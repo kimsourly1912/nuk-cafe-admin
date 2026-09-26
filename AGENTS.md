@@ -113,7 +113,7 @@ The returned object is **reactive (don't destructure it)**:
 
 Rules the Categories reference follows:
 
-- The feature exposes **`isBusy(id)`** (any mutation in flight for that item). The list dims the row and shows a spinner instead of its row actions, so single actions can't start on it. **Known gap:** bulk actions don't consult `isBusy` yet (select-all includes busy rows).
+- The feature exposes **`isBusy(id)`** (any mutation in flight for that item). The list dims the row and shows a spinner instead of its row actions, so single actions can't start on it. **Known gap:** nothing prevents a *different* mutation on the same item from overlapping. The engine only excludes repeats of the same mutation and key, and bulk actions don't even prefilter busy rows (select-all includes them). Prefiltering alone wouldn't meet the execution-time guarantee ([mutations.md](docs/reference/mutations.md#concurrency-guarantee-and-current-limits)).
 - **Form modals stay open while saving** (backend errors need the input on screen) but **can be closed**: the save continues. If it then fails, the toast offers **"Reopen"** with the draft restored (`errorActions` + a `draft` prop).
 - **Unsaved changes are guarded.** Every create/edit form uses `useModalUnsavedChanges` (modals) or `useUnsavedChanges` (pages), so closing the modal, changing route, logging out or reloading with changed input asks first. Pass `paused: saving` and call `markClean()` after a successful save (see [docs/reference/forms.md](docs/reference/forms.md)).
 - **Create is keyed by something that identifies the submission** (the name), so two different creates can run in parallel while a double submit is skipped.
