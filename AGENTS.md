@@ -19,7 +19,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 ## What this is
 
-Admin portal for NUK Cafe staff to manage the menu (categories, menu items, schedules), rewards, vouchers, banners, customers, staff and orders. **Frontend only.** It consumes an external Spring Boot API. Stack: Nuxt 4 (SPA mode), Nuxt UI v4 + Tailwind v4, Valibot, SDK generated from OpenAPI by Hey API. English-only UI.
+NUK Cafe is moving to one Nuxt full stack system for admin, customer, and cashier apps. The existing admin UI remains a SPA and temporarily consumes the external Spring Boot API. New server work uses NuxtHub, Better Auth, Drizzle, SQLite/D1, and R2; see [the system blueprint](docs/plans/system-blueprint.md) and [backend plan](docs/plans/fullstack-backend.md). The existing feature rules below apply to the legacy admin screens until each feature is ported. Do not treat the Spring SDK or its auth flow as a contract for the new backend.
 
 The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Schedules (card list) or Menu items (card grid + table); Categories is a tree (D37).
 
@@ -28,8 +28,10 @@ The code is **organized by feature** under `app/features/`. `app/features/catego
 Package manager is **pnpm**.
 
 ```bash
-pnpm dev                                  # http://localhost:3000, /api proxied to the dev backend
-pnpm api:generate                         # regenerate app/generated/api from the backend OpenAPI spec
+pnpm dev                                  # http://localhost:3000; /api is local, /legacy-api proxies Spring in dev
+pnpm nuxt db generate                     # create a migration after changing the server schema
+pnpm nuxt db migrate                      # apply local SQLite migrations
+pnpm api:generate                         # legacy Spring SDK only; do not run for the new backend
 pnpm lint / pnpm lint:fix                 # ESLint also does formatting (no Prettier) and enforces feature boundaries
 pnpm typecheck                            # vue-tsc via nuxt typecheck
 pnpm test                                 # all Vitest projects
@@ -132,7 +134,7 @@ The concurrency rules live in the framework-free engine `app/utils/mutation.ts` 
 - Pagination: query `page` (**0-based**) + `size`. Response `data` is `{ content, totalElements, totalPages, currentPage, pageSize, hasNext, hasPrevious }`.
 - Most resources share `status: 'ACTIVE' | 'INACTIVE'` and i18n maps `nameI18n` / `descriptionI18n` (`en`, `zh-HK`, `km`).
 - Auth is **HttpOnly cookies** (`staff_access_token`, `staff_refresh_token`) set by `/staff/auth/login`. Endpoints: `login`, `session` (GET, returns `StaffSessionDto` with `groups`), `refresh`, `logout`. The frontend never reads or stores tokens.
-- Cookies are `SameSite=Lax` with no `Domain`, so the browser must see the API as same-site. Dev: requests go through the Nitro `devProxy` at `/api` (`nuxt.config.ts`), which also rewrites `Origin` because the backend's CORS allowlist rejects arbitrary localhost ports. Prod: host the portal on the same site as the API (e.g. `admin.nukcafe.co`) and set `NUXT_PUBLIC_API_BASE` (see `.env.example`).
+- Cookies are `SameSite=Lax` with no `Domain`, so the browser must see the legacy API as same-site. Dev: legacy requests go through the Nitro `devProxy` at `/legacy-api` (`nuxt.config.ts`), which also rewrites `Origin`. Prod: set `NUXT_PUBLIC_LEGACY_API_BASE` to a same-site reverse-proxy path (see `.env.example`).
 - The backend's names are imperfect: `operationId`s are auto-suffixed (`createCategory1`, `update_2`, `getById_1`), and every response field is optional because Springdoc doesn't mark `required`. Find an SDK function by its URL: search `app/generated/api/sdk.gen.ts` for `url: '/staff/...'`.
 
 ## Request pipeline
@@ -143,7 +145,7 @@ feature component
     → generated SDK function (sdk.gen.ts)      typed params/body/response
       → Hey API ofetch client, configured in app/plugins/api.ts (baseUrl, credentials: 'include')
         → createApiFetch (app/utils/api-fetch.ts)   envelope check → ApiError; 401 → refresh once → retry
-          → ofetch → /api (dev proxy) → backend
+          → ofetch → /legacy-api (dev proxy) → Spring backend
 ```
 
 - `app/generated/api/`: **generated, never edit by hand, never lint**. Contains `sdk.gen.ts` (one function per endpoint), `types.gen.ts` (request/response types), `valibot.gen.ts` (`v<SchemaName>` schemas). Regenerate with `pnpm api:generate` after backend changes, then fix any renamed operationIds with typecheck.
@@ -183,7 +185,7 @@ How to use it in UI code:
 - The middleware protects **every page by default**. Opt out with `definePageMeta({ public: true })` (typed in `app/types/page-meta.d.ts`).
 - **Session transitions** (login, logout, expiry, another staff member via another tab) clear the previous identity's query data, mutation outcomes, toasts, overlays and unsaved forms, and discard its in-flight responses (`plugins/session-boundary.client.ts`, `useAuth().generation`, D29). Features must not keep user data outside `useApiQuery`/`useMutation`/`useState`-based composables, or the boundary can't clear it.
 - App-wide behavior needs nothing from features: login/logout apply to all open tabs (`plugins/auth-sync.client.ts`), `?` shows keyboard shortcuts, tab titles from `definePageMeta({ title })`, a save in one tab refreshes the same lists in the app's other tabs at once, lists refetch when the user returns to the tab (data ≥ 5s old) or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards. Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
-- `ssr: false`: the app is a pure SPA because only the browser has the auth cookies. Don't add server routes or SSR-dependent code.
+- `ssr: false` currently keeps the **admin UI** a SPA. Nitro server routes under `/api` and Better Auth under `/api/auth` are part of the new full stack system. Decide customer-site SSR separately; do not change the existing admin screens as part of setup.
 - `app/layouts/default.vue` is the Nuxt UI dashboard shell. The sidebar is `app/utils/navigation.ts`, which groups and orders each feature's exported `navigation` entry.
 - Every page component renders a `UDashboardPanel`: `UDashboardNavbar` (title, `UDashboardSidebarCollapse`, actions in `#right`), an optional `UDashboardToolbar` with filters in `#left`, and content in `#body`.
 

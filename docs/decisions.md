@@ -224,7 +224,7 @@ Dates are when the decision was made. All of these were agreed with the project 
 - **Drag and drop on `UTable`:** `useSortable` on the table body with a custom `onUpdate` that puts the DOM row back and moves the data, so Vue owns the rows. ↑/↓ on a focused handle is the keyboard path (and the reliable test path), as in the variant editor (D35).
 - **Banner look:** the hints use a quiet panel style and may wrap; `UBanner` defaults to a solid one-line bar that truncates its title, and a white bar was loud in dark mode.
 
-### D37: Full stack target and new data model, 2026-09-26
+### D38: Full stack target and new data model, 2026-09-26
 
 - **User direction:** build a Nuxt full stack backend with `@nuxtjs/better-auth`, `@nuxthub/core`, Drizzle, SQLite, Cloudflare D1 and R2. It must serve the admin, customer and cashier apps. Start with a new data design; no Spring Boot data migration is planned.
 - **Current state:** [the backend plan](plans/fullstack-backend.md) is a proposal, not a deployed architecture. D1-D6 still describe the running frontend. D2-D6 will be superseded during implementation, feature by feature; D1's SPA rendering choice may remain while Nitro serves the new API. The plan's detailed schema, business rules, and API contracts remain open until agreed.
@@ -239,3 +239,10 @@ Dates are when the decision was made. All of these were agreed with the project 
 - **Shared (root):** `StatusTabs` + `useStatusCounts` (counts via `size=1` requests on paginated lists; on the client for Categories), a **floating** `BulkActionsBar`, `ListSkeleton`, and `useTableSelection` helpers for cards and trees. Clicking a row/card opens it; the ⋮ menu is always visible (keyboard and touch users can't hover).
 - **Found while building:** a list query with `default: () => []` never reports `loading` (the default counts as data), so the empty state flashed during the first load. List queries don't get an empty default.
 - **Tests moved:** the shared list-behavior e2e tests (pagination, URL state, out-of-order responses, bulk Stop/Retry, last-page step-back) ran on the paginated Categories table; they now run on Schedules (`list-page.test.ts`) and the Menu items grid (`list-bulk.test.ts`).
+
+### D39: Reserve `/api` for the new backend while keeping the admin UI, 2026-09-26
+
+- **Context:** Better Auth mounts routes at `/api/auth`. The old dev proxy captured all of `/api`, so it intercepted the new auth routes. The owner wants the current admin screens preserved while the backend is built from a fresh data design (D38).
+- **Decision:** only the existing Spring SDK uses `/legacy-api` in development and `NUXT_PUBLIC_LEGACY_API_BASE` in deployment. Nitro and Better Auth own `/api`. Keep the generated SDK, feature composables, and existing screens until they are ported one feature at a time. D1 and D2 describe the historical frontend setup; this entry supersedes their claims that no server routes exist and that `/api` points to Spring.
+- **Setup:** `@nuxthub/core` precedes `@nuxtjs/better-auth`; NuxtHub provides SQLite locally and D1/R2 on Cloudflare. Better Auth uses database-backed rate limits so Worker instances share state. Generate and apply Drizzle migrations before using auth routes. Set a distinct `NUXT_BETTER_AUTH_SECRET` per environment and `NUXT_PUBLIC_SITE_URL` on Cloudflare.
+- **Deployment limit:** Nitro `devProxy` only covers local development. A deployed legacy admin screen needs a same-site reverse proxy and `NUXT_PUBLIC_LEGACY_API_BASE`, or a port to the new API. The new backend does not depend on that Spring API.

@@ -22,8 +22,8 @@ export function setupE2e() {
 }
 
 /**
- * Mocks the backend in the browser. Every `/api/**` request is answered from `handlers`
- * (key: `'GET /staff/categories'`, path without the `/api` prefix and query; numeric segments
+ * Mocks the legacy backend in the browser. Every `/legacy-api/**` request is answered from `handlers`
+ * (key: `'GET /staff/categories'`, path without the `/legacy-api` prefix and query; numeric segments
  * can be written `{id}`) wrapped in the backend envelope. Throw `MockFailure` (or a `failures.*`
  * preset) for `success: false` or an HTTP error.
  *
@@ -158,10 +158,10 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
   const missing: string[] = []
   const origin = new URL(url('/')).origin
 
-  await page.route(`${origin}/api/**`, async (route: Route) => {
+  await page.route(`${origin}/legacy-api/**`, async (route: Route) => {
     const request = route.request()
     const requestUrl = new URL(request.url())
-    const path = requestUrl.pathname.replace(/^\/api/, '')
+    const path = requestUrl.pathname.replace(/^\/legacy-api/, '')
     const key = `${request.method()} ${path}`
     calls.push(key)
     // 'DELETE /staff/categories/1' also matches a 'DELETE /staff/categories/{id}' handler.
