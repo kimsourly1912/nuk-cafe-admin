@@ -154,7 +154,7 @@ Source: `app/components/ApiErrorAlert.vue`
 
 ## `useNotify`
 
-Success and error toasts for API actions that **aren't** mutations (exports, lookups, one-off actions). Create/update/delete should use [`useMutation`](./mutations.md), which toasts by itself.
+Success, warning and error toasts for API actions that **aren't** mutations (exports, lookups, one-off actions). Create/update/delete should use [`useMutation`](./mutations.md), which toasts by itself.
 
 Source: `app/composables/useNotify.ts`
 
@@ -172,6 +172,7 @@ catch (error) {
 | Method | Description |
 |---|---|
 | `success(title, description?)` | Green toast. |
+| `warning(title, description?)` | Amber toast that **stays until dismissed**: the action worked but needs a look (e.g. the server saved variants differently from what was sent, D35). |
 | `error(title, error)` | Red toast with `ApiError.from(error).message`. It does nothing for [silent errors](#issilenterror), and logs `detail` to the console in dev. |
 
 ---

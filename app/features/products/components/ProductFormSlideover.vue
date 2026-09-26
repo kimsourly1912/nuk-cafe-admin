@@ -5,18 +5,21 @@
  *
  * Like the category form, it stays open while saving but can be closed: the save continues, and
  * a failure offers "Reopen" with the input restored. Save waits for a running image upload.
- * Variants aren't editable yet: they're listed and sent back unchanged (docs/plans/products.md P2).
+ * Variants are edited in `ProductVariantsEditor`. After a save, the server's reply is compared
+ * with what was sent, and any difference is shown as a warning (the backend's handling of removed
+ * variants is unverified, Q18, D35).
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { ProductResponse } from '~/generated/api'
 import { CategorySelect } from '~/features/categories'
 import { ScheduleSelect } from '~/features/schedules'
 import { useProductMutations } from '../composables/useProducts'
-import { productFormSchema, toProductForm, toProductRequest } from '../schemas/product-form'
+import { productFormSchema, toProductForm, toProductRequest, variantMismatches } from '../schemas/product-form'
 import type { ProductForm } from '../schemas/product-form'
-import { formatPrice, PRICE_FORMAT } from '../utils/money'
+import { PRICE_FORMAT } from '../utils/money'
 import ProductFormSlideover from './ProductFormSlideover.vue'
 import ProductImageInput from './ProductImageInput.vue'
+import ProductVariantsEditor from './ProductVariantsEditor.vue'
 
 const props = defineProps<{
   /** A list row. Omit to create a new menu item. */
@@ -30,7 +33,8 @@ const props = defineProps<{
 const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: boolean] }>()
 
 const isEdit = props.product?.id !== undefined
-const state = reactive<ProductForm>(structuredClone(toRaw(props.draft) ?? toProductForm(props.product)))
+// A deep copy that unwraps proxies (drag and drop can leave them inside the arrays).
+const state = reactive<ProductForm>(cloneFormValue(props.draft ?? toProductForm(props.product)))
 
 // UInputNumber clears to `null`; the form uses `undefined` for "no price".
 const price = computed({
@@ -54,10 +58,7 @@ const unsaved = useModalUnsavedChanges(state, {
 const form = useTemplateRef('form')
 useSubmitShortcut(() => form.value?.submit())
 
-const variants = computed(() => [...(props.product?.variants ?? [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)))
-function optionLabel(option: { optionName?: string, price?: number }) {
-  return option.price ? `${option.optionName} (+${formatPrice(option.price)})` : option.optionName
-}
+const notify = useNotify()
 
 // If the user closes the panel mid-save, a failure offers to reopen it with their input.
 let closed = false
@@ -76,7 +77,7 @@ function reopenActions(draft: ProductForm) {
 async function onSubmit({ data }: FormSubmitEvent<ProductForm>) {
   if (uploading.value) return
   const body = toProductRequest(data, props.product)
-  const draft = structuredClone(toRaw(state))
+  const draft = cloneFormValue(state)
   const overrides = { errorActions: () => reopenActions(draft) }
 
   saving.value = true
@@ -88,6 +89,14 @@ async function onSubmit({ data }: FormSubmitEvent<ProductForm>) {
   if (!result.ok) return
   unsaved.markClean()
   emit('close', true)
+
+  const problems = variantMismatches(body.variants, result.data?.variants)
+  if (problems.length) {
+    notify.warning(
+      `Check the variants of "${body.productName}"`,
+      `The server saved them differently: ${problems.join('; ')}.`,
+    )
+  }
 }
 </script>
 
@@ -190,37 +199,14 @@ async function onSubmit({ data }: FormSubmitEvent<ProductForm>) {
           />
         </UFormField>
 
-        <div
-          v-if="isEdit"
-          class="space-y-2"
-        >
+        <div class="space-y-2">
           <p class="text-sm font-medium">
             Variants
           </p>
-          <p
-            v-if="!variants.length"
-            class="text-sm text-muted"
-          >
-            No variants.
-          </p>
-          <div
-            v-for="variant in variants"
-            :key="variant.id"
-            class="rounded-md border border-default p-3 text-sm"
-          >
-            <p class="font-medium">
-              {{ variant.variantName }}
-              <span class="font-normal text-muted">
-                · {{ variant.requiredSelection ? 'Required' : 'Optional' }}, {{ variant.allowMultipleSelection ? 'pick any' : 'pick one' }}
-              </span>
-            </p>
-            <p class="text-muted">
-              {{ [...(variant.options ?? [])].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map(optionLabel).join(', ') }}
-            </p>
-          </div>
-          <p class="text-xs text-muted">
-            Kept as they are when you save. Editing variants comes in a later version.
-          </p>
+          <ProductVariantsEditor
+            v-model="state.variants"
+            :disabled="saving"
+          />
         </div>
       </UForm>
     </template>

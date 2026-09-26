@@ -155,7 +155,7 @@ describe('menu item form', () => {
 
     await chooseImage(form, PNG)
     await expect.poll(() => form.locator('img').getAttribute('src')).toBe(UPLOADED.url)
-    await form.getByLabel('Name').fill('Mocha')
+    await form.getByLabel('Name', { exact: true }).fill('Mocha')
     await form.getByText('Name is required').waitFor({ state: 'hidden' })
     await choose(form, 'Category', 'Coffee')
     await form.getByRole('spinbutton', { name: 'Price' }).fill('4.2')
@@ -216,11 +216,11 @@ describe('menu item form', () => {
       },
     })
     const form = await openEdit(page, 'Latte')
-    // Variants are listed read-only.
-    await form.getByText('Required, pick one').waitFor()
-    await form.getByText('Whole, Oat (+$0.50)').waitFor()
+    // The variants are in the editor, untouched.
+    expect(await form.getByLabel('Name of group 1').inputValue()).toBe('Milk')
+    expect(await form.getByLabel('Name of option 2 in Milk').inputValue()).toBe('Oat')
 
-    await form.getByLabel('Name').fill('Oat latte')
+    await form.getByLabel('Name', { exact: true }).fill('Oat latte')
     await form.getByRole('button', { name: 'Save' }).click()
     await toast(page, 'Menu item "Oat latte" updated').waitFor()
     expect(body).toEqual({
@@ -273,10 +273,10 @@ describe('menu item form', () => {
       },
     })
     const form = await openEdit(page, 'Latte')
-    await form.getByLabel('Name').fill('Latte 2')
+    await form.getByLabel('Name', { exact: true }).fill('Latte 2')
     await form.getByRole('button', { name: 'Save' }).click()
     await page.getByText('Price must be positive').first().waitFor()
-    expect(await form.getByLabel('Name').inputValue()).toBe('Latte 2')
+    expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte 2')
   })
 })
 
@@ -289,5 +289,131 @@ describe('menu item delete', () => {
     await page.getByRole('button', { name: 'Delete' }).last().click()
     await toast(page, 'Menu item "Matcha" deleted').waitFor()
     expect(api.calls).toContain('DELETE /staff/products/2')
+  })
+})
+
+type Variant = { id?: number, variantName?: string, sortOrder?: number, options?: { id?: number, optionName?: string, price?: number, sortOrder?: number }[] }
+
+/** A PUT handler that saves what it gets (new ids for new rows), like a replace-all backend. */
+function savingHandler(record: (body: Record<string, unknown>) => void, mutate?: (variants: Variant[]) => Variant[]): MockHandler {
+  return (request) => {
+    const body = request.body as Record<string, unknown> & { variants: Variant[] }
+    record(body)
+    let next = 900
+    const variants = body.variants.map((variant, i) => ({
+      ...variant,
+      id: variant.id ?? next++,
+      sortOrder: i,
+      options: (variant.options ?? []).map((option, j) => ({ ...option, id: option.id ?? next++, sortOrder: j })),
+    }))
+    return { ...LATTE, ...body, variants: mutate ? mutate(variants) : variants }
+  }
+}
+
+const SIZE: Variant & Record<string, unknown> = {
+  id: 50,
+  variantName: 'Size',
+  requiredSelection: true,
+  allowMultipleSelection: false,
+  sortOrder: 1,
+  options: [
+    { id: 90, optionName: 'Regular', price: 0, sortOrder: 0 },
+    { id: 91, optionName: 'Large', price: 1, sortOrder: 1 },
+  ],
+}
+const MILK_AND_SIZE: Row = { ...LATTE, variants: [...(LATTE.variants as Variant[]), SIZE] }
+
+describe('menu item variants', () => {
+  it('adds, edits, removes and reorders (keyboard) groups and options, and sends the whole list', async () => {
+    let body: Record<string, unknown> | undefined
+    const { page } = await open({ ...backend([MILK_AND_SIZE]), 'PUT /staff/products/{id}': savingHandler(b => (body = b)) })
+    const form = await openEdit(page, 'Latte')
+
+    // Milk: rename Oat, add Soy (+$0.75), move Soy up above Oat with the keyboard.
+    await form.getByLabel('Name of option 2 in Milk').fill('Oat milk')
+    await form.getByRole('button', { name: 'Add option' }).first().click()
+    await form.getByLabel('Name of option 3 in Milk').fill('Soy')
+    await form.getByRole('spinbutton', { name: 'Extra price of option 3 in Milk' }).fill('0.75')
+    await form.getByRole('button', { name: /^Reorder option Soy/ }).press('ArrowUp')
+    await expect.poll(() => form.getByLabel('Name of option 2 in Milk').inputValue()).toBe('Soy')
+
+    // Size: remove Large; then move the Size group above Milk.
+    await form.getByRole('button', { name: 'Remove option Large' }).click()
+    const sizeHandle = form.getByRole('button', { name: /^Reorder Size/ })
+    await sizeHandle.press('ArrowUp')
+    await expect.poll(() => form.getByLabel('Name of group 1').inputValue()).toBe('Size')
+    // Focus stays on the moved handle, so it can be moved again.
+    await expect.poll(() => sizeHandle.evaluate(el => el === document.activeElement)).toBe(true)
+
+    // A new group at the end, allowing several choices.
+    await form.getByRole('button', { name: 'Add variant group' }).click()
+    await form.getByLabel('Name of group 3').fill('Extras')
+    await form.getByLabel('Name of option 1 in Extras').fill('Extra shot')
+    await form.getByRole('spinbutton', { name: 'Extra price of option 1 in Extras' }).fill('0.5')
+    await form.getByRole('switch', { name: 'Customers can pick several' }).last().click()
+
+    await form.getByRole('button', { name: 'Save' }).click()
+    await toast(page, 'Menu item "Latte" updated').waitFor()
+    expect(body?.variants).toEqual([
+      { id: 50, variantName: 'Size', requiredSelection: true, allowMultipleSelection: false, options: [
+        { id: 90, optionName: 'Regular', price: 0 },
+      ] },
+      { id: 43, variantName: 'Milk', requiredSelection: true, allowMultipleSelection: false, options: [
+        { id: 73, optionName: 'Whole', price: 0 },
+        { optionName: 'Soy', price: 0.75 },
+        { id: 74, optionName: 'Oat milk', price: 0.5 },
+      ] },
+      { variantName: 'Extras', requiredSelection: false, allowMultipleSelection: true, options: [
+        { optionName: 'Extra shot', price: 0.5 },
+      ] },
+    ])
+    // The server saved what was sent: no warning.
+    expect(await toast(page, /Check the variants/).count()).toBe(0)
+  })
+
+  it('reorders groups by dragging the handle with the mouse', async () => {
+    let body: Record<string, unknown> | undefined
+    const { page } = await open({ ...backend([MILK_AND_SIZE]), 'PUT /staff/products/{id}': savingHandler(b => (body = b)) })
+    const form = await openEdit(page, 'Latte')
+    await form.getByRole('button', { name: /^Reorder Size/ }).dragTo(form.getByRole('button', { name: /^Reorder Milk/ }))
+    await expect.poll(() => form.getByLabel('Name of group 1').inputValue()).toBe('Size')
+    await form.getByRole('button', { name: 'Save' }).click()
+    await toast(page, /updated$/).waitFor()
+    expect((body?.variants as Variant[]).map(v => v.variantName)).toEqual(['Size', 'Milk'])
+  })
+
+  it('warns when the server keeps a variant that was removed', async () => {
+    const { page } = await open({
+      ...backend([MILK_AND_SIZE]),
+      // A backend that ignores removals: Size comes back.
+      'PUT /staff/products/{id}': savingHandler(() => {}, variants => [...variants, SIZE]),
+    })
+    const form = await openEdit(page, 'Latte')
+    await form.getByRole('button', { name: 'Remove Size' }).click()
+    await form.getByRole('button', { name: 'Save' }).click()
+    await toast(page, 'Check the variants of "Latte"').waitFor()
+    await page.getByText('The server saved them differently: "Size" is still there.').first().waitFor()
+  })
+
+  it('checks new groups before sending anything', async () => {
+    const { page, api } = await open()
+    const form = await openEdit(page, 'Latte')
+    await form.getByRole('button', { name: 'Add variant group' }).click()
+    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByText('Group name is required').waitFor()
+    await form.getByText('Option name is required').waitFor()
+    // Removing the only option is checked on the next save (the user may be about to add one).
+    await form.getByRole('button', { name: 'Remove option 1' }).click()
+    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByText('Add at least one option').waitFor()
+    expect(api.calls.filter(c => c.startsWith('PUT'))).toEqual([])
+  })
+
+  it('counts a reorder as an unsaved change', async () => {
+    const { page } = await open({ ...backend([MILK_AND_SIZE]) })
+    const form = await openEdit(page, 'Latte')
+    await form.getByRole('button', { name: /^Reorder Size/ }).press('ArrowUp')
+    await form.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByText('Discard unsaved changes?').waitFor()
   })
 })

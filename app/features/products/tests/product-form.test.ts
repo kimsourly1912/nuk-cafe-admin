@@ -1,6 +1,6 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
-import { productFormSchema, toProductForm, toProductRequest } from '../schemas/product-form'
+import { newOption, newVariant, productFormSchema, toProductForm, toProductRequest, variantMismatches } from '../schemas/product-form'
 import type { ProductForm } from '../schemas/product-form'
 import { formatPrice, roundPrice } from '../utils/money'
 
@@ -44,6 +44,7 @@ const valid: ProductForm = {
   status: 'ACTIVE',
   imageUrl: undefined,
   imageUuid: undefined,
+  variants: [],
 }
 
 function errorsOf(input: unknown) {
@@ -62,6 +63,7 @@ describe('product form', () => {
       status: 'ACTIVE',
       imageUrl: undefined,
       imageUuid: undefined,
+      variants: [],
     })
   })
 
@@ -75,10 +77,22 @@ describe('product form', () => {
       status: 'ACTIVE',
       imageUrl: 'https://s3.example/product/a',
       imageUuid: 'file-1',
+      // Groups and options in display order, keyed by id.
+      variants: [
+        { key: 'variant:43', id: 43, variantName: 'Drink', requiredSelection: true, allowMultipleSelection: false, options: [
+          { key: 'option:73', id: 73, optionName: 'Cola', price: 0 },
+          { key: 'option:74', id: 74, optionName: 'Tea', price: 0 },
+        ] },
+        { key: 'variant:44', id: 44, variantName: 'Side', requiredSelection: false, allowMultipleSelection: true, options: [
+          { key: 'option:80', id: 80, optionName: 'Fries', price: 5.79 },
+        ] },
+      ],
     })
+    // Two forms of the same product compare equal (no random keys), so nothing looks unsaved.
+    expect(toProductForm(existing)).toEqual(toProductForm(existing))
   })
 
-  it('re-sends variants unchanged with their ids, in display order, plus translations and image', () => {
+  it('re-sends untouched variants with their ids, in display order, plus translations and image', () => {
     const body = toProductRequest({ ...toProductForm(existing), productName: 'Combo', scheduleIds: [37] }, existing)
     expect(body).toEqual({
       productName: 'Combo',
@@ -115,6 +129,28 @@ describe('product form', () => {
     })
   })
 
+  it('sends the edited list: kept rows with ids, new rows without, removed rows left out, order as shown', () => {
+    const form = toProductForm(existing)
+    const [drink, side] = form.variants
+    drink!.options.reverse() // Tea, Cola
+    drink!.options[0]!.optionName = 'Green tea'
+    drink!.options.push({ ...newOption(), optionName: 'Juice', price: 1.005 })
+    const extra = { ...newVariant(), variantName: 'Sauce', options: [{ ...newOption(), optionName: 'Chili' }] }
+    form.variants = [extra, drink!] // Side removed, Sauce added first
+    void side
+
+    expect(toProductRequest(form, existing).variants).toEqual([
+      { id: undefined, variantName: 'Sauce', requiredSelection: false, allowMultipleSelection: false, nameI18n: undefined, options: [
+        { id: undefined, optionName: 'Chili', price: 0, labelI18n: undefined },
+      ] },
+      { id: 43, variantName: 'Drink', requiredSelection: true, allowMultipleSelection: false, nameI18n: { km: 'ភេសជ្ជៈ' }, options: [
+        { id: 74, optionName: 'Green tea', price: 0, labelI18n: undefined },
+        { id: 73, optionName: 'Cola', price: 0, labelI18n: { km: 'កូឡា' } },
+        { id: undefined, optionName: 'Juice', price: 1.01, labelI18n: undefined },
+      ] },
+    ])
+  })
+
   it('sends no variants for a new product and a replaced image as uploaded', () => {
     const body = toProductRequest({ ...valid, imageUrl: 'https://s3.example/new', imageUuid: 'file-2' })
     expect(body.variants).toEqual([])
@@ -124,6 +160,10 @@ describe('product form', () => {
   it('rounds the price to cents', () => {
     expect(toProductRequest({ ...valid, price: 0.1 + 0.2 }).price).toBe(0.3)
     expect(roundPrice(6.225)).toBe(6.23)
+    // 1.005 * 100 is 100.4999… in floating point: a naive round gives 1.
+    expect(roundPrice(1.005)).toBe(1.01)
+    expect(roundPrice(1.004)).toBe(1)
+    expect(roundPrice(16.99)).toBe(16.99)
   })
 
   it('accepts a valid form', () => {
@@ -139,6 +179,12 @@ describe('product form', () => {
     ])
   })
 
+  it('requires a group name, option names and prices, and at least one option', () => {
+    const variant = { ...newVariant(), options: [{ ...newOption(), price: undefined }] }
+    expect(errorsOf({ ...valid, variants: [variant] })).toEqual(['Group name is required', 'Option name is required', 'Price is required'])
+    expect(errorsOf({ ...valid, variants: [{ ...newVariant(), variantName: 'Milk', options: [] }] })).toEqual(['Add at least one option'])
+  })
+
   it('bounds the price', () => {
     expect(errorsOf({ ...valid, price: -1 })).toEqual(['Between $0 and $10,000'])
     expect(errorsOf({ ...valid, price: 10_001 })).toEqual(['Between $0 and $10,000'])
@@ -151,5 +197,40 @@ describe('prices', () => {
     expect(formatPrice(1234.5)).toBe('$1,234.50')
     expect(formatPrice(0)).toBe('$0.00')
     expect(formatPrice(undefined)).toBe('—')
+  })
+})
+
+describe('variantMismatches', () => {
+  const sent = [
+    { variantName: 'Drink', options: [{ optionName: 'Cola' }, { optionName: 'Tea' }] },
+    { variantName: 'Side', options: [{ optionName: 'Fries' }] },
+  ]
+  const saved = (variants: { name: string, options: string[] }[]) => variants.map((v, i) => ({
+    id: 100 + i, // new ids are fine: compared by name
+    variantName: v.name,
+    sortOrder: i,
+    options: v.options.map((o, j) => ({ id: 200 + j, optionName: o, sortOrder: j })),
+  }))
+
+  it('finds nothing when the server saved what was sent, whatever the ids', () => {
+    expect(variantMismatches(sent, saved([{ name: 'Drink', options: ['Cola', 'Tea'] }, { name: 'Side', options: ['Fries'] }]))).toEqual([])
+  })
+
+  it('reports a removed group or option the server kept, and missing ones', () => {
+    expect(variantMismatches(sent, saved([
+      { name: 'Drink', options: ['Cola', 'Tea', 'Water'] },
+      { name: 'Side', options: ['Fries'] },
+      { name: 'Sauce', options: ['Chili'] },
+    ]))).toEqual(['"Sauce" is still there', '"Drink › Water" is still there'])
+    expect(variantMismatches(sent, saved([{ name: 'Drink', options: ['Cola'] }]))).toEqual(['"Side" is missing', '"Drink › Tea" is missing'])
+  })
+
+  it('reports an order that was not saved', () => {
+    expect(variantMismatches(sent, saved([{ name: 'Side', options: ['Fries'] }, { name: 'Drink', options: ['Tea', 'Cola'] }])))
+      .toEqual(['The order of the groups wasn\'t saved', 'The order of the options in "Drink" wasn\'t saved'])
+  })
+
+  it('cannot check without variants in the response', () => {
+    expect(variantMismatches(sent, undefined)).toEqual([])
   })
 })

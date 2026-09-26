@@ -14,7 +14,12 @@ export function formatPrice(price: number | undefined | null): string {
   return price === undefined || price === null || Number.isNaN(price) ? '—' : formatter.format(price)
 }
 
-/** Rounds to cents, so floating-point noise (`0.1 + 0.2`) never reaches the API. */
+/**
+ * Rounds to cents, half up, so floating-point noise (`0.1 + 0.2`) never reaches the API. Shifts
+ * the decimal point in the number's text: `1.005 * 100` is `100.4999…` and would round down.
+ */
 export function roundPrice(price: number): number {
-  return Math.round(price * 100) / 100
+  const shifted = Number(`${price}e2`)
+  // Numbers JS writes in exponent form (1e-7) can't be shifted in text; they're far below a cent.
+  return Math.round(Number.isNaN(shifted) ? price * 100 : shifted) / 100
 }

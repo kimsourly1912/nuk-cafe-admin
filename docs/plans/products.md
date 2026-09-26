@@ -129,3 +129,19 @@ Phase 1 is built. Evidence is **unit** and **browser-mock**; response formats ar
 **Found while testing:** `aria-label` on the pickers landed on their wrapper, so the combobox had no accessible name (fixed, D34); the mock harness crashed on multipart bodies (fixed); a squeezed search box when a picker was given a width class (fixed).
 
 **Open, verify on first staff login:** P2–P6 (Q18, Q19 in progress.md).
+
+## Phase 2: variant editor (2026-09-26)
+
+**User decisions:** send the full list and **verify the reply** (warn on any difference); reorder by **drag and drop** (D35).
+
+| Criterion | Evidence |
+|---|---|
+| Add, rename, remove groups and options; required / "pick several" switches; option prices (USD, rounded) | e2e: the request body lists kept rows with ids, new rows without, removed rows absent, in the order shown |
+| Reorder by keyboard (↑/↓ on a focused handle, focus kept) | e2e; **checked to fail** without the focus restore |
+| Reorder by mouse drag | e2e (`dragTo` on the handle) |
+| Server kept a removed variant → warning | e2e (a mock that ignores removals); unit for `variantMismatches` (extra, missing, order, new ids are fine) |
+| Validation: group name, option names and prices, at least one option | unit + e2e (nothing is sent) |
+| Reorder counts as unsaved | e2e |
+| Translations of kept rows copied by id | unit |
+
+**Verify on first staff login (Q18):** does the backend delete omitted variants/options, keep ids, and save the list order? The warning will say so if it doesn't.
