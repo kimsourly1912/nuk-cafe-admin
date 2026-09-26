@@ -22,6 +22,8 @@ export default defineNuxtPlugin({
     client.setConfig({
       baseUrl: config.public.apiBase,
       credentials: 'include',
+      // Fails as ApiError kind 'timeout' instead of hanging forever.
+      timeout: 30_000,
       ofetch: createApiFetch({
         baseFetch,
         onSessionExpired: () => auth.clearSession(),

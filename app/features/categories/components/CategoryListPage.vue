@@ -37,7 +37,7 @@ function rowActions(category: CategoryResponse): DropdownMenuItem[] {
 // --- Actions ---
 const formModal = useOverlay().create(CategoryFormModal)
 const confirm = useConfirm()
-const toast = useToast()
+const notify = useNotify()
 const { remove } = useCategoryMutations()
 
 function openForm(category?: CategoryResponse) {
@@ -55,10 +55,10 @@ async function onDelete(category: CategoryResponse) {
 
   try {
     await remove(category.id!)
-    toast.add({ title: 'Category deleted', color: 'success' })
+    notify.success('Category deleted')
   }
-  catch (e) {
-    toast.add({ title: 'Could not delete category', description: getErrorMessage(e), color: 'error' })
+  catch (error) {
+    notify.error('Could not delete category', error)
   }
 }
 </script>
@@ -80,34 +80,33 @@ async function onDelete(category: CategoryResponse) {
       </UDashboardNavbar>
 
       <UDashboardToolbar>
-        <UInput
-          v-model.lazy="filters.search"
-          icon="i-lucide-search"
-          placeholder="Search… (press Enter)"
-          class="w-64"
-        />
-        <USelect
-          v-model="filters.status"
-          :items="STATUS_FILTER_ITEMS"
-          class="w-40"
-        />
-        <USelect
-          v-model="filters.type"
-          :items="typeItems"
-          class="w-36"
-        />
+        <template #left>
+          <UInput
+            v-model.lazy="filters.search"
+            icon="i-lucide-search"
+            placeholder="Search… (press Enter)"
+            class="w-64"
+          />
+          <USelect
+            v-model="filters.status"
+            :items="STATUS_FILTER_ITEMS"
+            class="w-40"
+          />
+          <USelect
+            v-model="filters.type"
+            :items="typeItems"
+            class="w-36"
+          />
+        </template>
       </UDashboardToolbar>
     </template>
 
     <template #body>
-      <UAlert
+      <ApiErrorAlert
         v-if="error"
-        color="error"
-        variant="subtle"
-        icon="i-lucide-circle-alert"
+        :error="error"
         title="Could not load categories"
-        :description="getErrorMessage(error)"
-        :actions="[{ label: 'Retry', onClick: () => refresh() }]"
+        @retry="refresh()"
       />
 
       <UTable

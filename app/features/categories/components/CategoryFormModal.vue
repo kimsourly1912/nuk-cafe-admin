@@ -18,7 +18,7 @@ const isEdit = computed(() => props.category?.id !== undefined)
 const state = reactive(toCategoryForm(props.category))
 
 const { create, update } = useCategoryMutations()
-const toast = useToast()
+const notify = useNotify()
 const saving = ref(false)
 
 async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
@@ -27,11 +27,11 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
   try {
     if (isEdit.value) await update(props.category!.id!, body)
     else await create(body)
-    toast.add({ title: isEdit.value ? 'Category updated' : 'Category created', color: 'success' })
+    notify.success(isEdit.value ? 'Category updated' : 'Category created')
     emit('close', true)
   }
   catch (error) {
-    toast.add({ title: 'Could not save category', description: getErrorMessage(error), color: 'error' })
+    notify.error('Could not save category', error)
   }
   finally {
     saving.value = false

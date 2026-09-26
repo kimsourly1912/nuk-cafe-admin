@@ -44,6 +44,18 @@ describe('createApiFetch', () => {
     expect(raw).toHaveBeenCalledWith('/staff/auth/refresh', expect.objectContaining({ method: 'POST' }))
   })
 
+  it('refreshes when the unauthorized code arrives with HTTP 200', async () => {
+    let calls = 0
+    const { call, raw } = setup((url) => {
+      if (url.includes('/refresh')) return res(200, { success: true })
+      return calls++ === 0
+        ? res(200, { data: null, success: false, msg: 'NC1000', reason: 'Unauthorized' })
+        : res(200, { success: true, data: 'ok' })
+    })
+    await expect(call('/staff/categories')).resolves.toMatchObject({ _data: { data: 'ok' } })
+    expect(raw).toHaveBeenCalledWith('/staff/auth/refresh', expect.objectContaining({ method: 'POST' }))
+  })
+
   it('shares one refresh between concurrent 401s', async () => {
     const seen = new Set<string>()
     const { call, raw } = setup((url) => {

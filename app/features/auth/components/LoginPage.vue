@@ -80,7 +80,6 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
       >
         <UInput
           v-model="state.password"
-          type="password"
           autocomplete="current-password"
           class="w-full"
         />
