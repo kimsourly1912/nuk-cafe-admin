@@ -8,10 +8,10 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 
 | Feature | Exports |
 |---|---|
-| `auth` | [`useAuth`](./auth.md#useauth), `SessionUser` |
+| `auth` | [`useAuth`](./auth.md#useauth), [`loginRedirectTarget`](./auth.md#loginredirecttarget), `SessionUser` |
 | `categories` | [`CategorySelect`](#categoryselect), [`useCategoryOptions`](#usecategoryoptions), `CategoryOptionsFilter`, `categoriesNavigation` |
 
-When you add a feature, add its section here.
+When you add a feature, add its section here. Pickers follow the contract in [feature-standard.md → Resource picker conventions](../feature-standard.md#6-resource-picker-conventions).
 
 ---
 
@@ -46,7 +46,7 @@ import { CategorySelect } from '~/features/categories'
 | `noneLabel` | `string` | | Adds an option that clears the value. `USelect` can't hold `undefined`, and this handles that internally. |
 | `placeholder` | `string` | `'Select a category'` | |
 
-It loads its options through `useCategoryOptions` and shows a loading state while fetching.
+It loads its options through `useCategoryOptions` and shows a loading state while fetching. **Known gaps** against the picker contract: a load error shows an empty list (no retry), and a current value missing from the options (inactive, deleted) shows blank.
 
 ### `useCategoryOptions`
 

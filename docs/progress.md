@@ -62,9 +62,12 @@ Backend resources available (from the spec) and their status. The folder names f
 
 ## Next steps (recommended order)
 
+**Feature standard (2026-09-26, docs only):** [docs/feature-standard.md](feature-standard.md) defines planning, structure, list/form/picker behavior, the capability roadmap and the definition of done. Checked: every relative link and anchor resolves (script), and each statement about existing behavior was checked against the code and tests. No application behavior was changed or newly verified. Gaps it found in the reference feature (not fixed): clearing a category's parent sends an omitted field (backend meaning unverified), `CategorySelect` has no error/unavailable-value states, and busy rows, selection reset and last-page step-back have no committed tests.
+
+
 0. **Polish done (2026-09-26):** e2e harness, tab titles, hidden password, list URL state + live search + empty states, refresh on return/reconnect + offline banner. Still open before features: role rules (Q6, waiting on the project owner).
 1. **Test Categories against the real API** with a staff login (`pnpm dev`, then create, edit, delete, batch delete). Record any new error codes in `API_ERROR_CODES` (`app/utils/api-error.ts`). Update the verification levels above.
-2. **Schedules.** Build it before products, because the menu item form needs `ScheduleSelect`. Needs a days-of-week picker and a time range. Export `ScheduleSelect` + `useScheduleOptions` from its `index.ts`.
+2. **Schedules**, planned with the standard first (`docs/plans/schedules.md`; the draft and its [Open] contract questions are in feature-standard.md §9). Then refine the standard from the experience before Products. Build it before products, because the menu item form needs `ScheduleSelect`. Needs a days-of-week picker and a time range. Export `ScheduleSelect` + `useScheduleOptions` from its `index.ts`.
 3. **Products ("Menu items").** Uses `CategorySelect` and `ScheduleSelect`. It's the first user of image upload, `nameI18n`/`descriptionI18n` and variants. Build `ImageUpload` and `I18nFields` inside the feature first, and promote them to the root when the second feature needs them (decisions D16). Then give schedules a `ProductSelect` (the bidirectional link: decisions D8).
 4. Rewards (+ reward categories), then vouchers and banners (all need image upload and status toggles).
 5. Customers, staff, orders, and the rest.
