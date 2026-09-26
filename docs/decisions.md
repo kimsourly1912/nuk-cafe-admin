@@ -126,10 +126,16 @@ Dates are when the decision was made. All of these were agreed with the project 
 - **Why not `@vueuse/router`'s `useRouteQuery`:** it isn't installed, it syncs one key at a time (a filter change needs the page reset in the same update), and the typed round-trip (`fromUrlQuery`/`toUrlQuery`) is small and unit-tested.
 - **Trap:** the composable must not write while navigating away (the route already points to the next page), so both watchers check that the current path is still its own.
 
-### D22: Refresh on return and reconnect, not polling, 2026-09-26
-- **Decision:** refetch every loaded query when the tab becomes visible after ≥ 30s hidden, or when the browser comes back online (`plugins/data-freshness.client.ts`, VueUse `useDocumentVisibility` + `useOnline`). Plus an offline banner.
-- **Why 30s:** staff alt-tab constantly. Refetching on every switch would spam the API and flicker spinners. After 30s, other staff may have changed the menu.
-- **Not polling:** no screen needs live data yet. The orders pickup queue will likely need it; do it per screen (`useIntervalFn`), not globally.
+### D22: Cross-tab invalidation + refetch stale data on return and reconnect, not polling, 2026-09-26 (amended the same day)
+- **First version (replaced):** refetch everything when the tab had been **hidden ≥ 30s**. It failed a real case: create a category in tab 1, switch to tab 2 within 30s, and the old list is still there. Measuring "time away" was the wrong signal. It says nothing about whether *this browser* just changed the data, and it misses two windows side by side (no visibility change at all).
+- **Research:** TanStack Query (`refetchOnWindowFocus` + `staleTime`, `visibilitychange` only since v5, experimental `broadcastQueryClient`), SWR (`revalidateOnFocus`, 5s focus throttle, `revalidateOnReconnect`) and Pinia Colada (`refetchOnWindowFocus`, 5s default `staleTime`). The common model: **staleness is measured from the last fetch, not from time away**, check on `visibilitychange`, refetch on reconnect, keep old data shown. TanStack's maintainers point to cross-tab broadcast for the side-by-side-windows case.
+- **Decision (`plugins/data-freshness.client.ts`):**
+  1. **Cross-tab invalidation:** `invalidate()` fires the runtime hook `app:data-changed` with the feature names. The plugin posts them on a `BroadcastChannel` (VueUse `useBroadcastChannel`), and receiving tabs call `invalidateInThisTab()` (never re-broadcast, so no ping-pong). Only names cross, never data: nothing to serialize (Vue proxies can't be cloned), nothing sensitive on the channel, and each tab refetches with its own cookies.
+  2. **Return to tab:** on `visibilitychange` → visible, refetch queries whose last load (recorded per key by `useApiQuery`) is ≥ 5s old (`invalidateAll({ olderThanMs })`). Not the `focus` event: it also fires after dialogs, file pickers, iframes and DevTools.
+  3. **Reconnect:** refetch everything loaded. Plus an offline banner.
+- **Why 5s:** it matches SWR and Pinia Colada. With cross-tab invalidation covering this browser, the return refetch only has to catch other devices' changes. Data younger than 5s is fresh, so quick alt-tabs don't refetch.
+- **Rejected:** syncing data between tabs (`broadcastQueryClient`: experimental, breaks on non-cloneable values); lowering the time-away threshold (still misses side-by-side windows).
+- **Not polling or server push:** no screen needs live data yet, and the backend has no push endpoint. The orders pickup queue will likely need it; do it per screen (`useIntervalFn`), not globally.
 
 ### D23: Tab titles from route meta, 2026-09-26
 - **Decision:** each route file declares `definePageMeta({ title })`, and `app.vue` applies `<title> · NUK Cafe Admin`. Titles sit next to the route (thin route files, rule 6), and there's no `useHead` in every page component. `error.vue` sets its own title because it renders instead of `app.vue`.

@@ -237,7 +237,7 @@ Finding the SDK function for an endpoint: search `app/generated/api/sdk.gen.ts` 
 
 ## `invalidate`
 
-Refetches every **loaded** query whose key belongs to the given features.
+Refetches every **loaded** query whose key belongs to the given features, **in this tab and in the app's other open tabs**.
 
 Source: `app/utils/invalidate.ts`
 
@@ -246,18 +246,27 @@ function invalidate(...features: string[]): Promise<void>
 ```
 
 ```ts
-await invalidate('products', 'schedules') // refreshes 'products:list', 'schedules:options:…', …
+await invalidate('products', 'schedules') // refreshes 'products:list', 'schedules:options:…', … here and in other tabs
 ```
 
 - Matches keys by prefix: `'products'` refreshes every key starting with `products:`. Queries not currently loaded are ignored.
-- **Batched:** calls within 30ms are merged into one refresh per key. The promise resolves after that refresh.
+- **Batched:** calls within 30ms are merged into one refresh per key and **one** message to other tabs. The promise resolves after this tab's refresh.
+- **Other tabs:** the feature names go out through the runtime hook `app:data-changed`, which `plugins/data-freshness.client.ts` forwards over a `BroadcastChannel`. Only names cross, never data. See [App-wide behavior → Data freshness](./app-behavior.md#data-freshness).
 - **Usually you don't call it.** Declare `invalidate: [...]` on [`useMutation`](./mutations.md#options) instead.
 - Must run in a Nuxt context. After an `await`, wrap it: `nuxtApp.runWithContext(() => invalidate('x'))` (`useMutation` does this for you).
+
+## `invalidateInThisTab`
+
+```ts
+function invalidateInThisTab(features: string[]): Promise<void>
+```
+
+`invalidate` without telling other tabs. The freshness plugin uses it for messages **received** from another tab, so they're never sent back (no ping-pong). Features don't need it.
 
 ## `invalidateAll`
 
 ```ts
-function invalidateAll(): Promise<void>
+function invalidateAll(options?: { olderThanMs?: number }): Promise<void>
 ```
 
-Refetches every loaded API query (every `<feature>:<name>` key), through `invalidate`. Used by `plugins/data-freshness.client.ts` when the user comes back to the tab or the connection returns (see [App-wide behavior](./app-behavior.md#data-freshness)). Features don't need to call it.
+Refetches loaded API queries (`<feature>:<name>` keys) in this tab. With `olderThanMs`, only the queries whose last successful load (recorded per key by `useApiQuery`) is at least that old. The freshness plugin calls `invalidateAll({ olderThanMs: 5000 })` when the user returns to the tab, and `invalidateAll()` on reconnect. Features don't need it.

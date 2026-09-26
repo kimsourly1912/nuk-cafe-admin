@@ -23,7 +23,13 @@ export function useApiQuery<T, DefaultT = undefined>(
     console.warn(`[useApiQuery] key "${toValue(key)}" should be "<feature>:<name>" so invalidate() can find it.`)
   }
 
-  const asyncData = useAsyncData(key, handler, options)
+  // Load time per key, so returning to the tab only refetches data that's actually stale.
+  const tracked = async () => {
+    const result = await handler()
+    markFetched(toValue(key))
+    return result
+  }
+  const asyncData = useAsyncData(key, tracked, options)
   const { data, status, error: rawError, refresh, execute, clear } = asyncData
 
   const pending = computed(() => status.value === 'pending')

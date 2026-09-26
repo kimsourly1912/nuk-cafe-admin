@@ -29,7 +29,7 @@ The foundation is complete and one feature (Categories) is built as the referenc
 | Unsaved-changes guard: modal close (X/Esc/outside/Cancel), route changes incl. back/forward, logout, tab close/reload; one dialog for many forms (D19) | done | unit (`form-value`), e2e (`unsaved-changes`). Page forms, logout-with-unsaved-form and session-expiry skip: no page form exists yet, so not browser-tested (see forms.md → Edge cases) |
 | Browser tab titles per page (D23) | done | e2e |
 | List pages: filters/page in the URL, search as you type, empty states (D21) | done | unit (`query`), e2e (`list-page`) |
-| Data freshness: refetch on return after 30s / reconnect, offline banner (D22) | done | e2e (`freshness`, with faked visibility, clock and offline) |
+| Data freshness: cross-tab invalidation, refetch stale (≥ 5s) data on return, refetch on reconnect, offline banner (D22) | done | e2e (`freshness`: two tabs in one context, faked visibility and clock, offline). The two-tab test was checked to fail with the broadcast disabled |
 | Login: password hidden with show/hide toggle (Q7) | done | e2e |
 | E2E harness: one build, `mockApi`, 31 tests (auth, categories, lists, unsaved changes, freshness, shell) (D20) | done | runs in `pnpm test` |
 | Feature architecture + ESLint boundary rules | done | lint (violations verified to be reported) |
@@ -84,7 +84,8 @@ Backend resources available (from the spec) and their status. The folder names f
 - Nothing is role-aware (Q6).
 - Unsaved-changes comparison treats `1` and `'1'` as different and array order as meaningful (see docs/reference/forms.md).
 - List filters in the URL support strings and numbers only, and one URL-synced list per page (`syncUrl: false` for others). See docs/reference/data-fetching.md.
-- Data freshness refetches every loaded query; no per-query opt-out yet. No polling (orders will likely need it per screen: D22).
+- Data freshness: another device's change shows up only when the user returns to the tab or navigates (no push from the backend). No per-query opt-out yet. No polling (orders will likely need it per screen: D22).
+- Logging out in one tab doesn't log out the other tabs until their next request (which then redirects to login). Could reuse the broadcast channel.
 
 ## How to verify
 
@@ -95,6 +96,7 @@ Backend resources available (from the spec) and their status. The folder names f
   - Always `goto(..., { waitUntil: 'hydration' })`. Without it, assertions can run before the app mounts and fail only under full-suite load.
   - While our confirm dialog is on top, the form modal behind it is `aria-hidden`, so `getByRole('dialog')` doesn't find it. Check the form after answering.
   - UTable renders an extra `<tr>` in the header. Count cells, not rows.
+  - Two tabs of one browser: `createPage()` opens a single-page context, so create one with `(await getBrowser()).newContext()`, open both pages in it, and wait with `waitForHydration(page, url, 'hydration')` (raw pages lack the `waitUntil: 'hydration'` wrapper). Tabs in one context share `BroadcastChannel`.
   - Tab visibility: fake `document.visibilityState` + dispatch `visibilitychange`, and move time with `page.clock.install()` / `fastForward`. Offline: `page.context().setOffline(true)` (fires the `offline` event; `page.route` mocks still answer).
   - In a `node -e` one-liner inside single-quoted bash, `\d` in a regex loses its backslash. Edit test files with the editor, not shell string replacement.
 - **browser-mock (ad hoc):** start `pnpm dev --port 3123`, then drive headless Chrome with `playwright-core` (`chromium.launch({ channel: 'chrome' })`) and mock the backend with `page.route('http://localhost:3123/api/**', …)`. Pitfalls met so far:

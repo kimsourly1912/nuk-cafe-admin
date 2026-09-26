@@ -80,7 +80,7 @@ app/
 ### Data freshness
 
 - Query keys are **namespaced by feature**: `<feature>:<name>` (`categories:list`, `categories:options:MAIN:all`). `useApiQuery` warns in dev when a key isn't namespaced.
-- Mutations declare `invalidate: ['<own feature>', '<affected feature>']`. `invalidate()` (`app/utils/invalidate.ts`) refetches every loaded key with those prefixes, so a feature never imports another feature's keys. Calls within 30ms are merged into one refresh per list (batches, parallel deletes). Example: category mutations invalidate `['categories', 'products']` because product lists show category names.
+- Mutations declare `invalidate: ['<own feature>', '<affected feature>']`. The same invalidation reaches the app's **other open tabs** (feature names over a `BroadcastChannel`, never data), so they refresh too. Data from **other devices** is picked up when the user returns to the tab. `invalidate()` (`app/utils/invalidate.ts`) refetches every loaded key with those prefixes, so a feature never imports another feature's keys. Calls within 30ms are merged into one refresh per list (batches, parallel deletes). Example: category mutations invalidate `['categories', 'products']` because product lists show category names.
 
 ## CRUD state: `useApiQuery` and `useMutation`
 
@@ -175,7 +175,7 @@ How to use it in UI code:
 
 - `app/features/auth/` exposes `useAuth()`: `user` (state, no tokens), `isLoggedIn`, `fetchSession`, `login`, `logout`. The shell (`middleware/auth.global.ts`, `plugins/api.ts`, `layouts/default.vue`) imports it from `~/features/auth`.
 - The middleware protects **every page by default**. Opt out with `definePageMeta({ public: true })` (typed in `app/types/page-meta.d.ts`).
-- App-wide behavior needs nothing from features: tab titles from `definePageMeta({ title })`, lists refetch when the user returns after 30s or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards. Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
+- App-wide behavior needs nothing from features: tab titles from `definePageMeta({ title })`, a save in one tab refreshes the same lists in the app's other tabs at once, lists refetch when the user returns to the tab (data ≥ 5s old) or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards. Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
 - `ssr: false`: the app is a pure SPA because only the browser has the auth cookies. Don't add server routes or SSR-dependent code.
 - `app/layouts/default.vue` is the Nuxt UI dashboard shell. The sidebar is `app/utils/navigation.ts`, which groups and orders each feature's exported `navigation` entry.
 - Every page component renders a `UDashboardPanel`: `UDashboardNavbar` (title, `UDashboardSidebarCollapse`, actions in `#right`), an optional `UDashboardToolbar` with filters in `#left`, and content in `#body`.
@@ -198,7 +198,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `unwrap`, `ApiError`, `getErrorMessage` | `utils/api*.ts` | API calls and errors (see "Error handling") |
 | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard` | `composables/`, `utils/form-value.ts` | "Discard unsaved changes?" for page and modal forms; the route middleware and tab-close plugin use them |
 | `<SearchInput>`, `<ListEmptyState>` | `components/` | List toolbar search (as you type) and empty states ("nothing yet" vs "filters hide everything") |
-| `invalidateAll()` | `utils/invalidate.ts` | Refetch every loaded query (used by the freshness plugin) |
+| `invalidateAll()`, `invalidateInThisTab()` | `utils/invalidate.ts` | Refetch loaded or only stale queries / invalidate without telling other tabs (used by the freshness plugin) |
 | `useNotify()` | `composables/` | Toasts for API actions that aren't mutations |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
 
