@@ -189,7 +189,8 @@ describe('schedule form', () => {
     expect(await form.getByRole('button', { name: 'Save' }).isDisabled()).toBe(true)
 
     detail.release(detailOf(2))
-    await form.getByText('Latte').waitFor()
+    // Each linked item by name, with its id beside it.
+    await expect.poll(() => form.getByText('Latte').first().innerText()).toMatch(/Latte\s*#40/)
     await form.getByText('Mocha').waitFor()
     await form.getByLabel('Name').fill('Early breakfast')
     await form.getByLabel('Sun').uncheck()
@@ -267,7 +268,7 @@ describe('schedule delete', () => {
     const { page } = await open()
     const item = await rowAction(page, 'Breakfast', 'Delete')
     expect(await item.getAttribute('aria-disabled')).toBe('true')
-    await page.getByText('Used by 2 menu items').waitFor()
+    await page.getByText('In use by 2 menu items', { exact: true }).waitFor()
   })
 
   it('refuses when a menu item started using the schedule after the list loaded', async () => {
@@ -280,7 +281,7 @@ describe('schedule delete', () => {
     await (await rowAction(page, 'Lunch', 'Delete')).click()
     await page.getByRole('button', { name: 'Delete' }).last().click()
     await toast(page, 'Could not delete "Lunch"').waitFor()
-    await page.getByText('Used by 2 menu items. Deleting schedules in use isn\'t supported yet.').first().waitFor()
+    await page.getByText('In use by 2 menu items. Remove it from their schedules first.').first().waitFor()
     expect(writes(api.calls)).toEqual([])
   })
 

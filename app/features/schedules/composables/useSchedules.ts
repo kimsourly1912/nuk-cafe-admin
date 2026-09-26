@@ -16,8 +16,10 @@ const AFFECTED = ['schedules', 'products']
  * unknown (docs/plans/schedules.md S6).
  */
 export const isLinked = (schedule: ScheduleListResponse) => (schedule.item_count ?? 0) > 0
-export const linkedReason = (count: number) =>
-  `Used by ${pluralize(count, ['menu item', 'menu items'])}. Deleting schedules in use isn't supported yet.`
+/** Short, for the disabled Delete item in the row menu. */
+export const linkedLabel = (count: number) => `In use by ${pluralize(count, ['menu item', 'menu items'])}`
+/** For a refused delete: what to do about it. Menu items unlink schedules in their own form. */
+export const linkedReason = (count: number) => `${linkedLabel(count)}. Remove it from their schedules first.`
 
 /** Paginated schedule list. Refetches whenever `query` changes. */
 export function useScheduleList(query: MaybeRefOrGetter<ScheduleListQuery>) {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem, SelectItem, TableColumn } from '@nuxt/ui'
 import type { ScheduleListResponse } from '~/generated/api'
-import { confirmDeleteMany, isLinked, linkedReason, useScheduleList, useScheduleMutations } from '../composables/useSchedules'
+import { confirmDeleteMany, isLinked, linkedLabel, useScheduleList, useScheduleMutations } from '../composables/useSchedules'
 import type { Day } from '../utils/days'
 import { DAYS, formatDays, formatTimeRange } from '../utils/days'
 import { shiftWeekly, viewerTimeZone, zoneLabel, zoneShift } from '../utils/timezone'
@@ -79,7 +79,7 @@ function rowActions(schedule: ScheduleListResponse): DropdownMenuItem[] {
       icon: 'i-lucide-trash-2',
       color: 'error',
       disabled: linked,
-      description: linked ? linkedReason(schedule.item_count!) : undefined,
+      description: linked ? linkedLabel(schedule.item_count!) : undefined,
       onSelect: () => remove.execute(schedule),
     },
   ]

@@ -240,13 +240,16 @@ async function onSubmit({ data }: FormSubmitEvent<ScheduleForm>) {
               v-if="detail.data.value?.items?.length"
               class="flex flex-wrap gap-1"
             >
+              <!-- Name first; the id tells apart items with odd or equal names (a name like "35" looks like an id). -->
               <UBadge
                 v-for="item in detail.data.value.items"
                 :key="item.id"
-                :label="item.productName ?? `#${item.productId}`"
                 color="neutral"
                 variant="subtle"
-              />
+              >
+                {{ item.productName || 'Unnamed item' }}
+                <span class="font-normal text-dimmed">#{{ item.productId }}</span>
+              </UBadge>
             </div>
             <p
               v-else
