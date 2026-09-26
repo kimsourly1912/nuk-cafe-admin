@@ -27,7 +27,7 @@ const { user, isLoggedIn, logout } = useAuth()
 | `checked` | `Readonly<Ref<boolean>>` | Whether the session has been checked against the backend at least once. |
 | `fetchSession()` | `() => Promise<SessionUser \| null>` | Calls `GET /staff/auth/session` (refreshing the token if needed). **Never throws:** on any failure the user becomes `null`. |
 | `login(credentials)` | `({ username, password }) => Promise<void>` | Calls `POST /staff/auth/login`. The backend sets the cookies. **Throws `ApiError`** on failure (e.g. `kind: 'business'`, "Incorrect username or password"). |
-| `logout()` | `() => Promise<void>` | Calls `POST /staff/auth/logout`, then navigates to `/login` and clears the user, even if the request fails. |
+| `logout()` | `() => Promise<void>` | If a form has unsaved changes, asks first and does nothing on "Keep editing" ([`useLeaveGuard`](./forms.md#useleaveguard)). Then calls `POST /staff/auth/logout`, navigates to `/login` and clears the user, even if the request fails. |
 | `clearSession()` | `() => void` | Clears the user locally (used when the refresh fails). |
 
 ```ts

@@ -34,6 +34,8 @@ export function useAuth() {
   }
 
   async function logout() {
+    // Ask before the backend logout: once it's sent, staying on the page is no longer possible.
+    if (!await useLeaveGuard().confirmLeave()) return
     try {
       await logoutRequest({})
     }

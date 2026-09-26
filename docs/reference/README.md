@@ -12,6 +12,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | [Mutations](./mutations.md) | `useMutation` (create/update/delete, single and batch), `usePendingMutationCount` |
 | [Errors](./errors.md) | `ApiError`, `getErrorMessage`, `isSilentError`, error codes, `<ApiErrorAlert>`, `useNotify` |
 | [UI helpers](./ui.md) | `useConfirm`, `useTableSelection`, `<BulkActionsBar>`, `<StatusBadge>`, status constants, `previewList`, `pluralize` |
+| [Forms: unsaved changes](./forms.md) | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard`, `isSameFormValue` |
 | [Auth](./auth.md) | `useAuth`, public pages |
 | [Feature public APIs](./features.md) | What each feature exports for other features (`CategorySelect`, `useCategoryOptions`, …) |
 
@@ -36,6 +37,9 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<BulkActionsBar>` | component | [UI helpers](./ui.md#bulkactionsbar) | "5 selected · actions · Clear" |
 | `<StatusBadge>`, `STATUS_*` | component, consts | [UI helpers](./ui.md#statusbadge-and-status-constants) | ACTIVE/INACTIVE display and selects |
 | `previewList`, `pluralize` | util | [UI helpers](./ui.md#previewlist-and-pluralize) | "Coffee, Tea and 3 more", "3 categories" |
+| `useUnsavedChanges` | composable | [Forms](./forms.md#useunsavedchanges) | Warn before a page form's input is lost |
+| `useModalUnsavedChanges` | composable | [Forms](./forms.md#usemodalunsavedchanges) | Same, plus asking before the modal closes |
+| `useLeaveGuard` | composable | [Forms](./forms.md#useleaveguard) | App-wide "discard unsaved changes?" check |
 | `useAuth` | composable | [Auth](./auth.md#useauth) | Session user, login, logout |
 
 ## Conventions that apply everywhere

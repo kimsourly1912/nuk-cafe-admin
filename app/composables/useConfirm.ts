@@ -11,10 +11,11 @@ import type { ConfirmOptions } from '~/utils/mutation'
  */
 export function useConfirm() {
   const overlay = useOverlay()
-  const modal = overlay.create(ConfirmDialog)
 
   return async (options: ConfirmOptions): Promise<boolean> => {
-    const confirmed = await modal.open(options).result
+    // One overlay per question, removed when it closes, so callers outside components
+    // (route middleware) don't pile up overlay entries.
+    const confirmed = await overlay.create(ConfirmDialog, { destroyOnClose: true }).open(options).result
     return confirmed === true
   }
 }

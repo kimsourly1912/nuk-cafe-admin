@@ -331,4 +331,4 @@ Number of mutation calls in flight across the whole app.
 const pending = usePendingMutationCount() // Ref<number>
 ```
 
-Used by `plugins/pending-guard.client.ts` to warn before the tab closes while writes are still running. It could also drive a global "Saving…" indicator.
+Used by `plugins/leave-guard.client.ts` to warn before the tab closes while writes are still running. It could also drive a global "Saving…" indicator.

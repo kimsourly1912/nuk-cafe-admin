@@ -104,12 +104,13 @@ The returned object is **reactive (don't destructure it)**:
 - `execute(input, { confirm?, errorActions? })` **never throws**. It resolves to `{ ok: true, data }`, `{ ok: false, status: 'error', error }`, or `{ ok: false, status: 'cancelled' | 'skipped' }`.
 - `executeMany(items)` runs with one confirmation, limited concurrency, a progress toast with **Stop**, one summary toast ("3 categories deleted, 1 failed", reasons grouped, **Retry failed**) and one refresh. It resolves to `{ succeeded, failed, skipped, notStarted, cancelled }`. Items already in flight are skipped, not sent twice.
 - `isPending(key?)`, `pending`, `pendingCount()`, `errorOf(key?)`, `error`, `data`, `isRemoved(key)`, `reset(key?)`.
-- Calls are **never cancelled on unmount**. `plugins/pending-guard.client.ts` warns before the tab closes while anything is in flight.
+- Calls are **never cancelled on unmount**. `plugins/leave-guard.client.ts` warns before the tab closes while anything is in flight.
 
 Rules the Categories reference follows:
 
 - The feature exposes **`isBusy(id)`** (any mutation in flight for that item). The list dims the row, shows a spinner instead of its actions, and blocks new actions on it.
 - **Form modals stay open while saving** (backend errors need the input on screen) but **can be closed**: the save continues. If it then fails, the toast offers **"Reopen"** with the draft restored (`errorActions` + a `draft` prop).
+- **Unsaved changes are guarded.** Every create/edit form uses `useModalUnsavedChanges` (modals) or `useUnsavedChanges` (pages), so closing the modal, changing route, logging out or reloading with changed input asks first. Pass `paused: saving` and call `markClean()` after a successful save (see [docs/reference/forms.md](docs/reference/forms.md)).
 - **Create is keyed by something that identifies the submission** (the name), so two different creates can run in parallel while a double submit is skipped.
 - **Bulk actions:** `useTableSelection(rows, getKey, { resetOn: [query] })` + `<BulkActionsBar>`. Selection clears on filter or page change. After `executeMany`, keep only the `failed` and `notStarted` rows selected.
 - If the current page becomes empty after deletes, step back to the last existing page.
@@ -193,6 +194,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `StatusBadge`, `STATUS_ITEMS`, `STATUS_FILTER_ITEMS`, `Status` | `components/`, `utils/status.ts` | ACTIVE/INACTIVE display, form select and filter select |
 | `useConfirm()` | `composables/` | `await confirm({ title, danger: true })` resolves to `boolean` (`useMutation`'s `confirm` uses it) |
 | `unwrap`, `ApiError`, `getErrorMessage` | `utils/api*.ts` | API calls and errors (see "Error handling") |
+| `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard` | `composables/`, `utils/form-value.ts` | "Discard unsaved changes?" for page and modal forms; the route middleware and tab-close plugin use them |
 | `useNotify()` | `composables/` | Toasts for API actions that aren't mutations |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
 
@@ -208,7 +210,7 @@ Mirror `app/features/categories/` file by file:
    - `use<Feature>Mutations()`: `create` / `update` / `remove` built with `useMutation` (ids `'<feature>:<action>'`, `key`, messages naming the item, `invalidate`, `confirm` + `removes` + `batch` for remove), plus `isBusy(id)`.
 3. **`composables/use<Feature>Options.ts` + `components/<Feature>Select.vue` (public):** add these if other features need to pick this resource. Key the options per filter. The select hides the `USelect` sentinel for "none" (see `CategorySelect`).
 4. **`schemas/<feature>-form.ts`:** the Valibot schema with user-facing messages (generated request schemas carry no rules). `to<Feature>Form(existing?)` builds the initial form state. `to<Feature>Request(form, existing?)` builds the request body and **copies over fields the form doesn't edit** (`nameI18n`, `sortOrder`, ...) so the PUT doesn't wipe them. Unit-test it in `tests/`.
-5. **`components/<Feature>FormModal.vue`:** opened with `useOverlay().create(...)`. On submit: `const result = await create.execute(body, { errorActions })`, then `if (result.ok) emit('close', true)`. It supports closing mid-save with "Reopen" (`draft` prop), and pulls in other features' pickers from their `index.ts`.
+5. **`components/<Feature>FormModal.vue`:** opened with `useOverlay().create(...)`. On submit: `const result = await create.execute(body, { errorActions })`, then `if (result.ok) emit('close', true)`. It supports closing mid-save with "Reopen" (`draft` prop), guards unsaved input with `useModalUnsavedChanges` (declare the `update:open` emit, bind `@update:open` on `UModal`, Cancel calls `requestClose()`), and pulls in other features' pickers from their `index.ts`.
 6. **`components/<Feature>ListPage.vue`:** `usePaginatedQuery` + list composable. Rows exclude `remove.isRemoved(id)`. `UTable` with a select column (`useTableSelection`), `#<column>-cell` slots, busy rows (`isBusy`: dimmed, spinner instead of actions), `<ApiErrorAlert>` on load error, row actions through `UDropdownMenu` (delete = `remove.execute(row)`), and `<BulkActionsBar>` calling `remove.executeMany(selection.selected)`.
 7. **`navigation.ts` + `index.ts`:** export the sidebar entry and the public building blocks, then add the entry to a group in `app/utils/navigation.ts`.
 8. **Route file** `app/pages/<feature>/index.vue`: import and render `<Feature>ListPage.vue`, nothing else.
@@ -224,7 +226,7 @@ Shared code tests live in `test/` (e.g. `test/unit/api-fetch.test.ts` covers the
 
 ## Conventions
 
-- Prefer Nuxt-native tools (`useAsyncData`, `useState`, `useRuntimeConfig`, route middleware) before adding a library. There is no Pinia: shared state is `useState` inside a composable.
+- Prefer Nuxt-native tools (`useAsyncData`, `useState`, `useRuntimeConfig`, route middleware), then `@vueuse/core` (import it explicitly: it isn't auto-imported), before adding a library or hand-rolling a utility. There is no Pinia: shared state is `useState` inside a composable.
 - Import SDK functions and types from `~/generated/api`, and Valibot as `import * as v from 'valibot'`.
 - Icons are bundled at build time, never fetched (decisions D18). Write icon names as literal strings (`'i-lucide-tags'`), not template strings, and install `@iconify-json/<collection>` before using a new collection.
 - `USelect` cannot hold an empty or `undefined` value. Use `ANY` for "all" filters and let the `<Feature>Select` components handle "none".

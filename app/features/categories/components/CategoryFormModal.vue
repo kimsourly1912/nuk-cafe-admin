@@ -21,13 +21,22 @@ const props = defineProps<{
   draft?: CategoryForm
 }>()
 
-const emit = defineEmits<{ close: [saved: boolean] }>()
+// `update:open` is declared so closing (X, Esc, outside click) goes through `unsaved` instead of
+// straight to the overlay.
+const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: boolean] }>()
 
 const isEdit = computed(() => props.category?.id !== undefined)
 const state = reactive<CategoryForm>({ ...(props.draft ?? toCategoryForm(props.category)) })
 
 const { create, update } = useCategoryMutations()
 const saving = ref(false)
+
+// Compared with the form's original values (not the draft), so a reopened draft counts as unsaved.
+const unsaved = useModalUnsavedChanges(state, {
+  initial: toCategoryForm(props.category),
+  paused: saving,
+  close: () => emit('close', false),
+})
 
 // If the user closes the modal mid-save, a failure offers to reopen it with their input.
 let closed = false
@@ -54,12 +63,17 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
     : await create.execute(body, overrides)
   saving.value = false
 
-  if (result.ok) emit('close', true)
+  if (!result.ok) return
+  unsaved.markClean()
+  emit('close', true)
 }
 </script>
 
 <template>
-  <UModal :title="isEdit ? 'Edit category' : 'New category'">
+  <UModal
+    :title="isEdit ? 'Edit category' : 'New category'"
+    @update:open="unsaved.onOpenChange"
+  >
     <template #body>
       <UForm
         id="category-form"
@@ -120,7 +134,7 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
           :label="saving ? 'Close' : 'Cancel'"
           color="neutral"
           variant="outline"
-          @click="emit('close', false)"
+          @click="unsaved.requestClose()"
         />
         <UButton
           type="submit"

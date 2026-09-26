@@ -33,6 +33,7 @@ interface ConfirmOptions {
   title: string
   description?: string
   confirmLabel?: string // default 'Confirm'
+  cancelLabel?: string  // default 'Cancel'
   danger?: boolean      // red confirm button
 }
 ```
@@ -42,7 +43,7 @@ interface ConfirmOptions {
 - Resolves `true` on confirm and `false` on Cancel. The dialog can't be dismissed by clicking outside or pressing Escape, so the user must choose.
 - It closes **as soon as the user answers**. Any work that follows runs in the background.
 - For deletes, don't call it yourself. Set `confirm` on [`useMutation`](./mutations.md#options).
-- Call `useConfirm()` during `setup`, not inside an event handler.
+- Call `useConfirm()` during `setup` (or in route middleware), not inside an event handler. Each question opens its own dialog, which is removed when it closes.
 
 ---
 

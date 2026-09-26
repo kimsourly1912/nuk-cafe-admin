@@ -4,9 +4,11 @@ withDefaults(defineProps<{
   title: string
   description?: string
   confirmLabel?: string
+  cancelLabel?: string
   danger?: boolean
 }>(), {
   confirmLabel: 'Confirm',
+  cancelLabel: 'Cancel',
 })
 
 const emit = defineEmits<{ close: [confirmed: boolean] }>()
@@ -22,7 +24,7 @@ const emit = defineEmits<{ close: [confirmed: boolean] }>()
     <template #footer>
       <div class="flex w-full justify-end gap-2">
         <UButton
-          label="Cancel"
+          :label="cancelLabel"
           color="neutral"
           variant="outline"
           @click="emit('close', false)"

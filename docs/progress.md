@@ -26,6 +26,7 @@ The foundation is complete and one feature (Categories) is built as the referenc
 | Error handling: `ApiError` classification, user-safe messages, `ApiErrorAlert`, `useNotify`, safety-net plugin | done | unit, browser-mock, real-API (error shapes) |
 | Auth: login page, session check, global guard, logout, redirect on session loss | done | browser-mock, real-API (failed login only) |
 | Icons bundled into the client build, no runtime Iconify API calls (D18) | done | build output (all app icons present in the bundle); not yet checked in a browser |
+| Unsaved-changes guard: modal close (X/Esc/outside/Cancel), route changes incl. back/forward, logout, tab close/reload; one dialog for many forms (D19) | done | unit (`form-value`), browser-mock (27 scenarios on the Categories modal). Page forms and logout-with-unsaved-form: no page form exists yet, so unverified in a browser |
 | Feature architecture + ESLint boundary rules | done | lint (violations verified to be reported) |
 | CRUD state: `useApiQuery`, `useMutation` (per-item concurrency, shared state, batch, Stop, Retry failed), `useTableSelection`, `BulkActionsBar`, leave-page guard | done | unit (engine), browser-mock (all async scenarios) |
 
@@ -78,6 +79,7 @@ Backend resources available (from the spec) and their status. The folder names f
 - Category sort order (`/staff/categories/sort-order`) has no UI.
 - Nothing is role-aware (Q6).
 - No committed e2e tests.
+- Unsaved-changes comparison treats `1` and `'1'` as different and array order as meaningful (see docs/reference/forms.md).
 
 ## How to verify
 

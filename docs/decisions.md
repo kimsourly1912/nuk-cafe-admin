@@ -100,3 +100,17 @@ Dates are when the decision was made. All of these were agreed with the project 
 - **Context:** With `ssr: false`, `@nuxt/icon` (installed by Nuxt UI) defaults to `provider: 'iconify'` and fetches every icon from `api.iconify.design` at runtime: a third-party dependency and a flash of missing icons.
 - **Decision:** `icon.provider: 'none'` + `icon.clientBundle.scan` in `nuxt.config.ts`. The build scans `app/**/*.{vue,ts}` for literal icon names and bundles them from the local `@iconify-json/lucide`. Nuxt UI adds its own icons through the `icon:clientBundleIcons` hook. Nothing is fetched at runtime.
 - **Consequence:** Icon names must be literal strings (`'i-lucide-tags'`), never built (`` `i-lucide-${name}` ``), or they won't render. Using another collection means installing its `@iconify-json/<collection>` package.
+
+### D19: Unsaved-changes guard, 2026-09-26
+- **Context:** Users lose typed input by closing a form modal, navigating (sidebar, back button), logging out or reloading.
+- **Decision:** One app-wide registry of open forms (`useUnsavedChanges`), a modal variant (`useModalUnsavedChanges`) that intercepts `UModal`'s `update:open`, one global route middleware and one `beforeunload` listener (merged with the in-flight-save guard into `plugins/leave-guard.client.ts`). Two separate, independent composables per form type were rejected: each would add its own route guard and listener, so a modal over a page form would ask twice, and a modal left open during a back navigation would fall between them.
+- **"Unsaved"** means the values differ from what the form opened with (`isSameFormValue`: deep, `''`/`null`/`undefined`/`[]` are equal). Touched-but-unchanged doesn't count. A form is never unsaved while it saves (`paused`), so closing mid-save still works (D13).
+- **Details that are easy to break:**
+  - `isSameFormValue` must not `toRaw` its input, or the `computed` stops tracking the form.
+  - The modal must declare the `update:open` emit, otherwise the overlay's listener closes it before we can ask.
+  - Overlay modals are app-level: they survive route changes. On Discard every registered form's `onDiscard` runs, which closes modals.
+  - `logout()` asks **before** calling the backend: after the call, staying on the page is impossible.
+  - The session-expiry redirect doesn't ask (the middleware skips when logged out).
+  - `beforeunload` is attached only while needed (a permanent listener disables bfcache).
+  - `useConfirm` now creates one overlay per question with `destroyOnClose`, so calling it from middleware doesn't accumulate overlay entries.
+- **VueUse:** `useEventListener` (reactive target attaches/detaches the listener) and `tryOnScopeDispose`. `useCloned` was tried for the baseline but dropped: its `sync()` can only snapshot the current state, and a reopened draft needs a different baseline (`initial`).
