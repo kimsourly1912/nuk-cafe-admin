@@ -6,7 +6,7 @@ _Draft, 2026-09-26. The [system blueprint](system-blueprint.md) is the product-l
 
 Build one Nuxt 4 application and Nitro API backed by Cloudflare Workers, D1 (SQLite), and R2. NuxtHub supplies the Drizzle database and blob integration. `@nuxtjs/better-auth` owns authentication tables and sessions. The same API must support the current admin portal and later customer and cashier clients. A separate customer UI may be another Nuxt app, but business rules and writes stay in this backend.
 
-The current frontend and generated Spring SDK are useful **behavioral references**, not the new database or API contract. Reuse a screen or shared UI helper only when it fits the new product contract. Keep the feature boundaries, `useApiQuery`, `useMutation`, form guards, and cross-tab invalidation where they still fit. Replace the Spring proxy, cookie refresh, and external SDK decisions when implementation begins (D2–D6 in `docs/decisions.md`). The admin UI may remain an SPA (`ssr: false`) while Nitro serves its API; decide SSR for the customer website separately. This document does not change runtime behavior.
+The preserved admin UI is a **behavioral reference**, not the new database or API contract. The Spring proxy, cookie refresh wrapper, and generated SDK have been removed (D39); the screens have unresolved API imports until they are connected to local routes. Reuse a screen or shared UI helper only when it fits the new product contract. Keep the feature boundaries, `useApiQuery`, `useMutation`, form guards, and cross-tab invalidation where they still fit. The admin UI may remain an SPA (`ssr: false`) while Nitro serves its API; decide SSR for the customer website separately.
 
 ```mermaid
 flowchart LR

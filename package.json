@@ -14,8 +14,7 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit --project nuxt",
     "test:e2e": "vitest run --project e2e",
-    "typecheck": "nuxt typecheck",
-    "api:generate": "openapi-ts"
+    "typecheck": "nuxt typecheck"
   },
   "dependencies": {
     "@internationalized/date": "^3.12.4",
@@ -35,7 +34,6 @@
     "vue-router": "^5.3.1"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.99.0",
     "@iconify-json/lucide": "^1.2.136",
     "@libsql/client": "^0.18.0",
     "@nuxt/eslint": "^1.17.0",

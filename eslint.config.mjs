@@ -8,7 +8,6 @@ import withNuxt from './.nuxt/eslint.config.mjs'
 const FEATURE_ALIAS = String.raw`^(~|@|~~/app)/features/[^/]+/`
 
 export default withNuxt(
-  { ignores: ['app/generated/**'] },
   {
     files: ['app/**/*.{ts,vue}'],
     ignores: ['app/pages/**'],

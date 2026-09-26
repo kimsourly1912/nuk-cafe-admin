@@ -1,6 +1,4 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
-const legacyApiProxyTarget = process.env.LEGACY_API_PROXY_TARGET ?? 'https://dev-api.nukcafe.co/nukcafe/api/v2'
-
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/ui', '@nuxt/test-utils/module', '@nuxthub/core', '@nuxtjs/better-auth'],
   // The existing admin UI remains a SPA while Nitro hosts the new local API.
@@ -12,24 +10,7 @@ export default defineNuxtConfig({
     },
   },
   css: ['@/assets/css/tailwind.css'],
-  runtimeConfig: {
-    public: {
-      // Temporary base for the existing Spring SDK. New Nitro routes own /api.
-      legacyApiBase: '/legacy-api',
-    },
-  },
   compatibilityDate: '2025-07-15',
-  nitro: {
-    // Keep the old admin screens working without intercepting Better Auth's /api/auth routes.
-    // Remove this when those screens use the new Nitro API.
-    devProxy: {
-      '/legacy-api': {
-        target: legacyApiProxyTarget,
-        changeOrigin: true,
-        headers: { origin: new URL(legacyApiProxyTarget).origin },
-      },
-    },
-  },
   hub: {
     blob: true,
     db: {

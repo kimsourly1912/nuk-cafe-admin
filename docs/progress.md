@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-26 (List UI refresh)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-26 (external API removal)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -13,11 +13,13 @@ Every "done" item states how it was checked. Keep using these labels:
 
 ## Current state
 
-**Full stack direction (2026-09-26):** the owner chose one Nuxt backend for the admin, customer, and cashier apps, using `@nuxtjs/better-auth`, NuxtHub, Drizzle, SQLite/D1, and R2, with a new schema and no Spring data migration. The [backend and data model draft](plans/fullstack-backend.md) covers the proposed tables, request flows, phases, and decisions still needed. **Planning only, unverified:** no server code, schema, migration, or Cloudflare deployment has been added. The current Spring API frontend remains in use. Next: settle the phase 0 identity/permission and currency contracts, then validate the stack locally and in staging.
+**Current transition (2026-09-26):** The [system blueprint](plans/system-blueprint.md) and [backend plan](plans/fullstack-backend.md) describe the new Nuxt backend for all cafe apps. NuxtHub SQLite/blob and Better Auth email/password are configured; the first auth migration exists and applied locally. The external Spring generator, generated SDK, proxy, browser client, envelope helper, and refresh wrapper have been removed (D39). The admin UI source remains unchanged as a reference and currently has unresolved imports from `~/generated/api` and `unwrap`; it is intentionally not build-ready until local auth/menu APIs are designed and connected. No app-domain schema, business routes, or Cloudflare deployment exists yet.
 
-**Greenfield product blueprint (2026-09-26):** [system-blueprint.md](plans/system-blueprint.md) now starts from customer, staff, and manager journeys. Confirmed launch scope: customer website, pickup and dine-in with table QR, USD, one branch, email/password accounts with no guest ordering, pay at counter before preparation, points earned at 1 per USD after completion and exchanged for vouchers, and staff-issued vouchers; native app, delivery, and online payment are outside that scope. Product policy questions are listed in the blueprint. This is still planning only; the current app is untouched by the new design.
+**Greenfield product blueprint (2026-09-26):** [system-blueprint.md](plans/system-blueprint.md) starts from customer, staff, and manager journeys. Confirmed launch scope: customer website, pickup and dine-in with table QR, USD, one branch, email/password accounts with no guest ordering, pay at counter before preparation, points earned at 1 per USD after completion and exchanged for vouchers, and staff-issued vouchers; native app, delivery, and online payment are outside that scope. Product policy questions remain open in the blueprint; no business routes have been implemented.
 
-The foundation is complete. Categories is the reference feature; Schedules ([plan](plans/schedules.md)) and Products / "Menu items" ([plan](plans/products.md)) are built. Nothing has been tested with a real staff login yet: no credentials were available. Only unauthenticated calls (session check, failed login, error shapes) were checked against the real dev API.
+**Verification of removal:** `pnpm lint` passed; `pnpm test:unit` passed (13 files, 123 tests). The local Better Auth anonymous session endpoint returned `200 null`; the former `/legacy-api/staff/auth/session` path returned Nuxt HTML, confirming it is no longer proxied. `pnpm typecheck` and `pnpm build` fail at the preserved UI's missing `~/generated/api` and `unwrap` imports; `pnpm test` fails during its e2e build for the same reason. These are expected transition failures, not new API failures. The old `api-error.ts` and browser mock fixtures remain as UI scaffolding and will be replaced when local contracts are implemented.
+
+The following tables are a historical snapshot of the former Spring-backed frontend. Categories, Schedules, and Products remain as UI source, but their API adapters have been removed. Their former test results do not verify the new backend.
 
 ### Foundation
 
@@ -73,6 +75,13 @@ Backend resources available (from the spec) and their status. The folder names f
 
 ## Next steps (recommended order)
 
+1. Finalize Better Auth identity, staff roles, branch permissions, and API response contracts for the new system.
+2. Implement application Drizzle tables and Nitro routes for categories, schedules, and products; then replace the preserved screens' SDK imports and `unwrap` calls with local API adapters.
+3. Connect the admin auth screen and guards to Better Auth. Re-enable the relevant browser tests with local API fixtures and run the complete CI gates.
+4. Validate migrations and R2/D1 bindings in Cloudflare staging before deployment.
+
+The older Spring-specific roadmap below is retained as a historical record only.
+
 **Feature standard (2026-09-26, docs only; revised twice after review the same day):** [docs/feature-standard.md](feature-standard.md) defines planning, structure, list/form/picker behavior, the capability roadmap and the definition of done. The revision separates reversible **[Choice]** items from **[Open]** backend/business/authorization contracts, which developers must not invent (defer the affected behavior, continue the rest). It replaces "encode clearing explicitly" with "map intent through the established contract, defer unknown clears", allows form-local submission state and justified screen-specific polling, and corrects an overstatement: row blocking is **not** enforced for bulk actions (an implementation gap, below). Checked: relative links and anchors resolve (script), `git diff --check`, only docs changed. Statements about existing behavior were re-checked against the code; the first version had overstated busy-row protection. Second revision: pickers separate **displaying an existing value** from **allowing a new selection** (a listing endpoint isn't eligibility evidence; unresolved eligibility is deferred, not defaulted, Q9). Schedules deletion is deferred until its effect on referenced products is known. The concurrency guarantee is stated as check-and-reserve at request start: `isBusy` prefiltering is only a preliminary check, and the engine has no cross-mutation exclusion (mutations.md). No application behavior was changed or newly verified. Gaps in the reference feature (not fixed): Q7 (clearing a parent), bulk delete vs pending update (below), `CategorySelect` has no error/unavailable-value states, no committed tests for row blocking, selection reset or last-page step-back. *Update:* all but Q7 were fixed by the foundation hardening (plans/admin-foundation-hardening.md).
 
 
@@ -125,7 +134,7 @@ Backend resources available (from the spec) and their status. The folder names f
 
 ## How to verify
 
-- `pnpm lint`, `pnpm typecheck` and `pnpm test` must pass before finishing any change.
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. During the SDK removal transition, record the expected typecheck and e2e build failures here; restore green gates as each screen is integrated with local routes.
 - **e2e (preferred):** `pnpm vitest run --project e2e`. Add scenarios to `test/e2e/` instead of throwaway scripts. Pitfalls met so far:
   - `expect.poll` defaults to a 1 s timeout; a cold page (session → refresh → redirect) can take longer under full-suite load. The e2e project sets 5 s (`vitest.config.ts`). Flaky "expected /categories to be /login" failures came from this.
   - **Escape also dismisses Reka toasts.** A test that presses Escape to close a modal may silently close the toast it later checks. Close modals with their button when toasts matter.

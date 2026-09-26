@@ -19,7 +19,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 ## What this is
 
-NUK Cafe is moving to one Nuxt full stack system for admin, customer, and cashier apps. The existing admin UI remains a SPA and temporarily consumes the external Spring Boot API. New server work uses NuxtHub, Better Auth, Drizzle, SQLite/D1, and R2; see [the system blueprint](docs/plans/system-blueprint.md) and [backend plan](docs/plans/fullstack-backend.md). The existing feature rules below apply to the legacy admin screens until each feature is ported. Do not treat the Spring SDK or its auth flow as a contract for the new backend.
+NUK Cafe is moving to one Nuxt full stack system for admin, customer, and cashier apps. The external Spring integration has been removed. The existing admin UI source is preserved as a reference, with unresolved generated SDK imports until new API contracts are built. New server work uses NuxtHub, Better Auth, Drizzle, SQLite/D1, and R2; see [the system blueprint](docs/plans/system-blueprint.md) and [backend plan](docs/plans/fullstack-backend.md). The feature rules below describe the preserved UI patterns; old Spring endpoint, SDK, auth, and error recipes are historical and must not be reused for new backend work.
 
 The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Schedules (card list) or Menu items (card grid + table); Categories is a tree (D37).
 
@@ -28,10 +28,9 @@ The code is **organized by feature** under `app/features/`. `app/features/catego
 Package manager is **pnpm**.
 
 ```bash
-pnpm dev                                  # http://localhost:3000; /api is local, /legacy-api proxies Spring in dev
+pnpm dev                                  # http://localhost:3000; /api is local Nitro/Better Auth
 pnpm nuxt db generate                     # create a migration after changing the server schema
 pnpm nuxt db migrate                      # apply local SQLite migrations
-pnpm api:generate                         # legacy Spring SDK only; do not run for the new backend
 pnpm lint / pnpm lint:fix                 # ESLint also does formatting (no Prettier) and enforces feature boundaries
 pnpm typecheck                            # vue-tsc via nuxt typecheck
 pnpm test                                 # all Vitest projects
@@ -41,7 +40,7 @@ pnpm vitest run app/features/categories   # one feature's tests
 pnpm vitest run -t "refreshes once"
 ```
 
-Before finishing a change, run `pnpm lint`, `pnpm typecheck` and `pnpm test`. CI (`.github/workflows/ci.yml`) runs the same on every push to `main` and every pull request.
+Before finishing a change, run `pnpm lint`, `pnpm typecheck` and `pnpm test`. Until the preserved screens are wired to the new API, typecheck and browser tests may fail on their missing SDK imports; record those failures explicitly. CI (`.github/workflows/ci.yml`) still runs the same commands.
 
 Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix open redirect after login`), not `new`. The history is how the team finds when something broke. If lint or typecheck complains about missing `.nuxt/*` files, run `pnpm nuxt prepare`.
 
@@ -64,7 +63,7 @@ app/
 ├── pages/                       # THIN route files: definePageMeta + render <Feature>Page
 ├── components/ composables/ utils/   # SHARED across features only (auto-imported)
 ├── layouts/ middleware/ plugins/ types/   # app shell
-└── generated/api/               # generated SDK (shared, never edit)
+└── (no generated Spring SDK; new API contracts are pending)
 ```
 
 ### Rules (the boundary rules are enforced by ESLint in `eslint.config.mjs`)
@@ -126,62 +125,16 @@ Rules the Categories reference follows:
 
 The concurrency rules live in the framework-free engine `app/utils/mutation.ts` and are unit-tested in `test/unit/mutation.test.ts`. `useMutation` only wires it to Nuxt (state, toasts, confirm, invalidate).
 
-## Backend API facts (verified against the dev API)
+## API transition
 
-- Spec: `https://dev-api.nukcafe.co/nukcafe/api/v2/api-docs`. The admin portal uses only `/staff/**` and `/admin/**` (filtered in `openapi-ts.config.ts`).
-- **Every response is an envelope** `{ data, success, msg, reason }` (`ResponseMsg*` types). `msg` is a code (`NC1000`, `LOGIN_FAILED`), `reason` is human-readable.
-- **Failures can arrive as HTTP 200 with `success: false`** (e.g. bad login). The API layer turns these into errors, so feature code never checks `success`.
-- Pagination: query `page` (**0-based**) + `size`. Response `data` is `{ content, totalElements, totalPages, currentPage, pageSize, hasNext, hasPrevious }`.
-- Most resources share `status: 'ACTIVE' | 'INACTIVE'` and i18n maps `nameI18n` / `descriptionI18n` (`en`, `zh-HK`, `km`).
-- Auth is **HttpOnly cookies** (`staff_access_token`, `staff_refresh_token`) set by `/staff/auth/login`. Endpoints: `login`, `session` (GET, returns `StaffSessionDto` with `groups`), `refresh`, `logout`. The frontend never reads or stores tokens.
-- Cookies are `SameSite=Lax` with no `Domain`, so the browser must see the legacy API as same-site. Dev: legacy requests go through the Nitro `devProxy` at `/legacy-api` (`nuxt.config.ts`), which also rewrites `Origin`. Prod: set `NUXT_PUBLIC_LEGACY_API_BASE` to a same-site reverse-proxy path (see `.env.example`).
-- The backend's names are imperfect: `operationId`s are auto-suffixed (`createCategory1`, `update_2`, `getById_1`), and every response field is optional because Springdoc doesn't mark `required`. Find an SDK function by its URL: search `app/generated/api/sdk.gen.ts` for `url: '/staff/...'`.
+The Spring OpenAPI generator, generated SDK, proxy, browser client, and token refresh wrapper were removed in D39. The preserved admin feature code still imports `~/generated/api` and calls `unwrap`; these references are intentionally unresolved until local API contracts are implemented. Do not restore the external SDK or proxy to make those screens compile.
 
-## Request pipeline
+New endpoints belong in Nitro under `/api/v1`; Better Auth owns `/api/auth`. Define application data in `server/db/schema/`, generate a Drizzle migration with `pnpm nuxt db generate`, and apply it locally with `pnpm nuxt db migrate`. Keep route validation and authorization on the server. The route and table design are in [the backend plan](docs/plans/fullstack-backend.md).
 
-```
-feature component
-  → feature composable                         useAsyncData + unwrap()
-    → generated SDK function (sdk.gen.ts)      typed params/body/response
-      → Hey API ofetch client, configured in app/plugins/api.ts (baseUrl, credentials: 'include')
-        → createApiFetch (app/utils/api-fetch.ts)   envelope check → ApiError; 401 → refresh once → retry
-          → ofetch → /legacy-api (dev proxy) → Spring backend
-```
-
-- `app/generated/api/`: **generated, never edit by hand, never lint**. Contains `sdk.gen.ts` (one function per endpoint), `types.gen.ts` (request/response types), `valibot.gen.ts` (`v<SchemaName>` schemas). Regenerate with `pnpm api:generate` after backend changes, then fix any renamed operationIds with typecheck.
-- The client is `@hey-api/client-ofetch` with `throwOnError: true`: SDK calls resolve to `{ data: <envelope> }` or throw. We don't use `@hey-api/client-nuxt`: it's beta, and its composable types fail to compile against Nuxt 4.5.
-- `unwrap(sdkCall(...))` returns the envelope's `data`. Use it for every SDK call.
-- Token refresh is single-flight: concurrent unauthorized errors share one `/staff/auth/refresh`. If refresh fails, `clearSession()` runs and the watcher in `plugins/api.ts` redirects to `/login?redirect=...`.
-- Requests time out after 30s (`timeout` in `plugins/api.ts`).
-
-## Error handling
-
-The backend is **inconsistent**: most failures come back as **HTTP 200 + `success: false`** (validation, not found, wrong login, even "unknown path"), 401 is a real HTTP status, and gateway/CORS/crash errors may not be the envelope at all (plain text, HTML, Spring's default JSON). `app/utils/api-error.ts` hides all of that:
-
-- **Every failure becomes one `ApiError`**, thrown by the API layer: `kind` (what went wrong), `status` (0 if there was no response, 200 for `success:false`), `code` (backend `msg`), `message` (**always safe to show**), `detail` (raw technical text, for logs) and `retryable`.
-- **The backend code wins over the HTTP status** when classifying. `API_ERROR_CODES` maps known codes to kinds: `NC0001` → validation, `NC0011`/`NC0014` → not_found, `NC1000` → unauthorized (triggers a refresh even when sent with HTTP 200), `NC0000` → unknown. **Add new codes there as you meet them.** Unknown codes sent with HTTP 200 become `business`.
-- **The message shown to users:** the backend `reason` for user-facing kinds (business, validation, not_found, conflict, forbidden). Otherwise a friendly fallback from `API_ERROR_MESSAGES`: technical codes (`NC0000`, e.g. "No static resource…"), 5xx, HTML/plain-text bodies, network and timeout. Unexpected JS errors never leak their message.
-- `ApiError.from(anything)` normalizes any thrown value. It walks the `cause` chain because `useAsyncData`'s NuxtError replaces its cause with the ApiError's own cause. It detects ofetch errors by name (not `instanceof`), because Vite can load two copies of ofetch.
-
-How to use it in UI code:
-
-| Situation | Use |
-|---|---|
-| Create/update/delete | `useMutation` does it: toasts, per-item `errorOf(key)`, silent errors skipped |
-| Other one-off API action (e.g. export) | `try { … notify.success('Exported') } catch (e) { notify.error('Could not export', e) }` with `useNotify()` |
-| Failed load (`useApiQuery` error) | `<ApiErrorAlert v-if="error" :error="error" title="Could not load …" @retry="refresh()" />` |
-| Inline form error (e.g. login) | `getErrorMessage(error)` in a `UAlert` |
-| Branch on the failure | `ApiError.from(e).kind === 'not_found'` (never compare status or message strings) |
-
-- `useNotify().error` skips `aborted` and `unauthorized` errors (the session redirect already handles those) and logs `detail` to the console in dev.
-- `plugins/errors.ts` is a safety net that toasts errors nobody caught (`vue:error`, unhandled `ApiError` rejections). Don't rely on it: catch at the call site.
-- `app/error.vue` renders fatal errors (unknown routes, `showError()`).
-- Don't use `useToast()` directly for API results, and don't show `error.message` from anything that isn't an `ApiError`.
-- The backend's validation errors are a single string (`"Required fields are missing: password, username"`), not per-field, so show them as a toast or form-level alert. Field-level rules belong in the Valibot form schema.
-
+The existing `app/utils/api-error.ts` still contains Spring error-code mapping because preserved UI state helpers depend on it. Replace that mapping when the local API error contract is defined; do not use Spring codes in new routes.
 ## Auth & app shell
 
-- `app/features/auth/` exposes `useAuth()`: `user` (state, no tokens), `isLoggedIn`, `fetchSession`, `login`, `logout`. The shell (`middleware/auth.global.ts`, `plugins/api.ts`, `layouts/default.vue`) imports it from `~/features/auth`.
+- `app/features/auth/` still exposes the former `useAuth()`, whose SDK imports are unresolved. Replace its data adapter with Better Auth before using the admin shell. The shell imports it from `~/features/auth`.
 - The middleware protects **every page by default**. Opt out with `definePageMeta({ public: true })` (typed in `app/types/page-meta.d.ts`).
 - **Session transitions** (login, logout, expiry, another staff member via another tab) clear the previous identity's query data, mutation outcomes, toasts, overlays and unsaved forms, and discard its in-flight responses (`plugins/session-boundary.client.ts`, `useAuth().generation`, D29). Features must not keep user data outside `useApiQuery`/`useMutation`/`useState`-based composables, or the boundary can't clear it.
 - App-wide behavior needs nothing from features: login/logout apply to all open tabs (`plugins/auth-sync.client.ts`), `?` shows keyboard shortcuts, tab titles from `definePageMeta({ title })`, a save in one tab refreshes the same lists in the app's other tabs at once, lists refetch when the user returns to the tab (data ≥ 5s old) or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards. Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
@@ -206,7 +159,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `invalidate(...features)` | `utils/invalidate.ts` | Refetch data after mutations |
 | `StatusBadge`, `STATUS_ITEMS`, `STATUS_FILTER_ITEMS`, `Status` | `components/`, `utils/status.ts` | ACTIVE/INACTIVE display, form select and filter select |
 | `useConfirm()` | `composables/` | `await confirm({ title, danger: true })` resolves to `boolean` (`useMutation`'s `confirm` uses it) |
-| `unwrap`, `ApiError`, `getErrorMessage` | `utils/api*.ts` | API calls and errors (see "Error handling") |
+| `ApiError`, `getErrorMessage` | `utils/api-error.ts` | Preserved UI error handling; Spring code mapping must be replaced for the new API |
 | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard` | `composables/`, `utils/form-value.ts` | "Discard unsaved changes?" for page and modal forms; the route middleware and tab-close plugin use them |
 | `<SearchInput>`, `<ListEmptyState>` | `components/` | List toolbar search (as you type) and empty states ("nothing yet" vs "filters hide everything") |
 | `invalidateAll()`, `invalidateInThisTab()` | `utils/invalidate.ts` | Refetch loaded or only stale queries / invalidate without telling other tabs (used by the freshness plugin) |
@@ -216,35 +169,21 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 
 Expected to be promoted to the root when the first two features need them: `ProductImageInput` (in `app/features/products/`; rewards, banners and vouchers also have upload endpoints) and `I18nFields` (for `nameI18n` / `descriptionI18n`). Money formatting (`formatPrice`, `PRICE_FORMAT`, USD) lives in `app/features/products/utils/money.ts` until a second feature shows prices.
 
-## Adding a feature (e.g. products)
+## Adding a full stack feature
 
-First plan it with the template in **[docs/feature-standard.md](docs/feature-standard.md)** (`docs/plans/<feature>.md`), and finish against its definition of done. Then mirror `app/features/categories/` file by file:
-
-1. **Endpoints:** find them in `app/generated/api/sdk.gen.ts` by URL. If they're missing or stale, run `pnpm api:generate`.
-2. **`composables/use<Feature>s.ts` (private):**
-   - `use<Feature>List(query)`: `useApiQuery('<feature>:list', () => unwrap(sdkFn({ query: toValue(query) })), { watch: [() => ({ ...toValue(query) })] })`.
-   - `use<Feature>Mutations()`: `create` / `update` / `remove` built with `useMutation` (ids `'<feature>:<action>'`, `key`, a shared `lock` on every mutation that acts on an existing record, messages naming the item, `invalidate`, `confirm` + `removes` + `batch` for remove), plus `isBusy(id)`.
-3. **`composables/use<Feature>Options.ts` + `components/<Feature>Select.vue` (public):** add these if other features need to pick this resource. Key the options per filter. The select hides the `USelect` sentinel for "none" (see `CategorySelect`).
-4. **`schemas/<feature>-form.ts`:** the Valibot schema with user-facing messages (generated request schemas carry no rules). `to<Feature>Form(existing?)` builds the initial form state. `to<Feature>Request(form, existing?)` builds the request body and **copies over fields the form doesn't edit** (`nameI18n`, `sortOrder`, ...) so the PUT doesn't wipe them. Unit-test it in `tests/`.
-5. **`components/<Feature>FormModal.vue`:** opened with `useOverlay().create(...)`. On submit: `const result = await create.execute(body, { errorActions })`, then `if (result.ok) emit('close', true)`. It supports closing mid-save with "Reopen" (`draft` prop), saves on Ctrl/⌘+Enter (`useSubmitShortcut(() => form.value?.submit())`, hint via `UTooltip :kbds="['meta', 'enter']"` on the submit button), guards unsaved input with `useModalUnsavedChanges` (declare the `update:open` emit, bind `@update:open` on `UModal`, Cancel calls `requestClose()`), and pulls in other features' pickers from their `index.ts`.
-6. **`components/<Feature>ListPage.vue`:** pick the layout by the job (cards, card list, table or tree: [list-ui-refresh.md](docs/plans/list-ui-refresh.md), D37); copy `ScheduleListPage` or `ProductListPage`. `usePaginatedQuery` (filters and page live in the URL) + list composable. Toolbar: `<SearchInput v-model="filters.search">` (searches as you type, `/` focuses it), other filter `USelect`s. `usePageShortcuts({ n: () => openForm() })` with `UTooltip :kbds="['n']"` on the New button. Body: `<StatusTabs>` (+ `useStatusCounts`), `<ApiErrorAlert>` on load error, `<ListSkeleton>` while `loading`, `<ListEmptyState :filtered="isFiltered" @create @clear="clearFilters()">`, then the rows (exclude `remove.isRemoved(id)`), `UPagination`, and a floating `<BulkActionsBar>` calling `remove.executeMany(selection.selected)`. Rows/cards: click opens the item, a checkbox (`useTableSelection`), busy state (`isBusy`: dimmed, spinner instead of actions), an always-visible ⋮ `UDropdownMenu` (delete = `remove.execute(row)`).
-7. **`navigation.ts` + `index.ts`:** export the sidebar entry and the public building blocks, then add the entry to a group in `app/utils/navigation.ts`.
-8. **Route file** `app/pages/<feature>/index.vue`: `definePageMeta({ title: '<Feature>' })`, then import and render `<Feature>ListPage.vue`, nothing else.
-9. **E2E test** `test/e2e/<feature>.test.ts`: at least list + create + delete, with `mockApi` (see "Tests").
+1. Start from the user journeys in [the system blueprint](docs/plans/system-blueprint.md), then write the relevant table and route contract in a feature plan. Settle any unresolved business or permission rule before encoding it.
+2. Add Drizzle tables and migrations, then server-side authorization, validation, and route handlers. Test data integrity and permissions at the server boundary.
+3. Replace only the corresponding preserved screen's generated SDK imports with calls to the new local routes. Adapt its form mapping to the new contract and keep its useful UI behavior.
+4. Add browser tests for the integrated journey. The old `test/e2e/support/mock-api.ts` fixtures model Spring responses and are not the new API contract.
 
 ## Tests
 
-`vitest.config.ts` defines three projects:
-- **unit** (Node, no Nuxt runtime): `app/features/*/tests/**/*.test.ts` and `test/unit/**`. Test pure code such as schemas, form mapping and utils. Files under test must import their dependencies explicitly, not through auto-imports.
-- **nuxt** (Nuxt environment via `@nuxt/test-utils`): `app/features/*/tests/**/*.nuxt.test.ts` and `test/nuxt/**`.
-- **e2e**: `test/e2e/**` (`@nuxt/test-utils/e2e` + `playwright-core`, real Chrome). `test/e2e/support/global-setup.ts` builds and serves the app **once** for all files. Start each file with `await setupE2e()`, and mock the backend with `mockApi(page, { 'GET /staff/x': () => data })` from `test/e2e/support/mock-api.ts` (throw `MockFailure` or a `failures.*` preset for `success: false`). **Unmocked requests fail the test** (HTTP 501 + `afterEach`), so every endpoint a test touches must have a handler. Helpers: `deferred()` (hold a response, release/fail on demand), `paginatedHandler(rows)`, `failures`, `gotoViaSidebar` (needed before testing back/forward), `beforeUnloadPrevented`, `toast`, `pageOf`, `openTabs`/`gotoHydrated` (two tabs of one browser). Pitfalls: docs/progress.md → "How to verify". `pnpm vitest run --project e2e` takes about a minute (mostly the build).
-
-Shared code tests live in `test/` (e.g. `test/unit/api-fetch.test.ts` covers the envelope, refresh and retry logic).
+`vitest.config.ts` has unit, Nuxt, and e2e projects. Run `pnpm test:unit` for backend-independent utilities and form logic. The e2e project builds the full app, so it currently fails on preserved screens that still import the deleted SDK. Keep those tests as UI behavior references and replace their Spring response fixtures when each screen uses the new local API. Record full-gate failures in `docs/progress.md` until integration is complete.
 
 ## Conventions
 
 - Prefer Nuxt-native tools (`useAsyncData`, `useState`, `useRuntimeConfig`, route middleware), then `@vueuse/core` (import it explicitly: it isn't auto-imported), before adding a library or hand-rolling a utility. There is no Pinia: shared state is `useState` inside a composable.
-- Import SDK functions and types from `~/generated/api`, and Valibot as `import * as v from 'valibot'`.
+- Define new API contracts in project-owned code. Import Valibot as `import * as v from 'valibot'`.
 - Icons are bundled at build time, never fetched (decisions D18). Write icon names as literal strings (`'i-lucide-tags'`), not template strings, and install `@iconify-json/<collection>` before using a new collection.
 - `USelect` cannot hold an empty or `undefined` value. Use `ANY` for "all" filters and let the `<Feature>Select` components handle "none".
 - The UI chrome is English only. Translatable content fields (`nameI18n`, ...) are data, preserved on update.

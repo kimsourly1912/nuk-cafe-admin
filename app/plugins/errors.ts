@@ -4,7 +4,6 @@
  */
 export default defineNuxtPlugin({
   name: 'errors',
-  dependsOn: ['api'],
   setup(nuxtApp) {
     const notify = useNotify()
 

@@ -1,5 +1,7 @@
 # Feature development standard
 
+> **Transition note (2026-09-26):** this standard describes the preserved Spring-backed UI. Its generated SDK and network layer have been removed. For new full stack features, define local data and route contracts first using [the system blueprint](plans/system-blueprint.md); apply the UI patterns here when those routes are ready.
+
 How every new feature (Schedules, Products, Rewards, …) is planned, built and verified, so they behave the same way. This page **links** to the rules and APIs rather than repeating them:
 
 - [AGENTS.md](../AGENTS.md): the rules (architecture, boundaries, conventions). It wins if this page disagrees.

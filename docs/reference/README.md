@@ -2,6 +2,8 @@
 
 Reference for the shared building blocks of the NUK Cafe admin portal: the composables, utilities and components every feature is built from.
 
+> **Transition note (2026-09-26):** the Spring SDK, proxy, and request wrapper have been removed. Examples that import `~/generated/api` or call `unwrap` describe the preserved UI's former implementation and are not executable until local API adapters replace them. The new backend contract is planned in [the system blueprint](../plans/system-blueprint.md).
+
 > The reference feature `app/features/categories/` uses everything documented here. When in doubt, read how Categories does it.
 
 ## Pages
