@@ -43,4 +43,18 @@ export default defineNuxtConfig({
       formatters: true,
     },
   },
+  icon: {
+    // With ssr: false, @nuxt/icon defaults to fetching from api.iconify.design at runtime.
+    // Bundle the icons we use into the client build instead and never fetch.
+    provider: 'none',
+    clientBundle: {
+      // Nuxt UI adds its own icons (chevrons, close, loading, ...) through the icon:clientBundleIcons hook.
+      // Icon names must be literal strings ('i-lucide-tags') to be found; built names aren't.
+      scan: {
+        // .ts is excluded by default, but navigation.ts, useMutation.ts, ... hold icon names.
+        globInclude: ['app/**/*.{vue,ts}'],
+        globExclude: ['app/generated/**', 'node_modules', '.*'],
+      },
+    },
+  },
 })

@@ -95,3 +95,8 @@ Dates are when the decision was made. All of these were agreed with the project 
 
 ### D17: English-only UI, 2026-09-26
 - **Decision:** No i18n setup for the UI. Translatable content fields (`nameI18n`, …) are data: they're preserved, and not yet editable (progress Q5).
+
+### D18: Icons are bundled into the client, 2026-09-26
+- **Context:** With `ssr: false`, `@nuxt/icon` (installed by Nuxt UI) defaults to `provider: 'iconify'` and fetches every icon from `api.iconify.design` at runtime: a third-party dependency and a flash of missing icons.
+- **Decision:** `icon.provider: 'none'` + `icon.clientBundle.scan` in `nuxt.config.ts`. The build scans `app/**/*.{vue,ts}` for literal icon names and bundles them from the local `@iconify-json/lucide`. Nuxt UI adds its own icons through the `icon:clientBundleIcons` hook. Nothing is fetched at runtime.
+- **Consequence:** Icon names must be literal strings (`'i-lucide-tags'`), never built (`` `i-lucide-${name}` ``), or they won't render. Using another collection means installing its `@iconify-json/<collection>` package.

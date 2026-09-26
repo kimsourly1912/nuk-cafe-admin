@@ -226,5 +226,6 @@ Shared code tests live in `test/` (e.g. `test/unit/api-fetch.test.ts` covers the
 
 - Prefer Nuxt-native tools (`useAsyncData`, `useState`, `useRuntimeConfig`, route middleware) before adding a library. There is no Pinia: shared state is `useState` inside a composable.
 - Import SDK functions and types from `~/generated/api`, and Valibot as `import * as v from 'valibot'`.
+- Icons are bundled at build time, never fetched (decisions D18). Write icon names as literal strings (`'i-lucide-tags'`), not template strings, and install `@iconify-json/<collection>` before using a new collection.
 - `USelect` cannot hold an empty or `undefined` value. Use `ANY` for "all" filters and let the `<Feature>Select` components handle "none".
 - The UI chrome is English only. Translatable content fields (`nameI18n`, ...) are data, preserved on update.
