@@ -31,7 +31,11 @@ The foundation is complete and one feature (Categories) is built as the referenc
 | List pages: filters/page in the URL, search as you type, empty states (D21) | done | unit (`query`), e2e (`list-page`) |
 | Data freshness: cross-tab invalidation, refetch stale (≥ 5s) data on return, refetch on reconnect, offline banner (D22) | done | e2e (`freshness`: two tabs in one context, faked visibility and clock, offline). The two-tab test was checked to fail with the broadcast disabled |
 | Login: password hidden with show/hide toggle (Q7) | done | e2e |
-| E2E harness: one build, `mockApi`, 31 tests (auth, categories, lists, unsaved changes, freshness, shell) (D20) | done | runs in `pnpm test` |
+| E2E harness: one build, `mockApi`, 45 tests (auth, categories, lists, unsaved changes, freshness, shortcuts, shell) (D20) | done | runs in `pnpm test` and CI |
+| Login/logout across tabs (D26) | done | e2e (checked to fail with the broadcast disabled) |
+| Open-redirect fix: `?redirect=//other-site` after login now goes to `/` (D26) | done | e2e |
+| Keyboard shortcuts: `/`, `N`, Ctrl/⌘+Enter, `?` list (D25) | done | e2e (the behind-a-dialog guard was checked by removing it) |
+| CI: GitHub Actions runs lint, typecheck, unit and e2e (D24) | written | **not run yet**: first run on the next push. YAML validated locally |
 | Feature architecture + ESLint boundary rules | done | lint (violations verified to be reported) |
 | CRUD state: `useApiQuery`, `useMutation` (per-item concurrency, shared state, batch, Stop, Retry failed), `useTableSelection`, `BulkActionsBar`, leave-page guard | done | unit (engine), browser-mock (all async scenarios) |
 
@@ -85,7 +89,6 @@ Backend resources available (from the spec) and their status. The folder names f
 - Unsaved-changes comparison treats `1` and `'1'` as different and array order as meaningful (see docs/reference/forms.md).
 - List filters in the URL support strings and numbers only, and one URL-synced list per page (`syncUrl: false` for others). See docs/reference/data-fetching.md.
 - Data freshness: another device's change shows up only when the user returns to the tab or navigates (no push from the backend). No per-query opt-out yet. No polling (orders will likely need it per screen: D22).
-- Logging out in one tab doesn't log out the other tabs until their next request (which then redirects to login). Could reuse the broadcast channel.
 
 ## How to verify
 

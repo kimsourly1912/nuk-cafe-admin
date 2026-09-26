@@ -4,7 +4,14 @@ import { login as loginRequest, logout as logoutRequest, session as sessionReque
 /** Session info kept in state. Tokens stay in HttpOnly cookies and are never stored here. */
 export type SessionUser = Pick<StaffSessionDto, 'staffId' | 'username' | 'displayName' | 'groups'>
 
+/** Where to go after login: the `?redirect=` target if it's a path on this site, else the dashboard. */
+export function loginRedirectTarget(redirect: unknown): string {
+  return typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
+}
+
 export function useAuth() {
+  // Captured now: login/logout call hooks after an `await`, where the Nuxt context is gone.
+  const nuxtApp = useNuxtApp()
   const user = useState<SessionUser | null>('auth:user', () => null)
   /** Whether the session has been checked against the backend at least once. */
   const checked = useState('auth:checked', () => false)
@@ -31,6 +38,8 @@ export function useAuth() {
   /** Throws `ApiError` on bad credentials. The backend sets the auth cookies. */
   async function login(credentials: PasswordGrantDto) {
     setUser(await unwrap(loginRequest({ body: credentials })))
+    // Other tabs follow (plugins/auth-sync.client.ts).
+    await nuxtApp.callHook('app:auth-changed', 'login')
   }
 
   async function logout() {
@@ -43,6 +52,7 @@ export function useAuth() {
       // Navigate first so the session-expired watcher in plugins/api.ts doesn't also redirect.
       await navigateTo('/login')
       clearSession()
+      await nuxtApp.callHook('app:auth-changed', 'logout')
     }
   }
 

@@ -3,7 +3,7 @@ import { watchDebounced } from '@vueuse/core'
 
 /**
  * Search box for list toolbars. Applies as you type (after `delay` ms without typing), or at once
- * on Enter or Clear. The model receives the trimmed text.
+ * on Enter or Clear. The model receives the trimmed text. `/` focuses it (hint shown while empty).
  *
  * @example
  * <SearchInput v-model="filters.search" placeholder="Search categories…" />
@@ -15,6 +15,9 @@ const props = withDefaults(defineProps<{ placeholder?: string, delay?: number }>
 })
 
 const text = ref(model.value)
+
+const input = useTemplateRef('input')
+usePageShortcuts({ '/': () => input.value?.inputRef?.focus() })
 
 function apply() {
   const value = text.value.trim()
@@ -36,6 +39,7 @@ function clear() {
 
 <template>
   <UInput
+    ref="input"
     v-model="text"
     type="search"
     icon="i-lucide-search"
@@ -44,11 +48,13 @@ function clear() {
     :ui="{ trailing: 'pe-1' }"
     @keydown.enter="apply"
   >
-    <template
-      v-if="text"
-      #trailing
-    >
+    <template #trailing>
+      <UKbd
+        v-if="!text"
+        value="/"
+      />
       <UButton
+        v-else
         color="neutral"
         variant="link"
         size="sm"

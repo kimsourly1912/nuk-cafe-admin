@@ -57,6 +57,8 @@ const formModal = useOverlay().create(CategoryFormModal)
 function openForm(category?: CategoryResponse) {
   formModal.open({ category })
 }
+
+usePageShortcuts({ n: () => openForm() })
 </script>
 
 <template>
@@ -67,11 +69,16 @@ function openForm(category?: CategoryResponse) {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
-          <UButton
-            label="New category"
-            icon="i-lucide-plus"
-            @click="openForm()"
-          />
+          <UTooltip
+            text="New category"
+            :kbds="['n']"
+          >
+            <UButton
+              label="New category"
+              icon="i-lucide-plus"
+              @click="openForm()"
+            />
+          </UTooltip>
         </template>
       </UDashboardNavbar>
 

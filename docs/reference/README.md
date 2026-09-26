@@ -45,6 +45,8 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `useUnsavedChanges` | composable | [Forms](./forms.md#useunsavedchanges) | Warn before a page form's input is lost |
 | `useModalUnsavedChanges` | composable | [Forms](./forms.md#usemodalunsavedchanges) | Same, plus asking before the modal closes |
 | `useLeaveGuard` | composable | [Forms](./forms.md#useleaveguard) | App-wide "discard unsaved changes?" check |
+| `usePageShortcuts`, `useSubmitShortcut` | composable | [UI helpers](./ui.md#keyboard-shortcuts) | Keyboard shortcuts; Ctrl/⌘+Enter to save |
+| `loginRedirectTarget` | util (auth) | [Auth](./auth.md#loginredirecttarget) | Safe post-login redirect |
 | `useAuth` | composable | [Auth](./auth.md#useauth) | Session user, login, logout |
 
 ## Conventions that apply everywhere

@@ -1,13 +1,19 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
+import { ShortcutsHelp } from '#components'
 import { useAuth } from '~/features/auth'
 
 const { user, logout } = useAuth()
 const open = ref(false)
 
+const shortcutsHelp = useOverlay().create(ShortcutsHelp)
+const showShortcuts = () => shortcutsHelp.open()
+usePageShortcuts({ '?': showShortcuts })
+
 const userMenu = computed<DropdownMenuItem[]>(() => [
   { label: user.value?.username, type: 'label' },
   { type: 'separator' },
+  { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
   { label: 'Log out', icon: 'i-lucide-log-out', onSelect: () => logout() },
 ])
 </script>

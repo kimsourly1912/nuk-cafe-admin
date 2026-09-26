@@ -38,6 +38,9 @@ const unsaved = useModalUnsavedChanges(state, {
   close: () => emit('close', false),
 })
 
+const form = useTemplateRef('form')
+useSubmitShortcut(() => form.value?.submit())
+
 // If the user closes the modal mid-save, a failure offers to reopen it with their input.
 let closed = false
 onUnmounted(() => {
@@ -77,6 +80,7 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
     <template #body>
       <UForm
         id="category-form"
+        ref="form"
         :schema="categoryFormSchema"
         :state="state"
         :disabled="saving"
@@ -136,12 +140,17 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
           variant="outline"
           @click="unsaved.requestClose()"
         />
-        <UButton
-          type="submit"
-          form="category-form"
-          :label="isEdit ? 'Save' : 'Create'"
-          :loading="saving"
-        />
+        <UTooltip
+          :text="isEdit ? 'Save' : 'Create'"
+          :kbds="['meta', 'enter']"
+        >
+          <UButton
+            type="submit"
+            form="category-form"
+            :label="isEdit ? 'Save' : 'Create'"
+            :loading="saving"
+          />
+        </UTooltip>
       </div>
     </template>
   </UModal>

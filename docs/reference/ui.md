@@ -9,6 +9,7 @@
 - [`previewList` and `pluralize`](#previewlist-and-pluralize)
 - [`<SearchInput>`](#searchinput)
 - [`<ListEmptyState>`](#listemptystate)
+- [Keyboard shortcuts: `usePageShortcuts`, `useSubmitShortcut`, `<ShortcutsHelp>`](#keyboard-shortcuts)
 
 ---
 
@@ -247,3 +248,47 @@ Source: `app/components/ListEmptyState.vue`
 | Filters active, no rows | "No categories match your filters" + **Clear filters** |
 
 - **Always fill UTable's `#loading` slot too.** Without it the table shows the empty state during the first load, so "No categories yet" flashes before the data arrives.
+
+---
+
+## Keyboard shortcuts
+
+Source: `app/composables/useShortcuts.ts`, `app/components/ShortcutsHelp.vue`. Built on Nuxt UI `defineShortcuts`: keys like `n`, `/`, `meta_enter` (`meta` = ⌘ on macOS, Ctrl elsewhere). Every shortcut and its cases: [App-wide behavior → Keyboard shortcuts](./app-behavior.md#keyboard-shortcuts).
+
+```ts
+function usePageShortcuts(config: Record<string, () => void>): void
+function useSubmitShortcut(submit: () => void): void
+const SHORTCUTS: readonly { kbds: readonly string[], label: string }[]
+```
+
+- **`usePageShortcuts`**: page-level keys. They don't fire while typing in an input, or while a dialog, menu or open select is on screen.
+- **`useSubmitShortcut`**: Ctrl/⌘+Enter, also while typing. Does nothing when another dialog is stacked on top.
+- **`SHORTCUTS`**: the list `<ShortcutsHelp>` shows (`?`). Add every new shortcut to it.
+
+```vue
+<!-- List page -->
+<script setup lang="ts">
+usePageShortcuts({ n: () => openForm() })
+</script>
+<template>
+  <UTooltip text="New category" :kbds="['n']">
+    <UButton label="New category" icon="i-lucide-plus" @click="openForm()" />
+  </UTooltip>
+</template>
+```
+
+```vue
+<!-- Form modal -->
+<script setup lang="ts">
+const form = useTemplateRef('form')
+useSubmitShortcut(() => form.value?.submit()) // UForm.submit() runs validation first
+</script>
+<template>
+  <UForm ref="form" ...>...</UForm>
+  <UTooltip text="Save" :kbds="['meta', 'enter']">
+    <UButton type="submit" label="Save" />
+  </UTooltip>
+</template>
+```
+
+`<SearchInput>` registers `/` itself.

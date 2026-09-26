@@ -27,7 +27,7 @@ const { user, isLoggedIn, logout } = useAuth()
 | `checked` | `Readonly<Ref<boolean>>` | Whether the session has been checked against the backend at least once. |
 | `fetchSession()` | `() => Promise<SessionUser \| null>` | Calls `GET /staff/auth/session` (refreshing the token if needed). **Never throws:** on any failure the user becomes `null`. |
 | `login(credentials)` | `({ username, password }) => Promise<void>` | Calls `POST /staff/auth/login`. The backend sets the cookies. **Throws `ApiError`** on failure (e.g. `kind: 'business'`, "Incorrect username or password"). |
-| `logout()` | `() => Promise<void>` | If a form has unsaved changes, asks first and does nothing on "Keep editing" ([`useLeaveGuard`](./forms.md#useleaveguard)). Then calls `POST /staff/auth/logout`, navigates to `/login` and clears the user, even if the request fails. |
+| `logout()` | `() => Promise<void>` | If a form has unsaved changes, asks first and does nothing on "Keep editing" ([`useLeaveGuard`](./forms.md#useleaveguard)). Then calls `POST /staff/auth/logout`, navigates to `/login` and clears the user, even if the request fails. Other open tabs go to login too (`plugins/auth-sync.client.ts`). |
 | `clearSession()` | `() => void` | Clears the user locally (used when the refresh fails). |
 
 ```ts
@@ -70,3 +70,15 @@ definePageMeta({ public: true, layout: 'auth' })
 - On the first navigation, the middleware calls `fetchSession()` once.
 - When any request fails as `unauthorized`, the API layer calls `/staff/auth/refresh` **once** (shared by concurrent requests) and retries. If the refresh fails, the user is cleared and redirected to `/login?redirect=…`.
 - Session-expiry errors are never toasted ([`isSilentError`](./errors.md#issilenterror)).
+
+## `loginRedirectTarget`
+
+```ts
+function loginRedirectTarget(redirect: unknown): string
+```
+
+Where to go after login: the `?redirect=` value if it's a path on this site (`/categories`), otherwise `/`. It rejects `//other-site.com` (protocol-relative, an open redirect) and absolute URLs. Used by `LoginPage` and by `plugins/auth-sync.client.ts` when another tab logs in. Exported from `~/features/auth`.
+
+## Across tabs
+
+`login()` and `logout()` fire the runtime hook `app:auth-changed`. `plugins/auth-sync.client.ts` forwards it to the app's other open tabs, so they log out (to `/login?redirect=<their page>`) or continue from the login page. Cases: [App-wide behavior → Session loss](./app-behavior.md#session-loss).

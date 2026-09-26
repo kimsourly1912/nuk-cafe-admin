@@ -8,7 +8,8 @@ Things the app shell does for every page, so features don't have to. Each sectio
 - [Data freshness](#data-freshness): other tabs, returning to the tab, reconnect
 - [Offline banner](#offline-banner)
 - [Leaving with unsaved or in-flight work](#leaving-with-unsaved-or-in-flight-work)
-- [Session loss](#session-loss)
+- [Session loss](#session-loss): including login/logout across tabs
+- [Keyboard shortcuts](#keyboard-shortcuts)
 - [Icons](#icons)
 
 Context that shapes these choices: the portal stays **open all day** on counter tablets and managers' laptops, several staff members edit the same menu, the screen can be **seen by customers**, and cafe **wifi drops**.
@@ -107,9 +108,39 @@ Every case is in [Forms: unsaved changes → Edge cases](./forms.md#edge-cases).
 | Access token expired | One `/staff/auth/refresh` (shared by concurrent requests), then the request is retried. The user notices nothing |
 | Refresh fails | `clearSession()` → redirect to `/login?redirect=<current page>`. **No unsaved-changes dialog**: staying isn't possible |
 | Log out with unsaved input | Asks first ([`useLeaveGuard`](./forms.md#useleaveguard)), **before** calling the backend |
-| After login | Back to the `redirect` page (only same-site paths starting with `/`) |
+| **Logged out in another tab** | This tab goes to `/login?redirect=<current page>` at once. Unsaved input in this tab is lost without a dialog (same as a refresh failure: the session is gone for every tab) |
+| **Logged in in another tab** | Tabs waiting on `/login` continue to their `redirect` target. Logged-in tabs re-read the session (it may be a different staff member now) |
+| Refresh fails in one tab | Only that tab redirects. The others find out on their next request (not broadcast: the failure could be one tab's network) |
+| After login | Back to the `redirect` page. Only paths on this site: `/x` is allowed; `//other-site.com`, `https://…` and anything else go to `/` (`loginRedirectTarget`). Blocks open redirects through crafted login links |
 
-Source: `app/utils/api-fetch.ts`, `app/plugins/api.ts`, `app/middleware/*.global.ts`. See [Auth](./auth.md). E2E: `test/e2e/auth.test.ts`.
+Source: `app/utils/api-fetch.ts`, `app/plugins/api.ts`, `app/plugins/auth-sync.client.ts` (VueUse `useBroadcastChannel`, channel `nuk-cafe-admin:auth`, hook `app:auth-changed` fired by `useAuth().login/logout`), `app/middleware/*.global.ts`. See [Auth](./auth.md). E2E: `test/e2e/auth.test.ts` (the two cross-tab tests were checked to fail with the broadcast disabled).
+
+---
+
+## Keyboard shortcuts
+
+For staff who use the portal all day. Press **`?`** (or user menu → Keyboard shortcuts) for the list.
+
+| Keys | Where | Action |
+|---|---|---|
+| `/` | Any page with a `<SearchInput>` | Focus the search (hint `/` shown in the box while empty) |
+| `N` | List pages | New item (tooltip on the "New …" button shows it) |
+| `Ctrl`+`Enter` (`⌘`+`Enter` on Mac) | Open form modal | Save, including while typing in a field. Runs the form validation first |
+| `Esc` | Dialogs | Close (asks first if there are unsaved changes) |
+| `?` | Everywhere | Show the shortcut list |
+
+Source: `app/composables/useShortcuts.ts` (`usePageShortcuts`, `useSubmitShortcut`, `SHORTCUTS`) on Nuxt UI `defineShortcuts`, `app/components/ShortcutsHelp.vue`. E2E: `test/e2e/shortcuts.test.ts`.
+
+| Case | Behavior |
+|---|---|
+| Typing in an input | Single-key shortcuts (`/`, `N`, `?`) don't fire: the key is typed |
+| A dialog, menu or open select is on screen | Page shortcuts (`/`, `N`, `?`) don't fire. Otherwise `N` behind an **Edit** form would turn it into "New category" (the overlay is reused). The guard was checked by removing it |
+| "Discard unsaved changes?" is over the form | `Ctrl`+`Enter` does nothing (it only acts when one dialog is open) |
+| Empty required field + `Ctrl`+`Enter` | Validation message, no request |
+| Windows / Linux vs macOS | `meta` = `Ctrl` / `⌘`, and the hints show the right key (`UKbd`) |
+| Browser shortcuts (`Ctrl`+`F`, `/` quick find in Firefox) | `/` is taken by the app on list pages (it's prevented only when it acts). Others are untouched |
+
+**Adding a shortcut:** register it with `usePageShortcuts` (page level) or `useSubmitShortcut` (forms), show it in the UI (`UTooltip :kbds`, `UKbd`), and add it to `SHORTCUTS` so `?` lists it.
 
 ---
 

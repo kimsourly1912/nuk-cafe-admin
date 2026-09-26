@@ -139,3 +139,18 @@ Dates are when the decision was made. All of these were agreed with the project 
 
 ### D23: Tab titles from route meta, 2026-09-26
 - **Decision:** each route file declares `definePageMeta({ title })`, and `app.vue` applies `<title> · NUK Cafe Admin`. Titles sit next to the route (thin route files, rule 6), and there's no `useHead` in every page component. `error.vue` sets its own title because it renders instead of `app.vue`.
+
+### D24: CI with GitHub Actions, following pnpm's recommended setup, 2026-09-26
+- **Decision:** `.github/workflows/ci.yml` runs lint, typecheck, unit and e2e tests on pushes to `main` and on pull requests (ubuntu-24.04, Node 24). pnpm, Node and `pnpm install` come from `pnpm/setup` v2.0.0 pinned by commit hash, as in https://pnpm.io/continuous-integration. The pnpm version comes from `packageManager` in `package.json`.
+- **Why not `actions/setup-node@v5` + `pnpm/action-setup`:** setup-node v5 has an open issue where pnpm setups fail immediately (actions/setup-node#1357). `pnpm/setup` does it all in one step.
+- E2E uses the runner's preinstalled Google Chrome (`channel: 'chrome'`), and the backend is mocked, so the workflow needs no secrets.
+
+### D25: Keyboard shortcuts through a guarded wrapper, 2026-09-26
+- **Decision:** `usePageShortcuts` and `useSubmitShortcut` (`composables/useShortcuts.ts`) wrap Nuxt UI `defineShortcuts`. Keys: `/` search, `n` new, Ctrl/⌘+Enter save, `?` help (list in `SHORTCUTS`). Hints are shown where the action lives (`UTooltip :kbds`, `UKbd`).
+- **Trap:** page shortcuts must not fire behind a dialog, menu or select. The list page's overlay is reused, so `n` over an open **Edit** form re-opened it as "New category". The wrapper skips when `[role=dialog|alertdialog|menu|listbox]` is on screen. `useSubmitShortcut` acts only when exactly one dialog is open, so it can't save a form behind "Discard unsaved changes?".
+- Save goes through `UForm.submit()`, so validation runs exactly as with the button.
+
+### D26: Login/logout across tabs, and a safe post-login redirect, 2026-09-26
+- **Decision:** `useAuth().login/logout` fire the runtime hook `app:auth-changed`, and `plugins/auth-sync.client.ts` forwards it over a `BroadcastChannel` (VueUse `useBroadcastChannel`, same pattern as D22). On logout, other tabs `clearSession()`, and the existing watcher sends them to `/login?redirect=…`. On login, tabs waiting on `/login` continue, and logged-in tabs re-read the session (it may be another staff member). Received messages are never re-sent.
+- A refresh failure is **not** broadcast: it may be one tab's network problem. The other tabs find out on their next request.
+- **Security fix found on the way:** `LoginPage` accepted any `redirect` starting with `/`, including `//evil.example` (protocol-relative, so it leaves the site after login: an open redirect). `loginRedirectTarget` (exported from `~/features/auth`) now allows only same-site paths. Covered by e2e.

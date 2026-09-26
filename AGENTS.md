@@ -32,12 +32,15 @@ pnpm api:generate                         # regenerate app/generated/api from th
 pnpm lint / pnpm lint:fix                 # ESLint also does formatting (no Prettier) and enforces feature boundaries
 pnpm typecheck                            # vue-tsc via nuxt typecheck
 pnpm test                                 # all Vitest projects
+pnpm test:unit / pnpm test:e2e            # unit+nuxt only (seconds) / e2e only (about a minute, builds the app)
 pnpm vitest run --project unit            # one project: unit | nuxt | e2e
 pnpm vitest run app/features/categories   # one feature's tests
 pnpm vitest run -t "refreshes once"
 ```
 
-Before finishing a change, run `pnpm lint`, `pnpm typecheck` and `pnpm test`. If lint or typecheck complains about missing `.nuxt/*` files, run `pnpm nuxt prepare`.
+Before finishing a change, run `pnpm lint`, `pnpm typecheck` and `pnpm test`. CI (`.github/workflows/ci.yml`) runs the same on every push to `main` and every pull request.
+
+Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix open redirect after login`), not `new`. The history is how the team finds when something broke. If lint or typecheck complains about missing `.nuxt/*` files, run `pnpm nuxt prepare`.
 
 ## Feature architecture
 
@@ -175,7 +178,7 @@ How to use it in UI code:
 
 - `app/features/auth/` exposes `useAuth()`: `user` (state, no tokens), `isLoggedIn`, `fetchSession`, `login`, `logout`. The shell (`middleware/auth.global.ts`, `plugins/api.ts`, `layouts/default.vue`) imports it from `~/features/auth`.
 - The middleware protects **every page by default**. Opt out with `definePageMeta({ public: true })` (typed in `app/types/page-meta.d.ts`).
-- App-wide behavior needs nothing from features: tab titles from `definePageMeta({ title })`, a save in one tab refreshes the same lists in the app's other tabs at once, lists refetch when the user returns to the tab (data ≥ 5s old) or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards. Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
+- App-wide behavior needs nothing from features: login/logout apply to all open tabs (`plugins/auth-sync.client.ts`), `?` shows keyboard shortcuts, tab titles from `definePageMeta({ title })`, a save in one tab refreshes the same lists in the app's other tabs at once, lists refetch when the user returns to the tab (data ≥ 5s old) or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards. Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
 - `ssr: false`: the app is a pure SPA because only the browser has the auth cookies. Don't add server routes or SSR-dependent code.
 - `app/layouts/default.vue` is the Nuxt UI dashboard shell. The sidebar is `app/utils/navigation.ts`, which groups and orders each feature's exported `navigation` entry.
 - Every page component renders a `UDashboardPanel`: `UDashboardNavbar` (title, `UDashboardSidebarCollapse`, actions in `#right`), an optional `UDashboardToolbar` with filters in `#left`, and content in `#body`.
@@ -199,6 +202,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard` | `composables/`, `utils/form-value.ts` | "Discard unsaved changes?" for page and modal forms; the route middleware and tab-close plugin use them |
 | `<SearchInput>`, `<ListEmptyState>` | `components/` | List toolbar search (as you type) and empty states ("nothing yet" vs "filters hide everything") |
 | `invalidateAll()`, `invalidateInThisTab()` | `utils/invalidate.ts` | Refetch loaded or only stale queries / invalidate without telling other tabs (used by the freshness plugin) |
+| `usePageShortcuts`, `useSubmitShortcut`, `SHORTCUTS`, `<ShortcutsHelp>` | `composables/useShortcuts.ts`, `components/` | Keyboard shortcuts (skipped behind dialogs/menus), Ctrl/⌘+Enter to save, the `?` list |
 | `useNotify()` | `composables/` | Toasts for API actions that aren't mutations |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
 
@@ -214,8 +218,8 @@ Mirror `app/features/categories/` file by file:
    - `use<Feature>Mutations()`: `create` / `update` / `remove` built with `useMutation` (ids `'<feature>:<action>'`, `key`, messages naming the item, `invalidate`, `confirm` + `removes` + `batch` for remove), plus `isBusy(id)`.
 3. **`composables/use<Feature>Options.ts` + `components/<Feature>Select.vue` (public):** add these if other features need to pick this resource. Key the options per filter. The select hides the `USelect` sentinel for "none" (see `CategorySelect`).
 4. **`schemas/<feature>-form.ts`:** the Valibot schema with user-facing messages (generated request schemas carry no rules). `to<Feature>Form(existing?)` builds the initial form state. `to<Feature>Request(form, existing?)` builds the request body and **copies over fields the form doesn't edit** (`nameI18n`, `sortOrder`, ...) so the PUT doesn't wipe them. Unit-test it in `tests/`.
-5. **`components/<Feature>FormModal.vue`:** opened with `useOverlay().create(...)`. On submit: `const result = await create.execute(body, { errorActions })`, then `if (result.ok) emit('close', true)`. It supports closing mid-save with "Reopen" (`draft` prop), guards unsaved input with `useModalUnsavedChanges` (declare the `update:open` emit, bind `@update:open` on `UModal`, Cancel calls `requestClose()`), and pulls in other features' pickers from their `index.ts`.
-6. **`components/<Feature>ListPage.vue`:** `usePaginatedQuery` (filters and page live in the URL) + list composable. Toolbar: `<SearchInput v-model="filters.search">` (searches as you type) and filter `USelect`s. `UTable` fills `#loading` and `#empty` (`<ListEmptyState :filtered="isFiltered" @create @clear="clearFilters()">`). Rows exclude `remove.isRemoved(id)`. `UTable` with a select column (`useTableSelection`), `#<column>-cell` slots, busy rows (`isBusy`: dimmed, spinner instead of actions), `<ApiErrorAlert>` on load error, row actions through `UDropdownMenu` (delete = `remove.execute(row)`), and `<BulkActionsBar>` calling `remove.executeMany(selection.selected)`.
+5. **`components/<Feature>FormModal.vue`:** opened with `useOverlay().create(...)`. On submit: `const result = await create.execute(body, { errorActions })`, then `if (result.ok) emit('close', true)`. It supports closing mid-save with "Reopen" (`draft` prop), saves on Ctrl/⌘+Enter (`useSubmitShortcut(() => form.value?.submit())`, hint via `UTooltip :kbds="['meta', 'enter']"` on the submit button), guards unsaved input with `useModalUnsavedChanges` (declare the `update:open` emit, bind `@update:open` on `UModal`, Cancel calls `requestClose()`), and pulls in other features' pickers from their `index.ts`.
+6. **`components/<Feature>ListPage.vue`:** `usePaginatedQuery` (filters and page live in the URL) + list composable. Toolbar: `<SearchInput v-model="filters.search">` (searches as you type, `/` focuses it). `usePageShortcuts({ n: () => openForm() })` with `UTooltip :kbds="['n']"` on the New button and filter `USelect`s. `UTable` fills `#loading` and `#empty` (`<ListEmptyState :filtered="isFiltered" @create @clear="clearFilters()">`). Rows exclude `remove.isRemoved(id)`. `UTable` with a select column (`useTableSelection`), `#<column>-cell` slots, busy rows (`isBusy`: dimmed, spinner instead of actions), `<ApiErrorAlert>` on load error, row actions through `UDropdownMenu` (delete = `remove.execute(row)`), and `<BulkActionsBar>` calling `remove.executeMany(selection.selected)`.
 7. **`navigation.ts` + `index.ts`:** export the sidebar entry and the public building blocks, then add the entry to a group in `app/utils/navigation.ts`.
 8. **Route file** `app/pages/<feature>/index.vue`: `definePageMeta({ title: '<Feature>' })`, then import and render `<Feature>ListPage.vue`, nothing else.
 9. **E2E test** `test/e2e/<feature>.test.ts`: at least list + create + delete, with `mockApi` (see "Tests").

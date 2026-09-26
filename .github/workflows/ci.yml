@@ -1,0 +1,41 @@
+# Lint, typecheck and every test on each push to main and each pull request.
+# E2E runs against a production build in the runner's preinstalled Google Chrome
+# (test/e2e/support/global-setup.ts); the backend is mocked, so no secrets are needed.
+# Setup follows https://pnpm.io/continuous-integration (decision D24).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      # Installs pnpm (version from package.json → packageManager), Node, and runs `pnpm install`
+      # (frozen lockfile in CI) with the store cached. Pinned by commit: v2.0.0.
+      - name: Install pnpm, Node.js and dependencies
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        with:
+          runtime: node@24
+          cache: true
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: E2E tests
+        run: pnpm test:e2e

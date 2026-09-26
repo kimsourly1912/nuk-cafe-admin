@@ -1,5 +1,5 @@
 import type { Page, Route } from 'playwright-core'
-import { setup, url } from '@nuxt/test-utils/e2e'
+import { getBrowser, setup, url, waitForHydration } from '@nuxt/test-utils/e2e'
 import { inject } from 'vitest'
 
 /** Call at the top of every e2e file: a browser against the app served by `global-setup.ts`. */
@@ -104,4 +104,16 @@ export async function gotoViaSidebar(page: Page, links: (string | RegExp)[]) {
  */
 export function toast(page: Page, title: string | RegExp) {
   return page.locator('[data-slot="title"]', { hasText: title })
+}
+
+/** Tabs of one browser window: pages in one context share `BroadcastChannel`. */
+export async function openTabs(count: number) {
+  const context = await (await getBrowser()).newContext()
+  return Promise.all(Array.from({ length: count }, () => context.newPage()))
+}
+
+/** `goto` for pages from `openTabs` (they lack test-utils' `waitUntil: 'hydration'` wrapper). */
+export async function gotoHydrated(page: Page, path: string) {
+  await page.goto(url(path))
+  await waitForHydration(page, url(path), 'hydration')
 }

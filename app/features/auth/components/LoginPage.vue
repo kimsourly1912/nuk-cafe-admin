@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { FormSubmitEvent } from '@nuxt/ui'
 import * as v from 'valibot'
-import { useAuth } from '../composables/useAuth'
+import { loginRedirectTarget, useAuth } from '../composables/useAuth'
 
 const schema = v.object({
   username: v.pipe(v.string(), v.trim(), v.minLength(1, 'Username is required')),
@@ -23,8 +23,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   error.value = undefined
   try {
     await login(event.data)
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
-    await navigateTo(redirect.startsWith('/') ? redirect : '/')
+    await navigateTo(loginRedirectTarget(route.query.redirect))
   }
   catch (e) {
     error.value = getErrorMessage(e)
