@@ -47,11 +47,11 @@ Every case below is handled. **Keep this table and the tests in sync when changi
 | 3 | Sidebar link, `navigateTo`, browser back/forward | Our dialog. Keep editing: the URL is restored (Vue Router undoes the popstate) | Global middleware `unsaved-changes.global.ts` | e2e (back) |
 | 4 | Same page, other params (`/products/1/edit` → `/2/edit`) | Our dialog (the middleware runs on every route change) | Global middleware | **Not tested**: no such page yet. The page must reset its form on param change (see caveats) |
 | 5 | Modal open while the route changes (back button) | Asks. On Discard the modal **closes** too: overlay modals are app-level and would otherwise stay open over the next page | `onDiscard` → `close` | e2e |
-| 6 | Logout | Asks **before** the backend call. Keep editing: stays logged in | `useAuth().logout` calls `confirmLeave()` first | **Not tested in a browser**: a modal blocks the user menu, and no page form exists yet |
-| 7 | Session expired → forced redirect to login | No dialog | Middleware skips when logged out | **Not tested in a browser** |
+| 6 | Logout | Asks **before** the backend call. Keep editing: stays logged in | `useAuth().logout` calls `confirmLeave()` first | **Not tested in a browser**: a modal blocks the user menu, and no page form exists yet. Logout **from another tab** with unsaved input: e2e (`session.test.ts`, no dialog) |
+| 7 | Session expired → forced redirect to login | No dialog; the form modal closes and its input is discarded | Middleware skips when logged out; the session boundary discards forms and closes overlays | e2e (`session.test.ts`: expiry during a save) |
 | 8 | Modal: X, Esc, outside click, Cancel | Our dialog | `update:open` → `onOpenChange`, Cancel → `requestClose` | e2e (all four) |
 | 9 | Save running | Not unsaved: closing works, the save continues ("Reopen" if it fails). Tab close still warns until the save ends (in-flight guard) | `paused: saving` | e2e |
-| 10 | Save failed | Unsaved again | `paused` goes back to false | Not in e2e |
+| 10 | Save failed | Form stays open with the input and the backend reason; unsaved again; can retry | `paused` goes back to false | e2e |
 | 11 | Reopened draft (after a failed background save) | Unsaved at once (compared to the original record) | `initial: toXForm(record)` | Not in e2e |
 | 12 | Typed then undone; `''` vs `undefined`; `[]` vs missing | Not unsaved | `isSameFormValue` | unit + e2e |
 | 13 | List refetches while an edit form is open (invalidate, tab focus) | Input untouched; baseline unchanged | The form keeps its own copy (`reactive({...})`), the baseline is a snapshot | By design |
@@ -178,6 +178,7 @@ The app-wide check. You rarely call it: the route middleware, the tab-close plug
 function useLeaveGuard(): {
   hasUnsavedChanges: ComputedRef<boolean>
   confirmLeave: () => Promise<boolean> // true: nothing unsaved, or user chose Discard (forms are discarded)
+  discardAll: () => void              // discard every form without asking: only for forced transitions (session boundary)
 }
 ```
 

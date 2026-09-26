@@ -21,16 +21,28 @@ export interface ToastAction {
   onClick: () => void
 }
 
+/**
+ * Why a call didn't run:
+ * - `in-flight`: this mutation is already running for the same key (a double submit; silent).
+ * - `locked`: another mutation holds the same record lock (e.g. an update while deleting).
+ */
+export type SkipReason = 'in-flight' | 'locked'
+
 export type MutationResult<T>
   = | { ok: true, status: 'success', data: T }
     | { ok: false, status: 'error', error: ApiError }
-    /** `cancelled`: the user declined the confirmation. `skipped`: the same item is already in flight. */
-    | { ok: false, status: 'cancelled' | 'skipped' }
+    /** The user declined the confirmation. */
+    | { ok: false, status: 'cancelled' }
+    | { ok: false, status: 'skipped', reason: SkipReason }
 
 export interface BatchResult<TInput, TResult> {
   succeeded: { input: TInput, data: TResult }[]
   failed: { input: TInput, error: ApiError }[]
-  /** Already in flight when the batch started (e.g. a single delete on the same row). */
+  /**
+   * Not run because the item was busy when its turn came: this mutation already in flight for it,
+   * or another mutation holding its record lock (e.g. a pending update). Checked right before each
+   * request starts, so this includes items that became busy during the confirmation.
+   */
   skipped: TInput[]
   /** Never started because the user pressed Stop. */
   notStarted: TInput[]
@@ -46,6 +58,14 @@ export interface MutationOptions<TInput, TResult> {
    * key is already in flight is skipped (no double submit). Omit for "one at a time" (e.g. create).
    */
   key?: (input: TInput) => MutationKey
+  /**
+   * Record lock shared **across mutations**: calls whose lock is held by any mutation are skipped,
+   * so conflicting operations on one record never overlap (e.g. `category:7` from both update
+   * and remove). Checked and reserved synchronously right before the request starts,
+   * after any confirmation. Different records still run in parallel. Omit when calls can't conflict
+   * (e.g. create).
+   */
+  lock?: (input: TInput) => MutationKey
   /** Ask before running (e.g. deletes). */
   confirm?: MaybeFn<ConfirmOptions, [input: TInput]>
   /** Toast title on success. `false` for no toast. */
@@ -91,8 +111,33 @@ export interface MutationState<TInput = unknown, TResult = unknown> {
   lastError: ApiError | undefined
 }
 
+/**
+ * Records keyed by user data (ids, names) have no prototype, so keys such as `constructor` or
+ * `__proto__` are ordinary entries. Always test membership with `has`, never `in`.
+ */
+export function createRecord<T>(): Record<string, T> {
+  return Object.create(null) as Record<string, T>
+}
+
 export function createMutationState<TInput, TResult>(): MutationState<TInput, TResult> {
-  return { inFlight: {}, errors: {}, removed: {}, lastResult: undefined, lastError: undefined }
+  return { inFlight: createRecord(), errors: createRecord(), removed: createRecord(), lastResult: undefined, lastError: undefined }
+}
+
+/** Clears recorded errors, results and "removed" marks; in-flight calls are untouched. */
+export function clearOutcomes(state: MutationState<unknown, unknown>) {
+  for (const key of Object.keys(state.errors)) Reflect.deleteProperty(state.errors, key)
+  for (const key of Object.keys(state.removed)) Reflect.deleteProperty(state.removed, key)
+  state.lastResult = undefined
+  state.lastError = undefined
+}
+
+/**
+ * Membership in a `createRecord()` record. Uses `in`, not `hasOwnProperty`: Vue tracks the `has`
+ * trap but not `getOwnPropertyDescriptor`, so `hasOwnProperty` on reactive state would never
+ * re-render the UI. `in` is safe here because the records have no prototype to inherit from.
+ */
+export function has(record: object, key: string): boolean {
+  return key in record
 }
 
 export interface ProgressHandle {
@@ -103,6 +148,8 @@ export interface ProgressHandle {
 export interface MutationDeps<TInput, TResult> {
   /** Must be reactive (e.g. `useState(...).value`) for the UI to follow it. */
   state: MutationState<TInput, TResult>
+  /** Record locks shared by every mutation in the app (`createRecord()`, reactive). Required for `lock`. */
+  locks?: Record<string, true>
   confirm: (options: ConfirmOptions) => Promise<boolean>
   success: (title: string, description?: string) => void
   failure: (title: string, description?: string, actions?: ToastAction[]) => void
@@ -119,6 +166,9 @@ function forget(record: Record<string, unknown>, key: string) {
   Reflect.deleteProperty(record, key)
 }
 
+/** Shown when a single action is refused because another action holds the record. */
+export const LOCKED_MESSAGE = 'Another action on this item is still in progress. Try again when it finishes.'
+
 function resolve<T, A extends unknown[]>(value: MaybeFn<T, A> | undefined, ...args: A): T | undefined {
   return typeof value === 'function' ? (value as (...a: A) => T)(...args) : value
 }
@@ -131,6 +181,16 @@ export function createMutation<TInput, TResult>(
   const { state } = deps
   const keyOf = (input: TInput) => (options.key ? String(options.key(input)) : SINGLE)
   const toKey = (key: MutationKey | undefined) => (key === undefined ? SINGLE : String(key))
+  const lockOf = (input: TInput) => (options.lock ? String(options.lock(input)) : undefined)
+  if (options.lock && !deps.locks) throw new Error('createMutation: `lock` needs `deps.locks`')
+
+  /** Why this input can't start right now, if anything. Synchronous: callers reserve in the same tick. */
+  function busyReason(input: TInput): SkipReason | undefined {
+    if (has(state.inFlight, keyOf(input))) return 'in-flight'
+    const lock = lockOf(input)
+    if (lock !== undefined && has(deps.locks!, lock)) return 'locked'
+    return undefined
+  }
 
   /** Refresh affected data; hide removed keys until the refresh has landed. */
   function refreshAfter(removedKeys: string[]) {
@@ -149,9 +209,13 @@ export function createMutation<TInput, TResult>(
     overrides: ExecuteOverrides<TInput> = {},
   ): Promise<MutationResult<TResult>> {
     const key = keyOf(input)
-    if (key in state.inFlight) return { ok: false, status: 'skipped' }
+    const lock = lockOf(input)
+    // Check and reserve with nothing asynchronous in between: nobody can slip in between.
+    const busy = busyReason(input)
+    if (busy) return { ok: false, status: 'skipped', reason: busy }
 
     state.inFlight[key] = input
+    if (lock !== undefined) deps.locks![lock] = true
     forget(state.errors, key)
     deps.onPendingChange?.(1)
     try {
@@ -179,6 +243,7 @@ export function createMutation<TInput, TResult>(
     }
     finally {
       forget(state.inFlight, key)
+      if (lock !== undefined) forget(deps.locks!, lock)
       deps.onPendingChange?.(-1)
     }
   }
@@ -188,14 +253,24 @@ export function createMutation<TInput, TResult>(
    * A second call for an item already in flight resolves to `skipped`.
    */
   async function execute(input: TInput, overrides: ExecuteOverrides<TInput> = {}): Promise<MutationResult<TResult>> {
-    if (keyOf(input) in state.inFlight) return { ok: false, status: 'skipped' }
+    // Early check so no confirmation is shown for work that can't run. Not the guarantee:
+    // `run` checks again when the request actually starts, after the confirmation.
+    const early = busyReason(input)
+    if (early) return skipped(input, early)
 
     const confirmOptions = overrides.confirm === false ? undefined : overrides.confirm ?? resolve(options.confirm, input)
     if (confirmOptions && !(await deps.confirm(confirmOptions))) return { ok: false, status: 'cancelled' }
 
     const result = await run(input, true, overrides)
+    if (result.status === 'skipped') return skipped(input, result.reason)
     if (result.ok) refreshAfter(options.removes ? [keyOf(input)] : [])
     return result
+  }
+
+  /** A double submit stays silent; a conflict with another action is explained. */
+  function skipped(input: TInput, reason: SkipReason): MutationResult<TResult> {
+    if (reason === 'locked') deps.failure(resolve(options.errorMessage, input) ?? 'Something went wrong', LOCKED_MESSAGE)
+    return { ok: false, status: 'skipped', reason }
   }
 
   /**
@@ -206,8 +281,9 @@ export function createMutation<TInput, TResult>(
     const batch = options.batch
     const result: BatchResult<TInput, TResult> = { succeeded: [], failed: [], skipped: [], notStarted: [], cancelled: false }
 
+    // Early filter (no point confirming busy items). Each item is checked again when it starts.
     const runnable = inputs.filter((input) => {
-      const busy = keyOf(input) in state.inFlight
+      const busy = busyReason(input)
       if (busy) result.skipped.push(input)
       return !busy
     })
@@ -239,7 +315,7 @@ export function createMutation<TInput, TResult>(
           const outcome = await run(input, false)
           if (outcome.ok) result.succeeded.push({ input, data: outcome.data })
           else if (outcome.status === 'error') result.failed.push({ input, error: outcome.error })
-          else result.skipped.push(input) // became busy after the batch started
+          else result.skipped.push(input) // became busy during the confirmation or while queued
           finished++
           progress.update(`${doing} ${noun(total)}… ${finished}/${total}`)
         }
@@ -256,7 +332,7 @@ export function createMutation<TInput, TResult>(
 
     const ok = result.succeeded.length
     const extras = [
-      result.skipped.length ? `${result.skipped.length} skipped (already in progress)` : '',
+      result.skipped.length ? `${result.skipped.length} skipped (another action on ${result.skipped.length === 1 ? 'it' : 'them'} was in progress)` : '',
       result.notStarted.length ? `${result.notStarted.length} not started (stopped)` : '',
     ].filter(Boolean)
 
@@ -284,12 +360,12 @@ export function createMutation<TInput, TResult>(
     execute,
     executeMany,
     /** Without a key: whether any call of this mutation is in flight. */
-    isPending: (key?: MutationKey) => (key === undefined ? Object.keys(state.inFlight).length > 0 : toKey(key) in state.inFlight),
+    isPending: (key?: MutationKey) => (key === undefined ? Object.keys(state.inFlight).length > 0 : has(state.inFlight, toKey(key))),
     pendingCount: () => Object.keys(state.inFlight).length,
     /** Last error for an item (or for the single slot when the mutation has no key). */
-    errorOf: (key?: MutationKey) => state.errors[toKey(key)],
+    errorOf: (key?: MutationKey) => (has(state.errors, toKey(key)) ? state.errors[toKey(key)] : undefined),
     /** True after a successful `removes` call until the refreshed data arrives. */
-    isRemoved: (key: MutationKey) => toKey(key) in state.removed,
+    isRemoved: (key: MutationKey) => has(state.removed, toKey(key)),
     /** Clears recorded errors/results (e.g. when a form reopens). */
     reset: (key?: MutationKey) => {
       if (key === undefined) {

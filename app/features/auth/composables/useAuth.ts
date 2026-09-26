@@ -4,6 +4,11 @@ import { login as loginRequest, logout as logoutRequest, session as sessionReque
 /** Session info kept in state. Tokens stay in HttpOnly cookies and are never stored here. */
 export type SessionUser = Pick<StaffSessionDto, 'staffId' | 'username' | 'displayName' | 'groups'>
 
+/** Who is signed in, for detecting identity changes. `null`: nobody. */
+function identityOf(user: SessionUser | null): string | null {
+  return user ? String(user.staffId ?? user.username) : null
+}
+
 /** Where to go after login: the `?redirect=` target if it's a path on this site, else the dashboard. */
 export function loginRedirectTarget(redirect: unknown): string {
   return typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
@@ -16,12 +21,27 @@ export function useAuth() {
   /** Whether the session has been checked against the backend at least once. */
   const checked = useState('auth:checked', () => false)
   const isLoggedIn = computed(() => user.value !== null)
+  /**
+   * Identity generation: +1 whenever the signed-in identity changes (login, logout, expiry,
+   * another staff member in another tab). The API layer discards responses to requests started
+   * in an older generation, and the session boundary clears the previous identity's data.
+   */
+  const generation = useState('auth:generation', () => 0)
 
   function setUser(dto: StaffSessionDto | undefined) {
-    user.value = dto
+    const next: SessionUser | null = dto
       ? { staffId: dto.staffId, username: dto.username, displayName: dto.displayName, groups: dto.groups }
       : null
+    const changed = identityOf(next) !== identityOf(user.value)
+    user.value = next
     checked.value = true
+    if (changed) sessionChanged()
+  }
+
+  /** Synchronous bump, then the boundary (plugins/session-boundary.client.ts) cleans up. */
+  function sessionChanged() {
+    generation.value++
+    void nuxtApp.callHook('app:session-changed', { signedIn: user.value !== null })
   }
 
   /** Validates the cookie session via `/staff/auth/session` (refreshing if needed). */
@@ -57,8 +77,17 @@ export function useAuth() {
   }
 
   function clearSession() {
-    user.value = null
+    setUser(undefined)
   }
 
-  return { user: readonly(user), checked: readonly(checked), isLoggedIn, fetchSession, login, logout, clearSession }
+  return {
+    user: readonly(user),
+    checked: readonly(checked),
+    generation: readonly(generation),
+    isLoggedIn,
+    fetchSession,
+    login,
+    logout,
+    clearSession,
+  }
 }

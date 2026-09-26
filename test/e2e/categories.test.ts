@@ -1,6 +1,6 @@
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import { MockFailure, TEA, mockApi, pageOf, setupE2e, toast } from './support/mock-api'
+import { failures, mockApi, pageOf, setupE2e, TEA, toast } from './support/mock-api'
 
 await setupE2e()
 
@@ -18,7 +18,7 @@ describe('categories list', () => {
     const page = await createPage()
     await mockApi(page, {
       'GET /staff/categories': () => {
-        if (fail) throw new MockFailure('NC0000', 'No static resource staff/categories.', 200)
+        if (fail) throw failures.technical()
         return pageOf([TEA])
       },
     })
@@ -42,7 +42,7 @@ describe('categories list', () => {
   it('bulk-deletes selected rows with one confirmation and a summary', async () => {
     const { page, api } = await openCategories({
       'DELETE /staff/categories/{id}': ({ url }) => {
-        if (url.pathname.endsWith('/2')) throw new MockFailure('NC0001', 'Category has menu items')
+        if (url.pathname.endsWith('/2')) throw failures.validation('Category has menu items')
         return null
       },
     })

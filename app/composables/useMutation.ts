@@ -1,8 +1,25 @@
-import type { MutationOptions } from '~/utils/mutation'
-import { createMutation, createMutationState } from '~/utils/mutation'
+import type { MutationOptions, MutationState } from '~/utils/mutation'
+import { clearOutcomes, createMutation, createMutationState, createRecord } from '~/utils/mutation'
 
 /** Number of mutations in flight app-wide (drives the leave-page warning). */
 export const usePendingMutationCount = () => useState('mutation:pending-count', () => 0)
+
+/** Record locks held right now, shared by every mutation (see the `lock` option). */
+const useMutationLocks = () => useState('mutation:locks', () => createRecord<true>())
+
+/** Ids of every mutation created so far, so a session change can reach their state. */
+const useMutationIds = () => useState('mutation:ids', () => createRecord<true>())
+
+/**
+ * Forgets what mutations recorded in the previous session: errors, last results and "removed"
+ * marks. In-flight calls and record locks are kept (those requests are still running; the API
+ * layer discards their responses because the session changed). Called by the session boundary.
+ */
+export function resetMutationOutcomes() {
+  for (const id of Object.keys(useMutationIds().value)) {
+    clearOutcomes(useState<MutationState>(`mutation:${id}`).value)
+  }
+}
 
 /**
  * Create/update/delete with shared state, confirmation, toasts, data refresh and batch support.
@@ -31,6 +48,7 @@ export function useMutation<TInput, TResult>(
 ) {
   const nuxtApp = useNuxtApp()
   const state = useState(`mutation:${options.id}`, () => createMutationState<TInput, TResult>())
+  useMutationIds().value[options.id] = true
   const pendingCount = usePendingMutationCount()
   const toast = useToast()
   const needsConfirm = Boolean(options.confirm || options.batch?.confirm)
@@ -38,6 +56,7 @@ export function useMutation<TInput, TResult>(
 
   const mutation = createMutation(fn, options, {
     state: state.value,
+    locks: useMutationLocks().value,
     confirm,
     success: (title, description) =>
       toast.add({ title, description, color: 'success', icon: 'i-lucide-circle-check' }),

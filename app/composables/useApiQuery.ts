@@ -29,8 +29,14 @@ export function useApiQuery<T, DefaultT = undefined>(
     markFetched(toValue(key))
     return result
   }
-  const asyncData = useAsyncData(key, tracked, options)
+  // `watch` is handled here, not by useAsyncData: in Nuxt 4.5 its watch path (debounceTick) waits
+  // for a running request and only then fetches again, so one slow response (e.g. an older
+  // search) blocked the newer one and was shown first. `refresh()` cancels instead: the newer
+  // request starts at once and the older response is ignored (docs/decisions.md D30).
+  const { watch: watchSources, ...asyncOptions } = options ?? {}
+  const asyncData = useAsyncData(key, tracked, asyncOptions)
   const { data, status, error: rawError, refresh, execute, clear } = asyncData
+  if (watchSources) watch(watchSources, () => refresh({ dedupe: 'cancel' }))
 
   const pending = computed(() => status.value === 'pending')
   return {

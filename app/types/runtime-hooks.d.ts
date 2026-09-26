@@ -4,6 +4,8 @@ declare module '#app' {
     'app:data-changed': (features: string[]) => void
     /** This tab logged in or out (`useAuth`). Forwarded to other tabs by plugins/auth-sync.client.ts. */
     'app:auth-changed': (event: 'login' | 'logout') => void
+    /** The signed-in identity changed in this tab, for any reason (useAuth). Handled by plugins/session-boundary.client.ts. */
+    'app:session-changed': (session: { signedIn: boolean }) => void
   }
 }
 

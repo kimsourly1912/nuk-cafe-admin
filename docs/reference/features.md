@@ -45,8 +45,12 @@ import { CategorySelect } from '~/features/categories'
 | `excludeId` | `number` | | Hide one category. |
 | `noneLabel` | `string` | | Adds an option that clears the value. `USelect` can't hold `undefined`, and this handles that internally. |
 | `placeholder` | `string` | `'Select a category'` | |
+| `currentLabel` | `string` | | Name of the current value from the edited record (e.g. `category.mainCategory?.categoryName`), shown if the value isn't among the options. |
 
-It loads its options through `useCategoryOptions` and shows a loading state while fetching. **Known gaps** against the picker contract: a load error shows an empty list (no retry), and a current value missing from the options (inactive, deleted) shows blank.
+It loads its options through `useCategoryOptions` and shows a loading state while fetching. Behavior (D31, e2e `test/e2e/pickers.test.ts`):
+- **Current value stays visible**, never cleared: labelled from the options, `currentLabel` or `#id`, marked "(inactive)" or "(unavailable)".
+- **Inactive categories aren't offered as new selections** while their eligibility is open (Q9). This is a deferral, not a rule.
+- **Load error:** shows the message with **Retry** instead of an empty list.
 
 ### `useCategoryOptions`
 

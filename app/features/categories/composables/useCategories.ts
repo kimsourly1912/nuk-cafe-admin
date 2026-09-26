@@ -5,6 +5,12 @@ export type CategoryListQuery = NonNullable<GetCategoriesPageData['query']>
 
 const NOUN: [string, string] = ['category', 'categories']
 
+/**
+ * Update and remove of one category must never overlap (e.g. a bulk delete while an edit is
+ * saving): both take this record lock, checked when each request actually starts.
+ */
+const lockOf = (id: number | undefined) => `category:${id}`
+
 /** Features whose cached data shows categories (products display their category). */
 const AFFECTED = ['categories', 'products']
 
@@ -37,6 +43,7 @@ export function useCategoryMutations() {
     {
       id: 'categories:update',
       key: ({ id }) => id,
+      lock: ({ id }) => lockOf(id),
       successMessage: (_, { body }) => `Category "${body.categoryName}" updated`,
       errorMessage: ({ body }) => `Could not save "${body.categoryName}"`,
       invalidate: AFFECTED,
@@ -48,6 +55,7 @@ export function useCategoryMutations() {
     {
       id: 'categories:remove',
       key: category => category.id!,
+      lock: category => lockOf(category.id),
       removes: true,
       confirm: category => ({
         title: `Delete "${category.categoryName}"?`,

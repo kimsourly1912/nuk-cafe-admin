@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { reactive } from 'vue'
+import { computed, reactive } from 'vue'
 import { ApiError } from '../../app/utils/api-error'
 import type { MutationOptions } from '../../app/utils/mutation'
-import { createMutation, createMutationState } from '../../app/utils/mutation'
+import { createMutation, createMutationState, createRecord, LOCKED_MESSAGE } from '../../app/utils/mutation'
 
 interface Item { id: number, name: string, parentId?: number }
 
@@ -26,6 +26,7 @@ function setup(fn: (item: Item) => Promise<unknown>, options: Partial<MutationOp
   let stop = () => {}
   const deps = {
     state,
+    locks: reactive(createRecord<true>()),
     confirm: vi.fn(async () => confirmAnswer),
     success: vi.fn(),
     failure: vi.fn(),
@@ -84,7 +85,7 @@ describe('execute (single item)', () => {
     const { mutation } = setup(fn)
     const first = mutation.execute(a)
     await tick()
-    await expect(mutation.execute(a)).resolves.toEqual({ ok: false, status: 'skipped' })
+    await expect(mutation.execute(a)).resolves.toEqual({ ok: false, status: 'skipped', reason: 'in-flight' })
     d.resolve()
     await first
     expect(fn).toHaveBeenCalledOnce()
@@ -258,5 +259,171 @@ describe('executeMany (batch)', () => {
     const result = await mutation.executeMany([a, b])
     expect(result.cancelled).toBe(true)
     expect(fn).not.toHaveBeenCalled()
+  })
+})
+
+describe('keys named like Object.prototype members', () => {
+  for (const name of ['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf']) {
+    it(`runs, tracks and releases the key "${name}"`, async () => {
+      const d = deferred()
+      // No invalidation, so the "removed" mark stays until checked.
+      const { mutation, state } = setup(() => d.promise, { key: () => name, invalidate: [] })
+      expect(mutation.isPending(name)).toBe(false)
+      expect(mutation.isRemoved(name)).toBe(false)
+      expect(mutation.errorOf(name)).toBeUndefined()
+
+      const first = mutation.execute(a)
+      await tick()
+      expect(mutation.isPending(name)).toBe(true)
+      // A double submit on the same key is still skipped.
+      await expect(mutation.execute(a)).resolves.toMatchObject({ status: 'skipped', reason: 'in-flight' })
+
+      d.resolve()
+      await expect(first).resolves.toMatchObject({ ok: true })
+      expect(mutation.isPending(name)).toBe(false)
+      expect(mutation.isRemoved(name)).toBe(true)
+      // Nothing leaked onto Object.prototype.
+      expect(Object.getPrototypeOf(state.inFlight)).toBeNull()
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+    })
+  }
+
+  it('records an error under "__proto__"', async () => {
+    const { mutation } = setup(async () => {
+      throw notFound()
+    }, { key: () => '__proto__' })
+    await mutation.execute(a)
+    expect(mutation.errorOf('__proto__')).toBeInstanceOf(ApiError)
+  })
+})
+
+describe('reactivity', () => {
+  // The UI (busy rows, removed rows, errors) reads these inside computeds and templates.
+  for (const name of ['constructor', '7']) {
+    it(`isPending / isRemoved / errorOf re-evaluate when the state changes (key "${name}")`, async () => {
+      const d = deferred()
+      const { mutation } = setup(() => d.promise, { key: () => name, invalidate: [] })
+      const pending = computed(() => mutation.isPending(name))
+      const removed = computed(() => mutation.isRemoved(name))
+      expect(pending.value).toBe(false)
+      const running = mutation.execute(a)
+      await tick()
+      expect(pending.value).toBe(true)
+      d.resolve()
+      await running
+      expect(pending.value).toBe(false)
+      expect(removed.value).toBe(true)
+    })
+  }
+})
+
+describe('record locks across mutations', () => {
+  /** Two mutations (update and remove) sharing one lock registry, like useMutation does. */
+  function pair() {
+    const updates = new Map<number, ReturnType<typeof deferred>>()
+    const removes = new Map<number, ReturnType<typeof deferred>>()
+    const main = setup((item) => {
+      const d = deferred()
+      removes.set(item.id, d)
+      return d.promise
+    }, { lock: item => `category:${item.id}` })
+    const update = createMutation((item: Item) => {
+      const d = deferred()
+      updates.set(item.id, d)
+      return d.promise
+    }, {
+      key: item => item.id,
+      lock: item => `category:${item.id}`,
+      errorMessage: item => `Could not save "${item.name}"`,
+    }, { ...main.deps, state: reactive(createMutationState<Item, unknown>()) })
+    return { remove: main.mutation, update, deps: main.deps, updates, removes }
+  }
+
+  it('refuses a delete while an update of the same record runs, and explains why', async () => {
+    const { remove, update, deps, removes } = pair()
+    void update.execute(a)
+    await tick()
+    await expect(remove.execute(a)).resolves.toEqual({ ok: false, status: 'skipped', reason: 'locked' })
+    expect(removes.size).toBe(0)
+    expect(deps.failure).toHaveBeenCalledWith('Could not delete "A"', LOCKED_MESSAGE)
+  })
+
+  it('checks again after the confirmation: a lock taken while the dialog was open wins', async () => {
+    const { remove, update, deps, removes } = pair()
+    const answer = deferred<boolean>()
+    deps.confirm.mockImplementation(() => answer.promise)
+    const removing = remove.execute(a, { confirm: { title: 'Delete?' } })
+    await tick()
+    void update.execute(a) // starts while "Delete?" is open
+    await tick()
+    answer.resolve(true)
+    await expect(removing).resolves.toMatchObject({ status: 'skipped', reason: 'locked' })
+    expect(removes.size).toBe(0)
+  })
+
+  it('keeps different records in parallel', async () => {
+    const { remove, update, removes, updates } = pair()
+    void update.execute(a)
+    void remove.execute(b)
+    await tick()
+    expect(updates.has(1)).toBe(true)
+    expect(removes.has(2)).toBe(true)
+  })
+
+  it('releases the lock when the request ends, even on failure', async () => {
+    const { remove, update, updates, removes } = pair()
+    const saving = update.execute(a)
+    await tick()
+    updates.get(1)!.reject(notFound())
+    await saving
+    void remove.execute(a)
+    await tick()
+    expect(removes.has(1)).toBe(true)
+  })
+
+  it('a batch skips locked records, reports them, and runs the rest', async () => {
+    const { remove, update, deps, removes } = pair()
+    void update.execute(a)
+    await tick()
+    const batch = remove.executeMany([a, b, c])
+    await tick()
+    expect([...removes.keys()]).toEqual([2, 3])
+    for (const d of removes.values()) d.resolve()
+    const result = await batch
+    expect(result.skipped).toEqual([a])
+    expect(result.succeeded.map(s => s.input)).toEqual([b, c])
+    expect(deps.success).toHaveBeenCalledWith('2 categories deleted', '1 skipped (another action on it was in progress)')
+  })
+
+  it('a batch item that becomes locked while queued is skipped when its turn comes', async () => {
+    const { remove, update, removes } = pair()
+    // concurrency 2: c waits in the queue while a and b run.
+    const batch = remove.executeMany([a, b, c])
+    await tick()
+    expect([...removes.keys()]).toEqual([1, 2])
+    void update.execute(c) // takes c's lock while it's queued
+    await tick()
+    removes.get(1)!.resolve()
+    removes.get(2)!.resolve()
+    const result = await batch
+    expect(removes.has(3)).toBe(false)
+    expect(result.skipped).toEqual([c])
+  })
+
+  it('a batch confirmation that is answered after a record got locked skips that record', async () => {
+    const answer = deferred<boolean>()
+    const { remove, update, deps, removes } = pair()
+    deps.confirm.mockImplementation(() => answer.promise)
+    const batch = remove.executeMany([a, b], { confirm: { title: 'Delete 2?' } })
+    await tick()
+    void update.execute(a) // while "Delete 2?" is open
+    await tick()
+    answer.resolve(true)
+    await tick()
+    removes.get(2)?.resolve()
+    const result = await batch
+    expect(removes.has(1)).toBe(false)
+    expect(result.skipped).toEqual([a])
+    expect(result.succeeded.map(s => s.input)).toEqual([b])
   })
 })

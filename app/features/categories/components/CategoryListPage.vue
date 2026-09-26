@@ -33,8 +33,12 @@ const selection = useTableSelection(rows, c => c.id!, { resetOn: [query] })
 
 async function removeSelected() {
   const result = await remove.executeMany(selection.selected)
-  // Keep only the rows that still need attention selected.
-  selection.select([...result.failed.map(f => f.input.id!), ...result.notStarted.map(c => c.id!)])
+  // Keep only the rows that still need attention selected: failed, skipped (busy) and not started.
+  selection.select([
+    ...result.failed.map(f => f.input.id!),
+    ...result.skipped.map(c => c.id!),
+    ...result.notStarted.map(c => c.id!),
+  ])
 }
 
 // --- Table ---

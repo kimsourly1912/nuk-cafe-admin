@@ -100,6 +100,12 @@ export function useCategoryOptions(filter: MaybeRefOrGetter<CategoryOptionsFilte
 
 ---
 
+### `watch` cancels, it doesn't queue
+
+`useApiQuery` handles the `watch` option itself: a change calls `refresh({ dedupe: 'cancel' })`, so the newer request starts at once and a slower, older response is ignored. Plain `useAsyncData` in Nuxt 4.5 would wait for the running request and show its (outdated) result first (D30). E2E: `list-page.test.ts` → "a slow response for an older search…".
+
+---
+
 ## `usePaginatedQuery`
 
 Filter and pagination state for list pages, **kept in the URL** (`/categories?search=tea&status=ACTIVE&page=2`). It converts between the UI's 1-based page (`UPagination`) and the API's 0-based `page` + `size`.

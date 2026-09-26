@@ -83,6 +83,7 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
         ref="form"
         :schema="categoryFormSchema"
         :state="state"
+        :validate-on="['input', 'change']"
         :disabled="saving"
         class="space-y-4"
         @submit="onSubmit"
@@ -108,6 +109,7 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
             v-model="state.mainCategoryId"
             type="MAIN"
             :exclude-id="category?.id"
+            :current-label="category?.mainCategory?.categoryName"
             none-label="None (main category)"
           />
         </UFormField>

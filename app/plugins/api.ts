@@ -27,6 +27,8 @@ export default defineNuxtPlugin({
       ofetch: createApiFetch({
         baseFetch,
         onSessionExpired: () => auth.clearSession(),
+        // Responses to requests from a previous identity are discarded (plugins/session-boundary).
+        sessionGeneration: () => auth.generation.value,
       }),
     })
 

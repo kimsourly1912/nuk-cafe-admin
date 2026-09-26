@@ -105,3 +105,38 @@ describe('data freshness: connection', () => {
     await expect.poll(() => listLoads(api)).toBe(before + 1)
   })
 })
+
+describe('data freshness: overlapping refreshes', () => {
+  it('when two refreshes overlap, the older response can\'t replace the newer one', async () => {
+    const { page, api } = await openTab()
+    let resolveFirst!: (data: unknown) => void
+    let refetches = 0
+    const listOf = (name: string) => ({ content: [{ id: 1, categoryName: name, status: 'ACTIVE', type: 'MAIN' }], totalElements: 1, totalPages: 1, currentPage: 0, pageSize: 20, hasNext: false, hasPrevious: false })
+    api.set({
+      'GET /staff/categories': () => {
+        refetches++
+        // First refresh: slow, and by the time it answers its data is outdated.
+        if (refetches === 1) {
+          return new Promise((resolve) => {
+            resolveFirst = resolve
+          })
+        }
+        return listOf('Fresh matcha')
+      },
+    })
+
+    // Return to the tab twice while the first refresh is still running.
+    for (let i = 0; i < 2; i++) {
+      await setVisibility(page, 'hidden')
+      await page.clock.fastForward(6_000)
+      await setVisibility(page, 'visible')
+      await expect.poll(() => refetches).toBe(i + 1)
+    }
+    await page.getByRole('cell', { name: 'Fresh matcha' }).waitFor()
+
+    resolveFirst(listOf('Outdated tea'))
+    await page.waitForTimeout(500)
+    expect(await page.getByText('Outdated tea').count()).toBe(0)
+    await page.getByRole('cell', { name: 'Fresh matcha' }).waitFor()
+  })
+})

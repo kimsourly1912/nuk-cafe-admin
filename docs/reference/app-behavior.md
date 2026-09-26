@@ -106,14 +106,65 @@ Every case is in [Forms: unsaved changes → Edge cases](./forms.md#edge-cases).
 | Case | Behavior |
 |---|---|
 | Access token expired | One `/staff/auth/refresh` (shared by concurrent requests), then the request is retried. The user notices nothing |
-| Refresh fails | `clearSession()` → redirect to `/login?redirect=<current page>`. **No unsaved-changes dialog**: staying isn't possible |
+| Refresh rejected | `clearSession()` → redirect to `/login?redirect=<current page>`. **No unsaved-changes dialog**: staying isn't possible. Open form modals close, toasts clear (see the transition contract below) |
+| Refresh times out (10 s) or can't reach the server | The request fails with a timeout/network message; the session is **kept**, and the next request may try again |
+| Still unauthorized after a successful refresh + retry | Session expires (once); no further refresh attempts until the next login |
+| Many requests fail at once | One shared refresh; at most one expiry |
 | Log out with unsaved input | Asks first ([`useLeaveGuard`](./forms.md#useleaveguard)), **before** calling the backend |
 | **Logged out in another tab** | This tab goes to `/login?redirect=<current page>` at once. Unsaved input in this tab is lost without a dialog (same as a refresh failure: the session is gone for every tab) |
 | **Logged in in another tab** | Tabs waiting on `/login` continue to their `redirect` target. Logged-in tabs re-read the session (it may be a different staff member now) |
-| Refresh fails in one tab | Only that tab redirects. The others find out on their next request (not broadcast: the failure could be one tab's network) |
+| Session expires in one tab | Only that tab redirects. The others find out on their next request (not broadcast) |
 | After login | Back to the `redirect` page. Only paths on this site: `/x` is allowed; `//other-site.com`, `https://…` and anything else go to `/` (`loginRedirectTarget`). Blocks open redirects through crafted login links |
 
-Source: `app/utils/api-fetch.ts`, `app/plugins/api.ts`, `app/plugins/auth-sync.client.ts` (VueUse `useBroadcastChannel`, channel `nuk-cafe-admin:auth`, hook `app:auth-changed` fired by `useAuth().login/logout`), `app/middleware/*.global.ts`. See [Auth](./auth.md). E2E: `test/e2e/auth.test.ts` (the two cross-tab tests were checked to fail with the broadcast disabled).
+Source: `app/utils/api-fetch.ts`, `app/plugins/api.ts`, `app/plugins/auth-sync.client.ts` (VueUse `useBroadcastChannel`, channel `nuk-cafe-admin:auth`, hook `app:auth-changed` fired by `useAuth().login/logout`), `app/plugins/session-boundary.client.ts`, `app/middleware/*.global.ts`. See [Auth](./auth.md). Tests: `test/unit/api-fetch.test.ts`; e2e `test/e2e/auth.test.ts`, `test/e2e/session.test.ts` (each checked to fail with its mechanism disabled).
+
+### Session-transition contract
+
+Any identity change (login, logout, expiry, a different staff member via another tab) increments `useAuth().generation` synchronously and fires `app:session-changed` (D29). Then:
+
+| Left over from the previous identity | What happens | How |
+|---|---|---|
+| Responses to requests still in flight | Discarded (silent `aborted`): no data, no toast, no invalidation | `createApiFetch` compares the generation at start and end |
+| Query data (`<feature>:` keys) | Cleared; refetched only if someone is signed in | `clearNuxtData` + `refreshNuxtData` |
+| Superseded/unmounted query responses | Ignored | Nuxt (promise identity), independent of the above |
+| Unsaved forms | Discarded **without** a dialog | `useLeaveGuard().discardAll()` |
+| Voluntary logout with unsaved input | Asks first; only "Discard" continues | `useAuth().logout` → `confirmLeave` |
+| Open overlays (form modals, confirmations) | Closed | `useOverlay().closeAll()` |
+| Toasts ("Reopen" drafts, "Retry failed") | Cleared | `useToast().clear()` |
+| Mutation errors, results, "removed" marks | Reset; in-flight calls and record locks stay until they settle | `resetMutationOutcomes()` |
+
+Not covered: browsers without `BroadcastChannel` learn about another tab's account change only on their next request or session check.
+
+### API timeouts and retries
+
+| Case | Behavior |
+|---|---|
+| Normal request | 30 s per attempt (SDK `timeout`). ofetch's automatic retries are **off** (`retry: 0`) |
+| 401 / NC1000 | One shared refresh (10 s timeout), then **one** retry with its own 30 s. Worst case ≈ 70 s |
+| GET network error | Fails at once (was: one hidden retry without a timeout) |
+
+Tests: `test/unit/api-fetch.test.ts` (including real-ofetch tests for the default retry and the refresh timeout). D27.
+
+### Cookies and CSRF (review, 2026-09-26)
+
+What the frontend does, verified in code: auth is two HttpOnly cookies (`SameSite=Lax`, no `Domain`) sent with `credentials: 'include'` to one configured API base; the frontend never reads tokens. State changes use POST/PUT/DELETE with JSON bodies; the `/staff`, `/admin` spec has no state-changing GET endpoint. The OpenAPI spec declares only `bearerAuth` (an `Authorization` header), while the portal authenticates with cookies.
+
+What that does and doesn't protect: `SameSite=Lax` keeps the cookies off cross-**site** POST/PUT/DELETE, but **same-site** origins (any `*.nukcafe.co` subdomain) still send them. Whether the backend defends cookie-authenticated writes (CSRF token, `Origin`/`Referer` check, required JSON content type, a custom header) is **unknown**. The frontend adds no token of its own: there is no contract for one. The exact questions are Q10–Q12 in progress.md. **Nothing here claims the backend is protected.**
+
+### Permissions (Q6: open)
+
+The session carries `groups` (e.g. `ADMIN`, `CASHIER`), but no role rules have been agreed. **The UI does no role gating**; hiding a button is never authorization, and the backend must refuse unauthorized requests. When the project owner answers, fill in this matrix, then add route meta and a shared `can(action)` (feature-standard §7):
+
+| Screen / action | ADMIN | CASHIER | Other groups? |
+|---|---|---|---|
+| Categories: view / create / edit / delete / bulk delete | ? | ? | ? |
+| Schedules, Menu items: view / edit / delete | ? | ? | ? |
+| Orders: view queue / accept / ready / complete / reject / cancel | ? | ? | ? |
+| Customers: view / suspend / reactivate; points adjustments | ? | ? | ? |
+| Staff: view / create / reset password / change status | ? | ? | ? |
+| Rewards, vouchers (redeem / lookup), banners, carbon, settings | ? | ? | ? |
+
+Also needed: does the backend enforce each rule (so the UI hides rather than blocks)? What does a forbidden request return (code for the `forbidden` kind)?
 
 ---
 

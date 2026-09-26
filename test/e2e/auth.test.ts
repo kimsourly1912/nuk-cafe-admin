@@ -1,15 +1,15 @@
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import { gotoHydrated, MockFailure, mockApi, openTabs, setupE2e } from './support/mock-api'
+import { failures, gotoHydrated, MockFailure, mockApi, openTabs, setupE2e } from './support/mock-api'
 
 await setupE2e()
 
 const LOGGED_OUT = {
   'GET /staff/auth/session': () => {
-    throw new MockFailure('NC1000', 'Unauthorized', 401)
+    throw failures.unauthorized()
   },
   'POST /staff/auth/refresh': () => {
-    throw new MockFailure('NC1000', 'Unauthorized', 401)
+    throw failures.unauthorized()
   },
 }
 

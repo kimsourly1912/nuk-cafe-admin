@@ -79,7 +79,8 @@ function useMutation<TInput, TResult>(
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `id` | `string` | **required** | Unique `'<feature>:<action>'`, e.g. `'categories:remove'`. **State is shared by `id` across the whole app**: every component calling `useCategoryMutations()` sees the same in-flight items. |
-| `key` | `(input) => string \| number` | none (single slot) | Identifies the item a call acts on. **Calls with different keys run in parallel.** A call whose key is already in flight resolves to `skipped` (no double submit). Without `key`, only one call runs at a time. |
+| `key` | `(input) => string \| number` | none (single slot) | Identifies the item a call acts on. **Calls with different keys run in parallel.** A call whose key is already in flight resolves to `skipped` (no double submit). Without `key`, only one call runs at a time. Any string works as a key, including `constructor` or `__proto__` (state records have no prototype). |
+| `lock` | `(input) => string \| number` | none | **Record lock shared across mutations**: calls whose lock is held by *any* mutation are skipped with reason `locked` and an explaining toast. Give conflicting operations on one record the same lock (Categories: `category:<id>` on update and remove). Checked and reserved when the request starts (after confirmation, per batch item). Omit when calls can't conflict (create). |
 | `confirm` | `ConfirmOptions \| (input) => ConfirmOptions` | none | Ask before running. See [`useConfirm`](./ui.md#useconfirm). The dialog closes as soon as the user answers. |
 | `successMessage` | `string \| (data, input) => string \| false` | none | Success toast title. **No toast unless you set it.** Name the item: `` `Category "${c.categoryName}" deleted` ``. |
 | `errorMessage` | `string \| (input) => string` | `'Something went wrong'` | Error toast **title**. The description is always the error's user-safe `message`. |
@@ -136,7 +137,7 @@ type MutationResult<T> =
   | { ok: true, status: 'success', data: T }
   | { ok: false, status: 'error', error: ApiError }   // already toasted
   | { ok: false, status: 'cancelled' }                // user declined the confirmation
-  | { ok: false, status: 'skipped' }                  // same key already in flight
+  | { ok: false, status: 'skipped', reason: 'in-flight' | 'locked' } // same key running (silent) / record locked by another mutation (toast)
 ```
 
 ```ts
@@ -155,7 +156,7 @@ executeMany(inputs: TInput[], overrides?: { confirm?: ConfirmOptions | false }):
 interface BatchResult<TInput, TResult> {
   succeeded: { input: TInput, data: TResult }[]
   failed: { input: TInput, error: ApiError }[]
-  skipped: TInput[]    // this mutation already in flight for the item (e.g. a single delete on the same row)
+  skipped: TInput[]    // busy when its turn came: same mutation in flight, or record locked (e.g. a pending update)
   notStarted: TInput[] // never started because the user pressed Stop
   cancelled: boolean   // user declined the batch confirmation: nothing ran
 }
@@ -163,21 +164,22 @@ interface BatchResult<TInput, TResult> {
 
 The backend has no bulk endpoints, so a batch is N single calls:
 
-1. Items with **this mutation** already in flight are set aside as `skipped`. Other mutations on the same item aren't checked (see [below](#concurrency-guarantee-and-current-limits)). If nothing is left to run, it returns immediately with no toast.
+1. Items that are busy (this mutation in flight, or their `lock` held by another mutation) are set aside as `skipped`. Each remaining item is checked **again** when its turn comes (see [below](#concurrency-guarantee-and-current-limits)). If nothing is left to run, it returns immediately with no toast.
 2. One confirmation (`batch.confirm`), unless `overrides.confirm === false`.
 3. Calls run with at most `batch.concurrency` in parallel, phase by phase. Each item gets the normal per-item state (`isPending`, `errorOf`, `isRemoved`), but **no per-item toasts**.
 4. A live progress toast ("Deleting categories… 3/10") with a **Stop** button. Stop prevents new items from starting. Requests already in flight finish.
 5. **One summary toast:**
-   - all succeeded: "10 categories deleted" (plus "N skipped (already in progress)" / "N not started (stopped)" when relevant)
+   - all succeeded: "10 categories deleted" (plus "N skipped (another action on them was in progress)" / "N not started (stopped)" when relevant)
    - some failed: "7 categories deleted, 3 failed", with reasons grouped ("Category has products (2) · Category not found (1)") and a **Retry failed** action that reruns only the failed items without asking again
 6. One data refresh (if anything succeeded).
 
 #### Concurrency guarantee and current limits
 
 - **Required** ([feature-standard.md §4](../feature-standard.md#4-list-page-behavior)): conflicting operations on the same item (update vs delete, delete vs delete) never overlap. Eligibility must be **checked and reserved immediately before each request starts**, with no asynchronous gap between the check and the reservation. Independent items still run concurrently.
-- **What the engine does today:** within **one** mutation, `run` checks the key and reserves it synchronously (no `await` in between) right before calling the request. That holds for a single `execute` after its confirmation, and for each batch item when a worker picks it up. An item that became busy for the same mutation meanwhile is `skipped`.
-- **What it doesn't do:** there is **no shared exclusion across different mutations**. `categories:update` and `categories:remove` keep separate in-flight state, so an update and a delete of the same item can overlap.
-- **Prefiltering is not the guarantee.** Filtering the input with the feature's `isBusy` before `executeMany` (or before opening a confirmation) is a preliminary UX and eligibility check only. An item can become busy while the confirmation is open, or while it waits in the batch queue. Prefiltering alone doesn't satisfy the execution-time requirement. Categories doesn't prefilter today either: a known gap ([feature-standard.md §4](../feature-standard.md#4-list-page-behavior)).
+- **What the engine does:** `run` checks the key **and the record lock** and reserves both synchronously (no `await` in between) right before calling the request. That holds for a single `execute` after its confirmation, and for each batch item when a worker picks it up. An item that became busy meanwhile (same mutation, or its lock taken by another mutation) is `skipped`, and different records still run in parallel (D28).
+- **What features must do:** give every mutation that can conflict on a record the same `lock`. Without `lock`, mutations only exclude themselves.
+- **Prefiltering is not the guarantee.** The early checks (before a confirmation, before a batch) only avoid asking about work that can't run. `isBusy` in the UI is a display. The guarantee is the check-and-reserve at request start.
+- Tests: `test/unit/mutation.test.ts` → "record locks across mutations"; `test/e2e/categories-bulk.test.ts` (bulk delete during a pending edit, which fails without `lock`).
 
 ```ts
 async function removeSelected() {
@@ -245,7 +247,7 @@ See `features/categories/components/CategoryFormModal.vue` for the full version,
 
 #### Busy rows in a table
 
-Expose `isBusy(id)` from the feature, combining every mutation that acts on an item, and use it to block the row's actions in the UI. This is UI-level blocking, **not** execution-time exclusion. It doesn't stop a bulk action or another caller from starting a different mutation on the item (see [Concurrency guarantee and current limits](#concurrency-guarantee-and-current-limits)).
+Expose `isBusy(id)` from the feature, combining every mutation that acts on an item, and use it to block the row's actions in the UI. This is a **display**; the exclusion itself comes from `lock` (see [Concurrency guarantee and current limits](#concurrency-guarantee-and-current-limits)).
 
 ```ts
 return { create, update, remove, isBusy: (id: number) => update.isPending(id) || remove.isPending(id) }
@@ -308,7 +310,8 @@ await remove.execute(category, { confirm: false }) // e.g. after your own custom
 
 ### Behavior details
 
-- **Concurrency:** different keys run in parallel. The same key is skipped while in flight **for the same mutation** (checked and reserved right before each request). Different mutations don't exclude each other. Without `key`, calls are serialized (any second call is skipped).
+- **Concurrency:** different keys run in parallel. The same key is skipped while in flight **for the same mutation**, and a held `lock` skips **any** mutation declaring it (both checked and reserved right before each request). Without `key`, calls are serialized (any second call is skipped).
+- **Session change:** errors, last results and "removed" marks reset when the signed-in identity changes (`resetMutationOutcomes`, D29). In-flight calls and locks stay until their requests settle; their responses are discarded.
 - **Shared state:** state lives in `useState('mutation:<id>')`. Two `useMutation` calls with the same `id` share in-flight items, errors and removed keys. Give every mutation a unique id.
 - **Never cancelled:** unmounting a component doesn't cancel its mutations. The toast and data refresh still happen. [`usePendingMutationCount`](#usependingmutationcount) drives a `beforeunload` warning.
 - **Silent errors:** `unauthorized` (session expiry, handled by the redirect to login) and `aborted` errors are recorded but not toasted. See [`isSilentError`](./errors.md#issilenterror).

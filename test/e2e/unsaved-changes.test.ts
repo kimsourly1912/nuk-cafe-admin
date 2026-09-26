@@ -1,7 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import { beforeUnloadPrevented, gotoViaSidebar, mockApi, setupE2e } from './support/mock-api'
+import { beforeUnloadPrevented, deferred, failures, gotoViaSidebar, mockApi, setupE2e, toast } from './support/mock-api'
 
 // The cases listed in docs/reference/forms.md → "Edge cases", on the Categories form modal.
 await setupE2e()
@@ -95,8 +95,8 @@ describe('unsaved changes: form modal', () => {
 
   it('closes mid-save without asking; the tab-close guard stays on until the save ends', async () => {
     const { page, api } = await openCategories()
-    let finishSave!: () => void
-    api.set({ 'POST /staff/categories': () => new Promise(resolve => (finishSave = () => resolve({ id: 3 }))) })
+    const save = deferred()
+    api.set({ 'POST /staff/categories': save.handler })
 
     await openNewForm(page, 'Latte')
     await page.getByRole('button', { name: 'Create' }).click()
@@ -106,7 +106,7 @@ describe('unsaved changes: form modal', () => {
     expect(await discardDialog(page).count()).toBe(0)
     expect(await beforeUnloadPrevented(page)).toBe(true)
 
-    finishSave()
+    save.release({ id: 3 })
     await expect.poll(() => beforeUnloadPrevented(page)).toBe(false)
   })
 })
@@ -156,5 +156,45 @@ describe('unsaved changes: leaving the page', () => {
     await page.getByRole('link', { name: /Dashboard/ }).first().click()
     await expect.poll(() => page.url()).not.toMatch(/\/categories$/)
     expect(await discardDialog(page).count()).toBe(0)
+  })
+})
+
+describe('unsaved changes: failed saves and forward', () => {
+  it('a failed save keeps the form open with the input and the reason, and still guards it', async () => {
+    const { page, api } = await openCategories()
+    api.set({
+      'POST /staff/categories': () => {
+        throw failures.validation('A category named "Latte" already exists')
+      },
+    })
+    await openNewForm(page, 'Latte')
+    await form(page).getByRole('button', { name: 'Create' }).click()
+
+    await toast(page, 'Could not create "Latte"').waitFor()
+    await page.getByText('A category named "Latte" already exists').first().waitFor()
+    expect(await form(page).isVisible()).toBe(true)
+    await expect(nameInput(page).inputValue()).resolves.toBe('Latte')
+    expect(await beforeUnloadPrevented(page)).toBe(true)
+
+    // Retrying is allowed after the failure (no stuck "in flight" state).
+    await form(page).getByRole('button', { name: 'Create' }).click()
+    await expect.poll(() => api.calls.filter(c => c === 'POST /staff/categories').length).toBe(2)
+  })
+
+  it('asks on browser forward; Keep editing stays on the page', async () => {
+    const { page } = await openCategories()
+    // History: / → /categories → / → /categories. Go back twice, then forward is available.
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/categories')
+    await page.goBack()
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/')
+    await page.goBack()
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/categories')
+    await openNewForm(page, 'Latte')
+
+    await page.goForward()
+    await discardDialog(page).waitFor()
+    await answer(page, 'Keep editing')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/categories')
+    await expect(nameInput(page).inputValue()).resolves.toBe('Latte')
   })
 })

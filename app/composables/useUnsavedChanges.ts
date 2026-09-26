@@ -120,5 +120,13 @@ export function useLeaveGuard() {
     return leaving
   }
 
-  return { hasUnsavedChanges, confirmLeave }
+  /**
+   * Discards every open form **without asking**. Only for transitions where staying isn't possible
+   * (session expired, logged out in another tab); a voluntary logout asks first (`confirmLeave`).
+   */
+  function discardAll() {
+    for (const form of [...forms.value]) form.discard()
+  }
+
+  return { hasUnsavedChanges, confirmLeave, discardAll }
 }

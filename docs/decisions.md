@@ -154,3 +154,37 @@ Dates are when the decision was made. All of these were agreed with the project 
 - **Decision:** `useAuth().login/logout` fire the runtime hook `app:auth-changed`, and `plugins/auth-sync.client.ts` forwards it over a `BroadcastChannel` (VueUse `useBroadcastChannel`, same pattern as D22). On logout, other tabs `clearSession()`, and the existing watcher sends them to `/login?redirect=…`. On login, tabs waiting on `/login` continue, and logged-in tabs re-read the session (it may be another staff member). Received messages are never re-sent.
 - A refresh failure is **not** broadcast: it may be one tab's network problem. The other tabs find out on their next request.
 - **Security fix found on the way:** `LoginPage` accepted any `redirect` starting with `/`, including `//evil.example` (protocol-relative, so it leaves the site after login: an open redirect). `loginRedirectTarget` (exported from `~/features/auth`) now allows only same-site paths. Covered by e2e.
+
+### D27: Bounded refresh, no hidden retries, expire once per identity, 2026-09-26
+- **Context:** the token refresh had no timeout. A 401 after a successful refresh+retry never expired the session, so the user was stuck. After expiry, every later 401 started a new refresh. ofetch retried GETs once by default, reusing the first attempt's `signal`: after a timeout the retry failed instantly, and after a network error it ran with **no** timeout.
+- **Decision (`app/utils/api-fetch.ts`):**
+  - `/staff/auth/refresh` gets its own 10 s timeout.
+  - ofetch retries are off (`retry: 0`); the SDK's 30 s applies per attempt, and the only retry is our single post-refresh one (worst case 30 + 10 + 30 s).
+  - A refresh **rejection**, or a still-unauthorized retry, expires the session **once per identity generation**. No further refreshes until the identity changes.
+  - A refresh that times out or can't reach the server fails the request with that error and **keeps** the session. [Choice] A flaky connection shouldn't log staff out; the next request tries again.
+- Tested in `test/unit/api-fetch.test.ts`, including against real ofetch.
+
+### D28: Record locks across mutations; prototype-free state records, 2026-09-26
+- **Context:** the engine only excluded repeats of the **same** mutation and key, so a bulk delete could overlap a pending update of the same category (select-all includes busy rows). Keys like `constructor` or `__proto__` broke `key in {}` lookups.
+- **Decision:** an opt-in `lock` option. Mutations returning the same lock (`category:7`) exclude each other through a shared `mutation:locks` record. `run()` checks and reserves key and lock **synchronously** right before the request, so this holds after a confirmation and for queued batch items. Different records still run in parallel. Skips carry a reason (`in-flight`: silent double submit; `locked`: explained with a toast). Batch summaries count them ("1 skipped (another action on it was in progress)"), and the list keeps skipped rows selected.
+- Opt-in, because only the feature knows which operations conflict. Categories locks update and remove.
+- State records are `Object.create(null)`, and membership uses `in`. **Not** `hasOwnProperty`: Vue doesn't track `getOwnPropertyDescriptor`, and that version stopped busy rows from rendering (caught by an e2e test; a unit reactivity test now guards it).
+
+### D29: Session-transition contract, 2026-09-26
+- **Context:** after logout, expiry or an account change, the previous identity's query data, mutation errors, "removed" marks, toasts ("Reopen" drafts, "Retry failed"), open form modals and dirty-form registrations survived. A mutation response from the old session could toast and invalidate in the new one. After expiry, a form modal stayed open over `/login`.
+- **Decision:** `useAuth` keeps an identity **generation**, which increments synchronously on any identity change and fires `app:session-changed`.
+  - `createApiFetch` discards responses to requests started in an older generation (silent `aborted`).
+  - `plugins/session-boundary.client.ts` discards unsaved forms without asking, closes overlays, clears toasts, resets mutation outcomes, and clears `<feature>:` query data (refetching only when someone is signed in).
+  - Voluntary logout still asks about unsaved changes first; expiry and other-tab logout don't.
+- Stale **query** responses were already safe: Nuxt ignores a response whose request was superseded, cleared or unmounted (promise identity). The generation check covers everything else (mutations, direct calls).
+
+### D30: `useApiQuery` handles `watch` itself, with cancel semantics, 2026-09-26
+- **Context:** in Nuxt 4.5, `useAsyncData`'s `watch` path goes through `debounceTick`, which returns the running promise and queues the new fetch until it settles. A slow response to an older filter blocked the newer request (up to 30 s), and was then shown first.
+- **Decision:** `useApiQuery` strips `watch` from the options and calls `refresh({ dedupe: 'cancel' })` itself. The newer request starts at once and the older response is ignored. Feature code is unchanged (`watch: [...]` as before). Tested (fails without the fix).
+
+### D31: Picker display vs eligibility; no blur validation in the Category form, 2026-09-26
+- **Decision (`CategorySelect`):**
+  - The current value always stays visible, labelled from the options, the record (`currentLabel`) or `#id`, marked "(inactive)" / "(unavailable)", and is never cleared.
+  - Inactive categories are **not offered as new selections** while Q9 is open. That's the feature standard's deferral rule, not a business rule, and one filter line to change once answered.
+  - A failed options load shows the error with Retry.
+- **Form validation:** `CategoryFormModal` validates on input and change, not on blur. Blurring the empty, autofocused name showed "Name is required" between mousedown and mouseup, shifting the small Retry button in the form body so the click was lost (reproduced in e2e).

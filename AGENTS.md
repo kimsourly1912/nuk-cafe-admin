@@ -90,7 +90,7 @@ app/
 
 Every read goes through **`useApiQuery`** and every create/update/delete through **`useMutation`**. Never duplicate their request state: no hand-rolled request `loading` refs, in-flight tracking, try/catch or toasts for API calls. A form may keep **its own** submission state (e.g. `saving` in `CategoryFormModal`, for its disabled inputs and unsaved-change pause). See [feature-standard.md §5](docs/feature-standard.md#form-local-vs-shared-pending-state).
 
-**Reads:** `useApiQuery(key, handler, useAsyncDataOptions)` is `useAsyncData` with `pending` (boolean), `loading` (first load, no data yet), `refreshing` (reloading while old data is shown) and `error` (already an `ApiError`).
+**Reads:** `useApiQuery(key, handler, useAsyncDataOptions)` is `useAsyncData` with `pending` (boolean), `loading` (first load, no data yet), `refreshing` (reloading while old data is shown) and `error` (already an `ApiError`). Its `watch` option **cancels** a running request instead of queueing behind it (D30), so a slow older response never replaces newer results.
 
 **Writes:** mutations are defined once per feature, in `use<Feature>Mutations()`, with `useMutation(fn, options)`:
 
@@ -98,6 +98,7 @@ Every read goes through **`useApiQuery`** and every create/update/delete through
 |---|---|
 | `id` | `'<feature>:<action>'`. **State is shared by id app-wide** (`useState`): a row sees "saving" even after the modal that started it was closed |
 | `key` | Identifies the item (`c => c.id`). Different keys run **in parallel**. A call for a key already in flight is **skipped** (no double submit). Omit only if calls must run one at a time |
+| `lock` | Record lock shared **across mutations** (e.g. `category:7` from both update and remove). Give every mutation that can conflict on a record (update, remove, status…) the same lock: a call whose lock is held is skipped when it would start (after confirmation, per batch item) with an explaining toast. **Required** for conflicting operations (D28) |
 | `confirm` | Ask first (deletes). The dialog closes on answer and the work continues in the background |
 | `successMessage` / `errorMessage` | Toast titles; name the item (`Category "Tea" deleted`). The error description is the `ApiError` message |
 | `invalidate` | Features to refresh after success |
@@ -107,13 +108,13 @@ Every read goes through **`useApiQuery`** and every create/update/delete through
 The returned object is **reactive (don't destructure it)**:
 
 - `execute(input, { confirm?, errorActions? })` **never throws**. It resolves to `{ ok: true, data }`, `{ ok: false, status: 'error', error }`, or `{ ok: false, status: 'cancelled' | 'skipped' }`.
-- `executeMany(items)` runs with one confirmation, limited concurrency, a progress toast with **Stop**, one summary toast ("3 categories deleted, 1 failed", reasons grouped, **Retry failed**) and one refresh. It resolves to `{ succeeded, failed, skipped, notStarted, cancelled }`. Items with **this mutation** already in flight are skipped, not sent twice. Other mutations on the same item (e.g. a pending update during a bulk delete) are **not** checked: see [feature-standard.md §4](docs/feature-standard.md#4-list-page-behavior).
+- `executeMany(items)` runs with one confirmation, limited concurrency, a progress toast with **Stop**, one summary toast ("3 categories deleted, 1 failed", reasons grouped, **Retry failed**) and one refresh. It resolves to `{ succeeded, failed, skipped, notStarted, cancelled }`. Busy items (same mutation in flight, or their `lock` held by another mutation, e.g. a pending update during a bulk delete) are skipped, checked again when each item starts, and reported in the summary.
 - `isPending(key?)`, `pending`, `pendingCount()`, `errorOf(key?)`, `error`, `data`, `isRemoved(key)`, `reset(key?)`.
 - Calls are **never cancelled on unmount**. `plugins/leave-guard.client.ts` warns before the tab closes while anything is in flight.
 
 Rules the Categories reference follows:
 
-- The feature exposes **`isBusy(id)`** (any mutation in flight for that item). The list dims the row and shows a spinner instead of its row actions, so single actions can't start on it. **Known gap:** nothing prevents a *different* mutation on the same item from overlapping. The engine only excludes repeats of the same mutation and key, and bulk actions don't even prefilter busy rows (select-all includes them). Prefiltering alone wouldn't meet the execution-time guarantee ([mutations.md](docs/reference/mutations.md#concurrency-guarantee-and-current-limits)).
+- The feature exposes **`isBusy(id)`** (any mutation in flight for that item). The list dims the row and shows a spinner instead of its row actions. That is the display; the exclusion itself is `lock` ([mutations.md](docs/reference/mutations.md#concurrency-guarantee-and-current-limits)). After a bulk action, keep `failed`, `skipped` and `notStarted` rows selected.
 - **Form modals stay open while saving** (backend errors need the input on screen) but **can be closed**: the save continues. If it then fails, the toast offers **"Reopen"** with the draft restored (`errorActions` + a `draft` prop).
 - **Unsaved changes are guarded.** Every create/edit form uses `useModalUnsavedChanges` (modals) or `useUnsavedChanges` (pages), so closing the modal, changing route, logging out or reloading with changed input asks first. Pass `paused: saving` and call `markClean()` after a successful save (see [docs/reference/forms.md](docs/reference/forms.md)).
 - **Create is keyed by something that identifies the submission** (the name), so two different creates can run in parallel while a double submit is skipped.
@@ -179,6 +180,7 @@ How to use it in UI code:
 
 - `app/features/auth/` exposes `useAuth()`: `user` (state, no tokens), `isLoggedIn`, `fetchSession`, `login`, `logout`. The shell (`middleware/auth.global.ts`, `plugins/api.ts`, `layouts/default.vue`) imports it from `~/features/auth`.
 - The middleware protects **every page by default**. Opt out with `definePageMeta({ public: true })` (typed in `app/types/page-meta.d.ts`).
+- **Session transitions** (login, logout, expiry, another staff member via another tab) clear the previous identity's query data, mutation outcomes, toasts, overlays and unsaved forms, and discard its in-flight responses (`plugins/session-boundary.client.ts`, `useAuth().generation`, D29). Features must not keep user data outside `useApiQuery`/`useMutation`/`useState`-based composables, or the boundary can't clear it.
 - App-wide behavior needs nothing from features: login/logout apply to all open tabs (`plugins/auth-sync.client.ts`), `?` shows keyboard shortcuts, tab titles from `definePageMeta({ title })`, a save in one tab refreshes the same lists in the app's other tabs at once, lists refetch when the user returns to the tab (data ≥ 5s old) or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards. Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
 - `ssr: false`: the app is a pure SPA because only the browser has the auth cookies. Don't add server routes or SSR-dependent code.
 - `app/layouts/default.vue` is the Nuxt UI dashboard shell. The sidebar is `app/utils/navigation.ts`, which groups and orders each feature's exported `navigation` entry.
@@ -216,7 +218,7 @@ First plan it with the template in **[docs/feature-standard.md](docs/feature-sta
 1. **Endpoints:** find them in `app/generated/api/sdk.gen.ts` by URL. If they're missing or stale, run `pnpm api:generate`.
 2. **`composables/use<Feature>s.ts` (private):**
    - `use<Feature>List(query)`: `useApiQuery('<feature>:list', () => unwrap(sdkFn({ query: toValue(query) })), { watch: [() => ({ ...toValue(query) })] })`.
-   - `use<Feature>Mutations()`: `create` / `update` / `remove` built with `useMutation` (ids `'<feature>:<action>'`, `key`, messages naming the item, `invalidate`, `confirm` + `removes` + `batch` for remove), plus `isBusy(id)`.
+   - `use<Feature>Mutations()`: `create` / `update` / `remove` built with `useMutation` (ids `'<feature>:<action>'`, `key`, a shared `lock` on every mutation that acts on an existing record, messages naming the item, `invalidate`, `confirm` + `removes` + `batch` for remove), plus `isBusy(id)`.
 3. **`composables/use<Feature>Options.ts` + `components/<Feature>Select.vue` (public):** add these if other features need to pick this resource. Key the options per filter. The select hides the `USelect` sentinel for "none" (see `CategorySelect`).
 4. **`schemas/<feature>-form.ts`:** the Valibot schema with user-facing messages (generated request schemas carry no rules). `to<Feature>Form(existing?)` builds the initial form state. `to<Feature>Request(form, existing?)` builds the request body and **copies over fields the form doesn't edit** (`nameI18n`, `sortOrder`, ...) so the PUT doesn't wipe them. Unit-test it in `tests/`.
 5. **`components/<Feature>FormModal.vue`:** opened with `useOverlay().create(...)`. On submit: `const result = await create.execute(body, { errorActions })`, then `if (result.ok) emit('close', true)`. It supports closing mid-save with "Reopen" (`draft` prop), saves on Ctrl/⌘+Enter (`useSubmitShortcut(() => form.value?.submit())`, hint via `UTooltip :kbds="['meta', 'enter']"` on the submit button), guards unsaved input with `useModalUnsavedChanges` (declare the `update:open` emit, bind `@update:open` on `UModal`, Cancel calls `requestClose()`), and pulls in other features' pickers from their `index.ts`.
@@ -230,7 +232,7 @@ First plan it with the template in **[docs/feature-standard.md](docs/feature-sta
 `vitest.config.ts` defines three projects:
 - **unit** (Node, no Nuxt runtime): `app/features/*/tests/**/*.test.ts` and `test/unit/**`. Test pure code such as schemas, form mapping and utils. Files under test must import their dependencies explicitly, not through auto-imports.
 - **nuxt** (Nuxt environment via `@nuxt/test-utils`): `app/features/*/tests/**/*.nuxt.test.ts` and `test/nuxt/**`.
-- **e2e**: `test/e2e/**` (`@nuxt/test-utils/e2e` + `playwright-core`, real Chrome). `test/e2e/support/global-setup.ts` builds and serves the app **once** for all files. Start each file with `await setupE2e()`, and mock the backend with `mockApi(page, { 'GET /staff/x': () => data })` from `test/e2e/support/mock-api.ts` (throw `MockFailure` for `success: false`). Helpers: `gotoViaSidebar` (needed before testing back/forward), `beforeUnloadPrevented`, `toast`, `pageOf`. Pitfalls: docs/progress.md → "How to verify". `pnpm vitest run --project e2e` takes about a minute (mostly the build).
+- **e2e**: `test/e2e/**` (`@nuxt/test-utils/e2e` + `playwright-core`, real Chrome). `test/e2e/support/global-setup.ts` builds and serves the app **once** for all files. Start each file with `await setupE2e()`, and mock the backend with `mockApi(page, { 'GET /staff/x': () => data })` from `test/e2e/support/mock-api.ts` (throw `MockFailure` or a `failures.*` preset for `success: false`). **Unmocked requests fail the test** (HTTP 501 + `afterEach`), so every endpoint a test touches must have a handler. Helpers: `deferred()` (hold a response, release/fail on demand), `paginatedHandler(rows)`, `failures`, `gotoViaSidebar` (needed before testing back/forward), `beforeUnloadPrevented`, `toast`, `pageOf`, `openTabs`/`gotoHydrated` (two tabs of one browser). Pitfalls: docs/progress.md → "How to verify". `pnpm vitest run --project e2e` takes about a minute (mostly the build).
 
 Shared code tests live in `test/` (e.g. `test/unit/api-fetch.test.ts` covers the envelope, refresh and retry logic).
 

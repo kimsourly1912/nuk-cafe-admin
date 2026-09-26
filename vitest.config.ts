@@ -24,6 +24,9 @@ export default defineConfig({
           // Builds and serves the app once for all e2e files.
           globalSetup: ['test/e2e/support/global-setup.ts'],
           testTimeout: 30_000,
+          // expect.poll defaults to 1 s: too short for a cold page (session check → refresh → redirect)
+          // while the whole suite runs, which made redirect/title assertions flaky.
+          expect: { poll: { timeout: 5_000 } },
         },
       },
       await defineVitestProject({

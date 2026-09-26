@@ -1,8 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import type { MockHandler } from './support/mock-api'
-import { gotoViaSidebar, mockApi, pageOf, setupE2e } from './support/mock-api'
+import { deferred, gotoViaSidebar, mockApi, paginatedHandler, setupE2e } from './support/mock-api'
 
 // List-page behaviour shared by every feature (usePaginatedQuery, SearchInput, ListEmptyState),
 // exercised on Categories.
@@ -10,18 +9,9 @@ await setupE2e()
 
 const MANY = Array.from({ length: 45 }, (_, i) => ({ id: i + 1, categoryName: i === 0 ? 'Green tea' : `Category ${i + 1}`, status: 'ACTIVE', type: 'MAIN' }))
 
-/** A backend that filters by `search` and paginates like the real one (0-based page). */
-const listHandler = (rows = MANY): MockHandler => ({ url }) => {
-  const search = url.searchParams.get('search')?.toLowerCase()
-  const page = Number(url.searchParams.get('page') ?? 0)
-  const size = Number(url.searchParams.get('size') ?? 20)
-  const matching = search ? rows.filter(r => r.categoryName.toLowerCase().includes(search)) : rows
-  return { ...pageOf(matching.slice(page * size, (page + 1) * size), page, size), totalElements: matching.length, totalPages: Math.max(1, Math.ceil(matching.length / size)) }
-}
-
 async function open(path = '/categories', rows = MANY) {
   const page = await createPage()
-  const api = await mockApi(page, { 'GET /staff/categories': listHandler(rows) })
+  const api = await mockApi(page, { 'GET /staff/categories': paginatedHandler(rows) })
   await page.goto(url(path), { waitUntil: 'hydration' })
   return { page, api }
 }
@@ -74,7 +64,7 @@ describe('list page: state in the URL', () => {
 
   it('does not add history entries: back leaves the list', async () => {
     const page = await createPage()
-    await mockApi(page, { 'GET /staff/categories': listHandler() })
+    await mockApi(page, { 'GET /staff/categories': paginatedHandler(MANY) })
     await gotoViaSidebar(page, [/Categories/])
     await search(page).fill('green')
     await search(page).press('Enter')
@@ -106,5 +96,42 @@ describe('list page: empty states', () => {
     await page.getByRole('button', { name: 'Clear filters' }).click()
     await page.getByRole('cell', { name: 'Green tea' }).waitFor()
     expect(query(page)).toEqual({})
+  })
+})
+
+describe('list page: loading and out-of-order responses', () => {
+  it('shows the loading text until the first page arrives, never the empty state', async () => {
+    const first = deferred()
+    const page = await createPage()
+    await mockApi(page, { 'GET /staff/categories': first.handler })
+    await page.goto(url('/categories'), { waitUntil: 'hydration' })
+    await page.getByText('Loading categories…').waitFor()
+    expect(await page.getByText('No categories yet').count()).toBe(0)
+    first.release(paginatedHandler(MANY)({ url: new URL('http://x/staff/categories'), body: null }))
+    await page.getByRole('cell', { name: 'Green tea' }).waitFor()
+  })
+
+  it('a slow response for an older search never replaces the newer results', async () => {
+    const slowTea = deferred()
+    const list = paginatedHandler(MANY)
+    const page = await createPage()
+    await mockApi(page, {
+      'GET /staff/categories': request => (request.url.searchParams.get('search') === 'green' ? slowTea.handler(request) : list(request)),
+    })
+    await page.goto(url('/categories'), { waitUntil: 'hydration' })
+    await page.getByRole('cell', { name: 'Green tea' }).waitFor()
+
+    await search(page).fill('green')
+    await search(page).press('Enter')
+    await slowTea.started()
+    await search(page).fill('Category 45')
+    await search(page).press('Enter')
+    await page.getByRole('cell', { name: 'Category 45', exact: true }).waitFor()
+
+    // The older request answers last, with rows that don't match the current search.
+    slowTea.release({ content: [{ id: 99, categoryName: 'Stale green tea', status: 'ACTIVE', type: 'MAIN' }], totalElements: 1, totalPages: 1, currentPage: 0, pageSize: 20, hasNext: false, hasPrevious: false })
+    await page.waitForTimeout(500)
+    expect(await page.getByText('Stale green tea').count()).toBe(0)
+    await page.getByRole('cell', { name: 'Category 45', exact: true }).waitFor()
   })
 })

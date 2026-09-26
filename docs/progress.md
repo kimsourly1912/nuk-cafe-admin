@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-26._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-26 (foundation hardening)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -22,11 +22,17 @@ The foundation is complete and one feature (Categories) is built as the referenc
 | Nuxt 4 SPA + Nuxt UI dashboard shell, sidebar navigation, error page | done | browser-mock |
 | Generated SDK from OpenAPI (`pnpm api:generate`, `/staff` + `/admin` only) | done | typecheck |
 | API layer: envelope handling, cookie credentials, single-flight token refresh, 30s timeout | done | unit, browser-mock |
+| **Hardening (2026-09-26, [plan](plans/admin-foundation-hardening.md)):** bounded refresh (10 s), no hidden ofetch retries, expire once per identity, no refresh loop (D27) | done | unit (incl. real ofetch) |
+| Record locks across mutations; prototype-safe mutation keys (D28) | done | unit (incl. reactivity); e2e bulk delete during a pending edit |
+| Session-transition contract: generation, stale-response discard, boundary cleanup (D29) | done | unit; e2e `session.test.ts` (each mechanism checked by disabling it) |
+| `useApiQuery` `watch` cancels instead of queueing (D30) | done | e2e (fails without the fix) |
+| `CategorySelect`: error + Retry, current value always visible, inactive not offered while Q9 is open; no blur validation in the Category form (D31) | done | e2e `pickers.test.ts` |
+| Strict e2e harness (unmocked requests fail) + `deferred`, `paginatedHandler`, `failures` | done | proven with a throwaway failing test |
 | Dev proxy `/api` with `Origin` rewrite | done | real-API (unauthenticated) |
 | Error handling: `ApiError` classification, user-safe messages, `ApiErrorAlert`, `useNotify`, safety-net plugin | done | unit, browser-mock, real-API (error shapes) |
 | Auth: login page, session check, global guard, logout, redirect on session loss | done | browser-mock, real-API (failed login only) |
 | Icons bundled into the client build, no runtime Iconify API calls (D18) | done | build output (all app icons present in the bundle); not yet checked in a browser |
-| Unsaved-changes guard: modal close (X/Esc/outside/Cancel), route changes incl. back/forward, logout, tab close/reload; one dialog for many forms (D19) | done | unit (`form-value`), e2e (`unsaved-changes`). Page forms, logout-with-unsaved-form and session-expiry skip: no page form exists yet, so not browser-tested (see forms.md → Edge cases) |
+| Unsaved-changes guard: modal close (X/Esc/outside/Cancel), route changes incl. back/forward, logout, tab close/reload; one dialog for many forms (D19) | done | unit (`form-value`), e2e (`unsaved-changes`, `session`): failed save, forward, expiry and other-tab logout with a dirty form. Not browser-tested: voluntary logout with a dirty form (a modal covers the menu; no page form exists) |
 | Browser tab titles per page (D23) | done | e2e |
 | List pages: filters/page in the URL, search as you type, empty states (D21) | done | unit (`query`), e2e (`list-page`) |
 | Data freshness: cross-tab invalidation, refetch stale (≥ 5s) data on return, refetch on reconnect, offline banner (D22) | done | e2e (`freshness`: two tabs in one context, faked visibility and clock, offline). The two-tab test was checked to fail with the broadcast disabled |
@@ -62,9 +68,10 @@ Backend resources available (from the spec) and their status. The folder names f
 
 ## Next steps (recommended order)
 
-**Feature standard (2026-09-26, docs only; revised twice after review the same day):** [docs/feature-standard.md](feature-standard.md) defines planning, structure, list/form/picker behavior, the capability roadmap and the definition of done. The revision separates reversible **[Choice]** items from **[Open]** backend/business/authorization contracts, which developers must not invent (defer the affected behavior, continue the rest). It replaces "encode clearing explicitly" with "map intent through the established contract, defer unknown clears", allows form-local submission state and justified screen-specific polling, and corrects an overstatement: row blocking is **not** enforced for bulk actions (an implementation gap, below). Checked: relative links and anchors resolve (script), `git diff --check`, only docs changed. Statements about existing behavior were re-checked against the code; the first version had overstated busy-row protection. Second revision: pickers separate **displaying an existing value** from **allowing a new selection** (a listing endpoint isn't eligibility evidence; unresolved eligibility is deferred, not defaulted, Q9). Schedules deletion is deferred until its effect on referenced products is known. The concurrency guarantee is stated as check-and-reserve at request start: `isBusy` prefiltering is only a preliminary check, and the engine has no cross-mutation exclusion (mutations.md). No application behavior was changed or newly verified. Gaps in the reference feature (not fixed): Q7 (clearing a parent), bulk delete vs pending update (below), `CategorySelect` has no error/unavailable-value states, no committed tests for row blocking, selection reset or last-page step-back.
+**Feature standard (2026-09-26, docs only; revised twice after review the same day):** [docs/feature-standard.md](feature-standard.md) defines planning, structure, list/form/picker behavior, the capability roadmap and the definition of done. The revision separates reversible **[Choice]** items from **[Open]** backend/business/authorization contracts, which developers must not invent (defer the affected behavior, continue the rest). It replaces "encode clearing explicitly" with "map intent through the established contract, defer unknown clears", allows form-local submission state and justified screen-specific polling, and corrects an overstatement: row blocking is **not** enforced for bulk actions (an implementation gap, below). Checked: relative links and anchors resolve (script), `git diff --check`, only docs changed. Statements about existing behavior were re-checked against the code; the first version had overstated busy-row protection. Second revision: pickers separate **displaying an existing value** from **allowing a new selection** (a listing endpoint isn't eligibility evidence; unresolved eligibility is deferred, not defaulted, Q9). Schedules deletion is deferred until its effect on referenced products is known. The concurrency guarantee is stated as check-and-reserve at request start: `isBusy` prefiltering is only a preliminary check, and the engine has no cross-mutation exclusion (mutations.md). No application behavior was changed or newly verified. Gaps in the reference feature (not fixed): Q7 (clearing a parent), bulk delete vs pending update (below), `CategorySelect` has no error/unavailable-value states, no committed tests for row blocking, selection reset or last-page step-back. *Update:* all but Q7 were fixed by the foundation hardening (plans/admin-foundation-hardening.md).
 
 
+0. **Foundation hardening done (2026-09-26):** see the [plan and results](plans/admin-foundation-hardening.md). Next: plan Schedules with the feature standard (its [Open] contract questions are in feature-standard.md §9).
 0. **Polish done (2026-09-26):** e2e harness, tab titles, hidden password, list URL state + live search + empty states, refresh on return/reconnect + offline banner. Still open before features: role rules (Q6, waiting on the project owner).
 1. **Test Categories against the real API** with a staff login (`pnpm dev`, then create, edit, delete, batch delete). Record any new error codes in `API_ERROR_CODES` (`app/utils/api-error.ts`). Update the verification levels above.
 2. **Schedules**, planned with the standard first (`docs/plans/schedules.md`; the draft and its [Open] contract questions are in feature-standard.md §9). Then refine the standard from the experience before Products. Build it before products, because the menu item form needs `ScheduleSelect`. Needs a days-of-week picker and a time range. Export `ScheduleSelect` + `useScheduleOptions` from its `index.ts`.
@@ -85,14 +92,16 @@ Backend resources available (from the spec) and their status. The folder names f
 | Q6 | Role rules: the session has `groups` (e.g. ADMIN, CASHIER). Which screens and actions does each role get? No role-based UI exists yet | project owner | Route guard + hidden actions |
 | Q7 | `PUT /staff/categories/{id}` with `mainCategoryId` omitted: does it clear the parent or keep it? The Category form relies on "clear" (unverified) | backend team | Clearing a parent may silently not work |
 | Q8 | How does the backend handle two concurrent updates of the same record (last write wins, rejection, versioning)? No version field in the generated types for categories | backend team | Edit-conflict handling |
-| Q9 | Which records may be chosen for a **new** relationship? e.g. may an inactive category be picked as a parent or as a menu item's category? A listing endpoint returning them isn't evidence | project owner (backend team if it enforces a rule) | Picker eligibility. `CategorySelect` currently offers inactive categories |
+| Q9 | Which records may be chosen for a **new** relationship? e.g. may an inactive category be picked as a parent or as a menu item's category? A listing endpoint returning them isn't evidence | project owner (backend team if it enforces a rule) | Picker eligibility. **Deferred:** `CategorySelect` no longer offers inactive categories as new choices (D31); an existing inactive value stays |
+| Q10 | CSRF: does the backend protect cookie-authenticated POST/PUT/DELETE (CSRF token, `Origin`/`Referer` check, required `application/json`, custom header)? `SameSite=Lax` doesn't stop same-site (`*.nukcafe.co`) origins | backend team | Whether any frontend change (e.g. sending a token/header) is needed. None made: no contract exists |
+| Q11 | CORS with credentials: which exact origins are allowed? Is any wildcard or sibling subdomain (user content, marketing) on `nukcafe.co` allowed or hosted? | backend team / project owner | Same-site attack surface for the cookies |
+| Q12 | The spec declares only `bearerAuth`, but the portal uses cookies. Are both accepted on `/staff/**`, and is the spec's security section authoritative? | backend team | Which auth path the CSRF review applies to |
 
 ## Known limitations
 
 - No real-API verification of any authenticated flow (see Current state).
 - Category sort order (`/staff/categories/sort-order`) has no UI.
-- Nothing is role-aware (Q6).
-- **Bulk delete can overlap a pending update of the same item:** select-all includes busy rows, `executeMany` only skips items whose delete is already in flight, and the engine has no exclusion across different mutations (feature-standard.md §4, mutations.md). Single row actions are hidden while busy.
+- Nothing is role-aware (Q6). The question matrix is in app-behavior.md → Permissions; no role gating was built, and the backend must enforce.
 - No client-side edit-conflict handling; backend behavior unverified (Q8).
 - Unsaved-changes comparison treats `1` and `'1'` as different and array order as meaningful (see docs/reference/forms.md).
 - List filters in the URL support strings and numbers only, and one URL-synced list per page (`syncUrl: false` for others). See docs/reference/data-fetching.md.
@@ -102,6 +111,13 @@ Backend resources available (from the spec) and their status. The folder names f
 
 - `pnpm lint`, `pnpm typecheck` and `pnpm test` must pass before finishing any change.
 - **e2e (preferred):** `pnpm vitest run --project e2e`. Add scenarios to `test/e2e/` instead of throwaway scripts. Pitfalls met so far:
+  - `expect.poll` defaults to a 1 s timeout; a cold page (session → refresh → redirect) can take longer under full-suite load. The e2e project sets 5 s (`vitest.config.ts`). Flaky "expected /categories to be /login" failures came from this.
+  - **Escape also dismisses Reka toasts.** A test that presses Escape to close a modal may silently close the toast it later checks. Close modals with their button when toasts matter.
+  - `UIcon` renders `aria-hidden`, so `getByLabel('Working…')` doesn't find the busy spinner. Use `locator('[aria-label="Working…"]')`.
+  - `gotoViaSidebar` returns after the clicks, not after the last navigation. Wait for the path before testing back/forward.
+  - Vitest hides `console.log` from passing e2e tests. To inspect a value while debugging, assert it against a sentinel and read the failure message (`expected +0 to be 99`: mind the `+`).
+  - To check that a test guards a behavior, disable the behavior (move a plugin away, drop an option) and confirm the test fails. Several tests written in this project passed vacuously at first.
+  - A field that validates on blur can shift the layout between mousedown and mouseup, so a Playwright click (or a user's) misses. Suspect this when a click "does nothing" but `element.click()` works.
   - Toasts: Nuxt UI renders a hidden `aria-live` copy of each toast's text, so `getByText` matches twice (strict-mode error). Use the `toast(page, title)` helper.
   - Back/forward: reach the page through the sidebar (`gotoViaSidebar`). After `page.goto`, Back leaves the SPA (full page load) instead of changing route.
   - Always `goto(..., { waitUntil: 'hydration' })`. Without it, assertions can run before the app mounts and fail only under full-suite load.

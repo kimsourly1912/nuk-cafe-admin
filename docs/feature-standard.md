@@ -151,17 +151,18 @@ Not wanted: generic CRUD engines, repository or service layers over the SDK, new
 
 | Situation | Required behavior | Provided by | Current evidence and limitations |
 |---|---|---|---|
-| First load | Table shows "Loading <items>…" (`#loading` slot), never the empty state | `UTable :loading` + `#loading` | Built. No test asserts the loading text |
+| First load | Table shows "Loading <items>…" (`#loading` slot), never the empty state | `UTable :loading` + `#loading` | e2e |
 | Refetch with rows shown | Rows stay, small spinner (`refreshing`) | `useApiQuery` | e2e checks that the refetch happens, not the spinner |
 | No records | "No <items> yet" + create button | `ListEmptyState` | e2e |
 | Filters match nothing | "No <items> match your filters" + Clear filters | `ListEmptyState` + `isFiltered` | e2e |
 | Load fails | Alert with the safe message + Retry | `ApiErrorAlert` | e2e |
 | Search, filters, page | Search as you type, page resets on filter change, state in the URL (reload, Back and shared links work) | `usePaginatedQuery`, `SearchInput` | e2e. **Limits:** page size fixed (20) and not in the URL; string/number filters only; one URL-synced list per page |
+| Responses out of order | A slower response to an older filter never replaces newer results, and never delays the newer request | `useApiQuery` (`watch` → cancel, D30) | e2e (fails without the fix) |
 | Ordering | Server order | none | **[Choice]**: server order, no sort UI. Categories' list API has no sort parameter. Schedules' `sortBy`/`sortDir` values are undocumented (**[Open]**, backend team), so no sort UI until they're known |
-| Filter or page change with rows selected | Selection clears | `useTableSelection({ resetOn: [query] })` | Built. **No committed test** (checked ad hoc earlier) |
-| Conflicting actions on one item | **Required:** actions that conflict on the same item (update vs delete, delete vs delete) never overlap. Eligibility is **checked and reserved immediately before each request starts**, with no asynchronous gap between check and reservation. So an item that became busy while a confirmation was open, or while it waited in a batch queue, is not sent. Independent items still run concurrently. Prefiltering (e.g. by `isBusy`) before confirming is only a preliminary UX check | **Existing:** within one mutation, the engine checks and reserves the key synchronously right before each request, so the **same mutation and key** never overlap ([details](reference/mutations.md#concurrency-guarantee-and-current-limits)). `isBusy(id)` dims the row and replaces its actions with a spinner, so single row actions can't start on a busy row | **Implementation gap (Categories), not only a coverage gap:** select-all still selects busy rows; `removeSelected` passes `selection.selected` straight to `executeMany`; the batch skips only items whose **delete** is already in flight, not a pending **update** (`isBusy` isn't consulted). So a bulk delete can overlap an update of the same category. The engine has **no shared exclusion across different mutations**, so prefiltering by `isBusy` alone would not close this gap. Likewise, after its confirmation a single delete re-checks only its own mutation (unlikely to matter today, because the dialog blocks the page). There's no committed test for row blocking either |
-| Bulk action | One confirmation, limited concurrency, progress toast with **Stop**, one summary ("3 deleted, 1 failed", reasons grouped), **Retry failed**, failed and unstarted rows stay selected | `useMutation` `batch` + `executeMany` | Partial failure and "failed stays selected": e2e. Stop and Retry failed: unit (engine) only |
-| Last item on a page deleted | Step back to the last existing page | A `watch` on `totalPages` in each list page ([recipe](reference/data-fetching.md#recipe-step-back-when-the-last-page-empties)) | Built in Categories only, **not shared, not tested**. **[Proposed]**: move into `usePaginatedQuery` when the second list needs it |
+| Filter or page change with rows selected | Selection clears | `useTableSelection({ resetOn: [query] })` | e2e |
+| Conflicting actions on one item | **Required:** actions that conflict on the same item (update vs delete, delete vs delete) never overlap. Eligibility is **checked and reserved immediately before each request starts**, with no asynchronous gap between check and reservation. So an item that became busy while a confirmation was open, or while it waited in a batch queue, is not sent. Independent items still run concurrently. Prefiltering (e.g. by `isBusy`) before confirming is only a preliminary UX check | **Existing:** the engine checks and reserves the key **and the record `lock`** synchronously right before each request, so conflicting mutations that share a lock never overlap, and different records run in parallel ([details](reference/mutations.md#concurrency-guarantee-and-current-limits), D28). `isBusy(id)` is the row display (dimmed, spinner). Skipped bulk items are reported and stay selected | **Fixed in Categories (2026-09-26):** update and remove share `category:<id>`. Unit tests (lock taken during confirmation, while queued); e2e: bulk delete during a pending edit skips that row (fails without `lock`). **Every new feature must declare `lock`** on mutations that can conflict |
+| Bulk action | One confirmation, limited concurrency, progress toast with **Stop**, one summary ("3 deleted, 1 failed", reasons grouped), **Retry failed**, failed, skipped and unstarted rows stay selected | `useMutation` `batch` + `executeMany` | e2e: partial failure, Stop (running deletes finish, no more start), Retry failed (no second confirmation) |
+| Last item on a page deleted | Step back to the last existing page | A `watch` on `totalPages` in each list page ([recipe](reference/data-fetching.md#recipe-step-back-when-the-last-page-empties)) | e2e (Categories). **[Proposed]**: move into `usePaginatedQuery` when the second list needs it |
 | Another staff member changed the data | Picked up by the freshness rules | Freshness plugin | e2e. Another device's change appears only on return to the tab or on navigation (no backend push) |
 | Two staff edit the same item | Not agreed | none | **No client-side conflict handling is implemented.** Category responses carry no version or `updatedAt` in the generated types. How the backend handles concurrent updates is **unverified** (**[Open]**, backend team) |
 
@@ -229,9 +230,9 @@ What features must not do is **duplicate the engine**: no in-flight maps, double
 | Single vs multiple | Explicit: a separate component or a `multiple` prop, never inferred | Single only |
 | Optional value | A `noneLabel` option that sets `undefined` (`USelect` can't hold `undefined`). Required fields don't offer "none" | ✔ |
 | Loading / disabled | `loading` while options load. `disabled` passes through | Loading ✔, disabled via attrs |
-| Load error | Shows the failure with a retry, not an empty list | **Gap**: an error shows as an empty list |
-| Existing value (display) | An existing relationship **stays visible** with a label (from the record, e.g. `mainCategory.categoryName`, or "#12 (unavailable)"), whether the related record is inactive, deleted, filtered out or not selectable. The picker never silently clears or replaces it. Keeping an existing value visible is **separate from** allowing it as a new selection | **Gap**: shows blank |
-| New selections (eligibility) | Offered only per the relationship's **established** eligibility rules. An options or listing endpoint returning a record is **not** evidence that it may be selected, unless that endpoint's documented contract says so. Where eligibility for a class of records (e.g. inactive ones) is **[Open]**, defer that part of the selection behavior: don't offer those records as new selections yet, and record it as incomplete. This is a temporary deferral, **not** a rule that they're forbidden. The standard sets no permanent "always allowed" or "always forbidden" rule. A status marker next to an option is a [Choice] | Offers every category `/staff/categories/all` returns for the type, inactive ones included. Eligibility is unverified (**[Open]**, Q9) |
+| Load error | Shows the failure with a retry, not an empty list | ✔ (e2e) |
+| Existing value (display) | An existing relationship **stays visible** with a label (from the record, e.g. `mainCategory.categoryName`, or "#12 (unavailable)"), whether the related record is inactive, deleted, filtered out or not selectable. The picker never silently clears or replaces it. Keeping an existing value visible is **separate from** allowing it as a new selection | ✔ `currentLabel` prop, "(inactive)" / "(unavailable)" (e2e) |
+| New selections (eligibility) | Offered only per the relationship's **established** eligibility rules. An options or listing endpoint returning a record is **not** evidence that it may be selected, unless that endpoint's documented contract says so. Where eligibility for a class of records (e.g. inactive ones) is **[Open]**, defer that part of the selection behavior: don't offer those records as new selections yet, and record it as incomplete. This is a temporary deferral, **not** a rule that they're forbidden. The standard sets no permanent "always allowed" or "always forbidden" rule. A status marker next to an option is a [Choice] | Inactive categories are **not offered** as new selections while Q9 is open (deferral per this rule, D31); an inactive current value stays visible and selectable (e2e) |
 | Domain exclusions | Props named for the rule (`excludeId`: an item can't be its own parent) | ✔ |
 | Data source | Small sets: the unpaginated `/all` endpoint, keyed per filter (`<feature>:options:<filter>`). Large sets: remote search against the paginated endpoint (`USelectMenu` with search) | `/staff/categories/all` ✔ |
 | Where it lives | `use<Feature>Options` + `<Feature>Select`, exported from `index.ts`, importing no other feature | ✔ |
@@ -254,16 +255,13 @@ What features must not do is **duplicate the engine**: no in-flight maps, double
 | Ordering controls | Categories / Products (`…/sort-order` endpoints) | The request shape; whether ordering is global or per parent/category; how conflicts are handled | Endpoint call: feature. A drag-and-drop list: shared once extracted | Both Categories and Products get ordering |
 | Permission helpers | All features, after the role/action matrix (Q6) | Which role may view and do what; whether the backend enforces it (the UI hides, the backend must refuse) | A shared `can(action)` + route meta, once the matrix exists | Immediately when the matrix exists (every feature needs it) |
 
-**[Proposed] test fixtures** (in `test/e2e/support/`, when the second feature needs them):
-- A **deferred response** helper: resolve or fail a mocked request on demand. The freshness and unsaved-changes tests hand-roll this today.
-- A **paginated handler** with search: the `listHandler` in `test/e2e/list-page.test.ts`, generalized.
-- **Failure presets**: validation, not found and technical (`MockFailure` codes) with realistic `reason` texts.
+**Test fixtures** (built 2026-09-26, in `test/e2e/support/mock-api.ts`): `deferred()` (hold a response, release or fail it on demand), `paginatedHandler(rows)` (search + 0-based pagination, rows may be a function), `failures.*` (validation, not found, technical, unauthorized). Unmocked requests fail the test.
 
 ---
 
 ## 8. Verification recipes and definition of done
 
-Test by **risk**: pick the scenarios that can actually break in this feature, instead of applying every row to every feature. Helpers: `mockApi`, `MockFailure`, `pageOf`, `toast`, `gotoViaSidebar`, `beforeUnloadPrevented`, `openTabs`, `gotoHydrated` in [`test/e2e/support/mock-api.ts`](../test/e2e/support/mock-api.ts), and the pitfalls in [progress.md → How to verify](progress.md#how-to-verify).
+Test by **risk**: pick the scenarios that can actually break in this feature, instead of applying every row to every feature. Helpers: `mockApi` (strict: unmocked requests fail the test), `MockFailure`, `failures`, `deferred`, `paginatedHandler`, `pageOf`, `toast`, `gotoViaSidebar`, `beforeUnloadPrevented`, `openTabs`, `gotoHydrated` in [`test/e2e/support/mock-api.ts`](../test/e2e/support/mock-api.ts), and the pitfalls in [progress.md → How to verify](progress.md#how-to-verify).
 
 | Scenario | When | How |
 |---|---|---|
@@ -306,9 +304,7 @@ How the reference feature maps to this standard:
 
 **Gaps against this standard** (not fixed by this document):
 - Clearing a parent is offered and encoded as an omitted field, but the backend meaning is unverified (§5, Q7).
-- **Bulk delete doesn't enforce cross-operation conflicts** (§4): select-all includes busy rows, and the batch doesn't check a pending update.
-- `CategorySelect` lacks the error and unavailable-value states (§6).
-- There is no committed test for row blocking, selection reset or stepping back to the last page (§4).
+- Fixed 2026-09-26 (see [the hardening plan](plans/admin-foundation-hardening.md)): cross-operation conflicts (`lock`), `CategorySelect` error and unavailable-value states, tests for row blocking, selection reset, Stop, Retry failed and last-page step-back.
 - There is no plan document, because the feature predates this standard.
 - There is no real-API evidence.
 

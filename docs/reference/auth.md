@@ -82,3 +82,7 @@ Where to go after login: the `?redirect=` value if it's a path on this site (`/c
 ## Across tabs
 
 `login()` and `logout()` fire the runtime hook `app:auth-changed`. `plugins/auth-sync.client.ts` forwards it to the app's other open tabs, so they log out (to `/login?redirect=<their page>`) or continue from the login page. Cases: [App-wide behavior → Session loss](./app-behavior.md#session-loss).
+
+## Identity generation
+
+`useAuth().generation` (read-only) increments whenever the signed-in identity changes: login, logout, expiry, or another staff member through another tab. It fires the runtime hook `app:session-changed` (`{ signedIn }`). The API layer uses it to discard responses from an earlier identity, and `plugins/session-boundary.client.ts` clears that identity's data, toasts, overlays and forms. Features don't use it directly. Contract: [App-wide behavior → Session-transition contract](./app-behavior.md#session-transition-contract) (D29).
