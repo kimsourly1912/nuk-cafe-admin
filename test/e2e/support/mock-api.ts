@@ -137,6 +137,16 @@ export function paginatedHandler<T extends Record<string, unknown>>(rows: T[] | 
   }
 }
 
+/**
+ * A JSON body parsed; any other body (multipart uploads) as its raw text, so a handler can still
+ * check it; no body → `null`.
+ */
+function requestBody(request: ReturnType<Route['request']>): unknown {
+  const raw = request.postData()
+  if (raw === null) return null
+  return request.headers()['content-type']?.includes('application/json') ? request.postDataJSON() : raw
+}
+
 export async function mockApi(page: Page, handlers: Record<string, MockHandler> = {}): Promise<MockApi> {
   const active = { ...DEFAULT_HANDLERS, ...handlers }
   const calls: string[] = []
@@ -158,7 +168,7 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
       return
     }
     try {
-      const data = await handler({ url: requestUrl, body: request.postDataJSON() })
+      const data = await handler({ url: requestUrl, body: requestBody(request) })
       await route.fulfill({ status: 200, json: { success: true, msg: 'OK', data } })
     }
     catch (error) {

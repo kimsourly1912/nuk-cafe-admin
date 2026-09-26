@@ -17,6 +17,15 @@
 import type { SelectItem } from '@nuxt/ui'
 import { useCategoryOptions } from '../composables/useCategoryOptions'
 
+// Attributes such as `aria-label` and `id` belong on the select itself (its accessible name);
+// only `class` sizes the wrapper (full width unless a class is given).
+defineOptions({ inheritAttrs: false })
+const attrs = useAttrs()
+const selectAttrs = computed(() => {
+  const { class: _class, ...rest } = attrs
+  return rest
+})
+
 const props = defineProps<{
   type?: 'MAIN' | 'SUB'
   /** Hide this category (e.g. the one being edited can't be its own parent). */
@@ -26,6 +35,8 @@ const props = defineProps<{
   placeholder?: string
   /** Name of the current value from the edited record, shown if it isn't among the options. */
   currentLabel?: string
+  /** Also offer inactive categories: for filters, where no new relationship is made (Q9 doesn't apply). */
+  includeInactive?: boolean
 }>()
 
 const model = defineModel<number | undefined>()
@@ -37,7 +48,7 @@ const { data: categories, status, error, refresh } = useCategoryOptions(() => ({
 
 /** Offered as new selections: not excluded, and not inactive while Q9 is open. */
 const selectable = computed(() => categories.value.filter(c =>
-  c.id !== undefined && c.id !== props.excludeId && c.status !== 'INACTIVE'))
+  c.id !== undefined && c.id !== props.excludeId && (props.includeInactive || c.status !== 'INACTIVE')))
 
 /** The current value when it isn't selectable: kept visible (and kept) with the best label known. */
 const currentItem = computed<SelectItem | undefined>(() => {
@@ -64,8 +75,12 @@ const value = computed({
 </script>
 
 <template>
-  <div class="w-full space-y-1">
+  <div
+    class="space-y-1"
+    :class="attrs.class ?? 'w-full'"
+  >
     <USelect
+      v-bind="selectAttrs"
       v-model="value"
       :items="items"
       :loading="status === 'pending'"

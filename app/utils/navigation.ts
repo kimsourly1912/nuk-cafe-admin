@@ -1,5 +1,6 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 import { categoriesNavigation } from '~/features/categories'
+import { productsNavigation } from '~/features/products'
 import { schedulesNavigation } from '~/features/schedules'
 
 /**
@@ -12,6 +13,7 @@ export const navigationItems: NavigationMenuItem[][] = [
   ],
   [
     { label: 'Menu', type: 'label' },
+    productsNavigation,
     categoriesNavigation,
     schedulesNavigation,
   ],

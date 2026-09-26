@@ -10,7 +10,8 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 |---|---|
 | `auth` | [`useAuth`](./auth.md#useauth), [`loginRedirectTarget`](./auth.md#loginredirecttarget), `SessionUser` |
 | `categories` | [`CategorySelect`](#categoryselect), [`useCategoryOptions`](#usecategoryoptions), `CategoryOptionsFilter`, `categoriesNavigation` |
-| `schedules` | `schedulesNavigation`. `ScheduleSelect` (multiple) + `useScheduleOptions` (`GET /staff/schedules/all`) are added with their first consumer, the menu-item form ([plan](../plans/schedules.md#relationships)) |
+| `schedules` | [`ScheduleSelect`](#scheduleselect), [`useScheduleOptions`](#usescheduleoptions), `schedulesNavigation` |
+| `products` | `productsNavigation` ("Menu items"). A `ProductSelect` waits for its first consumer |
 
 When you add a feature, add its section here. Pickers follow the contract in [feature-standard.md → Resource picker conventions](../feature-standard.md#6-resource-picker-conventions).
 
@@ -47,6 +48,9 @@ import { CategorySelect } from '~/features/categories'
 | `noneLabel` | `string` | | Adds an option that clears the value. `USelect` can't hold `undefined`, and this handles that internally. |
 | `placeholder` | `string` | `'Select a category'` | |
 | `currentLabel` | `string` | | Name of the current value from the edited record (e.g. `category.mainCategory?.categoryName`), shown if the value isn't among the options. |
+| `includeInactive` | `boolean` | `false` | Also offer inactive categories. **Only for filters**, where no new relationship is made (Q9 doesn't apply). |
+
+Other attributes (`aria-label`, `id`, …) go to the select itself, so they name it for screen readers and tests. `class` sizes the wrapper (full width by default).
 
 It loads its options through `useCategoryOptions` and shows a loading state while fetching. Behavior (D31, e2e `test/e2e/pickers.test.ts`):
 - **Current value stays visible**, never cleared: labelled from the options, `currentLabel` or `#id`, marked "(inactive)" or "(unavailable)".
@@ -72,3 +76,39 @@ const { data: mainCategories, loading } = useCategoryOptions({ type: 'MAIN' })
 ### `categoriesNavigation`
 
 The sidebar entry (`NavigationMenuItem`), grouped in `app/utils/navigation.ts`.
+
+---
+
+## schedules
+
+### `ScheduleSelect`
+
+A multiple-schedule picker, e.g. the menu-item form's `scheduleIds`.
+
+```ts
+import { ScheduleSelect } from '~/features/schedules'
+```
+
+```vue
+<ScheduleSelect v-model="state.scheduleIds" />
+```
+
+| Prop | Type | Default | Description |
+|---|---|---|---|
+| `v-model` | `number[]` | `[]` | Schedule ids. |
+| `placeholder` | `string` | `'No schedule'` | |
+
+Behavior (e2e `test/e2e/products.test.ts`), the same contract as `CategorySelect`:
+- **Selected schedules stay visible**, never cleared: "(inactive)" when inactive, "#12 (unavailable)" when unknown.
+- **Inactive schedules aren't offered as new selections** while Q9 is open.
+- **Load error:** the message with **Retry**.
+- Attributes go to the select, `class` to the wrapper (as `CategorySelect`).
+
+### `useScheduleOptions`
+
+```ts
+function useScheduleOptions() // → useApiQuery result, `data`: ScheduleListResponse[] (default [])
+```
+
+- Key: `schedules:options`, refreshed by `invalidate('schedules')`.
+- Calls `GET /staff/schedules/all` (all statuses).

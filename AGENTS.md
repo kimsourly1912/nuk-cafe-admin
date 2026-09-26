@@ -77,7 +77,7 @@ app/
 
 ### Cross-feature relationships (from the API)
 
-- A menu item (`ProductRecordCreation`) has `categoryId` (required) and `scheduleIds[]`, so the products form uses `CategorySelect` and `ScheduleSelect`.
+- A menu item (`ProductRecordCreation`) has `categoryId` (required) and `scheduleIds[]`, so the products form uses `CategorySelect` and `ScheduleSelect`. Pickers forward attributes (`aria-label`) to their select and take `class` on the wrapper (D34).
 - A schedule (`ScheduleCreateRequest`) has `items[]` (product ids): the same link seen from the other side. For now the schedule form shows its items **read-only** and re-sends them on save (docs/plans/schedules.md S4), and links are edited from the menu-item form. A `ProductSelect` in the schedule form would be the bidirectional case rule 2 exists for.
 - **Edit forms that must preserve a relationship the list doesn't return** (schedules' `items`) load the detail record first and keep Save disabled until it has loaded (`ScheduleFormModal`).
 - A category has an optional `mainCategoryId` (main vs sub). The category form uses its own `CategorySelect type="MAIN"`.
@@ -210,7 +210,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `useNotify()` | `composables/` | Toasts for API actions that aren't mutations |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
 
-Expected to be promoted to the root when the first two features need them: `ImageUpload` (products, rewards, banners and vouchers all have upload endpoints) and `I18nFields` (for `nameI18n` / `descriptionI18n`).
+Expected to be promoted to the root when the first two features need them: `ProductImageInput` (in `app/features/products/`; rewards, banners and vouchers also have upload endpoints) and `I18nFields` (for `nameI18n` / `descriptionI18n`). Money formatting (`formatPrice`, `PRICE_FORMAT`, USD) lives in `app/features/products/utils/money.ts` until a second feature shows prices.
 
 ## Adding a feature (e.g. products)
 
