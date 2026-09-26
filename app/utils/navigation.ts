@@ -1,5 +1,6 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 import { categoriesNavigation } from '~/features/categories'
+import { schedulesNavigation } from '~/features/schedules'
 
 /**
  * Sidebar, grouped by area. Each feature exports its own entry from its index.ts;
@@ -12,5 +13,6 @@ export const navigationItems: NavigationMenuItem[][] = [
   [
     { label: 'Menu', type: 'label' },
     categoriesNavigation,
+    schedulesNavigation,
   ],
 ]

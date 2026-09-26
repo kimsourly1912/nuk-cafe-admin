@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-26 (foundation hardening)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-26 (Schedules)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -13,7 +13,7 @@ Every "done" item states how it was checked. Keep using these labels:
 
 ## Current state
 
-The foundation is complete and one feature (Categories) is built as the reference. Nothing has been tested with a real staff login yet: no credentials were available. Only unauthenticated calls (session check, failed login, error shapes) were checked against the real dev API.
+The foundation is complete. Categories is the reference feature; Schedules is the second feature ([plan](plans/schedules.md)). Nothing has been tested with a real staff login yet: no credentials were available. Only unauthenticated calls (session check, failed login, error shapes) were checked against the real dev API.
 
 ### Foundation
 
@@ -53,7 +53,7 @@ Backend resources available (from the spec) and their status. The folder names f
 |---|---|---|
 | auth | `auth/login`, `session`, `refresh`, `logout` | done |
 | categories (menu) | `categories`, `categories/{id}`, `categories/all`, `categories/sort-order` | **done, reference feature** (list, filters, create/edit, delete, batch delete). Sort order not built |
-| schedules (menu) | `schedules`, `schedules/{id}`, `schedules/all`, `schedules/available`, `schedules/days-of-week` | not started |
+| schedules (menu) | `schedules`, `schedules/{id}`, `schedules/all`, `schedules/available`, `schedules/days-of-week` | **done** ([plan](plans/schedules.md)): list (search, status, day filter), create, edit (items shown read-only and kept), delete + bulk delete for schedules not in use. **Evidence:** unit (form mapping, days) + browser-mock (e2e `schedules.test.ts`, 13 tests; the lock test fails without `lock`). Response formats checked against the real dev API through the unauthenticated `/public/schedules/**` endpoints. **No authenticated real-API check:** every request encoding (S1–S7) is unverified. `ScheduleSelect` comes with Products |
 | products = "Menu items" | `products`, `products/{id}`, `products/all`, `products/category/{id}`, `products/upload`, `products/sort-order` | not started |
 | rewards (+ reward categories) | `rewards`, `rewards/{id}`, `rewards/{id}/status`, `rewards/upload`, `reward-categories`, … | not started |
 | vouchers | `voucher/catalogs…`, `vouchers/redeem`, `vouchers/lookup`, `voucher/activity` | not started |
@@ -71,10 +71,11 @@ Backend resources available (from the spec) and their status. The folder names f
 **Feature standard (2026-09-26, docs only; revised twice after review the same day):** [docs/feature-standard.md](feature-standard.md) defines planning, structure, list/form/picker behavior, the capability roadmap and the definition of done. The revision separates reversible **[Choice]** items from **[Open]** backend/business/authorization contracts, which developers must not invent (defer the affected behavior, continue the rest). It replaces "encode clearing explicitly" with "map intent through the established contract, defer unknown clears", allows form-local submission state and justified screen-specific polling, and corrects an overstatement: row blocking is **not** enforced for bulk actions (an implementation gap, below). Checked: relative links and anchors resolve (script), `git diff --check`, only docs changed. Statements about existing behavior were re-checked against the code; the first version had overstated busy-row protection. Second revision: pickers separate **displaying an existing value** from **allowing a new selection** (a listing endpoint isn't eligibility evidence; unresolved eligibility is deferred, not defaulted, Q9). Schedules deletion is deferred until its effect on referenced products is known. The concurrency guarantee is stated as check-and-reserve at request start: `isBusy` prefiltering is only a preliminary check, and the engine has no cross-mutation exclusion (mutations.md). No application behavior was changed or newly verified. Gaps in the reference feature (not fixed): Q7 (clearing a parent), bulk delete vs pending update (below), `CategorySelect` has no error/unavailable-value states, no committed tests for row blocking, selection reset or last-page step-back. *Update:* all but Q7 were fixed by the foundation hardening (plans/admin-foundation-hardening.md).
 
 
-0. **Foundation hardening done (2026-09-26):** see the [plan and results](plans/admin-foundation-hardening.md). Next: plan Schedules with the feature standard (its [Open] contract questions are in feature-standard.md §9).
+0. **Schedules done (2026-09-26):** see the [plan](plans/schedules.md) and D32. **First thing on a staff login:** run the plan's "verify on first staff login" column (time format, `items` kept on edit, delete of an unused schedule), then Q7 for Categories.
+0. **Foundation hardening done (2026-09-26):** see the [plan and results](plans/admin-foundation-hardening.md).
 0. **Polish done (2026-09-26):** e2e harness, tab titles, hidden password, list URL state + live search + empty states, refresh on return/reconnect + offline banner. Still open before features: role rules (Q6, waiting on the project owner).
 1. **Test Categories against the real API** with a staff login (`pnpm dev`, then create, edit, delete, batch delete). Record any new error codes in `API_ERROR_CODES` (`app/utils/api-error.ts`). Update the verification levels above.
-2. **Schedules**, planned with the standard first (`docs/plans/schedules.md`; the draft and its [Open] contract questions are in feature-standard.md §9). Then refine the standard from the experience before Products. Build it before products, because the menu item form needs `ScheduleSelect`. Needs a days-of-week picker and a time range. Export `ScheduleSelect` + `useScheduleOptions` from its `index.ts`.
+2. ~~Schedules~~ done. Carry-over into Products: build `ScheduleSelect` (multiple, `GET /staff/schedules/all`, picker rules of feature-standard §6) + `useScheduleOptions` in `app/features/schedules/` and export them.
 3. **Products ("Menu items").** Uses `CategorySelect` and `ScheduleSelect`. It's the first user of image upload, `nameI18n`/`descriptionI18n` and variants. Build `ImageUpload` and `I18nFields` inside the feature first, and promote them to the root when the second feature needs them (decisions D16). Then give schedules a `ProductSelect` (the bidirectional link: decisions D8).
 4. Rewards (+ reward categories), then vouchers and banners (all need image upload and status toggles).
 5. Customers, staff, orders, and the rest.
@@ -96,11 +97,18 @@ Backend resources available (from the spec) and their status. The folder names f
 | Q10 | CSRF: does the backend protect cookie-authenticated POST/PUT/DELETE (CSRF token, `Origin`/`Referer` check, required `application/json`, custom header)? `SameSite=Lax` doesn't stop same-site (`*.nukcafe.co`) origins | backend team | Whether any frontend change (e.g. sending a token/header) is needed. None made: no contract exists |
 | Q11 | CORS with credentials: which exact origins are allowed? Is any wildcard or sibling subdomain (user content, marketing) on `nukcafe.co` allowed or hosted? | backend team / project owner | Same-site attack surface for the cookies |
 | Q12 | The spec declares only `bearerAuth`, but the portal uses cookies. Are both accepted on `/staff/**`, and is the spec's security section authoritative? | backend team | Which auth path the CSRF review applies to |
+| Q13 | Schedules: request format of `startTime`/`endTime` (responses are `HH:mm`), and does the backend apply them as UTC (`timezone: "UTC"`)? | backend team | **Decided for the UI (D33):** converted between the record zone and the viewer's browser zone, 12-hour on screen. If the backend really stores local time labelled UTC, every schedule displays shifted by the viewer's offset |
+| Q14 | Schedules: are overnight ranges (22:00–02:00) valid? | project owner + backend team | No rule of our own; the backend decides (S3) |
+| Q15 | `PUT /staff/schedules/{id}`: does `items` replace, merge or append, and what does an omitted `items` mean? | backend team | Edit re-sends the existing ids (safe under replace or merge; S4). Blocks editing items from the schedule form |
+| Q16 | Deleting a schedule that menu items use: rejected, links removed, or products changed? Does `items` reflect products' `scheduleIds`? | backend team | **Deferred:** only schedules not in use can be deleted (S6) |
+| Q17 | Schedules: must a schedule have at least one day and both times? Allowed `sortBy`/`sortDir` values? Is `items[].price` a schedule price, and in which unit? | project owner / backend team | Required in the form by choice (S10, S11); no sort UI; price not shown |
 
 ## Known limitations
 
 - No real-API verification of any authenticated flow (see Current state).
 - Category sort order (`/staff/categories/sort-order`) has no UI.
+- Schedules: the day filter matches stored (UTC) days, not the converted ones shown; timezone offsets are taken at today's date (DST zones shift by the current offset all year) (D33).
+- Schedules: a schedule's menu items can't be edited from the schedule form (read-only; linked from the menu-item form once Products exists), and schedules in use can't be deleted (Q16). If a menu item is linked between opening the edit form and saving, the save re-sends the older item list (same class of problem as Q8).
 - Nothing is role-aware (Q6). The question matrix is in app-behavior.md → Permissions; no role gating was built, and the backend must enforce.
 - No client-side edit-conflict handling; backend behavior unverified (Q8).
 - Unsaved-changes comparison treats `1` and `'1'` as different and array order as meaningful (see docs/reference/forms.md).
@@ -117,6 +125,9 @@ Backend resources available (from the spec) and their status. The folder names f
   - `gotoViaSidebar` returns after the clicks, not after the last navigation. Wait for the path before testing back/forward.
   - Vitest hides `console.log` from passing e2e tests. To inspect a value while debugging, assert it against a sentinel and read the failure message (`expected +0 to be 99`: mind the `+`).
   - To check that a test guards a behavior, disable the behavior (move a plugin away, drop an option) and confirm the test fails. Several tests written in this project passed vacuously at first.
+  - `UForm` debounces input validation (~300 ms). After `fill()` on a field showing an error, wait for the error to disappear before clicking anything below it, or the layout shift makes the click miss (`check()` then reports "did not change its state").
+  - A modal's header X and a footer button can both be named "Close". Scope to `[data-slot="footer"]`.
+  - `UInputTime` / `UInputDate` render segments (`role="spinbutton"`), not an `<input>`: `fill()` and `getByLabel(<field label>)` don't work (the label targets a hidden input). Give the component an `aria-label`, find it with `getByRole('group', { name })`, click the first segment and type digits (`'0830'`); typing replaces an existing value. See `typeTime` in `test/e2e/schedules.test.ts`.
   - A field that validates on blur can shift the layout between mousedown and mouseup, so a Playwright click (or a user's) misses. Suspect this when a click "does nothing" but `element.click()` works.
   - Toasts: Nuxt UI renders a hidden `aria-live` copy of each toast's text, so `getByText` matches twice (strict-mode error). Use the `toast(page, title)` helper.
   - Back/forward: reach the page through the sidebar (`gotoViaSidebar`). After `page.goto`, Back leaves the SPA (full page load) instead of changing route.

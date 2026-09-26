@@ -250,8 +250,8 @@ What features must not do is **duplicate the engine**: no in-flight maps, double
 | Image upload | Products (`/staff/products/upload`; `imageUrl`, `imageUuid`) | Upload response shape; size and type limits; replacing vs removing (what the request sends); whether an abandoned upload must be cleaned up | Upload endpoint and field mapping: feature. Picker, preview and progress UI: shared once extracted | Rewards, banners or vouchers need it |
 | Translation fields | Any feature, only if editing translations is approved (Q5) | Whether admins edit `en` / `zh-HK` / `km`, which are required, fallbacks | Field list: feature. The locale tabs component: shared | Approved **and** the second form needs it. Until then, forms edit the main field and preserve the maps |
 | Money display and input | Products (`price: number`) | Currency, decimal precision, rounding, and whether the API uses major or minor units | Which fields are money: feature. Formatting and parsing: shared | The second feature shows prices (schedules' items, rewards) |
-| Date/time display | Lists with `createdAt`/`updatedAt` | Timezone (`ScheduleResponse` has a `timezone`), format, date-only vs timestamp | Shared formatter once agreed | The second feature displays dates |
-| Weekday + time-range inputs | Schedules (`days[]`, `startTime`, `endTime`) | Time string format; overnight ranges (end < start); whether times are in the cafe's timezone | Schedules-specific until another feature needs them | A second feature has weekly availability |
+| Date/time display | Lists with `createdAt`/`updatedAt`. Schedules already convert **times of day** to the viewer's zone (`app/features/schedules/utils/timezone.ts`, D33): the model for promotion | Timezone (`ScheduleResponse` has a `timezone`), format, date-only vs timestamp | Shared formatter once agreed | The second feature displays dates |
+| Weekday + time-range inputs | **[Exists]** in Schedules: `UCheckboxGroup` + Every day/Weekdays/Weekends, `UInputTime` (12-hour, viewer's timezone; `Time` ↔ `HH:mm` via `utils/time.ts`, zone conversion via `utils/timezone.ts`, D33), `formatDays`/`formatTimeRange` (`app/features/schedules/utils/days.ts`) | Time format, timezone and overnight ranges: see [plans/schedules.md](plans/schedules.md) S1–S3 (safest encodings, unverified) | Schedules-specific | A second feature has weekly availability |
 | Ordering controls | Categories / Products (`…/sort-order` endpoints) | The request shape; whether ordering is global or per parent/category; how conflicts are handled | Endpoint call: feature. A drag-and-drop list: shared once extracted | Both Categories and Products get ordering |
 | Permission helpers | All features, after the role/action matrix (Q6) | Which role may view and do what; whether the backend enforces it (the UI hides, the backend must refuse) | A shared `can(action)` + route meta, once the matrix exists | Immediately when the matrix exists (every feature needs it) |
 
@@ -308,33 +308,13 @@ How the reference feature maps to this standard:
 - There is no plan document, because the feature predates this standard.
 - There is no real-API evidence.
 
-## Planning example: Schedules (next feature)
+## Worked example: Schedules
 
-A first pass at `docs/plans/schedules.md`, from the generated SDK only. **Not implemented.**
+Planned and built 2026-09-26: [plans/schedules.md](plans/schedules.md). The draft that stood here listed its [Open] questions (time format, timezone, overnight ranges, PUT semantics for `items`, deleting a schedule in use, sort values, `price`). The plan records how each was handled.
 
-- **Purpose:** staff define when menu items are available (days + time range) and which items each schedule covers.
-- **Endpoints:** `GET /staff/schedules` (`getPage`: `search`, `status`, `dayOfWeek`, `page`, `size`, `sortBy`, `sortDir`), `GET /staff/schedules/all` (`getAll1`, for `ScheduleSelect`), `GET/PUT/DELETE /staff/schedules/{id}` (`getById1`, `update1`, `delete1`), `POST /staff/schedules` (`create1`), `GET /staff/schedules/days-of-week`, `GET /staff/schedules/available` (`dayOfWeek`, `time`).
-- **Types:** `ScheduleCreateRequest` / `ScheduleUpdateRequest`: `name`, `nameI18n`, `description`, `descriptionI18n`, `status`, `startTime`, `endTime`, `days[]` (MONDAY…SUNDAY), `items[]` (product ids). `ScheduleResponse` adds `id` and `timezone`, and returns `items[]` as `{ id, productId, productName, price }`.
-- **List:** name, days, time range, status, item count. Filters: search, status, day of week. All three fit the URL state.
-- **Form:** name (required), description, status, days (whether at least one is required: [Open], project owner), start and end time, items. Preserve `nameI18n` and `descriptionI18n`. `items` in the request is product ids, derived from `existing.items[].productId`.
-- **Relationships:** exports `ScheduleSelect` (multiple) + `useScheduleOptions` for Products. Needs a `ProductSelect` (multiple) from Products, which doesn't exist yet.
-- **Mutations:** `schedules:create` (keyed by name), `schedules:update` / `schedules:remove` (by id). These exist in code only once their contracts allow exposing them (1–4, 8). Invalidate `['schedules']`, plus `'products'` if the Products screens end up showing schedule data (decide when Products is planned).
+By user decision ([D32](decisions.md)), unanswered contracts were **not** all deferred. Each got the encoding that is safe under every plausible backend meaning, backed by real evidence where possible (the dev API's unauthenticated `/public/**` endpoints), and is marked "verify on first staff login". Only deleting a schedule in use stays deferred, because no encoding makes an unknown destructive effect safe.
 
-**Unknowns.** [Open] items need an answer from the named party, backed by evidence (spec, backend docs, a verified real-API check) or a decision. Work that doesn't depend on them continues. [Choice] items are the developer's to make.
-
-What can proceed while the [Open] items are unanswered: **read-only work and independent scaffolding**. That means the list (times shown as the API returns them), filters, `ScheduleSelect` + `useScheduleOptions` (with the display rules from §6), and the form's non-time fields with their schema and mapping tests. **Create, edit and delete depend on the answers:**
-- A schedule needs its times (1–3).
-- Editing needs the update semantics (4).
-- Deleting needs the effect on referenced products (8).
-
-Keep those actions out of the UI, or visibly incomplete, until their contracts are established, and record that in progress.md.
-
-1. **[Open]**, backend team. **Time format** of `startTime` / `endTime` (`HH:mm`? `HH:mm:ss`?). The spec only says `string`.
-2. **[Open]**, backend team. **Timezone:** the response has `timezone`, the request doesn't. Are times the cafe's local time?
-3. **[Open]**, project owner and backend team. **Overnight ranges** (22:00–02:00): valid? The form adds **no rule of its own** either way until this is decided; backend validation errors are shown as usual. *Illustrative proposal, awaiting approval (not an instruction):* reject `end ≤ start` if overnight ranges turn out to be invalid.
-4. **[Open]**, backend team. **Update semantics:** does PUT replace `days` and `items`, or merge? Does omitting `items` keep or clear them? Sending the existing product ids back would keep them under full-replace semantics, but could duplicate them if the backend appends. So no encoding is known to be safe yet, and editing waits for this answer.
-5. **[Open]**, backend team: allowed `sortBy` / `sortDir` values. **[Choice]** meanwhile: no sort UI, server order.
-6. **[Choice]**, build order. The form needs `ProductSelect`, which belongs to Products. Options: (a) build a minimal public `useProductOptions` + `ProductSelect` in `app/features/products/` first; (b) ship Schedules with items read-only and preserved, and add editing once Products exists. Proposed: **(a)**, the cleaner fit for the boundary rules (D8).
-7. **[Choice]** once the response has been seen: whether to use `/days-of-week` (labels, order) or the enum.
-8. **[Open]**, backend team. **Deleting a schedule that products reference:** what happens? It could be rejected, the links could be removed, or the products could be changed or deleted. Don't assume any of these. Exposing deletion for referenced schedules depends on knowing the effect, and a generic "This cannot be undone" confirmation doesn't make an unknown destructive effect acceptable. Until the contract is established, deletion of referenced schedules is **deferred**. (Whether a schedule is referenced at all, via its `items` or via products' `scheduleIds`, is part of the same question.)
-9. **[Open]**, backend team / project owner. **Is the `price` in `items`** the product price or a schedule-specific price, and in which units? Show it only once the money contract (§7) is known.
+New patterns worth reusing:
+- **Detail before edit:** the list has no `items`, so `ScheduleFormModal` fills the fields from the row, loads `GET /{id}`, and keeps Save disabled until it has loaded.
+- **Refuse at request start:** the delete mutation re-reads the record and throws an `ApiError` (`conflict`) if it's in use, so single and bulk deletes both respect the rule even when the list is stale.
+- **Bulk action with ineligible rows:** only eligible rows are sent, the confirmation says how many were kept, and the kept rows stay selected.

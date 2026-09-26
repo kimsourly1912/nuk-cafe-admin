@@ -10,6 +10,7 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 |---|---|
 | `auth` | [`useAuth`](./auth.md#useauth), [`loginRedirectTarget`](./auth.md#loginredirecttarget), `SessionUser` |
 | `categories` | [`CategorySelect`](#categoryselect), [`useCategoryOptions`](#usecategoryoptions), `CategoryOptionsFilter`, `categoriesNavigation` |
+| `schedules` | `schedulesNavigation`. `ScheduleSelect` (multiple) + `useScheduleOptions` (`GET /staff/schedules/all`) are added with their first consumer, the menu-item form ([plan](../plans/schedules.md#relationships)) |
 
 When you add a feature, add its section here. Pickers follow the contract in [feature-standard.md → Resource picker conventions](../feature-standard.md#6-resource-picker-conventions).
 

@@ -78,7 +78,8 @@ app/
 ### Cross-feature relationships (from the API)
 
 - A menu item (`ProductRecordCreation`) has `categoryId` (required) and `scheduleIds[]`, so the products form uses `CategorySelect` and `ScheduleSelect`.
-- A schedule (`ScheduleCreateRequest`) has `items[]` (product ids), so the schedules form uses a `ProductSelect` from products. This is the bidirectional case that rule 2 exists for.
+- A schedule (`ScheduleCreateRequest`) has `items[]` (product ids): the same link seen from the other side. For now the schedule form shows its items **read-only** and re-sends them on save (docs/plans/schedules.md S4), and links are edited from the menu-item form. A `ProductSelect` in the schedule form would be the bidirectional case rule 2 exists for.
+- **Edit forms that must preserve a relationship the list doesn't return** (schedules' `items`) load the detail record first and keep Save disabled until it has loaded (`ScheduleFormModal`).
 - A category has an optional `mainCategoryId` (main vs sub). The category form uses its own `CategorySelect type="MAIN"`.
 
 ### Data freshness
