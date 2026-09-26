@@ -23,6 +23,50 @@ Every form that uses one of these composables registers itself app-wide while it
 
 However many forms are open (a modal over a page form, back pressed twice), the user sees **one** dialog.
 
+## Where forms live, and what to use
+
+| Where | Examples | Use |
+|---|---|---|
+| Modal | Category form (reference) | `useModalUnsavedChanges` |
+| Slideover / Drawer | Big forms (menu item with variants) | `useModalUnsavedChanges` (same `update:open` API) |
+| Full page (`/x/new`, `/x/:id/edit`, settings) | Products, points settings, carbon settings | `useUnsavedChanges` |
+| Tabs inside a page | Customer detail | Tabs switched by URL: covered. Tabs switched by local state: call `useLeaveGuard().confirmLeave()` before switching |
+| Multi-step wizard | Vouchers, rewards | One `useUnsavedChanges` over the whole wizard state (not one per step) |
+| Unsaved list reordering (drag and drop) | Category / product sort order | `useUnsavedChanges` over the ordered id array (order matters in `isSameFormValue`) |
+| Inline actions that save at once | Status toggle, delete | Nothing: there is no unsaved state |
+| List filters, search, login form | | Nothing: losing them costs nothing (filters are in the URL anyway) |
+
+## Edge cases
+
+Every case below is handled. **Keep this table and the tests in sync when changing the guard.** E2E tests: `test/e2e/unsaved-changes.test.ts`. Unit tests: `test/unit/form-value.test.ts`.
+
+| # | Case | Behavior | How | Tested |
+|---|---|---|---|---|
+| 1 | Hard reload, close tab, type a URL, external link | Browser's own "Leave site?" (text can't be changed) | `beforeunload` in `leave-guard.client.ts` | e2e (dispatches `beforeunload`, since headless Chrome never shows it) |
+| 2 | Nothing unsaved | No `beforeunload` listener at all | VueUse `useEventListener` with a reactive target. A permanent listener would disable the browser's back/forward cache | e2e |
+| 3 | Sidebar link, `navigateTo`, browser back/forward | Our dialog. Keep editing: the URL is restored (Vue Router undoes the popstate) | Global middleware `unsaved-changes.global.ts` | e2e (back) |
+| 4 | Same page, other params (`/products/1/edit` → `/2/edit`) | Our dialog (the middleware runs on every route change) | Global middleware | **Not tested**: no such page yet. The page must reset its form on param change (see caveats) |
+| 5 | Modal open while the route changes (back button) | Asks. On Discard the modal **closes** too: overlay modals are app-level and would otherwise stay open over the next page | `onDiscard` → `close` | e2e |
+| 6 | Logout | Asks **before** the backend call. Keep editing: stays logged in | `useAuth().logout` calls `confirmLeave()` first | **Not tested in a browser**: a modal blocks the user menu, and no page form exists yet |
+| 7 | Session expired → forced redirect to login | No dialog | Middleware skips when logged out | **Not tested in a browser** |
+| 8 | Modal: X, Esc, outside click, Cancel | Our dialog | `update:open` → `onOpenChange`, Cancel → `requestClose` | e2e (all four) |
+| 9 | Save running | Not unsaved: closing works, the save continues ("Reopen" if it fails). Tab close still warns until the save ends (in-flight guard) | `paused: saving` | e2e |
+| 10 | Save failed | Unsaved again | `paused` goes back to false | Not in e2e |
+| 11 | Reopened draft (after a failed background save) | Unsaved at once (compared to the original record) | `initial: toXForm(record)` | Not in e2e |
+| 12 | Typed then undone; `''` vs `undefined`; `[]` vs missing | Not unsaved | `isSameFormValue` | unit + e2e |
+| 13 | List refetches while an edit form is open (invalidate, tab focus) | Input untouched; baseline unchanged | The form keeps its own copy (`reactive({...})`), the baseline is a snapshot | By design |
+| 14 | Several forms (modal over a page form); back pressed twice | **One** dialog; Discard discards all | One registry, one in-flight `confirmLeave` promise | e2e (double back) |
+| 15 | Esc / outside click on the discard dialog itself | Nothing (it's "Keep editing" only by button). Never discards by accident | `ConfirmDialog` is `dismissible: false` | By design |
+| 16 | Successful save then redirect (page forms) | No dialog | Call `markClean()` before `navigateTo` | Not tested (no page form yet) |
+| 17 | Filter/search change on a list (URL `replace`) | No dialog unless a form is unsaved (none can be: modals block the list) | Middleware runs but finds nothing dirty | e2e (list-page) |
+| 18 | Same form in two browser tabs | Not handled (no cross-tab sync) | Out of scope | |
+
+Implementation traps (each one broke something once, see [D19](../decisions.md)):
+- `isSameFormValue` must read **through** reactive proxies. `toRaw` makes the `computed` stop tracking, so `isDirty` never changes. A unit test guards this.
+- The modal component **must declare the `update:open` emit**. Otherwise the overlay's own `v-model:open` listener closes the modal before we can ask.
+- `useConfirm` creates one overlay per question with `destroyOnClose`. Calling it from middleware must not accumulate overlay entries.
+- E2E: reach the page **through the sidebar**, not `page.goto`, before testing back/forward. `goto` loads a new document, so Back would leave the SPA (a full page load), not change the route.
+
 ---
 
 ## `useUnsavedChanges`

@@ -21,6 +21,9 @@ export default defineConfig({
           name: 'e2e',
           include: ['test/e2e/**/*.test.ts'],
           environment: 'node',
+          // Builds and serves the app once for all e2e files.
+          globalSetup: ['test/e2e/support/global-setup.ts'],
+          testTimeout: 30_000,
         },
       },
       await defineVitestProject({

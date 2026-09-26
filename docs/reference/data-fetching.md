@@ -7,6 +7,7 @@
 - [`ANY` / `toApiQuery`](#any--toapiquery): "All" option in filter selects
 - [`unwrap`](#unwrap): SDK call → envelope `data`
 - [`invalidate`](#invalidate): refresh a feature's cached data
+- [`invalidateAll`](#invalidateall): refresh every loaded list (tab focus, reconnect)
 
 ---
 
@@ -101,46 +102,74 @@ export function useCategoryOptions(filter: MaybeRefOrGetter<CategoryOptionsFilte
 
 ## `usePaginatedQuery`
 
-Filter and pagination state for list pages. It converts between the UI's 1-based page (`UPagination`) and the API's 0-based `page` + `size`.
+Filter and pagination state for list pages, **kept in the URL** (`/categories?search=tea&status=ACTIVE&page=2`). It converts between the UI's 1-based page (`UPagination`) and the API's 0-based `page` + `size`.
 
-Source: `app/composables/usePaginatedQuery.ts`
+Source: `app/composables/usePaginatedQuery.ts`, URL conversion in `app/utils/query.ts` (`toUrlQuery`, `fromUrlQuery`, unit-tested in `test/unit/query.test.ts`). E2E: `test/e2e/list-page.test.ts`. Decision: [D21](../decisions.md).
 
 ### Usage
 
 ```ts
-const { page, pageSize, filters, query } = usePaginatedQuery({
+const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({
   search: '',
   status: ANY as Status | Any,
   type: ANY as 'MAIN' | 'SUB' | Any,
 })
-const { data } = useCategoryList(query)
+const { data, loading } = useCategoryList(query)
 ```
 
 ```vue
-<UInput v-model.lazy="filters.search" />
+<SearchInput v-model="filters.search" placeholder="Search categories…" />
 <USelect v-model="filters.status" :items="STATUS_FILTER_ITEMS" />
+<UTable :data="rows" :loading="loading">
+  <template #loading>Loading categories…</template>
+  <template #empty>
+    <ListEmptyState noun="categories" :filtered="isFiltered" create-label="New category"
+                    @create="openForm()" @clear="clearFilters()" />
+  </template>
+</UTable>
 <UPagination v-model:page="page" :total="data?.totalElements ?? 0" :items-per-page="pageSize" />
 ```
+
+See [`<SearchInput>`](./ui.md#searchinput) and [`<ListEmptyState>`](./ui.md#listemptystate).
 
 ### Type
 
 ```ts
 function usePaginatedQuery<T extends Record<string, unknown>>(
-  initialFilters: T,
-  options?: { pageSize?: number }, // default 20
+  initialFilters: T,                                   // also the defaults
+  options?: { pageSize?: number, syncUrl?: boolean },  // 20, true
 ): {
   page: Ref<number>                                   // 1-based
   pageSize: number
   filters: Reactive<T>                                // bind inputs to these
   query: ComputedRef<ApiQuery<T> & { page: number, size: number }> // 0-based, ANY/'' removed
+  isFiltered: ComputedRef<boolean>                    // any filter differs from its default
+  clearFilters: () => void                            // back to the defaults (and page 1)
 }
 ```
 
 ### Behavior
 
 - **Changing any filter resets `page` to 1.**
-- `query` drops `ANY` and empty strings (via [`toApiQuery`](#any--toapiquery)), so unset filters aren't sent.
-- `query.page = page - 1`, `query.size = pageSize`.
+- `query` drops `ANY` and empty strings (via [`toApiQuery`](#any--toapiquery)), so unset filters aren't sent. `query.page = page - 1`, `query.size = pageSize`.
+- **URL sync** (`syncUrl: true`, the default):
+
+| Case | Behavior |
+|---|---|
+| Open or reload `/categories?search=tea&page=2` | Filters and page are read from the URL |
+| Change a filter or the page | URL updated with `router.replace`: **no history entry**, so Back leaves the list instead of undoing filters one by one |
+| Default values (`''`, `ANY`, page 1) | Left out of the URL, so an unfiltered list is just `/categories` |
+| Sidebar link to the list while filtered | Opens the bare list and **resets** the filters (the URL is the source of truth) |
+| Bad values in the URL (`page=-1`, `page=abc`, repeated keys) | Fall back to the default (page 1) |
+| Number defaults (`minPoints: 0`) | Parsed as numbers from the URL; strings stay strings |
+| Other query params not owned by this list | Kept untouched |
+| Navigating away | The composable only touches the URL while the route is still its own page, so it never writes filters into the next page's URL |
+
+### Caveats
+
+- **One `usePaginatedQuery` per page** when `syncUrl` is on: two lists on one page would share `page` and clash on filter names. Pass `syncUrl: false` for secondary lists (e.g. a list inside a modal or a tab).
+- Filter values must be strings or numbers to round-trip through the URL. Arrays/objects aren't supported yet.
+- The URL change runs the global route middleware (auth + [unsaved changes](./forms.md)). That's cheap, and a filter can't change while a form modal is open anyway.
 
 ### Recipe: step back when the last page empties
 
@@ -224,3 +253,11 @@ await invalidate('products', 'schedules') // refreshes 'products:list', 'schedul
 - **Batched:** calls within 30ms are merged into one refresh per key. The promise resolves after that refresh.
 - **Usually you don't call it.** Declare `invalidate: [...]` on [`useMutation`](./mutations.md#options) instead.
 - Must run in a Nuxt context. After an `await`, wrap it: `nuxtApp.runWithContext(() => invalidate('x'))` (`useMutation` does this for you).
+
+## `invalidateAll`
+
+```ts
+function invalidateAll(): Promise<void>
+```
+
+Refetches every loaded API query (every `<feature>:<name>` key), through `invalidate`. Used by `plugins/data-freshness.client.ts` when the user comes back to the tab or the connection returns (see [App-wide behavior](./app-behavior.md#data-freshness)). Features don't need to call it.

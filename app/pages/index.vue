@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { useAuth } from '~/features/auth'
 
+definePageMeta({ title: 'Dashboard' })
+
 const { user } = useAuth()
 </script>
 

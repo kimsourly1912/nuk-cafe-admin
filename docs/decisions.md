@@ -114,3 +114,22 @@ Dates are when the decision was made. All of these were agreed with the project 
   - `beforeunload` is attached only while needed (a permanent listener disables bfcache).
   - `useConfirm` now creates one overlay per question with `destroyOnClose`, so calling it from middleware doesn't accumulate overlay entries.
 - **VueUse:** `useEventListener` (reactive target attaches/detaches the listener) and `tryOnScopeDispose`. `useCloned` was tried for the baseline but dropped: its `sync()` can only snapshot the current state, and a reopened draft needs a different baseline (`initial`).
+
+### D20: E2E tests build once and mock the backend in the browser, 2026-09-26
+- **Decision:** `test/e2e/support/global-setup.ts` runs `nuxt build`, serves `.output` on a free port and `provide`s the URL. Each file calls `setup({ host })` (via `setupE2e()`). `@nuxt/test-utils` would otherwise build once **per file** (~35s each).
+- The backend is mocked with Playwright `page.route` (`mockApi`), not a fake server: no backend or credentials needed, and each test sets exactly the responses it needs, including `success: false` envelopes and slow saves.
+- Real Chrome (`channel: 'chrome'`), no Playwright browser download.
+
+### D21: List state lives in the URL, updated with `replace`, 2026-09-26
+- **Context:** A reload or a back navigation reset the search, filters and page. Staff also want to send a link to a filtered view.
+- **Decision:** `usePaginatedQuery` reads and writes filters + page to the query string (defaults left out). It uses `router.replace`, not `push`: one history entry per list, so Back leaves the list instead of stepping through every keystroke. The URL is the source of truth: the sidebar link to the bare list resets the filters.
+- **Why not `@vueuse/router`'s `useRouteQuery`:** it isn't installed, it syncs one key at a time (a filter change needs the page reset in the same update), and the typed round-trip (`fromUrlQuery`/`toUrlQuery`) is small and unit-tested.
+- **Trap:** the composable must not write while navigating away (the route already points to the next page), so both watchers check that the current path is still its own.
+
+### D22: Refresh on return and reconnect, not polling, 2026-09-26
+- **Decision:** refetch every loaded query when the tab becomes visible after ≥ 30s hidden, or when the browser comes back online (`plugins/data-freshness.client.ts`, VueUse `useDocumentVisibility` + `useOnline`). Plus an offline banner.
+- **Why 30s:** staff alt-tab constantly. Refetching on every switch would spam the API and flicker spinners. After 30s, other staff may have changed the menu.
+- **Not polling:** no screen needs live data yet. The orders pickup queue will likely need it; do it per screen (`useIntervalFn`), not globally.
+
+### D23: Tab titles from route meta, 2026-09-26
+- **Decision:** each route file declares `definePageMeta({ title })`, and `app.vue` applies `<title> · NUK Cafe Admin`. Titles sit next to the route (thin route files, rule 6), and there's no `useHead` in every page component. `error.vue` sets its own title because it renders instead of `app.vue`.

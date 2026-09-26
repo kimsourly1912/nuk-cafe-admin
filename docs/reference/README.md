@@ -8,10 +8,11 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 
 | Page | Contents |
 |---|---|
-| [Data fetching](./data-fetching.md) | `useApiQuery`, `usePaginatedQuery`, `ANY` / `toApiQuery`, `unwrap`, `invalidate` |
+| [Data fetching](./data-fetching.md) | `useApiQuery`, `usePaginatedQuery` (URL sync), `ANY` / `toApiQuery`, `unwrap`, `invalidate`, `invalidateAll` |
 | [Mutations](./mutations.md) | `useMutation` (create/update/delete, single and batch), `usePendingMutationCount` |
 | [Errors](./errors.md) | `ApiError`, `getErrorMessage`, `isSilentError`, error codes, `<ApiErrorAlert>`, `useNotify` |
-| [UI helpers](./ui.md) | `useConfirm`, `useTableSelection`, `<BulkActionsBar>`, `<StatusBadge>`, status constants, `previewList`, `pluralize` |
+| [UI helpers](./ui.md) | `useConfirm`, `useTableSelection`, `<BulkActionsBar>`, `<StatusBadge>`, status constants, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>` |
+| [App-wide behavior](./app-behavior.md) | Tab titles, refresh on tab focus/reconnect, offline banner, leave guards, session loss: every case handled |
 | [Forms: unsaved changes](./forms.md) | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard`, `isSameFormValue` |
 | [Auth](./auth.md) | `useAuth`, public pages |
 | [Feature public APIs](./features.md) | What each feature exports for other features (`CategorySelect`, `useCategoryOptions`, …) |
@@ -25,6 +26,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `ANY`, `toApiQuery` | util | [Data fetching](./data-fetching.md#any--toapiquery) | "All" option for filter selects |
 | `unwrap` | util | [Data fetching](./data-fetching.md#unwrap) | SDK call → envelope `data` |
 | `invalidate` | util | [Data fetching](./data-fetching.md#invalidate) | Refresh a feature's cached data |
+| `invalidateAll` | util | [Data fetching](./data-fetching.md#invalidateall) | Refresh every loaded query |
 | `useMutation` | composable | [Mutations](./mutations.md#usemutation) | Create/update/delete with every UI state handled |
 | `usePendingMutationCount` | composable | [Mutations](./mutations.md#usependingmutationcount) | Number of writes in flight app-wide |
 | `ApiError` | class | [Errors](./errors.md#apierror) | The one error type |
@@ -36,6 +38,8 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `useTableSelection` | composable | [UI helpers](./ui.md#usetableselection) | `UTable` row checkboxes |
 | `<BulkActionsBar>` | component | [UI helpers](./ui.md#bulkactionsbar) | "5 selected · actions · Clear" |
 | `<StatusBadge>`, `STATUS_*` | component, consts | [UI helpers](./ui.md#statusbadge-and-status-constants) | ACTIVE/INACTIVE display and selects |
+| `<SearchInput>` | component | [UI helpers](./ui.md#searchinput) | Search as you type (debounced) |
+| `<ListEmptyState>` | component | [UI helpers](./ui.md#listemptystate) | "No X yet" vs "No X match your filters" |
 | `previewList`, `pluralize` | util | [UI helpers](./ui.md#previewlist-and-pluralize) | "Coffee, Tea and 3 more", "3 categories" |
 | `useUnsavedChanges` | composable | [Forms](./forms.md#useunsavedchanges) | Warn before a page form's input is lost |
 | `useModalUnsavedChanges` | composable | [Forms](./forms.md#usemodalunsavedchanges) | Same, plus asking before the modal closes |

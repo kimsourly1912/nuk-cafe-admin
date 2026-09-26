@@ -4,8 +4,8 @@ import type { CategoryResponse } from '~/generated/api'
 import { useCategoryList, useCategoryMutations } from '../composables/useCategories'
 import CategoryFormModal from './CategoryFormModal.vue'
 
-// --- Filters & pagination ---
-const { page, pageSize, filters, query } = usePaginatedQuery({
+// --- Filters & pagination (kept in the URL) ---
+const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({
   search: '',
   status: ANY as Status | Any,
   type: ANY as 'MAIN' | 'SUB' | Any,
@@ -77,10 +77,9 @@ function openForm(category?: CategoryResponse) {
 
       <UDashboardToolbar>
         <template #left>
-          <UInput
-            v-model.lazy="filters.search"
-            icon="i-lucide-search"
-            placeholder="Search… (press Enter)"
+          <SearchInput
+            v-model="filters.search"
+            placeholder="Search categories…"
             class="w-64"
           />
           <USelect
@@ -132,8 +131,20 @@ function openForm(category?: CategoryResponse) {
         :columns="columns"
         :loading="loading"
         :meta="{ class: { tr: row => (isBusy(row.original.id!) ? 'opacity-50 pointer-events-none' : '') } }"
-        empty="No categories found."
       >
+        <template #loading>
+          <span class="text-muted">Loading categories…</span>
+        </template>
+        <template #empty>
+          <ListEmptyState
+            noun="categories"
+            :filtered="isFiltered"
+            create-label="New category"
+            @create="openForm()"
+            @clear="clearFilters()"
+          />
+        </template>
+
         <template #select-header="{ table }">
           <UCheckbox
             :model-value="table.getIsSomePageRowsSelected() ? 'indeterminate' : table.getIsAllPageRowsSelected()"

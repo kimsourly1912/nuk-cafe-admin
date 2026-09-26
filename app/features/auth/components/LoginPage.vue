@@ -11,6 +11,8 @@ type Schema = v.InferOutput<typeof schema>
 
 const state = reactive({ username: '', password: '' })
 const loading = ref(false)
+// Hidden by default: staff sign in at the counter, where customers can see the screen.
+const showPassword = ref(false)
 const error = ref<string>()
 
 const route = useRoute()
@@ -79,10 +81,26 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
         required
       >
         <UInput
+          id="password"
           v-model="state.password"
+          :type="showPassword ? 'text' : 'password'"
           autocomplete="current-password"
           class="w-full"
-        />
+          :ui="{ trailing: 'pe-1' }"
+        >
+          <template #trailing>
+            <UButton
+              color="neutral"
+              variant="link"
+              size="sm"
+              :icon="showPassword ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+              :aria-label="showPassword ? 'Hide password' : 'Show password'"
+              :aria-pressed="showPassword"
+              aria-controls="password"
+              @click="showPassword = !showPassword"
+            />
+          </template>
+        </UInput>
       </UFormField>
 
       <UButton

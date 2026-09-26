@@ -7,6 +7,8 @@
 - [`<BulkActionsBar>`](#bulkactionsbar)
 - [`<StatusBadge>` and status constants](#statusbadge-and-status-constants)
 - [`previewList` and `pluralize`](#previewlist-and-pluralize)
+- [`<SearchInput>`](#searchinput)
+- [`<ListEmptyState>`](#listemptystate)
 
 ---
 
@@ -191,3 +193,57 @@ confirm: categories => ({
   danger: true,
 }),
 ```
+
+---
+
+## `<SearchInput>`
+
+Search box for list toolbars. Searches **as you type**, after a pause, so it doesn't call the API on every keystroke.
+
+Source: `app/components/SearchInput.vue` (VueUse `watchDebounced`). E2E: `test/e2e/list-page.test.ts`.
+
+```vue
+<SearchInput v-model="filters.search" placeholder="Search categories…" class="w-64" />
+```
+
+| Prop | Type | Default | Meaning |
+|---|---|---|---|
+| `v-model` | `string` | `''` | Receives the **trimmed** text |
+| `placeholder` | `string` | `'Search…'` | Also its accessible name (`searchbox` role) |
+| `delay` | `number` | `300` | ms without typing before it applies |
+
+- **Enter** applies at once. The **✕** button clears and applies at once.
+- If the model changes from outside (Clear filters, URL, back/forward), the box shows the new value. Typing a trailing space doesn't count as a change.
+- Stale responses can't win: `useAsyncData` cancels the previous request when the query changes.
+
+---
+
+## `<ListEmptyState>`
+
+Content for `UTable`'s `#empty` slot. It tells "nothing exists yet" apart from "the filters hide everything".
+
+Source: `app/components/ListEmptyState.vue`
+
+```vue
+<UTable :data="rows" :loading="loading">
+  <template #loading>Loading categories…</template>
+  <template #empty>
+    <ListEmptyState noun="categories" :filtered="isFiltered" create-label="New category"
+                    @create="openForm()" @clear="clearFilters()" />
+  </template>
+</UTable>
+```
+
+| Prop / event | Meaning |
+|---|---|
+| `noun` | Plural, lower case (`'categories'`) |
+| `filtered` | `usePaginatedQuery().isFiltered` |
+| `create-label` | Create button label. Omit on lists where users can't create (e.g. orders) |
+| `@create` / `@clear` | Create clicked / Clear filters clicked |
+
+| State | Shows |
+|---|---|
+| No filters, no rows | "No categories yet" + create button |
+| Filters active, no rows | "No categories match your filters" + **Clear filters** |
+
+- **Always fill UTable's `#loading` slot too.** Without it the table shows the empty state during the first load, so "No categories yet" flashes before the data arrives.

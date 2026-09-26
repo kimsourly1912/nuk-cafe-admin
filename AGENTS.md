@@ -6,7 +6,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 1. **[docs/progress.md](docs/progress.md)**: what's done, what's next, open questions for the backend team, and how well each part has been verified. Start every session here.
 2. **[docs/decisions.md](docs/decisions.md)**: why things are the way they are. Read the relevant entry **before changing** a pattern that looks odd. Most of them work around a verified backend or tooling quirk.
-3. **[docs/reference/](docs/reference/README.md)**: API reference for every shared composable, util and component (`useMutation`, `useApiQuery`, `ApiError`, …) with types, options and examples. Check it before using or changing a shared API.
+3. **[docs/reference/](docs/reference/README.md)**: API reference for every shared composable, util and component (`useMutation`, `useApiQuery`, `ApiError`, …) with types, options and examples. Check it before using or changing a shared API. **[App-wide behavior](docs/reference/app-behavior.md)** (tab titles, refresh on tab focus, offline, leave guards, session loss) and **[Forms: unsaved changes](docs/reference/forms.md)** list every edge case those handle.
 4. The rest of this file: rules and recipes.
 
 **Keep these documents current as part of your work:**
@@ -14,6 +14,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 - Made or changed an architectural decision → add or amend an entry in `docs/decisions.md`.
 - Changed a convention, rule or shared building block → update this file.
 - Added or changed a shared API (or a feature's public `index.ts`) → update its page in `docs/reference/` (examples must compile).
+- Found or handled an **edge case** (a browser quirk, a backend inconsistency, a timing issue) → add it to the case table of the page it belongs to (`app-behavior.md`, `forms.md`, `data-fetching.md`, …) with how it's handled and which test covers it. Test pitfalls go in `docs/progress.md` → "How to verify".
 
 ## What this is
 
@@ -67,7 +68,7 @@ app/
 3. **Cross-feature imports go through the public API only:** `import { CategorySelect } from '~/features/categories'`. Deep imports (`~/features/x/composables/...`) and relative paths that leave the feature (`../../x`) are lint errors.
 4. **Public building blocks must not import other features.** This keeps the dependency graph one level deep, so no cycles can form. Screens (pages, forms) may import other features' public APIs.
 5. **Inside a feature, use relative imports** (`../composables/useCategories`). Feature code is *not* auto-imported. Root shared code *is* auto-imported everywhere (`unwrap`, `getErrorMessage`, `invalidate`, `usePaginatedQuery`, `useConfirm`, `StatusBadge`, `STATUS_ITEMS`, `ANY`, ...).
-6. **Route files in `app/pages/` stay thin.** They hold `definePageMeta` plus one `<Feature>…Page.vue` from the feature (the only deep import pages are allowed). Routes stay discoverable in one place.
+6. **Route files in `app/pages/` stay thin.** They hold `definePageMeta` (always with a `title` for the browser tab) plus one `<Feature>…Page.vue` from the feature (the only deep import pages are allowed). Routes stay discoverable in one place.
 7. **Name feature folders after backend resources**, so a folder maps to SDK functions and URLs: `categories`, `products` (shown as "Menu items" in the UI), `schedules`, `rewards` (reward categories live inside it: they're not menu categories), `vouchers`, `banners`, `customers`, `staff`, `orders`, `auth`.
 
 ### Cross-feature relationships (from the API)
@@ -174,6 +175,7 @@ How to use it in UI code:
 
 - `app/features/auth/` exposes `useAuth()`: `user` (state, no tokens), `isLoggedIn`, `fetchSession`, `login`, `logout`. The shell (`middleware/auth.global.ts`, `plugins/api.ts`, `layouts/default.vue`) imports it from `~/features/auth`.
 - The middleware protects **every page by default**. Opt out with `definePageMeta({ public: true })` (typed in `app/types/page-meta.d.ts`).
+- App-wide behavior needs nothing from features: tab titles from `definePageMeta({ title })`, lists refetch when the user returns after 30s or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards. Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
 - `ssr: false`: the app is a pure SPA because only the browser has the auth cookies. Don't add server routes or SSR-dependent code.
 - `app/layouts/default.vue` is the Nuxt UI dashboard shell. The sidebar is `app/utils/navigation.ts`, which groups and orders each feature's exported `navigation` entry.
 - Every page component renders a `UDashboardPanel`: `UDashboardNavbar` (title, `UDashboardSidebarCollapse`, actions in `#right`), an optional `UDashboardToolbar` with filters in `#left`, and content in `#body`.
@@ -188,13 +190,15 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `useMutation(fn, opts)` | `composables/`, engine in `utils/mutation.ts` | Every create/update/delete, single or batch |
 | `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Row checkboxes and bulk actions |
 | `previewList`, `pluralize` | `utils/text.ts` | "Coffee, Tea and 3 more", "3 categories" |
-| `usePaginatedQuery(filters)` | `composables/` | List state: 1-based `page` for `UPagination`, `query` with the 0-based API page, resets page on filter change, strips `ANY`/'' |
+| `usePaginatedQuery(filters)` | `composables/` | List state **kept in the URL**: 1-based `page` for `UPagination`, `query` with the 0-based API page, resets page on filter change, strips `ANY`/'', `isFiltered`, `clearFilters` |
 | `ANY`, `toApiQuery` | `utils/query.ts` | "All" option in filter selects (`USelect` can't hold `undefined`) |
 | `invalidate(...features)` | `utils/invalidate.ts` | Refetch data after mutations |
 | `StatusBadge`, `STATUS_ITEMS`, `STATUS_FILTER_ITEMS`, `Status` | `components/`, `utils/status.ts` | ACTIVE/INACTIVE display, form select and filter select |
 | `useConfirm()` | `composables/` | `await confirm({ title, danger: true })` resolves to `boolean` (`useMutation`'s `confirm` uses it) |
 | `unwrap`, `ApiError`, `getErrorMessage` | `utils/api*.ts` | API calls and errors (see "Error handling") |
 | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard` | `composables/`, `utils/form-value.ts` | "Discard unsaved changes?" for page and modal forms; the route middleware and tab-close plugin use them |
+| `<SearchInput>`, `<ListEmptyState>` | `components/` | List toolbar search (as you type) and empty states ("nothing yet" vs "filters hide everything") |
+| `invalidateAll()` | `utils/invalidate.ts` | Refetch every loaded query (used by the freshness plugin) |
 | `useNotify()` | `composables/` | Toasts for API actions that aren't mutations |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
 
@@ -211,16 +215,17 @@ Mirror `app/features/categories/` file by file:
 3. **`composables/use<Feature>Options.ts` + `components/<Feature>Select.vue` (public):** add these if other features need to pick this resource. Key the options per filter. The select hides the `USelect` sentinel for "none" (see `CategorySelect`).
 4. **`schemas/<feature>-form.ts`:** the Valibot schema with user-facing messages (generated request schemas carry no rules). `to<Feature>Form(existing?)` builds the initial form state. `to<Feature>Request(form, existing?)` builds the request body and **copies over fields the form doesn't edit** (`nameI18n`, `sortOrder`, ...) so the PUT doesn't wipe them. Unit-test it in `tests/`.
 5. **`components/<Feature>FormModal.vue`:** opened with `useOverlay().create(...)`. On submit: `const result = await create.execute(body, { errorActions })`, then `if (result.ok) emit('close', true)`. It supports closing mid-save with "Reopen" (`draft` prop), guards unsaved input with `useModalUnsavedChanges` (declare the `update:open` emit, bind `@update:open` on `UModal`, Cancel calls `requestClose()`), and pulls in other features' pickers from their `index.ts`.
-6. **`components/<Feature>ListPage.vue`:** `usePaginatedQuery` + list composable. Rows exclude `remove.isRemoved(id)`. `UTable` with a select column (`useTableSelection`), `#<column>-cell` slots, busy rows (`isBusy`: dimmed, spinner instead of actions), `<ApiErrorAlert>` on load error, row actions through `UDropdownMenu` (delete = `remove.execute(row)`), and `<BulkActionsBar>` calling `remove.executeMany(selection.selected)`.
+6. **`components/<Feature>ListPage.vue`:** `usePaginatedQuery` (filters and page live in the URL) + list composable. Toolbar: `<SearchInput v-model="filters.search">` (searches as you type) and filter `USelect`s. `UTable` fills `#loading` and `#empty` (`<ListEmptyState :filtered="isFiltered" @create @clear="clearFilters()">`). Rows exclude `remove.isRemoved(id)`. `UTable` with a select column (`useTableSelection`), `#<column>-cell` slots, busy rows (`isBusy`: dimmed, spinner instead of actions), `<ApiErrorAlert>` on load error, row actions through `UDropdownMenu` (delete = `remove.execute(row)`), and `<BulkActionsBar>` calling `remove.executeMany(selection.selected)`.
 7. **`navigation.ts` + `index.ts`:** export the sidebar entry and the public building blocks, then add the entry to a group in `app/utils/navigation.ts`.
-8. **Route file** `app/pages/<feature>/index.vue`: import and render `<Feature>ListPage.vue`, nothing else.
+8. **Route file** `app/pages/<feature>/index.vue`: `definePageMeta({ title: '<Feature>' })`, then import and render `<Feature>ListPage.vue`, nothing else.
+9. **E2E test** `test/e2e/<feature>.test.ts`: at least list + create + delete, with `mockApi` (see "Tests").
 
 ## Tests
 
 `vitest.config.ts` defines three projects:
 - **unit** (Node, no Nuxt runtime): `app/features/*/tests/**/*.test.ts` and `test/unit/**`. Test pure code such as schemas, form mapping and utils. Files under test must import their dependencies explicitly, not through auto-imports.
 - **nuxt** (Nuxt environment via `@nuxt/test-utils`): `app/features/*/tests/**/*.nuxt.test.ts` and `test/nuxt/**`.
-- **e2e**: `test/e2e/**` (`@nuxt/test-utils/e2e` + `playwright-core`).
+- **e2e**: `test/e2e/**` (`@nuxt/test-utils/e2e` + `playwright-core`, real Chrome). `test/e2e/support/global-setup.ts` builds and serves the app **once** for all files. Start each file with `await setupE2e()`, and mock the backend with `mockApi(page, { 'GET /staff/x': () => data })` from `test/e2e/support/mock-api.ts` (throw `MockFailure` for `success: false`). Helpers: `gotoViaSidebar` (needed before testing back/forward), `beforeUnloadPrevented`, `toast`, `pageOf`. Pitfalls: docs/progress.md → "How to verify". `pnpm vitest run --project e2e` takes about a minute (mostly the build).
 
 Shared code tests live in `test/` (e.g. `test/unit/api-fetch.test.ts` covers the envelope, refresh and retry logic).
 

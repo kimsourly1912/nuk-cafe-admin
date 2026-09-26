@@ -31,3 +31,13 @@ export function invalidate(...features: string[]): Promise<void> {
   })
   return flushing
 }
+
+/**
+ * Refetches every loaded API query (`<feature>:<name>` keys), e.g. when the tab comes back
+ * after a while or the connection returns (`plugins/data-freshness.client.ts`).
+ * Must be called in a Nuxt context.
+ */
+export function invalidateAll(): Promise<void> {
+  const features = new Set(Object.keys(useNuxtApp().payload.data).map(key => /^([\w-]+):/.exec(key)?.[1]).filter(Boolean) as string[])
+  return features.size ? invalidate(...features) : Promise.resolve()
+}

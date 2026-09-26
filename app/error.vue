@@ -6,6 +6,8 @@ const props = defineProps<{ error: NuxtError }>()
 
 const isNotFound = computed(() => props.error.statusCode === 404)
 const title = computed(() => (isNotFound.value ? 'Page not found' : 'Something went wrong'))
+// Rendered instead of app.vue, so it sets its own tab title.
+useHead({ title: () => `${title.value} · NUK Cafe Admin` })
 const description = computed(() => (isNotFound.value
   ? 'The page you are looking for doesn\'t exist.'
   : getErrorMessage(props.error)))
