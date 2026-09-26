@@ -6,12 +6,14 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 1. **[docs/progress.md](docs/progress.md)**: what's done, what's next, open questions for the backend team, and how well each part has been verified. Start every session here.
 2. **[docs/decisions.md](docs/decisions.md)**: why things are the way they are. Read the relevant entry **before changing** a pattern that looks odd. Most of them work around a verified backend or tooling quirk.
-3. The rest of this file: rules and recipes.
+3. **[docs/reference/](docs/reference/README.md)**: API reference for every shared composable, util and component (`useMutation`, `useApiQuery`, `ApiError`, …) with types, options and examples. Check it before using or changing a shared API.
+4. The rest of this file: rules and recipes.
 
 **Keep these documents current as part of your work:**
 - Finished or started something → update `docs/progress.md` (status, next steps, and what you verified and how).
 - Made or changed an architectural decision → add or amend an entry in `docs/decisions.md`.
 - Changed a convention, rule or shared building block → update this file.
+- Added or changed a shared API (or a feature's public `index.ts`) → update its page in `docs/reference/` (examples must compile).
 
 ## What this is
 
@@ -176,6 +178,8 @@ How to use it in UI code:
 - Every page component renders a `UDashboardPanel`: `UDashboardNavbar` (title, `UDashboardSidebarCollapse`, actions in `#right`), an optional `UDashboardToolbar` with filters in `#left`, and content in `#body`.
 
 ## Shared building blocks (root, auto-imported)
+
+Summary only. Full signatures, options and examples are in **[docs/reference/](docs/reference/README.md)**.
 
 | What | Where | Use for |
 |---|---|---|
