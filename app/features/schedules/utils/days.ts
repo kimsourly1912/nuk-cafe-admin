@@ -40,6 +40,28 @@ export function formatDays(days: readonly Day[] = []): string {
   return sorted.map(d => DAYS.find(x => x.value === d)!.label).join(', ')
 }
 
+/** Minutes since midnight of `HH:mm[:ss]`, or `undefined`. */
+function minutesOf(time?: string) {
+  const match = /^(\d{2}):(\d{2})/.exec(time ?? '')
+  return match ? Number(match[1]) * 60 + Number(match[2]) : undefined
+}
+
+/**
+ * Where a range sits on a 24-hour bar, in percent. A range ending at or before its start runs
+ * past midnight, so it's two segments: start → midnight and midnight → end.
+ */
+export function timeBarSegments(start?: string, end?: string): { left: number, width: number }[] {
+  const from = minutesOf(start)
+  const to = minutesOf(end)
+  if (from === undefined || to === undefined) return []
+  const pct = (minutes: number) => (minutes / (24 * 60)) * 100
+  if (to > from) return [{ left: pct(from), width: pct(to - from) }]
+  return [
+    { left: pct(from), width: 100 - pct(from) },
+    ...(to > 0 ? [{ left: 0, width: pct(to) }] : []),
+  ]
+}
+
 /**
  * "9:00 AM – 5:30 PM" (12-hour), "(next day)" when the range ends after midnight. Pass times
  * already converted to the viewer's zone (utils/timezone.ts).

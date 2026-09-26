@@ -50,12 +50,13 @@ async function open(handlers: Record<string, MockHandler> = backend().handlers, 
   return { page, api }
 }
 
+/** A schedule's card. */
 function rowOf(page: Page, name: string) {
-  return page.getByRole('row').filter({ has: page.getByText(name, { exact: true }) })
+  return page.getByRole('article', { name, exact: true })
 }
 
 async function rowAction(page: Page, name: string, action: string) {
-  await rowOf(page, name).getByRole('button', { name: 'Actions' }).click()
+  await page.getByRole('button', { name: `Actions for ${name}` }).click()
   return page.getByRole('menuitem', { name: action })
 }
 
@@ -76,20 +77,30 @@ async function shownTime(form: Locator, label: string) {
 }
 
 describe('schedules list', () => {
-  it('shows days and 12-hour times in the viewer timezone, and the item count', async () => {
+  it('shows the week as day pills and 12-hour times in the viewer timezone, and the item count', async () => {
     const { page } = await open()
     const lunch = rowOf(page, 'Lunch')
-    await page.getByRole('columnheader', { name: 'Time (GMT+7)' }).waitFor()
-    // 11:00–14:30 UTC on Mon, Fri.
-    await lunch.getByText('Mon, Fri').waitFor()
+    await page.getByText('Times in your timezone (GMT+7)').waitFor()
+    // 11:00–14:30 UTC on Mon, Fri. The pills are one image named by the days.
+    await lunch.getByRole('img', { name: 'Mon, Fri' }).waitFor()
     await lunch.getByText('6:00 PM – 9:30 PM').waitFor()
     await lunch.getByText('Midday menu').waitFor()
-    await rowOf(page, 'Breakfast').getByText('Every day').waitFor()
+    await rowOf(page, 'Breakfast').getByRole('img', { name: 'Every day' }).waitFor()
     await rowOf(page, 'Breakfast').getByText('1:00 PM – 5:00 PM').waitFor()
-    await rowOf(page, 'Breakfast').getByRole('cell', { name: '2', exact: true }).waitFor()
+    await rowOf(page, 'Breakfast').getByText('2 menu items').waitFor()
     // 18:00–22:00 UTC on Sat, Sun starts after midnight at UTC+7: the days move to Sun, Mon.
-    await rowOf(page, 'Dinner').getByText('Mon, Sun').waitFor()
+    await rowOf(page, 'Dinner').getByRole('img', { name: 'Mon, Sun' }).waitFor()
     await rowOf(page, 'Dinner').getByText('1:00 AM – 5:00 AM').waitFor()
+  })
+
+  it('opens a schedule by clicking its card, and filters by status with counted tabs', async () => {
+    const { page } = await open()
+    const tabs = page.getByRole('group', { name: 'Status' })
+    await expect.poll(() => tabs.innerText()).toMatch(/All\s*3\s*Active\s*2\s*Inactive\s*1/)
+    await tabs.getByRole('tab', { name: /Inactive/ }).click()
+    await expect.poll(() => page.getByRole('article').count()).toBe(1)
+    await rowOf(page, 'Dinner').getByRole('heading', { name: 'Dinner' }).click()
+    await page.getByRole('dialog', { name: 'Edit schedule' }).waitFor()
   })
 
   it('filters by day of week through the API and keeps it in the URL', async () => {

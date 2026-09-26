@@ -179,7 +179,7 @@ The backend has no bulk endpoints, so a batch is N single calls:
 - **What the engine does:** `run` checks the key **and the record lock** and reserves both synchronously (no `await` in between) right before calling the request. That holds for a single `execute` after its confirmation, and for each batch item when a worker picks it up. An item that became busy meanwhile (same mutation, or its lock taken by another mutation) is `skipped`, and different records still run in parallel (D28).
 - **What features must do:** give every mutation that can conflict on a record the same `lock`. Without `lock`, mutations only exclude themselves.
 - **Prefiltering is not the guarantee.** The early checks (before a confirmation, before a batch) only avoid asking about work that can't run. `isBusy` in the UI is a display. The guarantee is the check-and-reserve at request start.
-- Tests: `test/unit/mutation.test.ts` → "record locks across mutations"; `test/e2e/categories-bulk.test.ts` (bulk delete during a pending edit, which fails without `lock`).
+- Tests: `test/unit/mutation.test.ts` → "record locks across mutations"; `test/e2e/list-bulk.test.ts` (bulk delete during a pending edit, which fails without `lock`).
 
 ```ts
 async function removeSelected() {

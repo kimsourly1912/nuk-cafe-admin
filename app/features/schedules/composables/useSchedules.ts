@@ -28,6 +28,12 @@ export function useScheduleList(query: MaybeRefOrGetter<ScheduleListQuery>) {
   })
 }
 
+/** "All 7 · Active 6 · Inactive 1" for the status tabs, with the other filters applied. */
+export function useScheduleStatusCounts(filters: () => Pick<ScheduleListQuery, 'search' | 'dayOfWeek'>) {
+  return useStatusCounts('schedules', filters, (query, status) =>
+    unwrap(getPage({ query: { ...query, status, size: 1 } })).then(page => page.totalElements ?? 0))
+}
+
 /**
  * One schedule with its `items`, which the list doesn't include. The edit form needs it to keep
  * the items on save (plan S4).

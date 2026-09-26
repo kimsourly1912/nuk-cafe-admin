@@ -75,7 +75,7 @@ describe('unsaved changes: form modal', () => {
 
   it('opens an edit form clean', async () => {
     const { page } = await openCategories()
-    await page.getByRole('button', { name: 'Actions' }).first().click()
+    await page.getByRole('button', { name: 'Actions for Tea' }).click()
     await page.getByRole('menuitem', { name: 'Edit' }).click()
     await form(page).waitFor()
     await expect(nameInput(page).inputValue()).resolves.toBe('Tea')

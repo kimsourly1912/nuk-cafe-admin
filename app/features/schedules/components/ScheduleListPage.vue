@@ -1,10 +1,15 @@
 <script setup lang="ts">
-import type { DropdownMenuItem, SelectItem, TableColumn } from '@nuxt/ui'
+/**
+ * Schedules as a list of cards: the week as day pills and the time on a 24-hour bar, because the
+ * question here is "when is this on?", not comparing columns. docs/plans/list-ui-refresh.md
+ */
+import type { DropdownMenuItem, SelectItem } from '@nuxt/ui'
 import type { ScheduleListResponse } from '~/generated/api'
-import { confirmDeleteMany, isLinked, linkedLabel, useScheduleList, useScheduleMutations } from '../composables/useSchedules'
+import { confirmDeleteMany, isLinked, linkedLabel, useScheduleList, useScheduleMutations, useScheduleStatusCounts } from '../composables/useSchedules'
 import type { Day } from '../utils/days'
-import { DAYS, formatDays, formatTimeRange } from '../utils/days'
+import { DAYS } from '../utils/days'
 import { shiftWeekly, viewerTimeZone, zoneLabel, zoneShift } from '../utils/timezone'
+import ScheduleCard from './ScheduleCard.vue'
 import ScheduleFormModal from './ScheduleFormModal.vue'
 
 // --- Filters & pagination (kept in the URL) ---
@@ -16,6 +21,7 @@ const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginate
 
 const { data, loading, refreshing, error, refresh } = useScheduleList(query)
 const { remove, isBusy } = useScheduleMutations()
+const counts = useScheduleStatusCounts(() => ({ search: query.value.search, dayOfWeek: query.value.dayOfWeek }))
 
 // Deleted rows disappear immediately, before the refreshed list arrives.
 const rows = computed(() => (data.value?.content ?? []).filter(s => !remove.isRemoved(s.id!)))
@@ -58,17 +64,6 @@ function localWeekly(schedule: ScheduleListResponse) {
   return shift === undefined ? { ...stored, zone: schedule.timezone } : { ...shiftWeekly(stored, shift), zone: undefined }
 }
 const local = computed(() => new Map(rows.value.map(s => [s.id, localWeekly(s)])))
-
-// --- Table ---
-const columns: TableColumn<ScheduleListResponse>[] = [
-  { id: 'select' },
-  { accessorKey: 'name', header: 'Name' },
-  { id: 'days', header: 'Days' },
-  { id: 'time', header: `Time (${viewerZone})` },
-  { accessorKey: 'item_count', header: 'Menu items' },
-  { accessorKey: 'status', header: 'Status' },
-  { id: 'actions', meta: { class: { td: 'text-right' } } },
-]
 
 function rowActions(schedule: ScheduleListResponse): DropdownMenuItem[] {
   const linked = isLinked(schedule)
@@ -122,11 +117,6 @@ usePageShortcuts({ n: () => openForm() })
             class="w-64"
           />
           <USelect
-            v-model="filters.status"
-            :items="STATUS_FILTER_ITEMS"
-            class="w-40"
-          />
-          <USelect
             v-model="filters.dayOfWeek"
             :items="dayItems"
             aria-label="Day"
@@ -139,24 +129,26 @@ usePageShortcuts({ n: () => openForm() })
           />
         </template>
         <template #right>
-          <BulkActionsBar
-            :count="selection.count"
-            @clear="selection.clear()"
-          >
-            <UButton
-              label="Delete"
-              icon="i-lucide-trash-2"
-              color="error"
-              variant="subtle"
-              :disabled="!canDeleteSelected"
-              @click="removeSelected"
-            />
-          </BulkActionsBar>
+          <span class="text-xs text-muted">Times in your timezone ({{ viewerZone }})</span>
         </template>
       </UDashboardToolbar>
     </template>
 
     <template #body>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <StatusTabs
+          v-model="filters.status"
+          :counts="counts"
+        />
+        <UCheckbox
+          v-if="rows.length"
+          :model-value="selection.someSelected ? 'indeterminate' : selection.allSelected"
+          :label="selection.allSelected ? 'Unselect all' : 'Select all'"
+          aria-label="Select all"
+          @update:model-value="value => selection.toggleAll(!!value)"
+        />
+      </div>
+
       <ApiErrorAlert
         v-if="error"
         :error="error"
@@ -164,94 +156,36 @@ usePageShortcuts({ n: () => openForm() })
         @retry="refresh()"
       />
 
-      <UTable
+      <ListSkeleton
+        v-else-if="loading"
+        label="Loading schedules…"
+      />
+
+      <ListEmptyState
+        v-else-if="!rows.length"
+        noun="schedules"
+        :filtered="isFiltered"
+        create-label="New schedule"
+        @create="openForm()"
+        @clear="clearFilters()"
+      />
+
+      <div
         v-else
-        v-model:row-selection="selection.rowSelection"
-        :get-row-id="selection.getRowId"
-        :data="rows"
-        :columns="columns"
-        :loading="loading"
-        :meta="{ class: { tr: row => (isBusy(row.original.id!) ? 'opacity-50 pointer-events-none' : '') } }"
+        class="space-y-3"
       >
-        <template #loading>
-          <span class="text-muted">Loading schedules…</span>
-        </template>
-        <template #empty>
-          <ListEmptyState
-            noun="schedules"
-            :filtered="isFiltered"
-            create-label="New schedule"
-            @create="openForm()"
-            @clear="clearFilters()"
-          />
-        </template>
-
-        <template #select-header="{ table }">
-          <UCheckbox
-            :model-value="table.getIsSomePageRowsSelected() ? 'indeterminate' : table.getIsAllPageRowsSelected()"
-            aria-label="Select all"
-            @update:model-value="value => table.toggleAllPageRowsSelected(!!value)"
-          />
-        </template>
-        <template #select-cell="{ row }">
-          <UCheckbox
-            :model-value="row.getIsSelected()"
-            aria-label="Select row"
-            @update:model-value="value => row.toggleSelected(!!value)"
-          />
-        </template>
-
-        <template #name-cell="{ row }">
-          <p class="font-medium text-highlighted">
-            {{ row.original.name }}
-          </p>
-          <p
-            v-if="row.original.description"
-            class="max-w-xs truncate text-muted"
-          >
-            {{ row.original.description }}
-          </p>
-        </template>
-
-        <template #days-cell="{ row }">
-          {{ formatDays(local.get(row.original.id)?.days) }}
-        </template>
-
-        <template #time-cell="{ row }">
-          <span class="whitespace-nowrap tabular-nums">
-            {{ formatTimeRange(local.get(row.original.id)?.startTime, local.get(row.original.id)?.endTime) }}
-          </span>
-          <span
-            v-if="local.get(row.original.id)?.zone"
-            class="ml-1 text-xs text-muted"
-          >{{ local.get(row.original.id)?.zone }}</span>
-        </template>
-
-        <template #status-cell="{ row }">
-          <StatusBadge :status="row.original.status" />
-        </template>
-
-        <template #actions-cell="{ row }">
-          <UIcon
-            v-if="isBusy(row.original.id!)"
-            name="i-lucide-loader-circle"
-            class="size-5 animate-spin text-muted"
-            aria-label="Working…"
-          />
-          <UDropdownMenu
-            v-else
-            :items="rowActions(row.original)"
-            :content="{ align: 'end' }"
-          >
-            <UButton
-              icon="i-lucide-ellipsis-vertical"
-              color="neutral"
-              variant="ghost"
-              aria-label="Actions"
-            />
-          </UDropdownMenu>
-        </template>
-      </UTable>
+        <ScheduleCard
+          v-for="schedule in rows"
+          :key="schedule.id"
+          :schedule="schedule"
+          :local="local.get(schedule.id)!"
+          :actions="rowActions(schedule)"
+          :selected="selection.isSelected(schedule)"
+          :busy="isBusy(schedule.id!)"
+          @open="openForm(schedule)"
+          @select="value => selection.toggle(schedule, value)"
+        />
+      </div>
 
       <div
         v-if="(data?.totalPages ?? 0) > 1"
@@ -263,6 +197,20 @@ usePageShortcuts({ n: () => openForm() })
           :items-per-page="pageSize"
         />
       </div>
+
+      <BulkActionsBar
+        :count="selection.count"
+        @clear="selection.clear()"
+      >
+        <UButton
+          label="Delete"
+          icon="i-lucide-trash-2"
+          color="error"
+          variant="subtle"
+          :disabled="!canDeleteSelected"
+          @click="removeSelected"
+        />
+      </BulkActionsBar>
     </template>
   </UDashboardPanel>
 </template>

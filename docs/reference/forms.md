@@ -60,8 +60,9 @@ Every case below is handled. **Keep this table and the tests in sync when changi
 | 16 | Successful save then redirect (page forms) | No dialog | Call `markClean()` before `navigateTo` | Not tested (no page form yet) |
 | 17 | Filter/search change on a list (URL `replace`) | No dialog unless a form is unsaved (none can be: modals block the list) | Middleware runs but finds nothing dirty | e2e (list-page) |
 | 18 | Same form in two browser tabs | Not handled (no cross-tab sync) | Out of scope | |
-| 19 | Reordering rows (drag and drop or ↑/↓ on a handle, e.g. menu-item variants) | Unsaved, like any edit; moving back to the original order makes it clean again | Order matters in `isSameFormValue`; row keys come from ids, so a freshly opened form compares equal | e2e (`products.test.ts`) |
+| 19 | Reordering rows (drag and drop or ↑/↓ on a handle: menu-item variants, the categories tree) | Unsaved, like any edit; moving back to the original order makes it clean again | Order matters in `isSameFormValue`; row keys come from ids, so a freshly opened form compares equal | e2e (`products.test.ts`) |
 | 20 | Removing the last row of a list that needs one (variant options) | The "Add at least one option" message appears on the next save, not at once: validation runs per edited field | UForm `validate-on` input/change | e2e |
+| 21 | An unsaved list order on a page (the categories tree) and a filter change | Filters are **locked** until the order is saved or discarded: a filter change is a route change the guard could only cancel after the filters had changed | `:disabled` on the filter inputs while dirty | e2e (`categories-sort.test.ts`) |
 
 Implementation traps (each one broke something once, see [D19](../decisions.md)):
 - `isSameFormValue` must read **through** reactive proxies. `toRaw` makes the `computed` stop tracking, so `isDirty` never changes. A unit test guards this.

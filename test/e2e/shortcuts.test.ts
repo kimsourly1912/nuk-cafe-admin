@@ -1,7 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import { mockApi, setupE2e } from './support/mock-api'
+import { categoryItem, mockApi, setupE2e } from './support/mock-api'
 
 // composables/useShortcuts.ts. Cases: docs/reference/app-behavior.md → "Keyboard shortcuts".
 await setupE2e()
@@ -10,7 +10,7 @@ async function openCategories() {
   const page = await createPage()
   const api = await mockApi(page)
   await page.goto(url('/categories'), { waitUntil: 'hydration' })
-  await page.getByRole('cell', { name: 'Tea' }).waitFor()
+  await categoryItem(page, 'Tea').waitFor()
   return { page, api }
 }
 
@@ -34,7 +34,7 @@ describe('keyboard shortcuts', () => {
 
   it('n does nothing behind an open dialog (an edit form stays an edit form)', async () => {
     const { page } = await openCategories()
-    await page.getByRole('button', { name: 'Actions' }).first().click()
+    await page.getByRole('button', { name: 'Actions for Tea' }).click()
     await page.getByRole('menuitem', { name: 'Edit' }).click()
     const edit = page.getByRole('dialog', { name: 'Edit category' })
     await edit.waitFor()

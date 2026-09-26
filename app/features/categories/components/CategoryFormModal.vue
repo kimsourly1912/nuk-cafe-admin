@@ -19,6 +19,8 @@ const props = defineProps<{
   category?: CategoryResponse
   /** Restores unsaved input (used by "Reopen" after a failed background save). */
   draft?: CategoryForm
+  /** New sub-category of this main category ("Add sub-category" in the tree). */
+  parentId?: number
 }>()
 
 // `update:open` is declared so closing (X, Esc, outside click) goes through `unsaved` instead of
@@ -26,14 +28,16 @@ const props = defineProps<{
 const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: boolean] }>()
 
 const isEdit = computed(() => props.category?.id !== undefined)
-const state = reactive<CategoryForm>({ ...(props.draft ?? toCategoryForm(props.category)) })
+/** The form's starting values; a preset parent is part of them, so it doesn't count as a change. */
+const start = (): CategoryForm => ({ ...toCategoryForm(props.category), ...(props.parentId === undefined ? {} : { mainCategoryId: props.parentId }) })
+const state = reactive<CategoryForm>({ ...(props.draft ?? start()) })
 
 const { create, update } = useCategoryMutations()
 const saving = ref(false)
 
 // Compared with the form's original values (not the draft), so a reopened draft counts as unsaved.
 const unsaved = useModalUnsavedChanges(state, {
-  initial: toCategoryForm(props.category),
+  initial: start(),
   paused: saving,
   close: () => emit('close', false),
 })
@@ -51,7 +55,7 @@ function reopenActions(draft: CategoryForm) {
   if (!closed) return []
   return [{
     label: 'Reopen',
-    onClick: () => overlay.create(CategoryFormModal, { destroyOnClose: true }).open({ category: props.category, draft }),
+    onClick: () => overlay.create(CategoryFormModal, { destroyOnClose: true }).open({ category: props.category, parentId: props.parentId, draft }),
   }]
 }
 
@@ -74,7 +78,7 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
 
 <template>
   <UModal
-    :title="isEdit ? 'Edit category' : 'New category'"
+    :title="isEdit ? 'Edit category' : parentId === undefined ? 'New category' : 'New sub-category'"
     @update:open="unsaved.onOpenChange"
   >
     <template #body>

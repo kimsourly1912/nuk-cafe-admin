@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-26 (Products phase 2: variant editor)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-26 (List UI refresh)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -12,6 +12,10 @@ Every "done" item states how it was checked. Keep using these labels:
 - **unverified**: written but not exercised
 
 ## Current state
+
+**Full stack direction (2026-09-26):** the owner chose one Nuxt backend for the admin, customer, and cashier apps, using `@nuxtjs/better-auth`, NuxtHub, Drizzle, SQLite/D1, and R2, with a new schema and no Spring data migration. The [backend and data model draft](plans/fullstack-backend.md) covers the proposed tables, request flows, phases, and decisions still needed. **Planning only, unverified:** no server code, schema, migration, or Cloudflare deployment has been added. The current Spring API frontend remains in use. Next: settle the phase 0 identity/permission and currency contracts, then validate the stack locally and in staging.
+
+**Greenfield product blueprint (2026-09-26):** [system-blueprint.md](plans/system-blueprint.md) now starts from customer, staff, and manager journeys. Confirmed launch scope: customer website, pickup and dine-in with table QR, USD, one branch, email/password accounts with no guest ordering, pay at counter before preparation, points earned at 1 per USD after completion and exchanged for vouchers, and staff-issued vouchers; native app, delivery, and online payment are outside that scope. Product policy questions are listed in the blueprint. This is still planning only; the current app is untouched by the new design.
 
 The foundation is complete. Categories is the reference feature; Schedules ([plan](plans/schedules.md)) and Products / "Menu items" ([plan](plans/products.md)) are built. Nothing has been tested with a real staff login yet: no credentials were available. Only unauthenticated calls (session check, failed login, error shapes) were checked against the real dev API.
 
@@ -44,6 +48,7 @@ The foundation is complete. Categories is the reference feature; Schedules ([pla
 | CI: GitHub Actions runs lint, typecheck, unit and e2e (D24) | written | **not run yet**: first run on the next push. YAML validated locally |
 | Feature architecture + ESLint boundary rules | done | lint (violations verified to be reported) |
 | CRUD state: `useApiQuery`, `useMutation` (per-item concurrency, shared state, batch, Stop, Retry failed), `useTableSelection`, `BulkActionsBar`, leave-page guard | done | unit (engine), browser-mock (all async scenarios) |
+| **List UI refresh (2026-09-26, [plan](plans/list-ui-refresh.md), D37):** `StatusTabs` + `useStatusCounts`, floating `BulkActionsBar`, `ListSkeleton`, selection helpers for cards/trees | done | e2e on all three pages; light + dark screenshots |
 
 ### Features
 
@@ -52,7 +57,7 @@ Backend resources available (from the spec) and their status. The folder names f
 | Feature | Endpoints (`/staff/...`) | Status |
 |---|---|---|
 | auth | `auth/login`, `session`, `refresh`, `logout` | done |
-| categories (menu) | `categories`, `categories/{id}`, `categories/all`, `categories/sort-order` | **done, reference feature** (list, filters, create/edit, delete, batch delete). Sort order not built |
+| categories (menu) | `categories`, `categories/{id}`, `categories/all`, `categories/sort-order` | **done, reference feature** (**tree** of mains and subs, client search + status tabs, create/edit, **Add sub-category**, delete, batch delete, **drag-to-sort per level**, subs numbered per main: D37 supersedes D36; unit + e2e `categories.test.ts`, not checked against the real API) |
 | schedules (menu) | `schedules`, `schedules/{id}`, `schedules/all`, `schedules/available`, `schedules/days-of-week` | **done** ([plan](plans/schedules.md)): list (search, status, day filter), create, edit (items shown read-only and kept), delete + bulk delete for schedules not in use. **Evidence:** unit (form mapping, days) + browser-mock (e2e `schedules.test.ts`, 13 tests; the lock test fails without `lock`). Response formats checked against the real dev API through the unauthenticated `/public/schedules/**` endpoints. **No authenticated real-API check:** every request encoding (S1–S7) is unverified. `ScheduleSelect` comes with Products |
 | products = "Menu items" | `products`, `products/{id}`, `products/all`, `products/category/{id}`, `products/upload`, `products/sort-order` | **done, phases 1 + 2** ([plan](plans/products.md)): list (name search, category, status), create/edit in a slide-over (image upload + replace, category, USD price, description, schedules, status, **variant editor**: groups/options, required, pick several, option prices, drag-and-drop or keyboard reorder, reply check D35), delete + bulk delete. **Evidence:** unit (mapping, prices, `variantMismatches`) + browser-mock (e2e `products.test.ts`, 15 tests). Response formats checked through the unauthenticated `/public/products/**` endpoints. **No authenticated real-API check** (P2–P6 unverified). **Not built:** sort order, price-range filter, removing an image |
 | rewards (+ reward categories) | `rewards`, `rewards/{id}`, `rewards/{id}/status`, `rewards/upload`, `reward-categories`, … | not started |
@@ -102,13 +107,13 @@ Backend resources available (from the spec) and their status. The folder names f
 | Q15 | `PUT /staff/schedules/{id}`: does `items` replace, merge or append, and what does an omitted `items` mean? | backend team | Edit re-sends the existing ids (safe under replace or merge; S4). Blocks editing items from the schedule form |
 | Q16 | Deleting a schedule that menu items use: rejected, links removed, or products changed? Does `items` reflect products' `scheduleIds`? | backend team | **Deferred:** only schedules not in use can be deleted (S6) |
 | Q18 | Products: how does `PUT /staff/products/{id}` treat `variants`? Are ids matched (update in place), are omitted variants/options deleted, are new ones (no id) created? | backend team | The editor sends the full list (removed rows left out) and **warns if the reply differs** (D35). Verify on first login |
+| Q20 | ~~Sub-category numbering~~ **Decided (user, D37): per main category**, matching the data. Verify on a staff login that the apps show the saved order | backend team | |
 | Q19 | Product images: accepted types and size, how to clear an image, whether replaced or abandoned uploads must be deleted, what `ownerId` on upload is for | backend team | Own limit JPEG/PNG/WebP ≤ 5 MB; no remove button; no cleanup (P4, P5) |
 | Q17 | Schedules: must a schedule have at least one day and both times? Allowed `sortBy`/`sortDir` values? Is `items[].price` a schedule price, and in which unit? | project owner / backend team | Required in the form by choice (S10, S11); no sort UI; price not shown |
 
 ## Known limitations
 
 - No real-API verification of any authenticated flow (see Current state).
-- Category sort order (`/staff/categories/sort-order`) has no UI.
 - Products: whether removed variants are really deleted is unverified (a warning shows if the reply differs, Q18); an image can be replaced but not removed; uploads abandoned by cancelling the form stay on the server (Q19); no sort-order UI.
 - Schedules: the day filter matches stored (UTC) days, not the converted ones shown; timezone offsets are taken at today's date (DST zones shift by the current offset all year) (D33).
 - Schedules: a schedule's menu items can't be edited from the schedule form (read-only; linked from the menu-item form once Products exists), and schedules in use can't be deleted (Q16). If a menu item is linked between opening the edit form and saving, the save re-sends the older item list (same class of problem as Q8).
@@ -131,6 +136,12 @@ Backend resources available (from the spec) and their status. The folder names f
   - `UForm` debounces input validation (~300 ms). After `fill()` on a field showing an error, wait for the error to disappear before clicking anything below it, or the layout shift makes the click miss (`check()` then reports "did not change its state").
   - A modal's header X and a footer button can both be named "Close". Scope to `[data-slot="footer"]`.
   - `UInputTime` / `UInputDate` render segments (`role="spinbutton"`), not an `<input>`: `fill()` and `getByLabel(<field label>)` don't work (the label targets a hidden input). Give the component an `aria-label`, find it with `getByRole('group', { name })`, click the first segment and type digits (`'0830'`); typing replaces an existing value. See `typeTime` in `test/e2e/schedules.test.ts`.
+  - `BulkActionsBar` fades out (100 ms): after an action that clears the selection, poll for "N selected" to disappear instead of counting at once.
+  - The Categories tree and `CategorySelect` both call `GET /staff/categories/all` (the picker with `type=MAIN`): a mock must answer by query, and a "list loads" count must skip `type` requests (see `freshness.test.ts`, `pickers.test.ts`).
+  - Status-tab counts call the list endpoint with `size=1`: exclude those when counting list requests (`isCount` in `list-page.test.ts`).
+  - Row buttons are named after the item ("Actions for Tea", "Select Tea"), so a user-menu button like "alice" needs `{ exact: true }` once an item contains that name.
+  - `page.reload()` has no `waitUntil: 'hydration'`; use `page.goto(page.url(), { waitUntil: 'hydration' })`.
+  - Under load, a full `pnpm test` once hit a wave of 30 s timeouts in unrelated files right after another e2e run; the rerun passed. Rerun before chasing such a failure.
   - `getByLabel` matches **substrings**: `'Name'` also matches "Name of group 1", and "Option 2 of Milk" matched "Extra price of option 2 of Milk". Use `{ exact: true }`, or labels that can't contain each other.
   - SortableJS drag and drop works with Playwright's `locator.dragTo(target)` on the drag handle.
   - `UInputNumber` is `role="spinbutton"` (not a textbox); `fill('4.2')` works and it shows `$4.20` after blur.

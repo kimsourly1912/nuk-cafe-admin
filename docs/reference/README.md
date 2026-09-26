@@ -11,7 +11,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | [Data fetching](./data-fetching.md) | `useApiQuery`, `usePaginatedQuery` (URL sync), `ANY` / `toApiQuery`, `unwrap`, `invalidate` (also other tabs), `invalidateInThisTab`, `invalidateAll` |
 | [Mutations](./mutations.md) | `useMutation` (create/update/delete, single and batch), `usePendingMutationCount` |
 | [Errors](./errors.md) | `ApiError`, `getErrorMessage`, `isSilentError`, error codes, `<ApiErrorAlert>`, `useNotify` |
-| [UI helpers](./ui.md) | `useConfirm`, `useTableSelection`, `<BulkActionsBar>`, `<StatusBadge>`, status constants, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>` |
+| [UI helpers](./ui.md) | `useConfirm`, `useTableSelection`, `<BulkActionsBar>`, `<StatusBadge>`, status constants, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, `useStatusCounts`, `<ListSkeleton>` |
 | [App-wide behavior](./app-behavior.md) | Tab titles, refresh on tab focus/reconnect, offline banner, leave guards, session loss: every case handled |
 | [Forms: unsaved changes](./forms.md) | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard`, `isSameFormValue` |
 | [Auth](./auth.md) | `useAuth`, public pages |
@@ -36,8 +36,10 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<ApiErrorAlert>` | component | [Errors](./errors.md#apierroralert) | Failed-load alert with Retry |
 | `useNotify` | composable | [Errors](./errors.md#usenotify) | Toasts for non-mutation actions |
 | `useConfirm` | composable | [UI helpers](./ui.md#useconfirm) | `await confirm({...})` → boolean |
-| `useTableSelection` | composable | [UI helpers](./ui.md#usetableselection) | `UTable` row checkboxes |
-| `<BulkActionsBar>` | component | [UI helpers](./ui.md#bulkactionsbar) | "5 selected · actions · Clear" |
+| `useTableSelection` | composable | [UI helpers](./ui.md#usetableselection) | Selection for tables, card grids and trees |
+| `<BulkActionsBar>` | component | [UI helpers](./ui.md#bulkactionsbar) | Floating "5 selected · actions · Clear" |
+| `<StatusTabs>`, `useStatusCounts` | component, composable | [UI helpers](./ui.md#statustabs-and-usestatuscounts) | "All 24 · Active 20 · Inactive 4" |
+| `<ListSkeleton>` | component | [UI helpers](./ui.md#listskeleton) | First-load placeholders |
 | `<StatusBadge>`, `STATUS_*` | component, consts | [UI helpers](./ui.md#statusbadge-and-status-constants) | ACTIVE/INACTIVE display and selects |
 | `<SearchInput>` | component | [UI helpers](./ui.md#searchinput) | Search as you type (debounced) |
 | `<ListEmptyState>` | component | [UI helpers](./ui.md#listemptystate) | "No X yet" vs "No X match your filters" |
@@ -108,13 +110,16 @@ async function removeSelected() {
 </script>
 
 <template>
+  <!-- inside UDashboardPanel #body -->
+  <StatusTabs v-model="filters.status" :counts="counts" />
+  <ApiErrorAlert v-if="error" :error="error" title="Could not load rewards" @retry="refresh()" />
+  <ListSkeleton v-else-if="loading" label="Loading rewards…" variant="card" />
+  <ListEmptyState v-else-if="!rows.length" noun="rewards" ... />
+  <!-- cards (RewardCard, like ProductCard) or a UTable, by what the screen is for (list-ui-refresh.md) -->
+  <UPagination v-model:page="page" :total="data?.totalElements ?? 0" :items-per-page="pageSize" />
   <BulkActionsBar :count="selection.count" @clear="selection.clear()">
     <UButton label="Delete" color="error" variant="subtle" @click="removeSelected" />
   </BulkActionsBar>
-  <ApiErrorAlert v-if="error" :error="error" title="Could not load rewards" @retry="refresh()" />
-  <UTable v-else v-model:row-selection="selection.rowSelection" :get-row-id="selection.getRowId"
-          :data="rows" :loading="loading" ... />
-  <UPagination v-model:page="page" :total="data?.totalElements ?? 0" :items-per-page="pageSize" />
 </template>
 ```
 

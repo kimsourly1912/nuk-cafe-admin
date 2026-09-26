@@ -1,7 +1,5 @@
-import type { CategoryRecordCreation, CategoryRecordUpdate, CategoryResponse, GetCategoriesPageData } from '~/generated/api'
-import { createCategory1, deleteCategory1, getCategoriesPage, updateCategory1 } from '~/generated/api'
-
-export type CategoryListQuery = NonNullable<GetCategoriesPageData['query']>
+import type { CategoryRecordCreation, CategoryRecordUpdate, CategoryResponse, CategorySortOrderUpdateRequest } from '~/generated/api'
+import { createCategory1, deleteCategory1, updateCategory1, updateSortOrders } from '~/generated/api'
 
 const NOUN: [string, string] = ['category', 'categories']
 
@@ -13,13 +11,6 @@ const lockOf = (id: number | undefined) => `category:${id}`
 
 /** Features whose cached data shows categories (products display their category). */
 const AFFECTED = ['categories', 'products']
-
-/** Paginated category list. Refetches whenever `query` changes. */
-export function useCategoryList(query: MaybeRefOrGetter<CategoryListQuery>) {
-  return useApiQuery('categories:list', () => unwrap(getCategoriesPage({ query: toValue(query) })), {
-    watch: [() => ({ ...toValue(query) })],
-  })
-}
 
 /**
  * Category mutations. State is shared app-wide by mutation id, so e.g. a row knows it's
@@ -84,10 +75,23 @@ export function useCategoryMutations() {
     },
   )
 
+  /** Saves the tree order: every changed list, whole (`sortOrderChanges`). One save at a time. */
+  const reorder = useMutation(
+    (body: CategorySortOrderUpdateRequest) => unwrap(updateSortOrders({ body })),
+    {
+      id: 'categories:sort',
+      key: () => 'order',
+      successMessage: 'Category order saved',
+      errorMessage: 'Could not save the category order',
+      invalidate: AFFECTED,
+    },
+  )
+
   return {
     create,
     update,
     remove,
+    reorder,
     /** Any operation in flight for this category: disable its row actions. */
     isBusy: (id: number) => update.isPending(id) || remove.isPending(id),
   }

@@ -52,7 +52,7 @@ interface ConfirmOptions {
 
 ## `useTableSelection`
 
-Row checkboxes for `UTable`, keyed by id so the selection survives list refreshes.
+Row selection for `UTable`, card grids and trees, keyed by id so the selection survives list refreshes.
 
 Source: `app/composables/useTableSelection.ts`
 
@@ -99,9 +99,22 @@ function useTableSelection<T>(
   getRowId: (row: T) => string          // bind with :get-row-id
   selected: T[]                         // selected rows that are currently in `rows`
   count: number
+  allSelected: boolean                   // every row in `rows` (and at least one)
+  someSelected: boolean                  // some but not all: an "indeterminate" select-all
+  isSelected(row: T): boolean
+  toggle(row: T, value?: boolean): void  // flips when `value` is omitted
+  toggleAll(value: boolean): void        // every row in `rows`
   clear(): void
   select(keys: (string | number)[]): void // replace the selection
 }>
+```
+
+Without a table (cards, trees), bind the helpers:
+
+```vue
+<UCheckbox :model-value="selection.someSelected ? 'indeterminate' : selection.allSelected"
+           aria-label="Select all" @update:model-value="v => selection.toggleAll(!!v)" />
+<ProductCard v-for="p in rows" :selected="selection.isSelected(p)" @select="v => selection.toggle(p, v)" ... />
 ```
 
 ### Behavior
@@ -119,20 +132,22 @@ function useTableSelection<T>(
 
 ## `<BulkActionsBar>`
 
-"5 selected · *your actions* · Clear". It renders nothing when `count` is 0.
+A **floating** bar at the bottom of the list (Linear-style): "5 selected · *your actions* · Clear". It renders nothing when `count` is 0, fades in and out (100–150 ms), and Escape inside it clears the selection. It's a `role="toolbar"` named "Bulk actions".
 
 Source: `app/components/BulkActionsBar.vue`
 
+Put it **at the end of the page body** (`#body` of `UDashboardPanel`); it's `sticky` to the bottom of the scrolling panel.
+
 ```vue
-<UDashboardToolbar>
-  <template #right>
-    <BulkActionsBar :count="selection.count" @clear="selection.clear()">
-      <UButton label="Delete" icon="i-lucide-trash-2" color="error" variant="subtle" @click="removeSelected" />
-      <UButton label="Deactivate" color="neutral" variant="subtle" @click="deactivateSelected" />
-    </BulkActionsBar>
-  </template>
-</UDashboardToolbar>
+<template #body>
+  <!-- list… -->
+  <BulkActionsBar :count="selection.count" @clear="selection.clear()">
+    <UButton label="Delete" icon="i-lucide-trash-2" color="error" variant="subtle" @click="removeSelected" />
+  </BulkActionsBar>
+</template>
 ```
+
+> E2E: the bar fades out, so after an action that clears the selection, wait with `expect.poll(() => page.getByText(/\d+ selected/).count()).toBe(0)`.
 
 | Prop / slot / event | Description |
 |---|---|
@@ -292,3 +307,50 @@ useSubmitShortcut(() => form.value?.submit()) // UForm.submit() runs validation 
 ```
 
 `<SearchInput>` registers `/` itself.
+
+---
+
+## `<StatusTabs>` and `useStatusCounts`
+
+Status filter as tabs with counts, "All 24 · Active 20 · Inactive 4" (Shopify-style views). Replaces the status `USelect` in list toolbars; binds to the same filter value (`ANY` = all). The tabs sit in a `role="group"` named "Status" (`UTabs` can't name its `tablist`).
+
+Source: `app/components/StatusTabs.vue`, `app/composables/useStatusCounts.ts`
+
+```vue
+<StatusTabs v-model="filters.status" :counts="counts" />
+```
+
+```ts
+// Paginated lists: two tiny requests (size=1, totalElements), with the other filters applied.
+const counts = useStatusCounts('schedules', () => ({ search: query.value.search }),
+  (query, status) => unwrap(getPage({ query: { ...query, status, size: 1 } })).then(p => p.totalElements ?? 0))
+// Lists loaded whole (Categories): count on the client and pass { ACTIVE, INACTIVE, all }.
+```
+
+| Prop | Description |
+|---|---|
+| `v-model` | `Status \| Any` |
+| `counts` | `{ ACTIVE, INACTIVE, all }`; badges appear once known |
+| `disabled` | e.g. while an unsaved order locks the filters |
+
+`useStatusCounts` keys its query `<feature>:status-counts`, so `invalidate(feature)` refreshes the counts too. "All" is the sum (every record is ACTIVE or INACTIVE).
+
+---
+
+## `<ListSkeleton>`
+
+Placeholder rows or cards while a list loads for the first time, instead of "Loading…" text, so nothing jumps when the data arrives. `role="status"` with the label for screen readers.
+
+Source: `app/components/ListSkeleton.vue`
+
+```vue
+<ListSkeleton v-if="loading" label="Loading menu items…" variant="card" />
+```
+
+| Prop | Default | |
+|---|---|---|
+| `label` | | Read by screen readers ("Loading schedules…") |
+| `variant` | `'row'` | `'row'` or `'card'` |
+| `count` | `5` | How many placeholders |
+
+> Drive it with `useApiQuery`'s `loading`, and **don't give that query an empty-list `default`**: `loading` means "pending with no data yet", and `[]` counts as data, so the empty state would flash instead (a bug found by e2e, D37).

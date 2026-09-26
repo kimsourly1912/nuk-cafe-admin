@@ -1,5 +1,5 @@
 import type { GetPage1Data, ProductRecordCreation, ProductRecordUpdate, ProductResponse } from '~/generated/api'
-import { create2, delete2, getPage1, update2, upload } from '~/generated/api'
+import { create2, delete2, getAll2, getPage1, update2, upload } from '~/generated/api'
 
 export type ProductListQuery = NonNullable<GetPage1Data['query']>
 
@@ -17,11 +17,33 @@ export const IMAGE_MAX_BYTES = 5 * 1024 * 1024
 /** Uploads get longer than the API's 30 s default: 5 MB on a slow connection. */
 const UPLOAD_TIMEOUT_MS = 120_000
 
-/** Paginated product list. Refetches whenever `query` changes. */
-export function useProductList(query: MaybeRefOrGetter<ProductListQuery>) {
-  return useApiQuery('products:list', () => unwrap(getPage1({ query: toValue(query) })), {
-    watch: [() => ({ ...toValue(query) })],
+/**
+ * Paginated product list. Refetches whenever `query` changes. `enabled: false` (the grouped grid,
+ * which loads the whole menu instead) sends no request.
+ */
+export function useProductList(query: MaybeRefOrGetter<ProductListQuery>, enabled: MaybeRefOrGetter<boolean> = true) {
+  return useApiQuery('products:list', () => (toValue(enabled) ? unwrap(getPage1({ query: toValue(query) })) : Promise.resolve(null)), {
+    watch: [() => ({ ...toValue(query), enabled: toValue(enabled) })],
   })
+}
+
+/**
+ * The whole filtered menu (unpaginated), for the grid grouped by category. The key includes
+ * "off" while unused, so no request is made then.
+ */
+export function useProductMenu(query: MaybeRefOrGetter<Omit<ProductListQuery, 'page' | 'size'>>, enabled: MaybeRefOrGetter<boolean>) {
+  return useApiQuery(
+    () => (toValue(enabled) ? 'products:menu' : 'products:menu:off'),
+    () => (toValue(enabled) ? unwrap(getAll2({ query: toValue(query) })) : Promise.resolve([])),
+    // No empty-list default: it would count as data and skip the loading placeholders.
+    { watch: [() => ({ ...toValue(query) })] },
+  )
+}
+
+/** "All 24 · Active 20 · Inactive 4" for the status tabs, with the other filters applied. */
+export function useProductStatusCounts(filters: () => Pick<ProductListQuery, 'productName' | 'categoryId'>) {
+  return useStatusCounts('products', filters, (query, status) =>
+    unwrap(getPage1({ query: { ...query, status, size: 1 } })).then(page => page.totalElements ?? 0))
 }
 
 /**

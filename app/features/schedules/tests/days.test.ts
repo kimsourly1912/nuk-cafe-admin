@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { formatDays, formatTimeRange, sortDays } from '../utils/days'
+import { formatDays, formatTimeRange, sortDays, timeBarSegments } from '../utils/days'
+
+describe('timeBarSegments', () => {
+  it('places a daytime range on the 24-hour bar', () => {
+    expect(timeBarSegments('06:00', '12:00')).toEqual([{ left: 25, width: 25 }])
+  })
+
+  it('splits a range that runs past midnight', () => {
+    expect(timeBarSegments('18:00', '06:00')).toEqual([{ left: 75, width: 25 }, { left: 0, width: 25 }])
+    expect(timeBarSegments('18:00', '00:00')).toEqual([{ left: 75, width: 25 }])
+  })
+
+  it('draws nothing without both times', () => {
+    expect(timeBarSegments('08:00', '')).toEqual([])
+  })
+})
 
 describe('schedule days', () => {
   it('sorts days into week order and drops duplicates', () => {

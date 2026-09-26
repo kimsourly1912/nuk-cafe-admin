@@ -21,7 +21,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 Admin portal for NUK Cafe staff to manage the menu (categories, menu items, schedules), rewards, vouchers, banners, customers, staff and orders. **Frontend only.** It consumes an external Spring Boot API. Stack: Nuxt 4 (SPA mode), Nuxt UI v4 + Tailwind v4, Valibot, SDK generated from OpenAPI by Hey API. English-only UI.
 
-The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature**: copy its patterns for every new feature (see "Adding a feature").
+The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Schedules (card list) or Menu items (card grid + table); Categories is a tree (D37).
 
 ## Commands
 
@@ -195,7 +195,9 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 |---|---|---|
 | `useApiQuery(key, handler, opts)` | `composables/` | Every read (see "CRUD state") |
 | `useMutation(fn, opts)` | `composables/`, engine in `utils/mutation.ts` | Every create/update/delete, single or batch |
-| `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Row checkboxes and bulk actions |
+| `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Selection for tables, cards and trees (`isSelected`, `toggle`, `toggleAll`); the floating bulk bar |
+| `StatusTabs`, `useStatusCounts` | `components/`, `composables/` | Status filter as tabs with counts |
+| `ListSkeleton` | `components/` | First-load placeholders (rows or cards) |
 | `previewList`, `pluralize` | `utils/text.ts` | "Coffee, Tea and 3 more", "3 categories" |
 | `usePaginatedQuery(filters)` | `composables/` | List state **kept in the URL**: 1-based `page` for `UPagination`, `query` with the 0-based API page, resets page on filter change, strips `ANY`/'', `isFiltered`, `clearFilters` |
 | `ANY`, `toApiQuery` | `utils/query.ts` | "All" option in filter selects (`USelect` can't hold `undefined`) |
@@ -223,7 +225,7 @@ First plan it with the template in **[docs/feature-standard.md](docs/feature-sta
 3. **`composables/use<Feature>Options.ts` + `components/<Feature>Select.vue` (public):** add these if other features need to pick this resource. Key the options per filter. The select hides the `USelect` sentinel for "none" (see `CategorySelect`).
 4. **`schemas/<feature>-form.ts`:** the Valibot schema with user-facing messages (generated request schemas carry no rules). `to<Feature>Form(existing?)` builds the initial form state. `to<Feature>Request(form, existing?)` builds the request body and **copies over fields the form doesn't edit** (`nameI18n`, `sortOrder`, ...) so the PUT doesn't wipe them. Unit-test it in `tests/`.
 5. **`components/<Feature>FormModal.vue`:** opened with `useOverlay().create(...)`. On submit: `const result = await create.execute(body, { errorActions })`, then `if (result.ok) emit('close', true)`. It supports closing mid-save with "Reopen" (`draft` prop), saves on Ctrl/⌘+Enter (`useSubmitShortcut(() => form.value?.submit())`, hint via `UTooltip :kbds="['meta', 'enter']"` on the submit button), guards unsaved input with `useModalUnsavedChanges` (declare the `update:open` emit, bind `@update:open` on `UModal`, Cancel calls `requestClose()`), and pulls in other features' pickers from their `index.ts`.
-6. **`components/<Feature>ListPage.vue`:** `usePaginatedQuery` (filters and page live in the URL) + list composable. Toolbar: `<SearchInput v-model="filters.search">` (searches as you type, `/` focuses it). `usePageShortcuts({ n: () => openForm() })` with `UTooltip :kbds="['n']"` on the New button and filter `USelect`s. `UTable` fills `#loading` and `#empty` (`<ListEmptyState :filtered="isFiltered" @create @clear="clearFilters()">`). Rows exclude `remove.isRemoved(id)`. `UTable` with a select column (`useTableSelection`), `#<column>-cell` slots, busy rows (`isBusy`: dimmed, spinner instead of actions), `<ApiErrorAlert>` on load error, row actions through `UDropdownMenu` (delete = `remove.execute(row)`), and `<BulkActionsBar>` calling `remove.executeMany(selection.selected)`.
+6. **`components/<Feature>ListPage.vue`:** pick the layout by the job (cards, card list, table or tree: [list-ui-refresh.md](docs/plans/list-ui-refresh.md), D37); copy `ScheduleListPage` or `ProductListPage`. `usePaginatedQuery` (filters and page live in the URL) + list composable. Toolbar: `<SearchInput v-model="filters.search">` (searches as you type, `/` focuses it), other filter `USelect`s. `usePageShortcuts({ n: () => openForm() })` with `UTooltip :kbds="['n']"` on the New button. Body: `<StatusTabs>` (+ `useStatusCounts`), `<ApiErrorAlert>` on load error, `<ListSkeleton>` while `loading`, `<ListEmptyState :filtered="isFiltered" @create @clear="clearFilters()">`, then the rows (exclude `remove.isRemoved(id)`), `UPagination`, and a floating `<BulkActionsBar>` calling `remove.executeMany(selection.selected)`. Rows/cards: click opens the item, a checkbox (`useTableSelection`), busy state (`isBusy`: dimmed, spinner instead of actions), an always-visible ⋮ `UDropdownMenu` (delete = `remove.execute(row)`).
 7. **`navigation.ts` + `index.ts`:** export the sidebar entry and the public building blocks, then add the entry to a group in `app/utils/navigation.ts`.
 8. **Route file** `app/pages/<feature>/index.vue`: `definePageMeta({ title: '<Feature>' })`, then import and render `<Feature>ListPage.vue`, nothing else.
 9. **E2E test** `test/e2e/<feature>.test.ts`: at least list + create + delete, with `mockApi` (see "Tests").

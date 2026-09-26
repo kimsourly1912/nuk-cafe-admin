@@ -11,7 +11,7 @@ import type { UnwrapRef } from 'vue'
  *
  * @example
  * const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({ search: '', status: ANY as Status | Any })
- * const { data } = useCategoryList(query)
+ * const { data } = useScheduleList(query)
  */
 export function usePaginatedQuery<T extends Record<string, unknown>>(
   initialFilters: T,

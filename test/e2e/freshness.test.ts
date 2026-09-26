@@ -1,14 +1,14 @@
 import type { BrowserContext, Page } from 'playwright-core'
 import { createPage, getBrowser, url, waitForHydration } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import type { MockApi } from './support/mock-api'
-import { mockApi, setupE2e } from './support/mock-api'
+import { categoryItem, COFFEE, mockApi, setupE2e, TEA } from './support/mock-api'
 
 // plugins/data-freshness.client.ts and components/OfflineBanner.vue.
 // Cases: docs/reference/app-behavior.md → "Data freshness".
 await setupE2e()
 
-const listLoads = (api: MockApi) => api.calls.filter(c => c === 'GET /staff/categories').length
+/** Loads of the Categories tree (`/all` without `type`; the form's picker asks with `type`). */
+const listLoads = (tab: { loads: () => number }) => tab.loads()
 
 /** Tabs opened in the same context share a BroadcastChannel, like tabs of one browser window. */
 const newContext = async () => (await getBrowser()).newContext()
@@ -16,12 +16,18 @@ const newContext = async () => (await getBrowser()).newContext()
 async function openTab(path = '/categories', context?: BrowserContext) {
   const page = context ? await context.newPage() : await createPage()
   await page.clock.install()
-  const api = await mockApi(page)
+  let treeLoads = 0
+  const api = await mockApi(page, {
+    'GET /staff/categories/all': ({ url }) => {
+      if (!url.searchParams.get('type')) treeLoads++
+      return [TEA, COFFEE]
+    },
+  })
   // Raw context pages lack test-utils' `waitUntil: 'hydration'` wrapper.
   await page.goto(url(path))
   await waitForHydration(page, url(path), 'hydration')
-  if (path === '/categories') await page.getByRole('cell', { name: 'Tea' }).waitFor()
-  return { page, api }
+  if (path === '/categories') await categoryItem(page, 'Tea').waitFor()
+  return { page, api, loads: () => treeLoads }
 }
 
 /** Headless Chrome never hides the tab; fake the Page Visibility API. */
@@ -44,10 +50,10 @@ describe('data freshness: other tabs of this browser', () => {
     const context = await newContext()
     const tab1 = await openTab('/categories', context)
     const tab2 = await openTab('/categories', context)
-    const before = listLoads(tab2.api)
+    const before = listLoads(tab2)
 
     await createCategory(tab1.page, 'Latte')
-    await expect.poll(() => listLoads(tab2.api)).toBe(before + 1)
+    await expect.poll(() => listLoads(tab2)).toBe(before + 1)
   })
 
   it('a tab showing another page does nothing (it loads fresh when opened)', async () => {
@@ -56,53 +62,56 @@ describe('data freshness: other tabs of this browser', () => {
     const tab2 = await openTab('/', context)
     await createCategory(tab1.page, 'Latte')
     await tab1.page.waitForTimeout(500)
-    expect(listLoads(tab2.api)).toBe(0)
+    expect(listLoads(tab2)).toBe(0)
   })
 
   it('the tab that saved refreshes once, and does not echo messages back', async () => {
     const context = await newContext()
     const tab1 = await openTab('/categories', context)
     const tab2 = await openTab('/categories', context)
-    const before1 = listLoads(tab1.api)
-    const before2 = listLoads(tab2.api)
+    const before1 = listLoads(tab1)
+    const before2 = listLoads(tab2)
     await createCategory(tab1.page, 'Latte')
-    await expect.poll(() => listLoads(tab2.api)).toBe(before2 + 1)
+    await expect.poll(() => listLoads(tab2)).toBe(before2 + 1)
     await tab1.page.waitForTimeout(500)
-    expect(listLoads(tab1.api)).toBe(before1 + 1)
-    expect(listLoads(tab2.api)).toBe(before2 + 1)
+    expect(listLoads(tab1)).toBe(before1 + 1)
+    expect(listLoads(tab2)).toBe(before2 + 1)
   })
 })
 
 describe('data freshness: returning to the tab', () => {
   it('refetches data older than 5s', async () => {
-    const { page, api } = await openTab()
-    const before = listLoads(api)
+    const tab = await openTab()
+    const { page } = tab
+    const before = listLoads(tab)
     await setVisibility(page, 'hidden')
     await page.clock.fastForward(6_000)
     await setVisibility(page, 'visible')
-    await expect.poll(() => listLoads(api)).toBe(before + 1)
+    await expect.poll(() => listLoads(tab)).toBe(before + 1)
   })
 
   it('does not refetch data loaded less than 5s ago', async () => {
-    const { page, api } = await openTab()
-    const before = listLoads(api)
+    const tab = await openTab()
+    const { page } = tab
+    const before = listLoads(tab)
     await setVisibility(page, 'hidden')
     await page.clock.fastForward(2_000)
     await setVisibility(page, 'visible')
     await page.waitForTimeout(300)
-    expect(listLoads(api)).toBe(before)
+    expect(listLoads(tab)).toBe(before)
   })
 })
 
 describe('data freshness: connection', () => {
   it('shows an offline banner, and refetches when the connection is back', async () => {
-    const { page, api } = await openTab()
-    const before = listLoads(api)
+    const tab = await openTab()
+    const { page } = tab
+    const before = listLoads(tab)
     await page.context().setOffline(true)
     await page.getByText('You\'re offline').waitFor()
     await page.context().setOffline(false)
     await page.getByText('You\'re offline').waitFor({ state: 'hidden' })
-    await expect.poll(() => listLoads(api)).toBe(before + 1)
+    await expect.poll(() => listLoads(tab)).toBe(before + 1)
   })
 })
 
@@ -111,9 +120,9 @@ describe('data freshness: overlapping refreshes', () => {
     const { page, api } = await openTab()
     let resolveFirst!: (data: unknown) => void
     let refetches = 0
-    const listOf = (name: string) => ({ content: [{ id: 1, categoryName: name, status: 'ACTIVE', type: 'MAIN' }], totalElements: 1, totalPages: 1, currentPage: 0, pageSize: 20, hasNext: false, hasPrevious: false })
+    const listOf = (name: string) => [{ id: 1, categoryName: name, status: 'ACTIVE', type: 'MAIN' }]
     api.set({
-      'GET /staff/categories': () => {
+      'GET /staff/categories/all': () => {
         refetches++
         // First refresh: slow, and by the time it answers its data is outdated.
         if (refetches === 1) {
@@ -132,11 +141,11 @@ describe('data freshness: overlapping refreshes', () => {
       await setVisibility(page, 'visible')
       await expect.poll(() => refetches).toBe(i + 1)
     }
-    await page.getByRole('cell', { name: 'Fresh matcha' }).waitFor()
+    await categoryItem(page, 'Fresh matcha').waitFor()
 
     resolveFirst(listOf('Outdated tea'))
     await page.waitForTimeout(500)
     expect(await page.getByText('Outdated tea').count()).toBe(0)
-    await page.getByRole('cell', { name: 'Fresh matcha' }).waitFor()
+    await categoryItem(page, 'Fresh matcha').waitFor()
   })
 })

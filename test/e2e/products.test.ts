@@ -61,10 +61,11 @@ async function open(handlers: Record<string, MockHandler> = backend(), firstCell
   return { page, api }
 }
 
-const rowOf = (page: Page, name: string) => page.getByRole('row').filter({ has: page.getByText(name, { exact: true }) })
+/** A menu item's card in the grid (the default view). */
+const cardOf = (page: Page, name: string) => page.getByRole('article', { name, exact: true })
 
 async function openEdit(page: Page, name: string) {
-  await rowOf(page, name).getByRole('button', { name: 'Actions' }).click()
+  await page.getByRole('button', { name: `Actions for ${name}` }).click()
   await page.getByRole('menuitem', { name: 'Edit' }).click()
   const form = page.getByRole('dialog', { name: 'Edit menu item' })
   await form.waitFor()
@@ -95,15 +96,71 @@ async function choose(form: Locator, field: string, option: string) {
 }
 
 describe('menu items list', () => {
-  it('shows image, name, category, price in dollars and status', async () => {
+  it('shows cards with image, name, category, option groups, price in dollars and status', async () => {
     const { page } = await open()
-    const latte = rowOf(page, 'Latte')
-    await latte.getByText('Espresso and milk').waitFor()
-    await latte.getByRole('cell', { name: 'Coffee', exact: true }).waitFor()
+    const latte = cardOf(page, 'Latte')
     await latte.getByText('$3.50').waitFor()
-    await rowOf(page, 'Matcha').getByText('$4.25').waitFor()
-    await rowOf(page, 'Matcha').getByText('Inactive').waitFor()
+    await latte.getByText('Coffee · 1 option group').waitFor()
     expect(await latte.locator('img').getAttribute('src')).toBe('https://img.example/latte.png')
+    await cardOf(page, 'Matcha').getByText('$4.25').waitFor()
+    await cardOf(page, 'Matcha').getByText('Inactive').waitFor()
+  })
+
+  it('opens a menu item by clicking its card, but not from its checkbox', async () => {
+    const { page } = await open()
+    await cardOf(page, 'Matcha').getByRole('checkbox').click()
+    await page.getByText('1 selected').waitFor()
+    expect(await page.getByRole('dialog').count()).toBe(0)
+    await cardOf(page, 'Latte').getByRole('heading', { name: 'Latte' }).click()
+    await page.getByRole('dialog', { name: 'Edit menu item' }).waitFor()
+  })
+
+  it('switches to the list (table), opens a row by clicking it, and remembers the view', async () => {
+    const { page } = await open()
+    await page.getByRole('button', { name: 'List view' }).click()
+    await page.getByRole('cell', { name: 'Coffee', exact: true }).waitFor()
+    await page.getByRole('cell', { name: '$4.25' }).click()
+    await page.getByRole('dialog', { name: 'Edit menu item' }).waitFor()
+    await page.getByRole('button', { name: 'Cancel' }).click()
+
+    await page.goto(page.url(), { waitUntil: 'hydration' })
+    await page.getByRole('cell', { name: 'Coffee', exact: true }).waitFor()
+    expect(await page.getByRole('button', { name: 'List view' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('groups the whole menu by category, in the order customers see it', async () => {
+    const seen: string[] = []
+    const { page } = await open({
+      ...backend(),
+      'GET /staff/categories/all': () => [{ ...TEA, sortOrder: 1 }, { ...COFFEE, sortOrder: 2 }],
+      'GET /staff/products/all': ({ url }) => {
+        seen.push(url.search)
+        return [LATTE, MATCHA]
+      },
+    })
+    await page.getByRole('switch', { name: 'Group by category' }).click()
+    await page.getByRole('region', { name: 'Tea' }).getByRole('article', { name: 'Matcha' }).waitFor()
+    await page.getByRole('region', { name: 'Coffee' }).getByRole('article', { name: 'Latte' }).waitFor()
+    expect(await page.locator('section h2').allInnerTexts()).toEqual(['Tea\n1', 'Coffee\n1'])
+    expect(seen.length).toBeGreaterThan(0)
+  })
+
+  it('filters by status with tabs that show counts', async () => {
+    const seen: URLSearchParams[] = []
+    const list = paginatedHandler([LATTE, MATCHA], 'productName')
+    const { page } = await open({
+      ...backend(),
+      'GET /staff/products': (request) => {
+        if (request.url.searchParams.get('size') !== '1') seen.push(request.url.searchParams)
+        return list(request)
+      },
+    })
+    const tabs = page.getByRole('group', { name: 'Status' })
+    await expect.poll(() => tabs.innerText()).toMatch(/All\s*2\s*Active\s*1\s*Inactive\s*1/)
+    await tabs.getByRole('tab', { name: /Inactive/ }).click()
+    await expect.poll(() => seen.at(-1)?.get('status')).toBe('INACTIVE')
+    await expect.poll(() => page.getByRole('article').count()).toBe(1)
+    expect(new URL(page.url()).searchParams.get('status')).toBe('INACTIVE')
   })
 
   it('searches by productName and filters by categoryId, both in the URL', async () => {
@@ -283,7 +340,7 @@ describe('menu item form', () => {
 describe('menu item delete', () => {
   it('deletes after confirmation', async () => {
     const { page, api } = await open()
-    await rowOf(page, 'Matcha').getByRole('button', { name: 'Actions' }).click()
+    await page.getByRole('button', { name: 'Actions for Matcha' }).click()
     await page.getByRole('menuitem', { name: 'Delete' }).click()
     await page.getByText('Delete "Matcha"?').waitFor()
     await page.getByRole('button', { name: 'Delete' }).last().click()

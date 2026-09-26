@@ -114,7 +114,8 @@ export function deferred() {
 }
 
 /**
- * A list endpoint that searches and paginates like the backend (0-based `page`, `size`).
+ * A list endpoint that searches, filters by `status` and paginates like the backend (0-based
+ * `page`, `size`).
  * Pass a function to let the rows change during the test (e.g. after deletes).
  */
 export function paginatedHandler<T extends Record<string, unknown>>(rows: T[] | (() => T[]), searchField: keyof T = 'categoryName'): MockHandler {
@@ -123,7 +124,11 @@ export function paginatedHandler<T extends Record<string, unknown>>(rows: T[] | 
     const search = url.searchParams.get('search')?.toLowerCase()
     const page = Number(url.searchParams.get('page') ?? 0)
     const size = Number(url.searchParams.get('size') ?? 20)
-    const matching = search ? all.filter(r => String(r[searchField]).toLowerCase().includes(search)) : all
+    const status = url.searchParams.get('status')
+    const matching = all
+      .filter(r => !search || String(r[searchField]).toLowerCase().includes(search))
+      // Like the backend's `status` filter (also what status-tab counts ask for).
+      .filter(r => !status || r.status === status)
     const totalPages = Math.max(1, Math.ceil(matching.length / size))
     return {
       content: matching.slice(page * size, (page + 1) * size),
@@ -207,6 +212,14 @@ export async function gotoViaSidebar(page: Page, links: (string | RegExp)[]) {
  */
 export function toast(page: Page, title: string | RegExp) {
   return page.locator('[data-slot="title"]', { hasText: title })
+}
+
+/**
+ * A category in the Categories tree (`/categories`), by name. The tree loads
+ * `GET /staff/categories/all`; the default handlers answer it with TEA and COFFEE.
+ */
+export function categoryItem(page: Page, name: string) {
+  return page.getByRole('listitem', { name, exact: true })
 }
 
 /** Tabs of one browser window: pages in one context share `BroadcastChannel`. */

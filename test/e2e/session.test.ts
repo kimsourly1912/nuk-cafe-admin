@@ -1,7 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import { beforeUnloadPrevented, deferred, failures, gotoHydrated, mockApi, openTabs, setupE2e, TEA, toast } from './support/mock-api'
+import { beforeUnloadPrevented, categoryItem, deferred, failures, gotoHydrated, mockApi, openTabs, setupE2e, TEA, toast } from './support/mock-api'
 
 // The session-transition contract (plugins/session-boundary.client.ts, useAuth generation,
 // createApiFetch). Cases: docs/reference/app-behavior.md → "Session loss".
@@ -11,7 +11,9 @@ const ALICE = { staffId: 1, username: 'alice', groups: ['ADMIN'] }
 const BOB = { staffId: 2, username: 'bob', groups: ['ADMIN'] }
 const ALICE_ONLY = { id: 11, categoryName: 'Alice-only draft', status: 'ACTIVE', type: 'MAIN' }
 const BOB_ONLY = { id: 12, categoryName: 'Bob-only menu', status: 'ACTIVE', type: 'MAIN' }
-const listOf = (...rows: object[]) => ({ content: rows, totalElements: rows.length, totalPages: 1, currentPage: 0, pageSize: 20, hasNext: false, hasPrevious: false })
+/** The Categories tree loads the whole list (`GET /staff/categories/all`). */
+const LIST = 'GET /staff/categories/all'
+const listOf = (...rows: object[]) => rows
 
 const form = (page: Page) => page.getByRole('dialog', { name: /New category|Edit category/ })
 const discardDialog = (page: Page) => page.getByText('Discard unsaved changes?')
@@ -23,7 +25,7 @@ async function openNewForm(page: Page, name: string) {
 }
 
 async function logout(page: Page, username: string) {
-  await page.getByRole('button', { name: username }).click()
+  await page.getByRole('button', { name: username, exact: true }).click()
   await page.getByRole('menuitem', { name: 'Log out' }).click()
 }
 
@@ -45,7 +47,7 @@ describe('session expiry', () => {
       },
     })
     await page.goto(url('/categories'), { waitUntil: 'hydration' })
-    await page.getByRole('cell', { name: 'Tea' }).waitFor()
+    await categoryItem(page, 'Tea').waitFor()
     await openNewForm(page, 'Latte')
     await form(page).getByRole('button', { name: 'Create' }).click()
 
@@ -61,7 +63,7 @@ describe('session expiry', () => {
   it('a request that is still unauthorized after a successful refresh expires the session once', async () => {
     const page = await createPage()
     const api = await mockApi(page, {
-      'GET /staff/categories': () => {
+      [LIST]: () => {
         throw failures.unauthorized()
       },
       'POST /staff/auth/refresh': () => null,
@@ -98,21 +100,21 @@ describe('switching users in the same browser', () => {
     const aliceSave = deferred()
     const api = await mockApi(page, {
       'GET /staff/auth/session': () => ALICE,
-      'GET /staff/categories': () => listOf(TEA, ALICE_ONLY),
+      [LIST]: () => listOf(TEA, ALICE_ONLY),
       'PUT /staff/categories/{id}': aliceSave.handler,
       'DELETE /staff/categories/{id}': () => {
         throw failures.validation('Alice cannot delete this')
       },
     })
     await page.goto(url('/categories'), { waitUntil: 'hydration' })
-    await page.getByRole('cell', { name: 'Alice-only draft' }).waitFor()
+    await categoryItem(page, 'Alice-only draft').waitFor()
 
     // Alice leaves a batch result with "Retry failed" (it stays 10 s) and a save in flight.
-    await page.getByRole('checkbox', { name: 'Select row' }).nth(1).click()
-    await page.getByRole('button', { name: 'Delete' }).first().click()
+    await page.getByRole('checkbox', { name: 'Select Alice-only draft' }).click()
+    await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Delete' }).click()
     await page.getByRole('button', { name: 'Delete' }).last().click()
     await toast(page, '0 categories deleted, 1 failed').waitFor()
-    await page.getByRole('button', { name: 'Actions' }).first().click()
+    await page.getByRole('button', { name: 'Actions for Tea' }).click()
     await page.getByRole('menuitem', { name: 'Edit' }).click()
     await form(page).locator('input').first().fill('Tea by Alice')
     await form(page).getByRole('button', { name: 'Save' }).click()
@@ -131,19 +133,19 @@ describe('switching users in the same browser', () => {
     api.set({
       'POST /staff/auth/login': () => BOB,
       'GET /staff/auth/session': () => BOB,
-      'GET /staff/categories': () => listOf(BOB_ONLY),
+      [LIST]: () => listOf(BOB_ONLY),
     })
     await login(page, 'bob')
     await expect.poll(() => path(page)).toBe('/')
     await page.getByRole('link', { name: /Categories/ }).first().click()
-    await page.getByRole('cell', { name: 'Bob-only menu' }).waitFor()
+    await categoryItem(page, 'Bob-only menu').waitFor()
 
     // Alice's save finally answers: it must not toast or refresh anything in Bob's session.
-    const loadsBefore = api.calls.filter(c => c === 'GET /staff/categories').length
+    const loadsBefore = api.calls.filter(c => c === LIST).length
     aliceSave.release({ ...TEA, categoryName: 'Tea by Alice' })
     await page.waitForTimeout(500)
     expect(await toast(page, /updated/).count()).toBe(0)
-    expect(api.calls.filter(c => c === 'GET /staff/categories').length).toBe(loadsBefore)
+    expect(api.calls.filter(c => c === LIST).length).toBe(loadsBefore)
     expect(await page.getByText('Alice-only draft').count()).toBe(0)
   })
 
@@ -153,7 +155,7 @@ describe('switching users in the same browser', () => {
     let aliceSignedIn = true
     const api = await mockApi(page, {
       'GET /staff/auth/session': () => (aliceSignedIn ? ALICE : BOB),
-      'GET /staff/categories': request => (aliceSignedIn ? aliceList.handler(request) : listOf(BOB_ONLY)),
+      [LIST]: request => (aliceSignedIn ? aliceList.handler(request) : listOf(BOB_ONLY)),
       'POST /staff/auth/login': () => BOB,
     })
     await page.goto(url('/categories'), { waitUntil: 'hydration' })
@@ -165,12 +167,12 @@ describe('switching users in the same browser', () => {
     await login(page, 'bob')
     await expect.poll(() => path(page)).toBe('/')
     await page.getByRole('link', { name: /Categories/ }).first().click()
-    await page.getByRole('cell', { name: 'Bob-only menu' }).waitFor()
+    await categoryItem(page, 'Bob-only menu').waitFor()
 
     aliceList.release(listOf(ALICE_ONLY))
     await page.waitForTimeout(500)
     expect(await page.getByText('Alice-only draft').count()).toBe(0)
-    await page.getByRole('cell', { name: 'Bob-only menu' }).waitFor()
+    await categoryItem(page, 'Bob-only menu').waitFor()
     expect(api.unhandled).toEqual([])
   })
 })

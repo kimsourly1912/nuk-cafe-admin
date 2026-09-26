@@ -1,23 +1,41 @@
 <script setup lang="ts">
+/**
+ * Menu items: a card grid (pictures drive this screen) with a Grid / List switch; the list is the
+ * table. The grid can be grouped by category, in the order customers see the menu; grouped, it
+ * loads the whole filtered menu instead of a page. View and grouping are remembered per viewer.
+ * docs/plans/list-ui-refresh.md
+ */
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { ProductResponse } from '~/generated/api'
-import { CategorySelect } from '~/features/categories'
+import { useLocalStorage } from '@vueuse/core'
+import { CategorySelect, useCategoryOptions } from '~/features/categories'
 import type { ProductListQuery } from '../composables/useProducts'
-import { useProductList, useProductMutations } from '../composables/useProducts'
+import { useProductList, useProductMenu, useProductMutations, useProductStatusCounts } from '../composables/useProducts'
+import { menuSections } from '../utils/menu-sections'
 import { formatPrice } from '../utils/money'
+import ProductCard from './ProductCard.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
 
-// --- Filters & pagination (kept in the URL) ---
+// --- Filters & pagination (kept in the URL); view and grouping per viewer ---
 const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({
   productName: '',
   categoryId: ANY as number | string,
   status: ANY as Status | Any,
 })
 
+const view = useLocalStorage<'grid' | 'list'>('products:view', 'grid')
+const grouped = useLocalStorage('products:grouped', false)
+/** The grid grouped by category shows the whole menu, not a page. */
+const showMenu = computed(() => view.value === 'grid' && grouped.value)
+
 // A category id read back from the URL is a string; the API wants a number.
 const apiQuery = computed<ProductListQuery>(() => {
   const { categoryId, ...rest } = query.value
   return { ...rest, categoryId: categoryId === undefined ? undefined : Number(categoryId) }
+})
+const menuQuery = computed(() => {
+  const { page: _page, size: _size, ...rest } = apiQuery.value
+  return rest
 })
 
 /** `CategorySelect` holds `number | undefined`; the filter holds `ANY` for "all". */
@@ -28,23 +46,33 @@ const categoryFilter = computed({
   },
 })
 
-const { data, loading, refreshing, error, refresh } = useProductList(apiQuery)
+const list = useProductList(apiQuery, () => !showMenu.value)
+const menu = useProductMenu(menuQuery, showMenu)
+const { data: categories } = useCategoryOptions()
+const counts = useProductStatusCounts(() => ({ productName: apiQuery.value.productName, categoryId: apiQuery.value.categoryId }))
 const { remove, isBusy } = useProductMutations()
 
-// Deleted rows disappear immediately, before the refreshed list arrives.
-const rows = computed(() => (data.value?.content ?? []).filter(p => !remove.isRemoved(p.id!)))
+const source = computed(() => (showMenu.value ? menu : list))
+const loading = computed(() => source.value.loading.value)
+const refreshing = computed(() => source.value.refreshing.value)
+const error = computed(() => source.value.error.value)
+const refresh = () => source.value.refresh()
 
-// Deleting the last rows of the last page: step back to a page that exists.
-watch(() => data.value?.totalPages, (totalPages) => {
+// Deleted items disappear immediately, before the refreshed list arrives.
+const rows = computed(() => ((showMenu.value ? menu.data.value : list.data.value?.content) ?? []).filter(p => !remove.isRemoved(p.id!)))
+const sections = computed(() => menuSections(rows.value, categories.value))
+
+// Deleting the last items of the last page: step back to a page that exists.
+watch(() => list.data.value?.totalPages, (totalPages) => {
   if (totalPages !== undefined && page.value > Math.max(totalPages, 1)) page.value = Math.max(totalPages, 1)
 })
 
 // --- Selection & bulk actions ---
-const selection = useTableSelection(rows, p => p.id!, { resetOn: [query] })
+const selection = useTableSelection(rows, p => p.id!, { resetOn: [query, showMenu] })
 
 async function removeSelected() {
   const result = await remove.executeMany(selection.selected)
-  // Keep only the rows that still need attention selected: failed, skipped (busy) and not started.
+  // Keep only the items that still need attention selected: failed, skipped (busy) and not started.
   selection.select([
     ...result.failed.map(f => f.input.id!),
     ...result.skipped.map(p => p.id!),
@@ -52,7 +80,7 @@ async function removeSelected() {
   ])
 }
 
-// --- Table ---
+// --- Table (List view) ---
 const columns: TableColumn<ProductResponse>[] = [
   { id: 'select' },
   { accessorKey: 'productName', header: 'Name' },
@@ -112,11 +140,6 @@ usePageShortcuts({ n: () => openForm() })
             aria-label="Category"
             class="w-48"
           />
-          <USelect
-            v-model="filters.status"
-            :items="STATUS_FILTER_ITEMS"
-            class="w-40"
-          />
           <UIcon
             v-if="refreshing"
             name="i-lucide-loader-circle"
@@ -124,23 +147,49 @@ usePageShortcuts({ n: () => openForm() })
           />
         </template>
         <template #right>
-          <BulkActionsBar
-            :count="selection.count"
-            @clear="selection.clear()"
-          >
+          <USwitch
+            v-if="view === 'grid'"
+            v-model="grouped"
+            label="Group by category"
+            size="sm"
+          />
+          <UFieldGroup>
             <UButton
-              label="Delete"
-              icon="i-lucide-trash-2"
-              color="error"
-              variant="subtle"
-              @click="removeSelected"
+              icon="i-lucide-layout-grid"
+              :color="view === 'grid' ? 'primary' : 'neutral'"
+              :variant="view === 'grid' ? 'soft' : 'ghost'"
+              aria-label="Grid view"
+              :aria-pressed="view === 'grid'"
+              @click="view = 'grid'"
             />
-          </BulkActionsBar>
+            <UButton
+              icon="i-lucide-list"
+              :color="view === 'list' ? 'primary' : 'neutral'"
+              :variant="view === 'list' ? 'soft' : 'ghost'"
+              aria-label="List view"
+              :aria-pressed="view === 'list'"
+              @click="view = 'list'"
+            />
+          </UFieldGroup>
         </template>
       </UDashboardToolbar>
     </template>
 
     <template #body>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <StatusTabs
+          v-model="filters.status"
+          :counts="counts"
+        />
+        <UCheckbox
+          v-if="view === 'grid' && rows.length"
+          :model-value="selection.someSelected ? 'indeterminate' : selection.allSelected"
+          :label="selection.allSelected ? 'Unselect all' : 'Select all'"
+          aria-label="Select all"
+          @update:model-value="value => selection.toggleAll(!!value)"
+        />
+      </div>
+
       <ApiErrorAlert
         v-if="error"
         :error="error"
@@ -148,28 +197,78 @@ usePageShortcuts({ n: () => openForm() })
         @retry="refresh()"
       />
 
+      <ListSkeleton
+        v-else-if="loading"
+        label="Loading menu items…"
+        :variant="view === 'grid' ? 'card' : 'row'"
+      />
+
+      <ListEmptyState
+        v-else-if="!rows.length"
+        noun="menu items"
+        :filtered="isFiltered"
+        create-label="New menu item"
+        @create="openForm()"
+        @clear="clearFilters()"
+      />
+
+      <!-- Grid, grouped by category: the menu as customers see it. -->
+      <div
+        v-else-if="showMenu"
+        class="space-y-8"
+      >
+        <section
+          v-for="section in sections"
+          :key="section.key"
+          :aria-label="section.title"
+        >
+          <h2 class="mb-3 flex items-baseline gap-2 font-semibold text-highlighted">
+            {{ section.title }}
+            <span class="text-sm font-normal text-muted">{{ section.products.length }}</span>
+          </h2>
+          <div class="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-4">
+            <ProductCard
+              v-for="product in section.products"
+              :key="product.id"
+              :product="product"
+              hide-category
+              :actions="rowActions(product)"
+              :selected="selection.isSelected(product)"
+              :busy="isBusy(product.id!)"
+              @open="openForm(product)"
+              @select="value => selection.toggle(product, value)"
+            />
+          </div>
+        </section>
+      </div>
+
+      <!-- Grid, one page. -->
+      <div
+        v-else-if="view === 'grid'"
+        class="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-4"
+      >
+        <ProductCard
+          v-for="product in rows"
+          :key="product.id"
+          :product="product"
+          :actions="rowActions(product)"
+          :selected="selection.isSelected(product)"
+          :busy="isBusy(product.id!)"
+          @open="openForm(product)"
+          @select="value => selection.toggle(product, value)"
+        />
+      </div>
+
+      <!-- List: the table, for comparing across columns. -->
       <UTable
         v-else
         v-model:row-selection="selection.rowSelection"
         :get-row-id="selection.getRowId"
         :data="rows"
         :columns="columns"
-        :loading="loading"
-        :meta="{ class: { tr: row => (isBusy(row.original.id!) ? 'opacity-50 pointer-events-none' : '') } }"
+        :meta="{ class: { tr: row => (isBusy(row.original.id!) ? 'opacity-50 pointer-events-none' : 'cursor-pointer') } }"
+        @select="(_, row) => openForm(row.original)"
       >
-        <template #loading>
-          <span class="text-muted">Loading menu items…</span>
-        </template>
-        <template #empty>
-          <ListEmptyState
-            noun="menu items"
-            :filtered="isFiltered"
-            create-label="New menu item"
-            @create="openForm()"
-            @clear="clearFilters()"
-          />
-        </template>
-
         <template #select-header="{ table }">
           <UCheckbox
             :model-value="table.getIsSomePageRowsSelected() ? 'indeterminate' : table.getIsAllPageRowsSelected()"
@@ -242,15 +341,28 @@ usePageShortcuts({ n: () => openForm() })
       </UTable>
 
       <div
-        v-if="(data?.totalPages ?? 0) > 1"
+        v-if="!showMenu && (list.data.value?.totalPages ?? 0) > 1"
         class="flex justify-end border-t border-default pt-4"
       >
         <UPagination
           v-model:page="page"
-          :total="data?.totalElements ?? 0"
+          :total="list.data.value?.totalElements ?? 0"
           :items-per-page="pageSize"
         />
       </div>
+
+      <BulkActionsBar
+        :count="selection.count"
+        @clear="selection.clear()"
+      >
+        <UButton
+          label="Delete"
+          icon="i-lucide-trash-2"
+          color="error"
+          variant="subtle"
+          @click="removeSelected"
+        />
+      </BulkActionsBar>
     </template>
   </UDashboardPanel>
 </template>
