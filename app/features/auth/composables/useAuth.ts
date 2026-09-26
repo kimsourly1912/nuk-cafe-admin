@@ -1,0 +1,52 @@
+import type { PasswordGrantDto, StaffSessionDto } from '~/generated/api'
+import { login as loginRequest, logout as logoutRequest, session as sessionRequest } from '~/generated/api'
+
+/** Session info kept in state. Tokens stay in HttpOnly cookies and are never stored here. */
+export type SessionUser = Pick<StaffSessionDto, 'staffId' | 'username' | 'displayName' | 'groups'>
+
+export function useAuth() {
+  const user = useState<SessionUser | null>('auth:user', () => null)
+  /** Whether the session has been checked against the backend at least once. */
+  const checked = useState('auth:checked', () => false)
+  const isLoggedIn = computed(() => user.value !== null)
+
+  function setUser(dto: StaffSessionDto | undefined) {
+    user.value = dto
+      ? { staffId: dto.staffId, username: dto.username, displayName: dto.displayName, groups: dto.groups }
+      : null
+    checked.value = true
+  }
+
+  /** Validates the cookie session via `/staff/auth/session` (refreshing if needed). */
+  async function fetchSession() {
+    try {
+      setUser(await unwrap(sessionRequest({})))
+    }
+    catch {
+      setUser(undefined)
+    }
+    return user.value
+  }
+
+  /** Throws `ApiError` on bad credentials. The backend sets the auth cookies. */
+  async function login(credentials: PasswordGrantDto) {
+    setUser(await unwrap(loginRequest({ body: credentials })))
+  }
+
+  async function logout() {
+    try {
+      await logoutRequest({})
+    }
+    finally {
+      // Navigate first so the session-expired watcher in plugins/api.ts doesn't also redirect.
+      await navigateTo('/login')
+      clearSession()
+    }
+  }
+
+  function clearSession() {
+    user.value = null
+  }
+
+  return { user: readonly(user), checked: readonly(checked), isLoggedIn, fetchSession, login, logout, clearSession }
+}
