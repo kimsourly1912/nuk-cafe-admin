@@ -18,7 +18,7 @@ const { user } = useAuth()
 
     <template #body>
       <p class="text-muted">
-        Welcome back, {{ user?.displayName || user?.username }}.
+        Welcome back, {{ user?.displayName || user?.email }}.
       </p>
     </template>
   </UDashboardPanel>

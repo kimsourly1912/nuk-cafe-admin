@@ -1,13 +1,13 @@
 import type { BrowserContext, Page } from 'playwright-core'
 import { createPage, getBrowser, url, waitForHydration } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import { categoryItem, COFFEE, mockApi, setupE2e, TEA } from './support/mock-api'
+import { categoryItem, categoryOf, COFFEE, mockApi, setupE2e, TEA } from './support/mock-api'
 
 // plugins/data-freshness.client.ts and components/OfflineBanner.vue.
 // Cases: docs/reference/app-behavior.md → "Data freshness".
 await setupE2e()
 
-/** Loads of the Categories tree (`/all` without `type`; the form's picker asks with `type`). */
+/** Loads of the Categories tree (without `level`; the form's parent picker asks with `level=main`). */
 const listLoads = (tab: { loads: () => number }) => tab.loads()
 
 /** Tabs opened in the same context share a BroadcastChannel, like tabs of one browser window. */
@@ -18,8 +18,8 @@ async function openTab(path = '/categories', context?: BrowserContext) {
   await page.clock.install()
   let treeLoads = 0
   const api = await mockApi(page, {
-    'GET /staff/categories/all': ({ url }) => {
-      if (!url.searchParams.get('type')) treeLoads++
+    'GET /admin/categories': ({ url }) => {
+      if (!url.searchParams.get('level')) treeLoads++
       return [TEA, COFFEE]
     },
   })
@@ -120,9 +120,9 @@ describe('data freshness: overlapping refreshes', () => {
     const { page, api } = await openTab()
     let resolveFirst!: (data: unknown) => void
     let refetches = 0
-    const listOf = (name: string) => [{ id: 1, categoryName: name, status: 'ACTIVE', type: 'MAIN' }]
+    const listOf = (name: string) => [categoryOf('cat-1', name)]
     api.set({
-      'GET /staff/categories/all': () => {
+      'GET /admin/categories': () => {
         refetches++
         // First refresh: slow, and by the time it answers its data is outdated.
         if (refetches === 1) {

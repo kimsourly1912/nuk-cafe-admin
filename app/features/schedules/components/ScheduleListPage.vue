@@ -4,11 +4,11 @@
  * question here is "when is this on?", not comparing columns. docs/plans/list-ui-refresh.md
  */
 import type { DropdownMenuItem, SelectItem } from '@nuxt/ui'
-import type { ScheduleListResponse } from '~/generated/api'
+import type { Schedule } from '#shared/contracts/menu'
 import { confirmDeleteMany, isLinked, linkedLabel, useScheduleList, useScheduleMutations, useScheduleStatusCounts } from '../composables/useSchedules'
 import type { Day } from '../utils/days'
 import { DAYS } from '../utils/days'
-import { shiftWeekly, viewerTimeZone, zoneLabel, zoneShift } from '../utils/timezone'
+import { describeZone } from '../utils/timezone'
 import ScheduleCard from './ScheduleCard.vue'
 import ScheduleFormModal from './ScheduleFormModal.vue'
 
@@ -16,15 +16,15 @@ import ScheduleFormModal from './ScheduleFormModal.vue'
 const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({
   search: '',
   status: ANY as Status | Any,
-  dayOfWeek: ANY as Day | Any,
+  day: ANY as Day | Any,
 })
 
 const { data, loading, refreshing, error, refresh } = useScheduleList(query)
 const { remove, isBusy } = useScheduleMutations()
-const counts = useScheduleStatusCounts(() => ({ search: query.value.search, dayOfWeek: query.value.dayOfWeek }))
+const counts = useScheduleStatusCounts(() => ({ search: query.value.search, day: query.value.day }))
 
 // Deleted rows disappear immediately, before the refreshed list arrives.
-const rows = computed(() => (data.value?.content ?? []).filter(s => !remove.isRemoved(s.id!)))
+const rows = computed(() => (data.value?.items ?? []).filter(s => !remove.isRemoved(s.id)))
 
 // Deleting the last rows of the last page: step back to a page that exists.
 watch(() => data.value?.totalPages, (totalPages) => {
@@ -37,7 +37,7 @@ const dayItems: SelectItem[] = [
 ]
 
 // --- Selection & bulk actions ---
-const selection = useTableSelection(rows, s => s.id!, { resetOn: [query] })
+const selection = useTableSelection(rows, s => s.id, { resetOn: [query] })
 
 async function removeSelected() {
   // Schedules in use can't be deleted yet (docs/plans/schedules.md S6): leave them out and say so.
@@ -46,26 +46,18 @@ async function removeSelected() {
   const result = await remove.executeMany(deletable, linked.length ? { confirm: confirmDeleteMany(deletable, linked.length) } : {})
   // Keep only the rows that still need attention selected: in use, failed, skipped (busy), not started.
   selection.select([
-    ...linked.map(s => s.id!),
-    ...result.failed.map(f => f.input.id!),
-    ...result.skipped.map(s => s.id!),
-    ...result.notStarted.map(s => s.id!),
+    ...linked.map(s => s.id),
+    ...result.failed.map(f => f.input.id),
+    ...result.skipped.map(s => s.id),
+    ...result.notStarted.map(s => s.id),
   ])
 }
 const canDeleteSelected = computed(() => selection.selected.some(s => !isLinked(s)))
 
-// --- Times: stored in each record's zone, shown in the viewer's (docs/plans/schedules.md S2) ---
-const viewerZone = zoneLabel(viewerTimeZone())
+// --- Times: local wall time at the cafe, shown as stored (D41) ---
+const cafeZone = useRuntimeConfig().public.cafeTimeZone
 
-/** Days and times in the viewer's zone. An unknown record zone is shown as stored, labelled. */
-function localWeekly(schedule: ScheduleListResponse) {
-  const stored = { days: schedule.days ?? [], startTime: schedule.startTime ?? '', endTime: schedule.endTime ?? '' }
-  const shift = zoneShift(schedule.timezone)
-  return shift === undefined ? { ...stored, zone: schedule.timezone } : { ...shiftWeekly(stored, shift), zone: undefined }
-}
-const local = computed(() => new Map(rows.value.map(s => [s.id, localWeekly(s)])))
-
-function rowActions(schedule: ScheduleListResponse): DropdownMenuItem[] {
+function rowActions(schedule: Schedule): DropdownMenuItem[] {
   const linked = isLinked(schedule)
   return [
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openForm(schedule) },
@@ -74,14 +66,14 @@ function rowActions(schedule: ScheduleListResponse): DropdownMenuItem[] {
       icon: 'i-lucide-trash-2',
       color: 'error',
       disabled: linked,
-      description: linked ? linkedLabel(schedule.item_count!) : undefined,
+      description: linked ? linkedLabel(schedule.productCount) : undefined,
       onSelect: () => remove.execute(schedule),
     },
   ]
 }
 
 const formModal = useOverlay().create(ScheduleFormModal)
-function openForm(schedule?: ScheduleListResponse) {
+function openForm(schedule?: Schedule) {
   formModal.open({ schedule })
 }
 
@@ -117,7 +109,7 @@ usePageShortcuts({ n: () => openForm() })
             class="w-64"
           />
           <USelect
-            v-model="filters.dayOfWeek"
+            v-model="filters.day"
             :items="dayItems"
             aria-label="Day"
             class="w-32"
@@ -129,7 +121,7 @@ usePageShortcuts({ n: () => openForm() })
           />
         </template>
         <template #right>
-          <span class="text-xs text-muted">Times in your timezone ({{ viewerZone }})</span>
+          <span class="text-xs text-muted">Cafe time: {{ describeZone(cafeZone) }}</span>
         </template>
       </UDashboardToolbar>
     </template>
@@ -178,10 +170,10 @@ usePageShortcuts({ n: () => openForm() })
           v-for="schedule in rows"
           :key="schedule.id"
           :schedule="schedule"
-          :local="local.get(schedule.id)!"
+          :cafe-zone="cafeZone"
           :actions="rowActions(schedule)"
           :selected="selection.isSelected(schedule)"
-          :busy="isBusy(schedule.id!)"
+          :busy="isBusy(schedule.id)"
           @open="openForm(schedule)"
           @select="value => selection.toggle(schedule, value)"
         />
@@ -193,7 +185,7 @@ usePageShortcuts({ n: () => openForm() })
       >
         <UPagination
           v-model:page="page"
-          :total="data?.totalElements ?? 0"
+          :total="data?.total ?? 0"
           :items-per-page="pageSize"
         />
       </div>

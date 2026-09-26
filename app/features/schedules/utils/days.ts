@@ -1,12 +1,9 @@
-import type { ScheduleResponse } from '~/generated/api'
+import type { Day } from '#shared/contracts/menu'
 import { formatTime12 } from './time'
 
-export type Day = NonNullable<ScheduleResponse['days']>[number]
+export type { Day }
 
-/**
- * Days in week order, labelled like `GET /staff/schedules/days-of-week` returns them. A local
- * constant instead of that request: the enum is fixed by the spec (docs/plans/schedules.md).
- */
+/** Days in week order, with short labels. */
 export const DAYS: { value: Day, label: string }[] = [
   { value: 'MONDAY', label: 'Mon' },
   { value: 'TUESDAY', label: 'Tue' },
@@ -21,7 +18,7 @@ export const DAY_VALUES = DAYS.map(d => d.value)
 export const WEEKDAYS: Day[] = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY']
 export const WEEKEND: Day[] = ['SATURDAY', 'SUNDAY']
 
-/** Week order, duplicates removed. The API returns days in random order (a Java `Set`). */
+/** Week order, duplicates removed. */
 export function sortDays(days: readonly Day[] = []): Day[] {
   return DAY_VALUES.filter(d => days.includes(d))
 }
@@ -63,8 +60,8 @@ export function timeBarSegments(start?: string, end?: string): { left: number, w
 }
 
 /**
- * "9:00 AM – 5:30 PM" (12-hour), "(next day)" when the range ends after midnight. Pass times
- * already converted to the viewer's zone (utils/timezone.ts).
+ * "9:00 AM – 5:30 PM" (12-hour), "(next day)" when the range ends after midnight. Times are the
+ * schedule's local wall time (utils/timezone.ts).
  */
 export function formatTimeRange(start?: string, end?: string): string {
   if (!start && !end) return '—'

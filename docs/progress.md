@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-26 (external API removal)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-26 (admin on our own API: identity + menu)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -8,18 +8,32 @@ Every "done" item states how it was checked. Keep using these labels:
 
 - **unit**: covered by Vitest (`pnpm test`)
 - **browser-mock**: exercised in a real browser (headless Chrome) against a mocked API (see "How to verify" below)
-- **real-API**: exercised against `dev-api.nukcafe.co` with a real staff login
+- **server**: covered by the `server` Vitest project (services against SQLite built from the real migrations)
+- **real-server**: exercised against `pnpm dev` (real routes, Better Auth, local SQLite and blob), by script or in headless Chrome
+- **real-API** (historical): exercised against the former Spring `dev-api.nukcafe.co`
 - **unverified**: written but not exercised
 
 ## Current state
 
-**Current transition (2026-09-26):** The [system blueprint](plans/system-blueprint.md) and [backend plan](plans/fullstack-backend.md) describe the new Nuxt backend for all cafe apps. NuxtHub SQLite/blob and Better Auth email/password are configured; the first auth migration exists and applied locally. The external Spring generator, generated SDK, proxy, browser client, envelope helper, and refresh wrapper have been removed (D39). The admin UI source remains unchanged as a reference and currently has unresolved imports from `~/generated/api` and `unwrap`; it is intentionally not build-ready until local auth/menu APIs are designed and connected. No app-domain schema, business routes, or Cloudflare deployment exists yet.
+**Admin on our own API (2026-09-26):** the admin UI (auth, categories, schedules, menu items) now runs on our API (`/api/v1`, D40–D42); every `~/generated/api` / `unwrap` reference is gone. `pnpm typecheck` and `pnpm build` pass again for the first time since D39.
 
-**Greenfield product blueprint (2026-09-26):** [system-blueprint.md](plans/system-blueprint.md) starts from customer, staff, and manager journeys. Confirmed launch scope: customer website, pickup and dine-in with table QR, USD, one branch, email/password accounts with no guest ordering, pay at counter before preparation, points earned at 1 per USD after completion and exchanged for vouchers, and staff-issued vouchers; native app, delivery, and online payment are outside that scope. Product policy questions remain open in the blueprint; no business routes have been implemented.
+| Part | What exists | Verified |
+|---|---|---|
+| Schema + migration | `server/db/schema/` (staff_profiles, audit_events, media_assets, menu_categories, menu_schedules, menu_products, product_variant_groups/options, product_schedules), migration `0001_identity_and_menu` | server (every test builds the DB from the migrations); real-server (applied on `pnpm dev`) |
+| Identity | Better Auth sign-in/out, `GET /admin/me`, `requireStaff` (401 / 403 NOT_STAFF / 403 FORBIDDEN), `admin` role, bootstrap route, CSRF origin check | server (10 tests incl. a bootstrap race); real-server (sign-up → not staff → bootstrap → admin → sign-out; cross-origin write refused) |
+| Categories API | list, create, PATCH, delete, order; two levels; version checks | server (13 tests incl. a race and a stale reorder); real-server |
+| Schedules API | paginated list (search/status/day), options, detail, create, PATCH, delete; local wall time in the cafe zone | server (8 tests); real-server |
+| Menu items API | paginated list, whole menu, detail, create, PATCH (variants by stable id, schedules, image), delete | server (11 tests incl. a race; the race test fails with the guard removed); real-server |
+| Media | upload to blob (magic-byte check, ≤ 5 MB), public serving, attach/release | server (type sniffing, attach/release); real-server (upload → PNG served) |
+| Admin UI | `apiFetch`, `ApiError` for the new format, `useAuth` on Better Auth, all three features ported | unit (113); browser-mock (e2e, 115 tests); real-server (headless Chrome: login, create category/schedule/menu item with image, variants and schedule, edit, logout) |
 
-**Verification of removal:** `pnpm lint` passed; `pnpm test:unit` passed (13 files, 123 tests). The local Better Auth anonymous session endpoint returned `200 null`; the former `/legacy-api/staff/auth/session` path returned Nuxt HTML, confirming it is no longer proxied. `pnpm typecheck` and `pnpm build` fail at the preserved UI's missing `~/generated/api` and `unwrap` imports; `pnpm test` fails during its e2e build for the same reason. These are expected transition failures, not new API failures. The old `api-error.ts` and browser mock fixtures remain as UI scaffolding and will be replaced when local contracts are implemented.
+**Found by the browser tests and fixed:** `useAuth` kept the staff session in `useState('auth:user')`, the key `@nuxtjs/better-auth` uses for its own session. Its refetch on tab focus overwrote the staff session (and would have put a Better Auth user where a staff session belongs). Keys are now `staff-session:*`; regression test in `auth.test.ts` (checked to fail with the old key).
 
-The following tables are a historical snapshot of the former Spring-backed frontend. Categories, Schedules, and Products remain as UI source, but their API adapters have been removed. Their former test results do not verify the new backend.
+**Greenfield product blueprint (2026-09-26):** [system-blueprint.md](plans/system-blueprint.md) starts from customer, staff, and manager journeys. Confirmed launch scope: customer website, pickup and dine-in with table QR, USD, one branch, email/password accounts with no guest ordering, pay at counter before preparation, points earned at 1 per USD after completion and exchanged for vouchers, and staff-issued vouchers; native app, delivery, and online payment are outside that scope. Product policy questions remain open in the blueprint.
+
+**Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier routes; no staff management (only the bootstrap admin); no cleanup of temporary uploads; no public menu API.
+
+The Foundation table below is mostly still current (UI behavior); rows about the Spring API (SDK, proxy, token refresh) are historical.
 
 ### Foundation
 
@@ -54,14 +68,14 @@ The following tables are a historical snapshot of the former Spring-backed front
 
 ### Features
 
-Backend resources available (from the spec) and their status. The folder names follow the backend resources (see decisions D9).
+Our API resources and the admin screens on them (routes: [docs/reference/api.md](reference/api.md)). Later rows list the old Spring resources as a checklist of what the admin once planned; each gets its own contract first.
 
-| Feature | Endpoints (`/staff/...`) | Status |
+| Feature | Routes (`/api/v1/admin/...`) | Status |
 |---|---|---|
-| auth | `auth/login`, `session`, `refresh`, `logout` | done |
-| categories (menu) | `categories`, `categories/{id}`, `categories/all`, `categories/sort-order` | **done, reference feature** (**tree** of mains and subs, client search + status tabs, create/edit, **Add sub-category**, delete, batch delete, **drag-to-sort per level**, subs numbered per main: D37 supersedes D36; unit + e2e `categories.test.ts`, not checked against the real API) |
-| schedules (menu) | `schedules`, `schedules/{id}`, `schedules/all`, `schedules/available`, `schedules/days-of-week` | **done** ([plan](plans/schedules.md)): list (search, status, day filter), create, edit (items shown read-only and kept), delete + bulk delete for schedules not in use. **Evidence:** unit (form mapping, days) + browser-mock (e2e `schedules.test.ts`, 13 tests; the lock test fails without `lock`). Response formats checked against the real dev API through the unauthenticated `/public/schedules/**` endpoints. **No authenticated real-API check:** every request encoding (S1–S7) is unverified. `ScheduleSelect` comes with Products |
-| products = "Menu items" | `products`, `products/{id}`, `products/all`, `products/category/{id}`, `products/upload`, `products/sort-order` | **done, phases 1 + 2** ([plan](plans/products.md)): list (name search, category, status), create/edit in a slide-over (image upload + replace, category, USD price, description, schedules, status, **variant editor**: groups/options, required, pick several, option prices, drag-and-drop or keyboard reorder, reply check D35), delete + bulk delete. **Evidence:** unit (mapping, prices, `variantMismatches`) + browser-mock (e2e `products.test.ts`, 15 tests). Response formats checked through the unauthenticated `/public/products/**` endpoints. **No authenticated real-API check** (P2–P6 unverified). **Not built:** sort order, price-range filter, removing an image |
+| auth | Better Auth `/api/auth/sign-in/email`, `sign-out`; `me`; `/api/v1/bootstrap/admin` | **done** (D40). server + browser-mock + real-server |
+| categories (menu) | `categories`, `categories/{id}`, `categories/order` | **done, reference feature**: tree of mains and subs, search + status tabs, create/edit, add sub-category, delete, batch delete, drag-to-sort per level, version checks. server + unit + browser-mock (`categories.test.ts`) + real-server |
+| schedules (menu) | `schedules`, `schedules/options`, `schedules/{id}` | **done**: list (search, status, day), create, edit (menu items shown read-only, never sent), delete + bulk delete for schedules not in use; times as cafe time (D41). server + unit + browser-mock (`schedules.test.ts`) + real-server |
+| products = "Menu items" | `products`, `products/all`, `products/{id}`, `media` | **done**: list/grid/grouped menu, filters, create/edit (image upload, replace, **remove**, category, price in cents, schedules, variant editor), delete + bulk delete. server + unit + browser-mock (`products.test.ts`) + real-server. **Not built:** sort order within a category, price-range filter |
 | rewards (+ reward categories) | `rewards`, `rewards/{id}`, `rewards/{id}/status`, `rewards/upload`, `reward-categories`, … | not started |
 | vouchers | `voucher/catalogs…`, `vouchers/redeem`, `vouchers/lookup`, `voucher/activity` | not started |
 | banners | `banners`, `banners/{id}`, `banners/upload`, `banners/{id}/toggle-status`, `banners/dashboard` | not started |
@@ -75,66 +89,61 @@ Backend resources available (from the spec) and their status. The folder names f
 
 ## Next steps (recommended order)
 
-1. Finalize Better Auth identity, staff roles, branch permissions, and API response contracts for the new system.
-2. Implement application Drizzle tables and Nitro routes for categories, schedules, and products; then replace the preserved screens' SDK imports and `unwrap` calls with local API adapters.
-3. Connect the admin auth screen and guards to Better Auth. Re-enable the relevant browser tests with local API fixtures and run the complete CI gates.
-4. Validate migrations and R2/D1 bindings in Cloudflare staging before deployment.
+1. **Deploy to a Cloudflare staging Worker** with its own D1 and R2: bindings, `NUXT_BETTER_AUTH_SECRET`, `NUXT_PUBLIC_SITE_URL`, a CI step that applies migrations before deploy. Then repeat the real-server checks there; the batch guards (`requireOneChange`/`requireCount`) rely on SQLite's `changes()` and `json()` inside a D1 batch, which has only been exercised on libsql so far.
+2. **Staff management** (create staff accounts, disable them): needed before anyone but the bootstrap admin can work. Needs the role matrix (Q6) for anything beyond `admin`.
+3. **Public menu API** (`/api/v1/public/menu`) for the customer website: active items, availability from schedules. Needs the catalog rules (blueprint §9.7: unscheduled items, several schedules, overnight).
+4. **Temporary-upload cleanup** (a scheduled job deleting `temporary` media older than a day).
+5. Then the blueprint's order: customers and tables → quote/checkout/orders + counter payment → loyalty and vouchers.
 
-The older Spring-specific roadmap below is retained as a historical record only.
-
-**Feature standard (2026-09-26, docs only; revised twice after review the same day):** [docs/feature-standard.md](feature-standard.md) defines planning, structure, list/form/picker behavior, the capability roadmap and the definition of done. The revision separates reversible **[Choice]** items from **[Open]** backend/business/authorization contracts, which developers must not invent (defer the affected behavior, continue the rest). It replaces "encode clearing explicitly" with "map intent through the established contract, defer unknown clears", allows form-local submission state and justified screen-specific polling, and corrects an overstatement: row blocking is **not** enforced for bulk actions (an implementation gap, below). Checked: relative links and anchors resolve (script), `git diff --check`, only docs changed. Statements about existing behavior were re-checked against the code; the first version had overstated busy-row protection. Second revision: pickers separate **displaying an existing value** from **allowing a new selection** (a listing endpoint isn't eligibility evidence; unresolved eligibility is deferred, not defaulted, Q9). Schedules deletion is deferred until its effect on referenced products is known. The concurrency guarantee is stated as check-and-reserve at request start: `isBusy` prefiltering is only a preliminary check, and the engine has no cross-mutation exclusion (mutations.md). No application behavior was changed or newly verified. Gaps in the reference feature (not fixed): Q7 (clearing a parent), bulk delete vs pending update (below), `CategorySelect` has no error/unavailable-value states, no committed tests for row blocking, selection reset or last-page step-back. *Update:* all but Q7 were fixed by the foundation hardening (plans/admin-foundation-hardening.md).
-
-
-0. **Schedules done (2026-09-26):** see the [plan](plans/schedules.md) and D32. **First thing on a staff login:** run the plan's "verify on first staff login" column (time format, `items` kept on edit, delete of an unused schedule), then Q7 for Categories.
-0. **Foundation hardening done (2026-09-26):** see the [plan and results](plans/admin-foundation-hardening.md).
-0. **Polish done (2026-09-26):** e2e harness, tab titles, hidden password, list URL state + live search + empty states, refresh on return/reconnect + offline banner. Still open before features: role rules (Q6, waiting on the project owner).
-1. **Test Categories against the real API** with a staff login (`pnpm dev`, then create, edit, delete, batch delete). Record any new error codes in `API_ERROR_CODES` (`app/utils/api-error.ts`). Update the verification levels above.
-2. ~~Schedules~~ done (`ScheduleSelect` + `useScheduleOptions` were added with Products).
-3. ~~Products phases 1 + 2~~ done (D34, D35). Later: sort order per category (drag and drop is now available via `useSortable`), `ProductSelect` for the schedule form. `ProductImageInput` moves to the root when Rewards/Banners/Vouchers need uploads (D16).
-4. Rewards (+ reward categories), then vouchers and banners (all need image upload and status toggles).
-5. Customers, staff, orders, and the rest.
-6. Every new feature adds `test/e2e/<feature>.test.ts` (AGENTS.md → "Adding a feature", step 9).
+Historical roadmap of the Spring-backed frontend (kept for the record; its "verify on first staff login" items no longer apply):
 
 ## Open questions / waiting on others
 
 | # | Question | Owner | Impact |
 |---|---|---|---|
-| Q1 | Full list of backend error codes (`msg`). Only `NC0000`, `NC0001`, `NC0011`, `NC0014`, `NC1000`, `LOGIN_FAILED` have been observed | backend team | Better error messages and kinds (e.g. a "forbidden" code) |
-| Q2 | Unique, stable `operationId`s in Springdoc (today `createCategory1`, `update_2`, …) | backend team | Clean SDK names that survive regeneration |
-| Q3 | Mark required fields in the spec (all response fields are optional today) | backend team | Fewer `!` / `??` in the UI |
-| Q4 | Production hosting domain for the portal. It must be same-site with the API (e.g. `admin.nukcafe.co`), or the auth cookies are dropped | project owner | Deployment (`NUXT_PUBLIC_API_BASE`) |
+| ~~Q1~~ | **Resolved: our own codes** (`ERROR_CODES`, D40). Was: full list of Spring error codes (`msg`). Only `NC0000`, `NC0001`, `NC0011`, `NC0014`, `NC1000`, `LOGIN_FAILED` have been observed | backend team | Better error messages and kinds (e.g. a "forbidden" code) |
+| ~~Q2~~ | **Obsolete** (no generated SDK). Was: unique, stable `operationId`s in Springdoc (today `createCategory1`, `update_2`, …) | backend team | Clean SDK names that survive regeneration |
+| ~~Q3~~ | **Resolved:** contracts in `shared/contracts/` type every field. Was: mark required fields in the spec (all response fields are optional today) | backend team | Fewer `!` / `??` in the UI |
+| Q4 | Production domain for the app (UI and API are one origin now) | project owner | Deployment: `NUXT_PUBLIC_SITE_URL`, Better Auth trusted origins, the CSRF origin check |
 | Q5 | Should admins edit translations (`nameI18n` / `descriptionI18n`: en, zh-HK, km)? Forms currently edit English only and preserve the rest | project owner | `I18nFields` component |
-| Q6 | Role rules: the session has `groups` (e.g. ADMIN, CASHIER). Which screens and actions does each role get? No role-based UI exists yet | project owner | Route guard + hidden actions |
-| Q7 | `PUT /staff/categories/{id}` with `mainCategoryId` omitted: does it clear the parent or keep it? The Category form relies on "clear" (unverified) | backend team | Clearing a parent may silently not work |
-| Q8 | How does the backend handle two concurrent updates of the same record (last write wins, rejection, versioning)? No version field in the generated types for categories | backend team | Edit-conflict handling |
+| Q6 | Role rules: which screens and actions do manager and cashier get? Only `admin` (everything) exists (D40) | project owner | `ROLE_PERMISSIONS`, staff management, hidden actions |
+| ~~Q7~~ | **Resolved (D41):** PATCH, absent keeps, `null` clears. Was: `PUT /staff/categories/{id}` with `mainCategoryId` omitted: does it clear the parent or keep it? The Category form relies on "clear" (unverified) | backend team | Clearing a parent may silently not work |
+| ~~Q8~~ | **Resolved (D41):** `version` on every update and delete, 409 when stale. Was: how does the backend handle two concurrent updates of the same record (last write wins, rejection, versioning)? No version field in the generated types for categories | backend team | Edit-conflict handling |
 | Q9 | Which records may be chosen for a **new** relationship? e.g. may an inactive category be picked as a parent or as a menu item's category? A listing endpoint returning them isn't evidence | project owner (backend team if it enforces a rule) | Picker eligibility. **Deferred:** `CategorySelect` no longer offers inactive categories as new choices (D31); an existing inactive value stays |
-| Q10 | CSRF: does the backend protect cookie-authenticated POST/PUT/DELETE (CSRF token, `Origin`/`Referer` check, required `application/json`, custom header)? `SameSite=Lax` doesn't stop same-site (`*.nukcafe.co`) origins | backend team | Whether any frontend change (e.g. sending a token/header) is needed. None made: no contract exists |
-| Q11 | CORS with credentials: which exact origins are allowed? Is any wildcard or sibling subdomain (user content, marketing) on `nukcafe.co` allowed or hosted? | backend team / project owner | Same-site attack surface for the cookies |
-| Q12 | The spec declares only `bearerAuth`, but the portal uses cookies. Are both accepted on `/staff/**`, and is the spec's security section authoritative? | backend team | Which auth path the CSRF review applies to |
-| Q13 | Schedules: request format of `startTime`/`endTime` (responses are `HH:mm`), and does the backend apply them as UTC (`timezone: "UTC"`)? | backend team | **Decided for the UI (D33):** converted between the record zone and the viewer's browser zone, 12-hour on screen. If the backend really stores local time labelled UTC, every schedule displays shifted by the viewer's offset |
-| Q14 | Schedules: are overnight ranges (22:00–02:00) valid? | project owner + backend team | No rule of our own; the backend decides (S3) |
-| Q15 | `PUT /staff/schedules/{id}`: does `items` replace, merge or append, and what does an omitted `items` mean? | backend team | Edit re-sends the existing ids (safe under replace or merge; S4). Blocks editing items from the schedule form |
-| Q16 | Deleting a schedule that menu items use: rejected, links removed, or products changed? Does `items` reflect products' `scheduleIds`? | backend team | **Deferred:** only schedules not in use can be deleted (S6) |
-| Q18 | Products: how does `PUT /staff/products/{id}` treat `variants`? Are ids matched (update in place), are omitted variants/options deleted, are new ones (no id) created? | backend team | The editor sends the full list (removed rows left out) and **warns if the reply differs** (D35). Verify on first login |
+| ~~Q10~~ | **Resolved (D40):** origin check on every `/api/v1` write. Was: CSRF: does the backend protect cookie-authenticated POST/PUT/DELETE (CSRF token, `Origin`/`Referer` check, required `application/json`, custom header)? `SameSite=Lax` doesn't stop same-site (`*.nukcafe.co`) origins | backend team | Whether any frontend change (e.g. sending a token/header) is needed. None made: no contract exists |
+| ~~Q11~~ | **Obsolete:** one origin, no CORS. Was: CORS with credentials: which exact origins are allowed? Is any wildcard or sibling subdomain (user content, marketing) on `nukcafe.co` allowed or hosted? | backend team / project owner | Same-site attack surface for the cookies |
+| ~~Q12~~ | **Obsolete.** Was: the spec declares only `bearerAuth`, but the portal uses cookies. Are both accepted on `/staff/**`, and is the spec's security section authoritative? | backend team | Which auth path the CSRF review applies to |
+| ~~Q13~~ | **Resolved (D41):** `HH:mm` local wall time in the cafe's zone. Was: schedules: request format of `startTime`/`endTime` (responses are `HH:mm`), and does the backend apply them as UTC (`timezone: "UTC"`)? | backend team | **Decided for the UI (D33):** converted between the record zone and the viewer's browser zone, 12-hour on screen. If the backend really stores local time labelled UTC, every schedule displays shifted by the viewer's offset |
+| Q14 | Schedules: are overnight ranges (22:00–02:00) valid? | project owner | **Refused for now** (end must be after start, D41); allowing them needs the availability rule for the public menu |
+| ~~Q15~~ | **Resolved (D41):** links are written only from the menu item. Was: `PUT /staff/schedules/{id}`: does `items` replace, merge or append, and what does an omitted `items` mean? | backend team | Edit re-sends the existing ids (safe under replace or merge; S4). Blocks editing items from the schedule form |
+| Q16 | Deleting a schedule that menu items use: should the links be removed, or stay refused? | project owner | **Refused** (409 SCHEDULE_IN_USE, also a foreign key) |
+| ~~Q18~~ | **Resolved (D41):** full replacement with stable ids. Was: products: how does `PUT /staff/products/{id}` treat `variants`? Are ids matched (update in place), are omitted variants/options deleted, are new ones (no id) created? | backend team | The editor sends the full list (removed rows left out) and **warns if the reply differs** (D35). Verify on first login |
 | Q20 | ~~Sub-category numbering~~ **Decided (user, D37): per main category**, matching the data. Verify on a staff login that the apps show the saved order | backend team | |
-| Q19 | Product images: accepted types and size, how to clear an image, whether replaced or abandoned uploads must be deleted, what `ownerId` on upload is for | backend team | Own limit JPEG/PNG/WebP ≤ 5 MB; no remove button; no cleanup (P4, P5) |
-| Q17 | Schedules: must a schedule have at least one day and both times? Allowed `sortBy`/`sortDir` values? Is `items[].price` a schedule price, and in which unit? | project owner / backend team | Required in the form by choice (S10, S11); no sort UI; price not shown |
+| Q19 | Product images: are JPEG/PNG/WebP ≤ 5 MB the right limits? How long may abandoned uploads stay? | project owner | Our limits (D41); `imageAssetId: null` removes; cleanup job not built |
+| Q17 | Schedules: must a schedule have at least one day and both times? | project owner | Required (server and form) |
+| Q21 | Translations: which languages, and do admins edit them? (Was Q5 for the UI.) No translation tables exist yet; names are English only | project owner | `*_translations` tables + `I18nFields` |
+| Q22 | Catalog availability: does an unscheduled item mean "always available"? With several schedules, any match or all? | project owner | The public menu API (next step 3) |
 
 ## Known limitations
 
-- No real-API verification of any authenticated flow (see Current state).
-- Products: whether removed variants are really deleted is unverified (a warning shows if the reply differs, Q18); an image can be replaced but not removed; uploads abandoned by cancelling the form stay on the server (Q19); no sort-order UI.
-- Schedules: the day filter matches stored (UTC) days, not the converted ones shown; timezone offsets are taken at today's date (DST zones shift by the current offset all year) (D33).
-- Schedules: a schedule's menu items can't be edited from the schedule form (read-only; linked from the menu-item form once Products exists), and schedules in use can't be deleted (Q16). If a menu item is linked between opening the edit form and saving, the save re-sends the older item list (same class of problem as Q8).
-- Nothing is role-aware (Q6). The question matrix is in app-behavior.md → Permissions; no role gating was built, and the backend must enforce.
-- No client-side edit-conflict handling; backend behavior unverified (Q8).
+- Nothing runs on Cloudflare yet: D1 and R2 behavior (batch guards, blob serving, migrations in CI) is unverified there.
+- Only one role (`admin`) and no staff management: other staff can't be added yet (Q6).
+- Uploads: abandoned or replaced images stay as `temporary` assets until a cleanup job exists. No sort-order UI for menu items.
+- Schedules: overnight ranges are refused (Q14); schedules in use can't be deleted (Q16). The time zone of new schedules comes from `NUXT_PUBLIC_CAFE_TIME_ZONE` (default `Asia/Phnom_Penh`).
+- A 409 (someone else saved first) shows the server's message and keeps the form open; the user must reload the record (close and reopen) to get the new version. No merge UI.
+- Inactive records can still be chosen by the API as parents, categories or schedules; only the pickers avoid offering them (Q9).
 - Unsaved-changes comparison treats `1` and `'1'` as different and array order as meaningful (see docs/reference/forms.md).
 - List filters in the URL support strings and numbers only, and one URL-synced list per page (`syncUrl: false` for others). See docs/reference/data-fetching.md.
 - Data freshness: another device's change shows up only when the user returns to the tab or navigates (no push from the backend). No per-query opt-out yet. No polling (orders will likely need it per screen: D22).
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. During the SDK removal transition, record the expected typecheck and e2e build failures here; restore green gates as each screen is integrated with local routes.
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-26 (unit 113, server 42, e2e 115).
+- **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
+- **real-server (a first admin locally):** start `NUXT_BOOTSTRAP_TOKEN=<32+ chars> pnpm dev`, sign up (`POST /api/auth/sign-up/email` with `{ email, password, name }` and an `Origin` header), then `POST /api/v1/bootstrap/admin` with `{ token, email }` ([api.md → Identity](reference/api.md#identity)). Then log in at `/login`. The bootstrap is refused once an admin exists; `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
+  - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
+  - Pitfall: a bash heredoc containing an apostrophe inside a quoted `'EOF'` block failed in this environment's shell wrapper ("unexpected EOF"). Write edit scripts with the editor instead.
+  - Pitfall: several repo files use CRLF line endings; a Node text replacement with LF anchors silently matches nothing. Normalize (`replace(/\r\n/g, '\n')`) before replacing, and check the replacement happened.
 - **e2e (preferred):** `pnpm vitest run --project e2e`. Add scenarios to `test/e2e/` instead of throwaway scripts. Pitfalls met so far:
   - `expect.poll` defaults to a 1 s timeout; a cold page (session → refresh → redirect) can take longer under full-suite load. The e2e project sets 5 s (`vitest.config.ts`). Flaky "expected /categories to be /login" failures came from this.
   - **Escape also dismisses Reka toasts.** A test that presses Escape to close a modal may silently close the toast it later checks. Close modals with their button when toasts matter.
@@ -165,12 +174,12 @@ The older Spring-specific roadmap below is retained as a historical record only.
   - Two tabs of one browser: `createPage()` opens a single-page context, so create one with `(await getBrowser()).newContext()`, open both pages in it, and wait with `waitForHydration(page, url, 'hydration')` (raw pages lack the `waitUntil: 'hydration'` wrapper). Tabs in one context share `BroadcastChannel`.
   - Tab visibility: fake `document.visibilityState` + dispatch `visibilitychange`, and move time with `page.clock.install()` / `fastForward`. Offline: `page.context().setOffline(true)` (fires the `offline` event; `page.route` mocks still answer).
   - In a `node -e` one-liner inside single-quoted bash, `\d` in a regex loses its backslash. Edit test files with the editor, not shell string replacement.
-- **browser-mock (ad hoc):** start `pnpm dev --port 3123`, then drive headless Chrome with `playwright-core` (`chromium.launch({ channel: 'chrome' })`) and mock the backend with `page.route('http://localhost:3123/api/**', …)`. Pitfalls met so far:
+- **browser-mock (ad hoc):** start `pnpm dev --port 3123`, then drive headless Chrome with `playwright-core` (`chromium.launch({ channel: 'chrome' })`) and mock the server with `page.route('http://localhost:3123/api/**', …)` (or use the real server, see real-server above). Pitfalls met so far:
   - Use the full origin in the route pattern. A bare `**/api/**` also matches the Vite module `/_nuxt/generated/api/*.ts` and breaks the app.
   - `UAlert` has no `role="alert"`. Match on text.
   - Headless Chrome doesn't show the `beforeunload` dialog. Verify the guard by dispatching a cancelable `beforeunload` event and checking `defaultPrevented`.
   - Stopping the dev-server task can leave an orphaned Nuxt process holding the port and the lock ("Another Nuxt dev server is already running"). Kill it by port (`Get-NetTCPConnection -LocalPort 3123`) before restarting.
-- **real-API:** `pnpm dev` (port 3000 is fine; the proxy rewrites `Origin`) and log in with a staff account.
+- **real-API** (historical): the Spring dev API is no longer used.
 
 ## Environment notes
 

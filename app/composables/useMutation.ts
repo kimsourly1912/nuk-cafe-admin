@@ -33,8 +33,8 @@ export function resetMutationOutcomes() {
  *
  * @example
  * const remove = useMutation(
- *   (c: CategoryResponse) => unwrap(deleteCategory1({ path: { id: c.id! } })),
- *   { id: 'categories:remove', key: c => c.id!, confirm: c => ({ title: `Delete "${c.categoryName}"?`, danger: true }), ... },
+ *   (c: Category) => apiFetch(`/admin/categories/${c.id}`, { method: 'DELETE', query: { version: c.version } }),
+ *   { id: 'categories:remove', key: c => c.id, confirm: c => ({ title: `Delete "${c.name}"?`, danger: true }), ... },
  * )
  * await remove.execute(category)            // → { ok, status, data | error }
  * await remove.executeMany(selectedRows)    // → { succeeded, failed, skipped, notStarted, cancelled }

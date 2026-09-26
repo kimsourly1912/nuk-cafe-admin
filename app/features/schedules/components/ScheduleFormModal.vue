@@ -2,26 +2,25 @@
 /**
  * Create/edit form. Open via `useOverlay().create(ScheduleFormModal)`; emits `close(true)` when saved.
  *
- * Editing loads the schedule's detail first: the list row has no `items`, and the save must send
- * them back to keep the menu items linked (docs/plans/schedules.md S4). The fields are filled from
- * the row at once; Save waits for the detail.
+ * Editing also loads the schedule's detail to show which menu items follow it (read-only: links
+ * are made in the menu-item form, and a save never sends them).
  *
  * Like the category form, it stays open while saving but can be closed: the save continues, and
  * a failure offers "Reopen" with the input restored.
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { ScheduleListResponse } from '~/generated/api'
+import type { Schedule } from '#shared/contracts/menu'
 import { useScheduleDetail, useScheduleMutations } from '../composables/useSchedules'
-import { scheduleFormSchema, toScheduleForm, toScheduleRequest } from '../schemas/schedule-form'
+import { scheduleFormSchema, toCreateScheduleBody, toScheduleForm, toUpdateScheduleBody } from '../schemas/schedule-form'
 import type { ScheduleForm } from '../schemas/schedule-form'
 import { DAY_VALUES, DAYS, WEEKDAYS, WEEKEND } from '../utils/days'
 import { formatTime, parseTime } from '../utils/time'
-import { SERVER_TIME_ZONE, viewerTimeZone, zoneLabel, zoneShift } from '../utils/timezone'
+import { describeZone } from '../utils/timezone'
 import ScheduleFormModal from './ScheduleFormModal.vue'
 
 const props = defineProps<{
   /** A list row. Omit to create a new schedule. */
-  schedule?: ScheduleListResponse
+  schedule?: Schedule
   /** Restores unsaved input (used by "Reopen" after a failed background save). */
   draft?: ScheduleForm
 }>()
@@ -30,29 +29,21 @@ const props = defineProps<{
 // straight to the overlay.
 const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: boolean] }>()
 
-const id = props.schedule?.id
-const isEdit = id !== undefined
-// Staff see and enter times in their browser's timezone; the API gets them in the record's zone
-// as 24-hour HH:mm (docs/plans/schedules.md S2). An unknown record zone isn't converted at all.
-const recordZone = props.schedule?.timezone ?? SERVER_TIME_ZONE
-const zoneKnown = zoneShift(recordZone) !== undefined
-const shift = zoneShift(recordZone) ?? 0
-const timeHint = zoneKnown
-  ? `Times are in your timezone (${zoneLabel(viewerTimeZone())}) and saved in ${recordZone}.`
-  : `Times are in ${recordZone}, which this browser can't convert.`
+const isEdit = props.schedule !== undefined
+// Local wall time at the cafe, not converted to the viewer's zone (D41).
+const zone = props.schedule?.timeZone ?? useRuntimeConfig().public.cafeTimeZone
+const timeHint = `Times are cafe time: ${describeZone(zone)}.`
 
-const state = reactive<ScheduleForm>({ ...(props.draft ?? toScheduleForm(props.schedule, shift)) })
+const state = reactive<ScheduleForm>({ ...(props.draft ?? toScheduleForm(props.schedule)) })
 
-const detail = isEdit ? useScheduleDetail(id) : undefined
-/** Create needs nothing; edit needs a freshly loaded detail (not one being refetched). */
-const ready = computed(() => !detail || (detail.status.value === 'success' && !detail.pending.value))
+const detail = props.schedule ? useScheduleDetail(props.schedule.id) : undefined
 
 const { create, update } = useScheduleMutations()
 const saving = ref(false)
 
 // Compared with the form's original values (not the draft), so a reopened draft counts as unsaved.
 const unsaved = useModalUnsavedChanges(state, {
-  initial: toScheduleForm(props.schedule, shift),
+  initial: toScheduleForm(props.schedule),
   paused: saving,
   close: () => emit('close', false),
 })
@@ -93,15 +84,13 @@ function reopenActions(draft: ScheduleForm) {
 }
 
 async function onSubmit({ data }: FormSubmitEvent<ScheduleForm>) {
-  if (!ready.value) return
-  const body = toScheduleRequest(data, detail?.data.value ?? undefined, shift)
   const draft = { ...state, days: [...state.days] }
   const overrides = { errorActions: () => reopenActions(draft) }
 
   saving.value = true
-  const result = isEdit
-    ? await update.execute({ id, body }, overrides)
-    : await create.execute(body, overrides)
+  const result = props.schedule
+    ? await update.execute({ id: props.schedule.id, name: data.name, body: toUpdateScheduleBody(data, props.schedule) }, overrides)
+    : await create.execute(toCreateScheduleBody(data), overrides)
   saving.value = false
 
   if (!result.ok) return
@@ -237,18 +226,20 @@ async function onSubmit({ data }: FormSubmitEvent<ScheduleForm>) {
           </p>
           <template v-else>
             <div
-              v-if="detail.data.value?.items?.length"
+              v-if="detail.data.value?.products.length"
               class="flex flex-wrap gap-1"
             >
-              <!-- Name first; the id tells apart items with odd or equal names (a name like "35" looks like an id). -->
               <UBadge
-                v-for="item in detail.data.value.items"
-                :key="item.id"
+                v-for="product in detail.data.value.products"
+                :key="product.id"
                 color="neutral"
                 variant="subtle"
               >
-                {{ item.productName || 'Unnamed item' }}
-                <span class="font-normal text-dimmed">#{{ item.productId }}</span>
+                {{ product.name }}
+                <span
+                  v-if="product.status === 'INACTIVE'"
+                  class="font-normal text-dimmed"
+                >(inactive)</span>
               </UBadge>
             </div>
             <p
@@ -258,7 +249,7 @@ async function onSubmit({ data }: FormSubmitEvent<ScheduleForm>) {
               No menu items use this schedule.
             </p>
             <p class="text-xs text-muted">
-              Kept as they are when you save. Menu items are linked from their own form.
+              Menu items are linked from their own form.
             </p>
           </template>
         </div>
@@ -288,7 +279,6 @@ async function onSubmit({ data }: FormSubmitEvent<ScheduleForm>) {
             form="schedule-form"
             :label="isEdit ? 'Save' : 'Create'"
             :loading="saving"
-            :disabled="!ready"
           />
         </UTooltip>
       </div>

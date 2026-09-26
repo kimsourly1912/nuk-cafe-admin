@@ -1,5 +1,4 @@
-import type { CategoryResponse } from '~/generated/api'
-import { getAllCategories } from '~/generated/api'
+import type { Category } from '#shared/contracts/menu'
 import { mergeOrder, moveItem } from '../schemas/category-sort'
 import type { CategoryTree, TreeOrder } from '../schemas/category-tree'
 import { buildTree, countStatuses, filterTree, orderOf, sortOrderChanges } from '../schemas/category-tree'
@@ -17,12 +16,12 @@ import { useCategoryMutations } from './useCategories'
 export function useCategoryTree(
   filters: { search: string, status: string },
   /** Rows to leave out, e.g. deleted ones before the refetch arrives. */
-  hidden: (id: number) => boolean = () => false,
+  hidden: (id: string) => boolean = () => false,
 ) {
   // No empty-list default: `loading` means "no data yet", and an empty default would count as
   // data, showing the empty state instead of the placeholders during the first load.
-  const { data, loading, refreshing, error, refresh } = useApiQuery('categories:tree', () => unwrap(getAllCategories()))
-  const categories = computed<CategoryResponse[]>(() => (data.value ?? []).filter(c => !hidden(c.id!)))
+  const { data, loading, refreshing, error, refresh } = useApiQuery('categories:tree', () => apiFetch<Category[]>('/admin/categories'))
+  const categories = computed<Category[]>(() => (data.value ?? []).filter(c => !hidden(c.id)))
   const serverTree = computed(() => buildTree(categories.value))
   const serverOrder = computed(() => orderOf(serverTree.value))
 
@@ -47,17 +46,17 @@ export function useCategoryTree(
   watch(serverOrder, (next) => {
     if (!unsaved.isDirty.value) return reset()
     order.mains = mergeOrder(order.mains, next.mains)
-    order.subs = Object.fromEntries(Object.entries(next.subs).map(([main, ids]) => [main, mergeOrder(order.subs[Number(main)] ?? [], ids)]))
+    order.subs = Object.fromEntries(Object.entries(next.subs).map(([main, ids]) => [main, mergeOrder(order.subs[main] ?? [], ids)]))
   }, { immediate: true })
 
   /** The server tree in the local order. */
   const orderedTree = computed<CategoryTree>(() => {
-    const groups = new Map(serverTree.value.groups.map(g => [g.main.id!, g]))
+    const groups = new Map(serverTree.value.groups.map(g => [g.main.id, g]))
     return {
       groups: order.mains.flatMap((id) => {
         const group = groups.get(id)
         if (!group) return []
-        const subs = new Map(group.subs.map(s => [s.id!, s]))
+        const subs = new Map(group.subs.map(s => [s.id, s]))
         return [{ main: group.main, subs: (order.subs[id] ?? []).flatMap(subId => subs.get(subId) ?? []) }]
       }),
       orphans: serverTree.value.orphans,
@@ -69,19 +68,19 @@ export function useCategoryTree(
 
   /** Moves a main category by its position in the list shown. */
   function moveMain(from: number, to: number) {
-    order.mains = moveItem(orderedTree.value.groups.map(g => g.main.id!), from, to)
+    order.mains = moveItem(orderedTree.value.groups.map(g => g.main.id), from, to)
   }
 
   /** Moves a sub-category within its main category. */
-  function moveSub(mainId: number, from: number, to: number) {
+  function moveSub(mainId: string, from: number, to: number) {
     const group = orderedTree.value.groups.find(g => g.main.id === mainId)
     if (!group) return
-    order.subs = { ...order.subs, [mainId]: moveItem(group.subs.map(s => s.id!), from, to) }
+    order.subs = { ...order.subs, [mainId]: moveItem(group.subs.map(s => s.id), from, to) }
   }
 
   async function save() {
     const body = sortOrderChanges(serverOrder.value, order)
-    if (!body.items?.length) return reset()
+    if (!body.lists.length) return reset()
     // The refetch (invalidate) brings the saved order; mark clean so it's taken as is.
     const result = await reorder.execute(body)
     if (result.ok) unsaved.markClean()

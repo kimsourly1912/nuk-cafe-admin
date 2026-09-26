@@ -4,11 +4,11 @@
  * checkbox and the ⋮ menu (always visible, for keyboard and touch) don't.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { ProductResponse } from '~/generated/api'
-import { formatPrice } from '../utils/money'
+import type { Product } from '#shared/contracts/menu'
+import { formatMinor } from '../utils/money'
 
 const props = defineProps<{
-  product: ProductResponse
+  product: Product
   actions: DropdownMenuItem[]
   selected: boolean
   /** A save or delete is running for it. */
@@ -21,9 +21,9 @@ const emit = defineEmits<{ open: [], select: [value: boolean] }>()
 
 const inactive = computed(() => props.product.status === 'INACTIVE')
 const details = computed(() => {
-  const count = props.product.variants?.length ?? 0
+  const count = props.product.variantGroups.length
   return [
-    props.hideCategory ? undefined : props.product.category?.categoryName ?? 'No category',
+    props.hideCategory ? undefined : props.product.category.name,
     count ? `${count} ${count === 1 ? 'option group' : 'option groups'}` : undefined,
   ].filter(Boolean).join(' · ')
 })
@@ -39,15 +39,15 @@ function onClick(event: MouseEvent) {
   <article
     class="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg border bg-default transition hover:shadow-md focus-within:ring-2 focus-within:ring-primary"
     :class="[selected ? 'border-primary ring-1 ring-primary' : 'border-default', busy && 'pointer-events-none opacity-50']"
-    :aria-label="product.productName"
+    :aria-label="product.name"
     :aria-busy="busy || undefined"
     @click="onClick"
   >
     <div class="relative aspect-4/3 bg-elevated">
       <img
-        v-if="product.imageUrl"
-        :src="product.imageUrl"
-        :alt="product.productName"
+        v-if="product.image"
+        :src="product.image?.url"
+        :alt="product.name"
         loading="lazy"
         class="size-full object-cover"
         :class="inactive && 'grayscale'"
@@ -64,7 +64,7 @@ function onClick(event: MouseEvent) {
 
       <UCheckbox
         :model-value="selected"
-        :aria-label="`Select ${product.productName}`"
+        :aria-label="`Select ${product.name}`"
         class="absolute top-2 left-2 rounded bg-default/90 p-1"
         @update:model-value="value => emit('select', !!value)"
       />
@@ -86,7 +86,7 @@ function onClick(event: MouseEvent) {
             variant="solid"
             size="xs"
             class="bg-default/90 text-default hover:bg-default"
-            :aria-label="`Actions for ${product.productName}`"
+            :aria-label="`Actions for ${product.name}`"
           />
         </UDropdownMenu>
       </div>
@@ -106,9 +106,9 @@ function onClick(event: MouseEvent) {
           class="line-clamp-2 font-medium text-highlighted"
           :class="inactive && 'text-muted'"
         >
-          {{ product.productName }}
+          {{ product.name }}
         </h3>
-        <span class="shrink-0 font-semibold tabular-nums">{{ formatPrice(product.price) }}</span>
+        <span class="shrink-0 font-semibold tabular-nums">{{ formatMinor(product.priceMinor) }}</span>
       </div>
       <p
         v-if="details"

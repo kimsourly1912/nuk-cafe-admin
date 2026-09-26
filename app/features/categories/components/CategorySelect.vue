@@ -10,9 +10,8 @@
  * - A failed options load shows the error with Retry instead of an empty list.
  *
  * @example
- * <CategorySelect v-model="state.categoryId" type="SUB" />
- * <CategorySelect v-model="state.mainCategoryId" type="MAIN" none-label="None (main category)"
- *                 :current-label="category?.mainCategory?.categoryName" />
+ * <CategorySelect v-model="state.categoryId" :current-label="product?.category.name" />
+ * <CategorySelect v-model="state.parentId" level="main" none-label="None (main category)" />
  */
 import type { SelectItem } from '@nuxt/ui'
 import { useCategoryOptions } from '../composables/useCategoryOptions'
@@ -27,9 +26,9 @@ const selectAttrs = computed(() => {
 })
 
 const props = defineProps<{
-  type?: 'MAIN' | 'SUB'
+  level?: 'main' | 'sub'
   /** Hide this category (e.g. the one being edited can't be its own parent). */
-  excludeId?: number
+  excludeId?: string
   /** Adds an option that clears the value. */
   noneLabel?: string
   placeholder?: string
@@ -39,23 +38,23 @@ const props = defineProps<{
   includeInactive?: boolean
 }>()
 
-const model = defineModel<number | undefined>()
+const model = defineModel<string | undefined>()
 
-// USelect can't hold `undefined`, so "none" is represented internally by 0.
-const NONE = 0
+// USelect can't hold `undefined` or '', so "none" is represented internally by this value.
+const NONE = '__none__'
 
-const { data: categories, status, error, refresh } = useCategoryOptions(() => ({ type: props.type }))
+const { data: categories, status, error, refresh } = useCategoryOptions(() => ({ level: props.level }))
 
 /** Offered as new selections: not excluded, and not inactive while Q9 is open. */
 const selectable = computed(() => categories.value.filter(c =>
-  c.id !== undefined && c.id !== props.excludeId && (props.includeInactive || c.status !== 'INACTIVE')))
+  c.id !== props.excludeId && (props.includeInactive || c.status !== 'INACTIVE')))
 
 /** The current value when it isn't selectable: kept visible (and kept) with the best label known. */
 const currentItem = computed<SelectItem | undefined>(() => {
   const id = model.value
   if (id === undefined || selectable.value.some(c => c.id === id)) return undefined
   const known = categories.value.find(c => c.id === id)
-  const name = known?.categoryName ?? props.currentLabel ?? `#${id}`
+  const name = known?.name ?? props.currentLabel ?? 'Unknown category'
   const note = known?.status === 'INACTIVE' ? ' (inactive)' : !known && status.value === 'success' ? ' (unavailable)' : ''
   return { label: `${name}${note}`, value: id }
 })
@@ -63,12 +62,12 @@ const currentItem = computed<SelectItem | undefined>(() => {
 const items = computed<SelectItem[]>(() => [
   ...(props.noneLabel ? [{ label: props.noneLabel, value: NONE }] : []),
   ...(currentItem.value ? [currentItem.value] : []),
-  ...selectable.value.map(c => ({ label: c.categoryName, value: c.id })),
+  ...selectable.value.map(c => ({ label: c.name, value: c.id })),
 ])
 
 const value = computed({
   get: () => model.value ?? (props.noneLabel ? NONE : undefined),
-  set: (v: number | undefined) => {
+  set: (v: string | undefined) => {
     model.value = v === NONE ? undefined : v
   },
 })

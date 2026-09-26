@@ -2,11 +2,11 @@
 
 ← [API Reference](./README.md)
 
-- [Overview](#overview): how backend failures become one error type
+- [Overview](#overview): how server failures become one error type
 - [`ApiError`](#apierror)
 - [`getErrorMessage`](#geterrormessage)
 - [`isSilentError`](#issilenterror)
-- [Error codes](#error-codes): `API_ERROR_CODES`, `API_ERROR_MESSAGES`
+- [Error codes](#error-codes): server codes, `API_ERROR_MESSAGES`
 - [`<ApiErrorAlert>`](#apierroralert)
 - [`useNotify`](#usenotify)
 - [Which one do I use?](#which-one-do-i-use)
@@ -17,16 +17,16 @@ Source: `app/utils/api-error.ts`, tested in `test/unit/api-error.test.ts`.
 
 ## Overview
 
-The backend reports failures inconsistently:
+Failures reach the app in a few shapes:
 
 | Failure | How it arrives |
 |---|---|
-| Validation, not found, wrong login, "unknown path" | **HTTP 200** + `{ success: false, msg: 'NC0001', reason: '…' }` |
-| Session expired | HTTP 401 + envelope (`NC1000`) |
-| Gateway, CORS, crash | Real HTTP 4xx/5xx, possibly plain text, HTML or Spring's default JSON |
+| Our API (`/api/v1`) rejects a request | HTTP 4xx + `{ statusCode, message, data: { code, message, fieldErrors? } }` ([API → Errors](./api.md#errors)) |
+| Better Auth rejects a sign-in | HTTP 4xx + `{ code, message }` (`INVALID_EMAIL_OR_PASSWORD`, rate limiting) |
+| Crash, gateway, proxy | HTTP 5xx, possibly plain text or HTML |
 | Offline, DNS, timeout | No response at all |
 
-The API layer turns **all of them** into a single [`ApiError`](#apierror) with a `kind` and a message that's always safe to show. Feature code never checks `success` or HTTP status codes.
+`apiFetch` turns **all of them** into a single [`ApiError`](#apierror) with a `kind` and a message that's always safe to show. Feature code never inspects HTTP status codes.
 
 ---
 
@@ -35,8 +35,9 @@ The API layer turns **all of them** into a single [`ApiError`](#apierror) with a
 ```ts
 class ApiError extends Error {
   readonly kind: ApiErrorKind
-  readonly status: number       // HTTP status; 0 = no response; 200 = success:false
-  readonly code?: string        // backend `msg`, e.g. 'NC0001'
+  readonly status: number       // HTTP status; 0 = no response
+  readonly code?: string        // server code, e.g. 'VERSION_CONFLICT'
+  readonly fieldErrors?: Record<string, string[]> // per request field, for validation
   readonly message: string      // ALWAYS safe to show to users
   readonly detail?: string      // raw technical text, for logs only
   get retryable(): boolean      // network | timeout | server
@@ -50,19 +51,20 @@ class ApiError extends Error {
 
 | Kind | Meaning | Message shown |
 |---|---|---|
-| `validation` | Bad input (`NC0001`, HTTP 400/422) | Backend `reason`, e.g. "Required fields are missing: password, username" |
-| `not_found` | Item doesn't exist (`NC0011`, `NC0014`, HTTP 404) | Backend `reason`, e.g. "Category not found" |
-| `business` | A domain rule rejected it (unknown codes sent with HTTP 200, `LOGIN_FAILED`) | Backend `reason`, e.g. "Incorrect username or password" |
-| `conflict` | HTTP 409 | Backend `reason`, or "This change conflicts with existing data." |
-| `forbidden` | Logged in but not allowed (HTTP 403) | Backend `reason`, or "You don't have permission to do this." |
-| `unauthorized` | Session missing or expired (`NC1000`, HTTP 401). Triggers the token refresh | "Your session has expired…" (usually never shown: the user is redirected) |
-| `server` | HTTP 5xx, gateway pages | "Something went wrong on the server. Please try again." |
+| `validation` | Bad input (HTTP 400, 413, 415, 422) | Server message, e.g. "Some of the submitted data is invalid." (details in `fieldErrors`) |
+| `not_found` | Item doesn't exist (HTTP 404) | Server message, e.g. "The category was not found. It may have been deleted." |
+| `conflict` | HTTP 409: stale `version`, record in use, order changed meanwhile | Server message, e.g. "This category was changed by someone else. Reload it and try again." |
+| `forbidden` | HTTP 403: not staff (`NOT_STAFF`, which also ends the session), missing permission, cross-origin write | Server message, or "You don't have permission to do this." |
+| `business` | Other 4xx | Server message, or "The request could not be completed." |
+| `rate_limited` | HTTP 429 (sign-in attempts) | Server message, or "Too many attempts. Wait a moment and try again." |
+| `unauthorized` | No session (HTTP 401). Ends the session: the user goes to login | "Your session has expired…" (usually never shown) |
+| `server` | HTTP 5xx, gateway pages | "Something went wrong on the server. Please try again." (the server text is kept as `detail` only) |
 | `network` | No response (offline, DNS) | "Can't reach the server. Check your connection and try again." |
 | `timeout` | No response within 30s, or HTTP 408/504 | "The server took too long to respond. Please try again." |
-| `aborted` | Cancelled by the app | Never shown |
-| `unknown` | Technical backend errors (`NC0000`), unexpected JS errors | "Something went wrong. Please try again." |
+| `aborted` | Cancelled by the app, or a response from a previous identity | Never shown |
+| `unknown` | Unexpected JS errors | "Something went wrong. Please try again." |
 
-**The backend code wins over the HTTP status.** `NC1000` sent with HTTP 200 is still `unauthorized` and still triggers the refresh.
+Branch on `kind`, or on `code` for a specific reason (`error.code === 'SCHEDULE_IN_USE'`).
 
 ### `ApiError.from(error)`
 
@@ -83,8 +85,8 @@ catch (e) {
 Builds an error from any HTTP status and body. You won't normally call it; the API layer does. It's useful in tests.
 
 ```ts
-ApiError.fromResponse(200, { success: false, msg: 'NC0011', reason: 'Category not found' })
-// → kind 'not_found', message 'Category not found'
+ApiError.fromResponse(404, { statusCode: 404, message: 'Category not found', data: { code: 'NOT_FOUND', message: 'Category not found' } })
+// → kind 'not_found', code 'NOT_FOUND', message 'Category not found'
 ```
 
 ### `retryable`
@@ -117,18 +119,7 @@ Errors that must not produce a toast: cancelled on purpose, or already handled b
 
 ## Error codes
 
-```ts
-const API_ERROR_CODES: Record<string, ApiErrorKind> = {
-  NC0000: 'unknown',      // generic handler: reason is a raw technical message (hidden)
-  NC0001: 'validation',
-  NC0011: 'not_found',    // category not found
-  NC0014: 'not_found',    // product not found
-  NC1000: 'unauthorized',
-  LOGIN_FAILED: 'business',
-}
-```
-
-**When you meet a new backend code, add it here.** Unknown codes sent with HTTP 200 fall back to `business` and show their `reason`. That's right for domain messages, but wrong for technical ones: add those as `unknown` to hide them.
+The server's codes are listed in `ERROR_CODES` (`shared/contracts/common.ts`) and explained in [API → Errors](./api.md#errors). The client doesn't map codes to kinds: the HTTP status decides the kind, and 4xx messages are written to be shown. Add a code to `ERROR_CODES` and to the API page when a route needs a new one.
 
 `API_ERROR_MESSAGES: Record<ApiErrorKind, string>` holds the fallback messages from the table above.
 
@@ -161,7 +152,7 @@ Source: `app/composables/useNotify.ts`
 ```ts
 const notify = useNotify()
 try {
-  await unwrap(lookup({ body: { voucherCode } }))
+  await apiFetch('/staff/vouchers/lookup', { method: 'POST', body: { voucherCode } })
   notify.success('Voucher is valid')
 }
 catch (error) {
@@ -172,7 +163,7 @@ catch (error) {
 | Method | Description |
 |---|---|
 | `success(title, description?)` | Green toast. |
-| `warning(title, description?)` | Amber toast that **stays until dismissed**: the action worked but needs a look (e.g. the server saved variants differently from what was sent, D35). |
+| `warning(title, description?)` | Amber toast that **stays until dismissed**: the action worked but needs a look. |
 | `error(title, error)` | Red toast with `ApiError.from(error).message`. It does nothing for [silent errors](#issilenterror), and logs `detail` to the console in dev. |
 
 ---

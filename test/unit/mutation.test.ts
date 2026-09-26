@@ -18,7 +18,7 @@ function deferred<T = void>() {
 }
 
 const tick = () => new Promise(r => setTimeout(r, 0))
-const notFound = () => ApiError.fromResponse(200, { success: false, msg: 'NC0011', reason: 'Category not found' })
+const notFound = () => ApiError.fromResponse(404, { statusCode: 404, message: 'Category not found', data: { code: 'NOT_FOUND', message: 'Category not found' } })
 
 function setup(fn: (item: Item) => Promise<unknown>, options: Partial<MutationOptions<Item, unknown>> = {}, confirmAnswer = true) {
   const state = reactive(createMutationState<Item, unknown>())
@@ -112,7 +112,7 @@ describe('execute (single item)', () => {
 
   it('does not toast silent errors (session expired)', async () => {
     const { mutation, deps } = setup(async () => {
-      throw ApiError.fromResponse(401, { success: false, msg: 'NC1000', reason: 'Unauthorized' })
+      throw ApiError.fromResponse(401, { statusCode: 401, message: 'Sign in to continue.', data: { code: 'UNAUTHENTICATED', message: 'Sign in to continue.' } })
     })
     await mutation.execute(a)
     expect(deps.failure).not.toHaveBeenCalled()

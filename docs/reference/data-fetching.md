@@ -5,7 +5,6 @@
 - [`useApiQuery`](#useapiquery): read data
 - [`usePaginatedQuery`](#usepaginatedquery): filters and pagination for list pages
 - [`ANY` / `toApiQuery`](#any--toapiquery): "All" option in filter selects
-- [`unwrap`](#unwrap): SDK call → envelope `data`
 - [`invalidate`](#invalidate): refresh a feature's cached data
 - [`invalidateAll`](#invalidateall): refresh every loaded list (tab focus, reconnect)
 
@@ -13,7 +12,7 @@
 
 ## `useApiQuery`
 
-Reads data from the API. A thin wrapper over Nuxt's [`useAsyncData`](https://nuxt.com/docs/api/composables/use-async-data) with boolean loading states and errors already normalized to [`ApiError`](./errors.md#apierror).
+Reads data from the API (through [`apiFetch`](./api.md#calling-it-from-the-admin-ui)). A thin wrapper over Nuxt's [`useAsyncData`](https://nuxt.com/docs/api/composables/use-async-data) with boolean loading states and errors already normalized to [`ApiError`](./errors.md#apierror).
 
 Source: `app/composables/useApiQuery.ts`
 
@@ -21,8 +20,8 @@ Source: `app/composables/useApiQuery.ts`
 
 ```ts
 const { data, loading, refreshing, error, refresh } = useApiQuery(
-  'categories:list',
-  () => unwrap(getCategoriesPage({ query: toValue(query) })),
+  'schedules:list',
+  () => apiFetch<Page<Schedule>>('/admin/schedules', { query: toValue(query) }),
   { watch: [() => ({ ...toValue(query) })] },
 )
 ```
@@ -42,7 +41,7 @@ function useApiQuery<T, DefaultT = undefined>(
 | Parameter | Description |
 |---|---|
 | `key` | **`'<feature>:<name>'`**, e.g. `'categories:list'`. Can be a getter for parameterized queries: `` () => `categories:options:${type}` ``. [`invalidate`](#invalidate) finds queries by the feature prefix. In dev, a key without a prefix logs a warning. |
-| `handler` | Fetches the data, normally `() => unwrap(sdkFn({ ... }))`. Read reactive inputs with `toValue()` inside it. |
+| `handler` | Fetches the data, normally `() => apiFetch<T>('/admin/…', { query })`. Read reactive inputs with `toValue()` inside it. |
 | `options` | Any [`useAsyncData` option](https://nuxt.com/docs/api/composables/use-async-data#params). Common ones: `watch` (refetch when sources change), `default` (initial value), `immediate`, `lazy`. |
 
 ### Returns
@@ -63,8 +62,8 @@ function useApiQuery<T, DefaultT = undefined>(
 **Paginated list with filters** (refetches when the query changes):
 
 ```ts
-export function useCategoryList(query: MaybeRefOrGetter<CategoryListQuery>) {
-  return useApiQuery('categories:list', () => unwrap(getCategoriesPage({ query: toValue(query) })), {
+export function useScheduleList(query: MaybeRefOrGetter<ScheduleListQuery>) {
+  return useApiQuery('schedules:list', () => apiFetch<Page<Schedule>>('/admin/schedules', { query: toValue(query) }), {
     watch: [() => ({ ...toValue(query) })],
   })
 }
@@ -77,8 +76,8 @@ export function useCategoryList(query: MaybeRefOrGetter<CategoryListQuery>) {
 ```ts
 export function useCategoryOptions(filter: MaybeRefOrGetter<CategoryOptionsFilter> = {}) {
   return useApiQuery(
-    () => `categories:options:${toValue(filter).type ?? 'all'}`,
-    () => unwrap(getAllCategories({ query: toValue(filter) })),
+    () => `categories:options:${toValue(filter).level ?? 'all'}`,
+    () => apiFetch<Category[]>('/admin/categories', { query: { level: toValue(filter).level } }),
     { default: () => [] }, // data is never undefined
   )
 }
@@ -108,7 +107,7 @@ export function useCategoryOptions(filter: MaybeRefOrGetter<CategoryOptionsFilte
 
 ## `usePaginatedQuery`
 
-Filter and pagination state for list pages, **kept in the URL** (`/categories?search=tea&status=ACTIVE&page=2`). It converts between the UI's 1-based page (`UPagination`) and the API's 0-based `page` + `size`.
+Filter and pagination state for list pages, **kept in the URL** (`/categories?search=tea&status=ACTIVE&page=2`). Pages are 1-based both in `UPagination` and in the API (`page`, `pageSize`).
 
 Source: `app/composables/usePaginatedQuery.ts`, URL conversion in `app/utils/query.ts` (`toUrlQuery`, `fromUrlQuery`, unit-tested in `test/unit/query.test.ts`). E2E: `test/e2e/list-page.test.ts`. Decision: [D21](../decisions.md).
 
@@ -118,9 +117,9 @@ Source: `app/composables/usePaginatedQuery.ts`, URL conversion in `app/utils/que
 const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({
   search: '',
   status: ANY as Status | Any,
-  type: ANY as 'MAIN' | 'SUB' | Any,
+  day: ANY as Day | Any,
 })
-const { data, loading } = useCategoryList(query)
+const { data, loading } = useScheduleList(query)
 ```
 
 ```vue
@@ -133,7 +132,7 @@ const { data, loading } = useCategoryList(query)
                     @create="openForm()" @clear="clearFilters()" />
   </template>
 </UTable>
-<UPagination v-model:page="page" :total="data?.totalElements ?? 0" :items-per-page="pageSize" />
+<UPagination v-model:page="page" :total="data?.total ?? 0" :items-per-page="pageSize" />
 ```
 
 See [`<SearchInput>`](./ui.md#searchinput) and [`<ListEmptyState>`](./ui.md#listemptystate).
@@ -148,7 +147,7 @@ function usePaginatedQuery<T extends Record<string, unknown>>(
   page: Ref<number>                                   // 1-based
   pageSize: number
   filters: Reactive<T>                                // bind inputs to these
-  query: ComputedRef<ApiQuery<T> & { page: number, size: number }> // 0-based, ANY/'' removed
+  query: ComputedRef<ApiQuery<T> & { page: number, pageSize: number }> // ANY/'' removed
   isFiltered: ComputedRef<boolean>                    // any filter differs from its default
   clearFilters: () => void                            // back to the defaults (and page 1)
 }
@@ -157,7 +156,7 @@ function usePaginatedQuery<T extends Record<string, unknown>>(
 ### Behavior
 
 - **Changing any filter resets `page` to 1.**
-- `query` drops `ANY` and empty strings (via [`toApiQuery`](#any--toapiquery)), so unset filters aren't sent. `query.page = page - 1`, `query.size = pageSize`.
+- `query` drops `ANY` and empty strings (via [`toApiQuery`](#any--toapiquery)), so unset filters aren't sent. `query.page = page`, `query.pageSize = pageSize`.
 - **URL sync** (`syncUrl: true`, the default):
 
 | Case | Behavior |
@@ -215,29 +214,6 @@ const typeItems: SelectItem[] = [{ label: 'All types', value: ANY }, { label: 'M
 ```
 
 You rarely call `toApiQuery` directly, because `usePaginatedQuery` does. For "none" values in **forms** (e.g. "no parent category"), let the feature's `<Feature>Select` component handle it (see [`CategorySelect`](./features.md#categoryselect)).
-
----
-
-## `unwrap`
-
-Awaits a generated SDK call and returns the envelope's `data`.
-
-Source: `app/utils/api.ts`
-
-```ts
-function unwrap<T>(request: Promise<{ data: ApiEnvelope<T> }>): Promise<T>
-```
-
-```ts
-const page = await unwrap(getCategoriesPage({ query: { page: 0, size: 20 } }))
-// page: PageResponseCategoryResponse → { content, totalElements, totalPages, ... }
-```
-
-- Every backend response is `{ data, success, msg, reason }`, and the SDK returns `{ data: <that envelope> }`. `unwrap` gives you the inner `data`.
-- Failures never reach `unwrap`. The API layer already threw an [`ApiError`](./errors.md#apierror), including for HTTP 200 responses with `success: false`.
-- Use it for **every** SDK call.
-
-Finding the SDK function for an endpoint: search `app/generated/api/sdk.gen.ts` for its URL (`url: '/staff/categories/{id}'`). Names come from the backend's `operationId`s and are sometimes suffixed (`createCategory1`, `update_2`).
 
 ---
 

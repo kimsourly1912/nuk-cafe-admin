@@ -11,7 +11,7 @@ const showShortcuts = () => shortcutsHelp.open()
 usePageShortcuts({ '?': showShortcuts })
 
 const userMenu = computed<DropdownMenuItem[]>(() => [
-  { label: user.value?.username, type: 'label' },
+  { label: user.value?.email, type: 'label' },
   { type: 'separator' },
   { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
   { label: 'Log out', icon: 'i-lucide-log-out', onSelect: () => logout() },
@@ -56,7 +56,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
           class="w-full"
         >
           <UButton
-            :label="collapsed ? undefined : (user?.displayName || user?.username)"
+            :label="collapsed ? undefined : (user?.displayName || user?.email)"
             icon="i-lucide-circle-user"
             color="neutral"
             variant="ghost"

@@ -1,19 +1,18 @@
-import type { GetAllCategoriesData } from '~/generated/api'
-import { getAllCategories } from '~/generated/api'
+import type { Category } from '#shared/contracts/menu'
 
-export type CategoryOptionsFilter = NonNullable<GetAllCategoriesData['query']>
+export interface CategoryOptionsFilter {
+  /** Only main categories, or only sub-categories. */
+  level?: 'main' | 'sub'
+}
 
 /**
- * PUBLIC. Unpaginated categories for pickers (e.g. `type: 'MAIN'` for parent selects).
+ * PUBLIC. Every category for pickers (e.g. `level: 'main'` for parent selects).
  * Keyed per filter so different pickers don't overwrite each other.
  */
 export function useCategoryOptions(filter: MaybeRefOrGetter<CategoryOptionsFilter> = {}) {
   return useApiQuery(
-    () => {
-      const { type, mainCategoryId } = toValue(filter)
-      return `categories:options:${type ?? 'all'}:${mainCategoryId ?? 'all'}`
-    },
-    () => unwrap(getAllCategories({ query: toValue(filter) })),
+    () => `categories:options:${toValue(filter).level ?? 'all'}`,
+    () => apiFetch<Category[]>('/admin/categories', { query: { level: toValue(filter).level } }),
     { default: () => [] },
   )
 }

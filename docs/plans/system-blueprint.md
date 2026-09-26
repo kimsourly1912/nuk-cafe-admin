@@ -154,7 +154,7 @@ erDiagram
 ## 6. API shape and client boundaries
 
 - `/api/v1/public/*`: menu, branch hours, published content. No private customer data.
-- `/api/v1/customer/*`: checkout quote/order, own orders, profile, points, vouchers, rewards. Derive customer identity from session, never from a trusted body field.
+- `/api/v1/customer/*`: checkout quote/order, own orders, profile, points, vouchers (and rewards only if a reward catalog is approved). Derive customer identity from session, never from a trusted body field.
 - `/api/v1/staff/*`: branch queue, order commands, voucher lookup/redemption. Branch permission enforced on every route.
 - `/api/v1/admin/*`: catalog, staff, offers, media, reporting, audit. Fine-grained permission checks per command.
 - `/api/v1/webhooks/*`: signed provider events; no browser session; verify raw payload and deduplicate provider event ID.
@@ -168,7 +168,7 @@ The handoff should be a set of small, independently verifiable tasks. Do not giv
 
 | Milestone | Deliverables | Gate before next milestone |
 |---|---|---|
-| 0. Contracts | Resolve section 8 decisions; write role matrix, order/payment transitions, pricing examples, API examples | Owner approves product behavior; no unresolved policy hidden in code |
+| 0. Contracts | Resolve section 9 decisions; write role matrix, order/payment transitions, pricing examples, API examples | Owner approves product behavior; no unresolved policy hidden in code |
 | 1. Platform | NuxtHub local SQLite/R2, staging D1/R2, Better Auth, first-admin bootstrap, migrations, CI deploy sequence | Login and a permissioned read work locally and on staging; migration rollback tested |
 | 2. Catalog | Branches, categories, products, variants, schedules, translations, media, public menu API | Admin create/edit/publish and customer read; conflict and availability tests |
 | 3. Orders | Quote, checkout, immutable snapshots, idempotency, staff queue/commands, counter-payment record | Concurrent and replay tests; server totals match written examples |

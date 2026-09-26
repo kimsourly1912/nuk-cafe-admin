@@ -3,7 +3,7 @@ import type { UnwrapRef } from 'vue'
 /**
  * Filter + pagination state for list pages, kept in the URL (`/categories?search=tea&page=2`),
  * so reload, back/forward and shared links keep the user's place.
- * - `page` is 1-based (for UPagination); `query` converts it to the API's 0-based `page` + `size`.
+ * - `page` is 1-based, as in UPagination and the API; `query` adds it and `pageSize` to the filters.
  * - Changing any filter resets to page 1.
  * - `ANY` / '' filter values are dropped from `query`; default values are left out of the URL.
  * - The URL is updated with `router.replace` (filter changes don't add history entries). Changing
@@ -60,8 +60,8 @@ export function usePaginatedQuery<T extends Record<string, unknown>>(
 
   const query = computed(() => ({
     ...toApiQuery(filters as UnwrapRef<T>),
-    page: page.value - 1,
-    size: pageSize,
+    page: page.value,
+    pageSize,
   }))
 
   /** Whether any filter differs from its default (for "No results" vs "Nothing here yet"). */

@@ -5,7 +5,7 @@
  * the order is changed by drag and drop per level (docs/plans/list-ui-refresh.md, D37).
  */
 import type { BannerProps, DropdownMenuItem } from '@nuxt/ui'
-import type { CategoryResponse } from '~/generated/api'
+import type { Category } from '#shared/contracts/menu'
 import { insertNodeAt, removeNode, useSortable } from '@vueuse/integrations/useSortable'
 import { useCategoryMutations } from '../composables/useCategories'
 import { useCategoryTree } from '../composables/useCategoryTree'
@@ -23,37 +23,37 @@ const { remove, isBusy } = useCategoryMutations()
 const tree = useCategoryTree(filters, id => remove.isRemoved(id))
 
 // Every category shown, in order: for selection and bulk actions.
-const rows = computed<CategoryResponse[]>(() => [
+const rows = computed<Category[]>(() => [
   ...tree.tree.value.groups.flatMap(g => [g.main, ...g.subs]),
   ...tree.tree.value.orphans,
 ])
 
 // --- Collapsing (all expanded; a search shows every match) ---
-const collapsed = ref(new Set<number>())
-const isExpanded = (id: number) => !!filters.search || !collapsed.value.has(id)
-function toggle(id: number) {
+const collapsed = ref(new Set<string>())
+const isExpanded = (id: string) => !!filters.search || !collapsed.value.has(id)
+function toggle(id: string) {
   const next = new Set(collapsed.value)
   if (!next.delete(id)) next.add(id)
   collapsed.value = next
 }
 
 // --- Selection & bulk actions ---
-const selection = useTableSelection(rows, c => c.id!, { resetOn: [() => ({ ...filters })] })
+const selection = useTableSelection(rows, c => c.id, { resetOn: [() => ({ ...filters })] })
 
 async function removeSelected() {
   // Sub-categories go first (batch phases), so a main isn't refused for still having children.
   const result = await remove.executeMany(selection.selected)
   // Keep only the rows that still need attention selected: failed, skipped (busy) and not started.
   selection.select([
-    ...result.failed.map(f => f.input.id!),
-    ...result.skipped.map(c => c.id!),
-    ...result.notStarted.map(c => c.id!),
+    ...result.failed.map(f => f.input.id),
+    ...result.skipped.map(c => c.id),
+    ...result.notStarted.map(c => c.id),
   ])
 }
 
 // --- Row actions ---
-function rowActions(category: CategoryResponse): DropdownMenuItem[] {
-  const isMain = category.mainCategoryId === undefined || category.mainCategoryId === null
+function rowActions(category: Category): DropdownMenuItem[] {
+  const isMain = category.parentId === null
   return [
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openForm(category) },
     ...(isMain ? [{ label: 'Add sub-category', icon: 'i-lucide-list-plus', onSelect: () => openForm(undefined, category.id) }] : []),
@@ -62,7 +62,7 @@ function rowActions(category: CategoryResponse): DropdownMenuItem[] {
 }
 
 const formModal = useOverlay().create(CategoryFormModal)
-function openForm(category?: CategoryResponse, parentId?: number) {
+function openForm(category?: Category, parentId?: string) {
   formModal.open({ category, parentId })
 }
 
@@ -236,15 +236,15 @@ const filtersLocked = computed(() => tree.isDirty.value || tree.saving.value)
             :key="group.main.id"
             :group="group"
             :sortable="tree.sortable.value && !tree.saving.value"
-            :expanded="isExpanded(group.main.id!)"
+            :expanded="isExpanded(group.main.id)"
             :actions="rowActions"
             :is-selected="selection.isSelected"
             :is-busy="isBusy"
             @open="category => openForm(category)"
             @select="(category, value) => selection.toggle(category, value)"
-            @toggle="toggle(group.main.id!)"
+            @toggle="toggle(group.main.id)"
             @main-handle-keydown="onMainKey($event, i)"
-            @move-sub="(from, to) => tree.moveSub(group.main.id!, from, to)"
+            @move-sub="(from, to) => tree.moveSub(group.main.id, from, to)"
           />
         </div>
 
@@ -261,12 +261,12 @@ const filtersLocked = computed(() => tree.isDirty.value || tree.saving.value)
             v-for="orphan in tree.tree.value.orphans"
             :key="orphan.id"
             role="listitem"
-            :aria-label="orphan.categoryName"
+            :aria-label="orphan.name"
             :category="orphan"
             level="sub"
             :actions="rowActions(orphan)"
             :selected="selection.isSelected(orphan)"
-            :busy="isBusy(orphan.id!)"
+            :busy="isBusy(orphan.id)"
             class="pl-8"
             @open="openForm(orphan)"
             @select="value => selection.toggle(orphan, value)"

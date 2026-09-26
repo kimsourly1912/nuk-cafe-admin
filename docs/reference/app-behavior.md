@@ -63,7 +63,7 @@ Source: `app/plugins/data-freshness.client.ts` (VueUse `useBroadcastChannel`, `u
 | Connection lost → back | Every loaded query refetches (and the offline banner hides) |
 | Refetch while rows are shown | Old rows stay on screen; `refreshing` is true (small spinner), not `loading` |
 | Refetch while a form is open | Form input is untouched (forms copy data into their own state). The list behind it updates |
-| Session expired while away | The refetch gets 401 → refresh fails → redirect to login (see [Session loss](#session-loss)) |
+| Session expired while away | The refetch gets 401 → redirect to login (see [Session loss](#session-loss)) |
 | Browser without `BroadcastChannel` | Only return-to-tab and reconnect refetches (every supported browser has it: Safari ≥ 15.4) |
 | Malformed message on the channel | Ignored (must be `{ features: string[] }`) |
 
@@ -105,13 +105,13 @@ Every case is in [Forms: unsaved changes → Edge cases](./forms.md#edge-cases).
 
 | Case | Behavior |
 |---|---|
-| Access token expired | One `/staff/auth/refresh` (shared by concurrent requests), then the request is retried. The user notices nothing |
-| Refresh rejected | `clearSession()` → redirect to `/login?redirect=<current page>`. **No unsaved-changes dialog**: staying isn't possible. Open form modals close, toasts clear (see the transition contract below) |
-| Refresh times out (10 s) or can't reach the server | The request fails with a timeout/network message; the session is **kept**, and the next request may try again |
-| Still unauthorized after a successful refresh + retry | Session expires (once); no further refresh attempts until the next login |
-| Many requests fail at once | One shared refresh; at most one expiry |
+| Session expired (401 from any request) | `clearSession()` → redirect to `/login?redirect=<current page>`. No refresh or retry: Better Auth keeps a live session's cookie fresh itself, so a 401 means it's over. **No unsaved-changes dialog**: staying isn't possible. Open form modals close, toasts clear (see the transition contract below) |
+| Staff access removed mid-session (403 `NOT_STAFF`: profile disabled) | Same as a 401 |
+| Many requests fail at once | One session change: `clearSession()` is idempotent |
+| A customer account signs in on the admin login | `/api/v1/admin/me` answers 403 `NOT_STAFF`; the account is signed out again and the form says "This account doesn't have staff access." |
+| Better Auth refetches its own session (startup, tab focus) | No effect on the staff session: separate state keys (`staff-session:*` vs the module's `auth:*`) |
 | Log out with unsaved input | Asks first ([`useLeaveGuard`](./forms.md#useleaveguard)), **before** calling the backend |
-| **Logged out in another tab** | This tab goes to `/login?redirect=<current page>` at once. Unsaved input in this tab is lost without a dialog (same as a refresh failure: the session is gone for every tab) |
+| **Logged out in another tab** | This tab goes to `/login?redirect=<current page>` at once. Unsaved input in this tab is lost without a dialog (the session is gone for every tab) |
 | **Logged in in another tab** | Tabs waiting on `/login` continue to their `redirect` target. Logged-in tabs re-read the session (it may be a different staff member now) |
 | Session expires in one tab | Only that tab redirects. The others find out on their next request (not broadcast) |
 | After login | Back to the `redirect` page. Only paths on this site: `/x` is allowed; `//other-site.com`, `https://…` and anything else go to `/` (`loginRedirectTarget`). Blocks open redirects through crafted login links |
@@ -124,7 +124,7 @@ Any identity change (login, logout, expiry, a different staff member via another
 
 | Left over from the previous identity | What happens | How |
 |---|---|---|
-| Responses to requests still in flight | Discarded (silent `aborted`): no data, no toast, no invalidation | `createApiFetch` compares the generation at start and end |
+| Responses to requests still in flight | Discarded (silent `aborted`): no data, no toast, no invalidation | `createApiFetch` (`apiFetch`) compares the generation at start and end |
 | Query data (`<feature>:` keys) | Cleared; refetched only if someone is signed in | `clearNuxtData` + `refreshNuxtData` |
 | Superseded/unmounted query responses | Ignored | Nuxt (promise identity), independent of the above |
 | Unsaved forms | Discarded **without** a dialog | `useLeaveGuard().discardAll()` |
@@ -139,23 +139,21 @@ Not covered: browsers without `BroadcastChannel` learn about another tab's accou
 
 | Case | Behavior |
 |---|---|
-| Normal request | 30 s per attempt (SDK `timeout`). ofetch's automatic retries are **off** (`retry: 0`) |
-| 401 / NC1000 | One shared refresh (10 s timeout), then **one** retry with its own 30 s. Worst case ≈ 70 s |
-| GET network error | Fails at once (was: one hidden retry without a timeout) |
+| Normal request | 30 s (`apiFetch`; uploads pass 120 s). ofetch's automatic retries are **off** (`retry: 0`): a retried write could apply twice |
+| 401 / 403 NOT_STAFF | No retry; the session ends |
+| GET network error | Fails at once |
 
-Tests: `test/unit/api-fetch.test.ts` (including real-ofetch tests for the default retry and the refresh timeout). D27.
+Tests: `test/unit/api-fetch.test.ts`. D27 (partly superseded by D40).
 
 ### Cookies and CSRF (review, 2026-09-26)
 
-What the frontend does, verified in code: auth is two HttpOnly cookies (`SameSite=Lax`, no `Domain`) sent with `credentials: 'include'` to one configured API base; the frontend never reads tokens. State changes use POST/PUT/DELETE with JSON bodies; the `/staff`, `/admin` spec has no state-changing GET endpoint. The OpenAPI spec declares only `bearerAuth` (an `Authorization` header), while the portal authenticates with cookies.
-
-What that does and doesn't protect: `SameSite=Lax` keeps the cookies off cross-**site** POST/PUT/DELETE, but **same-site** origins (any `*.nukcafe.co` subdomain) still send them. Whether the backend defends cookie-authenticated writes (CSRF token, `Origin`/`Referer` check, required JSON content type, a custom header) is **unknown**. The frontend adds no token of its own: there is no contract for one. The exact questions are Q10–Q12 in progress.md. **Nothing here claims the backend is protected.**
+Auth is Better Auth's HttpOnly session cookie on this same origin (the admin UI and `/api` are one app); the frontend never reads it. Better Auth protects its own routes (`/api/auth`, trusted origins). Our API's writes (POST/PATCH/PUT/DELETE) must carry this site's `Origin` or `Referer` (`server/middleware/origin-check.ts`), so a sibling subdomain can't write with the user's cookie even though `SameSite=Lax` would send it. There are no state-changing GET routes. Verified with a cross-origin POST (403) against `pnpm dev`; production also needs `NUXT_PUBLIC_SITE_URL` set to the real origin.
 
 ### Permissions (Q6: open)
 
-The session carries `groups` (e.g. `ADMIN`, `CASHIER`), but no role rules have been agreed. **The UI does no role gating**; hiding a button is never authorization, and the backend must refuse unauthorized requests. When the project owner answers, fill in this matrix, then add route meta and a shared `can(action)` (feature-standard §7):
+The staff session carries a `role` and its `permissions`. Only `admin` exists (every permission, D40); the server checks a permission on every admin route (`requireStaff`). `useAuth().can(permission)` exists for hiding actions, but no screen uses it yet because only one role exists. When the project owner answers, fill in this matrix, add roles to `ROLE_PERMISSIONS` (`shared/contracts/identity.ts`), then route meta and hidden actions (feature-standard §7):
 
-| Screen / action | ADMIN | CASHIER | Other groups? |
+| Screen / action | admin | manager? | cashier? |
 |---|---|---|---|
 | Categories: view / create / edit / delete / bulk delete | ? | ? | ? |
 | Schedules, Menu items: view / edit / delete | ? | ? | ? |
@@ -164,7 +162,7 @@ The session carries `groups` (e.g. `ADMIN`, `CASHIER`), but no role rules have b
 | Staff: view / create / reset password / change status | ? | ? | ? |
 | Rewards, vouchers (redeem / lookup), banners, carbon, settings | ? | ? | ? |
 
-Also needed: does the backend enforce each rule (so the UI hides rather than blocks)? What does a forbidden request return (code for the `forbidden` kind)?
+A forbidden request returns 403 `FORBIDDEN` (kind `forbidden`).
 
 ---
 

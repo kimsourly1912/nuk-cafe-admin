@@ -1,18 +1,18 @@
 <script setup lang="ts">
 /**
  * A schedule in the list: name, the week as 7 day pills, the time range on a 24-hour bar, the
- * number of menu items, status. Days and times are already in the viewer's zone (the page
- * converts them, D33). Clicking the card opens it; the checkbox and the ⋮ menu don't.
+ * number of menu items, status. Times are the schedule's local wall time; its zone is shown only
+ * when it isn't the cafe's (D41). Clicking the card opens it; the checkbox and the ⋮ menu don't.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { ScheduleListResponse } from '~/generated/api'
-import type { Day } from '../utils/days'
+import type { Schedule } from '#shared/contracts/menu'
 import { DAYS, formatDays, formatTimeRange, timeBarSegments } from '../utils/days'
+import { zoneLabel } from '../utils/timezone'
 
 const props = defineProps<{
-  schedule: ScheduleListResponse
-  /** Days and times in the viewer's zone; `zone` is set when the record's zone couldn't be converted. */
-  local: { days: Day[], startTime: string, endTime: string, zone?: string }
+  schedule: Schedule
+  /** The cafe's zone: a schedule in another zone says which. */
+  cafeZone: string
   actions: DropdownMenuItem[]
   selected: boolean
   busy?: boolean
@@ -21,8 +21,9 @@ const props = defineProps<{
 const emit = defineEmits<{ open: [], select: [value: boolean] }>()
 
 const inactive = computed(() => props.schedule.status === 'INACTIVE')
-const segments = computed(() => timeBarSegments(props.local.startTime, props.local.endTime))
-const itemCount = computed(() => props.schedule.item_count ?? 0)
+const segments = computed(() => timeBarSegments(props.schedule.startTime, props.schedule.endTime))
+const itemCount = computed(() => props.schedule.productCount)
+const zone = computed(() => (props.schedule.timeZone === props.cafeZone ? undefined : zoneLabel(props.schedule.timeZone)))
 
 function onClick(event: MouseEvent) {
   if ((event.target as HTMLElement).closest('a, button, input, label')) return
@@ -62,14 +63,14 @@ function onClick(event: MouseEvent) {
     <!-- The week: which days it runs. -->
     <div
       role="img"
-      :aria-label="formatDays(local.days)"
+      :aria-label="formatDays(schedule.days)"
       class="flex gap-1"
     >
       <span
         v-for="day in DAYS"
         :key="day.value"
         class="flex size-7 items-center justify-center rounded-full text-xs font-medium"
-        :class="local.days.includes(day.value) ? (inactive ? 'bg-accented text-default' : 'bg-primary text-inverted') : 'bg-elevated text-dimmed'"
+        :class="schedule.days.includes(day.value) ? (inactive ? 'bg-accented text-default' : 'bg-primary text-inverted') : 'bg-elevated text-dimmed'"
         :title="day.label"
       >{{ day.label[0] }}</span>
     </div>
@@ -77,11 +78,11 @@ function onClick(event: MouseEvent) {
     <!-- The day: when it runs, on a 24-hour bar. -->
     <div class="w-48 space-y-1.5">
       <p class="text-sm tabular-nums">
-        {{ formatTimeRange(local.startTime, local.endTime) }}
+        {{ formatTimeRange(schedule.startTime, schedule.endTime) }}
         <span
-          v-if="local.zone"
+          v-if="zone"
           class="text-xs text-muted"
-        >{{ local.zone }}</span>
+        >{{ zone }}</span>
       </p>
       <div
         class="relative h-1.5 overflow-hidden rounded-full bg-elevated"

@@ -2,22 +2,22 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { MockHandler } from './support/mock-api'
-import { deferred, gotoViaSidebar, mockApi, paginatedHandler, setupE2e } from './support/mock-api'
+import { deferred, gotoViaSidebar, mockApi, pageOf, paginatedHandler, scheduleOf, setupE2e } from './support/mock-api'
 
 // List-page behaviour shared by every paginated feature (usePaginatedQuery, SearchInput,
 // ListEmptyState, ListSkeleton), exercised on Schedules. (It ran on Categories until that became
 // an unpaginated tree: docs/plans/list-ui-refresh.md.)
 await setupE2e()
 
-const schedule = (id: number, name: string) => ({ id, name, status: 'ACTIVE', startTime: '08:00', endTime: '10:00', timezone: 'UTC', days: ['MONDAY'], item_count: 0 })
+const schedule = (id: number, name: string) => scheduleOf(`sched-${id}`, name, { days: ['MONDAY'], startTime: '08:00', endTime: '10:00' })
 const MANY = Array.from({ length: 45 }, (_, i) => schedule(i + 1, i === 0 ? 'Green tea' : `Schedule ${i + 1}`))
 
-/** The status tabs ask the same endpoint for counts (`size=1`): leave those out. */
-const isCount = (request: { url: URL }) => request.url.searchParams.get('size') === '1'
+/** The status tabs ask the same endpoint for counts (`pageSize=1`): leave those out. */
+const isCount = (request: { url: URL }) => request.url.searchParams.get('pageSize') === '1'
 
 async function open(path = '/schedules', rows = MANY) {
   const page = await createPage()
-  const api = await mockApi(page, { 'GET /staff/schedules': paginatedHandler(rows, 'name') })
+  const api = await mockApi(page, { 'GET /admin/schedules': paginatedHandler(rows) })
   await page.goto(url(path), { waitUntil: 'hydration' })
   return { page, api }
 }
@@ -29,10 +29,10 @@ const query = (page: Page) => Object.fromEntries(new URL(page.url()).searchParam
 describe('list page: search', () => {
   it('searches as you type, with one request after typing stops', async () => {
     const lists: string[] = []
-    const list = paginatedHandler(MANY, 'name')
+    const list = paginatedHandler(MANY)
     const page = await createPage()
     await mockApi(page, {
-      'GET /staff/schedules': (request) => {
+      'GET /admin/schedules': (request) => {
         if (!isCount(request)) lists.push(request.url.search)
         return list(request)
       },
@@ -80,7 +80,7 @@ describe('list page: state in the URL', () => {
 
   it('does not add history entries: back leaves the list', async () => {
     const page = await createPage()
-    await mockApi(page, { 'GET /staff/schedules': paginatedHandler(MANY, 'name') })
+    await mockApi(page, { 'GET /admin/schedules': paginatedHandler(MANY) })
     await gotoViaSidebar(page, [/Schedules/])
     await search(page).fill('green')
     await search(page).press('Enter')
@@ -118,24 +118,24 @@ describe('list page: empty states', () => {
 describe('list page: loading and out-of-order responses', () => {
   it('shows placeholders until the first page arrives, never the empty state', async () => {
     const first = deferred()
-    const list = paginatedHandler(MANY, 'name')
+    const list = paginatedHandler(MANY)
     const page = await createPage()
-    await mockApi(page, { 'GET /staff/schedules': request => (isCount(request) ? list(request) : first.handler(request)) })
+    await mockApi(page, { 'GET /admin/schedules': request => (isCount(request) ? list(request) : first.handler(request)) })
     await page.goto(url('/schedules'), { waitUntil: 'hydration' })
     await page.getByRole('status', { name: 'Loading schedules…' }).waitFor()
     expect(await page.getByText('No schedules yet').count()).toBe(0)
-    first.release(list({ url: new URL('http://x/staff/schedules'), body: null }))
+    first.release(list({ url: new URL('http://x/api/v1/admin/schedules'), body: null }))
     await card(page, 'Green tea').waitFor()
     expect(await page.getByRole('status', { name: 'Loading schedules…' }).count()).toBe(0)
   })
 
   it('a slow response for an older search never replaces the newer results', async () => {
     const slowGreen = deferred()
-    const list = paginatedHandler(MANY, 'name')
+    const list = paginatedHandler(MANY)
     const handler: MockHandler = request =>
       (!isCount(request) && request.url.searchParams.get('search') === 'green' ? slowGreen.handler(request) : list(request))
     const page = await createPage()
-    await mockApi(page, { 'GET /staff/schedules': handler })
+    await mockApi(page, { 'GET /admin/schedules': handler })
     await page.goto(url('/schedules'), { waitUntil: 'hydration' })
     await card(page, 'Green tea').waitFor()
 
@@ -147,7 +147,7 @@ describe('list page: loading and out-of-order responses', () => {
     await card(page, 'Schedule 45').waitFor()
 
     // The older request answers last, with rows that don't match the current search.
-    slowGreen.release({ content: [schedule(99, 'Stale green tea')], totalElements: 1, totalPages: 1, currentPage: 0, pageSize: 20, hasNext: false, hasPrevious: false })
+    slowGreen.release(pageOf([schedule(99, 'Stale green tea')]))
     await page.waitForTimeout(500)
     expect(await page.getByText('Stale green tea').count()).toBe(0)
     await card(page, 'Schedule 45').waitFor()

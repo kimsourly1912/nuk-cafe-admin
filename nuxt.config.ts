@@ -10,6 +10,14 @@ export default defineNuxtConfig({
     },
   },
   css: ['@/assets/css/tailwind.css'],
+  runtimeConfig: {
+    // NUXT_BOOTSTRAP_TOKEN: enables POST /api/v1/bootstrap/admin (first admin) while set; ≥ 32 characters.
+    bootstrapToken: '',
+    public: {
+      // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
+      cafeTimeZone: 'Asia/Phnom_Penh',
+    },
+  },
   compatibilityDate: '2025-07-15',
   hub: {
     blob: true,

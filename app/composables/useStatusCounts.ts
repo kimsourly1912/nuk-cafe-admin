@@ -5,8 +5,8 @@ export type StatusCounts = Record<Status, number> & { all: number }
 /**
  * How many records each status has, for `<StatusTabs>` ("All 24 · Active 20 · Inactive 4").
  *
- * The APIs have no count endpoint, so this asks the list endpoint twice with `size: 1` and reads
- * `totalElements`. "All" is the sum (every record is ACTIVE or INACTIVE). Pass the other filters
+ * The APIs have no count endpoint, so this asks the list endpoint twice with `pageSize: 1` and
+ * reads `total`. "All" is the sum (every record is ACTIVE or INACTIVE). Pass the other filters
  * (not status, not page) as `filters`, so the counts match what the tabs would show. Refreshed by
  * `invalidate(feature)` like any query of the feature.
  *
@@ -14,7 +14,7 @@ export type StatusCounts = Record<Status, number> & { all: number }
  *
  * @example
  * const counts = useStatusCounts('schedules', () => ({ search: filters.search }),
- *   (query, status) => unwrap(getPage({ query: { ...query, status, size: 1 } })).then(p => p.totalElements ?? 0))
+ *   (query, status) => apiFetch<Page<Schedule>>('/admin/schedules', { query: { ...query, status, pageSize: 1 } }).then(p => p.total))
  */
 export function useStatusCounts<Q extends Record<string, unknown>>(
   feature: string,

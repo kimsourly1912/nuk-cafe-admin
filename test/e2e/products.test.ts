@@ -1,51 +1,48 @@
 import type { Locator, Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
+import type { Product, ScheduleOption, VariantGroup } from '../../shared/contracts/menu'
 import type { MockHandler } from './support/mock-api'
-import { COFFEE, deferred, failures, mockApi, paginatedHandler, setupE2e, TEA, toast } from './support/mock-api'
+import { COFFEE, deferred, failures, lastSegment, mockApi, paginatedHandler, productOf, setupE2e, TEA, toast } from './support/mock-api'
 
-// Menu items (products): list, filters, create with an image upload, edit keeping what the form
-// doesn't edit (variants, translations, image), schedules picker, delete (docs/plans/products.md).
+// Menu items (products): list, filters, create with an image upload, edit (variants with stable
+// ids, schedules, image), delete. Prices are cents in the API and dollars on screen.
 await setupE2e()
 
-type Row = Record<string, unknown> & { id: number, productName: string }
-
-const LATTE: Row = {
-  id: 1,
-  productName: 'Latte',
-  description: 'Espresso and milk',
-  price: 3.5,
-  status: 'ACTIVE',
-  category: { id: 2, categoryName: 'Coffee' },
-  imageUrl: 'https://img.example/latte.png',
-  imageUuid: 'file-latte',
-  scheduleIds: [30],
-  sortOrder: 0,
-  nameI18n: { km: 'ឡាតេ' },
-  variants: [
-    { id: 43, variantName: 'Milk', requiredSelection: true, allowMultipleSelection: false, sortOrder: 0, options: [
-      { id: 73, optionName: 'Whole', price: 0, sortOrder: 0 },
-      { id: 74, optionName: 'Oat', price: 0.5, sortOrder: 1 },
-    ] },
+const MILK: VariantGroup = {
+  id: 'grp-43',
+  name: 'Milk',
+  minSelect: 1,
+  maxSelect: 1,
+  options: [
+    { id: 'opt-73', name: 'Whole', priceDeltaMinor: 0 },
+    { id: 'opt-74', name: 'Oat', priceDeltaMinor: 50 },
   ],
 }
-const MATCHA: Row = { id: 2, productName: 'Matcha', price: 4.25, status: 'INACTIVE', category: { id: 1, categoryName: 'Tea' }, scheduleIds: [], variants: [] }
+const LATTE = productOf('prod-1', 'Latte', COFFEE, {
+  description: 'Espresso and milk',
+  priceMinor: 350,
+  image: { id: 'asset-latte', url: 'https://img.example/latte.png' },
+  scheduleIds: ['sched-30'],
+  variantGroups: [MILK],
+  version: 3,
+})
+const MATCHA = productOf('prod-2', 'Matcha', TEA, { priceMinor: 425, status: 'INACTIVE' })
 
-const BREAKFAST = { id: 30, name: 'Breakfast', status: 'ACTIVE' }
-const LUNCH = { id: 31, name: 'Lunch', status: 'ACTIVE' }
-const RETIRED = { id: 32, name: 'Old promo', status: 'INACTIVE' }
+const BREAKFAST: ScheduleOption = { id: 'sched-30', name: 'Breakfast', status: 'ACTIVE' }
+const LUNCH: ScheduleOption = { id: 'sched-31', name: 'Lunch', status: 'ACTIVE' }
+const RETIRED: ScheduleOption = { id: 'sched-32', name: 'Old promo', status: 'INACTIVE' }
 
-const UPLOADED = { id: 'file-new', url: 'https://img.example/new.png', contentType: 'image/png', sizeBytes: 68 }
+const UPLOADED = { id: 'asset-new', url: 'https://img.example/new.png' }
 
-function backend(initial: Row[] = [LATTE, MATCHA]) {
+function backend(initial: Product[] = [LATTE, MATCHA]) {
   let rows = [...initial]
   const handlers: Record<string, MockHandler> = {
-    'GET /staff/products': paginatedHandler(() => rows, 'productName'),
-    'GET /staff/categories/all': () => [TEA, COFFEE],
-    'GET /staff/schedules/all': () => [BREAKFAST, LUNCH, RETIRED],
-    'DELETE /staff/products/{id}': ({ url }) => {
-      const id = Number(url.pathname.split('/').pop())
-      rows = rows.filter(r => r.id !== id)
+    'GET /admin/products': paginatedHandler(() => rows),
+    'GET /admin/categories': () => [TEA, COFFEE],
+    'GET /admin/schedules/options': () => [BREAKFAST, LUNCH, RETIRED],
+    'DELETE /admin/products/{id}': ({ url }) => {
+      rows = rows.filter(r => r.id !== lastSegment(url))
       return null
     },
   }
@@ -132,8 +129,8 @@ describe('menu items list', () => {
     const seen: string[] = []
     const { page } = await open({
       ...backend(),
-      'GET /staff/categories/all': () => [{ ...TEA, sortOrder: 1 }, { ...COFFEE, sortOrder: 2 }],
-      'GET /staff/products/all': ({ url }) => {
+      'GET /admin/categories': () => [{ ...TEA, sortOrder: 1 }, { ...COFFEE, sortOrder: 2 }],
+      'GET /admin/products/all': ({ url }) => {
         seen.push(url.search)
         return [LATTE, MATCHA]
       },
@@ -147,11 +144,11 @@ describe('menu items list', () => {
 
   it('filters by status with tabs that show counts', async () => {
     const seen: URLSearchParams[] = []
-    const list = paginatedHandler([LATTE, MATCHA], 'productName')
+    const list = paginatedHandler([LATTE, MATCHA])
     const { page } = await open({
       ...backend(),
-      'GET /staff/products': (request) => {
-        if (request.url.searchParams.get('size') !== '1') seen.push(request.url.searchParams)
+      'GET /admin/products': (request) => {
+        if (request.url.searchParams.get('pageSize') !== '1') seen.push(request.url.searchParams)
         return list(request)
       },
     })
@@ -163,23 +160,23 @@ describe('menu items list', () => {
     expect(new URL(page.url()).searchParams.get('status')).toBe('INACTIVE')
   })
 
-  it('searches by productName and filters by categoryId, both in the URL', async () => {
+  it('searches and filters by category, both in the URL', async () => {
     const seen: URLSearchParams[] = []
-    const list = paginatedHandler([LATTE, MATCHA], 'productName')
+    const list = paginatedHandler([LATTE, MATCHA])
     const { page } = await open({
       ...backend(),
-      'GET /staff/products': (request) => {
+      'GET /admin/products': (request) => {
         seen.push(request.url.searchParams)
         return list(request)
       },
     })
     await page.getByPlaceholder('Search menu items…').fill('lat')
-    await expect.poll(() => seen.at(-1)?.get('productName')).toBe('lat')
+    await expect.poll(() => seen.at(-1)?.get('search')).toBe('lat')
 
     await page.getByRole('combobox', { name: 'Category' }).click()
     await page.getByRole('option', { name: 'Coffee' }).click()
-    await expect.poll(() => seen.at(-1)?.get('categoryId')).toBe('2')
-    await expect.poll(() => new URL(page.url()).searchParams.get('categoryId')).toBe('2')
+    await expect.poll(() => seen.at(-1)?.get('categoryId')).toBe(COFFEE.id)
+    await expect.poll(() => new URL(page.url()).searchParams.get('categoryId')).toBe(COFFEE.id)
   })
 
   it('shows the empty state when there are no menu items', async () => {
@@ -189,18 +186,18 @@ describe('menu items list', () => {
 })
 
 describe('menu item form', () => {
-  it('creates a menu item with an uploaded image, a category, a price and schedules', async () => {
+  it('creates a menu item with an uploaded image, a category, a price in cents and schedules', async () => {
     let uploaded: unknown
     let body: unknown
     const { page } = await open({
       ...backend(),
-      'POST /staff/products/upload': (request) => {
+      'POST /admin/media': (request) => {
         uploaded = request.body
         return UPLOADED
       },
-      'POST /staff/products': (request) => {
+      'POST /admin/products': (request) => {
         body = request.body
-        return { id: 9 }
+        return productOf('prod-9', 'Mocha', COFFEE)
       },
     })
     const form = await openNew(page)
@@ -224,15 +221,14 @@ describe('menu item form', () => {
     // Multipart with the chosen file.
     expect(uploaded).toContain('filename="photo.png"')
     expect(body).toEqual({
-      productName: 'Mocha',
-      categoryId: 2,
-      price: 4.2,
+      name: 'Mocha',
+      categoryId: COFFEE.id,
+      priceMinor: 420,
       description: '',
-      scheduleIds: [31],
+      scheduleIds: [LUNCH.id],
       status: 'ACTIVE',
-      imageUrl: UPLOADED.url,
-      imageUuid: UPLOADED.id,
-      variants: [],
+      imageAssetId: UPLOADED.id,
+      variantGroups: [],
     })
   })
 
@@ -243,33 +239,33 @@ describe('menu item form', () => {
     await form.getByText('Use a JPEG, PNG or WebP image.').waitFor()
     await chooseImage(form, { name: 'huge.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(5 * 1024 * 1024 + 1) })
     await form.getByText('The image is larger than 5 MB.').waitFor()
-    expect(api.calls.filter(c => c.includes('upload'))).toEqual([])
+    expect(api.calls.filter(c => c.includes('media'))).toEqual([])
   })
 
   it('cannot save while the image is uploading, and shows an upload failure', async () => {
     const upload = deferred()
-    const { page, api } = await open({ ...backend(), 'POST /staff/products/upload': upload.handler })
+    const { page, api } = await open({ ...backend(), 'POST /admin/media': upload.handler })
     const form = await openEdit(page, 'Latte')
     await chooseImage(form, PNG)
     await upload.started()
     await form.getByText('Waiting for the image upload…').waitFor()
     expect(await form.getByRole('button', { name: 'Save' }).isDisabled()).toBe(true)
 
-    upload.fail(failures.validation('File too large for the server'))
+    upload.fail(failures.validation('Use a JPEG, PNG or WebP image.'))
     await toast(page, 'Could not upload "photo.png"').waitFor()
     await expect.poll(() => form.getByRole('button', { name: 'Save' }).isDisabled()).toBe(false)
     // The previous image is still the one in the form.
     expect(await form.locator('img').getAttribute('src')).toBe('https://img.example/latte.png')
-    expect(api.calls.filter(c => c.startsWith('PUT'))).toEqual([])
+    expect(api.calls.filter(c => c.startsWith('PATCH'))).toEqual([])
   })
 
-  it('edits and re-sends variants, translations, image and schedules it does not change', async () => {
+  it('edits from the version it read, sending variants with their ids, schedules and image', async () => {
     let body: unknown
     const { page } = await open({
       ...backend(),
-      'PUT /staff/products/{id}': (request) => {
+      'PATCH /admin/products/{id}': (request) => {
         body = request.body
-        return LATTE
+        return { ...LATTE, name: 'Oat latte', version: 4 }
       },
     })
     const form = await openEdit(page, 'Latte')
@@ -281,30 +277,46 @@ describe('menu item form', () => {
     await form.getByRole('button', { name: 'Save' }).click()
     await toast(page, 'Menu item "Oat latte" updated').waitFor()
     expect(body).toEqual({
-      productName: 'Oat latte',
-      categoryId: 2,
-      price: 3.5,
+      version: 3,
+      name: 'Oat latte',
+      categoryId: COFFEE.id,
+      priceMinor: 350,
       description: 'Espresso and milk',
-      scheduleIds: [30],
+      scheduleIds: ['sched-30'],
       status: 'ACTIVE',
-      imageUrl: 'https://img.example/latte.png',
-      imageUuid: 'file-latte',
-      nameI18n: { km: 'ឡាតេ' },
-      variants: [{
-        id: 43,
-        variantName: 'Milk',
-        requiredSelection: true,
-        allowMultipleSelection: false,
-        options: [{ id: 73, optionName: 'Whole', price: 0 }, { id: 74, optionName: 'Oat', price: 0.5 }],
+      imageAssetId: 'asset-latte',
+      variantGroups: [{
+        id: 'grp-43',
+        name: 'Milk',
+        minSelect: 1,
+        maxSelect: 1,
+        options: [{ id: 'opt-73', name: 'Whole', priceDeltaMinor: 0 }, { id: 'opt-74', name: 'Oat', priceDeltaMinor: 50 }],
       }],
     })
+  })
+
+  it('removes the image: saved with imageAssetId null', async () => {
+    let body: Record<string, unknown> | undefined
+    const { page } = await open({
+      ...backend(),
+      'PATCH /admin/products/{id}': (request) => {
+        body = request.body as Record<string, unknown>
+        return { ...LATTE, image: null, version: 4 }
+      },
+    })
+    const form = await openEdit(page, 'Latte')
+    await form.getByRole('button', { name: 'Remove', exact: true }).click()
+    await form.getByRole('button', { name: 'Upload image' }).waitFor()
+    await form.getByRole('button', { name: 'Save' }).click()
+    await toast(page, /updated$/).waitFor()
+    expect(body?.imageAssetId).toBeNull()
   })
 
   it('keeps a selected inactive schedule visible, but does not offer inactive ones as new choices', async () => {
     let body: Record<string, unknown> | undefined
     const { page } = await open({
-      ...backend([{ ...LATTE, scheduleIds: [32] }]),
-      'PUT /staff/products/{id}': (request) => {
+      ...backend([{ ...LATTE, scheduleIds: [RETIRED.id] }]),
+      'PATCH /admin/products/{id}': (request) => {
         body = request.body as Record<string, unknown>
         return LATTE
       },
@@ -319,71 +331,68 @@ describe('menu item form', () => {
     await page.keyboard.press('Escape')
     await form.getByRole('button', { name: 'Save' }).click()
     await toast(page, /updated$/).waitFor()
-    expect(body?.scheduleIds).toEqual([32, 30])
+    expect(body?.scheduleIds).toEqual([RETIRED.id, BREAKFAST.id])
   })
 
-  it('keeps the input and shows the backend reason when the save fails', async () => {
+  it('keeps the input and shows the server\'s reason when the save fails', async () => {
     const { page } = await open({
       ...backend(),
-      'PUT /staff/products/{id}': () => {
-        throw failures.validation('Price must be positive')
+      'PATCH /admin/products/{id}': () => {
+        throw failures.conflict('VERSION_CONFLICT', 'This menu item was changed by someone else. Reload it and try again.')
       },
     })
     const form = await openEdit(page, 'Latte')
     await form.getByLabel('Name', { exact: true }).fill('Latte 2')
     await form.getByRole('button', { name: 'Save' }).click()
-    await page.getByText('Price must be positive').first().waitFor()
+    await page.getByText('This menu item was changed by someone else. Reload it and try again.').first().waitFor()
     expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte 2')
   })
 })
 
 describe('menu item delete', () => {
-  it('deletes after confirmation', async () => {
-    const { page, api } = await open()
+  it('deletes after confirmation, naming the version it read', async () => {
+    let version: string | null = null
+    const { page, api } = await open({
+      ...backend(),
+      'DELETE /admin/products/{id}': ({ url }) => {
+        version = url.searchParams.get('version')
+        return null
+      },
+    })
     await page.getByRole('button', { name: 'Actions for Matcha' }).click()
     await page.getByRole('menuitem', { name: 'Delete' }).click()
     await page.getByText('Delete "Matcha"?').waitFor()
     await page.getByRole('button', { name: 'Delete' }).last().click()
     await toast(page, 'Menu item "Matcha" deleted').waitFor()
-    expect(api.calls).toContain('DELETE /staff/products/2')
+    expect(api.calls).toContain('DELETE /admin/products/prod-2')
+    expect(version).toBe('1')
   })
 })
 
-type Variant = { id?: number, variantName?: string, sortOrder?: number, options?: { id?: number, optionName?: string, price?: number, sortOrder?: number }[] }
-
-/** A PUT handler that saves what it gets (new ids for new rows), like a replace-all backend. */
-function savingHandler(record: (body: Record<string, unknown>) => void, mutate?: (variants: Variant[]) => Variant[]): MockHandler {
-  return (request) => {
-    const body = request.body as Record<string, unknown> & { variants: Variant[] }
-    record(body)
-    let next = 900
-    const variants = body.variants.map((variant, i) => ({
-      ...variant,
-      id: variant.id ?? next++,
-      sortOrder: i,
-      options: (variant.options ?? []).map((option, j) => ({ ...option, id: option.id ?? next++, sortOrder: j })),
-    }))
-    return { ...LATTE, ...body, variants: mutate ? mutate(variants) : variants }
-  }
-}
-
-const SIZE: Variant & Record<string, unknown> = {
-  id: 50,
-  variantName: 'Size',
-  requiredSelection: true,
-  allowMultipleSelection: false,
-  sortOrder: 1,
+const SIZE: VariantGroup = {
+  id: 'grp-50',
+  name: 'Size',
+  minSelect: 1,
+  maxSelect: 1,
   options: [
-    { id: 90, optionName: 'Regular', price: 0, sortOrder: 0 },
-    { id: 91, optionName: 'Large', price: 1, sortOrder: 1 },
+    { id: 'opt-90', name: 'Regular', priceDeltaMinor: 0 },
+    { id: 'opt-91', name: 'Large', priceDeltaMinor: 100 },
   ],
 }
-const MILK_AND_SIZE: Row = { ...LATTE, variants: [...(LATTE.variants as Variant[]), SIZE] }
+const MILK_AND_SIZE = productOf(LATTE.id, 'Latte', COFFEE, { ...LATTE, variantGroups: [MILK, SIZE] })
+
+/** A PATCH handler that records the body and answers with the item. */
+function savingHandler(record: (body: Record<string, unknown>) => void): MockHandler {
+  return (request) => {
+    record(request.body as Record<string, unknown>)
+    return { ...MILK_AND_SIZE, version: MILK_AND_SIZE.version + 1 }
+  }
+}
 
 describe('menu item variants', () => {
   it('adds, edits, removes and reorders (keyboard) groups and options, and sends the whole list', async () => {
     let body: Record<string, unknown> | undefined
-    const { page } = await open({ ...backend([MILK_AND_SIZE]), 'PUT /staff/products/{id}': savingHandler(b => (body = b)) })
+    const { page } = await open({ ...backend([MILK_AND_SIZE]), 'PATCH /admin/products/{id}': savingHandler(b => (body = b)) })
     const form = await openEdit(page, 'Latte')
 
     // Milk: rename Oat, add Soy (+$0.75), move Soy up above Oat with the keyboard.
@@ -411,45 +420,30 @@ describe('menu item variants', () => {
 
     await form.getByRole('button', { name: 'Save' }).click()
     await toast(page, 'Menu item "Latte" updated').waitFor()
-    expect(body?.variants).toEqual([
-      { id: 50, variantName: 'Size', requiredSelection: true, allowMultipleSelection: false, options: [
-        { id: 90, optionName: 'Regular', price: 0 },
+    expect(body?.variantGroups).toEqual([
+      { id: 'grp-50', name: 'Size', minSelect: 1, maxSelect: 1, options: [
+        { id: 'opt-90', name: 'Regular', priceDeltaMinor: 0 },
       ] },
-      { id: 43, variantName: 'Milk', requiredSelection: true, allowMultipleSelection: false, options: [
-        { id: 73, optionName: 'Whole', price: 0 },
-        { optionName: 'Soy', price: 0.75 },
-        { id: 74, optionName: 'Oat milk', price: 0.5 },
+      { id: 'grp-43', name: 'Milk', minSelect: 1, maxSelect: 1, options: [
+        { id: 'opt-73', name: 'Whole', priceDeltaMinor: 0 },
+        { name: 'Soy', priceDeltaMinor: 75 },
+        { id: 'opt-74', name: 'Oat milk', priceDeltaMinor: 50 },
       ] },
-      { variantName: 'Extras', requiredSelection: false, allowMultipleSelection: true, options: [
-        { optionName: 'Extra shot', price: 0.5 },
+      { name: 'Extras', minSelect: 0, maxSelect: null, options: [
+        { name: 'Extra shot', priceDeltaMinor: 50 },
       ] },
     ])
-    // The server saved what was sent: no warning.
-    expect(await toast(page, /Check the variants/).count()).toBe(0)
   })
 
   it('reorders groups by dragging the handle with the mouse', async () => {
     let body: Record<string, unknown> | undefined
-    const { page } = await open({ ...backend([MILK_AND_SIZE]), 'PUT /staff/products/{id}': savingHandler(b => (body = b)) })
+    const { page } = await open({ ...backend([MILK_AND_SIZE]), 'PATCH /admin/products/{id}': savingHandler(b => (body = b)) })
     const form = await openEdit(page, 'Latte')
     await form.getByRole('button', { name: /^Reorder Size/ }).dragTo(form.getByRole('button', { name: /^Reorder Milk/ }))
     await expect.poll(() => form.getByLabel('Name of group 1').inputValue()).toBe('Size')
     await form.getByRole('button', { name: 'Save' }).click()
     await toast(page, /updated$/).waitFor()
-    expect((body?.variants as Variant[]).map(v => v.variantName)).toEqual(['Size', 'Milk'])
-  })
-
-  it('warns when the server keeps a variant that was removed', async () => {
-    const { page } = await open({
-      ...backend([MILK_AND_SIZE]),
-      // A backend that ignores removals: Size comes back.
-      'PUT /staff/products/{id}': savingHandler(() => {}, variants => [...variants, SIZE]),
-    })
-    const form = await openEdit(page, 'Latte')
-    await form.getByRole('button', { name: 'Remove Size' }).click()
-    await form.getByRole('button', { name: 'Save' }).click()
-    await toast(page, 'Check the variants of "Latte"').waitFor()
-    await page.getByText('The server saved them differently: "Size" is still there.').first().waitFor()
+    expect((body?.variantGroups as VariantGroup[]).map(v => v.name)).toEqual(['Size', 'Milk'])
   })
 
   it('checks new groups before sending anything', async () => {
@@ -463,7 +457,7 @@ describe('menu item variants', () => {
     await form.getByRole('button', { name: 'Remove option 1' }).click()
     await form.getByRole('button', { name: 'Save' }).click()
     await form.getByText('Add at least one option').waitFor()
-    expect(api.calls.filter(c => c.startsWith('PUT'))).toEqual([])
+    expect(api.calls.filter(c => c.startsWith('PATCH'))).toEqual([])
   })
 
   it('counts a reorder as an unsaved change', async () => {

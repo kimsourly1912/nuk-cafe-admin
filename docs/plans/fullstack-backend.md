@@ -33,7 +33,7 @@ flowchart LR
 ### Conventions shared by all tables
 
 - Use opaque text IDs for new application rows (UUID or ULID, selected once before schema generation). Auth foreign keys must match the module's text user ID. Keep `created_at` and `updated_at` as UTC instants; use `deleted_at` only where retention/audit requires a soft delete. Add `version INTEGER NOT NULL DEFAULT 1` to editable catalog rows for optimistic concurrency.
-- Store money as **integer minor units** plus a currency code. This avoids floating-point rounding in D1. Keep the current USD menu UI only if USD is confirmed as the business currency; no automatic currency conversion. Store points as integer units in a separate ledger.
+- Store money as **integer minor units** plus a currency code. This avoids floating-point rounding in D1. USD is the confirmed currency; no automatic currency conversion. Store points as integer units in a separate ledger.
 - Use explicit `NOT NULL`, `CHECK`, `UNIQUE`, and foreign keys, with indexes matching real list filters and joins. Use `RESTRICT` for referenced catalog/history rows, `CASCADE` for private children deleted with a parent, and `SET NULL` only where history remains meaningful without the referenced row. Historical order prices, names, tax, discounts, and chosen options are immutable snapshots.
 - Use a small set of named status values at the service boundary, backed by SQLite `CHECK` constraints where practical. Do not expose Drizzle row types directly as public API contracts. Public request/response schemas should be explicit Valibot schemas in `shared/`.
 - For translatable content, use one `*_translations` child table per aggregate (`locale`, translated fields, unique `(owner_id, locale)`). Keep the primary English name in the parent for sorting/search and require an English translation. This makes fallback and indexed search predictable; do not copy the Spring API's arbitrary i18n maps into the database.
@@ -134,8 +134,8 @@ POST /api/v1/admin/media
 
 | Phase | Build | Gate |
 |---|---|---|
-| 0. Runtime spike | Add NuxtHub + Better Auth on a branch; local SQLite/R2 emulation; deploy a private staging Worker with D1/R2; generate/apply a reversible migration; sign in as a seeded admin. | Local and staging session, database and blob smoke tests; CI migration step proven. |
-| 1. Identity and menu | Auth roles/branches, audit, categories, schedules, products, variants, media, `/api/v1/admin` and public menu reads. Move existing screens to the new API one feature at a time. | Permissions tested at server routes; catalog create/edit/sort/image flows in browser; old API no longer used by these screens. |
+| 0. Runtime spike | **Local part done** (NuxtHub + Better Auth on `main`, D39). Remaining: local SQLite/R2 emulation; deploy a private staging Worker with D1/R2; generate/apply a reversible migration; sign in as a seeded admin. | Local and staging session, database and blob smoke tests; CI migration step proven. |
+| 1. Identity and menu | **Admin part done (D40–D42):** staff profiles, `admin` role, audit, categories, schedules, products, variants, media, `/api/v1/admin`, screens moved. Remaining: public menu reads, staff management, other roles, branches. | Permissions tested at server routes; catalog create/edit/sort/image flows in browser; old API no longer used by these screens. |
 | 2. Customers and orders | Customer identity, branch/availability, cart pricing, order snapshots, cashier queue and state transitions, counter payment. | Concurrent/duplicate order actions tested; totals match snapshots; no state skips. |
 | 3. Loyalty and offers | Points ledger, vouchers, redemptions; reward catalog only if approved. | Concurrent last-use voucher and points double-spend tests; ledger can reconcile cached balances. |
 | 4. Operations | Banners, notifications, dashboard/reporting, community/carbon after domain plans; retention and backup drills. | Each feature has a written contract, permissions, indexes and end-to-end checks. |
@@ -152,6 +152,6 @@ These are product contracts, not defaults to hide in code:
 4. **Order/payment rules:** Pickup, dine-in via a table QR, and pay at counter before preparation are confirmed. Decide pickup/unpaid-order expiry, cancellation/refund windows, offline counter flow, tender methods, and whether staff acceptance is needed.
 5. **Loyalty contracts:** 1 point per USD on completed orders, point-for-voucher exchange, and staff issuance are confirmed. Decide earning base/rounding, point expiration, exchange initiator, voucher cost/type/stacking/reservation/expiry/use limit, and refund reversal.
 6. **Catalog rules:** Whether unscheduled means always available; multiple schedule union/intersection; overnight behavior; eligible inactive relationships; product availability per branch; translation editing and fallback.
-7. **Data and operations:** Retention/deletion/anonymization requirements, image visibility, expected order volume, backup/restore target, and whether existing public clients need a compatibility window with Spring endpoints.
+7. **Data and operations:** Retention/deletion/anonymization requirements, image visibility, expected order volume, backup/restore target.
 
 Resolve 1–3 before implementing the corresponding tables/routes, and 4–5 before any live customer transaction. A written decision updates this plan and `docs/decisions.md` before the affected phase begins.

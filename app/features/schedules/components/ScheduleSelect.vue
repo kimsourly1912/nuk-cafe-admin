@@ -4,7 +4,7 @@
  * Contract: docs/feature-standard.md → "Resource picker conventions".
  *
  * - Selected schedules always stay visible, even when they aren't selectable (inactive) or no
- *   longer exist ("#12 (unavailable)"). Nothing is cleared silently.
+ *   longer exist ("Unknown schedule (unavailable)"). Nothing is cleared silently.
  * - New selections: inactive schedules are **not offered** while their eligibility is an open
  *   question (progress.md Q9), as in `CategorySelect`.
  * - A failed load shows the error with Retry instead of an empty list.
@@ -26,11 +26,11 @@ const selectAttrs = computed(() => {
 
 defineProps<{ placeholder?: string }>()
 
-const model = defineModel<number[]>({ default: () => [] })
+const model = defineModel<string[]>({ default: () => [] })
 
 const { data: schedules, status, error, refresh } = useScheduleOptions()
 
-const selectable = computed(() => schedules.value.filter(s => s.id !== undefined && s.status !== 'INACTIVE'))
+const selectable = computed(() => schedules.value.filter(s => s.status !== 'INACTIVE'))
 
 /** Selected ids that aren't selectable: kept visible with the best label known. */
 const currentItems = computed<SelectItem[]>(() => model.value
@@ -38,7 +38,7 @@ const currentItems = computed<SelectItem[]>(() => model.value
   .map((id) => {
     const known = schedules.value.find(s => s.id === id)
     const note = known ? ' (inactive)' : status.value === 'success' ? ' (unavailable)' : ''
-    return { label: `${known?.name ?? `#${id}`}${note}`, value: id }
+    return { label: `${known?.name ?? 'Unknown schedule'}${note}`, value: id }
   }))
 
 const items = computed<SelectItem[]>(() => [

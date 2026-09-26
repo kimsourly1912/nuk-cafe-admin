@@ -1,24 +1,22 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
-import { scheduleFormSchema, toScheduleForm, toScheduleRequest } from '../schemas/schedule-form'
+import type { Schedule } from '#shared/contracts/menu'
+import { scheduleFormSchema, toCreateScheduleBody, toScheduleForm, toUpdateScheduleBody } from '../schemas/schedule-form'
 import type { ScheduleForm } from '../schemas/schedule-form'
 
-const existing = {
-  id: 7,
+const existing: Schedule = {
+  id: 's7',
   name: 'Lunch',
   description: 'Midday menu',
-  status: 'INACTIVE' as const,
+  status: 'INACTIVE',
   startTime: '11:00',
   endTime: '14:30',
-  timezone: 'UTC',
-  // The API returns days in random order.
-  days: ['FRIDAY', 'MONDAY', 'WEDNESDAY'] as ScheduleForm['days'],
-  items: [
-    { id: 1, productId: 40, productName: 'Latte', price: 3 },
-    { id: 2, productId: 41, productName: 'Mocha', price: 3.5 },
-  ],
-  nameI18n: { 'zh-HK': '午餐' },
-  descriptionI18n: { km: 'ម៉ឺនុយ' },
+  timeZone: 'Asia/Phnom_Penh',
+  days: ['FRIDAY', 'MONDAY', 'WEDNESDAY'],
+  productCount: 2,
+  version: 3,
+  createdAt: '2026-09-26T00:00:00.000Z',
+  updatedAt: '2026-09-26T00:00:00.000Z',
 }
 
 const valid: ScheduleForm = {
@@ -40,7 +38,7 @@ describe('schedule form', () => {
     expect(toScheduleForm()).toEqual({ name: '', description: '', days: [], startTime: '', endTime: '', status: 'ACTIVE' })
   })
 
-  it('fills the form from an existing schedule, days in week order', () => {
+  it('fills the form from an existing schedule as stored (cafe time), days in week order', () => {
     expect(toScheduleForm(existing)).toEqual({
       name: 'Lunch',
       description: 'Midday menu',
@@ -51,35 +49,14 @@ describe('schedule form', () => {
     })
   })
 
-  it('re-sends the linked product ids and copies the translations on update', () => {
-    const body = toScheduleRequest({ ...valid, name: 'Brunch', days: ['SUNDAY', 'MONDAY'] }, existing)
-    expect(body).toEqual({
-      name: 'Brunch',
-      description: '',
-      status: 'ACTIVE',
-      startTime: '11:00',
-      endTime: '14:30',
-      days: ['MONDAY', 'SUNDAY'],
-      items: [40, 41],
-      nameI18n: { 'zh-HK': '午餐' },
-      descriptionI18n: { km: 'ម៉ឺនុយ' },
-    })
+  it('creates with the edited fields, days in week order', () => {
+    expect(toCreateScheduleBody({ ...valid, days: ['SUNDAY', 'MONDAY'] })).toEqual({ ...valid, days: ['MONDAY', 'SUNDAY'] })
   })
 
-  it('shows days and times in the viewer zone and sends them back in the record zone', () => {
-    // UTC record, viewer at UTC+7: Fri 20:00 UTC is Sat 03:00 local.
-    const utc = { ...existing, days: ['MONDAY', 'FRIDAY'] as ScheduleForm['days'], startTime: '20:00', endTime: '23:00' }
-    const form = toScheduleForm(utc, 420)
-    expect(form).toMatchObject({ days: ['TUESDAY', 'SATURDAY'], startTime: '03:00', endTime: '06:00' })
-    expect(toScheduleRequest(form, utc, 420)).toMatchObject({ days: ['MONDAY', 'FRIDAY'], startTime: '20:00', endTime: '23:00' })
-  })
-
-  it('sends no items for a new schedule', () => {
-    expect(toScheduleRequest(valid).items).toEqual([])
-  })
-
-  it('skips items without a product id instead of sending undefined', () => {
-    expect(toScheduleRequest(valid, { items: [{ id: 1 }, { id: 2, productId: 9 }] }).items).toEqual([9])
+  it('updates from the version it was opened with, and never sends menu items', () => {
+    const body = toUpdateScheduleBody({ ...valid, name: 'Brunch' }, existing)
+    expect(body).toEqual({ ...valid, name: 'Brunch', version: 3 })
+    expect(body).not.toHaveProperty('items')
   })
 
   it('accepts a valid form', () => {
@@ -98,11 +75,11 @@ describe('schedule form', () => {
   it('checks the time format', () => {
     expect(errorsOf({ ...valid, startTime: '8:30' })).toEqual(['Use HH:mm, e.g. 08:30'])
     expect(errorsOf({ ...valid, startTime: '24:00' })).toEqual(['Use HH:mm, e.g. 08:30'])
-    expect(errorsOf({ ...valid, startTime: '08:30:00' })).toEqual([])
   })
 
-  it('leaves overnight ranges to the backend', () => {
-    expect(errorsOf({ ...valid, startTime: '22:00', endTime: '02:00' })).toEqual([])
+  it('requires the end after the start (no overnight ranges yet, D41)', () => {
+    expect(errorsOf({ ...valid, startTime: '22:00', endTime: '02:00' })).toEqual(['End time must be after the start time'])
+    expect(errorsOf({ ...valid, startTime: '09:00', endTime: '09:00' })).toEqual(['End time must be after the start time'])
   })
 
   it('limits the description length', () => {

@@ -5,16 +5,14 @@
  *
  * Like the category form, it stays open while saving but can be closed: the save continues, and
  * a failure offers "Reopen" with the input restored. Save waits for a running image upload.
- * Variants are edited in `ProductVariantsEditor`. After a save, the server's reply is compared
- * with what was sent, and any difference is shown as a warning (the backend's handling of removed
- * variants is unverified, Q18, D35).
+ * Variants are edited in `ProductVariantsEditor` and saved as the full list (the API replaces them).
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { ProductResponse } from '~/generated/api'
+import type { Product } from '#shared/contracts/menu'
 import { CategorySelect } from '~/features/categories'
 import { ScheduleSelect } from '~/features/schedules'
 import { useProductMutations } from '../composables/useProducts'
-import { productFormSchema, toProductForm, toProductRequest, variantMismatches } from '../schemas/product-form'
+import { productFormSchema, toCreateProductBody, toProductForm, toUpdateProductBody } from '../schemas/product-form'
 import type { ProductForm } from '../schemas/product-form'
 import { PRICE_FORMAT } from '../utils/money'
 import ProductFormSlideover from './ProductFormSlideover.vue'
@@ -23,7 +21,7 @@ import ProductVariantsEditor from './ProductVariantsEditor.vue'
 
 const props = defineProps<{
   /** A list row. Omit to create a new menu item. */
-  product?: ProductResponse
+  product?: Product
   /** Restores unsaved input (used by "Reopen" after a failed background save). */
   draft?: ProductForm
 }>()
@@ -32,7 +30,7 @@ const props = defineProps<{
 // straight to the overlay.
 const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: boolean] }>()
 
-const isEdit = props.product?.id !== undefined
+const isEdit = props.product !== undefined
 // A deep copy that unwraps proxies (drag and drop can leave them inside the arrays).
 const state = reactive<ProductForm>(cloneFormValue(props.draft ?? toProductForm(props.product)))
 
@@ -58,8 +56,6 @@ const unsaved = useModalUnsavedChanges(state, {
 const form = useTemplateRef('form')
 useSubmitShortcut(() => form.value?.submit())
 
-const notify = useNotify()
-
 // If the user closes the panel mid-save, a failure offers to reopen it with their input.
 let closed = false
 onUnmounted(() => {
@@ -76,27 +72,18 @@ function reopenActions(draft: ProductForm) {
 
 async function onSubmit({ data }: FormSubmitEvent<ProductForm>) {
   if (uploading.value) return
-  const body = toProductRequest(data, props.product)
   const draft = cloneFormValue(state)
   const overrides = { errorActions: () => reopenActions(draft) }
 
   saving.value = true
-  const result = isEdit
-    ? await update.execute({ id: props.product!.id!, body }, overrides)
-    : await create.execute({ ...body, productName: body.productName!, categoryId: body.categoryId!, price: body.price! }, overrides)
+  const result = props.product
+    ? await update.execute({ id: props.product.id, name: data.name, body: toUpdateProductBody(data, props.product) }, overrides)
+    : await create.execute(toCreateProductBody(data), overrides)
   saving.value = false
 
   if (!result.ok) return
   unsaved.markClean()
   emit('close', true)
-
-  const problems = variantMismatches(body.variants, result.data?.variants)
-  if (problems.length) {
-    notify.warning(
-      `Check the variants of "${body.productName}"`,
-      `The server saved them differently: ${problems.join('; ')}.`,
-    )
-  }
 }
 </script>
 
@@ -123,7 +110,7 @@ async function onSubmit({ data }: FormSubmitEvent<ProductForm>) {
         >
           <ProductImageInput
             v-model:image-url="state.imageUrl"
-            v-model:image-uuid="state.imageUuid"
+            v-model:image-asset-id="state.imageAssetId"
             v-model:uploading="uploading"
             :disabled="saving"
           />
@@ -131,11 +118,11 @@ async function onSubmit({ data }: FormSubmitEvent<ProductForm>) {
 
         <UFormField
           label="Name"
-          name="productName"
+          name="name"
           required
         >
           <UInput
-            v-model="state.productName"
+            v-model="state.name"
             class="w-full"
             autofocus
           />
@@ -149,7 +136,7 @@ async function onSubmit({ data }: FormSubmitEvent<ProductForm>) {
           >
             <CategorySelect
               v-model="state.categoryId"
-              :current-label="product?.category?.categoryName"
+              :current-label="product?.category.name"
             />
           </UFormField>
           <UFormField

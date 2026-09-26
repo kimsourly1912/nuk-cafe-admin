@@ -6,7 +6,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 1. **[docs/progress.md](docs/progress.md)**: what's done, what's next, open questions for the backend team, and how well each part has been verified. Start every session here.
 2. **[docs/decisions.md](docs/decisions.md)**: why things are the way they are. Read the relevant entry **before changing** a pattern that looks odd. Most of them work around a verified backend or tooling quirk.
-3. **[docs/reference/](docs/reference/README.md)**: API reference for every shared composable, util and component (`useMutation`, `useApiQuery`, `ApiError`, …) with types, options and examples. Check it before using or changing a shared API. **[App-wide behavior](docs/reference/app-behavior.md)** (tab titles, refresh on tab focus, offline, leave guards, session loss) and **[Forms: unsaved changes](docs/reference/forms.md)** list every edge case those handle.
+3. **[docs/reference/](docs/reference/README.md)**: reference for our HTTP API (**[api.md](docs/reference/api.md)**: routes, error codes, server structure) and for every shared composable, util and component (`useMutation`, `useApiQuery`, `apiFetch`, `ApiError`, …) with types, options and examples. Check it before using or changing a shared API. **[App-wide behavior](docs/reference/app-behavior.md)** (tab titles, refresh on tab focus, offline, leave guards, session loss) and **[Forms: unsaved changes](docs/reference/forms.md)** list every edge case those handle.
 4. **[docs/feature-standard.md](docs/feature-standard.md)**: how every new feature is planned, built and verified (planning template, list/form/picker behavior, definition of done). **Read it before starting a feature.**
 5. The rest of this file: rules and recipes.
 
@@ -19,7 +19,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 ## What this is
 
-NUK Cafe is moving to one Nuxt full stack system for admin, customer, and cashier apps. The external Spring integration has been removed. The existing admin UI source is preserved as a reference, with unresolved generated SDK imports until new API contracts are built. New server work uses NuxtHub, Better Auth, Drizzle, SQLite/D1, and R2; see [the system blueprint](docs/plans/system-blueprint.md) and [backend plan](docs/plans/fullstack-backend.md). The feature rules below describe the preserved UI patterns; old Spring endpoint, SDK, auth, and error recipes are historical and must not be reused for new backend work.
+NUK Cafe is one Nuxt full stack app: the admin UI (a SPA, `ssr: false`) and our own API (`/api/v1`, Nitro) with Better Auth, NuxtHub, Drizzle, SQLite locally and D1/R2 on Cloudflare. The customer website and cashier workspace will use the same API. Product scope: [the system blueprint](docs/plans/system-blueprint.md); backend design: [backend plan](docs/plans/fullstack-backend.md); the API as built: [docs/reference/api.md](docs/reference/api.md). Admin auth, categories, schedules and menu items run on our API (D40, D41); the Spring integration is gone (D39).
 
 The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Schedules (card list) or Menu items (card grid + table); Categories is a tree (D37).
 
@@ -34,13 +34,13 @@ pnpm nuxt db migrate                      # apply local SQLite migrations
 pnpm lint / pnpm lint:fix                 # ESLint also does formatting (no Prettier) and enforces feature boundaries
 pnpm typecheck                            # vue-tsc via nuxt typecheck
 pnpm test                                 # all Vitest projects
-pnpm test:unit / pnpm test:e2e            # unit+nuxt only (seconds) / e2e only (about a minute, builds the app)
-pnpm vitest run --project unit            # one project: unit | nuxt | e2e
+pnpm test:unit / pnpm test:e2e            # unit + server (seconds) / e2e only (about two minutes, builds the app)
+pnpm vitest run --project server          # one project: unit | server | e2e (| nuxt, once a *.nuxt.test.ts exists)
 pnpm vitest run app/features/categories   # one feature's tests
 pnpm vitest run -t "refreshes once"
 ```
 
-Before finishing a change, run `pnpm lint`, `pnpm typecheck` and `pnpm test`. Until the preserved screens are wired to the new API, typecheck and browser tests may fail on their missing SDK imports; record those failures explicitly. CI (`.github/workflows/ci.yml`) still runs the same commands.
+Before finishing a change, run `pnpm lint`, `pnpm typecheck` and `pnpm test`. CI (`.github/workflows/ci.yml`) runs the same commands. Local setup for a first admin: [docs/reference/api.md → Identity](docs/reference/api.md#identity).
 
 Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix open redirect after login`), not `new`. The history is how the team finds when something broke. If lint or typecheck complains about missing `.nuxt/*` files, run `pnpm nuxt prepare`.
 
@@ -63,7 +63,8 @@ app/
 ├── pages/                       # THIN route files: definePageMeta + render <Feature>Page
 ├── components/ composables/ utils/   # SHARED across features only (auto-imported)
 ├── layouts/ middleware/ plugins/ types/   # app shell
-└── (no generated Spring SDK; new API contracts are pending)
+server/                          # our API: routes (api/v1), services (features/), schema + migrations (db/)
+shared/contracts/                # API contracts: request schemas + response types, used by server and app
 ```
 
 ### Rules (the boundary rules are enforced by ESLint in `eslint.config.mjs`)
@@ -72,16 +73,16 @@ app/
 2. **`index.ts` exports only building blocks:** pickers (`CategorySelect`), display components, option composables (`useCategoryOptions`), types and `navigation`. **Never export pages or forms from `index.ts`.** Otherwise features that use each other (products ↔ schedules) would import each other's screens and create cycles.
 3. **Cross-feature imports go through the public API only:** `import { CategorySelect } from '~/features/categories'`. Deep imports (`~/features/x/composables/...`) and relative paths that leave the feature (`../../x`) are lint errors.
 4. **Public building blocks must not import other features.** This keeps the dependency graph one level deep, so no cycles can form. Screens (pages, forms) may import other features' public APIs.
-5. **Inside a feature, use relative imports** (`../composables/useCategories`). Feature code is *not* auto-imported. Root shared code *is* auto-imported everywhere (`unwrap`, `getErrorMessage`, `invalidate`, `usePaginatedQuery`, `useConfirm`, `StatusBadge`, `STATUS_ITEMS`, `ANY`, ...).
+5. **Inside a feature, use relative imports** (`../composables/useCategories`). Feature code is *not* auto-imported. Root shared code *is* auto-imported everywhere (`apiFetch`, `getErrorMessage`, `invalidate`, `usePaginatedQuery`, `useConfirm`, `StatusBadge`, `STATUS_ITEMS`, `ANY`, ...).
 6. **Route files in `app/pages/` stay thin.** They hold `definePageMeta` (always with a `title` for the browser tab) plus one `<Feature>…Page.vue` from the feature (the only deep import pages are allowed). Routes stay discoverable in one place.
-7. **Name feature folders after backend resources**, so a folder maps to SDK functions and URLs: `categories`, `products` (shown as "Menu items" in the UI), `schedules`, `rewards` (reward categories live inside it: they're not menu categories), `vouchers`, `banners`, `customers`, `staff`, `orders`, `auth`.
+7. **Name feature folders after API resources**, so a folder maps to routes (`/api/v1/admin/<resource>`) and contracts: `categories`, `products` (shown as "Menu items" in the UI), `schedules`, `rewards` (reward categories live inside it: they're not menu categories), `vouchers`, `banners`, `customers`, `staff`, `orders`, `auth`.
 
 ### Cross-feature relationships (from the API)
 
-- A menu item (`ProductRecordCreation`) has `categoryId` (required) and `scheduleIds[]`, so the products form uses `CategorySelect` and `ScheduleSelect`. Pickers forward attributes (`aria-label`) to their select and take `class` on the wrapper (D34).
-- A schedule (`ScheduleCreateRequest`) has `items[]` (product ids): the same link seen from the other side. For now the schedule form shows its items **read-only** and re-sends them on save (docs/plans/schedules.md S4), and links are edited from the menu-item form. A `ProductSelect` in the schedule form would be the bidirectional case rule 2 exists for.
-- **Edit forms that must preserve a relationship the list doesn't return** (schedules' `items`) load the detail record first and keep Save disabled until it has loaded (`ScheduleFormModal`).
-- A category has an optional `mainCategoryId` (main vs sub). The category form uses its own `CategorySelect type="MAIN"`.
+- A menu item (`Product`) has `categoryId` (required) and `scheduleIds[]`, so the products form uses `CategorySelect` and `ScheduleSelect`. Pickers forward attributes (`aria-label`) to their select and take `class` on the wrapper (D34).
+- The item ↔ schedule link is stored once (`product_schedules`) and written **only from the menu item** (`scheduleIds`). The schedule form shows its menu items read-only (`GET /schedules/{id}` → `products`) and never sends them (D41).
+- A category has an optional `parentId` (main vs sub, two levels). The category form uses its own `CategorySelect level="main"`.
+- Every update names the `version` it read; a stale one is refused with 409 (D41). Forms keep the record they opened and send its version.
 
 ### Data freshness
 
@@ -125,20 +126,26 @@ Rules the Categories reference follows:
 
 The concurrency rules live in the framework-free engine `app/utils/mutation.ts` and are unit-tested in `test/unit/mutation.test.ts`. `useMutation` only wires it to Nuxt (state, toasts, confirm, invalidate).
 
-## API transition
+## Our API (`/api/v1`)
 
-The Spring OpenAPI generator, generated SDK, proxy, browser client, and token refresh wrapper were removed in D39. The preserved admin feature code still imports `~/generated/api` and calls `unwrap`; these references are intentionally unresolved until local API contracts are implemented. Do not restore the external SDK or proxy to make those screens compile.
+Everything is documented in [docs/reference/api.md](docs/reference/api.md). The rules:
 
-New endpoints belong in Nitro under `/api/v1`; Better Auth owns `/api/auth`. Define application data in `server/db/schema/`, generate a Drizzle migration with `pnpm nuxt db generate`, and apply it locally with `pnpm nuxt db migrate`. Keep route validation and authorization on the server. The route and table design are in [the backend plan](docs/plans/fullstack-backend.md).
+- **Contracts first:** `shared/contracts/<domain>.ts` holds the Valibot request schemas (the server validates with them) and the response types (the app imports them). Import as `#shared/contracts/<domain>`.
+- **Routes are thin:** `requireStaff(event, '<permission>')` → `readBodyAs` / `readQueryAs` / `idParam` → one service call. No SQL or business rules in route files.
+- **Services** (`server/features/<domain>/`) hold the rules and SQL, take `db: Db` as the first parameter, and use **explicit imports** (no Nitro auto-imports), so the `server` test project can run them against SQLite.
+- **Writes:** PATCH with `version` (absent keeps, `null` clears); a multi-statement write is **one `db.batch`** with a guard (`requireOneChange` / `requireCount`, `server/db/types.ts`) because D1 has no interactive transactions; privileged writes add an `audit_events` row in the same batch.
+- **Errors:** `throw apiError(status, code, message, fieldErrors?)`; add new codes to `ERROR_CODES`. Messages for 4xx must be safe to show.
+- **Schema changes:** edit `server/db/schema/`, run `pnpm nuxt db generate`, give the migration a descriptive name (and update its tag in `meta/_journal.json`). Local dev applies migrations on start; D1 needs `nuxt db migrate` in CI before deploy (not set up yet).
+- **The app calls the API only through `apiFetch`**, inside `useApiQuery` / `useMutation`. Never `$fetch` business routes directly (you'd lose `ApiError`, session handling and stale-response discard).
+- Do not restore the Spring SDK, proxy or envelope handling (D39).
 
-The existing `app/utils/api-error.ts` still contains Spring error-code mapping because preserved UI state helpers depend on it. Replace that mapping when the local API error contract is defined; do not use Spring codes in new routes.
 ## Auth & app shell
 
-- `app/features/auth/` still exposes the former `useAuth()`, whose SDK imports are unresolved. Replace its data adapter with Better Auth before using the admin shell. The shell imports it from `~/features/auth`.
+- `app/features/auth/` exposes `useAuth()`: sign-in and sign-out through Better Auth (`/api/auth`), the staff session from `GET /api/v1/admin/me`. A Better Auth account is **not** staff access (customers sign up through the same routes); only an active `staff_profiles` row is (D40). Its state keys are `staff-session:*`: `auth:*` belongs to `@nuxtjs/better-auth`. The shell imports it from `~/features/auth`.
 - The middleware protects **every page by default**. Opt out with `definePageMeta({ public: true })` (typed in `app/types/page-meta.d.ts`).
 - **Session transitions** (login, logout, expiry, another staff member via another tab) clear the previous identity's query data, mutation outcomes, toasts, overlays and unsaved forms, and discard its in-flight responses (`plugins/session-boundary.client.ts`, `useAuth().generation`, D29). Features must not keep user data outside `useApiQuery`/`useMutation`/`useState`-based composables, or the boundary can't clear it.
 - App-wide behavior needs nothing from features: login/logout apply to all open tabs (`plugins/auth-sync.client.ts`), `?` shows keyboard shortcuts, tab titles from `definePageMeta({ title })`, a save in one tab refreshes the same lists in the app's other tabs at once, lists refetch when the user returns to the tab (data ≥ 5s old) or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards. Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
-- `ssr: false` currently keeps the **admin UI** a SPA. Nitro server routes under `/api` and Better Auth under `/api/auth` are part of the new full stack system. Decide customer-site SSR separately; do not change the existing admin screens as part of setup.
+- `ssr: false` keeps the **admin UI** a SPA; Nitro serves `/api/v1` and Better Auth `/api/auth` from the same origin. Decide customer-site SSR separately.
 - `app/layouts/default.vue` is the Nuxt UI dashboard shell. The sidebar is `app/utils/navigation.ts`, which groups and orders each feature's exported `navigation` entry.
 - Every page component renders a `UDashboardPanel`: `UDashboardNavbar` (title, `UDashboardSidebarCollapse`, actions in `#right`), an optional `UDashboardToolbar` with filters in `#left`, and content in `#body`.
 
@@ -148,18 +155,19 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 
 | What | Where | Use for |
 |---|---|---|
+| `apiFetch<T>(path, opts)` | `utils/api.ts`, engine `utils/api-fetch.ts` | Every call to our API (`/api/v1` + path): `ApiError` on failure, no retries, session loss handled |
 | `useApiQuery(key, handler, opts)` | `composables/` | Every read (see "CRUD state") |
 | `useMutation(fn, opts)` | `composables/`, engine in `utils/mutation.ts` | Every create/update/delete, single or batch |
 | `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Selection for tables, cards and trees (`isSelected`, `toggle`, `toggleAll`); the floating bulk bar |
 | `StatusTabs`, `useStatusCounts` | `components/`, `composables/` | Status filter as tabs with counts |
 | `ListSkeleton` | `components/` | First-load placeholders (rows or cards) |
 | `previewList`, `pluralize` | `utils/text.ts` | "Coffee, Tea and 3 more", "3 categories" |
-| `usePaginatedQuery(filters)` | `composables/` | List state **kept in the URL**: 1-based `page` for `UPagination`, `query` with the 0-based API page, resets page on filter change, strips `ANY`/'', `isFiltered`, `clearFilters` |
+| `usePaginatedQuery(filters)` | `composables/` | List state **kept in the URL**: 1-based `page` (UI and API), `query` with `page` + `pageSize`, resets page on filter change, strips `ANY`/'', `isFiltered`, `clearFilters` |
 | `ANY`, `toApiQuery` | `utils/query.ts` | "All" option in filter selects (`USelect` can't hold `undefined`) |
 | `invalidate(...features)` | `utils/invalidate.ts` | Refetch data after mutations |
 | `StatusBadge`, `STATUS_ITEMS`, `STATUS_FILTER_ITEMS`, `Status` | `components/`, `utils/status.ts` | ACTIVE/INACTIVE display, form select and filter select |
 | `useConfirm()` | `composables/` | `await confirm({ title, danger: true })` resolves to `boolean` (`useMutation`'s `confirm` uses it) |
-| `ApiError`, `getErrorMessage` | `utils/api-error.ts` | Preserved UI error handling; Spring code mapping must be replaced for the new API |
+| `ApiError`, `getErrorMessage` | `utils/api-error.ts` | One error type for every failure (our API's and Better Auth's formats); `kind`, `code`, `fieldErrors`, a user-safe `message` |
 | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard` | `composables/`, `utils/form-value.ts` | "Discard unsaved changes?" for page and modal forms; the route middleware and tab-close plugin use them |
 | `<SearchInput>`, `<ListEmptyState>` | `components/` | List toolbar search (as you type) and empty states ("nothing yet" vs "filters hide everything") |
 | `invalidateAll()`, `invalidateInThisTab()` | `utils/invalidate.ts` | Refetch loaded or only stale queries / invalidate without telling other tabs (used by the freshness plugin) |
@@ -167,18 +175,24 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `useNotify()` | `composables/` | Toasts for API actions that aren't mutations |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
 
-Expected to be promoted to the root when the first two features need them: `ProductImageInput` (in `app/features/products/`; rewards, banners and vouchers also have upload endpoints) and `I18nFields` (for `nameI18n` / `descriptionI18n`). Money formatting (`formatPrice`, `PRICE_FORMAT`, USD) lives in `app/features/products/utils/money.ts` until a second feature shows prices.
+Expected to be promoted to the root when the first two features need them: `ProductImageInput` (in `app/features/products/`; rewards, banners and vouchers will need uploads too, through `POST /api/v1/admin/media`). Money (`toMinor`/`fromMinor` cents ↔ dollars, `formatPrice`, `formatMinor`, USD) lives in `app/features/products/utils/money.ts` until a second feature shows prices.
 
 ## Adding a full stack feature
 
-1. Start from the user journeys in [the system blueprint](docs/plans/system-blueprint.md), then write the relevant table and route contract in a feature plan. Settle any unresolved business or permission rule before encoding it.
-2. Add Drizzle tables and migrations, then server-side authorization, validation, and route handlers. Test data integrity and permissions at the server boundary.
-3. Replace only the corresponding preserved screen's generated SDK imports with calls to the new local routes. Adapt its form mapping to the new contract and keep its useful UI behavior.
-4. Add browser tests for the integrated journey. The old `test/e2e/support/mock-api.ts` fixtures model Spring responses and are not the new API contract.
+1. Start from the user journeys in [the system blueprint](docs/plans/system-blueprint.md) and write a plan with [docs/feature-standard.md](docs/feature-standard.md). Settle any unresolved business or permission rule first, or defer that behavior; never encode a guess.
+2. Contract in `shared/contracts/<domain>.ts`; tables in `server/db/schema/` + a migration; service in `server/features/<domain>/`; routes in `server/api/v1/…`; permissions in `shared/contracts/identity.ts` ([api.md → Server structure](docs/reference/api.md#server-structure)).
+3. Server tests in `test/server/` against `createTestDb()`: rules, permissions-relevant cases, and a stale-version or race case for every conditional write (check that it fails with the guard removed).
+4. The feature folder in `app/features/<feature>/` (copy Categories for composables/forms, Schedules or Menu items for paginated lists), calling `apiFetch` through `useApiQuery` / `useMutation`.
+5. Browser tests in `test/e2e/<feature>.test.ts` with `mockApi` and the typed fixtures in `test/e2e/support/mock-api.ts`.
+6. Update docs/reference/api.md, the feature's reference page, progress.md and decisions.md.
 
 ## Tests
 
-`vitest.config.ts` has unit, Nuxt, and e2e projects. Run `pnpm test:unit` for backend-independent utilities and form logic. The e2e project builds the full app, so it currently fails on preserved screens that still import the deleted SDK. Keep those tests as UI behavior references and replace their Spring response fixtures when each screen uses the new local API. Record full-gate failures in `docs/progress.md` until integration is complete.
+`vitest.config.ts` projects:
+- **unit** (`test/unit`, `app/features/*/tests`): pure logic in Node: engines, form schemas and mappings.
+- **server** (`test/server`): services against an in-memory SQLite database built from the checked-in migrations, foreign keys on (D42).
+- **e2e** (`test/e2e`): builds the app once and drives Chrome with the API mocked in the browser (`mockApi`).
+- **nuxt**: only created once a `*.nuxt.test.ts` exists (D42).
 
 ## Conventions
 

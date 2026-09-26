@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
-    "test:unit": "vitest run --project unit --project nuxt",
+    "test:unit": "vitest run --project unit --project server",
     "test:e2e": "vitest run --project e2e",
     "typecheck": "nuxt typecheck"
   },
@@ -25,6 +25,7 @@
     "@vueuse/integrations": "^15.0.0",
     "better-auth": "^1.7.3",
     "drizzle-orm": "^0.45.3",
+    "h3": "1.15.11",
     "nuxt": "^4.5.2",
     "ofetch": "^1.5.1",
     "sortablejs": "^1.15.7",

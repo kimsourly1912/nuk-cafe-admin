@@ -6,20 +6,19 @@
  * docs/plans/list-ui-refresh.md
  */
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
-import type { ProductResponse } from '~/generated/api'
+import type { Product } from '#shared/contracts/menu'
 import { useLocalStorage } from '@vueuse/core'
 import { CategorySelect, useCategoryOptions } from '~/features/categories'
-import type { ProductListQuery } from '../composables/useProducts'
 import { useProductList, useProductMenu, useProductMutations, useProductStatusCounts } from '../composables/useProducts'
 import { menuSections } from '../utils/menu-sections'
-import { formatPrice } from '../utils/money'
+import { formatMinor } from '../utils/money'
 import ProductCard from './ProductCard.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
 
 // --- Filters & pagination (kept in the URL); view and grouping per viewer ---
 const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({
-  productName: '',
-  categoryId: ANY as number | string,
+  search: '',
+  categoryId: ANY as string,
   status: ANY as Status | Any,
 })
 
@@ -28,28 +27,23 @@ const grouped = useLocalStorage('products:grouped', false)
 /** The grid grouped by category shows the whole menu, not a page. */
 const showMenu = computed(() => view.value === 'grid' && grouped.value)
 
-// A category id read back from the URL is a string; the API wants a number.
-const apiQuery = computed<ProductListQuery>(() => {
-  const { categoryId, ...rest } = query.value
-  return { ...rest, categoryId: categoryId === undefined ? undefined : Number(categoryId) }
-})
 const menuQuery = computed(() => {
-  const { page: _page, size: _size, ...rest } = apiQuery.value
+  const { page: _page, pageSize: _size, ...rest } = query.value
   return rest
 })
 
 /** `CategorySelect` holds `number | undefined`; the filter holds `ANY` for "all". */
 const categoryFilter = computed({
-  get: () => (filters.categoryId === ANY ? undefined : Number(filters.categoryId)),
-  set: (id: number | undefined) => {
+  get: () => (filters.categoryId === ANY ? undefined : filters.categoryId),
+  set: (id: string | undefined) => {
     filters.categoryId = id ?? ANY
   },
 })
 
-const list = useProductList(apiQuery, () => !showMenu.value)
+const list = useProductList(query, () => !showMenu.value)
 const menu = useProductMenu(menuQuery, showMenu)
 const { data: categories } = useCategoryOptions()
-const counts = useProductStatusCounts(() => ({ productName: apiQuery.value.productName, categoryId: apiQuery.value.categoryId }))
+const counts = useProductStatusCounts(() => ({ search: query.value.search, categoryId: query.value.categoryId }))
 const { remove, isBusy } = useProductMutations()
 
 const source = computed(() => (showMenu.value ? menu : list))
@@ -59,7 +53,7 @@ const error = computed(() => source.value.error.value)
 const refresh = () => source.value.refresh()
 
 // Deleted items disappear immediately, before the refreshed list arrives.
-const rows = computed(() => ((showMenu.value ? menu.data.value : list.data.value?.content) ?? []).filter(p => !remove.isRemoved(p.id!)))
+const rows = computed(() => ((showMenu.value ? menu.data.value : list.data.value?.items) ?? []).filter(p => !remove.isRemoved(p.id)))
 const sections = computed(() => menuSections(rows.value, categories.value))
 
 // Deleting the last items of the last page: step back to a page that exists.
@@ -68,29 +62,29 @@ watch(() => list.data.value?.totalPages, (totalPages) => {
 })
 
 // --- Selection & bulk actions ---
-const selection = useTableSelection(rows, p => p.id!, { resetOn: [query, showMenu] })
+const selection = useTableSelection(rows, p => p.id, { resetOn: [query, showMenu] })
 
 async function removeSelected() {
   const result = await remove.executeMany(selection.selected)
   // Keep only the items that still need attention selected: failed, skipped (busy) and not started.
   selection.select([
-    ...result.failed.map(f => f.input.id!),
-    ...result.skipped.map(p => p.id!),
-    ...result.notStarted.map(p => p.id!),
+    ...result.failed.map(f => f.input.id),
+    ...result.skipped.map(p => p.id),
+    ...result.notStarted.map(p => p.id),
   ])
 }
 
 // --- Table (List view) ---
-const columns: TableColumn<ProductResponse>[] = [
+const columns: TableColumn<Product>[] = [
   { id: 'select' },
-  { accessorKey: 'productName', header: 'Name' },
+  { accessorKey: 'name', header: 'Name' },
   { id: 'category', header: 'Category' },
-  { accessorKey: 'price', header: 'Price', meta: { class: { th: 'text-right', td: 'text-right' } } },
+  { accessorKey: 'priceMinor', header: 'Price', meta: { class: { th: 'text-right', td: 'text-right' } } },
   { accessorKey: 'status', header: 'Status' },
   { id: 'actions', meta: { class: { td: 'text-right' } } },
 ]
 
-function rowActions(product: ProductResponse): DropdownMenuItem[] {
+function rowActions(product: Product): DropdownMenuItem[] {
   return [
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openForm(product) },
     { label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => remove.execute(product) },
@@ -98,7 +92,7 @@ function rowActions(product: ProductResponse): DropdownMenuItem[] {
 }
 
 const formPanel = useOverlay().create(ProductFormSlideover)
-function openForm(product?: ProductResponse) {
+function openForm(product?: Product) {
   formPanel.open({ product })
 }
 
@@ -129,7 +123,7 @@ usePageShortcuts({ n: () => openForm() })
       <UDashboardToolbar>
         <template #left>
           <SearchInput
-            v-model="filters.productName"
+            v-model="filters.search"
             placeholder="Search menu items…"
             class="w-64"
           />
@@ -234,7 +228,7 @@ usePageShortcuts({ n: () => openForm() })
               hide-category
               :actions="rowActions(product)"
               :selected="selection.isSelected(product)"
-              :busy="isBusy(product.id!)"
+              :busy="isBusy(product.id)"
               @open="openForm(product)"
               @select="value => selection.toggle(product, value)"
             />
@@ -253,7 +247,7 @@ usePageShortcuts({ n: () => openForm() })
           :product="product"
           :actions="rowActions(product)"
           :selected="selection.isSelected(product)"
-          :busy="isBusy(product.id!)"
+          :busy="isBusy(product.id)"
           @open="openForm(product)"
           @select="value => selection.toggle(product, value)"
         />
@@ -266,7 +260,7 @@ usePageShortcuts({ n: () => openForm() })
         :get-row-id="selection.getRowId"
         :data="rows"
         :columns="columns"
-        :meta="{ class: { tr: row => (isBusy(row.original.id!) ? 'opacity-50 pointer-events-none' : 'cursor-pointer') } }"
+        :meta="{ class: { tr: row => (isBusy(row.original.id) ? 'opacity-50 pointer-events-none' : 'cursor-pointer') } }"
         @select="(_, row) => openForm(row.original)"
       >
         <template #select-header="{ table }">
@@ -284,17 +278,17 @@ usePageShortcuts({ n: () => openForm() })
           />
         </template>
 
-        <template #productName-cell="{ row }">
+        <template #name-cell="{ row }">
           <div class="flex items-center gap-3">
             <UAvatar
-              :src="row.original.imageUrl"
+              :src="row.original.image?.url"
               icon="i-lucide-image"
-              :alt="row.original.productName"
+              :alt="row.original.name"
               class="size-10 shrink-0 rounded-md"
             />
             <div class="min-w-0">
               <p class="font-medium text-highlighted">
-                {{ row.original.productName }}
+                {{ row.original.name }}
               </p>
               <p
                 v-if="row.original.description"
@@ -307,11 +301,11 @@ usePageShortcuts({ n: () => openForm() })
         </template>
 
         <template #category-cell="{ row }">
-          {{ row.original.category?.categoryName ?? '—' }}
+          {{ row.original.category.name }}
         </template>
 
-        <template #price-cell="{ row }">
-          <span class="tabular-nums">{{ formatPrice(row.original.price) }}</span>
+        <template #priceMinor-cell="{ row }">
+          <span class="tabular-nums">{{ formatMinor(row.original.priceMinor) }}</span>
         </template>
 
         <template #status-cell="{ row }">
@@ -320,7 +314,7 @@ usePageShortcuts({ n: () => openForm() })
 
         <template #actions-cell="{ row }">
           <UIcon
-            v-if="isBusy(row.original.id!)"
+            v-if="isBusy(row.original.id)"
             name="i-lucide-loader-circle"
             class="size-5 animate-spin text-muted"
             aria-label="Working…"
@@ -346,7 +340,7 @@ usePageShortcuts({ n: () => openForm() })
       >
         <UPagination
           v-model:page="page"
-          :total="list.data.value?.totalElements ?? 0"
+          :total="list.data.value?.total ?? 0"
           :items-per-page="pageSize"
         />
       </div>

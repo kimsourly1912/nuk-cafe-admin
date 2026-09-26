@@ -7,29 +7,29 @@
  * user's input restored.
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { CategoryResponse } from '~/generated/api'
+import type { Category } from '#shared/contracts/menu'
 import { useCategoryMutations } from '../composables/useCategories'
-import { categoryFormSchema, toCategoryForm, toCategoryRequest } from '../schemas/category-form'
+import { categoryFormSchema, toCategoryForm, toCreateCategoryBody, toUpdateCategoryBody } from '../schemas/category-form'
 import type { CategoryForm } from '../schemas/category-form'
 import CategoryFormModal from './CategoryFormModal.vue'
 import CategorySelect from './CategorySelect.vue'
 
 const props = defineProps<{
   /** Omit to create a new category. */
-  category?: CategoryResponse
+  category?: Category
   /** Restores unsaved input (used by "Reopen" after a failed background save). */
   draft?: CategoryForm
   /** New sub-category of this main category ("Add sub-category" in the tree). */
-  parentId?: number
+  parentId?: string
 }>()
 
 // `update:open` is declared so closing (X, Esc, outside click) goes through `unsaved` instead of
 // straight to the overlay.
 const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: boolean] }>()
 
-const isEdit = computed(() => props.category?.id !== undefined)
+const isEdit = computed(() => props.category !== undefined)
 /** The form's starting values; a preset parent is part of them, so it doesn't count as a change. */
-const start = (): CategoryForm => ({ ...toCategoryForm(props.category), ...(props.parentId === undefined ? {} : { mainCategoryId: props.parentId }) })
+const start = (): CategoryForm => ({ ...toCategoryForm(props.category), ...(props.parentId === undefined ? {} : { parentId: props.parentId }) })
 const state = reactive<CategoryForm>({ ...(props.draft ?? start()) })
 
 const { create, update } = useCategoryMutations()
@@ -60,14 +60,13 @@ function reopenActions(draft: CategoryForm) {
 }
 
 async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
-  const body = toCategoryRequest(data, props.category)
   const draft = { ...state }
   const overrides = { errorActions: () => reopenActions(draft) }
 
   saving.value = true
-  const result = isEdit.value
-    ? await update.execute({ id: props.category!.id!, body }, overrides)
-    : await create.execute(body, overrides)
+  const result = props.category
+    ? await update.execute({ id: props.category.id, name: data.name, body: toUpdateCategoryBody(data, props.category) }, overrides)
+    : await create.execute(toCreateCategoryBody(data), overrides)
   saving.value = false
 
   if (!result.ok) return
@@ -94,11 +93,11 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
       >
         <UFormField
           label="Name"
-          name="categoryName"
+          name="name"
           required
         >
           <UInput
-            v-model="state.categoryName"
+            v-model="state.name"
             class="w-full"
             autofocus
           />
@@ -106,14 +105,13 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
 
         <UFormField
           label="Parent category"
-          name="mainCategoryId"
+          name="parentId"
           help="Leave as none to create a main category."
         >
           <CategorySelect
-            v-model="state.mainCategoryId"
-            type="MAIN"
+            v-model="state.parentId"
+            level="main"
             :exclude-id="category?.id"
-            :current-label="category?.mainCategory?.categoryName"
             none-label="None (main category)"
           />
         </UFormField>

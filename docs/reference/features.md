@@ -28,13 +28,13 @@ import { CategorySelect } from '~/features/categories'
 ```
 
 ```vue
-<!-- required category, sub-categories only -->
-<CategorySelect v-model="state.categoryId" type="SUB" />
+<!-- required category (any level), with the edited record's name as a fallback label -->
+<CategorySelect v-model="state.categoryId" :current-label="product?.category.name" />
 
 <!-- optional parent, with a "none" option; the edited category can't be its own parent -->
 <CategorySelect
-  v-model="state.mainCategoryId"
-  type="MAIN"
+  v-model="state.parentId"
+  level="main"
   :exclude-id="category?.id"
   none-label="None (main category)"
 />
@@ -42,18 +42,18 @@ import { CategorySelect } from '~/features/categories'
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `v-model` | `number \| undefined` | | Category id. Choosing the `noneLabel` option sets `undefined`. |
-| `type` | `'MAIN' \| 'SUB'` | all | Which categories to list. |
-| `excludeId` | `number` | | Hide one category. |
+| `v-model` | `string \| undefined` | | Category id. Choosing the `noneLabel` option sets `undefined`. |
+| `level` | `'main' \| 'sub'` | all | Which categories to list. |
+| `excludeId` | `string` | | Hide one category. |
 | `noneLabel` | `string` | | Adds an option that clears the value. `USelect` can't hold `undefined`, and this handles that internally. |
 | `placeholder` | `string` | `'Select a category'` | |
-| `currentLabel` | `string` | | Name of the current value from the edited record (e.g. `category.mainCategory?.categoryName`), shown if the value isn't among the options. |
+| `currentLabel` | `string` | | Name of the current value from the edited record (e.g. `product.category.name`), shown if the value isn't among the options. |
 | `includeInactive` | `boolean` | `false` | Also offer inactive categories. **Only for filters**, where no new relationship is made (Q9 doesn't apply). |
 
 Other attributes (`aria-label`, `id`, …) go to the select itself, so they name it for screen readers and tests. `class` sizes the wrapper (full width by default).
 
 It loads its options through `useCategoryOptions` and shows a loading state while fetching. Behavior (D31, e2e `test/e2e/pickers.test.ts`):
-- **Current value stays visible**, never cleared: labelled from the options, `currentLabel` or `#id`, marked "(inactive)" or "(unavailable)".
+- **Current value stays visible**, never cleared: labelled from the options, `currentLabel` or "Unknown category", marked "(inactive)" or "(unavailable)".
 - **Inactive categories aren't offered as new selections** while their eligibility is open (Q9). This is a deferral, not a rule.
 - **Load error:** shows the message with **Retry** instead of an empty list.
 
@@ -62,16 +62,16 @@ It loads its options through `useCategoryOptions` and shows a loading state whil
 Unpaginated categories for pickers.
 
 ```ts
-function useCategoryOptions(filter?: MaybeRefOrGetter<{ type?: 'MAIN' | 'SUB', mainCategoryId?: number }>)
-// → useApiQuery result, `data` defaults to []
+function useCategoryOptions(filter?: MaybeRefOrGetter<{ level?: 'main' | 'sub' }>)
+// → useApiQuery result, `data`: Category[] (default [])
 ```
 
 ```ts
-const { data: mainCategories, loading } = useCategoryOptions({ type: 'MAIN' })
+const { data: mainCategories, loading } = useCategoryOptions({ level: 'main' })
 ```
 
-- Key: `categories:options:<type>:<mainCategoryId>`. Each filter is cached separately, and all of them refresh on `invalidate('categories')`.
-- Calls `GET /staff/categories/all`.
+- Key: `categories:options:<level>`. Each filter is cached separately, and all of them refresh on `invalidate('categories')`.
+- Calls `GET /api/v1/admin/categories?level=`.
 
 ### `categoriesNavigation`
 
@@ -95,11 +95,11 @@ import { ScheduleSelect } from '~/features/schedules'
 
 | Prop | Type | Default | Description |
 |---|---|---|---|
-| `v-model` | `number[]` | `[]` | Schedule ids. |
+| `v-model` | `string[]` | `[]` | Schedule ids. |
 | `placeholder` | `string` | `'No schedule'` | |
 
 Behavior (e2e `test/e2e/products.test.ts`), the same contract as `CategorySelect`:
-- **Selected schedules stay visible**, never cleared: "(inactive)" when inactive, "#12 (unavailable)" when unknown.
+- **Selected schedules stay visible**, never cleared: "(inactive)" when inactive, "Unknown schedule (unavailable)" when it no longer exists.
 - **Inactive schedules aren't offered as new selections** while Q9 is open.
 - **Load error:** the message with **Retry**.
 - Attributes go to the select, `class` to the wrapper (as `CategorySelect`).
@@ -107,8 +107,8 @@ Behavior (e2e `test/e2e/products.test.ts`), the same contract as `CategorySelect
 ### `useScheduleOptions`
 
 ```ts
-function useScheduleOptions() // → useApiQuery result, `data`: ScheduleListResponse[] (default [])
+function useScheduleOptions() // → useApiQuery result, `data`: ScheduleOption[] (default [])
 ```
 
 - Key: `schedules:options`, refreshed by `invalidate('schedules')`.
-- Calls `GET /staff/schedules/all` (all statuses).
+- Calls `GET /api/v1/admin/schedules/options` (all statuses).

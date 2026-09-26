@@ -1,18 +1,18 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import { beforeUnloadPrevented, categoryItem, deferred, failures, gotoHydrated, mockApi, openTabs, setupE2e, TEA, toast } from './support/mock-api'
+import { ADMIN, beforeUnloadPrevented, categoryItem, categoryOf, deferred, failures, gotoHydrated, mockApi, openTabs, setupE2e, TEA, toast } from './support/mock-api'
 
 // The session-transition contract (plugins/session-boundary.client.ts, useAuth generation,
 // createApiFetch). Cases: docs/reference/app-behavior.md → "Session loss".
 await setupE2e()
 
-const ALICE = { staffId: 1, username: 'alice', groups: ['ADMIN'] }
-const BOB = { staffId: 2, username: 'bob', groups: ['ADMIN'] }
-const ALICE_ONLY = { id: 11, categoryName: 'Alice-only draft', status: 'ACTIVE', type: 'MAIN' }
-const BOB_ONLY = { id: 12, categoryName: 'Bob-only menu', status: 'ACTIVE', type: 'MAIN' }
-/** The Categories tree loads the whole list (`GET /staff/categories/all`). */
-const LIST = 'GET /staff/categories/all'
+const ALICE = { ...ADMIN, userId: 'user-alice', email: 'alice@nukcafe.test', displayName: 'alice' }
+const BOB = { ...ADMIN, userId: 'user-bob', email: 'bob@nukcafe.test', displayName: 'bob' }
+const ALICE_ONLY = categoryOf('cat-11', 'Alice-only draft')
+const BOB_ONLY = categoryOf('cat-12', 'Bob-only menu')
+/** The Categories tree loads the whole list. */
+const LIST = 'GET /admin/categories'
 const listOf = (...rows: object[]) => rows
 
 const form = (page: Page) => page.getByRole('dialog', { name: /New category|Edit category/ })
@@ -30,7 +30,7 @@ async function logout(page: Page, username: string) {
 }
 
 async function login(page: Page, username: string) {
-  await page.getByLabel('Username').fill(username)
+  await page.getByLabel('Email').fill(`${username}@nukcafe.test`)
   await page.getByLabel('Password', { exact: true }).fill('secret')
   await page.getByRole('button', { name: 'Sign in' }).click()
 }
@@ -39,10 +39,7 @@ describe('session expiry', () => {
   it('expiring during a save goes to login: no discard dialog, no form left over, no error toast', async () => {
     const page = await createPage()
     await mockApi(page, {
-      'POST /staff/categories': () => {
-        throw failures.unauthorized()
-      },
-      'POST /staff/auth/refresh': () => {
+      'POST /admin/categories': () => {
         throw failures.unauthorized()
       },
     })
@@ -60,18 +57,32 @@ describe('session expiry', () => {
     expect(await beforeUnloadPrevented(page)).toBe(false)
   })
 
-  it('a request that is still unauthorized after a successful refresh expires the session once', async () => {
+  it('a 401 ends the session once: no refresh, no retry loop', async () => {
     const page = await createPage()
     const api = await mockApi(page, {
       [LIST]: () => {
         throw failures.unauthorized()
       },
-      'POST /staff/auth/refresh': () => null,
     })
     await page.goto(url('/categories'))
     await expect.poll(() => path(page)).toBe('/login')
     await page.waitForTimeout(500)
-    expect(api.calls.filter(c => c === 'POST /staff/auth/refresh')).toHaveLength(1)
+    expect(api.calls.filter(c => c === LIST)).toHaveLength(1)
+  })
+
+  it('staff access removed mid-session (403 NOT_STAFF) also goes to login', async () => {
+    const page = await createPage()
+    const api = await mockApi(page)
+    await page.goto(url('/categories'), { waitUntil: 'hydration' })
+    await categoryItem(page, 'Tea').waitFor()
+    api.set({
+      'POST /admin/categories': () => {
+        throw failures.notStaff()
+      },
+    })
+    await openNewForm(page, 'Latte')
+    await form(page).getByRole('button', { name: 'Create' }).click()
+    await expect.poll(() => path(page)).toBe('/login')
   })
 })
 
@@ -84,7 +95,7 @@ describe('logout in another tab', () => {
     await gotoHydrated(tab2!, '/categories')
     await openNewForm(tab2!, 'Unsaved latte')
 
-    await logout(tab1!, 'admin')
+    await logout(tab1!, 'alice')
 
     await expect.poll(() => path(tab2!)).toBe('/login')
     await tab2!.waitForTimeout(300)
@@ -99,11 +110,11 @@ describe('switching users in the same browser', () => {
     const page = await createPage()
     const aliceSave = deferred()
     const api = await mockApi(page, {
-      'GET /staff/auth/session': () => ALICE,
+      'GET /admin/me': () => ALICE,
       [LIST]: () => listOf(TEA, ALICE_ONLY),
-      'PUT /staff/categories/{id}': aliceSave.handler,
-      'DELETE /staff/categories/{id}': () => {
-        throw failures.validation('Alice cannot delete this')
+      'PATCH /admin/categories/{id}': aliceSave.handler,
+      'DELETE /admin/categories/{id}': () => {
+        throw failures.conflict('CATEGORY_IN_USE', 'Alice cannot delete this')
       },
     })
     await page.goto(url('/categories'), { waitUntil: 'hydration' })
@@ -131,8 +142,8 @@ describe('switching users in the same browser', () => {
 
     // Bob signs in; the backend now answers as Bob.
     api.set({
-      'POST /staff/auth/login': () => BOB,
-      'GET /staff/auth/session': () => BOB,
+      'POST /auth/sign-in/email': () => ({ token: 't' }),
+      'GET /admin/me': () => BOB,
       [LIST]: () => listOf(BOB_ONLY),
     })
     await login(page, 'bob')
@@ -142,7 +153,7 @@ describe('switching users in the same browser', () => {
 
     // Alice's save finally answers: it must not toast or refresh anything in Bob's session.
     const loadsBefore = api.calls.filter(c => c === LIST).length
-    aliceSave.release({ ...TEA, categoryName: 'Tea by Alice' })
+    aliceSave.release({ ...TEA, name: 'Tea by Alice', version: 2 })
     await page.waitForTimeout(500)
     expect(await toast(page, /updated/).count()).toBe(0)
     expect(api.calls.filter(c => c === LIST).length).toBe(loadsBefore)
@@ -154,9 +165,9 @@ describe('switching users in the same browser', () => {
     const aliceList = deferred()
     let aliceSignedIn = true
     const api = await mockApi(page, {
-      'GET /staff/auth/session': () => (aliceSignedIn ? ALICE : BOB),
+      'GET /admin/me': () => (aliceSignedIn ? ALICE : BOB),
       [LIST]: request => (aliceSignedIn ? aliceList.handler(request) : listOf(BOB_ONLY)),
-      'POST /staff/auth/login': () => BOB,
+      'POST /auth/sign-in/email': () => ({ token: 't' }),
     })
     await page.goto(url('/categories'), { waitUntil: 'hydration' })
     await aliceList.started()

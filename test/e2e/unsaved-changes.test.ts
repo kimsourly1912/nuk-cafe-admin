@@ -1,7 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import { beforeUnloadPrevented, deferred, failures, gotoViaSidebar, mockApi, setupE2e, toast } from './support/mock-api'
+import { beforeUnloadPrevented, categoryOf, deferred, failures, gotoViaSidebar, mockApi, setupE2e, toast } from './support/mock-api'
 
 // The cases listed in docs/reference/forms.md → "Edge cases", on the Categories form modal.
 await setupE2e()
@@ -96,7 +96,7 @@ describe('unsaved changes: form modal', () => {
   it('closes mid-save without asking; the tab-close guard stays on until the save ends', async () => {
     const { page, api } = await openCategories()
     const save = deferred()
-    api.set({ 'POST /staff/categories': save.handler })
+    api.set({ 'POST /admin/categories': save.handler })
 
     await openNewForm(page, 'Latte')
     await page.getByRole('button', { name: 'Create' }).click()
@@ -106,7 +106,7 @@ describe('unsaved changes: form modal', () => {
     expect(await discardDialog(page).count()).toBe(0)
     expect(await beforeUnloadPrevented(page)).toBe(true)
 
-    save.release({ id: 3 })
+    save.release(categoryOf('cat-3', 'Latte'))
     await expect.poll(() => beforeUnloadPrevented(page)).toBe(false)
   })
 })
@@ -163,7 +163,7 @@ describe('unsaved changes: failed saves and forward', () => {
   it('a failed save keeps the form open with the input and the reason, and still guards it', async () => {
     const { page, api } = await openCategories()
     api.set({
-      'POST /staff/categories': () => {
+      'POST /admin/categories': () => {
         throw failures.validation('A category named "Latte" already exists')
       },
     })
@@ -178,7 +178,7 @@ describe('unsaved changes: failed saves and forward', () => {
 
     // Retrying is allowed after the failure (no stuck "in flight" state).
     await form(page).getByRole('button', { name: 'Create' }).click()
-    await expect.poll(() => api.calls.filter(c => c === 'POST /staff/categories').length).toBe(2)
+    await expect.poll(() => api.calls.filter(c => c === 'POST /admin/categories').length).toBe(2)
   })
 
   it('asks on browser forward; Keep editing stays on the page', async () => {

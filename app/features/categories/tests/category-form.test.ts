@@ -1,38 +1,39 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
-import { categoryFormSchema, toCategoryForm, toCategoryRequest } from '../schemas/category-form'
+import type { Category } from '#shared/contracts/menu'
+import { categoryFormSchema, toCategoryForm, toCreateCategoryBody, toUpdateCategoryBody } from '../schemas/category-form'
 
 describe('category form', () => {
-  const existing = {
-    id: 7,
-    categoryName: 'Coffee',
-    mainCategoryId: 1,
-    status: 'INACTIVE' as const,
+  const existing: Category = {
+    id: 'c7',
+    name: 'Coffee',
+    parentId: 'c1',
+    status: 'INACTIVE',
     sortOrder: 3,
-    nameI18n: { 'zh-HK': '咖啡' },
+    version: 4,
+    createdAt: '2026-09-26T00:00:00.000Z',
+    updatedAt: '2026-09-26T00:00:00.000Z',
   }
 
   it('defaults a new category to active with no parent', () => {
-    expect(toCategoryForm()).toEqual({ categoryName: '', mainCategoryId: undefined, status: 'ACTIVE' })
+    expect(toCategoryForm()).toEqual({ name: '', parentId: undefined, status: 'ACTIVE' })
   })
 
   it('fills the form from an existing category', () => {
-    expect(toCategoryForm(existing)).toEqual({ categoryName: 'Coffee', mainCategoryId: 1, status: 'INACTIVE' })
+    expect(toCategoryForm(existing)).toEqual({ name: 'Coffee', parentId: 'c1', status: 'INACTIVE' })
   })
 
-  it('preserves fields the form does not edit', () => {
-    const body = toCategoryRequest({ categoryName: 'Tea', mainCategoryId: undefined, status: 'ACTIVE' }, existing)
-    expect(body).toEqual({
-      categoryName: 'Tea',
-      mainCategoryId: undefined,
-      status: 'ACTIVE',
-      nameI18n: { 'zh-HK': '咖啡' },
-      sortOrder: 3,
-    })
+  it('creates with an explicit null parent for a main category', () => {
+    expect(toCreateCategoryBody({ name: 'Tea', parentId: undefined, status: 'ACTIVE' })).toEqual({ name: 'Tea', parentId: null, status: 'ACTIVE' })
+  })
+
+  it('updates from the version it was opened with, clearing the parent with null', () => {
+    const body = toUpdateCategoryBody({ name: 'Tea', parentId: undefined, status: 'ACTIVE' }, existing)
+    expect(body).toEqual({ version: 4, name: 'Tea', parentId: null, status: 'ACTIVE' })
   })
 
   it('rejects a blank name', () => {
-    const result = v.safeParse(categoryFormSchema, { categoryName: '   ', status: 'ACTIVE' })
+    const result = v.safeParse(categoryFormSchema, { name: '   ', status: 'ACTIVE' })
     expect(result.success).toBe(false)
   })
 })

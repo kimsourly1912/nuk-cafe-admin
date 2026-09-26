@@ -1,31 +1,32 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
+import type { Category } from '../../shared/contracts/menu'
 import type { MockHandler } from './support/mock-api'
-import { failures, mockApi, setupE2e, toast } from './support/mock-api'
+import { categoriesHandler, categoryOf, failures, lastSegment, mockApi, setupE2e, toast } from './support/mock-api'
 
 // Categories as a tree (docs/plans/list-ui-refresh.md, D37): mains with their subs, loaded whole,
 // filtered and counted on the client.
 await setupE2e()
 
-type Row = { id: number, categoryName: string, status: string, type: string, sortOrder: number, mainCategoryId?: number, mainCategory?: { id: number, categoryName: string } }
-const main = (id: number, name: string, sortOrder: number, status = 'ACTIVE'): Row => ({ id, categoryName: name, status, type: 'MAIN', sortOrder })
-const sub = (id: number, name: string, parent: Row, sortOrder: number, status = 'ACTIVE'): Row =>
-  ({ id, categoryName: name, status, type: 'SUB', sortOrder, mainCategoryId: parent.id, mainCategory: { id: parent.id, categoryName: parent.categoryName } })
+type Row = Category
+const main = (id: string, name: string, sortOrder: number, status: Row['status'] = 'ACTIVE') => categoryOf(id, name, { sortOrder, status })
+const sub = (id: string, name: string, parent: Row, sortOrder: number, status: Row['status'] = 'ACTIVE') =>
+  categoryOf(id, name, { sortOrder, status, parentId: parent.id })
 
-const DRINKS = main(1, 'Drinks', 1)
-const FOOD = main(2, 'Food', 2)
-const COFFEE = sub(11, 'Coffee', DRINKS, 1)
-const TEA = sub(12, 'Tea', DRINKS, 2, 'INACTIVE')
-const TOAST = sub(21, 'Toast', FOOD, 1)
+const DRINKS = main('cat-1', 'Drinks', 1)
+const FOOD = main('cat-2', 'Food', 2)
+const COFFEE = sub('cat-11', 'Coffee', DRINKS, 1)
+const TEA = sub('cat-12', 'Tea', DRINKS, 2, 'INACTIVE')
+const TOAST = sub('cat-21', 'Toast', FOOD, 1)
 
 /** A backend whose list reflects deletes. Out of order on purpose: the page sorts. */
 function backend(initial: Row[] = [TOAST, FOOD, TEA, COFFEE, DRINKS], extra: Record<string, MockHandler> = {}) {
   let rows = [...initial]
   return {
-    'GET /staff/categories/all': () => rows,
-    'DELETE /staff/categories/{id}': ({ url }) => {
-      rows = rows.filter(r => r.id !== Number(url.pathname.split('/').pop()))
+    'GET /admin/categories': categoriesHandler(() => rows),
+    'DELETE /admin/categories/{id}': ({ url }) => {
+      rows = rows.filter(r => r.id !== lastSegment(url))
       return null
     },
     ...extra,
@@ -87,9 +88,9 @@ describe('categories tree', () => {
   it('adds a sub-category with the parent filled in', async () => {
     let body: Record<string, unknown> | undefined
     const { page } = await open(backend(undefined, {
-      'POST /staff/categories': (request) => {
+      'POST /admin/categories': (request) => {
         body = request.body as Record<string, unknown>
-        return { id: 30 }
+        return categoryOf('cat-30', 'Sandwiches', { parentId: FOOD.id })
       },
     }))
     await page.getByRole('button', { name: 'Actions for Food' }).click()
@@ -99,14 +100,14 @@ describe('categories tree', () => {
     await form.getByLabel('Name').fill('Sandwiches')
     await form.getByRole('button', { name: 'Create' }).click()
     await toast(page, 'Category "Sandwiches" created').waitFor()
-    expect(body).toMatchObject({ categoryName: 'Sandwiches', mainCategoryId: 2 })
+    expect(body).toEqual({ name: 'Sandwiches', parentId: FOOD.id, status: 'ACTIVE' })
   })
 
   it('shows the load error with Retry', async () => {
     let fail = true
     const { page } = await open({
-      'GET /staff/categories/all': () => {
-        if (fail) throw failures.technical()
+      'GET /admin/categories': () => {
+        if (fail) throw failures.server()
         return [DRINKS]
       },
     })
@@ -123,15 +124,15 @@ describe('categories tree', () => {
     await page.getByText('Delete "Toast"?').waitFor()
     await page.getByRole('button', { name: 'Delete' }).last().click()
     await toast(page, 'Category "Toast" deleted').waitFor()
-    expect(api.calls).toContain('DELETE /staff/categories/21')
+    expect(api.calls).toContain('DELETE /admin/categories/cat-21')
     await item(page, 'Toast').waitFor({ state: 'detached' })
   })
 
   it('bulk-deletes the selection, sub-categories first, with one confirmation', async () => {
     const order: string[] = []
     const { page } = await open(backend(undefined, {
-      'DELETE /staff/categories/{id}': ({ url }) => {
-        order.push(url.pathname.split('/').pop()!)
+      'DELETE /admin/categories/{id}': ({ url }) => {
+        order.push(`${lastSegment(url)} v${url.searchParams.get('version')}`)
         return null
       },
     }))
@@ -141,17 +142,18 @@ describe('categories tree', () => {
     await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Delete' }).click()
     await page.getByRole('button', { name: 'Delete' }).last().click()
     await toast(page, '2 categories deleted').waitFor()
-    expect(order).toEqual(['11', '1'])
+    // Each delete names the version it read.
+    expect(order).toEqual(['cat-11 v1', 'cat-1 v1'])
   })
 })
 
 describe('category order', () => {
   function saving(record: (body: unknown) => void, fail = false): Record<string, MockHandler> {
     return backend(undefined, {
-      'PUT /staff/categories/sort-order': (request) => {
+      'PUT /admin/categories/order': (request) => {
         record(request.body)
-        if (fail) throw failures.validation('Sort order must be unique')
-        return null
+        if (fail) throw failures.conflict('ORDER_STALE', 'Categories were added, moved or deleted meanwhile. Reload and arrange them again.')
+        return []
       },
     })
   }
@@ -167,7 +169,7 @@ describe('category order', () => {
     await page.getByText('The new order isn\'t saved yet.').waitFor()
     await page.getByRole('button', { name: 'Save order' }).click()
     await toast(page, 'Category order saved').waitFor()
-    expect(body).toEqual({ items: [{ id: 2, sortOrder: 1 }, { id: 1, sortOrder: 2 }] })
+    expect(body).toEqual({ lists: [{ parentId: null, ids: ['cat-2', 'cat-1'] }] })
   })
 
   it('reorders subs within their main only, numbered from 1 for that main', async () => {
@@ -180,7 +182,7 @@ describe('category order', () => {
     expect(await shown(page)).toEqual(['Drinks', 'Tea', 'Coffee', 'Food', 'Toast'])
     await page.getByRole('button', { name: 'Save order' }).click()
     await toast(page, 'Category order saved').waitFor()
-    expect(body).toEqual({ items: [{ id: 12, sortOrder: 1 }, { id: 11, sortOrder: 2 }] })
+    expect(body).toEqual({ lists: [{ parentId: 'cat-1', ids: ['cat-12', 'cat-11'] }] })
   })
 
   it('reorders mains by dragging the handle with the mouse', async () => {
@@ -203,7 +205,7 @@ describe('category order', () => {
     await page.getByRole('button', { name: /^Reorder Food/ }).press('ArrowUp')
     await page.getByRole('button', { name: 'Save order' }).click()
     await toast(page, 'Could not save the category order').waitFor()
-    await page.getByText('Sort order must be unique').first().waitFor()
+    await page.getByText('Categories were added, moved or deleted meanwhile.').first().waitFor()
     expect((await shown(page))[0]).toBe('Food')
   })
 

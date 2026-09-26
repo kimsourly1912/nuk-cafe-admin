@@ -2,7 +2,7 @@
 
 Reference for the shared building blocks of the NUK Cafe admin portal: the composables, utilities and components every feature is built from.
 
-> **Transition note (2026-09-26):** the Spring SDK, proxy, and request wrapper have been removed. Examples that import `~/generated/api` or call `unwrap` describe the preserved UI's former implementation and are not executable until local API adapters replace them. The new backend contract is planned in [the system blueprint](../plans/system-blueprint.md).
+> The admin UI calls our own API (`/api/v1`, served by this app): see [API](./api.md) for the routes, error format and server structure. Contracts live in `shared/contracts/`.
 
 > The reference feature `app/features/categories/` uses everything documented here. When in doubt, read how Categories does it.
 
@@ -10,7 +10,8 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 
 | Page | Contents |
 |---|---|
-| [Data fetching](./data-fetching.md) | `useApiQuery`, `usePaginatedQuery` (URL sync), `ANY` / `toApiQuery`, `unwrap`, `invalidate` (also other tabs), `invalidateInThisTab`, `invalidateAll` |
+| [API](./api.md) | `/api/v1` conventions, error codes, every route, `apiFetch`, bootstrap, adding a server route |
+| [Data fetching](./data-fetching.md) | `useApiQuery`, `usePaginatedQuery` (URL sync), `ANY` / `toApiQuery`, `invalidate` (also other tabs), `invalidateInThisTab`, `invalidateAll` |
 | [Mutations](./mutations.md) | `useMutation` (create/update/delete, single and batch), `usePendingMutationCount` |
 | [Errors](./errors.md) | `ApiError`, `getErrorMessage`, `isSilentError`, error codes, `<ApiErrorAlert>`, `useNotify` |
 | [UI helpers](./ui.md) | `useConfirm`, `useTableSelection`, `<BulkActionsBar>`, `<StatusBadge>`, status constants, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, `useStatusCounts`, `<ListSkeleton>` |
@@ -26,7 +27,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `useApiQuery` | composable | [Data fetching](./data-fetching.md#useapiquery) | Read data. `useAsyncData` + boolean states + `ApiError` |
 | `usePaginatedQuery` | composable | [Data fetching](./data-fetching.md#usepaginatedquery) | Filters + 1-based page → API query |
 | `ANY`, `toApiQuery` | util | [Data fetching](./data-fetching.md#any--toapiquery) | "All" option for filter selects |
-| `unwrap` | util | [Data fetching](./data-fetching.md#unwrap) | SDK call → envelope `data` |
+| `apiFetch` | util | [API](./api.md#calling-it-from-the-admin-ui) | Call `/api/v1`; throws `ApiError` |
 | `invalidate` | util | [Data fetching](./data-fetching.md#invalidate) | Refresh a feature's cached data |
 | `invalidateAll` | util | [Data fetching](./data-fetching.md#invalidateall) | Refresh loaded (or only stale) queries in this tab |
 | `invalidateInThisTab` | util | [Data fetching](./data-fetching.md#invalidateinthistab) | `invalidate` without telling other tabs |
@@ -66,21 +67,21 @@ The minimal shape of a feature list page, with filters, pagination, load errors,
 
 ```ts
 // features/rewards/composables/useRewards.ts
-import type { RewardCatalogItemResponse, RewardsData } from '~/generated/api'
-import { deleteReward, rewards as getRewardsPage } from '~/generated/api'
+import type { Page } from '#shared/contracts/common'
+import type { Reward, RewardListQuery } from '#shared/contracts/rewards' // written with the route
 
-export function useRewardList(query: MaybeRefOrGetter<NonNullable<RewardsData['query']>>) {
-  return useApiQuery('rewards:list', () => unwrap(getRewardsPage({ query: toValue(query) })), {
+export function useRewardList(query: MaybeRefOrGetter<RewardListQuery>) {
+  return useApiQuery('rewards:list', () => apiFetch<Page<Reward>>('/admin/rewards', { query: toValue(query) }), {
     watch: [() => ({ ...toValue(query) })],
   })
 }
 
 export function useRewardMutations() {
   const remove = useMutation(
-    (reward: RewardCatalogItemResponse) => unwrap(deleteReward({ path: { id: reward.id! } })),
+    (reward: Reward) => apiFetch<null>(`/admin/rewards/${reward.id}`, { method: 'DELETE', query: { version: reward.version } }),
     {
       id: 'rewards:remove',
-      key: reward => reward.id!,
+      key: reward => reward.id,
       removes: true,
       confirm: reward => ({ title: `Delete "${reward.title}"?`, confirmLabel: 'Delete', danger: true }),
       successMessage: (_, reward) => `Reward "${reward.title}" deleted`,
@@ -89,7 +90,7 @@ export function useRewardMutations() {
       batch: { noun: ['reward', 'rewards'], verb: ['Deleting', 'deleted'] },
     },
   )
-  return { remove, isBusy: (id: number) => remove.isPending(id) }
+  return { remove, isBusy: (id: string) => remove.isPending(id) }
 }
 ```
 
@@ -102,12 +103,12 @@ const { page, pageSize, filters, query } = usePaginatedQuery({ search: '', statu
 const { data, loading, error, refresh } = useRewardList(query)
 const { remove, isBusy } = useRewardMutations()
 
-const rows = computed(() => (data.value?.content ?? []).filter(r => !remove.isRemoved(r.id!)))
-const selection = useTableSelection(rows, r => r.id!, { resetOn: [query] })
+const rows = computed(() => (data.value?.items ?? []).filter(r => !remove.isRemoved(r.id)))
+const selection = useTableSelection(rows, r => r.id, { resetOn: [query] })
 
 async function removeSelected() {
   const result = await remove.executeMany(selection.selected)
-  selection.select(result.failed.map(f => f.input.id!))
+  selection.select(result.failed.map(f => f.input.id))
 }
 </script>
 
@@ -118,14 +119,14 @@ async function removeSelected() {
   <ListSkeleton v-else-if="loading" label="Loading rewards…" variant="card" />
   <ListEmptyState v-else-if="!rows.length" noun="rewards" ... />
   <!-- cards (RewardCard, like ProductCard) or a UTable, by what the screen is for (list-ui-refresh.md) -->
-  <UPagination v-model:page="page" :total="data?.totalElements ?? 0" :items-per-page="pageSize" />
+  <UPagination v-model:page="page" :total="data?.total ?? 0" :items-per-page="pageSize" />
   <BulkActionsBar :count="selection.count" @clear="selection.clear()">
     <UButton label="Delete" color="error" variant="subtle" @click="removeSelected" />
   </BulkActionsBar>
 </template>
 ```
 
-> The rewards snippet is illustrative (the feature isn't built yet). SDK names come from `app/generated/api/sdk.gen.ts`: search for the URL (`url: '/staff/rewards'`).
+> The rewards snippet is illustrative: the feature isn't built, and its contract (`shared/contracts/rewards.ts`) and routes come first ([API → Server structure](./api.md#server-structure)).
 
 ## Keeping this reference current
 

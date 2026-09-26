@@ -2,34 +2,26 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { MockHandler } from './support/mock-api'
-import { deferred, failures, mockApi, paginatedHandler, setupE2e, toast } from './support/mock-api'
+import type { Product } from '../../shared/contracts/menu'
+import { deferred, failures, lastSegment, mockApi, paginatedHandler, productOf, setupE2e, TEA, toast } from './support/mock-api'
 
 // Shared list behaviors on a paginated list (the Menu items grid): a busy item vs bulk delete,
 // Stop, Retry failed, the last-page step-back and selection reset. They used to run on the
 // Categories table, which is now an unpaginated tree (docs/plans/list-ui-refresh.md).
 await setupE2e()
 
-type Row = { id: number, productName: string, price: number, status: string, category: { id: number, categoryName: string }, scheduleIds: number[], variants: [] }
-const rowsOf = (n: number): Row[] => Array.from({ length: n }, (_, i) => ({
-  id: i + 1,
-  productName: `Item ${i + 1}`,
-  price: 1,
-  status: 'ACTIVE',
-  category: { id: 1, categoryName: 'Tea' },
-  scheduleIds: [],
-  variants: [],
-}))
+type Row = Product
+const rowsOf = (n: number): Row[] => Array.from({ length: n }, (_, i) => productOf(`prod-${i + 1}`, `Item ${i + 1}`, TEA, { priceMinor: 100 }))
 
 /** A backend whose list reflects deletes, like the real one. */
 function backend(initial: Row[]) {
   let rows = [...initial]
-  const idOf = (u: URL) => Number(u.pathname.split('/').pop())
   return {
-    list: paginatedHandler(() => rows, 'productName'),
+    list: paginatedHandler(() => rows),
     /** Deletes after `wait` (if given) resolves; then the item is gone from the list. */
     remove: (wait?: MockHandler): MockHandler => async (request) => {
       if (wait) await wait(request)
-      rows = rows.filter(r => r.id !== idOf(request.url))
+      rows = rows.filter(r => r.id !== lastSegment(request.url))
       return null
     },
   }
@@ -57,10 +49,10 @@ describe('bulk delete vs an edit in progress', () => {
     const save = deferred()
     const [one, two] = rowsOf(2)
     const { page, api } = await open({
-      'GET /staff/products': paginatedHandler([one!, two!], 'productName'),
-      'GET /staff/schedules/all': () => [],
-      'PUT /staff/products/{id}': save.handler,
-      'DELETE /staff/products/{id}': () => null,
+      'GET /admin/products': paginatedHandler([one!, two!]),
+      'GET /admin/schedules/options': () => [],
+      'PATCH /admin/products/{id}': save.handler,
+      'DELETE /admin/products/{id}': () => null,
     })
 
     // Edit Item 1, save, and close the panel while the save is still running.
@@ -82,10 +74,10 @@ describe('bulk delete vs an edit in progress', () => {
 
     await toast(page, /^1 menu item deleted$/).waitFor()
     await page.getByText('1 skipped (another action on it was in progress)').first().waitFor()
-    expect(deletes(api.calls)).toEqual(['DELETE /staff/products/2'])
+    expect(deletes(api.calls)).toEqual(['DELETE /admin/products/prod-2'])
     await selectedCount(page, 1).waitFor()
 
-    save.release({ ...one, productName: 'Item 1b' })
+    save.release({ ...one, name: 'Item 1b', version: 2 })
     await toast(page, 'Menu item "Item 1b" updated').waitFor()
   })
 })
@@ -94,7 +86,7 @@ describe('bulk delete: Stop and Retry failed', () => {
   it('Stop lets running deletes finish, starts no more, and keeps the rest selected', async () => {
     const slow = deferred()
     const server = backend(rowsOf(6))
-    const { page, api } = await open({ 'GET /staff/products': server.list, 'DELETE /staff/products/{id}': server.remove(slow.handler) })
+    const { page, api } = await open({ 'GET /admin/products': server.list, 'DELETE /admin/products/{id}': server.remove(slow.handler) })
 
     await page.getByRole('checkbox', { name: 'Select all' }).click()
     await selectedCount(page, 6).waitFor()
@@ -114,11 +106,11 @@ describe('bulk delete: Stop and Retry failed', () => {
     const server = backend(rowsOf(2))
     const remove = server.remove()
     const { page, api } = await open({
-      'GET /staff/products': server.list,
-      'DELETE /staff/products/{id}': (request) => {
-        if (request.url.pathname.endsWith('/2') && failOnce) {
+      'GET /admin/products': server.list,
+      'DELETE /admin/products/{id}': (request) => {
+        if (lastSegment(request.url) === 'prod-2' && failOnce) {
           failOnce = false
-          throw failures.validation('Menu item is in an open order')
+          throw failures.conflict('VERSION_CONFLICT', 'Menu item is in an open order')
         }
         return remove(request)
       },
@@ -132,7 +124,7 @@ describe('bulk delete: Stop and Retry failed', () => {
 
     await page.getByRole('button', { name: 'Retry failed' }).click()
     await toast(page, /^1 menu item deleted$/).waitFor()
-    expect(deletes(api.calls)).toEqual(['DELETE /staff/products/1', 'DELETE /staff/products/2', 'DELETE /staff/products/2'])
+    expect(deletes(api.calls)).toEqual(['DELETE /admin/products/prod-1', 'DELETE /admin/products/prod-2', 'DELETE /admin/products/prod-2'])
     expect(await page.getByRole('alertdialog').count()).toBe(0)
   })
 })
@@ -141,8 +133,8 @@ describe('list state after deletes and navigation', () => {
   it('deleting the only item of the last page steps back to the previous page', async () => {
     const server = backend(rowsOf(21))
     const { page } = await open({
-      'GET /staff/products': server.list,
-      'DELETE /staff/products/{id}': server.remove(),
+      'GET /admin/products': server.list,
+      'DELETE /admin/products/{id}': server.remove(),
     }, '/products?page=2', 'Item 21')
 
     await page.getByRole('button', { name: 'Actions for Item 21' }).click()
@@ -156,7 +148,7 @@ describe('list state after deletes and navigation', () => {
 
   it('clears the selection when the filters or the page change', async () => {
     const server = backend(rowsOf(45))
-    const { page } = await open({ 'GET /staff/products': server.list })
+    const { page } = await open({ 'GET /admin/products': server.list })
 
     await page.getByRole('checkbox', { name: 'Select all' }).click()
     await selectedCount(page, 20).waitFor()

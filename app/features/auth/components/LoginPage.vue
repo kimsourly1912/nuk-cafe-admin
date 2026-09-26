@@ -4,12 +4,12 @@ import * as v from 'valibot'
 import { loginRedirectTarget, useAuth } from '../composables/useAuth'
 
 const schema = v.object({
-  username: v.pipe(v.string(), v.trim(), v.minLength(1, 'Username is required')),
+  email: v.pipe(v.string(), v.trim(), v.minLength(1, 'Email is required'), v.email('Enter an email address')),
   password: v.pipe(v.string(), v.minLength(1, 'Password is required')),
 })
 type Schema = v.InferOutput<typeof schema>
 
-const state = reactive({ username: '', password: '' })
+const state = reactive({ email: '', password: '' })
 const loading = ref(false)
 // Hidden by default: staff sign in at the counter, where customers can see the screen.
 const showPassword = ref(false)
@@ -63,12 +63,13 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
       />
 
       <UFormField
-        label="Username"
-        name="username"
+        label="Email"
+        name="email"
         required
       >
         <UInput
-          v-model="state.username"
+          v-model="state.email"
+          type="email"
           autocomplete="username"
           class="w-full"
         />

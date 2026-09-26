@@ -204,7 +204,7 @@ Typical use, in a batch confirmation:
 ```ts
 confirm: categories => ({
   title: `Delete ${pluralize(categories.length, ['category', 'categories'])}?`,
-  description: `${previewList(categories.map(c => c.categoryName ?? `#${c.id}`))}. This cannot be undone.`,
+  description: `${previewList(categories.map(c => c.name))}. This cannot be undone.`,
   confirmLabel: 'Delete',
   danger: true,
 }),
@@ -321,9 +321,9 @@ Source: `app/components/StatusTabs.vue`, `app/composables/useStatusCounts.ts`
 ```
 
 ```ts
-// Paginated lists: two tiny requests (size=1, totalElements), with the other filters applied.
+// Paginated lists: two tiny requests (pageSize=1, read `total`), with the other filters applied.
 const counts = useStatusCounts('schedules', () => ({ search: query.value.search }),
-  (query, status) => unwrap(getPage({ query: { ...query, status, size: 1 } })).then(p => p.totalElements ?? 0))
+  (query, status) => apiFetch<Page<Schedule>>('/admin/schedules', { query: { ...query, status, pageSize: 1 } }).then(p => p.total))
 // Lists loaded whole (Categories): count on the client and pass { ACTIVE, INACTIVE, all }.
 ```
 

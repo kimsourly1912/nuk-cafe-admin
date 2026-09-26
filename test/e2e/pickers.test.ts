@@ -2,20 +2,20 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { MockHandler } from './support/mock-api'
-import { failures, mockApi, setupE2e, TEA } from './support/mock-api'
+import { categoryOf, failures, mockApi, setupE2e, TEA } from './support/mock-api'
 
 // CategorySelect: the picker contract (docs/feature-standard.md → "Resource picker conventions").
 await setupE2e()
 
-const OOLONG_UNDER_MISSING = { id: 5, categoryName: 'Oolong', status: 'ACTIVE', type: 'SUB', mainCategoryId: 99, mainCategory: { id: 99, categoryName: 'Old parent' } }
-const RETIRED = { id: 7, categoryName: 'Retired', status: 'INACTIVE', type: 'MAIN' }
-const DORMANT = { id: 8, categoryName: 'Dormant', status: 'INACTIVE', type: 'MAIN' }
-const GREEN_UNDER_RETIRED = { id: 6, categoryName: 'Green', status: 'ACTIVE', type: 'SUB', mainCategoryId: 7, mainCategory: { id: 7, categoryName: 'Retired' } }
+const OOLONG_UNDER_MISSING = categoryOf('cat-5', 'Oolong', { parentId: 'cat-99' })
+const RETIRED = categoryOf('cat-7', 'Retired', { status: 'INACTIVE' })
+const DORMANT = categoryOf('cat-8', 'Dormant', { status: 'INACTIVE' })
+const GREEN_UNDER_RETIRED = categoryOf('cat-6', 'Green', { parentId: 'cat-7' })
 /**
- * The tree and the picker both call `GET /staff/categories/all`: the picker with `type=MAIN`
+ * The tree and the picker both call `GET /admin/categories`: the picker with `level=main`
  * (its options), the tree without (every category).
  */
-const allCategories = (tree: object[], options: object[]): MockHandler => ({ url }) => (url.searchParams.get('type') ? options : tree)
+const allCategories = (tree: object[], options: object[]): MockHandler => ({ url }) => (url.searchParams.get('level') ? options : tree)
 
 async function editRow(page: Page, name: string, handlers: Record<string, MockHandler>) {
   const api = await mockApi(page, handlers)
@@ -32,8 +32,8 @@ describe('CategorySelect', () => {
     let fail = true
     const page = await createPage()
     await mockApi(page, {
-      'GET /staff/categories/all': () => {
-        if (fail) throw failures.technical()
+      'GET /admin/categories': () => {
+        if (fail) throw failures.server()
         return [TEA]
       },
     })
@@ -54,23 +54,23 @@ describe('CategorySelect', () => {
     const page = await createPage()
     let body: Record<string, unknown> | undefined
     const { form, parent } = await editRow(page, 'Oolong', {
-      'GET /staff/categories/all': allCategories([OOLONG_UNDER_MISSING], [TEA]),
-      'PUT /staff/categories/{id}': (request) => {
+      'GET /admin/categories': allCategories([OOLONG_UNDER_MISSING], [TEA]),
+      'PATCH /admin/categories/{id}': (request) => {
         body = request.body as Record<string, unknown>
         return OOLONG_UNDER_MISSING
       },
     })
-    await expect.poll(() => parent.textContent()).toContain('Old parent (unavailable)')
+    await expect.poll(() => parent.textContent()).toContain('Unknown category (unavailable)')
 
     await form.locator('input').first().fill('Oolong 2')
     await form.getByRole('button', { name: 'Save' }).click()
-    await expect.poll(() => body?.mainCategoryId).toBe(99)
+    await expect.poll(() => body?.parentId).toBe('cat-99')
   })
 
   it('shows an inactive current parent, but doesn\'t offer inactive categories as new choices (Q9)', async () => {
     const page = await createPage()
     const { parent } = await editRow(page, 'Green', {
-      'GET /staff/categories/all': allCategories([GREEN_UNDER_RETIRED], [TEA, RETIRED, DORMANT]),
+      'GET /admin/categories': allCategories([GREEN_UNDER_RETIRED], [TEA, RETIRED, DORMANT]),
     })
     await expect.poll(() => parent.textContent()).toContain('Retired (inactive)')
 

@@ -9,8 +9,8 @@ import type { AsyncDataOptions } from '#app'
  *
  * @example
  * const { data, pending, refreshing, error, refresh } = useApiQuery(
- *   'categories:list',
- *   () => unwrap(getCategoriesPage({ query: toValue(query) })),
+ *   'schedules:list',
+ *   () => apiFetch<Page<Schedule>>('/admin/schedules', { query: toValue(query) }),
  *   { watch: [() => ({ ...toValue(query) })] },
  * )
  */

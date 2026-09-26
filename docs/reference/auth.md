@@ -22,30 +22,33 @@ const { user, isLoggedIn, logout } = useAuth()
 
 | Member | Type | Description |
 |---|---|---|
-| `user` | `Readonly<Ref<SessionUser \| null>>` | The logged-in staff member. **No tokens:** they stay in HttpOnly cookies. |
+| `user` | `Readonly<Ref<SessionUser \| null>>` | The signed-in staff member. **No session token:** Better Auth keeps it in an HttpOnly cookie. |
 | `isLoggedIn` | `ComputedRef<boolean>` | |
-| `checked` | `Readonly<Ref<boolean>>` | Whether the session has been checked against the backend at least once. |
-| `fetchSession()` | `() => Promise<SessionUser \| null>` | Calls `GET /staff/auth/session` (refreshing the token if needed). **Never throws:** on any failure the user becomes `null`. |
-| `login(credentials)` | `({ username, password }) => Promise<void>` | Calls `POST /staff/auth/login`. The backend sets the cookies. **Throws `ApiError`** on failure (e.g. `kind: 'business'`, "Incorrect username or password"). |
-| `logout()` | `() => Promise<void>` | If a form has unsaved changes, asks first and does nothing on "Keep editing" ([`useLeaveGuard`](./forms.md#useleaveguard)). Then calls `POST /staff/auth/logout`, navigates to `/login` and clears the user, even if the request fails. Other open tabs go to login too (`plugins/auth-sync.client.ts`). |
-| `clearSession()` | `() => void` | Clears the user locally (used when the refresh fails). |
+| `checked` | `Readonly<Ref<boolean>>` | Whether the session has been checked against the server at least once. |
+| `fetchSession()` | `() => Promise<SessionUser \| null>` | Calls `GET /api/v1/admin/me`. **Never throws.** Signed out (401) or signed in without staff access (403 NOT_STAFF) makes the user `null`; a network failure keeps the current state (except on the very first check). |
+| `login(credentials)` | `({ email, password }) => Promise<void>` | Signs in with Better Auth (`POST /api/auth/sign-in/email`, which sets the cookie), then reads `/api/v1/admin/me`. **Throws `ApiError`**: "Incorrect email or password." (`kind: 'business'`), rate limiting, or 403 NOT_STAFF (the account is then signed out again). |
+| `logout()` | `() => Promise<void>` | If a form has unsaved changes, asks first and does nothing on "Keep editing" ([`useLeaveGuard`](./forms.md#useleaveguard)). Then `POST /api/auth/sign-out`, navigates to `/login` and clears the user, even if the request fails. Other open tabs go to login too (`plugins/auth-sync.client.ts`). |
+| `clearSession()` | `() => void` | Clears the user locally (used by `apiFetch` on a 401 or 403 NOT_STAFF). |
+| `can(permission)` | `(Permission) => boolean` | For hiding actions. The server checks every request regardless. |
 
 ```ts
-type SessionUser = Pick<StaffSessionDto, 'staffId' | 'username' | 'displayName' | 'groups'>
+type SessionUser = StaffSession // { userId, email, displayName, role, permissions } from #shared/contracts/identity
 ```
 
-`groups` holds the staff roles (e.g. `ADMIN`, `CASHIER`). Role-based UI isn't implemented yet (see `docs/progress.md` Q6).
+Only the `admin` role exists (every permission) until the role matrix is decided (Q6, D40).
+
+The state keys are `staff-session:*`, never `auth:*`: `@nuxtjs/better-auth` keeps its own session in `auth:user` and refetches it on startup and tab focus; sharing the key let it overwrite the staff session (e2e: auth.test.ts → "Better Auth refetching its own session…").
 
 ### Example: login form
 
 ```ts
 const { login } = useAuth()
 try {
-  await login({ username, password })
+  await login({ email, password })
   await navigateTo(redirectTo)
 }
 catch (e) {
-  error.value = getErrorMessage(e) // "Incorrect username or password"
+  error.value = getErrorMessage(e) // "Incorrect email or password."
 }
 ```
 
@@ -66,9 +69,11 @@ definePageMeta({ public: true, layout: 'auth' })
 
 ## How the session works
 
-- The backend sets `staff_access_token` / `staff_refresh_token` as **HttpOnly cookies**, so the frontend can't read them. Every request sends them automatically (`credentials: 'include'`).
+- Better Auth (`@nuxtjs/better-auth`, `server/auth.config.ts`) owns accounts and the session cookie (HttpOnly, same origin) and keeps it fresh itself: there is no token refresh in the app.
+- A Better Auth account is **not** staff access: customers sign up through the same routes. Staff access is an active `staff_profiles` row, checked by the server on every admin request (D40).
 - On the first navigation, the middleware calls `fetchSession()` once.
-- When any request fails as `unauthorized`, the API layer calls `/staff/auth/refresh` **once** (shared by concurrent requests) and retries. If the refresh fails, the user is cleared and redirected to `/login?redirect=…`.
+- When any request answers 401 or 403 NOT_STAFF, `apiFetch` clears the user and `plugins/api.ts` redirects to `/login?redirect=…`. No retry.
+- The first admin is created with the bootstrap route ([API → Identity](./api.md#identity)).
 - Session-expiry errors are never toasted ([`isSilentError`](./errors.md#issilenterror)).
 
 ## `loginRedirectTarget`

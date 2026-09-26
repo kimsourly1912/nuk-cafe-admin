@@ -6,10 +6,10 @@
  * Clicking the row opens it; the handle, toggle, checkbox and menu don't.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { CategoryResponse } from '~/generated/api'
+import type { Category } from '#shared/contracts/menu'
 
 const props = defineProps<{
-  category: CategoryResponse
+  category: Category
   level: 'main' | 'sub'
   actions: DropdownMenuItem[]
   selected: boolean
@@ -30,7 +30,7 @@ const emit = defineEmits<{
   'handle-keydown': [event: KeyboardEvent]
 }>()
 
-const name = computed(() => props.category.categoryName ?? `#${props.category.id}`)
+const name = computed(() => props.category.name)
 const inactive = computed(() => props.category.status === 'INACTIVE')
 
 function onClick(event: MouseEvent) {

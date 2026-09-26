@@ -2,56 +2,45 @@ import { FetchError } from 'ofetch'
 import { describe, expect, it } from 'vitest'
 import { API_ERROR_MESSAGES, ApiError, getErrorMessage } from '../../app/utils/api-error'
 
-const envelope = (msg: string, reason: string) => ({ data: null, success: false, msg, reason })
+/** An `/api/v1` error response body (`apiError` in server/utils/api-error.ts). */
+const body = (statusCode: number, code: string, message: string, fieldErrors?: Record<string, string[]>) =>
+  ({ error: true, statusCode, message, data: { code, message, ...(fieldErrors ? { fieldErrors } : {}) } })
 
-// Cases below mirror real responses observed from the dev API.
 describe('ApiError.fromResponse', () => {
-  it('HTTP 200 validation error shows the backend reason', () => {
-    const error = ApiError.fromResponse(200, envelope('NC0001', 'Required fields are missing: password, username'))
-    expect(error).toMatchObject({ kind: 'validation', status: 200, code: 'NC0001', message: 'Required fields are missing: password, username' })
+  it('a validation error shows the server message and keeps the field errors', () => {
+    const error = ApiError.fromResponse(400, body(400, 'VALIDATION_FAILED', 'Some of the submitted data is invalid.', { name: ['Required'] }))
+    expect(error).toMatchObject({ kind: 'validation', status: 400, code: 'VALIDATION_FAILED', fieldErrors: { name: ['Required'] } })
+    expect(error.message).toBe('Some of the submitted data is invalid.')
   })
 
-  it('HTTP 200 not-found error shows the backend reason', () => {
-    expect(ApiError.fromResponse(200, envelope('NC0011', 'Category not found'))).toMatchObject({ kind: 'not_found', message: 'Category not found' })
+  it('a conflict shows the server message with its code', () => {
+    const error = ApiError.fromResponse(409, body(409, 'VERSION_CONFLICT', 'This category was changed by someone else. Reload it and try again.'))
+    expect(error).toMatchObject({ kind: 'conflict', code: 'VERSION_CONFLICT', message: 'This category was changed by someone else. Reload it and try again.' })
   })
 
-  it('HTTP 200 wrong login is a business error with the backend reason', () => {
-    expect(ApiError.fromResponse(200, envelope('LOGIN_FAILED', 'Incorrect username or password')))
-      .toMatchObject({ kind: 'business', message: 'Incorrect username or password' })
+  it('a missing record is not_found with the server message', () => {
+    expect(ApiError.fromResponse(404, body(404, 'NOT_FOUND', 'The category was not found.'))).toMatchObject({ kind: 'not_found', message: 'The category was not found.' })
   })
 
-  it('hides technical reasons (NC0000) behind a friendly message but keeps them as detail', () => {
-    const reason = 'No static resource public/nope for request \'/nukcafe/api/v2/public/nope\'.'
-    const error = ApiError.fromResponse(200, envelope('NC0000', reason))
-    expect(error.message).toBe(API_ERROR_MESSAGES.unknown)
-    expect(error.detail).toBe(reason)
+  it('401 is unauthorized; 403 NOT_STAFF keeps its code', () => {
+    expect(ApiError.fromResponse(401, body(401, 'UNAUTHENTICATED', 'Sign in to continue.'))).toMatchObject({ kind: 'unauthorized', status: 401 })
+    expect(ApiError.fromResponse(403, body(403, 'NOT_STAFF', 'No staff access.'))).toMatchObject({ kind: 'forbidden', code: 'NOT_STAFF' })
   })
 
-  it('unknown code with HTTP 200 is a business error showing the reason', () => {
-    expect(ApiError.fromResponse(200, envelope('NC0099', 'Reward is out of stock')))
-      .toMatchObject({ kind: 'business', message: 'Reward is out of stock' })
+  it('reads Better Auth errors ({ code, message } at the top level)', () => {
+    expect(ApiError.fromResponse(401, { code: 'INVALID_EMAIL_OR_PASSWORD', message: 'Invalid email or password' }))
+      .toMatchObject({ kind: 'unauthorized', code: 'INVALID_EMAIL_OR_PASSWORD' })
+    expect(ApiError.fromResponse(429, { message: 'Too many requests' })).toMatchObject({ kind: 'rate_limited', message: 'Too many requests' })
   })
 
-  it('HTTP 401 envelope is unauthorized', () => {
-    expect(ApiError.fromResponse(401, envelope('NC1000', 'Unauthorized'))).toMatchObject({ kind: 'unauthorized', status: 401 })
-  })
-
-  it('unauthorized code sent with HTTP 200 is still unauthorized', () => {
-    expect(ApiError.fromResponse(200, envelope('NC1000', 'Unauthorized')).kind).toBe('unauthorized')
-  })
-
-  it('non-envelope plain text (CORS rejection) falls back by status', () => {
-    const error = ApiError.fromResponse(403, 'Invalid CORS request')
-    expect(error).toMatchObject({ kind: 'forbidden', message: API_ERROR_MESSAGES.forbidden, detail: 'Invalid CORS request' })
-  })
-
-  it('Spring default error JSON falls back by status and keeps the message as detail', () => {
-    const error = ApiError.fromResponse(500, { timestamp: 'x', status: 500, error: 'Internal Server Error', message: 'NullPointerException' })
-    expect(error).toMatchObject({ kind: 'server', message: API_ERROR_MESSAGES.server, detail: 'NullPointerException' })
+  it('hides 5xx messages behind a friendly one, keeping them as detail', () => {
+    const error = ApiError.fromResponse(500, { statusCode: 500, message: 'D1_ERROR: no such table' })
+    expect(error).toMatchObject({ kind: 'server', message: API_ERROR_MESSAGES.server, detail: 'D1_ERROR: no such table' })
     expect(error.retryable).toBe(true)
   })
 
-  it('gateway HTML error is a server error', () => {
+  it('non-JSON bodies fall back by status', () => {
+    expect(ApiError.fromResponse(403, 'Forbidden')).toMatchObject({ kind: 'forbidden', message: API_ERROR_MESSAGES.forbidden, detail: 'Forbidden' })
     expect(ApiError.fromResponse(502, '<html><body>Bad Gateway</body></html>').kind).toBe('server')
   })
 })
@@ -74,7 +63,7 @@ describe('ApiError.from', () => {
   })
 
   it('unwraps an ApiError wrapped by NuxtError (useAsyncData) via cause', () => {
-    const original = ApiError.fromResponse(200, envelope('NC0011', 'Category not found'))
+    const original = ApiError.fromResponse(404, body(404, 'NOT_FOUND', 'Category not found'))
     const wrapped = Object.assign(new Error('Category not found'), { cause: original })
     expect(ApiError.from(wrapped)).toBe(original)
   })

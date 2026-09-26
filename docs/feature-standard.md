@@ -58,10 +58,11 @@ Evidence levels follow [progress.md → Verification levels](progress.md#verific
 - In scope / acceptance criteria: a numbered list, each one testable.
 - Out of scope: what this iteration will not do.
 
-## API contract (from app/generated/api)
-- Endpoints: METHOD /staff/... → sdkFunction (list, all/options, get, create, update, delete, extras).
-- Request types / response types.
-- Update semantics: is PUT a full replace? What does an omitted field mean (keep or clear)? How is a value cleared (null, '', [])? For each: the evidence (spec, backend docs, real-API check), or [Open] + who answers.
+## API contract (shared/contracts/<domain>.ts, docs/reference/api.md)
+- Routes: METHOD /api/v1/admin/... (list, options, get, create, update, delete, extras), with the permission each needs.
+- Request schemas (Valibot) and response types, written before the screen.
+- Business rules the server enforces (and which are [Open]: decide or defer, never guess).
+- Updates follow the API conventions: PATCH, absent keeps, null clears, `version` required (D41). Lists that replace (links, child rows) say so.
 
 ## List
 - Columns.
@@ -106,7 +107,7 @@ Evidence levels follow [progress.md → Verification levels](progress.md#verific
 - Other features are imported only through `~/features/<name>` (their `index.ts`).
 - `index.ts` exports building blocks (pickers, option composables, display components, types, navigation), never pages or forms.
 - Shared code moves to the root when a **second real consumer** needs it ([D16](decisions.md)).
-- `app/generated/api/` is never edited. Regenerate it with `pnpm api:generate`.
+- API contracts live in `shared/contracts/`; the server validates with them and the UI imports their types. There is no generated SDK (D39).
 
 Where each concern belongs:
 
@@ -235,10 +236,10 @@ What features must not do is **duplicate the engine**: no in-flight maps, double
 | Optional value | A `noneLabel` option that sets `undefined` (`USelect` can't hold `undefined`). Required fields don't offer "none" | ✔ |
 | Loading / disabled | `loading` while options load. `disabled` passes through | Loading ✔, disabled via attrs |
 | Load error | Shows the failure with a retry, not an empty list | ✔ (e2e) |
-| Existing value (display) | An existing relationship **stays visible** with a label (from the record, e.g. `mainCategory.categoryName`, or "#12 (unavailable)"), whether the related record is inactive, deleted, filtered out or not selectable. The picker never silently clears or replaces it. Keeping an existing value visible is **separate from** allowing it as a new selection | ✔ `currentLabel` prop, "(inactive)" / "(unavailable)" (e2e) |
+| Existing value (display) | An existing relationship **stays visible** with a label (from the record, e.g. `product.category.name`, or "Unknown category (unavailable)"), whether the related record is inactive, deleted, filtered out or not selectable. The picker never silently clears or replaces it. Keeping an existing value visible is **separate from** allowing it as a new selection | ✔ `currentLabel` prop, "(inactive)" / "(unavailable)" (e2e) |
 | New selections (eligibility) | Offered only per the relationship's **established** eligibility rules. An options or listing endpoint returning a record is **not** evidence that it may be selected, unless that endpoint's documented contract says so. Where eligibility for a class of records (e.g. inactive ones) is **[Open]**, defer that part of the selection behavior: don't offer those records as new selections yet, and record it as incomplete. This is a temporary deferral, **not** a rule that they're forbidden. The standard sets no permanent "always allowed" or "always forbidden" rule. A status marker next to an option is a [Choice] | Inactive categories are **not offered** as new selections while Q9 is open (deferral per this rule, D31); an inactive current value stays visible and selectable (e2e) |
 | Domain exclusions | Props named for the rule (`excludeId`: an item can't be its own parent) | ✔ |
-| Data source | Small sets: the unpaginated `/all` endpoint, keyed per filter (`<feature>:options:<filter>`). Large sets: remote search against the paginated endpoint (`USelectMenu` with search) | `/staff/categories/all` ✔ |
+| Data source | Small sets: an unpaginated list or `/options` route, keyed per filter (`<feature>:options:<filter>`). Large sets: remote search against the paginated route (`USelectMenu` with search) | `/admin/categories`, `/admin/schedules/options` ✔ |
 | Where it lives | `use<Feature>Options` + `<Feature>Select`, exported from `index.ts`, importing no other feature | ✔ |
 
 **[Choice]**: when a set is "large". Make it a configurable threshold (a constant or prop), and switch a picker to remote search when its resource can realistically exceed it. Products are the likely first case.
@@ -256,7 +257,7 @@ What features must not do is **duplicate the engine**: no in-flight maps, double
 | Money display and input | **[Exists]** in Products: USD major units, `formatPrice` / `PRICE_FORMAT` + `UInputNumber` (D34) | Currency, decimal precision, rounding, and whether the API uses major or minor units | Which fields are money: feature. Formatting and parsing: shared | The second feature shows prices (schedules' items, rewards) |
 | Date/time display | Lists with `createdAt`/`updatedAt`. Schedules already convert **times of day** to the viewer's zone (`app/features/schedules/utils/timezone.ts`, D33): the model for promotion | Timezone (`ScheduleResponse` has a `timezone`), format, date-only vs timestamp | Shared formatter once agreed | The second feature displays dates |
 | Weekday + time-range inputs | **[Exists]** in Schedules: `UCheckboxGroup` + Every day/Weekdays/Weekends, `UInputTime` (12-hour, viewer's timezone; `Time` ↔ `HH:mm` via `utils/time.ts`, zone conversion via `utils/timezone.ts`, D33), `formatDays`/`formatTimeRange` (`app/features/schedules/utils/days.ts`) | Time format, timezone and overnight ranges: see [plans/schedules.md](plans/schedules.md) S1–S3 (safest encodings, unverified) | Schedules-specific | A second feature has weekly availability |
-| Ordering controls | **[Exists]** in Categories (D36): sort mode per type, `useSortable` on `UTable` + keyboard, explicit save. Products (`/staff/products/sort-order`, per category) next | The request shape; whether ordering is global or per parent/category; how conflicts are handled | Endpoint call: feature. A drag-and-drop list: shared once extracted | Both Categories and Products get ordering |
+| Ordering controls | **[Exists]** in Categories (D36): sort mode per type, `useSortable` on `UTable` + keyboard, explicit save. Products (per category) next: no route yet | The request shape; whether ordering is global or per parent/category; how conflicts are handled | Endpoint call: feature. A drag-and-drop list: shared once extracted | Both Categories and Products get ordering |
 | Permission helpers | All features, after the role/action matrix (Q6) | Which role may view and do what; whether the backend enforces it (the UI hides, the backend must refuse) | A shared `can(action)` + route meta, once the matrix exists | Immediately when the matrix exists (every feature needs it) |
 
 **Test fixtures** (built 2026-09-26, in `test/e2e/support/mock-api.ts`): `deferred()` (hold a response, release or fail it on demand), `paginatedHandler(rows)` (search + 0-based pagination, rows may be a function), `failures.*` (validation, not found, technical, unauthorized). Unmocked requests fail the test.

@@ -1,5 +1,4 @@
-import type { CategoryRecordCreation, CategoryRecordUpdate, CategoryResponse, CategorySortOrderUpdateRequest } from '~/generated/api'
-import { createCategory1, deleteCategory1, updateCategory1, updateSortOrders } from '~/generated/api'
+import type { Category, CreateCategoryBody, ReorderCategoriesBody, UpdateCategoryBody } from '#shared/contracts/menu'
 
 const NOUN: [string, string] = ['category', 'categories']
 
@@ -7,7 +6,7 @@ const NOUN: [string, string] = ['category', 'categories']
  * Update and remove of one category must never overlap (e.g. a bulk delete while an edit is
  * saving): both take this record lock, checked when each request actually starts.
  */
-const lockOf = (id: number | undefined) => `category:${id}`
+const lockOf = (id: string) => `category:${id}`
 
 /** Features whose cached data shows categories (products display their category). */
 const AFFECTED = ['categories', 'products']
@@ -18,58 +17,59 @@ const AFFECTED = ['categories', 'products']
  */
 export function useCategoryMutations() {
   const create = useMutation(
-    (body: CategoryRecordCreation) => unwrap(createCategory1({ body })),
+    (body: CreateCategoryBody) => apiFetch<Category>('/admin/categories', { method: 'POST', body }),
     {
       id: 'categories:create',
       // Same name in flight = same submission (double submit); different names run in parallel.
-      key: body => body.categoryName?.trim().toLowerCase() ?? '',
-      successMessage: (_, body) => `Category "${body.categoryName}" created`,
-      errorMessage: body => `Could not create "${body.categoryName}"`,
+      key: body => body.name.trim().toLowerCase(),
+      successMessage: (_, body) => `Category "${body.name}" created`,
+      errorMessage: body => `Could not create "${body.name}"`,
       invalidate: AFFECTED,
     },
   )
 
   const update = useMutation(
-    ({ id, body }: { id: number, body: CategoryRecordUpdate }) => unwrap(updateCategory1({ path: { id }, body })),
+    ({ id, body }: { id: string, name: string, body: UpdateCategoryBody }) =>
+      apiFetch<Category>(`/admin/categories/${id}`, { method: 'PATCH', body }),
     {
       id: 'categories:update',
       key: ({ id }) => id,
       lock: ({ id }) => lockOf(id),
-      successMessage: (_, { body }) => `Category "${body.categoryName}" updated`,
-      errorMessage: ({ body }) => `Could not save "${body.categoryName}"`,
+      successMessage: (_, { name }) => `Category "${name}" updated`,
+      errorMessage: ({ name }) => `Could not save "${name}"`,
       invalidate: AFFECTED,
     },
   )
 
   const remove = useMutation(
-    (category: CategoryResponse) => unwrap(deleteCategory1({ path: { id: category.id! } })),
+    (category: Category) => apiFetch<null>(`/admin/categories/${category.id}`, { method: 'DELETE', query: { version: category.version } }),
     {
       id: 'categories:remove',
-      key: category => category.id!,
+      key: category => category.id,
       lock: category => lockOf(category.id),
       removes: true,
       confirm: category => ({
-        title: `Delete "${category.categoryName}"?`,
+        title: `Delete "${category.name}"?`,
         description: 'This cannot be undone.',
         confirmLabel: 'Delete',
         danger: true,
       }),
-      successMessage: (_, category) => `Category "${category.categoryName}" deleted`,
-      errorMessage: category => `Could not delete "${category.categoryName}"`,
+      successMessage: (_, category) => `Category "${category.name}" deleted`,
+      errorMessage: category => `Could not delete "${category.name}"`,
       invalidate: AFFECTED,
       batch: {
         noun: NOUN,
         verb: ['Deleting', 'deleted'],
         confirm: categories => ({
           title: `Delete ${pluralize(categories.length, NOUN)}?`,
-          description: `${previewList(categories.map(c => c.categoryName ?? `#${c.id}`))}. This cannot be undone.`,
+          description: `${previewList(categories.map(c => c.name))}. This cannot be undone.`,
           confirmLabel: 'Delete',
           danger: true,
         }),
         // Sub-categories first, so a main category isn't rejected for still having children.
         phases: categories => [
-          categories.filter(c => c.mainCategoryId !== undefined),
-          categories.filter(c => c.mainCategoryId === undefined),
+          categories.filter(c => c.parentId !== null),
+          categories.filter(c => c.parentId === null),
         ],
       },
     },
@@ -77,7 +77,7 @@ export function useCategoryMutations() {
 
   /** Saves the tree order: every changed list, whole (`sortOrderChanges`). One save at a time. */
   const reorder = useMutation(
-    (body: CategorySortOrderUpdateRequest) => unwrap(updateSortOrders({ body })),
+    (body: ReorderCategoriesBody) => apiFetch<Category[]>('/admin/categories/order', { method: 'PUT', body }),
     {
       id: 'categories:sort',
       key: () => 'order',
@@ -93,6 +93,6 @@ export function useCategoryMutations() {
     remove,
     reorder,
     /** Any operation in flight for this category: disable its row actions. */
-    isBusy: (id: number) => update.isPending(id) || remove.isPending(id),
+    isBusy: (id: string) => update.isPending(id) || remove.isPending(id),
   }
 }

@@ -1,8 +1,8 @@
-import type { CategoryResponse } from '~/generated/api'
+import type { Category } from '#shared/contracts/menu'
 
-/** Server order: `sortOrder` ascending, then id, so equal numbers still have a stable order. */
-export function bySortOrder(categories: CategoryResponse[]): CategoryResponse[] {
-  return [...categories].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.id ?? 0) - (b.id ?? 0))
+/** Server order: `sortOrder` ascending, then name, so equal numbers still have a stable order. */
+export function bySortOrder(categories: Category[]): Category[] {
+  return [...categories].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
 }
 
 /**
@@ -10,7 +10,7 @@ export function bySortOrder(categories: CategoryResponse[]): CategoryResponse[] 
  * ones are appended. So a save never sends a partial or stale list, even if another tab added or
  * deleted a category while this order was being edited.
  */
-export function mergeOrder(current: number[], available: number[]): number[] {
+export function mergeOrder(current: string[], available: string[]): string[] {
   const kept = current.filter(id => available.includes(id))
   return [...kept, ...available.filter(id => !kept.includes(id))]
 }

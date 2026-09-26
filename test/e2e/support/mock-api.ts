@@ -1,6 +1,9 @@
 import type { Page, Route } from 'playwright-core'
 import { getBrowser, setup, url, waitForHydration } from '@nuxt/test-utils/e2e'
 import { afterEach, expect, inject } from 'vitest'
+import type { Page as ApiPage } from '../../../shared/contracts/common'
+import type { Category, Product, Schedule } from '../../../shared/contracts/menu'
+import type { StaffSession } from '../../../shared/contracts/identity'
 
 /** Requests no handler answered, across every `mockApi` of the current test. */
 const unhandled: string[] = []
@@ -22,16 +25,16 @@ export function setupE2e() {
 }
 
 /**
- * Mocks the legacy backend in the browser. Every `/legacy-api/**` request is answered from `handlers`
- * (key: `'GET /staff/categories'`, path without the `/legacy-api` prefix and query; numeric segments
- * can be written `{id}`) wrapped in the backend envelope. Throw `MockFailure` (or a `failures.*`
- * preset) for `success: false` or an HTTP error.
+ * Mocks the server in the browser: every `/api/**` request is answered from `handlers`. Keys are
+ * `'METHOD /path'` without query:
+ * - our API without its `/api/v1` prefix: `'GET /admin/categories'`;
+ * - Better Auth as `/auth/...`: `'POST /auth/sign-in/email'`.
+ * A segment containing a digit can be written `{id}` (`'PATCH /admin/categories/{id}'`).
  *
- * **Unknown endpoints fail visibly:** HTTP 501 with an error envelope, and the test fails in
- * `afterEach`. A silent `success: true, data: null` used to hide missing handlers.
+ * A handler's return value is the JSON body (HTTP 200). Throw `MockFailure` (or a `failures.*`
+ * preset) for an error response in the API's format.
  *
- * The pattern uses the full origin: a pattern starting with a wildcard would also match the
- * Vite chunk `/_nuxt/generated/api/...` in dev and break the app.
+ * **Unknown endpoints fail visibly:** HTTP 501, and the test fails in `afterEach`.
  */
 export type MockHandler = (request: { url: URL, body: unknown }) => unknown | Promise<unknown>
 
@@ -44,38 +47,107 @@ export interface MockApi {
   set: (handlers: Record<string, MockHandler>) => void
 }
 
-export const TEA = { id: 1, categoryName: 'Tea', status: 'ACTIVE', type: 'MAIN' }
-export const COFFEE = { id: 2, categoryName: 'Coffee', status: 'ACTIVE', type: 'MAIN' }
+// --- Fixtures ---
 
-export function pageOf<T>(content: T[], page = 0, pageSize = 20) {
-  const totalPages = Math.max(1, Math.ceil(content.length / pageSize))
-  return { content, totalElements: content.length, totalPages, currentPage: page, pageSize, hasNext: page < totalPages - 1, hasPrevious: page > 0 }
+const STAMP = '2026-09-26T00:00:00.000Z'
+
+export const ADMIN: StaffSession = {
+  userId: 'user-1',
+  email: 'admin@nukcafe.test',
+  displayName: 'alice',
+  role: 'admin',
+  permissions: ['menu.read', 'menu.write', 'media.write'],
 }
 
-/** A logged-in admin with two categories. */
+export function categoryOf(id: string, name: string, overrides: Partial<Category> = {}): Category {
+  return { id, name, parentId: null, status: 'ACTIVE', sortOrder: 1, version: 1, createdAt: STAMP, updatedAt: STAMP, ...overrides }
+}
+
+export function scheduleOf(id: string, name: string, overrides: Partial<Schedule> = {}): Schedule {
+  return {
+    id,
+    name,
+    description: '',
+    days: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
+    startTime: '08:00',
+    endTime: '17:00',
+    timeZone: 'Asia/Phnom_Penh',
+    status: 'ACTIVE',
+    productCount: 0,
+    version: 1,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    ...overrides,
+  }
+}
+
+export function productOf(id: string, name: string, category: Category, overrides: Partial<Product> = {}): Product {
+  return {
+    id,
+    name,
+    description: '',
+    category: { id: category.id, name: category.name, parentId: category.parentId, status: category.status },
+    priceMinor: 350,
+    currency: 'USD',
+    image: null,
+    status: 'ACTIVE',
+    sortOrder: 1,
+    scheduleIds: [],
+    variantGroups: [],
+    version: 1,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    ...overrides,
+  }
+}
+
+export const TEA = categoryOf('cat-1', 'Tea')
+export const COFFEE = categoryOf('cat-2', 'Coffee', { sortOrder: 2 })
+
+export function pageOf<T>(items: T[], page = 1, pageSize = 20): ApiPage<T> {
+  return { items, page, pageSize, total: items.length, totalPages: Math.max(1, Math.ceil(items.length / pageSize)) }
+}
+
+/** A signed-in admin with two categories. */
 export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
-  'GET /staff/auth/session': () => ({ staffId: 1, username: 'admin', groups: ['ADMIN'] }),
-  'POST /staff/auth/logout': () => null,
-  'GET /staff/categories': () => pageOf([TEA, COFFEE]),
-  'GET /staff/categories/all': () => [TEA, COFFEE],
-  'POST /staff/categories': () => ({ ...TEA, id: 3 }),
+  // Better Auth's client plugin reads the session once at startup; the app itself uses /admin/me.
+  'GET /auth/get-session': () => null,
+  'POST /auth/sign-out': () => ({ success: true }),
+  'GET /admin/me': () => ADMIN,
+  'GET /admin/categories': () => [TEA, COFFEE],
+  'POST /admin/categories': ({ body }) => categoryOf('cat-3', String((body as { name?: string })?.name ?? 'New')),
 }
 
-/** Throw this from a handler to answer `success: false`. */
+/** Throw this from a handler to answer with an error in the API's format. */
 export class MockFailure {
-  constructor(public msg: string, public reason: string, public status = 200) {}
+  constructor(
+    public status: number,
+    public code: string,
+    public message: string,
+    public fieldErrors?: Record<string, string[]>,
+  ) {}
 }
 
-/** Backend failures seen on the dev API (codes in app/utils/api-error.ts → API_ERROR_CODES). */
+/** Error responses our server sends (server/utils/api-error.ts). */
 export const failures = {
-  /** HTTP 200 + NC0001: shown to the user as the reason. */
-  validation: (reason = 'Required fields are missing') => new MockFailure('NC0001', reason),
-  /** HTTP 200 + NC0011. */
-  notFound: (reason = 'Category not found') => new MockFailure('NC0011', reason),
-  /** HTTP 200 + NC0000: technical, the user sees a generic message. */
-  technical: () => new MockFailure('NC0000', 'No static resource staff/categories.'),
-  /** HTTP 401 + NC1000: triggers a token refresh. */
-  unauthorized: () => new MockFailure('NC1000', 'Unauthorized', 401),
+  validation: (message = 'Some of the submitted data is invalid.', fieldErrors?: Record<string, string[]>) =>
+    new MockFailure(400, 'VALIDATION_FAILED', message, fieldErrors),
+  notFound: (message = 'The category was not found. It may have been deleted.') => new MockFailure(404, 'NOT_FOUND', message),
+  conflict: (code = 'VERSION_CONFLICT', message = 'This category was changed by someone else. Reload it and try again.') =>
+    new MockFailure(409, code, message),
+  /** A crash: the user sees a generic message, never this text. */
+  server: () => new MockFailure(500, 'INTERNAL', 'D1_ERROR: no such table: menu_categories'),
+  /** No session (expired, or signed out elsewhere). */
+  unauthorized: () => new MockFailure(401, 'UNAUTHENTICATED', 'Sign in to continue.'),
+  /** Signed in, but the account has no (active) staff profile. */
+  notStaff: () => new MockFailure(403, 'NOT_STAFF', 'This account doesn\'t have staff access.'),
+}
+
+/** Handlers for a signed-out browser: no session, and no staff session. */
+export const SIGNED_OUT: Record<string, MockHandler> = {
+  'GET /admin/me': () => {
+    throw failures.unauthorized()
+  },
 }
 
 /**
@@ -84,8 +156,8 @@ export const failures = {
  *
  * @example
  * const save = deferred()
- * await mockApi(page, { 'PUT /staff/categories/{id}': save.handler })
- * … await save.started() … save.release({ id: 1 }) / save.fail(failures.validation())
+ * await mockApi(page, { 'PATCH /admin/categories/{id}': save.handler })
+ * … await save.started() … save.release(category) / save.fail(failures.validation())
  */
 export function deferred() {
   const waiting: { resolve: (data: unknown) => void, reject: (error: unknown) => void }[] = []
@@ -114,33 +186,45 @@ export function deferred() {
 }
 
 /**
- * A list endpoint that searches, filters by `status` and paginates like the backend (0-based
- * `page`, `size`).
- * Pass a function to let the rows change during the test (e.g. after deletes).
+ * A list endpoint that searches (`search`, on `searchField`), filters by `status` and paginates
+ * like the server (1-based `page`, `pageSize`). Pass a function to let the rows change during the
+ * test (e.g. after deletes).
  */
-export function paginatedHandler<T extends Record<string, unknown>>(rows: T[] | (() => T[]), searchField: keyof T = 'categoryName'): MockHandler {
+export function paginatedHandler<T extends Record<string, unknown>>(rows: T[] | (() => T[]), searchField: keyof T = 'name'): MockHandler {
   return ({ url }) => {
     const all = typeof rows === 'function' ? rows() : rows
     const search = url.searchParams.get('search')?.toLowerCase()
-    const page = Number(url.searchParams.get('page') ?? 0)
-    const size = Number(url.searchParams.get('size') ?? 20)
+    const page = Number(url.searchParams.get('page') ?? 1)
+    const pageSize = Number(url.searchParams.get('pageSize') ?? 20)
     const status = url.searchParams.get('status')
     const matching = all
       .filter(r => !search || String(r[searchField]).toLowerCase().includes(search))
-      // Like the backend's `status` filter (also what status-tab counts ask for).
+      // Like the server's `status` filter (also what status-tab counts ask for).
       .filter(r => !status || r.status === status)
-    const totalPages = Math.max(1, Math.ceil(matching.length / size))
     return {
-      content: matching.slice(page * size, (page + 1) * size),
-      totalElements: matching.length,
-      totalPages,
-      currentPage: page,
-      pageSize: size,
-      hasNext: page < totalPages - 1,
-      hasPrevious: page > 0,
+      items: matching.slice((page - 1) * pageSize, page * pageSize),
+      page,
+      pageSize,
+      total: matching.length,
+      totalPages: Math.max(1, Math.ceil(matching.length / pageSize)),
     }
   }
 }
+
+/**
+ * `GET /admin/categories` like the server: every category, or only mains / subs with `?level=`
+ * (the parent picker asks for `level=main`). Pass a function for rows that change.
+ */
+export function categoriesHandler(rows: Category[] | (() => Category[])): MockHandler {
+  return ({ url }) => {
+    const all = typeof rows === 'function' ? rows() : rows
+    const level = url.searchParams.get('level')
+    return all.filter(c => !level || (level === 'main') === (c.parentId === null))
+  }
+}
+
+/** The last path segment of a request: the record id of `/admin/categories/{id}`. */
+export const lastSegment = (url: URL) => url.pathname.split('/').pop()!
 
 /**
  * A JSON body parsed; any other body (multipart uploads) as its raw text, so a handler can still
@@ -158,27 +242,28 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
   const missing: string[] = []
   const origin = new URL(url('/')).origin
 
-  await page.route(`${origin}/legacy-api/**`, async (route: Route) => {
+  await page.route(`${origin}/api/**`, async (route: Route) => {
     const request = route.request()
     const requestUrl = new URL(request.url())
-    const path = requestUrl.pathname.replace(/^\/legacy-api/, '')
+    const path = requestUrl.pathname.replace(/^\/api\/v1/, '').replace(/^\/api\/auth/, '/auth')
     const key = `${request.method()} ${path}`
     calls.push(key)
-    // 'DELETE /staff/categories/1' also matches a 'DELETE /staff/categories/{id}' handler.
-    const handler = active[key] ?? active[key.replace(/\/\d+(?=\/|$)/g, '/{id}')]
+    // 'DELETE /admin/categories/cat-1' also matches a 'DELETE /admin/categories/{id}' handler.
+    const handler = active[key] ?? active[key.replace(/\/[^/]*\d[^/]*(?=\/|$)/g, '/{id}')]
     if (!handler) {
       missing.push(key)
       unhandled.push(key)
-      await route.fulfill({ status: 501, json: { success: false, msg: 'UNMOCKED', reason: `No mock for ${key}` } }).catch(() => {})
+      await route.fulfill({ status: 501, json: { statusCode: 501, message: `No mock for ${key}`, data: { code: 'UNMOCKED', message: `No mock for ${key}` } } }).catch(() => {})
       return
     }
     try {
       const data = await handler({ url: requestUrl, body: requestBody(request) })
-      await route.fulfill({ status: 200, json: { success: true, msg: 'OK', data } })
+      await route.fulfill({ status: 200, json: data ?? null })
     }
     catch (error) {
       if (!(error instanceof MockFailure)) throw error
-      await route.fulfill({ status: error.status, json: { success: false, msg: error.msg, reason: error.reason } })
+      const data = { code: error.code, message: error.message, ...(error.fieldErrors ? { fieldErrors: error.fieldErrors } : {}) }
+      await route.fulfill({ status: error.status, json: { error: true, statusCode: error.status, message: error.message, data } })
     }
   })
 
@@ -216,7 +301,7 @@ export function toast(page: Page, title: string | RegExp) {
 
 /**
  * A category in the Categories tree (`/categories`), by name. The tree loads
- * `GET /staff/categories/all`; the default handlers answer it with TEA and COFFEE.
+ * `GET /admin/categories`; the default handlers answer it with TEA and COFFEE.
  */
 export function categoryItem(page: Page, name: string) {
   return page.getByRole('listitem', { name, exact: true })
