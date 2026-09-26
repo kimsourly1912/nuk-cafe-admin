@@ -14,7 +14,31 @@ Every statement here is labelled:
 | **[Exists]** | Built and in use by Categories. The evidence level is stated where it matters |
 | **[Required]** | A convention every feature must follow |
 | **[Proposed]** | Not built. Build it when the first feature needs it, following [the roadmap](#7-upcoming-reusable-capabilities) |
-| **[Open]** | A product or backend decision nobody has made. Features record a working default and keep it easy to change (a constant, a prop, one mapping function) |
+| **[Choice]** | A reversible presentation or implementation choice, made by the developer within existing requirements and recorded in the plan (e.g. server order with no sort UI) |
+| **[Open]** | An unresolved backend, business or authorization contract. **Developers don't decide these**: see [Open questions: choices vs contracts](#open-questions-choices-vs-contracts) |
+
+### Open questions: choices vs contracts
+
+Not every unknown is the same kind.
+
+**A. Reversible choices [Choice].** Presentation or implementation details that existing requirements leave open, and that can be changed later without migrating data or breaking an agreement. Pick a reasonable option, record it in the plan, and keep it easy to change (a constant, a prop). Examples: server ordering with no sort UI; a configurable size threshold for switching a picker to remote search; the order in which parts of a feature are built.
+
+**B. Unresolved contracts [Open].** Backend semantics, business rules and authorization. **Don't invent behavior for these.** Examples:
+- omitted vs `null` vs empty values in updates;
+- removing a relationship or an image, and cleaning up uploads;
+- currency units and rounding;
+- schedule timezone, time format and whether overnight ranges are valid;
+- whether inactive records may be selected;
+- roles and permissions;
+- whether translations may be edited.
+
+For each [Open] item:
+1. **Record the exact question and who can answer it** (backend team for API semantics, project owner for business rules and permissions) in the plan and in [progress.md → Open questions](progress.md#open-questions--waiting-on-others).
+2. **Settle it with authoritative evidence or a decision.** Evidence means the API contract (OpenAPI spec, backend documentation) or a verified real-API check. Existing frontend code and unit tests are **not** evidence of backend behavior.
+3. **Continue the work that doesn't depend on it.** One open question doesn't stop a feature.
+4. **Defer the affected behavior**: don't offer it in the UI, or leave it visibly incomplete, and say so in progress.md.
+
+An illustrative proposal may be written down, labelled **awaiting approval**. It is not an implementation instruction.
 
 Evidence levels follow [progress.md → Verification levels](progress.md#verification-levels). Note that **e2e tests are browser-mock evidence** (real Chrome, mocked API). **No authenticated flow has been verified against the real API yet.**
 
@@ -22,7 +46,7 @@ Evidence levels follow [progress.md → Verification levels](progress.md#verific
 
 ## 1. Feature planning template
 
-**[Required]** Before writing code, fill this in as `docs/plans/<feature>.md`. Keep it short: a line per item is fine. Mark anything unknown **[Open]** with the working default you'll build to, and add it to [progress.md → Open questions](progress.md#open-questions--waiting-on-others).
+**[Required]** Before writing code, fill this in as `docs/plans/<feature>.md`. Keep it short: a line per item is fine. Mark each unknown as **[Choice]** (with the choice made) or **[Open]** (with the exact question and who can answer it), following [choices vs contracts](#open-questions-choices-vs-contracts). Add every [Open] item to [progress.md → Open questions](progress.md#open-questions--waiting-on-others).
 
 ```markdown
 # <Feature> plan
@@ -35,7 +59,7 @@ Evidence levels follow [progress.md → Verification levels](progress.md#verific
 ## API contract (from app/generated/api)
 - Endpoints: METHOD /staff/... → sdkFunction (list, all/options, get, create, update, delete, extras).
 - Request types / response types.
-- Update semantics: is PUT a full replace? What does an omitted field mean (keep or clear)? How is a value cleared (null, '', [])? Verified or [Open]?
+- Update semantics: is PUT a full replace? What does an omitted field mean (keep or clear)? How is a value cleared (null, '', [])? For each: the evidence (spec, backend docs, real-API check), or [Open] + who answers.
 
 ## List
 - Columns.
@@ -60,10 +84,10 @@ Evidence levels follow [progress.md → Verification levels](progress.md#verific
 - Bulk actions: which ones, phases (order), what "partial failure" means.
 
 ## Permissions
-- Who can view, create, edit and delete. [Open] until the role matrix exists (Q6).
+- Who can view, create, edit and delete. [Open] until the role matrix exists (Q6). Don't guess role rules in the meantime.
 
 ## Freshness
-- Anything beyond the defaults (cross-tab invalidation, refetch on return/reconnect)? e.g. polling for live screens.
+- Anything beyond the defaults (cross-tab invalidation, refetch on return/reconnect)? e.g. screen-specific polling for a live screen, with the reason (D22).
 
 ## Edge cases and verification
 - Risks specific to this feature, and the test that covers each (unit / e2e / real-API).
@@ -106,7 +130,7 @@ Not wanted: generic CRUD engines, repository or service layers over the SDK, new
 | Building block | Owns | Features must not | Reference |
 |---|---|---|---|
 | `useApiQuery` | Reads: `loading` / `refreshing` / `error` as `ApiError`, load time for freshness | hand-roll loading refs or try/catch around reads | [data-fetching](reference/data-fetching.md#useapiquery) |
-| `useMutation` | Writes: per-key concurrency, double-submit skip, confirm, toasts, `removes`, batch (`executeMany`, Stop, Retry failed), invalidation | toast, catch or track pending for writes themselves | [mutations](reference/mutations.md#usemutation) |
+| `useMutation` | Writes: the request lifecycle, per-key in-flight state and double-submit skip, confirm, toasts, `removes`, batch (`executeMany`, Stop, Retry failed), invalidation | duplicate its request or concurrency state (their own in-flight maps, double-submit guards, try/catch-and-toast). **Form-local submission state is allowed** ([§5](#form-local-vs-shared-pending-state)) | [mutations](reference/mutations.md#usemutation) |
 | `usePaginatedQuery` | List filters and page, URL state, page reset on filter change, `isFiltered`, `clearFilters` | keep their own page/filter refs or sync the URL | [data-fetching](reference/data-fetching.md#usepaginatedquery) |
 | `<SearchInput>` | Debounced search, Enter/Clear, `/` shortcut | debounce search themselves | [ui](reference/ui.md#searchinput) |
 | `<ListEmptyState>` | "No X yet" vs "No X match your filters" | write their own empty text | [ui](reference/ui.md#listemptystate) |
@@ -114,7 +138,7 @@ Not wanted: generic CRUD engines, repository or service layers over the SDK, new
 | `useTableSelection` + `<BulkActionsBar>` | Row selection, reset on query change, the "N selected" bar | keep selection state themselves | [ui](reference/ui.md#usetableselection) |
 | `useConfirm` | Confirmation dialogs | build ad-hoc confirm modals (deletes use `useMutation`'s `confirm`) | [ui](reference/ui.md#useconfirm) |
 | `useModalUnsavedChanges` / `useUnsavedChanges` / `useLeaveGuard` | "Discard unsaved changes?" on close, route change, logout and reload | add their own `beforeunload` or route guards | [forms](reference/forms.md) |
-| `invalidate` (+ `invalidateAll`, `invalidateInThisTab`, freshness plugin) | Refetching affected features in this tab and other tabs, on return and on reconnect | refetch other features' data directly or poll | [data-fetching](reference/data-fetching.md#invalidate), [app-behavior](reference/app-behavior.md#data-freshness) |
+| `invalidate` (+ `invalidateAll`, `invalidateInThisTab`, freshness plugin) | Refetching affected features in this tab and other tabs, on return and on reconnect | refetch other features' data directly, add global polling, or add a second refresh mechanism. **Screen-specific polling is allowed** when a screen needs live data (e.g. the Orders queue), per D22 | [data-fetching](reference/data-fetching.md#invalidate), [app-behavior](reference/app-behavior.md#data-freshness) |
 | `<StatusBadge>`, `STATUS_ITEMS`, `STATUS_FILTER_ITEMS` | ACTIVE/INACTIVE display, form select and filter select | redefine status labels or colors | [ui](reference/ui.md#statusbadge-and-status-constants) |
 | `ApiError`, `getErrorMessage`, `useNotify` | Error classification, user-safe messages, toasts for non-mutation actions | compare HTTP statuses or message strings, or call `useToast()` for API results | [errors](reference/errors.md) |
 | `usePageShortcuts`, `useSubmitShortcut` | Keyboard shortcuts, suppressed behind dialogs | call `defineShortcuts` directly for page keys | [ui](reference/ui.md#keyboard-shortcuts) |
@@ -133,13 +157,13 @@ Not wanted: generic CRUD engines, repository or service layers over the SDK, new
 | Filters match nothing | "No <items> match your filters" + Clear filters | `ListEmptyState` + `isFiltered` | e2e |
 | Load fails | Alert with the safe message + Retry | `ApiErrorAlert` | e2e |
 | Search, filters, page | Search as you type, page resets on filter change, state in the URL (reload, Back and shared links work) | `usePaginatedQuery`, `SearchInput` | e2e. **Limits:** page size fixed (20) and not in the URL; string/number filters only; one URL-synced list per page |
-| Ordering | Server order | none | **[Open]**: Categories' list API has no sort parameter. Schedules has free-form `sortBy`/`sortDir` with undocumented values. No sort UI exists |
+| Ordering | Server order | none | **[Choice]**: server order, no sort UI. Categories' list API has no sort parameter. Schedules' `sortBy`/`sortDir` values are undocumented (**[Open]**, backend team), so no sort UI until they're known |
 | Filter or page change with rows selected | Selection clears | `useTableSelection({ resetOn: [query] })` | Built. **No committed test** (checked ad hoc earlier) |
-| Action on an item already in flight | Row dimmed, spinner instead of actions, new actions blocked | `isBusy(id)` from the feature | Built. **No committed test.** The engine only skips a repeat of the **same** mutation and key. Blocking *different* mutations on one item (update while deleting) relies on the UI's `isBusy` |
+| Conflicting actions on one item | **Required:** actions that conflict on the same item (update vs delete, delete vs delete) never overlap. Eligibility is checked **when the action starts, including after its confirmation**. Independent items still run concurrently | **Existing:** the engine skips a repeat of the **same mutation and key**, before and after confirmation. `isBusy(id)` dims the row and replaces its actions with a spinner, so single row actions can't start on a busy row | **Implementation gap (Categories), not only a coverage gap:** select-all still selects busy rows; `removeSelected` passes `selection.selected` straight to `executeMany`; the batch skips only items whose **delete** is already in flight, not a pending **update** (`isBusy` isn't consulted). So a bulk delete can overlap an update of the same category. Likewise, after its confirmation a single delete re-checks only its own mutation (unlikely to matter today, because the dialog blocks the page). There's no committed test for row blocking either |
 | Bulk action | One confirmation, limited concurrency, progress toast with **Stop**, one summary ("3 deleted, 1 failed", reasons grouped), **Retry failed**, failed and unstarted rows stay selected | `useMutation` `batch` + `executeMany` | Partial failure and "failed stays selected": e2e. Stop and Retry failed: unit (engine) only |
 | Last item on a page deleted | Step back to the last existing page | A `watch` on `totalPages` in each list page ([recipe](reference/data-fetching.md#recipe-step-back-when-the-last-page-empties)) | Built in Categories only, **not shared, not tested**. **[Proposed]**: move into `usePaginatedQuery` when the second list needs it |
 | Another staff member changed the data | Picked up by the freshness rules | Freshness plugin | e2e. Another device's change appears only on return to the tab or on navigation (no backend push) |
-| Two staff edit the same item | – | none | **[Open]**: the last save silently wins. The API has no version or `updatedAt` for conflict detection on most resources |
+| Two staff edit the same item | Not agreed | none | **No client-side conflict handling is implemented.** Category responses carry no version or `updatedAt` in the generated types. How the backend handles concurrent updates is **unverified** (**[Open]**, backend team) |
 
 ---
 
@@ -154,31 +178,44 @@ Not wanted: generic CRUD engines, repository or service layers over the SDK, new
 
 ### Values: omitted, `undefined`, `null`, empty
 
+Possible encodings, whose meaning is set by each resource's contract:
+
 | In the request body | What is sent | Meaning to the backend |
 |---|---|---|
-| key absent / `undefined` | nothing (JSON drops `undefined`) | **[Open]** per resource: "keep" or "clear"? |
-| `null` | `null` | **[Open]**: accepted as "clear"? |
-| `''` / `[]` | empty value | **[Open]**: accepted, and does it mean "clear"? |
+| key absent / `undefined` | nothing (JSON drops `undefined`) | per resource: "keep" or "clear"? |
+| `null` | `null` | per resource: accepted as "clear"? |
+| `''` / `[]` | empty value | per resource: accepted, and does it mean "clear"? |
 
-**[Required]** Until a resource's semantics are verified against the real API:
-- `to<Feature>Request` produces the **same body for "unchanged" and "cleared"** only if the plan explicitly says so. Otherwise it encodes clearing explicitly, and the plan marks the choice **[Open]**.
-- Its unit test covers both **preserving** and **clearing** each optional field and relationship.
+**[Required]**
+- **Intent first.** Where the form offers clearing, form state distinguishes "left unchanged" from "cleared by the user".
+- **Map intent through the established contract.** `to<Feature>Request` turns each intent into the request value the resource's contract defines. The plan records the evidence (spec, backend docs, verified real-API check).
+- **Preserve untouched fields per the verified semantics**: copy them from `existing`, or omit them only where omission is verified to mean "keep".
+- **Unknown semantics: defer, don't guess.** If a resource's clearing semantics are unknown, don't pick `null`, omission or an empty value. Record the [Open] question, and leave the clear operation out of the UI (or visibly unavailable) until it's settled. The rest of the form ships.
+- **Unit tests pin down the agreed mapping only.** They don't show how the backend interprets it: that takes real-API evidence.
 
-> **Known risk in the reference feature:** clearing a category's parent maps to `mainCategoryId: undefined`, which is **omitted** from the PUT body. Whether the backend then clears the parent or keeps it is unverified. Check this first when real-API testing becomes possible.
+> **Unverified contract risk in the reference feature (not fixed):** the Category form, which predates this rule, offers clearing a parent and maps it to `mainCategoryId: undefined`, which is **omitted** from the PUT body. Whether the backend then clears or keeps the parent is unverified (Q7). Check this first when real-API testing becomes possible. A new feature would defer such a clear until its contract is known.
 
-Images follow the same rule: "remove the image" and "keep the image" must be distinct in the request (see [image upload](#7-upcoming-reusable-capabilities)).
+Images follow the same rule: "remove the image" and "keep the image" are different intents, and their encoding (and any upload cleanup) is **[Open]** until the contract is known (see [image upload](#7-upcoming-reusable-capabilities)).
 
 ### Save lifecycle
 
 | Phase | Behavior | Provided by |
 |---|---|---|
 | Validation fails | Field-level messages, no request | the Valibot schema (via `UForm`) |
-| Saving | Submit button loading, inputs disabled, the form doesn't count as unsaved (`paused: saving`) | the feature form + `useModalUnsavedChanges` |
+| Saving | Submit button loading, inputs disabled, the form doesn't count as unsaved (`paused: saving`) | the form's own `saving` state + `useModalUnsavedChanges` |
 | Double submit | Skipped: create is keyed by what identifies the submission (e.g. the name), update by id | `useMutation` `key` |
 | Backend rejects | Toast with the backend reason. The modal stays open with the input intact, and the form is unsaved again | `useMutation`. Backend validation is one string, not per field |
 | User closes during save | The save continues. If it fails, the toast offers **Reopen** with the draft (compared against the original record, so it counts as unsaved) | `errorActions` + `draft` prop ([D13](decisions.md)) |
 | Save succeeds | `markClean()`, close (`emit('close', true)`), affected features refresh here and in other tabs | the feature form + `useMutation` `invalidate` |
 | Leave with changed input | "Discard unsaved changes?" | [forms.md → Edge cases](reference/forms.md#edge-cases) |
+
+### Form-local vs shared pending state
+
+[`CategoryFormModal.vue`](../app/features/categories/components/CategoryFormModal.vue) keeps its own `saving` ref around `create.execute` / `update.execute`. It drives **this form's** disabled inputs, loading button, `paused` unsaved-change guard and "saving continues in the background" hint. That's allowed and expected.
+
+Don't replace it with the mutation's shared state (`create.pending`, `update.isPending(id)`). That state also reflects **other** submissions: another create in flight, or an update of the same row started elsewhere. It would disable or pause the wrong form.
+
+What features must not do is **duplicate the engine**: no in-flight maps, double-submit guards, retry logic or try/catch-and-toast of their own. `useMutation` owns those.
 
 ---
 
@@ -194,18 +231,18 @@ Images follow the same rule: "remove the image" and "keep the image" must be dis
 | Loading / disabled | `loading` while options load. `disabled` passes through | Loading ✔, disabled via attrs |
 | Load error | Shows the failure with a retry, not an empty list | **Gap**: an error shows as an empty list |
 | Current value not in the options (inactive, deleted, filtered out) | Still shows a label (from the record, e.g. `mainCategory.categoryName`, or "#12 (unavailable)"), never a blank field | **Gap**: shows blank |
-| Inactive options | **[Open]**: may inactive items be chosen? Default: show them marked "(inactive)" | Listed without marking |
+| Inactive options | **[Open]** (project owner): may inactive records be selected? Until decided, a picker adds no eligibility rule of its own, and lists what its options endpoint returns. Showing a status marker next to an option is a [Choice] | Listed without marking |
 | Domain exclusions | Props named for the rule (`excludeId`: an item can't be its own parent) | ✔ |
 | Data source | Small sets: the unpaginated `/all` endpoint, keyed per filter (`<feature>:options:<filter>`). Large sets: remote search against the paginated endpoint (`USelectMenu` with search) | `/staff/categories/all` ✔ |
 | Where it lives | `use<Feature>Options` + `<Feature>Select`, exported from `index.ts`, importing no other feature | ✔ |
 
-**[Open]**: when is a set "large"? The working default is remote search once a resource can exceed a few hundred records. Products are the likely first case.
+**[Choice]**: when a set is "large". Make it a configurable threshold (a constant or prop), and switch a picker to remote search when its resource can realistically exceed it. Products are the likely first case.
 
 ---
 
 ## 7. Upcoming reusable capabilities
 
-**[Proposed]** None of these exist. Build each **inside its first consumer**, and promote it to the root on the second real use ([D16](decisions.md)). Don't assume the behavior that needs agreement: record it as **[Open]** with a working default.
+**[Proposed]** None of these exist. Build each **inside its first consumer**, and promote it to the root on the second real use ([D16](decisions.md)). Everything in "Needs agreement" is an **[Open]** contract ([category B](#open-questions-choices-vs-contracts)): record the question and who answers it, build the parts that don't depend on it, and defer the rest.
 
 | Capability | First consumer | Needs agreement | Feature vs shared | Extract when |
 |---|---|---|---|---|
@@ -268,9 +305,10 @@ How the reference feature maps to this standard:
 | Tests | [`test/e2e/categories.test.ts`](../test/e2e/categories.test.ts), plus shared-behavior e2e on Categories (`list-page`, `unsaved-changes`, `shortcuts`, `freshness`) |
 
 **Gaps against this standard** (not fixed by this document):
-- The tests don't cover clearing the parent (§5), and the backend semantics are unverified.
+- Clearing a parent is offered and encoded as an omitted field, but the backend meaning is unverified (§5, Q7).
+- **Bulk delete doesn't enforce cross-operation conflicts** (§4): select-all includes busy rows, and the batch doesn't check a pending update.
 - `CategorySelect` lacks the error and unavailable-value states (§6).
-- There is no committed test for busy rows, selection reset or stepping back to the last page (§4).
+- There is no committed test for row blocking, selection reset or stepping back to the last page (§4).
 - There is no plan document, because the feature predates this standard.
 - There is no real-API evidence.
 
@@ -282,18 +320,20 @@ A first pass at `docs/plans/schedules.md`, from the generated SDK only. **Not im
 - **Endpoints:** `GET /staff/schedules` (`getPage`: `search`, `status`, `dayOfWeek`, `page`, `size`, `sortBy`, `sortDir`), `GET /staff/schedules/all` (`getAll1`, for `ScheduleSelect`), `GET/PUT/DELETE /staff/schedules/{id}` (`getById1`, `update1`, `delete1`), `POST /staff/schedules` (`create1`), `GET /staff/schedules/days-of-week`, `GET /staff/schedules/available` (`dayOfWeek`, `time`).
 - **Types:** `ScheduleCreateRequest` / `ScheduleUpdateRequest`: `name`, `nameI18n`, `description`, `descriptionI18n`, `status`, `startTime`, `endTime`, `days[]` (MONDAY…SUNDAY), `items[]` (product ids). `ScheduleResponse` adds `id` and `timezone`, and returns `items[]` as `{ id, productId, productName, price }`.
 - **List:** name, days, time range, status, item count. Filters: search, status, day of week. All three fit the URL state.
-- **Form:** name (required), description, status, days (at least one?), start and end time, items. Preserve `nameI18n` and `descriptionI18n`. `items` in the request is product ids, derived from `existing.items[].productId`.
+- **Form:** name (required), description, status, days (whether at least one is required: [Open], project owner), start and end time, items. Preserve `nameI18n` and `descriptionI18n`. `items` in the request is product ids, derived from `existing.items[].productId`.
 - **Relationships:** exports `ScheduleSelect` (multiple) + `useScheduleOptions` for Products. Needs a `ProductSelect` (multiple) from Products, which doesn't exist yet.
 - **Mutations:** `schedules:create` (keyed by name), `schedules:update` / `schedules:remove` (by id). Invalidate `['schedules']`, plus `'products'` if the Products screens end up showing schedule data (decide when Products is planned).
 
-**Contract questions [Open]** (resolve with the real API when possible, otherwise build to the working default):
+**Unknowns.** [Open] items need an answer from the named party, backed by evidence (spec, backend docs, a verified real-API check) or a decision. Work that doesn't depend on them continues. [Choice] items are the developer's to make.
 
-1. **Time format** of `startTime` / `endTime` (`HH:mm`? `HH:mm:ss`?). The spec only says `string`.
-2. **Timezone:** the response has `timezone`, the request doesn't. Are times the cafe's local time?
-3. **Overnight ranges** (22:00–02:00): allowed? Default: reject `end ≤ start` in the form until confirmed.
-4. **Update semantics:** does PUT replace `days` and `items`, or merge? Does omitting `items` keep or clear them?
-5. **`sortBy` / `sortDir`:** allowed values. Default: no sort UI, server order.
-6. **Ordering Schedules before Products:** the form needs `ProductSelect`, which belongs to Products. Options: (a) build a minimal public `useProductOptions` + `ProductSelect` in `app/features/products/` first; (b) ship Schedules with items read-only and preserved, editing them once Products exists. The working default is **(a)**, because it's the cleaner fit for the boundary rules (D8).
-7. **`/days-of-week`:** does it return labels and order worth using over the enum?
-8. **Deleting a schedule that products reference:** refused or cascaded? This shapes the confirmation text and failure handling.
-9. **Is the `price` in `items`** the product price or a schedule-specific price? This touches the money capability in §7.
+What can proceed while 1–4 are open: the list (times shown as the API returns them), filters, delete, `ScheduleSelect` + `useScheduleOptions`, and the form's non-time fields with their schema and mapping tests. **Create and edit depend on the answers.** A schedule needs its times (1–3), and editing needs the update semantics (4). Keep them out of the UI, or visibly incomplete, until the answers are established, and record that in progress.md.
+
+1. **[Open]**, backend team. **Time format** of `startTime` / `endTime` (`HH:mm`? `HH:mm:ss`?). The spec only says `string`.
+2. **[Open]**, backend team. **Timezone:** the response has `timezone`, the request doesn't. Are times the cafe's local time?
+3. **[Open]**, project owner and backend team. **Overnight ranges** (22:00–02:00): valid? The form adds **no rule of its own** either way until this is decided; backend validation errors are shown as usual. *Illustrative proposal, awaiting approval (not an instruction):* reject `end ≤ start` if overnight ranges turn out to be invalid.
+4. **[Open]**, backend team. **Update semantics:** does PUT replace `days` and `items`, or merge? Does omitting `items` keep or clear them? Sending the existing product ids back would keep them under full-replace semantics, but could duplicate them if the backend appends. So no encoding is known to be safe yet, and editing waits for this answer.
+5. **[Open]**, backend team: allowed `sortBy` / `sortDir` values. **[Choice]** meanwhile: no sort UI, server order.
+6. **[Choice]**, build order. The form needs `ProductSelect`, which belongs to Products. Options: (a) build a minimal public `useProductOptions` + `ProductSelect` in `app/features/products/` first; (b) ship Schedules with items read-only and preserved, and add editing once Products exists. Proposed: **(a)**, the cleaner fit for the boundary rules (D8).
+7. **[Choice]** once the response has been seen: whether to use `/days-of-week` (labels, order) or the enum.
+8. **[Open]**, backend team. **Deleting a schedule that products reference:** refused or cascaded? This shapes the confirmation text and failure handling. Until known, the confirmation states only what is certain.
+9. **[Open]**, backend team / project owner. **Is the `price` in `items`** the product price or a schedule-specific price, and in which units? Show it only once the money contract (§7) is known.

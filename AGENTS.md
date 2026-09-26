@@ -88,7 +88,7 @@ app/
 
 ## CRUD state: `useApiQuery` and `useMutation`
 
-Every read goes through **`useApiQuery`** and every create/update/delete through **`useMutation`**. Never hand-roll `loading` refs, try/catch or toasts for API calls.
+Every read goes through **`useApiQuery`** and every create/update/delete through **`useMutation`**. Never duplicate their request state: no hand-rolled request `loading` refs, in-flight tracking, try/catch or toasts for API calls. A form may keep **its own** submission state (e.g. `saving` in `CategoryFormModal`, for its disabled inputs and unsaved-change pause). See [feature-standard.md §5](docs/feature-standard.md#form-local-vs-shared-pending-state).
 
 **Reads:** `useApiQuery(key, handler, useAsyncDataOptions)` is `useAsyncData` with `pending` (boolean), `loading` (first load, no data yet), `refreshing` (reloading while old data is shown) and `error` (already an `ApiError`).
 
@@ -107,13 +107,13 @@ Every read goes through **`useApiQuery`** and every create/update/delete through
 The returned object is **reactive (don't destructure it)**:
 
 - `execute(input, { confirm?, errorActions? })` **never throws**. It resolves to `{ ok: true, data }`, `{ ok: false, status: 'error', error }`, or `{ ok: false, status: 'cancelled' | 'skipped' }`.
-- `executeMany(items)` runs with one confirmation, limited concurrency, a progress toast with **Stop**, one summary toast ("3 categories deleted, 1 failed", reasons grouped, **Retry failed**) and one refresh. It resolves to `{ succeeded, failed, skipped, notStarted, cancelled }`. Items already in flight are skipped, not sent twice.
+- `executeMany(items)` runs with one confirmation, limited concurrency, a progress toast with **Stop**, one summary toast ("3 categories deleted, 1 failed", reasons grouped, **Retry failed**) and one refresh. It resolves to `{ succeeded, failed, skipped, notStarted, cancelled }`. Items with **this mutation** already in flight are skipped, not sent twice. Other mutations on the same item (e.g. a pending update during a bulk delete) are **not** checked: see [feature-standard.md §4](docs/feature-standard.md#4-list-page-behavior).
 - `isPending(key?)`, `pending`, `pendingCount()`, `errorOf(key?)`, `error`, `data`, `isRemoved(key)`, `reset(key?)`.
 - Calls are **never cancelled on unmount**. `plugins/leave-guard.client.ts` warns before the tab closes while anything is in flight.
 
 Rules the Categories reference follows:
 
-- The feature exposes **`isBusy(id)`** (any mutation in flight for that item). The list dims the row, shows a spinner instead of its actions, and blocks new actions on it.
+- The feature exposes **`isBusy(id)`** (any mutation in flight for that item). The list dims the row and shows a spinner instead of its row actions, so single actions can't start on it. **Known gap:** bulk actions don't consult `isBusy` yet (select-all includes busy rows).
 - **Form modals stay open while saving** (backend errors need the input on screen) but **can be closed**: the save continues. If it then fails, the toast offers **"Reopen"** with the draft restored (`errorActions` + a `draft` prop).
 - **Unsaved changes are guarded.** Every create/edit form uses `useModalUnsavedChanges` (modals) or `useUnsavedChanges` (pages), so closing the modal, changing route, logging out or reloading with changed input asks first. Pass `paused: saving` and call `markClean()` after a successful save (see [docs/reference/forms.md](docs/reference/forms.md)).
 - **Create is keyed by something that identifies the submission** (the name), so two different creates can run in parallel while a double submit is skipped.

@@ -62,7 +62,7 @@ Backend resources available (from the spec) and their status. The folder names f
 
 ## Next steps (recommended order)
 
-**Feature standard (2026-09-26, docs only):** [docs/feature-standard.md](feature-standard.md) defines planning, structure, list/form/picker behavior, the capability roadmap and the definition of done. Checked: every relative link and anchor resolves (script), and each statement about existing behavior was checked against the code and tests. No application behavior was changed or newly verified. Gaps it found in the reference feature (not fixed): clearing a category's parent sends an omitted field (backend meaning unverified), `CategorySelect` has no error/unavailable-value states, and busy rows, selection reset and last-page step-back have no committed tests.
+**Feature standard (2026-09-26, docs only; revised after review the same day):** [docs/feature-standard.md](feature-standard.md) defines planning, structure, list/form/picker behavior, the capability roadmap and the definition of done. The revision separates reversible **[Choice]** items from **[Open]** backend/business/authorization contracts, which developers must not invent (defer the affected behavior, continue the rest). It replaces "encode clearing explicitly" with "map intent through the established contract, defer unknown clears", allows form-local submission state and justified screen-specific polling, and corrects an overstatement: row blocking is **not** enforced for bulk actions (an implementation gap, below). Checked: relative links and anchors resolve (script), `git diff --check`, only docs changed. Statements about existing behavior were re-checked against the code; the first version had overstated busy-row protection. No application behavior was changed or newly verified. Gaps in the reference feature (not fixed): Q7 (clearing a parent), bulk delete vs pending update (below), `CategorySelect` has no error/unavailable-value states, no committed tests for row blocking, selection reset or last-page step-back.
 
 
 0. **Polish done (2026-09-26):** e2e harness, tab titles, hidden password, list URL state + live search + empty states, refresh on return/reconnect + offline banner. Still open before features: role rules (Q6, waiting on the project owner).
@@ -83,12 +83,16 @@ Backend resources available (from the spec) and their status. The folder names f
 | Q4 | Production hosting domain for the portal. It must be same-site with the API (e.g. `admin.nukcafe.co`), or the auth cookies are dropped | project owner | Deployment (`NUXT_PUBLIC_API_BASE`) |
 | Q5 | Should admins edit translations (`nameI18n` / `descriptionI18n`: en, zh-HK, km)? Forms currently edit English only and preserve the rest | project owner | `I18nFields` component |
 | Q6 | Role rules: the session has `groups` (e.g. ADMIN, CASHIER). Which screens and actions does each role get? No role-based UI exists yet | project owner | Route guard + hidden actions |
+| Q7 | `PUT /staff/categories/{id}` with `mainCategoryId` omitted: does it clear the parent or keep it? The Category form relies on "clear" (unverified) | backend team | Clearing a parent may silently not work |
+| Q8 | How does the backend handle two concurrent updates of the same record (last write wins, rejection, versioning)? No version field in the generated types for categories | backend team | Edit-conflict handling |
 
 ## Known limitations
 
 - No real-API verification of any authenticated flow (see Current state).
 - Category sort order (`/staff/categories/sort-order`) has no UI.
 - Nothing is role-aware (Q6).
+- **Bulk delete can overlap a pending update of the same item:** select-all includes busy rows, and `executeMany` only skips items whose delete is already in flight (feature-standard.md §4). Single row actions are blocked while busy.
+- No client-side edit-conflict handling; backend behavior unverified (Q8).
 - Unsaved-changes comparison treats `1` and `'1'` as different and array order as meaningful (see docs/reference/forms.md).
 - List filters in the URL support strings and numbers only, and one URL-synced list per page (`syncUrl: false` for others). See docs/reference/data-fetching.md.
 - Data freshness: another device's change shows up only when the user returns to the tab or navigates (no push from the backend). No per-query opt-out yet. No polling (orders will likely need it per screen: D22).

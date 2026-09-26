@@ -163,7 +163,7 @@ interface BatchResult<TInput, TResult> {
 
 The backend has no bulk endpoints, so a batch is N single calls:
 
-1. Items already in flight are set aside as `skipped`. If nothing is left to run, it returns immediately with no toast.
+1. Items with **this mutation** already in flight are set aside as `skipped`. Other mutations on the same item aren't checked: filter those out with the feature's `isBusy` before calling (a known gap in Categories, see [feature-standard.md §4](../feature-standard.md#4-list-page-behavior)). If nothing is left to run, it returns immediately with no toast.
 2. One confirmation (`batch.confirm`), unless `overrides.confirm === false`.
 3. Calls run with at most `batch.concurrency` in parallel, phase by phase. Each item gets the normal per-item state (`isPending`, `errorOf`, `isRemoved`), but **no per-item toasts**.
 4. A live progress toast ("Deleting categories… 3/10") with a **Stop** button. Stop prevents new items from starting. Requests already in flight finish.

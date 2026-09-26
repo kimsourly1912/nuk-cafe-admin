@@ -54,7 +54,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 - **Auto-imported:** everything in `app/composables/`, `app/utils/` and `app/components/` is available without imports in app code. Feature code (`app/features/**`) is **not** auto-imported: import it relatively inside the feature, or from `~/features/<name>` elsewhere.
 - **Reactive return objects:** `useMutation`, `useTableSelection` and `useAuth().user` return reactive objects. **Don't destructure `useMutation` or `useTableSelection` results**, or you lose reactivity. Use `remove.pending`, `selection.count`.
 - **Keys are `<feature>:<name>`.** Query keys and mutation ids share this namespace, so `invalidate('<feature>')` finds them.
-- **Never hand-roll** `loading` refs, try/catch-and-toast, or `useToast()` for API calls. Reads use `useApiQuery`, writes use `useMutation`.
+- **Never duplicate request state:** no hand-rolled request `loading` refs, in-flight tracking, try/catch-and-toast, or `useToast()` for API calls. Reads use `useApiQuery`, writes use `useMutation`. A form's own submission state (`saving`) is fine ([feature-standard.md §5](../feature-standard.md#form-local-vs-shared-pending-state)).
 
 ## Quick start: a complete list page
 
