@@ -1,7 +1,7 @@
 // @ts-check
 import withNuxt from './.nuxt/eslint.config.mjs'
 
-// Feature boundaries (see CLAUDE.md, "Feature architecture"):
+// Feature boundaries (see AGENTS.md, "Feature architecture"; why: docs/decisions.md D8):
 // - Anything outside a feature imports it only via its public API: '~/features/<name>'.
 // - Route files in app/pages may also import a feature's *Page.vue component.
 // - Inside a feature, use relative imports; reaching another feature uses '~/features/<name>'.

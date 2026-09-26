@@ -8,7 +8,7 @@ export type CategoryOptionsFilter = NonNullable<GetAllCategoriesData['query']>
  * Keyed per filter so different pickers don't overwrite each other.
  */
 export function useCategoryOptions(filter: MaybeRefOrGetter<CategoryOptionsFilter> = {}) {
-  return useAsyncData(
+  return useApiQuery(
     () => {
       const { type, mainCategoryId } = toValue(filter)
       return `categories:options:${type ?? 'all'}:${mainCategoryId ?? 'all'}`

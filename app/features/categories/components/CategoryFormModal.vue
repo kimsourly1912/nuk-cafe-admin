@@ -1,54 +1,71 @@
 <script setup lang="ts">
-/** Create/edit form. Open via `useOverlay().create(CategoryFormModal)`; emits `close(true)` when saved. */
+/**
+ * Create/edit form. Open via `useOverlay().create(CategoryFormModal)`; emits `close(true)` when saved.
+ *
+ * The modal stays open while saving so backend errors can be fixed in place, but the user may
+ * close it: the save continues, and if it then fails the error toast offers "Reopen" with the
+ * user's input restored.
+ */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { CategoryResponse } from '~/generated/api'
 import { useCategoryMutations } from '../composables/useCategories'
 import { categoryFormSchema, toCategoryForm, toCategoryRequest } from '../schemas/category-form'
 import type { CategoryForm } from '../schemas/category-form'
+import CategoryFormModal from './CategoryFormModal.vue'
 import CategorySelect from './CategorySelect.vue'
 
 const props = defineProps<{
   /** Omit to create a new category. */
   category?: CategoryResponse
+  /** Restores unsaved input (used by "Reopen" after a failed background save). */
+  draft?: CategoryForm
 }>()
 
 const emit = defineEmits<{ close: [saved: boolean] }>()
 
 const isEdit = computed(() => props.category?.id !== undefined)
-const state = reactive(toCategoryForm(props.category))
+const state = reactive<CategoryForm>({ ...(props.draft ?? toCategoryForm(props.category)) })
 
 const { create, update } = useCategoryMutations()
-const notify = useNotify()
 const saving = ref(false)
+
+// If the user closes the modal mid-save, a failure offers to reopen it with their input.
+let closed = false
+onUnmounted(() => {
+  closed = true
+})
+const overlay = useOverlay()
+function reopenActions(draft: CategoryForm) {
+  if (!closed) return []
+  return [{
+    label: 'Reopen',
+    onClick: () => overlay.create(CategoryFormModal, { destroyOnClose: true }).open({ category: props.category, draft }),
+  }]
+}
 
 async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
   const body = toCategoryRequest(data, props.category)
+  const draft = { ...state }
+  const overrides = { errorActions: () => reopenActions(draft) }
+
   saving.value = true
-  try {
-    if (isEdit.value) await update(props.category!.id!, body)
-    else await create(body)
-    notify.success(isEdit.value ? 'Category updated' : 'Category created')
-    emit('close', true)
-  }
-  catch (error) {
-    notify.error('Could not save category', error)
-  }
-  finally {
-    saving.value = false
-  }
+  const result = isEdit.value
+    ? await update.execute({ id: props.category!.id!, body }, overrides)
+    : await create.execute(body, overrides)
+  saving.value = false
+
+  if (result.ok) emit('close', true)
 }
 </script>
 
 <template>
-  <UModal
-    :title="isEdit ? 'Edit category' : 'New category'"
-    :dismissible="!saving"
-  >
+  <UModal :title="isEdit ? 'Edit category' : 'New category'">
     <template #body>
       <UForm
         id="category-form"
         :schema="categoryFormSchema"
         :state="state"
+        :disabled="saving"
         class="space-y-4"
         @submit="onSubmit"
       >
@@ -92,12 +109,17 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
     </template>
 
     <template #footer>
-      <div class="flex w-full justify-end gap-2">
+      <div class="flex w-full items-center justify-end gap-2">
+        <span
+          v-if="saving"
+          class="mr-auto text-xs text-muted"
+        >
+          You can close this; saving continues in the background.
+        </span>
         <UButton
-          label="Cancel"
+          :label="saving ? 'Close' : 'Cancel'"
           color="neutral"
           variant="outline"
-          :disabled="saving"
           @click="emit('close', false)"
         />
         <UButton

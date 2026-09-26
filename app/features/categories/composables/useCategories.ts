@@ -1,34 +1,86 @@
-import type { CategoryRecordCreation, CategoryRecordUpdate, GetCategoriesPageData } from '~/generated/api'
+import type { CategoryRecordCreation, CategoryRecordUpdate, CategoryResponse, GetCategoriesPageData } from '~/generated/api'
 import { createCategory1, deleteCategory1, getCategoriesPage, updateCategory1 } from '~/generated/api'
 
 export type CategoryListQuery = NonNullable<GetCategoriesPageData['query']>
 
+const NOUN: [string, string] = ['category', 'categories']
+
+/** Features whose cached data shows categories (products display their category). */
+const AFFECTED = ['categories', 'products']
+
 /** Paginated category list. Refetches whenever `query` changes. */
 export function useCategoryList(query: MaybeRefOrGetter<CategoryListQuery>) {
-  return useAsyncData('categories:list', () => unwrap(getCategoriesPage({ query: toValue(query) })), {
+  return useApiQuery('categories:list', () => unwrap(getCategoriesPage({ query: toValue(query) })), {
     watch: [() => ({ ...toValue(query) })],
   })
 }
 
-/** Category mutations. Each one refreshes cached data that shows categories. */
+/**
+ * Category mutations. State is shared app-wide by mutation id, so e.g. a row knows it's
+ * being saved even after the edit modal was closed.
+ */
 export function useCategoryMutations() {
-  // Products display their category, so their lists go stale too.
-  const refresh = () => invalidate('categories', 'products')
+  const create = useMutation(
+    (body: CategoryRecordCreation) => unwrap(createCategory1({ body })),
+    {
+      id: 'categories:create',
+      // Same name in flight = same submission (double submit); different names run in parallel.
+      key: body => body.categoryName?.trim().toLowerCase() ?? '',
+      successMessage: (_, body) => `Category "${body.categoryName}" created`,
+      errorMessage: body => `Could not create "${body.categoryName}"`,
+      invalidate: AFFECTED,
+    },
+  )
+
+  const update = useMutation(
+    ({ id, body }: { id: number, body: CategoryRecordUpdate }) => unwrap(updateCategory1({ path: { id }, body })),
+    {
+      id: 'categories:update',
+      key: ({ id }) => id,
+      successMessage: (_, { body }) => `Category "${body.categoryName}" updated`,
+      errorMessage: ({ body }) => `Could not save "${body.categoryName}"`,
+      invalidate: AFFECTED,
+    },
+  )
+
+  const remove = useMutation(
+    (category: CategoryResponse) => unwrap(deleteCategory1({ path: { id: category.id! } })),
+    {
+      id: 'categories:remove',
+      key: category => category.id!,
+      removes: true,
+      confirm: category => ({
+        title: `Delete "${category.categoryName}"?`,
+        description: 'This cannot be undone.',
+        confirmLabel: 'Delete',
+        danger: true,
+      }),
+      successMessage: (_, category) => `Category "${category.categoryName}" deleted`,
+      errorMessage: category => `Could not delete "${category.categoryName}"`,
+      invalidate: AFFECTED,
+      batch: {
+        noun: NOUN,
+        verb: ['Deleting', 'deleted'],
+        confirm: categories => ({
+          title: `Delete ${pluralize(categories.length, NOUN)}?`,
+          description: `${previewList(categories.map(c => c.categoryName ?? `#${c.id}`))}. This cannot be undone.`,
+          confirmLabel: 'Delete',
+          danger: true,
+        }),
+        // Sub-categories first, so a main category isn't rejected for still having children.
+        phases: categories => [
+          categories.filter(c => c.mainCategoryId !== undefined),
+          categories.filter(c => c.mainCategoryId === undefined),
+        ],
+      },
+    },
+  )
 
   return {
-    async create(body: CategoryRecordCreation) {
-      const category = await unwrap(createCategory1({ body }))
-      await refresh()
-      return category
-    },
-    async update(id: number, body: CategoryRecordUpdate) {
-      const category = await unwrap(updateCategory1({ path: { id }, body }))
-      await refresh()
-      return category
-    },
-    async remove(id: number) {
-      await unwrap(deleteCategory1({ path: { id } }))
-      await refresh()
-    },
+    create,
+    update,
+    remove,
+    /** Any operation in flight for this category: disable its row actions. */
+    isBusy: (id: number) => update.isPending(id) || remove.isPending(id),
   }
 }

@@ -113,6 +113,11 @@ export interface MutationDeps<TInput, TResult> {
 
 const SINGLE = '__single__'
 
+/** Removes a key from a (reactive) record; Vue tracks `deleteProperty`. */
+function forget(record: Record<string, unknown>, key: string) {
+  Reflect.deleteProperty(record, key)
+}
+
 function resolve<T, A extends unknown[]>(value: MaybeFn<T, A> | undefined, ...args: A): T | undefined {
   return typeof value === 'function' ? (value as (...a: A) => T)(...args) : value
 }
@@ -132,7 +137,7 @@ export function createMutation<TInput, TResult>(
     deps.invalidate(options.invalidate)
       .catch(() => {})
       .finally(() => {
-        for (const key of removedKeys) delete state.removed[key]
+        for (const key of removedKeys) forget(state.removed, key)
       })
   }
 
@@ -146,7 +151,7 @@ export function createMutation<TInput, TResult>(
     if (key in state.inFlight) return { ok: false, status: 'skipped' }
 
     state.inFlight[key] = input
-    delete state.errors[key]
+    forget(state.errors, key)
     deps.onPendingChange?.(1)
     try {
       const data = await fn(input)
@@ -172,7 +177,7 @@ export function createMutation<TInput, TResult>(
       return { ok: false, status: 'error', error }
     }
     finally {
-      delete state.inFlight[key]
+      forget(state.inFlight, key)
       deps.onPendingChange?.(-1)
     }
   }
@@ -287,12 +292,12 @@ export function createMutation<TInput, TResult>(
     /** Clears recorded errors/results (e.g. when a form reopens). */
     reset: (key?: MutationKey) => {
       if (key === undefined) {
-        for (const k of Object.keys(state.errors)) delete state.errors[k]
+        for (const k of Object.keys(state.errors)) forget(state.errors, k)
         state.lastError = undefined
         state.lastResult = undefined
       }
       else {
-        delete state.errors[toKey(key)]
+        forget(state.errors, toKey(key))
       }
     },
   }

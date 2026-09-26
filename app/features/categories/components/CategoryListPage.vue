@@ -11,7 +11,16 @@ const { page, pageSize, filters, query } = usePaginatedQuery({
   type: ANY as 'MAIN' | 'SUB' | Any,
 })
 
-const { data, status: fetchStatus, error, refresh } = useCategoryList(query)
+const { data, loading, refreshing, error, refresh } = useCategoryList(query)
+const { remove, isBusy } = useCategoryMutations()
+
+// Deleted rows disappear immediately, before the refreshed list arrives.
+const rows = computed(() => (data.value?.content ?? []).filter(c => !remove.isRemoved(c.id!)))
+
+// Deleting the last rows of the last page: step back to a page that exists.
+watch(() => data.value?.totalPages, (totalPages) => {
+  if (totalPages !== undefined && page.value > Math.max(totalPages, 1)) page.value = Math.max(totalPages, 1)
+})
 
 const typeItems: SelectItem[] = [
   { label: 'All types', value: ANY },
@@ -19,8 +28,18 @@ const typeItems: SelectItem[] = [
   { label: 'Sub', value: 'SUB' },
 ]
 
+// --- Selection & bulk actions ---
+const selection = useTableSelection(rows, c => c.id!, { resetOn: [query] })
+
+async function removeSelected() {
+  const result = await remove.executeMany(selection.selected)
+  // Keep only the rows that still need attention selected.
+  selection.select([...result.failed.map(f => f.input.id!), ...result.notStarted.map(c => c.id!)])
+}
+
 // --- Table ---
 const columns: TableColumn<CategoryResponse>[] = [
+  { id: 'select' },
   { accessorKey: 'categoryName', header: 'Name' },
   { id: 'parent', header: 'Parent' },
   { accessorKey: 'status', header: 'Status' },
@@ -30,36 +49,13 @@ const columns: TableColumn<CategoryResponse>[] = [
 function rowActions(category: CategoryResponse): DropdownMenuItem[] {
   return [
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openForm(category) },
-    { label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => onDelete(category) },
+    { label: 'Delete', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => remove.execute(category) },
   ]
 }
 
-// --- Actions ---
 const formModal = useOverlay().create(CategoryFormModal)
-const confirm = useConfirm()
-const notify = useNotify()
-const { remove } = useCategoryMutations()
-
 function openForm(category?: CategoryResponse) {
   formModal.open({ category })
-}
-
-async function onDelete(category: CategoryResponse) {
-  const confirmed = await confirm({
-    title: `Delete "${category.categoryName}"?`,
-    description: 'This cannot be undone.',
-    confirmLabel: 'Delete',
-    danger: true,
-  })
-  if (!confirmed) return
-
-  try {
-    await remove(category.id!)
-    notify.success('Category deleted')
-  }
-  catch (error) {
-    notify.error('Could not delete category', error)
-  }
 }
 </script>
 
@@ -97,6 +93,25 @@ async function onDelete(category: CategoryResponse) {
             :items="typeItems"
             class="w-36"
           />
+          <UIcon
+            v-if="refreshing"
+            name="i-lucide-loader-circle"
+            class="size-4 animate-spin text-muted"
+          />
+        </template>
+        <template #right>
+          <BulkActionsBar
+            :count="selection.count"
+            @clear="selection.clear()"
+          >
+            <UButton
+              label="Delete"
+              icon="i-lucide-trash-2"
+              color="error"
+              variant="subtle"
+              @click="removeSelected"
+            />
+          </BulkActionsBar>
         </template>
       </UDashboardToolbar>
     </template>
@@ -111,11 +126,29 @@ async function onDelete(category: CategoryResponse) {
 
       <UTable
         v-else
-        :data="data?.content ?? []"
+        v-model:row-selection="selection.rowSelection"
+        :get-row-id="selection.getRowId"
+        :data="rows"
         :columns="columns"
-        :loading="fetchStatus === 'pending'"
+        :loading="loading"
+        :meta="{ class: { tr: row => (isBusy(row.original.id!) ? 'opacity-50 pointer-events-none' : '') } }"
         empty="No categories found."
       >
+        <template #select-header="{ table }">
+          <UCheckbox
+            :model-value="table.getIsSomePageRowsSelected() ? 'indeterminate' : table.getIsAllPageRowsSelected()"
+            aria-label="Select all"
+            @update:model-value="value => table.toggleAllPageRowsSelected(!!value)"
+          />
+        </template>
+        <template #select-cell="{ row }">
+          <UCheckbox
+            :model-value="row.getIsSelected()"
+            aria-label="Select row"
+            @update:model-value="value => row.toggleSelected(!!value)"
+          />
+        </template>
+
         <template #parent-cell="{ row }">
           {{ row.original.mainCategory?.categoryName ?? '—' }}
         </template>
@@ -125,7 +158,14 @@ async function onDelete(category: CategoryResponse) {
         </template>
 
         <template #actions-cell="{ row }">
+          <UIcon
+            v-if="isBusy(row.original.id!)"
+            name="i-lucide-loader-circle"
+            class="size-5 animate-spin text-muted"
+            aria-label="Working…"
+          />
           <UDropdownMenu
+            v-else
             :items="rowActions(row.original)"
             :content="{ align: 'end' }"
           >
