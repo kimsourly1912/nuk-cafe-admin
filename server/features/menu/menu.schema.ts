@@ -1,11 +1,12 @@
 import { sql } from 'drizzle-orm'
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { schema as authSchema } from '#auth/schema'
 import { newId } from '../../utils/ids'
 
 /**
  * The menu (docs/server/data-model.md → Menu, D44): categories (3.1), options (3.3), add-ons (3.4),
- * items (3.5), add-ons on items (3.5b), availability rules (3.7); sold-out joins in 3.6. Registered
+ * items (3.5), add-ons on items (3.5b), sold-out per branch (3.6), availability rules (3.7). Registered
  * with NuxtHub through the `hub:db:schema:extend` hook; column names are snake_case in SQL.
  */
 
@@ -274,4 +275,23 @@ export const menuCategoryAvailability = sqliteTable('menu_category_availability'
 }, t => [
   primaryKey({ columns: [t.categoryId, t.ruleId] }),
   index('menu_category_availability_rule_idx').on(t.ruleId),
+])
+
+/**
+ * The counter's "86" switch (D64): one version of an item sold out at one branch ("Large" gone,
+ * "Regular" still sold). Brand-wide menu, per-branch state. A row stays after it's switched back
+ * on (`soldOut: false`), recording who did it. `updatedBy` is plain text, like the audit trail's
+ * actor, so the record survives if the account is removed.
+ */
+export const branchItemStates = sqliteTable('branch_item_states', {
+  // A branch is a Better Auth organization. '#auth/schema' declares only the core tables by name;
+  // its `schema` object holds every one (plugins included).
+  branchId: text().notNull().references(() => authSchema!.organization.id, { onDelete: 'cascade' }),
+  variationId: text().notNull().references(() => menuItemVariations.id, { onDelete: 'cascade' }),
+  soldOut: integer({ mode: 'boolean' }).notNull().default(false),
+  updatedBy: text().notNull(),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  primaryKey({ columns: [t.branchId, t.variationId] }),
+  index('branch_item_states_variation_idx').on(t.variationId),
 ])

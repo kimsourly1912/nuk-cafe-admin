@@ -71,6 +71,13 @@
       "when": 1790524908112,
       "tag": "0009_menu_availability",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1790527461873,
+      "tag": "0010_branch_item_states",
+      "breakpoints": true
     }
   ]
 }

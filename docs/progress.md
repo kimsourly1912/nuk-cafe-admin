@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-27 (step 3.7: availability rules, D63; step 3.6 is still open)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-27 (step 3.6: sold out per branch, D64)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -119,7 +119,7 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | 3.4 ✅ | **Add-ons library:** modifier groups, modifiers with default prices, "used by N items" | Tests |
 | 3.5a ✅ | **Menu items:** item CRUD, option sets (max 2) with the version price grid, draft / active / archived, order within a category, the item side of "items only in leaves" | Tests incl. grid regeneration and version conflicts |
 | 3.5b ✅ | **Add-ons on items:** add-on groups on an item with per-item rule and price overrides; "used by N items" for add-on groups | Tests |
-| 3.6 | **Sold-out per branch:** `branch_item_states` + counter route | Tests |
+| 3.6 ✅ | **Sold-out per branch:** `branch_item_states` + counter route (D64); stays until switched back (Q37) | Tests |
 | 3.7 ✅ | **Availability rules** (overnight windows; no rule = always, several = any; D45, D63): the rules library, rules on items and categories, the pure window check. Built before 3.6 (they don't depend on each other) | Tests of the window rules |
 | 3.8 | **Public menu API** (cached, purged on writes); **remove the old menu tables and `/api/v1` routes** | Public menu shows only active, available, in-stock versions |
 
@@ -184,6 +184,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 | Q4 | Staging and production domains, and the email sending domain | 2.1, 8.2 | |
 | Q24 | Acceptable data loss and downtime (RPO/RTO), who receives alerts and when, data retention and erasure periods | 8.2 | |
 | Q36 | Can staff cancel an order that is **already paid** (money handed back at the counter), or does that always need an admin refund? | 6.3 | Staff and managers may cancel a paid order before it's ready, recording the cash/KHQR returned; after that, admin refund only |
+| Q37 | Should a sold-out switch **reset by itself** at the start of each business day, or stay until staff switch it back? | Nothing now (built as "stays", D64); a reset needs branch hours (5.1) | Stay until switched back; revisit when the counter screen is used |
 
 ## Known limitations
 
@@ -199,7 +200,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 125, server 342, e2e 130).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 125, server 355, e2e 130).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.

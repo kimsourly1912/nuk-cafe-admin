@@ -8,3 +8,5 @@ export { archiveItem, createItem, getItem, listItems, publishItem, reorderItems,
 export { ItemErrorCodes } from './items.errors'
 export { archiveAvailabilityRule, createAvailabilityRule, getAvailabilityRule, listAvailabilityRules, restoreAvailabilityRule, updateAvailabilityRule } from './availability.service'
 export { AvailabilityErrorCodes } from './availability.errors'
+export { listSoldOut, setSoldOut } from './soldout.service'
+export { SoldOutErrorCodes } from './soldout.errors'
