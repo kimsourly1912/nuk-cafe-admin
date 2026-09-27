@@ -1,5 +1,5 @@
-import { sql } from 'drizzle-orm'
-import type { SQL } from 'drizzle-orm'
+import { getTableColumns, sql } from 'drizzle-orm'
+import type { SQL, Table } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 
@@ -36,6 +36,39 @@ export function requireOneChange(db: Db): Statement {
 /** A guard statement: aborts the batch unless the scalar subquery `count` equals `expected`. */
 export function requireCount(db: Db, count: SQL, expected: number): Statement {
   return guard(db, sql`(${count}) = ${expected}`)
+}
+
+/**
+ * D1 refuses a statement with more than 100 bound parameters ("too many SQL variables"; checked on
+ * staging, D62). libsql allows 32,766, so the test database enforces D1's limit
+ * (`server/tests/support/db.ts`). Any list that can grow goes through the helpers below.
+ */
+export const MAX_PARAMS = 100
+/** Ids per `IN (…)` list, leaving room for the statement's other parameters. */
+export const IDS_PER_STATEMENT = 90
+
+/** `list` in consecutive pieces of at most `size`. */
+export function chunk<T>(list: readonly T[], size = IDS_PER_STATEMENT): T[][] {
+  const pieces: T[][] = []
+  for (let i = 0; i < list.length; i += size) pieces.push(list.slice(i, i + size))
+  return pieces
+}
+
+/**
+ * Runs a read for `ids` in pieces small enough for D1 and joins the rows. Rows keep their order
+ * within a piece only: sort afterwards, or group by the id you passed.
+ */
+export async function readInChunks<T>(ids: readonly string[], read: (ids: string[]) => Promise<T[]>): Promise<T[]> {
+  const pieces = await Promise.all(chunk(ids).map(read))
+  return pieces.flat()
+}
+
+/**
+ * Rows for a multi-row insert, in pieces that stay under D1's limit: each row binds at most one
+ * parameter per column of the table.
+ */
+export function insertPieces<T>(table: Table, rows: readonly T[]): T[][] {
+  return chunk(rows, Math.max(1, Math.floor(MAX_PARAMS / Object.keys(getTableColumns(table)).length)))
 }
 
 function messageChain(error: unknown): string[] {

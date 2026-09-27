@@ -105,7 +105,7 @@ export async function createModifierGroup(db: Db, actor: Actor, input: CreateMod
   const now = new Date()
   const statements: Statement[] = [
     repo.insertGroupStatement(db, { id, name: input.name, minSelect: input.minSelect, maxSelect: input.maxSelect, now }),
-    repo.insertModifiersStatement(db, input.modifiers.map((m, i) => ({ id: newId(), groupId: id, name: m.name, priceDeltaMinor: m.priceDeltaMinor, isDefault: m.isDefault, sortOrder: i + 1 })), now),
+    ...repo.insertModifiersStatements(db, input.modifiers.map((m, i) => ({ id: newId(), groupId: id, name: m.name, priceDeltaMinor: m.priceDeltaMinor, isDefault: m.isDefault, sortOrder: i + 1 })), now),
     audit(db, actor, 'create', id, { modifiers: input.modifiers.length }),
   ]
   try {
@@ -167,7 +167,7 @@ export async function addModifier(db: Db, actor: Actor, groupId: string, input: 
   await runGroupBatch(db, groupId, input.version, [
     repo.touchGroupStatement(db, groupId, input.version, now),
     requireOneChange(db),
-    repo.insertModifiersStatement(db, [{ id: modifierId, groupId, name: input.name, priceDeltaMinor: input.priceDeltaMinor, isDefault: input.isDefault, sortOrder: await repo.nextModifierOrder(db, groupId) }], now),
+    ...repo.insertModifiersStatements(db, [{ id: modifierId, groupId, name: input.name, priceDeltaMinor: input.priceDeltaMinor, isDefault: input.isDefault, sortOrder: await repo.nextModifierOrder(db, groupId) }], now),
     repo.requireSelectionRules(db, groupId),
     audit(db, actor, 'modifier.add', groupId, { modifierId, priceDeltaMinor: input.priceDeltaMinor }),
   ], () => modifierNameTaken(input.name))

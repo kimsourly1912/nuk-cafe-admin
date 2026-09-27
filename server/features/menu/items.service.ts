@@ -183,7 +183,7 @@ function gridStatements(db: Db, itemId: string, grid: GridPlan, now: Date): Stat
     ...grid.cells.flatMap(cell => cell.id
       ? [repo.updateVariationStatement(db, itemId, cell.id, { priceMinor: cell.priceMinor, status: cell.status, sortOrder: cell.sortOrder }, now)]
       : repo.insertVariationStatements(db, itemId, { ...cell, id: newId() }, now)),
-    ...(grid.retire.length ? [repo.retireVariationsStatement(db, itemId, grid.retire, now)] : []),
+    ...repo.retireVariationsStatements(db, itemId, grid.retire, now),
   ]
 }
 
@@ -238,7 +238,7 @@ async function planAddOns(db: Db, input: ItemModifierGroupsInput, current?: AddO
 /** The guards for a planned add-on list: whatever it newly uses is still active. */
 const addOnGuards = (db: Db, plan: AddOnPlan | undefined): Statement[] => [
   ...(plan?.newGroupIds.length ? [repo.requireActiveGroups(db, plan.newGroupIds)] : []),
-  ...(plan?.newPricedIds.length ? [repo.requireActiveModifiers(db, plan.newPricedIds)] : []),
+  ...(plan ? repo.requireActiveModifiers(db, plan.newPricedIds) : []),
 ]
 
 const audit = (db: Db, actor: Actor, action: string, itemId: string, metadata: Record<string, unknown>) =>
