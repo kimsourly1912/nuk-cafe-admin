@@ -10,6 +10,7 @@
 - [Scheduled jobs](#scheduled-jobs)
 - [Email](#email)
 - [Monitoring](#monitoring)
+- [Platform facts](#platform-facts): what the stack does and doesn't do for us
 
 ---
 
@@ -67,7 +68,7 @@ Production: manual workflow from a commit that is live on staging: export the da
 - **D1 Time Travel**: point-in-time restore for the retention window of the Cloudflare plan. Note the bookmark before every production migration.
 - **R2**: menu images are re-uploadable; no separate backup at launch.
 - **Restore drill** on staging before launch and then yearly: restore to a bookmark, check the app works, write down how long it took.
-- [Open]: acceptable data loss and downtime (RPO/RTO) and the Cloudflare plan (Time Travel window).
+- [Open] Q24: acceptable data loss and downtime (RPO/RTO) and the Cloudflare plan (Time Travel window).
 
 ## Scheduled jobs
 
@@ -79,7 +80,7 @@ Nitro tasks in `server/tasks/`, triggered by Cloudflare cron (`nitro.scheduledTa
 | `platform:expire-idempotency-keys` | daily | Removes expired idempotency keys |
 | `platform:deliver-outbox` | every minute | Sends pending outbox messages with retries and backoff |
 | `loyalty:expire-vouchers` | daily | Marks vouchers past `expires_at` as expired |
-| `orders:expire-unpaid` | [Open] | Cancels unpaid orders after the agreed time |
+| `orders:expire-unpaid` | every 5 minutes | Cancels orders still unpaid 30 minutes after placing (D45) |
 
 ## Email
 
@@ -93,4 +94,22 @@ Nitro tasks in `server/tasks/`, triggered by Cloudflare cron (`nitro.scheduledTa
 - **Workers Logs** for structured logs (see [security.md → Logging](./security.md#logging-and-privacy)); every error log has the request id.
 - `GET /api/public/health` answers 200 when the Worker can reach D1 (no details).
 - Alerts (Cloudflare notifications) on a spike of 5xx responses and on Worker exceptions.
-- [Open]: who receives alerts, and during which hours.
+- [Open] Q24: who receives alerts, and during which hours.
+
+## Platform facts
+
+Verified behavior of the stack that the rest of the standard relies on. Re-check when upgrading NuxtHub, Better Auth or Wrangler.
+
+| Fact | Consequence |
+|---|---|
+| In `nuxt.config.ts`, `@nuxthub/core` must come **before** `@nuxtjs/better-auth` in `modules` | Better Auth then generates its tables into NuxtHub's schema and migrations |
+| Better Auth on Workers needs `NUXT_BETTER_AUTH_SECRET` and `NUXT_PUBLIC_SITE_URL` | Set both in every deployed environment |
+| NuxtHub KV lacks the atomic operations Better Auth's secondary storage needs | Sessions and auth rate limits stay in the database (`rateLimit.storage: 'database'`) |
+| Workers builds **don't** apply D1 migrations | CI applies them as its own step before deploying ([Deploys](#deploys)) |
+| D1 **always enforces foreign keys** | Every `ON DELETE` is chosen on purpose: `restrict` for referenced records, `cascade` only for private children |
+| D1 has **no interactive transactions**; a `batch` is atomic, but a conditional `UPDATE` matching no row does **not** fail it | Multi-statement writes are one batch with explicit guard statements ([architecture.md → Atomic writes](./architecture.md#atomic-writes)) |
+| An R2 upload and a D1 write can't share a transaction | Uploads start `temporary` and are attached by a later write; orphans are cleaned by a task |
+| D1 has per-database size and throughput limits | Check query plans and rows read before adding caches; index every filter used by a list |
+| Local dev uses libsql; the server tests use in-memory libsql built from the migrations | The batch guards are proven on libsql; staging (step 2.2) proves them on D1 |
+
+Sources: [NuxtHub database](https://hub.nuxt.com/docs/database), [NuxtHub migrations](https://hub.nuxt.com/docs/database/migrations), [Nuxt Better Auth + NuxtHub](https://better-auth.nuxt.dev/integrations/nuxthub), [D1 foreign keys](https://developers.cloudflare.com/d1/sql-api/foreign-keys/), [D1 batch](https://developers.cloudflare.com/d1/worker-api/d1-database/), [D1 limits](https://developers.cloudflare.com/d1/platform/limits/).

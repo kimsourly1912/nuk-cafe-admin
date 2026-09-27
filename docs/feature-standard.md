@@ -1,6 +1,6 @@
 # Feature development standard
 
-> **Transition note (2026-09-26):** this standard describes the preserved Spring-backed UI. Its generated SDK and network layer have been removed. For new full stack features, define local data and route contracts first using [the system blueprint](plans/system-blueprint.md); apply the UI patterns here when those routes are ready.
+> **Scope:** this is the **app** half of building a feature (screens, composables, forms, pickers, browser tests). The **server** half (routes, the feature's service and repository, tables, permissions) follows the [server standard](server/README.md). We own the API, so a contract question is settled by writing the contract; only **business rules** wait for the project owner.
 
 How every new feature (Schedules, Products, Rewards, …) is planned, built and verified, so they behave the same way. This page **links** to the rules and APIs rather than repeating them:
 
@@ -17,7 +17,7 @@ Every statement here is labelled:
 | **[Required]** | A convention every feature must follow |
 | **[Proposed]** | Not built. Build it when the first feature needs it, following [the roadmap](#7-upcoming-reusable-capabilities) |
 | **[Choice]** | A reversible presentation or implementation choice, made by the developer within existing requirements and recorded in the plan (e.g. server order with no sort UI) |
-| **[Open]** | An unresolved backend, business or authorization contract. **Developers don't decide these**: see [Open questions: choices vs contracts](#open-questions-choices-vs-contracts) |
+| **[Open]** | An unresolved business or authorization rule. **Developers don't decide these**: see [Open questions: choices vs contracts](#open-questions-choices-vs-contracts) |
 
 ### Open questions: choices vs contracts
 
@@ -25,24 +25,24 @@ Not every unknown is the same kind.
 
 **A. Reversible choices [Choice].** Presentation or implementation details that existing requirements leave open, and that can be changed later without migrating data or breaking an agreement. Pick a reasonable option, record it in the plan, and keep it easy to change (a constant, a prop). Examples: server ordering with no sort UI; a configurable size threshold for switching a picker to remote search; the order in which parts of a feature are built.
 
-**B. Unresolved contracts [Open].** Backend semantics, business rules and authorization. **Don't invent behavior for these.** Examples:
-- omitted vs `null` vs empty values in updates;
-- removing a relationship or an image, and cleaning up uploads;
-- currency units and rounding;
-- schedule timezone, time format and whether overnight ranges are valid;
-- whether inactive records may be selected;
-- roles and permissions;
-- whether translations may be edited.
+**B. Unresolved business rules [Open].** Business rules and authorization that only the project owner can decide. **Don't invent behavior for these.** Examples:
+- rounding of points, tax and service charge;
+- whether availability windows may run overnight, and what "no rule" means;
+- whether inactive records may be selected for new relationships;
+- which role may do what (the `?` cells in [server: roles](server/security.md#roles-and-permissions));
+- whether translations exist and who edits them.
+
+API mechanics (absent vs `null`, versions, error codes, ids, units) are **not** open: the [server standard](server/README.md) defines them.
 
 For each [Open] item:
-1. **Record the exact question and who can answer it** (backend team for API semantics, project owner for business rules and permissions) in the plan and in [progress.md → Open questions](progress.md#open-questions--waiting-on-others).
-2. **Settle it with authoritative evidence or a decision.** Evidence means the API contract (OpenAPI spec, backend documentation) or a verified real-API check. Existing frontend code and unit tests are **not** evidence of backend behavior.
+1. **Record the exact question and who can answer it** (the project owner for business rules and permissions; API semantics are ours to define in the server standard) in the plan and in [progress.md → Open questions](progress.md#open-questions--waiting-on-others).
+2. **Settle it with a decision** recorded in [decisions.md](decisions.md) and, for the server, in the [server standard](server/README.md). Server behavior is evidenced by the feature's server tests and a real-server check, not by frontend code.
 3. **Continue the work that doesn't depend on it.** One open question doesn't stop a feature.
 4. **Defer the affected behavior**: don't offer it in the UI, or leave it visibly incomplete, and say so in progress.md.
 
 An illustrative proposal may be written down, labelled **awaiting approval**. It is not an implementation instruction.
 
-Evidence levels follow [progress.md → Verification levels](progress.md#verification-levels). Note that **e2e tests are browser-mock evidence** (real Chrome, mocked API). **No authenticated flow has been verified against the real API yet.**
+Evidence levels follow [progress.md → Verification levels](progress.md#verification-levels). Note that **e2e tests are browser-mock evidence** (real Chrome, mocked API); **server** and **real-server** evidence come from the server tests and from running against `pnpm dev` (or staging).
 
 ---
 
@@ -93,7 +93,7 @@ Evidence levels follow [progress.md → Verification levels](progress.md#verific
 - Anything beyond the defaults (cross-tab invalidation, refetch on return/reconnect)? e.g. screen-specific polling for a live screen, with the reason (D22).
 
 ## Edge cases and verification
-- Risks specific to this feature, and the test that covers each (unit / e2e / real-API).
+- Risks specific to this feature, and the test that covers each (unit / server / e2e / real-server).
 ```
 
 ---
@@ -114,15 +114,15 @@ Where each concern belongs:
 | Concern | Where | Notes |
 |---|---|---|
 | Screens and presentation | `components/<Feature>ListPage.vue`, `<Feature>FormModal.vue` (or a page form) | Private. Only compose building blocks, with no request or error logic of their own |
-| Form rules (validation, messages) | `schemas/<feature>-form.ts`: Valibot schema | Pure. The generated request schemas carry no rules ([D14](decisions.md)) |
-| Form ↔ request mapping | the same file: `to<Feature>Form`, `to<Feature>Request` | Pure and unit-tested. The one place that knows the backend's update semantics |
+| Form rules (validation, messages) | `schemas/<feature>-form.ts`: Valibot schema | Pure. Mirrors the server's contract (`shared/contracts`) with user-facing messages ([D14](decisions.md)) |
+| Form ↔ request mapping | the same file: `to<Feature>Form`, `toCreate<Feature>Body`, `toUpdate<Feature>Body` | Pure and unit-tested. The one place that knows the API's update rules (PATCH with `version`, absent keeps, `null` clears) |
 | Feature behavior (reads, writes, keys, busy state) | `composables/use<Feature>s.ts`: `use<Feature>List`, `use<Feature>Mutations` | Private |
 | Data for other features' pickers | `composables/use<Feature>Options.ts` + `components/<Feature>Select.vue` | **Public** (exported). Must not import other features |
 | Sidebar entry | `navigation.ts`, grouped in `app/utils/navigation.ts` | |
 | Shared infrastructure | root `components/`, `composables/`, `utils/` (auto-imported) | Only with two or more consumers, or the app shell |
 | App-wide behavior | `layouts/`, `middleware/`, `plugins/` | Features don't re-implement it ([app-behavior.md](reference/app-behavior.md)) |
 
-Not wanted: generic CRUD engines, repository or service layers over the SDK, new state libraries, or wrappers that only rename Nuxt UI components.
+Not wanted in the app: generic CRUD engines, repository or service layers (the server has its own, per the server standard), new state libraries, or wrappers that only rename Nuxt UI components.
 
 ---
 
@@ -163,13 +163,13 @@ Not wanted: generic CRUD engines, repository or service layers over the SDK, new
 | Load fails | Alert with the safe message + Retry | `ApiErrorAlert` | e2e |
 | Search, filters, page | Search as you type, page resets on filter change, state in the URL (reload, Back and shared links work) | `usePaginatedQuery`, `SearchInput` | e2e. **Limits:** page size fixed (20) and not in the URL; string/number filters only; one URL-synced list per page |
 | Responses out of order | A slower response to an older filter never replaces newer results, and never delays the newer request | `useApiQuery` (`watch` → cancel, D30) | e2e (fails without the fix) |
-| Ordering | Server order | none | **[Choice]**: server order, no sort UI. Categories' list API has no sort parameter. Schedules' `sortBy`/`sortDir` values are undocumented (**[Open]**, backend team), so no sort UI until they're known |
+| Ordering | Server order | none | **[Choice]**: server order by default; a sort control only where the route supports `sort` ([server conventions](server/architecture.md#conventions)) |
 | Filter or page change with rows selected | Selection clears | `useTableSelection({ resetOn: [query] })` | e2e |
 | Conflicting actions on one item | **Required:** actions that conflict on the same item (update vs delete, delete vs delete) never overlap. Eligibility is **checked and reserved immediately before each request starts**, with no asynchronous gap between check and reservation. So an item that became busy while a confirmation was open, or while it waited in a batch queue, is not sent. Independent items still run concurrently. Prefiltering (e.g. by `isBusy`) before confirming is only a preliminary UX check | **Existing:** the engine checks and reserves the key **and the record `lock`** synchronously right before each request, so conflicting mutations that share a lock never overlap, and different records run in parallel ([details](reference/mutations.md#concurrency-guarantee-and-current-limits), D28). `isBusy(id)` is the row display (dimmed, spinner). Skipped bulk items are reported and stay selected | **Fixed in Categories (2026-09-26):** update and remove share `category:<id>`. Unit tests (lock taken during confirmation, while queued); e2e: bulk delete during a pending edit skips that row (fails without `lock`). **Every new feature must declare `lock`** on mutations that can conflict |
 | Bulk action | Floating `<BulkActionsBar>`. One confirmation, limited concurrency, progress toast with **Stop**, one summary ("3 deleted, 1 failed", reasons grouped), **Retry failed**, failed, skipped and unstarted rows stay selected | `useMutation` `batch` + `executeMany` | e2e: partial failure, Stop (running deletes finish, no more start), Retry failed (no second confirmation) |
 | Last item on a page deleted | Step back to the last existing page | A `watch` on `totalPages` in each list page ([recipe](reference/data-fetching.md#recipe-step-back-when-the-last-page-empties)) | e2e (Categories). **[Proposed]**: move into `usePaginatedQuery` when the second list needs it |
-| Another staff member changed the data | Picked up by the freshness rules | Freshness plugin | e2e. Another device's change appears only on return to the tab or on navigation (no backend push) |
-| Two staff edit the same item | Not agreed | none | **No client-side conflict handling is implemented.** Category responses carry no version or `updatedAt` in the generated types. How the backend handles concurrent updates is **unverified** (**[Open]**, backend team) |
+| Another staff member changed the data | Picked up by the freshness rules | Freshness plugin | e2e. Another device's change appears only on return to the tab or on navigation (no server push) |
+| Two staff edit the same item | The second save gets **409 `VERSION_CONFLICT`**: the form stays open with the server's message; the user closes and reopens to load the new version | The update body carries the `version` the form opened with ([server: Versions](server/architecture.md#versions-optimistic-concurrency)) | Server race tests; e2e (a 409 keeps the input and shows the message) |
 
 ---
 
@@ -179,29 +179,25 @@ Not wanted: generic CRUD engines, repository or service layers over the SDK, new
 
 1. `<feature>FormSchema`: a Valibot schema with user-facing messages for required fields, lengths and formats.
 2. `to<Feature>Form(existing?)`: the initial state. It holds defaults for create and the record's values for edit.
-3. `to<Feature>Request(form, existing?)`: the request body. It **copies fields the form doesn't edit** from `existing` (`nameI18n`, `sortOrder`, …). It is the only place that encodes the backend's update semantics.
-4. The form component uses the feature's mutations and `useModalUnsavedChanges` / `useUnsavedChanges`. There is no generic form engine: each resource's update semantics may differ.
+3. `toCreate<Feature>Body(form)` and `toUpdate<Feature>Body(form, existing)`: the request bodies. The update body carries the `version` the form opened with and the fields the form edits (fields it doesn't edit are simply absent, which the API keeps). They are the only place that encodes the API's update rules.
+4. The form component uses the feature's mutations and `useModalUnsavedChanges` / `useUnsavedChanges`. There is no generic form engine.
 
-### Values: omitted, `undefined`, `null`, empty
+### Values: absent, `null`, empty
 
-Possible encodings, whose meaning is set by each resource's contract:
+The rules are the same for every route ([server standard → Writing data](server/architecture.md#writing-data)):
 
-| In the request body | What is sent | Meaning to the backend |
-|---|---|---|
-| key absent / `undefined` | nothing (JSON drops `undefined`) | per resource: "keep" or "clear"? |
-| `null` | `null` | per resource: accepted as "clear"? |
-| `''` / `[]` | empty value | per resource: accepted, and does it mean "clear"? |
+| In a PATCH body | Meaning |
+|---|---|
+| key absent (`undefined`) | **keep** the stored value |
+| `null` | **clear** a nullable field (e.g. no parent, no image) |
+| `''` | an empty string where the contract allows one (e.g. an empty description); never used to mean "clear" a reference |
+| `[]` | an empty list for list fields that replace the whole list (e.g. no add-on groups) |
 
 **[Required]**
-- **Intent first.** Where the form offers clearing, form state distinguishes "left unchanged" from "cleared by the user".
-- **Map intent through the established contract.** `to<Feature>Request` turns each intent into the request value the resource's contract defines. The plan records the evidence (spec, backend docs, verified real-API check).
-- **Preserve untouched fields per the verified semantics**: copy them from `existing`, or omit them only where omission is verified to mean "keep".
-- **Unknown semantics: defer, don't guess.** If a resource's clearing semantics are unknown, don't pick `null`, omission or an empty value. Record the [Open] question, and leave the clear operation out of the UI (or visibly unavailable) until it's settled. The rest of the form ships.
-- **Unit tests pin down the agreed mapping only.** They don't show how the backend interprets it: that takes real-API evidence.
+- **Intent first.** Where the form offers clearing, form state distinguishes "left unchanged" from "cleared by the user", and the mapping sends `null` only for a real clear.
+- **Unit tests pin down the mapping**; server tests pin down how the route applies it.
 
-> **Unverified contract risk in the reference feature (not fixed):** the Category form, which predates this rule, offers clearing a parent and maps it to `mainCategoryId: undefined`, which is **omitted** from the PUT body. Whether the backend then clears or keeps the parent is unverified (Q7). Check this first when real-API testing becomes possible. A new feature would defer such a clear until its contract is known.
-
-Images follow the same rule: "remove the image" and "keep the image" are different intents, and their encoding (and any upload cleanup) is **[Open]** until the contract is known (see [image upload](#7-upcoming-reusable-capabilities)).
+Images follow the same rule: "remove the image" sends `imageAssetId: null`; "keep" leaves it absent. Replaced or abandoned uploads are cleaned up by the server ([server: uploads](server/security.md#uploads)).
 
 ### Save lifecycle
 
@@ -210,7 +206,7 @@ Images follow the same rule: "remove the image" and "keep the image" are differe
 | Validation fails | Field-level messages, no request | the Valibot schema (via `UForm`) |
 | Saving | Submit button loading, inputs disabled, the form doesn't count as unsaved (`paused: saving`) | the form's own `saving` state + `useModalUnsavedChanges` |
 | Double submit | Skipped: create is keyed by what identifies the submission (e.g. the name), update by id | `useMutation` `key` |
-| Backend rejects | Toast with the backend reason. The modal stays open with the input intact, and the form is unsaved again | `useMutation`. Backend validation is one string, not per field |
+| Server rejects | Toast with the server reason. The modal stays open with the input intact, and the form is unsaved again | `useMutation`. Server validation is one string, not per field |
 | User closes during save | The save continues. If it fails, the toast offers **Reopen** with the draft (compared against the original record, so it counts as unsaved) | `errorActions` + `draft` prop ([D13](decisions.md)) |
 | Save succeeds | `markClean()`, close (`emit('close', true)`), affected features refresh here and in other tabs | the feature form + `useMutation` `invalidate` |
 | Leave with changed input | "Discard unsaved changes?" | [forms.md → Edge cases](reference/forms.md#edge-cases) |
@@ -258,7 +254,7 @@ What features must not do is **duplicate the engine**: no in-flight maps, double
 | Date/time display | Lists with `createdAt`/`updatedAt`. Schedules already convert **times of day** to the viewer's zone (`app/features/schedules/utils/timezone.ts`, D33): the model for promotion | Timezone (`ScheduleResponse` has a `timezone`), format, date-only vs timestamp | Shared formatter once agreed | The second feature displays dates |
 | Weekday + time-range inputs | **[Exists]** in Schedules: `UCheckboxGroup` + Every day/Weekdays/Weekends, `UInputTime` (12-hour, viewer's timezone; `Time` ↔ `HH:mm` via `utils/time.ts`, zone conversion via `utils/timezone.ts`, D33), `formatDays`/`formatTimeRange` (`app/features/schedules/utils/days.ts`) | Time format, timezone and overnight ranges: see [plans/schedules.md](plans/schedules.md) S1–S3 (safest encodings, unverified) | Schedules-specific | A second feature has weekly availability |
 | Ordering controls | **[Exists]** in Categories (D36): sort mode per type, `useSortable` on `UTable` + keyboard, explicit save. Products (per category) next: no route yet | The request shape; whether ordering is global or per parent/category; how conflicts are handled | Endpoint call: feature. A drag-and-drop list: shared once extracted | Both Categories and Products get ordering |
-| Permission helpers | All features, after the role/action matrix (Q6) | Which role may view and do what; whether the backend enforces it (the UI hides, the backend must refuse) | A shared `can(action)` + route meta, once the matrix exists | Immediately when the matrix exists (every feature needs it) |
+| Permission helpers | All features, after the role/action matrix (Q6) | Which role may view and do what; whether the server enforces it (the UI hides, the server must refuse) | A shared `can(action)` + route meta, once the matrix exists | Immediately when the matrix exists (every feature needs it) |
 
 **Test fixtures** (built 2026-09-26, in `test/e2e/support/mock-api.ts`): `deferred()` (hold a response, release or fail it on demand), `paginatedHandler(rows)` (search + 0-based pagination, rows may be a function), `failures.*` (validation, not found, technical, unauthorized). Unmocked requests fail the test.
 
@@ -274,13 +270,13 @@ Test by **risk**: pick the scenarios that can actually break in this feature, in
 | Preserving un-edited fields, and **explicit clearing** of each optional field and relationship | Always for update | Unit |
 | List: loading, empty, filtered-empty, load failure + Retry | Every list | e2e |
 | Create and edit succeed (the list refreshes, no discard prompt after save) | Always | e2e |
-| Save fails: backend reason shown, input kept | Always | e2e (`MockFailure`) |
+| Save fails: server reason shown, input kept | Always | e2e (`MockFailure`) |
 | Double submit / action on a busy row | Features with slow or destructive actions | Unit engine rules exist. e2e with a delayed response |
 | Unsaved input; close mid-save + Reopen | Every form. Reopen for forms with long saves | e2e (see `unsaved-changes.test.ts`) |
 | Bulk: partial failure, failed stays selected. Stop / Retry failed where the feature adds phases or special rules | Features with bulk actions | e2e + engine unit tests |
 | Relationships: picker loads, exclusions, current value not in the options | Features with pickers | e2e |
-| Permissions: hidden actions, refused requests | Once Q6 exists | e2e + real-API |
-| **Real API:** every endpoint's happy path, and the clearing semantics from §5 | Before calling a feature "done" in progress.md | Manual with a staff login. Record as **real-API** evidence |
+| Permissions: hidden actions, refused requests | Every feature behind a permission | server route tests + e2e |
+| **Real server:** every route's happy path and its permission refusals | Before calling a feature "done" in progress.md | Against `pnpm dev` (and staging once it exists). Record as **real-server** evidence |
 
 **Definition of done** **[Required]**:
 - [ ] Plan in `docs/plans/<feature>.md`, with **[Open]** items listed in progress.md.
@@ -288,7 +284,7 @@ Test by **risk**: pick the scenarios that can actually break in this feature, in
 - [ ] Lists and forms behave per §4–§5. Pickers per §6.
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass. Run `pnpm build` too when touching config, plugins or modules (e2e also builds).
 - [ ] Tests chosen per the table above. For each important test, it was checked to fail when the behavior is removed.
-- [ ] Docs: `features.md` (public API), `progress.md` (status plus **evidence level per item**, browser-mock vs real-API kept apart), case tables for new edge cases, `decisions.md` if a decision was made.
+- [ ] Docs: `features.md` (public API), `progress.md` (status plus **evidence level per item**, browser-mock vs server vs real-server kept apart), case tables for new edge cases, `decisions.md` if a decision was made.
 
 ---
 
@@ -300,26 +296,20 @@ How the reference feature maps to this standard:
 |---|---|
 | Structure | [`app/features/categories/`](../app/features/categories/), route [`app/pages/categories/index.vue`](../app/pages/categories/index.vue) |
 | Public API | [`index.ts`](../app/features/categories/index.ts): `CategorySelect`, `useCategoryOptions`, `categoriesNavigation` |
-| Behavior | [`useCategories.ts`](../app/features/categories/composables/useCategories.ts): `useCategoryList`, `useCategoryMutations` (create keyed by name, update/remove by id, `invalidate: ['categories', 'products']`, batch delete with sub-categories first), `isBusy` |
-| Form rules + mapping | [`category-form.ts`](../app/features/categories/schemas/category-form.ts) (preserves `nameI18n`, `sortOrder`), tests in [`category-form.test.ts`](../app/features/categories/tests/category-form.test.ts) |
+| Behavior | [`useCategories.ts`](../app/features/categories/composables/useCategories.ts): `useCategoryMutations` (create keyed by name, update/remove by id with a shared `lock`, `invalidate: ['categories', 'products']`, batch delete with sub-categories first), `isBusy`; [`useCategoryTree.ts`](../app/features/categories/composables/useCategoryTree.ts): the tree, filters and ordering |
+| Form rules + mapping | [`category-form.ts`](../app/features/categories/schemas/category-form.ts) (create and update bodies, `version`, `null` clears the parent), tests in [`category-form.test.ts`](../app/features/categories/tests/category-form.test.ts) |
 | Form | [`CategoryFormModal.vue`](../app/features/categories/components/CategoryFormModal.vue): unsaved guard, Reopen draft, Ctrl/⌘+Enter |
 | List | [`CategoryListPage.vue`](../app/features/categories/components/CategoryListPage.vue) |
 | Picker | [`CategorySelect.vue`](../app/features/categories/components/CategorySelect.vue) + [`useCategoryOptions.ts`](../app/features/categories/composables/useCategoryOptions.ts) |
 | Tests | [`test/e2e/categories.test.ts`](../test/e2e/categories.test.ts), plus shared-behavior e2e on Categories (`list-page`, `unsaved-changes`, `shortcuts`, `freshness`) |
 
-**Gaps against this standard** (not fixed by this document):
-- Clearing a parent is offered and encoded as an omitted field, but the backend meaning is unverified (§5, Q7).
-- Fixed 2026-09-26 (see [the hardening plan](plans/admin-foundation-hardening.md)): cross-operation conflicts (`lock`), `CategorySelect` error and unavailable-value states, tests for row blocking, selection reset, Stop, Retry failed and last-page step-back.
+**Gaps against this standard:**
+- It runs on the pre-standard `/api/v1` routes and is rebuilt on the new menu API in step 4.1 (two-level tree with "items only in leaves", D44).
 - There is no plan document, because the feature predates this standard.
-- There is no real-API evidence.
 
-## Worked example: Schedules
+## Patterns from earlier features
 
-Planned and built 2026-09-26: [plans/schedules.md](plans/schedules.md). The draft that stood here listed its [Open] questions (time format, timezone, overnight ranges, PUT semantics for `items`, deleting a schedule in use, sort values, `price`). The plan records how each was handled.
-
-By user decision ([D32](decisions.md)), unanswered contracts were **not** all deferred. Each got the encoding that is safe under every plausible backend meaning, backed by real evidence where possible (the dev API's unauthenticated `/public/**` endpoints), and is marked "verify on first staff login". Only deleting a schedule in use stays deferred, because no encoding makes an unknown destructive effect safe.
-
-New patterns worth reusing:
-- **Detail before edit:** the list has no `items`, so `ScheduleFormModal` fills the fields from the row, loads `GET /{id}`, and keeps Save disabled until it has loaded.
-- **Refuse at request start:** the delete mutation re-reads the record and throws an `ApiError` (`conflict`) if it's in use, so single and bulk deletes both respect the rule even when the list is stale.
+Worth reusing (from Schedules, built on the former Spring API: [plans/schedules.md](plans/schedules.md), historical):
 - **Bulk action with ineligible rows:** only eligible rows are sent, the confirmation says how many were kept, and the kept rows stay selected.
+- **Detail for read-only relations:** when the list doesn't carry a relation (a schedule's menu items), the form loads the detail and shows it read-only; the save never sends it.
+- **Refused by the server, explained in the UI:** a 409 with a feature code (`SCHEDULE_IN_USE`) is shown as the toast description; the row stays.

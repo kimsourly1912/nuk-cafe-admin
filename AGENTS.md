@@ -6,7 +6,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 1. **[docs/progress.md](docs/progress.md)**: what's done, what's next, open questions for the backend team, and how well each part has been verified. Start every session here.
 2. **[docs/decisions.md](docs/decisions.md)**: why things are the way they are. Read the relevant entry **before changing** a pattern that looks odd. Most of them work around a verified backend or tooling quirk.
-3. **[docs/reference/](docs/reference/README.md)**: reference for our HTTP API (**[api.md](docs/reference/api.md)**: routes, error codes, server structure) and for every shared composable, util and component (`useMutation`, `useApiQuery`, `apiFetch`, `ApiError`, …) with types, options and examples. Check it before using or changing a shared API. **[App-wide behavior](docs/reference/app-behavior.md)** (tab titles, refresh on tab focus, offline, leave guards, session loss) and **[Forms: unsaved changes](docs/reference/forms.md)** list every edge case those handle.
+3. **[docs/reference/](docs/reference/README.md)**: reference for every shared app composable, util and component (`useMutation`, `useApiQuery`, `apiFetch`, `ApiError`, …) with types, options and examples. Its [api.md](docs/reference/api.md) documents the pre-standard `/api/v1` routes still in use until step 3.8; new server work follows docs/server/. Check it before using or changing a shared API. **[App-wide behavior](docs/reference/app-behavior.md)** (tab titles, refresh on tab focus, offline, leave guards, session loss) and **[Forms: unsaved changes](docs/reference/forms.md)** list every edge case those handle.
 4. **[docs/feature-standard.md](docs/feature-standard.md)**: how every new feature is planned, built and verified (planning template, list/form/picker behavior, definition of done). **Read it before starting a feature.**
 5. **[docs/server/](docs/server/README.md)**: the **server standard** (architecture, security, data model, operations). **Every server change follows it.** The server code written before it (`/api/v1`, `server/features/` without the service/repository layers, `staff_profiles`, the D41 menu tables) does not follow it yet and is being replaced (D43); the "Our API" section below describes that older code.
 6. The rest of this file: rules and recipes.
@@ -20,7 +20,9 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 ## What this is
 
-NUK Cafe is one Nuxt full stack app: the admin UI (a SPA, `ssr: false`) and our own API (`/api/v1`, Nitro) with Better Auth, NuxtHub, Drizzle, SQLite locally and D1/R2 on Cloudflare. The customer website and cashier workspace will use the same API. Product scope: [the system blueprint](docs/plans/system-blueprint.md); backend design: [backend plan](docs/plans/fullstack-backend.md); the API as built: [docs/reference/api.md](docs/reference/api.md). Admin auth, categories, schedules and menu items run on our API (D40, D41); the Spring integration is gone (D39).
+NUK Cafe is one Nuxt full stack app: the customer website, the admin workspace and the cashier workspace, plus our own API (Nitro) with Better Auth, NuxtHub, Drizzle, SQLite locally and D1/R2/KV on Cloudflare. Product scope: [the system blueprint](docs/plans/system-blueprint.md). **How the server is built: the [server standard](docs/server/README.md)** (routes `/api/<surface>/…`, `server/features/` with service/repository layers, Better Auth roles and branches, the data model, operations). Build order: [progress.md → Next steps](docs/progress.md#next-steps-recommended-order).
+
+**Transition:** the admin screens (auth, categories, schedules, menu items) still run on the pre-standard `/api/v1` routes (D40, D41). Those are replaced step by step (steps 1.7 and 3.8); don't extend them.
 
 The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Schedules (card list) or Menu items (card grid + table); Categories is a tree (D37).
 
@@ -64,7 +66,7 @@ app/
 ├── pages/                       # THIN route files: definePageMeta + render <Feature>Page
 ├── components/ composables/ utils/   # SHARED across features only (auto-imported)
 ├── layouts/ middleware/ plugins/ types/   # app shell
-server/                          # our API: routes (api/v1), services (features/), schema + migrations (db/)
+server/                          # our API, per docs/server/architecture.md (pre-standard code still in api/v1 and db/schema)
 shared/contracts/                # API contracts: request schemas + response types, used by server and app
 ```
 
@@ -76,7 +78,7 @@ shared/contracts/                # API contracts: request schemas + response typ
 4. **Public building blocks must not import other features.** This keeps the dependency graph one level deep, so no cycles can form. Screens (pages, forms) may import other features' public APIs.
 5. **Inside a feature, use relative imports** (`../composables/useCategories`). Feature code is *not* auto-imported. Root shared code *is* auto-imported everywhere (`apiFetch`, `getErrorMessage`, `invalidate`, `usePaginatedQuery`, `useConfirm`, `StatusBadge`, `STATUS_ITEMS`, `ANY`, ...).
 6. **Route files in `app/pages/` stay thin.** They hold `definePageMeta` (always with a `title` for the browser tab) plus one `<Feature>…Page.vue` from the feature (the only deep import pages are allowed). Routes stay discoverable in one place.
-7. **Name feature folders after API resources**, so a folder maps to routes (`/api/v1/admin/<resource>`) and contracts: `categories`, `products` (shown as "Menu items" in the UI), `schedules`, `rewards` (reward categories live inside it: they're not menu categories), `vouchers`, `banners`, `customers`, `staff`, `orders`, `auth`.
+7. **Name feature folders after the resource they manage**, so a folder maps to its routes (`/api/admin/<resource>`) and contracts: `categories`, `products` (shown as "Menu items" in the UI), `schedules`, `rewards` (reward categories live inside it: they're not menu categories), `vouchers`, `banners`, `customers`, `staff`, `orders`, `auth`.
 
 ### Cross-feature relationships (from the API)
 
@@ -127,17 +129,15 @@ Rules the Categories reference follows:
 
 The concurrency rules live in the framework-free engine `app/utils/mutation.ts` and are unit-tested in `test/unit/mutation.test.ts`. `useMutation` only wires it to Nuxt (state, toasts, confirm, invalidate).
 
-## Our API (`/api/v1`)
+## Server
 
-Everything is documented in [docs/reference/api.md](docs/reference/api.md). The rules:
+Every server change follows the [server standard](docs/server/README.md). The essentials:
 
-- **Contracts first:** `shared/contracts/<domain>.ts` holds the Valibot request schemas (the server validates with them) and the response types (the app imports them). Import as `#shared/contracts/<domain>`.
-- **Routes are thin:** `requireStaff(event, '<permission>')` → `readBodyAs` / `readQueryAs` / `idParam` → one service call. No SQL or business rules in route files.
-- **Services** (`server/features/<domain>/`) hold the rules and SQL, take `db: Db` as the first parameter, and use **explicit imports** (no Nitro auto-imports), so the `server` test project can run them against SQLite.
-- **Writes:** PATCH with `version` (absent keeps, `null` clears); a multi-statement write is **one `db.batch`** with a guard (`requireOneChange` / `requireCount`, `server/db/types.ts`) because D1 has no interactive transactions; privileged writes add an `audit_events` row in the same batch.
-- **Errors:** `throw apiError(status, code, message, fieldErrors?)`; add new codes to `ERROR_CODES`. Messages for 4xx must be safe to show.
-- **Schema changes:** edit `server/db/schema/`, run `pnpm nuxt db generate`, give the migration a descriptive name (and update its tag in `meta/_journal.json`). Local dev applies migrations on start; D1 needs `nuxt db migrate` in CI before deploy (not set up yet).
-- **The app calls the API only through `apiFetch`**, inside `useApiQuery` / `useMutation`. Never `$fetch` business routes directly (you'd lose `ApiError`, session handling and stale-response discard).
+- **Library first:** Better Auth (`admin` + `organization` plugins, access control), `@nuxtjs/better-auth`, NuxtHub and Cloudflare features before our own code ([security.md → What the libraries do](docs/server/security.md#what-the-libraries-do)).
+- **Routes** are thin, unversioned, per surface: `/api/public`, `/api/shop`, `/api/counter/{branchId}`, `/api/admin`.
+- **Features** live in `server/features/<feature>/` with fixed layers: `index.ts` (public API), `*.schema.ts`, `*.types.ts`, `*.repository.ts` (all SQL), `*.service.ts` (rules and use cases), `*.errors.ts`, `tests/`.
+- **Writes:** `version` checks, one atomic `db.batch` with guards, idempotency keys for money/points/vouchers, audit in the same batch.
+- **The app calls the API only through `apiFetch`**, inside `useApiQuery` / `useMutation` (`ApiError`, session handling, stale-response discard).
 - Do not restore the Spring SDK, proxy or envelope handling (D39).
 
 ## Auth & app shell
@@ -181,17 +181,17 @@ Expected to be promoted to the root when the first two features need them: `Prod
 ## Adding a full stack feature
 
 1. Start from the user journeys in [the system blueprint](docs/plans/system-blueprint.md) and write a plan with [docs/feature-standard.md](docs/feature-standard.md). Settle any unresolved business or permission rule first, or defer that behavior; never encode a guess.
-2. Contract in `shared/contracts/<domain>.ts`; tables in `server/db/schema/` + a migration; service in `server/features/<domain>/`; routes in `server/api/v1/…`; permissions in `shared/contracts/identity.ts` ([api.md → Server structure](docs/reference/api.md#server-structure)).
-3. Server tests in `test/server/` against `createTestDb()`: rules, permissions-relevant cases, and a stale-version or race case for every conditional write (check that it fails with the guard removed).
+2. The server side per the [server standard](docs/server/README.md): contracts in `shared/contracts/<domain>.ts`; the feature in `server/features/<feature>/` (schema + migration, repository, service, errors, types); thin routes under the right surface; permissions in the identity feature.
+3. Server tests in the feature's `tests/` against SQLite built from the migrations: rules, each error code, permission cases, and a stale-version / race / replay case for every guarded or idempotent write (check that it fails with the guard removed).
 4. The feature folder in `app/features/<feature>/` (copy Categories for composables/forms, Schedules or Menu items for paginated lists), calling `apiFetch` through `useApiQuery` / `useMutation`.
 5. Browser tests in `test/e2e/<feature>.test.ts` with `mockApi` and the typed fixtures in `test/e2e/support/mock-api.ts`.
-6. Update docs/reference/api.md, the feature's reference page, progress.md and decisions.md.
+6. Update the server standard where it changed, the feature's reference page, progress.md and decisions.md.
 
 ## Tests
 
 `vitest.config.ts` projects:
 - **unit** (`test/unit`, `app/features/*/tests`): pure logic in Node: engines, form schemas and mappings.
-- **server** (`test/server`): services against an in-memory SQLite database built from the checked-in migrations, foreign keys on (D42).
+- **server** (`test/server` today; `server/features/*/tests` per the standard): services against an in-memory SQLite database built from the checked-in migrations, foreign keys on (D42).
 - **e2e** (`test/e2e`): builds the app once and drives Chrome with the API mocked in the browser (`mockApi`).
 - **nuxt**: only created once a `*.nuxt.test.ts` exists (D42).
 

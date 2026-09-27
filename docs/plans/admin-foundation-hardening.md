@@ -1,5 +1,7 @@
 # Admin foundation hardening plan
 
+> **Historical (2026-09-27).** Written against the former Spring API. Its UI behavior notes still explain the current screens, but its API contracts, encodings and [Open] backend questions no longer apply. The server is now defined by the [server standard](../server/README.md); the session and error handling parts are replaced by Better Auth and apiFetch (D40).
+
 Planned with [feature-standard.md](../feature-standard.md) before Schedules. Scope: the shared foundation and the Categories reference feature. **Out of scope:** Schedules, Products, image upload, translations, any generic CRUD framework.
 
 Labels as in the standard: **[Choice]** is a reversible implementation choice, recorded here. **[Open]** is a backend or project-owner contract; nothing here guesses one.

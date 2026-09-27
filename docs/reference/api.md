@@ -1,4 +1,6 @@
-# API: `/api/v1`
+# API: `/api/v1` (pre-standard, being replaced)
+
+> **Read this first.** This page documents the routes the admin screens use **today**. They predate the [server standard](../server/README.md) (D43) and are replaced step by step: identity in step 1.7, the menu in step 3.8 ([progress.md](../progress.md#next-steps-recommended-order)). **Don't add routes here or copy these patterns** (`/api/v1`, `requireStaff`, `staff_profiles`, the bootstrap route, the D41 menu tables). New server work follows docs/server/. This page is deleted when step 3.8 lands.
 
 Our own API, served by Nitro in this app. Contracts (types and the request schemas the server validates with) are in `shared/contracts/`; server code is in `server/`. Why it looks like this: D40 (identity, errors, ids) and D41 (menu).
 

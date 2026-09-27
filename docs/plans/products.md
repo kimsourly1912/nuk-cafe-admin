@@ -1,5 +1,7 @@
 # Products ("Menu items") plan
 
+> **Historical (2026-09-27).** Written against the former Spring API. Its UI behavior notes still explain the current screens, but its API contracts, encodings and [Open] backend questions no longer apply. The server is now defined by the [server standard](../server/README.md); menu items, options and add-ons are defined in the [data model](../server/data-model.md#menu) (D44).
+
 Planned with [feature-standard.md](../feature-standard.md) (template §1). Labels: **[Choice]** is a reversible choice made here; **[Open]** is a backend or project-owner contract, listed in [progress.md](../progress.md#open-questions--waiting-on-others). Unanswered contracts follow D32: the encoding that is safe under every plausible backend meaning, marked **verify on first staff login**.
 
 **User decisions (2026-09-26):** variants editor is **phase 2** (shown read-only, kept on save); prices are **US dollars**; images: **upload and replace only**, no "remove"; the form opens in a **slide-over**.

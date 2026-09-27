@@ -32,6 +32,7 @@ Browser ──► Nuxt app (customer site · /admin · /counter)
 ```
 
 - The server owns every rule: prices, availability, order state, points, voucher use, permissions. A client asks; it never decides.
+- **Rendering (D45):** the public customer pages are server-rendered (fast first load, visible to search engines); the admin and counter workspaces stay single-page apps. Set per route with `routeRules` (`ssr: false` for `/admin/**` and `/counter/**`) in step 5.2; today the whole app is `ssr: false`.
 - There is no public API for outside clients. If a native app comes later, it gets its own decision (bearer tokens, a versioned surface).
 
 ## Surfaces and routes

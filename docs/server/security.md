@@ -53,7 +53,7 @@ Two layers, both Better Auth:
 | Platform | `user.role` (`admin` plugin) | `customer` (default for every sign-up), `admin` (owner/head office) |
 | Branch | `member.role` (`organization` plugin), one row per branch | `manager`, `staff` |
 
-Permissions are **statements** (`resource: [actions]`) defined once in `server/features/identity/identity.permissions.ts` with `createAccessControl`, and granted to roles there. Draft (to confirm with the owner, Q6):
+Permissions are **statements** (`resource: [actions]`) defined once in `server/features/identity/identity.permissions.ts` with `createAccessControl`, and granted to roles there. Agreed with the owner on 2026-09-27 (D45):
 
 | Resource | Action | admin | manager | staff |
 |---|---|:-:|:-:|:-:|
@@ -61,19 +61,20 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | menu | set sold out (own branch) | ✔ | ✔ | ✔ |
 | media | upload | ✔ | | |
 | branch | read / update | ✔ | read | read |
-| staff | create / change role / disable | ✔ | ? | |
+| staff | create / change role / disable | ✔ | | |
 | table | manage, rotate QR | ✔ | ✔ | |
-| order | read queue, accept, ready, complete | ✔ | ✔ | ✔ |
-| order | cancel | ✔ | ✔ | ? |
+| order | read queue, start, ready, complete | ✔ | ✔ | ✔ |
+| order | cancel | ✔ | ✔ | ✔ |
 | payment | collect | ✔ | ✔ | ✔ |
-| payment | refund | ✔ | ✔ | |
+| payment | refund | ✔ | | |
 | voucher | look up, redeem | ✔ | ✔ | ✔ |
-| voucher | issue to a customer | ✔ | ✔ | ? |
+| voucher | issue to a customer | ✔ | ✔ | |
 | voucher template | manage | ✔ | | |
-| loyalty | adjust points | ✔ | ? | |
+| settings | KHR exchange rate, branch hours | ✔ | | |
+| loyalty | adjust points | ✔ | ✔ | |
 | report / audit | read | ✔ | own branch | |
 
-`?` = open. A platform `admin` has every branch permission in every branch.
+A platform `admin` has every branch permission in every branch: **our** `requireBranchPermission` grants that, because Better Auth only knows branch roles for members of that branch (spike, 2026-09-27).
 
 **Checking:**
 - `requirePermission(event, { menu: ['write'] })` for the admin surface (platform role).
@@ -85,7 +86,7 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 ## Sessions
 
 - Better Auth database sessions, HttpOnly + `Secure` (production) + `SameSite=Lax` cookie, one origin.
-- Lifetime: Better Auth defaults (7 days, refreshed daily) unless the owner wants shorter staff sessions ([Open]).
+- Lifetime: **7 days for everyone**, refreshed daily while used (Better Auth default; D45).
 - **Revoke all sessions** of a user when their role changes, they're removed from a branch, their staff access is disabled, or they're banned (`admin.revokeUserSessions`).
 - `trustedOrigins` lists exactly the app's origins per environment.
 
@@ -97,7 +98,15 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 4. Changing the password (Better Auth `changePassword`, revoking other sessions) clears the flag.
 5. Disabling staff = removing their branch membership (and platform role), revoking their sessions, and an audit event. Their account keeps working as a customer.
 
-To verify in the auth spike: that `createUser` can set `emailVerified` and the additional field, and the cleanest hook for clearing the flag.
+**Verified in the auth spike (2026-09-27, better-auth 1.7.3, in-memory adapter, 17 checks):**
+- The seed task can call `auth.api.createUser` **without a session** (server-side) with `role: 'admin'` and `emailVerified: true`.
+- An admin's `createUser` sets `emailVerified` and `mustChangePassword`; new users get the platform role `customer`. Staff stay `customer` on the platform and get their access from branch membership.
+- `requireEmailVerification` refuses an unverified customer's sign-in (403).
+- `allowUserToCreateOrganization` stops non-admins from creating branches; `organization.additionalFields` stores `timezone`.
+- `addMember` (server-side) assigns `staff`; `hasPermission` with an explicit `organizationId` grants `order:accept`, refuses `payment:refund`, and **throws "not a member"** for another branch (our helper turns that into 404).
+- **Better Auth does not enforce `mustChangePassword`:** our access helpers must refuse with `PASSWORD_CHANGE_REQUIRED`, and the change-password route clears the flag server-side after `changePassword` succeeds.
+- `removeMember` + `revokeUserSessions` end a staff member's access immediately.
+- `@nuxtjs/better-auth` generates every plugin table and field (`role`, `banned`, `must_change_password`, `impersonated_by`, `active_organization_id`, `organization.timezone`, `member`, `invitation`) into the schema NuxtHub migrates.
 
 ## Customers
 
@@ -140,7 +149,7 @@ Never in the repo, never logged, never in error messages. `.env` is git-ignored;
 - Every request gets a **request id** (Cloudflare's `cf-ray` when present, else generated), in logs and in error bodies (`data.requestId`), so a user's screenshot leads to the log line.
 - Structured logs: `level`, `requestId`, `route`, `actor` id, `code`, duration. **Never log:** passwords, tokens, cookies, session ids, reset links, QR tokens, full request bodies, card data.
 - Personal data (email, phone, name) only where needed; audit metadata records **which fields** changed, not their values.
-- **Privacy erasure** of a customer: anonymize the profile (name, email, phone replaced), keep orders and ledgers with the anonymized customer, delete sessions and accounts. [Open]: retention periods (blueprint §9.8).
+- **Privacy erasure** of a customer: anonymize the profile (name, email, phone replaced), keep orders and ledgers with the anonymized customer, delete sessions and accounts. [Open]: retention periods (Q24).
 - No card data is ever stored: counter payments record method and amount only.
 
 ## Checklist for every route

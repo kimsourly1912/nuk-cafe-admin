@@ -69,7 +69,7 @@ Feature: `branches`.
 | Table | Columns | Invariants |
 |---|---|---|
 | `dining_tables` | `branch_id` → organization, `label`, `qr_token_hash` (unique), `status` (`active` \| `archived`), `qr_rotated_at`, `version` | Unique (`branch_id`, `label`). The token itself is shown once when generated/rotated and never stored |
-| `branch_hours` | `branch_id`, `weekday`, `open_minute`, `close_minute` | [Open] whether ordering is limited to opening hours |
+| `branch_hours` | `branch_id`, `weekday`, `open_minute`, `close_minute` | **Orders are accepted only while the branch is open** (D45); pickup is "as soon as possible" (no scheduled pickup times) |
 
 ## Menu
 
@@ -115,10 +115,10 @@ An item without option sets has exactly one version with one price ("Croissant $
 | `menu_item_modifier_groups` | `item_id`, `group_id`, `sort_order`, `min_select` / `max_select` overrides (nullable) | PK (`item_id`, `group_id`) |
 | `menu_item_modifier_prices` | `item_id`, `modifier_id`, `price_delta_minor` | Optional per-item price override ("oat milk +$0.75 on the large-cup drinks") |
 | `menu_availability_rules` | `name` ("Breakfast"), `status`, `version` | |
-| `menu_availability_windows` | `rule_id`, `weekday`, `start_minute`, `end_minute` | Several windows per rule. Overnight = a window whose end is the next day ([Open] Q14). Times are in the branch timezone |
-| `menu_category_availability`, `menu_item_availability` | links to rules | [Open] Q22: "no rule" = always available? several rules = any or all? |
+| `menu_availability_windows` | `rule_id`, `weekday`, `start_minute`, `end_minute` | Several windows per rule. **Overnight windows are allowed** (D45): an end before the start means the next day, and the window belongs to the weekday it starts on. Times are in the branch timezone |
+| `menu_category_availability`, `menu_item_availability` | links to rules | **No rule = available whenever the branch is open; several rules = available when any matches** (D45). An item is available only if its category is too |
 | `branch_item_states` | `branch_id`, `variation_id`, `sold_out`, `updated_by` | The counter's "86" switch, per version (Large sold out, Regular still available). Later: a branch price override |
-| `menu_translations` | [Open] Q21 | Added once the languages are decided |
+| `menu_translations` | Not at launch | **English only at launch** (D45). Added as `*_translations` tables when a second language is needed |
 
 ### Rules that keep the UI clean
 
@@ -147,11 +147,17 @@ Features: `customers`, `loyalty`.
 | `customer_profiles` | `user_id` (PK), `member_code` (unique, shown as a QR at the counter), `phone`, `marketing_opt_in`, `anonymized_at` | Created on sign-up (Better Auth hook) |
 | `loyalty_accounts` | `user_id` (PK), `balance` (cached), `version` | `balance` ≥ 0, and always equals the sum of its entries |
 | `loyalty_entries` | `account_id`, `points` (signed), `reason` (`earn_order` \| `exchange_voucher` \| `adjust` \| `reverse`), `source_type`, `source_id`, `idempotency_key` (unique), `actor_id`, `note` | **Append-only.** A correction is a new `reverse`/`adjust` entry with a reason |
-| `voucher_templates` | `kind` (`amount_off` \| `percent_off` \| `free_item`), `value`, `item_id` (free item), `points_cost` (null = not exchangeable), `valid_days`, `uses_per_voucher`, `status`, `version` | [Open] stacking, minimum spend, which items it applies to |
+| `voucher_templates` | `kind` (`amount_off` \| `free_item`), `amount_minor` (amount off), `variation_id` (free item), `points_cost` (null = staff-issue only), `valid_days` (default 30), `uses_per_voucher` (default 1), `status`, `version` | **One voucher per order, no minimum spend** (D45). An amount-off voucher never makes a total negative; a free item needs that item in the order |
 | `vouchers` | `template_id`, `owner_id` → user, `code_hash` (unique), `source` (`points_exchange` \| `staff_issue`), `issued_by`, `issue_reason`, `remaining_uses`, `expires_at`, `status` (`active` \| `used` \| `expired` \| `revoked`), `version` | Exchange = negative loyalty entry + voucher **in one batch** |
 | `voucher_redemptions` | `voucher_id`, `order_id`, `branch_id`, `staff_id`, `idempotency_key` (unique) | Conditional `remaining_uses > 0` update in the same batch: two cashiers can't use the last use twice |
 
-**[Confirmed]** 1 point per USD after completion; points buy vouchers; staff issue vouchers. **[Open]** earning base and rounding, who starts an exchange, expiry, reversal on refund.
+Rules (D45):
+- **Earning:** on completion, `floor(amount paid after the voucher discount / 1 USD)` points ($7.80 → 7). Entry key `earn:order:{orderId}`, so it applies once.
+- **Exchange:** the **customer** exchanges points for a voucher on the website; staff redeem at the counter. The debit and the voucher are one batch.
+- **Issue:** admins and managers may issue a voucher to a customer, with a reason (audited); it doesn't cost the customer points.
+- **Adjust:** admins and managers may add or remove points with a reason.
+- **Reversal:** when a completed order is refunded or cancelled, its earned points are reversed and a voucher used on it is restored if not expired.
+- Staff never act on their own account (security.md → Identity).
 
 ## Orders & payment
 
@@ -159,22 +165,27 @@ Feature: `orders`.
 
 | Table | Columns | Invariants |
 |---|---|---|
-| `orders` | `branch_id`, `customer_id` → user, `fulfillment` (`pickup` \| `dine_in`), `table_id` (dine-in only), `status`, `payment_status` (`unpaid` \| `paid` \| `refunded`), `subtotal_minor`, `discount_minor`, `tax_minor`, `total_minor`, `currency`, `pickup_number`, `business_day`, `note`, `placed_at`, `version` | A `CHECK`: `table_id` is set exactly when `fulfillment = 'dine_in'`. Totals are computed by the server |
+| `orders` | `branch_id`, `customer_id` → user, `fulfillment` (`pickup` \| `dine_in`), `table_id` (dine-in only), `status`, `payment_status` (`unpaid` \| `paid` \| `refunded`), `voucher_id` (at most one), `subtotal_minor`, `discount_minor`, `total_minor`, `currency`, `pickup_number`, `business_day`, `note`, `placed_at`, `expires_at` (placed + 30 min while unpaid), `version` | A `CHECK`: `table_id` is set exactly when `fulfillment = 'dine_in'`. Totals are computed by the server. **No tax or service charge: menu prices are final** (D45) |
 | `order_lines` | `order_id`, `item_id`, `variation_id` (references kept for reports), **snapshots** `item_name`, `variation_label` ("Large, Iced"), `unit_price_minor`, `quantity`, `line_total_minor` | Never changed after placing |
 | `order_line_modifiers` | `line_id`, `modifier_id`, snapshots `name`, `price_delta_minor` | |
 | `order_events` | `order_id`, `actor_id`, `from_status`, `to_status`, `reason`, `at`; unique (`order_id`, `to_version`) | The history the queue and the customer see |
-| `counter_payments` | `order_id`, `method` ([Open] cash / card terminal), `amount_minor`, `collected_by`, `idempotency_key` (unique) | Preparation can't start until the order is `paid` |
+| `counter_payments` | `order_id`, `method` (`cash_usd` \| `cash_khr` \| `khqr`), `amount_minor` (USD cents), `amount_khr` and `khr_per_usd` (cash in riel: the riel received and the rate used), `reference` (KHQR transaction ref, optional), `collected_by`, `idempotency_key` (unique) | One payment per order; recording it starts preparation |
+| `exchange_rates` | `currency` (`KHR`), `per_usd` (e.g. 4100), `effective_from`, `set_by` | Set by an admin; append-only history; a riel payment records the rate it used |
 | `branch_order_counters` | `branch_id`, `business_day`, `next_number` | Pickup numbers restart each business day (branch timezone) |
 
-Order status (draft for the owner to confirm; the blueprint marks transitions [Open]):
+Order status (D45):
 
 ```
-placed ──pay──► paid ──start──► preparing ──► ready ──► completed
-  │                │                │
-  └──cancel──► cancelled ◄──────────┘ (refund rules [Open])
+placed (unpaid) ──payment recorded──► preparing ──► ready ──► completed
+      │
+      ├──customer or staff cancels──► cancelled
+      └──30 minutes unpaid──────────► cancelled (expired)
 ```
 
-**[Confirmed]** pay at the counter before preparation. **[Open]** acceptance step, unpaid-order expiry, cancellation window, refunds, tax/service charge.
+- No separate accept step: **recording the counter payment starts preparation.**
+- A customer can cancel only while unpaid. Staff, managers and admins can cancel unpaid orders.
+- **[Open] Q36:** can staff cancel an order that is already paid (money handed back at the counter), or does that need an admin refund? Refunds are admin only.
+- A refund or cancellation after completion reverses loyalty (see above).
 
 ## Platform
 
@@ -188,10 +199,4 @@ Feature: `platform`.
 
 ## Open questions
 
-| # | Question | Blocks |
-|---|---|---|
-| Q6 | Role matrix (the `?` cells in [security.md](./security.md#roles-and-permissions)) | Permissions |
-| Q14, Q22 | Availability: overnight windows; "no rule"; several rules any/all | Menu availability, public menu |
-| Q21 | Translations: languages, edited by admins | `menu_translations` |
-| new | Ordering only during opening hours? | `branch_hours` use at checkout |
-| blueprint §9 | Tax/service charge, tender methods, refunds, unpaid expiry, points rounding, voucher rules, retention | Orders, loyalty, privacy |
+Tracked in one place, with the step each blocks and a suggested default: [progress.md → Open questions](../progress.md#open-questions--waiting-on-others). Still open for these tables: Q36 (cancelling a paid order) and Q24 (retention and erasure periods).

@@ -33,31 +33,28 @@ Every "done" item states how it was checked. Keep using these labels:
 
 **Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier routes; no staff management (only the bootstrap admin); no cleanup of temporary uploads; no public menu API.
 
-The Foundation table below is mostly still current (UI behavior); rows about the Spring API (SDK, proxy, token refresh) are historical.
+The Foundation table below is the app's shared UI behavior; it stays valid through the server rebuild.
 
 ### Foundation
 
 | Area | Status | Verified |
 |---|---|---|
 | Nuxt 4 SPA + Nuxt UI dashboard shell, sidebar navigation, error page | done | browser-mock |
-| Generated SDK from OpenAPI (`pnpm api:generate`, `/staff` + `/admin` only) | done | typecheck |
-| API layer: envelope handling, cookie credentials, single-flight token refresh, 30s timeout | done | unit, browser-mock |
-| **Hardening (2026-09-26, [plan](plans/admin-foundation-hardening.md)):** bounded refresh (10 s), no hidden ofetch retries, expire once per identity, no refresh loop (D27) | done | unit (incl. real ofetch) |
+| API client `apiFetch`: `/api/v1` base, 30 s timeout, no hidden retries, `ApiError` for every failure, 401 / 403 NOT_STAFF end the session, responses from a previous identity discarded (D40) | done | unit (`api-fetch.test.ts`), e2e |
 | Record locks across mutations; prototype-safe mutation keys (D28) | done | unit (incl. reactivity); e2e bulk delete during a pending edit |
 | Session-transition contract: generation, stale-response discard, boundary cleanup (D29) | done | unit; e2e `session.test.ts` (each mechanism checked by disabling it) |
 | `useApiQuery` `watch` cancels instead of queueing (D30) | done | e2e (fails without the fix) |
 | `CategorySelect`: error + Retry, current value always visible, inactive not offered while Q9 is open; no blur validation in the Category form (D31) | done | e2e `pickers.test.ts` |
 | Strict e2e harness (unmocked requests fail) + `deferred`, `paginatedHandler`, `failures` | done | proven with a throwaway failing test |
-| Dev proxy `/api` with `Origin` rewrite | done | real-API (unauthenticated) |
-| Error handling: `ApiError` classification, user-safe messages, `ApiErrorAlert`, `useNotify`, safety-net plugin | done | unit, browser-mock, real-API (error shapes) |
-| Auth: login page, session check, global guard, logout, redirect on session loss | done | browser-mock, real-API (failed login only) |
+| Error handling: `ApiError` classification (our error body and Better Auth's), user-safe messages, `ApiErrorAlert`, `useNotify`, safety-net plugin | done | unit, browser-mock, real-server (error shapes) |
+| Auth: email login (Better Auth), staff session check, global guard, logout, redirect on session loss | done | browser-mock, real-server (login, logout, protected-page redirect) |
 | Icons bundled into the client build, no runtime Iconify API calls (D18) | done | build output (all app icons present in the bundle); not yet checked in a browser |
 | Unsaved-changes guard: modal close (X/Esc/outside/Cancel), route changes incl. back/forward, logout, tab close/reload; one dialog for many forms (D19) | done | unit (`form-value`), e2e (`unsaved-changes`, `session`): failed save, forward, expiry and other-tab logout with a dirty form. Not browser-tested: voluntary logout with a dirty form (a modal covers the menu; no page form exists) |
 | Browser tab titles per page (D23) | done | e2e |
 | List pages: filters/page in the URL, search as you type, empty states (D21) | done | unit (`query`), e2e (`list-page`) |
 | Data freshness: cross-tab invalidation, refetch stale (≥ 5s) data on return, refetch on reconnect, offline banner (D22) | done | e2e (`freshness`: two tabs in one context, faked visibility and clock, offline). The two-tab test was checked to fail with the broadcast disabled |
-| Login: password hidden with show/hide toggle (Q7) | done | e2e |
-| E2E harness: one build, `mockApi`, 45 tests (auth, categories, lists, unsaved changes, freshness, shortcuts, shell) (D20) | done | runs in `pnpm test` and CI |
+| Login: password hidden with show/hide toggle | done | e2e |
+| E2E harness: one build, `mockApi` for our API and Better Auth, typed fixtures, 115 tests (D20, D42) | done | runs in `pnpm test` and CI |
 | Login/logout across tabs (D26) | done | e2e (checked to fail with the broadcast disabled) |
 | Open-redirect fix: `?redirect=//other-site` after login now goes to `/` (D26) | done | e2e |
 | Keyboard shortcuts: `/`, `N`, Ctrl/⌘+Enter, `?` list (D25) | done | e2e (the behind-a-dialog guard was checked by removing it) |
@@ -68,7 +65,7 @@ The Foundation table below is mostly still current (UI behavior); rows about the
 
 ### Features
 
-Our API resources and the admin screens on them (routes: [docs/reference/api.md](reference/api.md)). Later rows list the old Spring resources as a checklist of what the admin once planned; each gets its own contract first.
+The admin screens that exist today. They run on the **pre-standard** `/api/v1` routes ([reference/api.md](reference/api.md)) and are rebuilt per the server standard in steps 1.7 and 3.8–4.4.
 
 | Feature | Routes (`/api/v1/admin/...`) | Status |
 |---|---|---|
@@ -76,36 +73,28 @@ Our API resources and the admin screens on them (routes: [docs/reference/api.md]
 | categories (menu) | `categories`, `categories/{id}`, `categories/order` | **done, reference feature**: tree of mains and subs, search + status tabs, create/edit, add sub-category, delete, batch delete, drag-to-sort per level, version checks. server + unit + browser-mock (`categories.test.ts`) + real-server |
 | schedules (menu) | `schedules`, `schedules/options`, `schedules/{id}` | **done**: list (search, status, day), create, edit (menu items shown read-only, never sent), delete + bulk delete for schedules not in use; times as cafe time (D41). server + unit + browser-mock (`schedules.test.ts`) + real-server |
 | products = "Menu items" | `products`, `products/all`, `products/{id}`, `media` | **done**: list/grid/grouped menu, filters, create/edit (image upload, replace, **remove**, category, price in cents, schedules, variant editor), delete + bulk delete. server + unit + browser-mock (`products.test.ts`) + real-server. **Not built:** sort order within a category, price-range filter |
-| rewards (+ reward categories) | `rewards`, `rewards/{id}`, `rewards/{id}/status`, `rewards/upload`, `reward-categories`, … | not started |
-| vouchers | `voucher/catalogs…`, `vouchers/redeem`, `vouchers/lookup`, `voucher/activity` | not started |
-| banners | `banners`, `banners/{id}`, `banners/upload`, `banners/{id}/toggle-status`, `banners/dashboard` | not started |
-| customers | `customers`, `customers/{id}` + vouchers/rewards/posts/points/orders, `suspend`, `reactivate` | not started |
-| staff (admins, cashiers) | `staff`, `staff/{id}`, `admins`, `cashiers`, `reset-password`, `status` | not started |
-| orders | `orders/{id}` (accept/ready/complete/reject/cancel), `orders/pickup-queue`, `/admin/orders` | not started |
-| points, loyalty | `points/settings`, `points/history`, `loyalty/...` | not started |
-| community posts | `community-posts`, approval status, comments, likes, dashboard | not started |
-| carbon | `carbon/projects`, `carbon/stats`, `carbon-settings`, `carbon-metadata` | not started |
-| dashboard, activity log, files, notifications, profile (`me`) | `dashboard`, `activity-log`, `files`, `me/...` | dashboard is a placeholder page; rest not started |
+
+Everything else (branches and tables, the customer website, orders, payments, loyalty, vouchers, reports) is not started; it is built in the numbered steps below. Community posts, carbon and banners from the old API have no product design and are out of scope until the owner asks for them.
 
 ## Next steps (recommended order)
 
 The server is being rebuilt to the **server standard** ([docs/server/](server/README.md), D43, written 2026-09-27; no code follows it yet). Each phase gets a short plan before coding and ends with passing tests and an update here.
 
-**How we work:** one step at a time. For each step the agent writes a short plan (for steps marked ✋, it asks first), builds it on its own branch, runs `pnpm lint`, `pnpm typecheck` and `pnpm test`, updates the docs, then **stops for review**. The next step starts only after approval. ✋ marks a step that needs a decision from the owner first (question numbers are in the tables below).
+**How we work:** one step at a time. For each step the agent writes a short plan (for steps marked ✋, it asks first), builds it on its own branch, runs `pnpm lint`, `pnpm typecheck` and `pnpm test`, updates the docs, then **stops for review**. The next step starts only after approval. ✋ marks a step that needs a decision from the owner first (question numbers link to the Open questions table). ✅ marks a step that is done.
 
 ### Phase 0: groundwork
 
 | # | Step | Done when |
 |---|---|---|
-| 0.1 | **Clean stale docs:** fold the few platform facts from `plans/fullstack-backend.md` into `docs/server/` and delete it; replace the system blueprint's data map, API shape and build order sections with links; mark `reference/api.md` as "current code, being replaced" | No doc tells an agent to build the old design |
-| 0.2 | **Auth spike** (throwaway branch, ½ day): `admin` + `organization` plugins with access control | Report: plugin tables are generated into migrations; `userHasPermission` / `hasPermission` work from a Nitro route; `createUser` can set `emailVerified` and `mustChangePassword`. Standard amended if anything differs |
+| 0.1 ✅ | **Clean stale docs:** fold the few platform facts from `plans/fullstack-backend.md` into `docs/server/` and delete it; replace the system blueprint's data map, API shape and build order sections with links; mark `reference/api.md` as "current code, being replaced" | No doc tells an agent to build the old design |
+| 0.2 ✅ | **Auth spike** (throwaway branch, ½ day): `admin` + `organization` plugins with access control | Report: plugin tables are generated into migrations; `userHasPermission` / `hasPermission` work from a Nitro route; `createUser` can set `emailVerified` and `mustChangePassword`. Standard amended if anything differs |
 
 ### Phase 1: platform foundation
 
 | # | Step | Done when |
 |---|---|---|
 | 1.1 | **Server skeleton:** `server/features/` layers; utils (`apiError` with request id, `readValidBody` / params / query, db + batch guards, UUID v7); Nitro error handler; request-id middleware; server test harness moved to features | Tests for the utils; existing screens still work |
-| 1.2 | **Identity config:** Better Auth `admin` + `organization` plugins, roles and permission statements, `haveIBeenPwned`, auth rate-limit rules, trusted origins; **fresh migrations** (old menu tables kept until 3.8) | Migrations generated and reviewed; a server test per role grant |
+| 1.2 | **Identity config** (roles per D45): Better Auth `admin` + `organization` plugins, roles and permission statements, `haveIBeenPwned`, auth rate-limit rules, trusted origins; **fresh migrations** (old menu tables kept until 3.8) | Migrations generated and reviewed; a server test per role grant |
 | 1.3 | **Access helpers:** `requirePermission`, `requireBranchPermission`, route rules per surface, origin check on trusted origins, security headers | Tests: 401 / 403 / 404 for wrong surface, role and branch |
 | 1.4 | **Seed and staff:** seed task (first admin, demo branch); `/api/admin/staff` (list, create with temporary password, change role, disable); `mustChangePassword` enforcement and change-password flow; audit on each | Server tests including "disabled staff lose their sessions" |
 | 1.5 | **Platform tables:** `audit_events` (moved), `idempotency_keys`, `outbox_messages` + delivery task | Replay and retry tests |
@@ -129,7 +118,7 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | 3.4 | **Add-ons library:** modifier groups, modifiers with default prices, "used by N items" | Tests |
 | 3.5 | **Menu items:** item CRUD, option sets (max 2) with the version price grid, add-on groups with per-item overrides, draft / active / archived | Tests incl. grid regeneration and version conflicts |
 | 3.6 | **Sold-out per branch:** `branch_item_states` + counter route | Tests |
-| 3.7 ✋ | **Availability rules** (Q14 overnight, Q22 "no rule" / several rules) | Tests of the window rules |
+| 3.7 | **Availability rules** (overnight windows; no rule = always, several = any; D45) | Tests of the window rules |
 | 3.8 | **Public menu API** (cached, purged on writes); **remove the old menu tables and `/api/v1` routes** | Public menu shows only active, available, in-stock versions |
 
 ### Phase 4: admin menu screens
@@ -146,37 +135,37 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | # | Step | Done when |
 |---|---|---|
 | 5.1 | **Branch settings + dining tables:** timezone, address, hours; tables with hashed QR tokens and rotation; admin pages | Tests: unknown or archived tokens rejected |
-| 5.2 ✋ | **Customer site shell:** SSR or not for the public pages (decide), layout, sign-up / sign-in / verify / reset pages | e2e of the account journeys |
+| 5.2 | **Customer site shell:** SSR public pages, SPA admin/counter (D45), layout, sign-up / sign-in / verify / reset pages | e2e of the account journeys |
 | 5.3 | **Menu browsing:** categories as tabs, sub-categories as sections, item page with options and add-ons, QR table context | e2e |
 
 ### Phase 6: orders and counter payment
 
 | # | Step | Done when |
 |---|---|---|
-| 6.1 ✋ | **Pricing and quote** (tax / service charge, rounding: blueprint §9) | Totals match written examples |
-| 6.2 | **Checkout:** idempotent order placement, snapshots, pickup numbers per business day; cart and checkout on the site | Replay and double-submit tests |
-| 6.3 ✋ | **Counter queue and actions:** accept / preparing / ready / complete / cancel (state machine and cancellation rules) + counter screen | Concurrent-action tests |
-| 6.4 ✋ | **Counter payment** (tender methods) before preparation | One payment per order under retries |
+| 6.1 | **Pricing and quote** (no tax or service charge; one voucher per order; D45) | Totals match written examples |
+| 6.2 | **Checkout** (only while open, ASAP pickup; D45): idempotent order placement, snapshots, pickup numbers per business day; cart and checkout on the site | Replay and double-submit tests |
+| 6.3 ✋ | **Counter queue and actions:** preparing (on payment) / ready / complete / cancel (payment starts preparation, D45; Q36: cancelling a paid order) + counter screen | Concurrent-action tests |
+| 6.4 | **Counter payment** (cash USD, cash KHR at the admin-set rate, KHQR; D45) before preparation | One payment per order under retries |
 | 6.5 | **Order tracking** for the customer | e2e |
-| 6.6 ✋ | **Unpaid-order expiry** task (the expiry time) | Task test |
+| 6.6 | **Unpaid-order expiry** task (30 minutes; D45) | Task test |
 
 ### Phase 7: loyalty and vouchers
 
 | # | Step | Done when |
 |---|---|---|
-| 7.1 ✋ | **Points ledger + earn on completion** (earning base, rounding) | Earned once under retries; balance reconciles |
-| 7.2 ✋ | **Voucher templates** (admin; stacking, expiry, rules) | Tests |
-| 7.3 ✋ | **Exchange points for a voucher** (who starts it) | No double spend under races |
+| 7.1 | **Points ledger + earn on completion** (paid amount after discounts, rounded down; D45) | Earned once under retries; balance reconciles |
+| 7.2 | **Voucher templates** ($ off or free item, 30 days, one per order; D45) | Tests |
+| 7.3 | **Exchange points for a voucher** (by the customer on the website; D45) | No double spend under races |
 | 7.4 | **Staff-issued vouchers** with reason and audit | Tests |
 | 7.5 | **Redemption at the counter** (lookup, redeem; not on one's own voucher) | Last-use race test |
-| 7.6 ✋ | **Reversals on cancel / refund** | Ledger reconciles |
+| 7.6 | **Reversals on cancel / refund** (reverse points, restore an unexpired voucher; D45) | Ledger reconciles |
 
 ### Phase 8: launch
 
 | # | Step | Done when |
 |---|---|---|
-| 8.1 | **Reports and audit viewer** (basic sales per day, points issued) | ✋ report definitions |
-| 8.2 | **Production:** environment, domain, email domain (SPF/DKIM), alerts, restore drill, release test scenarios (blueprint §8) | Launch checklist signed off |
+| 8.1 | **Reports and audit viewer:** sales per day and per item, points and vouchers, staff activity (D45) | Report definitions written into the plan |
+| 8.2 ✋ | **Production** (Q4, Q24): environment, domain, email domain (SPF/DKIM), alerts, restore drill, release test scenarios (blueprint §8) | Launch checklist signed off |
 
 **What happens to the current server code** (nothing is in production, so no data migration):
 - **Replaced in phase 1 (by step 1.7):** `staff_profiles`, the bootstrap route and `NUXT_BOOTSTRAP_TOKEN`, `ROLE_PERMISSIONS`, `requireStaff`, the `/api/v1` routes, the current `server/features/` services (split into repository + service layers), migration `0001_identity_and_menu` (local databases are recreated).
@@ -186,30 +175,13 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 
 ## Open questions / waiting on others
 
-| # | Question | Owner | Impact |
+Business decisions the build still needs, with the step each blocks. All are for the **project owner**; nothing is built on a guess. Answered questions move to [decisions.md](decisions.md) (the 2026-09-27 round is D45) and out of this table.
+
+| # | Question | Blocks | Suggested default |
 |---|---|---|---|
-| ~~Q1~~ | **Resolved: our own codes** (`ERROR_CODES`, D40). Was: full list of Spring error codes (`msg`). Only `NC0000`, `NC0001`, `NC0011`, `NC0014`, `NC1000`, `LOGIN_FAILED` have been observed | backend team | Better error messages and kinds (e.g. a "forbidden" code) |
-| ~~Q2~~ | **Obsolete** (no generated SDK). Was: unique, stable `operationId`s in Springdoc (today `createCategory1`, `update_2`, …) | backend team | Clean SDK names that survive regeneration |
-| ~~Q3~~ | **Resolved:** contracts in `shared/contracts/` type every field. Was: mark required fields in the spec (all response fields are optional today) | backend team | Fewer `!` / `??` in the UI |
-| Q4 | Production domain for the app (UI and API are one origin now) | project owner | Deployment: `NUXT_PUBLIC_SITE_URL`, Better Auth trusted origins, the CSRF origin check |
-| Q5 | Should admins edit translations (`nameI18n` / `descriptionI18n`: en, zh-HK, km)? Forms currently edit English only and preserve the rest | project owner | `I18nFields` component |
-| Q6 | Role rules: which screens and actions do manager and cashier get? Only `admin` (everything) exists (D40) | project owner | `ROLE_PERMISSIONS`, staff management, hidden actions |
-| ~~Q7~~ | **Resolved (D41):** PATCH, absent keeps, `null` clears. Was: `PUT /staff/categories/{id}` with `mainCategoryId` omitted: does it clear the parent or keep it? The Category form relies on "clear" (unverified) | backend team | Clearing a parent may silently not work |
-| ~~Q8~~ | **Resolved (D41):** `version` on every update and delete, 409 when stale. Was: how does the backend handle two concurrent updates of the same record (last write wins, rejection, versioning)? No version field in the generated types for categories | backend team | Edit-conflict handling |
-| Q9 | Which records may be chosen for a **new** relationship? e.g. may an inactive category be picked as a parent or as a menu item's category? A listing endpoint returning them isn't evidence | project owner (backend team if it enforces a rule) | Picker eligibility. **Deferred:** `CategorySelect` no longer offers inactive categories as new choices (D31); an existing inactive value stays |
-| ~~Q10~~ | **Resolved (D40):** origin check on every `/api/v1` write. Was: CSRF: does the backend protect cookie-authenticated POST/PUT/DELETE (CSRF token, `Origin`/`Referer` check, required `application/json`, custom header)? `SameSite=Lax` doesn't stop same-site (`*.nukcafe.co`) origins | backend team | Whether any frontend change (e.g. sending a token/header) is needed. None made: no contract exists |
-| ~~Q11~~ | **Obsolete:** one origin, no CORS. Was: CORS with credentials: which exact origins are allowed? Is any wildcard or sibling subdomain (user content, marketing) on `nukcafe.co` allowed or hosted? | backend team / project owner | Same-site attack surface for the cookies |
-| ~~Q12~~ | **Obsolete.** Was: the spec declares only `bearerAuth`, but the portal uses cookies. Are both accepted on `/staff/**`, and is the spec's security section authoritative? | backend team | Which auth path the CSRF review applies to |
-| ~~Q13~~ | **Resolved (D41):** `HH:mm` local wall time in the cafe's zone. Was: schedules: request format of `startTime`/`endTime` (responses are `HH:mm`), and does the backend apply them as UTC (`timezone: "UTC"`)? | backend team | **Decided for the UI (D33):** converted between the record zone and the viewer's browser zone, 12-hour on screen. If the backend really stores local time labelled UTC, every schedule displays shifted by the viewer's offset |
-| Q14 | Schedules: are overnight ranges (22:00–02:00) valid? | project owner | **Refused for now** (end must be after start, D41); allowing them needs the availability rule for the public menu |
-| ~~Q15~~ | **Resolved (D41):** links are written only from the menu item. Was: `PUT /staff/schedules/{id}`: does `items` replace, merge or append, and what does an omitted `items` mean? | backend team | Edit re-sends the existing ids (safe under replace or merge; S4). Blocks editing items from the schedule form |
-| Q16 | Deleting a schedule that menu items use: should the links be removed, or stay refused? | project owner | **Refused** (409 SCHEDULE_IN_USE, also a foreign key) |
-| ~~Q18~~ | **Resolved (D41):** full replacement with stable ids. Was: products: how does `PUT /staff/products/{id}` treat `variants`? Are ids matched (update in place), are omitted variants/options deleted, are new ones (no id) created? | backend team | The editor sends the full list (removed rows left out) and **warns if the reply differs** (D35). Verify on first login |
-| Q20 | ~~Sub-category numbering~~ **Decided (user, D37): per main category**, matching the data. Verify on a staff login that the apps show the saved order | backend team | |
-| Q19 | Product images: are JPEG/PNG/WebP ≤ 5 MB the right limits? How long may abandoned uploads stay? | project owner | Our limits (D41); `imageAssetId: null` removes; cleanup job not built |
-| Q17 | Schedules: must a schedule have at least one day and both times? | project owner | Required (server and form) |
-| Q21 | Translations: which languages, and do admins edit them? (Was Q5 for the UI.) No translation tables exist yet; names are English only | project owner | `*_translations` tables + `I18nFields` |
-| Q22 | Catalog availability: does an unscheduled item mean "always available"? With several schedules, any match or all? | project owner | The public menu API (next step 3) |
+| Q4 | Staging and production domains, and the email sending domain | 2.1, 8.2 | |
+| Q24 | Acceptable data loss and downtime (RPO/RTO), who receives alerts and when, data retention and erasure periods | 8.2 | |
+| Q36 | Can staff cancel an order that is **already paid** (money handed back at the counter), or does that always need an admin refund? | 6.3 | Staff and managers may cancel a paid order before it's ready, recording the cash/KHQR returned; after that, admin refund only |
 
 ## Known limitations
 

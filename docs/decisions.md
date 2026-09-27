@@ -240,7 +240,7 @@ Dates are when the decision was made. All of these were agreed with the project 
 ### D38: Full stack target and new data model, 2026-09-26
 
 - **User direction:** build a Nuxt full stack backend with `@nuxtjs/better-auth`, `@nuxthub/core`, Drizzle, SQLite, Cloudflare D1 and R2. It must serve the admin, customer and cashier apps. Start with a new data design; no Spring Boot data migration is planned.
-- **Current state:** [the backend plan](plans/fullstack-backend.md) is a proposal, not a deployed architecture. D1-D6 describe the former Spring integration and are superseded by D39. The plan's detailed schema, business rules, and API contracts remain open until agreed.
+- **Current state:** the backend plan of that time (`plans/fullstack-backend.md`, deleted 2026-09-27: superseded by the server standard, D43) was a proposal, not a deployed architecture. D1-D6 describe the former Spring integration and are superseded by D39. The plan's detailed schema, business rules, and API contracts remain open until agreed.
 - **Launch scope confirmed later the same day:** [the greenfield system blueprint](plans/system-blueprint.md) starts from the new cafe journeys. The customer website, pickup and dine-in ordering with table QR, points, vouchers, USD, one branch, email/password accounts with no guest ordering, and pay at counter before preparation are required for launch. Native app, delivery, and online payment are outside that confirmed scope. Existing frontend behavior is a reference, not a backend contract.
 - **Loyalty direction confirmed:** an order earns 1 point per USD after completion, points can be exchanged for vouchers, and staff can issue vouchers. The earning base/rounding, point exchange actor, voucher type, expiry, and redemption policy are still open; no code should guess them.
 
@@ -295,3 +295,15 @@ Dates are when the decision was made. All of these were agreed with the project 
 - **Why:** options and add-ons behave differently. The version of an item is priced per item and needs per-version reports and sold-out; extras are priced alike everywhere. The "items only in leaves" rule avoids the breakage Square users report when items sit on a parent category.
 - **Rejected:** one kind of preset for everything (Toast's size-as-modifier: vaguer prices and reports); unlimited option sets (large price grids, not needed for a cafe); unlimited category depth; items on parent categories.
 - **Details:** [docs/server/data-model.md → Menu](server/data-model.md#menu).
+
+### D45: Business rules for launch, 2026-09-27
+
+- **Context:** the owner answered the open product questions in one round (former Q6, Q9, Q14, Q19, Q21–Q23, Q25–Q35). Each answer is now written into the server standard; this entry is the record.
+- **Roles:** staff may cancel orders and mark items sold out, but not issue vouchers. Managers may issue vouchers and adjust points, but not create staff or refund. Refunds, staff management, voucher templates, media and settings are admin only. Sessions last 7 days for everyone.
+- **Menu:** archived records are never offered in pickers; draft items are invisible to customers. Availability windows may run overnight. No rule means available whenever the branch is open; several rules mean available when any matches. English only at launch. Images: JPEG/PNG/WebP up to 5 MB, unused uploads deleted after 24 hours.
+- **Customer site:** server-rendered public pages; admin and counter stay SPAs.
+- **Orders:** accepted only while the branch is open, pickup as soon as possible. No tax or service charge: menu prices are final. No accept step: recording the payment starts preparation. Customers cancel only while unpaid. Unpaid orders are cancelled after 30 minutes. Payments: cash in USD, cash in riel at an admin-set KHR rate (each payment records the rate), and KHQR.
+- **Loyalty:** points = the amount paid after the voucher discount, rounded down to whole USD, on completion. Customers exchange points for vouchers on the website. Vouchers: $ off or a free item, valid 30 days, one per order, no minimum spend. A refund or cancellation after completion reverses the points and restores an unexpired voucher.
+- **Reports at launch:** sales per day, sales per item, points and vouchers, staff activity.
+- **Still open:** Q4 (domains), Q24 (RPO/RTO, alerts, retention), Q36 (cancelling a paid order).
+- **Where it lives:** [security.md → roles](server/security.md#roles-and-permissions), [data-model.md](server/data-model.md), [operations.md → scheduled jobs](server/operations.md#scheduled-jobs), [architecture.md](server/architecture.md#shape-of-the-system).

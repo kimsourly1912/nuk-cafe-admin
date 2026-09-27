@@ -1,5 +1,7 @@
 # Schedules plan
 
+> **Historical (2026-09-27).** Written against the former Spring API. Its UI behavior notes still explain the current screens, but its API contracts, encodings and [Open] backend questions no longer apply. The server is now defined by the [server standard](../server/README.md); schedules are replaced by availability rules ([data model](../server/data-model.md#menu), D44).
+
 Planned with [feature-standard.md](../feature-standard.md) (template §1). Labels: **[Choice]** is a reversible choice made here; **[Open]** is a backend or project-owner contract, with the question listed in [progress.md](../progress.md#open-questions--waiting-on-others).
 
 **Scope decision (user, 2026-09-26):** build create, edit and delete now, using the **safest encoding the evidence allows** for each [Open] item, instead of deferring them. Each such item is marked **verify on first staff login** below. Only what no encoding makes safe stays deferred.
