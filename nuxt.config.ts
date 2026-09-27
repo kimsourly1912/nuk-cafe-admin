@@ -59,6 +59,7 @@ function securityHeaders(): Record<string, string> {
 const SCHEDULED_TASKS: Record<string, string[]> = {
   '* * * * *': ['platform:deliver-outbox'],
   '15 3 * * *': ['platform:expire-idempotency-keys'],
+  '5 * * * *': ['media:purge-temporary'],
 }
 
 /**

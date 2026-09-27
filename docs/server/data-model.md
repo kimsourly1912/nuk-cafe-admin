@@ -164,7 +164,29 @@ Feature: `media`.
 
 | Table | Columns | Invariants |
 |---|---|---|
-| `media_assets` | `object_key` (unique), `mime_type`, `byte_size`, `sha256`, `state` (`temporary` \| `attached`), `uploaded_by` | Temporary assets older than 24 h are deleted with their R2 object |
+| `media_assets` | `object_key` (unique), `mime_type`, `byte_size` (> 0), `sha256`, `state` (`temporary` \| `attached`), `uploaded_by`, `created_at`, `state_changed_at` | Temporary assets whose state is older than 24 h are deleted with their R2 object. An asset is attached to **one** record at a time |
+
+Built in step 3.2 (D57): `server/features/media/`, contract `shared/contracts/media.ts`.
+
+| Use | How |
+|---|---|
+| Upload | `POST /api/admin/media` (multipart, field `file`, permission `media:upload`) → 201 `{ id, url, mimeType, byteSize }`; audited as `media.asset.upload` |
+| Serve | `GET /media/<key>` (public, `nosniff`, cached for a year: keys never change) |
+| A record starts using an upload | `media.attachStatements(db, assetId, field)` in the record's batch: checks it now (422 `MEDIA_NOT_AVAILABLE` on `field`) and guards it in the batch (map a stale batch to `mediaNotAvailable(field)`) |
+| A record drops or replaces it | `media.releaseStatement(db, assetId)` in the same batch; its 24 hours start then |
+| Cleanup | `media:purge-temporary`, hourly at :05 |
+
+| Case | Result | Test |
+|---|---|---|
+| Bytes aren't JPEG/PNG/WebP, or don't match the claimed type (an SVG or HTML file renamed `.png`) | 415 `UNSUPPORTED_MEDIA`, nothing stored | ✔, real-server |
+| Over 5 MB | 413 `PAYLOAD_TOO_LARGE` (by `Content-Length` before reading, and by size after) | ✔, real-server |
+| No file, or an empty one | 400 `VALIDATION_FAILED` | ✔, real-server |
+| Storing the object fails | No row | ✔ |
+| Writing the row fails | The object is removed again | ✔ |
+| Two records attach the same upload at once | One wins; the other's batch fails its guard | ✔ (race) |
+| An upload is cleaned up between a record's check and its write | The record's batch fails its guard | ✔ (race) |
+| A record attaches an upload between the purge finding it and deleting it | Kept (conditional delete) | ✔ (race) |
+| The object can't be removed after its row was deleted | Reported and logged; the object stays in R2 (no record can point at it) | ✔ |
 
 ## Customers & loyalty
 

@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { check, index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { createdAt, id, status, updatedAt, version } from '../columns'
-import { mediaAssets } from './media'
+import { legacyMediaAssets } from './media'
 
 const statusCheck = (name: string, column: AnySQLiteColumn) => check(name, sql`${column} in ('ACTIVE', 'INACTIVE')`)
 
@@ -55,7 +55,7 @@ export const menuProducts = sqliteTable('menu_products', {
   description: text().notNull().default(''),
   priceMinor: integer().notNull(),
   currencyCode: text().notNull().default('USD'),
-  imageAssetId: text().references(() => mediaAssets.id, { onDelete: 'set null' }),
+  imageAssetId: text().references(() => legacyMediaAssets.id, { onDelete: 'set null' }),
   status: status(),
   sortOrder: integer().notNull().default(0),
   version: version(),

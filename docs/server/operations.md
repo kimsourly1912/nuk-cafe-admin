@@ -104,7 +104,7 @@ Production: manual workflow from a commit that is live on staging: export the da
 
 Nitro tasks in `server/tasks/`, scheduled in `nuxt.config.ts` (`nitro.scheduledTasks`, cron in UTC): Cloudflare cron triggers in deployed environments; the dev server runs them itself. Every task is **idempotent** (safe to run twice) and logs what it did. Locally a task runs on demand with `curl http://localhost:3000/_nitro/tasks/<name>` (dev only).
 
-Built so far: `platform:deliver-outbox` (every minute) and `platform:expire-idempotency-keys` (daily at 03:15 UTC).
+Built so far: `platform:deliver-outbox` (every minute), `platform:expire-idempotency-keys` (daily at 03:15 UTC) and `media:purge-temporary` (hourly at :05).
 
 | Task | Schedule | Does |
 |---|---|---|

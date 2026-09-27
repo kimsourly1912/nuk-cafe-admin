@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import type { UploadedMedia } from '#shared/contracts/menu'
 import { IMAGE_MAX_BYTES, IMAGE_TYPES } from '#shared/contracts/menu'
-import { mediaAssets } from '../../db/tables'
+import { legacyMediaAssets } from '../../db/tables'
 import type { Db } from '../../utils/batch'
 import { apiError } from '../../utils/errors'
 import type { Actor } from '../actor'
@@ -40,13 +40,13 @@ export function sniffImageType(head: Uint8Array): string | undefined {
  * menu item is saved with it; temporary assets are for a cleanup job (not built yet).
  */
 export async function recordUpload(db: Db, actor: Actor, file: { objectKey: string, mimeType: string, byteSize: number }): Promise<UploadedMedia> {
-  const [row] = await db.insert(mediaAssets)
+  const [row] = await db.insert(legacyMediaAssets)
     .values({ objectKey: file.objectKey, mimeType: file.mimeType, byteSize: file.byteSize, uploadedBy: actor.userId })
     .returning()
   return { id: row!.id, url: mediaUrl(row!.objectKey) }
 }
 
 export async function findAsset(db: Db, id: string) {
-  const [row] = await db.select().from(mediaAssets).where(eq(mediaAssets.id, id))
+  const [row] = await db.select().from(legacyMediaAssets).where(eq(legacyMediaAssets.id, id))
   return row
 }
