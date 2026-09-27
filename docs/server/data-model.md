@@ -128,6 +128,34 @@ An item without option sets has exactly one version with one price ("Croissant $
 - **Order lines snapshot** the item name, the version's option values ("Large, Iced"), its price, and each add-on's name and price, so later edits never change past orders.
 - **Price of a line** = the version's `price_minor` + each chosen add-on's price (the item override if present, else the default).
 
+### Categories API (step 3.1, D55)
+
+Feature `server/features/menu/` (`categories.*`), contract `shared/contracts/menu-categories.ts`, permission `menu:read` / `menu:write`. Every write is one batch with its guards and an audit row (`menu.category.create|update|move|archive|restore|reorder`).
+
+| Route | Does |
+|---|---|
+| `GET /api/admin/menu/categories?status=active\|archived\|all` | The tree in order: each top-level category followed by its sub-categories; `childCount` = active sub-categories |
+| `GET /api/admin/menu/categories/{id}` | One category |
+| `POST /api/admin/menu/categories` | `{ name, description?, parentId? }` → 201, at the end of its level |
+| `PATCH /api/admin/menu/categories/{id}` | `{ version, name?, description?, parentId? }`: absent keeps; a new `parentId` moves it (`null`: to the top level) to the end of its new siblings |
+| `POST /api/admin/menu/categories/{id}/archive` | `{ version }`: archives it and its active sub-categories |
+| `POST /api/admin/menu/categories/{id}/restore` | `{ version }`: restores this one only, at the end of its level |
+| `PUT /api/admin/menu/categories/order` | `{ parentId, items: [{ id, version }] }`: every active child of that parent, in the new order |
+
+| Case | Result | Test |
+|---|---|---|
+| A sub-category under a sub-category, or a category with sub-categories moved under another (or under itself) | 422 `CATEGORY_DEPTH` | ✔ |
+| Parent unknown or archived (also if archived between the check and the write) | 422 `PARENT_NOT_AVAILABLE` | ✔ (incl. the race) |
+| Moving a category that gets a sub-category between the check and the write | 409 `VERSION_CONFLICT`, nothing changes | ✔ (race) |
+| Two active siblings with the same name (case-insensitive), also two creates at once | 409 `CATEGORY_NAME_TAKEN` (partial unique indexes); archived ones don't count | ✔ (incl. the race; also on D1) |
+| Stale version (before or during the write) | 409 `VERSION_CONFLICT` | ✔ (incl. the race) |
+| Editing or archiving an archived category; restoring an active one | 409 `INVALID_STATE` | ✔ |
+| Restoring a sub-category whose parent is archived | 409 `PARENT_ARCHIVED` | ✔ |
+| Reorder missing a sibling, naming an old version, or a sibling added meanwhile | 409 `VERSION_CONFLICT`, nothing changes | ✔ (incl. the race) |
+| Unknown body field | 400 (strict objects) | staging |
+
+Positions (`sortOrder`) keep gaps after archiving and may tie after simultaneous creates (ties sort by name); only the relative order matters, and a reorder rewrites them 1…n. **"Items only in leaf categories"**: the category side (no sub-category under a sub-category) is enforced now; the item side (no item in a category with sub-categories, and no sub-category added to a category with items) comes with menu items in step 3.5.
+
 Sources: [Square item options](https://developer.squareup.com/docs/catalog-api/item-options), [Square option sets](https://squareup.com/help/us/en/article/6689-item-options), [Square nested categories (community)](https://community.squareup.com/t5/Orders-Menu-Items-Catalog/Getting-Sub-categories-to-show-when-parent-category-is-selected/td-p/827866), [Toast menu hierarchy](https://doc.toasttab.com/doc/platformguide/adminMenuHierarchy.html), [Toast shared modifier groups](https://support.toasttab.com/en/article/Shallow-and-Deep-Copying-Menu-Items-and-Modifiers), [Uber Eats menu structure](https://developer.uber.com/docs/eats/guides/menu-integration), [Loyverse variants vs modifiers](https://help.loyverse.com/help/how-use-variants-items).
 
 ## Media

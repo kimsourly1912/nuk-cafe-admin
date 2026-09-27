@@ -10,18 +10,18 @@ const statusCheck = (name: string, column: AnySQLiteColumn) => check(name, sql`$
  * Main categories (`parentId` null) and their sub-categories. Two levels only; the service
  * enforces the depth (a parent must be a main category) and ordering per parent.
  */
-export const menuCategories = sqliteTable('menu_categories', {
+export const legacyMenuCategories = sqliteTable('legacy_menu_categories', {
   id: id(),
   name: text().notNull(),
-  parentId: text().references((): AnySQLiteColumn => menuCategories.id, { onDelete: 'restrict' }),
+  parentId: text().references((): AnySQLiteColumn => legacyMenuCategories.id, { onDelete: 'restrict' }),
   status: status(),
   sortOrder: integer().notNull().default(0),
   version: version(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 }, t => [
-  statusCheck('menu_categories_status_check', t.status),
-  index('menu_categories_parent_sort_idx').on(t.parentId, t.sortOrder),
+  statusCheck('legacy_menu_categories_status_check', t.status),
+  index('legacy_menu_categories_parent_sort_idx').on(t.parentId, t.sortOrder),
 ])
 
 /**
@@ -50,7 +50,7 @@ export const menuSchedules = sqliteTable('menu_schedules', {
 /** A menu item. Prices are integer cents of `currencyCode` (USD only at launch). */
 export const menuProducts = sqliteTable('menu_products', {
   id: id(),
-  categoryId: text().notNull().references(() => menuCategories.id, { onDelete: 'restrict' }),
+  categoryId: text().notNull().references(() => legacyMenuCategories.id, { onDelete: 'restrict' }),
   name: text().notNull(),
   description: text().notNull().default(''),
   priceMinor: integer().notNull(),

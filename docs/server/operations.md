@@ -39,6 +39,8 @@ Nothing crosses environments: no production data in staging, no shared secrets, 
 | Config | `$env.staging` in `nuxt.config.ts` (preset `cloudflare_module`, bindings, `NUXT_PUBLIC_SITE_URL` as a plain var, cron triggers, Workers Logs, security headers) |
 | Secrets | `NUXT_BETTER_AUTH_SECRET` (set once with `wrangler secret put`; generated, never written down); `NUXT_MAIL_RESEND_API_KEY` (from the GitHub environment `staging`, re-sent by every deploy). `NUXT_MAIL_FROM` is a plain var |
 
+**Deploy by hand only what is on `main`** (or the branch about to be merged next): a branch deploy runs its migrations ahead of `main`, and the next deploy from `main` then runs older code against a newer database. (Happened in step 3.1: fixed by merging it right after.)
+
 **Deploys** (step 2.2, D54): every push to `main` that passes the checks deploys itself (`.github/workflows/ci.yml` → `deploy-staging`). By hand, with Wrangler logged in (`npx wrangler login`): `pnpm deploy:staging` = `pnpm build:staging` (`nuxt build --envName staging`) → `pnpm db:migrate:staging` (`wrangler d1 migrations apply DB --remote`, tracked in `_hub_migrations`) → `wrangler deploy`.
 
 **First admin on staging:** there's no seed endpoint on a deployed Worker (`/_nitro/tasks` is dev only). Sign up on the site (`POST /api/auth/sign-up/email`, or the customer sign-up page once it exists), then promote the account:
