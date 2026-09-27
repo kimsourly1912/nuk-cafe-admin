@@ -1,5 +1,7 @@
 import * as v from 'valibot'
 import { idSchema, nameSchema, textSchema, versionSchema } from './common'
+import type { AvailabilityRuleRef } from './menu-availability'
+import { availabilityRuleIdsSchema } from './menu-availability'
 
 /**
  * Menu categories (`/api/admin/menu/categories`, D44, D55): a two-level tree of top-level categories
@@ -26,6 +28,12 @@ export interface MenuCategory {
   status: CategoryStatus
   /** Active sub-categories (always 0 for a sub-category). */
   childCount: number
+  /**
+   * When its items are sold (by name): none = no limit of its own, several = when any matches. A
+   * sub-category's items follow its parent's rules too. An archived rule stays until removed, and
+   * never matches.
+   */
+  availabilityRules: AvailabilityRuleRef[]
   version: number
   createdAt: string
   updatedAt: string
@@ -44,6 +52,7 @@ export const createCategorySchema = v.strictObject({
   description: v.optional(textSchema(CATEGORY_DESCRIPTION_MAX), ''),
   /** Omit or `null` for a top-level category; a top-level category's id for a sub-category. */
   parentId: v.optional(parentIdSchema, null),
+  availabilityRuleIds: v.optional(availabilityRuleIdsSchema, []),
 })
 export type CreateCategoryInput = v.InferOutput<typeof createCategorySchema>
 
@@ -56,6 +65,8 @@ export const updateCategorySchema = v.strictObject({
   name: v.optional(nameSchema(CATEGORY_NAME_MAX)),
   description: v.optional(textSchema(CATEGORY_DESCRIPTION_MAX)),
   parentId: v.optional(parentIdSchema),
+  /** Replaces the rules it uses; `[]`: no limit of its own. */
+  availabilityRuleIds: v.optional(availabilityRuleIdsSchema),
 })
 export type UpdateCategoryInput = v.InferOutput<typeof updateCategorySchema>
 

@@ -114,9 +114,9 @@ An item without option sets has exactly one version with one price ("Croissant $
 | `menu_modifiers` | `group_id`, `name`, `price_delta_minor` (≥ 0), `is_default`, `sort_order`, `status` | Default price for every item |
 | `menu_item_modifier_groups` | `item_id`, `group_id`, `sort_order`, `rules_overridden`, `min_select` / `max_select` (the item's own rules when overridden) | PK (`item_id`, `group_id`); CHECK: overridden rules are valid (`max_select` null or ≥ 1 and ≥ `min_select`) |
 | `menu_item_modifier_prices` | `item_id`, `modifier_id`, `price_delta_minor` (≥ 0) | Optional per-item price override ("oat milk +$0.75 on the large-cup drinks"). PK (`item_id`, `modifier_id`) |
-| `menu_availability_rules` | `name` ("Breakfast"), `status`, `version` | |
-| `menu_availability_windows` | `rule_id`, `weekday`, `start_minute`, `end_minute` | Several windows per rule. **Overnight windows are allowed** (D45): an end before the start means the next day, and the window belongs to the weekday it starts on. Times are in the branch timezone |
-| `menu_category_availability`, `menu_item_availability` | links to rules | **No rule = available whenever the branch is open; several rules = available when any matches** (D45). An item is available only if its category is too |
+| `menu_availability_rules` | `name` ("Breakfast"), `status`, `version` | Library. `version` covers its windows. Names unique among active rules. **Can't be archived while a draft, an active item or an active category uses it** (D63) |
+| `menu_availability_windows` | `rule_id`, `weekday` (ISO: 1 = Monday), `start_minute` (0–1439), `end_minute` (1–1440) | Several windows per rule (at most 21), **never overlapping** (D63); PK (`rule_id`, `weekday`, `start_minute`). **Overnight windows are allowed** (D45): an end before the start means the next day, and the window belongs to the weekday it starts on. Times are in the branch timezone |
+| `menu_category_availability`, `menu_item_availability` | links to rules (at most 5 each) | **No rule = available whenever the branch is open; several rules = available when any matches** (D45). An item is available only if its category is too, and a sub-category's items only if its parent is too (D63). **An archived rule never matches** |
 | `branch_item_states` | `branch_id`, `variation_id`, `sold_out`, `updated_by` | The counter's "86" switch, per version (Large sold out, Regular still available). Later: a branch price override |
 | `menu_translations` | Not at launch | **English only at launch** (D45). Added as `*_translations` tables when a second language is needed |
 
@@ -262,6 +262,33 @@ The item returns each group with what applies **on this item**: `minSelect` / `m
 | A group twice, a price twice, more than 10 groups, a negative price | 400 (contract) | ✔ |
 | The library's default price or rules change | Items without their own follow; own prices and rules stay | ✔ |
 | Stale item version | 409 `VERSION_CONFLICT` | ✔ |
+
+### Availability rules API (step 3.7, D63)
+
+Same feature (`availability.*`, the window rules in `availability.rules.ts`), contract `shared/contracts/menu-availability.ts`, permission `menu:read` / `menu:write`. The rule's `version` covers its windows; every response is the whole rule with `itemCount` (drafts and active items) and `categoryCount` (active categories). Audited as `menu.availability_rule.<action>` (a window change records `from` and `to`).
+
+| Route | Does |
+|---|---|
+| `GET /api/admin/menu/availability-rules?status=active\|archived\|all` | Rules by name, with their windows (by weekday, then start) |
+| `GET …/{ruleId}` | One rule |
+| `POST /api/admin/menu/availability-rules` | `{ name, windows: [{ weekday, startMinute, endMinute }] }` (1–21) → 201 |
+| `PATCH …/{ruleId}` | `{ version, name?, windows? }`: `windows` replaces them all |
+| `POST …/{ruleId}/archive`, `…/restore` | `{ version }` |
+
+Items and categories choose their rules with `availabilityRuleIds` (at most 5, each once) on create and update (absent keeps, `[]` removes), and return `availabilityRules: [{ id, name, status }]` by name.
+
+**When something is available** (`isAvailableAt`, pure): the branch's local time (`localTime(instant, timeZone)`) falls in a window of an **active** rule at every level that has rules: the item, its category, the parent category. A window includes its start and excludes its end.
+
+| Case | Result | Test |
+|---|---|---|
+| Two windows of a rule overlap (overnight ones included, Sunday night into Monday too); touching is fine | 422 `AVAILABILITY_WINDOWS` on `windows.<i>` | ✔ (rules) |
+| A window starting and ending at the same minute, a weekday outside 1–7, more than 21 windows | 400 (contract) | contract |
+| Two active rules with the same name (case-insensitive), also two creates at once | 409 `AVAILABILITY_RULE_NAME_TAKEN` | ✔ (incl. the race) |
+| Stale version (before or during the write) | 409 `VERSION_CONFLICT` | ✔ (incl. the race) |
+| Editing or archiving an archived rule; restoring an active one | 409 `INVALID_STATE` | ✔ |
+| Archiving a rule a draft, active item or active category uses (also if one starts using it meanwhile) | 409 `AVAILABILITY_RULE_IN_USE`; archived items and categories don't count | ✔ (incl. both races) |
+| An item or category choosing an unknown or archived rule (also if archived meanwhile, on create and update) | 422 `AVAILABILITY_RULE_NOT_AVAILABLE` on `availabilityRuleIds.<i>` | ✔ (incl. the races) |
+| An archived rule an item or category already uses (it was archived while they were) | Stays, shown with `status: 'archived'`, never matches; the form can send it back | ✔ |
 
 Sources: [Square item options](https://developer.squareup.com/docs/catalog-api/item-options), [Square option sets](https://squareup.com/help/us/en/article/6689-item-options), [Square nested categories (community)](https://community.squareup.com/t5/Orders-Menu-Items-Catalog/Getting-Sub-categories-to-show-when-parent-category-is-selected/td-p/827866), [Toast menu hierarchy](https://doc.toasttab.com/doc/platformguide/adminMenuHierarchy.html), [Toast shared modifier groups](https://support.toasttab.com/en/article/Shallow-and-Deep-Copying-Menu-Items-and-Modifiers), [Uber Eats menu structure](https://developer.uber.com/docs/eats/guides/menu-integration), [Loyverse variants vs modifiers](https://help.loyverse.com/help/how-use-variants-items).
 

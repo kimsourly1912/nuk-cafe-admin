@@ -1,5 +1,7 @@
 import * as v from 'valibot'
 import { idSchema, nameSchema, optionalParam, pageQuerySchema, textSchema, versionSchema } from './common'
+import type { AvailabilityRuleRef } from './menu-availability'
+import { availabilityRuleIdsSchema } from './menu-availability'
 import { MAX_MODIFIER_PRICE_MINOR, MAX_MODIFIERS } from './menu-modifiers'
 
 /**
@@ -97,6 +99,11 @@ export interface MenuItem {
   variations: MenuItemVariation[]
   /** The add-on groups it offers, in order. */
   modifierGroups: ItemModifierGroup[]
+  /**
+   * When it's sold (by name): none = whenever the branch is open, several = when any matches, and
+   * its category's rules apply too. An archived rule stays until removed, and never matches.
+   */
+  availabilityRules: AvailabilityRuleRef[]
   version: number
   createdAt: string
   updatedAt: string
@@ -164,6 +171,7 @@ export const createItemSchema = v.strictObject({
   optionSetIds: v.optional(optionSetIds, []),
   variations,
   modifierGroups: v.optional(itemModifierGroups, []),
+  availabilityRuleIds: v.optional(availabilityRuleIdsSchema, []),
 })
 export type CreateItemInput = v.InferOutput<typeof createItemSchema>
 
@@ -183,6 +191,8 @@ export const updateItemSchema = v.pipe(
     variations: v.optional(variations),
     /** Replaces the whole list of add-on groups, with their rules and prices. */
     modifierGroups: v.optional(itemModifierGroups),
+    /** Replaces the rules it uses; `[]`: whenever the branch is open. */
+    availabilityRuleIds: v.optional(availabilityRuleIdsSchema),
   }),
   v.forward(v.partialCheck([['optionSetIds'], ['variations']], input => input.optionSetIds === undefined || input.variations !== undefined, 'Send the new price grid with the option sets'), ['variations']),
 )

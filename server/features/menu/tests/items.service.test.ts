@@ -25,9 +25,9 @@ let temp: OptionSet
 
 beforeEach(async () => {
   db = await createTestDb()
-  const top = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null })
+  const top = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
   drinks = top.id
-  hot = (await createCategory(db, actor, { name: 'Hot drinks', description: '', parentId: drinks })).id
+  hot = (await createCategory(db, actor, { name: 'Hot drinks', description: '', parentId: drinks, availabilityRuleIds: [] })).id
   size = await createOptionSet(db, actor, { name: 'Size', values: ['Small', 'Large'] })
   temp = await createOptionSet(db, actor, { name: 'Temperature', values: ['Hot', 'Iced'] })
 })
@@ -48,9 +48,10 @@ const latte = (overrides: Partial<CreateItemInput> = {}) => createItem(db, actor
   optionSetIds: [size.id, temp.id],
   variations: grid([size, temp]),
   modifierGroups: [],
+  availabilityRuleIds: [],
   ...overrides,
 })
-const croissant = () => createItem(db, actor, { categoryId: hot, name: 'Croissant', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 250, status: 'active' }], modifierGroups: [] })
+const croissant = () => createItem(db, actor, { categoryId: hot, name: 'Croissant', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 250, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
 
 async function upload() {
   const id = newId()
@@ -95,12 +96,12 @@ describe('creating', () => {
   it('refuses a create when the category gets a sub-category between the check and the write', async () => {
     // Written straight to the table: the API wouldn't nest three levels, but the guard mustn't rely on that.
     const racing = interleaved(db, () => db.insert(menuCategories).values({ name: 'Espresso', parentId: hot }))
-    await expectApiError(() => createItem(racing, actor, { categoryId: hot, name: 'Latte', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [] }), 422, 'CATEGORY_NOT_A_LEAF')
+    await expectApiError(() => createItem(racing, actor, { categoryId: hot, name: 'Latte', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] }), 422, 'CATEGORY_NOT_A_LEAF')
   })
 
   it('refuses a create when an option value is archived between the check and the write', async () => {
     const racing = interleaved(db, () => db.update(menuOptionValues).set({ status: 'archived' }).where(eq(menuOptionValues.id, v(size, 'Large'))))
-    await expectApiError(() => createItem(racing, actor, { categoryId: hot, name: 'Latte', description: '', imageId: null, optionSetIds: [size.id], variations: grid([size]), modifierGroups: [] }), 422, 'PRICE_GRID')
+    await expectApiError(() => createItem(racing, actor, { categoryId: hot, name: 'Latte', description: '', imageId: null, optionSetIds: [size.id], variations: grid([size]), modifierGroups: [], availabilityRuleIds: [] }), 422, 'PRICE_GRID')
   })
 
   it('attaches the image, and refuses one that\'s gone or already used', async () => {
@@ -115,12 +116,12 @@ describe('creating', () => {
 
 /** A top-level category with an item directly in it (a leaf, since it has no sub-categories). */
 async function topLevelWithToast() {
-  const id = (await createCategory(db, actor, { name: 'Food', description: '', parentId: null })).id
-  const item = await createItem(db, actor, { categoryId: id, name: 'Toast', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [] })
+  const id = (await createCategory(db, actor, { name: 'Food', description: '', parentId: null, availabilityRuleIds: [] })).id
+  const item = await createItem(db, actor, { categoryId: id, name: 'Toast', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
   return { id, item }
 }
 
-const croissantWith = (imageId: string) => createItem(db, actor, { categoryId: hot, name: 'Croissant', description: '', imageId, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 250, status: 'active' }], modifierGroups: [] })
+const croissantWith = (imageId: string) => createItem(db, actor, { categoryId: hot, name: 'Croissant', description: '', imageId, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 250, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
 
 describe('updating', () => {
   it('changes prices and switches, keeping every version\'s id', async () => {
@@ -176,8 +177,8 @@ describe('updating', () => {
   })
 
   it('moves the item to the end of another leaf category', async () => {
-    const iced = (await createCategory(db, actor, { name: 'Iced drinks', description: '', parentId: drinks })).id
-    await createItem(db, actor, { categoryId: iced, name: 'Iced tea', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 200, status: 'active' }], modifierGroups: [] })
+    const iced = (await createCategory(db, actor, { name: 'Iced drinks', description: '', parentId: drinks, availabilityRuleIds: [] })).id
+    await createItem(db, actor, { categoryId: iced, name: 'Iced tea', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 200, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
     const item = await latte()
     const moved = await updateItem(db, actor, item.id, { version: 1, categoryId: iced })
     expect(moved).toMatchObject({ categoryId: iced, sortOrder: 2 })
@@ -223,7 +224,7 @@ describe('publishing and archiving', () => {
   })
 
   it('won\'t publish an item with nothing sellable', async () => {
-    const item = await createItem(db, actor, { categoryId: hot, name: 'Tea', description: '', imageId: null, optionSetIds: [size.id], variations: [{ valueIds: [v(size, 'Small')], priceMinor: 200, status: 'active' }, { valueIds: [v(size, 'Large')], priceMinor: null, status: 'disabled' }], modifierGroups: [] })
+    const item = await createItem(db, actor, { categoryId: hot, name: 'Tea', description: '', imageId: null, optionSetIds: [size.id], variations: [{ valueIds: [v(size, 'Small')], priceMinor: 200, status: 'active' }, { valueIds: [v(size, 'Large')], priceMinor: null, status: 'disabled' }], modifierGroups: [], availabilityRuleIds: [] })
     await archiveOptionValue(db, actor, size.id, v(size, 'Small'), { version: size.version })
     await expectApiError(() => publishItem(db, actor, item.id, { version: 1 }), 422, 'NOTHING_TO_SELL')
   })
@@ -242,7 +243,7 @@ describe('publishing and archiving', () => {
     // A top-level category holding items directly is a leaf too.
     const food = await topLevelWithToast()
     const archived = await archiveItem(db, actor, food.item.id, { version: 1 })
-    await createCategory(db, actor, { name: 'Sandwiches', description: '', parentId: food.id })
+    await createCategory(db, actor, { name: 'Sandwiches', description: '', parentId: food.id, availabilityRuleIds: [] })
     await expectApiError(() => restoreItem(db, actor, food.item.id, { version: archived.version }), 422, 'CATEGORY_NOT_A_LEAF')
   })
 })
@@ -275,22 +276,22 @@ describe('listing and ordering', () => {
 describe('the category side of "items only in leaves"', () => {
   it('won\'t add a sub-category to a category with items, also when an item arrives meanwhile', async () => {
     const food = await topLevelWithToast()
-    await expectApiError(() => createCategory(db, actor, { name: 'Sandwiches', description: '', parentId: food.id }), 422, 'CATEGORY_HAS_ITEMS')
-    const iced = await createCategory(db, actor, { name: 'Iced', description: '', parentId: null })
-    const racing = interleaved(db, () => createItem(db, actor, { categoryId: iced.id, name: 'Frappe', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [] }))
-    await expectApiError(() => createCategory(racing, actor, { name: 'Frozen', description: '', parentId: iced.id }), 422, 'CATEGORY_HAS_ITEMS')
+    await expectApiError(() => createCategory(db, actor, { name: 'Sandwiches', description: '', parentId: food.id, availabilityRuleIds: [] }), 422, 'CATEGORY_HAS_ITEMS')
+    const iced = await createCategory(db, actor, { name: 'Iced', description: '', parentId: null, availabilityRuleIds: [] })
+    const racing = interleaved(db, () => createItem(db, actor, { categoryId: iced.id, name: 'Frappe', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] }))
+    await expectApiError(() => createCategory(racing, actor, { name: 'Frozen', description: '', parentId: iced.id, availabilityRuleIds: [] }), 422, 'CATEGORY_HAS_ITEMS')
   })
 
   it('won\'t move a category under one that gets an item meanwhile', async () => {
-    const iced = await createCategory(db, actor, { name: 'Iced', description: '', parentId: null })
-    const frozen = await createCategory(db, actor, { name: 'Frozen', description: '', parentId: null })
-    const racing = interleaved(db, () => createItem(db, actor, { categoryId: iced.id, name: 'Frappe', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [] }))
+    const iced = await createCategory(db, actor, { name: 'Iced', description: '', parentId: null, availabilityRuleIds: [] })
+    const frozen = await createCategory(db, actor, { name: 'Frozen', description: '', parentId: null, availabilityRuleIds: [] })
+    const racing = interleaved(db, () => createItem(db, actor, { categoryId: iced.id, name: 'Frappe', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] }))
     await expectApiError(() => updateCategory(racing, actor, frozen.id, { version: frozen.version, parentId: iced.id }), 422, 'CATEGORY_HAS_ITEMS')
   })
 
   it('archived items don\'t hold a category', async () => {
     const food = await topLevelWithToast()
     await archiveItem(db, actor, food.item.id, { version: 1 })
-    await expect(createCategory(db, actor, { name: 'Sandwiches', description: '', parentId: food.id })).resolves.toMatchObject({ parentId: food.id })
+    await expect(createCategory(db, actor, { name: 'Sandwiches', description: '', parentId: food.id, availabilityRuleIds: [] })).resolves.toMatchObject({ parentId: food.id })
   })
 })

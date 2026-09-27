@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-27 (D62: D1's 100-parameter limit)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-27 (step 3.7: availability rules, D63; step 3.6 is still open)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -120,7 +120,7 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | 3.5a ✅ | **Menu items:** item CRUD, option sets (max 2) with the version price grid, draft / active / archived, order within a category, the item side of "items only in leaves" | Tests incl. grid regeneration and version conflicts |
 | 3.5b ✅ | **Add-ons on items:** add-on groups on an item with per-item rule and price overrides; "used by N items" for add-on groups | Tests |
 | 3.6 | **Sold-out per branch:** `branch_item_states` + counter route | Tests |
-| 3.7 | **Availability rules** (overnight windows; no rule = always, several = any; D45) | Tests of the window rules |
+| 3.7 ✅ | **Availability rules** (overnight windows; no rule = always, several = any; D45, D63): the rules library, rules on items and categories, the pure window check. Built before 3.6 (they don't depend on each other) | Tests of the window rules |
 | 3.8 | **Public menu API** (cached, purged on writes); **remove the old menu tables and `/api/v1` routes** | Public menu shows only active, available, in-stock versions |
 
 ### Phase 4: admin menu screens
@@ -199,7 +199,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 125, server 307, e2e 130).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 125, server 342, e2e 130).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
@@ -224,6 +224,7 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Pitfall: backticks inside a `node -e "…"` script in bash are command substitution: they vanish silently. Use a script file or the editor for text containing backticks.
   - Pitfall: several repo files use CRLF line endings; a Node text replacement with LF anchors silently matches nothing. Normalize (`replace(/\r\n/g, '\n')`) before replacing, and check the replacement happened.
 - **e2e (preferred):** `pnpm vitest run --project e2e`. Add scenarios to `test/e2e/` instead of throwaway scripts. Pitfalls met so far:
+  - In a Claude Code cloud container the e2e harness can't find Google Chrome (`launch: { channel: 'chrome' }` in `test/e2e/support/mock-api.ts`; "Run pnpm exec playwright install chrome"). Run the e2e tests there with that line temporarily changed to `launch: { executablePath: '/opt/pw-browsers/chromium' }`, and don't commit the change. Font-provider fetch errors in that run's log are harmless.
   - `expect.poll` defaults to a 1 s timeout; a cold page (session → refresh → redirect) can take longer under full-suite load. The e2e project sets 5 s (`vitest.config.ts`). Flaky "expected /categories to be /login" failures came from this.
   - **Escape also dismisses Reka toasts.** A test that presses Escape to close a modal may silently close the toast it later checks. Close modals with their button when toasts matter.
   - `UIcon` renders `aria-hidden`, so `getByLabel('Working…')` doesn't find the busy spinner. Use `locator('[aria-label="Working…"]')`.

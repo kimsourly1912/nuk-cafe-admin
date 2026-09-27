@@ -17,7 +17,7 @@ beforeEach(async () => {
   db = await createTestDb()
 })
 
-const create = (name: string, parentId: string | null = null) => createCategory(db, actor, { name, description: '', parentId })
+const create = (name: string, parentId: string | null = null) => createCategory(db, actor, { name, description: '', parentId, availabilityRuleIds: [] })
 
 const names = (list: MenuCategory[]) => list.map(c => (c.parentId ? `  ${c.name}` : c.name))
 
@@ -66,7 +66,7 @@ describe('creating', () => {
   it('refuses a sub-category when the parent is archived between the check and the write', async () => {
     const coffee = await create('Coffee')
     const racing = interleaved(db, () => db.update(menuCategories).set({ status: 'archived' }).where(eq(menuCategories.id, coffee.id)))
-    await expectApiError(() => createCategory(racing, actor, { name: 'Filter', description: '', parentId: coffee.id }), 422, 'PARENT_NOT_AVAILABLE')
+    await expectApiError(() => createCategory(racing, actor, { name: 'Filter', description: '', parentId: coffee.id, availabilityRuleIds: [] }), 422, 'PARENT_NOT_AVAILABLE')
     expect(await listCategories(db, { status: 'all' })).toHaveLength(1)
   })
 

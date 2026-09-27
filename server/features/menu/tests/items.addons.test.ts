@@ -23,8 +23,8 @@ let extras: ModifierGroup
 
 beforeEach(async () => {
   db = await createTestDb()
-  const drinks = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null })
-  hot = (await createCategory(db, actor, { name: 'Hot drinks', description: '', parentId: drinks.id })).id
+  const drinks = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
+  hot = (await createCategory(db, actor, { name: 'Hot drinks', description: '', parentId: drinks.id, availabilityRuleIds: [] })).id
   // Milk: choose exactly one, Whole pre-selected.
   milk = await createModifierGroup(db, actor, {
     name: 'Milk',
@@ -55,6 +55,7 @@ const latte = (modifierGroups: ItemModifierGroupsInput, database: Db = db) => cr
   optionSetIds: [],
   variations: [{ valueIds: [], priceMinor: 350, status: 'active' }],
   modifierGroups,
+  availabilityRuleIds: [],
 })
 
 const groupOf = (item: MenuItem, name: string) => item.modifierGroups.find(g => g.name === name)!
@@ -144,7 +145,7 @@ describe('changing an item\'s add-ons', () => {
     expect(groupOf(kept, 'Milk').status).toBe('archived')
     // The form sends back what it read.
     await expect(updateItem(db, actor, item.id, { version: kept.version, modifierGroups: [plain(milk.id), plain(extras.id)] })).resolves.toMatchObject({ version: 2 })
-    const other = await createItem(db, actor, { categoryId: hot, name: 'Mocha', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [] })
+    const other = await createItem(db, actor, { categoryId: hot, name: 'Mocha', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
     await expectApiError(() => updateItem(db, actor, other.id, { version: 1, modifierGroups: [plain(milk.id)] }), 422, 'MODIFIER_GROUP_NOT_AVAILABLE')
   })
 
@@ -192,7 +193,7 @@ describe('races with the library', () => {
 describe('"used by N items" in the library', () => {
   it('counts drafts and active items that offer the group, not archived ones', async () => {
     const item = await latte([plain(milk.id)])
-    await createItem(db, actor, { categoryId: hot, name: 'Mocha', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [plain(milk.id), plain(extras.id)] })
+    await createItem(db, actor, { categoryId: hot, name: 'Mocha', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [plain(milk.id), plain(extras.id)], availabilityRuleIds: [] })
     expect((await getModifierGroup(db, milk.id)).itemCount).toBe(2)
     await archiveItem(db, actor, item.id, { version: item.version })
     const listed = await listModifierGroups(db, { status: 'active' })
