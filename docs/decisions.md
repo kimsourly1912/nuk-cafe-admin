@@ -443,3 +443,13 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Every response is the whole set,** so the page can replace its copy after any change.
 - **Deferred to 3.5:** "used by N items", and the effect of archiving a set or value on items.
 - **Tests:** 16, including four forced races (stale version, the last value, the maximum, two edits of one set). 7 of 10 guards fail a test when removed; the other three are early checks whose in-batch guard gives the same error. `interleaved()` (a write landing between a service's check and its batch) moved to `server/tests/support/interleave.ts` for all features.
+
+### D59: Add-ons library API (step 3.4), 2026-09-27
+
+- **Names:** the data model's terms in the API and database (`/api/admin/menu/modifier-groups`, `menu_modifier_groups`, `menu_modifiers`, like Square and Toast), "Add-ons" on the admin screen.
+- **Same shape as the Options library (D58):** one version per group covering its add-ons; archived, never deleted; names unique among active groups and within a group, case-insensitive, by partial unique indexes; every response is the whole group.
+- **Selection rules are checked twice:** a pure function (`selectionProblem`) before writing, so the admin gets the exact reason; and one guard statement in the batch (`requireSelectionRules`: active count within 1..30 and at least `min_select`; defaults within `max_select`), so a change landing in between can't leave a group impossible to order from. When that guard fails without a version change, the message asks to reload. The table also has a CHECK on `min_select` / `max_select`.
+- **Limits** [Choice]: 1–30 active add-ons per group; add-on prices 0 to $100 in whole cents (a typo guard, like `MAX_PRICE_MINOR` for items). Easy to change.
+- **Pre-selected add-ons:** moving the default in a "choose 1" group is two changes (unset, then set), because both steps are checked against the maximum. The admin screen can do both in one click later if needed.
+- **Deferred to 3.5:** "used by N items" and per-item overrides of rules and prices.
+- **Tests:** 17, including five forced races. All 11 guards fail a test when removed (the defaults guard needed its own race test, added).

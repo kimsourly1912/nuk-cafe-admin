@@ -185,6 +185,36 @@ Same feature (`options.*`), contract `shared/contracts/menu-options.ts`, permiss
 
 **Not yet:** "used by N items" and what archiving a set or value does to items (hiding their versions) come with menu items in step 3.5.
 
+### Add-ons library API (step 3.4, D59)
+
+Same feature (`modifiers.*`), contract `shared/contracts/menu-modifiers.ts`. The API and tables say **modifier groups** (the data model's term); the admin screen says **Add-ons**. Same shape as the Options library: the group's `version` covers its add-ons, every response is the whole group, audited as `menu.modifier_group.<action>` (a price change records `from` and `to`).
+
+| Route | Does |
+|---|---|
+| `GET /api/admin/menu/modifier-groups?status=active\|archived\|all` | Groups by name, with their add-ons |
+| `GET /api/admin/menu/modifier-groups/{groupId}` | One group |
+| `POST /api/admin/menu/modifier-groups` | `{ name, minSelect?, maxSelect?, modifiers: [{ name, priceDeltaMinor?, isDefault? }] }` (1–30) → 201 |
+| `PATCH …/{groupId}` | `{ version, name?, minSelect?, maxSelect? }` (`maxSelect: null` = no limit) |
+| `POST …/{groupId}/archive`, `…/restore` | `{ version }` |
+| `POST …/{groupId}/modifiers` | `{ version, name, priceDeltaMinor?, isDefault? }` → 201, at the end |
+| `PATCH …/{groupId}/modifiers/{modifierId}` | `{ version, name?, priceDeltaMinor?, isDefault? }` |
+| `POST …/{groupId}/modifiers/{modifierId}/archive`, `…/restore` | `{ version }` |
+| `PUT …/{groupId}/modifiers/order` | `{ version, modifierIds }` |
+
+**Selection rules** (`modifiers.rules.ts`, checked before every write with a precise message and again inside the batch): 1–30 active add-ons; `minSelect` ≤ active add-ons; `maxSelect` is `null` or ≥ 1 and ≥ `minSelect`; pre-selected (default) add-ons ≤ `maxSelect`. Prices are whole cents, 0 to $100.
+
+| Case | Result | Test |
+|---|---|---|
+| Rules the add-ons can't meet (minimum above the active count, maximum below the minimum or the defaults) | 422 `SELECTION_RULES` with the field and a sentence ("Customers must choose 2, but only 1 add-on is active.") | ✔ |
+| Archiving an add-on below the minimum, or the last one | 422 `SELECTION_RULES` (archive the group instead) | ✔ (incl. a race) |
+| Pre-selecting one more than the maximum (also if another is pre-selected meanwhile) | 422 `SELECTION_RULES` | ✔ (incl. the race) |
+| Duplicate names (groups; add-ons within a group), also two creates at once | 409 `MODIFIER_GROUP_NAME_TAKEN` / `MODIFIER_NAME_TAKEN` | ✔ (incl. the race) |
+| Stale version, or two edits of one group at once | 409 `VERSION_CONFLICT` | ✔ (incl. both races) |
+| Editing an archived group or add-on; restoring what isn't archived | 409 `INVALID_STATE` | ✔ |
+| An add-on of another group in the path | 404 | ✔ |
+
+**Not yet:** "used by N items", and per-item overrides of the rules and prices, come with menu items in step 3.5.
+
 Sources: [Square item options](https://developer.squareup.com/docs/catalog-api/item-options), [Square option sets](https://squareup.com/help/us/en/article/6689-item-options), [Square nested categories (community)](https://community.squareup.com/t5/Orders-Menu-Items-Catalog/Getting-Sub-categories-to-show-when-parent-category-is-selected/td-p/827866), [Toast menu hierarchy](https://doc.toasttab.com/doc/platformguide/adminMenuHierarchy.html), [Toast shared modifier groups](https://support.toasttab.com/en/article/Shallow-and-Deep-Copying-Menu-Items-and-Modifiers), [Uber Eats menu structure](https://developer.uber.com/docs/eats/guides/menu-integration), [Loyverse variants vs modifiers](https://help.loyverse.com/help/how-use-variants-items).
 
 ## Media
