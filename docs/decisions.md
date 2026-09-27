@@ -417,3 +417,11 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Errors:** business-rule refusals are 422 (`CATEGORY_DEPTH`, `PARENT_NOT_AVAILABLE`), conflicts with current data 409 (`CATEGORY_NAME_TAKEN`, `PARENT_ARCHIVED`, `INVALID_STATE`, `VERSION_CONFLICT`), per architecture.md → Errors.
 - **Deferred to 3.5:** the item side of "items only in leaf categories".
 - **Tests:** 24, including four races made deterministic with an interleaving database wrapper (another write lands between the service's check and its batch); 7 of 9 guards fail a test when removed, and the other two are early checks backed by an in-batch guard that covers the same case. Verified on staging (D1): the migration, the routes, the unique indexes under simultaneous creates.
+
+### D56: Parallel e2e shards in CI, 2026-09-27
+
+- **Cause of the slow CI:** the repository is private, and GitHub's standard runner for private repos has 2 cores. Vitest's default worker count (cores minus one) is then 1, so the 14 e2e files ran one after another: about 300 s of a 410 s run. Locally (12 cores) the same files run side by side, which is why the full suite takes about 2 minutes on a laptop.
+- **Change:** `check` (lint, typecheck, audit, unit + server) and three `e2e` shards (`pnpm test:e2e --shard=N/3`, `fail-fast: false`) run as parallel jobs; `deploy-staging` needs all of them. First run: **198 s** (was 410 s), all green.
+- **Why not more workers on one runner:** Chrome on 2 cores under full load is where our timing-sensitive tests flaked before (progress.md → e2e pitfalls); separate runners keep each shard's load the same as one file at a time.
+- **Balance:** Vitest shards by file count, not duration: shard 1 got products, schedules and unsaved-changes (194 s vs 101 s for shard 3). Accepted: a hand-kept file list per shard would silently skip a new file someone forgets to add. If the slowest shard passes about 2 minutes, add a fourth shard or split the biggest file (`products.test.ts`).
+- **Cost:** four runners per run instead of one (each e2e shard installs dependencies and builds the app, about 45 s), which counts against the private repository's Actions minutes.

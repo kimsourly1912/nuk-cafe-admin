@@ -16,7 +16,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
 
@@ -41,12 +41,33 @@ jobs:
       - name: Unit tests
         run: pnpm test:unit
 
+  # A private repository's runner has 2 cores, so Vitest ran the e2e files one after another
+  # (about 5 minutes). Three shards run side by side on three runners, each building the app once
+  # (D56). Add a shard when the slowest one passes about 2 minutes.
+  e2e:
+    name: e2e (${{ matrix.shard }}/3)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      # Every shard reports, so one failure doesn't hide another.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pnpm, Node.js and dependencies
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        with:
+          runtime: node@24
+          cache: true
+
       - name: E2E tests
-        run: pnpm test:e2e
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/3
 
   deploy-staging:
-    # Only after the checks passed, and only for main: pull requests never deploy.
-    needs: check
+    # Only after every check passed, and only for main: pull requests never deploy.
+    needs: [check, e2e]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
