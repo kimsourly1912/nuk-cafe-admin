@@ -2,9 +2,10 @@ import { and, asc, count, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
 import type { Category, CategoryListQuery, CreateCategoryBody, ReorderCategoriesBody, UpdateCategoryBody } from '#shared/contracts/menu'
 import { auditEvents, menuCategories, menuProducts } from '../../db/tables'
-import type { Db } from '../../db/types'
-import { isForeignKeyError, isStaleWrite, requireCount, requireOneChange, toIso } from '../../db/types'
-import { apiError, notFound, versionConflict } from '../../utils/api-error'
+import type { Db } from '../../utils/batch'
+import { isForeignKeyError, isStaleWrite, requireCount, requireOneChange } from '../../utils/batch'
+import { toIso } from '../../utils/time'
+import { apiError, notFound, versionConflict } from '../../utils/errors'
 import type { Actor } from '../identity/service'
 
 type CategoryRow = InferSelectModel<typeof menuCategories>
@@ -52,11 +53,11 @@ export async function getCategory(db: Db, id: string): Promise<Category> {
  * being edited, which can't become its own parent.
  */
 async function checkParent(db: Db, parentId: string, self?: string) {
-  if (parentId === self) throw apiError(400, 'CATEGORY_DEPTH', 'A category can\'t be its own parent.', { parentId: ['A category can\'t be its own parent'] })
+  if (parentId === self) throw apiError(400, 'CATEGORY_DEPTH', 'A category can\'t be its own parent.', { fieldErrors: { parentId: ['A category can\'t be its own parent'] } })
   const parent = await findRow(db, parentId)
-  if (!parent) throw apiError(400, 'REFERENCE_NOT_FOUND', 'The parent category no longer exists.', { parentId: ['Not found'] })
+  if (!parent) throw apiError(400, 'REFERENCE_NOT_FOUND', 'The parent category no longer exists.', { fieldErrors: { parentId: ['Not found'] } })
   if (parent.parentId !== null) {
-    throw apiError(400, 'CATEGORY_DEPTH', 'A sub-category can\'t have sub-categories.', { parentId: ['Choose a main category'] })
+    throw apiError(400, 'CATEGORY_DEPTH', 'A sub-category can\'t have sub-categories.', { fieldErrors: { parentId: ['Choose a main category'] } })
   }
 }
 
@@ -92,7 +93,7 @@ export async function updateCategory(db: Db, actor: Actor, id: string, input: Up
     await checkParent(db, input.parentId, id)
     const [children] = await db.select({ n: count() }).from(menuCategories).where(eq(menuCategories.parentId, id))
     if (children!.n > 0) {
-      throw apiError(409, 'CATEGORY_DEPTH', 'A category with sub-categories can\'t become a sub-category.', { parentId: ['Move its sub-categories first'] })
+      throw apiError(409, 'CATEGORY_DEPTH', 'A category with sub-categories can\'t become a sub-category.', { fieldErrors: { parentId: ['Move its sub-categories first'] } })
     }
   }
 
@@ -164,12 +165,12 @@ export async function deleteCategory(db: Db, actor: Actor, id: string, version: 
 export async function reorderCategories(db: Db, actor: Actor, input: ReorderCategoriesBody) {
   const parents = input.lists.map(list => list.parentId)
   if (new Set(parents).size !== parents.length) {
-    throw apiError(400, 'VALIDATION_FAILED', 'Each parent may appear once.', { lists: ['Each parent may appear once'] })
+    throw apiError(400, 'VALIDATION_FAILED', 'Each parent may appear once.', { fieldErrors: { lists: ['Each parent may appear once'] } })
   }
 
   const statements = []
   for (const list of input.lists) {
-    if (new Set(list.ids).size !== list.ids.length) throw apiError(400, 'VALIDATION_FAILED', 'A list repeats a category.', { lists: ['A list repeats a category'] })
+    if (new Set(list.ids).size !== list.ids.length) throw apiError(400, 'VALIDATION_FAILED', 'A list repeats a category.', { fieldErrors: { lists: ['A list repeats a category'] } })
     const children = await db.select({ id: menuCategories.id }).from(menuCategories).where(parentIs(list.parentId))
     const current = new Set(children.map(c => c.id))
     if (current.size !== list.ids.length || list.ids.some(id => !current.has(id))) {

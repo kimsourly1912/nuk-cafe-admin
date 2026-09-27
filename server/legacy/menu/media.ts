@@ -2,8 +2,8 @@ import { eq } from 'drizzle-orm'
 import type { UploadedMedia } from '#shared/contracts/menu'
 import { IMAGE_MAX_BYTES, IMAGE_TYPES } from '#shared/contracts/menu'
 import { mediaAssets } from '../../db/tables'
-import type { Db } from '../../db/types'
-import { apiError } from '../../utils/api-error'
+import type { Db } from '../../utils/batch'
+import { apiError } from '../../utils/errors'
 import type { Actor } from '../identity/service'
 
 /** Where a stored object is served (server/routes/media/[...key].get.ts). */

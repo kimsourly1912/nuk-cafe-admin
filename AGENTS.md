@@ -22,7 +22,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 NUK Cafe is one Nuxt full stack app: the customer website, the admin workspace and the cashier workspace, plus our own API (Nitro) with Better Auth, NuxtHub, Drizzle, SQLite locally and D1/R2/KV on Cloudflare. Product scope: [the system blueprint](docs/plans/system-blueprint.md). **How the server is built: the [server standard](docs/server/README.md)** (routes `/api/<surface>/…`, `server/features/` with service/repository layers, Better Auth roles and branches, the data model, operations). Build order: [progress.md → Next steps](docs/progress.md#next-steps-recommended-order).
 
-**Transition:** the admin screens (auth, categories, schedules, menu items) still run on the pre-standard `/api/v1` routes (D40, D41). Those are replaced step by step (steps 1.7 and 3.8); don't extend them.
+**Transition:** the admin screens (auth, categories, schedules, menu items) still run on the pre-standard `/api/v1` routes (D40, D41). Their server code lives in `server/legacy/` and is replaced step by step (steps 1.7 and 3.8); don't extend it (ESLint forbids new code from importing it).
 
 The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Schedules (card list) or Menu items (card grid + table); Categories is a tree (D37).
 

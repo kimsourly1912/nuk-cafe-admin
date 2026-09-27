@@ -1,4 +1,4 @@
-import type { Page, Route } from 'playwright-core'
+import type { BrowserContext, Page, Route } from 'playwright-core'
 import { getBrowser, setup, url, waitForHydration } from '@nuxt/test-utils/e2e'
 import { afterEach, expect, inject } from 'vitest'
 import type { Page as ApiPage } from '../../../shared/contracts/common'
@@ -8,12 +8,16 @@ import type { StaffSession } from '../../../shared/contracts/identity'
 /** Requests no handler answered, across every `mockApi` of the current test. */
 const unhandled: string[] = []
 
+/** Browser contexts opened by `openTabs` in the current test; closed after it so they don't pile up. */
+const contexts: BrowserContext[] = []
+
 /**
  * Call at the top of every e2e file: a browser against the app served by `global-setup.ts`.
  * Each test then fails if the app made an API request that no handler answers (see `mockApi`).
  */
 export function setupE2e() {
-  afterEach(() => {
+  afterEach(async () => {
+    await Promise.all(contexts.splice(0).map(context => context.close().catch(() => {})))
     const missing = unhandled.splice(0)
     expect(missing, 'API requests without a mock handler (add them to the test explicitly)').toEqual([])
   })
@@ -310,6 +314,7 @@ export function categoryItem(page: Page, name: string) {
 /** Tabs of one browser window: pages in one context share `BroadcastChannel`. */
 export async function openTabs(count: number) {
   const context = await (await getBrowser()).newContext()
+  contexts.push(context)
   return Promise.all(Array.from({ length: count }, () => context.newPage()))
 }
 

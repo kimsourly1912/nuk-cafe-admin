@@ -1,7 +1,7 @@
 import type { H3Event } from 'h3'
 import type { Permission, StaffSession } from '#shared/contracts/identity'
-import { authorizeStaff } from '../features/identity/service'
-import { apiError } from './api-error'
+import { authorizeStaff } from '../legacy/identity/service'
+import { apiError } from './errors'
 import { useDb } from './db'
 
 /**

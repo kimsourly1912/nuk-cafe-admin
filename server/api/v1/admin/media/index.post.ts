@@ -1,5 +1,5 @@
 import { IMAGE_MAX_BYTES } from '#shared/contracts/menu'
-import { checkImage, recordUpload } from '../../../../features/menu/media'
+import { checkImage, recordUpload } from '../../../../legacy/menu/media'
 
 /**
  * Uploads a menu image (multipart, field `file`) to R2 and records it as a temporary asset.
@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
   }
   const parts = await readMultipartFormData(event)
   const file = parts?.find(part => part.name === 'file' && part.filename)
-  if (!file) throw apiError(400, 'VALIDATION_FAILED', 'Choose an image to upload.', { file: ['Required'] })
+  if (!file) throw apiError(400, 'VALIDATION_FAILED', 'Choose an image to upload.', { fieldErrors: { file: ['Required'] } })
 
   const { objectKey, mimeType } = checkImage({ type: file.type ?? '', size: file.data.length, head: file.data.subarray(0, 16) })
   await blob.put(objectKey, file.data, { contentType: mimeType })

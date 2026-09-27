@@ -1,10 +1,10 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { auditEvents, staffProfiles } from '../../server/db/tables'
-import type { Db } from '../../server/db/types'
-import { authorizeStaff, bootstrapAdmin } from '../../server/features/identity/service'
-import { createAdmin, createTestDb, createUser } from './support/db'
-import { failure } from './support/failure'
+import type { Db } from '../../server/utils/batch'
+import { authorizeStaff, bootstrapAdmin } from '../../server/legacy/identity/service'
+import { createAdmin, createTestDb, createUser } from '../../server/tests/support/db'
+import { failure } from '../../server/tests/support/failure'
 
 const TOKEN = 'x'.repeat(32)
 

@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 
 /**
- * Conventions every `/api/v1` route follows (docs/reference/api.md):
+ * Shared API conventions (docs/server/architecture.md → Conventions):
  * - JSON in and out; ids are opaque strings; timestamps are ISO 8601 UTC strings.
  * - Failures use an HTTP status and the error body below; never HTTP 200 with a failure flag.
  * - Lists that can grow are paginated with `page` (1-based) and `pageSize`.
@@ -10,38 +10,18 @@ import * as v from 'valibot'
 export const STATUSES = ['ACTIVE', 'INACTIVE'] as const
 export type Status = typeof STATUSES[number]
 
-/** Machine-readable error codes. The HTTP status says the kind; the code says the reason. */
-export const ERROR_CODES = [
-  'VALIDATION_FAILED',
-  'UNAUTHENTICATED',
-  'NOT_STAFF',
-  'FORBIDDEN',
-  'NOT_FOUND',
-  'VERSION_CONFLICT',
-  'REFERENCE_NOT_FOUND',
-  'CATEGORY_DEPTH',
-  'CATEGORY_HAS_CHILDREN',
-  'CATEGORY_IN_USE',
-  'ORDER_STALE',
-  'SCHEDULE_IN_USE',
-  'UNSUPPORTED_MEDIA',
-  'MEDIA_TOO_LARGE',
-  'BOOTSTRAP_DISABLED',
-  'ADMIN_EXISTS',
-  'USER_NOT_FOUND',
-  'INTERNAL',
-] as const
-export type ErrorCode = typeof ERROR_CODES[number]
-
 /**
- * The error body of every failed `/api/v1` request (the `data` of the JSON error response).
- * `message` is safe to show to users; `fieldErrors` maps a request field path (`name`,
- * `variantGroups.0.name`) to its messages.
+ * The error body of every failed API request (the `data` of h3's JSON error response;
+ * docs/server/architecture.md → Errors). `code` is machine-readable (shared codes in
+ * server/utils/errors.ts, feature codes in each feature's `*.errors.ts`); `message` is safe to
+ * show to users; `fieldErrors` maps a request field path (`name`, `variations.0.priceMinor`) to
+ * its messages; `requestId` finds the log line.
  */
 export interface ApiErrorBody {
-  code: ErrorCode
+  code: string
   message: string
   fieldErrors?: Record<string, string[]>
+  requestId?: string
 }
 
 export interface Page<T> {

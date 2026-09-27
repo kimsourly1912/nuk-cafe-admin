@@ -1,7 +1,7 @@
 import { productListQuery } from '#shared/contracts/menu'
-import { listProducts } from '../../../../features/menu/products'
+import { listProducts } from '../../../../legacy/menu/products'
 
 export default defineEventHandler(async (event) => {
   await requireStaff(event, 'menu.read')
-  return listProducts(useDb(), readQueryAs(event, productListQuery))
+  return listProducts(useDb(), readValidQuery(event, productListQuery))
 })

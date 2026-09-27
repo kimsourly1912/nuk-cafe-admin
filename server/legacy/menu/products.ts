@@ -15,9 +15,10 @@ import {
   productVariantGroups,
   productVariantOptions,
 } from '../../db/tables'
-import type { Db } from '../../db/types'
-import { isStaleWrite, requireOneChange, toIso } from '../../db/types'
-import { apiError, notFound, versionConflict } from '../../utils/api-error'
+import type { Db } from '../../utils/batch'
+import { isStaleWrite, requireOneChange } from '../../utils/batch'
+import { toIso } from '../../utils/time'
+import { apiError, notFound, versionConflict } from '../../utils/errors'
 import type { Actor } from '../identity/service'
 import { mediaUrl } from './media'
 
@@ -28,7 +29,7 @@ const audit = (db: Db, actor: Actor, action: string, targetId: string, metadata?
   db.insert(auditEvents).values({ actorUserId: actor.userId, action, targetType: 'menu_product', targetId, metadata })
 
 const invalid = (field: string, message: string, code: 'VALIDATION_FAILED' | 'REFERENCE_NOT_FOUND' = 'REFERENCE_NOT_FOUND') =>
-  apiError(400, code, message, { [field]: [message] })
+  apiError(400, code, message, { fieldErrors: { [field]: [message] } })
 
 // --- Reading ---
 

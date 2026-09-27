@@ -2,9 +2,9 @@ import { and, eq, sql } from 'drizzle-orm'
 import type { BootstrapAdminBody, Permission, StaffRole, StaffSession } from '#shared/contracts/identity'
 import { ROLE_PERMISSIONS } from '#shared/contracts/identity'
 import { auditEvents, staffProfiles, user } from '../../db/tables'
-import type { Db } from '../../db/types'
-import { requireCount } from '../../db/types'
-import { apiError } from '../../utils/api-error'
+import type { Db } from '../../utils/batch'
+import { requireCount } from '../../utils/batch'
+import { apiError } from '../../utils/errors'
 
 /** Who performs a privileged action, for audit events. */
 export interface Actor {

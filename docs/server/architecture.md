@@ -70,10 +70,13 @@ server/
 │   ├── loyalty/       # points ledger, voucher templates, vouchers, redemptions
 │   ├── orders/        # quote, checkout, order state, counter payments
 │   └── platform/      # audit events, idempotency keys, outbox
-├── api/               # thin route files, grouped by surface
+├── api/               # thin route files, grouped by surface; api/[...].ts answers unknown paths with 404
 ├── tasks/             # scheduled jobs (Nitro tasks)
-├── middleware/        # request id, origin check
-└── utils/             # shared glue: errors, validation, db, permissions (auto-imported in routes)
+├── middleware/        # 00.request-id.ts, 10.origin-check.ts (run in file-name order)
+├── utils/             # shared glue (auto-imported in routes; imported explicitly in features)
+├── tests/             # tests of the shared utils; tests/support: the SQLite test harness
+├── error-handler.ts   # the /api error responses (registered in nuxt.config.ts)
+└── legacy/            # pre-standard code (D40–D41), replaced in steps 1.7 and 3.8; never build on it
 shared/contracts/      # request schemas and enums the app also uses (Valibot)
 ```
 
@@ -157,7 +160,7 @@ import { menu } from '~~/server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['write'] })   // 1. who, allowed?
-  const itemId = readIdParam(event, 'itemId')                          // 2. validate params,
+  const itemId = readIdParam(event, 'itemId', 'The menu item')         // 2. validate params,
   const input = await readValidBody(event, updateItemInput)            //    body, query
   return menu.updateItem(useDb(), actor, itemId, input)                // 3. one service call
 })
@@ -196,7 +199,7 @@ Every editable record has `version`. An edit sends the version it read; the writ
 ### Atomic writes
 
 D1 has no interactive transactions. A write that touches several rows is **one `db.batch([...])`**, which is all-or-nothing:
-- Statements that must only apply if a check still holds are guarded: `requireOneChange` after a conditional `UPDATE … WHERE version = ?`, `requireCount` for set checks (`server/utils/db.ts`).
+- Statements that must only apply if a check still holds are guarded: `requireOneChange` after a conditional `UPDATE … WHERE version = ?`, `requireCount` for set checks. `runBatch(db, statements, onStale)` runs the batch and turns a guard failure into the feature's conflict error (`server/utils/batch.ts`).
 - Reads for validation happen before the batch; the guard catches anything that changed in between.
 
 ### Idempotency
@@ -261,9 +264,24 @@ Anything outside the database (email, cache purge, R2 object deletes) happens **
 
 | Level | What | Where |
 |---|---|---|
-| Rules | Pure functions: availability, pricing, state machines | `server/features/<f>/tests/*.rules.test.ts` (unit project) |
+| Shared utils | Errors, validation, batch guards, ids, logging | `server/tests/*.test.ts` (server project) |
+| Rules | Pure functions: availability, pricing, state machines | `server/features/<f>/tests/*.rules.test.ts` (server project) |
 | Services | Every command and query against SQLite built from the real migrations, foreign keys on: happy path, each error code, **a stale-version or race case for every conditional write**, **a replay case for every idempotent action** | `server/features/<f>/tests/*.service.test.ts` (server project). Repositories are tested through their services |
 | Routes | Permission wiring: each route rejects the wrong surface/role/branch (401/403/404) and accepts the right one | route tests against the built server (added in the platform phase) |
 | App | Screens against a mocked API | `test/e2e` |
 
 Check that a guard test guards something: remove the guard and see it fail.
+
+### Shared server utilities
+
+All in `server/utils/`. Routes get them by auto-import; features import them explicitly (`../../utils/<file>`) so their tests run without Nitro.
+
+| File | Exports | Use |
+|---|---|---|
+| `errors.ts` | `apiError(status, code, message, { fieldErrors })`, `ErrorCodes`, `notFound`, `versionConflict`, `toErrorResponse` | Throw API errors; the error handler maps anything thrown to the response |
+| `validation.ts` | `readValidBody`, `readValidQuery`, `readIdParam`, `parseInput`, `MAX_JSON_BYTES` | Validate every input |
+| `batch.ts` | `Db`, `Statement`, `runBatch`, `requireOneChange`, `requireCount`, `isStaleWrite`, `isForeignKeyError`, `isUniqueViolation` | Atomic multi-statement writes |
+| `ids.ts` | `newId()` | UUID v7 for our tables |
+| `time.ts` | `toIso` | Instants in responses |
+| `log.ts` | `log(level, message, fields, event?)` | Structured logs with the request id; secret-looking keys are redacted |
+| `db.ts` | `useDb()` | The NuxtHub database, **routes and tasks only** (it imports `hub:db`, which tests can't load) |

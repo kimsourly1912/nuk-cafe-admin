@@ -5,9 +5,10 @@ import { totalPages } from '#shared/contracts/common'
 import type { CreateScheduleBody, Day, Schedule, ScheduleDetail, ScheduleOption, UpdateScheduleBody } from '#shared/contracts/menu'
 import { DAYS, SCHEDULE_END_AFTER_START } from '#shared/contracts/menu'
 import { auditEvents, menuProducts, menuSchedules, productSchedules } from '../../db/tables'
-import type { Db } from '../../db/types'
-import { isForeignKeyError, isStaleWrite, requireOneChange, toIso } from '../../db/types'
-import { apiError, notFound, versionConflict } from '../../utils/api-error'
+import type { Db } from '../../utils/batch'
+import { isForeignKeyError, isStaleWrite, requireOneChange } from '../../utils/batch'
+import { toIso } from '../../utils/time'
+import { apiError, notFound, versionConflict } from '../../utils/errors'
 import type { Actor } from '../identity/service'
 
 type ScheduleRow = InferSelectModel<typeof menuSchedules>
@@ -122,7 +123,7 @@ export async function updateSchedule(db: Db, actor: Actor, id: string, input: Up
   const startMinute = input.startTime === undefined ? current.startMinute : timeToMinutes(input.startTime)
   const endMinute = input.endTime === undefined ? current.endMinute : timeToMinutes(input.endTime)
   if (endMinute <= startMinute) {
-    throw apiError(400, 'VALIDATION_FAILED', 'Some of the submitted data is invalid.', { endTime: [SCHEDULE_END_AFTER_START] })
+    throw apiError(400, 'VALIDATION_FAILED', 'Some of the submitted data is invalid.', { fieldErrors: { endTime: [SCHEDULE_END_AFTER_START] } })
   }
 
   const changes = {

@@ -307,3 +307,13 @@ Dates are when the decision was made. All of these were agreed with the project 
 - **Reports at launch:** sales per day, sales per item, points and vouchers, staff activity.
 - **Still open:** Q4 (domains), Q24 (RPO/RTO, alerts, retention), Q36 (cancelling a paid order).
 - **Where it lives:** [security.md → roles](server/security.md#roles-and-permissions), [data-model.md](server/data-model.md), [operations.md → scheduled jobs](server/operations.md#scheduled-jobs), [architecture.md](server/architecture.md#shape-of-the-system).
+
+### D46: Server skeleton (step 1.1), 2026-09-27
+
+- **Error responses:** our Nitro error handler (`server/error-handler.ts`) is put **first** in `nitroConfig.errorHandler` from the `nitro:config` hook; Nuxt sets its own handler before that hook, so it stays second and still renders page errors. Ours answers only `/api/**`: h3's shape + `data.code` + `data.requestId`; 5xx always become a fixed `INTERNAL` message and the cause is logged. Registered by an absolute path with forward slashes: Nitro writes it into a generated import, and Windows backslashes broke the build silently (the handler became a missing external).
+- **Unknown API paths:** `server/api/[...].ts` answers 404 `NOT_FOUND`. Before, `/api/<unknown>` fell through to the SPA and returned the app's HTML with 200. Specific routes (Better Auth's `/api/auth/**`, features) still win.
+- **Request ids:** `00.request-id.ts` runs first (middleware run in file-name order), reuses `cf-ray` when present, else a UUID v7; sent back as `X-Request-Id`.
+- **Legacy code:** the pre-standard services moved to `server/legacy/` so `server/features/` contains only standard-compliant features; ESLint forbids new code from importing `legacy/` and forbids deep imports into a feature from routes or other features.
+- **Test harness:** `server/tests/support/` (SQLite from the migrations); shared-util tests in `server/tests/`, feature tests in `server/features/*/tests/`; the legacy tests stay in `test/server/` until their code is replaced.
+- **Tooling quirk, libsql native binary:** libsql loads `@libsql/<platform>` through a computed `require()` that Nitro's file tracer can't follow, so the node-server build crashed at startup once pnpm stopped placing the binary in the root `node_modules` (the built server had been finding it by walking up the folders). A `compiled` Nitro hook copies the installed binary into `.output/server/node_modules/@libsql/` for node builds. Including the `.node` file through `externals.traceInclude` was tried and fails (the tracer chokes on the raw import). Cloudflare builds use D1 and aren't affected.
+- **e2e hygiene:** `openTabs` contexts are closed after each test; accumulated contexts made two-tab tests time out under full-suite load.

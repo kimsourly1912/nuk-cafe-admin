@@ -93,7 +93,7 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 
 | # | Step | Done when |
 |---|---|---|
-| 1.1 | **Server skeleton:** `server/features/` layers; utils (`apiError` with request id, `readValidBody` / params / query, db + batch guards, UUID v7); Nitro error handler; request-id middleware; server test harness moved to features | Tests for the utils; existing screens still work |
+| 1.1 ✅ | **Server skeleton:** `server/features/` layers; utils (`apiError` with request id, `readValidBody` / params / query, db + batch guards, UUID v7); Nitro error handler; request-id middleware; server test harness moved to features | Tests for the utils; existing screens still work |
 | 1.2 | **Identity config** (roles per D45): Better Auth `admin` + `organization` plugins, roles and permission statements, `haveIBeenPwned`, auth rate-limit rules, trusted origins; **fresh migrations** (old menu tables kept until 3.8) | Migrations generated and reviewed; a server test per role grant |
 | 1.3 | **Access helpers:** `requirePermission`, `requireBranchPermission`, route rules per surface, origin check on trusted origins, security headers | Tests: 401 / 403 / 404 for wrong surface, role and branch |
 | 1.4 | **Seed and staff:** seed task (first admin, demo branch); `/api/admin/staff` (list, create with temporary password, change role, disable); `mustChangePassword` enforcement and change-password flow; audit on each | Server tests including "disabled staff lose their sessions" |
@@ -197,11 +197,13 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-26 (unit 113, server 42, e2e 115).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 113, server 58, e2e 115).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_BOOTSTRAP_TOKEN=<32+ chars> pnpm dev`, sign up (`POST /api/auth/sign-up/email` with `{ email, password, name }` and an `Origin` header), then `POST /api/v1/bootstrap/admin` with `{ token, email }` ([api.md → Identity](reference/api.md#identity)). Then log in at `/login`. The bootstrap is refused once an admin exists; `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
   - Pitfall: a bash heredoc containing an apostrophe inside a quoted `'EOF'` block failed in this environment's shell wrapper ("unexpected EOF"). Write edit scripts with the editor instead.
+  - Pitfall: to smoke-test a production build, run `node .output/server/index.mjs` with the `.env` variables **and** `NUXT_PUBLIC_SITE_URL` set; without it every auth-touching route answers 500 (logged as "siteUrl required in production").
+  - Pitfall: backticks inside a `node -e "…"` script in bash are command substitution: they vanish silently. Use a script file or the editor for text containing backticks.
   - Pitfall: several repo files use CRLF line endings; a Node text replacement with LF anchors silently matches nothing. Normalize (`replace(/\r\n/g, '\n')`) before replacing, and check the replacement happened.
 - **e2e (preferred):** `pnpm vitest run --project e2e`. Add scenarios to `test/e2e/` instead of throwaway scripts. Pitfalls met so far:
   - `expect.poll` defaults to a 1 s timeout; a cold page (session → refresh → redirect) can take longer under full-suite load. The e2e project sets 5 s (`vitest.config.ts`). Flaky "expected /categories to be /login" failures came from this.
@@ -230,7 +232,7 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Always `goto(..., { waitUntil: 'hydration' })`. Without it, assertions can run before the app mounts and fail only under full-suite load.
   - While our confirm dialog is on top, the form modal behind it is `aria-hidden`, so `getByRole('dialog')` doesn't find it. Check the form after answering.
   - UTable renders an extra `<tr>` in the header. Count cells, not rows.
-  - Two tabs of one browser: `createPage()` opens a single-page context, so create one with `(await getBrowser()).newContext()`, open both pages in it, and wait with `waitForHydration(page, url, 'hydration')` (raw pages lack the `waitUntil: 'hydration'` wrapper). Tabs in one context share `BroadcastChannel`.
+  - Two tabs of one browser (`openTabs`, closed after each test since D46): `createPage()` opens a single-page context, so create one with `(await getBrowser()).newContext()`, open both pages in it, and wait with `waitForHydration(page, url, 'hydration')` (raw pages lack the `waitUntil: 'hydration'` wrapper). Tabs in one context share `BroadcastChannel`.
   - Tab visibility: fake `document.visibilityState` + dispatch `visibilitychange`, and move time with `page.clock.install()` / `fastForward`. Offline: `page.context().setOffline(true)` (fires the `offline` event; `page.route` mocks still answer).
   - In a `node -e` one-liner inside single-quoted bash, `\d` in a regex loses its backslash. Edit test files with the editor, not shell string replacement.
 - **browser-mock (ad hoc):** start `pnpm dev --port 3123`, then drive headless Chrome with `playwright-core` (`chromium.launch({ channel: 'chrome' })`) and mock the server with `page.route('http://localhost:3123/api/**', …)` (or use the real server, see real-server above). Pitfalls met so far:

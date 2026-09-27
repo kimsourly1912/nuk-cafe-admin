@@ -2,8 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
-import type { Db } from '../../../server/db/types'
-import { staffProfiles, user } from '../../../server/db/tables'
+import type { Db } from '../../utils/batch'
+import { staffProfiles, user } from '../../db/tables'
 
 const migrationsDir = fileURLToPath(new URL('../../../server/db/migrations/sqlite', import.meta.url))
 
@@ -28,8 +28,8 @@ let users = 0
 
 /** A Better Auth user row (what sign-up creates). */
 export async function createUser(db: Db, email = `user${++users}@example.com`, name = 'Test User') {
-  const [row] = await db.insert(user).values({ id: crypto.randomUUID(), email, name }).returning()
-  return row!
+  const rows: { id: string, email: string }[] = await db.insert(user).values({ id: crypto.randomUUID(), email, name }).returning({ id: user.id, email: user.email })
+  return rows[0]!
 }
 
 /** A user with an active admin staff profile. */
