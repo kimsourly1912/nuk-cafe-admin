@@ -4,3 +4,5 @@ export { addOptionValue, archiveOptionSet, archiveOptionValue, createOptionSet, 
 export { OptionErrorCodes } from './options.errors'
 export { addModifier, archiveModifier, archiveModifierGroup, createModifierGroup, getModifierGroup, listModifierGroups, reorderModifiers, restoreModifier, restoreModifierGroup, updateModifier, updateModifierGroup } from './modifiers.service'
 export { ModifierErrorCodes } from './modifiers.errors'
+export { archiveItem, createItem, getItem, listItems, publishItem, reorderItems, restoreItem, unpublishItem, updateItem } from './items.service'
+export { ItemErrorCodes } from './items.errors'

@@ -30,6 +30,8 @@ export interface OptionSet {
   status: OptionStatus
   /** Active values first in order, then archived ones. */
   values: OptionValue[]
+  /** Menu items (drafts and active ones) that use this set. */
+  itemCount: number
   version: number
   createdAt: string
   updatedAt: string

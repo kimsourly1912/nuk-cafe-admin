@@ -3,7 +3,7 @@ import type { SQL } from 'drizzle-orm'
 import type { CategoryStatus } from '#shared/contracts/menu-categories'
 import type { Db, Statement } from '../../utils/batch'
 import { requireCount } from '../../utils/batch'
-import { menuCategories } from './menu.schema'
+import { menuCategories, menuItems } from './menu.schema'
 
 export interface CategoryRow {
   id: string
@@ -78,6 +78,18 @@ export async function nextSortOrder(db: Db, parentId: string | null): Promise<nu
 /** Aborts unless `parentId` is still an active top-level category. */
 export function requireActiveTopLevel(db: Db, parentId: string): Statement {
   return requireCount(db, sql`select count(*) from ${menuCategories} where ${menuCategories.id} = ${parentId} and ${menuCategories.parentId} is null and ${menuCategories.status} = 'active'`, 1)
+}
+
+/** Drafts and active menu items in a category (archived ones don't hold it). */
+export async function countListedItems(db: Db, categoryId: string): Promise<number> {
+  const rows: { n: number }[] = await db.select({ n: count() }).from(menuItems)
+    .where(and(eq(menuItems.categoryId, categoryId), sql`${menuItems.status} <> 'archived'`))
+  return rows[0]?.n ?? 0
+}
+
+/** Aborts unless the future parent still has no drafts or active items (items go in leaves). */
+export function requireNoItems(db: Db, categoryId: string): Statement {
+  return requireCount(db, sql`select count(*) from ${menuItems} where ${menuItems.categoryId} = ${categoryId} and ${menuItems.status} <> 'archived'`, 0)
 }
 
 /** Aborts unless the category still has no children (active or archived): it's about to become one. */

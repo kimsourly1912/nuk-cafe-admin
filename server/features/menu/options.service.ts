@@ -7,6 +7,7 @@ import { toIso } from '../../utils/time'
 import type { Actor } from '../identity'
 import { auditStatement } from '../platform'
 import { lastOptionValue, optionNotArchived, optionSetArchived, optionSetChanged, optionSetNameTaken, optionSetNotFound, optionValueArchived, optionValueNameTaken, optionValueNotFound, optionValuesChanged, tooManyOptionValues } from './options.errors'
+import { itemCountsBySet } from './items.repository'
 import * as repo from './options.repository'
 import type { OptionSetRow, OptionValueRow } from './options.repository'
 
@@ -16,7 +17,7 @@ import type { OptionSetRow, OptionValueRow } from './options.repository'
  * concurrent edits of one set never interleave.
  */
 
-function toOptionSet(row: OptionSetRow, values: OptionValueRow[]): OptionSet {
+function toOptionSet(row: OptionSetRow, values: OptionValueRow[], itemCounts: Map<string, number>): OptionSet {
   const own = values.filter(v => v.setId === row.id)
   return {
     id: row.id,
@@ -24,6 +25,7 @@ function toOptionSet(row: OptionSetRow, values: OptionValueRow[]): OptionSet {
     status: row.status,
     values: [...own.filter(v => v.status === 'active'), ...own.filter(v => v.status !== 'active')]
       .map(v => ({ id: v.id, name: v.name, sortOrder: v.sortOrder, status: v.status })),
+    itemCount: itemCounts.get(row.id) ?? 0,
     version: row.version,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
@@ -33,7 +35,7 @@ function toOptionSet(row: OptionSetRow, values: OptionValueRow[]): OptionSet {
 async function loadSet(db: Db, id: string): Promise<OptionSet> {
   const row = await repo.findSet(db, id)
   if (!row) throw optionSetNotFound()
-  return toOptionSet(row, await repo.valuesOf(db, [id]))
+  return toOptionSet(row, await repo.valuesOf(db, [id]), await itemCountsBySet(db, [id]))
 }
 
 /** The set, checked: exists, at the version read, and active (unless restoring). */
@@ -72,8 +74,9 @@ async function runSetBatch(db: Db, setId: string, version: number, statements: S
 
 export async function listOptionSets(db: Db, query: OptionSetListQuery): Promise<OptionSet[]> {
   const sets = await repo.listSets(db, query.status)
-  const values = await repo.valuesOf(db, sets.map(s => s.id))
-  return sets.map(set => toOptionSet(set, values))
+  const ids = sets.map(s => s.id)
+  const [values, itemCounts] = await Promise.all([repo.valuesOf(db, ids), itemCountsBySet(db, ids)])
+  return sets.map(set => toOptionSet(set, values, itemCounts))
 }
 
 export async function getOptionSet(db: Db, id: string): Promise<OptionSet> {

@@ -1,6 +1,7 @@
 import { apiError, ErrorCodes, notFound, versionConflict } from '../../utils/errors'
 
 export const CategoryErrorCodes = {
+  CATEGORY_HAS_ITEMS: 'CATEGORY_HAS_ITEMS',
   CATEGORY_NAME_TAKEN: 'CATEGORY_NAME_TAKEN',
   CATEGORY_DEPTH: 'CATEGORY_DEPTH',
   PARENT_NOT_AVAILABLE: 'PARENT_NOT_AVAILABLE',
@@ -25,6 +26,12 @@ export const tooDeep = (reason: 'parent-is-sub' | 'has-children') =>
   apiError(422, CategoryErrorCodes.CATEGORY_DEPTH, reason === 'parent-is-sub'
     ? 'A sub-category can\'t have sub-categories of its own.'
     : 'This category has sub-categories, so it can\'t become a sub-category.', { fieldErrors: { parentId: ['Choose a top-level category'] } })
+
+/** A category holds sub-categories or items, never both (D44): one with items can't get sub-categories. */
+export const parentHasItems = () =>
+  apiError(422, CategoryErrorCodes.CATEGORY_HAS_ITEMS, 'That category has menu items. Move them to a sub-category first, or pick another parent.', {
+    fieldErrors: { parentId: ['Choose a category without menu items'] },
+  })
 
 export const parentNotAvailable = () =>
   apiError(422, CategoryErrorCodes.PARENT_NOT_AVAILABLE, 'That category doesn\'t exist or is archived.', {

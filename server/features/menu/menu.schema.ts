@@ -1,11 +1,11 @@
 import { sql } from 'drizzle-orm'
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
-import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { newId } from '../../utils/ids'
 
 /**
- * The menu (docs/server/data-model.md → Menu, D44). Step 3.1: categories; 3.3: options; 3.4: add-ons. Items
- * and availability join in steps 3.5 to 3.7. Registered with NuxtHub through the
+ * The menu (docs/server/data-model.md → Menu, D44): categories (3.1), options (3.3), add-ons (3.4),
+ * items (3.5). Add-ons on items, sold-out and availability join in 3.5b to 3.7. Registered with NuxtHub through the
  * `hub:db:schema:extend` hook; column names are snake_case in SQL.
  */
 
@@ -126,4 +126,72 @@ export const menuModifiers = sqliteTable('menu_modifiers', {
   check('menu_modifiers_price_check', sql`${t.priceDeltaMinor} >= 0`),
   index('menu_modifiers_group_sort_idx').on(t.groupId, t.sortOrder),
   uniqueIndex('menu_modifiers_active_name_idx').on(t.groupId, sql`lower(${t.name})`).where(sql`${t.status} = 'active'`),
+])
+
+export const ITEM_STATUSES = ['draft', 'active', 'archived'] as const
+export const VARIATION_STATUSES = ['active', 'disabled', 'retired'] as const
+
+/**
+ * A menu item (D44, D60) in a leaf category. `draft` items are invisible to customers; `archived`
+ * ones are kept (orders will refer to them) and can be restored as drafts. `version` covers the item
+ * **and its option sets and variations**: the item form saves them together.
+ */
+export const menuItems = sqliteTable('menu_items', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  categoryId: text().notNull().references(() => menuCategories.id, { onDelete: 'restrict' }),
+  name: text().notNull(),
+  description: text().notNull().default(''),
+  /** A `media_assets` id (the media feature owns that table; attached while the item uses it). */
+  imageAssetId: text(),
+  status: text({ enum: ITEM_STATUSES }).notNull().default('draft'),
+  sortOrder: integer().notNull().default(0),
+  version: integer().notNull().default(1),
+  createdAt: instant().notNull().default(nowMs),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  check('menu_items_status_check', sql`${t.status} in ('draft', 'active', 'archived')`),
+  index('menu_items_category_sort_idx').on(t.categoryId, t.sortOrder),
+  index('menu_items_status_idx').on(t.status),
+])
+
+/** The option sets an item's versions come from, in grid order (at most 2 per item). */
+export const menuItemOptionSets = sqliteTable('menu_item_option_sets', {
+  itemId: text().notNull().references(() => menuItems.id, { onDelete: 'cascade' }),
+  setId: text().notNull().references(() => menuOptionSets.id, { onDelete: 'restrict' }),
+  sortOrder: integer().notNull(),
+}, t => [
+  primaryKey({ columns: [t.itemId, t.setId] }),
+])
+
+/**
+ * One priced version of an item: one combination of its option sets' values ("Large, Iced"), or
+ * the only version of an item without option sets. Its id never changes: orders and sold-out
+ * switches refer to it. `disabled`: in the grid but switched off (price optional); `retired`: no
+ * longer in the grid (an option set was removed), kept for history.
+ */
+export const menuItemVariations = sqliteTable('menu_item_variations', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  itemId: text().notNull().references(() => menuItems.id, { onDelete: 'cascade' }),
+  /** The sorted value ids joined with `,` (`''` without option sets): unique per item. */
+  combinationKey: text().notNull(),
+  priceMinor: integer(),
+  currency: text().notNull().default('USD'),
+  status: text({ enum: VARIATION_STATUSES }).notNull().default('disabled'),
+  sortOrder: integer().notNull().default(0),
+  createdAt: instant().notNull().default(nowMs),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  check('menu_item_variations_status_check', sql`${t.status} in ('active', 'disabled', 'retired')`),
+  check('menu_item_variations_price_check', sql`${t.priceMinor} is null or ${t.priceMinor} >= 0`),
+  check('menu_item_variations_active_price_check', sql`${t.status} <> 'active' or ${t.priceMinor} is not null`),
+  uniqueIndex('menu_item_variations_combination_idx').on(t.itemId, t.combinationKey),
+])
+
+/** The option values of a variation: one per option set of the item. */
+export const menuVariationOptionValues = sqliteTable('menu_variation_option_values', {
+  variationId: text().notNull().references(() => menuItemVariations.id, { onDelete: 'cascade' }),
+  valueId: text().notNull().references(() => menuOptionValues.id, { onDelete: 'restrict' }),
+}, t => [
+  primaryKey({ columns: [t.variationId, t.valueId] }),
+  index('menu_variation_option_values_value_idx').on(t.valueId),
 ])
