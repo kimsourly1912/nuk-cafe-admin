@@ -65,7 +65,7 @@ const itemColumns = {
 }
 
 /** A variation is sellable when it's active, priced, and none of its values is archived. */
-const sellable = sql`${menuItemVariations.status} = 'active' and ${menuItemVariations.priceMinor} is not null and not exists (
+export const sellable = sql`${menuItemVariations.status} = 'active' and ${menuItemVariations.priceMinor} is not null and not exists (
   select 1 from ${menuVariationOptionValues} join ${menuOptionValues} on ${menuOptionValues.id} = ${menuVariationOptionValues.valueId}
   where ${menuVariationOptionValues.variationId} = ${menuItemVariations.id} and ${menuOptionValues.status} = 'archived')`
 

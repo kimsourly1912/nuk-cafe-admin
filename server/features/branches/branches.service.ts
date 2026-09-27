@@ -1,5 +1,6 @@
 import type { Db } from '../../utils/batch'
 import { newId } from '../../utils/ids'
+import { notFound } from '../../utils/errors'
 import * as repo from './branches.repository'
 
 export interface SeededBranch {
@@ -21,4 +22,18 @@ export async function seedDemoBranch(db: Db, input: { timezone: string }): Promi
 /** Active branches (id and name), for pickers such as the staff form's. Step 5.1 adds the rest. */
 export async function listBranchOptions(db: Db): Promise<repo.BranchOptionRow[]> {
   return repo.listActiveBranches(db)
+}
+
+export interface OpenBranch {
+  id: string
+  name: string
+  /** IANA zone of its wall clock ("Asia/Phnom_Penh"): opening hours and availability use it. */
+  timezone: string
+}
+
+/** An active branch for the public surface; unknown and archived ones are 404. */
+export async function getActiveBranch(db: Db, id: string): Promise<OpenBranch> {
+  const branch = await repo.findBranch(db, id)
+  if (!branch || branch.status !== 'active') throw notFound('This branch')
+  return { id: branch.id, name: branch.name, timezone: branch.timezone }
 }

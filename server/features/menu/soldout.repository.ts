@@ -76,3 +76,10 @@ export function markOnSaleStatements(db: Db, branchId: string, variationIds: str
     .set({ soldOut: false, updatedBy: userId, updatedAt: now })
     .where(and(eq(branchItemStates.branchId, branchId), inArray(branchItemStates.variationId, ids), eq(branchItemStates.soldOut, true))))
 }
+
+/** The variations sold out at the branch (for the customer menu). */
+export async function soldOutIds(db: Db, branchId: string): Promise<Set<string>> {
+  const rows: { variationId: string }[] = await db.select({ variationId: branchItemStates.variationId }).from(branchItemStates)
+    .where(and(eq(branchItemStates.branchId, branchId), eq(branchItemStates.soldOut, true)))
+  return new Set(rows.map(r => r.variationId))
+}

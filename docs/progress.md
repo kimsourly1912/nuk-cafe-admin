@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-27 (step 3.6: sold out per branch, D64)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-27 (step 3.8a: the public menu, D65)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -31,7 +31,7 @@ Every "done" item states how it was checked. Keep using these labels:
 
 **Greenfield product blueprint (2026-09-26):** [system-blueprint.md](plans/system-blueprint.md) starts from customer, staff, and manager journeys. Confirmed launch scope: customer website, pickup and dine-in with table QR, USD, one branch, email/password accounts with no guest ordering, pay at counter before preparation, points earned at 1 per USD after completion and exchanged for vouchers, and staff-issued vouchers; native app, delivery, and online payment are outside that scope. Product policy questions remain open in the blueprint.
 
-**Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier screens; no admin reset of a staff member's password; no cleanup of temporary uploads; no public menu API.
+**Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier screens; no admin reset of a staff member's password; no cleanup of temporary uploads. The public menu API exists (3.8a) but no customer screen uses it yet.
 
 The Foundation table below is the app's shared UI behavior; it stays valid through the server rebuild.
 
@@ -121,7 +121,8 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | 3.5b ✅ | **Add-ons on items:** add-on groups on an item with per-item rule and price overrides; "used by N items" for add-on groups | Tests |
 | 3.6 ✅ | **Sold-out per branch:** `branch_item_states` + counter route (D64); stays until switched back (Q37) | Tests |
 | 3.7 ✅ | **Availability rules** (overnight windows; no rule = always, several = any; D45, D63): the rules library, rules on items and categories, the pure window check. Built before 3.6 (they don't depend on each other) | Tests of the window rules |
-| 3.8 | **Public menu API** (cached, purged on writes); **remove the old menu tables and `/api/v1` routes** | Public menu shows only active, available, in-stock versions |
+| 3.8a ✅ | **Public menu API** (`GET /api/public/menu?branchId=`; no cache yet by the owner's choice, cache-ready: D65) | Public menu shows only active, available, in-stock versions |
+| 3.8b | **Move the admin menu screens onto the new API, then remove the legacy menu** (owner, 2026-09-27: **don't delete the screens**): Categories and Menu items call `/api/admin/menu/*`; Schedules become availability rules (D63); verify each screen in the browser (e2e + real-server); only then remove `/api/v1`, `server/legacy` and the D41 tables, and re-point AGENTS.md's reference-feature guidance if it changes | Every admin menu screen works on the new API; no code imports `server/legacy` |
 
 ### Phase 4: admin menu screens
 
@@ -171,9 +172,9 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 
 **What happens to the current server code** (nothing is in production, so no data migration):
 - **Replaced in phase 1 (by step 1.7):** `staff_profiles`, the bootstrap route and `NUXT_BOOTSTRAP_TOKEN`, `ROLE_PERMISSIONS`, `requireStaff`, the `/api/v1` routes, the current `server/features/` services (split into repository + service layers), migration `0001_identity_and_menu` (local databases are recreated).
-- **Replaced in step 3.8:** the D41 menu tables (categories with parents, schedules, products, variant groups).
+- **Replaced in step 3.8b:** the D41 menu tables (categories with parents, schedules, products, variant groups).
 - **Kept and moved into the new layout:** `apiError`, the validation helpers, the batch guards, the origin check, audit events, media handling, the `server` test harness; in the app, `apiFetch` / `ApiError` (pointed at the new routes).
-- **Admin screens:** Categories, Schedules and Menu items keep working against the old routes until step 3.8 removes them, then return in phase 4.
+- **Admin screens:** Categories, Schedules and Menu items keep working against the old routes until step 3.8b moves them onto the new API (owner, 2026-09-27: the screens are kept, not deleted; Schedules become availability rules). Phase 4 then adds what the new model brings (Options, Add-ons, the price grid).
 
 ## Open questions / waiting on others
 
@@ -200,11 +201,11 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 125, server 355, e2e 130).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 125, server 374, e2e 130).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
-  - Pitfall: sign-up checks the password against Have I Been Pwned (network needed): `password123` is refused with `PASSWORD_COMPROMISED`. Use a long random one.
+  - Pitfall: sign-up checks the password against Have I Been Pwned (network needed): `password123` is refused with `PASSWORD_COMPROMISED`. Use a long random one. In a Claude Code cloud container the network policy blocks `api.pwnedpasswords.com`, so sign-up and change-password answer 500; for a local smoke test, clear the seeded admin's flag in the throwaway `.data/db/sqlite.db` (`update user set must_change_password = 0 …`) instead of changing the password.
   - Pitfall: in Drizzle, ``exists(sql`select …`)`` renders the subquery without parentheses; write ``sql`(select …)` `` inside it, or SQLite reports `near "select": syntax error`.
   - Pitfall: drizzle's **D1** driver can't batch a raw ``db.run(sql`…`)`` that has bound parameters (it crashes reading `stmt.bind`); libsql can, so local tests never show it. Batch statements must be query-builder statements; the guards are `select`s (D53, test in `server/tests/batch.test.ts` with a stand-in D1 client).
   - Pitfall: `nuxt build --envName staging` doesn't apply `$production`; repeat what deployed builds need in `$env.<name>`.

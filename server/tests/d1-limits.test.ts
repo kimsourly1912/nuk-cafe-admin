@@ -13,10 +13,12 @@ import type { Actor } from '../features/identity'
 import { createStaff, listStaff, updateStaffAccess } from '../features/identity/staff.service'
 import { createAvailabilityRule, listAvailabilityRules } from '../features/menu/availability.service'
 import { createCategory, listCategories, reorderCategories } from '../features/menu/categories.service'
-import { createItem, updateItem } from '../features/menu/items.service'
+import { createItem, publishItem, updateItem } from '../features/menu/items.service'
 import { createModifierGroup, listModifierGroups } from '../features/menu/modifiers.service'
 import { createOptionSet, listOptionSets } from '../features/menu/options.service'
 import { setSoldOut } from '../features/menu/soldout.service'
+import { getPublicMenu } from '../features/menu/catalog.service'
+import { mediaAssets } from '../features/media/media.schema'
 import type { Db } from '../utils/batch'
 import { newId } from '../utils/ids'
 import { createAdmin, createTestDb, createUser, D1_MAX_PARAMS } from './support/db'
@@ -108,6 +110,22 @@ describe('sold out at its limits', () => {
     const staff = { userId: 'staff-1', role: 'customer' as const, branchId, branchRole: 'staff' as const }
     expect((await setSoldOut(db, staff, { variationIds, soldOut: true })).variations).toHaveLength(MAX_SOLD_OUT_VARIATIONS)
     expect((await setSoldOut(db, staff, { variationIds, soldOut: false })).variations).toHaveLength(0)
+  })
+})
+
+describe('the public menu at its limits', () => {
+  it('lists more items with images than fit in one statement', async () => {
+    const branchId = newId()
+    await db.insert(organization).values({ id: branchId, name: 'Main', slug: 'main', timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+    const drinks = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
+    for (const name of names(120, 'Item')) {
+      const imageId = newId()
+      await db.insert(mediaAssets).values({ id: imageId, objectKey: `menu/${imageId}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x' })
+      const item = await createItem(db, actor, { categoryId: drinks.id, name, description: '', imageId, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
+      await publishItem(db, actor, item.id, { version: item.version })
+    }
+    const menu = await getPublicMenu(db, { branchId })
+    expect(menu.categories[0]!.items.filter(i => i.imageUrl)).toHaveLength(120)
   })
 })
 

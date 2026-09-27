@@ -83,6 +83,13 @@ export async function getAsset(db: Db, id: string): Promise<MediaAsset | undefin
   return row && toAsset(row)
 }
 
+/** The public URL of each of these assets that exists, by id (for lists of records with images). */
+export async function assetUrls(db: Db, ids: string[]): Promise<Map<string, string>> {
+  if (!ids.length) return new Map()
+  const rows = await repo.findAssets(db, [...new Set(ids)])
+  return new Map(rows.map(row => [row.id, mediaUrl(row.objectKey)]))
+}
+
 export interface PurgeReport {
   deleted: number
   /** Attached or released again after being found: kept. */

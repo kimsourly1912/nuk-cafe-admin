@@ -10,3 +10,4 @@ export { archiveAvailabilityRule, createAvailabilityRule, getAvailabilityRule, l
 export { AvailabilityErrorCodes } from './availability.errors'
 export { listSoldOut, setSoldOut } from './soldout.service'
 export { SoldOutErrorCodes } from './soldout.errors'
+export { getPublicMenu } from './catalog.service'

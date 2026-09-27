@@ -263,6 +263,20 @@ The item returns each group with what applies **on this item**: `minSelect` / `m
 | The library's default price or rules change | Items without their own follow; own prices and rules stay | ✔ |
 | Stale item version | 409 `VERSION_CONFLICT` | ✔ |
 
+### Public menu (step 3.8a, D65)
+
+`GET /api/public/menu?branchId=…` (anyone, `no-store`, contract `shared/contracts/public-menu.ts`): `{ branch, currency, at, categories }`. Each top-level category holds `categories` (its sub-categories) or `items`; each item has `optionSets`, `variations` (`{ id, valueIds, label, priceMinor }`) and `modifierGroups` (the rules and prices that apply on it).
+
+| Shown | Rule |
+|---|---|
+| Categories | Active, with something to show (empty ones are left out) |
+| Items | Active, in an active category, available now on the branch's clock (item, category and parent rules; an archived or missing rule never matches) |
+| Versions | Sellable (active, priced, no archived value) and not sold out at this branch; an item with none left is left out |
+| Option values | Only those a listed version uses |
+| Add-ons | Active groups and add-ons; the item's own prices and rules; the minimum capped at the add-ons offered |
+
+A menu read is never a reservation: checkout checks everything again (6.1–6.2). No cache yet (D65); `loadCatalog` is the part a cache would hold.
+
 ### Sold out per branch (step 3.6, D64)
 
 Same feature (`soldout.*`), contract `shared/contracts/menu-sold-out.ts`, on the **counter surface**: the branch comes from the path and `requireBranchPermission` checks the caller's membership.

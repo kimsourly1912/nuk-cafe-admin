@@ -1,2 +1,2 @@
-export { listBranchOptions, seedDemoBranch } from './branches.service'
-export type { SeededBranch } from './branches.service'
+export { getActiveBranch, listBranchOptions, seedDemoBranch } from './branches.service'
+export type { OpenBranch, SeededBranch } from './branches.service'
