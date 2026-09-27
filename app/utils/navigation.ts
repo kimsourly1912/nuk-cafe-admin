@@ -1,6 +1,7 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 import { availabilityRulesNavigation } from '~/features/availability-rules'
 import { categoriesNavigation } from '~/features/categories'
+import { optionSetsNavigation } from '~/features/option-sets'
 import { productsNavigation } from '~/features/products'
 import { schedulesNavigation } from '~/features/schedules'
 import { staffNavigation } from '~/features/staff'
@@ -17,6 +18,7 @@ export const navigationItems: NavigationMenuItem[][] = [
     { label: 'Menu', type: 'label' },
     productsNavigation,
     categoriesNavigation,
+    optionSetsNavigation,
     schedulesNavigation,
     availabilityRulesNavigation,
   ],

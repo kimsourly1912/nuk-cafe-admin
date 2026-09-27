@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-27 (step 3.8b part 1: the Availability page, D66)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-27 (step 3.8b part 2a: the Options page, D67)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -74,6 +74,7 @@ The admin screens that exist today. They run on the **pre-standard** `/api/v1` r
 | categories (menu) | `categories`, `categories/{id}`, `categories/order` | **done, reference feature**: tree of mains and subs, search + status tabs, create/edit, add sub-category, delete, batch delete, drag-to-sort per level, version checks. server + unit + browser-mock (`categories.test.ts`) + real-server |
 | schedules (menu) | `schedules`, `schedules/options`, `schedules/{id}` | **done**: list (search, status, day), create, edit (menu items shown read-only, never sent), delete + bulk delete for schedules not in use; times as cafe time (D41). server + unit + browser-mock (`schedules.test.ts`) + real-server |
 | availability-rules = "Availability" | **new API** `/api/admin/menu/availability-rules` | **done** (3.8b part 1, D66): cards with each rule's times in words and what uses it, Active/Archived tabs, search, create/edit with rows of days and times (overnight, midnight end), the server's overlap error shown on its row, archive (disabled while in use) and restore. unit (12) + browser-mock (`availability-rules.test.ts`, 9) + real-server (headless Chromium on `pnpm dev`: create, overlap refused on the right row, overnight edit, archive, restore) |
+| option-sets = "Options" | **new API** `/api/admin/menu/option-sets` | **done** (3.8b part 2a, D67): cards with each set's values in order and what uses it, Active/Archived tabs, search; create with first values; an editor that saves each change at once (rename, add, rename/archive/restore a value, reorder by drag or ↑/↓) with the version of the last answer, an in-editor Reload after a conflict; archive and restore sets. unit (5) + browser-mock (`option-sets.test.ts`, 9) + real-server (headless Chromium on `pnpm dev`: 8 writes in a row, a duplicate refused by the server, archive and restore) |
 | products = "Menu items" | `products`, `products/all`, `products/{id}`, `media` | **done**: list/grid/grouped menu, filters, create/edit (image upload, replace, **remove**, category, price in cents, schedules, variant editor), delete + bulk delete. server + unit + browser-mock (`products.test.ts`) + real-server. **Not built:** sort order within a category, price-range filter |
 
 Everything else (branches and tables, the customer website, orders, payments, loyalty, vouchers, reports) is not started; it is built in the numbered steps below. Community posts, carbon and banners from the old API have no product design and are out of scope until the owner asks for them.
@@ -123,7 +124,7 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | 3.6 ✅ | **Sold-out per branch:** `branch_item_states` + counter route (D64); stays until switched back (Q37) | Tests |
 | 3.7 ✅ | **Availability rules** (overnight windows; no rule = always, several = any; D45, D63): the rules library, rules on items and categories, the pure window check. Built before 3.6 (they don't depend on each other) | Tests of the window rules |
 | 3.8a ✅ | **Public menu API** (`GET /api/public/menu?branchId=`; no cache yet by the owner's choice, cache-ready: D65) | Public menu shows only active, available, in-stock versions |
-| 3.8b | **Move the admin menu screens onto the new API, then remove the legacy menu** (owner, 2026-09-27: **don't delete the screens**; D66). Categories and Menu items must move **together** (the item form's category picker and the legacy items' foreign key), and the item form needs the Options and Add-ons pages, so 3.8b absorbs phase 4 in this order: **part 1 ✅ Availability page** (replaces Schedules as a screen); **part 2** Options and Add-ons pages (4.2, 4.3); **part 3** Categories and Menu items together (4.1, 4.4), each verified in the browser (e2e + real-server), then remove `/api/v1`, `server/legacy`, the D41 tables, the Schedules screen and `shared/contracts/menu.ts`, and re-point AGENTS.md's reference-feature guidance | Every admin menu screen works on the new API; no code imports `server/legacy` |
+| 3.8b | **Move the admin menu screens onto the new API, then remove the legacy menu** (owner, 2026-09-27: **don't delete the screens**; D66). Categories and Menu items must move **together** (the item form's category picker and the legacy items' foreign key), and the item form needs the Options and Add-ons pages, so 3.8b absorbs phase 4 in this order: **part 1 ✅ Availability page** (replaces Schedules as a screen); **part 2** Options (**2a ✅**, D67) and Add-ons (2b) pages (4.2, 4.3); **part 3** Categories and Menu items together (4.1, 4.4), each verified in the browser (e2e + real-server), then remove `/api/v1`, `server/legacy`, the D41 tables, the Schedules screen and `shared/contracts/menu.ts`, and re-point AGENTS.md's reference-feature guidance | Every admin menu screen works on the new API; no code imports `server/legacy` |
 
 ### Phase 4: admin menu screens
 
@@ -202,7 +203,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 137, server 374, e2e 139).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 142, server 374, e2e 148).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
@@ -228,6 +229,7 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Pitfall: several repo files use CRLF line endings; a Node text replacement with LF anchors silently matches nothing. Normalize (`replace(/\r\n/g, '\n')`) before replacing, and check the replacement happened.
 - **e2e (preferred):** `pnpm vitest run --project e2e`. Add scenarios to `test/e2e/` instead of throwaway scripts. Pitfalls met so far:
   - In a Claude Code cloud container the e2e harness can't find Google Chrome (`launch: { channel: 'chrome' }` in `test/e2e/support/mock-api.ts`; "Run pnpm exec playwright install chrome"). Run the e2e tests there with that line temporarily changed to `launch: { executablePath: '/opt/pw-browsers/chromium' }`, and don't commit the change. Font-provider fetch errors in that run's log are harmless.
+  - **Toast actions can't be reached while a modal or slide-over is open**: the overlay hides the rest of the page (`aria-hidden`), toasts included, so `getByRole('button', …)` never finds a toast's button (and neither can a keyboard or screen-reader user). Put an action the user needs while the overlay is open inside the overlay (the Options editor's Reload alert, D67). "Reopen" toasts are fine: they appear after the modal closed.
   - `expect.poll` defaults to a 1 s timeout; a cold page (session → refresh → redirect) can take longer under full-suite load. The e2e project sets 5 s (`vitest.config.ts`). Flaky "expected /categories to be /login" failures came from this.
   - **Escape also dismisses Reka toasts.** A test that presses Escape to close a modal may silently close the toast it later checks. Close modals with their button when toasts matter.
   - `UIcon` renders `aria-hidden`, so `getByLabel('Working…')` doesn't find the busy spinner. Use `locator('[aria-label="Working…"]')`.
@@ -242,7 +244,7 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Status-tab counts call the list endpoint with `size=1`: exclude those when counting list requests (`isCount` in `list-page.test.ts`).
   - Row buttons are named after the item ("Actions for Tea", "Select Tea"), so a user-menu button like "alice" needs `{ exact: true }` once an item contains that name.
   - `page.reload()` has no `waitUntil: 'hydration'`; use `page.goto(page.url(), { waitUntil: 'hydration' })`.
-  - Under load, a full `pnpm test` once hit a wave of 30 s timeouts in unrelated files right after another e2e run; the rerun passed. Rerun before chasing such a failure. Seen again in step 1.3: the two-tab tests (`auth`, `freshness`, `session`) time out only when `pnpm test` runs every project at once; alone, and in `pnpm test:e2e`, they pass.
+  - Under load, a full `pnpm test` once hit a wave of 30 s timeouts in unrelated files right after another e2e run; the rerun passed. Rerun before chasing such a failure. Seen again in step 1.3: the two-tab tests (`auth`, `freshness`, `session`) time out only when `pnpm test` runs every project at once; alone, and in `pnpm test:e2e`, they pass. Seen once in 3.8b part 2a: `unsaved-changes` "asks on browser forward" failed in a full `pnpm test:e2e` and passed alone three times and in the full rerun.
   - `getByLabel` matches **substrings**: `'Name'` also matches "Name of group 1", and "Option 2 of Milk" matched "Extra price of option 2 of Milk". Use `{ exact: true }`, or labels that can't contain each other.
   - SortableJS drag and drop works with Playwright's `locator.dragTo(target)` on the drag handle.
   - `UInputNumber` is `role="spinbutton"` (not a textbox); `fill('4.2')` works and it shows `$4.20` after blur.

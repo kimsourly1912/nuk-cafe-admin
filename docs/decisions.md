@@ -523,3 +523,12 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **`StatusTabs` takes its tabs** (`tabs` prop, default Active / Inactive), because every new-API screen has `active` / `archived` (items add `draft`). Existing screens are unchanged.
 - **The Schedules screen stays** in the sidebar until part 3: the old item form still picks schedules.
 - **Verified:** unit (row ↔ window mapping, midnight end, overnight, form rules, wording); e2e (9, two of them checked to fail with the behavior removed: the in-use lock and the overlap row); real-server in headless Chromium on `pnpm dev` (create, an overlap refused and shown on its row, an overnight edit, archive, restore; the stored windows match).
+
+### D67: The Options page (step 3.8b, part 2a), 2026-09-27
+
+- **Each change is saved at once** ([plan](plans/option-sets.md)): the API has one call per action on a set and answers with the whole set, whose `version` covers its values (D58). A draft-and-save form would have to replay several calls and could fail halfway, so the editor (a slide-over) sends each change on its own and keeps the latest set it got back; the next call sends that version. New sets are created in a modal with their first values (one request), then open in the editor.
+- **All changes to one set share one mutation key and lock** (`option-set:<id>`), so two never run at once: the second would fail its version check anyway.
+- **The unsaved-changes guard watches only pending text** (a changed name, a value being renamed, a value being added), not the whole editor: saving one of them clears it and leaves the others guarded.
+- **A version conflict shows an alert with Reload inside the editor**, not a toast action. Found by the browser test: while a modal or slide-over is open, the rest of the page (toasts included) is `aria-hidden`, so a toast's button can't be reached by keyboard or screen reader. The existing "Reopen" toasts are unaffected (they appear after their modal closed).
+- **Archiving a set that items use is allowed** (they keep it, D60); the confirmation says how many. The last active value's Archive is disabled, and Add at 20 values.
+- **Verified:** unit (the create form); e2e (9; the version forwarding and the last-value lock checked to fail with the behavior removed); real-server in headless Chromium on `pnpm dev` (create, add, reorder, rename, archive and restore a value, rename the set, a duplicate value refused by the server, archive and restore the set: 8 writes in a row, each with the previous answer's version).
