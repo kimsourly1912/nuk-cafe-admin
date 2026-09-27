@@ -1,14 +1,14 @@
 import { and, asc, count, eq, inArray, isNull, sql } from 'drizzle-orm'
 import type { InferSelectModel } from 'drizzle-orm'
 import type { Category, CategoryListQuery, CreateCategoryBody, ReorderCategoriesBody, UpdateCategoryBody } from '#shared/contracts/menu'
-import { auditEvents, menuCategories, menuProducts } from '../../db/tables'
+import { auditEvents, legacyMenuCategories, menuProducts } from '../../db/tables'
 import type { Db } from '../../utils/batch'
 import { isForeignKeyError, isStaleWrite, requireCount, requireOneChange } from '../../utils/batch'
 import { toIso } from '../../utils/time'
 import { apiError, notFound, versionConflict } from '../../utils/errors'
 import type { Actor } from '../actor'
 
-type CategoryRow = InferSelectModel<typeof menuCategories>
+type CategoryRow = InferSelectModel<typeof legacyMenuCategories>
 
 export function toCategory(row: CategoryRow): Category {
   return {
@@ -23,22 +23,22 @@ export function toCategory(row: CategoryRow): Category {
   }
 }
 
-const parentIs = (parentId: string | null) => (parentId === null ? isNull(menuCategories.parentId) : eq(menuCategories.parentId, parentId))
+const parentIs = (parentId: string | null) => (parentId === null ? isNull(legacyMenuCategories.parentId) : eq(legacyMenuCategories.parentId, parentId))
 
 const audit = (db: Db, actor: Actor, action: string, targetId: string | null, metadata?: Record<string, unknown>) =>
   db.insert(auditEvents).values({ actorId: actor.userId, action, targetType: 'menu_category', targetId, metadata })
 
 /** Every category (the list is small), mains and subs, in their sort order. */
 export async function listCategories(db: Db, query: { level?: 'main' | 'sub' } = {}): Promise<Category[]> {
-  const rows = await db.select().from(menuCategories)
-    .where(query.level === 'main' ? isNull(menuCategories.parentId) : query.level === 'sub' ? sql`${menuCategories.parentId} is not null` : undefined)
-    .orderBy(asc(menuCategories.sortOrder), asc(menuCategories.name))
+  const rows = await db.select().from(legacyMenuCategories)
+    .where(query.level === 'main' ? isNull(legacyMenuCategories.parentId) : query.level === 'sub' ? sql`${legacyMenuCategories.parentId} is not null` : undefined)
+    .orderBy(asc(legacyMenuCategories.sortOrder), asc(legacyMenuCategories.name))
   return rows.map(toCategory)
 }
 export type { CategoryListQuery }
 
 async function findRow(db: Db, id: string) {
-  const [row] = await db.select().from(menuCategories).where(eq(menuCategories.id, id))
+  const [row] = await db.select().from(legacyMenuCategories).where(eq(legacyMenuCategories.id, id))
   return row
 }
 
@@ -63,7 +63,7 @@ async function checkParent(db: Db, parentId: string, self?: string) {
 
 /** Next position among the siblings: new categories go last. */
 async function nextSortOrder(db: Db, parentId: string | null) {
-  const [row] = await db.select({ max: sql<number | null>`max(${menuCategories.sortOrder})` }).from(menuCategories).where(parentIs(parentId))
+  const [row] = await db.select({ max: sql<number | null>`max(${legacyMenuCategories.sortOrder})` }).from(legacyMenuCategories).where(parentIs(parentId))
   return (row?.max ?? 0) + 1
 }
 
@@ -72,7 +72,7 @@ export async function createCategory(db: Db, actor: Actor, input: Required<Creat
   const id = crypto.randomUUID()
   const sortOrder = await nextSortOrder(db, input.parentId)
   const [[row]] = await db.batch([
-    db.insert(menuCategories).values({ id, name: input.name, parentId: input.parentId, status: input.status, sortOrder }).returning(),
+    db.insert(legacyMenuCategories).values({ id, name: input.name, parentId: input.parentId, status: input.status, sortOrder }).returning(),
     audit(db, actor, 'menu_category.create', id, { name: input.name }),
   ])
   return toCategory(row!)
@@ -91,7 +91,7 @@ export async function updateCategory(db: Db, actor: Actor, id: string, input: Up
   const moving = input.parentId !== undefined && input.parentId !== current.parentId
   if (moving && input.parentId) {
     await checkParent(db, input.parentId, id)
-    const [children] = await db.select({ n: count() }).from(menuCategories).where(eq(menuCategories.parentId, id))
+    const [children] = await db.select({ n: count() }).from(legacyMenuCategories).where(eq(legacyMenuCategories.parentId, id))
     if (children!.n > 0) {
       throw apiError(409, 'CATEGORY_DEPTH', 'A category with sub-categories can\'t become a sub-category.', { fieldErrors: { parentId: ['Move its sub-categories first'] } })
     }
@@ -104,9 +104,9 @@ export async function updateCategory(db: Db, actor: Actor, id: string, input: Up
   }
   try {
     await db.batch([
-      db.update(menuCategories)
-        .set({ ...changes, version: sql`${menuCategories.version} + 1` })
-        .where(and(eq(menuCategories.id, id), eq(menuCategories.version, input.version))),
+      db.update(legacyMenuCategories)
+        .set({ ...changes, version: sql`${legacyMenuCategories.version} + 1` })
+        .where(and(eq(legacyMenuCategories.id, id), eq(legacyMenuCategories.version, input.version))),
       // Changed by someone else since the read: nothing is written, not even the audit event.
       requireOneChange(db),
       audit(db, actor, 'menu_category.update', id, { fields: Object.keys(changes) }),
@@ -129,7 +129,7 @@ export async function deleteCategory(db: Db, actor: Actor, id: string, version: 
   if (current.version !== version) throw versionConflict('This category')
 
   const [[children], [products]] = await Promise.all([
-    db.select({ n: count() }).from(menuCategories).where(eq(menuCategories.parentId, id)),
+    db.select({ n: count() }).from(legacyMenuCategories).where(eq(legacyMenuCategories.parentId, id)),
     db.select({ n: count() }).from(menuProducts).where(eq(menuProducts.categoryId, id)),
   ])
   if (children!.n > 0) {
@@ -142,7 +142,7 @@ export async function deleteCategory(db: Db, actor: Actor, id: string, version: 
 
   try {
     await db.batch([
-      db.delete(menuCategories).where(and(eq(menuCategories.id, id), eq(menuCategories.version, version))),
+      db.delete(legacyMenuCategories).where(and(eq(legacyMenuCategories.id, id), eq(legacyMenuCategories.version, version))),
       requireOneChange(db),
       audit(db, actor, 'menu_category.delete', id, { name: current.name }),
     ])
@@ -171,19 +171,19 @@ export async function reorderCategories(db: Db, actor: Actor, input: ReorderCate
   const statements = []
   for (const list of input.lists) {
     if (new Set(list.ids).size !== list.ids.length) throw apiError(400, 'VALIDATION_FAILED', 'A list repeats a category.', { fieldErrors: { lists: ['A list repeats a category'] } })
-    const children = await db.select({ id: menuCategories.id }).from(menuCategories).where(parentIs(list.parentId))
+    const children = await db.select({ id: legacyMenuCategories.id }).from(legacyMenuCategories).where(parentIs(list.parentId))
     const current = new Set(children.map(c => c.id))
     if (current.size !== list.ids.length || list.ids.some(id => !current.has(id))) {
       throw apiError(409, 'ORDER_STALE', 'Categories were added, moved or deleted meanwhile. Reload and arrange them again.')
     }
     statements.push(requireCount(
       db,
-      sql`select count(*) from ${menuCategories} where ${list.parentId === null ? sql`${menuCategories.parentId} is null` : sql`${menuCategories.parentId} = ${list.parentId}`} and ${inArray(menuCategories.id, list.ids.length ? list.ids : [''])}`,
+      sql`select count(*) from ${legacyMenuCategories} where ${list.parentId === null ? sql`${legacyMenuCategories.parentId} is null` : sql`${legacyMenuCategories.parentId} = ${list.parentId}`} and ${inArray(legacyMenuCategories.id, list.ids.length ? list.ids : [''])}`,
       list.ids.length,
     ))
-    statements.push(requireCount(db, sql`select count(*) from ${menuCategories} where ${parentIs(list.parentId)}`, list.ids.length))
+    statements.push(requireCount(db, sql`select count(*) from ${legacyMenuCategories} where ${parentIs(list.parentId)}`, list.ids.length))
     list.ids.forEach((id, index) => statements.push(
-      db.update(menuCategories).set({ sortOrder: index + 1 }).where(eq(menuCategories.id, id)),
+      db.update(legacyMenuCategories).set({ sortOrder: index + 1 }).where(eq(legacyMenuCategories.id, id)),
     ))
   }
   statements.push(audit(db, actor, 'menu_category.reorder', null, { lists: input.lists.length }))

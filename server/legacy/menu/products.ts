@@ -8,7 +8,7 @@ import { CURRENCY, MAX_MENU_ITEMS } from '#shared/contracts/menu'
 import {
   auditEvents,
   mediaAssets,
-  menuCategories,
+  legacyMenuCategories,
   menuProducts,
   menuSchedules,
   productSchedules,
@@ -41,8 +41,8 @@ async function assemble(db: Db, rows: ProductRow[]): Promise<Product[]> {
   const assetIds = [...new Set(rows.flatMap(r => (r.imageAssetId ? [r.imageAssetId] : [])))]
 
   const [categories, assets, links, groups] = await Promise.all([
-    db.select({ id: menuCategories.id, name: menuCategories.name, parentId: menuCategories.parentId, status: menuCategories.status })
-      .from(menuCategories).where(inArray(menuCategories.id, categoryIds)),
+    db.select({ id: legacyMenuCategories.id, name: legacyMenuCategories.name, parentId: legacyMenuCategories.parentId, status: legacyMenuCategories.status })
+      .from(legacyMenuCategories).where(inArray(legacyMenuCategories.id, categoryIds)),
     assetIds.length ? db.select().from(mediaAssets).where(inArray(mediaAssets.id, assetIds)) : Promise.resolve([]),
     db.select().from(productSchedules).where(inArray(productSchedules.productId, ids)),
     db.select().from(productVariantGroups).where(inArray(productVariantGroups.productId, ids))
@@ -125,7 +125,7 @@ export async function getProduct(db: Db, id: string): Promise<Product> {
 // --- Checks shared by create and update ---
 
 async function checkCategory(db: Db, categoryId: string) {
-  const [category] = await db.select({ id: menuCategories.id }).from(menuCategories).where(eq(menuCategories.id, categoryId))
+  const [category] = await db.select({ id: legacyMenuCategories.id }).from(legacyMenuCategories).where(eq(legacyMenuCategories.id, categoryId))
   if (!category) throw invalid('categoryId', 'The category no longer exists')
 }
 
