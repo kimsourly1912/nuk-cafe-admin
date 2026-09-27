@@ -58,7 +58,7 @@ The Foundation table below is the app's shared UI behavior; it stays valid throu
 | Login/logout across tabs (D26) | done | e2e (checked to fail with the broadcast disabled) |
 | Open-redirect fix: `?redirect=//other-site` after login now goes to `/` (D26) | done | e2e |
 | Keyboard shortcuts: `/`, `N`, Ctrl/⌘+Enter, `?` list (D25) | done | e2e (the behind-a-dialog guard was checked by removing it) |
-| CI: GitHub Actions runs lint, typecheck, unit and e2e (D24) | written | **not run yet**: first run on the next push. YAML validated locally |
+| CI: GitHub Actions: lint, typecheck, audit and unit in one job, e2e in three parallel shards, then the staging deploy (D24, D54, D56) | done | runs on every PR and push to `main`; about 3.5 min (was 7) |
 | Feature architecture + ESLint boundary rules | done | lint (violations verified to be reported) |
 | CRUD state: `useApiQuery`, `useMutation` (per-item concurrency, shared state, batch, Stop, Retry failed), `useTableSelection`, `BulkActionsBar`, leave-page guard | done | unit (engine), browser-mock (all async scenarios) |
 | **List UI refresh (2026-09-26, [plan](plans/list-ui-refresh.md), D37):** `StatusTabs` + `useStatusCounts`, floating `BulkActionsBar`, `ListSkeleton`, selection helpers for cards/trees | done | e2e on all three pages; light + dark screenshots |

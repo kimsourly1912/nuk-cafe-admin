@@ -80,7 +80,7 @@ Rules:
 
 ## Deploys
 
-CI on every push and pull request (`.github/workflows/ci.yml`): lint, typecheck, `pnpm audit --audit-level high` (lower advisories are reviewed with dependency updates), unit + server tests, e2e.
+CI on every push and pull request (`.github/workflows/ci.yml`), as parallel jobs: `check` (lint, typecheck, `pnpm audit --audit-level high`, unit + server tests) and `e2e (1/3)` to `e2e (3/3)` (`vitest --shard`, each builds the app once). Lower advisories are reviewed with dependency updates.
 
 On push to `main`, after those pass, the `deploy-staging` job (GitHub environment `staging`, one deploy at a time, never cancelled halfway):
 1. `pnpm build:staging`;
