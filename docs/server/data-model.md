@@ -112,8 +112,8 @@ An item without option sets has exactly one version with one price ("Croissant $
 | `menu_variation_option_values` | `variation_id`, `value_id` | One value per option set of the item; no two variations of an item share the same combination |
 | `menu_modifier_groups` | `name` ("Milk"), `min_select`, `max_select` (null = no limit), `status`, `version` | Library. `max_select` ≥ `min_select`. Changes apply to every item using it (the page shows "Used by N items") |
 | `menu_modifiers` | `group_id`, `name`, `price_delta_minor` (≥ 0), `is_default`, `sort_order`, `status` | Default price for every item |
-| `menu_item_modifier_groups` | `item_id`, `group_id`, `sort_order`, `min_select` / `max_select` overrides (nullable) | PK (`item_id`, `group_id`) |
-| `menu_item_modifier_prices` | `item_id`, `modifier_id`, `price_delta_minor` | Optional per-item price override ("oat milk +$0.75 on the large-cup drinks") |
+| `menu_item_modifier_groups` | `item_id`, `group_id`, `sort_order`, `rules_overridden`, `min_select` / `max_select` (the item's own rules when overridden) | PK (`item_id`, `group_id`); CHECK: overridden rules are valid (`max_select` null or ≥ 1 and ≥ `min_select`) |
+| `menu_item_modifier_prices` | `item_id`, `modifier_id`, `price_delta_minor` (≥ 0) | Optional per-item price override ("oat milk +$0.75 on the large-cup drinks"). PK (`item_id`, `modifier_id`) |
 | `menu_availability_rules` | `name` ("Breakfast"), `status`, `version` | |
 | `menu_availability_windows` | `rule_id`, `weekday`, `start_minute`, `end_minute` | Several windows per rule. **Overnight windows are allowed** (D45): an end before the start means the next day, and the window belongs to the weekday it starts on. Times are in the branch timezone |
 | `menu_category_availability`, `menu_item_availability` | links to rules | **No rule = available whenever the branch is open; several rules = available when any matches** (D45). An item is available only if its category is too |
@@ -124,7 +124,7 @@ An item without option sets has exactly one version with one price ("Croissant $
 
 - **Changing an item's option sets** regenerates its version grid: existing combinations keep their prices, new combinations start disabled with no price until one is entered, removed combinations are disabled (history keeps them).
 - **Adding a value to an option set** (e.g. "Extra large" to Size) does not change existing items; each item's grid shows the new column as disabled until a price is set. **Archiving a value** disables the versions that use it everywhere.
-- **Editing an add-on group** (names, default prices, rules) changes every item that uses it; per-item overrides stay.
+- **Editing an add-on group** (names, default prices, rules) changes every item that uses it; per-item overrides stay. Library edits don't re-check items' own rules (D61): an item whose own minimum no longer fits the group's active add-ons is capped at the quote (step 6.1).
 - **Order lines snapshot** the item name, the version's option values ("Large, Iced"), its price, and each add-on's name and price, so later edits never change past orders.
 - **Price of a line** = the version's `price_minor` + each chosen add-on's price (the item override if present, else the default).
 
@@ -213,18 +213,17 @@ Same feature (`modifiers.*`), contract `shared/contracts/menu-modifiers.ts`. The
 | Editing an archived group or add-on; restoring what isn't archived | 409 `INVALID_STATE` | ✔ |
 | An add-on of another group in the path | 404 | ✔ |
 
-**Not yet:** "used by N items", and per-item overrides of the rules and prices, come with menu items in step 3.5.
 
 ### Menu items API (step 3.5a, D60)
 
-Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/contracts/menu-items.ts`. The item's `version` covers the item, its option sets and its variations. Audited as `menu.item.<action>`. Add-ons on items come in step 3.5b.
+Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/contracts/menu-items.ts`. The item's `version` covers the item, its option sets, its variations and its add-on groups. Audited as `menu.item.<action>`.
 
 | Route | Permission | Does |
 |---|---|---|
 | `GET /api/admin/menu/items?page&pageSize&search&categoryId&status` | `menu:read` | Summaries by category, then position: category name, image, the sellable price range. Default status: drafts and active (`status=archived` or `all` on request) |
 | `GET /api/admin/menu/items/{itemId}` | `menu:read` | The item with its option sets and variations |
-| `POST /api/admin/menu/items` | `menu:write` | `{ categoryId, name, description?, imageId?, optionSetIds?, variations }` → 201, a **draft** at the end of its category |
-| `PATCH /api/admin/menu/items/{itemId}` | `menu:write` | `{ version, categoryId?, name?, description?, imageId?, optionSetIds?, variations? }`: absent keeps; `imageId: null` removes; `optionSetIds` needs `variations` |
+| `POST /api/admin/menu/items` | `menu:write` | `{ categoryId, name, description?, imageId?, optionSetIds?, variations, modifierGroups? }` → 201, a **draft** at the end of its category |
+| `PATCH /api/admin/menu/items/{itemId}` | `menu:write` | `{ version, categoryId?, name?, description?, imageId?, optionSetIds?, variations?, modifierGroups? }`: absent keeps; `imageId: null` removes; `optionSetIds` needs `variations`; `modifierGroups` replaces the whole list |
 | `POST …/{itemId}/publish`, `…/unpublish` | `menu:publish` | draft ↔ active |
 | `POST …/{itemId}/archive`, `…/restore` | `menu:write` | draft/active → archived; archived → draft (at the end of its category) |
 | `PUT /api/admin/menu/items/order` | `menu:write` | `{ categoryId, items: [{ id, version }] }`: every draft and active item of the category |
@@ -246,6 +245,23 @@ Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/c
 | Restoring into a category that has since got sub-categories | 422 `CATEGORY_NOT_A_LEAF` | ✔ |
 
 Option sets now report `itemCount` (drafts and active items using them).
+
+### Add-ons on items (step 3.5b, D61)
+
+`modifierGroups` is the item's list of add-on groups, in order (at most 10, each once): `[{ groupId, rules?: { minSelect, maxSelect } | null, prices?: [{ modifierId, priceDeltaMinor }] }]`. `rules: null` (the default) uses the group's rules; `prices` are this item's own prices for some of the group's add-ons (whole cents, 0 to $100, one per add-on). When sent, it replaces the list, the rules and the prices; when absent, all stay.
+
+The item returns each group with what applies **on this item**: `minSelect` / `maxSelect` (its own if `rulesOverridden`, else the group's), and each add-on's `priceDeltaMinor` (its own if `priceOverridden`, else the default) next to `defaultPriceDeltaMinor`, `isDefault` and `status`. Add-ons: the group's active ones in order, then archived ones the item has a price for. Add-on groups now report `itemCount` (drafts and active items offering them).
+
+| Case | Result | Test |
+|---|---|---|
+| A group that doesn't exist, or is archived and not already on the item (also if archived meanwhile, on create and update) | 422 `MODIFIER_GROUP_NOT_AVAILABLE` on `modifierGroups.<i>.groupId` | ✔ (incl. both races) |
+| A group archived in the library that the item already offers | Stays, shown with `status: 'archived'`; the form can send it back | ✔ |
+| Own rules the group's active add-ons can't meet (minimum above the active count, maximum below the minimum or the defaults) | 422 `ITEM_SELECTION_RULES` on `modifierGroups.<i>.rules[.minSelect|.maxSelect]` | ✔ |
+| A price for an add-on of another group, or an archived one not priced before (also if archived meanwhile) | 422 `MODIFIER_NOT_AVAILABLE` on `modifierGroups.<i>.prices.<j>.modifierId` | ✔ (incl. the race) |
+| An archived add-on the item has a price for | Keeps its price, listed after the active ones, back in place when restored | ✔ |
+| A group twice, a price twice, more than 10 groups, a negative price | 400 (contract) | ✔ |
+| The library's default price or rules change | Items without their own follow; own prices and rules stay | ✔ |
+| Stale item version | 409 `VERSION_CONFLICT` | ✔ |
 
 Sources: [Square item options](https://developer.squareup.com/docs/catalog-api/item-options), [Square option sets](https://squareup.com/help/us/en/article/6689-item-options), [Square nested categories (community)](https://community.squareup.com/t5/Orders-Menu-Items-Catalog/Getting-Sub-categories-to-show-when-parent-category-is-selected/td-p/827866), [Toast menu hierarchy](https://doc.toasttab.com/doc/platformguide/adminMenuHierarchy.html), [Toast shared modifier groups](https://support.toasttab.com/en/article/Shallow-and-Deep-Copying-Menu-Items-and-Modifiers), [Uber Eats menu structure](https://developer.uber.com/docs/eats/guides/menu-integration), [Loyverse variants vs modifiers](https://help.loyverse.com/help/how-use-variants-items).
 

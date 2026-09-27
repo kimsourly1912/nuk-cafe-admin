@@ -37,6 +37,8 @@ export interface ModifierGroup {
   status: ModifierStatus
   /** Active modifiers first in order, then archived ones. */
   modifiers: Modifier[]
+  /** Menu items (drafts and active ones) that offer this group. */
+  itemCount: number
   version: number
   createdAt: string
   updatedAt: string

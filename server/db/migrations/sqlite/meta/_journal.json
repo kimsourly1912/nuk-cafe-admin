@@ -57,6 +57,13 @@
       "when": 1790518428131,
       "tag": "0007_menu_items",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1790520283055,
+      "tag": "0008_menu_item_modifiers",
+      "breakpoints": true
     }
   ]
 }
