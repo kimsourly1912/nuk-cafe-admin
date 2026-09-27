@@ -7,6 +7,7 @@ import { menuCategories } from '../menu.schema'
 import { archiveCategory, createCategory, listCategories, reorderCategories, restoreCategory, updateCategory } from '../categories.service'
 import { createTestDb } from '../../../tests/support/db'
 import { expectApiError } from '../../../tests/support/failure'
+import { interleaved } from '../../../tests/support/interleave'
 import type { Db } from '../../../utils/batch'
 
 let db: Db
@@ -17,26 +18,6 @@ beforeEach(async () => {
 })
 
 const create = (name: string, parentId: string | null = null) => createCategory(db, actor, { name, description: '', parentId })
-
-/**
- * The database, but its next `batch` first runs `meanwhile` (another admin's write): the change lands
- * between the service's checks and its write, which only the in-batch guards can catch.
- */
-function interleaved(meanwhile: () => Promise<unknown>): Db {
-  let pending = true
-  return new Proxy(db, {
-    get(target, key, receiver) {
-      if (key === 'batch' && pending) {
-        return async (statements: unknown) => {
-          pending = false
-          await meanwhile()
-          return target.batch(statements as never)
-        }
-      }
-      return Reflect.get(target, key, receiver)
-    },
-  })
-}
 
 const names = (list: MenuCategory[]) => list.map(c => (c.parentId ? `  ${c.name}` : c.name))
 
@@ -84,7 +65,7 @@ describe('creating', () => {
 
   it('refuses a sub-category when the parent is archived between the check and the write', async () => {
     const coffee = await create('Coffee')
-    const racing = interleaved(() => db.update(menuCategories).set({ status: 'archived' }).where(eq(menuCategories.id, coffee.id)))
+    const racing = interleaved(db, () => db.update(menuCategories).set({ status: 'archived' }).where(eq(menuCategories.id, coffee.id)))
     await expectApiError(() => createCategory(racing, actor, { name: 'Filter', description: '', parentId: coffee.id }), 422, 'PARENT_NOT_AVAILABLE')
     expect(await listCategories(db, { status: 'all' })).toHaveLength(1)
   })
@@ -113,7 +94,7 @@ describe('updating', () => {
 
   it('refuses a stale version that arrives between the check and the write', async () => {
     const coffee = await create('Coffee')
-    const racing = interleaved(() => db.update(menuCategories).set({ version: 2 }).where(eq(menuCategories.id, coffee.id)))
+    const racing = interleaved(db, () => db.update(menuCategories).set({ version: 2 }).where(eq(menuCategories.id, coffee.id)))
     await expectApiError(() => updateCategory(racing, actor, coffee.id, { version: 1, name: 'Coffees' }), 409, 'VERSION_CONFLICT')
   })
 
@@ -147,7 +128,7 @@ describe('updating', () => {
   it('refuses the move when the category gets a sub-category between the check and the write', async () => {
     const coffee = await create('Coffee')
     const tea = await create('Tea')
-    const racing = interleaved(() => create('Green', tea.id))
+    const racing = interleaved(db, () => create('Green', tea.id))
     await expectApiError(() => updateCategory(racing, actor, tea.id, { version: tea.version, parentId: coffee.id }), 409, 'VERSION_CONFLICT')
     expect((await listCategories(db, { status: 'active' })).find(c => c.id === tea.id)?.parentId).toBeNull()
   })
@@ -232,7 +213,7 @@ describe('reordering', () => {
 
   it('changes nothing when a sibling is added between the check and the write', async () => {
     const list = await threeTopLevel()
-    const racing = interleaved(() => create('Drinks'))
+    const racing = interleaved(db, () => create('Drinks'))
     await expectApiError(() => reorderCategories(racing, actor, { parentId: null, items: [...list].reverse().map(c => ({ id: c.id, version: c.version })) }), 409, 'VERSION_CONFLICT')
     expect(names(await listCategories(db, { status: 'active' }))).toEqual(['Coffee', 'Tea', 'Food', 'Drinks'])
   })
