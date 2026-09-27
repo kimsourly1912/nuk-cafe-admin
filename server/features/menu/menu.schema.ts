@@ -5,8 +5,8 @@ import { newId } from '../../utils/ids'
 
 /**
  * The menu (docs/server/data-model.md → Menu, D44): categories (3.1), options (3.3), add-ons (3.4),
- * items (3.5), add-ons on items (3.5b). Sold-out and availability join in 3.6 and 3.7. Registered with NuxtHub through the
- * `hub:db:schema:extend` hook; column names are snake_case in SQL.
+ * items (3.5), add-ons on items (3.5b), availability rules (3.7); sold-out joins in 3.6. Registered
+ * with NuxtHub through the `hub:db:schema:extend` hook; column names are snake_case in SQL.
  */
 
 const nowMs = sql`(cast(unixepoch('subsecond') * 1000 as integer))`
@@ -221,4 +221,57 @@ export const menuItemModifierPrices = sqliteTable('menu_item_modifier_prices', {
 }, t => [
   primaryKey({ columns: [t.itemId, t.modifierId] }),
   check('menu_item_modifier_prices_price_check', sql`${t.priceDeltaMinor} >= 0`),
+])
+
+export const AVAILABILITY_STATUSES = ['active', 'archived'] as const
+
+/**
+ * Availability rules (D45, D63): named weekly time windows ("Breakfast") that limit when items and
+ * categories are sold. `version` covers the rule **and its windows**. Archived, never deleted; an
+ * archived rule never matches, so whatever still uses it isn't sold.
+ */
+export const menuAvailabilityRules = sqliteTable('menu_availability_rules', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  name: text().notNull(),
+  status: text({ enum: AVAILABILITY_STATUSES }).notNull().default('active'),
+  version: integer().notNull().default(1),
+  createdAt: instant().notNull().default(nowMs),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  check('menu_availability_rules_status_check', sql`${t.status} in ('active', 'archived')`),
+  uniqueIndex('menu_availability_rules_active_name_idx').on(sql`lower(${t.name})`).where(sql`${t.status} = 'active'`),
+])
+
+/**
+ * A weekly window of a rule, in the branch's local time: ISO `weekday` (1 = Monday), minutes after
+ * midnight. An end before the start runs past midnight; the window belongs to the day it starts on.
+ * Replaced whole when the rule's windows change.
+ */
+export const menuAvailabilityWindows = sqliteTable('menu_availability_windows', {
+  ruleId: text().notNull().references(() => menuAvailabilityRules.id, { onDelete: 'cascade' }),
+  weekday: integer().notNull(),
+  startMinute: integer().notNull(),
+  endMinute: integer().notNull(),
+}, t => [
+  // Windows of a rule don't overlap (checked by the service), so none share a start.
+  primaryKey({ columns: [t.ruleId, t.weekday, t.startMinute] }),
+  check('menu_availability_windows_range_check', sql`${t.weekday} between 1 and 7 and ${t.startMinute} between 0 and 1439 and ${t.endMinute} between 1 and 1440 and ${t.endMinute} <> ${t.startMinute}`),
+])
+
+/** The rules an item uses (none: whenever the branch is open; several: when any matches). */
+export const menuItemAvailability = sqliteTable('menu_item_availability', {
+  itemId: text().notNull().references(() => menuItems.id, { onDelete: 'cascade' }),
+  ruleId: text().notNull().references(() => menuAvailabilityRules.id, { onDelete: 'restrict' }),
+}, t => [
+  primaryKey({ columns: [t.itemId, t.ruleId] }),
+  index('menu_item_availability_rule_idx').on(t.ruleId),
+])
+
+/** The rules a category uses; its items and sub-categories are limited by them too. */
+export const menuCategoryAvailability = sqliteTable('menu_category_availability', {
+  categoryId: text().notNull().references(() => menuCategories.id, { onDelete: 'cascade' }),
+  ruleId: text().notNull().references(() => menuAvailabilityRules.id, { onDelete: 'restrict' }),
+}, t => [
+  primaryKey({ columns: [t.categoryId, t.ruleId] }),
+  index('menu_category_availability_rule_idx').on(t.ruleId),
 ])

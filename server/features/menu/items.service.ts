@@ -1,5 +1,6 @@
 import type { Page } from '#shared/contracts/common'
 import { totalPages } from '#shared/contracts/common'
+import type { AvailabilityRuleRef } from '#shared/contracts/menu-availability'
 import type { CreateItemInput, ItemListQuery, ItemModifierGroup, ItemModifierGroupsInput, ItemVersionInput, MenuItem, MenuItemSummary, ReorderItemsInput, UpdateItemInput } from '#shared/contracts/menu-items'
 import type { Db, Statement } from '../../utils/batch'
 import { isStaleWrite, requireOneChange } from '../../utils/batch'
@@ -8,6 +9,8 @@ import { toIso } from '../../utils/time'
 import type { Actor } from '../identity'
 import { attachStatements, getAsset, mediaNotAvailable, releaseStatement } from '../media'
 import { auditStatement } from '../platform'
+import * as availabilityRepo from './availability.repository'
+import { planRuleLinks, ruleLinksFailure } from './availability.service'
 import { categoryNotALeaf, categoryNotAvailable, itemChanged, itemInWrongState, itemNotFound, itemSelectionRules, itemsChanged, modifierGroupNotAvailable, modifierNotAvailable, nothingToSell, optionSetNotAvailable, priceGrid } from './items.errors'
 import * as repo from './items.repository'
 import type { GroupWithModifiers, ItemGroupRow, ItemRow, SetWithValues, VariationRow } from './items.repository'
@@ -17,9 +20,10 @@ import { selectionProblem } from './modifiers.rules'
 
 /**
  * Menu items (docs/server/data-model.md → Menu, D44, D60, D61). The item's `version` locks the item,
- * its option sets, its variations and its add-on groups. Writes check everything first (for precise
- * errors), then re-check the things other admins could change meanwhile (category, option sets and
- * values, add-on groups and add-ons, image) inside the batch.
+ * its option sets, its variations, its add-on groups and its availability rules. Writes check
+ * everything first (for precise errors), then re-check the things other admins could change
+ * meanwhile (category, option sets and values, add-on groups and add-ons, rules, image) inside the
+ * batch.
  */
 
 // --- Reading ---
@@ -61,7 +65,7 @@ async function loadAddOns(db: Db, itemId: string): Promise<AddOns> {
   return { rows, prices, groups: await repo.groupsWithModifiers(db, rows.map(r => r.groupId)) }
 }
 
-function toItem(row: ItemRow, sets: SetWithValues[], variations: VariationRow[], addOns: AddOns, imageUrl: string | null): MenuItem {
+function toItem(row: ItemRow, sets: SetWithValues[], variations: VariationRow[], addOns: AddOns, rules: AvailabilityRuleRef[], imageUrl: string | null): MenuItem {
   const setIndex = new Map<string, number>()
   const valueName = new Map<string, string>()
   const archived = new Set<string>()
@@ -103,6 +107,7 @@ function toItem(row: ItemRow, sets: SetWithValues[], variations: VariationRow[],
     })),
     variations: [...visible.filter(v => !v.hidden), ...visible.filter(v => v.hidden)].map(v => v.variation),
     modifierGroups: toItemGroups(addOns),
+    availabilityRules: rules,
     version: row.version,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
@@ -112,13 +117,14 @@ function toItem(row: ItemRow, sets: SetWithValues[], variations: VariationRow[],
 async function loadItem(db: Db, id: string): Promise<MenuItem> {
   const row = await repo.findItem(db, id)
   if (!row) throw itemNotFound()
-  const [sets, variations, addOns, image] = await Promise.all([
+  const [sets, variations, addOns, rules, image] = await Promise.all([
     repo.itemSetIds(db, id).then(ids => repo.setsWithValues(db, ids)),
     repo.variationsOf(db, id),
     loadAddOns(db, id),
+    availabilityRepo.itemRules(db, id),
     row.imageAssetId ? getAsset(db, row.imageAssetId) : undefined,
   ])
-  return toItem(row, sets, variations, addOns, image?.url ?? null)
+  return toItem(row, sets, variations, addOns, rules, image?.url ?? null)
 }
 
 export async function listItems(db: Db, query: ItemListQuery): Promise<Page<MenuItemSummary>> {
@@ -246,10 +252,10 @@ const audit = (db: Db, actor: Actor, action: string, itemId: string, metadata: R
 
 /**
  * Runs an item write. When a guard stops it, finds out which: the item changed, its category (or
- * the target one) is no longer an active leaf, an option set or value was archived, or the image
- * expired.
+ * the target one) is no longer an active leaf, an option set or value, add-on group or add-on, or
+ * newly chosen availability rule was archived, or the image expired.
  */
-async function runItemBatch(db: Db, statements: Statement[], check: { itemId?: string, version?: number, categoryId?: string, setIds?: string[], valueIds?: string[], addOns?: { input: ItemModifierGroupsInput, plan: AddOnPlan }, imageId?: string | null }) {
+async function runItemBatch(db: Db, statements: Statement[], check: { itemId?: string, version?: number, categoryId?: string, setIds?: string[], valueIds?: string[], addOns?: { input: ItemModifierGroupsInput, plan: AddOnPlan }, rules?: { ids: string[], added: string[] }, imageId?: string | null }) {
   try {
     await db.batch(statements as [Statement, ...Statement[]])
   }
@@ -280,6 +286,8 @@ async function runItemBatch(db: Db, statements: Statement[], check: { itemId?: s
         if (j >= 0) throw modifierNotAvailable(`modifierGroups.${i}.prices.${j}.modifierId`)
       }
     }
+    const ruleError = check.rules && await ruleLinksFailure(db, check.rules.ids, check.rules.added)
+    if (ruleError) throw ruleError
     if (check.imageId) throw mediaNotAvailable('imageId')
     throw itemChanged()
   }
@@ -293,6 +301,7 @@ export async function createItem(db: Db, actor: Actor, input: CreateItemInput): 
   const sets = await loadSets(db, input.optionSetIds)
   const grid = plan(sets, [], input.variations)
   const addOns = await planAddOns(db, input.modifierGroups)
+  const addedRules = await planRuleLinks(db, input.availabilityRuleIds)
   const imageStatements = input.imageId ? await attachStatements(db, input.imageId, 'imageId') : []
 
   const id = newId()
@@ -303,13 +312,15 @@ export async function createItem(db: Db, actor: Actor, input: CreateItemInput): 
     ...(input.optionSetIds.length ? [repo.requireActiveSets(db, input.optionSetIds)] : []),
     ...(valueIds.length ? [repo.requireActiveValues(db, valueIds)] : []),
     ...addOnGuards(db, addOns),
+    ...availabilityRepo.requireActiveRules(db, addedRules),
     repo.insertItemStatement(db, { id, categoryId: input.categoryId, name: input.name, description: input.description, imageAssetId: input.imageId, sortOrder: await repo.nextItemOrder(db, input.categoryId) }, now),
     ...repo.replaceOptionSetsStatements(db, id, input.optionSetIds),
     ...gridStatements(db, id, grid, now),
     ...repo.replaceModifierGroupsStatements(db, id, addOns.groups, addOns.prices),
+    ...availabilityRepo.replaceItemRulesStatements(db, id, input.availabilityRuleIds),
     ...imageStatements,
-    audit(db, actor, 'create', id, { categoryId: input.categoryId, optionSets: input.optionSetIds.length, versions: grid.cells.length, addOnGroups: addOns.groups.length }),
-  ], { categoryId: input.categoryId, setIds: input.optionSetIds, valueIds, addOns: { input: input.modifierGroups, plan: addOns }, imageId: input.imageId })
+    audit(db, actor, 'create', id, { categoryId: input.categoryId, optionSets: input.optionSetIds.length, versions: grid.cells.length, addOnGroups: addOns.groups.length, availabilityRules: input.availabilityRuleIds }),
+  ], { categoryId: input.categoryId, setIds: input.optionSetIds, valueIds, addOns: { input: input.modifierGroups, plan: addOns }, rules: { ids: input.availabilityRuleIds, added: addedRules }, imageId: input.imageId })
   return loadItem(db, id)
 }
 
@@ -337,6 +348,8 @@ export async function updateItem(db: Db, actor: Actor, id: string, input: Update
     grid = plan(sets, await repo.variationsOf(db, id), input.variations)
   }
   const addOns = input.modifierGroups ? await planAddOns(db, input.modifierGroups, await loadAddOns(db, id)) : undefined
+  const ruleIds = input.availabilityRuleIds
+  const addedRules = ruleIds ? await planRuleLinks(db, ruleIds, (await availabilityRepo.itemRules(db, id)).map(r => r.id)) : []
 
   const imageChanging = input.imageId !== undefined && input.imageId !== item.imageAssetId
   const imageStatements = imageChanging
@@ -358,16 +371,18 @@ export async function updateItem(db: Db, actor: Actor, id: string, input: Update
     ...(newSetIds.length ? [repo.requireActiveSets(db, newSetIds)] : []),
     ...(valueIds.length ? [repo.requireActiveValues(db, valueIds)] : []),
     ...addOnGuards(db, addOns),
+    ...availabilityRepo.requireActiveRules(db, addedRules),
     ...(setsChanged ? repo.replaceOptionSetsStatements(db, id, setIds) : []),
     ...(grid ? gridStatements(db, id, grid, now) : []),
     ...(addOns ? repo.replaceModifierGroupsStatements(db, id, addOns.groups, addOns.prices) : []),
+    ...(ruleIds ? availabilityRepo.replaceItemRulesStatements(db, id, ruleIds) : []),
     ...imageStatements,
     ...(item.status === 'active' ? [repo.requireSellable(db, id)] : []),
     audit(db, actor, moving ? 'move' : 'update', id, {
-      fields: [...Object.keys(changes).filter(k => k !== 'sortOrder'), ...(setsChanged ? ['optionSetIds'] : []), ...(grid ? ['variations'] : []), ...(addOns ? ['modifierGroups'] : [])],
+      fields: [...Object.keys(changes).filter(k => k !== 'sortOrder'), ...(setsChanged ? ['optionSetIds'] : []), ...(grid ? ['variations'] : []), ...(addOns ? ['modifierGroups'] : []), ...(ruleIds ? ['availabilityRuleIds'] : [])],
       ...(moving && { from: item.categoryId, to: input.categoryId }),
     }),
-  ], { itemId: id, version: input.version, categoryId: moving ? input.categoryId : undefined, setIds: newSetIds, valueIds, addOns: addOns && { input: input.modifierGroups!, plan: addOns }, imageId: imageChanging ? input.imageId : undefined })
+  ], { itemId: id, version: input.version, categoryId: moving ? input.categoryId : undefined, setIds: newSetIds, valueIds, addOns: addOns && { input: input.modifierGroups!, plan: addOns }, rules: ruleIds && { ids: ruleIds, added: addedRules }, imageId: imageChanging ? input.imageId : undefined })
   return loadItem(db, id)
 }
 
