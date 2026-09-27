@@ -79,7 +79,7 @@ Brand-wide menu with per-branch state. Feature: `menu`. The design follows how S
 
 | Admin page | What it holds | Used in the item form as |
 |---|---|---|
-| **Categories** | A two-level tree: categories and sub-categories | "Category" (a leaf only) |
+| **Categories** | A two-level tree: categories and sub-categories | "Category" (a leaf only: a category without sub-categories, top-level or not) |
 | **Options** | Reusable **option sets** that define the versions of an item: Size (Small, Regular, Large), Temperature (Hot, Iced). **Names only, no prices** | "Options & prices": pick up to 2 sets; a price grid appears, one price per version (Latte Large $4.50, Tea Large $3.20) |
 | **Add-ons** | Reusable **modifier groups** of extras with their **default prices**: Milk (Whole, Oat +$0.50), Extra shot (+$0.75), Sweetness | "Add-ons": pick groups; override a group's selection rules or an add-on's price for this item only when needed |
 | **Menu items** | Items, their versions and prices, their add-on groups | |
