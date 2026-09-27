@@ -129,7 +129,7 @@ describe('updating', () => {
     const coffee = await create('Coffee')
     const tea = await create('Tea')
     const racing = interleaved(db, () => create('Green', tea.id))
-    await expectApiError(() => updateCategory(racing, actor, tea.id, { version: tea.version, parentId: coffee.id }), 409, 'VERSION_CONFLICT')
+    await expectApiError(() => updateCategory(racing, actor, tea.id, { version: tea.version, parentId: coffee.id }), 422, 'CATEGORY_DEPTH')
     expect((await listCategories(db, { status: 'active' })).find(c => c.id === tea.id)?.parentId).toBeNull()
   })
 

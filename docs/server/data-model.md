@@ -108,7 +108,7 @@ An item without option sets has exactly one version with one price ("Croissant $
 | `menu_option_values` | `set_id`, `name` ("Large"), `sort_order`, `status` | Unique (`set_id`, `name`). Archiving a value hides the versions that use it; it never deletes them |
 | `menu_items` | `category_id` (a leaf category), `name`, `description`, `image_asset_id`, `status` (`draft` \| `active` \| `archived`), `sort_order`, `version` | Customers see only `active` items in active categories. An item that was ever ordered is archived, never deleted |
 | `menu_item_option_sets` | `item_id`, `set_id`, `sort_order` | PK (`item_id`, `set_id`). **At most 2 per item** |
-| `menu_item_variations` | `item_id`, `price_minor`, `currency`, `status` (`active` \| `disabled`), `sort_order` | **Every item has at least one active variation.** With option sets: exactly one variation per combination of their values (the price grid), created when the sets are attached, "disabled" instead of deleted. Without: one variation with no values. An order line always names a variation |
+| `menu_item_variations` | `item_id`, `combination_key` (sorted value ids; unique per item), `price_minor` (null allowed only when not active), `currency`, `status` (`active` \| `disabled` \| `retired`), `sort_order` | **Every item has at least one active variation.** With option sets: exactly one variation per combination of their values (the price grid), created when the sets are attached, "disabled" instead of deleted. Without: one variation with no values. An order line always names a variation |
 | `menu_variation_option_values` | `variation_id`, `value_id` | One value per option set of the item; no two variations of an item share the same combination |
 | `menu_modifier_groups` | `name` ("Milk"), `min_select`, `max_select` (null = no limit), `status`, `version` | Library. `max_select` ≥ `min_select`. Changes apply to every item using it (the page shows "Used by N items") |
 | `menu_modifiers` | `group_id`, `name`, `price_delta_minor` (≥ 0), `is_default`, `sort_order`, `status` | Default price for every item |
@@ -214,6 +214,38 @@ Same feature (`modifiers.*`), contract `shared/contracts/menu-modifiers.ts`. The
 | An add-on of another group in the path | 404 | ✔ |
 
 **Not yet:** "used by N items", and per-item overrides of the rules and prices, come with menu items in step 3.5.
+
+### Menu items API (step 3.5a, D60)
+
+Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/contracts/menu-items.ts`. The item's `version` covers the item, its option sets and its variations. Audited as `menu.item.<action>`. Add-ons on items come in step 3.5b.
+
+| Route | Permission | Does |
+|---|---|---|
+| `GET /api/admin/menu/items?page&pageSize&search&categoryId&status` | `menu:read` | Summaries by category, then position: category name, image, the sellable price range. Default status: drafts and active (`status=archived` or `all` on request) |
+| `GET /api/admin/menu/items/{itemId}` | `menu:read` | The item with its option sets and variations |
+| `POST /api/admin/menu/items` | `menu:write` | `{ categoryId, name, description?, imageId?, optionSetIds?, variations }` → 201, a **draft** at the end of its category |
+| `PATCH /api/admin/menu/items/{itemId}` | `menu:write` | `{ version, categoryId?, name?, description?, imageId?, optionSetIds?, variations? }`: absent keeps; `imageId: null` removes; `optionSetIds` needs `variations` |
+| `POST …/{itemId}/publish`, `…/unpublish` | `menu:publish` | draft ↔ active |
+| `POST …/{itemId}/archive`, `…/restore` | `menu:write` | draft/active → archived; archived → draft (at the end of its category) |
+| `PUT /api/admin/menu/items/order` | `menu:write` | `{ categoryId, items: [{ id, version }] }`: every draft and active item of the category |
+
+**The price grid:** `variations` is always the whole grid, every combination of the chosen option sets' **active** values exactly once, each `{ valueIds, priceMinor, status: 'active' | 'disabled' }`. A variation's id never changes: it's matched by its combination, so changing prices keeps ids, removing an option set **retires** its variations (kept for history and orders), and adding it back revives them. A variation that uses an archived value is kept but hidden from the grid and not sellable; restoring the value brings it back. Sellable = active, priced, no archived value.
+
+| Case | Result | Test |
+|---|---|---|
+| Category unknown or archived / has sub-categories (also if one is added meanwhile) | 422 `CATEGORY_NOT_AVAILABLE` / `CATEGORY_NOT_A_LEAF` | ✔ (incl. the race) |
+| A sub-category added to a category that holds drafts or active items (also if one arrives meanwhile, on create and on move) | 422 `CATEGORY_HAS_ITEMS`; archived items don't hold a category | ✔ (incl. both races) |
+| A new option set that's archived (also if archived meanwhile); more than 2 | 422 `OPTION_SET_NOT_AVAILABLE` / 400; an archived set already on the item stays | ✔ (incl. the race) |
+| Grid missing a combination, listing one twice, wrong shape, an archived value, an active cell without a price, nothing switched on | 422 `PRICE_GRID` with the field and a sentence | ✔ (rules: 9 tests) |
+| An option value archived meanwhile | 422 `PRICE_GRID` ("reload the item") | ✔ (race) |
+| A value added to a set later | That item's grid is "missing 1 combination" until it's priced or switched off | ✔ |
+| Image gone or used by another record | 422 `MEDIA_NOT_AVAILABLE`; replacing or removing releases the old image | ✔ |
+| Stale version (before or during the write) | 409 `VERSION_CONFLICT` | ✔ (incl. the race) |
+| Editing an archived item; publishing a non-draft; restoring a non-archived one | 409 `INVALID_STATE` | ✔ |
+| Publishing with nothing sellable | 422 `NOTHING_TO_SELL` | ✔ |
+| Restoring into a category that has since got sub-categories | 422 `CATEGORY_NOT_A_LEAF` | ✔ |
+
+Option sets now report `itemCount` (drafts and active items using them).
 
 Sources: [Square item options](https://developer.squareup.com/docs/catalog-api/item-options), [Square option sets](https://squareup.com/help/us/en/article/6689-item-options), [Square nested categories (community)](https://community.squareup.com/t5/Orders-Menu-Items-Catalog/Getting-Sub-categories-to-show-when-parent-category-is-selected/td-p/827866), [Toast menu hierarchy](https://doc.toasttab.com/doc/platformguide/adminMenuHierarchy.html), [Toast shared modifier groups](https://support.toasttab.com/en/article/Shallow-and-Deep-Copying-Menu-Items-and-Modifiers), [Uber Eats menu structure](https://developer.uber.com/docs/eats/guides/menu-integration), [Loyverse variants vs modifiers](https://help.loyverse.com/help/how-use-variants-items).
 

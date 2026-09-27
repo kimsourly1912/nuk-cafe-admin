@@ -5,7 +5,7 @@ import { newId } from '../../utils/ids'
 import { toIso } from '../../utils/time'
 import type { Actor } from '../identity'
 import { auditStatement } from '../platform'
-import { categoryArchived, categoryChanged, categoryNameTaken, categoryNotArchived, categoryNotFound, parentArchived, parentNotAvailable, siblingsChanged, tooDeep } from './categories.errors'
+import { categoryArchived, categoryChanged, categoryNameTaken, categoryNotArchived, categoryNotFound, parentArchived, parentHasItems, parentNotAvailable, siblingsChanged, tooDeep } from './categories.errors'
 import * as repo from './categories.repository'
 import type { CategoryRow } from './categories.repository'
 
@@ -42,13 +42,13 @@ const audit = (db: Db, actor: Actor, action: string, categoryId: string, metadat
  * Runs a category write. A name used by an active sibling (the unique indexes) is 409
  * `CATEGORY_NAME_TAKEN`; a failed guard is `onStale()`.
  */
-async function runCategoryBatch(db: Db, statements: Statement[], name: string, onStale: () => Error) {
+async function runCategoryBatch(db: Db, statements: Statement[], name: string, onStale: () => Error | Promise<Error>) {
   try {
     await db.batch(statements as [Statement, ...Statement[]])
   }
   catch (error) {
     if (isUniqueViolation(error)) throw categoryNameTaken(name)
-    if (isStaleWrite(error)) throw onStale()
+    if (isStaleWrite(error)) throw await onStale()
     throw error
   }
 }
@@ -58,6 +58,7 @@ async function ensureParent(db: Db, parentId: string) {
   const parent = await repo.findCategory(db, parentId)
   if (!parent || parent.status !== 'active') throw parentNotAvailable()
   if (parent.parentId !== null) throw tooDeep('parent-is-sub')
+  if (await repo.countListedItems(db, parentId) > 0) throw parentHasItems()
 }
 
 /**
@@ -89,12 +90,16 @@ export async function createCategory(db: Db, actor: Actor, input: CreateCategory
   const id = newId()
   const now = new Date()
   const statements: Statement[] = [
-    ...(input.parentId ? [repo.requireActiveTopLevel(db, input.parentId)] : []),
+    ...(input.parentId ? [repo.requireActiveTopLevel(db, input.parentId), repo.requireNoItems(db, input.parentId)] : []),
     repo.insertCategoryStatement(db, { id, parentId: input.parentId, name: input.name, description: input.description, sortOrder: await repo.nextSortOrder(db, input.parentId), now }),
     audit(db, actor, 'create', id, { parentId: input.parentId }),
   ]
   // The parent was archived or became a sub-category between the check and the write.
-  await runCategoryBatch(db, statements, input.name, () => parentNotAvailable())
+  // The parent was archived, became a sub-category or got items between the check and the write.
+  await runCategoryBatch(db, statements, input.name, async () => {
+    if (input.parentId) await ensureParent(db, input.parentId)
+    return parentNotAvailable()
+  })
   return loadCategory(db, id)
 }
 
@@ -116,7 +121,7 @@ export async function updateCategory(db: Db, actor: Actor, id: string, input: Up
     if (input.parentId) {
       await ensureParent(db, input.parentId)
       if (await repo.countChildren(db, id) > 0) throw tooDeep('has-children')
-      guards.push(repo.requireActiveTopLevel(db, input.parentId), repo.requireNoChildren(db, id))
+      guards.push(repo.requireActiveTopLevel(db, input.parentId), repo.requireNoItems(db, input.parentId), repo.requireNoChildren(db, id))
     }
     sortOrder = await repo.nextSortOrder(db, input.parentId ?? null)
   }
@@ -132,7 +137,13 @@ export async function updateCategory(db: Db, actor: Actor, id: string, input: Up
     requireOneChange(db),
     audit(db, actor, moving ? 'move' : 'update', id, { fields: Object.keys(changes).filter(k => k !== 'sortOrder'), ...(moving && { from: current.parentId, to: input.parentId ?? null }) }),
   ]
-  await runCategoryBatch(db, statements, input.name ?? current.name, () => categoryChanged())
+  await runCategoryBatch(db, statements, input.name ?? current.name, async () => {
+    if (moving && input.parentId) {
+      await ensureParent(db, input.parentId)
+      if (await repo.countChildren(db, id) > 0) return tooDeep('has-children')
+    }
+    return categoryChanged()
+  })
   return loadCategory(db, id)
 }
 
