@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-27 (step 2.1: Cloudflare staging)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-27 (step 2.2: CI deploy to staging)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -107,7 +107,7 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | # | Step | Done when |
 |---|---|---|
 | 2.1 ✅ | **Cloudflare staging:** Worker, D1, R2, KV, secrets, domain (Q4: the domain) | The app runs on staging |
-| 2.2 | **CI deploy:** checks → migrate staging D1 → deploy → smoke check; `pnpm audit`; WAF rate limits; Time Travel checked | A merge to `main` deploys itself; batch guards verified on D1 |
+| 2.2 ✅ | **CI deploy:** checks → migrate staging D1 → deploy → smoke check; `pnpm audit`; WAF rate limits; Time Travel checked | A merge to `main` deploys itself; batch guards verified on D1 |
 
 ### Phase 3: menu API
 
@@ -186,7 +186,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## Known limitations
 
-- Staging runs on Cloudflare (step 2.1): D1 migrations, both batch guards (stale version, last admin) under simultaneous requests, cron triggers and the outbox were verified there. Not yet verified on Cloudflare: R2 uploads and serving (no upload was made), deploys from CI (step 2.2). Staging email waits for a Resend key and sending domain (Q4).
+- Staging runs on Cloudflare (step 2.1): D1 migrations, both batch guards (stale version, last admin) under simultaneous requests, cron triggers and the outbox were verified there. Not yet verified on Cloudflare: R2 uploads and serving (no upload was made). The CI deploy was checked step by step by hand (same commands, same smoke check); **its first run in GitHub is the merge of the phase 1–2 pull request**. Staging mail uses Resend's test sender, which delivers only to the Resend account's own address, until the sending domain exists (Q4). WAF rate limits need a custom domain (a `workers.dev` address isn't a zone we control); until then only Better Auth's own limits apply.
 - Only one role (`admin`) and no staff management: other staff can't be added yet (Q6).
 - Uploads: abandoned or replaced images stay as `temporary` assets until a cleanup job exists. No sort-order UI for menu items.
 - Schedules: overnight ranges are refused (Q14); schedules in use can't be deleted (Q16). The time zone of new schedules comes from `NUXT_PUBLIC_CAFE_TIME_ZONE` (default `Asia/Phnom_Penh`).

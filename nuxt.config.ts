@@ -89,7 +89,12 @@ export default defineNuxtConfig({
             // Workers Logs: the structured logs (docs/server/operations.md → Monitoring).
             observability: { enabled: true },
             // Public, not secret: Better Auth's base URL and the only trusted origin.
-            vars: { NUXT_PUBLIC_SITE_URL: STAGING.siteUrl },
+            vars: {
+              NUXT_PUBLIC_SITE_URL: STAGING.siteUrl,
+              // Resend's test sender until the sending domain is set up (Q4): it delivers only to the
+              // Resend account's own address, so staging can't mail anyone else.
+              NUXT_MAIL_FROM: 'NUK Cafe <onboarding@resend.dev>',
+            },
             // Cloudflare calls the Worker on these; Nitro runs the matching tasks.
             triggers: { crons: Object.keys(SCHEDULED_TASKS) },
           },

@@ -24,7 +24,7 @@
 | Cache | local | its own KV (when a feature needs it) | its own KV |
 | Deployed | | on every merge to `main` | manually, from a commit that passed staging |
 | Data | disposable, seeded | test data only, reset freely | real |
-| Email | logged to the console, not sent | Resend once a key and sender are set (Q4); until then messages stay queued | Resend |
+| Email | logged to the console, not sent | Resend's test sender `onboarding@resend.dev`: delivers only to the Resend account's own address (until the domain, Q4) | Resend, from our domain |
 
 Nothing crosses environments: no production data in staging, no shared secrets, no shared buckets.
 
@@ -37,9 +37,9 @@ Nothing crosses environments: no production data in staging, no shared secrets, 
 | D1 | `nuk-cafe-staging` (`33752107-bc40-4c31-8ff0-d3c50dc6a3a2`, Asia-Pacific), binding `DB` |
 | R2 | `nuk-cafe-staging-media` (created in eastern North America: the tool had no location option), binding `BLOB` |
 | Config | `$env.staging` in `nuxt.config.ts` (preset `cloudflare_module`, bindings, `NUXT_PUBLIC_SITE_URL` as a plain var, cron triggers, Workers Logs, security headers) |
-| Secrets | `NUXT_BETTER_AUTH_SECRET` (set with `wrangler secret put`; generated, never written down). Not yet: `NUXT_MAIL_RESEND_API_KEY`, `NUXT_MAIL_FROM` |
+| Secrets | `NUXT_BETTER_AUTH_SECRET` (set once with `wrangler secret put`; generated, never written down); `NUXT_MAIL_RESEND_API_KEY` (from the GitHub environment `staging`, re-sent by every deploy). `NUXT_MAIL_FROM` is a plain var |
 
-Deploy by hand (Wrangler logged in: `npx wrangler login`): `pnpm deploy:staging` = `pnpm build:staging` (`nuxt build --envName staging`) → `pnpm db:migrate:staging` (`wrangler d1 migrations apply DB --remote`, tracked in `_hub_migrations`) → `wrangler deploy`. CI takes this over in step 2.2.
+**Deploys** (step 2.2, D54): every push to `main` that passes the checks deploys itself (`.github/workflows/ci.yml` → `deploy-staging`). By hand, with Wrangler logged in (`npx wrangler login`): `pnpm deploy:staging` = `pnpm build:staging` (`nuxt build --envName staging`) → `pnpm db:migrate:staging` (`wrangler d1 migrations apply DB --remote`, tracked in `_hub_migrations`) → `wrangler deploy`.
 
 **First admin on staging:** there's no seed endpoint on a deployed Worker (`/_nitro/tasks` is dev only). Sign up on the site (`POST /api/auth/sign-up/email`, or the customer sign-up page once it exists), then promote the account:
 
@@ -78,15 +78,22 @@ Rules:
 
 ## Deploys
 
-CI on every push and pull request: lint, typecheck, unit + server tests, e2e, `pnpm audit`.
+CI on every push and pull request (`.github/workflows/ci.yml`): lint, typecheck, `pnpm audit --audit-level high` (lower advisories are reviewed with dependency updates), unit + server tests, e2e.
 
-On merge to `main`: the same checks, then apply staging migrations, deploy to staging, run a smoke check (sign in, read the menu, place and complete a test order once orders exist).
+On push to `main`, after those pass, the `deploy-staging` job (GitHub environment `staging`, one deploy at a time, never cancelled halfway):
+1. `pnpm build:staging`;
+2. `pnpm db:migrate:staging` (migrations before the Worker: expand, then contract);
+3. `wrangler deploy`;
+4. re-sends `NUXT_MAIL_RESEND_API_KEY` from the environment's secret (skipped when unset);
+5. smoke check: `GET /api/public/health` is ok (the database answers), `/login` has the CSP header, an unknown `/api` path is 404, `/api/admin/me` without a session is 401. Later: sign in, read the menu, place and complete a test order once orders exist.
+
+GitHub environment `staging` secrets: `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers" plus **Account → D1 → Edit**, this account only), `CLOUDFLARE_ACCOUNT_ID`, `NUXT_MAIL_RESEND_API_KEY`.
 
 Production: manual workflow from a commit that is live on staging: export the database (Time Travel bookmark), apply migrations, deploy, smoke check. Rollback = redeploy the previous Worker version (possible because migrations are backwards compatible).
 
 ## Backups and restore
 
-- **D1 Time Travel**: point-in-time restore for the retention window of the Cloudflare plan. Note the bookmark before every production migration.
+- **D1 Time Travel**: point-in-time restore for the retention window of the Cloudflare plan (checked on staging: `wrangler d1 time-travel info nuk-cafe-staging` gives the current bookmark). Note the bookmark before every production migration.
 - **R2**: menu images are re-uploadable; no separate backup at launch.
 - **Restore drill** on staging before launch and then yearly: restore to a bookmark, check the app works, write down how long it took.
 - [Open] Q24: acceptable data loss and downtime (RPO/RTO) and the Cloudflare plan (Time Travel window).
