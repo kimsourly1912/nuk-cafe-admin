@@ -4,3 +4,5 @@ export { BRANCH_ROLES, branchAc, branchRoles, branchStatements, PLATFORM_ROLES, 
 export type { BranchPermission, BranchRole, PlatformPermission, PlatformRole } from './identity.permissions'
 export { authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn } from './identity.service'
 export type { Actor, BranchActor, SessionUser } from './identity.types'
+export { createStaff, disableStaff, getStaffMember, listStaff, seedFirstAdmin, updateStaffAccess } from './staff.service'
+export { StaffErrorCodes } from './staff.errors'

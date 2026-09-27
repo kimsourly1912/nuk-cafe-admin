@@ -53,7 +53,7 @@ Rules:
 - **Expand, then contract.** The new Worker starts after the migration, and the old one may still serve requests for a moment, so a migration must work with both: add columns/tables first, move the code, remove old columns in a later release.
 - No destructive change (dropping a column or table, narrowing a type) without an export of the affected data first.
 - Migrations are never edited after they reached staging; fix forward with a new one.
-- Seed data (the first admin, a demo branch and menu locally) comes from a **Nitro task** (`pnpm nuxt task run db:seed`), never from migrations.
+- Seed data comes from a **Nitro task**, never from migrations. `db:seed` (`server/tasks/db/seed.ts`) creates the first admin (from `NUXT_SEED_ADMIN_EMAIL` / `NUXT_SEED_ADMIN_NAME`, with a temporary password printed once) and a "Main branch" (in `NUXT_PUBLIC_CAFE_TIME_ZONE`); each part is skipped once it exists, so it's safe to repeat. Locally, with the dev server running: `curl http://localhost:3000/_nitro/tasks/db:seed` (the Nuxt CLI has no `task` command; that endpoint exists only in dev). How staging runs it is decided in step 2.2. A demo menu comes with the menu steps.
 
 ## Deploys
 

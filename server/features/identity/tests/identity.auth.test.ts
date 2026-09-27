@@ -1,33 +1,21 @@
-import { betterAuth } from 'better-auth'
-import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as authSchema from '#auth/schema'
 import { identityAuthOptions } from '../identity.auth'
+import { seedFirstAdmin } from '../staff.service'
+import { createTestAuth, sessionHeaders, signIn, TEST_SITE as SITE } from '../../../tests/support/auth'
+import type { TestAuth as Auth } from '../../../tests/support/auth'
 import { createTestDb } from '../../../tests/support/db'
 import type { Db } from '../../../utils/batch'
 
-const SITE = 'https://cafe.example'
-
 // Our Better Auth configuration against the real migration (server/db/migrations).
-function createAuth(db: Db) {
-  return betterAuth({
-    ...identityAuthOptions({ siteUrl: SITE, checkBreachedPasswords: false }),
-    baseURL: SITE,
-    secret: 'test-secret-that-is-at-least-32-characters-long',
-    database: drizzleAdapter(db, { provider: 'sqlite', schema: authSchema }),
-  })
-}
-
-type Auth = ReturnType<typeof createAuth>
-
 let db: Db
 let auth: Auth
 let accounts = 0
 
 beforeEach(async () => {
   db = await createTestDb()
-  auth = createAuth(db)
+  auth = createTestAuth(db)
 })
 
 /** Signs up a new account and returns its id and the headers of its session. */
@@ -37,8 +25,7 @@ async function signUp(body: Record<string, unknown> = {}) {
     body: { email, password: 'a long enough password', name: 'Person', ...body } as never,
     returnHeaders: true,
   })
-  const cookie = headers.getSetCookie().map(c => c.split(';')[0]).join('; ')
-  return { userId: response.user.id, headers: new Headers({ cookie }) }
+  return { userId: response.user.id, headers: sessionHeaders(headers) }
 }
 
 async function makeAdmin(userId: string) {
@@ -90,6 +77,26 @@ describe('accounts', () => {
   it('trusts only the site origin', () => {
     expect(identityAuthOptions({ siteUrl: 'https://cafe.example/some/path' }).trustedOrigins).toEqual([SITE])
     expect(identityAuthOptions({}).trustedOrigins).toEqual([])
+  })
+})
+
+describe('temporary password', () => {
+  async function staffOnTemporaryPassword() {
+    const created = await seedFirstAdmin(db, { name: 'Owner', email: 'owner@example.com' })
+    const headers = await signIn(auth, 'owner@example.com', created!.temporaryPassword!)
+    return { userId: created!.staff.id, password: created!.temporaryPassword!, headers }
+  }
+
+  it('is cleared once its owner changes it', async () => {
+    const staff = await staffOnTemporaryPassword()
+    await auth.api.changePassword({ body: { currentPassword: staff.password, newPassword: 'a brand new password', revokeOtherSessions: true }, headers: staff.headers })
+    expect((await userRow(staff.userId)).mustChangePassword).toBe(false)
+  })
+
+  it('stays when the change fails', async () => {
+    const staff = await staffOnTemporaryPassword()
+    await expect(auth.api.changePassword({ body: { currentPassword: 'wrong password', newPassword: 'a brand new password' }, headers: staff.headers })).rejects.toThrow()
+    expect((await userRow(staff.userId)).mustChangePassword).toBe(true)
   })
 })
 

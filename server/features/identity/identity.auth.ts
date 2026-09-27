@@ -1,3 +1,4 @@
+import { createAuthMiddleware, isAPIError } from 'better-auth/api'
 import { admin, haveIBeenPwned, organization } from 'better-auth/plugins'
 import type { ServerAuthConfig } from '@nuxtjs/better-auth/config'
 import { newId } from '../../utils/ids'
@@ -34,6 +35,15 @@ export function identityAuthOptions({ siteUrl, checkBreachedPasswords = true }: 
         // enforce it: our access helpers refuse with PASSWORD_CHANGE_REQUIRED (security.md).
         mustChangePassword: { type: 'boolean', required: false, defaultValue: false, input: false },
       },
+    },
+    hooks: {
+      // A temporary password is cleared once its owner changes it (security.md → Staff onboarding).
+      // Only this route: a password an admin sets must stay temporary. Reset by email joins in 1.6.
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== '/change-password' || isAPIError(ctx.context.returned)) return
+        const userId = ctx.context.session?.user.id
+        if (userId) await ctx.context.internalAdapter.updateUser(userId, { mustChangePassword: false })
+      }),
     },
     rateLimit: {
       // A Worker instance's memory is not shared with other instances. Better Auth enables rate

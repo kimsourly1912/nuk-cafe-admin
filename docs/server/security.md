@@ -62,7 +62,7 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | menu | set sold out (own branch) | ✔ | ✔ | ✔ |
 | media | upload | ✔ | | |
 | branch | read / update | ✔ | read | read |
-| staff | create / change role / disable | ✔ | | |
+| staff | list, create / change role / disable | ✔ | | |
 | table | manage, rotate QR | ✔ | ✔ | |
 | order | read queue, ready, complete (payment starts preparation: no accept step) | ✔ | ✔ | ✔ |
 | order | cancel | ✔ | ✔ | ✔ |
@@ -107,11 +107,34 @@ A platform `admin` has every branch permission in every branch: **our** `require
 
 ## Staff onboarding
 
-1. An admin creates the account (`admin.createUser`) with name, email and a generated **temporary password**, and assigns the branch role (`organization.addMember`). The email is marked verified (the admin vouches for it).
+Built in step 1.4 (D49): `server/features/identity/staff.*`, routes under `/api/admin/staff`.
+
+1. An admin creates the account with name, email and access: `admin` and/or one role per branch (several branches allowed). The server generates a **temporary password** (16 characters, e.g. `Hq7x-3mPa-kR9t-Wz2c`), returns it **once** for the admin to hand over, and stores only Better Auth's hash. The email is marked verified (the admin vouches for it).
 2. The account carries `mustChangePassword = true` (a Better Auth `user.additionalFields` field).
-3. While it's set, every surface except `/api/auth/**` answers **403 `PASSWORD_CHANGE_REQUIRED`**, and the app shows the change-password screen.
-4. Changing the password (Better Auth `changePassword`, revoking other sessions) clears the flag.
-5. Disabling staff = removing their branch membership (and platform role), revoking their sessions, and an audit event. Their account keeps working as a customer.
+3. While it's set, our access helpers answer **403 `PASSWORD_CHANGE_REQUIRED`** on every surface; Better Auth's `/api/auth/**` still works, and the app shows the change-password screen (step 1.7). (On `/api/admin` a non-admin gets 403 `FORBIDDEN` from the route-rule gate first.)
+4. Changing the password (Better Auth `/change-password`) clears the flag: an `after` hook in `identity.auth.ts`, only when the change succeeded. A password set by an admin stays temporary. Reset by email clears it too once reset exists (step 1.6).
+5. Changing someone's access replaces their admin role and memberships and **signs them out everywhere** (except an admin editing their own branches). Disabling = removing the admin role and every membership and signing them out. Their account keeps working as a customer, and can be given access again later.
+6. Every change writes an `audit_events` row (`staff.create`, `staff.access.update`, `staff.disable`) with the access given, never a password.
+
+| Case | Result |
+|---|---|
+| The email already has a **customer** account | That account gets the access; its password, points and orders are untouched; no temporary password (`temporaryPassword: null`) |
+| The email already has **staff access** (or is an admin) | 409 `STAFF_ALREADY_EXISTS`: edit them instead |
+| A membership names an unknown or archived branch | 400 `VALIDATION_FAILED`, `fieldErrors["memberships.N.branchId"]` |
+| No admin role and no membership | 400 (`fieldErrors.memberships`); taking all access away is "disable" |
+| An admin removes their own admin role, or disables themselves | 409 `OWN_ACCESS` |
+| Two admins demote each other at the same moment | The batch guard keeps at least one active admin: the second save gets 409 `LAST_ADMIN` |
+| Two saves of the same version | One wins; the other gets 409 `VERSION_CONFLICT` (`version` = the account's `updated_at` in ms) |
+
+| Route | Permission | Returns |
+|---|---|---|
+| `GET /api/admin/staff?page&pageSize&search&branchId&role` | `staff:read` | `Page<StaffMember>`: accounts with access only, by name; `role` = `admin` \| `manager` \| `staff` |
+| `GET /api/admin/staff/{userId}` | `staff:read` | `StaffMember` |
+| `POST /api/admin/staff` | `staff:create` | 201 `{ staff, temporaryPassword }` |
+| `PATCH /api/admin/staff/{userId}` | `staff:update` | `StaffMember`; body `{ version, admin, memberships }` replaces all access |
+| `POST /api/admin/staff/{userId}/disable` | `staff:disable` | 204; body `{ version }` |
+
+Contracts: `shared/contracts/staff.ts`. The account rows are written by our repository, not `auth.api.createUser` / `addMember`, so the account, its memberships, its sessions and the audit row change in **one atomic batch** (D1 has no transactions); the password hash is Better Auth's own `hashPassword`, and a test signs in through Better Auth with the result.
 
 **Verified in the auth spike (2026-09-27, better-auth 1.7.3, in-memory adapter, 17 checks):**
 - The seed task can call `auth.api.createUser` **without a session** (server-side) with `role: 'admin'` and `emailVerified: true`.

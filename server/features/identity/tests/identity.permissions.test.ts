@@ -13,6 +13,7 @@ const platformMatrix: Row[] = [
   ['media', 'upload', ['admin']],
   ['branch', 'create', ['admin']],
   ['branch', 'update', ['admin']],
+  ['staff', 'read', ['admin']],
   ['staff', 'create', ['admin']],
   ['staff', 'update', ['admin']],
   ['staff', 'disable', ['admin']],

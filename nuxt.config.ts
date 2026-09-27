@@ -75,6 +75,8 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // NUXT_BOOTSTRAP_TOKEN: enables POST /api/v1/bootstrap/admin (first admin) while set; ≥ 32 characters.
     bootstrapToken: '',
+    // The seed task's first admin (server/tasks/db/seed.ts): NUXT_SEED_ADMIN_EMAIL, NUXT_SEED_ADMIN_NAME.
+    seed: { adminEmail: '', adminName: 'Admin' },
     public: {
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',
@@ -91,6 +93,8 @@ export default defineNuxtConfig({
   },
   compatibilityDate: '2025-07-15',
   nitro: {
+    // Scheduled jobs and the seed task (docs/server/operations.md).
+    experimental: { tasks: true },
     hooks: {
       compiled(nitro) {
         if (nitro.options.preset.startsWith('node')) copyLibsqlNativeBinary(nitro.options.output.serverDir)
