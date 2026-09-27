@@ -73,7 +73,7 @@ export async function bootstrapAdmin(db: Db, configuredToken: string | undefined
     requireCount(db, sql`select count(*) from ${staffProfiles} where ${staffProfiles.role} = 'admin'`, 0),
     db.insert(staffProfiles).values({ userId: account.id, displayName, role: 'admin' }),
     db.insert(auditEvents).values({
-      actorUserId: account.id,
+      actorId: account.id,
       action: 'staff.bootstrap_admin',
       targetType: 'staff',
       targetId: account.id,

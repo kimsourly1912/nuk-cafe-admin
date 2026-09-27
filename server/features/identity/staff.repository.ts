@@ -4,7 +4,7 @@ import type { BranchRoleName, StaffListQuery } from '#shared/contracts/staff'
 import type { Db, Statement } from '../../utils/batch'
 import { requireCount } from '../../utils/batch'
 import { newId } from '../../utils/ids'
-import { account, auditEvents, member, organization, session, user } from '../../db/tables'
+import { account, member, organization, session, user } from '../../db/tables'
 
 /**
  * Staff queries (D49). Better Auth owns these tables' shape; staff management writes them directly
@@ -166,8 +166,4 @@ export async function countAdmins(db: Db): Promise<number> {
   const rows: { total: number }[] = await db.select({ total: count() }).from(user)
     .where(and(isAdminRole, sql`coalesce(${user.banned}, 0) = 0`))
   return rows[0]?.total ?? 0
-}
-
-export function auditStatement(db: Db, actorId: string | null, action: string, targetId: string, metadata: Record<string, unknown>): Statement {
-  return db.insert(auditEvents).values({ id: newId(), actorUserId: actorId, action, targetType: 'user', targetId, metadata })
 }

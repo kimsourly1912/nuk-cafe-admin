@@ -68,7 +68,7 @@ describe('create', () => {
     const created = await createStaff(db, actor, staffInput())
     const rows = await db.select().from(auditEvents).where(eq(auditEvents.targetId, created.staff.id))
     expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({ actorUserId: actor.userId, action: 'staff.create', targetType: 'user' })
+    expect(rows[0]).toMatchObject({ actorId: actor.userId, action: 'staff.create', targetType: 'user' })
     expect(JSON.stringify(rows[0]!.metadata)).not.toContain(created.temporaryPassword!)
   })
 

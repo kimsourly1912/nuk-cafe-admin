@@ -18,16 +18,32 @@ CREATE TABLE `account` (
 CREATE INDEX `account_userId_idx` ON `account` (`user_id`);--> statement-breakpoint
 CREATE TABLE `audit_events` (
 	`id` text PRIMARY KEY NOT NULL,
-	`actor_user_id` text,
+	`actor_id` text,
 	`action` text NOT NULL,
 	`target_type` text NOT NULL,
 	`target_id` text,
+	`branch_id` text,
 	`metadata` text,
-	`occurred_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
+	`request_id` text,
+	`at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
 );
 --> statement-breakpoint
 CREATE INDEX `audit_events_target_idx` ON `audit_events` (`target_type`,`target_id`);--> statement-breakpoint
-CREATE INDEX `audit_events_occurred_at_idx` ON `audit_events` (`occurred_at`);--> statement-breakpoint
+CREATE INDEX `audit_events_at_idx` ON `audit_events` (`at`);--> statement-breakpoint
+CREATE INDEX `audit_events_actor_idx` ON `audit_events` (`actor_id`,`at`);--> statement-breakpoint
+CREATE TABLE `idempotency_keys` (
+	`id` text PRIMARY KEY NOT NULL,
+	`actor_id` text NOT NULL,
+	`operation` text NOT NULL,
+	`key` text NOT NULL,
+	`request_hash` text NOT NULL,
+	`response` text,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`expires_at` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `idempotency_keys_scope_idx` ON `idempotency_keys` (`actor_id`,`operation`,`key`);--> statement-breakpoint
+CREATE INDEX `idempotency_keys_expires_at_idx` ON `idempotency_keys` (`expires_at`);--> statement-breakpoint
 CREATE TABLE `invitation` (
 	`id` text PRIMARY KEY NOT NULL,
 	`organization_id` text NOT NULL,
@@ -136,6 +152,21 @@ CREATE TABLE `organization` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `organization_slug_unique` ON `organization` (`slug`);--> statement-breakpoint
+CREATE TABLE `outbox_messages` (
+	`id` text PRIMARY KEY NOT NULL,
+	`kind` text NOT NULL,
+	`payload` text NOT NULL,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`attempts` integer DEFAULT 0 NOT NULL,
+	`next_attempt_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`locked_until` integer,
+	`last_error` text,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`sent_at` integer,
+	CONSTRAINT "outbox_messages_status_check" CHECK("outbox_messages"."status" in ('pending', 'sent', 'failed'))
+);
+--> statement-breakpoint
+CREATE INDEX `outbox_messages_due_idx` ON `outbox_messages` (`status`,`next_attempt_at`);--> statement-breakpoint
 CREATE TABLE `product_schedules` (
 	`product_id` text NOT NULL,
 	`schedule_id` text NOT NULL,

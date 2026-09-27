@@ -6,6 +6,8 @@ import type { Db, Statement } from '../../utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '../../utils/batch'
 import { newId } from '../../utils/ids'
 import { toIso } from '../../utils/time'
+import { auditStatement } from '../platform'
+import type { AuditActor } from '../platform'
 import type { Actor } from './identity.types'
 import { lastAdmin, ownAccess, staffAlreadyExists, staffChanged, staffNotFound, unknownBranches } from './staff.errors'
 import * as repo from './staff.repository'
@@ -43,6 +45,9 @@ async function ensureActiveBranches(db: Db, memberships: Memberships) {
   const missing = memberships.flatMap((m, i) => active.has(m.branchId) ? [] : [i])
   if (missing.length) throw unknownBranches(missing)
 }
+
+const staffAudit = (db: Db, by: AuditActor, action: string, userId: string, metadata: Record<string, unknown>) =>
+  auditStatement(db, by, { action, targetType: 'user', targetId: userId, metadata })
 
 const accessMetadata = (admin: boolean, memberships: Memberships) => ({ admin, memberships })
 
@@ -84,11 +89,11 @@ export async function getStaffMember(db: Db, userId: string): Promise<StaffMembe
  * that email (a customer who also works at the cafe: they keep their password; D49).
  */
 export async function createStaff(db: Db, actor: Actor, input: CreateStaffInput): Promise<CreatedStaff> {
-  return createStaffAs(db, actor.userId, input)
+  return createStaffAs(db, actor, input)
 }
 
-/** `actorId` `null`: the system (the seed task). */
-async function createStaffAs(db: Db, actorId: string | null, input: CreateStaffInput): Promise<CreatedStaff> {
+/** `userId: null`: the system (the seed task). */
+async function createStaffAs(db: Db, by: AuditActor, input: CreateStaffInput): Promise<CreatedStaff> {
   await ensureActiveBranches(db, input.memberships)
   const existing = await repo.findAccountByEmail(db, input.email)
   const now = new Date()
@@ -100,7 +105,7 @@ async function createStaffAs(db: Db, actorId: string | null, input: CreateStaffI
       repo.setPlatformRoleStatement(db, existing.id, input.admin, existing.updatedAt, nextVersion(existing.updatedAt, now)),
       requireOneChange(db),
       ...repo.replaceMembershipsStatements(db, existing.id, input.memberships, now),
-      repo.auditStatement(db, actorId, 'staff.create', existing.id, { ...accessMetadata(input.admin, input.memberships), existingAccount: true }),
+      staffAudit(db, by, 'staff.create', existing.id, { ...accessMetadata(input.admin, input.memberships), existingAccount: true }),
     ]
     await runAccessBatch(db, statements, existing.id, existing.updatedAt.getTime())
     return { staff: await loadStaffMember(db, existing.id), temporaryPassword: null }
@@ -111,7 +116,7 @@ async function createStaffAs(db: Db, actorId: string | null, input: CreateStaffI
   const statements: Statement[] = [
     ...repo.insertAccountStatements(db, { id: userId, name: input.name, email: input.email, admin: input.admin, passwordHash: await hashPassword(temporaryPassword), now }),
     ...repo.replaceMembershipsStatements(db, userId, input.memberships, now),
-    repo.auditStatement(db, actorId, 'staff.create', userId, { ...accessMetadata(input.admin, input.memberships), existingAccount: false }),
+    staffAudit(db, by, 'staff.create', userId, { ...accessMetadata(input.admin, input.memberships), existingAccount: false }),
   ]
   try {
     await db.batch(statements as [Statement, ...Statement[]])
@@ -143,7 +148,7 @@ export async function updateStaffAccess(db: Db, actor: Actor, userId: string, in
     ...repo.replaceMembershipsStatements(db, userId, input.memberships, now),
     repo.requireAnAdminStatement(db),
     ...(self ? [] : [repo.deleteSessionsStatement(db, userId)]),
-    repo.auditStatement(db, actor.userId, 'staff.access.update', userId, accessMetadata(input.admin, input.memberships)),
+    staffAudit(db, actor, 'staff.access.update', userId, accessMetadata(input.admin, input.memberships)),
   ]
   await runAccessBatch(db, statements, userId, input.version)
   return loadStaffMember(db, userId)
@@ -165,7 +170,7 @@ export async function disableStaff(db: Db, actor: Actor, userId: string, input: 
     ...repo.replaceMembershipsStatements(db, userId, [], new Date()),
     repo.requireAnAdminStatement(db),
     repo.deleteSessionsStatement(db, userId),
-    repo.auditStatement(db, actor.userId, 'staff.disable', userId, {}),
+    staffAudit(db, actor, 'staff.disable', userId, {}),
   ]
   await runAccessBatch(db, statements, userId, input.version)
 }
@@ -176,5 +181,5 @@ export async function disableStaff(db: Db, actor: Actor, userId: string, input: 
  */
 export async function seedFirstAdmin(db: Db, input: { name: string, email: string }): Promise<CreatedStaff | null> {
   if (await repo.countAdmins(db) > 0) return null
-  return createStaffAs(db, null, { ...input, email: input.email.trim().toLowerCase(), admin: true, memberships: [] })
+  return createStaffAs(db, { userId: null }, { ...input, email: input.email.trim().toLowerCase(), admin: true, memberships: [] })
 }

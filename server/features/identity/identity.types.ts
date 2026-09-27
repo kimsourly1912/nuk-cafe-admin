@@ -17,6 +17,8 @@ export interface SessionUser {
 export interface Actor {
   userId: string
   role: PlatformRole
+  /** The request this actor made, for the audit trail (set by the access helpers). */
+  requestId?: string
 }
 
 /** An actor on the counter surface: acting in one branch. */

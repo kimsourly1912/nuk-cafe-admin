@@ -42,7 +42,7 @@ function toSchedule(row: ScheduleRow, products: number): Schedule {
 }
 
 const audit = (db: Db, actor: Actor, action: string, targetId: string, metadata?: Record<string, unknown>) =>
-  db.insert(auditEvents).values({ actorUserId: actor.userId, action, targetType: 'menu_schedule', targetId, metadata })
+  db.insert(auditEvents).values({ actorId: actor.userId, action, targetType: 'menu_schedule', targetId, metadata })
 
 export interface ScheduleFilters {
   page: number

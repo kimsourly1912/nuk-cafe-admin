@@ -61,7 +61,7 @@ describe('bootstrapAdmin', () => {
     const staff = await bootstrapAdmin(db, TOKEN, { token: TOKEN, email: 'owner@example.com' })
     expect(staff).toMatchObject({ userId: owner.id, displayName: 'Owner', role: 'admin' })
     const events = await db.select().from(auditEvents)
-    expect(events).toMatchObject([{ actorUserId: owner.id, action: 'staff.bootstrap_admin', targetId: owner.id }])
+    expect(events).toMatchObject([{ actorId: owner.id, action: 'staff.bootstrap_admin', targetId: owner.id }])
   })
 
   it('refuses once an admin exists, even for another account', async () => {

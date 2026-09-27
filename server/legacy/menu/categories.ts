@@ -26,7 +26,7 @@ export function toCategory(row: CategoryRow): Category {
 const parentIs = (parentId: string | null) => (parentId === null ? isNull(menuCategories.parentId) : eq(menuCategories.parentId, parentId))
 
 const audit = (db: Db, actor: Actor, action: string, targetId: string | null, metadata?: Record<string, unknown>) =>
-  db.insert(auditEvents).values({ actorUserId: actor.userId, action, targetType: 'menu_category', targetId, metadata })
+  db.insert(auditEvents).values({ actorId: actor.userId, action, targetType: 'menu_category', targetId, metadata })
 
 /** Every category (the list is small), mains and subs, in their sort order. */
 export async function listCategories(db: Db, query: { level?: 'main' | 'sub' } = {}): Promise<Category[]> {

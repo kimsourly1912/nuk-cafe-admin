@@ -95,6 +95,11 @@ export default defineNuxtConfig({
   nitro: {
     // Scheduled jobs and the seed task (docs/server/operations.md).
     experimental: { tasks: true },
+    // Cron in UTC. On Cloudflare they become Worker cron triggers; in dev Nitro runs them itself.
+    scheduledTasks: {
+      '* * * * *': ['platform:deliver-outbox'],
+      '15 3 * * *': ['platform:expire-idempotency-keys'],
+    },
     hooks: {
       compiled(nitro) {
         if (nitro.options.preset.startsWith('node')) copyLibsqlNativeBinary(nitro.options.output.serverDir)
@@ -111,6 +116,16 @@ export default defineNuxtConfig({
   hooks: {
     // Our error handler answers /api/** in the API's error format; Nuxt's own handler (set before
     // this hook runs) stays next in line for pages. Nitro tries handlers in order.
+    // Each server feature owns its tables in server/features/<feature>/<feature>.schema.ts
+    // (docs/server/architecture.md → Features); NuxtHub reads server/db/schema/ by itself.
+    'hub:db:schema:extend'({ paths }) {
+      const featuresDir = fileURLToPath(new URL('./server/features', import.meta.url))
+      for (const feature of readdirSync(featuresDir)) {
+        const schema = join(featuresDir, feature, `${feature}.schema.ts`)
+        // Forward slashes: NuxtHub writes these paths into a generated import (like the error handler).
+        if (existsSync(schema)) paths.push(schema.replaceAll('\\', '/'))
+      }
+    },
     // NuxtHub declares 'hub:db:schema' for the app and Nitro type projects only. The node project
     // reaches the server utils through Nitro's auto-import types, so it needs the declaration too.
     'prepare:types'({ nodeReferences }) {

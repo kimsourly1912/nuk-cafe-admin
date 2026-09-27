@@ -210,11 +210,33 @@ Actions where a retry must never apply twice (placing an order, recording a paym
 - Same key, different request: **422 `IDEMPOTENCY_MISMATCH`**.
 - Keys expire after 24 hours (a scheduled task removes them).
 
+How (the `platform` feature, D50):
+
+```ts
+// route
+const actor = await requireCustomer(event)
+const key = readIdempotencyKey(event)                  // 400 when missing or not a UUID
+const input = await readValidBody(event, placeOrderSchema)
+return orders.placeOrder(useDb(), actor, input, key)
+
+// service
+const { response } = await withIdempotency(db, { actorId: actor.userId, operation: 'orders.place', key }, input, async () => ({
+  statements: [/* the action's statements, guards, audit, outbox */],
+  response: order,                                     // JSON; stored and returned as is on a replay
+}), { onStale: () => orderChanged() })
+```
+
+- The key is stored **in the same batch** as the action. A replay returns the stored response and doesn't call `work()`. Two identical requests at once: the second batch fails on the key's unique index, changes nothing, and replays the first.
+- `request` is compared as canonical JSON (key order and `undefined` fields don't matter); pass the validated input plus path ids.
+- The response must be computable before the batch runs: generate ids up front (`newId()`).
+
 Internal awards (points on completion) use a deterministic key (`earn:order:{orderId}`) with a unique index, so they can't double-apply even without a header.
 
 ### Audit
 
 Every privileged write (admin and counter surfaces, role changes, points adjustments, refunds) adds an `audit_events` row **in the same batch**: actor, action (`menu.item.update`), target, branch, safe metadata (field names changed, never secrets or full personal data).
+
+`platform.auditStatement(db, actor, { action, targetType, targetId, branchId?, metadata? })` returns the statement. The access helpers' actor carries the request id, so the row leads to the request's log lines; `{ userId: null }` is the system (seed task, scheduled jobs).
 
 ## Errors
 
@@ -257,7 +279,11 @@ A record another branch or customer owns is **404**, not 403: don't confirm it e
 ## Side effects
 
 Anything outside the database (email, cache purge, R2 object deletes) happens **after** the batch commits, never inside it.
-- Must-not-lose effects (verification email, order notifications later) go through an **`outbox`** row written in the same batch; a scheduled task delivers and retries them.
+- Must-not-lose effects (verification email, order notifications later) go through an **`outbox`** row written in the same batch (`platform.outboxStatement(db, kind, payload)`); `platform:deliver-outbox` delivers and retries them (D50):
+  - each kind has one handler, registered in `server/tasks/platform/deliver-outbox.ts` by the feature that owns it; a kind without a handler is retried and then marked `failed`, never dropped silently;
+  - a message is **claimed** before sending (conditional update), so overlapping runs don't send it twice at the same moment; failures retry after 1, 2, 4 … minutes (at most 6 h), and after 8 attempts the message is `failed` and logged as an error;
+  - delivery is **at least once** (a run that dies mid-send leaves the claim to expire): handlers must tolerate a repeat, e.g. by passing the message id as the provider's idempotency key;
+  - payloads hold ids and what the handler needs, not secrets it can look up.
 - Best-effort effects (purging the public menu cache) run directly after the commit; failure is logged, not surfaced.
 
 ## Tests
@@ -285,4 +311,5 @@ All in `server/utils/`. Routes get them by auto-import; features import them exp
 | `time.ts` | `toIso` | Instants in responses |
 | `log.ts` | `log(level, message, fields, event?)` | Structured logs with the request id; secret-looking keys are redacted |
 | `db.ts` | `useDb()` | The NuxtHub database, **routes and tasks only** (it imports `hub:db`, which tests can't load) |
+| `idempotency.ts` | `readIdempotencyKey(event)` | The `Idempotency-Key` header of an action that must not apply twice (400 when missing) |
 | `access.ts` | `requirePermission`, `requireBranchPermission`, `requireCustomer`, `requireSignedIn` | The first line of every route: who is acting, and may they ([security.md → Roles and permissions](security.md#roles-and-permissions)) |

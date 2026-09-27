@@ -1,7 +1,7 @@
 import { user } from '#auth/schema'
 import { sql } from 'drizzle-orm'
-import { check, index, sqliteTable, text } from 'drizzle-orm/sqlite-core'
-import { createdAt, id, timestamp, updatedAt } from '../columns'
+import { check, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { createdAt, updatedAt } from '../columns'
 
 export const STAFF_ROLES = ['admin'] as const
 export const STAFF_STATUSES = ['active', 'disabled'] as const
@@ -21,21 +21,4 @@ export const staffProfiles = sqliteTable('staff_profiles', {
 }, t => [
   check('staff_profiles_role_check', sql`${t.role} in ('admin')`),
   check('staff_profiles_status_check', sql`${t.status} in ('active', 'disabled')`),
-])
-
-/**
- * Append-only record of privileged changes. The actor is kept as plain text, not a foreign key,
- * so history survives if an account is removed. Metadata is JSON and must never hold secrets.
- */
-export const auditEvents = sqliteTable('audit_events', {
-  id: id(),
-  actorUserId: text(),
-  action: text().notNull(),
-  targetType: text().notNull(),
-  targetId: text(),
-  metadata: text({ mode: 'json' }).$type<Record<string, unknown>>(),
-  occurredAt: timestamp().notNull().default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`),
-}, t => [
-  index('audit_events_target_idx').on(t.targetType, t.targetId),
-  index('audit_events_occurred_at_idx').on(t.occurredAt),
 ])

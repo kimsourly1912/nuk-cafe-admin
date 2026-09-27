@@ -72,7 +72,9 @@ Production: manual workflow from a commit that is live on staging: export the da
 
 ## Scheduled jobs
 
-Nitro tasks in `server/tasks/`, triggered by Cloudflare cron (`nitro.scheduledTasks`). Every task is **idempotent** (safe to run twice) and logs what it did.
+Nitro tasks in `server/tasks/`, scheduled in `nuxt.config.ts` (`nitro.scheduledTasks`, cron in UTC): Cloudflare cron triggers in deployed environments; the dev server runs them itself. Every task is **idempotent** (safe to run twice) and logs what it did. Locally a task runs on demand with `curl http://localhost:3000/_nitro/tasks/<name>` (dev only).
+
+Built so far: `platform:deliver-outbox` (every minute) and `platform:expire-idempotency-keys` (daily at 03:15 UTC).
 
 | Task | Schedule | Does |
 |---|---|---|

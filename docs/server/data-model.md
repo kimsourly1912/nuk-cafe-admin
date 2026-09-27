@@ -193,9 +193,9 @@ Feature: `platform`.
 
 | Table | Columns | Notes |
 |---|---|---|
-| `audit_events` | `actor_id`, `action`, `target_type`, `target_id`, `branch_id`, `metadata` (JSON, no secrets or personal values), `request_id`, `at` | Append-only, written in the same batch as the change |
-| `idempotency_keys` | `actor_id`, `operation`, `key`, `request_hash`, `response` (JSON), `expires_at`; unique (`actor_id`, `operation`, `key`) | Removed after 24 h |
-| `outbox_messages` | `kind`, `payload`, `status`, `attempts`, `next_attempt_at`, `last_error` | Must-not-lose side effects, delivered by a scheduled task |
+| `audit_events` | `actor_id` (`null` = system), `action`, `target_type`, `target_id`, `branch_id`, `metadata` (JSON, no secrets or personal values), `request_id`, `at` | Append-only, written in the same batch as the change. Indexes: target, `at`, (actor, `at`) |
+| `idempotency_keys` | `actor_id`, `operation`, `key`, `request_hash` (SHA-256 of canonical JSON), `response` (JSON), `created_at`, `expires_at`; unique (`actor_id`, `operation`, `key`) | Removed after 24 h; a key counts until removed |
+| `outbox_messages` | `kind`, `payload` (JSON), `status` (`pending` \| `sent` \| `failed`), `attempts`, `next_attempt_at`, `locked_until` (delivery claim), `last_error` (one line), `created_at`, `sent_at` | Must-not-lose side effects, delivered at least once by `platform:deliver-outbox` |
 
 ## Open questions
 

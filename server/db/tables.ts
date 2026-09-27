@@ -7,3 +7,5 @@ export { account, member, organization, session, user } from 'hub:db:schema'
 export * from './schema/identity'
 export * from './schema/media'
 export * from './schema/menu'
+// Owned by the platform feature (D50); re-exported for the legacy services.
+export { auditEvents } from '../features/platform/platform.schema'

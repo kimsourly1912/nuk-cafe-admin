@@ -26,7 +26,7 @@ type ProductRow = InferSelectModel<typeof menuProducts>
 type Statement = BatchItem<'sqlite'>
 
 const audit = (db: Db, actor: Actor, action: string, targetId: string, metadata?: Record<string, unknown>) =>
-  db.insert(auditEvents).values({ actorUserId: actor.userId, action, targetType: 'menu_product', targetId, metadata })
+  db.insert(auditEvents).values({ actorId: actor.userId, action, targetType: 'menu_product', targetId, metadata })
 
 const invalid = (field: string, message: string, code: 'VALIDATION_FAILED' | 'REFERENCE_NOT_FOUND' = 'REFERENCE_NOT_FOUND') =>
   apiError(400, code, message, { fieldErrors: { [field]: [message] } })
