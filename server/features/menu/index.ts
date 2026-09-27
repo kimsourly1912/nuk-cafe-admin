@@ -2,3 +2,5 @@ export { archiveCategory, createCategory, getCategory, listCategories, reorderCa
 export { CategoryErrorCodes } from './categories.errors'
 export { addOptionValue, archiveOptionSet, archiveOptionValue, createOptionSet, getOptionSet, listOptionSets, renameOptionSet, renameOptionValue, reorderOptionValues, restoreOptionSet, restoreOptionValue } from './options.service'
 export { OptionErrorCodes } from './options.errors'
+export { addModifier, archiveModifier, archiveModifierGroup, createModifierGroup, getModifierGroup, listModifierGroups, reorderModifiers, restoreModifier, restoreModifierGroup, updateModifier, updateModifierGroup } from './modifiers.service'
+export { ModifierErrorCodes } from './modifiers.errors'

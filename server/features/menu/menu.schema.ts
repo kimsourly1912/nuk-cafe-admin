@@ -4,8 +4,8 @@ import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-o
 import { newId } from '../../utils/ids'
 
 /**
- * The menu (docs/server/data-model.md → Menu, D44). Step 3.1: categories; 3.3: options. Add-ons, items
- * and availability join in steps 3.4 to 3.7. Registered with NuxtHub through the
+ * The menu (docs/server/data-model.md → Menu, D44). Step 3.1: categories; 3.3: options; 3.4: add-ons. Items
+ * and availability join in steps 3.5 to 3.7. Registered with NuxtHub through the
  * `hub:db:schema:extend` hook; column names are snake_case in SQL.
  */
 
@@ -82,4 +82,48 @@ export const menuOptionValues = sqliteTable('menu_option_values', {
   index('menu_option_values_set_sort_idx').on(t.setId, t.sortOrder),
   // Active values of one set have distinct names (case-insensitive).
   uniqueIndex('menu_option_values_active_name_idx').on(t.setId, sql`lower(${t.name})`).where(sql`${t.status} = 'active'`),
+])
+
+export const MODIFIER_STATUSES = ['active', 'archived'] as const
+
+/**
+ * The Add-ons library (D44, D59): reusable groups of extras ("Milk", "Extra shot") with default
+ * prices and selection rules, used by many items (each item can override the rules and prices in
+ * step 3.5). As with option sets, `version` covers the group **and its modifiers**.
+ */
+export const menuModifierGroups = sqliteTable('menu_modifier_groups', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  name: text().notNull(),
+  /** How many the customer must choose (0 = optional). */
+  minSelect: integer().notNull().default(0),
+  /** How many they may choose; `null` = no limit. */
+  maxSelect: integer(),
+  status: text({ enum: MODIFIER_STATUSES }).notNull().default('active'),
+  version: integer().notNull().default(1),
+  createdAt: instant().notNull().default(nowMs),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  check('menu_modifier_groups_status_check', sql`${t.status} in ('active', 'archived')`),
+  check('menu_modifier_groups_select_check', sql`${t.minSelect} >= 0 and (${t.maxSelect} is null or (${t.maxSelect} >= 1 and ${t.maxSelect} >= ${t.minSelect}))`),
+  uniqueIndex('menu_modifier_groups_active_name_idx').on(sql`lower(${t.name})`).where(sql`${t.status} = 'active'`),
+])
+
+/** An extra ("Oat", +$0.50). Archived, never deleted: past orders refer to it. */
+export const menuModifiers = sqliteTable('menu_modifiers', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  groupId: text().notNull().references(() => menuModifierGroups.id, { onDelete: 'restrict' }),
+  name: text().notNull(),
+  /** Added to the item's price, in cents; 0 for a free choice ("Whole milk"). */
+  priceDeltaMinor: integer().notNull().default(0),
+  /** Pre-selected for the customer. */
+  isDefault: integer({ mode: 'boolean' }).notNull().default(false),
+  sortOrder: integer().notNull().default(0),
+  status: text({ enum: MODIFIER_STATUSES }).notNull().default('active'),
+  createdAt: instant().notNull().default(nowMs),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  check('menu_modifiers_status_check', sql`${t.status} in ('active', 'archived')`),
+  check('menu_modifiers_price_check', sql`${t.priceDeltaMinor} >= 0`),
+  index('menu_modifiers_group_sort_idx').on(t.groupId, t.sortOrder),
+  uniqueIndex('menu_modifiers_active_name_idx').on(t.groupId, sql`lower(${t.name})`).where(sql`${t.status} = 'active'`),
 ])
