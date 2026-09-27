@@ -4,8 +4,8 @@ import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-o
 import { newId } from '../../utils/ids'
 
 /**
- * The menu (docs/server/data-model.md → Menu, D44). Step 3.1: categories. Options, add-ons, items
- * and availability join in steps 3.3 to 3.7. Registered with NuxtHub through the
+ * The menu (docs/server/data-model.md → Menu, D44). Step 3.1: categories; 3.3: options. Add-ons, items
+ * and availability join in steps 3.4 to 3.7. Registered with NuxtHub through the
  * `hub:db:schema:extend` hook; column names are snake_case in SQL.
  */
 
@@ -42,4 +42,44 @@ export const menuCategories = sqliteTable('menu_categories', {
   uniqueIndex('menu_categories_sub_name_idx')
     .on(t.parentId, sql`lower(${t.name})`)
     .where(sql`${t.parentId} is not null and ${t.status} = 'active'`),
+])
+
+export const OPTION_STATUSES = ['active', 'archived'] as const
+
+/**
+ * The Options library (D44, D58): reusable option sets ("Size") with names only, no prices. A menu
+ * item uses up to two, and gets one priced version per combination of their values (step 3.5).
+ * `version` covers the set **and its values**: every change to either moves it, so two admins
+ * editing the same set can't overwrite each other.
+ */
+export const menuOptionSets = sqliteTable('menu_option_sets', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  name: text().notNull(),
+  status: text({ enum: OPTION_STATUSES }).notNull().default('active'),
+  version: integer().notNull().default(1),
+  createdAt: instant().notNull().default(nowMs),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  check('menu_option_sets_status_check', sql`${t.status} in ('active', 'archived')`),
+  // Active sets have distinct names (case-insensitive), even when two saves race.
+  uniqueIndex('menu_option_sets_active_name_idx').on(sql`lower(${t.name})`).where(sql`${t.status} = 'active'`),
+])
+
+/**
+ * A value of a set ("Large"). Archiving a value hides the item versions that use it; it's never
+ * deleted, because versions and past orders refer to it.
+ */
+export const menuOptionValues = sqliteTable('menu_option_values', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  setId: text().notNull().references(() => menuOptionSets.id, { onDelete: 'restrict' }),
+  name: text().notNull(),
+  sortOrder: integer().notNull().default(0),
+  status: text({ enum: OPTION_STATUSES }).notNull().default('active'),
+  createdAt: instant().notNull().default(nowMs),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  check('menu_option_values_status_check', sql`${t.status} in ('active', 'archived')`),
+  index('menu_option_values_set_sort_idx').on(t.setId, t.sortOrder),
+  // Active values of one set have distinct names (case-insensitive).
+  uniqueIndex('menu_option_values_active_name_idx').on(t.setId, sql`lower(${t.name})`).where(sql`${t.status} = 'active'`),
 ])

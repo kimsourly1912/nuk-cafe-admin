@@ -156,6 +156,35 @@ Feature `server/features/menu/` (`categories.*`), contract `shared/contracts/men
 
 Positions (`sortOrder`) keep gaps after archiving and may tie after simultaneous creates (ties sort by name); only the relative order matters, and a reorder rewrites them 1…n. **"Items only in leaf categories"**: the category side (no sub-category under a sub-category) is enforced now; the item side (no item in a category with sub-categories, and no sub-category added to a category with items) comes with menu items in step 3.5.
 
+### Options library API (step 3.3, D58)
+
+Same feature (`options.*`), contract `shared/contracts/menu-options.ts`, permission `menu:read` / `menu:write`. **The set's `version` covers its values:** every change to a set or one of its values sends the set's version and moves it, so two admins can't overwrite each other's edits of one set. Each response is the whole set with its values (active ones in order, then archived ones). Audited as `menu.option_set.<action>`.
+
+| Route | Does |
+|---|---|
+| `GET /api/admin/menu/option-sets?status=active\|archived\|all` | Sets by name, with their values |
+| `GET /api/admin/menu/option-sets/{setId}` | One set |
+| `POST /api/admin/menu/option-sets` | `{ name, values: [names] }` (1–20, unique) → 201 |
+| `PATCH /api/admin/menu/option-sets/{setId}` | `{ version, name }` |
+| `POST …/{setId}/archive`, `…/restore` | `{ version }` |
+| `POST …/{setId}/values` | `{ version, name }` → 201, at the end |
+| `PATCH …/{setId}/values/{valueId}` | `{ version, name }` |
+| `POST …/{setId}/values/{valueId}/archive`, `…/restore` | `{ version }` (restore puts it at the end) |
+| `PUT …/{setId}/values/order` | `{ version, valueIds }`: every active value, once |
+
+| Case | Result | Test |
+|---|---|---|
+| Two active sets with the same name (case-insensitive), also two creates at once | 409 `OPTION_SET_NAME_TAKEN`; the losing create leaves no values behind | ✔ (incl. the race) |
+| Two active values of one set with the same name | 409 `OPTION_VALUE_NAME_TAKEN`; the same name in another set is fine | ✔ |
+| Stale set version (before or during the write), or two edits of one set at once | 409 `VERSION_CONFLICT`, nothing changes | ✔ (incl. both races) |
+| Editing an archived set or value; restoring what isn't archived | 409 `INVALID_STATE` | ✔ |
+| Archiving the last active value (also if another is archived meanwhile) | 422 `LAST_OPTION_VALUE`: archive the set instead | ✔ (incl. the race) |
+| More than 20 active values (also if one is added meanwhile) | 422 `TOO_MANY_OPTION_VALUES` | ✔ (incl. the race) |
+| A value of another set in the path | 404 | ✔ |
+| Reorder that isn't exactly the active values | 409 `VERSION_CONFLICT` | ✔ |
+
+**Not yet:** "used by N items" and what archiving a set or value does to items (hiding their versions) come with menu items in step 3.5.
+
 Sources: [Square item options](https://developer.squareup.com/docs/catalog-api/item-options), [Square option sets](https://squareup.com/help/us/en/article/6689-item-options), [Square nested categories (community)](https://community.squareup.com/t5/Orders-Menu-Items-Catalog/Getting-Sub-categories-to-show-when-parent-category-is-selected/td-p/827866), [Toast menu hierarchy](https://doc.toasttab.com/doc/platformguide/adminMenuHierarchy.html), [Toast shared modifier groups](https://support.toasttab.com/en/article/Shallow-and-Deep-Copying-Menu-Items-and-Modifiers), [Uber Eats menu structure](https://developer.uber.com/docs/eats/guides/menu-integration), [Loyverse variants vs modifiers](https://help.loyverse.com/help/how-use-variants-items).
 
 ## Media
