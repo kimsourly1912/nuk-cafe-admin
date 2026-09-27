@@ -141,6 +141,7 @@ Verified behavior of the stack that the rest of the standard relies on. Re-check
 | Workers builds **don't** apply D1 migrations | CI applies them as its own step before deploying ([Deploys](#deploys)) |
 | D1 **always enforces foreign keys** | Every `ON DELETE` is chosen on purpose: `restrict` for referenced records, `cascade` only for private children |
 | D1 has **no interactive transactions**; a `batch` is atomic, but a conditional `UPDATE` matching no row does **not** fail it | Multi-statement writes are one batch with explicit guard statements ([architecture.md → Atomic writes](./architecture.md#atomic-writes)) |
+| D1 refuses a statement with **more than 100 bound parameters** ("too many SQL variables"); local SQLite allows 32,766 | Growing lists are split into several statements; the test database enforces the limit (D62) |
 | An R2 upload and a D1 write can't share a transaction | Uploads start `temporary` and are attached by a later write; orphans are cleaned by a task |
 | D1 has per-database size and throughput limits | Check query plans and rows read before adding caches; index every filter used by a list |
 | libsql loads its native binary through a computed `require()` that Nitro's tracer can't follow | A `compiled` hook in `nuxt.config.ts` copies it into node builds (local and e2e); see D46 |

@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, max, sql } from 'drizzle-orm'
 import type { ModifierStatus } from '#shared/contracts/menu-modifiers'
 import { MAX_MODIFIERS } from '#shared/contracts/menu-modifiers'
 import type { Db, Statement } from '../../utils/batch'
-import { requireCount } from '../../utils/batch'
+import { insertPieces, readInChunks, requireCount } from '../../utils/batch'
 import { menuModifierGroups, menuModifiers } from './menu.schema'
 
 export interface ModifierGroupRow {
@@ -59,9 +59,9 @@ export async function listGroups(db: Db, status: ModifierStatus | 'all'): Promis
 
 export async function modifiersOf(db: Db, groupIds: string[]): Promise<ModifierRow[]> {
   if (!groupIds.length) return []
-  return db.select(modifierColumns).from(menuModifiers)
-    .where(inArray(menuModifiers.groupId, groupIds))
-    .orderBy(asc(menuModifiers.sortOrder), asc(menuModifiers.name))
+  return readInChunks(groupIds, ids => db.select(modifierColumns).from(menuModifiers)
+    .where(inArray(menuModifiers.groupId, ids))
+    .orderBy(asc(menuModifiers.sortOrder), asc(menuModifiers.name)))
 }
 
 export async function findModifier(db: Db, groupId: string, modifierId: string): Promise<ModifierRow | undefined> {
@@ -93,8 +93,8 @@ export function insertGroupStatement(db: Db, row: { id: string, name: string, mi
   return db.insert(menuModifierGroups).values({ id: row.id, name: row.name, minSelect: row.minSelect, maxSelect: row.maxSelect, createdAt: row.now, updatedAt: row.now })
 }
 
-export function insertModifiersStatement(db: Db, rows: { id: string, groupId: string, name: string, priceDeltaMinor: number, isDefault: boolean, sortOrder: number }[], now: Date): Statement {
-  return db.insert(menuModifiers).values(rows.map(row => ({ ...row, createdAt: now, updatedAt: now })))
+export function insertModifiersStatements(db: Db, rows: { id: string, groupId: string, name: string, priceDeltaMinor: number, isDefault: boolean, sortOrder: number }[], now: Date): Statement[] {
+  return insertPieces(menuModifiers, rows).map(piece => db.insert(menuModifiers).values(piece.map(row => ({ ...row, createdAt: now, updatedAt: now }))))
 }
 
 export function updateModifierStatement(db: Db, groupId: string, modifierId: string, changes: Partial<Pick<ModifierRow, 'name' | 'priceDeltaMinor' | 'isDefault' | 'status' | 'sortOrder'>>, now: Date): Statement {

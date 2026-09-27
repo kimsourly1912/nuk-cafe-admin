@@ -2,7 +2,7 @@ import { and, asc, count, eq, inArray, isNull, max, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { CategoryStatus } from '#shared/contracts/menu-categories'
 import type { Db, Statement } from '../../utils/batch'
-import { requireCount } from '../../utils/batch'
+import { readInChunks, requireCount } from '../../utils/batch'
 import { menuCategories, menuItems } from './menu.schema'
 
 export interface CategoryRow {
@@ -140,5 +140,5 @@ export function positionStatement(db: Db, parentId: string | null, id: string, v
 
 export async function findCategoriesByIds(db: Db, ids: string[]): Promise<CategoryRow[]> {
   if (!ids.length) return []
-  return db.select(columns).from(menuCategories).where(inArray(menuCategories.id, ids))
+  return readInChunks(ids, piece => db.select(columns).from(menuCategories).where(inArray(menuCategories.id, piece)))
 }

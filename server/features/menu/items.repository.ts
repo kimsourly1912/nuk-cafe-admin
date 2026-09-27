@@ -2,7 +2,7 @@ import { and, asc, count, eq, inArray, max, ne, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { ItemListQuery, ItemStatus } from '#shared/contracts/menu-items'
 import type { Db, Statement } from '../../utils/batch'
-import { requireCount } from '../../utils/batch'
+import { chunk, insertPieces, readInChunks, requireCount } from '../../utils/batch'
 import { menuCategories, menuItemModifierGroups, menuItemModifierPrices, menuItemOptionSets, menuItems, menuItemVariations, menuModifierGroups, menuModifiers, menuOptionSets, menuOptionValues, menuVariationOptionValues } from './menu.schema'
 
 export interface ItemRow {
@@ -166,10 +166,10 @@ export async function countSellable(db: Db, itemId: string): Promise<number> {
 /** Non-archived items per option set, for "used by N items". */
 export async function itemCountsBySet(db: Db, setIds: string[]): Promise<Map<string, number>> {
   if (!setIds.length) return new Map()
-  const rows: { setId: string, n: number }[] = await db.select({ setId: menuItemOptionSets.setId, n: count() }).from(menuItemOptionSets)
+  const rows: { setId: string, n: number }[] = await readInChunks(setIds, ids => db.select({ setId: menuItemOptionSets.setId, n: count() }).from(menuItemOptionSets)
     .innerJoin(menuItems, eq(menuItems.id, menuItemOptionSets.itemId))
-    .where(and(inArray(menuItemOptionSets.setId, setIds), ne(menuItems.status, 'archived')))
-    .groupBy(menuItemOptionSets.setId)
+    .where(and(inArray(menuItemOptionSets.setId, ids), ne(menuItems.status, 'archived')))
+    .groupBy(menuItemOptionSets.setId))
   return new Map(rows.map(r => [r.setId, r.n]))
 }
 
@@ -189,6 +189,7 @@ export async function itemModifierPrices(db: Db, itemId: string): Promise<Map<st
 /** These add-on groups with all their add-ons, in the order of `ids`. */
 export async function groupsWithModifiers(db: Db, ids: string[]): Promise<GroupWithModifiers[]> {
   if (!ids.length) return []
+  // At most 10 groups per item (the contract), so one IN list each.
   const groups: Omit<GroupWithModifiers, 'modifiers'>[] = await db.select({ id: menuModifierGroups.id, name: menuModifierGroups.name, minSelect: menuModifierGroups.minSelect, maxSelect: menuModifierGroups.maxSelect, status: menuModifierGroups.status })
     .from(menuModifierGroups).where(inArray(menuModifierGroups.id, ids))
   const modifiers: (GroupWithModifiers['modifiers'][number] & { groupId: string })[] = await db
@@ -203,10 +204,10 @@ export async function groupsWithModifiers(db: Db, ids: string[]): Promise<GroupW
 /** Non-archived items per add-on group, for "used by N items". */
 export async function itemCountsByGroup(db: Db, groupIds: string[]): Promise<Map<string, number>> {
   if (!groupIds.length) return new Map()
-  const rows: { groupId: string, n: number }[] = await db.select({ groupId: menuItemModifierGroups.groupId, n: count() }).from(menuItemModifierGroups)
+  const rows: { groupId: string, n: number }[] = await readInChunks(groupIds, ids => db.select({ groupId: menuItemModifierGroups.groupId, n: count() }).from(menuItemModifierGroups)
     .innerJoin(menuItems, eq(menuItems.id, menuItemModifierGroups.itemId))
-    .where(and(inArray(menuItemModifierGroups.groupId, groupIds), ne(menuItems.status, 'archived')))
-    .groupBy(menuItemModifierGroups.groupId)
+    .where(and(inArray(menuItemModifierGroups.groupId, ids), ne(menuItems.status, 'archived')))
+    .groupBy(menuItemModifierGroups.groupId))
   return new Map(rows.map(r => [r.groupId, r.n]))
 }
 
@@ -233,9 +234,9 @@ export function requireActiveGroups(db: Db, groupIds: string[]): Statement {
   return requireCount(db, sql`select count(*) from ${menuModifierGroups} where ${inArray(menuModifierGroups.id, groupIds)} and ${menuModifierGroups.status} = 'active'`, groupIds.length)
 }
 
-/** Aborts unless every one of these add-ons is still active. */
-export function requireActiveModifiers(db: Db, modifierIds: string[]): Statement {
-  return requireCount(db, sql`select count(*) from ${menuModifiers} where ${inArray(menuModifiers.id, modifierIds)} and ${menuModifiers.status} = 'active'`, modifierIds.length)
+/** Abort unless every one of these add-ons is still active (one guard per piece of the list). */
+export function requireActiveModifiers(db: Db, modifierIds: string[]): Statement[] {
+  return chunk(modifierIds).map(ids => requireCount(db, sql`select count(*) from ${menuModifiers} where ${inArray(menuModifiers.id, ids)} and ${menuModifiers.status} = 'active'`, ids.length))
 }
 
 /** Aborts unless the item has at least one sellable variation. */
@@ -286,7 +287,7 @@ export function replaceModifierGroupsStatements(db: Db, itemId: string, groups: 
           maxSelect: group.rules?.maxSelect ?? null,
         })))]
       : []),
-    ...(prices.length ? [db.insert(menuItemModifierPrices).values(prices.map(price => ({ itemId, ...price })))] : []),
+    ...insertPieces(menuItemModifierPrices, prices).map(piece => db.insert(menuItemModifierPrices).values(piece.map(price => ({ itemId, ...price })))),
   ]
 }
 
@@ -302,9 +303,9 @@ export function updateVariationStatement(db: Db, itemId: string, variationId: st
     .where(and(eq(menuItemVariations.id, variationId), eq(menuItemVariations.itemId, itemId)))
 }
 
-export function retireVariationsStatement(db: Db, itemId: string, ids: string[], now: Date): Statement {
-  return db.update(menuItemVariations).set({ status: 'retired', updatedAt: now })
-    .where(and(eq(menuItemVariations.itemId, itemId), inArray(menuItemVariations.id, ids)))
+export function retireVariationsStatements(db: Db, itemId: string, variationIds: string[], now: Date): Statement[] {
+  return chunk(variationIds).map(ids => db.update(menuItemVariations).set({ status: 'retired', updatedAt: now })
+    .where(and(eq(menuItemVariations.itemId, itemId), inArray(menuItemVariations.id, ids))))
 }
 
 export function positionItemStatement(db: Db, categoryId: string, id: string, version: number, sortOrder: number, now: Date): Statement {

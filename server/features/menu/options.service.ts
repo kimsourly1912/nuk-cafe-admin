@@ -88,7 +88,7 @@ export async function createOptionSet(db: Db, actor: Actor, input: CreateOptionS
   const now = new Date()
   const statements: Statement[] = [
     repo.insertSetStatement(db, { id, name: input.name, now }),
-    repo.insertValuesStatement(db, input.values.map((name, i) => ({ id: newId(), setId: id, name, sortOrder: i + 1 })), now),
+    ...repo.insertValuesStatements(db, input.values.map((name, i) => ({ id: newId(), setId: id, name, sortOrder: i + 1 })), now),
     audit(db, actor, 'create', id, { values: input.values.length }),
   ]
   try {
@@ -144,7 +144,7 @@ export async function addOptionValue(db: Db, actor: Actor, setId: string, input:
   await runSetBatch(db, setId, input.version, [
     repo.touchSetStatement(db, setId, input.version, now),
     requireOneChange(db),
-    repo.insertValuesStatement(db, [{ id: valueId, setId, name: input.name, sortOrder: await repo.nextValueOrder(db, setId) }], now),
+    ...repo.insertValuesStatements(db, [{ id: valueId, setId, name: input.name, sortOrder: await repo.nextValueOrder(db, setId) }], now),
     repo.requireActiveValueCount(db, setId, MAX_OPTION_VALUES),
     audit(db, actor, 'value.add', setId, { valueId }),
   ], () => optionValueNameTaken(input.name), () => tooManyOptionValues())

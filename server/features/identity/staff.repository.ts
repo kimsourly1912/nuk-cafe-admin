@@ -2,7 +2,7 @@ import { and, asc, count, eq, exists, inArray, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { BranchRoleName, StaffListQuery } from '#shared/contracts/staff'
 import type { Db, Statement } from '../../utils/batch'
-import { requireCount } from '../../utils/batch'
+import { insertPieces, readInChunks, requireCount } from '../../utils/batch'
 import { newId } from '../../utils/ids'
 import { account, member, organization, session, user } from '../../db/tables'
 
@@ -57,12 +57,12 @@ export async function findAccountByEmail(db: Db, email: string): Promise<Account
 
 export async function membershipsOf(db: Db, userIds: string[]): Promise<MembershipRow[]> {
   if (!userIds.length) return []
-  return db
+  return readInChunks(userIds, ids => db
     .select({ userId: member.userId, branchId: member.organizationId, branchName: organization.name, role: member.role })
     .from(member)
     .innerJoin(organization, eq(organization.id, member.organizationId))
-    .where(inArray(member.userId, userIds))
-    .orderBy(asc(organization.name))
+    .where(inArray(member.userId, ids))
+    .orderBy(asc(organization.name)))
 }
 
 /** Of these branch ids, the ones that exist and are active. */
@@ -140,8 +140,8 @@ export function setPlatformRoleStatement(db: Db, userId: string, admin: boolean,
 
 export function replaceMembershipsStatements(db: Db, userId: string, memberships: { branchId: string, role: BranchRoleName }[], now: Date): Statement[] {
   const statements: Statement[] = [db.delete(member).where(eq(member.userId, userId))]
-  if (memberships.length) {
-    statements.push(db.insert(member).values(memberships.map(m => ({
+  for (const piece of insertPieces(member, memberships)) {
+    statements.push(db.insert(member).values(piece.map(m => ({
       id: newId(),
       organizationId: m.branchId,
       userId,

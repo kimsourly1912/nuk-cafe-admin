@@ -475,3 +475,11 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Limits** [Choice]: at most 10 add-on groups per item; own prices 0 to $100 like the library's.
 - **"Used by N items"** on add-on groups counts drafts and active items (like option sets).
 - **Tests:** 14 (two forced races). All 6 guards and checks without an in-batch twin fail a test when removed; the 2 survivors are early checks whose in-batch guard gives the same error. `expectApiError` now takes an optional list of expected field-error paths.
+
+### D62: D1's limit of 100 parameters per statement, 2026-09-27
+
+- **Found while planning step 3.6:** D1 refuses a statement with more than 100 bound parameters ("too many SQL variables"). Checked on the staging database: an `IN` list of 100 works, 101 fails. libsql (local and tests) allows 32,766, so no test could see it.
+- **What could fail on staging:** creating an option set with more than 14 values, or an add-on group with more than 12 add-ons (one multi-row insert); an item with many own add-on prices; retiring more than 99 versions of a price grid; reordering more than 99 sibling categories (the re-read); listing more than 99 option sets or add-on groups (values, add-ons and "used by" counts by id); a staff member with more than 20 branches.
+- **Fix:** three helpers in `server/utils/batch.ts`. `readInChunks` runs a read by ids in pieces of 90. `insertPieces(table, rows)` splits a multi-row insert so rows × columns stay within 100. `chunk` splits `IN` lists in updates and guards, one statement per piece, in the same atomic batch.
+- **Kept honest by the tests:** the test database refuses more than 100 parameters too (a proxy on the libsql client). `server/tests/d1-limits.test.ts` runs each of these at the largest size the contracts allow. Undoing any one fix fails a test, except the paged staff read, where a page of at most 100 ids is within the limit; its chunking is a safety margin.
+- **Not changed:** the legacy menu (`server/legacy`, removed in 3.8) and Better Auth's own queries (small, fixed lists).

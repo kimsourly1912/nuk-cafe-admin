@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, max, sql } from 'drizzle-orm'
 import type { OptionStatus } from '#shared/contracts/menu-options'
 import type { Db, Statement } from '../../utils/batch'
-import { requireCount } from '../../utils/batch'
+import { insertPieces, readInChunks, requireCount } from '../../utils/batch'
 import { menuOptionSets, menuOptionValues } from './menu.schema'
 
 export interface OptionSetRow {
@@ -51,9 +51,9 @@ export async function listSets(db: Db, status: OptionStatus | 'all'): Promise<Op
 /** The values of these sets, in order. */
 export async function valuesOf(db: Db, setIds: string[]): Promise<OptionValueRow[]> {
   if (!setIds.length) return []
-  return db.select(valueColumns).from(menuOptionValues)
-    .where(inArray(menuOptionValues.setId, setIds))
-    .orderBy(asc(menuOptionValues.sortOrder), asc(menuOptionValues.name))
+  return readInChunks(setIds, ids => db.select(valueColumns).from(menuOptionValues)
+    .where(inArray(menuOptionValues.setId, ids))
+    .orderBy(asc(menuOptionValues.sortOrder), asc(menuOptionValues.name)))
 }
 
 export async function findValue(db: Db, setId: string, valueId: string): Promise<OptionValueRow | undefined> {
@@ -85,8 +85,8 @@ export function insertSetStatement(db: Db, row: { id: string, name: string, now:
   return db.insert(menuOptionSets).values({ id: row.id, name: row.name, createdAt: row.now, updatedAt: row.now })
 }
 
-export function insertValuesStatement(db: Db, values: { id: string, setId: string, name: string, sortOrder: number }[], now: Date): Statement {
-  return db.insert(menuOptionValues).values(values.map(value => ({ ...value, createdAt: now, updatedAt: now })))
+export function insertValuesStatements(db: Db, values: { id: string, setId: string, name: string, sortOrder: number }[], now: Date): Statement[] {
+  return insertPieces(menuOptionValues, values).map(piece => db.insert(menuOptionValues).values(piece.map(value => ({ ...value, createdAt: now, updatedAt: now }))))
 }
 
 export function updateValueStatement(db: Db, setId: string, valueId: string, changes: Partial<Pick<OptionValueRow, 'name' | 'status' | 'sortOrder'>>, now: Date): Statement {
