@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { CreateProductBody } from '#shared/contracts/menu'
-import { mediaAssets, productVariantOptions } from '../../server/db/tables'
+import { legacyMediaAssets, productVariantOptions } from '../../server/db/tables'
 import type { Db } from '../../server/utils/batch'
 import type { Actor } from '../../server/legacy/actor'
 import { createCategory } from '../../server/legacy/menu/categories'
@@ -149,7 +149,7 @@ describe('images', () => {
     expect(await failure(createProduct(db, actor, input({ name: 'Mocha', imageAssetId: first.id })))).toEqual({ status: 400, code: 'REFERENCE_NOT_FOUND' })
 
     await updateProduct(db, actor, latte.id, { version: 1, imageAssetId: second.id })
-    const states = Object.fromEntries((await db.select().from(mediaAssets)).map(a => [a.objectKey, a.state]))
+    const states = Object.fromEntries((await db.select().from(legacyMediaAssets)).map(a => [a.objectKey, a.state]))
     expect(states).toEqual({ 'menu/a.png': 'temporary', 'menu/b.png': 'attached' })
   })
 })

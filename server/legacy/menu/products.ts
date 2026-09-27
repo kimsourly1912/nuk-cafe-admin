@@ -7,7 +7,7 @@ import type { CreateProductBody, Product, UpdateProductBody, VariantGroup, Varia
 import { CURRENCY, MAX_MENU_ITEMS } from '#shared/contracts/menu'
 import {
   auditEvents,
-  mediaAssets,
+  legacyMediaAssets,
   legacyMenuCategories,
   menuProducts,
   menuSchedules,
@@ -43,7 +43,7 @@ async function assemble(db: Db, rows: ProductRow[]): Promise<Product[]> {
   const [categories, assets, links, groups] = await Promise.all([
     db.select({ id: legacyMenuCategories.id, name: legacyMenuCategories.name, parentId: legacyMenuCategories.parentId, status: legacyMenuCategories.status })
       .from(legacyMenuCategories).where(inArray(legacyMenuCategories.id, categoryIds)),
-    assetIds.length ? db.select().from(mediaAssets).where(inArray(mediaAssets.id, assetIds)) : Promise.resolve([]),
+    assetIds.length ? db.select().from(legacyMediaAssets).where(inArray(legacyMediaAssets.id, assetIds)) : Promise.resolve([]),
     db.select().from(productSchedules).where(inArray(productSchedules.productId, ids)),
     db.select().from(productVariantGroups).where(inArray(productVariantGroups.productId, ids))
       .orderBy(asc(productVariantGroups.sortOrder)),
@@ -137,7 +137,7 @@ async function checkSchedules(db: Db, scheduleIds: string[]) {
 
 /** An image may be a fresh upload, or the image the item already has. */
 async function checkImage(db: Db, assetId: string, currentAssetId?: string | null) {
-  const [asset] = await db.select().from(mediaAssets).where(eq(mediaAssets.id, assetId))
+  const [asset] = await db.select().from(legacyMediaAssets).where(eq(legacyMediaAssets.id, assetId))
   if (!asset) throw invalid('imageAssetId', 'The image no longer exists. Upload it again')
   if (asset.state === 'attached' && asset.id !== currentAssetId) throw invalid('imageAssetId', 'This image belongs to another menu item')
 }
@@ -206,7 +206,7 @@ function scheduleStatements(db: Db, productId: string, scheduleIds: string[], is
 }
 
 const setAssetState = (db: Db, assetId: string, state: 'temporary' | 'attached') =>
-  db.update(mediaAssets).set({ state }).where(eq(mediaAssets.id, assetId))
+  db.update(legacyMediaAssets).set({ state }).where(eq(legacyMediaAssets.id, assetId))
 
 async function runBatch(db: Db, statements: Statement[], what: string) {
   try {
