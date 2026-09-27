@@ -483,3 +483,14 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Fix:** three helpers in `server/utils/batch.ts`. `readInChunks` runs a read by ids in pieces of 90. `insertPieces(table, rows)` splits a multi-row insert so rows × columns stay within 100. `chunk` splits `IN` lists in updates and guards, one statement per piece, in the same atomic batch.
 - **Kept honest by the tests:** the test database refuses more than 100 parameters too (a proxy on the libsql client). `server/tests/d1-limits.test.ts` runs each of these at the largest size the contracts allow. Undoing any one fix fails a test, except the paged staff read, where a page of at most 100 ids is within the limit; its chunking is a safety margin.
 - **Not changed:** the legacy menu (`server/legacy`, removed in 3.8) and Better Auth's own queries (small, fixed lists).
+
+### D63: Sold out per branch (step 3.6), 2026-09-27
+
+- **Per variation, per branch** (data model): "Large, Iced" can be out while "Small, Hot" isn't; each branch has its own switches. An item counts as sold out when all its sellable variations are. The row keys on the variation id, which survives price changes and unpublishing (D60), so the switch follows the variation.
+- **A switch set to a value, with no version** [Choice]: `PUT … { soldOut }` sets the state instead of toggling it. A repeat, or a second staff member doing the same, changes nothing (no write, no audit). Two opposite switches at once: the last one wins. That's what staff expect of a physical switch; a 409 would only slow down a busy counter.
+- **Stays until switched back** [Choice]: no automatic reset at closing. Square and Toast both offer "sold out until tomorrow"; it needs branch hours and the business day, which come with branch settings in step 5.1. Adding it then is one more column (`until`). Recorded here so it's decided with the owner, not guessed.
+- **What the counter can switch:** only what customers could order: published items in an active category (and parent), and their active, priced variations without an archived value. Anything else is 404 (item) or 422 `VARIATION_NOT_AVAILABLE` (variation).
+- **No guard in the batch:** the only row written is the switch itself. If the item is unpublished or a variation switched off meanwhile, the stored state does no harm and applies again when it's back on sale.
+- **The counter's menu is one list, not paginated:** a cafe menu is small, and the counter needs it all on one screen. Queries filter by status and join; none takes an id list (D62).
+- **Later:** add-ons running out (oat milk) are not covered; the data model only has variations. Ask the owner before adding `branch_modifier_states`. The public menu (step 3.8) must hide sold-out variations and mark items sold out.
+- **Tests:** 11 service tests, plus the full 400-variation grid in `d1-limits.test.ts`. All 12 rules fail a test when removed.

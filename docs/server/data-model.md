@@ -117,7 +117,7 @@ An item without option sets has exactly one version with one price ("Croissant $
 | `menu_availability_rules` | `name` ("Breakfast"), `status`, `version` | |
 | `menu_availability_windows` | `rule_id`, `weekday`, `start_minute`, `end_minute` | Several windows per rule. **Overnight windows are allowed** (D45): an end before the start means the next day, and the window belongs to the weekday it starts on. Times are in the branch timezone |
 | `menu_category_availability`, `menu_item_availability` | links to rules | **No rule = available whenever the branch is open; several rules = available when any matches** (D45). An item is available only if its category is too |
-| `branch_item_states` | `branch_id`, `variation_id`, `sold_out`, `updated_by` | The counter's "86" switch, per version (Large sold out, Regular still available). Later: a branch price override |
+| `branch_item_states` | `branch_id`, `variation_id`, `sold_out`, `updated_by`, `updated_at` | The counter's "86" switch, per version (Large sold out, Regular still available); PK (`branch_id`, `variation_id`), a row once the switch was used. Stays until switched back (D63). Later: a branch price override |
 | `menu_translations` | Not at launch | **English only at launch** (D45). Added as `*_translations` tables when a second language is needed |
 
 ### Rules that keep the UI clean
@@ -262,6 +262,29 @@ The item returns each group with what applies **on this item**: `minSelect` / `m
 | A group twice, a price twice, more than 10 groups, a negative price | 400 (contract) | ✔ |
 | The library's default price or rules change | Items without their own follow; own prices and rules stay | ✔ |
 | Stale item version | 409 `VERSION_CONFLICT` | ✔ |
+
+### Sold out at the counter (step 3.6, D63)
+
+Same feature (`sold-out.*`), contract `shared/contracts/menu-sold-out.ts`, on the counter surface: the branch comes from the path and is checked by `requireBranchPermission` (staff, managers, and admins in every branch).
+
+| Route | Permission | Does |
+|---|---|---|
+| `GET /api/counter/{branchId}/menu/items?search&soldOut=true` | `menu:read` | What customers can order, in menu order (top-level category, sub-category, item position): each item with its category and its **sellable** variations (label "Large, Iced", price, `soldOut`, `soldOutChangedAt`); `soldOut` on the item when every variation is. `soldOut=true`: only items with something sold out. Not paginated (the whole menu) |
+| `PUT /api/counter/{branchId}/menu/items/{itemId}/sold-out` | `menu:setSoldOut` | `{ soldOut, variationIds? }`: sets the switch (not a toggle) for the listed variations, or all the item sells. Returns the item as above |
+
+Shown at the counter: published items whose category is active (and its parent, if any), and their active, priced variations without an archived value.
+
+| Case | Result | Test |
+|---|---|---|
+| Draft, archived or unknown item; an item in an archived category (or under an archived parent) | 404 `NOT_FOUND` (the counter doesn't sell it) | ✔ |
+| A variation of another item, switched off, retired, or hidden by an archived value | 422 `VARIATION_NOT_AVAILABLE` on `variationIds.<i>` | ✔ |
+| Already in that state (a repeat, or another staff member got there first) | No write, no audit; returns the item | ✔ |
+| Two staff switching opposite ways at once | The last one wins; every row ends in one of the two states (no version: the switch is the whole record) | (by design) |
+| The item unpublished, repriced or re-published meanwhile | The switch stays with the variation id (ids survive price changes, D60) | ✔ |
+| Another branch | Its own switches; not affected | ✔ |
+| The whole 20 × 20 grid at once | Fits D1's parameter limit (D62) | ✔ (`d1-limits.test.ts`) |
+
+Audited as `menu.item.sold_out` / `menu.item.back_in_stock` with the branch and `{ variations, of }`.
 
 Sources: [Square item options](https://developer.squareup.com/docs/catalog-api/item-options), [Square option sets](https://squareup.com/help/us/en/article/6689-item-options), [Square nested categories (community)](https://community.squareup.com/t5/Orders-Menu-Items-Catalog/Getting-Sub-categories-to-show-when-parent-category-is-selected/td-p/827866), [Toast menu hierarchy](https://doc.toasttab.com/doc/platformguide/adminMenuHierarchy.html), [Toast shared modifier groups](https://support.toasttab.com/en/article/Shallow-and-Deep-Copying-Menu-Items-and-Modifiers), [Uber Eats menu structure](https://developer.uber.com/docs/eats/guides/menu-integration), [Loyverse variants vs modifiers](https://help.loyverse.com/help/how-use-variants-items).
 

@@ -65,10 +65,11 @@ export async function readInChunks<T>(ids: readonly string[], read: (ids: string
 
 /**
  * Rows for a multi-row insert, in pieces that stay under D1's limit: each row binds at most one
- * parameter per column of the table.
+ * parameter per column of the table. `reserved`: parameters the statement binds besides the rows
+ * (an upsert's `set` values).
  */
-export function insertPieces<T>(table: Table, rows: readonly T[]): T[][] {
-  return chunk(rows, Math.max(1, Math.floor(MAX_PARAMS / Object.keys(getTableColumns(table)).length)))
+export function insertPieces<T>(table: Table, rows: readonly T[], reserved = 0): T[][] {
+  return chunk(rows, Math.max(1, Math.floor((MAX_PARAMS - reserved) / Object.keys(getTableColumns(table)).length)))
 }
 
 function messageChain(error: unknown): string[] {

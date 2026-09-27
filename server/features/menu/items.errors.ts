@@ -9,6 +9,7 @@ export const ItemErrorCodes = {
   MODIFIER_GROUP_NOT_AVAILABLE: 'MODIFIER_GROUP_NOT_AVAILABLE',
   MODIFIER_NOT_AVAILABLE: 'MODIFIER_NOT_AVAILABLE',
   ITEM_SELECTION_RULES: 'ITEM_SELECTION_RULES',
+  VARIATION_NOT_AVAILABLE: 'VARIATION_NOT_AVAILABLE',
 } as const
 
 export const itemNotFound = () => notFound('This menu item')
@@ -38,6 +39,10 @@ export const modifierNotAvailable = (field: string) =>
 /** The item's own selection rules can't be met by the group's add-ons. */
 export const itemSelectionRules = (field: string, message: string) =>
   apiError(422, ItemErrorCodes.ITEM_SELECTION_RULES, message, { fieldErrors: { [field]: [message] } })
+
+/** A variation that isn't one the counter sells for this item (another item's, off, or retired). */
+export const variationNotAvailable = (index: number) =>
+  apiError(422, ItemErrorCodes.VARIATION_NOT_AVAILABLE, 'That isn\'t a variation this item sells.', { fieldErrors: { [`variationIds.${index}`]: ['Choose a variation of this item that\'s on sale'] } })
 
 /** Publishing needs something to sell. */
 export const nothingToSell = () =>
