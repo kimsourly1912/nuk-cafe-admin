@@ -24,6 +24,19 @@ export function insertBranchStatement(db: Db, row: { id: string, name: string, s
   })
 }
 
+export interface BranchRow {
+  id: string
+  name: string
+  timezone: string
+  status: string | null
+}
+
+export async function findBranch(db: Db, id: string): Promise<BranchRow | undefined> {
+  const rows: BranchRow[] = await db.select({ id: organization.id, name: organization.name, timezone: organization.timezone, status: organization.status })
+    .from(organization).where(eq(organization.id, id)).limit(1)
+  return rows[0]
+}
+
 export interface BranchOptionRow {
   id: string
   name: string

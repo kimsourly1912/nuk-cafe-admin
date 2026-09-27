@@ -1,5 +1,6 @@
-import { and, asc, eq, lt } from 'drizzle-orm'
+import { and, asc, eq, inArray, lt } from 'drizzle-orm'
 import type { Db, Statement } from '../../utils/batch'
+import { readInChunks } from '../../utils/batch'
 import { mediaAssets } from './media.schema'
 
 export interface MediaRow {
@@ -23,6 +24,10 @@ const columns = {
 export async function findAsset(db: Db, id: string): Promise<MediaRow | undefined> {
   const rows: MediaRow[] = await db.select(columns).from(mediaAssets).where(eq(mediaAssets.id, id)).limit(1)
   return rows[0]
+}
+
+export async function findAssets(db: Db, ids: string[]): Promise<MediaRow[]> {
+  return readInChunks(ids, piece => db.select(columns).from(mediaAssets).where(inArray(mediaAssets.id, piece)))
 }
 
 export function insertAssetStatement(db: Db, row: { id: string, objectKey: string, mimeType: string, byteSize: number, sha256: string, uploadedBy: string, now: Date }): Statement {

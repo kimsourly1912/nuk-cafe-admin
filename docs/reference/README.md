@@ -10,7 +10,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 
 | Page | Contents |
 |---|---|
-| [API](./api.md) | The legacy `/api/v1` menu routes (until step 3.8), error codes, `apiFetch` |
+| [API](./api.md) | The legacy `/api/v1` menu routes (until step 3.8b), error codes, `apiFetch` |
 | [Data fetching](./data-fetching.md) | `useApiQuery`, `usePaginatedQuery` (URL sync), `ANY` / `toApiQuery`, `invalidate` (also other tabs), `invalidateInThisTab`, `invalidateAll` |
 | [Mutations](./mutations.md) | `useMutation` (create/update/delete, single and batch), `usePendingMutationCount` |
 | [Errors](./errors.md) | `ApiError`, `getErrorMessage`, `isSilentError`, error codes, `<ApiErrorAlert>`, `useNotify` |

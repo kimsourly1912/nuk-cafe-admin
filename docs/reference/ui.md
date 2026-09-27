@@ -327,10 +327,21 @@ const counts = useStatusCounts('schedules', () => ({ search: query.value.search 
 // Lists loaded whole (Categories): count on the client and pass { ACTIVE, INACTIVE, all }.
 ```
 
+Resources with other statuses (the menu API's `active` / `archived`) pass their own tabs; `counts` uses the same values:
+
+```vue
+<StatusTabs
+  v-model="filters.status"
+  :tabs="[{ label: 'Active', value: 'active' }, { label: 'Archived', value: 'archived' }]"
+  :counts="{ all: 3, active: 2, archived: 1 }"
+/>
+```
+
 | Prop | Description |
 |---|---|
-| `v-model` | `Status \| Any` |
-| `counts` | `{ ACTIVE, INACTIVE, all }`; badges appear once known |
+| `v-model` | The filter value: a status or `ANY` |
+| `tabs` | The statuses after "All", `{ label, value }[]`; default Active / Inactive (`ACTIVE` / `INACTIVE`) |
+| `counts` | Keyed by the tab values plus `all` (default `{ ACTIVE, INACTIVE, all }`); badges appear once known |
 | `disabled` | e.g. while an unsaved order locks the filters |
 
 `useStatusCounts` keys its query `<feature>:status-counts`, so `invalidate(feature)` refreshes the counts too. "All" is the sum (every record is ACTIVE or INACTIVE).

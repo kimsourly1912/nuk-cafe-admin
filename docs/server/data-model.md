@@ -117,7 +117,7 @@ An item without option sets has exactly one version with one price ("Croissant $
 | `menu_availability_rules` | `name` ("Breakfast"), `status`, `version` | Library. `version` covers its windows. Names unique among active rules. **Can't be archived while a draft, an active item or an active category uses it** (D63) |
 | `menu_availability_windows` | `rule_id`, `weekday` (ISO: 1 = Monday), `start_minute` (0–1439), `end_minute` (1–1440) | Several windows per rule (at most 21), **never overlapping** (D63); PK (`rule_id`, `weekday`, `start_minute`). **Overnight windows are allowed** (D45): an end before the start means the next day, and the window belongs to the weekday it starts on. Times are in the branch timezone |
 | `menu_category_availability`, `menu_item_availability` | links to rules (at most 5 each) | **No rule = available whenever the branch is open; several rules = available when any matches** (D45). An item is available only if its category is too, and a sub-category's items only if its parent is too (D63). **An archived rule never matches** |
-| `branch_item_states` | `branch_id`, `variation_id`, `sold_out`, `updated_by` | The counter's "86" switch, per version (Large sold out, Regular still available). Later: a branch price override |
+| `branch_item_states` | `branch_id` → organization, `variation_id`, `sold_out`, `updated_by`, `updated_at` | PK (`branch_id`, `variation_id`). The counter's "86" switch, per version (Large sold out, Regular still available), per branch (D64). Stays until switched back ([Open] Q37: reset daily?). Later: a branch price override |
 | `menu_translations` | Not at launch | **English only at launch** (D45). Added as `*_translations` tables when a second language is needed |
 
 ### Rules that keep the UI clean
@@ -262,6 +262,40 @@ The item returns each group with what applies **on this item**: `minSelect` / `m
 | A group twice, a price twice, more than 10 groups, a negative price | 400 (contract) | ✔ |
 | The library's default price or rules change | Items without their own follow; own prices and rules stay | ✔ |
 | Stale item version | 409 `VERSION_CONFLICT` | ✔ |
+
+### Public menu (step 3.8a, D65)
+
+`GET /api/public/menu?branchId=…` (anyone, `no-store`, contract `shared/contracts/public-menu.ts`): `{ branch, currency, at, categories }`. Each top-level category holds `categories` (its sub-categories) or `items`; each item has `optionSets`, `variations` (`{ id, valueIds, label, priceMinor }`) and `modifierGroups` (the rules and prices that apply on it).
+
+| Shown | Rule |
+|---|---|
+| Categories | Active, with something to show (empty ones are left out) |
+| Items | Active, in an active category, available now on the branch's clock (item, category and parent rules; an archived or missing rule never matches) |
+| Versions | Sellable (active, priced, no archived value) and not sold out at this branch; an item with none left is left out |
+| Option values | Only those a listed version uses |
+| Add-ons | Active groups and add-ons; the item's own prices and rules; the minimum capped at the add-ons offered |
+
+A menu read is never a reservation: checkout checks everything again (6.1–6.2). No cache yet (D65); `loadCatalog` is the part a cache would hold.
+
+### Sold out per branch (step 3.6, D64)
+
+Same feature (`soldout.*`), contract `shared/contracts/menu-sold-out.ts`, on the **counter surface**: the branch comes from the path and `requireBranchPermission` checks the caller's membership.
+
+| Route | Permission | Does |
+|---|---|---|
+| `GET /api/counter/{branchId}/sold-out` | `menu:read` | What's sold out at the branch: `{ branchId, variations: [{ variationId, itemId, itemName, label, updatedAt, updatedBy }] }` by item name, then version |
+| `PUT /api/counter/{branchId}/sold-out` | `menu:setSoldOut` (staff, manager, admin) | `{ variationIds (1–400), soldOut }`: sets the state (never toggles) and returns the list. Audited as `menu.sold_out.set` |
+
+| Case | Result | Test |
+|---|---|---|
+| Staff of another branch, a customer, an unknown or archived branch | 404 (from `requireBranchPermission`) | ✔ |
+| Sold out at one branch | Still on sale at the others | ✔ |
+| The same request twice, or two at once | Same end state; the first person to switch it stays on record | ✔ |
+| Back on sale for something never switched off | Nothing stored | ✔ |
+| A draft item, a switched-off version | Accepted: applies once they're sold | ✔ |
+| An unknown or retired version, an archived item | 422 `VARIATION_NOT_AVAILABLE` on `variationIds.<i>`; nothing changes | ✔ |
+| The item is archived, or the version retired, later | Hidden from the list; shown again if it returns | ✔ |
+| A version listed twice, more than 400 | 400 (contract) | contract |
 
 ### Availability rules API (step 3.7, D63)
 

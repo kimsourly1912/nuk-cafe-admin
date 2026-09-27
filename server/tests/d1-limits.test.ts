@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { MAX_AVAILABILITY_WINDOWS, MAX_TARGET_RULES } from '#shared/contracts/menu-availability'
 import { MAX_ITEM_MODIFIER_GROUPS } from '#shared/contracts/menu-items'
+import { MAX_SOLD_OUT_VARIATIONS } from '#shared/contracts/menu-sold-out'
 import { MAX_SIBLINGS } from '#shared/contracts/menu-categories'
 import { MAX_MODIFIERS } from '#shared/contracts/menu-modifiers'
 import { MAX_OPTION_VALUES } from '#shared/contracts/menu-options'
@@ -12,9 +13,12 @@ import type { Actor } from '../features/identity'
 import { createStaff, listStaff, updateStaffAccess } from '../features/identity/staff.service'
 import { createAvailabilityRule, listAvailabilityRules } from '../features/menu/availability.service'
 import { createCategory, listCategories, reorderCategories } from '../features/menu/categories.service'
-import { createItem, updateItem } from '../features/menu/items.service'
+import { createItem, publishItem, updateItem } from '../features/menu/items.service'
 import { createModifierGroup, listModifierGroups } from '../features/menu/modifiers.service'
 import { createOptionSet, listOptionSets } from '../features/menu/options.service'
+import { setSoldOut } from '../features/menu/soldout.service'
+import { getPublicMenu } from '../features/menu/catalog.service'
+import { mediaAssets } from '../features/media/media.schema'
 import type { Db } from '../utils/batch'
 import { newId } from '../utils/ids'
 import { createAdmin, createTestDb, createUser, D1_MAX_PARAMS } from './support/db'
@@ -89,6 +93,39 @@ describe('menu at its limits', () => {
     const item = await createItem(db, actor, { categoryId: drinks.id, name: 'Latte', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
     const updated = await updateItem(db, actor, item.id, { version: item.version, modifierGroups })
     expect(updated.modifierGroups.flatMap(g => g.modifiers).filter(m => m.priceOverridden)).toHaveLength(MAX_ITEM_MODIFIER_GROUPS * MAX_MODIFIERS)
+  })
+})
+
+describe('sold out at its limits', () => {
+  it('switches every version of the largest price grid off and back on', async () => {
+    const branchId = newId()
+    await db.insert(organization).values({ id: branchId, name: 'Main', slug: 'main', timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+    const drinks = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
+    const size = await createOptionSet(db, actor, { name: 'Size', values: names(MAX_OPTION_VALUES, 'Size') })
+    const milk = await createOptionSet(db, actor, { name: 'Milk', values: names(MAX_OPTION_VALUES, 'Milk') })
+    const variations = size.values.flatMap(s => milk.values.map(m => ({ valueIds: [s.id, m.id], priceMinor: 300, status: 'active' as const })))
+    const item = await createItem(db, actor, { categoryId: drinks.id, name: 'Latte', description: '', imageId: null, optionSetIds: [size.id, milk.id], variations, modifierGroups: [], availabilityRuleIds: [] })
+    const variationIds = item.variations.map(v => v.id)
+    expect(variationIds).toHaveLength(MAX_SOLD_OUT_VARIATIONS)
+    const staff = { userId: 'staff-1', role: 'customer' as const, branchId, branchRole: 'staff' as const }
+    expect((await setSoldOut(db, staff, { variationIds, soldOut: true })).variations).toHaveLength(MAX_SOLD_OUT_VARIATIONS)
+    expect((await setSoldOut(db, staff, { variationIds, soldOut: false })).variations).toHaveLength(0)
+  })
+})
+
+describe('the public menu at its limits', () => {
+  it('lists more items with images than fit in one statement', async () => {
+    const branchId = newId()
+    await db.insert(organization).values({ id: branchId, name: 'Main', slug: 'main', timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+    const drinks = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
+    for (const name of names(120, 'Item')) {
+      const imageId = newId()
+      await db.insert(mediaAssets).values({ id: imageId, objectKey: `menu/${imageId}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x' })
+      const item = await createItem(db, actor, { categoryId: drinks.id, name, description: '', imageId, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
+      await publishItem(db, actor, item.id, { version: item.version })
+    }
+    const menu = await getPublicMenu(db, { branchId })
+    expect(menu.categories[0]!.items.filter(i => i.imageUrl)).toHaveLength(120)
   })
 })
 

@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-27 (step 3.7: availability rules, D63; step 3.6 is still open)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-27 (step 3.8b part 1: the Availability page, D66)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -31,7 +31,7 @@ Every "done" item states how it was checked. Keep using these labels:
 
 **Greenfield product blueprint (2026-09-26):** [system-blueprint.md](plans/system-blueprint.md) starts from customer, staff, and manager journeys. Confirmed launch scope: customer website, pickup and dine-in with table QR, USD, one branch, email/password accounts with no guest ordering, pay at counter before preparation, points earned at 1 per USD after completion and exchanged for vouchers, and staff-issued vouchers; native app, delivery, and online payment are outside that scope. Product policy questions remain open in the blueprint.
 
-**Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier screens; no admin reset of a staff member's password; no cleanup of temporary uploads; no public menu API.
+**Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier screens; no admin reset of a staff member's password; no cleanup of temporary uploads. The public menu API exists (3.8a) but no customer screen uses it yet.
 
 The Foundation table below is the app's shared UI behavior; it stays valid through the server rebuild.
 
@@ -73,6 +73,7 @@ The admin screens that exist today. They run on the **pre-standard** `/api/v1` r
 | staff | `/api/admin/staff`, `/api/admin/branches/options` | **done** (D49, D52): list with search and role/branch filters, add (temporary password shown once), change access, disable. server + unit + browser-mock (`staff.test.ts`) + real-server |
 | categories (menu) | `categories`, `categories/{id}`, `categories/order` | **done, reference feature**: tree of mains and subs, search + status tabs, create/edit, add sub-category, delete, batch delete, drag-to-sort per level, version checks. server + unit + browser-mock (`categories.test.ts`) + real-server |
 | schedules (menu) | `schedules`, `schedules/options`, `schedules/{id}` | **done**: list (search, status, day), create, edit (menu items shown read-only, never sent), delete + bulk delete for schedules not in use; times as cafe time (D41). server + unit + browser-mock (`schedules.test.ts`) + real-server |
+| availability-rules = "Availability" | **new API** `/api/admin/menu/availability-rules` | **done** (3.8b part 1, D66): cards with each rule's times in words and what uses it, Active/Archived tabs, search, create/edit with rows of days and times (overnight, midnight end), the server's overlap error shown on its row, archive (disabled while in use) and restore. unit (12) + browser-mock (`availability-rules.test.ts`, 9) + real-server (headless Chromium on `pnpm dev`: create, overlap refused on the right row, overnight edit, archive, restore) |
 | products = "Menu items" | `products`, `products/all`, `products/{id}`, `media` | **done**: list/grid/grouped menu, filters, create/edit (image upload, replace, **remove**, category, price in cents, schedules, variant editor), delete + bulk delete. server + unit + browser-mock (`products.test.ts`) + real-server. **Not built:** sort order within a category, price-range filter |
 
 Everything else (branches and tables, the customer website, orders, payments, loyalty, vouchers, reports) is not started; it is built in the numbered steps below. Community posts, carbon and banners from the old API have no product design and are out of scope until the owner asks for them.
@@ -119,18 +120,19 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | 3.4 ✅ | **Add-ons library:** modifier groups, modifiers with default prices, "used by N items" | Tests |
 | 3.5a ✅ | **Menu items:** item CRUD, option sets (max 2) with the version price grid, draft / active / archived, order within a category, the item side of "items only in leaves" | Tests incl. grid regeneration and version conflicts |
 | 3.5b ✅ | **Add-ons on items:** add-on groups on an item with per-item rule and price overrides; "used by N items" for add-on groups | Tests |
-| 3.6 | **Sold-out per branch:** `branch_item_states` + counter route | Tests |
+| 3.6 ✅ | **Sold-out per branch:** `branch_item_states` + counter route (D64); stays until switched back (Q37) | Tests |
 | 3.7 ✅ | **Availability rules** (overnight windows; no rule = always, several = any; D45, D63): the rules library, rules on items and categories, the pure window check. Built before 3.6 (they don't depend on each other) | Tests of the window rules |
-| 3.8 | **Public menu API** (cached, purged on writes); **remove the old menu tables and `/api/v1` routes** | Public menu shows only active, available, in-stock versions |
+| 3.8a ✅ | **Public menu API** (`GET /api/public/menu?branchId=`; no cache yet by the owner's choice, cache-ready: D65) | Public menu shows only active, available, in-stock versions |
+| 3.8b | **Move the admin menu screens onto the new API, then remove the legacy menu** (owner, 2026-09-27: **don't delete the screens**; D66). Categories and Menu items must move **together** (the item form's category picker and the legacy items' foreign key), and the item form needs the Options and Add-ons pages, so 3.8b absorbs phase 4 in this order: **part 1 ✅ Availability page** (replaces Schedules as a screen); **part 2** Options and Add-ons pages (4.2, 4.3); **part 3** Categories and Menu items together (4.1, 4.4), each verified in the browser (e2e + real-server), then remove `/api/v1`, `server/legacy`, the D41 tables, the Schedules screen and `shared/contracts/menu.ts`, and re-point AGENTS.md's reference-feature guidance | Every admin menu screen works on the new API; no code imports `server/legacy` |
 
 ### Phase 4: admin menu screens
 
 | # | Step | Done when |
 |---|---|---|
-| 4.1 | **Categories** page (tree, sub-categories, drag order) | e2e |
-| 4.2 | **Options** page | e2e |
-| 4.3 | **Add-ons** page | e2e |
-| 4.4 | **Menu items** list and form (category picker, option sets, price grid, add-ons, image) | e2e |
+| 4.1 | **Categories** page (tree, sub-categories, drag order): done as 3.8b part 3 | e2e |
+| 4.2 | **Options** page: done as 3.8b part 2 | e2e |
+| 4.3 | **Add-ons** page: done as 3.8b part 2 | e2e |
+| 4.4 | **Menu items** list and form (category picker, option sets, price grid, add-ons, availability rules, image): done as 3.8b part 3 | e2e |
 
 ### Phase 5: branches and the customer website
 
@@ -171,9 +173,9 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 
 **What happens to the current server code** (nothing is in production, so no data migration):
 - **Replaced in phase 1 (by step 1.7):** `staff_profiles`, the bootstrap route and `NUXT_BOOTSTRAP_TOKEN`, `ROLE_PERMISSIONS`, `requireStaff`, the `/api/v1` routes, the current `server/features/` services (split into repository + service layers), migration `0001_identity_and_menu` (local databases are recreated).
-- **Replaced in step 3.8:** the D41 menu tables (categories with parents, schedules, products, variant groups).
+- **Replaced in step 3.8b:** the D41 menu tables (categories with parents, schedules, products, variant groups).
 - **Kept and moved into the new layout:** `apiError`, the validation helpers, the batch guards, the origin check, audit events, media handling, the `server` test harness; in the app, `apiFetch` / `ApiError` (pointed at the new routes).
-- **Admin screens:** Categories, Schedules and Menu items keep working against the old routes until step 3.8 removes them, then return in phase 4.
+- **Admin screens:** Categories, Schedules and Menu items keep working against the old routes until step 3.8b moves them onto the new API (owner, 2026-09-27: the screens are kept, not deleted; Schedules become availability rules). Phase 4 then adds what the new model brings (Options, Add-ons, the price grid).
 
 ## Open questions / waiting on others
 
@@ -184,6 +186,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 | Q4 | Staging and production domains, and the email sending domain | 2.1, 8.2 | |
 | Q24 | Acceptable data loss and downtime (RPO/RTO), who receives alerts and when, data retention and erasure periods | 8.2 | |
 | Q36 | Can staff cancel an order that is **already paid** (money handed back at the counter), or does that always need an admin refund? | 6.3 | Staff and managers may cancel a paid order before it's ready, recording the cash/KHQR returned; after that, admin refund only |
+| Q37 | Should a sold-out switch **reset by itself** at the start of each business day, or stay until staff switch it back? | Nothing now (built as "stays", D64); a reset needs branch hours (5.1) | Stay until switched back; revisit when the counter screen is used |
 
 ## Known limitations
 
@@ -199,11 +202,11 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 125, server 342, e2e 130).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 137, server 374, e2e 139).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
-  - Pitfall: sign-up checks the password against Have I Been Pwned (network needed): `password123` is refused with `PASSWORD_COMPROMISED`. Use a long random one.
+  - Pitfall: sign-up checks the password against Have I Been Pwned (network needed): `password123` is refused with `PASSWORD_COMPROMISED`. Use a long random one. In a Claude Code cloud container the network policy blocks `api.pwnedpasswords.com`, so sign-up and change-password answer 500; for a local smoke test, clear the seeded admin's flag in the throwaway `.data/db/sqlite.db` (`update user set must_change_password = 0 …`) instead of changing the password.
   - Pitfall: in Drizzle, ``exists(sql`select …`)`` renders the subquery without parentheses; write ``sql`(select …)` `` inside it, or SQLite reports `near "select": syntax error`.
   - Pitfall: drizzle's **D1** driver can't batch a raw ``db.run(sql`…`)`` that has bound parameters (it crashes reading `stmt.bind`); libsql can, so local tests never show it. Batch statements must be query-builder statements; the guards are `select`s (D53, test in `server/tests/batch.test.ts` with a stand-in D1 client).
   - Pitfall: `nuxt build --envName staging` doesn't apply `$production`; repeat what deployed builds need in `$env.<name>`.
