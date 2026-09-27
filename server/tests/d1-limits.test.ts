@@ -6,7 +6,7 @@ import { MAX_MODIFIERS } from '#shared/contracts/menu-modifiers'
 import { MAX_OPTION_VALUES } from '#shared/contracts/menu-options'
 import { MAX_MEMBERSHIPS } from '#shared/contracts/staff'
 import { MAX_PAGE_SIZE } from '#shared/contracts/common'
-import { organization } from '../db/tables'
+import { member, organization } from '../db/tables'
 import type { Actor } from '../features/identity'
 import { createStaff, listStaff, updateStaffAccess } from '../features/identity/staff.service'
 import { createCategory, reorderCategories } from '../features/menu/categories.service'
@@ -15,7 +15,7 @@ import { createModifierGroup, listModifierGroups } from '../features/menu/modifi
 import { createOptionSet, listOptionSets } from '../features/menu/options.service'
 import type { Db } from '../utils/batch'
 import { newId } from '../utils/ids'
-import { createAdmin, createTestDb, D1_MAX_PARAMS } from './support/db'
+import { createAdmin, createTestDb, createUser, D1_MAX_PARAMS } from './support/db'
 
 /**
  * D1 refuses a statement with more than 100 bound parameters (D62); the test database does too.
@@ -101,8 +101,10 @@ describe('staff at their limits', () => {
     const changed = await updateStaffAccess(db, owner, created.staff.id, { version: created.staff.version, admin: false, memberships: memberships.map(m => ({ ...m, role: 'manager' as const })) })
     expect(changed.memberships.every(m => m.role === 'manager')).toBe(true)
 
+    // Accounts with a membership, written directly: createStaff would hash 100 passwords.
     for (let i = 0; i < MAX_PAGE_SIZE; i++) {
-      await createStaff(db, owner, { name: `Staff ${i}`, email: `staff${i}@example.com`, admin: false, memberships: [{ branchId: branchIds[0]!, role: 'staff' }] })
+      const account = await createUser(db, `staff${i}@example.com`, `Staff ${i}`)
+      await db.insert(member).values({ id: newId(), organizationId: branchIds[0]!, userId: account.id, role: 'staff', createdAt: new Date() })
     }
     const page = await listStaff(db, { page: 1, pageSize: MAX_PAGE_SIZE })
     expect(page.items).toHaveLength(MAX_PAGE_SIZE)
