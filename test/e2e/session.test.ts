@@ -7,8 +7,8 @@ import { ADMIN, beforeUnloadPrevented, categoryItem, categoryOf, deferred, failu
 // createApiFetch). Cases: docs/reference/app-behavior.md → "Session loss".
 await setupE2e()
 
-const ALICE = { ...ADMIN, userId: 'user-alice', email: 'alice@nukcafe.test', displayName: 'alice' }
-const BOB = { ...ADMIN, userId: 'user-bob', email: 'bob@nukcafe.test', displayName: 'bob' }
+const ALICE = { ...ADMIN, userId: 'user-alice', email: 'alice@nukcafe.test', name: 'alice' }
+const BOB = { ...ADMIN, userId: 'user-bob', email: 'bob@nukcafe.test', name: 'bob' }
 const ALICE_ONLY = categoryOf('cat-11', 'Alice-only draft')
 const BOB_ONLY = categoryOf('cat-12', 'Bob-only menu')
 /** The Categories tree loads the whole list. */
@@ -70,14 +70,14 @@ describe('session expiry', () => {
     expect(api.calls.filter(c => c === LIST)).toHaveLength(1)
   })
 
-  it('staff access removed mid-session (403 NOT_STAFF) also goes to login', async () => {
+  it('admin access removed mid-session (403 NOT_ADMIN) also goes to login', async () => {
     const page = await createPage()
     const api = await mockApi(page)
     await page.goto(url('/categories'), { waitUntil: 'hydration' })
     await categoryItem(page, 'Tea').waitFor()
     api.set({
       'POST /admin/categories': () => {
-        throw failures.notStaff()
+        throw failures.notAdmin()
       },
     })
     await openNewForm(page, 'Latte')

@@ -39,7 +39,10 @@ describe('auth', () => {
     expect(new URL(page.url()).pathname).toBe('/login')
   })
 
-  it('refuses an account without staff access (a customer) and signs it out again', async () => {
+  it.each([
+    ['a customer or branch staff (NOT_ADMIN)', () => failures.notAdmin()],
+    ['refused by the route gate (FORBIDDEN)', () => failures.forbidden()],
+  ])('refuses an account without admin access, %s, and signs it out again', async (_, failure) => {
     const page = await createPage()
     const api = await mockApi(page, {
       ...SIGNED_OUT,
@@ -47,12 +50,12 @@ describe('auth', () => {
     })
     api.set({
       'GET /admin/me': () => {
-        throw failures.notStaff()
+        throw failure()
       },
     })
     await page.goto(url('/login'), { waitUntil: 'hydration' })
     await signIn(page, 'customer@example.com')
-    await page.getByText('This account doesn\'t have staff access.').waitFor()
+    await page.getByText('This account doesn\'t have access to the admin app.').waitFor()
     await expect.poll(() => api.calls).toContain('POST /auth/sign-out')
     expect(new URL(page.url()).pathname).toBe('/login')
   })

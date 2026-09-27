@@ -3,7 +3,7 @@ import { deleteSchedule } from '../../../../legacy/menu/schedules'
 
 /** `?version=` names the version the client read: a stale delete gets 409. */
 export default defineEventHandler(async (event) => {
-  const staff = await requireStaff(event, 'menu.write')
+  const staff = await requirePermission(event, { menu: ['write'] })
   const id = readIdParam(event, 'id', 'The schedule')
   const { version } = readValidQuery(event, versionQuery)
   await deleteSchedule(useDb(), staff, id, version)

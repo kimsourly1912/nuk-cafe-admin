@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { member, organization } from '../../../db/tables'
 import { newId } from '../../../utils/ids'
-import { authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn } from '../identity.service'
+import { adminSession, authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn } from '../identity.service'
 import type { SessionUser } from '../identity.types'
 import { createTestDb, createUser } from '../../../tests/support/db'
 import { expectApiError } from '../../../tests/support/failure'
@@ -130,5 +130,26 @@ describe('counter surface', () => {
     await expectApiError(() => authorizeBranch(db, null, newId(), { order: ['read'] }), 401, 'UNAUTHENTICATED')
     const staff = { ...(await signedInMember('staff')), mustChangePassword: true }
     await expectApiError(() => authorizeBranch(db, staff, branchId, { order: ['read'] }), 403, 'PASSWORD_CHANGE_REQUIRED')
+  })
+})
+
+describe('admin app session', () => {
+  const owner: SessionUser = { ...admin, email: 'owner@example.com', name: 'Owner' }
+
+  it('describes an admin, with what they may do', () => {
+    const session = adminSession(owner)
+    expect(session).toMatchObject({ userId: owner.id, email: 'owner@example.com', name: 'Owner', role: 'admin', mustChangePassword: false })
+    expect(session.permissions).toEqual(expect.arrayContaining(['menu:write', 'staff:create', 'branch:read']))
+    expect(session.permissions).not.toContain('user:impersonate')
+  })
+
+  it('answers an admin on a temporary password, so the app can ask for a new one', () => {
+    expect(adminSession({ ...owner, mustChangePassword: true })).toMatchObject({ mustChangePassword: true })
+  })
+
+  it('refuses everyone else: 401 without a session, 403 NOT_ADMIN for customers and branch staff', async () => {
+    await expectApiError(() => adminSession(null), 401, 'UNAUTHENTICATED')
+    await expectApiError(() => adminSession({ ...owner, banned: true }), 401, 'UNAUTHENTICATED')
+    await expectApiError(() => adminSession(customer), 403, 'NOT_ADMIN')
   })
 })

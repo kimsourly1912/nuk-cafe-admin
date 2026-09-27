@@ -1,3 +1,4 @@
+import { asc, eq } from 'drizzle-orm'
 import type { Db, Statement } from '../../utils/batch'
 import { organization } from '../../db/tables'
 
@@ -21,4 +22,16 @@ export function insertBranchStatement(db: Db, row: { id: string, name: string, s
     status: 'active',
     createdAt: row.now,
   })
+}
+
+export interface BranchOptionRow {
+  id: string
+  name: string
+}
+
+/** Active branches by name, for pickers. */
+export async function listActiveBranches(db: Db): Promise<BranchOptionRow[]> {
+  return db.select({ id: organization.id, name: organization.name }).from(organization)
+    .where(eq(organization.status, 'active'))
+    .orderBy(asc(organization.name))
 }

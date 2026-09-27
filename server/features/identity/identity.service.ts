@@ -1,6 +1,7 @@
+import type { AdminSession } from '#shared/contracts/identity'
 import type { Db } from '../../utils/batch'
-import { branchNotFound, emailNotVerified, forbidden, passwordChangeRequired, unauthenticated } from './identity.errors'
-import { branchRoles, platformRoles } from './identity.permissions'
+import { branchNotFound, emailNotVerified, forbidden, notAdmin, passwordChangeRequired, unauthenticated } from './identity.errors'
+import { branchRoles, platformRoles, platformStatements } from './identity.permissions'
 import type { BranchPermission, BranchRole, PlatformPermission, PlatformRole } from './identity.permissions'
 import * as repo from './identity.repository'
 import type { Actor, BranchActor, SessionUser } from './identity.types'
@@ -61,4 +62,31 @@ export async function authorizeBranch(db: Db, user: SessionUser | null | undefin
   if (!branchRole) throw branchNotFound()
   if (!branchRoles[branchRole].authorize(permissions).success) throw forbidden()
   return { ...actor, branchId, branchRole }
+}
+
+/** Every `resource:action` the role grants, from the statements (for the app to hide what's not allowed). */
+function grantedPermissions(roles: PlatformRole[]): string[] {
+  return Object.entries(platformStatements).flatMap(([resource, actions]) =>
+    (actions as readonly string[])
+      .filter(action => roles.some(role => platformRoles[role].authorize({ [resource]: [action] } as PlatformPermission).success))
+      .map(action => `${resource}:${action}`))
+}
+
+/**
+ * The admin app's session check (`GET /api/admin/me`): a platform admin, **including one still on a
+ * temporary password** (the app then shows the change-password page; every other admin route
+ * refuses). Not signed in or banned: 401. Signed in without the admin role: 403 `NOT_ADMIN`.
+ */
+export function adminSession(user: SessionUser | null | undefined): AdminSession {
+  if (!user || user.banned) throw unauthenticated()
+  const roles = platformRolesOf(user)
+  if (!roles.includes('admin')) throw notAdmin()
+  return {
+    userId: user.id,
+    email: user.email ?? '',
+    name: user.name ?? '',
+    role: 'admin',
+    permissions: grantedPermissions(roles),
+    mustChangePassword: Boolean(user.mustChangePassword),
+  }
 }

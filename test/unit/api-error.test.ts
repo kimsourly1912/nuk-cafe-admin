@@ -22,9 +22,9 @@ describe('ApiError.fromResponse', () => {
     expect(ApiError.fromResponse(404, body(404, 'NOT_FOUND', 'The category was not found.'))).toMatchObject({ kind: 'not_found', message: 'The category was not found.' })
   })
 
-  it('401 is unauthorized; 403 NOT_STAFF keeps its code', () => {
+  it('401 is unauthorized; 403 NOT_ADMIN keeps its code', () => {
     expect(ApiError.fromResponse(401, body(401, 'UNAUTHENTICATED', 'Sign in to continue.'))).toMatchObject({ kind: 'unauthorized', status: 401 })
-    expect(ApiError.fromResponse(403, body(403, 'NOT_STAFF', 'No staff access.'))).toMatchObject({ kind: 'forbidden', code: 'NOT_STAFF' })
+    expect(ApiError.fromResponse(403, body(403, 'NOT_ADMIN', 'No admin access.'))).toMatchObject({ kind: 'forbidden', code: 'NOT_ADMIN' })
   })
 
   it('reads Better Auth errors ({ code, message } at the top level)', () => {

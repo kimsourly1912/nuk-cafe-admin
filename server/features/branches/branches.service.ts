@@ -17,3 +17,8 @@ export async function seedDemoBranch(db: Db, input: { timezone: string }): Promi
   await db.batch([repo.insertBranchStatement(db, branch)])
   return { id: branch.id, name: branch.name }
 }
+
+/** Active branches (id and name), for pickers such as the staff form's. Step 5.1 adds the rest. */
+export async function listBranchOptions(db: Db): Promise<repo.BranchOptionRow[]> {
+  return repo.listActiveBranches(db)
+}

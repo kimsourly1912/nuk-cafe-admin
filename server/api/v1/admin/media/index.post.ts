@@ -6,7 +6,7 @@ import { checkImage, recordUpload } from '../../../../legacy/menu/media'
  * A menu item references it by id when it is saved (`imageAssetId`).
  */
 export default defineEventHandler(async (event) => {
-  const staff = await requireStaff(event, 'media.write')
+  const staff = await requirePermission(event, { media: ['upload'] })
   // Checked before reading the body; the multipart envelope adds a little to the file size.
   if (Number(getHeader(event, 'content-length') ?? 0) > IMAGE_MAX_BYTES + 64 * 1024) {
     throw apiError(413, 'MEDIA_TOO_LARGE', `The image is larger than ${IMAGE_MAX_BYTES / 1024 / 1024} MB.`)

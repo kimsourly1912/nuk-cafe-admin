@@ -93,3 +93,9 @@ export interface CreatedStaff {
    */
   temporaryPassword: string | null
 }
+
+/** `GET /api/admin/branches/options`: active branches for pickers. */
+export interface BranchOption {
+  id: string
+  name: string
+}

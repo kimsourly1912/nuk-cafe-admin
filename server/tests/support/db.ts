@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url'
 import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import type { Db } from '../../utils/batch'
-import { staffProfiles, user } from '../../db/tables'
+import { eq } from 'drizzle-orm'
+import { user } from '../../db/tables'
 
 const migrationsDir = fileURLToPath(new URL('../../../server/db/migrations/sqlite', import.meta.url))
 
@@ -32,9 +33,9 @@ export async function createUser(db: Db, email = `user${++users}@example.com`, n
   return rows[0]!
 }
 
-/** A user with an active admin staff profile. */
+/** A platform admin (Better Auth's `user.role`). */
 export async function createAdmin(db: Db, email?: string) {
   const row = await createUser(db, email, 'Admin')
-  await db.insert(staffProfiles).values({ userId: row.id, displayName: 'Admin', role: 'admin' })
+  await db.update(user).set({ role: 'admin' }).where(eq(user.id, row.id))
   return { userId: row.id, email: row.email }
 }

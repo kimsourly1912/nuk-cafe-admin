@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { CreateScheduleBody } from '#shared/contracts/menu'
 import type { Db } from '../../server/utils/batch'
-import type { Actor } from '../../server/legacy/identity/service'
+import type { Actor } from '../../server/legacy/actor'
 import { createCategory } from '../../server/legacy/menu/categories'
 import { createProduct } from '../../server/legacy/menu/products'
 import { createSchedule, daysToMask, deleteSchedule, getSchedule, listSchedules, maskToDays, updateSchedule } from '../../server/legacy/menu/schedules'

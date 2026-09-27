@@ -24,7 +24,7 @@ const UPLOAD_TIMEOUT_MS = 120_000
 export function useProductList(query: MaybeRefOrGetter<ProductListQuery>, enabled: MaybeRefOrGetter<boolean> = true) {
   return useApiQuery(
     'products:list',
-    () => (toValue(enabled) ? apiFetch<Page<Product>>('/admin/products', { query: toValue(query) }) : Promise.resolve(null)),
+    () => (toValue(enabled) ? apiFetch<Page<Product>>('/v1/admin/products', { query: toValue(query) }) : Promise.resolve(null)),
     { watch: [() => ({ ...toValue(query), enabled: toValue(enabled) })] },
   )
 }
@@ -36,7 +36,7 @@ export function useProductList(query: MaybeRefOrGetter<ProductListQuery>, enable
 export function useProductMenu(query: MaybeRefOrGetter<ProductMenuQuery>, enabled: MaybeRefOrGetter<boolean>) {
   return useApiQuery(
     () => (toValue(enabled) ? 'products:menu' : 'products:menu:off'),
-    () => (toValue(enabled) ? apiFetch<Product[]>('/admin/products/all', { query: toValue(query) }) : Promise.resolve([])),
+    () => (toValue(enabled) ? apiFetch<Product[]>('/v1/admin/products/all', { query: toValue(query) }) : Promise.resolve([])),
     // No empty-list default: it would count as data and skip the loading placeholders.
     { watch: [() => ({ ...toValue(query) })] },
   )
@@ -45,7 +45,7 @@ export function useProductMenu(query: MaybeRefOrGetter<ProductMenuQuery>, enable
 /** "All 24 · Active 20 · Inactive 4" for the status tabs, with the other filters applied. */
 export function useProductStatusCounts(filters: () => Pick<ProductListQuery, 'search' | 'categoryId'>) {
   return useStatusCounts('products', filters, (query, status) =>
-    apiFetch<Page<Product>>('/admin/products', { query: { ...query, status, pageSize: 1 } }).then(page => page.total))
+    apiFetch<Page<Product>>('/v1/admin/products', { query: { ...query, status, pageSize: 1 } }).then(page => page.total))
 }
 
 /**
@@ -54,7 +54,7 @@ export function useProductStatusCounts(filters: () => Pick<ProductListQuery, 'se
  */
 export function useProductMutations() {
   const create = useMutation(
-    (body: CreateProductBody) => apiFetch<Product>('/admin/products', { method: 'POST', body }),
+    (body: CreateProductBody) => apiFetch<Product>('/v1/admin/products', { method: 'POST', body }),
     {
       id: 'products:create',
       // Same name in flight = same submission (double submit); different names run in parallel.
@@ -67,7 +67,7 @@ export function useProductMutations() {
 
   const update = useMutation(
     ({ id, body }: { id: string, name: string, body: UpdateProductBody }) =>
-      apiFetch<Product>(`/admin/products/${id}`, { method: 'PATCH', body }),
+      apiFetch<Product>(`/v1/admin/products/${id}`, { method: 'PATCH', body }),
     {
       id: 'products:update',
       key: ({ id }) => id,
@@ -79,7 +79,7 @@ export function useProductMutations() {
   )
 
   const remove = useMutation(
-    (product: Product) => apiFetch<null>(`/admin/products/${product.id}`, { method: 'DELETE', query: { version: product.version } }),
+    (product: Product) => apiFetch<null>(`/v1/admin/products/${product.id}`, { method: 'DELETE', query: { version: product.version } }),
     {
       id: 'products:remove',
       key: product => product.id,
@@ -116,7 +116,7 @@ export function useProductMutations() {
     ({ file }: { file: File, form: string }) => {
       const body = new FormData()
       body.append('file', file)
-      return apiFetch<UploadedMedia>('/admin/media', { method: 'POST', body, timeout: UPLOAD_TIMEOUT_MS })
+      return apiFetch<UploadedMedia>('/v1/admin/media', { method: 'POST', body, timeout: UPLOAD_TIMEOUT_MS })
     },
     {
       id: 'products:upload',

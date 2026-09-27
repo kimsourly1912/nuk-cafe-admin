@@ -73,8 +73,6 @@ export default defineNuxtConfig({
   },
   css: ['@/assets/css/tailwind.css'],
   runtimeConfig: {
-    // NUXT_BOOTSTRAP_TOKEN: enables POST /api/v1/bootstrap/admin (first admin) while set; ≥ 32 characters.
-    bootstrapToken: '',
     // The seed task's first admin (server/tasks/db/seed.ts): NUXT_SEED_ADMIN_EMAIL, NUXT_SEED_ADMIN_NAME.
     seed: { adminEmail: '', adminName: 'Admin' },
     // Account emails (docs/server/operations.md → Email): NUXT_MAIL_RESEND_API_KEY, NUXT_MAIL_FROM
@@ -90,6 +88,8 @@ export default defineNuxtConfig({
     // Session gate per surface (@nuxtjs/better-auth), a second line behind each route's own
     // requirePermission / requireBranchPermission / requireCustomer (docs/server/security.md).
     '/api/admin/**': { auth: { only: 'user', user: { role: 'admin' } } },
+    // The admin app's session check answers non-admins itself (403 NOT_ADMIN, a clearer message).
+    '/api/admin/me': { auth: 'user' },
     '/api/counter/**': { auth: 'user' },
     '/api/shop/**': { auth: 'user' },
     // API responses are personal or change often; a public route opts in to caching explicitly.

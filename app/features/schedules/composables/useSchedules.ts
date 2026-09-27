@@ -21,7 +21,7 @@ export const linkedLabel = (count: number) => `In use by ${pluralize(count, ['me
 
 /** Paginated schedule list. Refetches whenever `query` changes. */
 export function useScheduleList(query: MaybeRefOrGetter<ScheduleListQuery>) {
-  return useApiQuery('schedules:list', () => apiFetch<Page<Schedule>>('/admin/schedules', { query: toValue(query) }), {
+  return useApiQuery('schedules:list', () => apiFetch<Page<Schedule>>('/v1/admin/schedules', { query: toValue(query) }), {
     watch: [() => ({ ...toValue(query) })],
   })
 }
@@ -29,12 +29,12 @@ export function useScheduleList(query: MaybeRefOrGetter<ScheduleListQuery>) {
 /** "All 7 · Active 6 · Inactive 1" for the status tabs, with the other filters applied. */
 export function useScheduleStatusCounts(filters: () => Pick<ScheduleListQuery, 'search' | 'day'>) {
   return useStatusCounts('schedules', filters, (query, status) =>
-    apiFetch<Page<Schedule>>('/admin/schedules', { query: { ...query, status, pageSize: 1 } }).then(page => page.total))
+    apiFetch<Page<Schedule>>('/v1/admin/schedules', { query: { ...query, status, pageSize: 1 } }).then(page => page.total))
 }
 
 /** One schedule with the menu items that follow it (the list only has their number). */
 export function useScheduleDetail(id: MaybeRefOrGetter<string>) {
-  return useApiQuery(() => `schedules:detail:${toValue(id)}`, () => apiFetch<ScheduleDetail>(`/admin/schedules/${toValue(id)}`))
+  return useApiQuery(() => `schedules:detail:${toValue(id)}`, () => apiFetch<ScheduleDetail>(`/v1/admin/schedules/${toValue(id)}`))
 }
 
 /** Confirmation for a bulk delete; `keptCount` linked schedules were left out of it. */
@@ -54,7 +54,7 @@ export function confirmDeleteMany(schedules: Schedule[], keptCount = 0) {
  */
 export function useScheduleMutations() {
   const create = useMutation(
-    (body: CreateScheduleBody) => apiFetch<ScheduleDetail>('/admin/schedules', { method: 'POST', body }),
+    (body: CreateScheduleBody) => apiFetch<ScheduleDetail>('/v1/admin/schedules', { method: 'POST', body }),
     {
       id: 'schedules:create',
       // Same name in flight = same submission (double submit); different names run in parallel.
@@ -67,7 +67,7 @@ export function useScheduleMutations() {
 
   const update = useMutation(
     ({ id, body }: { id: string, name: string, body: UpdateScheduleBody }) =>
-      apiFetch<ScheduleDetail>(`/admin/schedules/${id}`, { method: 'PATCH', body }),
+      apiFetch<ScheduleDetail>(`/v1/admin/schedules/${id}`, { method: 'PATCH', body }),
     {
       id: 'schedules:update',
       key: ({ id }) => id,
@@ -80,7 +80,7 @@ export function useScheduleMutations() {
 
   const remove = useMutation(
     // The server refuses a schedule that is in use, also one linked since the list loaded.
-    (schedule: Schedule) => apiFetch<null>(`/admin/schedules/${schedule.id}`, { method: 'DELETE', query: { version: schedule.version } }),
+    (schedule: Schedule) => apiFetch<null>(`/v1/admin/schedules/${schedule.id}`, { method: 'DELETE', query: { version: schedule.version } }),
     {
       id: 'schedules:remove',
       key: schedule => schedule.id,

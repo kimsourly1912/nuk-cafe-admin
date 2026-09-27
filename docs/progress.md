@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-27 (step 1.6: customer accounts)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-27 (step 1.7: admin app on the new identity)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -19,8 +19,8 @@ Every "done" item states how it was checked. Keep using these labels:
 
 | Part | What exists | Verified |
 |---|---|---|
-| Schema + migration | `server/db/schema/` (staff_profiles, audit_events, media_assets, menu_categories, menu_schedules, menu_products, product_variant_groups/options, product_schedules), migration `0001_identity_and_menu` | server (every test builds the DB from the migrations); real-server (applied on `pnpm dev`) |
-| Identity | Better Auth sign-in/out, `GET /admin/me`, `requireStaff` (401 / 403 NOT_STAFF / 403 FORBIDDEN), `admin` role, bootstrap route, CSRF origin check | server (10 tests incl. a bootstrap race); real-server (sign-up → not staff → bootstrap → admin → sign-out; cross-origin write refused) |
+| Schema + migration | `server/db/schema/` (media_assets, menu_categories, menu_schedules, menu_products, product_variant_groups/options, product_schedules), migration `0001_identity_and_menu` | server (every test builds the DB from the migrations); real-server (applied on `pnpm dev`) |
+| Identity (steps 1.2–1.7) | Better Auth with the `admin` + `organization` plugins, roles per D45, `requirePermission` / `requireBranchPermission` / `requireCustomer`, `GET /api/admin/me`, staff management, forced password change, email verification and reset, customer profiles, seed task | server (10 tests incl. a bootstrap race); real-server (sign-up → not staff → bootstrap → admin → sign-out; cross-origin write refused) |
 | Categories API | list, create, PATCH, delete, order; two levels; version checks | server (13 tests incl. a race and a stale reorder); real-server |
 | Schedules API | paginated list (search/status/day), options, detail, create, PATCH, delete; local wall time in the cafe zone | server (8 tests); real-server |
 | Menu items API | paginated list, whole menu, detail, create, PATCH (variants by stable id, schedules, image), delete | server (11 tests incl. a race; the race test fails with the guard removed); real-server |
@@ -31,7 +31,7 @@ Every "done" item states how it was checked. Keep using these labels:
 
 **Greenfield product blueprint (2026-09-26):** [system-blueprint.md](plans/system-blueprint.md) starts from customer, staff, and manager journeys. Confirmed launch scope: customer website, pickup and dine-in with table QR, USD, one branch, email/password accounts with no guest ordering, pay at counter before preparation, points earned at 1 per USD after completion and exchanged for vouchers, and staff-issued vouchers; native app, delivery, and online payment are outside that scope. Product policy questions remain open in the blueprint.
 
-**Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier routes; no staff management (only the bootstrap admin); no cleanup of temporary uploads; no public menu API.
+**Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier screens; no admin reset of a staff member's password; no cleanup of temporary uploads; no public menu API.
 
 The Foundation table below is the app's shared UI behavior; it stays valid through the server rebuild.
 
@@ -40,7 +40,7 @@ The Foundation table below is the app's shared UI behavior; it stays valid throu
 | Area | Status | Verified |
 |---|---|---|
 | Nuxt 4 SPA + Nuxt UI dashboard shell, sidebar navigation, error page | done | browser-mock |
-| API client `apiFetch`: `/api/v1` base, 30 s timeout, no hidden retries, `ApiError` for every failure, 401 / 403 NOT_STAFF end the session, responses from a previous identity discarded (D40) | done | unit (`api-fetch.test.ts`), e2e |
+| API client `apiFetch`: `/api` base, 30 s timeout, no hidden retries, `ApiError` for every failure, 401 / 403 NOT_ADMIN end the session, 403 PASSWORD_CHANGE_REQUIRED opens the change-password page, responses from a previous identity discarded (D40) | done | unit (`api-fetch.test.ts`), e2e |
 | Record locks across mutations; prototype-safe mutation keys (D28) | done | unit (incl. reactivity); e2e bulk delete during a pending edit |
 | Session-transition contract: generation, stale-response discard, boundary cleanup (D29) | done | unit; e2e `session.test.ts` (each mechanism checked by disabling it) |
 | `useApiQuery` `watch` cancels instead of queueing (D30) | done | e2e (fails without the fix) |
@@ -69,7 +69,8 @@ The admin screens that exist today. They run on the **pre-standard** `/api/v1` r
 
 | Feature | Routes (`/api/v1/admin/...`) | Status |
 |---|---|---|
-| auth | Better Auth `/api/auth/sign-in/email`, `sign-out`; `me`; `/api/v1/bootstrap/admin` | **done** (D40). server + browser-mock + real-server |
+| auth | Better Auth `/api/auth/sign-in/email`, `sign-out`, `change-password`; `/api/admin/me` | **done** (D52): admins only, forced password change, change password from the user menu. server + unit + browser-mock (`auth`, `password`) + real-server |
+| staff | `/api/admin/staff`, `/api/admin/branches/options` | **done** (D49, D52): list with search and role/branch filters, add (temporary password shown once), change access, disable. server + unit + browser-mock (`staff.test.ts`) + real-server |
 | categories (menu) | `categories`, `categories/{id}`, `categories/order` | **done, reference feature**: tree of mains and subs, search + status tabs, create/edit, add sub-category, delete, batch delete, drag-to-sort per level, version checks. server + unit + browser-mock (`categories.test.ts`) + real-server |
 | schedules (menu) | `schedules`, `schedules/options`, `schedules/{id}` | **done**: list (search, status, day), create, edit (menu items shown read-only, never sent), delete + bulk delete for schedules not in use; times as cafe time (D41). server + unit + browser-mock (`schedules.test.ts`) + real-server |
 | products = "Menu items" | `products`, `products/all`, `products/{id}`, `media` | **done**: list/grid/grouped menu, filters, create/edit (image upload, replace, **remove**, category, price in cents, schedules, variant editor), delete + bulk delete. server + unit + browser-mock (`products.test.ts`) + real-server. **Not built:** sort order within a category, price-range filter |
@@ -99,7 +100,7 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | 1.4 ✅ | **Seed and staff:** seed task (first admin, demo branch); `/api/admin/staff` (list, create with temporary password, change role, disable); `mustChangePassword` enforcement and change-password flow; audit on each | Server tests including "disabled staff lose their sessions" |
 | 1.5 ✅ | **Platform tables:** `audit_events` (moved), `idempotency_keys`, `outbox_messages` + delivery task | Replay and retry tests |
 | 1.6 ✅ | **Customer accounts:** Resend mail sender (console locally), email verification, password reset, sign-up hook creating the customer profile (member code) | Unverified accounts are refused on shop writes |
-| 1.7 | **Admin app on the new identity:** `useAuth` reads roles from Better Auth, change-password screen, **Staff** admin page; remove `staff_profiles`, bootstrap route, `requireStaff`; the old menu routes use `requirePermission` until replaced | e2e: login, forced password change, staff page; the old menu screens still work |
+| 1.7 ✅ | **Admin app on the new identity:** `useAuth` reads roles from Better Auth, change-password screen, **Staff** admin page; remove `staff_profiles`, bootstrap route, `requireStaff`; the old menu routes use `requirePermission` until replaced | e2e: login, forced password change, staff page; the old menu screens still work |
 
 ### Phase 2: staging
 
@@ -197,12 +198,11 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 113, server 184, e2e 115).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 125, server 177, e2e 130).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
-- **real-server (a first admin locally):** start `NUXT_BOOTSTRAP_TOKEN=<32+ chars> pnpm dev`, sign up (`POST /api/auth/sign-up/email` with `{ email, password, name }` and an `Origin` header), then `POST /api/v1/bootstrap/admin` with `{ token, email }` ([api.md → Identity](reference/api.md#identity)). Then log in at `/login`. The bootstrap is refused once an admin exists; `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
+- **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
   - Pitfall: sign-up checks the password against Have I Been Pwned (network needed): `password123` is refused with `PASSWORD_COMPROMISED`. Use a long random one.
-  - **The new identity (step 1.4) and the admin UI don't meet yet:** the seeded admin can use `/api/admin/staff`, but the admin UI still signs in through `staff_profiles` (the bootstrap route above) until step 1.7. To try the staff routes: `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, then `curl http://localhost:3000/_nitro/tasks/db:seed` prints a temporary password; sign in with it, change it (`POST /api/auth/change-password`), then call `/api/admin/staff` with the session cookie and an `Origin` header.
   - Pitfall: in Drizzle, ``exists(sql`select …`)`` renders the subquery without parentheses; write ``sql`(select …)` `` inside it, or SQLite reports `near "select": syntax error`.
   - Pitfall: `server/auth.config.ts` must not import a feature's `index.ts` (or anything reaching `hub:db` / `hub:db:schema`): the module loads it at build time and typecheck fails with NUXT_AUTH_CONFIG_LOAD_FAILED (D48).
   - Pitfall: schema changes add a migration (`pnpm nuxt db generate`, then rename it and its journal tag). Only a change `drizzle-kit` would ask about interactively (a rename) was handled by **regenerating** `0000_initial` while nothing is deployed (steps 1.2 and 1.5, D50); after such a regeneration a local `.data/db` must be deleted (dev server stopped). From step 2.1 on, never regenerate.

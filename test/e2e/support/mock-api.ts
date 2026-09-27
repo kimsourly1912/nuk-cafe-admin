@@ -3,7 +3,8 @@ import { getBrowser, setup, url, waitForHydration } from '@nuxt/test-utils/e2e'
 import { afterEach, expect, inject } from 'vitest'
 import type { Page as ApiPage } from '../../../shared/contracts/common'
 import type { Category, Product, Schedule } from '../../../shared/contracts/menu'
-import type { StaffSession } from '../../../shared/contracts/identity'
+import type { AdminSession } from '../../../shared/contracts/identity'
+import type { BranchOption, StaffMember } from '../../../shared/contracts/staff'
 
 /** Requests no handler answered, across every `mockApi` of the current test. */
 const unhandled: string[] = []
@@ -55,12 +56,13 @@ export interface MockApi {
 
 const STAMP = '2026-09-26T00:00:00.000Z'
 
-export const ADMIN: StaffSession = {
+export const ADMIN: AdminSession = {
   userId: 'user-1',
   email: 'admin@nukcafe.test',
-  displayName: 'alice',
+  name: 'alice',
   role: 'admin',
-  permissions: ['menu.read', 'menu.write', 'media.write'],
+  permissions: ['menu:read', 'menu:write', 'media:upload', 'branch:read', 'staff:read', 'staff:create', 'staff:update', 'staff:disable'],
+  mustChangePassword: false,
 }
 
 export function categoryOf(id: string, name: string, overrides: Partial<Category> = {}): Category {
@@ -105,6 +107,23 @@ export function productOf(id: string, name: string, category: Category, override
   }
 }
 
+export const RIVERSIDE: BranchOption = { id: 'branch-1', name: 'Riverside' }
+export const AIRPORT: BranchOption = { id: 'branch-2', name: 'Airport' }
+
+export function staffOf(id: string, name: string, overrides: Partial<StaffMember> = {}): StaffMember {
+  return {
+    id,
+    name,
+    email: `${name.toLowerCase()}@nukcafe.test`,
+    admin: false,
+    memberships: [{ branchId: RIVERSIDE.id, branchName: RIVERSIDE.name, role: 'staff' }],
+    mustChangePassword: false,
+    version: 1790000000000,
+    createdAt: STAMP,
+    ...overrides,
+  }
+}
+
 export const TEA = categoryOf('cat-1', 'Tea')
 export const COFFEE = categoryOf('cat-2', 'Coffee', { sortOrder: 2 })
 
@@ -143,8 +162,11 @@ export const failures = {
   server: () => new MockFailure(500, 'INTERNAL', 'D1_ERROR: no such table: menu_categories'),
   /** No session (expired, or signed out elsewhere). */
   unauthorized: () => new MockFailure(401, 'UNAUTHENTICATED', 'Sign in to continue.'),
-  /** Signed in, but the account has no (active) staff profile. */
-  notStaff: () => new MockFailure(403, 'NOT_STAFF', 'This account doesn\'t have staff access.'),
+  /** Signed in, but not a platform admin (a customer, branch staff). */
+  notAdmin: () => new MockFailure(403, 'NOT_ADMIN', 'This account doesn\'t have access to the admin app.'),
+  /** The /api/admin route gate's answer to a non-admin. */
+  forbidden: () => new MockFailure(403, 'FORBIDDEN', 'You don\'t have permission to do this.'),
+  passwordChangeRequired: () => new MockFailure(403, 'PASSWORD_CHANGE_REQUIRED', 'Change your temporary password to continue.'),
 }
 
 /** Handlers for a signed-out browser: no session, and no staff session. */
@@ -251,7 +273,7 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
   await page.route(`${origin}/api/**`, async (route: Route) => {
     const request = route.request()
     const requestUrl = new URL(request.url())
-    const path = requestUrl.pathname.replace(/^\/api\/v1/, '').replace(/^\/api\/auth/, '/auth')
+    const path = requestUrl.pathname.replace(/^\/api(\/v1)?(?=\/admin)/, '').replace(/^\/api\/auth/, '/auth')
     const key = `${request.method()} ${path}`
     calls.push(key)
     // 'DELETE /admin/categories/cat-1' also matches a 'DELETE /admin/categories/{id}' handler.

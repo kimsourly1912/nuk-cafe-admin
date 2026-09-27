@@ -39,7 +39,7 @@ describe('createApiFetch', () => {
     expect(error).toMatchObject({ kind: 'conflict', code: 'VERSION_CONFLICT', message: 'Changed by someone else.' })
   })
 
-  it('reports a lost session on 401 and on 403 NOT_STAFF, not on other 403s', async () => {
+  it('reports a lost session on 401 and on 403 NOT_ADMIN, not on other 403s', async () => {
     const onSessionLost = vi.fn()
     let next: unknown
     const { fetch } = fakeFetch(async () => {
@@ -49,11 +49,23 @@ describe('createApiFetch', () => {
 
     next = httpError(401, errorBody('UNAUTHENTICATED', 'Sign in to continue.'))
     await apiFetch('/x').catch(() => {})
-    next = httpError(403, errorBody('NOT_STAFF', 'No staff access.'))
+    next = httpError(403, errorBody('NOT_ADMIN', 'No admin access.'))
     await apiFetch('/x').catch(() => {})
     next = httpError(403, errorBody('FORBIDDEN', 'Not allowed.'))
     await apiFetch('/x').catch(() => {})
     expect(onSessionLost).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports a required password change, which is not a lost session', async () => {
+    const onSessionLost = vi.fn()
+    const onPasswordChangeRequired = vi.fn()
+    const { fetch } = fakeFetch(async () => {
+      throw httpError(403, errorBody('PASSWORD_CHANGE_REQUIRED', 'Change your temporary password to continue.'))
+    })
+    const apiFetch = createApiFetch({ baseFetch: fetch, onSessionLost, onPasswordChangeRequired })
+    await expect(apiFetch('/x')).rejects.toMatchObject({ kind: 'forbidden', code: 'PASSWORD_CHANGE_REQUIRED' })
+    expect(onPasswordChangeRequired).toHaveBeenCalledTimes(1)
+    expect(onSessionLost).not.toHaveBeenCalled()
   })
 
   it('discards a response from a previous identity, success or failure, silently', async () => {

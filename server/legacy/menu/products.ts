@@ -19,7 +19,7 @@ import type { Db } from '../../utils/batch'
 import { isStaleWrite, requireOneChange } from '../../utils/batch'
 import { toIso } from '../../utils/time'
 import { apiError, notFound, versionConflict } from '../../utils/errors'
-import type { Actor } from '../identity/service'
+import type { Actor } from '../actor'
 import { mediaUrl } from './media'
 
 type ProductRow = InferSelectModel<typeof menuProducts>

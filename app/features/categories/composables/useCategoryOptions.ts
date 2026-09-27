@@ -12,7 +12,7 @@ export interface CategoryOptionsFilter {
 export function useCategoryOptions(filter: MaybeRefOrGetter<CategoryOptionsFilter> = {}) {
   return useApiQuery(
     () => `categories:options:${toValue(filter).level ?? 'all'}`,
-    () => apiFetch<Category[]>('/admin/categories', { query: { level: toValue(filter).level } }),
+    () => apiFetch<Category[]>('/v1/admin/categories', { query: { level: toValue(filter).level } }),
     { default: () => [] },
   )
 }

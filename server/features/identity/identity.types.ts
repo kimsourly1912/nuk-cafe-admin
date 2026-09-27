@@ -3,6 +3,8 @@ import type { BranchRole, PlatformRole } from './identity.permissions'
 /** The signed-in user as Better Auth's session returns it (the fields access checks read). */
 export interface SessionUser {
   id: string
+  email?: string
+  name?: string
   emailVerified: boolean
   /** Better Auth stores several roles comma-separated; ours only ever set one. */
   role?: string | null

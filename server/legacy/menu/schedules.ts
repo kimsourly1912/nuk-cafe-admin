@@ -9,7 +9,7 @@ import type { Db } from '../../utils/batch'
 import { isForeignKeyError, isStaleWrite, requireOneChange } from '../../utils/batch'
 import { toIso } from '../../utils/time'
 import { apiError, notFound, versionConflict } from '../../utils/errors'
-import type { Actor } from '../identity/service'
+import type { Actor } from '../actor'
 
 type ScheduleRow = InferSelectModel<typeof menuSchedules>
 
