@@ -9,7 +9,7 @@ export const TEST_SITE = 'https://cafe.example'
 /** Our Better Auth configuration on a test database (no breached-password lookups). */
 export function createTestAuth(db: Db) {
   return betterAuth({
-    ...identityAuthOptions({ siteUrl: TEST_SITE, checkBreachedPasswords: false }),
+    ...identityAuthOptions({ db, siteUrl: TEST_SITE, checkBreachedPasswords: false }),
     baseURL: TEST_SITE,
     secret: 'test-secret-that-is-at-least-32-characters-long',
     database: drizzleAdapter(db, { provider: 'sqlite', schema: authSchema }),

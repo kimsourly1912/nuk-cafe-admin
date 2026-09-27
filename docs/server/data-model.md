@@ -144,7 +144,7 @@ Features: `customers`, `loyalty`.
 
 | Table | Columns | Invariants |
 |---|---|---|
-| `customer_profiles` | `user_id` (PK), `member_code` (unique, shown as a QR at the counter), `phone`, `marketing_opt_in`, `anonymized_at` | Created on sign-up (Better Auth hook) |
+| `customer_profiles` | `user_id` (PK, → user, cascade), `member_code` (unique, shown as a QR at the counter), `phone`, `marketing_opt_in`, `anonymized_at`, `created_at` | Every account has one, staff included: created on sign-up (Better Auth hook), in the staff-creation batch, or on first use. Member code: 8 random Crockford base32 characters shown `XXXX-XXXX` (40 bits; no I, L, O, U); typed codes are normalized (case, spaces, dashes, look-alikes) |
 | `loyalty_accounts` | `user_id` (PK), `balance` (cached), `version` | `balance` ≥ 0, and always equals the sum of its entries |
 | `loyalty_entries` | `account_id`, `points` (signed), `reason` (`earn_order` \| `exchange_voucher` \| `adjust` \| `reverse`), `source_type`, `source_id`, `idempotency_key` (unique), `actor_id`, `note` | **Append-only.** A correction is a new `reverse`/`adjust` entry with a reason |
 | `voucher_templates` | `kind` (`amount_off` \| `free_item`), `amount_minor` (amount off), `variation_id` (free item), `points_cost` (null = staff-issue only), `valid_days` (default 30), `uses_per_voucher` (default 1), `status`, `version` | **One voucher per order, no minimum spend** (D45). An amount-off voucher never makes a total negative; a free item needs that item in the order |

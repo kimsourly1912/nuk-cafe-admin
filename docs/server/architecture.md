@@ -283,7 +283,7 @@ Anything outside the database (email, cache purge, R2 object deletes) happens **
   - each kind has one handler, registered in `server/tasks/platform/deliver-outbox.ts` by the feature that owns it; a kind without a handler is retried and then marked `failed`, never dropped silently;
   - a message is **claimed** before sending (conditional update), so overlapping runs don't send it twice at the same moment; failures retry after 1, 2, 4 … minutes (at most 6 h), and after 8 attempts the message is `failed` and logged as an error;
   - delivery is **at least once** (a run that dies mid-send leaves the claim to expire): handlers must tolerate a repeat, e.g. by passing the message id as the provider's idempotency key;
-  - payloads hold ids and what the handler needs, not secrets it can look up.
+  - payloads hold ids and what the handler needs, not secrets it can look up; a sent message's payload is emptied (account emails carry one-time links).
 - Best-effort effects (purging the public menu cache) run directly after the commit; failure is logged, not surfaced.
 
 ## Tests

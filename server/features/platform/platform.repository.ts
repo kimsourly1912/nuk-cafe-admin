@@ -83,7 +83,8 @@ export async function claimMessage(db: Db, id: string, now: Date, until: Date): 
 }
 
 export async function markSent(db: Db, id: string, now: Date) {
-  await db.update(outboxMessages).set({ status: 'sent', sentAt: now, lockedUntil: null, lastError: null }).where(eq(outboxMessages.id, id))
+  // The payload is dropped once sent: account emails carry one-time links (D51).
+  await db.update(outboxMessages).set({ status: 'sent', sentAt: now, lockedUntil: null, lastError: null, payload: {} }).where(eq(outboxMessages.id, id))
 }
 
 export async function markRetry(db: Db, id: string, nextAttemptAt: Date, error: string) {

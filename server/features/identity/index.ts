@@ -6,3 +6,5 @@ export { authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedI
 export type { Actor, BranchActor, SessionUser } from './identity.types'
 export { createStaff, disableStaff, getStaffMember, listStaff, seedFirstAdmin, updateStaffAccess } from './staff.service'
 export { StaffErrorCodes } from './staff.errors'
+export { accountMailHandlers, consoleSender, MAIL_KINDS, resendSender } from './identity.mail'
+export type { MailMessage, MailSender } from './identity.mail'

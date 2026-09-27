@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-27 (step 1.5: platform tables)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-27 (step 1.6: customer accounts)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -98,7 +98,7 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | 1.3 ✅ | **Access helpers:** `requirePermission`, `requireBranchPermission`, route rules per surface, origin check on trusted origins (done in 1.2, D47), security headers | Tests: 401 / 403 / 404 for wrong surface, role and branch |
 | 1.4 ✅ | **Seed and staff:** seed task (first admin, demo branch); `/api/admin/staff` (list, create with temporary password, change role, disable); `mustChangePassword` enforcement and change-password flow; audit on each | Server tests including "disabled staff lose their sessions" |
 | 1.5 ✅ | **Platform tables:** `audit_events` (moved), `idempotency_keys`, `outbox_messages` + delivery task | Replay and retry tests |
-| 1.6 | **Customer accounts:** Resend mail sender (console locally), email verification, password reset, sign-up hook creating the customer profile (member code) | Unverified accounts are refused on shop writes |
+| 1.6 ✅ | **Customer accounts:** Resend mail sender (console locally), email verification, password reset, sign-up hook creating the customer profile (member code) | Unverified accounts are refused on shop writes |
 | 1.7 | **Admin app on the new identity:** `useAuth` reads roles from Better Auth, change-password screen, **Staff** admin page; remove `staff_profiles`, bootstrap route, `requireStaff`; the old menu routes use `requirePermission` until replaced | e2e: login, forced password change, staff page; the old menu screens still work |
 
 ### Phase 2: staging
@@ -197,7 +197,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 113, server 170, e2e 115).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 113, server 184, e2e 115).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_BOOTSTRAP_TOKEN=<32+ chars> pnpm dev`, sign up (`POST /api/auth/sign-up/email` with `{ email, password, name }` and an `Origin` header), then `POST /api/v1/bootstrap/admin` with `{ token, email }` ([api.md → Identity](reference/api.md#identity)). Then log in at `/login`. The bootstrap is refused once an admin exists; `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
@@ -205,7 +205,9 @@ Business decisions the build still needs, with the step each blocks. All are for
   - **The new identity (step 1.4) and the admin UI don't meet yet:** the seeded admin can use `/api/admin/staff`, but the admin UI still signs in through `staff_profiles` (the bootstrap route above) until step 1.7. To try the staff routes: `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, then `curl http://localhost:3000/_nitro/tasks/db:seed` prints a temporary password; sign in with it, change it (`POST /api/auth/change-password`), then call `/api/admin/staff` with the session cookie and an `Origin` header.
   - Pitfall: in Drizzle, ``exists(sql`select …`)`` renders the subquery without parentheses; write ``sql`(select …)` `` inside it, or SQLite reports `near "select": syntax error`.
   - Pitfall: `server/auth.config.ts` must not import a feature's `index.ts` (or anything reaching `hub:db` / `hub:db:schema`): the module loads it at build time and typecheck fails with NUXT_AUTH_CONFIG_LOAD_FAILED (D48).
-  - Pitfall: until a database is deployed (step 2.1), schema changes **regenerate** `0000_initial` (D50) instead of adding a migration, so a local `.data/db` from before a schema change must be deleted (dev server stopped); it's recreated on the next `pnpm dev`. Regenerated so far in steps 1.2 and 1.5.
+  - Pitfall: schema changes add a migration (`pnpm nuxt db generate`, then rename it and its journal tag). Only a change `drizzle-kit` would ask about interactively (a rename) was handled by **regenerating** `0000_initial` while nothing is deployed (steps 1.2 and 1.5, D50); after such a regeneration a local `.data/db` must be deleted (dev server stopped). From step 2.1 on, never regenerate.
+  - Pitfall: SQLite's `unixepoch('subsecond')` default can round 1 ms ahead of a JavaScript `Date` taken right after the insert, so "due now" comparisons against a row created a moment ago can miss. In tests, pass an explicit later `now` (the outbox tests do).
+  - Account emails locally: without `NUXT_MAIL_RESEND_API_KEY` the dev server prints them (with the link) within a minute; `curl http://localhost:3000/_nitro/tasks/platform:deliver-outbox` sends at once.
   - Pitfall: `drizzle-kit generate` asks interactively when a column looks renamed, which fails in a non-interactive shell. Another reason to regenerate while nothing is deployed; after 2.1, write the rename as its own migration.
   - Pitfall: paths handed to NuxtHub's `hub:db:schema:extend` go into a generated import: use forward slashes on Windows ("Unterminated string constant" otherwise), like the error handler in D46.
   - Pitfall: a race test must make the race happen. Two `Promise.all` calls against in-memory SQLite can still run one after the other; hold both at the critical point (`meetingPoint` in `platform.service.test.ts`) and remove the guard to check the test fails.

@@ -1,26 +1,76 @@
 import { createAuthMiddleware, isAPIError } from 'better-auth/api'
 import { admin, haveIBeenPwned, organization } from 'better-auth/plugins'
 import type { ServerAuthConfig } from '@nuxtjs/better-auth/config'
+import type { Db } from '../../utils/batch'
 import { newId } from '../../utils/ids'
+import { log } from '../../utils/log'
+import { outboxStatement } from '../platform'
+import { MAIL_KINDS } from './identity.mail'
 import { branchAc, branchRoles, platformAc, platformRoles } from './identity.permissions'
 
 const MINUTE = 60
 const DAY = 24 * 60 * MINUTE
 
 export interface IdentityAuthSettings {
+  /** The database Better Auth uses (NuxtHub's), for the outbox and customer profiles. */
+  db: Db
   /** The public site URL (`NUXT_PUBLIC_SITE_URL`); the only origin trusted besides dev origins. */
   siteUrl?: string
   /** Check new passwords against Have I Been Pwned. Off only in tests (it calls an external API). */
   checkBreachedPasswords?: boolean
 }
 
+/** Queues an account email (verification, reset); `platform:deliver-outbox` sends it. */
+async function queueMail(db: Db, kind: string, to: string, url: string) {
+  await db.batch([outboxStatement(db, kind, { to, url })])
+}
+
+/**
+ * The user a password reset is for, from the token, remembered between the before and after hooks
+ * of one request (they share `ctx.context`). Used to clear a temporary password once the reset
+ * succeeded: the token is gone by then.
+ */
+const resetFor = new WeakMap<object, string>()
+
 /**
  * Our Better Auth configuration (docs/server/security.md, D45, D47). `server/auth.config.ts` passes
  * it to `defineServerAuth`; the identity tests run it against the real migration.
  */
-export function identityAuthOptions({ siteUrl, checkBreachedPasswords = true }: IdentityAuthSettings) {
+export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true }: IdentityAuthSettings) {
   return {
-    emailAndPassword: { enabled: true },
+    emailAndPassword: {
+      enabled: true,
+      // Signing in works before the email is verified; shop writes don't (requireCustomer, D51).
+      requireEmailVerification: false,
+      resetPasswordTokenExpiresIn: 60 * MINUTE,
+      revokeSessionsOnPasswordReset: true,
+      sendResetPassword: async ({ user, url }) => queueMail(db, MAIL_KINDS.resetPassword, user.email, url),
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      autoSignInAfterVerification: true,
+      expiresIn: DAY,
+      sendVerificationEmail: async ({ user, url }) => queueMail(db, MAIL_KINDS.verifyEmail, user.email, url),
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          // Every account gets a customer profile (member code). D1 has no transactions, so this
+          // runs after the account is stored; if it fails, the account still works and
+          // `ensureProfile` creates the profile on first use. Loaded lazily: the module loads this
+          // file at build time, before the customers schema's imports exist.
+          after: async (user) => {
+            try {
+              const { ensureProfile } = await import('../customers')
+              await ensureProfile(db, user.id)
+            }
+            catch (error) {
+              log('error', 'Customer profile not created at sign-up; created on first use instead', { userId: user.id, error: String(error) })
+            }
+          },
+        },
+      },
+    },
     // UUID v7 like every other table, so Better Auth's ids (users, branches) pass readIdParam.
     advanced: { database: { generateId: () => newId() } },
     trustedOrigins: siteUrl ? [new URL(siteUrl).origin] : [],
@@ -37,11 +87,19 @@ export function identityAuthOptions({ siteUrl, checkBreachedPasswords = true }: 
       },
     },
     hooks: {
-      // A temporary password is cleared once its owner changes it (security.md → Staff onboarding).
-      // Only this route: a password an admin sets must stay temporary. Reset by email joins in 1.6.
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== '/reset-password' || typeof ctx.body?.token !== 'string') return
+        const verification = await ctx.context.internalAdapter.findVerificationValue(`reset-password:${ctx.body.token}`)
+        if (verification?.value) resetFor.set(ctx.context, verification.value)
+      }),
+      // A temporary password is cleared once its owner replaces it, by changing it or by a reset
+      // link (security.md → Staff onboarding). Only these routes: a password an admin sets stays
+      // temporary.
       after: createAuthMiddleware(async (ctx) => {
-        if (ctx.path !== '/change-password' || isAPIError(ctx.context.returned)) return
-        const userId = ctx.context.session?.user.id
+        if (isAPIError(ctx.context.returned)) return
+        const userId = ctx.path === '/change-password'
+          ? ctx.context.session?.user.id
+          : ctx.path === '/reset-password' ? resetFor.get(ctx.context) : undefined
         if (userId) await ctx.context.internalAdapter.updateUser(userId, { mustChangePassword: false })
       }),
     },

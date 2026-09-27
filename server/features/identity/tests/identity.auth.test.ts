@@ -75,8 +75,8 @@ describe('accounts', () => {
   })
 
   it('trusts only the site origin', () => {
-    expect(identityAuthOptions({ siteUrl: 'https://cafe.example/some/path' }).trustedOrigins).toEqual([SITE])
-    expect(identityAuthOptions({}).trustedOrigins).toEqual([])
+    expect(identityAuthOptions({ db, siteUrl: 'https://cafe.example/some/path' }).trustedOrigins).toEqual([SITE])
+    expect(identityAuthOptions({ db }).trustedOrigins).toEqual([])
   })
 })
 

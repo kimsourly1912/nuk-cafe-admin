@@ -86,10 +86,11 @@ Built so far: `platform:deliver-outbox` (every minute) and `platform:expire-idem
 
 ## Email
 
-- **Resend**, called only from the `identity` feature's mail sender (verification, password reset) and later the outbox.
-- A sending domain with SPF, DKIM and DMARC set up before launch.
+- **Resend**, called only by outbox handlers (`identity.mail.ts`: verification, password reset), never inside a request. Each send passes the outbox message id as Resend's `Idempotency-Key`, so a repeated delivery isn't sent twice.
+- Config: `NUXT_MAIL_RESEND_API_KEY` and `NUXT_MAIL_FROM` (`"NUK Cafe <no-reply@…>"`, a domain verified in Resend, with SPF, DKIM and DMARC; the domain waits on Q4).
+- **Locally**, without a key, the dev server prints each email (with its link) to the console. A production build without a key **refuses** to send (the messages stay queued and are logged as failing), so one-time links never land in production logs.
+- Delivery takes up to a minute (the outbox task's schedule).
 - Templates: plain, short, the app's name, one link; no tracking pixels. English only until translations are decided (Q21).
-- Locally, mail is printed to the console (with the link) instead of sent.
 
 ## Monitoring
 

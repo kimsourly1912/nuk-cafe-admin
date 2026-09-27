@@ -6,6 +6,7 @@ import type { Db, Statement } from '../../utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '../../utils/batch'
 import { newId } from '../../utils/ids'
 import { toIso } from '../../utils/time'
+import { profileStatement } from '../customers'
 import { auditStatement } from '../platform'
 import type { AuditActor } from '../platform'
 import type { Actor } from './identity.types'
@@ -115,6 +116,8 @@ async function createStaffAs(db: Db, by: AuditActor, input: CreateStaffInput): P
   const temporaryPassword = generateTemporaryPassword()
   const statements: Statement[] = [
     ...repo.insertAccountStatements(db, { id: userId, name: input.name, email: input.email, admin: input.admin, passwordHash: await hashPassword(temporaryPassword), now }),
+    // Better Auth's sign-up hook doesn't run for these writes (D49).
+    profileStatement(db, userId),
     ...repo.replaceMembershipsStatements(db, userId, input.memberships, now),
     staffAudit(db, by, 'staff.create', userId, { ...accessMetadata(input.admin, input.memberships), existingAccount: false }),
   ]

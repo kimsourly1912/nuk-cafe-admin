@@ -77,6 +77,10 @@ export default defineNuxtConfig({
     bootstrapToken: '',
     // The seed task's first admin (server/tasks/db/seed.ts): NUXT_SEED_ADMIN_EMAIL, NUXT_SEED_ADMIN_NAME.
     seed: { adminEmail: '', adminName: 'Admin' },
+    // Account emails (docs/server/operations.md → Email): NUXT_MAIL_RESEND_API_KEY, NUXT_MAIL_FROM
+    // ("NUK Cafe <no-reply@…>", a domain verified in Resend; Q4). Without a key the dev server
+    // prints mail to the console; a production build refuses to (the links are secrets).
+    mail: { resendApiKey: '', from: '' },
     public: {
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',

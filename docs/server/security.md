@@ -112,7 +112,7 @@ Built in step 1.4 (D49): `server/features/identity/staff.*`, routes under `/api/
 1. An admin creates the account with name, email and access: `admin` and/or one role per branch (several branches allowed). The server generates a **temporary password** (16 characters, e.g. `Hq7x-3mPa-kR9t-Wz2c`), returns it **once** for the admin to hand over, and stores only Better Auth's hash. The email is marked verified (the admin vouches for it).
 2. The account carries `mustChangePassword = true` (a Better Auth `user.additionalFields` field).
 3. While it's set, our access helpers answer **403 `PASSWORD_CHANGE_REQUIRED`** on every surface; Better Auth's `/api/auth/**` still works, and the app shows the change-password screen (step 1.7). (On `/api/admin` a non-admin gets 403 `FORBIDDEN` from the route-rule gate first.)
-4. Changing the password (Better Auth `/change-password`) clears the flag: an `after` hook in `identity.auth.ts`, only when the change succeeded. A password set by an admin stays temporary. Reset by email clears it too once reset exists (step 1.6).
+4. Changing the password (Better Auth `/change-password`) clears the flag: an `after` hook in `identity.auth.ts`, only when the change succeeded. A reset link clears it too (the token's user is read in a `before` hook, since the token is gone afterwards). A password set by an admin stays temporary.
 5. Changing someone's access replaces their admin role and memberships and **signs them out everywhere** (except an admin editing their own branches). Disabling = removing the admin role and every membership and signing them out. Their account keeps working as a customer, and can be given access again later.
 6. Every change writes an `audit_events` row (`staff.create`, `staff.access.update`, `staff.disable`) with the access given, never a password.
 
@@ -148,10 +148,21 @@ Contracts: `shared/contracts/staff.ts`. The account rows are written by our repo
 
 ## Customers
 
-- Sign-up with email + password (`haveIBeenPwned` rejects breached passwords).
-- **Email must be verified before ordering:** `/api/shop/**` write routes answer **403 `EMAIL_NOT_VERIFIED`** until it is. Browsing the menu works without an account.
-- Password reset by email (Resend). Reset links are single-use and expire (Better Auth defaults).
-- `databaseHooks.user.create.after` creates the customer profile and the loyalty account.
+Built in step 1.6 (D51).
+
+- Sign-up with email + password (`haveIBeenPwned` rejects breached passwords). A verification email is sent on sign-up (link valid 24 h; following it signs the person in).
+- **Signing in works before verification; ordering doesn't:** `/api/shop/**` write routes (`requireCustomer`) answer **403 `EMAIL_NOT_VERIFIED`** until it is. Browsing the menu works without an account; `GET /api/shop/me` works signed in, verified or not.
+- Password reset by email: the link works **once** and expires after **1 hour**; a reset **signs the account out everywhere** and clears a temporary password. A reset request answers the same whether or not the email has an account (the only difference is one outbox insert, a few milliseconds).
+- Account emails go through the **outbox** (platform feature): Better Auth's callbacks only queue a message, and `platform:deliver-outbox` sends it within a minute, with retries. The link is in the message until it's sent, then dropped from the row.
+- Every account gets a **customer profile** with a member code, from `databaseHooks.user.create.after` (sign-up) or in the staff-creation batch. The hook runs after the account is stored (no transactions on D1), so if it fails the account still works and `ensureProfile` creates the profile on first use. The loyalty account joins in step 7.1.
+
+| Case | Result |
+|---|---|
+| Unverified customer places an order (any shop write) | 403 `EMAIL_NOT_VERIFIED` |
+| Reset link used twice | Second use: 400 `INVALID_TOKEN` (Better Auth) |
+| Reset requested for an unknown email | Same 200 answer, no email |
+| Staff on a temporary password resets by email | Flag cleared, like changing it |
+| The sign-up hook fails to create the profile | Logged; created on the first `ensureProfile` (e.g. `GET /api/shop/me`) |
 - An admin can **ban** an abusive account (`admin.banUser`), which ends its sessions.
 
 ## Request protection
