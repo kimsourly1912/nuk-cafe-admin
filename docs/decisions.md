@@ -280,3 +280,18 @@ Dates are when the decision was made. All of these were agreed with the project 
 - **Browser:** the e2e harness (D20) mocks `/api/v1` and `/api/auth` in the new format (`test/e2e/support/mock-api.ts`), with fixtures typed by the shared contracts.
 - **Nuxt project:** created only when a `*.nuxt.test.ts` exists. Loading Nuxt for it runs NuxtHub's module setup, which rewrites `.data/db/migrations` and raced with a running dev server on Windows, failing whole runs.
 - **Route smoke test:** the real routes are exercised against `pnpm dev` (sign-up, bootstrap, CRUD, upload, sign-out); see progress.md for how to repeat it.
+
+### D43: Server standard, rebuilt from scratch, 2026-09-27
+
+- **Context:** the first server slice (D40–D42) inherited the old external API's conventions (`/api/v1`, main/sub categories, one price per item) and hand-built what Better Auth already offers (staff roles, bootstrap, permissions). The owner asked to design the server as a fresh project.
+- **Decision (owner's answers, 2026-09-27):** one Nuxt app for all clients; Nuxt-native **unversioned** routes `/api/<surface>/<resource>` (surfaces `public`, `shop`, `counter/{branchId}`, `admin`); **features** in `server/features/` with fixed layers (service, repository, errors, types, schema; revised by the owner the same day, first drafted as `server/modules/`); Valibot; platform `admin` + branch `manager`/`staff` on Better Auth's `admin` and `organization` plugins; staff created by an admin with a temporary password; one account can be staff and customer; verified email before ordering; UUID v7; archive by default; h3 errors + `data.code`; version checks + idempotency keys; local/staging/production; Resend.
+- **The standard:** [docs/server/](server/README.md) (architecture, security, data model, operations). It supersedes the conventions and data model of D40/D41 (a same-day draft plan was folded into it and deleted); the existing code is replaced step by step, in the phases listed in progress.md.
+- **Rejected:** a versioned API (no outside clients yet); folders layered by type across the whole server (spreads one feature across the tree; layers live inside each feature instead); handlers without services (untestable, not reusable across surfaces); prefixed ids and Better Auth ids for our tables.
+
+### D44: Menu model: option sets, add-on groups, two-level categories, 2026-09-27
+
+- **Context:** the first draft of the fresh data model (D43) kept variations per item and flat categories. The owner wanted reusable variant presets selectable in the item form, and sub-categories. Researched how Square, Toast, Uber Eats and Loyverse model menus.
+- **Decision (owner, 2026-09-27):** two library pages. **Options** are reusable option sets (Size, Temperature) with names only; an item uses **up to 2** and gets a price grid, one priced variation per combination (Square's model: the price lives on the variation). **Add-ons** are reusable modifier groups with default prices and optional per-item overrides (Toast/Uber/Loyverse's shared modifier groups). **Categories go two levels deep, and a category holds either sub-categories or items, never both.**
+- **Why:** options and add-ons behave differently. The version of an item is priced per item and needs per-version reports and sold-out; extras are priced alike everywhere. The "items only in leaves" rule avoids the breakage Square users report when items sit on a parent category.
+- **Rejected:** one kind of preset for everything (Toast's size-as-modifier: vaguer prices and reports); unlimited option sets (large price grids, not needed for a cafe); unlimited category depth; items on parent categories.
+- **Details:** [docs/server/data-model.md → Menu](server/data-model.md#menu).

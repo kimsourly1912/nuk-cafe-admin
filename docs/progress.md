@@ -89,13 +89,100 @@ Our API resources and the admin screens on them (routes: [docs/reference/api.md]
 
 ## Next steps (recommended order)
 
-1. **Deploy to a Cloudflare staging Worker** with its own D1 and R2: bindings, `NUXT_BETTER_AUTH_SECRET`, `NUXT_PUBLIC_SITE_URL`, a CI step that applies migrations before deploy. Then repeat the real-server checks there; the batch guards (`requireOneChange`/`requireCount`) rely on SQLite's `changes()` and `json()` inside a D1 batch, which has only been exercised on libsql so far.
-2. **Staff management** (create staff accounts, disable them): needed before anyone but the bootstrap admin can work. Needs the role matrix (Q6) for anything beyond `admin`.
-3. **Public menu API** (`/api/v1/public/menu`) for the customer website: active items, availability from schedules. Needs the catalog rules (blueprint §9.7: unscheduled items, several schedules, overnight).
-4. **Temporary-upload cleanup** (a scheduled job deleting `temporary` media older than a day).
-5. Then the blueprint's order: customers and tables → quote/checkout/orders + counter payment → loyalty and vouchers.
+The server is being rebuilt to the **server standard** ([docs/server/](server/README.md), D43, written 2026-09-27; no code follows it yet). Each phase gets a short plan before coding and ends with passing tests and an update here.
 
-Historical roadmap of the Spring-backed frontend (kept for the record; its "verify on first staff login" items no longer apply):
+**How we work:** one step at a time. For each step the agent writes a short plan (for steps marked ✋, it asks first), builds it on its own branch, runs `pnpm lint`, `pnpm typecheck` and `pnpm test`, updates the docs, then **stops for review**. The next step starts only after approval. ✋ marks a step that needs a decision from the owner first (question numbers are in the tables below).
+
+### Phase 0: groundwork
+
+| # | Step | Done when |
+|---|---|---|
+| 0.1 | **Clean stale docs:** fold the few platform facts from `plans/fullstack-backend.md` into `docs/server/` and delete it; replace the system blueprint's data map, API shape and build order sections with links; mark `reference/api.md` as "current code, being replaced" | No doc tells an agent to build the old design |
+| 0.2 | **Auth spike** (throwaway branch, ½ day): `admin` + `organization` plugins with access control | Report: plugin tables are generated into migrations; `userHasPermission` / `hasPermission` work from a Nitro route; `createUser` can set `emailVerified` and `mustChangePassword`. Standard amended if anything differs |
+
+### Phase 1: platform foundation
+
+| # | Step | Done when |
+|---|---|---|
+| 1.1 | **Server skeleton:** `server/features/` layers; utils (`apiError` with request id, `readValidBody` / params / query, db + batch guards, UUID v7); Nitro error handler; request-id middleware; server test harness moved to features | Tests for the utils; existing screens still work |
+| 1.2 | **Identity config:** Better Auth `admin` + `organization` plugins, roles and permission statements, `haveIBeenPwned`, auth rate-limit rules, trusted origins; **fresh migrations** (old menu tables kept until 3.8) | Migrations generated and reviewed; a server test per role grant |
+| 1.3 | **Access helpers:** `requirePermission`, `requireBranchPermission`, route rules per surface, origin check on trusted origins, security headers | Tests: 401 / 403 / 404 for wrong surface, role and branch |
+| 1.4 | **Seed and staff:** seed task (first admin, demo branch); `/api/admin/staff` (list, create with temporary password, change role, disable); `mustChangePassword` enforcement and change-password flow; audit on each | Server tests including "disabled staff lose their sessions" |
+| 1.5 | **Platform tables:** `audit_events` (moved), `idempotency_keys`, `outbox_messages` + delivery task | Replay and retry tests |
+| 1.6 | **Customer accounts:** Resend mail sender (console locally), email verification, password reset, sign-up hook creating the customer profile (member code) | Unverified accounts are refused on shop writes |
+| 1.7 | **Admin app on the new identity:** `useAuth` reads roles from Better Auth, change-password screen, **Staff** admin page; remove `staff_profiles`, bootstrap route, `requireStaff`; the old menu routes use `requirePermission` until replaced | e2e: login, forced password change, staff page; the old menu screens still work |
+
+### Phase 2: staging
+
+| # | Step | Done when |
+|---|---|---|
+| 2.1 ✋ | **Cloudflare staging:** Worker, D1, R2, KV, secrets, domain (Q4: the domain) | The app runs on staging |
+| 2.2 | **CI deploy:** checks → migrate staging D1 → deploy → smoke check; `pnpm audit`; WAF rate limits; Time Travel checked | A merge to `main` deploys itself; batch guards verified on D1 |
+
+### Phase 3: menu API
+
+| # | Step | Done when |
+|---|---|---|
+| 3.1 | **Categories:** two-level tree, "items only in leaves", order per parent, archive | Server tests for every rule |
+| 3.2 | **Media:** upload (ensureBlob + magic bytes), attach/release, temporary cleanup task | Tests; cleanup task idempotent |
+| 3.3 | **Options library:** option sets and values, archive rules | Tests |
+| 3.4 | **Add-ons library:** modifier groups, modifiers with default prices, "used by N items" | Tests |
+| 3.5 | **Menu items:** item CRUD, option sets (max 2) with the version price grid, add-on groups with per-item overrides, draft / active / archived | Tests incl. grid regeneration and version conflicts |
+| 3.6 | **Sold-out per branch:** `branch_item_states` + counter route | Tests |
+| 3.7 ✋ | **Availability rules** (Q14 overnight, Q22 "no rule" / several rules) | Tests of the window rules |
+| 3.8 | **Public menu API** (cached, purged on writes); **remove the old menu tables and `/api/v1` routes** | Public menu shows only active, available, in-stock versions |
+
+### Phase 4: admin menu screens
+
+| # | Step | Done when |
+|---|---|---|
+| 4.1 | **Categories** page (tree, sub-categories, drag order) | e2e |
+| 4.2 | **Options** page | e2e |
+| 4.3 | **Add-ons** page | e2e |
+| 4.4 | **Menu items** list and form (category picker, option sets, price grid, add-ons, image) | e2e |
+
+### Phase 5: branches and the customer website
+
+| # | Step | Done when |
+|---|---|---|
+| 5.1 | **Branch settings + dining tables:** timezone, address, hours; tables with hashed QR tokens and rotation; admin pages | Tests: unknown or archived tokens rejected |
+| 5.2 ✋ | **Customer site shell:** SSR or not for the public pages (decide), layout, sign-up / sign-in / verify / reset pages | e2e of the account journeys |
+| 5.3 | **Menu browsing:** categories as tabs, sub-categories as sections, item page with options and add-ons, QR table context | e2e |
+
+### Phase 6: orders and counter payment
+
+| # | Step | Done when |
+|---|---|---|
+| 6.1 ✋ | **Pricing and quote** (tax / service charge, rounding: blueprint §9) | Totals match written examples |
+| 6.2 | **Checkout:** idempotent order placement, snapshots, pickup numbers per business day; cart and checkout on the site | Replay and double-submit tests |
+| 6.3 ✋ | **Counter queue and actions:** accept / preparing / ready / complete / cancel (state machine and cancellation rules) + counter screen | Concurrent-action tests |
+| 6.4 ✋ | **Counter payment** (tender methods) before preparation | One payment per order under retries |
+| 6.5 | **Order tracking** for the customer | e2e |
+| 6.6 ✋ | **Unpaid-order expiry** task (the expiry time) | Task test |
+
+### Phase 7: loyalty and vouchers
+
+| # | Step | Done when |
+|---|---|---|
+| 7.1 ✋ | **Points ledger + earn on completion** (earning base, rounding) | Earned once under retries; balance reconciles |
+| 7.2 ✋ | **Voucher templates** (admin; stacking, expiry, rules) | Tests |
+| 7.3 ✋ | **Exchange points for a voucher** (who starts it) | No double spend under races |
+| 7.4 | **Staff-issued vouchers** with reason and audit | Tests |
+| 7.5 | **Redemption at the counter** (lookup, redeem; not on one's own voucher) | Last-use race test |
+| 7.6 ✋ | **Reversals on cancel / refund** | Ledger reconciles |
+
+### Phase 8: launch
+
+| # | Step | Done when |
+|---|---|---|
+| 8.1 | **Reports and audit viewer** (basic sales per day, points issued) | ✋ report definitions |
+| 8.2 | **Production:** environment, domain, email domain (SPF/DKIM), alerts, restore drill, release test scenarios (blueprint §8) | Launch checklist signed off |
+
+**What happens to the current server code** (nothing is in production, so no data migration):
+- **Replaced in phase 1 (by step 1.7):** `staff_profiles`, the bootstrap route and `NUXT_BOOTSTRAP_TOKEN`, `ROLE_PERMISSIONS`, `requireStaff`, the `/api/v1` routes, the current `server/features/` services (split into repository + service layers), migration `0001_identity_and_menu` (local databases are recreated).
+- **Replaced in step 3.8:** the D41 menu tables (categories with parents, schedules, products, variant groups).
+- **Kept and moved into the new layout:** `apiError`, the validation helpers, the batch guards, the origin check, audit events, media handling, the `server` test harness; in the app, `apiFetch` / `ApiError` (pointed at the new routes).
+- **Admin screens:** Categories, Schedules and Menu items keep working against the old routes until step 3.8 removes them, then return in phase 4.
 
 ## Open questions / waiting on others
 

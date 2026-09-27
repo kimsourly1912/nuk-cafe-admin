@@ -8,7 +8,8 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 2. **[docs/decisions.md](docs/decisions.md)**: why things are the way they are. Read the relevant entry **before changing** a pattern that looks odd. Most of them work around a verified backend or tooling quirk.
 3. **[docs/reference/](docs/reference/README.md)**: reference for our HTTP API (**[api.md](docs/reference/api.md)**: routes, error codes, server structure) and for every shared composable, util and component (`useMutation`, `useApiQuery`, `apiFetch`, `ApiError`, …) with types, options and examples. Check it before using or changing a shared API. **[App-wide behavior](docs/reference/app-behavior.md)** (tab titles, refresh on tab focus, offline, leave guards, session loss) and **[Forms: unsaved changes](docs/reference/forms.md)** list every edge case those handle.
 4. **[docs/feature-standard.md](docs/feature-standard.md)**: how every new feature is planned, built and verified (planning template, list/form/picker behavior, definition of done). **Read it before starting a feature.**
-5. The rest of this file: rules and recipes.
+5. **[docs/server/](docs/server/README.md)**: the **server standard** (architecture, security, data model, operations). **Every server change follows it.** The server code written before it (`/api/v1`, `server/features/` without the service/repository layers, `staff_profiles`, the D41 menu tables) does not follow it yet and is being replaced (D43); the "Our API" section below describes that older code.
+6. The rest of this file: rules and recipes.
 
 **Keep these documents current as part of your work:**
 - Finished or started something → update `docs/progress.md` (status, next steps, and what you verified and how).

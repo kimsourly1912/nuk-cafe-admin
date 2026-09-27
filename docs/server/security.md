@@ -1,0 +1,157 @@
+# Security & hardening
+
+← [Server standard](./README.md)
+
+- [What the libraries do](#what-the-libraries-do)
+- [Identity](#identity)
+- [Roles and permissions](#roles-and-permissions)
+- [Sessions](#sessions)
+- [Staff onboarding](#staff-onboarding)
+- [Customers](#customers)
+- [Request protection](#request-protection): CSRF, headers, rate limits, size limits
+- [Uploads](#uploads)
+- [Secrets](#secrets)
+- [Logging and privacy](#logging-and-privacy)
+- [Checklist for every route](#checklist-for-every-route)
+
+---
+
+## What the libraries do
+
+Use these; don't rebuild them. Checked against better-auth 1.7.3, @nuxtjs/better-auth 0.3.5, @nuxthub/core 0.10.8.
+
+| Need | Use |
+|---|---|
+| Accounts, passwords, sessions, cookies | Better Auth `emailAndPassword` |
+| Email verification, password reset | Better Auth `emailVerification` / `sendResetPassword`, delivered with Resend |
+| Platform role, ban, admin-created users, revoke sessions | Better Auth **`admin`** plugin |
+| Branches, branch staff and their roles | Better Auth **`organization`** plugin (a branch is an organization) |
+| Permission checks | Better Auth **access control** (`createAccessControl`) + `userHasPermission` / `hasPermission` |
+| Rate limiting of auth routes | Better Auth `rateLimit` (database storage, `customRules`) |
+| Breached passwords | Better Auth **`haveIBeenPwned`** plugin |
+| Work on sign-up (create the loyalty account) | Better Auth `databaseHooks.user.create.after` |
+| Session required on route groups | `@nuxtjs/better-auth` `routeRules: { '/api/admin/**': { auth: 'user' } }`, `requireUserSession(event)` |
+| Upload size and type check | NuxtHub `ensureBlob(file, { maxSize, types })` (plus our magic-byte check: it trusts the claimed type) |
+| Rate limiting our API, bot protection | Cloudflare WAF rate-limiting rules (edge, no code) |
+| Security headers | Nitro `routeRules` `headers` |
+| Backups | D1 Time Travel |
+
+**Don't use:** NuxtHub `blob.handleUpload` (stores under the client's file name and turns validation failures into 500s), and Better Auth impersonation (off until there's a support process for it).
+
+## Identity
+
+- **One account per person**, email + password, owned by Better Auth (`user`, `account`, `session`, `verification`).
+- An account by itself grants **nothing** beyond the shop: access comes from the platform role and branch memberships.
+- The same person can be staff and a customer on one account. **Staff never act on their own customer records**: no redeeming their own voucher, adjusting their own points or completing their own order payment. The server checks `actor.userId !== customer.userId` for those actions.
+
+## Roles and permissions
+
+Two layers, both Better Auth:
+
+| Layer | Stored in | Roles |
+|---|---|---|
+| Platform | `user.role` (`admin` plugin) | `customer` (default for every sign-up), `admin` (owner/head office) |
+| Branch | `member.role` (`organization` plugin), one row per branch | `manager`, `staff` |
+
+Permissions are **statements** (`resource: [actions]`) defined once in `server/features/identity/identity.permissions.ts` with `createAccessControl`, and granted to roles there. Draft (to confirm with the owner, Q6):
+
+| Resource | Action | admin | manager | staff |
+|---|---|:-:|:-:|:-:|
+| menu | read / write / publish | ✔ | read | read |
+| menu | set sold out (own branch) | ✔ | ✔ | ✔ |
+| media | upload | ✔ | | |
+| branch | read / update | ✔ | read | read |
+| staff | create / change role / disable | ✔ | ? | |
+| table | manage, rotate QR | ✔ | ✔ | |
+| order | read queue, accept, ready, complete | ✔ | ✔ | ✔ |
+| order | cancel | ✔ | ✔ | ? |
+| payment | collect | ✔ | ✔ | ✔ |
+| payment | refund | ✔ | ✔ | |
+| voucher | look up, redeem | ✔ | ✔ | ✔ |
+| voucher | issue to a customer | ✔ | ✔ | ? |
+| voucher template | manage | ✔ | | |
+| loyalty | adjust points | ✔ | ? | |
+| report / audit | read | ✔ | own branch | |
+
+`?` = open. A platform `admin` has every branch permission in every branch.
+
+**Checking:**
+- `requirePermission(event, { menu: ['write'] })` for the admin surface (platform role).
+- `requireBranchPermission(event, branchId, { order: ['accept'] })` for the counter surface: the caller must be a member of **that** branch with a role that grants the action (or be a platform admin).
+- Both return the **actor** (`{ userId, role, branchRole? }`) that services receive and write to the audit log.
+- Deny by default: a route without a permission check is a bug. Route tests assert the 401/403/404 cases.
+- Only admins can create branches (`allowUserToCreateOrganization: user => user.role === 'admin'`).
+
+## Sessions
+
+- Better Auth database sessions, HttpOnly + `Secure` (production) + `SameSite=Lax` cookie, one origin.
+- Lifetime: Better Auth defaults (7 days, refreshed daily) unless the owner wants shorter staff sessions ([Open]).
+- **Revoke all sessions** of a user when their role changes, they're removed from a branch, their staff access is disabled, or they're banned (`admin.revokeUserSessions`).
+- `trustedOrigins` lists exactly the app's origins per environment.
+
+## Staff onboarding
+
+1. An admin creates the account (`admin.createUser`) with name, email and a generated **temporary password**, and assigns the branch role (`organization.addMember`). The email is marked verified (the admin vouches for it).
+2. The account carries `mustChangePassword = true` (a Better Auth `user.additionalFields` field).
+3. While it's set, every surface except `/api/auth/**` answers **403 `PASSWORD_CHANGE_REQUIRED`**, and the app shows the change-password screen.
+4. Changing the password (Better Auth `changePassword`, revoking other sessions) clears the flag.
+5. Disabling staff = removing their branch membership (and platform role), revoking their sessions, and an audit event. Their account keeps working as a customer.
+
+To verify in the auth spike: that `createUser` can set `emailVerified` and the additional field, and the cleanest hook for clearing the flag.
+
+## Customers
+
+- Sign-up with email + password (`haveIBeenPwned` rejects breached passwords).
+- **Email must be verified before ordering:** `/api/shop/**` write routes answer **403 `EMAIL_NOT_VERIFIED`** until it is. Browsing the menu works without an account.
+- Password reset by email (Resend). Reset links are single-use and expire (Better Auth defaults).
+- `databaseHooks.user.create.after` creates the customer profile and the loyalty account.
+- An admin can **ban** an abusive account (`admin.banUser`), which ends its sessions.
+
+## Request protection
+
+| Protection | Rule |
+|---|---|
+| **CSRF** | Every non-GET request to `/api/**` except `/api/auth/**` (Better Auth checks its own) and `/api/webhooks/**` must carry an `Origin` (or `Referer`) in `trustedOrigins`. Otherwise 403. `GET` never changes state. |
+| **Headers** | Via `routeRules`: `Content-Security-Policy` (self + what Nuxt UI needs), `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `frame-ancestors 'none'`, `Permissions-Policy` (camera only if QR scanning needs it). API responses: `Cache-Control: no-store` unless explicitly public. |
+| **Rate limits** | Better Auth `customRules`: sign-in, sign-up, password reset, verification emails. Cloudflare WAF: `/api/shop/orders`, voucher lookup/redeem, `/api/public/tables/*` (QR guessing). |
+| **Body size** | JSON bodies ≤ 64 KB (`readValidBody`); uploads ≤ 5 MB. |
+| **Enumeration** | Other people's records are 404. Sign-in errors don't say whether the email exists (Better Auth default). |
+| **Tokens in URLs** | QR tokens are random (128-bit) and stored **hashed**; a leaked database doesn't reveal working QR links. Rotating a table's QR invalidates the old one. |
+
+## Uploads
+
+- Only `media.upload` holders. Images only: JPEG, PNG, WebP (no SVG: it can carry script). Checked by `ensureBlob` **and** by the file's first bytes.
+- The server picks the key (`menu/<uuid v7>.<ext>`) and the content type; the client's file name is never used.
+- Served with `X-Content-Type-Options: nosniff` and a long cache (keys never change).
+- An upload is `temporary` until a record references it; a scheduled task deletes temporary objects older than 24 hours.
+
+## Secrets
+
+| Secret | Where |
+|---|---|
+| `NUXT_BETTER_AUTH_SECRET` | Per environment, ≥ 32 random characters. Rotation: Better Auth `secrets` (new first, old kept until sessions expire) |
+| `NUXT_RESEND_API_KEY` | Per environment; staging uses a restricted key |
+| Cloudflare API token (CI) | GitHub Actions secret, scoped to the one account and the resources deployed |
+
+Never in the repo, never logged, never in error messages. `.env` is git-ignored; `.env.example` lists names only.
+
+## Logging and privacy
+
+- Every request gets a **request id** (Cloudflare's `cf-ray` when present, else generated), in logs and in error bodies (`data.requestId`), so a user's screenshot leads to the log line.
+- Structured logs: `level`, `requestId`, `route`, `actor` id, `code`, duration. **Never log:** passwords, tokens, cookies, session ids, reset links, QR tokens, full request bodies, card data.
+- Personal data (email, phone, name) only where needed; audit metadata records **which fields** changed, not their values.
+- **Privacy erasure** of a customer: anonymize the profile (name, email, phone replaced), keep orders and ledgers with the anonymized customer, delete sessions and accounts. [Open]: retention periods (blueprint §9.8).
+- No card data is ever stored: counter payments record method and amount only.
+
+## Checklist for every route
+
+- [ ] It sits under the right surface (`public` / `shop` / `counter` / `admin`).
+- [ ] It checks the permission (or is deliberately public and read-only).
+- [ ] The branch (counter) comes from the path and is checked against membership.
+- [ ] Params, query and body are validated with strict Valibot schemas, sizes bounded.
+- [ ] Records outside the caller's scope answer 404.
+- [ ] Writes check `version`; money/points/voucher actions take an `Idempotency-Key`.
+- [ ] Privileged writes add an audit event in the same batch.
+- [ ] Errors use shared codes or the feature's `*.errors.ts` factories, with user-safe messages; nothing internal leaks.
+- [ ] The response is mapped (no raw rows) and contains nothing the caller shouldn't see.
+- [ ] Tests cover the permission cases, each error code, and the race/replay case.
