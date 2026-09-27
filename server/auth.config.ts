@@ -1,7 +1,6 @@
 import { defineServerAuth } from '@nuxtjs/better-auth/config'
+import { identityAuthOptions } from './features/identity'
 
-export default defineServerAuth({
-  emailAndPassword: { enabled: true },
-  // A Worker instance's memory is not shared with other instances.
-  rateLimit: { storage: 'database' },
-})
+export default defineServerAuth(({ runtimeConfig }) => identityAuthOptions({
+  siteUrl: (runtimeConfig.public as { siteUrl?: string } | undefined)?.siteUrl || undefined,
+}))

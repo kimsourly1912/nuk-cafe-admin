@@ -51,7 +51,7 @@ Routes are Nuxt file routes, **unversioned** (the apps deploy together with the 
 Rules:
 - **Resources are plural nouns, kebab-case:** `/api/admin/menu/items`, `/api/admin/voucher-templates`. Nest only for ownership (`/menu/items/{itemId}/variations`), at most two levels.
 - **CRUD maps to methods:** `GET` list/read, `POST` create, `PATCH` partial update, `DELETE` archive-or-delete (see [Archiving](#archiving)).
-- **Business actions are sub-resources with `POST`**, named with a verb: `/orders/{orderId}/accept`, `/ready`, `/complete`, `/cancel`, `/vouchers/{voucherId}/redeem`. Never change state through `PATCH status`.
+- **Business actions are sub-resources with `POST`**, named with a verb: `/orders/{orderId}/ready`, `/complete`, `/cancel`, `/vouchers/{voucherId}/redeem`. Never change state through `PATCH status`.
 - The branch in `/api/counter/{branchId}` comes from the path and is checked against the caller's membership. It is never read from a body field or trusted from the session alone.
 - File layout mirrors the URL: `server/api/admin/menu/items/[itemId].patch.ts`.
 
@@ -187,7 +187,7 @@ The return value is the response body. Nuxt infers its type, so `$fetch('/api/ad
 
 ### Versions (optimistic concurrency)
 
-Every editable record has `version`. An edit sends the version it read; the write applies only if it still matches, otherwise **409 `VERSION_CONFLICT`** and nothing changes. The UI shows "changed by someone else, reload". Status-changing actions (accept, ready…) also check the current state in the same conditional write.
+Every editable record has `version`. An edit sends the version it read; the write applies only if it still matches, otherwise **409 `VERSION_CONFLICT`** and nothing changes. The UI shows "changed by someone else, reload". Status-changing actions (ready, complete…) also check the current state in the same conditional write.
 
 ### Archiving
 
