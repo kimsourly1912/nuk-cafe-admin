@@ -5,6 +5,9 @@
   "packageManager": "pnpm@12.3.4",
   "scripts": {
     "build": "nuxt build",
+    "build:staging": "nuxt build --envName staging",
+    "db:migrate:staging": "wrangler d1 migrations apply DB --remote --config .output/server/wrangler.json",
+    "deploy:staging": "pnpm build:staging && pnpm db:migrate:staging && wrangler deploy --config .output/server/wrangler.json",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
@@ -49,6 +52,7 @@
     "playwright-core": "^1.63.0",
     "typescript": "^6.0.3",
     "vitest": "^5.0.1",
-    "vue-tsc": "^3.3.11"
+    "vue-tsc": "^3.3.11",
+    "wrangler": "^4.141.0"
   }
 }

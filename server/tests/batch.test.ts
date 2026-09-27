@@ -1,5 +1,7 @@
 import { createClient } from '@libsql/client'
-import { sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
+import { integer, sqliteTable } from 'drizzle-orm/sqlite-core'
+import { drizzle as drizzleD1 } from 'drizzle-orm/d1'
 import { drizzle } from 'drizzle-orm/libsql'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Db } from '../utils/batch'
@@ -60,5 +62,41 @@ describe('error classification', () => {
   it('passes other errors through runBatch unchanged', async () => {
     await expect(runBatch(db, [db.run(sql`insert into notes values ('n', 'missing', 'n')`)], () => versionConflict('x')))
       .rejects.toSatisfy((e: unknown) => isForeignKeyError(e))
+  })
+})
+
+describe('on D1', () => {
+  /**
+   * Drizzle's D1 driver against a stand-in D1 client that records what it's asked to run. The real
+   * D1 answered the old raw-SQL guards with "Cannot read properties of undefined (reading 'bind')"
+   * as soon as a guard had a bound parameter (staging, D53); libsql never showed it.
+   */
+  function fakeD1() {
+    const bound: { sql: string, params: unknown[] }[] = []
+    const statement = (text: string) => ({
+      bind: (...params: unknown[]) => {
+        const entry = { sql: text, params }
+        bound.push(entry)
+        return { ...entry, all: async () => ({ results: [] }), raw: async () => [], run: async () => ({ results: [] }), first: async () => null }
+      },
+    })
+    const client = {
+      prepare: (text: string) => statement(text),
+      batch: async (statements: unknown[]) => statements.map(() => ({ results: [], success: true, meta: {} })),
+    }
+    return { db: drizzleD1(client as never) as unknown as Db, bound }
+  }
+
+  const things = sqliteTable('t', { v: integer() })
+
+  it('batches every guard, with and without bound parameters', async () => {
+    const { db: d1, bound } = fakeD1()
+    await d1.batch([
+      d1.update(things).set({ v: 1 }).where(eq(things.v, 0)),
+      requireOneChange(d1),
+      requireCount(d1, sql`select count(*) from t where kind = ${'admin'}`, 1),
+    ])
+    expect(bound.map(b => b.params)).toEqual([[1, 0], [], ['admin', 1]])
+    expect(bound[2]!.sql).toContain('json(\'stale write\')')
   })
 })

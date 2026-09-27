@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
 
@@ -14,17 +15,27 @@ export type Db = LibSQLDatabase<any>
 export type Statement = BatchItem<'sqlite'>
 
 /**
+ * A guard: a one-row `select` that raises inside the batch unless `condition` holds, so the whole
+ * batch rolls back. SQLite's `json()` raises on the malformed text. Built with the query builder,
+ * not `db.run(sql)`: drizzle's D1 driver can't batch a raw statement that has bound parameters (it
+ * crashes reading `stmt.bind`; found on staging, D53). libsql runs both forms.
+ */
+function guard(db: Db, condition: SQL): Statement {
+  return db.select({ guard: sql<number>`case when ${condition} then 1 else json('stale write') end` }).from(sql`(select 1)`)
+}
+
+/**
  * A guard statement: aborts the whole batch unless the previous statement changed exactly one
  * row. Put it right after a conditional `UPDATE … WHERE version = ?`, so nothing after it applies
- * to a record someone else changed meanwhile. SQLite's `json()` raises on the malformed text.
+ * to a record someone else changed meanwhile.
  */
 export function requireOneChange(db: Db): Statement {
-  return db.run(sql`select case when changes() = 1 then 1 else json('stale write') end`)
+  return guard(db, sql`changes() = 1`)
 }
 
 /** A guard statement: aborts the batch unless the scalar subquery `count` equals `expected`. */
-export function requireCount(db: Db, count: ReturnType<typeof sql>, expected: number): Statement {
-  return db.run(sql`select case when (${count}) = ${expected} then 1 else json('stale write') end`)
+export function requireCount(db: Db, count: SQL, expected: number): Statement {
+  return guard(db, sql`(${count}) = ${expected}`)
 }
 
 function messageChain(error: unknown): string[] {

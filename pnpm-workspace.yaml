@@ -2,5 +2,6 @@ allowBuilds:
   esbuild: true
   unrs-resolver: true  
   vue-demi: true
+  workerd: true
 minimumReleaseAgeExclude:
   - '@nuxtjs/better-auth@0.3.5'

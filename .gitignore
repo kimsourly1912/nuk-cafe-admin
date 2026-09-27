@@ -1,6 +1,8 @@
 # Nuxt dev/build outputs
 .output
 .data
+# Wrangler (Cloudflare CLI) local state
+.wrangler
 .nuxt
 .nitro
 .cache

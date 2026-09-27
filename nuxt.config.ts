@@ -55,9 +55,53 @@ function securityHeaders(): Record<string, string> {
   }
 }
 
+/** Scheduled jobs, cron in UTC (docs/server/operations.md → Scheduled jobs). */
+const SCHEDULED_TASKS: Record<string, string[]> = {
+  '* * * * *': ['platform:deliver-outbox'],
+  '15 3 * * *': ['platform:expire-idempotency-keys'],
+}
+
+/**
+ * Staging on Cloudflare (D53): `nuxt build --envName staging` builds a Worker for
+ * `nuk-cafe-staging.<account>.workers.dev` with its own D1 database and R2 bucket. Secrets
+ * (`NUXT_BETTER_AUTH_SECRET`, later the Resend key) are Worker secrets, never in this file.
+ */
+const STAGING = {
+  worker: 'nuk-cafe-staging',
+  siteUrl: 'https://nuk-cafe-staging.kimsur61.workers.dev',
+  d1DatabaseId: '33752107-bc40-4c31-8ff0-d3c50dc6a3a2',
+  r2Bucket: 'nuk-cafe-staging-media',
+}
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/ui', '@nuxt/test-utils/module', '@nuxthub/core', '@nuxtjs/better-auth'],
+  $env: {
+    staging: {
+      // `--envName staging` replaces `$production` (one environment block applies), so the security
+      // headers are repeated here.
+      routeRules: { '/**': { headers: securityHeaders() } },
+      nitro: {
+        preset: 'cloudflare_module',
+        cloudflare: {
+          wrangler: {
+            name: STAGING.worker,
+            // Workers Logs: the structured logs (docs/server/operations.md → Monitoring).
+            observability: { enabled: true },
+            // Public, not secret: Better Auth's base URL and the only trusted origin.
+            vars: { NUXT_PUBLIC_SITE_URL: STAGING.siteUrl },
+            // Cloudflare calls the Worker on these; Nitro runs the matching tasks.
+            triggers: { crons: Object.keys(SCHEDULED_TASKS) },
+          },
+        },
+      },
+      hub: {
+        // NuxtHub binds these as `DB` and `BLOB` and points D1 at our migrations.
+        db: { dialect: 'sqlite', casing: 'snake_case', connection: { databaseId: STAGING.d1DatabaseId } },
+        blob: { driver: 'cloudflare-r2', binding: 'BLOB', bucketName: STAGING.r2Bucket },
+      },
+    },
+  },
   $production: {
     // Security headers (docs/server/security.md → Request protection). Production builds only: the
     // Vite dev server needs inline scripts and a websocket. The e2e suite runs a production build.
@@ -100,15 +144,7 @@ export default defineNuxtConfig({
     // Scheduled jobs and the seed task (docs/server/operations.md).
     experimental: { tasks: true },
     // Cron in UTC. On Cloudflare they become Worker cron triggers; in dev Nitro runs them itself.
-    scheduledTasks: {
-      '* * * * *': ['platform:deliver-outbox'],
-      '15 3 * * *': ['platform:expire-idempotency-keys'],
-    },
-    hooks: {
-      compiled(nitro) {
-        if (nitro.options.preset.startsWith('node')) copyLibsqlNativeBinary(nitro.options.output.serverDir)
-      },
-    },
+    scheduledTasks: SCHEDULED_TASKS,
   },
   hub: {
     blob: true,
@@ -118,6 +154,13 @@ export default defineNuxtConfig({
     },
   },
   hooks: {
+    // Added through nitro:init, not `nitro.hooks`: a `compiled` key there replaces the Cloudflare
+    // preset's own `compiled` hook, which writes wrangler.json (D53).
+    'nitro:init'(nitro) {
+      nitro.hooks.hook('compiled', () => {
+        if (nitro.options.preset.startsWith('node')) copyLibsqlNativeBinary(nitro.options.output.serverDir)
+      })
+    },
     // Our error handler answers /api/** in the API's error format; Nuxt's own handler (set before
     // this hook runs) stays next in line for pages. Nitro tries handlers in order.
     // Each server feature owns its tables in server/features/<feature>/<feature>.schema.ts
