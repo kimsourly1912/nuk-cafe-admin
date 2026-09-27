@@ -3,7 +3,7 @@ import type { SQL } from 'drizzle-orm'
 import type { ItemListQuery, ItemStatus } from '#shared/contracts/menu-items'
 import type { Db, Statement } from '../../utils/batch'
 import { requireCount } from '../../utils/batch'
-import { menuCategories, menuItemOptionSets, menuItems, menuItemVariations, menuOptionSets, menuOptionValues, menuVariationOptionValues } from './menu.schema'
+import { menuCategories, menuItemModifierGroups, menuItemModifierPrices, menuItemOptionSets, menuItems, menuItemVariations, menuModifierGroups, menuModifiers, menuOptionSets, menuOptionValues, menuVariationOptionValues } from './menu.schema'
 
 export interface ItemRow {
   id: string
@@ -31,6 +31,24 @@ export interface SetWithValues {
   name: string
   status: 'active' | 'archived'
   values: { id: string, name: string, status: 'active' | 'archived' }[]
+}
+
+/** An add-on group on an item, with the item's own rules if it overrides them. */
+export interface ItemGroupRow {
+  groupId: string
+  rulesOverridden: boolean
+  minSelect: number | null
+  maxSelect: number | null
+}
+
+export interface GroupWithModifiers {
+  id: string
+  name: string
+  minSelect: number
+  maxSelect: number | null
+  status: 'active' | 'archived'
+  /** In the group's order. */
+  modifiers: { id: string, name: string, priceDeltaMinor: number, isDefault: boolean, status: 'active' | 'archived' }[]
 }
 
 const itemColumns = {
@@ -155,6 +173,43 @@ export async function itemCountsBySet(db: Db, setIds: string[]): Promise<Map<str
   return new Map(rows.map(r => [r.setId, r.n]))
 }
 
+/** The item's add-on groups in order. */
+export async function itemGroups(db: Db, itemId: string): Promise<ItemGroupRow[]> {
+  return db.select({ groupId: menuItemModifierGroups.groupId, rulesOverridden: menuItemModifierGroups.rulesOverridden, minSelect: menuItemModifierGroups.minSelect, maxSelect: menuItemModifierGroups.maxSelect })
+    .from(menuItemModifierGroups).where(eq(menuItemModifierGroups.itemId, itemId)).orderBy(asc(menuItemModifierGroups.sortOrder))
+}
+
+/** The item's own add-on prices, by modifier id. */
+export async function itemModifierPrices(db: Db, itemId: string): Promise<Map<string, number>> {
+  const rows: { modifierId: string, priceDeltaMinor: number }[] = await db.select({ modifierId: menuItemModifierPrices.modifierId, priceDeltaMinor: menuItemModifierPrices.priceDeltaMinor })
+    .from(menuItemModifierPrices).where(eq(menuItemModifierPrices.itemId, itemId))
+  return new Map(rows.map(r => [r.modifierId, r.priceDeltaMinor]))
+}
+
+/** These add-on groups with all their add-ons, in the order of `ids`. */
+export async function groupsWithModifiers(db: Db, ids: string[]): Promise<GroupWithModifiers[]> {
+  if (!ids.length) return []
+  const groups: Omit<GroupWithModifiers, 'modifiers'>[] = await db.select({ id: menuModifierGroups.id, name: menuModifierGroups.name, minSelect: menuModifierGroups.minSelect, maxSelect: menuModifierGroups.maxSelect, status: menuModifierGroups.status })
+    .from(menuModifierGroups).where(inArray(menuModifierGroups.id, ids))
+  const modifiers: (GroupWithModifiers['modifiers'][number] & { groupId: string })[] = await db
+    .select({ id: menuModifiers.id, groupId: menuModifiers.groupId, name: menuModifiers.name, priceDeltaMinor: menuModifiers.priceDeltaMinor, isDefault: menuModifiers.isDefault, status: menuModifiers.status })
+    .from(menuModifiers).where(inArray(menuModifiers.groupId, ids)).orderBy(asc(menuModifiers.sortOrder), asc(menuModifiers.name))
+  return ids.flatMap((id) => {
+    const group = groups.find(g => g.id === id)
+    return group ? [{ ...group, modifiers: modifiers.filter(m => m.groupId === id).map(({ groupId: _, ...modifier }) => modifier) }] : []
+  })
+}
+
+/** Non-archived items per add-on group, for "used by N items". */
+export async function itemCountsByGroup(db: Db, groupIds: string[]): Promise<Map<string, number>> {
+  if (!groupIds.length) return new Map()
+  const rows: { groupId: string, n: number }[] = await db.select({ groupId: menuItemModifierGroups.groupId, n: count() }).from(menuItemModifierGroups)
+    .innerJoin(menuItems, eq(menuItems.id, menuItemModifierGroups.itemId))
+    .where(and(inArray(menuItemModifierGroups.groupId, groupIds), ne(menuItems.status, 'archived')))
+    .groupBy(menuItemModifierGroups.groupId)
+  return new Map(rows.map(r => [r.groupId, r.n]))
+}
+
 // --- Guards (checked again inside the batch) ---
 
 /** Aborts unless the category is still active and has no sub-categories (items go in leaves). */
@@ -171,6 +226,16 @@ export function requireActiveSets(db: Db, setIds: string[]): Statement {
 /** Aborts unless every one of these option values is still active. */
 export function requireActiveValues(db: Db, valueIds: string[]): Statement {
   return requireCount(db, sql`select count(*) from ${menuOptionValues} where ${inArray(menuOptionValues.id, valueIds)} and ${menuOptionValues.status} = 'active'`, valueIds.length)
+}
+
+/** Aborts unless every one of these add-on groups is still active. */
+export function requireActiveGroups(db: Db, groupIds: string[]): Statement {
+  return requireCount(db, sql`select count(*) from ${menuModifierGroups} where ${inArray(menuModifierGroups.id, groupIds)} and ${menuModifierGroups.status} = 'active'`, groupIds.length)
+}
+
+/** Aborts unless every one of these add-ons is still active. */
+export function requireActiveModifiers(db: Db, modifierIds: string[]): Statement {
+  return requireCount(db, sql`select count(*) from ${menuModifiers} where ${inArray(menuModifiers.id, modifierIds)} and ${menuModifiers.status} = 'active'`, modifierIds.length)
 }
 
 /** Aborts unless the item has at least one sellable variation. */
@@ -203,6 +268,25 @@ export function replaceOptionSetsStatements(db: Db, itemId: string, setIds: stri
   return [
     db.delete(menuItemOptionSets).where(eq(menuItemOptionSets.itemId, itemId)),
     ...(setIds.length ? [db.insert(menuItemOptionSets).values(setIds.map((setId, i) => ({ itemId, setId, sortOrder: i + 1 })))] : []),
+  ]
+}
+
+/** Replaces the item's add-on groups and its own add-on prices. */
+export function replaceModifierGroupsStatements(db: Db, itemId: string, groups: { groupId: string, rules: { minSelect: number, maxSelect: number | null } | null }[], prices: { modifierId: string, priceDeltaMinor: number }[]): Statement[] {
+  return [
+    db.delete(menuItemModifierPrices).where(eq(menuItemModifierPrices.itemId, itemId)),
+    db.delete(menuItemModifierGroups).where(eq(menuItemModifierGroups.itemId, itemId)),
+    ...(groups.length
+      ? [db.insert(menuItemModifierGroups).values(groups.map((group, i) => ({
+          itemId,
+          groupId: group.groupId,
+          sortOrder: i + 1,
+          rulesOverridden: group.rules !== null,
+          minSelect: group.rules?.minSelect ?? null,
+          maxSelect: group.rules?.maxSelect ?? null,
+        })))]
+      : []),
+    ...(prices.length ? [db.insert(menuItemModifierPrices).values(prices.map(price => ({ itemId, ...price })))] : []),
   ]
 }
 

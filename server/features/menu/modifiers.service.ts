@@ -5,6 +5,7 @@ import { newId } from '../../utils/ids'
 import { toIso } from '../../utils/time'
 import type { Actor } from '../identity'
 import { auditStatement } from '../platform'
+import { itemCountsByGroup } from './items.repository'
 import { modifierArchived, modifierGroupArchived, modifierGroupChanged, modifierGroupNameTaken, modifierGroupNotFound, modifierNameTaken, modifierNotArchived, modifierNotFound, modifiersChanged, selectionRules } from './modifiers.errors'
 import * as repo from './modifiers.repository'
 import type { ModifierGroupRow, ModifierRow } from './modifiers.repository'
@@ -18,7 +19,7 @@ import { selectionProblem } from './modifiers.rules'
  * against whatever changed in between.
  */
 
-function toGroup(row: ModifierGroupRow, modifiers: ModifierRow[]): ModifierGroup {
+function toGroup(row: ModifierGroupRow, modifiers: ModifierRow[], itemCounts: Map<string, number>): ModifierGroup {
   const own = modifiers.filter(m => m.groupId === row.id)
   return {
     id: row.id,
@@ -28,6 +29,7 @@ function toGroup(row: ModifierGroupRow, modifiers: ModifierRow[]): ModifierGroup
     status: row.status,
     modifiers: [...own.filter(m => m.status === 'active'), ...own.filter(m => m.status !== 'active')]
       .map(m => ({ id: m.id, name: m.name, priceDeltaMinor: m.priceDeltaMinor, isDefault: m.isDefault, sortOrder: m.sortOrder, status: m.status })),
+    itemCount: itemCounts.get(row.id) ?? 0,
     version: row.version,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
@@ -37,7 +39,7 @@ function toGroup(row: ModifierGroupRow, modifiers: ModifierRow[]): ModifierGroup
 async function loadGroup(db: Db, id: string): Promise<ModifierGroup> {
   const row = await repo.findGroup(db, id)
   if (!row) throw modifierGroupNotFound()
-  return toGroup(row, await repo.modifiersOf(db, [id]))
+  return toGroup(row, await repo.modifiersOf(db, [id]), await itemCountsByGroup(db, [id]))
 }
 
 async function openGroup(db: Db, id: string, version: number, allowArchived = false): Promise<ModifierGroupRow> {
@@ -88,8 +90,9 @@ async function runGroupBatch(db: Db, groupId: string, version: number, statement
 
 export async function listModifierGroups(db: Db, query: ModifierGroupListQuery): Promise<ModifierGroup[]> {
   const groups = await repo.listGroups(db, query.status)
-  const modifiers = await repo.modifiersOf(db, groups.map(g => g.id))
-  return groups.map(group => toGroup(group, modifiers))
+  const ids = groups.map(g => g.id)
+  const [modifiers, itemCounts] = await Promise.all([repo.modifiersOf(db, ids), itemCountsByGroup(db, ids)])
+  return groups.map(group => toGroup(group, modifiers, itemCounts))
 }
 
 export async function getModifierGroup(db: Db, id: string): Promise<ModifierGroup> {

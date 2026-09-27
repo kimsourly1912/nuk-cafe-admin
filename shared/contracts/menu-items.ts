@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { idSchema, nameSchema, optionalParam, pageQuerySchema, textSchema, versionSchema } from './common'
+import { MAX_MODIFIER_PRICE_MINOR, MAX_MODIFIERS } from './menu-modifiers'
 
 /**
  * Menu items (`/api/admin/menu/items`, D44, D60). An item sits in a leaf category and has one or
@@ -18,6 +19,8 @@ export type GridVariationStatus = typeof GRID_VARIATION_STATUSES[number]
 export const ITEM_NAME_MAX = 80
 export const ITEM_DESCRIPTION_MAX = 500
 export const MAX_ITEM_OPTION_SETS = 2
+/** Add-on groups per item. */
+export const MAX_ITEM_MODIFIER_GROUPS = 10
 /** A variation's price, in cents: a typo guard ($1,000). */
 export const MAX_VARIATION_PRICE_MINOR = 100_000
 
@@ -57,6 +60,30 @@ export interface MenuItemVariation {
   sellable: boolean
 }
 
+export interface ItemModifier {
+  id: string
+  name: string
+  /** What the customer pays on this item: the item's price if set, else the group's default. */
+  priceDeltaMinor: number
+  defaultPriceDeltaMinor: number
+  priceOverridden: boolean
+  isDefault: boolean
+  status: 'active' | 'archived'
+}
+
+export interface ItemModifierGroup {
+  id: string
+  name: string
+  /** An archived group stays on items that already offer it. */
+  status: 'active' | 'archived'
+  /** The rules that apply on this item: its own if overridden, else the group's. */
+  minSelect: number
+  maxSelect: number | null
+  rulesOverridden: boolean
+  /** The group's active add-ons in order, then archived ones this item has a price for. */
+  modifiers: ItemModifier[]
+}
+
 export interface MenuItem {
   id: string
   categoryId: string
@@ -68,6 +95,8 @@ export interface MenuItem {
   optionSets: ItemOptionSet[]
   /** The grid (active values' combinations) first, then variations hidden by an archived value. */
   variations: MenuItemVariation[]
+  /** The add-on groups it offers, in order. */
+  modifierGroups: ItemModifierGroup[]
   version: number
   createdAt: string
   updatedAt: string
@@ -81,6 +110,31 @@ const variationSchema = v.strictObject({
   priceMinor,
   status: v.picklist(GRID_VARIATION_STATUSES),
 })
+
+/**
+ * The add-on groups an item offers, in order. `rules`: this item's own `minSelect` / `maxSelect`
+ * (`null`: use the group's). `prices`: this item's price for some of the group's add-ons.
+ */
+const itemModifierGroups = v.pipe(
+  v.array(v.strictObject({
+    groupId: idSchema,
+    rules: v.optional(v.nullable(v.strictObject({
+      minSelect: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(MAX_MODIFIERS)),
+      maxSelect: v.nullable(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_MODIFIERS))),
+    })), null),
+    prices: v.optional(v.pipe(
+      v.array(v.strictObject({
+        modifierId: idSchema,
+        priceDeltaMinor: v.pipe(v.number(), v.integer('Must be whole cents'), v.minValue(0, 'Can\'t be negative'), v.maxValue(MAX_MODIFIER_PRICE_MINOR)),
+      })),
+      v.maxLength(MAX_MODIFIERS),
+      v.check(list => new Set(list.map(p => p.modifierId)).size === list.length, 'Each add-on can have one price'),
+    ), []),
+  })),
+  v.maxLength(MAX_ITEM_MODIFIER_GROUPS, `At most ${MAX_ITEM_MODIFIER_GROUPS} add-on groups`),
+  v.check(list => new Set(list.map(g => g.groupId)).size === list.length, 'Each add-on group can be offered once'),
+)
+export type ItemModifierGroupsInput = v.InferOutput<typeof itemModifierGroups>
 
 const optionSetIds = v.pipe(
   v.array(idSchema),
@@ -109,6 +163,7 @@ export const createItemSchema = v.strictObject({
   imageId: v.optional(v.nullable(idSchema), null),
   optionSetIds: v.optional(optionSetIds, []),
   variations,
+  modifierGroups: v.optional(itemModifierGroups, []),
 })
 export type CreateItemInput = v.InferOutput<typeof createItemSchema>
 
@@ -126,6 +181,8 @@ export const updateItemSchema = v.pipe(
     imageId: v.optional(v.nullable(idSchema)),
     optionSetIds: v.optional(optionSetIds),
     variations: v.optional(variations),
+    /** Replaces the whole list of add-on groups, with their rules and prices. */
+    modifierGroups: v.optional(itemModifierGroups),
   }),
   v.forward(v.partialCheck([['optionSetIds'], ['variations']], input => input.optionSetIds === undefined || input.variations !== undefined, 'Send the new price grid with the option sets'), ['variations']),
 )

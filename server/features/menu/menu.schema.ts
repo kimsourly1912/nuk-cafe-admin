@@ -5,7 +5,7 @@ import { newId } from '../../utils/ids'
 
 /**
  * The menu (docs/server/data-model.md → Menu, D44): categories (3.1), options (3.3), add-ons (3.4),
- * items (3.5). Add-ons on items, sold-out and availability join in 3.5b to 3.7. Registered with NuxtHub through the
+ * items (3.5), add-ons on items (3.5b). Sold-out and availability join in 3.6 and 3.7. Registered with NuxtHub through the
  * `hub:db:schema:extend` hook; column names are snake_case in SQL.
  */
 
@@ -194,4 +194,31 @@ export const menuVariationOptionValues = sqliteTable('menu_variation_option_valu
 }, t => [
   primaryKey({ columns: [t.variationId, t.valueId] }),
   index('menu_variation_option_values_value_idx').on(t.valueId),
+])
+
+/**
+ * The add-on groups an item offers, in order (D61). `rulesOverridden`: this item uses its own
+ * `minSelect` / `maxSelect` (`maxSelect` null = no limit) instead of the group's.
+ */
+export const menuItemModifierGroups = sqliteTable('menu_item_modifier_groups', {
+  itemId: text().notNull().references(() => menuItems.id, { onDelete: 'cascade' }),
+  groupId: text().notNull().references(() => menuModifierGroups.id, { onDelete: 'restrict' }),
+  sortOrder: integer().notNull(),
+  rulesOverridden: integer({ mode: 'boolean' }).notNull().default(false),
+  minSelect: integer(),
+  maxSelect: integer(),
+}, t => [
+  primaryKey({ columns: [t.itemId, t.groupId] }),
+  index('menu_item_modifier_groups_group_idx').on(t.groupId),
+  check('menu_item_modifier_groups_rules_check', sql`not ${t.rulesOverridden} or (${t.minSelect} >= 0 and (${t.maxSelect} is null or (${t.maxSelect} >= 1 and ${t.maxSelect} >= ${t.minSelect})))`),
+])
+
+/** An add-on's price on one item, instead of its default ("Oat +$0.75 on the large drinks"). */
+export const menuItemModifierPrices = sqliteTable('menu_item_modifier_prices', {
+  itemId: text().notNull().references(() => menuItems.id, { onDelete: 'cascade' }),
+  modifierId: text().notNull().references(() => menuModifiers.id, { onDelete: 'restrict' }),
+  priceDeltaMinor: integer().notNull(),
+}, t => [
+  primaryKey({ columns: [t.itemId, t.modifierId] }),
+  check('menu_item_modifier_prices_price_check', sql`${t.priceDeltaMinor} >= 0`),
 ])
