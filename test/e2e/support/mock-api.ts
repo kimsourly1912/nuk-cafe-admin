@@ -240,6 +240,8 @@ function requestBody(request: ReturnType<Route['request']>): unknown {
   return request.headers()['content-type']?.includes('application/json') ? request.postDataJSON() : raw
 }
 
+const TINY_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64')
+
 export async function mockApi(page: Page, handlers: Record<string, MockHandler> = {}): Promise<MockApi> {
   const active = { ...DEFAULT_HANDLERS, ...handlers }
   const calls: string[] = []
@@ -270,6 +272,10 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
       await route.fulfill({ status: error.status, json: { error: true, statusCode: error.status, message: error.message, data } })
     }
   })
+
+  // Media is served by our own origin (`/media/<key>`, like the real server): any key answers with
+  // a 1×1 PNG, so images render under the production CSP instead of failing to load.
+  await page.route(`${origin}/media/**`, route => route.fulfill({ status: 200, contentType: 'image/png', body: TINY_PNG }))
 
   return { calls, unhandled: missing, set: next => Object.assign(active, next) }
 }

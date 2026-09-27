@@ -9,3 +9,9 @@ export async function failure(promise: Promise<unknown>) {
   expect(error, 'expected the call to fail').toBeDefined()
   return { status: error!.statusCode, code: error!.data?.code }
 }
+
+/** Asserts that `call` (sync or async) fails with this API error status and code. */
+export async function expectApiError(call: () => unknown, status: number, code: string) {
+  const promise = (async () => call())()
+  expect(await failure(promise)).toEqual({ status, code })
+}

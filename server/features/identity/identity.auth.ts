@@ -1,5 +1,6 @@
 import { admin, haveIBeenPwned, organization } from 'better-auth/plugins'
 import type { ServerAuthConfig } from '@nuxtjs/better-auth/config'
+import { newId } from '../../utils/ids'
 import { branchAc, branchRoles, platformAc, platformRoles } from './identity.permissions'
 
 const MINUTE = 60
@@ -14,11 +15,13 @@ export interface IdentityAuthSettings {
 
 /**
  * Our Better Auth configuration (docs/server/security.md, D45, D47). `server/auth.config.ts` passes
- * it to `defineServerAuth`; the identity tests run it against an in-memory adapter.
+ * it to `defineServerAuth`; the identity tests run it against the real migration.
  */
 export function identityAuthOptions({ siteUrl, checkBreachedPasswords = true }: IdentityAuthSettings) {
   return {
     emailAndPassword: { enabled: true },
+    // UUID v7 like every other table, so Better Auth's ids (users, branches) pass readIdParam.
+    advanced: { database: { generateId: () => newId() } },
     trustedOrigins: siteUrl ? [new URL(siteUrl).origin] : [],
     session: {
       // 7 days for everyone, extended once a day while used (D45).

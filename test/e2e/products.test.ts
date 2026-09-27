@@ -22,7 +22,7 @@ const MILK: VariantGroup = {
 const LATTE = productOf('prod-1', 'Latte', COFFEE, {
   description: 'Espresso and milk',
   priceMinor: 350,
-  image: { id: 'asset-latte', url: 'https://img.example/latte.png' },
+  image: { id: 'asset-latte', url: '/media/menu/latte.png' },
   scheduleIds: ['sched-30'],
   variantGroups: [MILK],
   version: 3,
@@ -33,7 +33,7 @@ const BREAKFAST: ScheduleOption = { id: 'sched-30', name: 'Breakfast', status: '
 const LUNCH: ScheduleOption = { id: 'sched-31', name: 'Lunch', status: 'ACTIVE' }
 const RETIRED: ScheduleOption = { id: 'sched-32', name: 'Old promo', status: 'INACTIVE' }
 
-const UPLOADED = { id: 'asset-new', url: 'https://img.example/new.png' }
+const UPLOADED = { id: 'asset-new', url: '/media/menu/new.png' }
 
 function backend(initial: Product[] = [LATTE, MATCHA]) {
   let rows = [...initial]
@@ -98,7 +98,7 @@ describe('menu items list', () => {
     const latte = cardOf(page, 'Latte')
     await latte.getByText('$3.50').waitFor()
     await latte.getByText('Coffee · 1 option group').waitFor()
-    expect(await latte.locator('img').getAttribute('src')).toBe('https://img.example/latte.png')
+    expect(await latte.locator('img').getAttribute('src')).toBe('/media/menu/latte.png')
     await cardOf(page, 'Matcha').getByText('$4.25').waitFor()
     await cardOf(page, 'Matcha').getByText('Inactive').waitFor()
   })
@@ -255,7 +255,7 @@ describe('menu item form', () => {
     await toast(page, 'Could not upload "photo.png"').waitFor()
     await expect.poll(() => form.getByRole('button', { name: 'Save' }).isDisabled()).toBe(false)
     // The previous image is still the one in the form.
-    expect(await form.locator('img').getAttribute('src')).toBe('https://img.example/latte.png')
+    expect(await form.locator('img').getAttribute('src')).toBe('/media/menu/latte.png')
     expect(api.calls.filter(c => c.startsWith('PATCH'))).toEqual([])
   })
 

@@ -285,3 +285,4 @@ All in `server/utils/`. Routes get them by auto-import; features import them exp
 | `time.ts` | `toIso` | Instants in responses |
 | `log.ts` | `log(level, message, fields, event?)` | Structured logs with the request id; secret-looking keys are redacted |
 | `db.ts` | `useDb()` | The NuxtHub database, **routes and tasks only** (it imports `hub:db`, which tests can't load) |
+| `access.ts` | `requirePermission`, `requireBranchPermission`, `requireCustomer`, `requireSignedIn` | The first line of every route: who is acting, and may they ([security.md → Roles and permissions](security.md#roles-and-permissions)) |

@@ -30,10 +30,10 @@ Use these; don't rebuild them. Checked against better-auth 1.7.3, @nuxtjs/better
 | Rate limiting of auth routes | Better Auth `rateLimit` (database storage, `customRules`) |
 | Breached passwords | Better Auth **`haveIBeenPwned`** plugin |
 | Work on sign-up (create the loyalty account) | Better Auth `databaseHooks.user.create.after` |
-| Session required on route groups | `@nuxtjs/better-auth` `routeRules: { '/api/admin/**': { auth: 'user' } }`, `requireUserSession(event)` |
+| Session required on route groups | `@nuxtjs/better-auth` `routeRules` `auth` in `nuxt.config.ts`: `/api/admin/**` needs a session with role `admin`, `/api/counter/**` and `/api/shop/**` a session. A second line only (see Checking) |
 | Upload size and type check | NuxtHub `ensureBlob(file, { maxSize, types })` (plus our magic-byte check: it trusts the claimed type) |
 | Rate limiting our API, bot protection | Cloudflare WAF rate-limiting rules (edge, no code) |
-| Security headers | Nitro `routeRules` `headers` |
+| Security headers | Nitro `routeRules` `headers` (production builds, `securityHeaders()` in `nuxt.config.ts`) |
 | Backups | D1 Time Travel |
 
 **Don't use:** NuxtHub `blob.handleUpload` (stores under the client's file name and turns validation failures into 500s), and Better Auth impersonation (off until there's a support process for it).
@@ -81,11 +81,19 @@ The last two rows are Better Auth's own statements: branch roles get **none** of
 
 A platform `admin` has every branch permission in every branch: **our** `requireBranchPermission` grants that, because Better Auth only knows branch roles for members of that branch (spike, 2026-09-27).
 
-**Checking:**
-- `requirePermission(event, { menu: ['write'] })` for the admin surface (platform role).
-- `requireBranchPermission(event, branchId, { order: ['cancel'] })` for the counter surface: the caller must be a member of **that** branch with a role that grants the action (or be a platform admin).
-- Both return the **actor** (`{ userId, role, branchRole? }`) that services receive and write to the audit log.
-- Deny by default: a route without a permission check is a bug. Route tests assert the 401/403/404 cases.
+**Checking** (`server/utils/access.ts`, auto-imported in routes; the decisions are `authorize*` in `server/features/identity/identity.service.ts`):
+
+| Helper | Surface | Refuses with |
+|---|---|---|
+| `requirePermission(event, { menu: ['write'] })` | `/api/admin` | 401 no session / banned; 403 `PASSWORD_CHANGE_REQUIRED`; 403 `FORBIDDEN` when the platform role lacks **any** requested action |
+| `requireBranchPermission(event, branchId, { order: ['cancel'] })` | `/api/counter/{branchId}` | 401; 403 `PASSWORD_CHANGE_REQUIRED`; **404** for an unknown or archived branch, a branch the caller isn't a member of, or an unknown membership role; 403 `FORBIDDEN` for a member whose role lacks the action. A platform admin passes in every active branch without being a member |
+| `requireCustomer(event)` | `/api/shop` writes | 401; 403 `PASSWORD_CHANGE_REQUIRED`; 403 `EMAIL_NOT_VERIFIED` |
+| `requireSignedIn(event)` | own-account reads | 401; 403 `PASSWORD_CHANGE_REQUIRED` |
+
+- Each returns the **actor** (`{ userId, role }`, plus `branchId` and `branchRole?` on the counter) that services receive and write to the audit log.
+- The branch id comes from the path (`readIdParam(event, 'branchId', 'The branch')`), never from a body. Better Auth's tables use UUID v7 like ours (`advanced.database.generateId`), so `readIdParam` applies to users and branches too.
+- Deny by default: a route without a permission check is a bug. The `routeRules` session gate catches a forgotten check on the admin surface (401, or 403 for non-admins) but can't see branches, permissions, `mustChangePassword` or email verification.
+- Tests: `identity.service.test.ts` covers every refusal above (each guard checked to fail its test when removed). The route wiring was checked against a production build with temporary probe routes (D48); per-route tests come with the first real routes (step 1.4).
 - Only admins can create branches (`allowUserToCreateOrganization: user => user.role === 'admin'`). Better Auth always makes the creator a member; our config names that membership `manager` (`creatorRole`), since `owner` isn't one of our roles.
 - Branches are never deleted (`disableOrganizationDeletion`); they're archived through `organization.status`.
 - The whole configuration is `identityAuthOptions()` in `server/features/identity/identity.auth.ts`; `server/auth.config.ts` only passes it the site URL.
@@ -128,7 +136,7 @@ A platform `admin` has every branch permission in every branch: **our** `require
 | Protection | Rule |
 |---|---|
 | **CSRF** | Every non-GET request to `/api/**` except `/api/auth/**` (Better Auth checks its own) and `/api/webhooks/**` must carry an `Origin` (or `Referer`) in `trustedOrigins`. Otherwise 403. `GET` never changes state. |
-| **Headers** | Via `routeRules`: `Content-Security-Policy` (self + what Nuxt UI needs), `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `frame-ancestors 'none'`, `Permissions-Policy` (camera only if QR scanning needs it). API responses: `Cache-Control: no-store` unless explicitly public. |
+| **Headers** | Production builds, every route: `Content-Security-Policy` (`default-src 'self'`; scripts and styles also `'unsafe-inline'` until SSR brings nonces in step 5.2; images `'self' data: blob:`; `connect-src 'self'`; `object-src 'none'`; `base-uri` and `form-action 'self'`; `frame-ancestors 'none'`), `Strict-Transport-Security: max-age=31536000; includeSubDomains`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Cross-Origin-Opener-Policy: same-origin`, `Permissions-Policy` denying camera, microphone, geolocation and payment (loosen camera if QR scanning needs it). `/api/**`: `Cache-Control: no-store` unless a public route opts in. Images must come from our origin (`/media/…`): the CSP blocks others. |
 | **Rate limits** | Better Auth `customRules` (production only, database storage): sign-in 5/min, sign-up 5/10 min, password-reset request 3/10 min, reset 5/10 min, verification email 3/10 min, change password 5/min. Cloudflare WAF: `/api/shop/orders`, voucher lookup/redeem, `/api/public/tables/*` (QR guessing). |
 | **Body size** | JSON bodies ≤ 64 KB (`readValidBody`); uploads ≤ 5 MB. |
 | **Enumeration** | Other people's records are 404. Sign-in errors don't say whether the email exists (Better Auth default). |

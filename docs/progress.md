@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-27 (step 1.2: identity config)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-27 (step 1.3: access helpers)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -95,7 +95,7 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 |---|---|---|
 | 1.1 ✅ | **Server skeleton:** `server/features/` layers; utils (`apiError` with request id, `readValidBody` / params / query, db + batch guards, UUID v7); Nitro error handler; request-id middleware; server test harness moved to features | Tests for the utils; existing screens still work |
 | 1.2 ✅ | **Identity config** (roles per D45): Better Auth `admin` + `organization` plugins, roles and permission statements, `haveIBeenPwned`, auth rate-limit rules, trusted origins; **fresh migrations** (old menu tables kept until 3.8) | Migrations generated and reviewed; a server test per role grant |
-| 1.3 | **Access helpers:** `requirePermission`, `requireBranchPermission`, route rules per surface, origin check on trusted origins (done in 1.2, D47), security headers | Tests: 401 / 403 / 404 for wrong surface, role and branch |
+| 1.3 ✅ | **Access helpers:** `requirePermission`, `requireBranchPermission`, route rules per surface, origin check on trusted origins (done in 1.2, D47), security headers | Tests: 401 / 403 / 404 for wrong surface, role and branch |
 | 1.4 | **Seed and staff:** seed task (first admin, demo branch); `/api/admin/staff` (list, create with temporary password, change role, disable); `mustChangePassword` enforcement and change-password flow; audit on each | Server tests including "disabled staff lose their sessions" |
 | 1.5 | **Platform tables:** `audit_events` (moved), `idempotency_keys`, `outbox_messages` + delivery task | Replay and retry tests |
 | 1.6 | **Customer accounts:** Resend mail sender (console locally), email verification, password reset, sign-up hook creating the customer profile (member code) | Unverified accounts are refused on shop writes |
@@ -197,11 +197,12 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 113, server 113, e2e 115).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 113, server 130, e2e 115).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_BOOTSTRAP_TOKEN=<32+ chars> pnpm dev`, sign up (`POST /api/auth/sign-up/email` with `{ email, password, name }` and an `Origin` header), then `POST /api/v1/bootstrap/admin` with `{ token, email }` ([api.md → Identity](reference/api.md#identity)). Then log in at `/login`. The bootstrap is refused once an admin exists; `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
   - Pitfall: sign-up checks the password against Have I Been Pwned (network needed): `password123` is refused with `PASSWORD_COMPROMISED`. Use a long random one.
+  - Pitfall: `server/auth.config.ts` must not import a feature's `index.ts` (or anything reaching `hub:db` / `hub:db:schema`): the module loads it at build time and typecheck fails with NUXT_AUTH_CONFIG_LOAD_FAILED (D48).
   - Pitfall: step 1.2 replaced the migrations with `0000_initial`. A local `.data/db` from before it must be deleted (with the dev server stopped); it's recreated on the next `pnpm dev`.
   - Pitfall: a bash heredoc containing an apostrophe inside a quoted `'EOF'` block failed in this environment's shell wrapper ("unexpected EOF"). Write edit scripts with the editor instead.
   - Pitfall: to smoke-test a production build, run `node .output/server/index.mjs` with the `.env` variables **and** `NUXT_PUBLIC_SITE_URL` set; without it every auth-touching route answers 500 (logged as "siteUrl required in production").
@@ -222,7 +223,7 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Status-tab counts call the list endpoint with `size=1`: exclude those when counting list requests (`isCount` in `list-page.test.ts`).
   - Row buttons are named after the item ("Actions for Tea", "Select Tea"), so a user-menu button like "alice" needs `{ exact: true }` once an item contains that name.
   - `page.reload()` has no `waitUntil: 'hydration'`; use `page.goto(page.url(), { waitUntil: 'hydration' })`.
-  - Under load, a full `pnpm test` once hit a wave of 30 s timeouts in unrelated files right after another e2e run; the rerun passed. Rerun before chasing such a failure.
+  - Under load, a full `pnpm test` once hit a wave of 30 s timeouts in unrelated files right after another e2e run; the rerun passed. Rerun before chasing such a failure. Seen again in step 1.3: the two-tab tests (`auth`, `freshness`, `session`) time out only when `pnpm test` runs every project at once; alone, and in `pnpm test:e2e`, they pass.
   - `getByLabel` matches **substrings**: `'Name'` also matches "Name of group 1", and "Option 2 of Milk" matched "Extra price of option 2 of Milk". Use `{ exact: true }`, or labels that can't contain each other.
   - SortableJS drag and drop works with Playwright's `locator.dragTo(target)` on the drag handle.
   - `UInputNumber` is `role="spinbutton"` (not a textbox); `fill('4.2')` works and it shows `$4.20` after blur.
@@ -234,6 +235,7 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Always `goto(..., { waitUntil: 'hydration' })`. Without it, assertions can run before the app mounts and fail only under full-suite load.
   - While our confirm dialog is on top, the form modal behind it is `aria-hidden`, so `getByRole('dialog')` doesn't find it. Check the form after answering.
   - UTable renders an extra `<tr>` in the header. Count cells, not rows.
+  - The production CSP (D48) blocks images from other origins: fixture image URLs must be same-origin `/media/…` (`mockApi` serves a 1×1 PNG there). A component that drops a broken `<img>` makes a src assertion fail.
   - Two tabs of one browser (`openTabs`, closed after each test since D46): `createPage()` opens a single-page context, so create one with `(await getBrowser()).newContext()`, open both pages in it, and wait with `waitForHydration(page, url, 'hydration')` (raw pages lack the `waitUntil: 'hydration'` wrapper). Tabs in one context share `BroadcastChannel`.
   - Tab visibility: fake `document.visibilityState` + dispatch `visibilitychange`, and move time with `page.clock.install()` / `fastForward`. Offline: `page.context().setOffline(true)` (fires the `offline` event; `page.route` mocks still answer).
   - In a `node -e` one-liner inside single-quoted bash, `\d` in a regex loses its backslash. Edit test files with the editor, not shell string replacement.

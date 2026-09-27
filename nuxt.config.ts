@@ -25,9 +25,44 @@ function copyLibsqlNativeBinary(serverDir: string) {
   }
 }
 
+/**
+ * Response headers for every route in production (D48). Scripts still allow `'unsafe-inline'`: the
+ * SPA shell carries Nuxt's inline config script and the color-mode script, whose content changes
+ * per environment. A nonce-based script policy comes with server rendering (step 5.2). Everything
+ * else is locked to this origin: no framing, no plugins, no requests or form posts elsewhere.
+ */
+function securityHeaders(): Record<string, string> {
+  const csp = [
+    `default-src 'self'`,
+    `script-src 'self' 'unsafe-inline'`,
+    `style-src 'self' 'unsafe-inline'`,
+    `img-src 'self' data: blob:`,
+    `font-src 'self' data:`,
+    `connect-src 'self'`,
+    `object-src 'none'`,
+    `base-uri 'self'`,
+    `form-action 'self'`,
+    `frame-ancestors 'none'`,
+  ].join('; ')
+  return {
+    'content-security-policy': csp,
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'referrer-policy': 'strict-origin-when-cross-origin',
+    'cross-origin-opener-policy': 'same-origin',
+    'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+  }
+}
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/ui', '@nuxt/test-utils/module', '@nuxthub/core', '@nuxtjs/better-auth'],
+  $production: {
+    // Security headers (docs/server/security.md → Request protection). Production builds only: the
+    // Vite dev server needs inline scripts and a websocket. The e2e suite runs a production build.
+    routeRules: { '/**': { headers: securityHeaders() } },
+  },
   // The existing admin UI remains a SPA while Nitro hosts the new local API.
   ssr: false,
   devtools: { enabled: true },
@@ -44,6 +79,15 @@ export default defineNuxtConfig({
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',
     },
+  },
+  routeRules: {
+    // Session gate per surface (@nuxtjs/better-auth), a second line behind each route's own
+    // requirePermission / requireBranchPermission / requireCustomer (docs/server/security.md).
+    '/api/admin/**': { auth: { only: 'user', user: { role: 'admin' } } },
+    '/api/counter/**': { auth: 'user' },
+    '/api/shop/**': { auth: 'user' },
+    // API responses are personal or change often; a public route opts in to caching explicitly.
+    '/api/**': { headers: { 'cache-control': 'no-store' } },
   },
   compatibilityDate: '2025-07-15',
   nitro: {
@@ -63,6 +107,11 @@ export default defineNuxtConfig({
   hooks: {
     // Our error handler answers /api/** in the API's error format; Nuxt's own handler (set before
     // this hook runs) stays next in line for pages. Nitro tries handlers in order.
+    // NuxtHub declares 'hub:db:schema' for the app and Nitro type projects only. The node project
+    // reaches the server utils through Nitro's auto-import types, so it needs the declaration too.
+    'prepare:types'({ nodeReferences }) {
+      nodeReferences.push({ path: 'hub/db/schema.d.ts' })
+    },
     'nitro:config'(nitroConfig) {
       const nuxtHandlers = [nitroConfig.errorHandler ?? []].flat()
       // Forward slashes: Nitro writes this path into a generated import (Windows backslashes break it).
