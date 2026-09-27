@@ -5,7 +5,7 @@ import { newId } from '../../utils/ids'
 
 /**
  * The menu (docs/server/data-model.md → Menu, D44): categories (3.1), options (3.3), add-ons (3.4),
- * items (3.5), add-ons on items (3.5b). Sold-out and availability join in 3.6 and 3.7. Registered with NuxtHub through the
+ * items (3.5), add-ons on items (3.5b), sold-out per branch (3.6). Availability joins in 3.7. Registered with NuxtHub through the
  * `hub:db:schema:extend` hook; column names are snake_case in SQL.
  */
 
@@ -221,4 +221,21 @@ export const menuItemModifierPrices = sqliteTable('menu_item_modifier_prices', {
 }, t => [
   primaryKey({ columns: [t.itemId, t.modifierId] }),
   check('menu_item_modifier_prices_price_check', sql`${t.priceDeltaMinor} >= 0`),
+])
+
+/**
+ * The counter's sold-out switch, per branch and version (D63): a row once the switch was used.
+ * `branch_id` is a Better Auth organization; like `audit_events`, no foreign key into Better
+ * Auth's tables (branches are archived, never deleted).
+ */
+export const branchItemStates = sqliteTable('branch_item_states', {
+  branchId: text().notNull(),
+  variationId: text().notNull().references(() => menuItemVariations.id, { onDelete: 'cascade' }),
+  soldOut: integer({ mode: 'boolean' }).notNull().default(false),
+  /** Who flipped it last (a user id); `null` for the system. */
+  updatedBy: text(),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  primaryKey({ columns: [t.branchId, t.variationId] }),
+  index('branch_item_states_variation_idx').on(t.variationId),
 ])

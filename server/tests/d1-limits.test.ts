@@ -7,10 +7,11 @@ import { MAX_OPTION_VALUES } from '#shared/contracts/menu-options'
 import { MAX_MEMBERSHIPS } from '#shared/contracts/staff'
 import { MAX_PAGE_SIZE } from '#shared/contracts/common'
 import { member, organization } from '../db/tables'
-import type { Actor } from '../features/identity'
+import type { Actor, BranchActor } from '../features/identity'
 import { createStaff, listStaff, updateStaffAccess } from '../features/identity/staff.service'
 import { createCategory, reorderCategories } from '../features/menu/categories.service'
-import { createItem, updateItem } from '../features/menu/items.service'
+import { createItem, publishItem, updateItem } from '../features/menu/items.service'
+import { listCounterMenu, setSoldOut } from '../features/menu/sold-out.service'
 import { createModifierGroup, listModifierGroups } from '../features/menu/modifiers.service'
 import { createOptionSet, listOptionSets } from '../features/menu/options.service'
 import type { Db } from '../utils/batch'
@@ -65,14 +66,20 @@ describe('menu at its limits', () => {
     expect(reordered.map(c => c.id)).toEqual([...created].reverse().map(c => c.id))
   })
 
-  it('writes and retires the largest price grid (20 × 20 versions)', async () => {
+  it('writes, sells out and retires the largest price grid (20 × 20 versions)', async () => {
     const drinks = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null })
     const size = await createOptionSet(db, actor, { name: 'Size', values: names(MAX_OPTION_VALUES, 'Size') })
     const milk = await createOptionSet(db, actor, { name: 'Milk', values: names(MAX_OPTION_VALUES, 'Milk') })
     const variations = size.values.flatMap(s => milk.values.map(m => ({ valueIds: [s.id, m.id], priceMinor: 300, status: 'active' as const })))
     const item = await createItem(db, actor, { categoryId: drinks.id, name: 'Latte', description: '', imageId: null, optionSetIds: [size.id, milk.id], variations, modifierGroups: [] })
     expect(item.variations).toHaveLength(400)
-    const single = await updateItem(db, actor, item.id, { version: item.version, optionSetIds: [size.id], variations: size.values.map(s => ({ valueIds: [s.id], priceMinor: 300, status: 'active' as const })) })
+    const live = await publishItem(db, actor, item.id, { version: item.version })
+    const staff: BranchActor = { userId: 'staff-1', role: 'customer', branchId: newId(), branchRole: 'staff' }
+    expect((await setSoldOut(db, staff, item.id, { soldOut: true })).variations.filter(x => x.soldOut)).toHaveLength(400)
+    const some = live.variations.slice(0, 300).map(x => x.id)
+    expect((await setSoldOut(db, staff, item.id, { soldOut: false, variationIds: some })).variations.filter(x => x.soldOut)).toHaveLength(100)
+    expect((await listCounterMenu(db, staff.branchId, {}))[0]!.variations).toHaveLength(400)
+    const single = await updateItem(db, actor, item.id, { version: live.version, optionSetIds: [size.id], variations: size.values.map(s => ({ valueIds: [s.id], priceMinor: 300, status: 'active' as const })) })
     expect(single.variations).toHaveLength(MAX_OPTION_VALUES)
   })
 

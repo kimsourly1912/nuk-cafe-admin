@@ -6,3 +6,4 @@ export { addModifier, archiveModifier, archiveModifierGroup, createModifierGroup
 export { ModifierErrorCodes } from './modifiers.errors'
 export { archiveItem, createItem, getItem, listItems, publishItem, reorderItems, restoreItem, unpublishItem, updateItem } from './items.service'
 export { ItemErrorCodes } from './items.errors'
+export { listCounterMenu, setSoldOut } from './sold-out.service'
