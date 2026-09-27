@@ -1,7 +1,7 @@
-# Lint, typecheck and every test on each push to main and each pull request.
+# Checks on each push to main and each pull request; a push to main then deploys to staging.
 # E2E runs against a production build in the runner's preinstalled Google Chrome
-# (test/e2e/support/global-setup.ts); the backend is mocked, so no secrets are needed.
-# Setup follows https://pnpm.io/continuous-integration (decision D24).
+# (test/e2e/support/global-setup.ts); the backend is mocked, so the checks need no secrets.
+# Setup follows https://pnpm.io/continuous-integration (decision D24). Deploy: D54.
 name: CI
 
 on:
@@ -34,8 +34,72 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # Known advisories below "high" are accepted and reviewed when dependencies are updated.
+      - name: Dependency audit (high and critical)
+        run: pnpm audit --audit-level high
+
       - name: Unit tests
         run: pnpm test:unit
 
       - name: E2E tests
         run: pnpm test:e2e
+
+  deploy-staging:
+    # Only after the checks passed, and only for main: pull requests never deploy.
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: staging
+      url: https://nuk-cafe-staging.kimsur61.workers.dev
+    # One deploy at a time, and a newer push never cancels one halfway (migrations then Worker).
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      STAGING_URL: https://nuk-cafe-staging.kimsur61.workers.dev
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pnpm, Node.js and dependencies
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        with:
+          runtime: node@24
+          cache: true
+
+      - name: Build the staging Worker
+        run: pnpm build:staging
+
+      # Before the new Worker: migrations are backwards compatible (expand, then contract), so the
+      # old Worker keeps working against the migrated database for the moment in between.
+      - name: Apply database migrations
+        run: pnpm db:migrate:staging
+
+      - name: Deploy the Worker
+        run: pnpm exec wrangler deploy --config .output/server/wrangler.json
+
+      # From the GitHub environment's secret; skipped while it isn't set. Re-sent on every deploy so
+      # the Worker always has the current value.
+      - name: Update the Resend key
+        env:
+          NUXT_MAIL_RESEND_API_KEY: ${{ secrets.NUXT_MAIL_RESEND_API_KEY }}
+        run: |
+          if [ -n "$NUXT_MAIL_RESEND_API_KEY" ]; then
+            printf '%s' "$NUXT_MAIL_RESEND_API_KEY" | pnpm exec wrangler secret put NUXT_MAIL_RESEND_API_KEY --config .output/server/wrangler.json
+          fi
+
+      - name: Smoke check
+        run: |
+          set -eu
+          # The database answers through the Worker.
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors "$STAGING_URL/api/public/health" | grep -q '"ok"'
+          # The app shell loads, with the security headers.
+          curl --fail --silent --show-error --head "$STAGING_URL/login" | grep -qi '^content-security-policy:'
+          # An unknown API path is our JSON 404, not the app's HTML.
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/api/does-not-exist")" = 404
+          # Admin routes refuse without a session.
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/api/admin/me")" = 401
+          echo "Staging is up: $STAGING_URL"

@@ -54,7 +54,7 @@ class ApiError extends Error {
 | `validation` | Bad input (HTTP 400, 413, 415, 422) | Server message, e.g. "Some of the submitted data is invalid." (details in `fieldErrors`) |
 | `not_found` | Item doesn't exist (HTTP 404) | Server message, e.g. "The category was not found. It may have been deleted." |
 | `conflict` | HTTP 409: stale `version`, record in use, order changed meanwhile | Server message, e.g. "This category was changed by someone else. Reload it and try again." |
-| `forbidden` | HTTP 403: not staff (`NOT_STAFF`, which also ends the session), missing permission, cross-origin write | Server message, or "You don't have permission to do this." |
+| `forbidden` | HTTP 403: not an admin (`NOT_ADMIN`, which also ends the session), a temporary password (`PASSWORD_CHANGE_REQUIRED`, which opens the change-password page), missing permission, cross-origin write | Server message, or "You don't have permission to do this." |
 | `business` | Other 4xx | Server message, or "The request could not be completed." |
 | `rate_limited` | HTTP 429 (sign-in attempts) | Server message, or "Too many attempts. Wait a moment and try again." |
 | `unauthorized` | No session (HTTP 401). Ends the session: the user goes to login | "Your session has expired…" (usually never shown) |

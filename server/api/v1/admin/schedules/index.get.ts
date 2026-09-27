@@ -1,7 +1,7 @@
 import { scheduleListQuery } from '#shared/contracts/menu'
-import { listSchedules } from '../../../../features/menu/schedules'
+import { listSchedules } from '../../../../legacy/menu/schedules'
 
 export default defineEventHandler(async (event) => {
-  await requireStaff(event, 'menu.read')
-  return listSchedules(useDb(), readQueryAs(event, scheduleListQuery))
+  await requirePermission(event, { menu: ['read'] })
+  return listSchedules(useDb(), readValidQuery(event, scheduleListQuery))
 })

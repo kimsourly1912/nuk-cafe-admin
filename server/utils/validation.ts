@@ -1,14 +1,14 @@
 import type { H3Event } from 'h3'
-import { getQuery, readBody } from 'h3'
+import { getHeader, getQuery, getRouterParam, readBody } from 'h3'
 import * as v from 'valibot'
-import { apiError } from './api-error'
+import { apiError, ErrorCodes } from './errors'
 
-/** Largest JSON body a write accepts. */
-const MAX_JSON_BYTES = 256 * 1024
+/** Largest JSON body a write accepts (docs/server/security.md → Request protection). */
+export const MAX_JSON_BYTES = 64 * 1024
 
 /**
- * Validates input with a contract schema, or throws 400 VALIDATION_FAILED with the messages per
- * field path (`name`, `variantGroups.0.options.1.name`).
+ * Validates input with a Valibot schema, or throws 400 VALIDATION_FAILED with the messages per
+ * field path (`name`, `variations.0.priceMinor`).
  */
 export function parseInput<T extends v.GenericSchema>(schema: T, input: unknown): v.InferOutput<T> {
   const result = v.safeParse(schema, input)
@@ -18,33 +18,37 @@ export function parseInput<T extends v.GenericSchema>(schema: T, input: unknown)
     const path = v.getDotPath(issue) ?? ''
     ;(fieldErrors[path] ??= []).push(issue.message)
   }
-  return failValidation(fieldErrors)
+  throw apiError(400, ErrorCodes.VALIDATION_FAILED, 'Some of the submitted data is invalid.', { fieldErrors })
 }
 
-function failValidation(fieldErrors: Record<string, string[]>): never {
-  throw apiError(400, 'VALIDATION_FAILED', 'Some of the submitted data is invalid.', fieldErrors)
-}
-
-export async function readBodyAs<T extends v.GenericSchema>(event: H3Event, schema: T): Promise<v.InferOutput<T>> {
-  const length = Number(event.node.req.headers['content-length'] ?? 0)
-  if (length > MAX_JSON_BYTES) throw apiError(413, 'VALIDATION_FAILED', 'The request is too large.')
+/** The JSON body, size-limited and validated. */
+export async function readValidBody<T extends v.GenericSchema>(event: H3Event, schema: T): Promise<v.InferOutput<T>> {
+  if (Number(getHeader(event, 'content-length') ?? 0) > MAX_JSON_BYTES) {
+    throw apiError(413, ErrorCodes.PAYLOAD_TOO_LARGE, 'The request is too large.')
+  }
   let body: unknown
   try {
     body = await readBody(event)
   }
   catch {
-    throw apiError(400, 'VALIDATION_FAILED', 'The request body is not valid JSON.')
+    throw apiError(400, ErrorCodes.VALIDATION_FAILED, 'The request body is not valid JSON.')
   }
   return parseInput(schema, body ?? {})
 }
 
-export function readQueryAs<T extends v.GenericSchema>(event: H3Event, schema: T): v.InferOutput<T> {
+/** The query string, validated (values arrive as strings: use coercing schemas). */
+export function readValidQuery<T extends v.GenericSchema>(event: H3Event, schema: T): v.InferOutput<T> {
   return parseInput(schema, getQuery(event))
 }
 
-/** A route parameter that must be an id. */
-export function idParam(value: string | undefined, what: string): string {
-  const result = v.safeParse(v.pipe(v.string(), v.uuid()), value)
-  if (!result.success) throw apiError(404, 'NOT_FOUND', `${what} was not found.`)
+const uuidSchema = v.pipe(v.string(), v.uuid())
+
+/**
+ * A route parameter that must be an id (UUID). Anything else is 404, not 400: a malformed id
+ * can't name an existing record, and we don't explain id formats to callers.
+ */
+export function readIdParam(event: H3Event, name: string, what: string): string {
+  const result = v.safeParse(uuidSchema, getRouterParam(event, name))
+  if (!result.success) throw apiError(404, ErrorCodes.NOT_FOUND, `${what} was not found.`)
   return result.output
 }

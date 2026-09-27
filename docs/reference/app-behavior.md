@@ -106,9 +106,10 @@ Every case is in [Forms: unsaved changes → Edge cases](./forms.md#edge-cases).
 | Case | Behavior |
 |---|---|
 | Session expired (401 from any request) | `clearSession()` → redirect to `/login?redirect=<current page>`. No refresh or retry: Better Auth keeps a live session's cookie fresh itself, so a 401 means it's over. **No unsaved-changes dialog**: staying isn't possible. Open form modals close, toasts clear (see the transition contract below) |
-| Staff access removed mid-session (403 `NOT_STAFF`: profile disabled) | Same as a 401 |
+| Admin access removed mid-session (403 `NOT_ADMIN`; removing the role also deletes the sessions, so usually a 401) | Same as a 401 |
 | Many requests fail at once | One session change: `clearSession()` is idempotent |
-| A customer account signs in on the admin login | `/api/v1/admin/me` answers 403 `NOT_STAFF`; the account is signed out again and the form says "This account doesn't have staff access." |
+| A customer or branch-staff account signs in on the admin login | `/api/admin/me` answers 403; the account is signed out again and the form says "This account doesn't have access to the admin app." (e2e `auth.test.ts`, both `NOT_ADMIN` and the route gate's `FORBIDDEN`) |
+| Signed in on a temporary password, or a route answers 403 `PASSWORD_CHANGE_REQUIRED` | Every page goes to `/change-password` until it's changed ([auth → change-password page](./auth.md#public-pages-and-the-change-password-page)) |
 | Better Auth refetches its own session (startup, tab focus) | No effect on the staff session: separate state keys (`staff-session:*` vs the module's `auth:*`) |
 | Log out with unsaved input | Asks first ([`useLeaveGuard`](./forms.md#useleaveguard)), **before** calling the backend |
 | **Logged out in another tab** | This tab goes to `/login?redirect=<current page>` at once. Unsaved input in this tab is lost without a dialog (the session is gone for every tab) |
@@ -140,7 +141,7 @@ Not covered: browsers without `BroadcastChannel` learn about another tab's accou
 | Case | Behavior |
 |---|---|
 | Normal request | 30 s (`apiFetch`; uploads pass 120 s). ofetch's automatic retries are **off** (`retry: 0`): a retried write could apply twice |
-| 401 / 403 NOT_STAFF | No retry; the session ends |
+| 401 / 403 NOT_ADMIN | No retry; the session ends |
 | GET network error | Fails at once |
 
 Tests: `test/unit/api-fetch.test.ts`. D27 (partly superseded by D40).
@@ -149,22 +150,9 @@ Tests: `test/unit/api-fetch.test.ts`. D27 (partly superseded by D40).
 
 Auth is Better Auth's HttpOnly session cookie on this same origin (the admin UI and `/api` are one app); the frontend never reads it. Better Auth protects its own routes (`/api/auth`, trusted origins). Our API's writes (POST/PATCH/PUT/DELETE) must carry this site's `Origin` or `Referer` (`server/middleware/origin-check.ts`), so a sibling subdomain can't write with the user's cookie even though `SameSite=Lax` would send it. There are no state-changing GET routes. Verified with a cross-origin POST (403) against `pnpm dev`; production also needs `NUXT_PUBLIC_SITE_URL` set to the real origin.
 
-### Permissions (Q6: open)
+### Permissions
 
-The staff session carries a `role` and its `permissions`. Only `admin` exists (every permission, D40); the server checks a permission on every admin route (`requireStaff`). `useAuth().can(permission)` exists for hiding actions, but no screen uses it yet because only one role exists. When the project owner answers, fill in this matrix, add roles to `ROLE_PERMISSIONS` (`shared/contracts/identity.ts`), then route meta and hidden actions (feature-standard §7):
-
-| Screen / action | admin | manager? | cashier? |
-|---|---|---|---|
-| Categories: view / create / edit / delete / bulk delete | ? | ? | ? |
-| Schedules, Menu items: view / edit / delete | ? | ? | ? |
-| Orders: view queue / accept / ready / complete / reject / cancel | ? | ? | ? |
-| Customers: view / suspend / reactivate; points adjustments | ? | ? | ? |
-| Staff: view / create / reset password / change status | ? | ? | ? |
-| Rewards, vouchers (redeem / lookup), banners, carbon, settings | ? | ? | ? |
-
-A forbidden request returns 403 `FORBIDDEN` (kind `forbidden`).
-
----
+The admin session carries `permissions` (`resource:action`, D52); only platform admins use the admin app, and they hold every admin permission, so no screen hides anything yet. `useAuth().can('staff:create')` is there for when manager screens exist. Who may do what: [security.md → Roles and permissions](../server/security.md#roles-and-permissions) (D45); the server checks every request.
 
 ## Keyboard shortcuts
 

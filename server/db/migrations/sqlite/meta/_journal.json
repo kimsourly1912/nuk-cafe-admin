@@ -5,15 +5,29 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1790435163506,
-      "tag": "0000_flawless_maginty",
+      "when": 1790496383557,
+      "tag": "0000_initial",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "6",
-      "when": 1790437754353,
-      "tag": "0001_identity_and_menu",
+      "when": 1790497887417,
+      "tag": "0001_customer_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790500082744,
+      "tag": "0002_drop_staff_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790507723017,
+      "tag": "0003_menu_categories",
       "breakpoints": true
     }
   ]

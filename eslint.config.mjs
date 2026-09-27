@@ -37,4 +37,31 @@ export default withNuxt(
       }],
     },
   },
+  // Server boundaries (docs/server/architecture.md → Features):
+  // - routes use a feature only through its index.ts;
+  // - a feature reaches another feature only through that feature's index.ts;
+  // - new code never builds on server/legacy (the pre-standard code being replaced).
+  {
+    files: ['server/api/**/*.ts', 'server/routes/**/*.ts', 'server/tasks/**/*.ts', 'server/middleware/**/*.ts'],
+    ignores: ['server/api/v1/**'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          { regex: String.raw`features/[^/]+/.+`, message: 'Import a server feature through its index.ts: \'~~/server/features/<name>\'.' },
+          { regex: String.raw`(^|/)legacy(/|$)`, message: 'server/legacy is being replaced; don\'t build on it (D43).' },
+        ],
+      }],
+    },
+  },
+  {
+    files: ['server/features/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          { regex: String.raw`^\.\./[^./][^/]*/.+`, message: 'Reach another server feature only through its index.ts (\'../<feature>\').' },
+          { regex: String.raw`(^|/)legacy(/|$)`, message: 'server/legacy is being replaced; don\'t build on it (D43).' },
+        ],
+      }],
+    },
+  },
 )

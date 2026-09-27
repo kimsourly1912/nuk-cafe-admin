@@ -51,7 +51,7 @@ Routes are Nuxt file routes, **unversioned** (the apps deploy together with the 
 Rules:
 - **Resources are plural nouns, kebab-case:** `/api/admin/menu/items`, `/api/admin/voucher-templates`. Nest only for ownership (`/menu/items/{itemId}/variations`), at most two levels.
 - **CRUD maps to methods:** `GET` list/read, `POST` create, `PATCH` partial update, `DELETE` archive-or-delete (see [Archiving](#archiving)).
-- **Business actions are sub-resources with `POST`**, named with a verb: `/orders/{orderId}/accept`, `/ready`, `/complete`, `/cancel`, `/vouchers/{voucherId}/redeem`. Never change state through `PATCH status`.
+- **Business actions are sub-resources with `POST`**, named with a verb: `/orders/{orderId}/ready`, `/complete`, `/cancel`, `/vouchers/{voucherId}/redeem`. Never change state through `PATCH status`.
 - The branch in `/api/counter/{branchId}` comes from the path and is checked against the caller's membership. It is never read from a body field or trusted from the session alone.
 - File layout mirrors the URL: `server/api/admin/menu/items/[itemId].patch.ts`.
 
@@ -70,10 +70,13 @@ server/
 │   ├── loyalty/       # points ledger, voucher templates, vouchers, redemptions
 │   ├── orders/        # quote, checkout, order state, counter payments
 │   └── platform/      # audit events, idempotency keys, outbox
-├── api/               # thin route files, grouped by surface
+├── api/               # thin route files, grouped by surface; api/[...].ts answers unknown paths with 404
 ├── tasks/             # scheduled jobs (Nitro tasks)
-├── middleware/        # request id, origin check
-└── utils/             # shared glue: errors, validation, db, permissions (auto-imported in routes)
+├── middleware/        # 00.request-id.ts, 10.origin-check.ts (run in file-name order)
+├── utils/             # shared glue (auto-imported in routes; imported explicitly in features)
+├── tests/             # tests of the shared utils; tests/support: the SQLite test harness
+├── error-handler.ts   # the /api error responses (registered in nuxt.config.ts)
+└── legacy/            # pre-standard code (D40–D41), replaced in steps 1.7 and 3.8; never build on it
 shared/contracts/      # request schemas and enums the app also uses (Valibot)
 ```
 
@@ -157,7 +160,7 @@ import { menu } from '~~/server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['write'] })   // 1. who, allowed?
-  const itemId = readIdParam(event, 'itemId')                          // 2. validate params,
+  const itemId = readIdParam(event, 'itemId', 'The menu item')         // 2. validate params,
   const input = await readValidBody(event, updateItemInput)            //    body, query
   return menu.updateItem(useDb(), actor, itemId, input)                // 3. one service call
 })
@@ -184,7 +187,7 @@ The return value is the response body. Nuxt infers its type, so `$fetch('/api/ad
 
 ### Versions (optimistic concurrency)
 
-Every editable record has `version`. An edit sends the version it read; the write applies only if it still matches, otherwise **409 `VERSION_CONFLICT`** and nothing changes. The UI shows "changed by someone else, reload". Status-changing actions (accept, ready…) also check the current state in the same conditional write.
+Every editable record has `version`. An edit sends the version it read; the write applies only if it still matches, otherwise **409 `VERSION_CONFLICT`** and nothing changes. The UI shows "changed by someone else, reload". Status-changing actions (ready, complete…) also check the current state in the same conditional write.
 
 ### Archiving
 
@@ -196,7 +199,7 @@ Every editable record has `version`. An edit sends the version it read; the writ
 ### Atomic writes
 
 D1 has no interactive transactions. A write that touches several rows is **one `db.batch([...])`**, which is all-or-nothing:
-- Statements that must only apply if a check still holds are guarded: `requireOneChange` after a conditional `UPDATE … WHERE version = ?`, `requireCount` for set checks (`server/utils/db.ts`).
+- Statements that must only apply if a check still holds are guarded: `requireOneChange` after a conditional `UPDATE … WHERE version = ?`, `requireCount` for set checks. `runBatch(db, statements, onStale)` runs the batch and turns a guard failure into the feature's conflict error (`server/utils/batch.ts`).
 - Reads for validation happen before the batch; the guard catches anything that changed in between.
 
 ### Idempotency
@@ -207,11 +210,33 @@ Actions where a retry must never apply twice (placing an order, recording a paym
 - Same key, different request: **422 `IDEMPOTENCY_MISMATCH`**.
 - Keys expire after 24 hours (a scheduled task removes them).
 
+How (the `platform` feature, D50):
+
+```ts
+// route
+const actor = await requireCustomer(event)
+const key = readIdempotencyKey(event)                  // 400 when missing or not a UUID
+const input = await readValidBody(event, placeOrderSchema)
+return orders.placeOrder(useDb(), actor, input, key)
+
+// service
+const { response } = await withIdempotency(db, { actorId: actor.userId, operation: 'orders.place', key }, input, async () => ({
+  statements: [/* the action's statements, guards, audit, outbox */],
+  response: order,                                     // JSON; stored and returned as is on a replay
+}), { onStale: () => orderChanged() })
+```
+
+- The key is stored **in the same batch** as the action. A replay returns the stored response and doesn't call `work()`. Two identical requests at once: the second batch fails on the key's unique index, changes nothing, and replays the first.
+- `request` is compared as canonical JSON (key order and `undefined` fields don't matter); pass the validated input plus path ids.
+- The response must be computable before the batch runs: generate ids up front (`newId()`).
+
 Internal awards (points on completion) use a deterministic key (`earn:order:{orderId}`) with a unique index, so they can't double-apply even without a header.
 
 ### Audit
 
 Every privileged write (admin and counter surfaces, role changes, points adjustments, refunds) adds an `audit_events` row **in the same batch**: actor, action (`menu.item.update`), target, branch, safe metadata (field names changed, never secrets or full personal data).
+
+`platform.auditStatement(db, actor, { action, targetType, targetId, branchId?, metadata? })` returns the statement. The access helpers' actor carries the request id, so the row leads to the request's log lines; `{ userId: null }` is the system (seed task, scheduled jobs).
 
 ## Errors
 
@@ -254,16 +279,37 @@ A record another branch or customer owns is **404**, not 403: don't confirm it e
 ## Side effects
 
 Anything outside the database (email, cache purge, R2 object deletes) happens **after** the batch commits, never inside it.
-- Must-not-lose effects (verification email, order notifications later) go through an **`outbox`** row written in the same batch; a scheduled task delivers and retries them.
+- Must-not-lose effects (verification email, order notifications later) go through an **`outbox`** row written in the same batch (`platform.outboxStatement(db, kind, payload)`); `platform:deliver-outbox` delivers and retries them (D50):
+  - each kind has one handler, registered in `server/tasks/platform/deliver-outbox.ts` by the feature that owns it; a kind without a handler is retried and then marked `failed`, never dropped silently;
+  - a message is **claimed** before sending (conditional update), so overlapping runs don't send it twice at the same moment; failures retry after 1, 2, 4 … minutes (at most 6 h), and after 8 attempts the message is `failed` and logged as an error;
+  - delivery is **at least once** (a run that dies mid-send leaves the claim to expire): handlers must tolerate a repeat, e.g. by passing the message id as the provider's idempotency key;
+  - payloads hold ids and what the handler needs, not secrets it can look up; a sent message's payload is emptied (account emails carry one-time links).
 - Best-effort effects (purging the public menu cache) run directly after the commit; failure is logged, not surfaced.
 
 ## Tests
 
 | Level | What | Where |
 |---|---|---|
-| Rules | Pure functions: availability, pricing, state machines | `server/features/<f>/tests/*.rules.test.ts` (unit project) |
+| Shared utils | Errors, validation, batch guards, ids, logging | `server/tests/*.test.ts` (server project) |
+| Rules | Pure functions: availability, pricing, state machines | `server/features/<f>/tests/*.rules.test.ts` (server project) |
 | Services | Every command and query against SQLite built from the real migrations, foreign keys on: happy path, each error code, **a stale-version or race case for every conditional write**, **a replay case for every idempotent action** | `server/features/<f>/tests/*.service.test.ts` (server project). Repositories are tested through their services |
 | Routes | Permission wiring: each route rejects the wrong surface/role/branch (401/403/404) and accepts the right one | route tests against the built server (added in the platform phase) |
 | App | Screens against a mocked API | `test/e2e` |
 
 Check that a guard test guards something: remove the guard and see it fail.
+
+### Shared server utilities
+
+All in `server/utils/`. Routes get them by auto-import; features import them explicitly (`../../utils/<file>`) so their tests run without Nitro.
+
+| File | Exports | Use |
+|---|---|---|
+| `errors.ts` | `apiError(status, code, message, { fieldErrors })`, `ErrorCodes`, `notFound`, `versionConflict`, `toErrorResponse` | Throw API errors; the error handler maps anything thrown to the response |
+| `validation.ts` | `readValidBody`, `readValidQuery`, `readIdParam`, `parseInput`, `MAX_JSON_BYTES` | Validate every input |
+| `batch.ts` | `Db`, `Statement`, `runBatch`, `requireOneChange`, `requireCount`, `isStaleWrite`, `isForeignKeyError`, `isUniqueViolation` | Atomic multi-statement writes |
+| `ids.ts` | `newId()` | UUID v7 for our tables |
+| `time.ts` | `toIso` | Instants in responses |
+| `log.ts` | `log(level, message, fields, event?)` | Structured logs with the request id; secret-looking keys are redacted |
+| `db.ts` | `useDb()` | The NuxtHub database, **routes and tasks only** (it imports `hub:db`, which tests can't load) |
+| `idempotency.ts` | `readIdempotencyKey(event)` | The `Idempotency-Key` header of an action that must not apply twice (400 when missing) |
+| `access.ts` | `requirePermission`, `requireBranchPermission`, `requireCustomer`, `requireSignedIn` | The first line of every route: who is acting, and may they ([security.md → Roles and permissions](security.md#roles-and-permissions)) |

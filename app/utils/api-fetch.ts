@@ -8,10 +8,15 @@ interface CreateApiFetchOptions {
   /** Base ofetch instance (`baseURL: '/api/v1'`, timeout). */
   baseFetch: $Fetch
   /**
-   * Called when a response says the session is gone (401) or no longer grants staff access
-   * (403 NOT_STAFF: the account was disabled). `useAuth().clearSession()`: idempotent.
+   * Called when a response says the session is gone (401) or no longer grants admin access
+   * (403 NOT_ADMIN). `useAuth().clearSession()`: idempotent.
    */
   onSessionLost: () => void
+  /**
+   * Called when a response says the account must change its temporary password first
+   * (403 PASSWORD_CHANGE_REQUIRED). `useAuth().requirePasswordChange()`.
+   */
+  onPasswordChangeRequired?: () => void
   /**
    * Identity generation: changes on login, logout, expiry and account change (`useAuth`).
    * A response to a request started in an older generation is discarded (silent `aborted` error),
@@ -28,7 +33,7 @@ interface CreateApiFetchOptions {
  *   the session is over;
  * - responses from a previous identity are discarded.
  */
-export function createApiFetch({ baseFetch, onSessionLost, sessionGeneration = () => 0 }: CreateApiFetchOptions): ApiFetch {
+export function createApiFetch({ baseFetch, onSessionLost, onPasswordChangeRequired, sessionGeneration = () => 0 }: CreateApiFetchOptions): ApiFetch {
   return async function apiFetch<T>(path: string, options?: ApiFetchOptions): Promise<T> {
     const generation = sessionGeneration()
     const stale = () => new ApiError(API_ERROR_MESSAGES.aborted, {
@@ -43,7 +48,8 @@ export function createApiFetch({ baseFetch, onSessionLost, sessionGeneration = (
     catch (error) {
       if (sessionGeneration() !== generation) throw stale()
       const apiError = ApiError.from(error)
-      if (apiError.kind === 'unauthorized' || apiError.code === 'NOT_STAFF') onSessionLost()
+      if (apiError.kind === 'unauthorized' || apiError.code === 'NOT_ADMIN') onSessionLost()
+      else if (apiError.code === 'PASSWORD_CHANGE_REQUIRED') onPasswordChangeRequired?.()
       throw apiError
     }
     if (sessionGeneration() !== generation) throw stale()

@@ -8,7 +8,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 2. **[docs/decisions.md](docs/decisions.md)**: why things are the way they are. Read the relevant entry **before changing** a pattern that looks odd. Most of them work around a verified backend or tooling quirk.
 3. **[docs/reference/](docs/reference/README.md)**: reference for every shared app composable, util and component (`useMutation`, `useApiQuery`, `apiFetch`, `ApiError`, …) with types, options and examples. Its [api.md](docs/reference/api.md) documents the pre-standard `/api/v1` routes still in use until step 3.8; new server work follows docs/server/. Check it before using or changing a shared API. **[App-wide behavior](docs/reference/app-behavior.md)** (tab titles, refresh on tab focus, offline, leave guards, session loss) and **[Forms: unsaved changes](docs/reference/forms.md)** list every edge case those handle.
 4. **[docs/feature-standard.md](docs/feature-standard.md)**: how every new feature is planned, built and verified (planning template, list/form/picker behavior, definition of done). **Read it before starting a feature.**
-5. **[docs/server/](docs/server/README.md)**: the **server standard** (architecture, security, data model, operations). **Every server change follows it.** The server code written before it (`/api/v1`, `server/features/` without the service/repository layers, `staff_profiles`, the D41 menu tables) does not follow it yet and is being replaced (D43); the "Our API" section below describes that older code.
+5. **[docs/server/](docs/server/README.md)**: the **server standard** (architecture, security, data model, operations). **Every server change follows it.** The only server code that doesn't follow it yet is the legacy menu (`/api/v1`, `server/legacy/menu`, the D41 tables), replaced in step 3.8 (D43).
 6. The rest of this file: rules and recipes.
 
 **Keep these documents current as part of your work:**
@@ -22,7 +22,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 NUK Cafe is one Nuxt full stack app: the customer website, the admin workspace and the cashier workspace, plus our own API (Nitro) with Better Auth, NuxtHub, Drizzle, SQLite locally and D1/R2/KV on Cloudflare. Product scope: [the system blueprint](docs/plans/system-blueprint.md). **How the server is built: the [server standard](docs/server/README.md)** (routes `/api/<surface>/…`, `server/features/` with service/repository layers, Better Auth roles and branches, the data model, operations). Build order: [progress.md → Next steps](docs/progress.md#next-steps-recommended-order).
 
-**Transition:** the admin screens (auth, categories, schedules, menu items) still run on the pre-standard `/api/v1` routes (D40, D41). Those are replaced step by step (steps 1.7 and 3.8); don't extend them.
+**Transition:** the menu screens (categories, schedules, menu items) still run on the pre-standard `/api/v1` routes (D41), now checked with `requirePermission`. Their server code lives in `server/legacy/` and is replaced in step 3.8; don't extend it (ESLint forbids new code from importing it). Sign-in and staff run on the standard's `/api/admin` routes (D52).
 
 The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Schedules (card list) or Menu items (card grid + table); Categories is a tree (D37).
 
@@ -43,7 +43,7 @@ pnpm vitest run app/features/categories   # one feature's tests
 pnpm vitest run -t "refreshes once"
 ```
 
-Before finishing a change, run `pnpm lint`, `pnpm typecheck` and `pnpm test`. CI (`.github/workflows/ci.yml`) runs the same commands. Local setup for a first admin: [docs/reference/api.md → Identity](docs/reference/api.md#identity).
+Before finishing a change, run `pnpm lint`, `pnpm typecheck` and `pnpm test`. CI (`.github/workflows/ci.yml`) runs the same commands. Local setup for a first admin: [docs/reference/auth.md → First admin](docs/reference/auth.md#first-admin-local-setup).
 
 Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix open redirect after login`), not `new`. The history is how the team finds when something broke. If lint or typecheck complains about missing `.nuxt/*` files, run `pnpm nuxt prepare`.
 
@@ -142,7 +142,7 @@ Every server change follows the [server standard](docs/server/README.md). The es
 
 ## Auth & app shell
 
-- `app/features/auth/` exposes `useAuth()`: sign-in and sign-out through Better Auth (`/api/auth`), the staff session from `GET /api/v1/admin/me`. A Better Auth account is **not** staff access (customers sign up through the same routes); only an active `staff_profiles` row is (D40). Its state keys are `staff-session:*`: `auth:*` belongs to `@nuxtjs/better-auth`. The shell imports it from `~/features/auth`.
+- `app/features/auth/` exposes `useAuth()`: sign-in, sign-out and password change through Better Auth (`/api/auth`), the admin session from `GET /api/admin/me`. Only platform **admins** use the admin app (D52); a customer or branch-staff account is refused at login. On a temporary password every page goes to `/change-password` first. Its state keys are `staff-session:*`: `auth:*` belongs to `@nuxtjs/better-auth`. The shell imports it from `~/features/auth`. Staff are managed on the **Staff** page (`app/features/staff/`).
 - The middleware protects **every page by default**. Opt out with `definePageMeta({ public: true })` (typed in `app/types/page-meta.d.ts`).
 - **Session transitions** (login, logout, expiry, another staff member via another tab) clear the previous identity's query data, mutation outcomes, toasts, overlays and unsaved forms, and discard its in-flight responses (`plugins/session-boundary.client.ts`, `useAuth().generation`, D29). Features must not keep user data outside `useApiQuery`/`useMutation`/`useState`-based composables, or the boundary can't clear it.
 - App-wide behavior needs nothing from features: login/logout apply to all open tabs (`plugins/auth-sync.client.ts`), `?` shows keyboard shortcuts, tab titles from `definePageMeta({ title })`, a save in one tab refreshes the same lists in the app's other tabs at once, lists refetch when the user returns to the tab (data ≥ 5s old) or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards. Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
@@ -156,7 +156,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 
 | What | Where | Use for |
 |---|---|---|
-| `apiFetch<T>(path, opts)` | `utils/api.ts`, engine `utils/api-fetch.ts` | Every call to our API (`/api/v1` + path): `ApiError` on failure, no retries, session loss handled |
+| `apiFetch<T>(path, opts)` | `utils/api.ts`, engine `utils/api-fetch.ts` | Every call to our API (`/api` + path; legacy menu routes are `/v1/admin/…`): `ApiError` on failure, no retries, session loss and required password change handled |
 | `useApiQuery(key, handler, opts)` | `composables/` | Every read (see "CRUD state") |
 | `useMutation(fn, opts)` | `composables/`, engine in `utils/mutation.ts` | Every create/update/delete, single or batch |
 | `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Selection for tables, cards and trees (`isSelected`, `toggle`, `toggleAll`); the floating bulk bar |

@@ -1,32 +1,32 @@
 import * as v from 'valibot'
 
-export const STAFF_ROLES = ['admin'] as const
-export type StaffRole = typeof STAFF_ROLES[number]
-
 /**
- * Permissions checked by the server on every admin route. The UI may hide actions with them;
- * it never grants anything. Only `admin` exists until the role matrix is decided (Q6, D40).
+ * `GET /api/admin/me`: the signed-in admin, for the admin app (D52). Only platform admins may use
+ * the admin app for now; branch managers and staff get 403 (their screens come with the counter).
  */
-export const PERMISSIONS = ['menu.read', 'menu.write', 'media.write'] as const
-export type Permission = typeof PERMISSIONS[number]
-
-export const ROLE_PERMISSIONS: Record<StaffRole, readonly Permission[]> = {
-  admin: PERMISSIONS,
-}
-
-/** `GET /api/v1/admin/me`: the signed-in staff member. */
-export interface StaffSession {
+export interface AdminSession {
   userId: string
   email: string
-  displayName: string
-  role: StaffRole
-  permissions: Permission[]
+  name: string
+  role: 'admin'
+  /**
+   * The platform actions this account may take, as `resource:action` (`menu:write`,
+   * `staff:create`). For hiding UI only: the server checks every request itself.
+   */
+  permissions: string[]
+  /**
+   * Still on a temporary password: every other admin route answers 403
+   * `PASSWORD_CHANGE_REQUIRED` until it's changed, and the app shows the change-password page.
+   */
+  mustChangePassword: boolean
 }
 
-/** `POST /api/v1/bootstrap/admin`: makes an existing account the first admin. */
-export const bootstrapAdminBody = v.strictObject({
-  token: v.pipe(v.string(), v.minLength(1, 'Required')),
-  email: v.pipe(v.string(), v.trim(), v.toLowerCase(), v.email('Must be an email address')),
-  displayName: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(100))),
-})
-export type BootstrapAdminBody = v.InferOutput<typeof bootstrapAdminBody>
+/** Better Auth's limits (`minPasswordLength` / `maxPasswordLength` defaults). */
+export const PASSWORD_MIN = 8
+export const PASSWORD_MAX = 128
+
+export const newPasswordSchema = v.pipe(
+  v.string(),
+  v.minLength(PASSWORD_MIN, `At least ${PASSWORD_MIN} characters`),
+  v.maxLength(PASSWORD_MAX, `At most ${PASSWORD_MAX} characters`),
+)

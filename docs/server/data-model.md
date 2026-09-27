@@ -128,6 +128,34 @@ An item without option sets has exactly one version with one price ("Croissant $
 - **Order lines snapshot** the item name, the version's option values ("Large, Iced"), its price, and each add-on's name and price, so later edits never change past orders.
 - **Price of a line** = the version's `price_minor` + each chosen add-on's price (the item override if present, else the default).
 
+### Categories API (step 3.1, D55)
+
+Feature `server/features/menu/` (`categories.*`), contract `shared/contracts/menu-categories.ts`, permission `menu:read` / `menu:write`. Every write is one batch with its guards and an audit row (`menu.category.create|update|move|archive|restore|reorder`).
+
+| Route | Does |
+|---|---|
+| `GET /api/admin/menu/categories?status=active\|archived\|all` | The tree in order: each top-level category followed by its sub-categories; `childCount` = active sub-categories |
+| `GET /api/admin/menu/categories/{id}` | One category |
+| `POST /api/admin/menu/categories` | `{ name, description?, parentId? }` → 201, at the end of its level |
+| `PATCH /api/admin/menu/categories/{id}` | `{ version, name?, description?, parentId? }`: absent keeps; a new `parentId` moves it (`null`: to the top level) to the end of its new siblings |
+| `POST /api/admin/menu/categories/{id}/archive` | `{ version }`: archives it and its active sub-categories |
+| `POST /api/admin/menu/categories/{id}/restore` | `{ version }`: restores this one only, at the end of its level |
+| `PUT /api/admin/menu/categories/order` | `{ parentId, items: [{ id, version }] }`: every active child of that parent, in the new order |
+
+| Case | Result | Test |
+|---|---|---|
+| A sub-category under a sub-category, or a category with sub-categories moved under another (or under itself) | 422 `CATEGORY_DEPTH` | ✔ |
+| Parent unknown or archived (also if archived between the check and the write) | 422 `PARENT_NOT_AVAILABLE` | ✔ (incl. the race) |
+| Moving a category that gets a sub-category between the check and the write | 409 `VERSION_CONFLICT`, nothing changes | ✔ (race) |
+| Two active siblings with the same name (case-insensitive), also two creates at once | 409 `CATEGORY_NAME_TAKEN` (partial unique indexes); archived ones don't count | ✔ (incl. the race; also on D1) |
+| Stale version (before or during the write) | 409 `VERSION_CONFLICT` | ✔ (incl. the race) |
+| Editing or archiving an archived category; restoring an active one | 409 `INVALID_STATE` | ✔ |
+| Restoring a sub-category whose parent is archived | 409 `PARENT_ARCHIVED` | ✔ |
+| Reorder missing a sibling, naming an old version, or a sibling added meanwhile | 409 `VERSION_CONFLICT`, nothing changes | ✔ (incl. the race) |
+| Unknown body field | 400 (strict objects) | staging |
+
+Positions (`sortOrder`) keep gaps after archiving and may tie after simultaneous creates (ties sort by name); only the relative order matters, and a reorder rewrites them 1…n. **"Items only in leaf categories"**: the category side (no sub-category under a sub-category) is enforced now; the item side (no item in a category with sub-categories, and no sub-category added to a category with items) comes with menu items in step 3.5.
+
 Sources: [Square item options](https://developer.squareup.com/docs/catalog-api/item-options), [Square option sets](https://squareup.com/help/us/en/article/6689-item-options), [Square nested categories (community)](https://community.squareup.com/t5/Orders-Menu-Items-Catalog/Getting-Sub-categories-to-show-when-parent-category-is-selected/td-p/827866), [Toast menu hierarchy](https://doc.toasttab.com/doc/platformguide/adminMenuHierarchy.html), [Toast shared modifier groups](https://support.toasttab.com/en/article/Shallow-and-Deep-Copying-Menu-Items-and-Modifiers), [Uber Eats menu structure](https://developer.uber.com/docs/eats/guides/menu-integration), [Loyverse variants vs modifiers](https://help.loyverse.com/help/how-use-variants-items).
 
 ## Media
@@ -144,7 +172,7 @@ Features: `customers`, `loyalty`.
 
 | Table | Columns | Invariants |
 |---|---|---|
-| `customer_profiles` | `user_id` (PK), `member_code` (unique, shown as a QR at the counter), `phone`, `marketing_opt_in`, `anonymized_at` | Created on sign-up (Better Auth hook) |
+| `customer_profiles` | `user_id` (PK, → user, cascade), `member_code` (unique, shown as a QR at the counter), `phone`, `marketing_opt_in`, `anonymized_at`, `created_at` | Every account has one, staff included: created on sign-up (Better Auth hook), in the staff-creation batch, or on first use. Member code: 8 random Crockford base32 characters shown `XXXX-XXXX` (40 bits; no I, L, O, U); typed codes are normalized (case, spaces, dashes, look-alikes) |
 | `loyalty_accounts` | `user_id` (PK), `balance` (cached), `version` | `balance` ≥ 0, and always equals the sum of its entries |
 | `loyalty_entries` | `account_id`, `points` (signed), `reason` (`earn_order` \| `exchange_voucher` \| `adjust` \| `reverse`), `source_type`, `source_id`, `idempotency_key` (unique), `actor_id`, `note` | **Append-only.** A correction is a new `reverse`/`adjust` entry with a reason |
 | `voucher_templates` | `kind` (`amount_off` \| `free_item`), `amount_minor` (amount off), `variation_id` (free item), `points_cost` (null = staff-issue only), `valid_days` (default 30), `uses_per_voucher` (default 1), `status`, `version` | **One voucher per order, no minimum spend** (D45). An amount-off voucher never makes a total negative; a free item needs that item in the order |
@@ -193,9 +221,9 @@ Feature: `platform`.
 
 | Table | Columns | Notes |
 |---|---|---|
-| `audit_events` | `actor_id`, `action`, `target_type`, `target_id`, `branch_id`, `metadata` (JSON, no secrets or personal values), `request_id`, `at` | Append-only, written in the same batch as the change |
-| `idempotency_keys` | `actor_id`, `operation`, `key`, `request_hash`, `response` (JSON), `expires_at`; unique (`actor_id`, `operation`, `key`) | Removed after 24 h |
-| `outbox_messages` | `kind`, `payload`, `status`, `attempts`, `next_attempt_at`, `last_error` | Must-not-lose side effects, delivered by a scheduled task |
+| `audit_events` | `actor_id` (`null` = system), `action`, `target_type`, `target_id`, `branch_id`, `metadata` (JSON, no secrets or personal values), `request_id`, `at` | Append-only, written in the same batch as the change. Indexes: target, `at`, (actor, `at`) |
+| `idempotency_keys` | `actor_id`, `operation`, `key`, `request_hash` (SHA-256 of canonical JSON), `response` (JSON), `created_at`, `expires_at`; unique (`actor_id`, `operation`, `key`) | Removed after 24 h; a key counts until removed |
+| `outbox_messages` | `kind`, `payload` (JSON), `status` (`pending` \| `sent` \| `failed`), `attempts`, `next_attempt_at`, `locked_until` (delivery claim), `last_error` (one line), `created_at`, `sent_at` | Must-not-lose side effects, delivered at least once by `platform:deliver-outbox` |
 
 ## Open questions
 

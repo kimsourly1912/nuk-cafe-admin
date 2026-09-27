@@ -17,7 +17,7 @@ const AFFECTED = ['categories', 'products']
  */
 export function useCategoryMutations() {
   const create = useMutation(
-    (body: CreateCategoryBody) => apiFetch<Category>('/admin/categories', { method: 'POST', body }),
+    (body: CreateCategoryBody) => apiFetch<Category>('/v1/admin/categories', { method: 'POST', body }),
     {
       id: 'categories:create',
       // Same name in flight = same submission (double submit); different names run in parallel.
@@ -30,7 +30,7 @@ export function useCategoryMutations() {
 
   const update = useMutation(
     ({ id, body }: { id: string, name: string, body: UpdateCategoryBody }) =>
-      apiFetch<Category>(`/admin/categories/${id}`, { method: 'PATCH', body }),
+      apiFetch<Category>(`/v1/admin/categories/${id}`, { method: 'PATCH', body }),
     {
       id: 'categories:update',
       key: ({ id }) => id,
@@ -42,7 +42,7 @@ export function useCategoryMutations() {
   )
 
   const remove = useMutation(
-    (category: Category) => apiFetch<null>(`/admin/categories/${category.id}`, { method: 'DELETE', query: { version: category.version } }),
+    (category: Category) => apiFetch<null>(`/v1/admin/categories/${category.id}`, { method: 'DELETE', query: { version: category.version } }),
     {
       id: 'categories:remove',
       key: category => category.id,
@@ -77,7 +77,7 @@ export function useCategoryMutations() {
 
   /** Saves the tree order: every changed list, whole (`sortOrderChanges`). One save at a time. */
   const reorder = useMutation(
-    (body: ReorderCategoriesBody) => apiFetch<Category[]>('/admin/categories/order', { method: 'PUT', body }),
+    (body: ReorderCategoriesBody) => apiFetch<Category[]>('/v1/admin/categories/order', { method: 'PUT', body }),
     {
       id: 'categories:sort',
       key: () => 'order',

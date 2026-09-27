@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { auditEvents, menuCategories } from '../../server/db/tables'
-import type { Db } from '../../server/db/types'
-import type { Actor } from '../../server/features/identity/service'
-import { createCategory, deleteCategory, listCategories, reorderCategories, updateCategory } from '../../server/features/menu/categories'
-import { createProduct } from '../../server/features/menu/products'
-import { createAdmin, createTestDb } from './support/db'
-import { failure } from './support/failure'
+import { auditEvents, legacyMenuCategories } from '../../server/db/tables'
+import type { Db } from '../../server/utils/batch'
+import type { Actor } from '../../server/legacy/actor'
+import { createCategory, deleteCategory, listCategories, reorderCategories, updateCategory } from '../../server/legacy/menu/categories'
+import { createProduct } from '../../server/legacy/menu/products'
+import { createAdmin, createTestDb } from '../../server/tests/support/db'
+import { failure } from '../../server/tests/support/failure'
 
 let db: Db
 let actor: Actor
@@ -132,7 +132,7 @@ describe('reorder', () => {
     // Simulate a category created between the service's read and its batch.
     const original = db.batch.bind(db)
     db.batch = (async (statements: Parameters<typeof original>[0]) => {
-      await db.insert(menuCategories).values({ name: 'Juice', sortOrder: 3 })
+      await db.insert(legacyMenuCategories).values({ name: 'Juice', sortOrder: 3 })
       return original(statements)
     }) as typeof db.batch
     expect(await failure(reorderCategories(db, actor, { lists: [{ parentId: null, ids: [coffee.id, tea.id] }] }))).toEqual({ status: 409, code: 'ORDER_STALE' })

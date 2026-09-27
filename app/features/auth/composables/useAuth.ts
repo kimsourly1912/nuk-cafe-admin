@@ -1,7 +1,7 @@
-import type { StaffSession } from '#shared/contracts/identity'
+import type { AdminSession } from '#shared/contracts/identity'
 
-/** The signed-in staff member, kept in state. The session itself is an HttpOnly cookie. */
-export type SessionUser = StaffSession
+/** The signed-in admin, kept in state. The session itself is an HttpOnly cookie. */
+export type SessionUser = AdminSession
 
 export interface Credentials {
   email: string
@@ -18,9 +18,17 @@ export function loginRedirectTarget(redirect: unknown): string {
   return typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
 }
 
+/** The page every signed-in admin is sent to while on a temporary password. */
+export const CHANGE_PASSWORD_PATH = '/change-password'
+
+const NO_ADMIN_ACCESS = 'This account doesn\'t have access to the admin app.'
+
 /** Better Auth's routes (`/api/auth`): same origin, so the session cookie is set and sent. */
 const authFetch = <T>(path: string, body: Record<string, unknown> = {}) =>
   $fetch<T>(`/api/auth${path}`, { method: 'POST', body, retry: 0, timeout: 30_000 })
+
+/** 403 from `/admin/me`: signed in, but not an admin (NOT_ADMIN, or the route gate's FORBIDDEN). */
+const isNoAccess = (error: ApiError) => error.status === 403
 
 export function useAuth() {
   // Captured now: login/logout call hooks after an `await`, where the Nuxt context is gone.
@@ -31,6 +39,8 @@ export function useAuth() {
   /** Whether the session has been checked against the server at least once. */
   const checked = useState('staff-session:checked', () => false)
   const isLoggedIn = computed(() => user.value !== null)
+  /** Signed in on a temporary password: only the change-password page is available (D52). */
+  const mustChangePassword = computed(() => user.value?.mustChangePassword ?? false)
   /**
    * Identity generation: +1 whenever the signed-in identity changes (login, logout, expiry,
    * another staff member in another tab). The API layer discards responses to requests started
@@ -52,23 +62,24 @@ export function useAuth() {
   }
 
   /**
-   * The staff session from `GET /api/v1/admin/me`. Signed out, or signed in without staff access
-   * (a customer account), both count as logged out here. A network failure keeps the current state.
+   * The admin session from `GET /api/admin/me`. Signed out, or signed in without admin access
+   * (a customer or branch staff account), both count as logged out here. A network failure keeps
+   * the current state.
    */
   async function fetchSession() {
     try {
-      setUser(await apiFetch<StaffSession>('/admin/me'))
+      setUser(await apiFetch<AdminSession>('/admin/me'))
     }
     catch (error) {
-      const { kind, code } = ApiError.from(error)
-      if (kind === 'unauthorized' || code === 'NOT_STAFF' || !checked.value) setUser(null)
+      const apiError = ApiError.from(error)
+      if (apiError.kind === 'unauthorized' || isNoAccess(apiError) || !checked.value) setUser(null)
     }
     return user.value
   }
 
   /**
-   * Signs in with Better Auth, then checks staff access. An account without it (e.g. a customer)
-   * is signed out again and gets a clear error. Throws `ApiError`.
+   * Signs in with Better Auth, then checks admin access. An account without it (a customer, branch
+   * staff) is signed out again and gets a clear error. Throws `ApiError`.
    */
   async function login(credentials: Credentials) {
     try {
@@ -83,18 +94,43 @@ export function useAuth() {
       throw apiError
     }
 
-    let session: StaffSession
+    let session: AdminSession
     try {
-      session = await apiFetch<StaffSession>('/admin/me')
+      session = await apiFetch<AdminSession>('/admin/me')
     }
     catch (error) {
       const apiError = ApiError.from(error)
-      if (apiError.code === 'NOT_STAFF') await authFetch('/sign-out').catch(() => {})
-      throw apiError
+      if (!isNoAccess(apiError)) throw apiError
+      await authFetch('/sign-out').catch(() => {})
+      throw new ApiError(NO_ADMIN_ACCESS, { kind: 'forbidden', status: 403, code: apiError.code, cause: error })
     }
     setUser(session)
     // Other tabs follow (plugins/auth-sync.client.ts).
     await nuxtApp.callHook('app:auth-changed', 'login')
+  }
+
+  /**
+   * Replaces the password (Better Auth `/change-password`) and signs out the account's other
+   * sessions. The server clears a temporary-password flag on success; the session is read again so
+   * the app sees that. Throws `ApiError` with a message for the form.
+   */
+  async function changePassword(currentPassword: string, newPassword: string) {
+    try {
+      await authFetch('/change-password', { currentPassword, newPassword, revokeOtherSessions: true })
+    }
+    catch (error) {
+      const apiError = ApiError.from(error)
+      if (apiError.code === 'INVALID_PASSWORD') {
+        throw new ApiError('Your current password is incorrect.', { kind: 'business', status: apiError.status, code: apiError.code, cause: error })
+      }
+      throw apiError
+    }
+    await fetchSession()
+  }
+
+  /** A route answered PASSWORD_CHANGE_REQUIRED: the app moves to the change-password page. */
+  function requirePasswordChange() {
+    if (user.value && !user.value.mustChangePassword) user.value = { ...user.value, mustChangePassword: true }
   }
 
   async function logout() {
@@ -118,8 +154,11 @@ export function useAuth() {
     setUser(null)
   }
 
-  /** Whether the signed-in staff member has a permission (for hiding actions; the server decides). */
-  function can(permission: StaffSession['permissions'][number]) {
+  /**
+   * Whether the signed-in admin may take an action, as `resource:action` (`staff:create`). For
+   * hiding UI only: the server decides.
+   */
+  function can(permission: string) {
     return user.value?.permissions.includes(permission) ?? false
   }
 
@@ -128,8 +167,11 @@ export function useAuth() {
     checked: readonly(checked),
     generation: readonly(generation),
     isLoggedIn,
+    mustChangePassword,
     fetchSession,
     login,
+    changePassword,
+    requirePasswordChange,
     logout,
     clearSession,
     can,

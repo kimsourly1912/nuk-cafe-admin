@@ -20,7 +20,7 @@ export function useCategoryTree(
 ) {
   // No empty-list default: `loading` means "no data yet", and an empty default would count as
   // data, showing the empty state instead of the placeholders during the first load.
-  const { data, loading, refreshing, error, refresh } = useApiQuery('categories:tree', () => apiFetch<Category[]>('/admin/categories'))
+  const { data, loading, refreshing, error, refresh } = useApiQuery('categories:tree', () => apiFetch<Category[]>('/v1/admin/categories'))
   const categories = computed<Category[]>(() => (data.value ?? []).filter(c => !hidden(c.id)))
   const serverTree = computed(() => buildTree(categories.value))
   const serverOrder = computed(() => orderOf(serverTree.value))

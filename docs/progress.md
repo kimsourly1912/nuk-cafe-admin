@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-26 (admin on our own API: identity + menu)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-27 (step 3.1: categories API)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -19,8 +19,8 @@ Every "done" item states how it was checked. Keep using these labels:
 
 | Part | What exists | Verified |
 |---|---|---|
-| Schema + migration | `server/db/schema/` (staff_profiles, audit_events, media_assets, menu_categories, menu_schedules, menu_products, product_variant_groups/options, product_schedules), migration `0001_identity_and_menu` | server (every test builds the DB from the migrations); real-server (applied on `pnpm dev`) |
-| Identity | Better Auth sign-in/out, `GET /admin/me`, `requireStaff` (401 / 403 NOT_STAFF / 403 FORBIDDEN), `admin` role, bootstrap route, CSRF origin check | server (10 tests incl. a bootstrap race); real-server (sign-up → not staff → bootstrap → admin → sign-out; cross-origin write refused) |
+| Schema + migration | `server/db/schema/` (media_assets, menu_categories, menu_schedules, menu_products, product_variant_groups/options, product_schedules), migration `0001_identity_and_menu` | server (every test builds the DB from the migrations); real-server (applied on `pnpm dev`) |
+| Identity (steps 1.2–1.7) | Better Auth with the `admin` + `organization` plugins, roles per D45, `requirePermission` / `requireBranchPermission` / `requireCustomer`, `GET /api/admin/me`, staff management, forced password change, email verification and reset, customer profiles, seed task | server (10 tests incl. a bootstrap race); real-server (sign-up → not staff → bootstrap → admin → sign-out; cross-origin write refused) |
 | Categories API | list, create, PATCH, delete, order; two levels; version checks | server (13 tests incl. a race and a stale reorder); real-server |
 | Schedules API | paginated list (search/status/day), options, detail, create, PATCH, delete; local wall time in the cafe zone | server (8 tests); real-server |
 | Menu items API | paginated list, whole menu, detail, create, PATCH (variants by stable id, schedules, image), delete | server (11 tests incl. a race; the race test fails with the guard removed); real-server |
@@ -31,7 +31,7 @@ Every "done" item states how it was checked. Keep using these labels:
 
 **Greenfield product blueprint (2026-09-26):** [system-blueprint.md](plans/system-blueprint.md) starts from customer, staff, and manager journeys. Confirmed launch scope: customer website, pickup and dine-in with table QR, USD, one branch, email/password accounts with no guest ordering, pay at counter before preparation, points earned at 1 per USD after completion and exchanged for vouchers, and staff-issued vouchers; native app, delivery, and online payment are outside that scope. Product policy questions remain open in the blueprint.
 
-**Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier routes; no staff management (only the bootstrap admin); no cleanup of temporary uploads; no public menu API.
+**Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier screens; no admin reset of a staff member's password; no cleanup of temporary uploads; no public menu API.
 
 The Foundation table below is the app's shared UI behavior; it stays valid through the server rebuild.
 
@@ -40,7 +40,7 @@ The Foundation table below is the app's shared UI behavior; it stays valid throu
 | Area | Status | Verified |
 |---|---|---|
 | Nuxt 4 SPA + Nuxt UI dashboard shell, sidebar navigation, error page | done | browser-mock |
-| API client `apiFetch`: `/api/v1` base, 30 s timeout, no hidden retries, `ApiError` for every failure, 401 / 403 NOT_STAFF end the session, responses from a previous identity discarded (D40) | done | unit (`api-fetch.test.ts`), e2e |
+| API client `apiFetch`: `/api` base, 30 s timeout, no hidden retries, `ApiError` for every failure, 401 / 403 NOT_ADMIN end the session, 403 PASSWORD_CHANGE_REQUIRED opens the change-password page, responses from a previous identity discarded (D40) | done | unit (`api-fetch.test.ts`), e2e |
 | Record locks across mutations; prototype-safe mutation keys (D28) | done | unit (incl. reactivity); e2e bulk delete during a pending edit |
 | Session-transition contract: generation, stale-response discard, boundary cleanup (D29) | done | unit; e2e `session.test.ts` (each mechanism checked by disabling it) |
 | `useApiQuery` `watch` cancels instead of queueing (D30) | done | e2e (fails without the fix) |
@@ -69,7 +69,8 @@ The admin screens that exist today. They run on the **pre-standard** `/api/v1` r
 
 | Feature | Routes (`/api/v1/admin/...`) | Status |
 |---|---|---|
-| auth | Better Auth `/api/auth/sign-in/email`, `sign-out`; `me`; `/api/v1/bootstrap/admin` | **done** (D40). server + browser-mock + real-server |
+| auth | Better Auth `/api/auth/sign-in/email`, `sign-out`, `change-password`; `/api/admin/me` | **done** (D52): admins only, forced password change, change password from the user menu. server + unit + browser-mock (`auth`, `password`) + real-server |
+| staff | `/api/admin/staff`, `/api/admin/branches/options` | **done** (D49, D52): list with search and role/branch filters, add (temporary password shown once), change access, disable. server + unit + browser-mock (`staff.test.ts`) + real-server |
 | categories (menu) | `categories`, `categories/{id}`, `categories/order` | **done, reference feature**: tree of mains and subs, search + status tabs, create/edit, add sub-category, delete, batch delete, drag-to-sort per level, version checks. server + unit + browser-mock (`categories.test.ts`) + real-server |
 | schedules (menu) | `schedules`, `schedules/options`, `schedules/{id}` | **done**: list (search, status, day), create, edit (menu items shown read-only, never sent), delete + bulk delete for schedules not in use; times as cafe time (D41). server + unit + browser-mock (`schedules.test.ts`) + real-server |
 | products = "Menu items" | `products`, `products/all`, `products/{id}`, `media` | **done**: list/grid/grouped menu, filters, create/edit (image upload, replace, **remove**, category, price in cents, schedules, variant editor), delete + bulk delete. server + unit + browser-mock (`products.test.ts`) + real-server. **Not built:** sort order within a category, price-range filter |
@@ -93,26 +94,26 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 
 | # | Step | Done when |
 |---|---|---|
-| 1.1 | **Server skeleton:** `server/features/` layers; utils (`apiError` with request id, `readValidBody` / params / query, db + batch guards, UUID v7); Nitro error handler; request-id middleware; server test harness moved to features | Tests for the utils; existing screens still work |
-| 1.2 | **Identity config** (roles per D45): Better Auth `admin` + `organization` plugins, roles and permission statements, `haveIBeenPwned`, auth rate-limit rules, trusted origins; **fresh migrations** (old menu tables kept until 3.8) | Migrations generated and reviewed; a server test per role grant |
-| 1.3 | **Access helpers:** `requirePermission`, `requireBranchPermission`, route rules per surface, origin check on trusted origins, security headers | Tests: 401 / 403 / 404 for wrong surface, role and branch |
-| 1.4 | **Seed and staff:** seed task (first admin, demo branch); `/api/admin/staff` (list, create with temporary password, change role, disable); `mustChangePassword` enforcement and change-password flow; audit on each | Server tests including "disabled staff lose their sessions" |
-| 1.5 | **Platform tables:** `audit_events` (moved), `idempotency_keys`, `outbox_messages` + delivery task | Replay and retry tests |
-| 1.6 | **Customer accounts:** Resend mail sender (console locally), email verification, password reset, sign-up hook creating the customer profile (member code) | Unverified accounts are refused on shop writes |
-| 1.7 | **Admin app on the new identity:** `useAuth` reads roles from Better Auth, change-password screen, **Staff** admin page; remove `staff_profiles`, bootstrap route, `requireStaff`; the old menu routes use `requirePermission` until replaced | e2e: login, forced password change, staff page; the old menu screens still work |
+| 1.1 ✅ | **Server skeleton:** `server/features/` layers; utils (`apiError` with request id, `readValidBody` / params / query, db + batch guards, UUID v7); Nitro error handler; request-id middleware; server test harness moved to features | Tests for the utils; existing screens still work |
+| 1.2 ✅ | **Identity config** (roles per D45): Better Auth `admin` + `organization` plugins, roles and permission statements, `haveIBeenPwned`, auth rate-limit rules, trusted origins; **fresh migrations** (old menu tables kept until 3.8) | Migrations generated and reviewed; a server test per role grant |
+| 1.3 ✅ | **Access helpers:** `requirePermission`, `requireBranchPermission`, route rules per surface, origin check on trusted origins (done in 1.2, D47), security headers | Tests: 401 / 403 / 404 for wrong surface, role and branch |
+| 1.4 ✅ | **Seed and staff:** seed task (first admin, demo branch); `/api/admin/staff` (list, create with temporary password, change role, disable); `mustChangePassword` enforcement and change-password flow; audit on each | Server tests including "disabled staff lose their sessions" |
+| 1.5 ✅ | **Platform tables:** `audit_events` (moved), `idempotency_keys`, `outbox_messages` + delivery task | Replay and retry tests |
+| 1.6 ✅ | **Customer accounts:** Resend mail sender (console locally), email verification, password reset, sign-up hook creating the customer profile (member code) | Unverified accounts are refused on shop writes |
+| 1.7 ✅ | **Admin app on the new identity:** `useAuth` reads roles from Better Auth, change-password screen, **Staff** admin page; remove `staff_profiles`, bootstrap route, `requireStaff`; the old menu routes use `requirePermission` until replaced | e2e: login, forced password change, staff page; the old menu screens still work |
 
 ### Phase 2: staging
 
 | # | Step | Done when |
 |---|---|---|
-| 2.1 ✋ | **Cloudflare staging:** Worker, D1, R2, KV, secrets, domain (Q4: the domain) | The app runs on staging |
-| 2.2 | **CI deploy:** checks → migrate staging D1 → deploy → smoke check; `pnpm audit`; WAF rate limits; Time Travel checked | A merge to `main` deploys itself; batch guards verified on D1 |
+| 2.1 ✅ | **Cloudflare staging:** Worker, D1, R2, KV, secrets, domain (Q4: the domain) | The app runs on staging |
+| 2.2 ✅ | **CI deploy:** checks → migrate staging D1 → deploy → smoke check; `pnpm audit`; WAF rate limits; Time Travel checked | A merge to `main` deploys itself; batch guards verified on D1 |
 
 ### Phase 3: menu API
 
 | # | Step | Done when |
 |---|---|---|
-| 3.1 | **Categories:** two-level tree, "items only in leaves", order per parent, archive | Server tests for every rule |
+| 3.1 ✅ | **Categories:** two-level tree, "items only in leaves", order per parent, archive | Server tests for every rule |
 | 3.2 | **Media:** upload (ensureBlob + magic bytes), attach/release, temporary cleanup task | Tests; cleanup task idempotent |
 | 3.3 | **Options library:** option sets and values, archive rules | Tests |
 | 3.4 | **Add-ons library:** modifier groups, modifiers with default prices, "used by N items" | Tests |
@@ -185,7 +186,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## Known limitations
 
-- Nothing runs on Cloudflare yet: D1 and R2 behavior (batch guards, blob serving, migrations in CI) is unverified there.
+- Staging runs on Cloudflare (step 2.1): D1 migrations, both batch guards (stale version, last admin) under simultaneous requests, cron triggers and the outbox were verified there. Not yet verified on Cloudflare: R2 uploads and serving (no upload was made). The CI deploy was checked step by step by hand (same commands, same smoke check); **its first run in GitHub is the merge of the phase 1–2 pull request**. Staging mail uses Resend's test sender, which delivers only to the Resend account's own address, until the sending domain exists (Q4). WAF rate limits need a custom domain (a `workers.dev` address isn't a zone we control); until then only Better Auth's own limits apply.
 - Only one role (`admin`) and no staff management: other staff can't be added yet (Q6).
 - Uploads: abandoned or replaced images stay as `temporary` assets until a cleanup job exists. No sort-order UI for menu items.
 - Schedules: overnight ranges are refused (Q14); schedules in use can't be deleted (Q16). The time zone of new schedules comes from `NUXT_PUBLIC_CAFE_TIME_ZONE` (default `Asia/Phnom_Penh`).
@@ -197,11 +198,28 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-26 (unit 113, server 42, e2e 115).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-27 (unit 125, server 202, e2e 130).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
-- **real-server (a first admin locally):** start `NUXT_BOOTSTRAP_TOKEN=<32+ chars> pnpm dev`, sign up (`POST /api/auth/sign-up/email` with `{ email, password, name }` and an `Origin` header), then `POST /api/v1/bootstrap/admin` with `{ token, email }` ([api.md → Identity](reference/api.md#identity)). Then log in at `/login`. The bootstrap is refused once an admin exists; `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
+- **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
+  - Pitfall: sign-up checks the password against Have I Been Pwned (network needed): `password123` is refused with `PASSWORD_COMPROMISED`. Use a long random one.
+  - Pitfall: in Drizzle, ``exists(sql`select …`)`` renders the subquery without parentheses; write ``sql`(select …)` `` inside it, or SQLite reports `near "select": syntax error`.
+  - Pitfall: drizzle's **D1** driver can't batch a raw ``db.run(sql`…`)`` that has bound parameters (it crashes reading `stmt.bind`); libsql can, so local tests never show it. Batch statements must be query-builder statements; the guards are `select`s (D53, test in `server/tests/batch.test.ts` with a stand-in D1 client).
+  - Pitfall: `nuxt build --envName staging` doesn't apply `$production`; repeat what deployed builds need in `$env.<name>`.
+  - Pitfall: a `compiled` key under `nitro.hooks` in nuxt.config **replaces** the Cloudflare preset's own `compiled` hook (which writes `wrangler.json`); add hooks from `nitro:init` instead.
+  - Pitfall: Wrangler needs a browser login once per machine (`! npx wrangler login` in Claude Code); commands then run with `CI=1` to skip prompts.
+  - Pitfall: `server/auth.config.ts` must not import a feature's `index.ts` (or anything reaching `hub:db` / `hub:db:schema`): the module loads it at build time and typecheck fails with NUXT_AUTH_CONFIG_LOAD_FAILED (D48).
+  - **A table rename after step 2.1** (drizzle-kit would prompt): write the migration by hand. Generate a full snapshot into a temp folder (`npx drizzle-kit generate --dialect sqlite --casing snake_case --schema .nuxt/hub/db/schema.mjs --out <tmp>`), write `000N_<name>.sql` (`ALTER TABLE … RENAME TO …`, index renames, the new `CREATE`s copied from the temp SQL), copy the temp snapshot to `meta/000N_snapshot.json` with `prevId` = the previous snapshot's `id`, add the journal entry, then **`pnpm nuxt db generate` must say "No schema changes"**. Keep comments in the same statement as SQL (a comment-only statement between breakpoints can fail). Done for `0003_menu_categories` (D55).
+  - Pitfall: drizzle-kit **splits an index expression at its commas** (`coalesce(parent_id, '')` became broken SQL, in the migration and the snapshot). Write index expressions without commas (D55 uses two partial indexes).
+  - Pitfall: schema changes add a migration (`pnpm nuxt db generate`, then rename it and its journal tag). Only a change `drizzle-kit` would ask about interactively (a rename) was handled by **regenerating** `0000_initial` while nothing is deployed (steps 1.2 and 1.5, D50); after such a regeneration a local `.data/db` must be deleted (dev server stopped). From step 2.1 on, never regenerate.
+  - Pitfall: SQLite's `unixepoch('subsecond')` default can round 1 ms ahead of a JavaScript `Date` taken right after the insert, so "due now" comparisons against a row created a moment ago can miss. In tests, pass an explicit later `now` (the outbox tests do).
+  - Account emails locally: without `NUXT_MAIL_RESEND_API_KEY` the dev server prints them (with the link) within a minute; `curl http://localhost:3000/_nitro/tasks/platform:deliver-outbox` sends at once.
+  - Pitfall: `drizzle-kit generate` asks interactively when a column looks renamed, which fails in a non-interactive shell. Another reason to regenerate while nothing is deployed; after 2.1, write the rename as its own migration.
+  - Pitfall: paths handed to NuxtHub's `hub:db:schema:extend` go into a generated import: use forward slashes on Windows ("Unterminated string constant" otherwise), like the error handler in D46.
+  - Pitfall: a race test must make the race happen. Two `Promise.all` calls against in-memory SQLite can still run one after the other; hold both at the critical point (`meetingPoint` in `platform.service.test.ts`) and remove the guard to check the test fails.
   - Pitfall: a bash heredoc containing an apostrophe inside a quoted `'EOF'` block failed in this environment's shell wrapper ("unexpected EOF"). Write edit scripts with the editor instead.
+  - Pitfall: to smoke-test a production build, run `node .output/server/index.mjs` with the `.env` variables **and** `NUXT_PUBLIC_SITE_URL` set; without it every auth-touching route answers 500 (logged as "siteUrl required in production").
+  - Pitfall: backticks inside a `node -e "…"` script in bash are command substitution: they vanish silently. Use a script file or the editor for text containing backticks.
   - Pitfall: several repo files use CRLF line endings; a Node text replacement with LF anchors silently matches nothing. Normalize (`replace(/\r\n/g, '\n')`) before replacing, and check the replacement happened.
 - **e2e (preferred):** `pnpm vitest run --project e2e`. Add scenarios to `test/e2e/` instead of throwaway scripts. Pitfalls met so far:
   - `expect.poll` defaults to a 1 s timeout; a cold page (session → refresh → redirect) can take longer under full-suite load. The e2e project sets 5 s (`vitest.config.ts`). Flaky "expected /categories to be /login" failures came from this.
@@ -218,7 +236,7 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Status-tab counts call the list endpoint with `size=1`: exclude those when counting list requests (`isCount` in `list-page.test.ts`).
   - Row buttons are named after the item ("Actions for Tea", "Select Tea"), so a user-menu button like "alice" needs `{ exact: true }` once an item contains that name.
   - `page.reload()` has no `waitUntil: 'hydration'`; use `page.goto(page.url(), { waitUntil: 'hydration' })`.
-  - Under load, a full `pnpm test` once hit a wave of 30 s timeouts in unrelated files right after another e2e run; the rerun passed. Rerun before chasing such a failure.
+  - Under load, a full `pnpm test` once hit a wave of 30 s timeouts in unrelated files right after another e2e run; the rerun passed. Rerun before chasing such a failure. Seen again in step 1.3: the two-tab tests (`auth`, `freshness`, `session`) time out only when `pnpm test` runs every project at once; alone, and in `pnpm test:e2e`, they pass.
   - `getByLabel` matches **substrings**: `'Name'` also matches "Name of group 1", and "Option 2 of Milk" matched "Extra price of option 2 of Milk". Use `{ exact: true }`, or labels that can't contain each other.
   - SortableJS drag and drop works with Playwright's `locator.dragTo(target)` on the drag handle.
   - `UInputNumber` is `role="spinbutton"` (not a textbox); `fill('4.2')` works and it shows `$4.20` after blur.
@@ -230,7 +248,8 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Always `goto(..., { waitUntil: 'hydration' })`. Without it, assertions can run before the app mounts and fail only under full-suite load.
   - While our confirm dialog is on top, the form modal behind it is `aria-hidden`, so `getByRole('dialog')` doesn't find it. Check the form after answering.
   - UTable renders an extra `<tr>` in the header. Count cells, not rows.
-  - Two tabs of one browser: `createPage()` opens a single-page context, so create one with `(await getBrowser()).newContext()`, open both pages in it, and wait with `waitForHydration(page, url, 'hydration')` (raw pages lack the `waitUntil: 'hydration'` wrapper). Tabs in one context share `BroadcastChannel`.
+  - The production CSP (D48) blocks images from other origins: fixture image URLs must be same-origin `/media/…` (`mockApi` serves a 1×1 PNG there). A component that drops a broken `<img>` makes a src assertion fail.
+  - Two tabs of one browser (`openTabs`, closed after each test since D46): `createPage()` opens a single-page context, so create one with `(await getBrowser()).newContext()`, open both pages in it, and wait with `waitForHydration(page, url, 'hydration')` (raw pages lack the `waitUntil: 'hydration'` wrapper). Tabs in one context share `BroadcastChannel`.
   - Tab visibility: fake `document.visibilityState` + dispatch `visibilitychange`, and move time with `page.clock.install()` / `fastForward`. Offline: `page.context().setOffline(true)` (fires the `offline` event; `page.route` mocks still answer).
   - In a `node -e` one-liner inside single-quoted bash, `\d` in a regex loses its backslash. Edit test files with the editor, not shell string replacement.
 - **browser-mock (ad hoc):** start `pnpm dev --port 3123`, then drive headless Chrome with `playwright-core` (`chromium.launch({ channel: 'chrome' })`) and mock the server with `page.route('http://localhost:3123/api/**', …)` (or use the real server, see real-server above). Pitfalls met so far:

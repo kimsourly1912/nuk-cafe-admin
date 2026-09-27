@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { ShortcutsHelp } from '#components'
-import { useAuth } from '~/features/auth'
+import { CHANGE_PASSWORD_PATH, useAuth } from '~/features/auth'
 
 const { user, logout } = useAuth()
 const open = ref(false)
@@ -13,6 +13,7 @@ usePageShortcuts({ '?': showShortcuts })
 const userMenu = computed<DropdownMenuItem[]>(() => [
   { label: user.value?.email, type: 'label' },
   { type: 'separator' },
+  { label: 'Change password', icon: 'i-lucide-key-round', to: CHANGE_PASSWORD_PATH },
   { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
   { label: 'Log out', icon: 'i-lucide-log-out', onSelect: () => logout() },
 ])
@@ -56,7 +57,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
           class="w-full"
         >
           <UButton
-            :label="collapsed ? undefined : (user?.displayName || user?.email)"
+            :label="collapsed ? undefined : (user?.name || user?.email)"
             icon="i-lucide-circle-user"
             color="neutral"
             variant="ghost"
