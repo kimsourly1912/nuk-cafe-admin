@@ -573,3 +573,42 @@ describe('categories on a phone', () => {
     expect(Math.round(box.y + box.height)).toBe(812)
   })
 })
+
+describe('categories on the UI standard (D85)', () => {
+  async function openAt(width: number, path = '/categories') {
+    const page = await createPage()
+    await page.setViewportSize({ width, height: 844 })
+    await mockApi(page, backend())
+    await page.goto(url(path), { waitUntil: 'hydration' })
+    await item(page, 'Toast').waitFor()
+    return page
+  }
+
+  it('opens a category from its name, with the actions beside the name (not inside it)', async () => {
+    const page = await openAt(390)
+    const target = item(page, 'Coffee').getByRole('button', { name: 'Coffee', exact: true })
+    const actions = item(page, 'Coffee').getByRole('button', { name: 'Actions for Coffee' })
+    expect(await actions.evaluate(el => el.parentElement?.closest('button, a') === null)).toBe(true)
+    expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    await target.click()
+    await page.getByRole('dialog', { name: 'Edit category' }).waitFor()
+  })
+
+  it('lays the tree out by its own width: stacked narrow, in columns when there is room', async () => {
+    const heading = (page: Page) => page.getByText('Contains', { exact: true }).filter({ visible: true })
+    const narrow = await openAt(640)
+    expect(await heading(narrow).count()).toBe(0)
+    await item(narrow, 'Coffee').getByText('Empty · Inherits parent').waitFor()
+    const wide = await openAt(1024)
+    await heading(wide).waitFor()
+    expect(await wide.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  })
+
+  it('shows the status next to the name in the All view', async () => {
+    const page = await openAt(1024, '/categories?status=all')
+    await item(page, 'Tea').getByText('Archived', { exact: true }).waitFor()
+    const name = (await item(page, 'Tea').getByText('Tea', { exact: true }).boundingBox())!
+    const badge = (await item(page, 'Tea').getByText('Archived', { exact: true }).boundingBox())!
+    expect(Math.abs(badge.y + badge.height / 2 - (name.y + name.height / 2))).toBeLessThan(8)
+  })
+})

@@ -47,13 +47,3 @@ export function contentsLabel(category: Pick<MenuCategory, 'childCount' | 'itemC
   if (category.itemCount) return `${category.itemCount} ${category.itemCount === 1 ? 'item' : 'items'}`
   return 'Empty'
 }
-
-/**
- * The desktop columns (category · contains · availability · [status] · actions), shared by the
- * header and every row so they line up. Literal strings: Tailwind finds classes by scanning.
- */
-export function rowColumns(showStatus: boolean) {
-  return showStatus
-    ? 'md:grid md:grid-cols-[minmax(0,1fr)_9rem_11rem_7rem_3rem]'
-    : 'md:grid md:grid-cols-[minmax(0,1fr)_9rem_11rem_3rem]'
-}

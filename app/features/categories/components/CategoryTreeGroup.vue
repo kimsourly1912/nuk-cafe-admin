@@ -86,7 +86,7 @@ const activeSubs = computed(() => props.group.subs.filter(s => s.status === 'act
     role="listitem"
     :aria-label="main.name"
     :data-main="main.id"
-    class="overflow-hidden rounded-lg border border-default bg-default md:rounded-none md:border-0"
+    class="overflow-hidden rounded-lg border border-default bg-default @2xl:rounded-none @2xl:border-0"
   >
     <CategoryRow
       :category="main"
@@ -146,15 +146,15 @@ const activeSubs = computed(() => props.group.subs.filter(s => s.status === 'act
       </div>
       <div
         v-if="showAdd"
-        class="relative flex min-h-12 items-center border-t border-default pl-16 pr-3 md:pl-18"
+        class="relative flex min-h-12 items-center border-t border-default pl-16 pr-3 @2xl:pl-18"
       >
         <span
           aria-hidden="true"
-          class="absolute left-7 top-0 h-1/2 border-l border-dashed border-accented md:left-8"
+          class="absolute left-7 top-0 h-1/2 border-l border-dashed border-accented @2xl:left-8"
         />
         <span
           aria-hidden="true"
-          class="absolute left-7 top-1/2 w-4 border-t border-dashed border-accented md:left-8"
+          class="absolute left-7 top-1/2 w-4 border-t border-dashed border-accented @2xl:left-8"
         />
         <UButton
           label="Add subcategory"
