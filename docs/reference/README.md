@@ -10,10 +10,14 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 
 | Page | Contents |
 |---|---|
+| [UI foundation](./ui.md) | **Canonical visual rules**: tokens, spacing, radius, type, density and touch targets, icons, surfaces, action hierarchy, motion, accessibility |
+| [Responsive layout](./responsive-layout.md) | Width classes (compact/medium/expanded), shell and navigation, page anatomy, sticky bars, the responsive behavior matrix |
+| [Page patterns](./page-patterns.md) | Resource index, settings, detail/editor and task-flow blueprints; editing surfaces; bottom sheets; gestures; the states every page handles |
+| [UI review checklist](./ui-review-checklist.md) | Run before merging UI work: widths, keyboard, touch, focus, states, tests |
 | [Data fetching](./data-fetching.md) | `apiFetch`, `useApiQuery`, `usePaginatedQuery` (URL sync), `ANY` / `toApiQuery`, `invalidate` (also other tabs), `invalidateInThisTab`, `invalidateAll` |
 | [Mutations](./mutations.md) | `useMutation` (create/update/delete, single and batch), `usePendingMutationCount` |
 | [Errors](./errors.md) | `ApiError`, `getErrorMessage`, `isSilentError`, error codes, `<ApiErrorAlert>`, `useNotify` |
-| [UI helpers](./ui.md) | `useConfirm`, `useTableSelection`, `<BulkActionsBar>`, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, money (`toMinor`, `formatMinor`, …), `<ListSkeleton>` |
+| [UI helpers](./ui-helpers.md) | `useConfirm`, `useTableSelection`, `<BulkActionsBar>`, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, money (`toMinor`, `formatMinor`, …), `<ListSkeleton>` |
 | [App-wide behavior](./app-behavior.md) | Tab titles, refresh on tab focus/reconnect, offline banner, leave guards, session loss: every case handled |
 | [Forms: unsaved changes](./forms.md) | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard`, `isSameFormValue` |
 | [Auth](./auth.md) | `useAuth`, public pages |
@@ -37,19 +41,19 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `isSilentError` | util | [Errors](./errors.md#issilenterror) | Errors that must not toast |
 | `<ApiErrorAlert>` | component | [Errors](./errors.md#apierroralert) | Failed-load alert with Retry |
 | `useNotify` | composable | [Errors](./errors.md#usenotify) | Toasts for non-mutation actions |
-| `useConfirm` | composable | [UI helpers](./ui.md#useconfirm) | `await confirm({...})` → boolean |
-| `useTableSelection` | composable | [UI helpers](./ui.md#usetableselection) | Selection for tables, card grids and trees |
-| `<BulkActionsBar>` | component | [UI helpers](./ui.md#bulkactionsbar) | Floating "5 selected · actions · Clear" |
-| `<StatusTabs>` | component | [UI helpers](./ui.md#statustabs) | "All 3 · Active 2 · Archived 1" |
-| `<ListSkeleton>` | component | [UI helpers](./ui.md#listskeleton) | First-load placeholders |
-| `<SearchInput>` | component | [UI helpers](./ui.md#searchinput) | Search as you type (debounced) |
-| `<ListEmptyState>` | component | [UI helpers](./ui.md#listemptystate) | "No X yet" vs "No X match your filters" |
-| `previewList`, `pluralize` | util | [UI helpers](./ui.md#previewlist-and-pluralize) | "Coffee, Tea and 3 more", "3 categories" |
-| `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT` | util | [UI helpers](./ui.md#money-tominor-fromminor-formatminor-formatprice-price_format) | Cents ↔ dollars, "$4.20" |
+| `useConfirm` | composable | [UI helpers](./ui-helpers.md#useconfirm) | `await confirm({...})` → boolean |
+| `useTableSelection` | composable | [UI helpers](./ui-helpers.md#usetableselection) | Selection for tables, card grids and trees |
+| `<BulkActionsBar>` | component | [UI helpers](./ui-helpers.md#bulkactionsbar) | Floating "5 selected · actions · Clear" |
+| `<StatusTabs>` | component | [UI helpers](./ui-helpers.md#statustabs) | "All 3 · Active 2 · Archived 1" |
+| `<ListSkeleton>` | component | [UI helpers](./ui-helpers.md#listskeleton) | First-load placeholders |
+| `<SearchInput>` | component | [UI helpers](./ui-helpers.md#searchinput) | Search as you type (debounced) |
+| `<ListEmptyState>` | component | [UI helpers](./ui-helpers.md#listemptystate) | "No X yet" vs "No X match your filters" |
+| `previewList`, `pluralize` | util | [UI helpers](./ui-helpers.md#previewlist-and-pluralize) | "Coffee, Tea and 3 more", "3 categories" |
+| `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT` | util | [UI helpers](./ui-helpers.md#money-tominor-fromminor-formatminor-formatprice-price_format) | Cents ↔ dollars, "$4.20" |
 | `useUnsavedChanges` | composable | [Forms](./forms.md#useunsavedchanges) | Warn before a page form's input is lost |
 | `useModalUnsavedChanges` | composable | [Forms](./forms.md#usemodalunsavedchanges) | Same, plus asking before the modal closes |
 | `useLeaveGuard` | composable | [Forms](./forms.md#useleaveguard) | App-wide "discard unsaved changes?" check |
-| `usePageShortcuts`, `useSubmitShortcut` | composable | [UI helpers](./ui.md#keyboard-shortcuts) | Keyboard shortcuts; Ctrl/⌘+Enter to save |
+| `usePageShortcuts`, `useSubmitShortcut` | composable | [UI helpers](./ui-helpers.md#keyboard-shortcuts) | Keyboard shortcuts; Ctrl/⌘+Enter to save |
 | `loginRedirectTarget` | util (auth) | [Auth](./auth.md#loginredirecttarget) | Safe post-login redirect |
 | `useAuth` | composable | [Auth](./auth.md#useauth) | Session user, login, logout |
 

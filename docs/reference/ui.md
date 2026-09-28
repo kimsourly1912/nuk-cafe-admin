@@ -1,351 +1,155 @@
-# UI helpers
+# UI foundation
 
-← [API Reference](./README.md)
+← [API Reference](./README.md) · Layout: [responsive-layout.md](./responsive-layout.md) · Patterns: [page-patterns.md](./page-patterns.md) · Review: [ui-review-checklist.md](./ui-review-checklist.md) · Helper APIs: [ui-helpers.md](./ui-helpers.md)
 
-- [`useConfirm`](#useconfirm)
-- [`useTableSelection`](#usetableselection)
-- [`<BulkActionsBar>`](#bulkactionsbar)
-- [`previewList` and `pluralize`](#previewlist-and-pluralize)
-- [`<SearchInput>`](#searchinput)
-- [`<ListEmptyState>`](#listemptystate)
-- [Keyboard shortcuts: `usePageShortcuts`, `useSubmitShortcut`, `<ShortcutsHelp>`](#keyboard-shortcuts)
+The canonical visual rules for NUK Cafe Admin: tokens, spacing, radius, type, density, icons, surfaces, actions, motion and accessibility. Where a rule lives here, other documents link to it instead of repeating it.
+
+Status labels used below:
+- **Owner-directed**: stated by the owner (D74, or the UI standardization request of 2026-09-28).
+- **Proposed**: this document's recommendation, not yet approved. The open questions are in [the rollout plan](../plans/ui-standardization.md#6-owner-decisions).
 
 ---
 
-## `useConfirm`
+## 1. Principles
 
-Promise-based confirmation dialog.
+1. **Nuxt UI first (owner-directed, D74).** Use Nuxt UI components with their default sizes and variants. Mockups decide layout, positions and content, not styling.
+2. **Configure globally, not per page.** Colors, radius, default sizes and component defaults change in `app/app.config.ts` (`ui.colors`, component `defaultVariants`, slots) or `app/assets/css/main.css` (theme variables). A page never restyles a component to look different from the same component elsewhere.
+3. **No parallel component library (owner-directed).** Shared app components ([ui-helpers.md](./ui-helpers.md)) wrap *behavior* (search, empty states, bulk actions). They don't re-skin Nuxt UI. Don't create `AppButton`, `BaseCard` or similar.
+4. **Allowed layout-only tweaks:** grid and flex placement, `min-w-0`, `shrink`, `break-words`, visibility per width class, a `ui` slot override that changes *layout* (e.g. a card body becoming a flex row), and `env(safe-area-inset-*)` padding. Anything that changes color, size, radius or shadow is not a layout tweak.
+5. **Avoid (owner-directed):** decorative gradients, glass and blur effects, arbitrary shadows, arbitrary values (`[13px]`, hex colors) except `env()` safe-area padding, excessive pills, and one-off styling.
 
-Source: `app/composables/useConfirm.ts`, `app/components/ConfirmDialog.vue`
+## 2. Color tokens
 
-### Usage
+`app.config.ts` sets `primary: 'amber'` and `neutral: 'stone'`. Use **semantic** colors and utilities only, never palette classes (`bg-amber-400`, `text-gray-500`) or hex values.
 
-```ts
-const confirm = useConfirm()
-
-if (!await confirm({ title: 'Discard changes?', confirmLabel: 'Discard', danger: true })) return
-```
-
-### Type
-
-```ts
-function useConfirm(): (options: ConfirmOptions) => Promise<boolean>
-
-interface ConfirmOptions {
-  title: string
-  description?: string
-  confirmLabel?: string // default 'Confirm'
-  cancelLabel?: string  // default 'Cancel'
-  danger?: boolean      // red confirm button
-}
-```
-
-### Notes
-
-- Resolves `true` on confirm and `false` on Cancel. The dialog can't be dismissed by clicking outside or pressing Escape, so the user must choose.
-- It closes **as soon as the user answers**. Any work that follows runs in the background.
-- For deletes, don't call it yourself. Set `confirm` on [`useMutation`](./mutations.md#options).
-- Call `useConfirm()` during `setup` (or in route middleware), not inside an event handler. Each question opens its own dialog, which is removed when it closes.
-
----
-
-## `useTableSelection`
-
-Row selection for `UTable`, card grids and trees, keyed by id so the selection survives list refreshes.
-
-Source: `app/composables/useTableSelection.ts`
-
-### Usage
-
-```ts
-const rows = computed(() => (data.value?.content ?? []).filter(c => !remove.isRemoved(c.id!)))
-const selection = useTableSelection(rows, c => c.id!, { resetOn: [query] })
-```
-
-```vue
-<UTable
-  v-model:row-selection="selection.rowSelection"
-  :get-row-id="selection.getRowId"
-  :data="rows"
-  :columns="[{ id: 'select' }, ...otherColumns]"
->
-  <template #select-header="{ table }">
-    <UCheckbox
-      :model-value="table.getIsSomePageRowsSelected() ? 'indeterminate' : table.getIsAllPageRowsSelected()"
-      aria-label="Select all"
-      @update:model-value="value => table.toggleAllPageRowsSelected(!!value)"
-    />
-  </template>
-  <template #select-cell="{ row }">
-    <UCheckbox
-      :model-value="row.getIsSelected()"
-      aria-label="Select row"
-      @update:model-value="value => row.toggleSelected(!!value)"
-    />
-  </template>
-</UTable>
-```
-
-### Type
-
-```ts
-function useTableSelection<T>(
-  rows: MaybeRefOrGetter<T[]>,
-  getKey: (row: T) => string | number,
-  options?: { resetOn?: WatchSource[] },
-): Reactive<{
-  rowSelection: Record<string, boolean> // bind with v-model:row-selection
-  getRowId: (row: T) => string          // bind with :get-row-id
-  selected: T[]                         // selected rows that are currently in `rows`
-  count: number
-  allSelected: boolean                   // every row in `rows` (and at least one)
-  someSelected: boolean                  // some but not all: an "indeterminate" select-all
-  isSelected(row: T): boolean
-  toggle(row: T, value?: boolean): void  // flips when `value` is omitted
-  toggleAll(value: boolean): void        // every row in `rows`
-  clear(): void
-  select(keys: (string | number)[]): void // replace the selection
-}>
-```
-
-Without a table (cards, trees), bind the helpers:
-
-```vue
-<UCheckbox :model-value="selection.someSelected ? 'indeterminate' : selection.allSelected"
-           aria-label="Select all" @update:model-value="v => selection.toggleAll(!!v)" />
-<ProductCard v-for="p in rows" :selected="selection.isSelected(p)" @select="v => selection.toggle(p, v)" ... />
-```
-
-### Behavior
-
-- **`selected` only contains rows currently in `rows`.** Deleted or filtered-out rows drop out on their own, and `count` follows.
-- **`resetOn`:** the selection clears whenever one of these sources changes. Pass the list `query` so changing filters or the page clears it, and nobody acts on rows they can no longer see.
-- `select(keys)` **replaces** the selection. After a batch, keep only the rows that failed:
-  ```ts
-  const result = await remove.executeMany(selection.selected)
-  selection.select(result.failed.map(f => f.input.id!))
-  ```
-- The object is reactive: use `selection.count`, and don't destructure it.
-
----
-
-## `<BulkActionsBar>`
-
-A **floating** bar at the bottom of the list (Linear-style): "5 selected · *your actions* · Clear". It renders nothing when `count` is 0, fades in and out (100–150 ms), and Escape inside it clears the selection. It's a `role="toolbar"` named "Bulk actions".
-
-Source: `app/components/BulkActionsBar.vue`
-
-Put it **at the end of the page body** (`#body` of `UDashboardPanel`); it's `sticky` to the bottom of the scrolling panel.
-
-```vue
-<template #body>
-  <!-- list… -->
-  <BulkActionsBar :count="selection.count" @clear="selection.clear()">
-    <UButton label="Delete" icon="i-lucide-trash-2" color="error" variant="subtle" @click="removeSelected" />
-  </BulkActionsBar>
-</template>
-```
-
-> E2E: the bar fades out, so after an action that clears the selection, wait with `expect.poll(() => page.getByText(/\d+ selected/).count()).toBe(0)`.
-
-| Prop / slot / event | Description |
-|---|---|
-| `count: number` | Number of selected rows. |
-| default slot | Action buttons. |
-| `@clear` | Clicked Clear. Usually `selection.clear()`. |
-
----
-
-## `previewList` and `pluralize`
-
-Text helpers for confirmations and summaries.
-
-Source: `app/utils/text.ts`
-
-```ts
-function previewList(items: string[], max = 5): string
-function pluralize(count: number, [one, many]: [string, string]): string
-```
-
-```ts
-previewList(['Coffee', 'Tea', 'Juice'])                    // 'Coffee, Tea, Juice'
-previewList(['A', 'B', 'C', 'D', 'E', 'F', 'G'])           // 'A, B, C, D, E and 2 more'
-pluralize(1, ['category', 'categories'])                   // '1 category'
-pluralize(3, ['category', 'categories'])                   // '3 categories'
-```
-
-Typical use, in a batch confirmation:
-
-```ts
-confirm: categories => ({
-  title: `Delete ${pluralize(categories.length, ['category', 'categories'])}?`,
-  description: `${previewList(categories.map(c => c.name))}. This cannot be undone.`,
-  confirmLabel: 'Delete',
-  danger: true,
-}),
-```
-
----
-
-## `<SearchInput>`
-
-Search box for list toolbars. Searches **as you type**, after a pause, so it doesn't call the API on every keystroke.
-
-Source: `app/components/SearchInput.vue` (VueUse `watchDebounced`). E2E: `test/e2e/list-page.test.ts`.
-
-```vue
-<SearchInput v-model="filters.search" placeholder="Search categories…" class="w-64" />
-```
-
-| Prop | Type | Default | Meaning |
-|---|---|---|---|
-| `v-model` | `string` | `''` | Receives the **trimmed** text |
-| `placeholder` | `string` | `'Search…'` | Also its accessible name (`searchbox` role) |
-| `delay` | `number` | `300` | ms without typing before it applies |
-
-- **Enter** applies at once. The **✕** button clears and applies at once.
-- If the model changes from outside (Clear filters, URL, back/forward), the box shows the new value. Typing a trailing space doesn't count as a change.
-- Stale responses can't win: `useAsyncData` cancels the previous request when the query changes.
-
----
-
-## `<ListEmptyState>`
-
-Content for `UTable`'s `#empty` slot. It tells "nothing exists yet" apart from "the filters hide everything".
-
-Source: `app/components/ListEmptyState.vue`
-
-```vue
-<UTable :data="rows" :loading="loading">
-  <template #loading>Loading categories…</template>
-  <template #empty>
-    <ListEmptyState noun="categories" :filtered="isFiltered" create-label="New category"
-                    @create="openForm()" @clear="clearFilters()" />
-  </template>
-</UTable>
-```
-
-| Prop / event | Meaning |
-|---|---|
-| `noun` | Plural, lower case (`'categories'`) |
-| `filtered` | `usePaginatedQuery().isFiltered` |
-| `create-label` | Create button label. Omit on lists where users can't create (e.g. orders) |
-| `@create` / `@clear` | Create clicked / Clear filters clicked |
-
-| State | Shows |
-|---|---|
-| No filters, no rows | "No categories yet" + create button |
-| Filters active, no rows | "No categories match your filters" + **Clear filters** |
-
-- **Always fill UTable's `#loading` slot too.** Without it the table shows the empty state during the first load, so "No categories yet" flashes before the data arrives.
-
----
-
-## Keyboard shortcuts
-
-Source: `app/composables/useShortcuts.ts`, `app/components/ShortcutsHelp.vue`. Built on Nuxt UI `defineShortcuts`: keys like `n`, `/`, `meta_enter` (`meta` = ⌘ on macOS, Ctrl elsewhere). Every shortcut and its cases: [App-wide behavior → Keyboard shortcuts](./app-behavior.md#keyboard-shortcuts).
-
-```ts
-function usePageShortcuts(config: Record<string, () => void>): void
-function useSubmitShortcut(submit: () => void): void
-const SHORTCUTS: readonly { kbds: readonly string[], label: string }[]
-```
-
-- **`usePageShortcuts`**: page-level keys. They don't fire while typing in an input, or while a dialog, menu or open select is on screen.
-- **`useSubmitShortcut`**: Ctrl/⌘+Enter, also while typing. Does nothing when another dialog is stacked on top.
-- **`SHORTCUTS`**: the list `<ShortcutsHelp>` shows (`?`). Add every new shortcut to it.
-
-```vue
-<!-- List page -->
-<script setup lang="ts">
-usePageShortcuts({ n: () => openForm() })
-</script>
-<template>
-  <UTooltip text="New category" :kbds="['n']">
-    <UButton label="New category" icon="i-lucide-plus" @click="openForm()" />
-  </UTooltip>
-</template>
-```
-
-```vue
-<!-- Form modal -->
-<script setup lang="ts">
-const form = useTemplateRef('form')
-useSubmitShortcut(() => form.value?.submit()) // UForm.submit() runs validation first
-</script>
-<template>
-  <UForm ref="form" ...>...</UForm>
-  <UTooltip text="Save" :kbds="['meta', 'enter']">
-    <UButton type="submit" label="Save" />
-  </UTooltip>
-</template>
-```
-
-`<SearchInput>` registers `/` itself.
-
----
-
-## `<StatusTabs>`
-
-Status filter as tabs with counts, "All 3 · Active 2 · Archived 1" (Shopify-style views). Binds to the list's status filter (`ANY` = "All"). The tabs sit in a `role="group"` named "Status" (`UTabs` can't name its `tablist`). Each resource names its own statuses: they differ (`active` / `archived`; menu items add `draft`), so there's no shared status constant or badge.
-
-Source: `app/components/StatusTabs.vue`
-
-```vue
-<StatusTabs
-  v-model="filters.status"
-  :tabs="[{ label: 'Active', value: 'active' }, { label: 'Archived', value: 'archived' }]"
-  :counts="{ all: 3, active: 2, archived: 1 }"
-/>
-```
-
-| Prop | Description |
-|---|---|
-| `v-model` | The filter value: a status or `ANY` |
-| `tabs` | The statuses after "All", `{ label, value }[]` |
-| `counts` | Keyed by the tab values plus `all`; badges appear once known |
-| `disabled` | e.g. while an unsaved order locks the filters |
-| `size` | `'sm'` (default) or `'md'` where the tabs are the page's main filter (Categories) |
-
-Counts: a list loaded whole (Categories, the libraries) counts on the client; a paginated one asks its list endpoint with `pageSize: 1` per status and reads `total`, in one query keyed `<feature>:status-counts` so `invalidate(feature)` refreshes it (`useItemStatusCounts` in the products feature).
-
----
-
-## Money: `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`
-
-The API stores prices as integer cents of USD (`priceMinor`, `priceDeltaMinor`); forms and the display work in dollars. Convert only at the boundary: `toMinor` when sending, `fromMinor` when filling a form.
-
-Source: `app/utils/money.ts` (moved from the products feature when Add-ons became the second screen with prices, D68). Tests: `app/features/products/tests/product-form.test.ts`.
-
-```ts
-toMinor(4.2) // 420 (half up, without floating-point noise: toMinor(1.005) is 101)
-fromMinor(420) // 4.2
-formatMinor(420) // "$4.20"; formatMinor(null) → "—"
-formatPrice(4.2) // "$4.20" (dollars)
-```
-
-```vue
-<UInputNumber :model-value="row.price" :format-options="PRICE_FORMAT" :min="0" :step="0.05" />
-```
-
-Auto-imported in components. Pure files that are unit-tested in Node (`schemas/*.ts`) import it explicitly: `import { toMinor } from '~/utils/money'` (the unit project has the `~` alias).
-
----
-
-## `<ListSkeleton>`
-
-Placeholder rows or cards while a list loads for the first time, instead of "Loading…" text, so nothing jumps when the data arrives. `role="status"` with the label for screen readers.
-
-Source: `app/components/ListSkeleton.vue`
-
-```vue
-<ListSkeleton v-if="loading" label="Loading menu items…" variant="card" />
-```
-
-| Prop | Default | |
+| Role | Use | Classes / props |
 |---|---|---|
-| `label` | | Read by screen readers ("Loading menu items…") |
-| `variant` | `'row'` | `'row'` or `'card'` |
-| `count` | `5` | How many placeholders |
+| Primary | The one main action, the current navigation item, selected state | `color="primary"`; `text-primary`, `bg-primary/10`, `border-primary` |
+| Neutral | Everything else: secondary buttons, badges without meaning | `color="neutral"` |
+| Success | Active / completed / saved | `color="success"` |
+| Warning | Needs attention, a conflict the user can resolve | `color="warning"` |
+| Error | Failures, validation, destructive actions | `color="error"` |
+| Info | Neutral notices (rare; prefer a muted paragraph) | `color="info"` |
 
-> Drive it with `useApiQuery`'s `loading`, and **don't give that query an empty-list `default`**: `loading` means "pending with no data yet", and `[]` counts as data, so the empty state would flash instead (a bug found by e2e, D37).
+| Text | Use |
+|---|---|
+| `text-highlighted` | Headings, names, the primary value in a row |
+| `text-default` | Body text |
+| `text-muted` | Supporting text, meta lines, help |
+| `text-dimmed` | Placeholders and disabled-looking content only |
+
+| Surface | Use |
+|---|---|
+| `bg-default` | Page, cards, overlays |
+| `bg-elevated` (`/25`–`/50`) | Sidebar, a quiet grouped area (a table header, a main-category row) |
+| `bg-muted`, `bg-accented` | Rare; hover and pressed states come from Nuxt UI |
+
+Borders: `border-default` for separators and outlines, `border-muted` for very quiet dividers, `divide-default` between rows. Color is never the only signal: status also has text or an icon (§10).
+
+**Dark mode:** the tokens adapt by themselves. The app doesn't offer a color-mode switch today; whether dark mode is supported is an [owner decision](../plans/ui-standardization.md#6-owner-decisions). Until then, don't write light-only colors, so both modes keep working.
+
+## 3. Spacing (owner-directed: a 4px ramp)
+
+Use Tailwind's spacing scale in 4px steps: `1` (4px), `2` (8), `3` (12), `4` (16), `5` (20), `6` (24), `8` (32), `10` (40), `12` (48), `16` (64). Half steps (`0.5`, `1.5`) only *inside* a compact control or badge, never between layout blocks.
+
+| Between… | Space |
+|---|---|
+| Icon and its text; items in a chip row | `gap-1`–`gap-2` |
+| Controls in a toolbar or form row | `gap-2`–`gap-3` |
+| Fields in a form | `space-y-4` (a `UForm` default) |
+| Sections of a page or card | `space-y-6` / `gap-6` |
+| Page gutter | the `UDashboardPanel` body default (16px compact, 24px from `sm`); don't add another |
+| Card padding | the `UCard` default (16px compact, 24px from `sm`); don't override |
+
+## 4. Radius
+
+Use Nuxt UI's `--ui-radius` (the default): controls and badges get the component's own radius, and cards and overlays theirs. Don't set `rounded-*` on Nuxt UI components. Plain elements the app draws (a row container, a dot) use `rounded-md` / `rounded-lg`, or `rounded-full` for dots and avatars only. Changing the radius is a global theme change.
+
+## 5. Typography
+
+| Level | Style | Where |
+|---|---|---|
+| Page title | `UDashboardNavbar` `title` (its own style) | One per page |
+| Record title on a detail page | `text-xl font-semibold text-highlighted` (an `h2` under the navbar's `h1`) | `/add-ons/[id]` |
+| Section heading | `font-semibold text-highlighted` (`h2`/`h3`) | Card and form sections |
+| Body | `text-sm` (the dashboard's base) | Lists, forms |
+| Supporting | `text-sm text-muted` | Meta lines, intros, help |
+| Small meta | `text-xs text-muted` | Counts under a label, "next day" |
+
+- At most three sizes on one screen. Numbers and times use `tabular-nums`.
+- Long names wrap (`break-words`); they're truncated only where a full value is one tap away.
+- Headings follow document order (`h1` navbar → `h2` → `h3`), never skip a level for looks.
+- Copy: sentence case, verbs on buttons ("Save changes", "Archive group"), no ALL CAPS.
+
+## 6. Density and touch targets
+
+- **Expanded and medium (≥640px):** Nuxt UI default sizes (`md` controls). WCAG 2.2 AA's 24×24px minimum (2.5.8) is the floor.
+- **Compact (<640px, owner-directed):** interactive targets are **44–48px** in their smaller dimension, and 44px for icon-only buttons in both dimensions. They must be met **globally** (one theme or config rule for compact widths), not with per-component `min-h-*` overrides. D74 removed those; the mechanism is an [owner decision](../plans/ui-standardization.md#6-owner-decisions).
+- Adjacent targets keep at least 8px between their hit areas on compact.
+- A row that opens something is one target (the whole row), not a small link inside it.
+
+## 7. Icons
+
+- Lucide only, bundled at build time; write names as literal strings (D18).
+- `size-4` inline with text, `size-5` standalone. Decorative icons are hidden from assistive technology (`UIcon` is by default); icon-only buttons need an `aria-label` and a tooltip on expanded.
+- **One icon per concept**, app-wide:
+
+| Concept | Icon | Concept | Icon |
+|---|---|---|---|
+| Create | `i-lucide-plus` | Row actions | `i-lucide-ellipsis-vertical` |
+| Edit | `i-lucide-pencil` | Search | `i-lucide-search` |
+| Archive | `i-lucide-archive` | Restore | `i-lucide-archive-restore` |
+| Reorder mode | `i-lucide-arrow-down-up` | Drag handle | `i-lucide-grip-vertical` |
+| Move up / down | `i-lucide-arrow-up` / `i-lucide-arrow-down` | Back | `i-lucide-arrow-left` |
+| Save | `i-lucide-save` | Close | Nuxt UI's close icon |
+| Info note | `i-lucide-info` | Error | `i-lucide-circle-alert` |
+| Busy | `i-lucide-loader-circle` (spinning) | Time | `i-lucide-clock` |
+
+A feature's own icon is the one in its `navigation.ts`; its cards reuse it rather than picking icons per record.
+
+## 8. Surface hierarchy
+
+From the page outwards:
+1. **Page** (`UDashboardPanel` body, `bg-default`).
+2. **Section**: a heading plus content, separated by space or `USeparator`. Prefer sections to boxes.
+3. **Card** (`UCard`, `variant="outline"`): one record in a collection, or one group of settings. **No card inside a card.** Rows inside a card use `divide-y`.
+4. **Overlays**: `UModal`, `USlideover`, `UDrawer`, menus and popovers. They're the only surfaces with shadows (Nuxt UI's own).
+
+Alerts (`UAlert`, `variant="subtle"`) are for states that need action or explain a blocked action (conflict, archived, load error). A page's standing explanation is a muted intro paragraph, not an alert (D74).
+
+## 9. Action hierarchy (owner-directed)
+
+| Level | Style | Rule |
+|---|---|---|
+| Primary | `UButton` solid, `color="primary"` | **One per page** (the navbar's `#right`, e.g. "New rule"), and **at most one per card** or overlay footer |
+| Secondary | `color="neutral" variant="outline"` | Cancel, Manage/View, Reorder |
+| Tertiary | `variant="ghost"` or `variant="link"` | Inline and low-emphasis actions, presets |
+| Destructive trigger | `color="error" variant="soft"` | Archive group, Archive option set |
+| Destructive confirm | The confirm dialog's `danger` button | Only inside `useConfirm` / `useMutation` `confirm` |
+| Overflow | `⋮` `UDropdownMenu` (or a bottom sheet on compact, see [page-patterns](./page-patterns.md#6-bottom-sheets)) | Everything beyond the one or two visible actions |
+
+- A destructive action is never the primary button, never shown as the only visible action, and always confirms (with the effect in words).
+- A disabled action that the user can't use yet stays visible with the reason (tooltip on expanded, description in menus and sheets).
+- Labels are verb + object; icons don't replace labels for primary and secondary actions.
+
+## 10. Status, badges and pills
+
+- Status (Active, Archived, Draft, Required) is a `UBadge variant="subtle"` **with text**, plus an icon where helpful. Color alone never carries it.
+- Badges are for status and counts. Plain attributes (a price, a category, a rule) are text, not pills. A row shows at most two badges.
+- Chips (outline badges) are only for short previews of values (Options), capped with "+N more".
+
+## 11. Motion
+
+- Use Nuxt UI's transitions (overlays, menus, collapsibles). App-level motion is limited to state feedback: a moved row's brief highlight, a spinner, a fade of a bulk bar. It lasts ≤200ms, or ≤1.5s for a highlight that fades.
+- Wrap app-level transitions in `motion-safe:`; nothing essential depends on motion (`prefers-reduced-motion`).
+- No decorative or looping animation, no animated status indicators.
+
+## 12. Accessibility baseline (owner-directed: WCAG 2.2 AA minimum)
+
+- **Contrast:** text meets 4.5:1 (3:1 for large text and UI boundaries). Use the matching token on tinted backgrounds (`text-primary` on `bg-primary/10`), never a lighter shade. **Known gap (needs verification):** with `primary: 'amber'`, Nuxt UI's light-mode primary is amber-500, which as text on white is well below 4.5:1. That covers primary-colored text: links, the active tab, selected day toggles and outline badges. The fix is global (a darker `--ui-primary` shade for light mode in `main.css`), not per page; see [the rollout plan](../plans/ui-standardization.md#6-owner-decisions).
+- **Focus:** never remove focus outlines. Nuxt UI's focus-visible rings are the style. After an action, focus goes somewhere sensible: the next row after a delete, the moved row after a reorder, the trigger after a dialog closes.
+- **Names:** every control has a visible label or `aria-label`; row actions name their record ("Actions for Oat milk").
+- **Structure:** landmarks from the dashboard shell, headings in order, lists as `ul`/`ol`, tables as `UTable` with headers.
+- **Announcements:** async results reach screen readers: toasts (`aria-live`), inline alerts, `role="status"` for "Saving…/Saved", `aria-live="polite"` for reorder positions.
+- **Input:** everything works by keyboard; no hover-only information (tooltips duplicate something reachable); gestures have button alternatives ([page-patterns → Gestures](./page-patterns.md#7-gestures)).
+- **Reflow and zoom:** content works at 320 CSS px wide and at 200% text zoom without two-dimensional scrolling ([checklist](./ui-review-checklist.md)).

@@ -135,15 +135,15 @@ Not wanted in the app: generic CRUD engines, repository or service layers (the s
 | `useApiQuery` | Reads: `loading` / `refreshing` / `error` as `ApiError`, load time for freshness | hand-roll loading refs or try/catch around reads | [data-fetching](reference/data-fetching.md#useapiquery) |
 | `useMutation` | Writes: the request lifecycle, per-key in-flight state and double-submit skip, confirm, toasts, `removes`, batch (`executeMany`, Stop, Retry failed), invalidation | duplicate its request or concurrency state (their own in-flight maps, double-submit guards, try/catch-and-toast). **Form-local submission state is allowed** ([§5](#form-local-vs-shared-pending-state)) | [mutations](reference/mutations.md#usemutation) |
 | `usePaginatedQuery` | List filters and page, URL state, page reset on filter change, `isFiltered`, `clearFilters` | keep their own page/filter refs or sync the URL | [data-fetching](reference/data-fetching.md#usepaginatedquery) |
-| `<SearchInput>` | Debounced search, Enter/Clear, `/` shortcut | debounce search themselves | [ui](reference/ui.md#searchinput) |
-| `<ListEmptyState>` | "No X yet" vs "No X match your filters" | write their own empty text | [ui](reference/ui.md#listemptystate) |
+| `<SearchInput>` | Debounced search, Enter/Clear, `/` shortcut | debounce search themselves | [ui](reference/ui-helpers.md#searchinput) |
+| `<ListEmptyState>` | "No X yet" vs "No X match your filters" | write their own empty text | [ui](reference/ui-helpers.md#listemptystate) |
 | `<ApiErrorAlert>` | Load-failure alert with Retry | show `error.message` from non-`ApiError`s | [errors](reference/errors.md#apierroralert) |
-| `useTableSelection` + `<BulkActionsBar>` | Row selection, reset on query change, the "N selected" bar | keep selection state themselves | [ui](reference/ui.md#usetableselection) |
-| `useConfirm` | Confirmation dialogs | build ad-hoc confirm modals (deletes use `useMutation`'s `confirm`) | [ui](reference/ui.md#useconfirm) |
+| `useTableSelection` + `<BulkActionsBar>` | Row selection, reset on query change, the "N selected" bar | keep selection state themselves | [ui](reference/ui-helpers.md#usetableselection) |
+| `useConfirm` | Confirmation dialogs | build ad-hoc confirm modals (deletes use `useMutation`'s `confirm`) | [ui](reference/ui-helpers.md#useconfirm) |
 | `useModalUnsavedChanges` / `useUnsavedChanges` / `useLeaveGuard` | "Discard unsaved changes?" on close, route change, logout and reload | add their own `beforeunload` or route guards | [forms](reference/forms.md) |
 | `invalidate` (+ `invalidateAll`, `invalidateInThisTab`, freshness plugin) | Refetching affected features in this tab and other tabs, on return and on reconnect | refetch other features' data directly, add global polling, or add a second refresh mechanism. **Screen-specific polling is allowed** when a screen needs live data (e.g. the Orders queue), per D22 | [data-fetching](reference/data-fetching.md#invalidate), [app-behavior](reference/app-behavior.md#data-freshness) |
 | `ApiError`, `getErrorMessage`, `useNotify` | Error classification, user-safe messages, toasts for non-mutation actions | compare HTTP statuses or message strings, or call `useToast()` for API results | [errors](reference/errors.md) |
-| `usePageShortcuts`, `useSubmitShortcut` | Keyboard shortcuts, suppressed behind dialogs | call `defineShortcuts` directly for page keys | [ui](reference/ui.md#keyboard-shortcuts) |
+| `usePageShortcuts`, `useSubmitShortcut` | Keyboard shortcuts, suppressed behind dialogs | call `defineShortcuts` directly for page keys | [ui](reference/ui-helpers.md#keyboard-shortcuts) |
 
 ---
 
@@ -153,7 +153,7 @@ Not wanted in the app: generic CRUD engines, repository or service layers (the s
 
 | Situation | Required behavior | Provided by | Current evidence and limitations |
 |---|---|---|---|
-| Layout | Chosen by the job: cards when pictures drive it, a card list for scanning, a table for comparing columns, a tree for nested data (D37). Row/card click opens the item; the ⋮ menu is always visible | the feature | e2e per page |
+| Layout | The [resource index pattern](reference/page-patterns.md#2-resource-index): the collection chosen by the job (D37), and grouped rows instead of tables on compact | the feature | e2e per page |
 | Status filter | `<StatusTabs>` with counts | client counts, or a `<feature>:status-counts` query (`useItemStatusCounts`) | e2e |
 | First load | `<ListSkeleton>` placeholders, never the empty state. **No empty-list `default`** on the list query (it hides `loading`) | `ListSkeleton` + `useApiQuery().loading` | e2e |
 | Refetch with rows shown | Rows stay, small spinner (`refreshing`) | `useApiQuery` | e2e checks that the refetch happens, not the spinner |

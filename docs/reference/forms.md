@@ -25,6 +25,8 @@ However many forms are open (a modal over a page form, back pressed twice), the 
 
 ## Where forms live, and what to use
 
+This table only says **which guard** to use. Which surface a form belongs in (modal, slideover, route, full screen on compact) is decided in [page-patterns → Detail / editor](./page-patterns.md#4-detail--editor).
+
 | Where | Examples | Use |
 |---|---|---|
 | Modal | Category form (reference) | `useModalUnsavedChanges` |

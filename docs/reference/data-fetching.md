@@ -162,7 +162,7 @@ const { data, loading } = useItemList(query)
 <UPagination v-model:page="page" :total="data?.total ?? 0" :items-per-page="pageSize" />
 ```
 
-See [`<SearchInput>`](./ui.md#searchinput) and [`<ListEmptyState>`](./ui.md#listemptystate).
+See [`<SearchInput>`](./ui-helpers.md#searchinput) and [`<ListEmptyState>`](./ui-helpers.md#listemptystate).
 
 ### Type
 
