@@ -112,7 +112,7 @@ function useAvailabilityRuleOptions() // → useApiQuery result, `data`: Availab
 
 ### `describeWindows`
 
-A rule's times in words, one part per group of days: `"Mon–Fri · 7:00 AM – 11:00 AM; Sat, Sun · 8:00 AM – 12:00 PM"`. The Categories list uses it for its availability tooltips.
+A rule's times in words, one part per group of days: `"Mon–Fri · 7:00 AM – 11:00 AM; Sat–Sun · 8:00 AM – 12:00 PM"` (consecutive days as a range since D76: "Sat–Sun", "Fri–Sat"; overnight times end in "(next day)"). The Categories list uses it for its availability tooltips.
 
 ```ts
 import { describeWindows } from '~/features/availability-rules'

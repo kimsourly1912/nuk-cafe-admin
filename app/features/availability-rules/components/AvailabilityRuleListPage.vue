@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * The availability rules library (D63): when things are sold. A card per rule. The whole library
- * is loaded once (it's small and unpaginated), so search and the status tabs work on it here.
+ * The availability rules library (D63, redesigned as a weekly agenda in D76): when things can be
+ * ordered. One full-width card per rule. The whole library is loaded once (it's small and
+ * unpaginated), so search and the status tabs work on it here. No bulk actions and no order.
  * docs/plans/availability-rules.md
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
@@ -52,9 +53,8 @@ function actions(rule: AvailabilityRule): DropdownMenuItem[] {
 }
 
 const formModal = useOverlay().create(AvailabilityRuleFormModal)
+/** An archived rule opens read-only, with Restore (the server refuses edits until then). */
 function openForm(rule?: AvailabilityRule) {
-  // An archived rule can't be edited (the server refuses): restore it first.
-  if (rule?.status === 'archived') return
   formModal.open({ rule })
 }
 
@@ -86,7 +86,7 @@ usePageShortcuts({ n: () => openForm() })
         <template #left>
           <SearchInput
             v-model="filters.search"
-            placeholder="Search rules…"
+            placeholder="Search availability rules…"
             class="w-64"
           />
           <UIcon
@@ -100,7 +100,7 @@ usePageShortcuts({ n: () => openForm() })
 
     <template #body>
       <p class="text-sm text-muted">
-        Menu items and categories without a rule are sold whenever the cafe is open. With rules, they're sold during any of their times.
+        Control when menu items and categories can be ordered. Items without a rule are available whenever the cafe is open.
       </p>
 
       <StatusTabs

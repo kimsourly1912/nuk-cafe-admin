@@ -1,4 +1,4 @@
-import type { AvailabilityWindow } from '#shared/contracts/menu-availability'
+import type { AvailabilityRule, AvailabilityWindow } from '#shared/contracts/menu-availability'
 import type { WindowRow } from '../schemas/availability-rule-form'
 import { toRows } from '../schemas/availability-rule-form'
 
@@ -16,7 +16,7 @@ export const WEEKDAYS = [
 
 const label = (day: number) => WEEKDAYS[day - 1]?.label ?? '?'
 
-/** "Every day", "Mon–Fri", "Sat, Sun" or "Mon, Wed–Fri". */
+/** "Every day", "Mon–Fri", "Sat–Sun", "Mon, Wed–Fri" or "Mon, Wed": consecutive days as a range. */
 export function formatWeekdays(days: number[]): string {
   const sorted = [...new Set(days)].sort((a, b) => a - b)
   if (sorted.length === 7) return 'Every day'
@@ -26,7 +26,7 @@ export function formatWeekdays(days: number[]): string {
     if (run && run.at(-1) === day - 1) run.push(day)
     else runs.push([day])
   }
-  return runs.map(run => (run.length >= 3 ? `${label(run[0]!)}–${label(run.at(-1)!)}` : run.map(label).join(', '))).join(', ')
+  return runs.map(run => (run.length >= 2 ? `${label(run[0]!)}–${label(run.at(-1)!)}` : run.map(label).join(', '))).join(', ')
 }
 
 /** `450` → `"7:30 AM"`; `0` and `1440` → `"12:00 AM"`. */
@@ -36,11 +36,18 @@ export function formatClock(minute: number): string {
   return `${hour % 12 || 12}:${String(inDay % 60).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'}`
 }
 
+/** An end before the start runs into the next day; an end of 12:00 AM (0 or 1440) is midnight. */
+export const isOvernight = (start: number, end: number) => end % 1440 !== 0 && end < start
+
+/** "7:00 AM – 11:00 AM", "10:00 PM – 2:00 AM", "All day" (without the "next day" note). */
+export function timeRange(start: number, end: number): string {
+  if (start === 0 && end % 1440 === 0) return 'All day'
+  return `${formatClock(start)} – ${formatClock(end)}`
+}
+
 /** "7:00 AM – 11:00 AM", "10:00 PM – 2:00 AM (next day)", "All day". */
 export function formatTimes(start: number, end: number): string {
-  if (start === 0 && end % 1440 === 0) return 'All day'
-  const nextDay = end !== 0 && end < start ? ' (next day)' : ''
-  return `${formatClock(start)} – ${formatClock(end)}${nextDay}`
+  return `${timeRange(start, end)}${isOvernight(start, end) ? ' (next day)' : ''}`
 }
 
 /** A row as one line: "Mon–Fri · 7:00 AM – 11:00 AM". */
@@ -52,4 +59,32 @@ export const formatRow = (row: Required<WindowRow>) => `${formatWeekdays(row.day
  */
 export function describeWindows(windows: AvailabilityWindow[]): string {
   return toRows(windows).map(row => formatRow({ days: row.days, start: row.start ?? 0, end: row.end ?? 0 })).join('; ')
+}
+
+/** One line of a rule's weekly agenda: its days, its times, and whether it ends the next day. */
+export interface ScheduleLine {
+  days: string
+  times: string
+  nextDay: boolean
+}
+
+/** A rule's windows as agenda lines, one per group of days with the same times (D76). */
+export function scheduleLines(windows: AvailabilityWindow[]): ScheduleLine[] {
+  return toRows(windows).map(row => ({
+    days: formatWeekdays(row.days),
+    times: timeRange(row.start ?? 0, row.end ?? 0),
+    nextDay: isOvernight(row.start ?? 0, row.end ?? 0),
+  }))
+}
+
+/** The ISO weekdays a rule's windows start on. */
+export const activeWeekdays = (windows: AvailabilityWindow[]) => new Set(windows.map(w => w.weekday))
+
+/** "18 items · 2 categories", "1 item", "Not used yet". */
+export function usageSummary(rule: Pick<AvailabilityRule, 'itemCount' | 'categoryCount'>): string {
+  const parts = [
+    ...(rule.itemCount ? [`${rule.itemCount} ${rule.itemCount === 1 ? 'item' : 'items'}`] : []),
+    ...(rule.categoryCount ? [`${rule.categoryCount} ${rule.categoryCount === 1 ? 'category' : 'categories'}`] : []),
+  ]
+  return parts.length ? parts.join(' · ') : 'Not used yet'
 }
