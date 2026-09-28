@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * A rule in the library, as a weekly agenda (D76). One reading path, left to right from `lg` and
- * top to bottom on phones: who it is and what uses it, the week at a glance, its times grouped by
+ * A rule in the library, as a weekly agenda (D76). One reading path, left to right when the card is
+ * `@4xl` (56rem) wide and top to bottom when narrower (the card is its own container, D87: beside
+ * the sidebar at 1024px it's too narrow for one row): who it is and what uses it, the week at a glance, its times grouped by
  * days ("Mon–Fri · 6:30 AM – 11:00 AM", overnight ones marked "next day"), then Manage (View when
  * archived) and the ⋮ menu. The card grows with its times; nothing is truncated.
  */
@@ -31,10 +32,10 @@ const days = computed(() => activeWeekdays(props.rule.windows))
     :aria-busy="busy || undefined"
     class="relative"
     :class="busy && 'pointer-events-none opacity-50'"
-    :ui="{ body: 'flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6' }"
+    :ui="{ root: '@container', body: 'flex flex-col gap-4 @4xl:flex-row @4xl:items-start @4xl:gap-6' }"
   >
     <!-- Identity and usage -->
-    <div class="flex items-start gap-3 pr-10 lg:w-64 lg:shrink-0 lg:pr-0">
+    <div class="flex items-start gap-3 pr-10 @4xl:w-64 @4xl:shrink-0 @4xl:pr-0">
       <UIcon
         name="i-lucide-calendar-clock"
         class="mt-0.5 size-5 shrink-0"
@@ -61,10 +62,10 @@ const days = computed(() => activeWeekdays(props.rule.windows))
       </div>
     </div>
 
-    <USeparator class="lg:hidden" />
+    <USeparator class="@4xl:hidden" />
 
     <!-- The week at a glance -->
-    <div class="lg:shrink-0">
+    <div class="@4xl:shrink-0">
       <p class="mb-1.5 text-xs font-medium text-muted">
         Weekly schedule
       </p>
@@ -93,7 +94,7 @@ const days = computed(() => activeWeekdays(props.rule.windows))
           class="mt-0.5 size-4 shrink-0 text-muted"
         />
         <span class="w-28 shrink-0 text-muted">{{ line.days }}</span>
-        <span class="ms-auto text-right tabular-nums lg:ms-0 lg:text-left">
+        <span class="ms-auto text-right tabular-nums @4xl:ms-0 @4xl:text-left">
           {{ line.times }}
           <span
             v-if="line.nextDay"
@@ -104,16 +105,16 @@ const days = computed(() => activeWeekdays(props.rule.windows))
     </ul>
 
     <!-- Actions: Manage / View; ⋮ sits top-right on phones -->
-    <div class="flex items-center gap-2 lg:shrink-0">
+    <div class="flex items-center gap-2 @4xl:shrink-0">
       <UButton
         :label="archived ? 'View' : 'Manage'"
         :aria-label="`${archived ? 'View' : 'Manage'} ${rule.name}`"
         color="neutral"
         variant="outline"
-        class="justify-center max-lg:flex-1"
+        class="justify-center @max-4xl:flex-1"
         @click="emit('open')"
       />
-      <div class="absolute right-4 top-4 lg:static">
+      <div class="absolute right-4 top-4 @4xl:static">
         <UIcon
           v-if="busy"
           name="i-lucide-loader-circle"
