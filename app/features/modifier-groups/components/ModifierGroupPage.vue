@@ -320,7 +320,6 @@ const headerActions = computed(() => archived.value
       <div
         v-else
         class="space-y-6"
-        :class="settingsDirty && !archived && 'pb-20 lg:pb-0'"
       >
         <!-- Heading -->
         <div
@@ -593,10 +592,11 @@ const headerActions = computed(() => archived.value
         </div>
       </div>
 
-      <!-- Phones: Save changes at hand while the settings have changes -->
-      <div
+      <!-- Below lg: Save changes at hand while the settings have changes (from lg it's in the navbar) -->
+      <BottomActionBar
         v-if="group && settingsDirty && !archived"
-        class="fixed inset-x-0 bottom-0 z-30 border-t border-default bg-default/95 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] backdrop-blur lg:hidden"
+        label="Settings actions"
+        expanded="hidden"
       >
         <UButton
           label="Save changes"
@@ -606,7 +606,7 @@ const headerActions = computed(() => archived.value
           :disabled="busy"
           @click="saveSettings()"
         />
-      </div>
+      </BottomActionBar>
     </template>
   </UDashboardPanel>
 </template>

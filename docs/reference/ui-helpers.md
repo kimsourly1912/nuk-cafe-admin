@@ -4,7 +4,9 @@
 
 - [`useConfirm`](#useconfirm)
 - [`useTableSelection`](#usetableselection)
+- [`<BottomActionBar>`](#bottomactionbar)
 - [`<BulkActionsBar>`](#bulkactionsbar)
+- [`useLayoutContext`](#uselayoutcontext)
 - [`previewList` and `pluralize`](#previewlist-and-pluralize)
 - [`<SearchInput>`](#searchinput)
 - [`<ListEmptyState>`](#listemptystate)
@@ -129,13 +131,42 @@ Without a table (cards, trees), bind the helpers:
 
 ---
 
+## `<BottomActionBar>`
+
+The one bottom action bar (D77 decision 3, D78): a page's mode bar (Select, Reorder), its Save bar or its bulk bar. The feature puts ordinary Nuxt UI buttons (and a short status text) in the slot; the bar owns only its placement:
+
+- **Below `lg`:** fixed to the bottom of the screen, full width, with safe-area padding. While it shows, its scroll container (the panel body) gets matching bottom padding and `scroll-padding-bottom`, so the last row and a focused field are never under it. While a text field elsewhere has focus (an on-screen keyboard: `isTextEntry` in `app/utils/bottom-bar.ts`), it steps aside and comes back on blur; the padding stays, so nothing jumps.
+- **From `lg`,** `expanded` decides: `inline` sits where it's placed (above the list: Categories), `pinned` sticks to the bottom of the panel (place it **last** in the body: bulk bars), `hidden` isn't shown (the page has the action in its navbar: the Add-on page's Save changes).
+- **One bar at a time,** app-wide: the most recently opened one shows.
+
+It's a `role="toolbar"` named by `label`. Its only styling is Nuxt UI's surface tokens (`bg-default`, `border-default`); no blur, shadow or colors of its own. Overlays don't use it: a modal's or slideover's footer is Nuxt UI's own `#footer` slot (the Options editor's Done reordering).
+
+Source: `app/components/BottomActionBar.vue`
+
+```vue
+<template #body>
+  <BottomActionBar v-if="mode === 'reorder'" label="Reorder">
+    <p class="min-w-0 flex-1 text-sm text-muted">Drag a row or use its arrows.</p>
+    <UButton label="Save order" icon="i-lucide-save" @click="saveOrder()" />
+  </BottomActionBar>
+  <!-- list… -->
+</template>
+```
+
+| Prop / slot | Description |
+|---|---|
+| `label: string` | The toolbar's accessible name ("Bulk actions", "Reorder", "Settings actions"). |
+| `open?: boolean` | Shown when true (default). `v-if` works too. |
+| `expanded?: 'inline' \| 'pinned' \| 'hidden'` | Placement from `lg` (default `inline`). |
+| default slot | The bar's content: a flex row that wraps (`gap-2`); give text `min-w-0 flex-1`. |
+
 ## `<BulkActionsBar>`
 
-A **floating** bar at the bottom of the list (Linear-style): "5 selected · *your actions* · Clear". It renders nothing when `count` is 0, fades in and out (100–150 ms), and Escape inside it clears the selection. It's a `role="toolbar"` named "Bulk actions".
+The bulk bar while rows are selected: "5 selected · *your actions* · Clear". A [`BottomActionBar`](#bottomactionbar) with `expanded="pinned"`: fixed to the bottom of the screen below `lg`, sticky to the bottom of the panel from `lg`. It renders nothing when `count` is 0, and Escape inside it clears the selection. It's a `role="toolbar"` named "Bulk actions".
 
 Source: `app/components/BulkActionsBar.vue`
 
-Put it **at the end of the page body** (`#body` of `UDashboardPanel`); it's `sticky` to the bottom of the scrolling panel.
+Put it **at the end of the page body** (`#body` of `UDashboardPanel`).
 
 ```vue
 <template #body>
@@ -146,10 +177,31 @@ Put it **at the end of the page body** (`#body` of `UDashboardPanel`); it's `sti
 </template>
 ```
 
-> E2E: the bar fades out, so after an action that clears the selection, wait with `expect.poll(() => page.getByText(/\d+ selected/).count()).toBe(0)`.
-
 | Prop / slot / event | Description |
 |---|---|
+| `count: number` | Number of selected rows. |
+| default slot | Action buttons. |
+| `@clear` | Clicked Clear. Usually `selection.clear()`. |
+
+## `useLayoutContext`
+
+The viewport's width class for choices CSS can't make (D77, [responsive-layout §1](./responsive-layout.md#constrained-surfaces-container-queries)): `fullscreen` on a `UModal`, a `UDrawer` instead of a dropdown, which URL a list opens. Everything CSS can express uses Tailwind's `sm:`/`lg:` variants or container queries instead.
+
+Source: `app/composables/useLayoutContext.ts`
+
+```ts
+const { isCompact, isExpanded } = useLayoutContext()
+// <UModal :fullscreen="isCompact">
+```
+
+| Returns | Description |
+|---|---|
+| `isCompact: Ref<boolean>` | Narrower than Tailwind's `sm` (`width < 40rem`, 640px at the default font size). |
+| `isExpanded: Ref<boolean>` | Tailwind's `lg` and wider (`width >= 64rem`). |
+
+The queries are Tailwind's own breakpoints in `rem`, so JavaScript and CSS switch at the same width even with a larger browser font. Width only: never the user agent, touch or hover.
+
+---|---|
 | `count: number` | Number of selected rows. |
 | default slot | Action buttons. |
 | `@clear` | Clicked Clear. Usually `selection.clear()`. |

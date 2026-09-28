@@ -539,7 +539,12 @@ describe('add-ons on a phone', () => {
 
     await page.getByRole('tab', { name: /Settings/ }).click()
     await page.getByLabel('Group name').fill('Flavors')
-    const save = page.getByRole('button', { name: 'Save changes' }).filter({ visible: true })
+    // While the name field has the keyboard, the bar steps aside; it comes back on blur
+    const bar = page.getByRole('toolbar', { name: 'Settings actions' })
+    await expect.poll(() => bar.isVisible()).toBe(false)
+    await page.getByLabel('Group name').blur()
+    const save = bar.getByRole('button', { name: 'Save changes' })
+    await save.waitFor()
     const box = (await save.boundingBox())!
     expect(box.y + box.height).toBeGreaterThan(844 - 40)
     await page.getByRole('tab', { name: /Add-ons/ }).click()

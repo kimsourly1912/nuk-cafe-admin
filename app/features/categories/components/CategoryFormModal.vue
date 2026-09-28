@@ -10,7 +10,6 @@
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { MenuCategory } from '#shared/contracts/menu-categories'
-import { useMediaQuery } from '@vueuse/core'
 import { AvailabilityRuleSelect } from '~/features/availability-rules'
 import { useCategoryMutations } from '../composables/useCategories'
 import { useAllCategories } from '../composables/useCategoryOptions'
@@ -41,7 +40,7 @@ const state = reactive<CategoryForm>(copy(props.draft ?? start()))
 const base = shallowRef(props.category)
 /** A category with subcategories stays top-level (two levels, D44): its parent can't change. */
 const hasSubs = computed(() => (base.value?.childCount ?? 0) > 0)
-const fullscreen = useMediaQuery('(max-width: 639px)')
+const { isCompact: fullscreen } = useLayoutContext()
 
 const { create, update } = useCategoryMutations()
 const saving = ref(false)

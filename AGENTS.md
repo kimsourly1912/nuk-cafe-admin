@@ -160,7 +160,9 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `apiFetch<T>(path, opts)` | `utils/api.ts`, engine `utils/api-fetch.ts` | Every call to our API (`/api` + path): `ApiError` on failure, no retries, session loss and required password change handled |
 | `useApiQuery(key, handler, opts)` | `composables/` | Every read (see "CRUD state") |
 | `useMutation(fn, opts)` | `composables/`, engine in `utils/mutation.ts` | Every create/update/delete, single or batch |
-| `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Selection for tables, cards and trees (`isSelected`, `toggle`, `toggleAll`); the floating bulk bar |
+| `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Selection for tables, cards and trees (`isSelected`, `toggle`, `toggleAll`); the bulk bar |
+| `BottomActionBar` | `components/` | The one bottom bar for a page's mode, Save or bulk actions (fixed below `lg`, one at a time, steps aside for the keyboard) |
+| `useLayoutContext()` | `composables/` | `isCompact` / `isExpanded` for choices CSS can't make (full-screen modal, drawer vs dropdown); never `useMediaQuery` by hand |
 | `StatusTabs` | `components/` | Status filter as tabs with counts; each feature names its statuses |
 | `ListSkeleton` | `components/` | First-load placeholders (rows or cards) |
 | `previewList`, `pluralize` | `utils/text.ts` | "Coffee, Tea and 3 more", "3 categories" |

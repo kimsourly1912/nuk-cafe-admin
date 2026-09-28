@@ -5,7 +5,6 @@
  * messages. Open via `useOverlay().create(ModifierGroupCreateModal)`; emits `close(group)`.
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
-import { useMediaQuery } from '@vueuse/core'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import { MAX_MODIFIERS } from '#shared/contracts/menu-modifiers'
 import { useModifierGroupMutations } from '../composables/useModifierGroups'
@@ -19,7 +18,7 @@ const state = reactive<ModifierGroupForm>(toModifierGroupForm())
 const { create } = useModifierGroupMutations()
 const saving = ref(false)
 
-const fullscreen = useMediaQuery('(max-width: 639px)')
+const { isCompact: fullscreen } = useLayoutContext()
 const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emit('close') })
 
 const form = useTemplateRef('form')
