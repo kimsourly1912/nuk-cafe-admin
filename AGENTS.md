@@ -44,7 +44,14 @@ pnpm vitest run app/features/categories   # one feature's tests
 pnpm vitest run -t "refreshes once"
 ```
 
-Before finishing a change, run `pnpm lint`, `pnpm typecheck` and `pnpm test`. CI (`.github/workflows/ci.yml`) runs the same commands. Local setup for a first admin: [docs/reference/auth.md → First admin](docs/reference/auth.md#first-admin-local-setup).
+**Checks (D83):**
+- **Before opening a PR, locally:** `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, and the e2e files of the feature you changed (`pnpm vitest run --project e2e test/e2e/<feature>.test.ts`). The e2e build is reused while no build input changed (`E2E_REBUILD=1` forces one), so rerunning tests or taking screenshots costs no rebuild.
+- **The full suite runs in CI** (`.github/workflows/ci.yml`: lint, typecheck, audit, unit/server, e2e in 3 shards) on every PR, and again on `main` before the staging deploy, which runs only when every job passed. A shared building block or app-wide change (a root composable, `app.config.ts`, a plugin) also runs the full `pnpm test:e2e` locally first.
+- **Merge only when the PR's checks are green.** A red PR is fixed on the same PR; a red `main` is fixed before any new work.
+- **"Remove the guard and see the test fail"** is required for new guards (locks, permissions, money, idempotency, version checks); optional elsewhere.
+- **Docs per step:** one `decisions.md` entry and the step's line in `progress.md`; reference pages only when a shared building block or a rule changes.
+
+Local setup for a first admin: [docs/reference/auth.md → First admin](docs/reference/auth.md#first-admin-local-setup).
 
 Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix open redirect after login`), not `new`. The history is how the team finds when something broke. If lint or typecheck complains about missing `.nuxt/*` files, run `pnpm nuxt prepare`.
 

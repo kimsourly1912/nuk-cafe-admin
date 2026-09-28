@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-28 (Add-on group page on the UI standard, D82, awaiting review; default control sizes on phones, D81, and status-color contrast, D80, merged; Staff on the UI standard, D79, merged; UI foundations, D78, merged; responsive UI standard, D77; Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-28 (faster check workflow, D83, awaiting review; Add-on group page on the UI standard, D82, merged; default control sizes on phones, D81, and status-color contrast, D80, merged; Staff on the UI standard, D79, merged; UI foundations, D78, merged; responsive UI standard, D77; Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -81,7 +81,7 @@ Everything else (branches and tables, the customer website, orders, payments, lo
 
 The server follows the **server standard** ([docs/server/](server/README.md), D43; all server code since D71). Each phase gets a short plan before coding and ends with passing tests and an update here.
 
-**How we work:** one step at a time. For each step the agent writes a short plan (for steps marked ✋, it asks first), builds it on its own branch, runs `pnpm lint`, `pnpm typecheck` and `pnpm test`, updates the docs, then **stops for review**. The next step starts only after approval. ✋ marks a step that needs a decision from the owner first (question numbers link to the Open questions table). ✅ marks a step that is done.
+**How we work:** one step at a time. For each step the agent writes a short plan (for steps marked ✋, it asks first), builds it on its own branch, runs the local checks (lint, typecheck, unit/server tests and the changed feature's e2e files; AGENTS.md → Checks, D83), updates the docs, opens a PR whose CI runs the full suite, then **stops for review**. The owner merges when the PR's checks are green. The next step starts only after approval. ✋ marks a step that needs a decision from the owner first (question numbers link to the Open questions table). ✅ marks a step that is done.
 
 ### Phase 0: groundwork
 
@@ -198,7 +198,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-28 (unit + server 511, e2e 223).
+- Before a PR: `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` and the changed feature's e2e files; CI runs everything (AGENTS.md → Checks, D83). All pass as of 2026-09-28 (unit + server 511, e2e 223).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
@@ -223,7 +223,7 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Pitfall: to smoke-test a production build, run `node .output/server/index.mjs` with the `.env` variables **and** `NUXT_PUBLIC_SITE_URL` set; without it every auth-touching route answers 500 (logged as "siteUrl required in production").
   - Pitfall: backticks inside a `node -e "…"` script in bash are command substitution: they vanish silently. Use a script file or the editor for text containing backticks.
   - Pitfall: several repo files use CRLF line endings; a Node text replacement with LF anchors silently matches nothing. Normalize (`replace(/\r\n/g, '\n')`) before replacing, and check the replacement happened.
-- **e2e (preferred):** `pnpm vitest run --project e2e`. Add scenarios to `test/e2e/` instead of throwaway scripts. Pitfalls met so far:
+- **e2e (preferred):** `pnpm vitest run --project e2e`. Add scenarios to `test/e2e/` instead of throwaway scripts. The build is reused while nothing it reads changed (`test/e2e/support/global-setup.ts`, D83: "[e2e] Reusing the build" in the log); `E2E_REBUILD=1` forces a build, CI always builds. Measured: a feature file takes ~27 s reusing the build, ~65–90 s with one. Pitfalls met so far:
   - In a Claude Code cloud container the e2e harness can't find Google Chrome (`launch: { channel: 'chrome' }` in `test/e2e/support/mock-api.ts`; "Run pnpm exec playwright install chrome"). Run the e2e tests there with that line temporarily changed to `launch: { executablePath: '/opt/pw-browsers/chromium' }`, and don't commit the change. Font-provider fetch errors in that run's log are harmless.
   - **Toast actions can't be reached while a modal or slide-over is open**: the overlay hides the rest of the page (`aria-hidden`), toasts included, so `getByRole('button', …)` never finds a toast's button (and neither can a keyboard or screen-reader user). Put an action the user needs while the overlay is open inside the overlay (the Options editor's Reload alert, D67). "Reopen" toasts are fine: they appear after the modal closed.
   - `expect.poll` defaults to a 1 s timeout; a cold page (session → refresh → redirect) can take longer under full-suite load. The e2e project sets 5 s (`vitest.config.ts`). Flaky "expected /categories to be /login" failures came from this.
