@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-28 (status-color contrast, D80, awaiting review; Staff on the UI standard, D79, merged; UI foundations, D78, merged; responsive UI standard, D77; Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-28 (default control sizes on phones, D81, and status-color contrast, D80, awaiting review; Staff on the UI standard, D79, merged; UI foundations, D78, merged; responsive UI standard, D77; Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -59,7 +59,7 @@ The Foundation table below is the app's shared UI behavior; it stays valid throu
 | Feature architecture + ESLint boundary rules | done | lint (violations verified to be reported) |
 | CRUD state: `useApiQuery`, `useMutation` (per-item concurrency, shared state, batch, Stop, Retry failed), `useTableSelection`, `BulkActionsBar`, leave-page guard | done | unit (engine), browser-mock (all async scenarios) |
 | **List UI refresh (2026-09-26, [plan](plans/list-ui-refresh.md), D37):** `StatusTabs` + `useStatusCounts`, floating `BulkActionsBar`, `ListSkeleton`, selection helpers for cards/trees | done | e2e on all three pages; light + dark screenshots |
-| **UI foundations (2026-09-28, D78, D80):** 44px compact targets in `app.config.ts`, light-mode primary and status colors at AA-passing shades (primary, warning and success 800, error 700, info 600), `useLayoutContext()`, `<BottomActionBar>` (one at a time, makes room, steps aside for the keyboard) | done | unit (`bottom-bar`), e2e (`ui-foundations` 12, checked to fail without the configuration), screenshots 390/1440 px light and dark |
+| **UI foundations (2026-09-28, D78, D80, D81):** Nuxt UI's default sizes at every width (44px phone targets tried and removed, D81) with invisible hit areas for checkboxes, radios and switches, light-mode primary and status colors at AA-passing shades (primary, warning and success 800, error 700, info 600), `useLayoutContext()`, `<BottomActionBar>` (one at a time, makes room, steps aside for the keyboard) | done | unit (`bottom-bar`), e2e (`ui-foundations` 12, checked to fail without the configuration), screenshots 390/1440 px light and dark |
 
 ### Features
 

@@ -189,14 +189,14 @@ describe('staff on a phone', () => {
     })
   }
 
-  it('opens a person from their row, full screen, with the actions beside the row (not inside it)', async () => {
+  it('opens a person from their row (a large target), full screen, with the actions beside the row (not inside it)', async () => {
     const { page } = await open(undefined, {}, 390)
     const target = page.getByRole('button', { name: 'Sophea', exact: true })
     const actions = page.getByRole('button', { name: 'Actions for Sophea', exact: true })
     expect(await actions.evaluate(el => el.parentElement?.closest('button, a') === null)).toBe(true)
     const [targetBox, actionsBox] = [(await target.boundingBox())!, (await actions.boundingBox())!]
     expect(targetBox.height).toBeGreaterThanOrEqual(44)
-    expect(actionsBox.width).toBeGreaterThanOrEqual(44)
+    expect(actionsBox.width).toBeGreaterThanOrEqual(24)
     expect(actionsBox.x).toBeGreaterThanOrEqual(targetBox.x + targetBox.width)
 
     await target.click()

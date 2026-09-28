@@ -29,9 +29,9 @@ async function open(width: number, height = 812, colorScheme: 'light' | 'dark' =
 }
 
 /**
- * Every visible Nuxt UI control (its `data-slot` root: buttons, fields, tabs) that's smaller than 44px:
- * `[what, width, height]`. The central configuration covers Nuxt UI's components only; plain
- * elements a page draws itself are its own step of the migration (docs/plans/ui-standardization.md).
+ * Every visible Nuxt UI control (its `data-slot` root: buttons, fields, tabs) smaller than WCAG 2.2
+ * AA's 24×24px (2.5.8) in either dimension: `[what, width, height]`. Plain elements a page draws
+ * itself are its own step of the migration (docs/plans/ui-standardization.md).
  */
 function smallTargets(page: Page) {
   return page.evaluate(() => {
@@ -40,8 +40,7 @@ function smallTargets(page: Page) {
       .filter(el => el.offsetParent !== null && !el.closest('[aria-hidden="true"]'))
       .map((el) => {
         const box = el.getBoundingClientRect()
-        const iconOnly = el.tagName === 'BUTTON' && !el.textContent?.trim()
-        const tooSmall = box.height < 44 || (iconOnly && box.width < 44)
+        const tooSmall = box.height < 24 || box.width < 24
         return tooSmall ? [el.getAttribute('aria-label') ?? el.textContent?.trim() ?? el.tagName, Math.round(box.width), Math.round(box.height)] : null
       })
       .filter(Boolean)
@@ -77,7 +76,7 @@ function contrast(a: number[], b: number[]) {
 const cssVar = (page: Page, name: string) => page.evaluate(n => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), name)
 
 describe('touch targets', () => {
-  it('gives every button, tab and field at least 44px on a phone (icon-only buttons 44×44)', async () => {
+  it('keeps every button, tab and field at 24×24px or more on a phone (WCAG 2.2 AA)', async () => {
     const page = await open(375)
     expect(await smallTargets(page)).toEqual([])
     await page.getByRole('button', { name: 'Select', exact: true }).click()
@@ -85,10 +84,14 @@ describe('touch targets', () => {
     expect(await smallTargets(page)).toEqual([])
   })
 
-  it('keeps Nuxt UI\'s own sizes from sm up', async () => {
-    const page = await open(1024)
-    const box = (await page.getByRole('button', { name: 'Select', exact: true }).boundingBox())!
-    expect(box.height).toBeLessThan(40)
+  it('uses Nuxt UI\'s own sizes at every width: a phone\'s buttons are no bigger (D81)', async () => {
+    const height = async (width: number) => {
+      const page = await open(width)
+      return (await page.getByRole('button', { name: 'Select', exact: true }).boundingBox())!.height
+    }
+    const [phone, desktop] = [await height(375), await height(1024)]
+    expect(phone).toBe(desktop)
+    expect(phone).toBeLessThan(40)
   })
 
   it('gives a checkbox a 44px hit area on a phone without making it bigger', async () => {
