@@ -5,7 +5,8 @@
  * stored order, what uses it, and an Edit (or View, when archived) button that opens the editor.
  * The ⋮ menu holds only Archive or Restore. While searching, values that match are listed.
  *
- * Chips: 3 on phones, 5 from `sm`, then "+N more" (CSS decides, so no resize listener).
+ * Chips: 3 on a narrow card, 5 once the card is `@sm` (24rem) wide, then "+N more". The card is its
+ * own container (D86): in the two-column grid from `lg` a card is narrower than on a tablet.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { OptionSet } from '#shared/contracts/menu-options'
@@ -29,7 +30,7 @@ const meta = computed(() => [valueCountLabel(values.value.length), hidden.value 
 
 const PHONE_CHIPS = 3
 const WIDE_CHIPS = 5
-const chipClass = (index: number) => (index < PHONE_CHIPS ? '' : index < WIDE_CHIPS ? 'hidden sm:block' : 'hidden')
+const chipClass = (index: number) => (index < PHONE_CHIPS ? '' : index < WIDE_CHIPS ? 'hidden @sm:block' : 'hidden')
 </script>
 
 <template>
@@ -39,7 +40,7 @@ const chipClass = (index: number) => (index < PHONE_CHIPS ? '' : index < WIDE_CH
     :aria-label="set.name"
     :aria-busy="busy || undefined"
     :class="busy && 'pointer-events-none opacity-50'"
-    :ui="{ root: 'flex flex-col', body: 'flex-1 space-y-3' }"
+    :ui="{ root: '@container flex flex-col', body: 'flex-1 space-y-3' }"
   >
     <div class="flex items-start gap-3">
       <UIcon
@@ -106,11 +107,11 @@ const chipClass = (index: number) => (index < PHONE_CHIPS ? '' : index < WIDE_CH
       </ul>
       <span
         v-if="values.length > PHONE_CHIPS"
-        class="text-xs text-muted sm:hidden"
+        class="text-xs text-muted @sm:hidden"
       >+{{ values.length - PHONE_CHIPS }} more</span>
       <span
         v-if="values.length > WIDE_CHIPS"
-        class="hidden text-xs text-muted sm:inline"
+        class="hidden text-xs text-muted @sm:inline"
       >+{{ values.length - WIDE_CHIPS }} more</span>
     </div>
 
