@@ -300,4 +300,22 @@ describe('availability agenda', () => {
     await expect.poll(async () => Math.round((await page.getByRole('dialog').boundingBox())!.width)).toBe(390)
     await page.getByRole('dialog').getByRole('button', { name: 'Save' }).waitFor()
   })
+
+  it('lays a card out by its own width: stacked beside the sidebar at 1024px, one row at 1440px (D87)', async () => {
+    const at = async (width: number) => {
+      const page = await createPage()
+      await page.setViewportSize({ width, height: 900 })
+      await mockApi(page, { 'GET /admin/menu/availability-rules': () => [BREAKFAST, LATE] })
+      await page.goto(url('/availability'), { waitUntil: 'hydration' })
+      await card(page, 'Breakfast').waitFor()
+      const heading = (await card(page, 'Breakfast').getByRole('heading', { name: 'Breakfast' }).boundingBox())!
+      const strip = (await card(page, 'Breakfast').getByRole('list', { name: 'Weekly schedule' }).boundingBox())!
+      const box = (await card(page, 'Breakfast').boundingBox())!
+      // Nothing spills out of the card
+      const inside = await card(page, 'Breakfast').evaluate(el => el.scrollWidth <= el.clientWidth)
+      return { stripBelow: strip.y > heading.y + heading.height, fits: inside && strip.x + strip.width <= box.x + box.width }
+    }
+    expect(await at(1024)).toEqual({ stripBelow: true, fits: true })
+    expect(await at(1440)).toEqual({ stripBelow: false, fits: true })
+  })
 })

@@ -87,7 +87,7 @@ usePageShortcuts({ n: () => openForm() })
           <SearchInput
             v-model="filters.search"
             placeholder="Search availability rules…"
-            class="w-64"
+            class="w-full sm:w-64"
           />
           <UIcon
             v-if="refreshing"
