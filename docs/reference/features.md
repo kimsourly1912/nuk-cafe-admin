@@ -156,8 +156,13 @@ function useModifierGroupOptions() // → useApiQuery result, `data`: ModifierGr
 ### `describeRules`, `formatDelta`
 
 ```ts
-describeRules(1, 1)     // "Required · choose 1"
+describeRules(1, 1)     // "Required · choose exactly 1"
 describeRules(0, 2)     // "Optional · up to 2"
+describeRules(0, null)  // "Optional · choose any"
+describeRules(1, null)  // "Required · choose at least 1"
+describeRules(1, 3)     // "Required · choose 1–3"
 formatDelta(50)         // "+$0.50"; 0 → "Free"
 ```
+
+The wording is derived from `minSelect` / `maxSelect` each time, never stored (D75). It lives in `schemas/modifier-group-display.ts`, with `ruleParts` (badge + summary) and `explainRules` (a sentence) used by the Add-ons pages.
 

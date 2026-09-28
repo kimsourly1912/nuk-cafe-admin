@@ -5,11 +5,13 @@
  * messages. Open via `useOverlay().create(ModifierGroupCreateModal)`; emits `close(group)`.
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
+import { useMediaQuery } from '@vueuse/core'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import { MAX_MODIFIERS } from '#shared/contracts/menu-modifiers'
 import { useModifierGroupMutations } from '../composables/useModifierGroups'
 import type { ModifierGroupForm } from '../schemas/modifier-group-form'
-import { describeRules, modifierGroupFormSchema, toCreateModifierGroupBody, toModifierGroupForm } from '../schemas/modifier-group-form'
+import { describeRules } from '../schemas/modifier-group-display'
+import { modifierGroupFormSchema, toCreateModifierGroupBody, toModifierGroupForm } from '../schemas/modifier-group-form'
 
 const emit = defineEmits<{ 'close': [created?: ModifierGroup], 'update:open': [open: boolean] }>()
 
@@ -17,6 +19,7 @@ const state = reactive<ModifierGroupForm>(toModifierGroupForm())
 const { create } = useModifierGroupMutations()
 const saving = ref(false)
 
+const fullscreen = useMediaQuery('(max-width: 639px)')
 const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emit('close') })
 
 const form = useTemplateRef('form')
@@ -48,6 +51,7 @@ async function onSubmit({ data }: FormSubmitEvent<ModifierGroupForm>) {
 
 <template>
   <UModal
+    :fullscreen="fullscreen"
     title="New add-on group"
     description="Extras customers can add, like milk or syrups, with default prices. Items can set their own."
     :ui="{ content: 'sm:max-w-xl' }"

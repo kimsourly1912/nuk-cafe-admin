@@ -86,6 +86,9 @@ export async function listItems(db: Db, query: ItemListQuery): Promise<{ rows: I
   if (query.status && query.status !== 'all') conditions.push(eq(menuItems.status, query.status))
   else if (!query.status) conditions.push(ne(menuItems.status, 'archived'))
   if (query.categoryId) conditions.push(eq(menuItems.categoryId, query.categoryId))
+  if (query.modifierGroupId) {
+    conditions.push(sql`exists (select 1 from ${menuItemModifierGroups} where ${menuItemModifierGroups.itemId} = ${menuItems.id} and ${menuItemModifierGroups.groupId} = ${query.modifierGroupId})`)
+  }
   if (query.search) conditions.push(sql`${menuItems.name} like ${`%${query.search.replace(/[\\%_]/g, c => `\\${c}`)}%`} escape '\\'`)
   const where = conditions.length ? and(...conditions) : undefined
 

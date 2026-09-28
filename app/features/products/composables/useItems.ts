@@ -18,7 +18,7 @@ export { IMAGE_MAX_BYTES, IMAGE_TYPES }
 /** Uploads get longer than the API's 30 s default: 5 MB on a slow connection. */
 const UPLOAD_TIMEOUT_MS = 120_000
 
-export type ItemListFilters = Partial<Pick<ItemListQuery, 'search' | 'categoryId' | 'page' | 'pageSize'>> & { status?: ItemStatus }
+export type ItemListFilters = Partial<Pick<ItemListQuery, 'search' | 'categoryId' | 'modifierGroupId' | 'page' | 'pageSize'>> & { status?: ItemStatus }
 
 /** The API's default leaves archived items out; the "All" tab means all of them. */
 const withStatus = (query: ItemListFilters) => ({ ...query, status: query.status ?? 'all' })
@@ -33,7 +33,7 @@ export function useItemList(query: MaybeRefOrGetter<ItemListFilters>) {
 }
 
 /** "All 24 · Draft 3 · Published 20 · Archived 1" for the status tabs, with the other filters. */
-export function useItemStatusCounts(filters: () => Pick<ItemListFilters, 'search' | 'categoryId'>) {
+export function useItemStatusCounts(filters: () => Pick<ItemListFilters, 'search' | 'categoryId' | 'modifierGroupId'>) {
   const { data } = useApiQuery(
     'products:status-counts',
     async () => {
