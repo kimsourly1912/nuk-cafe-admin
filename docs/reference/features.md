@@ -10,6 +10,8 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 |---|---|
 | `auth` | [`useAuth`](./auth.md#useauth), [`loginRedirectTarget`](./auth.md#loginredirecttarget), `SessionUser` |
 | `categories` | [`CategorySelect`](#categoryselect), [`useCategoryOptions`](#usecategoryoptions), `categoriesNavigation` |
+| `option-sets` | [`useOptionSetOptions`](#useoptionsetoptions), `optionSetsNavigation` ("Options") |
+| `modifier-groups` | [`useModifierGroupOptions`](#usemodifiergroupoptions), [`describeRules`, `formatDelta`](#describerules-formatdelta), `modifierGroupsNavigation` ("Add-ons") |
 | `availability-rules` | [`AvailabilityRuleSelect`](#availabilityruleselect), [`useAvailabilityRuleOptions`](#useavailabilityruleoptions), `availabilityRulesNavigation` |
 | `schedules` | [`ScheduleSelect`](#scheduleselect), [`useScheduleOptions`](#usescheduleoptions), `schedulesNavigation` |
 | `products` | `productsNavigation` ("Menu items"). A `ProductSelect` waits for its first consumer |
@@ -112,6 +114,44 @@ function useAvailabilityRuleOptions() // → useApiQuery result, `data`: Availab
 ### `availabilityRulesNavigation`
 
 The sidebar entry ("Availability").
+
+---
+
+## option-sets
+
+### `useOptionSetOptions`
+
+Every option set with its values, archived ones included (an item may still use one), for the menu-item form. The form offers only active sets and builds the price grid from their active values.
+
+```ts
+function useOptionSetOptions() // → useApiQuery result, `data`: OptionSet[] (`[]` until loaded)
+```
+
+- Key: `option-sets:list`, **shared with the Options page** (like D69), refreshed by `invalidate('option-sets')`.
+- Calls `GET /api/admin/menu/option-sets?status=all`.
+
+---
+
+## modifier-groups
+
+### `useModifierGroupOptions`
+
+Every add-on group with its add-ons, archived ones included, for the menu-item form (which offers only active groups).
+
+```ts
+function useModifierGroupOptions() // → useApiQuery result, `data`: ModifierGroup[] (`[]` until loaded)
+```
+
+- Key: `modifier-groups:list`, **shared with the Add-ons page**, refreshed by `invalidate('modifier-groups')`.
+- Calls `GET /api/admin/menu/modifier-groups?status=all`.
+
+### `describeRules`, `formatDelta`
+
+```ts
+describeRules(1, 1)     // "Required · choose 1"
+describeRules(0, 2)     // "Optional · up to 2"
+formatDelta(50)         // "+$0.50"; 0 → "Free"
+```
 
 ---
 

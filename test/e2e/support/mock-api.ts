@@ -5,6 +5,7 @@ import type { Page as ApiPage } from '../../../shared/contracts/common'
 import type { Category, Product, Schedule } from '../../../shared/contracts/menu'
 import type { AdminSession } from '../../../shared/contracts/identity'
 import type { MenuCategory } from '../../../shared/contracts/menu-categories'
+import type { MenuItem, MenuItemSummary } from '../../../shared/contracts/menu-items'
 import type { BranchOption, StaffMember } from '../../../shared/contracts/staff'
 
 /** Requests no handler answered, across every `mockApi` of the current test. */
@@ -73,6 +74,32 @@ export function categoryOf(id: string, name: string, overrides: Partial<Category
 /** A category of the new menu API (`/api/admin/menu/categories`). */
 export function menuCategoryOf(id: string, name: string, overrides: Partial<MenuCategory> = {}): MenuCategory {
   return { id, name, description: '', parentId: null, status: 'active', sortOrder: 1, childCount: 0, availabilityRules: [], version: 1, createdAt: STAMP, updatedAt: STAMP, ...overrides }
+}
+
+/** A menu item as the list shows it (`GET /api/admin/menu/items`): a draft in Tea at $3.50. */
+export function menuItemSummaryOf(id: string, name: string, overrides: Partial<MenuItemSummary> = {}): MenuItemSummary {
+  return { id, name, categoryId: 'cat-1', categoryName: 'Tea', status: 'draft', imageUrl: null, priceMinMinor: 350, priceMaxMinor: 350, sortOrder: 1, version: 1, updatedAt: STAMP, ...overrides }
+}
+
+/** A whole menu item (`GET /api/admin/menu/items/{id}`): one version at $3.50, no option sets or add-ons. */
+export function menuItemOf(id: string, name: string, overrides: Partial<MenuItem> = {}): MenuItem {
+  return {
+    id,
+    categoryId: 'cat-1',
+    name,
+    description: '',
+    image: null,
+    status: 'draft',
+    sortOrder: 1,
+    optionSets: [],
+    variations: [{ id: `${id}-v`, valueIds: [], label: '', priceMinor: 350, status: 'active', sellable: true }],
+    modifierGroups: [],
+    availabilityRules: [],
+    version: 1,
+    createdAt: STAMP,
+    updatedAt: STAMP,
+    ...overrides,
+  }
 }
 
 export function scheduleOf(id: string, name: string, overrides: Partial<Schedule> = {}): Schedule {
@@ -148,8 +175,10 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /admin/categories': () => [TEA, COFFEE],
   'GET /admin/menu/categories': () => [MENU_TEA, MENU_COFFEE],
   'POST /admin/menu/categories': ({ body }) => menuCategoryOf('cat-3', String((body as { name?: string })?.name ?? 'New')),
-  // The category form's rule picker.
+  // The category and item forms' pickers and libraries.
   'GET /admin/menu/availability-rules': () => [],
+  'GET /admin/menu/option-sets': () => [],
+  'GET /admin/menu/modifier-groups': () => [],
   'POST /admin/categories': ({ body }) => categoryOf('cat-3', String((body as { name?: string })?.name ?? 'New')),
 }
 
@@ -237,8 +266,8 @@ export function paginatedHandler<T extends Record<string, unknown>>(rows: T[] | 
     const status = url.searchParams.get('status')
     const matching = all
       .filter(r => !search || String(r[searchField]).toLowerCase().includes(search))
-      // Like the server's `status` filter (also what status-tab counts ask for).
-      .filter(r => !status || r.status === status)
+      // Like the server's `status` filter (also what status-tab counts ask for); `all` is every status.
+      .filter(r => !status || status === 'all' || r.status === status)
     return {
       items: matching.slice((page - 1) * pageSize, page * pageSize),
       page,

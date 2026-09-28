@@ -1,31 +1,23 @@
 <script setup lang="ts">
 /**
- * A menu item in the grid: image, name, category, price, status. Clicking the card opens it; the
- * checkbox and the ⋮ menu (always visible, for keyboard and touch) don't.
+ * A menu item in the grid: image, name, category, price range, status. Clicking the card opens it;
+ * the checkbox and the ⋮ menu (always visible, for keyboard and touch) don't.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { Product } from '#shared/contracts/menu'
+import type { MenuItemSummary } from '#shared/contracts/menu-items'
+import { ITEM_STATUS_LABELS, priceRange } from '../utils/item-display'
 
 const props = defineProps<{
-  product: Product
+  item: MenuItemSummary
   actions: DropdownMenuItem[]
   selected: boolean
-  /** A save or delete is running for it. */
+  /** A save or state change is running for it. */
   busy?: boolean
-  /** Leave the category out (the grid is grouped by category already). */
-  hideCategory?: boolean
 }>()
 
 const emit = defineEmits<{ open: [], select: [value: boolean] }>()
 
-const inactive = computed(() => props.product.status === 'INACTIVE')
-const details = computed(() => {
-  const count = props.product.variantGroups.length
-  return [
-    props.hideCategory ? undefined : props.product.category.name,
-    count ? `${count} ${count === 1 ? 'option group' : 'option groups'}` : undefined,
-  ].filter(Boolean).join(' · ')
-})
+const muted = computed(() => props.item.status !== 'active')
 
 function onClick(event: MouseEvent) {
   // Clicks on the checkbox or the menu are theirs, not "open".
@@ -38,18 +30,18 @@ function onClick(event: MouseEvent) {
   <article
     class="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg border bg-default transition hover:shadow-md focus-within:ring-2 focus-within:ring-primary"
     :class="[selected ? 'border-primary ring-1 ring-primary' : 'border-default', busy && 'pointer-events-none opacity-50']"
-    :aria-label="product.name"
+    :aria-label="item.name"
     :aria-busy="busy || undefined"
     @click="onClick"
   >
     <div class="relative aspect-4/3 bg-elevated">
       <img
-        v-if="product.image"
-        :src="product.image?.url"
-        :alt="product.name"
+        v-if="item.imageUrl"
+        :src="item.imageUrl"
+        :alt="item.name"
         loading="lazy"
         class="size-full object-cover"
-        :class="inactive && 'grayscale'"
+        :class="item.status === 'archived' && 'grayscale'"
       >
       <div
         v-else
@@ -63,7 +55,7 @@ function onClick(event: MouseEvent) {
 
       <UCheckbox
         :model-value="selected"
-        :aria-label="`Select ${product.name}`"
+        :aria-label="`Select ${item.name}`"
         class="absolute top-2 left-2 rounded bg-default/90 p-1"
         @update:model-value="value => emit('select', !!value)"
       />
@@ -85,14 +77,14 @@ function onClick(event: MouseEvent) {
             variant="solid"
             size="xs"
             class="bg-default/90 text-default hover:bg-default"
-            :aria-label="`Actions for ${product.name}`"
+            :aria-label="`Actions for ${item.name}`"
           />
         </UDropdownMenu>
       </div>
       <UBadge
-        v-if="inactive"
-        label="Inactive"
-        color="neutral"
+        v-if="muted"
+        :label="ITEM_STATUS_LABELS[item.status]"
+        :color="item.status === 'draft' ? 'warning' : 'neutral'"
         variant="solid"
         size="sm"
         class="absolute bottom-2 left-2"
@@ -103,17 +95,14 @@ function onClick(event: MouseEvent) {
       <div class="flex items-start justify-between gap-2">
         <h3
           class="line-clamp-2 font-medium text-highlighted"
-          :class="inactive && 'text-muted'"
+          :class="muted && 'text-muted'"
         >
-          {{ product.name }}
+          {{ item.name }}
         </h3>
-        <span class="shrink-0 font-semibold tabular-nums">{{ formatMinor(product.priceMinor) }}</span>
+        <span class="shrink-0 font-semibold tabular-nums">{{ priceRange(item) }}</span>
       </div>
-      <p
-        v-if="details"
-        class="truncate text-sm text-muted"
-      >
-        {{ details }}
+      <p class="truncate text-sm text-muted">
+        {{ item.categoryName }}
       </p>
     </div>
   </article>

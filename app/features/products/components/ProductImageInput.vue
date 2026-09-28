@@ -1,20 +1,20 @@
 <script setup lang="ts">
 /**
- * Product image: preview + Upload/Replace/Remove. The file is checked (type, size) and uploaded
+ * Menu item image: preview + Upload/Replace/Remove. The file is checked (type, size) and uploaded
  * as soon as it's picked; the form then holds the upload's `url` and asset `id`. Remove clears
- * both: the item is saved without an image (`imageAssetId: null`).
+ * both: the item is saved without an image (`imageId: null`).
  */
 import { useFileDialog } from '@vueuse/core'
-import { IMAGE_MAX_BYTES, IMAGE_TYPES, useProductMutations } from '../composables/useProducts'
+import { IMAGE_MAX_BYTES, IMAGE_TYPES, useItemMutations } from '../composables/useItems'
 
 const props = defineProps<{ disabled?: boolean }>()
 
 const imageUrl = defineModel<string | undefined>('imageUrl')
-const imageAssetId = defineModel<string | undefined>('imageAssetId')
+const imageId = defineModel<string | undefined>('imageId')
 /** True while an upload runs, so the form can wait before saving. */
 const uploading = defineModel<boolean>('uploading', { default: false })
 
-const { uploadImage } = useProductMutations()
+const { uploadImage } = useItemMutations()
 const formKey = useId()
 watchEffect(() => {
   uploading.value = uploadImage.isPending(formKey)
@@ -40,12 +40,12 @@ onChange(async (files) => {
   const result = await uploadImage.execute({ file, form: formKey })
   if (!result.ok) return
   imageUrl.value = result.data.url
-  imageAssetId.value = result.data.id
+  imageId.value = result.data.id
 })
 
 function removeImage() {
   imageUrl.value = undefined
-  imageAssetId.value = undefined
+  imageId.value = undefined
 }
 </script>
 

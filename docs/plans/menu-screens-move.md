@@ -14,8 +14,8 @@ The last part of 3.8b (D66): the two remaining legacy screens move onto `/api/ad
 - **`CategorySelect`** reads the new API. `level="main"` offers active top-level categories (for a parent); `level="leaf"` offers active categories without sub-categories (items go only in leaves, D44).
 - **Menu items list:** grid and table, filters (search, category, status: draft / published / archived), paginated from `GET /api/admin/menu/items`. The old "grouped menu" view is dropped: the public menu (3.8a) is the grouped view customers see, and the admin list filters by category.
 - **Menu items form:** a slide-over that saves the whole item at once (the API's PATCH takes the grid, add-ons and rules together, under one version). Option sets (up to 2) come from the Options library; the **price grid** has a row per value of the first set and a column per value of the second, each cell with a price and an on/off switch. Add-on groups come from the Add-ons library, each with "use this item's own rules" and own prices per add-on. Availability rules come from their library.
-- **States are actions** (the API's): Publish (needs a version switched on and priced), Unpublish, Archive, Restore, from the list and the form.
-- **Not built yet:** reordering items within a category (the API has it; no screen had it before either).
+- **States are actions** (the API's): Publish (needs a version switched on and priced), Unpublish, Archive (also in bulk), Restore, from the list. An archived item opens read-only (D70).
+- **Not built yet:** reordering items within a category (the API has it; no screen had it before either), publishing from inside the form, bulk publish.
 
 ## Data on staging
 Nothing is in production. The legacy tables' rows on staging (test categories, schedules and items) are **not carried over**: the new model differs (option sets, the price grid, library add-ons), so they'd be re-entered through the new screens. The drop migration runs on the next deploy after 3c merges.

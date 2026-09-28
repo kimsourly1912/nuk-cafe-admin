@@ -22,7 +22,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 NUK Cafe is one Nuxt full stack app: the customer website, the admin workspace and the cashier workspace, plus our own API (Nitro) with Better Auth, NuxtHub, Drizzle, SQLite locally and D1/R2/KV on Cloudflare. Product scope: [the system blueprint](docs/plans/system-blueprint.md). **How the server is built: the [server standard](docs/server/README.md)** (routes `/api/<surface>/…`, `server/features/` with service/repository layers, Better Auth roles and branches, the data model, operations). Build order: [progress.md → Next steps](docs/progress.md#next-steps-recommended-order).
 
-**Transition:** the Schedules and Menu items screens still run on the pre-standard `/api/v1` routes (D41), now checked with `requirePermission`. Their server code lives in `server/legacy/` and is replaced in step 3.8b; don't extend it (ESLint forbids new code from importing it). Sign-in, staff and the **Categories**, **Availability**, **Options** and **Add-ons** pages (`app/features/categories/`, `availability-rules/`, `option-sets/`, `modifier-groups/`, D66–D69) run on the standard's `/api/admin` routes (D52).
+**Transition:** only the Schedules screen still runs on the pre-standard `/api/v1` routes (D41), now checked with `requirePermission`. Its server code lives in `server/legacy/` and is removed at the end of step 3.8b; don't extend it (ESLint forbids new code from importing it). Sign-in, staff and the **Categories**, **Menu items**, **Availability**, **Options** and **Add-ons** pages (`app/features/categories/`, `products/`, `availability-rules/`, `option-sets/`, `modifier-groups/`, D66–D70) run on the standard's `/api/admin` routes (D52).
 
 The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Schedules (card list) or Menu items (card grid + table); Categories is a tree (D37).
 
@@ -82,8 +82,8 @@ shared/contracts/                # API contracts: request schemas + response typ
 
 ### Cross-feature relationships (from the API)
 
-- A menu item (`Product`) has `categoryId` (required) and `scheduleIds[]`, so the products form uses `CategorySelect` and `ScheduleSelect`. Pickers forward attributes (`aria-label`) to their select and take `class` on the wrapper (D34).
-- The item ↔ schedule link is stored once (`product_schedules`) and written **only from the menu item** (`scheduleIds`). The schedule form shows its menu items read-only (`GET /schedules/{id}` → `products`) and never sends them (D41).
+- A menu item has a leaf `categoryId` (required, D44), option sets with a price grid, add-on groups and availability rules, so the item form uses `CategorySelect level="leaf"`, `useOptionSetOptions`, `useModifierGroupOptions` and `AvailabilityRuleSelect` (D70). Pickers forward attributes (`aria-label`) to their select and take `class` on the wrapper (D34).
+- An item's links to libraries (option sets, add-on groups, rules) are written **only from the item**, which sends the whole list; the library pages show "used by N items" read-only (D60, D61, D63).
 - A category has an optional `parentId` (main vs sub, two levels). The category form uses its own `CategorySelect level="main"`.
 - Every update names the `version` it read; a stale one is refused with 409 (D41). Forms keep the record they opened and send its version.
 
@@ -177,7 +177,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`, `CURRENCY` | `utils/money.ts` | Cents (API) ↔ dollars (forms, display), "$4.20" |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
 
-Expected to be promoted to the root when the first two features need them: `ProductImageInput` (in `app/features/products/`; rewards, banners and vouchers will need uploads too, through `POST /api/v1/admin/media`).
+Expected to be promoted to the root when the first two features need them: `ProductImageInput` (in `app/features/products/`; rewards, banners and vouchers will need uploads too, through `POST /api/admin/media`).
 
 ## Adding a full stack feature
 
