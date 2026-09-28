@@ -281,7 +281,7 @@ describe('add-on group page', () => {
     expect(add.bodies).toEqual([{ version: 1, name: 'Soy milk', priceDeltaMinor: 50, isDefault: false }])
     await row(page, 'Soy milk').waitFor()
 
-    await row(page, 'Oat milk').getByRole('button', { name: 'Edit Oat milk' }).click()
+    await row(page, 'Oat milk').getByRole('button', { name: 'Oat milk', exact: true }).click()
     const editDialog = page.getByRole('dialog', { name: 'Edit add-on' })
     expect(await editDialog.getByLabel('Name').inputValue()).toBe('Oat milk')
     await editDialog.getByLabel('Name').fill('Oat')
@@ -549,6 +549,50 @@ describe('add-ons on a phone', () => {
     expect(box.y + box.height).toBeGreaterThan(844 - 40)
     await page.getByRole('tab', { name: /Add-ons/ }).click()
     await row(page, 'Vanilla').waitFor()
+  })
+  it('opens an add-on from its name, with its actions beside the name (not inside it)', async () => {
+    const { page } = await openGroup(backend(), 'grp-1', 390)
+    const target = row(page, 'Oat milk').getByRole('button', { name: 'Oat milk', exact: true })
+    const actions = row(page, 'Oat milk').getByRole('button', { name: 'Actions for Oat milk' })
+    expect(await actions.evaluate(el => el.parentElement?.closest('button, a') === null)).toBe(true)
+    expect((await actions.boundingBox())!.x).toBeGreaterThanOrEqual((await target.boundingBox())!.x + (await target.boundingBox())!.width)
+    await target.click()
+    await page.getByRole('dialog', { name: 'Edit add-on' }).waitFor()
+  })
+
+  it('puts Cancel and Save order at the bottom of the screen while reordering', async () => {
+    const { page } = await openGroup(backend(), 'grp-1', 390)
+    await page.getByRole('button', { name: 'Reorder', exact: true }).click()
+    const bar = page.getByRole('toolbar', { name: 'Reorder' })
+    await bar.getByRole('button', { name: 'Save order' }).waitFor()
+    const box = (await bar.boundingBox())!
+    expect(Math.round(box.y + box.height)).toBe(844)
+    await bar.getByRole('button', { name: 'Cancel' }).click()
+    await row(page, 'Oat milk').waitFor()
+  })
+})
+
+describe('add-on rows by the width of their column', () => {
+  // The list is a container (D82): beside the settings column at 1024px it's narrow and stacks;
+  // at 1440px it has room for the price and Preselected columns.
+  it('stacks beside the settings column at 1024px', async () => {
+    const { page } = await openGroup(backend(), 'grp-1', 1024)
+    await row(page, 'Oat milk').getByText(/^Default price/).waitFor()
+    expect(await page.getByRole('checkbox', { name: 'Oat milk is preselected' }).isVisible()).toBe(false)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  })
+
+  it('shows the price and Preselected columns at 1440px', async () => {
+    const { page } = await openGroup(backend(), 'grp-1', 1440)
+    await page.getByRole('checkbox', { name: 'Oat milk is preselected' }).waitFor()
+    expect(await row(page, 'Oat milk').getByText(/^Default price/).isVisible()).toBe(false)
+    const reorderAbove = async () => {
+      await page.getByRole('button', { name: 'Reorder', exact: true }).click()
+      const bar = page.getByRole('toolbar', { name: 'Reorder' })
+      await bar.waitFor()
+      return bar.evaluate(el => getComputedStyle(el).position)
+    }
+    expect(await reorderAbove()).toBe('static')
   })
 })
 
