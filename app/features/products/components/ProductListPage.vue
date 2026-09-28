@@ -4,7 +4,11 @@
  * table. Filters (search, category, status tabs) and the page are in the URL; the view is
  * remembered per viewer. States are actions: Publish, Unpublish, Archive, Restore (D70).
  * Links from other pages (D75): `?modifierGroupId=` shows the items offering an add-on group (a
- * filter that can be removed), `?item=<id>` opens that item's form.
+ * filter that can be removed).
+ * Opening an item (D90, page-patterns §4): on phones the list pushes `/products/<id>` (a new one:
+ * `/products/new`), from `sm` it opens the slide-over at `?item=<id>` (a new one: no URL). The
+ * choice is made when opening; resizing never changes the URL. `?item=` opens the slide-over at
+ * every width (links keep working); closing it removes only `item`, and Back closes it.
  * On the UI standard (D89): the name is each record's target; the List view is rows on phones and
  * the table from `sm`; the grid's columns follow its container; bulk archive is a Select mode.
  * docs/plans/menu-screens-move.md
@@ -119,9 +123,54 @@ function rowActions(item: MenuItemSummary): DropdownMenuItem[] {
 }
 
 const formPanel = useOverlay().create(ProductFormSlideover)
+const route = useRoute()
+const router = useRouter()
+
 function openForm(item?: MenuItemSummary) {
-  formPanel.open({ itemId: item?.id })
+  if (isCompact.value) {
+    router.push(item ? `/products/${item.id}` : '/products/new')
+  }
+  else if (!item) {
+    formPanel.open({})
+  }
+  else {
+    pushedFor = item.id
+    router.push({ query: { ...route.query, item: item.id } })
+  }
 }
+
+/** The item the slide-over shows, and the one this list pushed `?item=` for (Back then closes it). */
+let openFor: string | undefined
+let pushedFor: string | undefined
+
+async function showPanel(itemId: string) {
+  openFor = itemId
+  await formPanel.open({ itemId }).result
+  if (openFor !== itemId) return
+  openFor = undefined
+  // Closed by the user (not by Back): remove `item` and nothing else from the URL.
+  if (route.query.item !== itemId) return
+  if (pushedFor === itemId) {
+    pushedFor = undefined
+    router.back()
+  }
+  else {
+    const { item: _, ...rest } = route.query
+    router.replace({ query: rest })
+  }
+}
+
+watch(() => route.query.item, (itemId) => {
+  if (typeof itemId === 'string' && itemId) {
+    if (openFor !== itemId) showPanel(itemId)
+  }
+  else if (openFor) {
+    // Back removed `item` (the route guard already asked about unsaved input): close.
+    openFor = undefined
+    pushedFor = undefined
+    formPanel.close()
+  }
+}, { immediate: true })
 
 usePageShortcuts({ n: () => openForm(), s: () => startSelect() })
 
@@ -132,16 +181,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
   if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return
   exitSelect()
 })
-
-// `?item=<id>` (a link from another page) opens that item, then leaves the URL as the list's.
-const route = useRoute()
-const router = useRouter()
-watch(() => route.query.item, (itemId) => {
-  if (typeof itemId !== 'string' || !itemId) return
-  formPanel.open({ itemId })
-  const { item: _, ...rest } = route.query
-  router.replace({ query: rest })
-}, { immediate: true })
 </script>
 
 <template>

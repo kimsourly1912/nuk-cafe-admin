@@ -633,11 +633,14 @@ describe('from an add-on group to its menu items', () => {
     expect(new URL(page.url()).searchParams.get('modifierGroupId')).toBeNull()
   })
 
-  it('opens the item a link names', async () => {
+  it('opens the item a link names, and closing it removes only `item` from the URL (D90)', async () => {
     const seen: URLSearchParams[] = []
-    const { page, api } = await open(ITEMS_BACKEND(seen), '/products?item=item-1')
+    const { page, api } = await open(ITEMS_BACKEND(seen), '/products?modifierGroupId=grp-1&item=item-1')
     await expect.poll(() => api.calls).toContain('GET /admin/menu/items/item-1')
-    await expect.poll(() => new URL(page.url()).searchParams.get('item')).toBeNull()
     await expect.poll(() => page.getByRole('dialog').getByLabel('Name', { exact: true }).inputValue()).toBe('Iced latte')
+    expect(new URL(page.url()).searchParams.get('item')).toBe('item-1')
+    await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
+    await expect.poll(() => new URL(page.url()).searchParams.get('item')).toBeNull()
+    expect(new URL(page.url()).searchParams.get('modifierGroupId')).toBe('grp-1')
   })
 })

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { MenuItem } from '#shared/contracts/menu-items'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { OptionSet } from '#shared/contracts/menu-options'
-import { addOnGroupFromLibrary, buildGrid, itemFormSchema, optionSetFromLibrary, toCreateItemBody, toItemForm, toUpdateItemBody } from '../schemas/item-form'
+import { addOnGroupFromLibrary, buildGrid, formFieldOf, itemFormSchema, optionSetFromLibrary, sectionOf, toCreateItemBody, toItemForm, toUpdateItemBody } from '../schemas/item-form'
 import type { FormOptionSet, ItemForm } from '../schemas/item-form'
 
 const STAMP = '2026-09-28T00:00:00.000Z'
@@ -173,5 +173,21 @@ describe('item form rules', () => {
     expect(errorsOf({ ...valid(), addOnGroups: [{ ...group, minSelect: 1, maxSelect: 1 }] })).toEqual([])
     // The library's rules aren't the item's to check.
     expect(errorsOf({ ...valid(), addOnGroups: [{ ...group, ownRules: false }] })).toEqual([])
+  })
+})
+
+describe('where an error is shown', () => {
+  it('maps the server\'s field names to the form\'s', () => {
+    expect(formFieldOf('variations.2.priceMinor')).toBe('grid.2.price')
+    expect(formFieldOf('variations')).toBe('grid')
+    expect(formFieldOf('modifierGroups.1.rules.maxSelect')).toBe('addOnGroups.1.maxSelect')
+    expect(formFieldOf('name')).toBe('name')
+  })
+
+  it('names the section each field is edited in', () => {
+    expect(['name', 'description', 'categoryId', 'imageId'].map(sectionOf)).toEqual(['details', 'details', 'details', 'details'])
+    expect(['optionSets', 'grid', 'grid.0.price'].map(sectionOf)).toEqual(['prices', 'prices', 'prices'])
+    expect(sectionOf('addOnGroups.0.minSelect')).toBe('add-ons')
+    expect(sectionOf('availabilityRuleIds')).toBe('availability')
   })
 })
