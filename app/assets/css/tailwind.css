@@ -19,8 +19,11 @@
 :root,
 .light {
   --ui-primary: var(--ui-color-primary-800);
+  /* Warning (D80): Nuxt UI's yellow-500 is 1.9:1 on white; 700 gives 4.3:1 on its tint; 800 passes. */
+  --ui-warning: var(--ui-color-warning-800);
 }
 
 .dark {
   --ui-primary: var(--ui-color-primary-400);
+  --ui-warning: var(--ui-color-warning-400);
 }

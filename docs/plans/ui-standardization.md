@@ -35,7 +35,7 @@ _Started 2026-09-28. A rollout plan: delete it when the migration below is done 
 | `/add-ons` | Resource index (library cards) | Opens a route | Closest to the standard |
 | `/add-ons/[id]` | Detail / editor route | Two columns → tabs <1024; add-on dialog; bottom sheet row actions <640 | Reference candidate |
 | `/availability` | Resource index (agenda cards) | Editor: `UModal` (full screen <640); archived read-only | Card layout switches at `lg`; conforms otherwise |
-| `/staff` | Resource index (table) | Editor: `UModal` (full screen <640) | **Reference (D79):** rows on compact, the name as the record's button at every width. Left: the "Temporary password" badge's `warning` text contrast (all pages) |
+| `/staff` | Resource index (table) | Editor: `UModal` (full screen <640) | **Reference (D79):** rows on compact, the name as the record's button at every width. The "Temporary password" badge's `warning` contrast is fixed app-wide (D80) |
 
 **Settings pattern:** no instance. The first settings page (branch settings, step 5.1) proves it.
 

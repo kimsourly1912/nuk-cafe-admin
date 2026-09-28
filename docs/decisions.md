@@ -658,5 +658,12 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Table (from `sm`):** the name cell is the record's button and the row no longer opens on click, so the record target and the actions trigger are siblings at every width (page-patterns §2). `shrink-0` on the table: in the flex panel body it was squeezed into its own scroll box above the pagination (one row visible on a landscape phone).
 - **Toolbar, all pages:** `UDashboardToolbar` is `overflow-x-auto` in Nuxt UI. `app.config.ts` makes it wrap below `sm` (its left group takes the room, controls wrap), so filters never scroll sideways (responsive-layout §5). It also stops the Menu items category filter from being cut off at 390px. Staff's controls are `w-full` / `flex-1` below `sm`.
 - **Form:** full screen below `sm` (`useLayoutContext`), safe-area padding in the footer, the footer wraps.
-- **Found, not fixed here:** Nuxt UI's `warning` color as text (the outline "Temporary password" badge) looks well below 4.5:1 on white, the same kind of gap as the primary (D78). It affects every page: raised with the owner.
+- **Found, not fixed here:** Nuxt UI's `warning` color as text (the outline "Temporary password" badge) looks well below 4.5:1 on white, the same kind of gap as the primary (D78). It affects every page: fixed app-wide in D80 at the owner's request.
 - **Verified:** e2e `staff.test.ts` (13, 4 new: rows and no sideways scrolling at 320 and 390 px, the toolbar wraps, pagination fits, 44px targets with the actions beside the row, the full-screen form, the row menu); screenshots at 320, 390 (light and dark), 768, 1024, 1440 and 844×390.
+
+### D80: Light-mode warning contrast, 2026-09-28
+
+- **Context:** found in D79. Nuxt UI's `warning` is yellow-500 in light mode: text such as the outline "Temporary password" badge and the Categories and Options notices was far below AA. The owner asked for the fix (2026-09-28).
+- **Decision:** light mode's `--ui-warning` is the **800** shade, next to the primary override in `tailwind.css` (dark mode keeps 400, restated). Measured in the browser, text on white / on its 10% tint: 500 1.9 / 1.8, 600 2.9 / 2.7, 700 4.9 / **4.3**, 800 6.8 / 5.8. 700 fails on the tint (subtle badges), as primary did (D78). Solid warning badges (the Menu items "Draft") now carry their white label at 6.8:1.
+- **Not changed (open with the owner):** success, error and info are still Nuxt UI's 500 shades and measure below 4.5:1 as text: success 2.2 / 2.0 (needs 800), error 3.8 / 3.3 (needs 700), info 3.8 / 3.3 (needs 600).
+- **Verified:** `test/e2e/ui-foundations.test.ts` (warning in light mode on white and on its tint; in dark mode on the dark background).
