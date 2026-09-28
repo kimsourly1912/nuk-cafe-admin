@@ -200,6 +200,7 @@ Don't mix both for the same fields. Never send several dependent calls behind on
 - **Compact:** full screen; title at the top; the primary action at the bottom in thumb reach, above the keyboard and the safe area.
 - One primary action per step; Cancel/Back is secondary. A multi-step flow keeps one unsaved-changes guard over all its steps ([forms](./forms.md)).
 - Errors appear beside the field or at the top of the step, and focus moves to them.
+- Reference: `/login` and `/change-password` (`AuthFrame` in the auth feature, D84). The submit button sits in the frame's footer, outside the form, joined to it with `form="<id>"` so Enter still submits.
 
 ## 6. Bottom sheets
 

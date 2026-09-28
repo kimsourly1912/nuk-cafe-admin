@@ -116,3 +116,27 @@ describe('changing one\'s password', () => {
     expect(bodies).toHaveLength(1)
   })
 })
+
+describe('change password as a task flow (D84)', () => {
+  it('fills a phone screen, with Change password and Log out at the bottom', async () => {
+    const page = await createPage()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await mockApi(page, temporaryPasswordBackend().handlers)
+    await page.goto(url('/change-password'), { waitUntil: 'hydration' })
+    await page.getByRole('heading', { name: 'Choose your password' }).waitFor()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    const logOut = (await page.getByRole('button', { name: 'Log out' }).boundingBox())!
+    expect(logOut.y + logOut.height).toBeGreaterThan(844 - 80)
+    const submit = (await page.getByRole('button', { name: 'Change password' }).boundingBox())!
+    expect(submit.y).toBeLessThan(logOut.y)
+  })
+
+  it('moves focus to the server\'s error after a failed change', async () => {
+    const page = await createPage()
+    await mockApi(page, temporaryPasswordBackend().handlers)
+    await page.goto(url('/change-password'), { waitUntil: 'hydration' })
+    await fillPasswords(page, 'wrong', 'my own password')
+    await page.getByRole('button', { name: 'Change password' }).click()
+    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('role'))).toBe('alert')
+  })
+})

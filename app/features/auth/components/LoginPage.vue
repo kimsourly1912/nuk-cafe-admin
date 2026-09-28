@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import type { FormSubmitEvent } from '@nuxt/ui'
+import type { FormErrorEvent, FormSubmitEvent } from '@nuxt/ui'
 import * as v from 'valibot'
 import { loginRedirectTarget, useAuth } from '../composables/useAuth'
+import AuthFrame from './AuthFrame.vue'
 
 const schema = v.object({
   email: v.pipe(v.string(), v.trim(), v.minLength(1, 'Email is required'), v.email('Enter an email address')),
@@ -18,6 +19,15 @@ const error = ref<string>()
 const route = useRoute()
 const { login } = useAuth()
 
+// A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
+const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
+// The form keeps its fields disabled until after this event (`loadingAuto`, re-enabled in its
+// `finally`), and a disabled field can't take focus: focus on the next frame, once they're enabled.
+function focusFirstInvalid(event: FormErrorEvent) {
+  const id = event.errors[0]?.id
+  if (id) requestAnimationFrame(() => document.getElementById(id)?.focus())
+}
+
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
   error.value = undefined
@@ -27,6 +37,8 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   }
   catch (e) {
     error.value = getErrorMessage(e)
+    await nextTick()
+    errorAlert.value?.focus()
   }
   finally {
     loading.value = false
@@ -35,7 +47,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 </script>
 
 <template>
-  <UCard class="w-full max-w-sm">
+  <AuthFrame>
     <template #header>
       <div class="flex items-center gap-2">
         <UIcon
@@ -49,18 +61,26 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     </template>
 
     <UForm
+      id="login-form"
       :schema="schema"
       :state="state"
       class="space-y-4"
       @submit="onSubmit"
+      @error="focusFirstInvalid"
     >
-      <UAlert
+      <div
         v-if="error"
-        color="error"
-        variant="subtle"
-        icon="i-lucide-circle-alert"
-        :title="error"
-      />
+        ref="errorAlert"
+        role="alert"
+        tabindex="-1"
+      >
+        <UAlert
+          color="error"
+          variant="subtle"
+          icon="i-lucide-circle-alert"
+          :title="error"
+        />
+      </div>
 
       <UFormField
         label="Email"
@@ -102,13 +122,16 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
           </template>
         </UInput>
       </UFormField>
+    </UForm>
 
+    <template #footer>
       <UButton
         type="submit"
+        form="login-form"
         label="Sign in"
         block
         :loading="loading"
       />
-    </UForm>
-  </UCard>
+    </template>
+  </AuthFrame>
 </template>
