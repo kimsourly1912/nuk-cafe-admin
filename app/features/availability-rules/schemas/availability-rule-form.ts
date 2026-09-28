@@ -64,12 +64,13 @@ export function toRows(windows: AvailabilityWindow[]): WindowRow[] {
   return rows.map(row => ({ ...row, days: [...row.days].sort((a, b) => a - b) }))
 }
 
-/** Initial form state: the rule's values, or one empty weekday row for a new rule. */
+/**
+ * Initial form state: the rule's values, or one empty weekday row for a new rule. A stored rule
+ * without windows (older data) opens with one empty row, so it can be given times.
+ */
 export function toAvailabilityRuleForm(rule?: AvailabilityRule): AvailabilityRuleForm {
-  return {
-    name: rule?.name ?? '',
-    rows: rule ? toRows(rule.windows) : [{ days: [1, 2, 3, 4, 5], start: undefined, end: undefined }],
-  }
+  const rows = rule ? toRows(rule.windows) : [{ days: [1, 2, 3, 4, 5], start: undefined, end: undefined }]
+  return { name: rule?.name ?? '', rows: rows.length ? rows : [{ days: [], start: undefined, end: undefined }] }
 }
 
 /** One window per day of each row, rows in order and days in week order. */

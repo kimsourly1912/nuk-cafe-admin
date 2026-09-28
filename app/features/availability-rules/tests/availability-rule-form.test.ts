@@ -2,7 +2,7 @@ import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import type { AvailabilityRule } from '#shared/contracts/menu-availability'
 import { availabilityRuleFormSchema, rowOfWindow, toAvailabilityRuleForm, toCreateAvailabilityRuleBody, toRows, toUpdateAvailabilityRuleBody, toWindows } from '../schemas/availability-rule-form'
-import { formatRow, formatTimes, formatWeekdays } from '../utils/windows'
+import { activeWeekdays, formatRow, formatTimes, formatWeekdays, isOvernight, scheduleLines, timeRange, usageSummary } from '../utils/windows'
 
 const rule = (windows: AvailabilityRule['windows']): AvailabilityRule => ({
   id: 'rule-1',
@@ -85,7 +85,9 @@ describe('form rules', () => {
 describe('wording', () => {
   it('names days as ranges, lists or every day', () => {
     expect(formatWeekdays([1, 2, 3, 4, 5])).toBe('Mon–Fri')
-    expect(formatWeekdays([6, 7])).toBe('Sat, Sun')
+    expect(formatWeekdays([6, 7])).toBe('Sat–Sun')
+    expect(formatWeekdays([5, 6])).toBe('Fri–Sat')
+    expect(formatWeekdays([1, 3])).toBe('Mon, Wed')
     expect(formatWeekdays([1, 3, 4, 5])).toBe('Mon, Wed–Fri')
     expect(formatWeekdays([7, 1, 2, 3, 4, 5, 6])).toBe('Every day')
   })
@@ -96,5 +98,42 @@ describe('wording', () => {
     expect(formatTimes(1080, 0)).toBe('6:00 PM – 12:00 AM')
     expect(formatTimes(0, 0)).toBe('All day')
     expect(formatRow({ days: [1, 2, 3, 4, 5], start: 750, end: 810 })).toBe('Mon–Fri · 12:30 PM – 1:30 PM')
+  })
+})
+
+describe('the weekly agenda', () => {
+  it('groups a rule into lines of days and times, overnight ones marked', () => {
+    expect(scheduleLines([w(1, 390, 660), w(2, 390, 660), w(3, 390, 660), w(4, 390, 660), w(5, 390, 660), w(6, 420, 690), w(7, 420, 690)])).toEqual([
+      { days: 'Mon–Fri', times: '6:30 AM – 11:00 AM', nextDay: false },
+      { days: 'Sat–Sun', times: '7:00 AM – 11:30 AM', nextDay: false },
+    ])
+    expect(scheduleLines([1, 2, 3, 4, 5, 6, 7].map(d => w(d, 660, 900)))).toEqual([{ days: 'Every day', times: '11:00 AM – 3:00 PM', nextDay: false }])
+    expect(scheduleLines([w(5, 1260, 60), w(6, 1260, 60)])).toEqual([{ days: 'Fri–Sat', times: '9:00 PM – 1:00 AM', nextDay: true }])
+  })
+
+  it('treats a midnight end as the end of the day, not the next day', () => {
+    expect(isOvernight(1080, 1440)).toBe(false)
+    expect(isOvernight(1080, 0)).toBe(false)
+    expect(isOvernight(1320, 120)).toBe(true)
+    expect(timeRange(1080, 1440)).toBe('6:00 PM – 12:00 AM')
+    expect(scheduleLines([w(5, 1080, 1440)])).toEqual([{ days: 'Fri', times: '6:00 PM – 12:00 AM', nextDay: false }])
+  })
+
+  it('knows the days a rule opens on', () => {
+    expect([...activeWeekdays([w(6, 1, 2), w(1, 1, 2), w(6, 3, 4)])].sort()).toEqual([1, 6])
+  })
+
+  it('says what uses a rule', () => {
+    expect(usageSummary({ itemCount: 18, categoryCount: 2 })).toBe('18 items · 2 categories')
+    expect(usageSummary({ itemCount: 1, categoryCount: 1 })).toBe('1 item · 1 category')
+    expect(usageSummary({ itemCount: 0, categoryCount: 3 })).toBe('3 categories')
+    expect(usageSummary({ itemCount: 0, categoryCount: 0 })).toBe('Not used yet')
+  })
+})
+
+describe('a stored rule without windows', () => {
+  it('opens with one empty row, and shows no agenda lines', () => {
+    expect(toAvailabilityRuleForm(rule([]))).toEqual({ name: 'Breakfast', rows: [{ days: [], start: undefined, end: undefined }] })
+    expect(scheduleLines([])).toEqual([])
   })
 })
