@@ -6,7 +6,6 @@
 import { useSortable } from '@vueuse/integrations/useSortable'
 import type { VariantForm } from '../schemas/product-form'
 import { newOption } from '../schemas/product-form'
-import { PRICE_FORMAT } from '../utils/money'
 
 const props = defineProps<{
   /** Position in the list: for the form field names (`variants.0.variantName`) and labels. */

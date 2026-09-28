@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { Product } from '#shared/contracts/menu'
 import { newOption, newVariant, productFormSchema, toCreateProductBody, toProductForm, toUpdateProductBody } from '../schemas/product-form'
 import type { ProductForm } from '../schemas/product-form'
-import { formatMinor, formatPrice, roundPrice, toMinor } from '../utils/money'
+import { formatMinor, formatPrice, roundPrice, toMinor } from '~/utils/money'
 
 const existing: Product = {
   id: 'p162',

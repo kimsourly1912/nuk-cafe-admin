@@ -1,7 +1,7 @@
 import type { CreateProductBody, Product, UpdateProductBody, VariantGroup, VariantGroupInput } from '#shared/contracts/menu'
 import { MAX_PRICE_MINOR } from '#shared/contracts/menu'
 import * as v from 'valibot'
-import { fromMinor, toMinor } from '../utils/money'
+import { fromMinor, toMinor } from '~/utils/money'
 
 /** Upper bound in dollars (the server's typo guard, `MAX_PRICE_MINOR`). */
 export const MAX_PRICE = MAX_PRICE_MINOR / 100

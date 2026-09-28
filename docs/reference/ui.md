@@ -348,6 +348,27 @@ Resources with other statuses (the menu API's `active` / `archived`) pass their 
 
 ---
 
+## Money: `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`
+
+The API stores prices as integer cents of USD (`priceMinor`, `priceDeltaMinor`); forms and the display work in dollars. Convert only at the boundary: `toMinor` when sending, `fromMinor` when filling a form.
+
+Source: `app/utils/money.ts` (moved from the products feature when Add-ons became the second screen with prices, D68). Tests: `app/features/products/tests/product-form.test.ts`.
+
+```ts
+toMinor(4.2) // 420 (half up, without floating-point noise: toMinor(1.005) is 101)
+fromMinor(420) // 4.2
+formatMinor(420) // "$4.20"; formatMinor(null) → "—"
+formatPrice(4.2) // "$4.20" (dollars)
+```
+
+```vue
+<UInputNumber :model-value="row.price" :format-options="PRICE_FORMAT" :min="0" :step="0.05" />
+```
+
+Auto-imported in components. Pure files that are unit-tested in Node (`schemas/*.ts`) import it explicitly: `import { toMinor } from '~/utils/money'` (the unit project has the `~` alias).
+
+---
+
 ## `<ListSkeleton>`
 
 Placeholder rows or cards while a list loads for the first time, instead of "Loading…" text, so nothing jumps when the data arrives. `role="status"` with the label for screen readers.

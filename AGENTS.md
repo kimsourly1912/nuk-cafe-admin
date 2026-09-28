@@ -22,7 +22,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 NUK Cafe is one Nuxt full stack app: the customer website, the admin workspace and the cashier workspace, plus our own API (Nitro) with Better Auth, NuxtHub, Drizzle, SQLite locally and D1/R2/KV on Cloudflare. Product scope: [the system blueprint](docs/plans/system-blueprint.md). **How the server is built: the [server standard](docs/server/README.md)** (routes `/api/<surface>/…`, `server/features/` with service/repository layers, Better Auth roles and branches, the data model, operations). Build order: [progress.md → Next steps](docs/progress.md#next-steps-recommended-order).
 
-**Transition:** the menu screens (categories, schedules, menu items) still run on the pre-standard `/api/v1` routes (D41), now checked with `requirePermission`. Their server code lives in `server/legacy/` and is replaced in step 3.8b; don't extend it (ESLint forbids new code from importing it). Sign-in, staff and the **Availability** page (`app/features/availability-rules/`, the new API's first menu screen, D66) run on the standard's `/api/admin` routes (D52).
+**Transition:** the menu screens (categories, schedules, menu items) still run on the pre-standard `/api/v1` routes (D41), now checked with `requirePermission`. Their server code lives in `server/legacy/` and is replaced in step 3.8b; don't extend it (ESLint forbids new code from importing it). Sign-in, staff and the **Availability**, **Options** and **Add-ons** pages (`app/features/availability-rules/`, `option-sets/`, `modifier-groups/`, the new API's first menu screens, D66–D68) run on the standard's `/api/admin` routes (D52).
 
 The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Schedules (card list) or Menu items (card grid + table); Categories is a tree (D37).
 
@@ -78,7 +78,7 @@ shared/contracts/                # API contracts: request schemas + response typ
 4. **Public building blocks must not import other features.** This keeps the dependency graph one level deep, so no cycles can form. Screens (pages, forms) may import other features' public APIs.
 5. **Inside a feature, use relative imports** (`../composables/useCategories`). Feature code is *not* auto-imported. Root shared code *is* auto-imported everywhere (`apiFetch`, `getErrorMessage`, `invalidate`, `usePaginatedQuery`, `useConfirm`, `StatusBadge`, `STATUS_ITEMS`, `ANY`, ...).
 6. **Route files in `app/pages/` stay thin.** They hold `definePageMeta` (always with a `title` for the browser tab) plus one `<Feature>…Page.vue` from the feature (the only deep import pages are allowed). Routes stay discoverable in one place.
-7. **Name feature folders after the resource they manage**, so a folder maps to its routes (`/api/admin/<resource>`) and contracts: `categories`, `products` (shown as "Menu items" in the UI), `schedules`, `availability-rules` (shown as "Availability"), `rewards` (reward categories live inside it: they're not menu categories), `vouchers`, `banners`, `customers`, `staff`, `orders`, `auth`.
+7. **Name feature folders after the resource they manage**, so a folder maps to its routes (`/api/admin/<resource>`) and contracts: `categories`, `products` (shown as "Menu items" in the UI), `schedules`, `availability-rules` (shown as "Availability"), `option-sets` (shown as "Options"), `modifier-groups` (shown as "Add-ons"), `rewards` (reward categories live inside it: they're not menu categories), `vouchers`, `banners`, `customers`, `staff`, `orders`, `auth`.
 
 ### Cross-feature relationships (from the API)
 
@@ -174,9 +174,10 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `invalidateAll()`, `invalidateInThisTab()` | `utils/invalidate.ts` | Refetch loaded or only stale queries / invalidate without telling other tabs (used by the freshness plugin) |
 | `usePageShortcuts`, `useSubmitShortcut`, `SHORTCUTS`, `<ShortcutsHelp>` | `composables/useShortcuts.ts`, `components/` | Keyboard shortcuts (skipped behind dialogs/menus), Ctrl/⌘+Enter to save, the `?` list |
 | `useNotify()` | `composables/` | Toasts for API actions that aren't mutations |
+| `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`, `CURRENCY` | `utils/money.ts` | Cents (API) ↔ dollars (forms, display), "$4.20" |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
 
-Expected to be promoted to the root when the first two features need them: `ProductImageInput` (in `app/features/products/`; rewards, banners and vouchers will need uploads too, through `POST /api/v1/admin/media`). Money (`toMinor`/`fromMinor` cents ↔ dollars, `formatPrice`, `formatMinor`, USD) lives in `app/features/products/utils/money.ts` until a second feature shows prices.
+Expected to be promoted to the root when the first two features need them: `ProductImageInput` (in `app/features/products/`; rewards, banners and vouchers will need uploads too, through `POST /api/v1/admin/media`).
 
 ## Adding a full stack feature
 
