@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-28 (Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-28 (responsive UI standard documented, D77, awaiting review; Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -25,6 +25,8 @@ Every "done" item states how it was checked. Keep using these labels:
 **Found by the browser tests and fixed:** `useAuth` kept the staff session in `useState('auth:user')`, the key `@nuxtjs/better-auth` uses for its own session. Its refetch on tab focus overwrote the staff session (and would have put a Better Auth user where a staff session belongs). Keys are now `staff-session:*`; regression test in `auth.test.ts` (checked to fail with the old key).
 
 **Greenfield product blueprint (2026-09-26):** [system-blueprint.md](plans/system-blueprint.md) starts from customer, staff, and manager journeys. Confirmed launch scope: customer website, pickup and dine-in with table QR, USD, one branch, email/password accounts with no guest ordering, pay at counter before preparation, points earned at 1 per USD after completion and exchanged for vouchers, and staff-issued vouchers; native app, delivery, and online payment are outside that scope. Product policy questions remain open in the blueprint.
+
+**Responsive UI standard (2026-09-28, D77): documentation done, awaiting review.** Canonical rules in `docs/reference/ui.md`, `responsive-layout.md`, `page-patterns.md` and `ui-review-checklist.md`; the audit, open owner decisions and the page-migration sequence in [plans/ui-standardization.md](plans/ui-standardization.md). No page has been migrated yet.
 
 **Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier screens; no admin reset of a staff member's password; no cleanup of temporary uploads. The public menu API exists (3.8a) but no customer screen uses it yet.
 
