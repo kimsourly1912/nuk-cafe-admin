@@ -132,7 +132,7 @@ Rules the Categories reference follows:
 - **Form modals stay open while saving** (backend errors need the input on screen) but **can be closed**: the save continues. If it then fails, the toast offers **"Reopen"** with the draft restored (`errorActions` + a `draft` prop).
 - **Unsaved changes are guarded.** Every create/edit form uses `useModalUnsavedChanges` (modals) or `useUnsavedChanges` (pages), so closing the modal, changing route, logging out or reloading with changed input asks first. Pass `paused: saving` and call `markClean()` after a successful save (see [docs/reference/forms.md](docs/reference/forms.md)).
 - **Create is keyed by something that identifies the submission** (the name), so two different creates can run in parallel while a double submit is skipped.
-- **Bulk actions:** `useTableSelection(rows, getKey, { resetOn: [query] })` + `<BulkActionsBar>`. Selection clears on filter or page change. After `executeMany`, keep only the `failed` and `notStarted` rows selected.
+- **Bulk actions:** a **Select mode** (a toolbar button, `S`, Escape leaves; no always-on checkboxes) with `useTableSelection(rows, getKey, { resetOn: [query] })` + `<BulkActionsBar>` (D89). Selection clears on filter or page change. After `executeMany`, keep only the `failed`, `skipped` and `notStarted` rows selected.
 - If the current page becomes empty after deletes, step back to the last existing page.
 
 The concurrency rules live in the framework-free engine `app/utils/mutation.ts` and are unit-tested in `test/unit/mutation.test.ts`. `useMutation` only wires it to Nuxt (state, toasts, confirm, invalidate).
@@ -167,7 +167,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `apiFetch<T>(path, opts)` | `utils/api.ts`, engine `utils/api-fetch.ts` | Every call to our API (`/api` + path): `ApiError` on failure, no retries, session loss and required password change handled |
 | `useApiQuery(key, handler, opts)` | `composables/` | Every read (see "CRUD state") |
 | `useMutation(fn, opts)` | `composables/`, engine in `utils/mutation.ts` | Every create/update/delete, single or batch |
-| `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Selection for tables, cards and trees (`isSelected`, `toggle`, `toggleAll`); the bulk bar |
+| `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Selection for tables, cards and trees (`isSelected`, `toggle`, `toggleAll`); the Select mode bar |
 | `BottomActionBar` | `components/` | The one bottom bar for a page's mode, Save or bulk actions (fixed below `lg`, one at a time, steps aside for the keyboard) |
 | `useLayoutContext()` | `composables/` | `isCompact` / `isExpanded` for choices CSS can't make (full-screen modal, drawer vs dropdown); never `useMediaQuery` by hand |
 | `StatusTabs` | `components/` | Status filter as tabs with counts; each feature names its statuses |

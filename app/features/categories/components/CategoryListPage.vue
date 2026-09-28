@@ -310,46 +310,30 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         />
 
         <!-- Selection bar -->
-        <BottomActionBar
+        <BulkActionsBar
           v-if="mode === 'select'"
-          label="Bulk actions"
+          :count="selection.count"
+          :all-selected="selection.allSelected"
+          @toggle-all="selection.toggleAll(!selection.allSelected)"
+          @exit="exitSelect()"
         >
-          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 text-sm">
-            <span class="font-semibold text-highlighted">{{ selection.count }} selected</span>
-            <UButton
-              :label="selection.allSelected ? 'Unselect all' : 'Select all'"
-              color="neutral"
-              variant="link"
-              class="px-0"
-              @click="selection.toggleAll(!selection.allSelected)"
-            />
-          </div>
-          <div class="flex flex-wrap items-center justify-end gap-2">
-            <UButton
-              v-if="view === 'archived'"
-              label="Restore selected"
-              icon="i-lucide-archive-restore"
-              :disabled="!selection.count"
-              @click="runBulk()"
-            />
-            <UButton
-              v-else
-              label="Archive selected"
-              icon="i-lucide-archive"
-              color="neutral"
-              variant="subtle"
-              :disabled="!selection.count"
-              @click="runBulk()"
-            />
-            <UButton
-              icon="i-lucide-x"
-              color="neutral"
-              variant="ghost"
-              aria-label="Exit selection"
-              @click="exitSelect()"
-            />
-          </div>
-        </BottomActionBar>
+          <UButton
+            v-if="view === 'archived'"
+            label="Restore selected"
+            icon="i-lucide-archive-restore"
+            :disabled="!selection.count"
+            @click="runBulk()"
+          />
+          <UButton
+            v-else
+            label="Archive selected"
+            icon="i-lucide-archive"
+            color="neutral"
+            variant="subtle"
+            :disabled="!selection.count"
+            @click="runBulk()"
+          />
+        </BulkActionsBar>
 
         <!-- Reorder bar -->
         <BottomActionBar

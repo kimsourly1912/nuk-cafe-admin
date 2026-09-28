@@ -41,8 +41,14 @@ const card = (page: Page, name: string) => page.getByRole('article', { name, exa
 const archives = (calls: string[]) => calls.filter(c => c.endsWith('/archive'))
 const selectedCount = (page: Page, n: number) => page.getByText(`${n} selected`)
 
+/** Select mode, then Select all in its bar (D89). */
+async function selectAll(page: Page) {
+  await page.getByRole('button', { name: 'Select', exact: true }).click()
+  await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Select all' }).click()
+}
+
 async function bulkArchive(page: Page) {
-  await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Archive' }).click()
+  await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Archive selected' }).click()
   await page.getByRole('alertdialog').or(page.getByRole('dialog')).getByRole('button', { name: 'Archive' }).click()
 }
 
@@ -70,7 +76,7 @@ describe('bulk archive vs an edit in progress', () => {
     await page.locator('[aria-label="Working…"]').waitFor()
 
     // Select all includes the busy item; the archive must still not touch it.
-    await page.getByRole('checkbox', { name: 'Select all' }).click()
+    await selectAll(page)
     await selectedCount(page, 2).waitFor()
     await bulkArchive(page)
 
@@ -90,7 +96,7 @@ describe('bulk archive: Stop and Retry failed', () => {
     const server = backend(rowsOf(6))
     const { page, api } = await open({ 'GET /admin/menu/items': server.list, 'POST /admin/menu/items/{id}/archive': server.archive(slow.handler) })
 
-    await page.getByRole('checkbox', { name: 'Select all' }).click()
+    await selectAll(page)
     await selectedCount(page, 6).waitFor()
     await bulkArchive(page)
     await slow.started(4) // concurrency 4: two wait in the queue
@@ -118,7 +124,7 @@ describe('bulk archive: Stop and Retry failed', () => {
       },
     })
 
-    await page.getByRole('checkbox', { name: 'Select all' }).click()
+    await selectAll(page)
     await bulkArchive(page)
     await toast(page, '1 menu item archived, 1 failed').waitFor()
     await page.getByText('This menu item was changed by someone else (1)').first().waitFor()
@@ -152,12 +158,12 @@ describe('list state after archiving and navigation', () => {
     const server = backend(rowsOf(45))
     const { page } = await open({ 'GET /admin/menu/items': server.list })
 
-    await page.getByRole('checkbox', { name: 'Select all' }).click()
+    await selectAll(page)
     await selectedCount(page, 20).waitFor()
     await page.getByRole('button', { name: 'Page 2' }).click()
     await card(page, 'Item 21').waitFor()
-    // The bar fades out (100 ms): wait for it to go.
-    await expect.poll(() => page.getByText(/\d+ selected/).count()).toBe(0)
+    // Still in Select mode, with nothing selected.
+    await selectedCount(page, 0).waitFor()
 
     await card(page, 'Item 21').getByRole('checkbox').click()
     await selectedCount(page, 1).waitFor()
@@ -165,6 +171,6 @@ describe('list state after archiving and navigation', () => {
     await search.fill('Item 3')
     await search.press('Enter')
     await card(page, 'Item 3').waitFor()
-    await expect.poll(() => page.getByText(/\d+ selected/).count()).toBe(0)
+    await selectedCount(page, 0).waitFor()
   })
 })
