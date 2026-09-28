@@ -162,26 +162,33 @@ Source: `app/components/BottomActionBar.vue`
 
 ## `<BulkActionsBar>`
 
-The bulk bar while rows are selected: "5 selected · *your actions* · Clear". A [`BottomActionBar`](#bottomactionbar) with `expanded="pinned"`: fixed to the bottom of the screen below `lg`, sticky to the bottom of the panel from `lg`. It renders nothing when `count` is 0, and Escape inside it clears the selection. It's a `role="toolbar"` named "Bulk actions".
+The **Select mode** bar (page-patterns §2: selection is a mode, never always-on checkboxes; D89): "5 selected · Select all · *your actions* · ✕". A [`BottomActionBar`](#bottomactionbar): fixed to the bottom of the screen below `lg`, inline where it's placed from `lg` (under the status tabs). Render it while the page is in Select mode (`v-if`), so it shows with nothing selected too; ✕ leaves the mode. It's a `role="toolbar"` named "Bulk actions". The page owns the mode: a **Select** toolbar button (`S`), checkboxes and the name selecting while in it, the ⋮ menus hidden, Escape leaving it (a plain keydown listener, like Categories). Used by Categories and Menu items.
 
 Source: `app/components/BulkActionsBar.vue`
 
-Put it **at the end of the page body** (`#body` of `UDashboardPanel`).
-
 ```vue
 <template #body>
-  <!-- list… -->
-  <BulkActionsBar :count="selection.count" @clear="selection.clear()">
-    <UButton label="Delete" icon="i-lucide-trash-2" color="error" variant="subtle" @click="removeSelected" />
+  <StatusTabs v-model="filters.status" :tabs="TABS" :counts="counts" />
+  <BulkActionsBar
+    v-if="selecting"
+    :count="selection.count"
+    :all-selected="selection.allSelected"
+    @toggle-all="selection.toggleAll(!selection.allSelected)"
+    @exit="exitSelect()"
+  >
+    <UButton label="Archive selected" icon="i-lucide-archive" color="neutral" variant="subtle" :disabled="!selection.count" @click="archiveSelected" />
   </BulkActionsBar>
+  <!-- list… -->
 </template>
 ```
 
 | Prop / slot / event | Description |
 |---|---|
 | `count: number` | Number of selected rows. |
-| default slot | Action buttons. |
-| `@clear` | Clicked Clear. Usually `selection.clear()`. |
+| `allSelected: boolean` | Whether every selectable row is selected: the link reads "Unselect all". |
+| default slot | Action buttons; disable them while `count` is 0. |
+| `@toggle-all` | Clicked Select all / Unselect all. |
+| `@exit` | Clicked ✕. Clear the selection and leave the mode. |
 
 ## `useLayoutContext`
 

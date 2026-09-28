@@ -729,3 +729,15 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Context:** the next page of step 5, the same case as Options (D86). Each library card counted its add-on rows by the **viewport** (`sm:`), but from `lg` the cards sit in two columns, so at 1024px a card about 350px wide showed the wide count. The search box had a fixed width on phones.
 - **Decision:** each card is its own container (`@container` on the `UCard` root); rows, the "Preselected" label and the footer switch at `@sm` (a 24rem card): 3 rows and "+N more" on a narrow card, 4 on a wide one. The search box is `w-full sm:w-64` like Staff's.
 - **Verified:** e2e `modifier-groups.test.ts` (36, 1 new: 3 rows at 1024px in two columns, 4 at 768px in one).
+
+### D89: The Menu items list on the UI standard (Phase B step 5e, part 1), 2026-09-28
+
+- **Context:** the last page of step 5, split in two PRs: this list, then the editor route (A6, decision 4). The List view was a `UTable` at every width (sideways scroll on phones), a click anywhere on a row or card opened the item, checkboxes were always on (page-patterns §2: selection is a mode), the grid's columns used an arbitrary value (`minmax(13rem,1fr)`) and the toolbar's search and category filter had fixed widths that overflowed at 390px.
+- **Decision:**
+  - **Record target:** the name is each record's one target (page-patterns §2). In the table it's a button in the name cell (the row is no longer clickable). On a card it's a button stretched over the card (`after:absolute after:inset-0`), so a click anywhere still opens it, with the ⋮ menu and the checkbox as siblings above it, never nested.
+  - **List on phones:** rows (avatar, name, a status badge unless published, "category · price", ⋮), one tree in the DOM chosen by `useLayoutContext()` like Staff (D79); the table from `sm`.
+  - **Grid:** an `@container` whose columns follow the width it has, at the sizes where a 13rem card fits: 1, then 2 from `@md`, 3 from `@2xl`, 4 from `@4xl`, 5 from `@6xl`.
+  - **Select mode:** bulk archive is a mode, like Categories: a **Select** toolbar button (`S`), checkboxes and the name selecting while in it, the ⋮ menus hidden, Escape or ✕ leaving it, archived items not selectable (the Archived tab ends the mode). `BulkActionsBar` becomes the shared Select mode bar ("N selected · Select all · actions · ✕", Categories' bar moved to the root now that a second feature needs it); Categories uses it unchanged in behavior.
+  - **Toolbar:** search `w-full sm:w-64`, category `flex-1 sm:w-56`, like Staff's filters.
+- **Alternatives:** keep always-on checkboxes (against the standard, and noisy on phones); a separate Menu items bar (a second copy of Categories' bar).
+- **Verified:** e2e `products.test.ts` (22, 3 new: Select mode, phone rows fit the screen and open by name, grid columns at 1440px; the card test now clicks the card's centre, which the stretched name receives), `list-bulk.test.ts` (5, now through Select mode), `categories.test.ts` (40, unchanged, on the shared bar); screenshots at 390, 1024 and 1440 px (grid, Select mode, List).

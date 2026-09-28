@@ -5,11 +5,13 @@
  * remembered per viewer. States are actions: Publish, Unpublish, Archive, Restore (D70).
  * Links from other pages (D75): `?modifierGroupId=` shows the items offering an add-on group (a
  * filter that can be removed), `?item=<id>` opens that item's form.
+ * On the UI standard (D89): the name is each record's target; the List view is rows on phones and
+ * the table from `sm`; the grid's columns follow its container; bulk archive is a Select mode.
  * docs/plans/menu-screens-move.md
  */
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { ItemStatus, MenuItemSummary } from '#shared/contracts/menu-items'
-import { useLocalStorage } from '@vueuse/core'
+import { useEventListener, useLocalStorage } from '@vueuse/core'
 import { CategorySelect } from '~/features/categories'
 import { useItemList, useItemMutations, useItemStatusCounts } from '../composables/useItems'
 import { ITEM_STATUS_LABELS, priceRange } from '../utils/item-display'
@@ -32,6 +34,7 @@ const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginate
 })
 
 const view = useLocalStorage<'grid' | 'list'>('products:view', 'grid')
+const { isCompact } = useLayoutContext()
 
 /** `CategorySelect` holds `string | undefined`; the filter holds `ANY` for "all". */
 const categoryFilter = computed({
@@ -53,29 +56,51 @@ watch(() => data.value?.totalPages, (totalPages) => {
   if (totalPages !== undefined && page.value > Math.max(totalPages, 1)) page.value = Math.max(totalPages, 1)
 })
 
-// --- Selection & bulk actions ---
-const selection = useTableSelection(rows, item => item.id, { resetOn: [query] })
-const archivable = computed(() => selection.selected.filter(item => item.status !== 'archived'))
+// --- Select mode: bulk archive, so only items that aren't archived can be selected ---
+const selecting = ref(false)
+const selectableRows = computed(() => rows.value.filter(item => item.status !== 'archived'))
+const selection = useTableSelection(selectableRows, item => item.id, { resetOn: [query] })
+
+function startSelect() {
+  if (selectableRows.value.length) selecting.value = true
+}
+function exitSelect() {
+  selection.clear()
+  selecting.value = false
+}
+// The Archived tab has nothing to archive.
+watch(() => filters.status, (status) => {
+  if (status === 'archived') exitSelect()
+})
 
 async function archiveSelected() {
-  const result = await archive.executeMany(archivable.value)
+  const result = await archive.executeMany(selection.selected)
+  if (result.cancelled) return
   // Keep only the items that still need attention selected: failed, skipped (busy) and not started.
-  selection.select([
+  const keep = [
     ...result.failed.map(f => f.input.id),
     ...result.skipped.map(item => item.id),
     ...result.notStarted.map(item => item.id),
-  ])
+  ]
+  selection.select(keep)
+  if (!keep.length) exitSelect()
+}
+
+/** The name: opens the item, or in Select mode selects it. */
+function onName(item: MenuItemSummary) {
+  if (!selecting.value) openForm(item)
+  else if (item.status !== 'archived') selection.toggle(item, !selection.isSelected(item))
 }
 
 // --- Table (List view) ---
-const columns: TableColumn<MenuItemSummary>[] = [
-  { id: 'select' },
+const columns = computed<TableColumn<MenuItemSummary>[]>(() => [
+  ...(selecting.value ? [{ id: 'select' }] : []),
   { accessorKey: 'name', header: 'Name' },
   { accessorKey: 'categoryName', header: 'Category' },
   { id: 'price', header: 'Price', meta: { class: { th: 'text-right', td: 'text-right' } } },
   { accessorKey: 'status', header: 'Status' },
   { id: 'actions', meta: { class: { td: 'text-right' } } },
-]
+])
 
 function rowActions(item: MenuItemSummary): DropdownMenuItem[] {
   if (item.status === 'archived') {
@@ -98,7 +123,15 @@ function openForm(item?: MenuItemSummary) {
   formPanel.open({ itemId: item?.id })
 }
 
-usePageShortcuts({ n: () => openForm() })
+usePageShortcuts({ n: () => openForm(), s: () => startSelect() })
+
+// Escape leaves Select mode. Not a `defineShortcuts` key: those prevent the default, and Escape
+// must still close menus, selects and dialogs first (they win: nothing happens here then).
+useEventListener('keydown', (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || event.defaultPrevented || !selecting.value) return
+  if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return
+  exitSelect()
+})
 
 // `?item=<id>` (a link from another page) opens that item, then leaves the URL as the list's.
 const route = useRoute()
@@ -137,14 +170,14 @@ watch(() => route.query.item, (itemId) => {
           <SearchInput
             v-model="filters.search"
             placeholder="Search menu items…"
-            class="w-64"
+            class="w-full sm:w-64"
           />
           <CategorySelect
             v-model="categoryFilter"
             none-label="All categories"
             include-archived
             aria-label="Category"
-            class="w-56"
+            class="min-w-0 flex-1 sm:w-56 sm:flex-none"
           />
           <ProductGroupFilter
             v-if="filters.modifierGroupId"
@@ -158,6 +191,22 @@ watch(() => route.query.item, (itemId) => {
           />
         </template>
         <template #right>
+          <UTooltip
+            text="Select menu items to archive"
+            :kbds="['s']"
+          >
+            <UButton
+              icon="i-lucide-list-checks"
+              color="neutral"
+              :variant="selecting ? 'soft' : 'outline'"
+              aria-label="Select"
+              :aria-pressed="selecting"
+              :disabled="selecting || !selectableRows.length"
+              @click="startSelect()"
+            >
+              <span class="hidden lg:inline">Select</span>
+            </UButton>
+          </UTooltip>
           <UFieldGroup>
             <UButton
               icon="i-lucide-layout-grid"
@@ -181,20 +230,28 @@ watch(() => route.query.item, (itemId) => {
     </template>
 
     <template #body>
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <StatusTabs
-          v-model="filters.status"
-          :tabs="TABS"
-          :counts="counts"
+      <StatusTabs
+        v-model="filters.status"
+        :tabs="TABS"
+        :counts="counts"
+      />
+
+      <BulkActionsBar
+        v-if="selecting"
+        :count="selection.count"
+        :all-selected="selection.allSelected"
+        @toggle-all="selection.toggleAll(!selection.allSelected)"
+        @exit="exitSelect()"
+      >
+        <UButton
+          label="Archive selected"
+          icon="i-lucide-archive"
+          color="neutral"
+          variant="subtle"
+          :disabled="!selection.count"
+          @click="archiveSelected"
         />
-        <UCheckbox
-          v-if="view === 'grid' && rows.length"
-          :model-value="selection.someSelected ? 'indeterminate' : selection.allSelected"
-          :label="selection.allSelected ? 'Unselect all' : 'Select all'"
-          aria-label="Select all"
-          @update:model-value="value => selection.toggleAll(!!value)"
-        />
-      </div>
+      </BulkActionsBar>
 
       <ApiErrorAlert
         v-if="error"
@@ -218,60 +275,142 @@ watch(() => route.query.item, (itemId) => {
         @clear="clearFilters()"
       />
 
-      <!-- Grid: one page. -->
+      <!-- Grid: one page; its columns follow the width it has (a card is at least 13rem) -->
       <div
         v-else-if="view === 'grid'"
-        class="grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-4"
+        class="@container"
       >
-        <ProductCard
-          v-for="item in rows"
-          :key="item.id"
-          :item="item"
-          :actions="rowActions(item)"
-          :selected="selection.isSelected(item)"
-          :busy="isBusy(item.id)"
-          @open="openForm(item)"
-          @select="value => selection.toggle(item, value)"
-        />
+        <div class="grid grid-cols-1 gap-4 @md:grid-cols-2 @2xl:grid-cols-3 @4xl:grid-cols-4 @6xl:grid-cols-5">
+          <ProductCard
+            v-for="item in rows"
+            :key="item.id"
+            :item="item"
+            :actions="rowActions(item)"
+            :selecting="selecting"
+            :selectable="item.status !== 'archived'"
+            :selected="selection.isSelected(item)"
+            :busy="isBusy(item.id)"
+            @open="openForm(item)"
+            @select="value => selection.toggle(item, value)"
+          />
+        </div>
       </div>
 
-      <!-- List: the table, for comparing across columns. -->
+      <!-- List on phones: rows, the name the one target and the actions beside it (page-patterns §2) -->
+      <ul
+        v-else-if="isCompact"
+        aria-label="Menu items"
+        class="divide-y divide-default rounded-lg border border-default"
+      >
+        <li
+          v-for="item in rows"
+          :key="item.id"
+          class="flex items-center gap-1 p-1"
+          :class="isBusy(item.id) && 'opacity-50'"
+        >
+          <div
+            v-if="selecting"
+            class="flex size-8 shrink-0 items-center justify-center"
+          >
+            <UCheckbox
+              v-if="item.status !== 'archived'"
+              :model-value="selection.isSelected(item)"
+              :aria-label="`Select ${item.name}`"
+              @update:model-value="value => selection.toggle(item, !!value)"
+            />
+          </div>
+          <UButton
+            color="neutral"
+            variant="ghost"
+            :aria-label="item.name"
+            :disabled="isBusy(item.id) || (selecting && item.status === 'archived')"
+            :tabindex="selecting ? -1 : undefined"
+            class="min-w-0 flex-1 gap-3 text-left"
+            @click="onName(item)"
+          >
+            <UAvatar
+              :src="item.imageUrl ?? undefined"
+              icon="i-lucide-image"
+              :alt="item.name"
+              class="size-10 shrink-0 rounded-md"
+            />
+            <span class="flex min-w-0 flex-col items-start gap-0.5">
+              <span class="flex max-w-full flex-wrap items-center gap-x-2">
+                <span class="break-words font-medium text-highlighted">{{ item.name }}</span>
+                <UBadge
+                  v-if="item.status !== 'active'"
+                  :label="ITEM_STATUS_LABELS[item.status]"
+                  :color="item.status === 'draft' ? 'warning' : 'neutral'"
+                  variant="subtle"
+                />
+              </span>
+              <span class="max-w-full truncate font-normal text-muted">{{ item.categoryName }} · {{ priceRange(item) }}</span>
+            </span>
+          </UButton>
+          <UIcon
+            v-if="isBusy(item.id)"
+            name="i-lucide-loader-circle"
+            class="size-5 shrink-0 animate-spin text-muted"
+            aria-label="Working…"
+          />
+          <UDropdownMenu
+            v-else-if="!selecting"
+            :items="rowActions(item)"
+            :content="{ align: 'end' }"
+          >
+            <UButton
+              icon="i-lucide-ellipsis-vertical"
+              color="neutral"
+              variant="ghost"
+              :aria-label="`Actions for ${item.name}`"
+            />
+          </UDropdownMenu>
+        </li>
+      </ul>
+
+      <!-- List from sm: the table, for comparing across columns -->
       <UTable
         v-else
-        v-model:row-selection="selection.rowSelection"
-        :get-row-id="selection.getRowId"
         :data="rows"
         :columns="columns"
-        :meta="{ class: { tr: row => (isBusy(row.original.id) ? 'opacity-50 pointer-events-none' : 'cursor-pointer') } }"
-        @select="(_, row) => openForm(row.original)"
+        class="shrink-0"
+        :meta="{ class: { tr: row => (isBusy(row.original.id) ? 'opacity-50 pointer-events-none' : '') } }"
       >
-        <template #select-header="{ table }">
+        <template #select-header>
           <UCheckbox
-            :model-value="table.getIsSomePageRowsSelected() ? 'indeterminate' : table.getIsAllPageRowsSelected()"
+            :model-value="selection.someSelected ? 'indeterminate' : selection.allSelected"
             aria-label="Select all"
-            @update:model-value="value => table.toggleAllPageRowsSelected(!!value)"
+            @update:model-value="value => selection.toggleAll(!!value)"
           />
         </template>
         <template #select-cell="{ row }">
           <UCheckbox
-            :model-value="row.getIsSelected()"
+            v-if="row.original.status !== 'archived'"
+            :model-value="selection.isSelected(row.original)"
             :aria-label="`Select ${row.original.name}`"
-            @update:model-value="value => row.toggleSelected(!!value)"
+            @update:model-value="value => selection.toggle(row.original, !!value)"
           />
         </template>
 
+        <!-- The name opens the item: the record's one target, beside (not around) its actions -->
         <template #name-cell="{ row }">
-          <div class="flex items-center gap-3">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            :aria-label="row.original.name"
+            :disabled="selecting && row.original.status === 'archived'"
+            :tabindex="selecting ? -1 : undefined"
+            class="-mx-2.5 -my-1.5 max-w-full gap-3 text-left"
+            @click="onName(row.original)"
+          >
             <UAvatar
               :src="row.original.imageUrl ?? undefined"
               icon="i-lucide-image"
               :alt="row.original.name"
               class="size-10 shrink-0 rounded-md"
             />
-            <p class="font-medium text-highlighted">
-              {{ row.original.name }}
-            </p>
-          </div>
+            <span class="font-medium text-highlighted">{{ row.original.name }}</span>
+          </UButton>
         </template>
 
         <template #price-cell="{ row }">
@@ -294,7 +433,7 @@ watch(() => route.query.item, (itemId) => {
             aria-label="Working…"
           />
           <UDropdownMenu
-            v-else
+            v-else-if="!selecting"
             :items="rowActions(row.original)"
             :content="{ align: 'end' }"
           >
@@ -318,20 +457,6 @@ watch(() => route.query.item, (itemId) => {
           :items-per-page="pageSize"
         />
       </div>
-
-      <BulkActionsBar
-        :count="selection.count"
-        @clear="selection.clear()"
-      >
-        <UButton
-          label="Archive"
-          icon="i-lucide-archive"
-          color="error"
-          variant="subtle"
-          :disabled="!archivable.length"
-          @click="archiveSelected"
-        />
-      </BulkActionsBar>
     </template>
   </UDashboardPanel>
 </template>

@@ -166,22 +166,43 @@ describe('menu items list', () => {
     await cardOf(page, 'Matcha').getByText('Draft').waitFor()
   })
 
-  it('opens a menu item by clicking its card (loading the whole item), but not from its checkbox', async () => {
+  it('opens a menu item by clicking anywhere on its card (loading the whole item)', async () => {
     const { page, api } = await open()
-    await cardOf(page, 'Matcha').getByRole('checkbox').click()
-    await page.getByText('1 selected').waitFor()
-    expect(await page.getByRole('dialog').count()).toBe(0)
-    await cardOf(page, 'Latte').getByRole('heading', { name: 'Latte' }).click()
+    // The card's centre, not the name: the name's button covers the whole card (D89).
+    await cardOf(page, 'Latte').click()
     const form = page.getByRole('dialog', { name: 'Edit menu item' })
     await expect.poll(() => form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte')
     expect(api.calls).toContain('GET /admin/menu/items/item-1')
   })
 
-  it('switches to the list (table), opens a row by clicking it, and remembers the view', async () => {
+  it('selects only in Select mode: a click on a card then selects it, archived items can\'t be, Escape leaves (D89)', async () => {
+    const { page } = await open()
+    // No checkboxes until Select mode.
+    expect(await page.getByRole('checkbox').count()).toBe(0)
+    await page.getByRole('button', { name: 'Select', exact: true }).click()
+    const bar = page.getByRole('toolbar', { name: 'Bulk actions' })
+    await bar.getByText('0 selected').waitFor()
+    expect(await bar.getByRole('button', { name: 'Archive selected' }).isDisabled()).toBe(true)
+    await cardOf(page, 'Matcha').click()
+    await bar.getByText('1 selected').waitFor()
+    expect(await page.getByRole('dialog').count()).toBe(0)
+    await cardOf(page, 'Matcha').getByRole('checkbox', { name: 'Select Matcha' }).click()
+    await bar.getByText('0 selected').waitFor()
+    // Menus are hidden while selecting.
+    expect(await page.getByRole('button', { name: 'Actions for Latte' }).count()).toBe(0)
+    await page.keyboard.press('Escape')
+    await bar.waitFor({ state: 'detached' })
+    expect(await page.getByRole('checkbox').count()).toBe(0)
+  })
+
+  it('switches to the list (table), opens a row by its name, and remembers the view', async () => {
     const { page } = await open()
     await page.getByRole('button', { name: 'List view' }).click()
     await page.getByRole('cell', { name: 'Espresso', exact: true }).waitFor()
+    // The name is the row's target; the rest of the row isn't (D89).
     await page.getByRole('cell', { name: 'No price' }).click()
+    expect(await page.getByRole('dialog').count()).toBe(0)
+    await page.getByRole('button', { name: 'Matcha', exact: true }).click()
     await page.getByRole('dialog', { name: 'Edit menu item' }).waitFor()
     await page.getByRole('button', { name: 'Cancel' }).click()
 
@@ -227,6 +248,34 @@ describe('menu items list', () => {
     await page.getByRole('option', { name: 'Drinks › Espresso' }).click()
     await expect.poll(() => seen.at(-1)?.get('categoryId')).toBe(ESPRESSO.id)
     await expect.poll(() => new URL(page.url()).searchParams.get('categoryId')).toBe(ESPRESSO.id)
+  })
+
+  it('on phones: the List view is rows (no table), the page fits, and a row\'s name opens it (D89)', async () => {
+    const page = await createPage()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await mockApi(page, backend())
+    await page.goto(url('/products'), { waitUntil: 'hydration' })
+    await cardOf(page, 'Latte').waitFor()
+    // Grid: one column
+    const lefts = await page.getByRole('article').evaluateAll(cards => cards.map(c => Math.round(c.getBoundingClientRect().left)))
+    expect(new Set(lefts).size).toBe(1)
+
+    await page.getByRole('button', { name: 'List view' }).click()
+    const list = page.getByRole('list', { name: 'Menu items' })
+    await list.getByText('Espresso · $3.50–$4.25').waitFor()
+    expect(await page.getByRole('table').count()).toBe(0)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await list.getByRole('button', { name: 'Latte', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Edit menu item' }).waitFor()
+  })
+
+  it('lays the grid out by the width it has: several columns at 1440px (D89)', async () => {
+    const { page } = await open()
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await expect.poll(async () => {
+      const lefts = await page.getByRole('article').evaluateAll(cards => cards.map(c => Math.round(c.getBoundingClientRect().left)))
+      return new Set(lefts).size
+    }).toBe(await page.getByRole('article').count())
   })
 
   it('shows the empty state when there are no menu items', async () => {

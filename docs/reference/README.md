@@ -44,7 +44,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `useConfirm` | composable | [UI helpers](./ui-helpers.md#useconfirm) | `await confirm({...})` → boolean |
 | `useTableSelection` | composable | [UI helpers](./ui-helpers.md#usetableselection) | Selection for tables, card grids and trees |
 | `<BottomActionBar>` | component | [UI helpers](./ui-helpers.md#bottomactionbar) | The one bottom bar: mode, Save and bulk bars |
-| `<BulkActionsBar>` | component | [UI helpers](./ui-helpers.md#bulkactionsbar) | "5 selected · actions · Clear" (a `BottomActionBar`) |
+| `<BulkActionsBar>` | component | [UI helpers](./ui-helpers.md#bulkactionsbar) | The Select mode bar: "5 selected · Select all · actions · ✕" (a `BottomActionBar`) |
 | `useLayoutContext` | composable | [UI helpers](./ui-helpers.md#uselayoutcontext) | `isCompact` / `isExpanded` for choices CSS can't make |
 | `<StatusTabs>` | component | [UI helpers](./ui-helpers.md#statustabs) | "All 3 · Active 2 · Archived 1" |
 | `<ListSkeleton>` | component | [UI helpers](./ui-helpers.md#listskeleton) | First-load placeholders |
@@ -125,8 +125,8 @@ async function removeSelected() {
   <ListEmptyState v-else-if="!rows.length" noun="rewards" ... />
   <!-- cards (RewardCard, like ProductCard) or a UTable, by what the screen is for (list-ui-refresh.md) -->
   <UPagination v-model:page="page" :total="data?.total ?? 0" :items-per-page="pageSize" />
-  <BulkActionsBar :count="selection.count" @clear="selection.clear()">
-    <UButton label="Delete" color="error" variant="subtle" @click="removeSelected" />
+  <BulkActionsBar v-if="selecting" :count="selection.count" :all-selected="selection.allSelected" @toggle-all="selection.toggleAll(!selection.allSelected)" @exit="exitSelect()">
+    <UButton label="Archive selected" color="neutral" variant="subtle" :disabled="!selection.count" @click="archiveSelected" />
   </BulkActionsBar>
 </template>
 ```
