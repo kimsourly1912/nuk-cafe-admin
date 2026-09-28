@@ -258,7 +258,7 @@ describe('category order', () => {
     const { page } = await open()
     await page.getByRole('button', { name: /^Reorder Food/ }).press('ArrowUp')
     expect(await page.getByPlaceholder('Search categories…').isDisabled()).toBe(true)
-    await page.getByRole('link', { name: /Schedules/ }).click()
+    await page.getByRole('link', { name: /Availability/ }).click()
     await page.getByText('Discard unsaved changes?').waitFor()
   })
 

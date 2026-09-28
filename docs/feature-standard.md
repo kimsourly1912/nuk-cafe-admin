@@ -2,7 +2,7 @@
 
 > **Scope:** this is the **app** half of building a feature (screens, composables, forms, pickers, browser tests). The **server** half (routes, the feature's service and repository, tables, permissions) follows the [server standard](server/README.md). We own the API, so a contract question is settled by writing the contract; only **business rules** wait for the project owner.
 
-How every new feature (Schedules, Products, Rewards, …) is planned, built and verified, so they behave the same way. This page **links** to the rules and APIs rather than repeating them:
+How every new feature (Rewards, Vouchers, Orders, …) is planned, built and verified, so they behave the same way. This page **links** to the rules and APIs rather than repeating them:
 
 - [AGENTS.md](../AGENTS.md): the rules (architecture, boundaries, conventions). It wins if this page disagrees.
 - [docs/reference/](reference/README.md): the shared APIs, with types and examples.
@@ -58,8 +58,8 @@ Evidence levels follow [progress.md → Verification levels](progress.md#verific
 - In scope / acceptance criteria: a numbered list, each one testable.
 - Out of scope: what this iteration will not do.
 
-## API contract (shared/contracts/<domain>.ts, docs/reference/api.md)
-- Routes: METHOD /api/v1/admin/... (list, options, get, create, update, delete, extras), with the permission each needs.
+## API contract (shared/contracts/<domain>.ts, docs/server/architecture.md)
+- Routes: METHOD /api/<surface>/... per [architecture.md → Surfaces and routes](server/architecture.md#surfaces-and-routes) (list, get, create, update, state actions, extras), with the permission each needs.
 - Request schemas (Valibot) and response types, written before the screen.
 - Business rules the server enforces (and which are [Open]: decide or defer, never guess).
 - Updates follow the API conventions: PATCH, absent keeps, null clears, `version` required (D41). Lists that replace (links, child rows) say so.
@@ -142,7 +142,6 @@ Not wanted in the app: generic CRUD engines, repository or service layers (the s
 | `useConfirm` | Confirmation dialogs | build ad-hoc confirm modals (deletes use `useMutation`'s `confirm`) | [ui](reference/ui.md#useconfirm) |
 | `useModalUnsavedChanges` / `useUnsavedChanges` / `useLeaveGuard` | "Discard unsaved changes?" on close, route change, logout and reload | add their own `beforeunload` or route guards | [forms](reference/forms.md) |
 | `invalidate` (+ `invalidateAll`, `invalidateInThisTab`, freshness plugin) | Refetching affected features in this tab and other tabs, on return and on reconnect | refetch other features' data directly, add global polling, or add a second refresh mechanism. **Screen-specific polling is allowed** when a screen needs live data (e.g. the Orders queue), per D22 | [data-fetching](reference/data-fetching.md#invalidate), [app-behavior](reference/app-behavior.md#data-freshness) |
-| `<StatusBadge>`, `STATUS_ITEMS`, `STATUS_FILTER_ITEMS` | ACTIVE/INACTIVE display, form select and filter select | redefine status labels or colors | [ui](reference/ui.md#statusbadge-and-status-constants) |
 | `ApiError`, `getErrorMessage`, `useNotify` | Error classification, user-safe messages, toasts for non-mutation actions | compare HTTP statuses or message strings, or call `useToast()` for API results | [errors](reference/errors.md) |
 | `usePageShortcuts`, `useSubmitShortcut` | Keyboard shortcuts, suppressed behind dialogs | call `defineShortcuts` directly for page keys | [ui](reference/ui.md#keyboard-shortcuts) |
 
@@ -155,7 +154,7 @@ Not wanted in the app: generic CRUD engines, repository or service layers (the s
 | Situation | Required behavior | Provided by | Current evidence and limitations |
 |---|---|---|---|
 | Layout | Chosen by the job: cards when pictures drive it, a card list for scanning, a table for comparing columns, a tree for nested data (D37). Row/card click opens the item; the ⋮ menu is always visible | the feature | e2e per page |
-| Status filter | `<StatusTabs>` with counts | `useStatusCounts` (or client counts) | e2e |
+| Status filter | `<StatusTabs>` with counts | client counts, or a `<feature>:status-counts` query (`useItemStatusCounts`) | e2e |
 | First load | `<ListSkeleton>` placeholders, never the empty state. **No empty-list `default`** on the list query (it hides `loading`) | `ListSkeleton` + `useApiQuery().loading` | e2e |
 | Refetch with rows shown | Rows stay, small spinner (`refreshing`) | `useApiQuery` | e2e checks that the refetch happens, not the spinner |
 | No records | "No <items> yet" + create button | `ListEmptyState` | e2e |
@@ -223,7 +222,7 @@ What features must not do is **duplicate the engine**: no in-flight maps, double
 
 ## 6. Resource picker conventions
 
-**[Required]** for new pickers (`ScheduleSelect`, `ProductSelect`, …), and for `CategorySelect` when it's next touched. **[Proposed]**: no generic picker component. Each feature owns its picker and its data.
+**[Required]** for new pickers (`AvailabilityRuleSelect`, `ProductSelect`, …), and for `CategorySelect` when it's next touched. **[Proposed]**: no generic picker component. Each feature owns its picker and its data.
 
 | Contract | Rule | `CategorySelect` today |
 |---|---|---|
@@ -250,9 +249,9 @@ What features must not do is **duplicate the engine**: no in-flight maps, double
 |---|---|---|---|---|
 | Image upload | **[Exists]** in Products: `ProductImageInput` (`useFileDialog`, type/size check, upload on pick, Save waits; D34) | Upload response shape; size and type limits; replacing vs removing (what the request sends); whether an abandoned upload must be cleaned up | Upload endpoint and field mapping: feature. Picker, preview and progress UI: shared once extracted | Rewards, banners or vouchers need it |
 | Translation fields | Any feature, only if editing translations is approved (Q5) | Whether admins edit `en` / `zh-HK` / `km`, which are required, fallbacks | Field list: feature. The locale tabs component: shared | Approved **and** the second form needs it. Until then, forms edit the main field and preserve the maps |
-| Money display and input | **[Exists]** in Products: USD major units, `formatPrice` / `PRICE_FORMAT` + `UInputNumber` (D34) | Currency, decimal precision, rounding, and whether the API uses major or minor units | Which fields are money: feature. Formatting and parsing: shared | The second feature shows prices (schedules' items, rewards) |
-| Date/time display | Lists with `createdAt`/`updatedAt`. Schedules already convert **times of day** to the viewer's zone (`app/features/schedules/utils/timezone.ts`, D33): the model for promotion | Timezone (`ScheduleResponse` has a `timezone`), format, date-only vs timestamp | Shared formatter once agreed | The second feature displays dates |
-| Weekday + time-range inputs | **[Exists]** in Schedules: `UCheckboxGroup` + Every day/Weekdays/Weekends, `UInputTime` (12-hour, viewer's timezone; `Time` ↔ `HH:mm` via `utils/time.ts`, zone conversion via `utils/timezone.ts`, D33), `formatDays`/`formatTimeRange` (`app/features/schedules/utils/days.ts`) | Time format, timezone and overnight ranges: see [plans/schedules.md](plans/schedules.md) S1–S3 (safest encodings, unverified) | Schedules-specific | A second feature has weekly availability |
+| Money display and input | **[Exists]**, shared: `app/utils/money.ts` (cents in the API, dollars in forms; `formatMinor`, `PRICE_FORMAT` + `UInputNumber`; D34, D68) | Settled: USD, whole cents | Which fields are money: feature. Formatting and parsing: shared | Done (D68) |
+| Date/time display | Lists with `createdAt`/`updatedAt`. Availability shows **times of day** as the branch's wall time (D63, D66) | The viewer's zone vs the branch's, format, date-only vs timestamp | Shared formatter once agreed | The second feature displays dates |
+| Weekday + time-range inputs | **[Exists]** in Availability: rows of days and one start and end, overnight and a midnight end (D66) | Settled (D63) | Availability-specific | A second feature has weekly times (branch hours, 5.1) |
 | Ordering controls | **[Exists]** in Categories (D36): sort mode per type, `useSortable` on `UTable` + keyboard, explicit save. Products (per category) next: no route yet | The request shape; whether ordering is global or per parent/category; how conflicts are handled | Endpoint call: feature. A drag-and-drop list: shared once extracted | Both Categories and Products get ordering |
 | Permission helpers | All features, after the role/action matrix (Q6) | Which role may view and do what; whether the server enforces it (the UI hides, the server must refuse) | A shared `can(action)` + route meta, once the matrix exists | Immediately when the matrix exists (every feature needs it) |
 

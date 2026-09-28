@@ -2,7 +2,7 @@ import { FetchError } from 'ofetch'
 import { describe, expect, it } from 'vitest'
 import { API_ERROR_MESSAGES, ApiError, getErrorMessage } from '../../app/utils/api-error'
 
-/** An `/api/v1` error response body (`apiError` in server/utils/api-error.ts). */
+/** An error response body of our API (`apiError` in server/utils/errors.ts). */
 const body = (statusCode: number, code: string, message: string, fieldErrors?: Record<string, string[]>) =>
   ({ error: true, statusCode, message, data: { code, message, ...(fieldErrors ? { fieldErrors } : {}) } })
 

@@ -21,7 +21,7 @@ Failures reach the app in a few shapes:
 
 | Failure | How it arrives |
 |---|---|
-| Our API (`/api/v1`) rejects a request | HTTP 4xx + `{ statusCode, message, data: { code, message, fieldErrors? } }` ([API → Errors](./api.md#errors)) |
+| Our API (`/api`) rejects a request | HTTP 4xx + `{ statusCode, message, data: { code, message, fieldErrors? } }` ([server standard → Errors](../server/architecture.md#errors)) |
 | Better Auth rejects a sign-in | HTTP 4xx + `{ code, message }` (`INVALID_EMAIL_OR_PASSWORD`, rate limiting) |
 | Crash, gateway, proxy | HTTP 5xx, possibly plain text or HTML |
 | Offline, DNS, timeout | No response at all |
@@ -119,7 +119,7 @@ Errors that must not produce a toast: cancelled on purpose, or already handled b
 
 ## Error codes
 
-The server's codes are listed in `ERROR_CODES` (`shared/contracts/common.ts`) and explained in [API → Errors](./api.md#errors). The client doesn't map codes to kinds: the HTTP status decides the kind, and 4xx messages are written to be shown. Add a code to `ERROR_CODES` and to the API page when a route needs a new one.
+The server's shared codes are `ErrorCodes` (`server/utils/errors.ts`); each feature adds its own in its `*.errors.ts`. They're explained in [server standard → Errors](../server/architecture.md#errors). The client doesn't map codes to kinds: the HTTP status decides the kind, and 4xx messages are written to be shown.
 
 `API_ERROR_MESSAGES: Record<ApiErrorKind, string>` holds the fallback messages from the table above.
 

@@ -1,10 +1,8 @@
 /**
  * Every table the application services query, for explicit imports (services and tests don't use
- * Nitro auto-imports). NuxtHub itself reads `server/db/schema/*.ts`.
+ * Nitro auto-imports). The features' own tables come from their `*.schema.ts`.
  */
 // Better Auth's tables (plugins included) as NuxtHub merges them; '#auth/schema' types only the core ones.
 export { account, member, organization, session, user } from 'hub:db:schema'
-export * from './schema/media'
-export * from './schema/menu'
-// Owned by the platform feature (D50); re-exported for the legacy services.
+// Owned by the platform feature (D50).
 export { auditEvents } from '../features/platform/platform.schema'

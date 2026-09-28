@@ -4,7 +4,7 @@
 
 What each feature exports from its `index.ts` for **other features and the app shell**. Import only from `~/features/<name>`: deep imports are lint errors.
 
-A feature's public API contains **building blocks only** (pickers, option data, types, navigation), never pages or forms. That's what lets features that reference each other (products ↔ schedules) use each other's pickers without import cycles. See `docs/decisions.md` D8.
+A feature's public API contains **building blocks only** (pickers, option data, types, navigation), never pages or forms. That's what lets features that reference each other use each other's pickers without import cycles. See `docs/decisions.md` D8.
 
 | Feature | Exports |
 |---|---|
@@ -13,7 +13,6 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 | `option-sets` | [`useOptionSetOptions`](#useoptionsetoptions), `optionSetsNavigation` ("Options") |
 | `modifier-groups` | [`useModifierGroupOptions`](#usemodifiergroupoptions), [`describeRules`, `formatDelta`](#describerules-formatdelta), `modifierGroupsNavigation` ("Add-ons") |
 | `availability-rules` | [`AvailabilityRuleSelect`](#availabilityruleselect), [`useAvailabilityRuleOptions`](#useavailabilityruleoptions), `availabilityRulesNavigation` |
-| `schedules` | [`ScheduleSelect`](#scheduleselect), [`useScheduleOptions`](#usescheduleoptions), `schedulesNavigation` |
 | `products` | `productsNavigation` ("Menu items"). A `ProductSelect` waits for its first consumer |
 
 When you add a feature, add its section here. Pickers follow the contract in [feature-standard.md → Resource picker conventions](../feature-standard.md#6-resource-picker-conventions).
@@ -153,38 +152,3 @@ describeRules(0, 2)     // "Optional · up to 2"
 formatDelta(50)         // "+$0.50"; 0 → "Free"
 ```
 
----
-
-## schedules
-
-### `ScheduleSelect`
-
-A multiple-schedule picker, e.g. the menu-item form's `scheduleIds`.
-
-```ts
-import { ScheduleSelect } from '~/features/schedules'
-```
-
-```vue
-<ScheduleSelect v-model="state.scheduleIds" />
-```
-
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `v-model` | `string[]` | `[]` | Schedule ids. |
-| `placeholder` | `string` | `'No schedule'` | |
-
-Behavior (e2e `test/e2e/products.test.ts`), the same contract as `CategorySelect`:
-- **Selected schedules stay visible**, never cleared: "(inactive)" when inactive, "Unknown schedule (unavailable)" when it no longer exists.
-- **Inactive schedules aren't offered as new selections** while Q9 is open.
-- **Load error:** the message with **Retry**.
-- Attributes go to the select, `class` to the wrapper (as `CategorySelect`).
-
-### `useScheduleOptions`
-
-```ts
-function useScheduleOptions() // → useApiQuery result, `data`: ScheduleOption[] (default [])
-```
-
-- Key: `schedules:options`, refreshed by `invalidate('schedules')`.
-- Calls `GET /api/v1/admin/schedules/options` (all statuses).

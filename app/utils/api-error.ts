@@ -63,7 +63,7 @@ function kindFromStatus(status: number): ApiErrorKind {
 
 /**
  * What a failed request's body says, for both error formats the app meets:
- * - our `/api/v1` routes: `{ statusCode, message, data: { code, message, fieldErrors? } }`
+ * - our API (`/api`): `{ statusCode, message, data: { code, message, fieldErrors? } }`
  *   (`ApiErrorBody` in shared/contracts/common.ts);
  * - Better Auth (`/api/auth`): `{ code, message }`.
  */

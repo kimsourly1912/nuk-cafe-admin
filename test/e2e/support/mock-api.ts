@@ -2,7 +2,6 @@ import type { BrowserContext, Page, Route } from 'playwright-core'
 import { getBrowser, setup, url, waitForHydration } from '@nuxt/test-utils/e2e'
 import { afterEach, expect, inject } from 'vitest'
 import type { Page as ApiPage } from '../../../shared/contracts/common'
-import type { Category, Product, Schedule } from '../../../shared/contracts/menu'
 import type { AdminSession } from '../../../shared/contracts/identity'
 import type { MenuCategory } from '../../../shared/contracts/menu-categories'
 import type { MenuItem, MenuItemSummary } from '../../../shared/contracts/menu-items'
@@ -34,9 +33,9 @@ export function setupE2e() {
 /**
  * Mocks the server in the browser: every `/api/**` request is answered from `handlers`. Keys are
  * `'METHOD /path'` without query:
- * - our API without its `/api/v1` prefix: `'GET /admin/categories'`;
+ * - our API without its `/api` prefix: `'GET /admin/menu/categories'`;
  * - Better Auth as `/auth/...`: `'POST /auth/sign-in/email'`.
- * A segment containing a digit can be written `{id}` (`'PATCH /admin/categories/{id}'`).
+ * A segment containing a digit can be written `{id}` (`'PATCH /admin/menu/categories/{id}'`).
  *
  * A handler's return value is the JSON body (HTTP 200). Throw `MockFailure` (or a `failures.*`
  * preset) for an error response in the API's format.
@@ -65,10 +64,6 @@ export const ADMIN: AdminSession = {
   role: 'admin',
   permissions: ['menu:read', 'menu:write', 'media:upload', 'branch:read', 'staff:read', 'staff:create', 'staff:update', 'staff:disable'],
   mustChangePassword: false,
-}
-
-export function categoryOf(id: string, name: string, overrides: Partial<Category> = {}): Category {
-  return { id, name, parentId: null, status: 'ACTIVE', sortOrder: 1, version: 1, createdAt: STAMP, updatedAt: STAMP, ...overrides }
 }
 
 /** A category of the new menu API (`/api/admin/menu/categories`). */
@@ -102,44 +97,6 @@ export function menuItemOf(id: string, name: string, overrides: Partial<MenuItem
   }
 }
 
-export function scheduleOf(id: string, name: string, overrides: Partial<Schedule> = {}): Schedule {
-  return {
-    id,
-    name,
-    description: '',
-    days: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
-    startTime: '08:00',
-    endTime: '17:00',
-    timeZone: 'Asia/Phnom_Penh',
-    status: 'ACTIVE',
-    productCount: 0,
-    version: 1,
-    createdAt: STAMP,
-    updatedAt: STAMP,
-    ...overrides,
-  }
-}
-
-export function productOf(id: string, name: string, category: Category, overrides: Partial<Product> = {}): Product {
-  return {
-    id,
-    name,
-    description: '',
-    category: { id: category.id, name: category.name, parentId: category.parentId, status: category.status },
-    priceMinor: 350,
-    currency: 'USD',
-    image: null,
-    status: 'ACTIVE',
-    sortOrder: 1,
-    scheduleIds: [],
-    variantGroups: [],
-    version: 1,
-    createdAt: STAMP,
-    updatedAt: STAMP,
-    ...overrides,
-  }
-}
-
 export const RIVERSIDE: BranchOption = { id: 'branch-1', name: 'Riverside' }
 export const AIRPORT: BranchOption = { id: 'branch-2', name: 'Airport' }
 
@@ -157,8 +114,6 @@ export function staffOf(id: string, name: string, overrides: Partial<StaffMember
   }
 }
 
-export const TEA = categoryOf('cat-1', 'Tea')
-export const COFFEE = categoryOf('cat-2', 'Coffee', { sortOrder: 2 })
 export const MENU_TEA = menuCategoryOf('cat-1', 'Tea')
 export const MENU_COFFEE = menuCategoryOf('cat-2', 'Coffee', { sortOrder: 2 })
 
@@ -172,14 +127,12 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /auth/get-session': () => null,
   'POST /auth/sign-out': () => ({ success: true }),
   'GET /admin/me': () => ADMIN,
-  'GET /admin/categories': () => [TEA, COFFEE],
   'GET /admin/menu/categories': () => [MENU_TEA, MENU_COFFEE],
   'POST /admin/menu/categories': ({ body }) => menuCategoryOf('cat-3', String((body as { name?: string })?.name ?? 'New')),
   // The category and item forms' pickers and libraries.
   'GET /admin/menu/availability-rules': () => [],
   'GET /admin/menu/option-sets': () => [],
   'GET /admin/menu/modifier-groups': () => [],
-  'POST /admin/categories': ({ body }) => categoryOf('cat-3', String((body as { name?: string })?.name ?? 'New')),
 }
 
 /** Throw this from a handler to answer with an error in the API's format. */
@@ -278,18 +231,6 @@ export function paginatedHandler<T extends Record<string, unknown>>(rows: T[] | 
   }
 }
 
-/**
- * `GET /admin/categories` like the server: every category, or only mains / subs with `?level=`
- * (the parent picker asks for `level=main`). Pass a function for rows that change.
- */
-export function categoriesHandler(rows: Category[] | (() => Category[])): MockHandler {
-  return ({ url }) => {
-    const all = typeof rows === 'function' ? rows() : rows
-    const level = url.searchParams.get('level')
-    return all.filter(c => !level || (level === 'main') === (c.parentId === null))
-  }
-}
-
 /** The last path segment of a request: the record id of `/admin/categories/{id}`. */
 export const lastSegment = (url: URL) => url.pathname.split('/').pop()!
 
@@ -314,7 +255,7 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
   await page.route(`${origin}/api/**`, async (route: Route) => {
     const request = route.request()
     const requestUrl = new URL(request.url())
-    const path = requestUrl.pathname.replace(/^\/api(\/v1)?(?=\/admin)/, '').replace(/^\/api\/auth/, '/auth')
+    const path = requestUrl.pathname.replace(/^\/api(?=\/admin)/, '').replace(/^\/api\/auth/, '/auth')
     const key = `${request.method()} ${path}`
     calls.push(key)
     // 'DELETE /admin/categories/cat-1' also matches a 'DELETE /admin/categories/{id}' handler.
@@ -374,7 +315,7 @@ export function toast(page: Page, title: string | RegExp) {
 
 /**
  * A category in the Categories tree (`/categories`), by name. The tree loads
- * `GET /admin/categories`; the default handlers answer it with TEA and COFFEE.
+ * `GET /admin/menu/categories`; the default handlers answer it with MENU_TEA and MENU_COFFEE.
  */
 export function categoryItem(page: Page, name: string) {
   return page.getByRole('listitem', { name, exact: true })

@@ -39,9 +39,8 @@ export default defineConfig({
         resolve: { alias },
         test: {
           name: 'server',
-          // server/tests: shared server utils; server/features/*/tests: features (docs/server/architecture.md → Tests);
-          // test/server: the pre-standard (legacy) services until they are replaced.
-          include: ['server/tests/**/*.test.ts', 'server/features/*/tests/**/*.test.ts', 'test/server/**/*.test.ts'],
+          // server/tests: shared server utils; server/features/*/tests: features (docs/server/architecture.md → Tests).
+          include: ['server/tests/**/*.test.ts', 'server/features/*/tests/**/*.test.ts'],
           environment: 'node',
         },
       },

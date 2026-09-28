@@ -78,6 +78,13 @@
       "when": 1790527461873,
       "tag": "0010_branch_item_states",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1790563453247,
+      "tag": "0011_drop_legacy_menu",
+      "breakpoints": true
     }
   ]
 }
