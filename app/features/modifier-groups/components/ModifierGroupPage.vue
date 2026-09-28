@@ -371,9 +371,9 @@ const headerActions = computed(() => archived.value
           :class="['lg:hidden', mode === 'reorder' && 'hidden']"
         />
 
-        <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+        <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
           <div
-            class="min-w-0 space-y-6"
+            class="min-w-0 space-y-6 lg:flex-1"
             :class="tab !== 'addons' && 'max-lg:hidden'"
           >
             <UCard
@@ -381,10 +381,11 @@ const headerActions = computed(() => archived.value
               :ui="{ root: 'overflow-visible' }"
             >
               <!-- Browse -->
+              <!-- @container: the list lays out by the column's width, not the viewport's (D82) -->
               <section
                 v-if="mode === 'browse'"
                 aria-labelledby="add-ons-heading"
-                class="space-y-4"
+                class="@container space-y-4"
               >
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -398,13 +399,13 @@ const headerActions = computed(() => archived.value
                       {{ pluralize(active.length, ['active add-on', 'active add-ons']) }}
                     </p>
                   </div>
-                  <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+                  <div class="flex w-full flex-wrap items-center gap-2 @md:w-auto">
                     <UInput
                       v-model="addOnSearch"
                       icon="i-lucide-search"
                       placeholder="Search add-ons"
                       aria-label="Search add-ons"
-                      class="w-full sm:w-48"
+                      class="w-full @md:w-48"
                     />
                     <template v-if="!archived">
                       <UButton
@@ -412,7 +413,7 @@ const headerActions = computed(() => archived.value
                         icon="i-lucide-arrow-down-up"
                         color="neutral"
                         variant="outline"
-                        class="flex-1 justify-center sm:flex-none"
+                        class="flex-1 justify-center @md:flex-none"
                         :disabled="active.length < 2 || busy"
                         @click="startReorder()"
                       />
@@ -424,7 +425,7 @@ const headerActions = computed(() => archived.value
                           label="Add add-on"
                           icon="i-lucide-plus"
                           variant="outline"
-                          class="flex-1 justify-center sm:flex-none"
+                          class="flex-1 justify-center @md:flex-none"
                           :disabled="full || busy"
                           @click="openAddOn()"
                         />
@@ -433,18 +434,19 @@ const headerActions = computed(() => archived.value
                   </div>
                 </div>
 
+                <!-- Column headings of the wide layout; widths match AddOnRow -->
                 <div
-                  class="hidden border-b border-default pb-2 text-xs font-medium text-muted sm:grid sm:grid-cols-[minmax(0,1fr)_6rem_9rem_5rem] sm:gap-4"
+                  class="hidden gap-4 border-b border-default pb-2 text-xs font-medium text-muted @md:flex"
                   aria-hidden="true"
                 >
-                  <span>Add-on</span>
-                  <span class="text-right">Default price</span>
-                  <span>Preselected</span>
-                  <span class="text-right">Actions</span>
+                  <span class="min-w-0 flex-1">Add-on</span>
+                  <span class="w-24 shrink-0 text-right">Default price</span>
+                  <span class="w-36 shrink-0">Preselected</span>
+                  <span class="w-12 shrink-0 text-right">Actions</span>
                 </div>
                 <ul
                   aria-label="Active add-ons"
-                  class="-mt-4 divide-y divide-default sm:mt-0"
+                  class="divide-y divide-default"
                 >
                   <AddOnRow
                     v-for="modifier in shownAddOns"
@@ -535,29 +537,35 @@ const headerActions = computed(() => archived.value
                 aria-labelledby="reorder-heading"
                 class="space-y-4"
               >
-                <div class="sticky top-0 z-10 -mx-4 -mt-4 flex items-center gap-2 border-b border-default bg-default px-4 py-3 sm:static sm:m-0 sm:border-0 sm:p-0">
-                  <UButton
-                    label="Cancel"
-                    color="neutral"
-                    variant="outline"
-                    :disabled="savingOrder"
-                    @click="cancelReorder()"
-                  />
-                  <h2
-                    id="reorder-heading"
-                    class="min-w-0 flex-1 truncate text-center font-semibold text-highlighted sm:text-left"
-                  >
-                    Reorder add-ons
-                  </h2>
-                  <UButton
-                    label="Save order"
-                    icon="i-lucide-save"
-                    :loading="savingOrder"
-                    @click="saveOrder()"
-                  />
-                </div>
+                <h2
+                  id="reorder-heading"
+                  class="font-semibold text-highlighted"
+                >
+                  Reorder add-ons
+                </h2>
+                <!-- The mode's actions: at the bottom of the screen below lg, above the list from lg -->
+                <BottomActionBar label="Reorder">
+                  <p class="min-w-0 flex-1 text-sm text-muted">
+                    {{ orderDirty ? 'The new order isn\'t saved yet.' : 'Nothing is saved until Save order.' }}
+                  </p>
+                  <div class="flex flex-wrap items-center justify-end gap-2">
+                    <UButton
+                      label="Cancel"
+                      color="neutral"
+                      variant="outline"
+                      :disabled="savingOrder"
+                      @click="cancelReorder()"
+                    />
+                    <UButton
+                      label="Save order"
+                      icon="i-lucide-save"
+                      :loading="savingOrder"
+                      @click="saveOrder()"
+                    />
+                  </div>
+                </BottomActionBar>
                 <p class="text-sm text-muted">
-                  Drag an add-on or use its arrows. Customers see them in this order. Nothing is saved until Save order.
+                  Drag an add-on or use its arrows. Customers see them in this order.
                 </p>
                 <AddOnReorderList
                   :modifiers="orderRows"
@@ -577,6 +585,7 @@ const headerActions = computed(() => archived.value
 
           <UCard
             variant="outline"
+            class="lg:w-88 lg:shrink-0"
             :class="[tab !== 'settings' && 'max-lg:hidden', mode === 'reorder' && 'max-lg:hidden']"
           >
             <ModifierGroupSettings

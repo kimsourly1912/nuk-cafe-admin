@@ -179,6 +179,9 @@ Body:   Milk choices  Active                       Milk choices  Active
 - Heading block: record name (`h2`), status badge, one summary line.
 - A main column for what the user works on most, and a narrower column for settings and status.
 - On compact, the two columns become tabs, and each tab is a focused screen.
+- A sub-collection inside a column lays out by that column (`@container` on it, container variants inside), not the viewport: the add-ons list stacks beside the settings column at 1024px and shows its price and Preselected columns when the column is wider (D82).
+- Its rows use the [row composition](#compact-row-composition): an add-on's name opens its Edit dialog, the ⋮ actions sit beside it.
+- A mode (Reorder) puts its actions in the [`BottomActionBar`](./ui-helpers.md#bottomactionbar), inline above the list from `lg`.
 
 ### Save models
 
