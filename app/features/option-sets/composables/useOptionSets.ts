@@ -1,4 +1,6 @@
+import type { ConfirmOptions } from '~/utils/mutation'
 import type { CreateOptionSetInput, OptionSet, OptionValue } from '#shared/contracts/menu-options'
+import { archiveSetDescription } from '../schemas/option-set-display'
 
 const BASE = '/admin/menu/option-sets'
 
@@ -48,12 +50,14 @@ export function useOptionSetMutations() {
   )
 
   /** One change to a set: shared key, lock and refresh. */
-  function change<T extends SetChange>(id: string, request: (input: T) => Promise<OptionSet>, messages: { success: (input: T) => string, error: (input: T) => string }) {
+  function change<T extends SetChange>(id: string, request: (input: T) => Promise<OptionSet>, messages: { success: ((input: T) => string) | false, error: (input: T) => string, confirm?: (input: T) => ConfirmOptions }) {
+    const { success } = messages
     return useMutation(request, {
       id: `option-sets:${id}`,
       key: input => setKey(input.set.id),
       lock: input => setKey(input.set.id),
-      successMessage: (_, input) => messages.success(input),
+      confirm: messages.confirm,
+      successMessage: success && ((_, input) => success(input)),
       errorMessage: messages.error,
       invalidate: AFFECTED,
     })
@@ -72,11 +76,9 @@ export function useOptionSetMutations() {
       key: ({ set }) => setKey(set.id),
       lock: ({ set }) => setKey(set.id),
       confirm: ({ set }) => ({
-        title: `Archive "${set.name}"?`,
-        description: set.itemCount
-          ? `${pluralize(set.itemCount, ['menu item uses', 'menu items use'])} it and will keep it, but it can't be added to other items. You can restore it later.`
-          : 'It can\'t be added to menu items any more. You can restore it later.',
-        confirmLabel: 'Archive',
+        title: `Archive “${set.name}”?`,
+        description: archiveSetDescription(set.itemCount),
+        confirmLabel: 'Archive option set',
       }),
       successMessage: (_, { set }) => `Option set "${set.name}" archived`,
       errorMessage: ({ set }) => `Could not archive "${set.name}"`,
@@ -105,7 +107,15 @@ export function useOptionSetMutations() {
   const archiveValue = change(
     'value-archive',
     ({ set, value }: ValueChange) => apiFetch<OptionSet>(`${BASE}/${set.id}/values/${value.id}/archive`, { method: 'POST', body: { version: set.version } }),
-    { success: ({ value }) => `"${value.name}" archived`, error: ({ value }) => `Could not archive "${value.name}"` },
+    {
+      success: ({ value }) => `"${value.name}" archived`,
+      error: ({ value }) => `Could not archive "${value.name}"`,
+      confirm: ({ value }) => ({
+        title: `Archive “${value.name}”?`,
+        description: 'Menu-item versions that use this value will be hidden until it is restored.',
+        confirmLabel: 'Archive value',
+      }),
+    },
   )
 
   const restoreValue = change(
@@ -117,7 +127,8 @@ export function useOptionSetMutations() {
   const reorderValues = change(
     'value-reorder',
     ({ set, valueIds }: SetChange & { valueIds: string[] }) => apiFetch<OptionSet>(`${BASE}/${set.id}/values/order`, { method: 'PUT', body: { version: set.version, valueIds } }),
-    { success: () => 'Order saved', error: () => 'Could not save the order' },
+    // No toast per save: the editor's header says "Saving…" / "Saved" (reorder saves after each pause).
+    { success: false, error: () => 'Could not save the order' },
   )
 
   const changes = [rename, archive, restore, addValue, renameValue, archiveValue, restoreValue, reorderValues]
