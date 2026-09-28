@@ -7,3 +7,20 @@
     cursor: pointer;
   }
 }
+
+/*
+ * Light-mode primary (D77, D78, ui.md §12). Nuxt UI uses the 500 shade in light mode; amber-500 as text
+ * on white is about 2:1, below WCAG AA's 4.5:1. The 700 shade passes on white but not on its own tint
+ * (`text-primary` on `bg-primary/10`, the subtle badges: 4.4:1), so the 800 shade: it passes on both,
+ * and white text on solid primary buttons passes too (test/e2e/ui-foundations.test.ts measures all
+ * three). Dark mode keeps Nuxt UI's 400 shade: it's restated because these unlayered rules win over
+ * Nuxt UI's (in `@layer theme`).
+ */
+:root,
+.light {
+  --ui-primary: var(--ui-color-primary-800);
+}
+
+.dark {
+  --ui-primary: var(--ui-color-primary-400);
+}

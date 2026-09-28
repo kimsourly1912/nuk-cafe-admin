@@ -7,7 +7,6 @@
  * Open via `useOverlay().create(AddOnFormModal)`; emits `close(group)` with the group as saved.
  */
 import type { Modifier, ModifierGroup } from '#shared/contracts/menu-modifiers'
-import { useMediaQuery } from '@vueuse/core'
 import { useModifierGroupMutations } from '../composables/useModifierGroups'
 import type { AddOnForm, AddOnIssues } from '../schemas/modifier-group-form'
 import { addOnIssues, toAddOnFields, toAddOnForm } from '../schemas/modifier-group-form'
@@ -21,7 +20,7 @@ const emit = defineEmits<{ 'close': [saved?: ModifierGroup], 'update:open': [ope
 
 const state = reactive<AddOnForm>(toAddOnForm(props.modifier))
 const saving = ref(false)
-const fullscreen = useMediaQuery('(max-width: 639px)')
+const { isCompact: fullscreen } = useLayoutContext()
 const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emit('close') })
 
 const { addModifier, updateModifier } = useModifierGroupMutations()

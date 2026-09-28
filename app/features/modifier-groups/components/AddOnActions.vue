@@ -7,7 +7,6 @@
  * <AddOnActions name="Oat milk" :actions="[{ label: 'Edit add-on', icon: 'i-lucide-pencil', onSelect: edit }]" />
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
-import { useMediaQuery } from '@vueuse/core'
 
 export interface AddOnAction {
   label: string
@@ -21,7 +20,7 @@ export interface AddOnAction {
 
 const props = defineProps<{ name: string, actions: AddOnAction[] }>()
 
-const phone = useMediaQuery('(max-width: 639px)')
+const { isCompact: phone } = useLayoutContext()
 const open = ref(false)
 
 const menuItems = computed<DropdownMenuItem[]>(() => props.actions.map(action => ({ ...action })))

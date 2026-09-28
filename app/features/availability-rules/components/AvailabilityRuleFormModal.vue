@@ -12,7 +12,6 @@
  * it ends the next day; a read-only weekly preview follows. Full screen on phones. An archived rule
  * opens read-only with Restore.
  */
-import { useMediaQuery } from '@vueuse/core'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import { Time } from '@internationalized/date'
 import type { AvailabilityRule } from '#shared/contracts/menu-availability'
@@ -36,7 +35,7 @@ const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: bool
 const isEdit = props.rule !== undefined
 /** Archived rules can't be edited (the server refuses): shown read-only, with Restore. */
 const readOnly = props.rule?.status === 'archived'
-const fullscreen = useMediaQuery('(max-width: 639px)')
+const { isCompact: fullscreen } = useLayoutContext()
 const copy = (form: AvailabilityRuleForm): AvailabilityRuleForm => ({ name: form.name, rows: form.rows.map(row => ({ ...row, days: [...row.days] })) })
 const state = reactive<AvailabilityRuleForm>(copy(props.draft ?? toAvailabilityRuleForm(props.rule)))
 

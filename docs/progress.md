@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-28 (responsive UI standard documented, D77, awaiting review; Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-28 (UI foundations, D78, awaiting review; responsive UI standard, D77; Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -26,9 +26,9 @@ Every "done" item states how it was checked. Keep using these labels:
 
 **Greenfield product blueprint (2026-09-26):** [system-blueprint.md](plans/system-blueprint.md) starts from customer, staff, and manager journeys. Confirmed launch scope: customer website, pickup and dine-in with table QR, USD, one branch, email/password accounts with no guest ordering, pay at counter before preparation, points earned at 1 per USD after completion and exchanged for vouchers, and staff-issued vouchers; native app, delivery, and online payment are outside that scope. Product policy questions remain open in the blueprint.
 
-**Responsive UI standard (2026-09-28, D77): documentation revised after the owner's review; all owner decisions approved; awaiting review and merge.** Nuxt UI is the component design system; Tailwind CSS tokens are the layout and styling language. Canonical rules in `docs/reference/ui.md`, `responsive-layout.md`, `page-patterns.md` and `ui-review-checklist.md`; the audit, the owner-decision table (all approved: 8 directions plus the Settings blueprint, compact filters beyond two, one shared bottom action bar and the Menu item editor URLs; none open) and the page-migration sequence in [plans/ui-standardization.md](plans/ui-standardization.md). No page has been migrated yet; Phase B starts only after this documentation is merged into `main`.
+**Responsive UI standard (2026-09-28, D77): documented and merged; Phase B step 1 (foundations, D78) done, awaiting review.** Nuxt UI is the component design system; Tailwind CSS tokens are the layout and styling language. Canonical rules in `docs/reference/ui.md`, `responsive-layout.md`, `page-patterns.md` and `ui-review-checklist.md`; the audit, the owner-decision table (all approved: 8 directions plus the Settings blueprint, compact filters beyond two, one shared bottom action bar and the Menu item editor URLs; none open) and the page-migration sequence in [plans/ui-standardization.md](plans/ui-standardization.md). Step 1 (D78): 44px compact targets configured once in `app.config.ts`, light-mode primary at the 800 shade (measured), `useLayoutContext()`, one `<BottomActionBar>`. No page has been redesigned yet; next is step 2 (`/staff`).
 
-**Not built yet:** no Cloudflare deployment, D1/R2 bindings or CI migration step; no customer or cashier screens; no admin reset of a staff member's password; no cleanup of temporary uploads. The public menu API exists (3.8a) but no customer screen uses it yet.
+**Not built yet:** no production environment (staging runs on Cloudflare, steps 2.1–2.2); no customer or cashier screens; no admin reset of a staff member's password; no cleanup of temporary uploads. The public menu API exists (3.8a) but no customer screen uses it yet.
 
 The Foundation table below is the app's shared UI behavior; it stays valid through the server rebuild.
 
@@ -59,6 +59,7 @@ The Foundation table below is the app's shared UI behavior; it stays valid throu
 | Feature architecture + ESLint boundary rules | done | lint (violations verified to be reported) |
 | CRUD state: `useApiQuery`, `useMutation` (per-item concurrency, shared state, batch, Stop, Retry failed), `useTableSelection`, `BulkActionsBar`, leave-page guard | done | unit (engine), browser-mock (all async scenarios) |
 | **List UI refresh (2026-09-26, [plan](plans/list-ui-refresh.md), D37):** `StatusTabs` + `useStatusCounts`, floating `BulkActionsBar`, `ListSkeleton`, selection helpers for cards/trees | done | e2e on all three pages; light + dark screenshots |
+| **UI foundations (2026-09-28, D78):** 44px compact targets in `app.config.ts`, light-mode primary at the 800 shade, `useLayoutContext()`, `<BottomActionBar>` (one at a time, makes room, steps aside for the keyboard) | done | unit (`bottom-bar`), e2e (`ui-foundations` 7, checked to fail without the configuration), screenshots 390/1440 px light and dark |
 
 ### Features
 
@@ -78,7 +79,7 @@ Everything else (branches and tables, the customer website, orders, payments, lo
 
 ## Next steps (recommended order)
 
-The server is being rebuilt to the **server standard** ([docs/server/](server/README.md), D43, written 2026-09-27; no code follows it yet). Each phase gets a short plan before coding and ends with passing tests and an update here.
+The server follows the **server standard** ([docs/server/](server/README.md), D43; all server code since D71). Each phase gets a short plan before coding and ends with passing tests and an update here.
 
 **How we work:** one step at a time. For each step the agent writes a short plan (for steps marked ✋, it asks first), builds it on its own branch, runs `pnpm lint`, `pnpm typecheck` and `pnpm test`, updates the docs, then **stops for review**. The next step starts only after approval. ✋ marks a step that needs a decision from the owner first (question numbers link to the Open questions table). ✅ marks a step that is done.
 
@@ -189,7 +190,6 @@ Business decisions the build still needs, with the step each blocks. All are for
 ## Known limitations
 
 - Staging runs on Cloudflare (step 2.1): D1 migrations, both batch guards (stale version, last admin) under simultaneous requests, cron triggers and the outbox were verified there. R2 uploads and serving were verified on staging after step 3.2 (upload, byte-identical read-back, object present in the bucket), and the hourly `media:purge-temporary` deleted a backdated upload there (row and object). The CI deploy was checked step by step by hand (same commands, same smoke check); **its first run in GitHub is the merge of the phase 1–2 pull request**. Staging mail uses Resend's test sender, which delivers only to the Resend account's own address, until the sending domain exists (Q4). WAF rate limits need a custom domain (a `workers.dev` address isn't a zone we control); until then only Better Auth's own limits apply.
-- Only one role (`admin`) and no staff management: other staff can't be added yet (Q6).
 - Uploads: abandoned or replaced images stay as `temporary` assets until a cleanup job exists. No sort-order UI for menu items.
 - A 409 (someone else saved first) shows the server's message and keeps the form open. The Categories form and order offer Reload (latest version, input kept, D72); other forms still need close and reopen. No merge UI.
 - Unsaved-changes comparison treats `1` and `'1'` as different and array order as meaningful (see docs/reference/forms.md).
@@ -198,7 +198,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-28 (unit + server 509, e2e 203).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-28 (unit + server 511, e2e 210).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
@@ -235,10 +235,12 @@ Business decisions the build still needs, with the step each blocks. All are for
   - `UForm` debounces input validation (~300 ms). After `fill()` on a field showing an error, wait for the error to disappear before clicking anything below it, or the layout shift makes the click miss (`check()` then reports "did not change its state").
   - A modal's header X and a footer button can both be named "Close". Scope to `[data-slot="footer"]`.
   - `UInputTime` / `UInputDate` render segments (`role="spinbutton"`), not an `<input>`: `fill()` and `getByLabel(<field label>)` don't work (the label targets a hidden input). Give the component an `aria-label`, find it with `getByRole('group', { name })`, click the first segment and type digits (`'0830'`); typing replaces an existing value. See `typeTime` in `test/e2e/availability-rules.test.ts`.
-  - A `position: fixed` bar inside a `space-y-*` parent still gets the parent's `margin-bottom`, so `bottom-0` ends 16 px short (the Categories mode bar, D72). Reset it (`max-md:mb-0`); the phone e2e tests check the bar's bottom edge.
+  - A `position: fixed` bar inside a `space-y-*` parent still gets the parent's `margin-bottom`, so `bottom-0` ends 16 px short (D72). `BottomActionBar` resets it (`max-lg:m-0`, D78); the phone e2e tests check the bar's bottom edge.
+  - `BottomActionBar` steps aside while a text field has focus (the on-screen keyboard): after `fill()`, call `.blur()` before looking for a button in the bar (D78).
+  - Nuxt UI renders `data-slot="base"` on its controls' root element: `ui-foundations.test.ts` uses it to measure only Nuxt UI controls.
   - Text shown twice for different widths (a mobile meta line and a desktop column) matches twice, one hidden: use `getByText(…, { exact: true }).filter({ visible: true })`.
   - Nuxt UI's `defineShortcuts` (and so `usePageShortcuts`) calls `preventDefault` on every key it matches. Registering `escape` there stops Escape closing menus and selects, and the page behind stays `aria-hidden`: tests then time out finding the next button. Listen for Escape with a plain keydown listener that leaves the default alone (Categories, D72).
-  - `BulkActionsBar` fades out (100 ms): after an action that clears the selection, poll for "N selected" to disappear instead of counting at once.
+  - `BulkActionsBar` disappears when the selection clears (no fade since D78), but the list updates after the answer: poll for "N selected" to disappear instead of counting at once.
   - The Categories tree and `CategorySelect` both call `GET /staff/categories/all` (the picker with `type=MAIN`): a mock must answer by query, and a "list loads" count must skip `type` requests (see `freshness.test.ts`, `pickers.test.ts`).
   - Status-tab counts call the list endpoint with `size=1`: exclude those when counting list requests (`isCount` in `list-page.test.ts`).
   - Row buttons are named after the item ("Actions for Tea", "Select Tea"), so a user-menu button like "alice" needs `{ exact: true }` once an item contains that name.

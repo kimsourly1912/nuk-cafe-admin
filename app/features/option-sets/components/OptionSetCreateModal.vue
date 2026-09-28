@@ -5,7 +5,6 @@
  * phones. Values are added, renamed, archived and reordered afterwards in the editor, which opens
  * after creation. Open via `useOverlay().create(OptionSetCreateModal)`; emits `close(set)`.
  */
-import { useMediaQuery } from '@vueuse/core'
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { OptionSet } from '#shared/contracts/menu-options'
 import { MAX_OPTION_VALUES } from '#shared/contracts/menu-options'
@@ -19,7 +18,7 @@ const emit = defineEmits<{ 'close': [created?: OptionSet], 'update:open': [open:
 const state = reactive<OptionSetForm>(toOptionSetForm())
 const { create } = useOptionSetMutations()
 const saving = ref(false)
-const fullscreen = useMediaQuery('(max-width: 639px)')
+const { isCompact: fullscreen } = useLayoutContext()
 
 const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emit('close') })
 

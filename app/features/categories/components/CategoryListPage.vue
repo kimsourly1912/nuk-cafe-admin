@@ -18,7 +18,6 @@ import { useCategoryMutations } from '../composables/useCategories'
 import { useCategoryTree } from '../composables/useCategoryTree'
 import { rowColumns } from '../schemas/category-display'
 import CategoryFormModal from './CategoryFormModal.vue'
-import CategoryModeBar from './CategoryModeBar.vue'
 import CategoryRestoreModal from './CategoryRestoreModal.vue'
 import type { CategoryPageMode } from './CategoryRow.vue'
 import CategoryRow from './CategoryRow.vue'
@@ -299,10 +298,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
     </template>
 
     <template #body>
-      <div
-        class="space-y-4"
-        :class="mode !== 'browse' && 'pb-32 md:pb-0'"
-      >
+      <div class="space-y-4">
         <p class="text-sm text-muted">
           Organize how customers browse your menu.
         </p>
@@ -315,11 +311,11 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         />
 
         <!-- Selection bar -->
-        <CategoryModeBar
+        <BottomActionBar
           v-if="mode === 'select'"
           label="Bulk actions"
         >
-          <div class="flex flex-wrap items-center gap-x-3">
+          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 text-sm">
             <span class="font-semibold text-highlighted">{{ selection.count }} selected</span>
             <UButton
               :label="selection.allSelected ? 'Unselect all' : 'Select all'"
@@ -329,7 +325,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               @click="selection.toggleAll(!selection.allSelected)"
             />
           </div>
-          <template #actions>
+          <div class="flex flex-wrap items-center justify-end gap-2">
             <UButton
               v-if="view === 'archived'"
               label="Restore selected"
@@ -353,33 +349,33 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               aria-label="Exit selection"
               @click="exitSelect()"
             />
-          </template>
-        </CategoryModeBar>
+          </div>
+        </BottomActionBar>
 
         <!-- Reorder bar -->
-        <CategoryModeBar
+        <BottomActionBar
           v-if="mode === 'reorder'"
           label="Reorder"
         >
           <p
             v-if="tree.saveError.value"
-            class="text-error"
+            class="min-w-0 flex-1 text-sm text-error"
           >
             {{ saveConflict ? 'Someone else changed these categories. Reload to get their changes; your new order is kept, then save again.' : tree.saveError.value.message }}
           </p>
           <p
             v-else-if="tree.isDirty.value || tree.saving.value"
-            class="font-medium text-highlighted"
+            class="min-w-0 flex-1 text-sm font-medium text-highlighted"
           >
             The new order isn't saved yet.
           </p>
           <p
             v-else
-            class="text-muted"
+            class="min-w-0 flex-1 text-sm text-muted"
           >
             Drag a row or use its arrows. Categories move among their siblings only; change a parent in Edit.
           </p>
-          <template #actions>
+          <div class="flex flex-wrap items-center justify-end gap-2">
             <UButton
               v-if="saveConflict"
               label="Reload"
@@ -411,8 +407,8 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               variant="outline"
               @click="finishReorder()"
             />
-          </template>
-        </CategoryModeBar>
+          </div>
+        </BottomActionBar>
 
         <ApiErrorAlert
           v-if="tree.error.value"
