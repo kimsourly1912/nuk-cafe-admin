@@ -663,7 +663,7 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 
 ### D80: Light-mode warning contrast, 2026-09-28
 
-- **Context:** found in D79. Nuxt UI's `warning` is yellow-500 in light mode: text such as the outline "Temporary password" badge and the Categories and Options notices was far below AA. The owner asked for the fix (2026-09-28).
+- **Context:** found in D79. Nuxt UI's `warning` is yellow-500 in light mode: text in the offline banner, the Add-on group page, the Options editor, Menu items (the "Draft" badge) and Staff (the outline "Temporary password" badge) was far below AA. The owner asked for the fix (2026-09-28).
 - **Decision:** light mode's `--ui-warning` is the **800** shade, next to the primary override in `tailwind.css` (dark mode keeps 400, restated). Measured in the browser, text on white / on its 10% tint: 500 1.9 / 1.8, 600 2.9 / 2.7, 700 4.9 / **4.3**, 800 6.8 / 5.8. 700 fails on the tint (subtle badges), as primary did (D78). Solid warning badges (the Menu items "Draft") now carry their white label at 6.8:1.
 - **Not changed (open with the owner):** success, error and info are still Nuxt UI's 500 shades and measure below 4.5:1 as text: success 2.2 / 2.0 (needs 800), error 3.8 / 3.3 (needs 700), info 3.8 / 3.3 (needs 600).
 - **Verified:** `test/e2e/ui-foundations.test.ts` (warning in light mode on white and on its tint; in dark mode on the dark background).
