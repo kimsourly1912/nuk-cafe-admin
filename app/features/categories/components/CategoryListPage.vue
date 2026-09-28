@@ -218,17 +218,9 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 <template>
   <UDashboardPanel id="categories">
     <template #header>
-      <UDashboardNavbar :ui="{ root: 'h-auto min-h-(--ui-header-height) py-3' }">
-        <template #left>
+      <UDashboardNavbar title="Categories">
+        <template #leading>
           <UDashboardSidebarCollapse />
-          <div class="min-w-0">
-            <h1 class="truncate text-xl font-semibold text-highlighted sm:text-2xl">
-              Categories
-            </h1>
-            <p class="line-clamp-2 text-sm text-muted sm:truncate">
-              Organize how customers browse your menu.
-            </p>
-          </div>
         </template>
         <template #right>
           <UTooltip
@@ -236,17 +228,74 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             :kbds="['n']"
           >
             <UButton
+              label="New category"
               icon="i-lucide-plus"
-              size="lg"
-              aria-label="New category"
-              class="min-h-11 min-w-11 justify-center"
               @click="openForm()"
-            >
-              <span class="hidden sm:inline">New category</span>
-            </UButton>
+            />
           </UTooltip>
         </template>
       </UDashboardNavbar>
+
+      <!-- On phones the search gives up width so the view buttons stay on screen. -->
+      <UDashboardToolbar :ui="{ left: 'min-w-0' }">
+        <template #left>
+          <SearchInput
+            v-model="filters.search"
+            placeholder="Search categories…"
+            :disabled="filtersLocked"
+            class="w-64 min-w-0 shrink"
+          />
+          <UIcon
+            v-if="tree.refreshing.value"
+            name="i-lucide-loader-circle"
+            class="size-4 animate-spin text-muted"
+          />
+        </template>
+        <template #right>
+          <UButton
+            :icon="allExpanded ? 'i-lucide-list-collapse' : 'i-lucide-list-tree'"
+            color="neutral"
+            variant="outline"
+            :aria-label="allExpanded ? 'Collapse all' : 'Expand all'"
+            :disabled="!!filters.search || !expandable.length || mode === 'reorder'"
+            @click="toggleAllGroups()"
+          >
+            <span class="hidden lg:inline">{{ allExpanded ? 'Collapse all' : 'Expand all' }}</span>
+          </UButton>
+          <UTooltip
+            text="Reorder categories"
+            :kbds="['r']"
+          >
+            <UButton
+              icon="i-lucide-arrow-down-up"
+              color="neutral"
+              :variant="mode === 'reorder' ? 'soft' : 'outline'"
+              aria-label="Reorder"
+              :aria-pressed="mode === 'reorder'"
+              :disabled="mode === 'reorder' || tree.total.value < 2"
+              @click="startReorder()"
+            >
+              <span class="hidden lg:inline">Reorder</span>
+            </UButton>
+          </UTooltip>
+          <UTooltip
+            :text="view === 'all' ? 'Choose Active or Archived to select categories' : 'Select categories to archive or restore'"
+            :kbds="view === 'all' ? undefined : ['s']"
+          >
+            <UButton
+              icon="i-lucide-list-checks"
+              color="neutral"
+              :variant="mode === 'select' ? 'soft' : 'outline'"
+              aria-label="Select"
+              :aria-pressed="mode === 'select'"
+              :disabled="view === 'all' || mode !== 'browse' || !selectableRows.length"
+              @click="startSelect()"
+            >
+              <span class="hidden lg:inline">Select</span>
+            </UButton>
+          </UTooltip>
+        </template>
+      </UDashboardToolbar>
     </template>
 
     <template #body>
@@ -254,83 +303,16 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         class="space-y-4"
         :class="mode !== 'browse' && 'pb-32 md:pb-0'"
       >
-        <!-- Toolbar: search, then the tabs and the view actions -->
-        <div class="flex flex-col gap-3 md:flex-row md:items-center">
-          <div class="flex min-w-0 flex-1 items-center gap-2">
-            <SearchInput
-              v-model="filters.search"
-              placeholder="Search categories…"
-              :disabled="filtersLocked"
-              size="lg"
-              class="w-full md:max-w-xl"
-            />
-            <UIcon
-              v-if="tree.refreshing.value"
-              name="i-lucide-loader-circle"
-              class="size-4 shrink-0 animate-spin text-muted"
-            />
-          </div>
-          <div class="flex items-center gap-2">
-            <UButton
-              :icon="allExpanded ? 'i-lucide-list-collapse' : 'i-lucide-list-tree'"
-              color="neutral"
-              variant="outline"
-              size="lg"
-              :aria-label="allExpanded ? 'Collapse all' : 'Expand all'"
-              :disabled="!!filters.search || !expandable.length || mode === 'reorder'"
-              class="min-h-11 min-w-11 justify-center"
-              @click="toggleAllGroups()"
-            >
-              <span class="hidden lg:inline">{{ allExpanded ? 'Collapse all' : 'Expand all' }}</span>
-            </UButton>
-            <UTooltip
-              text="Reorder categories"
-              :kbds="['r']"
-            >
-              <UButton
-                icon="i-lucide-arrow-down-up"
-                color="neutral"
-                :variant="mode === 'reorder' ? 'soft' : 'outline'"
-                size="lg"
-                aria-label="Reorder"
-                :aria-pressed="mode === 'reorder'"
-                :disabled="mode === 'reorder' || tree.total.value < 2"
-                class="min-h-11 min-w-11 justify-center"
-                @click="startReorder()"
-              >
-                <span class="hidden lg:inline">Reorder</span>
-              </UButton>
-            </UTooltip>
-            <UTooltip
-              :text="view === 'all' ? 'Choose Active or Archived to select categories' : 'Select categories to archive or restore'"
-              :kbds="view === 'all' ? undefined : ['s']"
-            >
-              <UButton
-                icon="i-lucide-list-checks"
-                color="neutral"
-                :variant="mode === 'select' ? 'soft' : 'outline'"
-                size="lg"
-                aria-label="Select"
-                :aria-pressed="mode === 'select'"
-                :disabled="view === 'all' || mode !== 'browse' || !selectableRows.length"
-                class="min-h-11 min-w-11 justify-center"
-                @click="startSelect()"
-              >
-                <span class="hidden lg:inline">Select</span>
-              </UButton>
-            </UTooltip>
-          </div>
-        </div>
+        <p class="text-sm text-muted">
+          Organize how customers browse your menu.
+        </p>
 
-        <div class="-mx-4 overflow-x-auto border-b border-default px-4 sm:mx-0 sm:px-0">
-          <StatusTabs
-            v-model="filters.status"
-            :tabs="TABS"
-            :counts="tree.counts.value"
-            :disabled="filtersLocked"
-            size="md"
-          />
-        </div>
+        <StatusTabs
+          v-model="filters.status"
+          :tabs="TABS"
+          :counts="tree.counts.value"
+          :disabled="filtersLocked"
+        />
 
         <!-- Selection bar -->
         <CategoryModeBar
@@ -343,7 +325,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               :label="selection.allSelected ? 'Unselect all' : 'Select all'"
               color="neutral"
               variant="link"
-              class="min-h-11 px-0 md:min-h-8"
+              class="px-0"
               @click="selection.toggleAll(!selection.allSelected)"
             />
           </div>
@@ -352,7 +334,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               v-if="view === 'archived'"
               label="Restore selected"
               icon="i-lucide-archive-restore"
-              size="lg"
               :disabled="!selection.count"
               @click="runBulk()"
             />
@@ -362,7 +343,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               icon="i-lucide-archive"
               color="neutral"
               variant="subtle"
-              size="lg"
               :disabled="!selection.count"
               @click="runBulk()"
             />
@@ -370,9 +350,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               icon="i-lucide-x"
               color="neutral"
               variant="ghost"
-              size="lg"
               aria-label="Exit selection"
-              class="min-h-11 min-w-11 justify-center"
               @click="exitSelect()"
             />
           </template>
@@ -408,7 +386,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               icon="i-lucide-refresh-cw"
               color="neutral"
               variant="outline"
-              size="lg"
               :disabled="tree.saving.value"
               @click="tree.reload()"
             />
@@ -417,14 +394,12 @@ useEventListener('keydown', (event: KeyboardEvent) => {
                 label="Discard"
                 color="neutral"
                 variant="outline"
-                size="lg"
                 :disabled="tree.saving.value"
                 @click="tree.reset()"
               />
               <UButton
                 label="Save order"
                 icon="i-lucide-save"
-                size="lg"
                 :loading="tree.saving.value"
                 @click="saveOrder()"
               />
@@ -434,7 +409,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               label="Done"
               color="neutral"
               variant="outline"
-              size="lg"
               @click="finishReorder()"
             />
           </template>

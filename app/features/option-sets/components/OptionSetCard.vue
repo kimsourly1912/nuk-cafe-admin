@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * A set in the library (D73): one generic icon, the name, how many active values it has (and
- * archived ones), its active values as chips in their stored order, what uses it, and an explicit
- * button that opens the editor (Edit, or View when archived; a large Manage button on phones).
+ * A set in the library (D73, on the design system's `UCard` since D74): the name with one generic
+ * icon, how many active values it has (and archived ones), its active values as chips in their
+ * stored order, what uses it, and an Edit (or View, when archived) button that opens the editor.
  * The ⋮ menu holds only Archive or Restore. While searching, values that match are listed.
  *
  * Chips: 3 on phones, 5 from `sm`, then "+N more" (CSS decides, so no resize listener).
@@ -33,22 +33,20 @@ const chipClass = (index: number) => (index < PHONE_CHIPS ? '' : index < WIDE_CH
 </script>
 
 <template>
-  <article
-    class="flex flex-col gap-3 rounded-lg border border-default bg-default p-4 transition-opacity"
-    :class="busy && 'pointer-events-none opacity-50'"
+  <UCard
+    as="article"
+    variant="outline"
     :aria-label="set.name"
     :aria-busy="busy || undefined"
+    :class="busy && 'pointer-events-none opacity-50'"
+    :ui="{ root: 'flex flex-col', body: 'flex-1 space-y-3' }"
   >
     <div class="flex items-start gap-3">
-      <div
-        class="flex size-10 shrink-0 items-center justify-center rounded-lg"
-        :class="archived ? 'bg-elevated text-muted' : 'bg-primary/10 text-primary'"
-      >
-        <UIcon
-          name="i-lucide-sliders-horizontal"
-          class="size-5"
-        />
-      </div>
+      <UIcon
+        name="i-lucide-sliders-horizontal"
+        class="mt-0.5 size-5 shrink-0"
+        :class="archived ? 'text-muted' : 'text-primary'"
+      />
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-2">
           <h3
@@ -60,7 +58,6 @@ const chipClass = (index: number) => (index < PHONE_CHIPS ? '' : index < WIDE_CH
           <UBadge
             v-if="archived"
             label="Archived"
-            icon="i-lucide-archive"
             color="neutral"
             variant="subtle"
             size="sm"
@@ -73,7 +70,7 @@ const chipClass = (index: number) => (index < PHONE_CHIPS ? '' : index < WIDE_CH
       <UIcon
         v-if="busy"
         name="i-lucide-loader-circle"
-        class="m-2.5 size-5 shrink-0 animate-spin text-muted"
+        class="size-5 shrink-0 animate-spin text-muted"
         aria-label="Working…"
       />
       <UDropdownMenu
@@ -85,13 +82,12 @@ const chipClass = (index: number) => (index < PHONE_CHIPS ? '' : index < WIDE_CH
           icon="i-lucide-ellipsis-vertical"
           color="neutral"
           variant="ghost"
-          class="min-h-11 min-w-11 shrink-0 justify-center md:min-h-8 md:min-w-8"
           :aria-label="`Actions for ${set.name}`"
         />
       </UDropdownMenu>
     </div>
 
-    <div class="flex flex-wrap items-center gap-1.5">
+    <div class="flex flex-wrap items-center gap-1">
       <ul
         :aria-label="`Values of ${set.name}`"
         class="contents"
@@ -105,7 +101,6 @@ const chipClass = (index: number) => (index < PHONE_CHIPS ? '' : index < WIDE_CH
             :label="value.name"
             color="neutral"
             variant="outline"
-            class="max-w-48 truncate"
           />
         </li>
       </ul>
@@ -121,38 +116,25 @@ const chipClass = (index: number) => (index < PHONE_CHIPS ? '' : index < WIDE_CH
 
     <p
       v-if="matches?.length"
-      class="text-sm text-default"
+      class="text-sm"
     >
       <span class="text-muted">Matches:</span> {{ matches.join(', ') }}
     </p>
 
-    <div class="mt-auto flex flex-col gap-3 border-t border-default pt-3 sm:flex-row sm:items-center sm:justify-between">
-      <p class="flex items-center gap-1.5 text-sm text-muted">
-        <UIcon
-          name="i-lucide-utensils"
-          class="size-4 shrink-0"
+    <template #footer>
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-sm text-muted">
+          {{ usageLabel(set.itemCount) }}
+        </p>
+        <UButton
+          :label="archived ? 'View' : 'Edit'"
+          :icon="archived ? 'i-lucide-eye' : 'i-lucide-pencil'"
+          color="neutral"
+          variant="outline"
+          :aria-label="`${archived ? 'View' : 'Edit'} ${set.name}`"
+          @click="emit('open')"
         />
-        {{ usageLabel(set.itemCount) }}
-      </p>
-      <UButton
-        :label="archived ? 'View' : 'Edit'"
-        :icon="archived ? 'i-lucide-eye' : 'i-lucide-pencil'"
-        color="neutral"
-        variant="outline"
-        class="hidden sm:inline-flex"
-        :aria-label="`${archived ? 'View' : 'Edit'} ${set.name}`"
-        @click="emit('open')"
-      />
-      <UButton
-        :label="archived ? 'View' : 'Manage'"
-        color="neutral"
-        variant="outline"
-        size="lg"
-        block
-        class="min-h-11 sm:hidden"
-        :aria-label="`${archived ? 'View' : 'Manage'} ${set.name}`"
-        @click="emit('open')"
-      />
-    </div>
-  </article>
+      </div>
+    </template>
+  </UCard>
 </template>

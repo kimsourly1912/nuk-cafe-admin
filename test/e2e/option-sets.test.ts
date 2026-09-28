@@ -62,7 +62,7 @@ describe('options library', () => {
   it('shows each active set with its values in order, value counts and what uses it', async () => {
     const { page } = await open()
     await page.getByRole('heading', { name: 'Options', exact: true }).waitFor()
-    await page.getByText('Options create menu-item versions. Prices are configured on each menu item.').waitFor()
+    await page.getByText('Create reusable choices like Size and Temperature. Options create menu-item versions; prices are configured on each menu item.').waitFor()
     await card(page, 'Size').getByText('Used by 4 menu items').waitFor()
     await card(page, 'Size').getByText('3 values · 1 archived').waitFor()
     expect(await chips(page, 'Size')).toEqual(['Small', 'Regular', 'Large'])
@@ -80,22 +80,22 @@ describe('options library', () => {
 
   it('searches set names and value names, and says which values matched', async () => {
     const { page } = await open([SIZE, TEMP, OLD, MILK])
-    await page.getByPlaceholder('Search option sets or values…').fill('oat')
+    await page.getByPlaceholder('Search sets or values…').fill('oat')
     await card(page, 'Milk').getByText('Matches: Oat, Oat barista').waitFor()
     expect(await card(page, 'Size').count()).toBe(0)
     expect(await page.getByRole('tab', { name: /All/ }).innerText()).toContain('1')
 
-    await page.getByPlaceholder('Search option sets or values…').fill('size')
+    await page.getByPlaceholder('Search sets or values…').fill('size')
     await card(page, 'Size').waitFor()
     expect(await card(page, 'Size').getByText(/Matches/).count()).toBe(0)
     expect(await card(page, 'Milk').count()).toBe(0)
     await expect.poll(() => page.url()).toContain('search=size')
 
     // Archived values don't match ("Kids" is an archived value of Size).
-    await page.getByPlaceholder('Search option sets or values…').fill('kids')
+    await page.getByPlaceholder('Search sets or values…').fill('kids')
     await page.getByText('No option sets match your filters').waitFor()
     // The counts follow the search: "Vanilla" is in an archived set.
-    await page.getByPlaceholder('Search option sets or values…').fill('vanilla')
+    await page.getByPlaceholder('Search sets or values…').fill('vanilla')
     await expect.poll(() => page.getByRole('tab', { name: /Archived/ }).innerText()).toContain('1')
     await page.getByText('No option sets match your filters').waitFor()
   })
@@ -133,18 +133,14 @@ describe('options library', () => {
     expect(await page.getByText('Delete', { exact: true }).count()).toBe(0)
   })
 
-  it('on phones: an icon-only New button and a large Manage button per card', async () => {
+  it('on phones: fits the screen, and the editor fills it', async () => {
     const page = await createPage()
     await page.setViewportSize({ width: 375, height: 812 })
     await mockApi(page, { 'GET /admin/menu/option-sets': () => [SIZE] })
     await page.goto(url('/options'), { waitUntil: 'hydration' })
-    const create = page.getByRole('button', { name: 'New option set' })
-    await create.waitFor()
-    expect(await create.innerText()).toBe('')
-    const manage = visible(page, 'Manage Size')
-    const box = (await manage.boundingBox())!
-    expect(box.height).toBeGreaterThanOrEqual(44)
-    await manage.click()
+    await page.getByRole('button', { name: 'New option set' }).waitFor()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    await visible(page, 'Edit Size').click()
     const editor = page.getByRole('dialog')
     await editor.getByText('Changes save automatically').waitFor()
     // Full screen.
@@ -481,22 +477,19 @@ describe('reordering values', () => {
     await editor.getByText('Reorder values').waitFor()
   })
 
-  it('on phones: a full-width Done reordering at the bottom and 44px move buttons', async () => {
+  it('on phones: a full-width Done reordering at the bottom', async () => {
     const order = answering(SIZE, reordered)
     const page = await createPage()
     await page.setViewportSize({ width: 375, height: 812 })
     await mockApi(page, { 'GET /admin/menu/option-sets': () => [SIZE], 'PUT /admin/menu/option-sets/{id}/values/order': order.handler })
     await page.goto(url('/options'), { waitUntil: 'hydration' })
-    await visible(page, 'Manage Size').click()
+    await visible(page, 'Edit Size').click()
     const editor = page.getByRole('dialog')
     await editor.getByRole('button', { name: 'Reorder' }).click()
     const done = visible(page, 'Done reordering')
     const box = (await done.boundingBox())!
     expect(box.width).toBeGreaterThan(300)
     expect(box.y + box.height).toBeGreaterThan(812 - 40)
-    const move = (await editor.getByRole('button', { name: 'Move Small down' }).boundingBox())!
-    expect(move.height).toBeGreaterThanOrEqual(44)
-    expect(move.width).toBeGreaterThanOrEqual(44)
     await editor.getByRole('button', { name: 'Move Small down' }).click()
     await done.click()
     await expect.poll(() => order.bodies).toEqual([{ version: 1, valueIds: ['val-2', 'val-1', 'val-3'] }])

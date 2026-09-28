@@ -114,7 +114,6 @@ async function onSubmit({ data }: FormSubmitEvent<OptionSetForm>) {
                   icon="i-lucide-arrow-up"
                   color="neutral"
                   variant="ghost"
-                  class="min-h-11 min-w-11 justify-center sm:min-h-8 sm:min-w-8"
                   data-move="up"
                   :disabled="i === 0"
                   :aria-label="`Move value ${i + 1} up`"
@@ -124,7 +123,6 @@ async function onSubmit({ data }: FormSubmitEvent<OptionSetForm>) {
                   icon="i-lucide-arrow-down"
                   color="neutral"
                   variant="ghost"
-                  class="min-h-11 min-w-11 justify-center sm:min-h-8 sm:min-w-8"
                   data-move="down"
                   :disabled="i === state.values.length - 1"
                   :aria-label="`Move value ${i + 1} down`"
@@ -132,7 +130,6 @@ async function onSubmit({ data }: FormSubmitEvent<OptionSetForm>) {
                 />
                 <UButton
                   v-if="state.values.length > 1"
-                  class="min-h-11 min-w-11 justify-center sm:min-h-8 sm:min-w-8"
                   icon="i-lucide-x"
                   color="neutral"
                   variant="ghost"
@@ -144,8 +141,7 @@ async function onSubmit({ data }: FormSubmitEvent<OptionSetForm>) {
             <UButton
               label="Add value"
               icon="i-lucide-plus"
-              variant="outline"
-              block
+              variant="soft"
               :disabled="state.values.length >= MAX_OPTION_VALUES"
               @click="addValue"
             />

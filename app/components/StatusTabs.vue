@@ -15,8 +15,6 @@ const props = defineProps<{
   /** The statuses after "All". */
   tabs: { label: string, value: string }[]
   disabled?: boolean
-  /** `md` for a page where the tabs are the main filter (Categories). */
-  size?: 'sm' | 'md'
 }>()
 
 const status = defineModel<string>({ required: true })
@@ -38,7 +36,7 @@ const items = computed<TabsItem[]>(() => [
       :items="items"
       :content="false"
       variant="link"
-      :size="size ?? 'sm'"
+      size="sm"
       :ui="{ root: 'w-auto', list: 'border-b-0' }"
     />
   </div>
