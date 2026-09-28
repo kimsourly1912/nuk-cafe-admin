@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * One category in the tree (D72). A flex row on small screens (name, a meta line, status, ⋮) and a
- * grid row from `md` (category · subcategories · availability · status · ⋮, lined up with the
+ * grid row from `md` (category · contains · availability · status · ⋮, lined up with the
  * header by `rowColumns`). What the leading controls show depends on the page's mode:
  * - browse: the expand toggle (parents); the name opens the edit form (active categories);
  * - select: a checkbox, and the name toggles it too (a larger touch target);
@@ -11,7 +11,7 @@
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { MenuCategory } from '#shared/contracts/menu-categories'
-import { availabilityLabel, rowColumns, subcategoryCount } from '../schemas/category-display'
+import { availabilityLabel, contentsLabel, rowColumns } from '../schemas/category-display'
 
 export type CategoryPageMode = 'browse' | 'select' | 'reorder'
 
@@ -36,6 +36,8 @@ const props = defineProps<{
   canMoveDown?: boolean
   /** Subcategories: the last row of its group (the connector line stops here). */
   last?: boolean
+  /** Each availability rule's times in words, by rule id (for the tooltip), when loaded. */
+  ruleTimes?: ReadonlyMap<string, string>
 }>()
 
 const emit = defineEmits<{
@@ -49,10 +51,11 @@ const emit = defineEmits<{
 const name = computed(() => props.category.name)
 const archived = computed(() => props.category.status === 'archived')
 const isMain = computed(() => props.level === 'main')
-const availability = computed(() => availabilityLabel(props.category))
-const subcategories = computed(() => isMain.value ? subcategoryCount(props.category.childCount) : undefined)
+const availability = computed(() => availabilityLabel(props.category, props.ruleTimes))
+/** "2 subcategories", "12 items" or "Empty". */
+const contents = computed(() => contentsLabel(props.category))
 /** Mobile meta line: "2 subcategories · Always". */
-const meta = computed(() => [subcategories.value, availability.value.label].filter(Boolean).join(' · '))
+const meta = computed(() => `${contents.value} · ${availability.value.label}`)
 
 /** The name is a button when it does something: open (browse, active) or select (select mode). */
 const nameAction = computed<'open' | 'select' | undefined>(() => {
@@ -188,7 +191,7 @@ const ICON_BUTTON = 'min-h-11 min-w-11 justify-center md:min-h-8 md:min-w-8'
     </div>
 
     <!-- Desktop columns -->
-    <span class="hidden text-sm text-muted md:block">{{ subcategories ?? (isMain ? '—' : '') }}</span>
+    <span class="hidden text-sm text-muted md:block">{{ contents }}</span>
     <UTooltip
       :text="availability.full"
       :content="{ side: 'top' }"

@@ -8,8 +8,11 @@
 export const SHORTCUTS = [
   { kbds: ['/'], label: 'Search the list' },
   { kbds: ['n'], label: 'New item (on list pages)' },
+  { kbds: ['s'], label: 'Select categories (Categories)' },
+  { kbds: ['r'], label: 'Reorder categories (Categories)' },
   { kbds: ['meta', 'enter'], label: 'Save the open form' },
   { kbds: ['escape'], label: 'Close the dialog (asks first if there are unsaved changes)' },
+  { kbds: ['escape'], label: 'Leave Select or Reorder (Categories; an unsaved order stays until saved or discarded)' },
   { kbds: ['?'], label: 'Show keyboard shortcuts' },
 ] as const
 

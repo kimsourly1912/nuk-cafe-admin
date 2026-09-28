@@ -16,6 +16,9 @@ const AFFECTED = ['categories', 'products']
  * Category mutations. State is shared app-wide by mutation id, so e.g. a row knows it's
  * being saved even after the edit modal was closed.
  */
+/** A restore: the category as read; a top-level one may bring back its archived subcategories. */
+export type RestoreRequest = MenuCategory & { withSubcategories?: boolean }
+
 export function useCategoryMutations() {
   const create = useMutation(
     (body: CreateCategoryInput) => apiFetch<MenuCategory>(BASE, { method: 'POST', body }),
@@ -52,8 +55,10 @@ export function useCategoryMutations() {
       confirm: category => ({
         title: `Archive "${category.name}"?`,
         description: category.childCount
-          ? `Its ${pluralize(category.childCount, ['active subcategory', 'active subcategories'])} will be archived too. Menu items in them stay, but customers won't see them. You can restore it later.`
-          : 'Customers won\'t see it or its menu items. You can restore it later.',
+          ? `Its ${pluralize(category.childCount, ['active subcategory', 'active subcategories'])} will be archived too. Their menu items stay, but customers won't see them. You can restore it later.`
+          : category.itemCount
+            ? `Customers won't see it or its ${pluralize(category.itemCount, ['menu item', 'menu items'])}; the items stay and come back with it. You can restore it later.`
+            : 'Customers won\'t see it. You can restore it later.',
         confirmLabel: 'Archive',
       }),
       successMessage: (_, category) => `Category "${category.name}" archived`,
@@ -82,12 +87,17 @@ export function useCategoryMutations() {
    * can be restored only under an active parent, so a batch restores parents first.
    */
   const restore = useMutation(
-    (category: MenuCategory) => apiFetch<MenuCategory>(`${BASE}/${category.id}/restore`, { method: 'POST', body: { version: category.version } }),
+    (category: RestoreRequest) => apiFetch<MenuCategory>(`${BASE}/${category.id}/restore`, {
+      method: 'POST',
+      body: { version: category.version, ...(category.withSubcategories && { withSubcategories: true }) },
+    }),
     {
       id: 'categories:restore',
       key: category => category.id,
       lock: category => lockOf(category.id),
-      successMessage: (_, category) => `Category "${category.name}" restored`,
+      successMessage: (restored, category) => category.withSubcategories && restored.childCount
+        ? `Category "${category.name}" restored with ${pluralize(restored.childCount, ['subcategory', 'subcategories'])}`
+        : `Category "${category.name}" restored`,
       errorMessage: category => `Could not restore "${category.name}"`,
       invalidate: AFFECTED,
       batch: {

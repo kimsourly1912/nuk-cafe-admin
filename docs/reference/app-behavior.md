@@ -163,7 +163,9 @@ For staff who use the portal all day. Press **`?`** (or user menu → Keyboard s
 | `/` | Any page with a `<SearchInput>` | Focus the search (hint `/` shown in the box while empty) |
 | `N` | List pages | New item (tooltip on the "New …" button shows it) |
 | `Ctrl`+`Enter` (`⌘`+`Enter` on Mac) | Open form modal | Save, including while typing in a field. Runs the form validation first |
+| `S` / `R` | Categories | Select mode / Reorder mode (tooltips on the buttons show them) |
 | `Esc` | Dialogs | Close (asks first if there are unsaved changes) |
+| `Esc` | Categories in Select or Reorder mode | Leave the mode (an unsaved order stays until saved or discarded). Only when no dialog, menu or select is open: those close first. A plain keydown listener, not `defineShortcuts`, which would prevent the default and stop Escape closing menus |
 | `?` | Everywhere | Show the shortcut list |
 
 Source: `app/composables/useShortcuts.ts` (`usePageShortcuts`, `useSubmitShortcut`, `SHORTCUTS`) on Nuxt UI `defineShortcuts`, `app/components/ShortcutsHelp.vue`. E2E: `test/e2e/shortcuts.test.ts`.

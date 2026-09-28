@@ -3,7 +3,7 @@ import type { MenuCategory } from '#shared/contracts/menu-categories'
 import { buildTree, countStatuses, filterTree, orderOf, reorderRequests } from '../schemas/category-tree'
 
 const main = (id: string, name: string, sortOrder: number, status: MenuCategory['status'] = 'active') =>
-  ({ id, name, parentId: null, sortOrder, status, version: 1 }) as MenuCategory
+  ({ id, name, description: '', parentId: null, sortOrder, status, version: 1 }) as MenuCategory
 const sub = (id: string, name: string, parent: string, sortOrder: number, status: MenuCategory['status'] = 'active') =>
   ({ ...main(id, name, sortOrder, status), parentId: parent }) as MenuCategory
 
@@ -32,6 +32,12 @@ describe('category tree', () => {
   it('keeps a main as context when only its subs match', () => {
     const tree = filterTree(buildTree(CATEGORIES), { search: 'tea' })
     expect(tree.groups).toEqual([{ main: expect.objectContaining({ name: 'Drinks' }), subs: [expect.objectContaining({ name: 'Tea' })], contextOnly: true }])
+  })
+
+  it('searches descriptions too, keeping a matching sub under its main', () => {
+    const described = CATEGORIES.map(c => (c.id === 'juice' ? { ...c, description: 'Fresh-pressed every morning' } : c))
+    const tree = filterTree(buildTree(described), { search: 'PRESSED' })
+    expect(tree.groups.map(g => [g.main.name, g.subs.map(s => s.name)])).toEqual([['Drinks', ['Juice']]])
   })
 
   it('filters by status, and ignores the "all" value', () => {

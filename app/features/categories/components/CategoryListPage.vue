@@ -11,12 +11,15 @@
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { MenuCategory } from '#shared/contracts/menu-categories'
+import { useEventListener, useLocalStorage } from '@vueuse/core'
 import { insertNodeAt, removeNode, useSortable } from '@vueuse/integrations/useSortable'
+import { describeWindows, useAvailabilityRuleOptions } from '~/features/availability-rules'
 import { useCategoryMutations } from '../composables/useCategories'
 import { useCategoryTree } from '../composables/useCategoryTree'
 import { rowColumns } from '../schemas/category-display'
 import CategoryFormModal from './CategoryFormModal.vue'
 import CategoryModeBar from './CategoryModeBar.vue'
+import CategoryRestoreModal from './CategoryRestoreModal.vue'
 import type { CategoryPageMode } from './CategoryRow.vue'
 import CategoryRow from './CategoryRow.vue'
 import CategoryTreeGroup from './CategoryTreeGroup.vue'
@@ -47,18 +50,19 @@ const rows = computed<MenuCategory[]>(() => [
 
 const mode = ref<CategoryPageMode>('browse')
 
-// --- Expand / collapse (a search shows every match) ---
-const collapsed = ref(new Set<string>())
+// --- Expand / collapse (a search shows every match); remembered per viewer in this browser ---
+const collapsedIds = useLocalStorage<string[]>('categories:collapsed', [])
+const collapsed = computed(() => new Set(collapsedIds.value))
 const isExpanded = (id: string) => !!filters.search || !collapsed.value.has(id)
 const expandable = computed(() => groups.value.filter(g => g.subs.length).map(g => g.main.id))
 const allExpanded = computed(() => expandable.value.every(id => !collapsed.value.has(id)))
 function toggle(id: string) {
   const next = new Set(collapsed.value)
   if (!next.delete(id)) next.add(id)
-  collapsed.value = next
+  collapsedIds.value = [...next]
 }
 function toggleAllGroups() {
-  collapsed.value = allExpanded.value ? new Set(expandable.value) : new Set()
+  collapsedIds.value = allExpanded.value ? [...expandable.value] : []
 }
 
 // --- Select mode: rows of the view's status only, so a bulk action never mixes statuses ---
@@ -143,8 +147,22 @@ function onMainKey(event: KeyboardEvent, index: number) {
   moveMain(index, by, '[data-main-handle]')
 }
 
+// --- Availability: each rule's times, for the tooltips (the library is small and shared) ---
+const { data: rules } = useAvailabilityRuleOptions()
+const ruleTimes = computed(() => new Map(rules.value.map(rule => [rule.id, describeWindows(rule.windows)])))
+
 // --- Row actions ---
 const byId = computed(() => new Map(tree.categories.value.map(c => [c.id, c])))
+const archivedSubs = (id: string) => tree.categories.value.filter(c => c.parentId === id && c.status === 'archived').length
+
+const overlay = useOverlay()
+/** Restore; a top-level category with archived subcategories asks whether they come back too. */
+async function restoreOne(category: MenuCategory) {
+  const subs = category.parentId === null ? archivedSubs(category.id) : 0
+  if (!subs) return restore.execute(category)
+  const answer = await overlay.create(CategoryRestoreModal, { destroyOnClose: true }).open({ category, archivedSubs: subs }).result
+  if (answer) await restore.execute({ ...category, withSubcategories: answer.withSubcategories })
+}
 
 function rowActions(category: MenuCategory): DropdownMenuItem[] {
   if (category.status === 'archived') {
@@ -155,12 +173,17 @@ function rowActions(category: MenuCategory): DropdownMenuItem[] {
       label: blocked ? `Restore (restore "${parent.name}" first)` : 'Restore',
       icon: 'i-lucide-archive-restore',
       disabled: blocked,
-      onSelect: () => restore.execute(category),
+      onSelect: () => restoreOne(category),
     }]
   }
   return [
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openForm(category) },
-    ...(category.parentId === null ? [{ label: 'Add subcategory', icon: 'i-lucide-list-plus', onSelect: () => openForm(undefined, category.id) }] : []),
+    // A category holds subcategories or menu items, never both (D44).
+    ...(category.parentId === null
+      ? [category.itemCount
+          ? { label: 'Add subcategory (it holds menu items)', icon: 'i-lucide-list-plus', disabled: true }
+          : { label: 'Add subcategory', icon: 'i-lucide-list-plus', onSelect: () => openForm(undefined, category.id) }]
+      : []),
     { label: 'Archive', icon: 'i-lucide-archive', onSelect: () => archive.execute(category) },
   ]
 }
@@ -172,7 +195,24 @@ function openForm(category?: MenuCategory, parentId?: string) {
   formModal.open({ category, parentId })
 }
 
-usePageShortcuts({ n: () => openForm() })
+usePageShortcuts({
+  n: () => openForm(),
+  s: () => {
+    if (mode.value === 'browse' && view.value !== 'all' && selectableRows.value.length) startSelect()
+  },
+  r: () => {
+    if (mode.value !== 'reorder' && tree.total.value > 1) startReorder()
+  },
+})
+
+// Escape leaves Select or Reorder. Not a `defineShortcuts` key: those prevent the default, and
+// Escape must still close menus, selects and dialogs first (they win: nothing happens here then).
+useEventListener('keydown', (event: KeyboardEvent) => {
+  if (event.key !== 'Escape' || event.defaultPrevented || mode.value === 'browse') return
+  if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return
+  if (mode.value === 'select') exitSelect()
+  else finishReorder()
+})
 </script>
 
 <template>
@@ -243,21 +283,27 @@ usePageShortcuts({ n: () => openForm() })
             >
               <span class="hidden lg:inline">{{ allExpanded ? 'Collapse all' : 'Expand all' }}</span>
             </UButton>
-            <UButton
-              icon="i-lucide-arrow-down-up"
-              color="neutral"
-              :variant="mode === 'reorder' ? 'soft' : 'outline'"
-              size="lg"
-              aria-label="Reorder"
-              :aria-pressed="mode === 'reorder'"
-              :disabled="mode === 'reorder' || tree.total.value < 2"
-              class="min-h-11 min-w-11 justify-center"
-              @click="startReorder()"
+            <UTooltip
+              text="Reorder categories"
+              :kbds="['r']"
             >
-              <span class="hidden lg:inline">Reorder</span>
-            </UButton>
+              <UButton
+                icon="i-lucide-arrow-down-up"
+                color="neutral"
+                :variant="mode === 'reorder' ? 'soft' : 'outline'"
+                size="lg"
+                aria-label="Reorder"
+                :aria-pressed="mode === 'reorder'"
+                :disabled="mode === 'reorder' || tree.total.value < 2"
+                class="min-h-11 min-w-11 justify-center"
+                @click="startReorder()"
+              >
+                <span class="hidden lg:inline">Reorder</span>
+              </UButton>
+            </UTooltip>
             <UTooltip
               :text="view === 'all' ? 'Choose Active or Archived to select categories' : 'Select categories to archive or restore'"
+              :kbds="view === 'all' ? undefined : ['s']"
             >
               <UButton
                 icon="i-lucide-list-checks"
@@ -426,7 +472,7 @@ usePageShortcuts({ n: () => openForm() })
             aria-hidden="true"
           >
             <span>Category</span>
-            <span>Subcategories</span>
+            <span>Contains</span>
             <span>Availability</span>
             <span v-if="showStatus">Status</span>
             <span class="text-right">Actions</span>
@@ -452,6 +498,7 @@ usePageShortcuts({ n: () => openForm() })
               :actions="rowActions"
               :is-selected="selection.isSelected"
               :is-busy="isBusy"
+              :rule-times="ruleTimes"
               @open="category => openForm(category)"
               @select="(category, value) => selection.toggle(category, value)"
               @toggle="toggle(group.main.id)"
@@ -485,6 +532,7 @@ usePageShortcuts({ n: () => openForm() })
               :selected="selection.isSelected(orphan)"
               :selectable="mode === 'select' && orphan.status === view"
               :busy="isBusy(orphan.id)"
+              :rule-times="ruleTimes"
               last
               @open="openForm(orphan)"
               @select="value => selection.toggle(orphan, value)"

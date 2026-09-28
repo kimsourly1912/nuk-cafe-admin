@@ -28,6 +28,8 @@ export interface MenuCategory {
   status: CategoryStatus
   /** Active sub-categories (always 0 for a sub-category). */
   childCount: number
+  /** Menu items in it that aren't archived (drafts and published): a category holding items can't get sub-categories. */
+  itemCount: number
   /**
    * When its items are sold (by name): none = no limit of its own, several = when any matches. A
    * sub-category's items follow its parent's rules too. An archived rule stays until removed, and
@@ -73,6 +75,17 @@ export type UpdateCategoryInput = v.InferOutput<typeof updateCategorySchema>
 /** Archive or restore: the version read. */
 export const categoryStatusChangeSchema = v.strictObject({ version: versionSchema })
 export type CategoryStatusChangeInput = v.InferOutput<typeof categoryStatusChangeSchema>
+
+/**
+ * Restore: the version read; `withSubcategories` (top-level only) also restores its archived
+ * sub-categories, in the same write.
+ */
+export const restoreCategorySchema = v.strictObject({
+  version: versionSchema,
+  withSubcategories: v.optional(v.boolean(), false),
+})
+// The input shape: `withSubcategories` may be left out (the parsed body always has it).
+export type RestoreCategoryInput = v.InferInput<typeof restoreCategorySchema>
 
 /**
  * The new order of one parent's active children (`parentId: null` for the top level). Must list

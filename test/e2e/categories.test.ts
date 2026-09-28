@@ -22,7 +22,9 @@ const FOOD = main('cat-2', 'Food', 2, { childCount: 1, version: 2, availabilityR
 const COFFEE = sub('cat-11', 'Coffee', DRINKS, 1, { version: 5 })
 const TEA = sub('cat-12', 'Tea', DRINKS, 2, { status: 'archived' })
 const JUICE = sub('cat-13', 'Juice', DRINKS, 3, { availabilityRules: [BREAKFAST] })
-const TOAST = sub('cat-21', 'Toast', FOOD, 1)
+const TOAST = sub('cat-21', 'Toast', FOOD, 1, { itemCount: 4 })
+/** A top-level category that holds menu items: it can't take subcategories. */
+const SNACKS = main('cat-3', 'Snacks', 3, { itemCount: 3, description: 'Chips and cold nuts' })
 
 /** A backend whose list reflects archives and restores. Out of order on purpose: the page sorts. */
 function backend(initial: Row[] = [TOAST, FOOD, TEA, JUICE, COFFEE, DRINKS], extra: Record<string, MockHandler> = {}) {
@@ -227,7 +229,11 @@ describe('categories tree', () => {
     await page.getByRole('button', { name: 'Actions for Food' }).click()
     expect(await page.getByRole('menuitem').allInnerTexts()).toEqual(['Restore'])
     await page.getByRole('menuitem', { name: 'Restore' }).click()
-    await toast(page, 'Category "Food" restored').waitFor()
+    // Toast was archived with Food: the dialog asks whether it comes back too.
+    const dialog = page.getByRole('dialog', { name: 'Restore "Food"?' })
+    await dialog.getByRole('checkbox', { name: 'Also restore its 1 archived subcategory' }).waitFor()
+    await dialog.getByRole('button', { name: 'Restore' }).click()
+    await toast(page, 'Category "Food" restored with 1 subcategory').waitFor()
     expect(api.calls).toContain('POST /admin/menu/categories/cat-2/restore')
   })
 
@@ -237,6 +243,94 @@ describe('categories tree', () => {
     const restore = page.getByRole('menuitem', { name: 'Restore (restore "Drinks" first)' })
     await restore.waitFor()
     expect(await restore.getAttribute('data-disabled')).not.toBeNull()
+  })
+})
+
+describe('category contents and follow-ups', () => {
+  const withSnacks = (extra: Record<string, MockHandler> = {}) => backend([TOAST, FOOD, TEA, JUICE, COFFEE, DRINKS, SNACKS], extra)
+  const visibleText = (page: Page, name: string, text: string) => item(page, name).getByText(text, { exact: true }).filter({ visible: true })
+
+  it('says what each category contains: subcategories, items, or nothing', async () => {
+    const { page } = await open(withSnacks())
+    await visibleText(page, 'Drinks', '2 subcategories').first().waitFor()
+    await visibleText(page, 'Toast', '4 items').waitFor()
+    await visibleText(page, 'Coffee', 'Empty').waitFor()
+    await visibleText(page, 'Snacks', '3 items').waitFor()
+  })
+
+  it('a category holding menu items can\'t get subcategories, and isn\'t offered as a parent', async () => {
+    const { page } = await open(withSnacks())
+    await page.getByRole('button', { name: 'Actions for Snacks' }).click()
+    const add = page.getByRole('menuitem', { name: 'Add subcategory (it holds menu items)' })
+    await add.waitFor()
+    expect(await add.getAttribute('data-disabled')).not.toBeNull()
+    await page.keyboard.press('Escape')
+
+    await page.getByRole('button', { name: 'New category' }).first().click()
+    await page.getByRole('dialog', { name: 'New category' }).getByRole('combobox', { name: 'Parent category' }).click()
+    await page.getByRole('option', { name: 'Drinks' }).waitFor()
+    expect(await page.getByRole('option', { name: /Snacks/ }).count()).toBe(0)
+  })
+
+  it('warns that archiving hides a category\'s menu items', async () => {
+    const { page } = await open(withSnacks())
+    await page.getByRole('button', { name: 'Actions for Snacks' }).click()
+    await page.getByRole('menuitem', { name: 'Archive' }).click()
+    await page.getByText('Customers won\'t see it or its 3 menu items', { exact: false }).waitFor()
+  })
+
+  it('restores a parent alone when its subcategories are left unticked', async () => {
+    const bodies: unknown[] = []
+    const archivedFood = { ...FOOD, status: 'archived' as const, version: 7 }
+    const { page } = await open(backend([archivedFood, { ...TOAST, status: 'archived' }], {
+      'POST /admin/menu/categories/{id}/restore': ({ body }) => {
+        bodies.push(body)
+        return { ...archivedFood, status: 'active', childCount: 0 }
+      },
+    }), '/categories?status=archived')
+    await page.getByRole('button', { name: 'Actions for Food' }).click()
+    await page.getByRole('menuitem', { name: 'Restore' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Restore "Food"?' })
+    await dialog.getByRole('checkbox', { name: 'Also restore its 1 archived subcategory' }).click()
+    await dialog.getByRole('button', { name: 'Restore' }).click()
+    await toast(page, 'Category "Food" restored').waitFor()
+    expect(bodies).toEqual([{ version: 7 }])
+  })
+
+  it('remembers collapsed groups after a reload', async () => {
+    const { page } = await open()
+    await page.getByRole('button', { name: 'Collapse Drinks' }).click()
+    await item(page, 'Coffee').waitFor({ state: 'hidden' })
+    await page.goto(page.url(), { waitUntil: 'hydration' })
+    await item(page, 'Toast').waitFor()
+    await page.getByRole('button', { name: 'Expand Drinks' }).waitFor()
+    expect(await item(page, 'Coffee').isVisible()).toBe(false)
+  })
+
+  it('finds a category by its description', async () => {
+    const { page } = await open(withSnacks())
+    await page.getByPlaceholder('Search categories…').fill('nuts')
+    await expect.poll(() => shown(page)).toEqual(['Snacks'])
+  })
+
+  it('names each rule\'s times for the tooltip and screen readers', async () => {
+    const { page } = await open(backend(undefined, {
+      'GET /admin/menu/availability-rules': () => [{ ...BREAKFAST, windows: [1, 2, 3, 4, 5].map(weekday => ({ weekday, startMinute: 420, endMinute: 660 })), itemCount: 0, categoryCount: 1, version: 1, createdAt: '', updatedAt: '' }],
+    }))
+    await item(page, 'Juice').getByText('Sold only during: Breakfast (Mon–Fri · 7:00 AM – 11:00 AM)').first().waitFor({ state: 'attached' })
+  })
+
+  it('has shortcuts: S selects, R reorders, Escape leaves either mode', async () => {
+    const { page } = await open()
+    await item(page, 'Toast').waitFor()
+    await page.keyboard.press('s')
+    await page.getByRole('checkbox', { name: 'Select Drinks' }).waitFor()
+    await page.keyboard.press('Escape')
+    await expect.poll(() => page.getByRole('checkbox').count()).toBe(0)
+    await page.keyboard.press('r')
+    await page.getByRole('button', { name: /^Reorder Food/ }).waitFor()
+    await page.keyboard.press('Escape')
+    await expect.poll(() => page.getByRole('button', { name: /^Reorder / }).count()).toBe(0)
   })
 })
 

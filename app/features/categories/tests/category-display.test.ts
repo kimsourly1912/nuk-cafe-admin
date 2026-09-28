@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { availabilityLabel, subcategoryCount } from '../schemas/category-display'
+import { availabilityLabel, contentsLabel } from '../schemas/category-display'
 
 const rule = (name: string, status: 'active' | 'archived' = 'active') => ({ id: name, name, status })
 
@@ -17,12 +17,20 @@ describe('availability label', () => {
     expect(availabilityLabel({ parentId: 'cat-1', availabilityRules: [rule('Breakfast'), rule('Lunch'), rule('Old', 'archived')] }))
       .toEqual({ label: 'Breakfast +2', full: 'Sold only during: Breakfast, Lunch, Old (archived)', unrestricted: false })
   })
+
+  it('adds each rule\'s times when they are known', () => {
+    const times = new Map([['Breakfast', 'Mon–Fri · 7:00 AM – 11:00 AM']])
+    expect(availabilityLabel({ parentId: null, availabilityRules: [rule('Breakfast'), rule('Lunch')] }, times).full)
+      .toBe('Sold only during: Breakfast (Mon–Fri · 7:00 AM – 11:00 AM), Lunch')
+  })
 })
 
-describe('subcategory count', () => {
-  it('names one or many, and nothing for none', () => {
-    expect(subcategoryCount(0)).toBeUndefined()
-    expect(subcategoryCount(1)).toBe('1 subcategory')
-    expect(subcategoryCount(3)).toBe('3 subcategories')
+describe('contents label', () => {
+  it('names subcategories or items, one or many, or says it is empty', () => {
+    expect(contentsLabel({ childCount: 1, itemCount: 0 })).toBe('1 subcategory')
+    expect(contentsLabel({ childCount: 3, itemCount: 0 })).toBe('3 subcategories')
+    expect(contentsLabel({ childCount: 0, itemCount: 1 })).toBe('1 item')
+    expect(contentsLabel({ childCount: 0, itemCount: 12 })).toBe('12 items')
+    expect(contentsLabel({ childCount: 0, itemCount: 0 })).toBe('Empty')
   })
 })

@@ -27,6 +27,7 @@ const props = defineProps<{
   actions: (category: MenuCategory) => DropdownMenuItem[]
   isSelected: (category: MenuCategory) => boolean
   isBusy: (id: string) => boolean
+  ruleTimes?: ReadonlyMap<string, string>
 }>()
 
 const emit = defineEmits<{
@@ -99,6 +100,7 @@ const activeSubs = computed(() => props.group.subs.filter(s => s.status === 'act
       :context-only="group.contextOnly"
       :sub-count="group.subs.length"
       :expanded="expanded"
+      :rule-times="ruleTimes"
       :can-move-up="movable && index > 0"
       :can-move-down="movable && index < count - 1"
       @open="emit('open', main)"
@@ -135,6 +137,7 @@ const activeSubs = computed(() => props.group.subs.filter(s => s.status === 'act
           :can-move-up="movable && i > 0"
           :can-move-down="movable && i < activeSubs - 1"
           :last="!showAdd && i === group.subs.length - 1"
+          :rule-times="ruleTimes"
           @open="emit('open', sub)"
           @select="value => emit('select', sub, value)"
           @move="by => moveSub(i, i + by, by < 0 ? '[data-move=up]' : '[data-move=down]')"
