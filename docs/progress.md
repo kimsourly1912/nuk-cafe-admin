@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-28 (Staff on the UI standard, D79, and warning contrast, D80, awaiting review; UI foundations, D78, merged; responsive UI standard, D77; Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-28 (status-color contrast, D80, awaiting review; Staff on the UI standard, D79, merged; UI foundations, D78, merged; responsive UI standard, D77; Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -59,7 +59,7 @@ The Foundation table below is the app's shared UI behavior; it stays valid throu
 | Feature architecture + ESLint boundary rules | done | lint (violations verified to be reported) |
 | CRUD state: `useApiQuery`, `useMutation` (per-item concurrency, shared state, batch, Stop, Retry failed), `useTableSelection`, `BulkActionsBar`, leave-page guard | done | unit (engine), browser-mock (all async scenarios) |
 | **List UI refresh (2026-09-26, [plan](plans/list-ui-refresh.md), D37):** `StatusTabs` + `useStatusCounts`, floating `BulkActionsBar`, `ListSkeleton`, selection helpers for cards/trees | done | e2e on all three pages; light + dark screenshots |
-| **UI foundations (2026-09-28, D78, D80):** 44px compact targets in `app.config.ts`, light-mode primary and warning at the 800 shade, `useLayoutContext()`, `<BottomActionBar>` (one at a time, makes room, steps aside for the keyboard) | done | unit (`bottom-bar`), e2e (`ui-foundations` 7, checked to fail without the configuration), screenshots 390/1440 px light and dark |
+| **UI foundations (2026-09-28, D78, D80):** 44px compact targets in `app.config.ts`, light-mode primary and status colors at AA-passing shades (primary, warning and success 800, error 700, info 600), `useLayoutContext()`, `<BottomActionBar>` (one at a time, makes room, steps aside for the keyboard) | done | unit (`bottom-bar`), e2e (`ui-foundations` 12, checked to fail without the configuration), screenshots 390/1440 px light and dark |
 
 ### Features
 
@@ -198,7 +198,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-28 (unit + server 511, e2e 216).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-28 (unit + server 511, e2e 219).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.

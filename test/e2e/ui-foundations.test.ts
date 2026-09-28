@@ -137,25 +137,35 @@ describe('primary color', () => {
   })
 })
 
-describe('warning color', () => {
-  it('uses the 800 shade in light mode: AA contrast as text and on its own tint', async () => {
-    const page = await open(1024)
-    expect(await cssVar(page, '--ui-warning')).toBe(await cssVar(page, '--ui-color-warning-800'))
-    const warning = await painted(page, await cssVar(page, '--ui-warning'))
-    const white = [255, 255, 255]
-    expect(contrast(warning, white)).toBeGreaterThanOrEqual(4.5)
-    // `text-warning` on `bg-warning/10` (subtle badges)
-    const tint = await painted(page, `color-mix(in oklab, ${await cssVar(page, '--ui-warning')} 10%, transparent)`)
-    expect(contrast(warning, tint)).toBeGreaterThanOrEqual(4.5)
-  })
+/** The status colors (D80): the light-mode shade each uses, the lightest that passes AA. */
+const STATUS_SHADES = { warning: 800, success: 800, error: 700, info: 600 } as const
 
-  it('keeps Nuxt UI\'s 400 shade in dark mode, readable on the dark background', async () => {
+describe('status colors', () => {
+  for (const [color, shade] of Object.entries(STATUS_SHADES)) {
+    it(`${color} uses the ${shade} shade in light mode: AA as text on white and on its own tint`, async () => {
+      const page = await open(1024)
+      expect(await cssVar(page, `--ui-${color}`)).toBe(await cssVar(page, `--ui-color-${color}-${shade}`))
+      const value = await cssVar(page, `--ui-${color}`)
+      const text = await painted(page, value)
+      // Also the white label of a solid badge or button on it
+      expect(contrast(text, [255, 255, 255])).toBeGreaterThanOrEqual(4.5)
+      // `text-<color>` on `bg-<color>/10` (subtle badges, alerts)
+      expect(contrast(text, await painted(page, `color-mix(in oklab, ${value} 10%, transparent)`))).toBeGreaterThanOrEqual(4.5)
+    })
+  }
+
+  it('keeps Nuxt UI\'s 400 shades in dark mode, readable on the dark background and on their tint', async () => {
     const page = await open(1024, 812, 'dark')
     await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(true)
-    expect(await cssVar(page, '--ui-warning')).toBe(await cssVar(page, '--ui-color-warning-400'))
     const body = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
-    const warning = await painted(page, await cssVar(page, '--ui-warning'), body)
-    expect(contrast(warning, await painted(page, body))).toBeGreaterThanOrEqual(4.5)
+    for (const color of Object.keys(STATUS_SHADES)) {
+      expect(await cssVar(page, `--ui-${color}`)).toBe(await cssVar(page, `--ui-color-${color}-400`))
+      const value = await cssVar(page, `--ui-${color}`)
+      const text = await painted(page, value, body)
+      expect(contrast(text, await painted(page, body)), `${color} on the background`).toBeGreaterThanOrEqual(4.5)
+      const tint = await painted(page, `color-mix(in oklab, ${value} 10%, transparent)`, body)
+      expect(contrast(text, tint), `${color} on its tint`).toBeGreaterThanOrEqual(4.5)
+    }
   })
 })
 
