@@ -4,12 +4,16 @@
  *
  * The modal stays open while saving so backend errors can be fixed in place, but the user may
  * close it: the save continues, and if it then fails the error toast offers "Reopen" with the
- * user's input restored.
+ * user's input restored. A refused save also shows inside the modal (toasts are out of reach while
+ * it's open); after a version conflict, Reload takes the latest version and keeps the input (D72).
+ * Full screen on small screens.
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { MenuCategory } from '#shared/contracts/menu-categories'
+import { useMediaQuery } from '@vueuse/core'
 import { AvailabilityRuleSelect } from '~/features/availability-rules'
 import { useCategoryMutations } from '../composables/useCategories'
+import { useAllCategories } from '../composables/useCategoryOptions'
 import { categoryFormSchema, toCategoryForm, toCreateCategoryBody, toUpdateCategoryBody } from '../schemas/category-form'
 import type { CategoryForm } from '../schemas/category-form'
 import CategoryFormModal from './CategoryFormModal.vue'
@@ -20,7 +24,7 @@ const props = defineProps<{
   category?: MenuCategory
   /** Restores unsaved input (used by "Reopen" after a failed background save). */
   draft?: CategoryForm
-  /** New sub-category of this main category ("Add sub-category" in the tree). */
+  /** New subcategory of this top-level category ("Add subcategory" in the tree). */
   parentId?: string
 }>()
 
@@ -33,8 +37,11 @@ const isEdit = computed(() => props.category !== undefined)
 const start = (): CategoryForm => ({ ...toCategoryForm(props.category), ...(props.parentId === undefined ? {} : { parentId: props.parentId }) })
 const copy = (form: CategoryForm): CategoryForm => ({ ...form, availabilityRuleIds: [...form.availabilityRuleIds] })
 const state = reactive<CategoryForm>(copy(props.draft ?? start()))
-/** A category with sub-categories stays a main one (two levels, D44): its parent can't change. */
-const hasSubs = computed(() => (props.category?.childCount ?? 0) > 0)
+/** The category as last read: its `version` is what a save names (Reload after a conflict updates it). */
+const base = shallowRef(props.category)
+/** A category with subcategories stays top-level (two levels, D44): its parent can't change. */
+const hasSubs = computed(() => (base.value?.childCount ?? 0) > 0)
+const fullscreen = useMediaQuery('(max-width: 639px)')
 
 const { create, update } = useCategoryMutations()
 const saving = ref(false)
@@ -59,21 +66,45 @@ function reopenActions(draft: CategoryForm) {
   if (!closed) return []
   return [{
     label: 'Reopen',
-    onClick: () => overlay.create(CategoryFormModal, { destroyOnClose: true }).open({ category: props.category, parentId: props.parentId, draft }),
+    onClick: () => overlay.create(CategoryFormModal, { destroyOnClose: true }).open({ category: base.value, parentId: props.parentId, draft }),
   }]
+}
+
+/** The last refused save, shown in the modal; `conflict`: someone else saved first (409). */
+const lastError = ref<{ message: string, conflict: boolean }>()
+const all = useAllCategories()
+const reloading = ref(false)
+
+/** Takes the latest version of the category; the form keeps what the user typed. */
+async function reload() {
+  if (!base.value) return
+  reloading.value = true
+  await all.refresh()
+  reloading.value = false
+  const latest = all.data.value?.find(c => c.id === base.value!.id)
+  if (!latest || latest.status !== 'active') {
+    lastError.value = { message: 'This category was archived meanwhile. Close this form; restore it to edit it.', conflict: false }
+    return
+  }
+  base.value = latest
+  lastError.value = undefined
 }
 
 async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
   const draft = copy(state)
   const overrides = { errorActions: () => reopenActions(draft) }
 
+  lastError.value = undefined
   saving.value = true
-  const result = props.category
-    ? await update.execute({ id: props.category.id, name: data.name, body: toUpdateCategoryBody(data, props.category) }, overrides)
+  const result = base.value
+    ? await update.execute({ id: base.value.id, name: data.name, body: toUpdateCategoryBody(data, base.value) }, overrides)
     : await create.execute(toCreateCategoryBody(data), overrides)
   saving.value = false
 
-  if (!result.ok) return
+  if (!result.ok) {
+    if (result.status === 'error') lastError.value = { message: result.error.message, conflict: result.error.code === 'VERSION_CONFLICT' }
+    return
+  }
   unsaved.markClean()
   emit('close', true)
 }
@@ -81,7 +112,8 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
 
 <template>
   <UModal
-    :title="isEdit ? 'Edit category' : parentId === undefined ? 'New category' : 'New sub-category'"
+    :title="isEdit ? 'Edit category' : parentId === undefined ? 'New category' : 'New subcategory'"
+    :fullscreen="fullscreen"
     @update:open="unsaved.onOpenChange"
   >
     <template #body>
@@ -95,6 +127,15 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
         class="space-y-4"
         @submit="onSubmit"
       >
+        <UAlert
+          v-if="lastError"
+          color="error"
+          variant="subtle"
+          icon="i-lucide-circle-alert"
+          title="Not saved"
+          :description="lastError.conflict ? 'Someone else changed this category since you opened it. Reload to take the latest version: your input stays here, and saving then replaces their changes.' : lastError.message"
+          :actions="lastError.conflict ? [{ label: 'Reload', color: 'neutral', variant: 'outline', loading: reloading, onClick: () => reload() }] : undefined"
+        />
         <UFormField
           label="Name"
           name="name"
@@ -123,13 +164,13 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
         <UFormField
           label="Parent category"
           name="parentId"
-          :help="hasSubs ? 'It has sub-categories, so it stays a main category.' : 'Leave as none for a main category. A category holds either sub-categories or menu items.'"
+          :help="hasSubs ? 'It has subcategories, so it stays a top-level category.' : 'Leave as none for a top-level category. A category holds either subcategories or menu items.'"
         >
           <CategorySelect
             v-model="state.parentId"
             level="main"
             :exclude-id="category?.id"
-            none-label="None (main category)"
+            none-label="None (top-level category)"
             aria-label="Parent category"
             :disabled="hasSubs"
           />
@@ -138,7 +179,7 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
         <UFormField
           label="Availability"
           name="availabilityRuleIds"
-          help="Its menu items (and a main category's sub-categories) are sold only during these times."
+          help="Its menu items (and a top-level category's subcategories) are sold only during these times. None: always, or as its parent for a subcategory."
         >
           <AvailabilityRuleSelect
             v-model="state.availabilityRuleIds"

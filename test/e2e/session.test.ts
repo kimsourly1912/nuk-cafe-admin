@@ -121,8 +121,9 @@ describe('switching users in the same browser', () => {
     await categoryItem(page, 'Alice-only draft').waitFor()
 
     // Alice leaves a batch result with "Retry failed" (it stays 10 s) and a save in flight.
+    await page.getByRole('button', { name: 'Select', exact: true }).click()
     await page.getByRole('checkbox', { name: 'Select Alice-only draft' }).click()
-    await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Archive' }).click()
+    await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Archive selected' }).click()
     await page.getByRole('button', { name: 'Archive' }).last().click()
     await toast(page, '0 categories archived, 1 failed').waitFor()
     await page.getByRole('button', { name: 'Actions for Tea' }).click()

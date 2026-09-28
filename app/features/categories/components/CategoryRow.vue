@@ -1,138 +1,252 @@
 <script setup lang="ts">
 /**
- * One category in the tree: [drag handle] [expand toggle / indent] [checkbox] name · status · ⋮.
- * Main and sub handles have different attributes (`data-main-handle` / `data-sub-handle`), so
- * dragging a sub never drags its whole group.
- * Clicking the row opens it; the handle, toggle, checkbox and menu don't.
+ * One category in the tree (D72). A flex row on small screens (name, a meta line, status, ⋮) and a
+ * grid row from `md` (category · subcategories · availability · status · ⋮, lined up with the
+ * header by `rowColumns`). What the leading controls show depends on the page's mode:
+ * - browse: the expand toggle (parents); the name opens the edit form (active categories);
+ * - select: a checkbox, and the name toggles it too (a larger touch target);
+ * - reorder: Move up / Move down buttons (large on touch screens), and from `md` a drag handle
+ *   (↑/↓ on it also moves).
+ * The row itself isn't clickable, so its controls never fight over a click.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { MenuCategory } from '#shared/contracts/menu-categories'
+import { availabilityLabel, rowColumns, subcategoryCount } from '../schemas/category-display'
+
+export type CategoryPageMode = 'browse' | 'select' | 'reorder'
 
 const props = defineProps<{
   category: MenuCategory
   level: 'main' | 'sub'
+  mode: CategoryPageMode
   actions: DropdownMenuItem[]
-  selected: boolean
+  /** Status badges (All and Archived views; the Active view doesn't repeat "Active"). */
+  showStatus: boolean
+  selected?: boolean
+  /** Select mode: this row can be selected (its status matches the view). */
+  selectable?: boolean
   busy?: boolean
-  /** Show the drag handle (reordering is possible). */
-  sortable?: boolean
-  /** Shown only as the parent of matching sub-categories. */
+  /** Shown only as the parent of matching subcategories. */
   contextOnly?: boolean
-  /** Main rows: number of sub-categories and whether they're shown. */
+  /** Parents: subcategories shown under it, and whether they're expanded. */
   subCount?: number
   expanded?: boolean
+  /** Reorder mode: whether it can move up / down among its siblings. */
+  canMoveUp?: boolean
+  canMoveDown?: boolean
+  /** Subcategories: the last row of its group (the connector line stops here). */
+  last?: boolean
 }>()
 
 const emit = defineEmits<{
   'open': []
   'select': [value: boolean]
   'toggle': []
+  'move': [by: -1 | 1]
   'handle-keydown': [event: KeyboardEvent]
 }>()
 
 const name = computed(() => props.category.name)
 const archived = computed(() => props.category.status === 'archived')
-const rules = computed(() => props.category.availabilityRules.map(r => r.name).join(', '))
+const isMain = computed(() => props.level === 'main')
+const availability = computed(() => availabilityLabel(props.category))
+const subcategories = computed(() => isMain.value ? subcategoryCount(props.category.childCount) : undefined)
+/** Mobile meta line: "2 subcategories · Always". */
+const meta = computed(() => [subcategories.value, availability.value.label].filter(Boolean).join(' · '))
 
-function onClick(event: MouseEvent) {
-  if ((event.target as HTMLElement).closest('a, button, input, label')) return
-  emit('open')
+/** The name is a button when it does something: open (browse, active) or select (select mode). */
+const nameAction = computed<'open' | 'select' | undefined>(() => {
+  if (props.mode === 'select') return props.selectable ? 'select' : undefined
+  if (props.mode === 'browse' && !archived.value && !props.contextOnly) return 'open'
+  return undefined
+})
+
+function onName() {
+  if (nameAction.value === 'open') emit('open')
+  else if (nameAction.value === 'select') emit('select', !props.selected)
 }
+
+/** Icon buttons: 44px targets on touch screens, compact from `md`. */
+const ICON_BUTTON = 'min-h-11 min-w-11 justify-center md:min-h-8 md:min-w-8'
 </script>
 
 <template>
   <div
-    class="flex cursor-pointer items-center gap-2 border-b border-default py-2 pr-2 transition-colors hover:bg-elevated/50"
-    :class="[level === 'sub' ? 'pl-2' : 'pl-2 bg-elevated/25', selected && 'bg-primary/10', busy && 'pointer-events-none opacity-50']"
+    class="relative flex items-center gap-2 px-3 py-2 transition-colors md:gap-4 md:px-4"
+    :class="[
+      rowColumns(showStatus),
+      isMain ? 'min-h-16 bg-elevated/40' : 'min-h-14',
+      selected && 'bg-primary/10',
+      busy && 'pointer-events-none opacity-50',
+    ]"
     :aria-busy="busy || undefined"
-    @click="onClick"
   >
-    <UButton
-      v-if="sortable"
-      icon="i-lucide-grip-vertical"
-      color="neutral"
-      variant="ghost"
-      size="xs"
-      class="cursor-grab"
-      v-bind="{ [level === 'main' ? 'data-main-handle' : 'data-sub-handle']: category.id }"
-      :aria-label="`Reorder ${name} (drag, or press up or down)`"
-      @keydown="emit('handle-keydown', $event)"
-    />
-    <span
-      v-else
-      class="w-6"
-    />
+    <!-- Category: [connector] [reorder | toggle | checkbox] name, description -->
+    <div
+      class="flex min-w-0 flex-1 items-center gap-1 md:gap-2"
+      :class="!isMain && 'pl-8 md:pl-10'"
+    >
+      <template v-if="!isMain">
+        <span
+          aria-hidden="true"
+          class="absolute left-7 top-0 border-l border-dashed border-accented md:left-8"
+          :class="last ? 'h-1/2' : 'h-full'"
+        />
+        <span
+          aria-hidden="true"
+          class="absolute left-7 top-1/2 w-4 border-t border-dashed border-accented md:left-8"
+        />
+      </template>
 
-    <UButton
-      v-if="level === 'main'"
-      :icon="expanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
-      color="neutral"
-      variant="ghost"
-      size="xs"
-      :disabled="!subCount"
-      :aria-label="`${expanded ? 'Collapse' : 'Expand'} ${name}`"
-      :aria-expanded="expanded"
-      @click="emit('toggle')"
-    />
-    <span
-      v-else
-      class="w-10"
-    />
+      <template v-if="mode === 'reorder'">
+        <UButton
+          icon="i-lucide-grip-vertical"
+          color="neutral"
+          variant="ghost"
+          :class="[ICON_BUTTON, 'hidden cursor-grab md:inline-flex']"
+          v-bind="{ [isMain ? 'data-main-handle' : 'data-sub-handle']: category.id }"
+          :aria-label="`Reorder ${name} (drag, or press up or down)`"
+          @keydown="emit('handle-keydown', $event)"
+        />
+        <UButton
+          icon="i-lucide-arrow-up"
+          color="neutral"
+          variant="ghost"
+          :class="ICON_BUTTON"
+          :disabled="!canMoveUp"
+          data-move="up"
+          :aria-label="`Move ${name} up`"
+          @click="emit('move', -1)"
+        />
+        <UButton
+          icon="i-lucide-arrow-down"
+          color="neutral"
+          variant="ghost"
+          :class="ICON_BUTTON"
+          :disabled="!canMoveDown"
+          data-move="down"
+          :aria-label="`Move ${name} down`"
+          @click="emit('move', 1)"
+        />
+      </template>
 
-    <UCheckbox
-      :model-value="selected"
-      :aria-label="`Select ${name}`"
-      @update:model-value="value => emit('select', !!value)"
-    />
+      <template v-else-if="isMain">
+        <UButton
+          v-if="subCount"
+          :icon="expanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+          color="neutral"
+          variant="ghost"
+          :class="ICON_BUTTON"
+          :aria-label="`${expanded ? 'Collapse' : 'Expand'} ${name}`"
+          :aria-expanded="expanded"
+          @click="emit('toggle')"
+        />
+        <span
+          v-else
+          class="w-11 shrink-0 md:w-8"
+        />
+      </template>
 
-    <div class="min-w-0 flex-1 pl-1">
-      <span
-        class="truncate"
-        :class="[level === 'main' ? 'font-medium text-highlighted' : 'text-default', (archived || contextOnly) && 'text-muted']"
-      >{{ name }}</span>
-      <span
-        v-if="level === 'main' && subCount !== undefined"
-        class="ml-2 text-xs text-muted"
-      >{{ subCount }} {{ subCount === 1 ? 'sub-category' : 'sub-categories' }}</span>
-      <span
-        v-if="rules"
-        class="ml-2 inline-flex items-center gap-1 text-xs text-muted"
-        :title="`Sold only during: ${rules}`"
+      <div
+        v-if="mode === 'select'"
+        class="flex size-11 shrink-0 items-center justify-center md:size-8"
       >
-        <UIcon
-          name="i-lucide-clock"
-          class="size-3"
-        />{{ rules }}
-      </span>
+        <UCheckbox
+          v-if="selectable"
+          :model-value="selected"
+          :aria-label="`Select ${name}`"
+          size="lg"
+          @update:model-value="value => emit('select', !!value)"
+        />
+      </div>
+
+      <div class="min-w-0 flex-1 py-1">
+        <component
+          :is="nameAction ? 'button' : 'span'"
+          :type="nameAction ? 'button' : undefined"
+          class="line-clamp-2 max-w-full break-words rounded-sm text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          :class="[
+            isMain ? 'text-base font-semibold text-highlighted' : 'text-default',
+            (archived || contextOnly) && 'text-muted',
+            nameAction && 'cursor-pointer hover:underline',
+          ]"
+          :tabindex="nameAction === 'select' ? -1 : undefined"
+          @click="onName"
+        >
+          {{ name }}
+        </component>
+        <p
+          v-if="category.description"
+          class="line-clamp-2 text-sm text-muted md:line-clamp-1"
+        >
+          {{ category.description }}
+        </p>
+        <p class="truncate text-sm text-muted md:hidden">
+          {{ meta }}
+        </p>
+      </div>
     </div>
 
-    <div class="w-20">
+    <!-- Desktop columns -->
+    <span class="hidden text-sm text-muted md:block">{{ subcategories ?? (isMain ? '—' : '') }}</span>
+    <UTooltip
+      :text="availability.full"
+      :content="{ side: 'top' }"
+    >
+      <span
+        class="hidden min-w-0 items-center gap-1.5 text-sm md:flex"
+        :class="availability.unrestricted ? 'text-muted' : 'text-default'"
+      >
+        <UIcon
+          v-if="!availability.unrestricted"
+          name="i-lucide-clock"
+          class="size-4 shrink-0 text-muted"
+        />
+        <span class="truncate">{{ availability.label }}</span>
+        <span class="sr-only">{{ availability.full }}</span>
+      </span>
+    </UTooltip>
+
+    <div
+      v-if="showStatus"
+      class="shrink-0"
+    >
       <UBadge
         v-if="archived"
         label="Archived"
+        icon="i-lucide-archive"
         color="neutral"
+        variant="subtle"
+      />
+      <UBadge
+        v-else
+        label="Active"
+        icon="i-lucide-circle-check"
+        color="success"
         variant="subtle"
       />
     </div>
 
-    <UIcon
-      v-if="busy"
-      name="i-lucide-loader-circle"
-      class="size-5 animate-spin text-muted"
-      aria-label="Working…"
-    />
-    <UDropdownMenu
-      v-else
-      :items="actions"
-      :content="{ align: 'end' }"
-    >
-      <UButton
-        icon="i-lucide-ellipsis-vertical"
-        color="neutral"
-        variant="ghost"
-        size="sm"
-        :aria-label="`Actions for ${name}`"
+    <div class="flex shrink-0 justify-end">
+      <UIcon
+        v-if="busy"
+        name="i-lucide-loader-circle"
+        class="size-5 animate-spin text-muted"
+        aria-label="Working…"
       />
-    </UDropdownMenu>
+      <UDropdownMenu
+        v-else-if="mode !== 'reorder' && actions.length"
+        :items="actions"
+        :content="{ align: 'end' }"
+      >
+        <UButton
+          icon="i-lucide-ellipsis-vertical"
+          color="neutral"
+          variant="ghost"
+          :class="ICON_BUTTON"
+          :aria-label="`Actions for ${name}`"
+        />
+      </UDropdownMenu>
+    </div>
   </div>
 </template>
