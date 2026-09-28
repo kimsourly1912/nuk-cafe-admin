@@ -3,6 +3,8 @@
  * Menu items: a card grid (pictures drive this screen) with a Grid / List switch; the list is the
  * table. Filters (search, category, status tabs) and the page are in the URL; the view is
  * remembered per viewer. States are actions: Publish, Unpublish, Archive, Restore (D70).
+ * Links from other pages (D75): `?modifierGroupId=` shows the items offering an add-on group (a
+ * filter that can be removed), `?item=<id>` opens that item's form.
  * docs/plans/menu-screens-move.md
  */
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
@@ -12,6 +14,7 @@ import { CategorySelect } from '~/features/categories'
 import { useItemList, useItemMutations, useItemStatusCounts } from '../composables/useItems'
 import { ITEM_STATUS_LABELS, priceRange } from '../utils/item-display'
 import ProductCard from './ProductCard.vue'
+import ProductGroupFilter from './ProductGroupFilter.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
 
 const TABS = [
@@ -24,6 +27,7 @@ const TABS = [
 const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({
   search: '',
   categoryId: ANY as string,
+  modifierGroupId: '',
   status: ANY as string,
 })
 
@@ -39,7 +43,7 @@ const categoryFilter = computed({
 
 const listQuery = computed(() => ({ ...query.value, status: query.value.status as ItemStatus | undefined }))
 const { data, loading, refreshing, error, refresh } = useItemList(listQuery)
-const counts = useItemStatusCounts(() => ({ search: query.value.search, categoryId: query.value.categoryId }))
+const counts = useItemStatusCounts(() => ({ search: query.value.search, categoryId: query.value.categoryId, modifierGroupId: query.value.modifierGroupId }))
 const { publish, unpublish, archive, restore, isBusy } = useItemMutations()
 
 const rows = computed(() => data.value?.items ?? [])
@@ -95,6 +99,16 @@ function openForm(item?: MenuItemSummary) {
 }
 
 usePageShortcuts({ n: () => openForm() })
+
+// `?item=<id>` (a link from another page) opens that item, then leaves the URL as the list's.
+const route = useRoute()
+const router = useRouter()
+watch(() => route.query.item, (itemId) => {
+  if (typeof itemId !== 'string' || !itemId) return
+  formPanel.open({ itemId })
+  const { item: _, ...rest } = route.query
+  router.replace({ query: rest })
+}, { immediate: true })
 </script>
 
 <template>
@@ -131,6 +145,11 @@ usePageShortcuts({ n: () => openForm() })
             include-archived
             aria-label="Category"
             class="w-56"
+          />
+          <ProductGroupFilter
+            v-if="filters.modifierGroupId"
+            :group-id="filters.modifierGroupId"
+            @clear="filters.modifierGroupId = ''"
           />
           <UIcon
             v-if="refreshing"

@@ -6,7 +6,7 @@ import { createItemSchema } from '#shared/contracts/menu-items'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { Actor } from '../../identity'
 import { createCategory } from '../categories.service'
-import { archiveItem, createItem, getItem, updateItem } from '../items.service'
+import { archiveItem, createItem, getItem, listItems, updateItem } from '../items.service'
 import { menuModifierGroups, menuModifiers } from '../menu.schema'
 import { archiveModifier, archiveModifierGroup, createModifierGroup, getModifierGroup, listModifierGroups, restoreModifier, updateModifier } from '../modifiers.service'
 import { createTestDb } from '../../../tests/support/db'
@@ -198,5 +198,17 @@ describe('"used by N items" in the library', () => {
     await archiveItem(db, actor, item.id, { version: item.version })
     const listed = await listModifierGroups(db, { status: 'active' })
     expect(listed.map(g => [g.name, g.itemCount])).toEqual([['Extras', 1], ['Milk', 1]])
+  })
+
+  it('lists the items that offer a group, archived ones only when asked', async () => {
+    const item = await latte([plain(milk.id)])
+    await createItem(db, actor, { categoryId: hot, name: 'Mocha', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [plain(extras.id)], availabilityRuleIds: [] })
+    const names = async (query: Partial<Parameters<typeof listItems>[1]>) => (await listItems(db, { page: 1, pageSize: 20, ...query })).items.map(i => i.name)
+    expect(await names({ modifierGroupId: milk.id })).toEqual(['Latte'])
+    expect(await names({ modifierGroupId: extras.id })).toEqual(['Mocha'])
+    await archiveItem(db, actor, item.id, { version: item.version })
+    expect(await names({ modifierGroupId: milk.id })).toEqual([])
+    expect(await names({ modifierGroupId: milk.id, status: 'all' })).toEqual(['Latte'])
+    expect((await listItems(db, { page: 1, pageSize: 1, modifierGroupId: extras.id })).total).toBe(1)
   })
 })

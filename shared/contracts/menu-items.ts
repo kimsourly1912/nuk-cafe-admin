@@ -154,6 +154,8 @@ export const itemListQuerySchema = v.object({
   ...pageQuerySchema,
   search: optionalParam(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   categoryId: optionalParam(idSchema),
+  /** Items that offer this add-on group (the Add-ons page's "Used by" list). */
+  modifierGroupId: optionalParam(idSchema),
   /** Default: everything but archived. */
   status: optionalParam(v.picklist([...ITEM_STATUSES, 'all'])),
 })

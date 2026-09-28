@@ -24,7 +24,7 @@ NUK Cafe is one Nuxt full stack app: the customer website, the admin workspace a
 
 Every admin screen runs on the standard's `/api/admin` routes (D52): sign-in, Staff, and the menu's **Menu items**, **Categories**, **Options**, **Add-ons** and **Availability** pages (`app/features/products/`, `categories/`, `option-sets/`, `modifier-groups/`, `availability-rules/`, D66–D70). The pre-standard `/api/v1` menu and its tables were removed in step 3.8b (D71).
 
-The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Menu items (card grid + table); for a small library loaded whole, Options or Add-ons (cards, filtered on the client); Categories is a tree (D37).
+The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Menu items (card grid + table); for a small library loaded whole, Options or Add-ons (cards, filtered on the client); Categories is a tree (D37). For a **record with its own page** (a route such as `/add-ons/[id]`: breadcrumb, a main column and a settings column, tabs on phones), copy the Add-on group page (D75).
 
 ## Commands
 
