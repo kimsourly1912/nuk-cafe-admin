@@ -4,10 +4,11 @@
  * middleware sends every page here); otherwise reached from the user menu. Changing it signs the
  * account out on its other devices.
  */
-import type { FormSubmitEvent } from '@nuxt/ui'
+import type { FormErrorEvent, FormSubmitEvent } from '@nuxt/ui'
 import { loginRedirectTarget, useAuth } from '../composables/useAuth'
 import { emptyPasswordForm, passwordFormSchema } from '../schemas/password-form'
 import type { PasswordForm } from '../schemas/password-form'
+import AuthFrame from './AuthFrame.vue'
 
 const route = useRoute()
 const { user, mustChangePassword, changePassword, logout } = useAuth()
@@ -22,6 +23,15 @@ const error = ref<string>()
 const showPasswords = ref(false)
 const unsaved = useUnsavedChanges(state, { paused: saving })
 
+// A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
+const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
+// The form keeps its fields disabled until after this event (`loadingAuto`, re-enabled in its
+// `finally`), and a disabled field can't take focus: focus on the next frame, once they're enabled.
+function focusFirstInvalid(event: FormErrorEvent) {
+  const id = event.errors[0]?.id
+  if (id) requestAnimationFrame(() => document.getElementById(id)?.focus())
+}
+
 async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
   saving.value = true
   error.value = undefined
@@ -31,6 +41,8 @@ async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
   catch (e) {
     error.value = getErrorMessage(e)
     saving.value = false
+    await nextTick()
+    errorAlert.value?.focus()
     return
   }
   saving.value = false
@@ -47,7 +59,7 @@ const fields = [
 </script>
 
 <template>
-  <UCard class="w-full max-w-sm">
+  <AuthFrame>
     <template #header>
       <div class="space-y-1">
         <h1 class="text-lg font-semibold">
@@ -65,20 +77,28 @@ const fields = [
     </template>
 
     <UForm
+      id="password-form"
       :schema="passwordFormSchema"
       :state="state"
       :validate-on="['input', 'change']"
       :disabled="saving"
       class="space-y-4"
       @submit="onSubmit"
+      @error="focusFirstInvalid"
     >
-      <UAlert
+      <div
         v-if="error"
-        color="error"
-        variant="subtle"
-        icon="i-lucide-circle-alert"
-        :title="error"
-      />
+        ref="errorAlert"
+        role="alert"
+        tabindex="-1"
+      >
+        <UAlert
+          color="error"
+          variant="subtle"
+          icon="i-lucide-circle-alert"
+          :title="error"
+        />
+      </div>
 
       <UFormField
         v-for="field in fields"
@@ -100,14 +120,16 @@ const fields = [
         v-model="showPasswords"
         label="Show passwords"
       />
+    </UForm>
 
+    <template #footer>
       <UButton
         type="submit"
+        form="password-form"
         label="Change password"
         block
         :loading="saving"
       />
-
       <div class="flex justify-center">
         <UButton
           v-if="forced"
@@ -124,6 +146,6 @@ const fields = [
           :to="loginRedirectTarget(route.query.redirect)"
         />
       </div>
-    </UForm>
-  </UCard>
+    </template>
+  </AuthFrame>
 </template>

@@ -696,3 +696,10 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
   - **Docs per step:** one decisions entry and the step's progress line; reference pages only when a shared building block or a rule changes.
 - **Rejected:** testing after merge (a merge to `main` deploys staging); dropping e2e (it caught real bugs, e.g. the staff session overwritten by Better Auth's state key); sharing one build across the CI shards (they run in parallel, little wall time to gain).
 - **Where:** AGENTS.md → Checks; progress.md → How we work and How to verify.
+
+### D84: Sign-in and change-password as task flows (Phase B step 4), 2026-09-28
+
+- **Context:** the reference task flow ([plan §7](plans/ui-standardization.md#7-phase-b-migration-sequence-after-this-documentation-is-merged-into-main), page-patterns §5). Both pages were a centered card at every width (a small card in a gray frame on phones), and after a failed submit focus stayed on the button.
+- **Decision:** `AuthFrame` (`app/features/auth/components/`, feature-local until another feature has a task flow) renders a centered `UCard` with the actions in its footer from `sm`, and on phones the full screen: title at the top, the fields, the actions at the bottom with safe-area padding (a flex column, not a fixed bar, so the on-screen keyboard never covers a field). The choice is `useLayoutContext().isCompact`. The submit button lives in the footer, outside the form, joined with `form="<id>"`: Enter still submits.
+- **Focus:** a failed submit moves focus to the first invalid field (`UForm` `@error`), or to the server's error (`role="alert"`, focusable). Nuxt UI's form disables its fields while validating (`loadingAuto`) and re-enables them only after the error event, so the field is focused on the next frame; focusing at once silently does nothing.
+- **Verified:** e2e `auth.test.ts` and `password.test.ts` (21, 5 new: both pages on a phone, Enter submits, focus to the invalid field and to the server's error), screenshots at 390 and 1440.

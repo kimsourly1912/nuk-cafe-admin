@@ -157,3 +157,48 @@ describe('auth across tabs', () => {
     await expect.poll(() => new URL(tab2!.url()).pathname).toBe('/categories')
   })
 })
+
+describe('login as a task flow (D84)', () => {
+  const focused = (page: Page) => page.evaluate(() => {
+    const el = document.activeElement
+    return el?.getAttribute('role') === 'alert' ? `alert: ${el.textContent?.trim()}` : `${el?.tagName} ${el?.getAttribute('type') ?? ''}`.trim()
+  })
+
+  it('fills a phone screen, with Sign in at the bottom in thumb reach', async () => {
+    const page = await createPage()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await mockApi(page, SIGNED_OUT)
+    await page.goto(url('/login'), { waitUntil: 'hydration' })
+    await page.getByRole('heading', { name: 'NUK Cafe Admin' }).waitFor()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    const button = (await page.getByRole('button', { name: 'Sign in' }).boundingBox())!
+    expect(button.y + button.height).toBeGreaterThan(844 - 80)
+    expect(Math.round(button.width)).toBe(390 - 32)
+  })
+
+  it('submits with Enter although the button is outside the form', async () => {
+    const page = await createPage()
+    const api = await mockApi(page, SIGNED_OUT)
+    await page.goto(url('/login?redirect=/categories'), { waitUntil: 'hydration' })
+    api.set({ ...SIGN_IN_OK, 'GET /admin/me': () => ADMIN })
+    await page.getByLabel('Email').fill('admin@nukcafe.test')
+    await page.getByLabel('Password', { exact: true }).fill('secret')
+    await page.keyboard.press('Enter')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/categories')
+  })
+
+  it('moves focus to the first invalid field, or to the error the server gave', async () => {
+    const page = await createPage()
+    await mockApi(page, {
+      ...SIGNED_OUT,
+      'POST /auth/sign-in/email': () => {
+        throw new MockFailure(401, 'INVALID_EMAIL_OR_PASSWORD', 'Invalid email or password')
+      },
+    })
+    await page.goto(url('/login'), { waitUntil: 'hydration' })
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await expect.poll(() => focused(page)).toBe('INPUT email')
+    await signIn(page, 'admin@nukcafe.test', 'wrong')
+    await expect.poll(() => focused(page)).toBe('alert: Incorrect email or password.')
+  })
+})
