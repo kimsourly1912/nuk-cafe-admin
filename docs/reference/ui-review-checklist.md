@@ -18,6 +18,9 @@ Check every changed screen at **320, 390, 768, 1024 and 1440 px** wide, plus one
 - [ ] Compact record rows are the [row composition](./page-patterns.md#compact-row-composition): one large record target and a sibling actions trigger; no button inside a link, no custom row component for styling.
 - [ ] The save model is the same at every width: a page-wide draft is never split into independently saved sections on compact ([page-patterns §3–4](./page-patterns.md#save-models)).
 - [ ] Nothing depends on an **Open** item in [the owner-decision table](../plans/ui-standardization.md#6-owner-decisions).
+- [ ] More than two filters on compact: a labelled Filters button (with count) → `UDrawer` with Clear and Apply, writing the same URL query as the toolbar ([responsive-layout §5](./responsive-layout.md#5-page-anatomy)).
+- [ ] Bottom actions use the shared bottom action bar with ordinary Nuxt UI buttons; only one bar is visible ([responsive-layout §5](./responsive-layout.md#5-page-anatomy)).
+- [ ] Where a record has two URLs (Menu items), both open it at every width, resizing never changes the URL, and Back keeps the list's query ([page-patterns §4](./page-patterns.md#menu-item-editor-urls-owner-directed-decision-4-approved-2026-09-28)).
 - [ ] No sideways-scrolling table on compact; no two-dimensional scrolling at 320px ([matrix](./responsive-layout.md#7-responsive-behavior-matrix)).
 
 ## Visual

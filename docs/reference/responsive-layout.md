@@ -6,7 +6,7 @@ How the admin adapts to width: the three width classes, the application shell an
 
 Nuxt UI is the component design system; Tailwind CSS tokens are the layout and styling language ([ui.md](./ui.md)). Every responsive rule below is expressed with Nuxt UI components and Tailwind's standard breakpoint and container-query variants.
 
-Status labels: **owner-directed** (stated or approved by the owner) and **Open** (waiting on an owner decision, not implementable; see [the owner-decision table](../plans/ui-standardization.md#6-owner-decisions)).
+Status labels: **owner-directed** (stated or approved by the owner) and **Open** (waiting on an owner decision, not implementable). Every decision is in [the owner-decision table](../plans/ui-standardization.md#6-owner-decisions); none is open at present.
 
 ---
 
@@ -83,9 +83,9 @@ UDashboardPanel
 ```
 
 - **Navbar primary action:** labelled at every width (D74). Icon-only (with `aria-label` and tooltip) only when the label can't fit at 320px beside the title.
-- **Toolbar on compact:** search gets the row; its width shrinks before any toolbar action goes off screen (`min-w-0`). Filters never make the toolbar scroll sideways. Today no page has more than two filters, so they fit. How compact shows **more than two** filters (one "Filters" button opening a `UDrawer`) is **Open** ([decision 2](../plans/ui-standardization.md#6-owner-decisions)); a page that needs it waits for the decision.
+- **Toolbar on compact:** search gets the row; its width shrinks before any toolbar action goes off screen (`min-w-0`). Filters never make the toolbar scroll sideways. One or two simple filters may stay directly visible. **With more than two filters (owner-directed, decision 2):** compact shows one labelled **Filters** `UButton` (with the active-filter count when any are set, e.g. "Filters (2)") that opens a `UDrawer` bottom sheet holding the filters as ordinary Nuxt UI fields, with **Clear** and **Apply** actions. Filter meaning, values and URL/query state are the same at every width; Apply writes the same query the toolbar would. No custom-styled filter panel.
 - **Body order:** intro → tabs → alerts that apply to the whole page (archived, conflict) → content. Alerts about one row sit on that row.
-- **One bottom bar at a time.** A bottom bar is `fixed inset-x-0 bottom-0` on compact/medium and static (above the content or in the navbar) on expanded. It uses Nuxt UI surfaces and tokens (`bg-default`, `border-t border-default`, spacing tokens; no blur), pads `env(safe-area-inset-bottom)`, and the body adds matching bottom padding. Whether the four current bars become one shared component is **Open** ([decision 3](../plans/ui-standardization.md#6-owner-decisions)).
+- **One bottom bar at a time.** A bottom bar is `fixed inset-x-0 bottom-0` on compact/medium and static (above the content or in the navbar) on expanded. It uses Nuxt UI surfaces and tokens (`bg-default`, `border-t border-default`, spacing tokens; no blur), pads `env(safe-area-inset-bottom)`, and the body adds matching bottom padding. **One shared bottom action bar component (owner-directed, decision 3)** replaces the four current implementations. It owns only: fixed or static positioning by width class, safe-area padding, the matching page-body padding, focus and on-screen-keyboard handling (focused fields are never hidden behind it, §6), and enforcing that only one bottom bar is visible. It renders the ordinary Nuxt UI buttons each feature supplies (a slot) and adds no colors, radius, shadows, button styles or other styling of its own.
 
 ## 6. Sticky and fixed elements (owner-directed)
 
@@ -106,7 +106,7 @@ What each element becomes per width class. Page-type specifics and examples: [pa
 | Primary action | Navbar, labelled | Navbar, labelled | Navbar (icon-only only if it can't fit) |
 | Search | Toolbar, fixed width | Toolbar | Toolbar, full row |
 | Filters (≤2) | Toolbar | Toolbar | Toolbar, wrapping to a second row if needed |
-| Filters (>2) | Toolbar | Toolbar | **Open** ([decision 2](../plans/ui-standardization.md#6-owner-decisions)) |
+| Filters (>2) | Toolbar | Toolbar | Labelled **Filters** button (with count) → `UDrawer` with Clear and Apply; same query state (owner-directed) |
 | Status tabs | Body | Body | Body; must fit without scrolling (short labels) |
 | Comparable columns | `UTable` | `UTable` if it fits, else grouped rows | **Grouped rows or cards; never a sideways-scrolling table** (owner-directed) |
 | Card collection | 2-column grid or full-width agenda cards | 1–2 columns | 1 column |
@@ -116,9 +116,9 @@ What each element becomes per width class. Page-type specifics and examples: [pa
 | Reorder | Drag + buttons + keys | Same | Move up/down buttons (drag optional) |
 | Short form (≤ ~6 fields) | `UModal` | `UModal` | Full-screen `UModal` |
 | Editor tied to a list (short sections, save each change) | `USlideover`; contents follow its `@container` | Same | `USlideover` (Nuxt UI fills the narrow viewport); contents unchanged, already compact. Options editor (owner-directed) |
-| Long form tied to a list | `USlideover` | `USlideover` | **Focused route** (owner-directed for the Menu item editor); URLs per [decision 4](../plans/ui-standardization.md#6-owner-decisions) |
+| Long form tied to a list | `USlideover` | `USlideover` | **Focused route** (owner-directed for the Menu item editor); both URLs work at every width ([page-patterns → Menu item editor URLs](./page-patterns.md#menu-item-editor-urls-owner-directed-decision-4-approved-2026-09-28)) |
 | Record with sub-collections | Route, multi-column | Route, single column or tabs | Route, tabs; focused full-screen sections |
-| Settings | Sections, one Save | Same | Same draft and one Save; see [page-patterns → Settings](./page-patterns.md#3-settings) (**Open**, decision 1) |
+| Settings | Sections, one Save | Same | Pushed sections editing the same draft; one final Save (owner-directed; [page-patterns → Settings](./page-patterns.md#3-settings)) |
 | Master–detail | List + detail side by side | Pushed detail or slideover | **Pushed screen or bottom sheet** (owner-directed) |
 | Brief contextual choice | Dropdown or popover | Dropdown | Bottom sheet (owner-directed) |
 | Confirmation | Centered dialog | Centered dialog | Centered dialog |

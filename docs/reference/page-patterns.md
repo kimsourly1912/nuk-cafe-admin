@@ -6,7 +6,7 @@ Blueprints for the four kinds of admin page, with expanded and compact anatomy, 
 
 Every blueprint is composed from Nuxt UI components and laid out with Tailwind tokens ([ui.md](./ui.md)): Nuxt UI is the component design system, Tailwind CSS tokens are the layout and styling language. No blueprint needs a custom component for styling.
 
-Status labels: **owner-directed** and **Open** (waiting on an owner decision, not implementable; see [the owner-decision table](../plans/ui-standardization.md#6-owner-decisions)). Current pages are **evidence**, not automatic rules. Where a page differs from its blueprint, the gap is listed in [the rollout plan's audit](../plans/ui-standardization.md#2-route-inventory).
+Status labels: **owner-directed** and **Open** (waiting on an owner decision, not implementable). Every decision is in [the owner-decision table](../plans/ui-standardization.md#6-owner-decisions); none is open at present. Current pages are **evidence**, not automatic rules. Where a page differs from its blueprint, the gap is listed in [the rollout plan's audit](../plans/ui-standardization.md#2-route-inventory).
 
 ---
 
@@ -107,7 +107,7 @@ A compact record row has **two sibling targets**, never nested:
 
 **Purpose:** change configuration (branch hours, points rate). No instance exists yet.
 
-> **Open: the Settings blueprint is not approved and not implementable** ([decision 1](../plans/ui-standardization.md#6-owner-decisions)). Below is the recommendation the owner is asked to approve. The first settings page (step 5.1) waits for the decision.
+**Owner-directed (decision 1, approved 2026-09-28).** The first settings page (step 5.1) proves this blueprint. It uses Nuxt UI form components (`UForm`, `UFormField`, inputs) and Tailwind layout tokens throughout.
 
 ### Expanded anatomy
 
@@ -122,15 +122,14 @@ Body:    Section heading          Fields…
 - Sections with a heading and a one-line description, fields beside or below (max readable width, not full screen width).
 - One draft per page with **Save changes** in the navbar (the page's primary action), enabled only when dirty. It's guarded by `useUnsavedChanges` ([forms](./forms.md)). Instant toggles (save at once) are allowed only where the change is harmless and reversible, and say so.
 
-**The save model is the same at every width.** A page-wide draft saved by one Save on expanded is the same page-wide draft saved by one Save on compact. Compact never turns it into sections that save independently.
+**The save model is the same at every width (owner-directed).** One page-wide draft and one final **Save changes**, at every width. Save sends the **complete draft in one request**. Compact never turns the page into sections that save independently.
 
-### Compact anatomy (recommended)
+### Compact anatomy
 
 - Short settings: one column; the same **Save changes** in a bottom bar while the draft is dirty.
-- Long settings (more than ~2 screens): a grouped list of sections, each opening a **pushed full-screen section** that edits the **same shared draft**. A section has Back (to the list, keeping its edits in the draft) and no Save of its own. **One final Save changes** (a bottom bar on the section list and on each section, the same action) sends the whole draft in one request. The list marks sections with unsaved edits.
-- The draft belongs to the settings page, not to a section, so moving between sections never loses or saves it; the unsaved-changes guard asks only when leaving the settings page. The foundations for this (sections as a query value on one route, so Back works and the page's draft survives) are verified when the first settings page is built.
-
-**Alternative (decision 1):** independent section saves (each section has its own draft and Save) used consistently **at every width**, including expanded. Better when sections map to separate API resources; worse when a change spans sections.
+- Long settings (more than ~2 screens): a grouped list of sections, each opening a **pushed full-screen section** that edits the **same shared draft**. A section has Back (to the list, keeping its edits in the draft) and no Save of its own. **One final Save changes** (in the shared bottom action bar, on the section list and on each section: the same action) sends the whole draft in one request. The list marks sections with unsaved edits.
+- **Moving between sections neither saves nor discards changes.** The draft belongs to the settings page, not to a section.
+- **The unsaved-changes warning appears only when leaving the settings page** (`useUnsavedChanges` on the page), never when moving between its sections. How sections are addressed so Back works without leaving the page (for example a query value on one route) is settled and tested with the first settings page.
 
 ## 4. Detail / editor
 
@@ -148,7 +147,20 @@ Body:    Section heading          Fields…
 **Compact:**
 - Modals are **full screen** (`fullscreen` on `UModal`, from the layout-context composable). Slideovers fill a narrow viewport by Nuxt UI's own width; their contents already follow their `@container` ([responsive-layout §1](./responsive-layout.md#constrained-surfaces-container-queries)).
 - **The Options editor stays a `USlideover` at every width (owner-directed, approved 2026-09-28).** Its inner layout adapts with Tailwind responsive and container utilities; it doesn't become a route.
-- **Long forms use a focused route on compact (owner-directed).** The long **Menu item editor** gets a focused route on compact, one section at a time (approved 2026-09-28). The exact URLs, so a deep link opens the same record at every width, are **Open** ([decision 4](../plans/ui-standardization.md#6-owner-decisions)).
+- **Long forms use a focused route on compact (owner-directed).** The long **Menu item editor** gets a focused full-screen route on compact, one section at a time (approved 2026-09-28).
+
+### Menu item editor URLs (owner-directed, decision 4, approved 2026-09-28)
+
+| URL | Role | Opens |
+|---|---|---|
+| `/products/[id]` | **Preferred, canonical record URL** (share and copy this one) | The item at **every** width: the focused route |
+| `/products?item=<id>` | List context kept (search and filters stay in the query) | The item at **every** width: the list with the slideover open |
+
+- **Both URLs open the same item at every width**, and direct links in either format keep working.
+- **Which one the list uses by default:** compact lists open `/products/[id]`; medium and expanded lists open `/products?item=<id>`. The choice is made when the user opens the item (through the layout-context composable), never later.
+- **Resizing the browser never changes the URL.** An open slideover stays a slideover, and an open route stays a route, until the user navigates.
+- **Back returns to the list with its search and filter query unchanged:** the route is pushed from the list, and closing the slideover removes only `item` from the query.
+- Permissions, validation, data and available actions are identical in both presentations.
 - **Master–detail becomes a pushed screen or a bottom sheet (owner-directed):** the list is one screen; the detail pushes over it with Back. A bottom sheet is only for a short detail (a few fields or actions).
 
 ### Route anatomy (the `/add-ons/[id]` reference, D75)

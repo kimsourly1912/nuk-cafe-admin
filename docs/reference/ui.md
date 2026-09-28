@@ -8,7 +8,7 @@ The canonical visual rules for NUK Cafe Admin: tokens, spacing, radius, type, de
 
 Status labels used below:
 - **Owner-directed**: stated by the owner (D74, the UI standardization request of 2026-09-28, or the approved directions of the 2026-09-28 review).
-- **Open**: waiting on an owner decision; **not implementable** until decided. Every open item is in [the owner-decision table](../plans/ui-standardization.md#6-owner-decisions).
+- **Open**: waiting on an owner decision; **not implementable** until decided. Every decision, approved or open, is in [the owner-decision table](../plans/ui-standardization.md#6-owner-decisions); none is open at present.
 - Unlabelled rules are the standard as written in D77.
 
 ---
