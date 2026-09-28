@@ -60,7 +60,6 @@ function onKeydown(event: KeyboardEvent) {
         :aria-label="label"
         :placeholder="placeholder"
         :disabled="saving"
-        size="lg"
         class="min-w-40 flex-1"
         @keydown="onKeydown"
       />
@@ -69,7 +68,6 @@ function onKeydown(event: KeyboardEvent) {
           :label="saveLabel ?? 'Save'"
           :loading="saving"
           :disabled="!!error"
-          class="min-h-11 sm:min-h-9"
           @click="emit('save')"
         />
         <UButton
@@ -77,7 +75,6 @@ function onKeydown(event: KeyboardEvent) {
           color="neutral"
           variant="outline"
           :disabled="saving"
-          class="min-h-11 sm:min-h-9"
           @click="emit('cancel')"
         />
       </div>

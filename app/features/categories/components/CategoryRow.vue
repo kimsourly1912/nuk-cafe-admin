@@ -5,8 +5,7 @@
  * header by `rowColumns`). What the leading controls show depends on the page's mode:
  * - browse: the expand toggle (parents); the name opens the edit form (active categories);
  * - select: a checkbox, and the name toggles it too (a larger touch target);
- * - reorder: Move up / Move down buttons (large on touch screens), and from `md` a drag handle
- *   (↑/↓ on it also moves).
+ * - reorder: Move up / Move down buttons, and from `md` a drag handle (↑/↓ on it also moves).
  * The row itself isn't clickable, so its controls never fight over a click.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
@@ -68,9 +67,6 @@ function onName() {
   if (nameAction.value === 'open') emit('open')
   else if (nameAction.value === 'select') emit('select', !props.selected)
 }
-
-/** Icon buttons: 44px targets on touch screens, compact from `md`. */
-const ICON_BUTTON = 'min-h-11 min-w-11 justify-center md:min-h-8 md:min-w-8'
 </script>
 
 <template>
@@ -106,7 +102,7 @@ const ICON_BUTTON = 'min-h-11 min-w-11 justify-center md:min-h-8 md:min-w-8'
           icon="i-lucide-grip-vertical"
           color="neutral"
           variant="ghost"
-          :class="[ICON_BUTTON, 'hidden cursor-grab md:inline-flex']"
+          class="hidden cursor-grab md:inline-flex"
           v-bind="{ [isMain ? 'data-main-handle' : 'data-sub-handle']: category.id }"
           :aria-label="`Reorder ${name} (drag, or press up or down)`"
           @keydown="emit('handle-keydown', $event)"
@@ -115,7 +111,6 @@ const ICON_BUTTON = 'min-h-11 min-w-11 justify-center md:min-h-8 md:min-w-8'
           icon="i-lucide-arrow-up"
           color="neutral"
           variant="ghost"
-          :class="ICON_BUTTON"
           :disabled="!canMoveUp"
           data-move="up"
           :aria-label="`Move ${name} up`"
@@ -125,7 +120,6 @@ const ICON_BUTTON = 'min-h-11 min-w-11 justify-center md:min-h-8 md:min-w-8'
           icon="i-lucide-arrow-down"
           color="neutral"
           variant="ghost"
-          :class="ICON_BUTTON"
           :disabled="!canMoveDown"
           data-move="down"
           :aria-label="`Move ${name} down`"
@@ -139,26 +133,24 @@ const ICON_BUTTON = 'min-h-11 min-w-11 justify-center md:min-h-8 md:min-w-8'
           :icon="expanded ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
           color="neutral"
           variant="ghost"
-          :class="ICON_BUTTON"
           :aria-label="`${expanded ? 'Collapse' : 'Expand'} ${name}`"
           :aria-expanded="expanded"
           @click="emit('toggle')"
         />
         <span
           v-else
-          class="w-11 shrink-0 md:w-8"
+          class="w-8 shrink-0"
         />
       </template>
 
       <div
         v-if="mode === 'select'"
-        class="flex size-11 shrink-0 items-center justify-center md:size-8"
+        class="flex size-8 shrink-0 items-center justify-center"
       >
         <UCheckbox
           v-if="selectable"
           :model-value="selected"
           :aria-label="`Select ${name}`"
-          size="lg"
           @update:model-value="value => emit('select', !!value)"
         />
       </div>
@@ -246,7 +238,6 @@ const ICON_BUTTON = 'min-h-11 min-w-11 justify-center md:min-h-8 md:min-w-8'
           icon="i-lucide-ellipsis-vertical"
           color="neutral"
           variant="ghost"
-          :class="ICON_BUTTON"
           :aria-label="`Actions for ${name}`"
         />
       </UDropdownMenu>

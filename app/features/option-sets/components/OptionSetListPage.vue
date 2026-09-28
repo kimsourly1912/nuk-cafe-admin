@@ -66,17 +66,9 @@ usePageShortcuts({ n: () => create() })
 <template>
   <UDashboardPanel id="option-sets">
     <template #header>
-      <UDashboardNavbar :ui="{ root: 'h-auto min-h-(--ui-header-height) py-3' }">
-        <template #left>
+      <UDashboardNavbar title="Options">
+        <template #leading>
           <UDashboardSidebarCollapse />
-          <div class="min-w-0">
-            <h1 class="truncate text-xl font-semibold text-highlighted sm:text-2xl">
-              Options
-            </h1>
-            <p class="line-clamp-2 text-sm text-muted sm:truncate">
-              Create reusable choices like Size and Temperature
-            </p>
-          </div>
         </template>
         <template #right>
           <UTooltip
@@ -84,50 +76,41 @@ usePageShortcuts({ n: () => create() })
             :kbds="['n']"
           >
             <UButton
+              label="New option set"
               icon="i-lucide-plus"
-              size="lg"
-              aria-label="New option set"
-              class="min-h-11 min-w-11 justify-center"
               @click="create()"
-            >
-              <span class="hidden sm:inline">New option set</span>
-            </UButton>
+            />
           </UTooltip>
         </template>
       </UDashboardNavbar>
-    </template>
 
-    <template #body>
-      <div class="space-y-4">
-        <UAlert
-          icon="i-lucide-info"
-          color="neutral"
-          variant="subtle"
-          description="Options create menu-item versions. Prices are configured on each menu item."
-        />
-
-        <div class="flex items-center gap-2">
+      <UDashboardToolbar>
+        <template #left>
           <SearchInput
             v-model="filters.search"
-            placeholder="Search option sets or values…"
-            size="lg"
-            class="w-full md:max-w-xl"
+            placeholder="Search sets or values…"
+            class="w-64"
           />
           <UIcon
             v-if="refreshing"
             name="i-lucide-loader-circle"
-            class="size-4 shrink-0 animate-spin text-muted"
+            class="size-4 animate-spin text-muted"
           />
-        </div>
+        </template>
+      </UDashboardToolbar>
+    </template>
 
-        <div class="-mx-4 overflow-x-auto border-b border-default px-4 sm:mx-0 sm:px-0">
-          <StatusTabs
-            v-model="filters.status"
-            :tabs="TABS"
-            :counts="counts"
-            size="md"
-          />
-        </div>
+    <template #body>
+      <div class="space-y-4">
+        <p class="text-sm text-muted">
+          Create reusable choices like Size and Temperature. Options create menu-item versions; prices are configured on each menu item.
+        </p>
+
+        <StatusTabs
+          v-model="filters.status"
+          :tabs="TABS"
+          :counts="counts"
+        />
 
         <ApiErrorAlert
           v-if="error"

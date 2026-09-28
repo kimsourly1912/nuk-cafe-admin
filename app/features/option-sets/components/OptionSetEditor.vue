@@ -310,12 +310,7 @@ function onEscape(event: KeyboardEvent) {
   <USlideover
     :title="current.name"
     :content="{ onEscapeKeyDown: onEscape }"
-    :ui="{
-      content: 'max-sm:max-w-none sm:max-w-xl',
-      header: 'pt-[max(env(safe-area-inset-top),1rem)]',
-      body: 'pb-[max(env(safe-area-inset-bottom),1rem)]',
-      footer: 'pb-[max(env(safe-area-inset-bottom),1rem)] sm:hidden',
-    }"
+    :ui="{ footer: 'pb-[max(env(safe-area-inset-bottom),1rem)] sm:hidden' }"
     @update:open="unsaved.onOpenChange"
   >
     <template #title>
@@ -369,7 +364,7 @@ function onEscape(event: KeyboardEvent) {
           color="neutral"
           variant="subtle"
           description="This option set is archived. Existing menu items keep it, but it cannot be added to other items."
-          :actions="[{ label: 'Restore option set', icon: 'i-lucide-archive-restore', size: 'lg', color: 'primary', variant: 'solid', loading: busy, onClick: restoreSet }]"
+          :actions="[{ label: 'Restore option set', icon: 'i-lucide-archive-restore', color: 'primary', variant: 'solid', loading: busy, onClick: restoreSet }]"
         />
 
         <!-- Name -->
@@ -377,9 +372,9 @@ function onEscape(event: KeyboardEvent) {
           v-if="mode === 'browse'"
           aria-label="Name"
         >
-          <p class="mb-1 text-sm font-medium text-muted">
+          <h3 class="mb-2 font-semibold text-highlighted">
             Name
-          </p>
+          </h3>
           <OptionInlineEdit
             v-if="editing?.kind === 'name'"
             v-model="draft"
@@ -391,9 +386,9 @@ function onEscape(event: KeyboardEvent) {
           />
           <div
             v-else
-            class="flex items-center justify-between gap-3 rounded-lg border border-default px-3 py-2"
+            class="flex items-center justify-between gap-3"
           >
-            <span class="min-w-0 break-words font-medium text-highlighted">{{ current.name }}</span>
+            <span class="min-w-0 break-words">{{ current.name }}</span>
             <UButton
               v-if="!archived"
               label="Edit"
@@ -401,7 +396,6 @@ function onEscape(event: KeyboardEvent) {
               color="neutral"
               variant="ghost"
               aria-label="Edit name"
-              class="min-h-11 sm:min-h-8"
               @click="startEdit({ kind: 'name' })"
             />
           </div>
@@ -459,7 +453,7 @@ function onEscape(event: KeyboardEvent) {
               icon="i-lucide-arrow-down-up"
               color="neutral"
               variant="outline"
-              class="min-h-11 shrink-0 sm:min-h-8"
+              class="shrink-0"
               :disabled="active.length < 2 || busy"
               @click="startReorder()"
             />
@@ -517,10 +511,8 @@ function onEscape(event: KeyboardEvent) {
               <UButton
                 label="Add value"
                 icon="i-lucide-plus"
-                variant="outline"
+                variant="soft"
                 block
-                size="lg"
-                class="min-h-11 border-dashed"
                 :disabled="full"
                 @click="startEdit({ kind: 'add' })"
               />
@@ -535,71 +527,65 @@ function onEscape(event: KeyboardEvent) {
         </section>
 
         <!-- Archived values -->
-        <section
+        <UCollapsible
           v-if="hidden.length && mode === 'browse'"
-          class="rounded-lg border border-default"
+          v-model:open="showArchived"
         >
-          <button
-            type="button"
-            class="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left font-medium text-highlighted focus-visible:outline-2 focus-visible:outline-primary"
-            :aria-expanded="showArchived"
-            aria-controls="option-archived-values"
-            @click="showArchived = !showArchived"
-          >
-            Archived values ({{ hidden.length }})
-            <UIcon
-              :name="showArchived ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-              class="size-4 text-muted"
-            />
-          </button>
-          <div
-            v-show="showArchived"
-            id="option-archived-values"
-            class="space-y-2 border-t border-default px-3 py-3"
-          >
-            <p class="text-sm text-muted">
-              Menu-item versions that use them are hidden until they're restored.
-            </p>
-            <p
-              v-if="full && !archived"
-              class="text-sm text-muted"
-            >
-              A set can have at most {{ MAX_OPTION_VALUES }} active values: archive one to restore another.
-            </p>
-            <ul class="space-y-1">
-              <li
-                v-for="value in hidden"
-                :key="value.id"
-                :aria-label="value.name"
-                class="flex min-h-11 items-center justify-between gap-2"
+          <UButton
+            :label="`Archived values (${hidden.length})`"
+            color="neutral"
+            variant="ghost"
+            trailing-icon="i-lucide-chevron-down"
+            block
+            :ui="{ trailingIcon: 'ms-auto group-data-[state=open]:rotate-180 transition-transform duration-200' }"
+            class="group"
+          />
+          <template #content>
+            <div class="space-y-2 pt-2">
+              <p class="text-sm text-muted">
+                Menu-item versions that use them are hidden until they're restored.
+              </p>
+              <p
+                v-if="full && !archived"
+                class="text-sm text-muted"
               >
-                <span class="min-w-0 break-words text-muted">{{ value.name }}</span>
-                <UButton
-                  v-if="!archived"
-                  label="Restore"
-                  icon="i-lucide-archive-restore"
-                  color="neutral"
-                  variant="outline"
-                  size="sm"
-                  class="min-h-11 sm:min-h-8"
-                  :disabled="busy || full"
-                  :aria-label="`Restore ${value.name}`"
-                  @click="restoreValue(value)"
-                />
-              </li>
-            </ul>
-          </div>
-        </section>
+                A set can have at most {{ MAX_OPTION_VALUES }} active values: archive one to restore another.
+              </p>
+              <ul class="divide-y divide-default">
+                <li
+                  v-for="value in hidden"
+                  :key="value.id"
+                  :aria-label="value.name"
+                  class="flex items-center justify-between gap-2 py-2"
+                >
+                  <span class="min-w-0 break-words text-muted">{{ value.name }}</span>
+                  <UButton
+                    v-if="!archived"
+                    label="Restore"
+                    icon="i-lucide-archive-restore"
+                    color="neutral"
+                    variant="outline"
+                    size="sm"
+                    :disabled="busy || full"
+                    :aria-label="`Restore ${value.name}`"
+                    @click="restoreValue(value)"
+                  />
+                </li>
+              </ul>
+            </div>
+          </template>
+        </UCollapsible>
 
         <!-- Danger zone -->
+        <USeparator v-if="!archived && mode === 'browse'" />
         <section
           v-if="!archived && mode === 'browse'"
           aria-labelledby="option-danger-heading"
-          class="space-y-2 rounded-lg border border-error/30 p-4"
+          class="space-y-2"
         >
           <h3
             id="option-danger-heading"
-            class="font-semibold text-error"
+            class="font-semibold text-highlighted"
           >
             Danger zone
           </h3>
@@ -610,8 +596,7 @@ function onEscape(event: KeyboardEvent) {
             label="Archive option set"
             icon="i-lucide-archive"
             color="error"
-            variant="outline"
-            class="min-h-11 sm:min-h-8"
+            variant="soft"
             :disabled="busy"
             @click="archiveSet()"
           />
@@ -626,10 +611,8 @@ function onEscape(event: KeyboardEvent) {
       <UButton
         label="Done reordering"
         icon="i-lucide-check"
-        size="xl"
         block
         :loading="reorderPending"
-        class="min-h-12"
         @click="finishReorder()"
       />
     </template>

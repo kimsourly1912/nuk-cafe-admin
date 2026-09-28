@@ -160,7 +160,6 @@ const activeSubs = computed(() => props.group.subs.filter(s => s.status === 'act
           label="Add subcategory"
           icon="i-lucide-plus"
           variant="link"
-          class="min-h-11 md:min-h-8"
           :aria-label="`Add subcategory to ${main.name}`"
           @click="emit('add-sub')"
         />
