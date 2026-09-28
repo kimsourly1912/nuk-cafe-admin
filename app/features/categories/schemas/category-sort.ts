@@ -1,7 +1,5 @@
-import type { Category } from '#shared/contracts/menu'
-
 /** Server order: `sortOrder` ascending, then name, so equal numbers still have a stable order. */
-export function bySortOrder(categories: Category[]): Category[] {
+export function bySortOrder<T extends { id: string, name: string, sortOrder: number }>(categories: T[]): T[] {
   return [...categories].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
 }
 

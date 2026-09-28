@@ -1,18 +1,20 @@
-import type { Category } from '#shared/contracts/menu'
+import type { MenuCategory } from '#shared/contracts/menu-categories'
 
-export interface CategoryOptionsFilter {
-  /** Only main categories, or only sub-categories. */
-  level?: 'main' | 'sub'
+/**
+ * Every category, archived ones included, as one shared query: the Categories tree and every
+ * `CategorySelect` read the same data, so a page with both makes one request and refreshes once.
+ * No `default`: the tree tells "not loaded yet" (`loading`) from "no categories" (feature
+ * standard §4), and every caller of this key must pass the same options.
+ */
+export function useAllCategories() {
+  return useApiQuery('categories:all', () => apiFetch<MenuCategory[]>('/admin/menu/categories', { query: { status: 'all' } }))
 }
 
 /**
- * PUBLIC. Every category for pickers (e.g. `level: 'main'` for parent selects).
- * Keyed per filter so different pickers don't overwrite each other.
+ * PUBLIC. Every category, archived ones included (a record may still use one, and its name must
+ * show), for pickers; `[]` until loaded. The picker decides what's selectable (`CategorySelect`).
  */
-export function useCategoryOptions(filter: MaybeRefOrGetter<CategoryOptionsFilter> = {}) {
-  return useApiQuery(
-    () => `categories:options:${toValue(filter).level ?? 'all'}`,
-    () => apiFetch<Category[]>('/v1/admin/categories', { query: { level: toValue(filter).level } }),
-    { default: () => [] },
-  )
+export function useCategoryOptions() {
+  const query = useAllCategories()
+  return { ...query, data: computed<MenuCategory[]>(() => query.data.value ?? []) }
 }

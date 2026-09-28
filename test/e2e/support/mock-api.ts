@@ -2,8 +2,9 @@ import type { BrowserContext, Page, Route } from 'playwright-core'
 import { getBrowser, setup, url, waitForHydration } from '@nuxt/test-utils/e2e'
 import { afterEach, expect, inject } from 'vitest'
 import type { Page as ApiPage } from '../../../shared/contracts/common'
-import type { Category, Product, Schedule } from '../../../shared/contracts/menu'
 import type { AdminSession } from '../../../shared/contracts/identity'
+import type { MenuCategory } from '../../../shared/contracts/menu-categories'
+import type { MenuItem, MenuItemSummary } from '../../../shared/contracts/menu-items'
 import type { BranchOption, StaffMember } from '../../../shared/contracts/staff'
 
 /** Requests no handler answered, across every `mockApi` of the current test. */
@@ -32,9 +33,9 @@ export function setupE2e() {
 /**
  * Mocks the server in the browser: every `/api/**` request is answered from `handlers`. Keys are
  * `'METHOD /path'` without query:
- * - our API without its `/api/v1` prefix: `'GET /admin/categories'`;
+ * - our API without its `/api` prefix: `'GET /admin/menu/categories'`;
  * - Better Auth as `/auth/...`: `'POST /auth/sign-in/email'`.
- * A segment containing a digit can be written `{id}` (`'PATCH /admin/categories/{id}'`).
+ * A segment containing a digit can be written `{id}` (`'PATCH /admin/menu/categories/{id}'`).
  *
  * A handler's return value is the JSON body (HTTP 200). Throw `MockFailure` (or a `failures.*`
  * preset) for an error response in the API's format.
@@ -65,41 +66,30 @@ export const ADMIN: AdminSession = {
   mustChangePassword: false,
 }
 
-export function categoryOf(id: string, name: string, overrides: Partial<Category> = {}): Category {
-  return { id, name, parentId: null, status: 'ACTIVE', sortOrder: 1, version: 1, createdAt: STAMP, updatedAt: STAMP, ...overrides }
+/** A category of the new menu API (`/api/admin/menu/categories`). */
+export function menuCategoryOf(id: string, name: string, overrides: Partial<MenuCategory> = {}): MenuCategory {
+  return { id, name, description: '', parentId: null, status: 'active', sortOrder: 1, childCount: 0, availabilityRules: [], version: 1, createdAt: STAMP, updatedAt: STAMP, ...overrides }
 }
 
-export function scheduleOf(id: string, name: string, overrides: Partial<Schedule> = {}): Schedule {
-  return {
-    id,
-    name,
-    description: '',
-    days: ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'],
-    startTime: '08:00',
-    endTime: '17:00',
-    timeZone: 'Asia/Phnom_Penh',
-    status: 'ACTIVE',
-    productCount: 0,
-    version: 1,
-    createdAt: STAMP,
-    updatedAt: STAMP,
-    ...overrides,
-  }
+/** A menu item as the list shows it (`GET /api/admin/menu/items`): a draft in Tea at $3.50. */
+export function menuItemSummaryOf(id: string, name: string, overrides: Partial<MenuItemSummary> = {}): MenuItemSummary {
+  return { id, name, categoryId: 'cat-1', categoryName: 'Tea', status: 'draft', imageUrl: null, priceMinMinor: 350, priceMaxMinor: 350, sortOrder: 1, version: 1, updatedAt: STAMP, ...overrides }
 }
 
-export function productOf(id: string, name: string, category: Category, overrides: Partial<Product> = {}): Product {
+/** A whole menu item (`GET /api/admin/menu/items/{id}`): one version at $3.50, no option sets or add-ons. */
+export function menuItemOf(id: string, name: string, overrides: Partial<MenuItem> = {}): MenuItem {
   return {
     id,
+    categoryId: 'cat-1',
     name,
     description: '',
-    category: { id: category.id, name: category.name, parentId: category.parentId, status: category.status },
-    priceMinor: 350,
-    currency: 'USD',
     image: null,
-    status: 'ACTIVE',
+    status: 'draft',
     sortOrder: 1,
-    scheduleIds: [],
-    variantGroups: [],
+    optionSets: [],
+    variations: [{ id: `${id}-v`, valueIds: [], label: '', priceMinor: 350, status: 'active', sellable: true }],
+    modifierGroups: [],
+    availabilityRules: [],
     version: 1,
     createdAt: STAMP,
     updatedAt: STAMP,
@@ -124,8 +114,8 @@ export function staffOf(id: string, name: string, overrides: Partial<StaffMember
   }
 }
 
-export const TEA = categoryOf('cat-1', 'Tea')
-export const COFFEE = categoryOf('cat-2', 'Coffee', { sortOrder: 2 })
+export const MENU_TEA = menuCategoryOf('cat-1', 'Tea')
+export const MENU_COFFEE = menuCategoryOf('cat-2', 'Coffee', { sortOrder: 2 })
 
 export function pageOf<T>(items: T[], page = 1, pageSize = 20): ApiPage<T> {
   return { items, page, pageSize, total: items.length, totalPages: Math.max(1, Math.ceil(items.length / pageSize)) }
@@ -137,8 +127,12 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /auth/get-session': () => null,
   'POST /auth/sign-out': () => ({ success: true }),
   'GET /admin/me': () => ADMIN,
-  'GET /admin/categories': () => [TEA, COFFEE],
-  'POST /admin/categories': ({ body }) => categoryOf('cat-3', String((body as { name?: string })?.name ?? 'New')),
+  'GET /admin/menu/categories': () => [MENU_TEA, MENU_COFFEE],
+  'POST /admin/menu/categories': ({ body }) => menuCategoryOf('cat-3', String((body as { name?: string })?.name ?? 'New')),
+  // The category and item forms' pickers and libraries.
+  'GET /admin/menu/availability-rules': () => [],
+  'GET /admin/menu/option-sets': () => [],
+  'GET /admin/menu/modifier-groups': () => [],
 }
 
 /** Throw this from a handler to answer with an error in the API's format. */
@@ -225,8 +219,8 @@ export function paginatedHandler<T extends Record<string, unknown>>(rows: T[] | 
     const status = url.searchParams.get('status')
     const matching = all
       .filter(r => !search || String(r[searchField]).toLowerCase().includes(search))
-      // Like the server's `status` filter (also what status-tab counts ask for).
-      .filter(r => !status || r.status === status)
+      // Like the server's `status` filter (also what status-tab counts ask for); `all` is every status.
+      .filter(r => !status || status === 'all' || r.status === status)
     return {
       items: matching.slice((page - 1) * pageSize, page * pageSize),
       page,
@@ -234,18 +228,6 @@ export function paginatedHandler<T extends Record<string, unknown>>(rows: T[] | 
       total: matching.length,
       totalPages: Math.max(1, Math.ceil(matching.length / pageSize)),
     }
-  }
-}
-
-/**
- * `GET /admin/categories` like the server: every category, or only mains / subs with `?level=`
- * (the parent picker asks for `level=main`). Pass a function for rows that change.
- */
-export function categoriesHandler(rows: Category[] | (() => Category[])): MockHandler {
-  return ({ url }) => {
-    const all = typeof rows === 'function' ? rows() : rows
-    const level = url.searchParams.get('level')
-    return all.filter(c => !level || (level === 'main') === (c.parentId === null))
   }
 }
 
@@ -273,7 +255,7 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
   await page.route(`${origin}/api/**`, async (route: Route) => {
     const request = route.request()
     const requestUrl = new URL(request.url())
-    const path = requestUrl.pathname.replace(/^\/api(\/v1)?(?=\/admin)/, '').replace(/^\/api\/auth/, '/auth')
+    const path = requestUrl.pathname.replace(/^\/api(?=\/admin)/, '').replace(/^\/api\/auth/, '/auth')
     const key = `${request.method()} ${path}`
     calls.push(key)
     // 'DELETE /admin/categories/cat-1' also matches a 'DELETE /admin/categories/{id}' handler.
@@ -333,7 +315,7 @@ export function toast(page: Page, title: string | RegExp) {
 
 /**
  * A category in the Categories tree (`/categories`), by name. The tree loads
- * `GET /admin/categories`; the default handlers answer it with TEA and COFFEE.
+ * `GET /admin/menu/categories`; the default handlers answer it with MENU_TEA and MENU_COFFEE.
  */
 export function categoryItem(page: Page, name: string) {
   return page.getByRole('listitem', { name, exact: true })

@@ -10,7 +10,7 @@ import type { UnwrapRef } from 'vue'
  *   the URL (sidebar link to the bare list, back/forward) updates the filters.
  *
  * @example
- * const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({ search: '', status: ANY as Status | Any })
+ * const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({ search: '', status: ANY as string })
  * const { data } = useScheduleList(query)
  */
 export function usePaginatedQuery<T extends Record<string, unknown>>(

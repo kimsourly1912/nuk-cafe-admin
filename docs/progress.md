@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-28 (step 3.8b part 2: the Options and Add-ons pages, D67, D68)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-28 (step 3.8b done: Categories and Menu items on the new API, legacy menu removed; D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -15,17 +15,12 @@ Every "done" item states how it was checked. Keep using these labels:
 
 ## Current state
 
-**Admin on our own API (2026-09-26):** the admin UI (auth, categories, schedules, menu items) now runs on our API (`/api/v1`, D40–D42); every `~/generated/api` / `unwrap` reference is gone. `pnpm typecheck` and `pnpm build` pass again for the first time since D39.
+**Everything on the server standard (2026-09-28, step 3.8b):** every admin screen runs on `/api/admin` (D52), and the pre-standard `/api/v1` menu, its tables (dropped by migration `0011_drop_legacy_menu`) and the Schedules screen are gone (D71). History: the admin first moved off the Spring API onto our own `/api/v1` (D40–D42), then onto the server standard feature by feature (steps 1.7 and 3.8b).
 
 | Part | What exists | Verified |
 |---|---|---|
-| Schema + migration | `server/db/schema/` (media_assets, menu_categories, menu_schedules, menu_products, product_variant_groups/options, product_schedules), migration `0001_identity_and_menu` | server (every test builds the DB from the migrations); real-server (applied on `pnpm dev`) |
-| Identity (steps 1.2–1.7) | Better Auth with the `admin` + `organization` plugins, roles per D45, `requirePermission` / `requireBranchPermission` / `requireCustomer`, `GET /api/admin/me`, staff management, forced password change, email verification and reset, customer profiles, seed task | server (10 tests incl. a bootstrap race); real-server (sign-up → not staff → bootstrap → admin → sign-out; cross-origin write refused) |
-| Categories API | list, create, PATCH, delete, order; two levels; version checks | server (13 tests incl. a race and a stale reorder); real-server |
-| Schedules API | paginated list (search/status/day), options, detail, create, PATCH, delete; local wall time in the cafe zone | server (8 tests); real-server |
-| Menu items API | paginated list, whole menu, detail, create, PATCH (variants by stable id, schedules, image), delete | server (11 tests incl. a race; the race test fails with the guard removed); real-server |
-| Media | upload to blob (magic-byte check, ≤ 5 MB), public serving, attach/release | server (type sniffing, attach/release); real-server (upload → PNG served) |
-| Admin UI | `apiFetch`, `ApiError` for the new format, `useAuth` on Better Auth, all three features ported | unit (113); browser-mock (e2e, 115 tests); real-server (headless Chrome: login, create category/schedule/menu item with image, variants and schedule, edit, logout) |
+| Server | Features `identity`, `branches`, `media`, `menu` (categories, option sets, add-on groups, items with the price grid, availability rules, sold-out, the public menu), `platform` (audit, idempotency, outbox); migrations `0000`–`0011` | server (every test builds the DB from the migrations, foreign keys on and D1's parameter limit enforced); staging (step 2) |
+| Admin UI | Staff, Menu items, Categories, Options, Add-ons, Availability; auth with forced password change | unit, browser-mock (e2e), real-server (headless Chromium on `pnpm dev`, per feature below) |
 
 **Found by the browser tests and fixed:** `useAuth` kept the staff session in `useState('auth:user')`, the key `@nuxtjs/better-auth` uses for its own session. Its refetch on tab focus overwrote the staff session (and would have put a Better Auth user where a staff session belongs). Keys are now `staff-session:*`; regression test in `auth.test.ts` (checked to fail with the old key).
 
@@ -65,18 +60,17 @@ The Foundation table below is the app's shared UI behavior; it stays valid throu
 
 ### Features
 
-The admin screens that exist today. They run on the **pre-standard** `/api/v1` routes ([reference/api.md](reference/api.md)) and are rebuilt per the server standard in steps 1.7 and 3.8–4.4.
+The admin screens that exist today, all on the server standard's `/api/admin` routes.
 
-| Feature | Routes (`/api/v1/admin/...`) | Status |
+| Feature | Routes | Status |
 |---|---|---|
 | auth | Better Auth `/api/auth/sign-in/email`, `sign-out`, `change-password`; `/api/admin/me` | **done** (D52): admins only, forced password change, change password from the user menu. server + unit + browser-mock (`auth`, `password`) + real-server |
 | staff | `/api/admin/staff`, `/api/admin/branches/options` | **done** (D49, D52): list with search and role/branch filters, add (temporary password shown once), change access, disable. server + unit + browser-mock (`staff.test.ts`) + real-server |
-| categories (menu) | `categories`, `categories/{id}`, `categories/order` | **done, reference feature**: tree of mains and subs, search + status tabs, create/edit, add sub-category, delete, batch delete, drag-to-sort per level, version checks. server + unit + browser-mock (`categories.test.ts`) + real-server |
-| schedules (menu) | `schedules`, `schedules/options`, `schedules/{id}` | **done**: list (search, status, day), create, edit (menu items shown read-only, never sent), delete + bulk delete for schedules not in use; times as cafe time (D41). server + unit + browser-mock (`schedules.test.ts`) + real-server |
+| categories (menu) | **new API** `/api/admin/menu/categories` | **done, reference feature** (3.8b part 3a, D69): tree of mains and subs, search, Active/Archived tabs, create/edit with description, parent and availability rules, add sub-category, archive (with its subs) and restore, batch archive, drag-to-sort per level (one request per level, with versions). server + unit + browser-mock (`categories.test.ts`, `pickers.test.ts`) + real-server (headless Chromium on `pnpm dev`: create, rule, reorder + reload, archive, restore) |
 | availability-rules = "Availability" | **new API** `/api/admin/menu/availability-rules` | **done** (3.8b part 1, D66): cards with each rule's times in words and what uses it, Active/Archived tabs, search, create/edit with rows of days and times (overnight, midnight end), the server's overlap error shown on its row, archive (disabled while in use) and restore. unit (12) + browser-mock (`availability-rules.test.ts`, 9) + real-server (headless Chromium on `pnpm dev`: create, overlap refused on the right row, overnight edit, archive, restore) |
 | option-sets = "Options" | **new API** `/api/admin/menu/option-sets` | **done** (3.8b part 2a, D67): cards with each set's values in order and what uses it, Active/Archived tabs, search; create with first values; an editor that saves each change at once (rename, add, rename/archive/restore a value, reorder by drag or ↑/↓) with the version of the last answer, an in-editor Reload after a conflict; archive and restore sets. unit (5) + browser-mock (`option-sets.test.ts`, 9) + real-server (headless Chromium on `pnpm dev`: 8 writes in a row, a duplicate refused by the server, archive and restore) |
 | modifier-groups = "Add-ons" | **new API** `/api/admin/menu/modifier-groups` | **done** (3.8b part 2b, D68): cards with each group's rules in words ("Required · choose 1"), add-ons with default prices and what offers it, Active/Archived tabs, search; create with rules and first add-ons (the server's selection rules checked before sending, same messages); an editor that saves each change at once (name, rules, an add-on's name and price, pre-selected, add, archive, restore, reorder) and shows the last error inside it; archive and restore groups. unit (7) + browser-mock (`modifier-groups.test.ts`, 8) + real-server (headless Chromium on `pnpm dev`: a refused second default shown in the editor, 6 writes in a row) |
-| products = "Menu items" | `products`, `products/all`, `products/{id}`, `media` | **done**: list/grid/grouped menu, filters, create/edit (image upload, replace, **remove**, category, price in cents, schedules, variant editor), delete + bulk delete. server + unit + browser-mock (`products.test.ts`) + real-server. **Not built:** sort order within a category, price-range filter |
+| products = "Menu items" | **new API** `/api/admin/menu/items`, `/api/admin/media` | **done** (3.8b part 3b, D70): grid and table, search, category filter, All/Draft/Published/Archived tabs; a slide-over form with image, leaf category, up to 2 option sets and the price grid (a price and an on/off switch per version), add-on groups with own rules and prices, availability rules; Publish / Unpublish / Archive (also bulk) / Restore; an archived item opens read-only. unit + browser-mock (`products.test.ts` 19, `list-bulk.test.ts` 5) + real-server (headless Chromium on `pnpm dev`: create with image, grid, add-on, rule; publish → on the public menu; edit; archive → gone). **Not built:** order within a category, publish from the form, bulk publish |
 
 Everything else (branches and tables, the customer website, orders, payments, loyalty, vouchers, reports) is not started; it is built in the numbered steps below. Community posts, carbon and banners from the old API have no product design and are out of scope until the owner asks for them.
 
@@ -125,16 +119,16 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | 3.6 ✅ | **Sold-out per branch:** `branch_item_states` + counter route (D64); stays until switched back (Q37) | Tests |
 | 3.7 ✅ | **Availability rules** (overnight windows; no rule = always, several = any; D45, D63): the rules library, rules on items and categories, the pure window check. Built before 3.6 (they don't depend on each other) | Tests of the window rules |
 | 3.8a ✅ | **Public menu API** (`GET /api/public/menu?branchId=`; no cache yet by the owner's choice, cache-ready: D65) | Public menu shows only active, available, in-stock versions |
-| 3.8b | **Move the admin menu screens onto the new API, then remove the legacy menu** (owner, 2026-09-27: **don't delete the screens**; D66). Categories and Menu items must move **together** (the item form's category picker and the legacy items' foreign key), and the item form needs the Options and Add-ons pages, so 3.8b absorbs phase 4 in this order: **part 1 ✅ Availability page** (replaces Schedules as a screen); **part 2 ✅** Options (D67) and Add-ons (D68) pages (4.2, 4.3); **part 3** Categories and Menu items together (4.1, 4.4), each verified in the browser (e2e + real-server), then remove `/api/v1`, `server/legacy`, the D41 tables, the Schedules screen and `shared/contracts/menu.ts`, and re-point AGENTS.md's reference-feature guidance | Every admin menu screen works on the new API; no code imports `server/legacy` |
+| 3.8b ✅ | **Move the admin menu screens onto the new API, then remove the legacy menu** (owner, 2026-09-27: **don't delete the screens**; D66). Categories and Menu items must move **together** (the item form's category picker and the legacy items' foreign key), and the item form needs the Options and Add-ons pages, so 3.8b absorbs phase 4 in this order: **part 1 ✅ Availability page** (replaces Schedules as a screen); **part 2 ✅** Options (D67) and Add-ons (D68) pages (4.2, 4.3); **part 3** Categories and Menu items together (4.1, 4.4; [plan](plans/menu-screens-move.md)): **3a ✅ Categories** (D69), **3b ✅ Menu items** (D70), **3c ✅ removal** (D71), each verified in the browser (e2e + real-server), then remove `/api/v1`, `server/legacy`, the D41 tables, the Schedules screen and `shared/contracts/menu.ts`, and re-point AGENTS.md's reference-feature guidance | Every admin menu screen works on the new API; no code imports `server/legacy` |
 
 ### Phase 4: admin menu screens
 
 | # | Step | Done when |
 |---|---|---|
-| 4.1 | **Categories** page (tree, sub-categories, drag order): done as 3.8b part 3 | e2e |
-| 4.2 | **Options** page: done as 3.8b part 2 | e2e |
-| 4.3 | **Add-ons** page: done as 3.8b part 2 | e2e |
-| 4.4 | **Menu items** list and form (category picker, option sets, price grid, add-ons, availability rules, image): done as 3.8b part 3 | e2e |
+| 4.1 ✅ | **Categories** page (tree, sub-categories, drag order): done as 3.8b part 3 | e2e |
+| 4.2 ✅ | **Options** page: done as 3.8b part 2 | e2e |
+| 4.3 ✅ | **Add-ons** page: done as 3.8b part 2 | e2e |
+| 4.4 ✅ | **Menu items** list and form (category picker, option sets, price grid, add-ons, availability rules, image): done as 3.8b part 3 | e2e |
 
 ### Phase 5: branches and the customer website
 
@@ -175,9 +169,9 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 
 **What happens to the current server code** (nothing is in production, so no data migration):
 - **Replaced in phase 1 (by step 1.7):** `staff_profiles`, the bootstrap route and `NUXT_BOOTSTRAP_TOKEN`, `ROLE_PERMISSIONS`, `requireStaff`, the `/api/v1` routes, the current `server/features/` services (split into repository + service layers), migration `0001_identity_and_menu` (local databases are recreated).
-- **Replaced in step 3.8b:** the D41 menu tables (categories with parents, schedules, products, variant groups).
+- **Removed in step 3.8b (D71):** the D41 menu tables (categories with parents, schedules, products, variant groups and options, media), `/api/v1`, `server/legacy`, `shared/contracts/menu.ts`.
 - **Kept and moved into the new layout:** `apiError`, the validation helpers, the batch guards, the origin check, audit events, media handling, the `server` test harness; in the app, `apiFetch` / `ApiError` (pointed at the new routes).
-- **Admin screens:** Categories, Schedules and Menu items keep working against the old routes until step 3.8b moves them onto the new API (owner, 2026-09-27: the screens are kept, not deleted; Schedules become availability rules). Phase 4 then adds what the new model brings (Options, Add-ons, the price grid).
+- **Admin screens:** Categories and Menu items moved onto the new API in step 3.8b (owner, 2026-09-27: the screens are kept, not deleted); Schedules became the Availability page (D66). Phase 4 was absorbed into 3.8b.
 
 ## Open questions / waiting on others
 
@@ -195,16 +189,14 @@ Business decisions the build still needs, with the step each blocks. All are for
 - Staging runs on Cloudflare (step 2.1): D1 migrations, both batch guards (stale version, last admin) under simultaneous requests, cron triggers and the outbox were verified there. R2 uploads and serving were verified on staging after step 3.2 (upload, byte-identical read-back, object present in the bucket), and the hourly `media:purge-temporary` deleted a backdated upload there (row and object). The CI deploy was checked step by step by hand (same commands, same smoke check); **its first run in GitHub is the merge of the phase 1–2 pull request**. Staging mail uses Resend's test sender, which delivers only to the Resend account's own address, until the sending domain exists (Q4). WAF rate limits need a custom domain (a `workers.dev` address isn't a zone we control); until then only Better Auth's own limits apply.
 - Only one role (`admin`) and no staff management: other staff can't be added yet (Q6).
 - Uploads: abandoned or replaced images stay as `temporary` assets until a cleanup job exists. No sort-order UI for menu items.
-- Schedules: overnight ranges are refused (Q14); schedules in use can't be deleted (Q16). The time zone of new schedules comes from `NUXT_PUBLIC_CAFE_TIME_ZONE` (default `Asia/Phnom_Penh`).
 - A 409 (someone else saved first) shows the server's message and keeps the form open; the user must reload the record (close and reopen) to get the new version. No merge UI.
-- Inactive records can still be chosen by the API as parents, categories or schedules; only the pickers avoid offering them (Q9).
 - Unsaved-changes comparison treats `1` and `'1'` as different and array order as meaningful (see docs/reference/forms.md).
 - List filters in the URL support strings and numbers only, and one URL-synced list per page (`syncUrl: false` for others). See docs/reference/data-fetching.md.
 - Data freshness: another device's change shows up only when the user returns to the tab or navigates (no push from the backend). No per-query opt-out yet. No polling (orders will likely need it per screen: D22).
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-28 (unit 149, server 374, e2e 157).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-28 (unit + server 469, e2e 143; the legacy menu's own tests went with it).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
@@ -216,6 +208,7 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Pitfall: Wrangler needs a browser login once per machine (`! npx wrangler login` in Claude Code); commands then run with `CI=1` to skip prompts.
   - Pitfall: `server/auth.config.ts` must not import a feature's `index.ts` (or anything reaching `hub:db` / `hub:db:schema`): the module loads it at build time and typecheck fails with NUXT_AUTH_CONFIG_LOAD_FAILED (D48).
   - **A table rename after step 2.1** (drizzle-kit would prompt): write the migration by hand. Generate a full snapshot into a temp folder (`npx drizzle-kit generate --dialect sqlite --casing snake_case --schema .nuxt/hub/db/schema.mjs --out <tmp>`), write `000N_<name>.sql` (`ALTER TABLE … RENAME TO …`, index renames, the new `CREATE`s copied from the temp SQL), copy the temp snapshot to `meta/000N_snapshot.json` with `prevId` = the previous snapshot's `id`, add the journal entry, then **`pnpm nuxt db generate` must say "No schema changes"**. Keep comments in the same statement as SQL (a comment-only statement between breakpoints can fail). Done for `0003_menu_categories` (D55).
+  - Pitfall: drizzle-kit writes `DROP TABLE`s **parent-first**, which fails on a database with rows (D1 enforces foreign keys; a `restrict` reference is checked row by row as the table empties, a self-reference too). Reorder by hand, children first, and test the migration over linked rows (`server/tests/migrations.test.ts`, D71).
   - Pitfall: drizzle-kit **splits an index expression at its commas** (`coalesce(parent_id, '')` became broken SQL, in the migration and the snapshot). Write index expressions without commas (D55 uses two partial indexes).
   - Pitfall: schema changes add a migration (`pnpm nuxt db generate`, then rename it and its journal tag). Only a change `drizzle-kit` would ask about interactively (a rename) was handled by **regenerating** `0000_initial` while nothing is deployed (steps 1.2 and 1.5, D50); after such a regeneration a local `.data/db` must be deleted (dev server stopped). From step 2.1 on, never regenerate.
   - Pitfall: **D1 allows at most 100 bound parameters per statement** (checked on staging: 100 works, 101 fails with "too many SQL variables"); libsql allows 32,766. The test database now refuses more than 100 too (`server/tests/support/db.ts`), so a test at the largest allowed size catches it: add one to `server/tests/d1-limits.test.ts` for every list a statement takes (D62).
@@ -239,13 +232,13 @@ Business decisions the build still needs, with the step each blocks. All are for
   - To check that a test guards a behavior, disable the behavior (move a plugin away, drop an option) and confirm the test fails. Several tests written in this project passed vacuously at first.
   - `UForm` debounces input validation (~300 ms). After `fill()` on a field showing an error, wait for the error to disappear before clicking anything below it, or the layout shift makes the click miss (`check()` then reports "did not change its state").
   - A modal's header X and a footer button can both be named "Close". Scope to `[data-slot="footer"]`.
-  - `UInputTime` / `UInputDate` render segments (`role="spinbutton"`), not an `<input>`: `fill()` and `getByLabel(<field label>)` don't work (the label targets a hidden input). Give the component an `aria-label`, find it with `getByRole('group', { name })`, click the first segment and type digits (`'0830'`); typing replaces an existing value. See `typeTime` in `test/e2e/schedules.test.ts`.
+  - `UInputTime` / `UInputDate` render segments (`role="spinbutton"`), not an `<input>`: `fill()` and `getByLabel(<field label>)` don't work (the label targets a hidden input). Give the component an `aria-label`, find it with `getByRole('group', { name })`, click the first segment and type digits (`'0830'`); typing replaces an existing value. See `typeTime` in `test/e2e/availability-rules.test.ts`.
   - `BulkActionsBar` fades out (100 ms): after an action that clears the selection, poll for "N selected" to disappear instead of counting at once.
   - The Categories tree and `CategorySelect` both call `GET /staff/categories/all` (the picker with `type=MAIN`): a mock must answer by query, and a "list loads" count must skip `type` requests (see `freshness.test.ts`, `pickers.test.ts`).
   - Status-tab counts call the list endpoint with `size=1`: exclude those when counting list requests (`isCount` in `list-page.test.ts`).
   - Row buttons are named after the item ("Actions for Tea", "Select Tea"), so a user-menu button like "alice" needs `{ exact: true }` once an item contains that name.
   - `page.reload()` has no `waitUntil: 'hydration'`; use `page.goto(page.url(), { waitUntil: 'hydration' })`.
-  - Under load, a full `pnpm test` once hit a wave of 30 s timeouts in unrelated files right after another e2e run; the rerun passed. Rerun before chasing such a failure. Seen again in step 1.3: the two-tab tests (`auth`, `freshness`, `session`) time out only when `pnpm test` runs every project at once; alone, and in `pnpm test:e2e`, they pass. Seen once in 3.8b part 2a: `unsaved-changes` "asks on browser forward" failed in a full `pnpm test:e2e` and passed alone three times and in the full rerun.
+  - Under load, a full `pnpm test` once hit a wave of 30 s timeouts in unrelated files right after another e2e run; the rerun passed. Rerun before chasing such a failure. Seen again in step 1.3: the two-tab tests (`auth`, `freshness`, `session`) time out only when `pnpm test` runs every project at once; alone, and in `pnpm test:e2e`, they pass. Seen once in 3.8b part 2a: `unsaved-changes` "asks on browser forward" failed in a full `pnpm test:e2e` and passed alone three times and in the full rerun. Seen once in 3b: its "shows one dialog when back is pressed twice" failed in a full run and passed alone twice.
   - `getByLabel` matches **substrings**: `'Name'` also matches "Name of group 1", and "Option 2 of Milk" matched "Extra price of option 2 of Milk". Use `{ exact: true }`, or labels that can't contain each other.
   - SortableJS drag and drop works with Playwright's `locator.dragTo(target)` on the drag handle.
   - `UInputNumber` is `role="spinbutton"` (not a textbox); `fill('4.2')` works and it shows `$4.20` after blur. **Its model only updates on blur**: call `.blur()` after `fill()` before checking anything that depends on the value (the Add-ons rule checks).

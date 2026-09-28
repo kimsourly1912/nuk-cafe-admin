@@ -5,7 +5,7 @@ export type ApiFetchOptions = Omit<FetchOptions<'json'>, 'retry' | 'baseURL'>
 export type ApiFetch = <T>(path: string, options?: ApiFetchOptions) => Promise<T>
 
 interface CreateApiFetchOptions {
-  /** Base ofetch instance (`baseURL: '/api/v1'`, timeout). */
+  /** Base ofetch instance (`baseURL: '/api'`, timeout). */
   baseFetch: $Fetch
   /**
    * Called when a response says the session is gone (401) or no longer grants admin access

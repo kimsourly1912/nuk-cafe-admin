@@ -71,7 +71,7 @@ function useMutation<TInput, TResult>(
 ): Mutation<TInput, TResult> // reactive
 ```
 
-- **`fn`** does the API call. It receives exactly what you pass to `execute(input)`, and its resolved value becomes `data`. Call the API with [`apiFetch`](./api.md#calling-it-from-the-admin-ui). Let it throw: errors are caught and normalized to [`ApiError`](./errors.md#apierror).
+- **`fn`** does the API call. It receives exactly what you pass to `execute(input)`, and its resolved value becomes `data`. Call the API with [`apiFetch`](./data-fetching.md#apifetch). Let it throw: errors are caught and normalized to [`ApiError`](./errors.md#apierror).
 - **`TInput`** is whatever the call needs. Use an object when there's more than one value, e.g. `{ id: string, name: string, body: UpdateCategoryBody }` (the name for the toasts).
 
 ### Options

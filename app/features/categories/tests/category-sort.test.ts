@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { Category } from '#shared/contracts/menu'
 import { bySortOrder, mergeOrder, moveItem } from '../schemas/category-sort'
 
-const category = (id: string, name: string, sortOrder: number) => ({ id, name, sortOrder }) as Category
+const category = (id: string, name: string, sortOrder: number) => ({ id, name, sortOrder })
 
 describe('category sort order', () => {
   it('orders by sortOrder, then name', () => {

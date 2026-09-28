@@ -75,8 +75,7 @@ server/
 ├── middleware/        # 00.request-id.ts, 10.origin-check.ts (run in file-name order)
 ├── utils/             # shared glue (auto-imported in routes; imported explicitly in features)
 ├── tests/             # tests of the shared utils; tests/support: the SQLite test harness
-├── error-handler.ts   # the /api error responses (registered in nuxt.config.ts)
-└── legacy/            # pre-standard code (D40–D41), replaced in steps 1.7 and 3.8; never build on it
+└── error-handler.ts   # the /api error responses (registered in nuxt.config.ts)
 shared/contracts/      # request schemas and enums the app also uses (Valibot)
 ```
 

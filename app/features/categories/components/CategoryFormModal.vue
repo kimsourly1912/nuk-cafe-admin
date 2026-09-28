@@ -7,7 +7,8 @@
  * user's input restored.
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
-import type { Category } from '#shared/contracts/menu'
+import type { MenuCategory } from '#shared/contracts/menu-categories'
+import { AvailabilityRuleSelect } from '~/features/availability-rules'
 import { useCategoryMutations } from '../composables/useCategories'
 import { categoryFormSchema, toCategoryForm, toCreateCategoryBody, toUpdateCategoryBody } from '../schemas/category-form'
 import type { CategoryForm } from '../schemas/category-form'
@@ -16,7 +17,7 @@ import CategorySelect from './CategorySelect.vue'
 
 const props = defineProps<{
   /** Omit to create a new category. */
-  category?: Category
+  category?: MenuCategory
   /** Restores unsaved input (used by "Reopen" after a failed background save). */
   draft?: CategoryForm
   /** New sub-category of this main category ("Add sub-category" in the tree). */
@@ -30,7 +31,10 @@ const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: bool
 const isEdit = computed(() => props.category !== undefined)
 /** The form's starting values; a preset parent is part of them, so it doesn't count as a change. */
 const start = (): CategoryForm => ({ ...toCategoryForm(props.category), ...(props.parentId === undefined ? {} : { parentId: props.parentId }) })
-const state = reactive<CategoryForm>({ ...(props.draft ?? start()) })
+const copy = (form: CategoryForm): CategoryForm => ({ ...form, availabilityRuleIds: [...form.availabilityRuleIds] })
+const state = reactive<CategoryForm>(copy(props.draft ?? start()))
+/** A category with sub-categories stays a main one (two levels, D44): its parent can't change. */
+const hasSubs = computed(() => (props.category?.childCount ?? 0) > 0)
 
 const { create, update } = useCategoryMutations()
 const saving = ref(false)
@@ -60,7 +64,7 @@ function reopenActions(draft: CategoryForm) {
 }
 
 async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
-  const draft = { ...state }
+  const draft = copy(state)
   const overrides = { errorActions: () => reopenActions(draft) }
 
   saving.value = true
@@ -104,27 +108,41 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
         </UFormField>
 
         <UFormField
+          label="Description"
+          name="description"
+          help="Shown to customers under the category name."
+        >
+          <UTextarea
+            v-model="state.description"
+            :rows="2"
+            autoresize
+            class="w-full"
+          />
+        </UFormField>
+
+        <UFormField
           label="Parent category"
           name="parentId"
-          help="Leave as none to create a main category."
+          :help="hasSubs ? 'It has sub-categories, so it stays a main category.' : 'Leave as none for a main category. A category holds either sub-categories or menu items.'"
         >
           <CategorySelect
             v-model="state.parentId"
             level="main"
             :exclude-id="category?.id"
             none-label="None (main category)"
+            aria-label="Parent category"
+            :disabled="hasSubs"
           />
         </UFormField>
 
         <UFormField
-          label="Status"
-          name="status"
-          required
+          label="Availability"
+          name="availabilityRuleIds"
+          help="Its menu items (and a main category's sub-categories) are sold only during these times."
         >
-          <USelect
-            v-model="state.status"
-            :items="STATUS_ITEMS"
-            class="w-full"
+          <AvailabilityRuleSelect
+            v-model="state.availabilityRuleIds"
+            aria-label="Availability"
           />
         </UFormField>
       </UForm>

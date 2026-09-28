@@ -9,7 +9,7 @@ How the NUK Cafe server is designed and built. Every server change follows these
 | [Data model](./data-model.md) | The tables per domain (identity, branch, menu, customers & loyalty, orders), their invariants and open questions |
 | [Operations](./operations.md) | Environments, configuration, migrations, deploys, backups, scheduled jobs, email, monitoring |
 
-**Status (2026-09-27):** this is the target standard. Identity, staff, customers and the platform tables follow it (steps 1.1–1.7). The legacy menu code (`/api/v1`, `server/legacy/menu`, the D41 tables) does **not** yet and is replaced in step 3.8b. See [progress.md](../progress.md).
+**Status (2026-09-27):** this is the target standard. All server code follows it: identity, staff, customers and the platform tables since steps 1.1–1.7, the menu since step 3.8b removed the legacy `/api/v1` menu (D71). See [progress.md](../progress.md).
 
 ## Decisions this standard is built on
 

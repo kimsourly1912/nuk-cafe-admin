@@ -14,7 +14,7 @@ export default defineNuxtPlugin({
     configureApi(createApiFetch({
       // Same engine as Nuxt's $fetch; created from ofetch directly for its types.
       // Fails as ApiError kind 'timeout' instead of hanging forever.
-      // `/api`: the standard's routes (`/admin/me`, `/admin/staff`) and the legacy ones (`/v1/admin/…`).
+      // `/api`: the standard's routes (`/admin/me`, `/admin/menu/…`).
       baseFetch: ofetch.create({ baseURL: '/api', timeout: 30_000 }),
       onSessionLost: () => auth.clearSession(),
       onPasswordChangeRequired: () => auth.requirePasswordChange(),

@@ -1,17 +1,20 @@
-import type { Category } from '#shared/contracts/menu'
+import type { MenuCategory } from '#shared/contracts/menu-categories'
 import { mergeOrder, moveItem } from '../schemas/category-sort'
 import type { CategoryTree, TreeOrder } from '../schemas/category-tree'
-import { buildTree, countStatuses, filterTree, orderOf, sortOrderChanges } from '../schemas/category-tree'
+import { buildTree, countStatuses, filterTree, orderOf, reorderRequests } from '../schemas/category-tree'
 import { useCategoryMutations } from './useCategories'
+import { useAllCategories } from './useCategoryOptions'
 
 /**
  * The categories page as a tree (docs/plans/list-ui-refresh.md, D37): the whole list is loaded
  * (it's small), filtered and counted on the client, and ordered by drag and drop per level:
  * main categories among themselves, sub-categories within their main.
  *
- * - Reordering is available only with no search and no status filter (the whole tree is shown).
+ * - Reordering is available only with no search and the Active tab (every active category shown);
+ *   archived categories have no place in the order.
  * - A new order is local until saved, and counts as unsaved (route change, logout, reload ask).
- * - Save sends every list that changed, whole and numbered from 1 (`sortOrderChanges`).
+ * - Save sends one request per list that changed, each with every active child and its version
+ *   (`reorderRequests`), one after the other; a failure stops and keeps the order unsaved.
  */
 export function useCategoryTree(
   filters: { search: string, status: string },
@@ -20,16 +23,17 @@ export function useCategoryTree(
 ) {
   // No empty-list default: `loading` means "no data yet", and an empty default would count as
   // data, showing the empty state instead of the placeholders during the first load.
-  const { data, loading, refreshing, error, refresh } = useApiQuery('categories:tree', () => apiFetch<Category[]>('/v1/admin/categories'))
-  const categories = computed<Category[]>(() => (data.value ?? []).filter(c => !hidden(c.id)))
+  const { data, loading, refreshing, error, refresh } = useAllCategories()
+  const categories = computed<MenuCategory[]>(() => (data.value ?? []).filter(c => !hidden(c.id)))
   const serverTree = computed(() => buildTree(categories.value))
   const serverOrder = computed(() => orderOf(serverTree.value))
 
-  /** Only the whole tree can be reordered: with a search or status filter, parts are hidden. */
-  const sortable = computed(() => !filters.search && filters.status === ANY)
+  /** Only the whole active tree can be reordered: with a search or another tab, parts are hidden. */
+  const sortable = computed(() => !filters.search && filters.status === 'active')
 
   const { reorder } = useCategoryMutations()
-  const saving = computed(() => reorder.pending)
+  const saving = ref(false)
+  const notify = useNotify()
 
   const order = reactive<TreeOrder>({ mains: [], subs: {} })
   const unsaved = useUnsavedChanges(order, { paused: saving, onDiscard: reset })
@@ -49,15 +53,24 @@ export function useCategoryTree(
     order.subs = Object.fromEntries(Object.entries(next.subs).map(([main, ids]) => [main, mergeOrder(order.subs[main] ?? [], ids)]))
   }, { immediate: true })
 
-  /** The server tree in the local order. */
+  /**
+   * The server tree in the local order. The order holds only active categories (archived ones have
+   * no position); archived ones follow the active ones at each level, in the server's order.
+   */
   const orderedTree = computed<CategoryTree>(() => {
     const groups = new Map(serverTree.value.groups.map(g => [g.main.id, g]))
+    const archivedMains = serverTree.value.groups.filter(g => g.main.status === 'archived').map(g => g.main.id)
     return {
-      groups: order.mains.flatMap((id) => {
+      groups: [...order.mains, ...archivedMains].flatMap((id) => {
         const group = groups.get(id)
         if (!group) return []
         const subs = new Map(group.subs.map(s => [s.id, s]))
-        return [{ main: group.main, subs: (order.subs[id] ?? []).flatMap(subId => subs.get(subId) ?? []) }]
+        // A main without an order entry (an archived one) keeps its active subs in server order,
+        // so no category is ever left out of the tree.
+        const active = order.subs[id]
+          ? order.subs[id].flatMap(subId => subs.get(subId) ?? [])
+          : group.subs.filter(s => s.status === 'active')
+        return [{ main: group.main, subs: [...active, ...group.subs.filter(s => s.status === 'archived')] }]
       }),
       orphans: serverTree.value.orphans,
     }
@@ -66,24 +79,42 @@ export function useCategoryTree(
   const tree = computed(() => filterTree(orderedTree.value, filters))
   const counts = computed(() => countStatuses(categories.value, filters.search))
 
+  // Moves happen only on the Active tab (`sortable`), where positions count active categories.
+  const activeIds = (list: MenuCategory[]) => list.filter(c => c.status === 'active').map(c => c.id)
+
   /** Moves a main category by its position in the list shown. */
   function moveMain(from: number, to: number) {
-    order.mains = moveItem(orderedTree.value.groups.map(g => g.main.id), from, to)
+    order.mains = moveItem(activeIds(orderedTree.value.groups.map(g => g.main)), from, to)
   }
 
   /** Moves a sub-category within its main category. */
   function moveSub(mainId: string, from: number, to: number) {
     const group = orderedTree.value.groups.find(g => g.main.id === mainId)
     if (!group) return
-    order.subs = { ...order.subs, [mainId]: moveItem(group.subs.map(s => s.id), from, to) }
+    order.subs = { ...order.subs, [mainId]: moveItem(activeIds(group.subs), from, to) }
   }
 
   async function save() {
-    const body = sortOrderChanges(serverOrder.value, order)
-    if (!body.lists.length) return reset()
+    const versions = new Map(categories.value.map(c => [c.id, c.version]))
+    const requests = reorderRequests(serverOrder.value, order, versions)
+    if (!requests.length) return reset()
+    saving.value = true
+    // One level at a time; each is atomic on the server. A failure stops here: the levels already
+    // saved stay saved, and the refetch brings them back as the server order.
+    let ok = true
+    for (const request of requests) {
+      const result = await reorder.execute(request)
+      if (!result.ok) {
+        ok = false
+        break
+      }
+    }
+    saving.value = false
     // The refetch (invalidate) brings the saved order; mark clean so it's taken as is.
-    const result = await reorder.execute(body)
-    if (result.ok) unsaved.markClean()
+    if (ok) {
+      unsaved.markClean()
+      notify.success('Category order saved')
+    }
   }
 
   return {

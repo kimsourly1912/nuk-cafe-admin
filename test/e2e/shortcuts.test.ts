@@ -16,7 +16,7 @@ async function openCategories() {
 
 const search = (page: Page) => page.getByRole('searchbox', { name: 'Search categories…' })
 const form = (page: Page) => page.getByRole('dialog', { name: 'New category' })
-const creates = (calls: string[]) => calls.filter(c => c === 'POST /admin/categories').length
+const creates = (calls: string[]) => calls.filter(c => c === 'POST /admin/menu/categories').length
 
 describe('keyboard shortcuts', () => {
   it('/ focuses the search without typing a slash', async () => {

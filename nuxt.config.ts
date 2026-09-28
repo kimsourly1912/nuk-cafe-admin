@@ -170,7 +170,7 @@ export default defineNuxtConfig({
     // Our error handler answers /api/** in the API's error format; Nuxt's own handler (set before
     // this hook runs) stays next in line for pages. Nitro tries handlers in order.
     // Each server feature owns its tables in server/features/<feature>/<feature>.schema.ts
-    // (docs/server/architecture.md → Features); NuxtHub reads server/db/schema/ by itself.
+    // (docs/server/architecture.md → Features), registered here.
     'hub:db:schema:extend'({ paths }) {
       const featuresDir = fileURLToPath(new URL('./server/features', import.meta.url))
       for (const feature of readdirSync(featuresDir)) {

@@ -1,71 +1,127 @@
 import type { Locator, Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import type { Product, ScheduleOption, VariantGroup } from '../../shared/contracts/menu'
+import type { MenuItem, MenuItemSummary } from '../../shared/contracts/menu-items'
+import type { ModifierGroup } from '../../shared/contracts/menu-modifiers'
+import type { OptionSet } from '../../shared/contracts/menu-options'
 import type { MockHandler } from './support/mock-api'
-import { COFFEE, deferred, failures, lastSegment, mockApi, paginatedHandler, productOf, setupE2e, TEA, toast } from './support/mock-api'
+import { deferred, failures, MENU_TEA, menuCategoryOf, menuItemOf, menuItemSummaryOf, mockApi, paginatedHandler, setupE2e, toast } from './support/mock-api'
 
-// Menu items (products): list, filters, create with an image upload, edit (variants with stable
-// ids, schedules, image), delete. Prices are cents in the API and dollars on screen.
+// Menu items on the new API (D70): list, filters, state actions, and the form with an image, a
+// leaf category, the option sets' price grid, add-ons with the item's own rules and prices, and
+// availability rules. Prices are cents in the API and dollars on screen.
 await setupE2e()
 
-const MILK: VariantGroup = {
-  id: 'grp-43',
-  name: 'Milk',
-  minSelect: 1,
-  maxSelect: 1,
-  options: [
-    { id: 'opt-73', name: 'Whole', priceDeltaMinor: 0 },
-    { id: 'opt-74', name: 'Oat', priceDeltaMinor: 50 },
-  ],
+const STAMP = '2026-09-28T00:00:00.000Z'
+
+// Categories: Tea is a leaf; Drinks has a sub-category (Espresso), so only Espresso takes items.
+const DRINKS = menuCategoryOf('cat-10', 'Drinks', { sortOrder: 2, childCount: 1 })
+const ESPRESSO = menuCategoryOf('cat-11', 'Espresso', { parentId: 'cat-10' })
+
+const SIZE: OptionSet = {
+  id: 'set-size',
+  name: 'Size',
+  status: 'active',
+  values: [{ id: 'val-s', name: 'Small', sortOrder: 1, status: 'active' }, { id: 'val-l', name: 'Large', sortOrder: 2, status: 'active' }],
+  itemCount: 0,
+  version: 1,
+  createdAt: STAMP,
+  updatedAt: STAMP,
 }
-const LATTE = productOf('prod-1', 'Latte', COFFEE, {
+const TEMP: OptionSet = {
+  ...SIZE,
+  id: 'set-temp',
+  name: 'Temperature',
+  values: [{ id: 'val-hot', name: 'Hot', sortOrder: 1, status: 'active' }, { id: 'val-iced', name: 'Iced', sortOrder: 2, status: 'active' }],
+}
+const MILK: ModifierGroup = {
+  id: 'grp-milk',
+  name: 'Milk',
+  minSelect: 0,
+  maxSelect: 1,
+  status: 'active',
+  modifiers: [
+    { id: 'mod-oat', name: 'Oat', priceDeltaMinor: 50, isDefault: false, sortOrder: 1, status: 'active' },
+    { id: 'mod-soy', name: 'Soy', priceDeltaMinor: 40, isDefault: false, sortOrder: 2, status: 'active' },
+  ],
+  itemCount: 0,
+  version: 1,
+  createdAt: STAMP,
+  updatedAt: STAMP,
+}
+
+/** Latte: Size × Temperature, Large/Iced switched off, Milk with a Soy price of its own. */
+const LATTE: MenuItem = menuItemOf('item-1', 'Latte', {
+  categoryId: ESPRESSO.id,
   description: 'Espresso and milk',
-  priceMinor: 350,
   image: { id: 'asset-latte', url: '/media/menu/latte.png' },
-  scheduleIds: ['sched-30'],
-  variantGroups: [MILK],
+  status: 'active',
+  optionSets: [
+    { id: SIZE.id, name: 'Size', status: 'active', values: SIZE.values.map(({ id, name, status }) => ({ id, name, status })) },
+    { id: TEMP.id, name: 'Temperature', status: 'active', values: TEMP.values.map(({ id, name, status }) => ({ id, name, status })) },
+  ],
+  variations: [
+    { id: 'var-1', valueIds: ['val-s', 'val-hot'], label: 'Small, Hot', priceMinor: 350, status: 'active', sellable: true },
+    { id: 'var-2', valueIds: ['val-s', 'val-iced'], label: 'Small, Iced', priceMinor: 375, status: 'active', sellable: true },
+    { id: 'var-3', valueIds: ['val-l', 'val-hot'], label: 'Large, Hot', priceMinor: 425, status: 'active', sellable: true },
+    { id: 'var-4', valueIds: ['val-l', 'val-iced'], label: 'Large, Iced', priceMinor: 450, status: 'disabled', sellable: false },
+  ],
+  modifierGroups: [{
+    id: MILK.id,
+    name: 'Milk',
+    status: 'active',
+    minSelect: 0,
+    maxSelect: 1,
+    rulesOverridden: false,
+    modifiers: [
+      { id: 'mod-oat', name: 'Oat', priceDeltaMinor: 50, defaultPriceDeltaMinor: 50, priceOverridden: false, isDefault: false, status: 'active' },
+      { id: 'mod-soy', name: 'Soy', priceDeltaMinor: 60, defaultPriceDeltaMinor: 40, priceOverridden: true, isDefault: false, status: 'active' },
+    ],
+  }],
   version: 3,
 })
-const MATCHA = productOf('prod-2', 'Matcha', TEA, { priceMinor: 425, status: 'INACTIVE' })
 
-const BREAKFAST: ScheduleOption = { id: 'sched-30', name: 'Breakfast', status: 'ACTIVE' }
-const LUNCH: ScheduleOption = { id: 'sched-31', name: 'Lunch', status: 'ACTIVE' }
-const RETIRED: ScheduleOption = { id: 'sched-32', name: 'Old promo', status: 'INACTIVE' }
+const summaryOf = (item: MenuItem, overrides: Partial<MenuItemSummary> = {}) => menuItemSummaryOf(item.id, item.name, {
+  categoryId: item.categoryId,
+  categoryName: item.categoryId === ESPRESSO.id ? 'Espresso' : 'Tea',
+  status: item.status,
+  imageUrl: item.image?.url ?? null,
+  version: item.version,
+  ...overrides,
+})
+const LATTE_ROW = summaryOf(LATTE, { priceMinMinor: 350, priceMaxMinor: 425 })
+const MATCHA = menuItemOf('item-2', 'Matcha', { variations: [{ id: 'var-9', valueIds: [], label: '', priceMinor: null, status: 'disabled', sellable: false }] })
+const MATCHA_ROW = summaryOf(MATCHA, { priceMinMinor: null, priceMaxMinor: null })
 
-const UPLOADED = { id: 'asset-new', url: '/media/menu/new.png' }
+const UPLOADED = { id: 'asset-new', url: '/media/menu/new.png', mimeType: 'image/png', byteSize: 8 }
 
-function backend(initial: Product[] = [LATTE, MATCHA]) {
-  let rows = [...initial]
+function backend(rows: MenuItemSummary[] = [LATTE_ROW, MATCHA_ROW], items: MenuItem[] = [LATTE, MATCHA]) {
   const handlers: Record<string, MockHandler> = {
-    'GET /admin/products': paginatedHandler(() => rows),
-    'GET /admin/categories': () => [TEA, COFFEE],
-    'GET /admin/schedules/options': () => [BREAKFAST, LUNCH, RETIRED],
-    'DELETE /admin/products/{id}': ({ url }) => {
-      rows = rows.filter(r => r.id !== lastSegment(url))
-      return null
-    },
+    'GET /admin/menu/items': paginatedHandler(rows),
+    'GET /admin/menu/items/{id}': ({ url }) => items.find(i => i.id === url.pathname.split('/').pop()),
+    'GET /admin/menu/categories': () => [MENU_TEA, DRINKS, ESPRESSO],
+    'GET /admin/menu/option-sets': () => [SIZE, TEMP],
+    'GET /admin/menu/modifier-groups': () => [MILK],
   }
   return handlers
 }
 
-/** `firstCell: ''` doesn't wait for any row (empty list). */
-async function open(handlers: Record<string, MockHandler> = backend(), firstCell = 'Latte') {
+/** `first: ''` doesn't wait for any card (empty list). */
+async function open(handlers: Record<string, MockHandler> = backend(), first = 'Latte', path = '/products') {
   const page = await createPage()
   const api = await mockApi(page, handlers)
-  await page.goto(url('/products'), { waitUntil: 'hydration' })
-  if (firstCell) await page.getByText(firstCell, { exact: true }).first().waitFor()
+  await page.goto(url(path), { waitUntil: 'hydration' })
+  if (first) await cardOf(page, first).waitFor()
   return { page, api }
 }
 
-/** A menu item's card in the grid (the default view). */
 const cardOf = (page: Page, name: string) => page.getByRole('article', { name, exact: true })
 
 async function openEdit(page: Page, name: string) {
   await page.getByRole('button', { name: `Actions for ${name}` }).click()
   await page.getByRole('menuitem', { name: 'Edit' }).click()
   const form = page.getByRole('dialog', { name: 'Edit menu item' })
-  await form.waitFor()
+  await form.getByLabel('Name', { exact: true }).waitFor()
   return form
 }
 
@@ -87,85 +143,79 @@ async function chooseImage(form: Locator, file: { name: string, mimeType: string
 
 const PNG = { name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from('89504e470d0a1a0a', 'hex') }
 
-async function choose(form: Locator, field: string, option: string) {
-  await form.getByRole('combobox', { name: field }).click()
-  await form.page().getByRole('option', { name: option }).click()
+/** `UInputNumber` updates its model on blur. */
+async function typePrice(field: Locator, value: string) {
+  await field.fill(value)
+  await field.blur()
+}
+
+async function addFromMenu(form: Locator, button: string, entry: string) {
+  await form.getByRole('button', { name: button }).click()
+  await form.page().getByRole('menuitem', { name: entry }).click()
 }
 
 describe('menu items list', () => {
-  it('shows cards with image, name, category, option groups, price in dollars and status', async () => {
+  it('shows cards with image, name, category, price range and state', async () => {
     const { page } = await open()
     const latte = cardOf(page, 'Latte')
-    await latte.getByText('$3.50').waitFor()
-    await latte.getByText('Coffee · 1 option group').waitFor()
+    await latte.getByText('$3.50–$4.25').waitFor()
+    await latte.getByText('Espresso').waitFor()
     expect(await latte.locator('img').getAttribute('src')).toBe('/media/menu/latte.png')
-    await cardOf(page, 'Matcha').getByText('$4.25').waitFor()
-    await cardOf(page, 'Matcha').getByText('Inactive').waitFor()
+    // A draft is marked; nothing sellable reads "No price".
+    await cardOf(page, 'Matcha').getByText('No price').waitFor()
+    await cardOf(page, 'Matcha').getByText('Draft').waitFor()
   })
 
-  it('opens a menu item by clicking its card, but not from its checkbox', async () => {
-    const { page } = await open()
+  it('opens a menu item by clicking its card (loading the whole item), but not from its checkbox', async () => {
+    const { page, api } = await open()
     await cardOf(page, 'Matcha').getByRole('checkbox').click()
     await page.getByText('1 selected').waitFor()
     expect(await page.getByRole('dialog').count()).toBe(0)
     await cardOf(page, 'Latte').getByRole('heading', { name: 'Latte' }).click()
-    await page.getByRole('dialog', { name: 'Edit menu item' }).waitFor()
+    const form = page.getByRole('dialog', { name: 'Edit menu item' })
+    await expect.poll(() => form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte')
+    expect(api.calls).toContain('GET /admin/menu/items/item-1')
   })
 
   it('switches to the list (table), opens a row by clicking it, and remembers the view', async () => {
     const { page } = await open()
     await page.getByRole('button', { name: 'List view' }).click()
-    await page.getByRole('cell', { name: 'Coffee', exact: true }).waitFor()
-    await page.getByRole('cell', { name: '$4.25' }).click()
+    await page.getByRole('cell', { name: 'Espresso', exact: true }).waitFor()
+    await page.getByRole('cell', { name: 'No price' }).click()
     await page.getByRole('dialog', { name: 'Edit menu item' }).waitFor()
     await page.getByRole('button', { name: 'Cancel' }).click()
 
     await page.goto(page.url(), { waitUntil: 'hydration' })
-    await page.getByRole('cell', { name: 'Coffee', exact: true }).waitFor()
+    await page.getByRole('cell', { name: 'Espresso', exact: true }).waitFor()
     expect(await page.getByRole('button', { name: 'List view' }).getAttribute('aria-pressed')).toBe('true')
   })
 
-  it('groups the whole menu by category, in the order customers see it', async () => {
-    const seen: string[] = []
-    const { page } = await open({
-      ...backend(),
-      'GET /admin/categories': () => [{ ...TEA, sortOrder: 1 }, { ...COFFEE, sortOrder: 2 }],
-      'GET /admin/products/all': ({ url }) => {
-        seen.push(url.search)
-        return [LATTE, MATCHA]
-      },
-    })
-    await page.getByRole('switch', { name: 'Group by category' }).click()
-    await page.getByRole('region', { name: 'Tea' }).getByRole('article', { name: 'Matcha' }).waitFor()
-    await page.getByRole('region', { name: 'Coffee' }).getByRole('article', { name: 'Latte' }).waitFor()
-    expect(await page.locator('section h2').allInnerTexts()).toEqual(['Tea\n1', 'Coffee\n1'])
-    expect(seen.length).toBeGreaterThan(0)
-  })
-
-  it('filters by status with tabs that show counts', async () => {
+  it('filters by state with tabs that show counts; All includes archived items', async () => {
     const seen: URLSearchParams[] = []
-    const list = paginatedHandler([LATTE, MATCHA])
+    const list = paginatedHandler([LATTE_ROW, MATCHA_ROW, menuItemSummaryOf('item-3', 'Old chai', { status: 'archived' })])
     const { page } = await open({
       ...backend(),
-      'GET /admin/products': (request) => {
+      'GET /admin/menu/items': (request) => {
         if (request.url.searchParams.get('pageSize') !== '1') seen.push(request.url.searchParams)
         return list(request)
       },
     })
+    expect(seen[0]?.get('status')).toBe('all')
+    await cardOf(page, 'Old chai').getByText('Archived').waitFor()
     const tabs = page.getByRole('group', { name: 'Status' })
-    await expect.poll(() => tabs.innerText()).toMatch(/All\s*2\s*Active\s*1\s*Inactive\s*1/)
-    await tabs.getByRole('tab', { name: /Inactive/ }).click()
-    await expect.poll(() => seen.at(-1)?.get('status')).toBe('INACTIVE')
+    await expect.poll(() => tabs.innerText()).toMatch(/All\s*3\s*Draft\s*1\s*Published\s*1\s*Archived\s*1/)
+    await tabs.getByRole('tab', { name: /Published/ }).click()
+    await expect.poll(() => seen.at(-1)?.get('status')).toBe('active')
     await expect.poll(() => page.getByRole('article').count()).toBe(1)
-    expect(new URL(page.url()).searchParams.get('status')).toBe('INACTIVE')
+    expect(new URL(page.url()).searchParams.get('status')).toBe('active')
   })
 
-  it('searches and filters by category, both in the URL', async () => {
+  it('searches and filters by any category, both in the URL', async () => {
     const seen: URLSearchParams[] = []
-    const list = paginatedHandler([LATTE, MATCHA])
+    const list = paginatedHandler([LATTE_ROW, MATCHA_ROW])
     const { page } = await open({
       ...backend(),
-      'GET /admin/products': (request) => {
+      'GET /admin/menu/items': (request) => {
         seen.push(request.url.searchParams)
         return list(request)
       },
@@ -174,30 +224,83 @@ describe('menu items list', () => {
     await expect.poll(() => seen.at(-1)?.get('search')).toBe('lat')
 
     await page.getByRole('combobox', { name: 'Category' }).click()
-    await page.getByRole('option', { name: 'Coffee' }).click()
-    await expect.poll(() => seen.at(-1)?.get('categoryId')).toBe(COFFEE.id)
-    await expect.poll(() => new URL(page.url()).searchParams.get('categoryId')).toBe(COFFEE.id)
+    await page.getByRole('option', { name: 'Drinks › Espresso' }).click()
+    await expect.poll(() => seen.at(-1)?.get('categoryId')).toBe(ESPRESSO.id)
+    await expect.poll(() => new URL(page.url()).searchParams.get('categoryId')).toBe(ESPRESSO.id)
   })
 
   it('shows the empty state when there are no menu items', async () => {
-    const { page } = await open({ ...backend([]) }, '')
+    const { page } = await open(backend([], []), '')
     await page.getByText('No menu items yet').waitFor()
   })
 })
 
+describe('menu item states', () => {
+  it('publishes a draft, unpublishes a published item and restores an archived one, each from the version read', async () => {
+    const bodies: Record<string, unknown> = {}
+    const answer = (action: string): MockHandler => ({ url, body }) => {
+      bodies[`${action} ${url.pathname.split('/').at(-2)}`] = body
+      return MATCHA
+    }
+    const OLD = menuItemSummaryOf('item-3', 'Old chai', { status: 'archived', version: 9 })
+    const { page } = await open({
+      ...backend([LATTE_ROW, MATCHA_ROW, OLD]),
+      'POST /admin/menu/items/{id}/publish': answer('publish'),
+      'POST /admin/menu/items/{id}/unpublish': answer('unpublish'),
+      'POST /admin/menu/items/{id}/restore': answer('restore'),
+    })
+    const act = async (name: string, action: string) => {
+      await page.getByRole('button', { name: `Actions for ${name}` }).click()
+      await page.getByRole('menuitem', { name: action }).click()
+    }
+    await act('Matcha', 'Publish')
+    await toast(page, 'Menu item "Matcha" published').waitFor()
+    await act('Latte', 'Unpublish')
+    await toast(page, 'Menu item "Latte" unpublished').waitFor()
+    await act('Old chai', 'Restore')
+    await toast(page, 'Menu item "Old chai" restored as a draft').waitFor()
+    expect(bodies).toEqual({ 'publish item-2': { version: 1 }, 'unpublish item-1': { version: 3 }, 'restore item-3': { version: 9 } })
+  })
+
+  it('a draft with nothing to sell is refused with the server\'s reason', async () => {
+    const { page } = await open({
+      ...backend(),
+      'POST /admin/menu/items/{id}/publish': () => {
+        throw failures.validation('Switch on and price at least one version before publishing.')
+      },
+    })
+    await page.getByRole('button', { name: 'Actions for Matcha' }).click()
+    await page.getByRole('menuitem', { name: 'Publish' }).click()
+    await toast(page, 'Could not publish "Matcha"').waitFor()
+    await page.getByText('Switch on and price at least one version before publishing.').first().waitFor()
+  })
+
+  it('an archived item opens read-only', async () => {
+    const OLD = menuItemOf('item-3', 'Old chai', { status: 'archived' })
+    const { page } = await open(backend([summaryOf(OLD)], [OLD]), 'Old chai')
+    await page.getByRole('button', { name: 'Actions for Old chai' }).click()
+    await page.getByRole('menuitem', { name: 'View' }).click()
+    const form = page.getByRole('dialog', { name: 'Archived menu item' })
+    await form.getByText('This menu item is archived. Restore it from the list to edit it.').waitFor()
+    expect(await form.getByLabel('Name', { exact: true }).isDisabled()).toBe(true)
+    expect(await form.getByRole('button', { name: 'Save' }).count()).toBe(0)
+  })
+})
+
 describe('menu item form', () => {
-  it('creates a menu item with an uploaded image, a category, a price in cents and schedules', async () => {
+  it('creates a draft with an uploaded image, a leaf category, a price in cents and a rule', async () => {
     let uploaded: unknown
     let body: unknown
     const { page } = await open({
       ...backend(),
+      'GET /admin/menu/availability-rules': () => [{ id: 'rule-1', name: 'Breakfast', status: 'active', windows: [], itemCount: 0, categoryCount: 0, version: 1, createdAt: STAMP, updatedAt: STAMP }],
       'POST /admin/media': (request) => {
         uploaded = request.body
         return UPLOADED
       },
-      'POST /admin/products': (request) => {
+      'POST /admin/menu/items': (request) => {
         body = request.body
-        return productOf('prod-9', 'Mocha', COFFEE)
+        return menuItemOf('item-9', 'Mocha')
       },
     })
     const form = await openNew(page)
@@ -205,31 +308,167 @@ describe('menu item form', () => {
     // Nothing is sent while required fields are empty.
     await form.getByRole('button', { name: 'Create' }).click()
     await form.getByText('Category is required').waitFor()
-    await form.getByText('Price is required').waitFor()
+    await form.getByText('Set a price, or switch it off').waitFor()
 
     await chooseImage(form, PNG)
     await expect.poll(() => form.locator('img').getAttribute('src')).toBe(UPLOADED.url)
     await form.getByLabel('Name', { exact: true }).fill('Mocha')
-    await form.getByText('Name is required').waitFor({ state: 'hidden' })
-    await choose(form, 'Category', 'Coffee')
-    await form.getByRole('spinbutton', { name: 'Price' }).fill('4.2')
-    await choose(form, 'Schedules', 'Lunch')
+    // Only leaves are offered: Drinks has a sub-category.
+    await form.getByRole('combobox', { name: 'Category' }).click()
+    await page.getByRole('option', { name: 'Drinks › Espresso' }).waitFor()
+    expect(await page.getByRole('option', { name: 'Drinks', exact: true }).count()).toBe(0)
+    await page.getByRole('option', { name: 'Drinks › Espresso' }).click()
+    await typePrice(form.getByRole('spinbutton', { name: 'Price' }), '4.2')
+    await form.getByRole('combobox', { name: 'Availability' }).click()
+    await page.getByRole('option', { name: 'Breakfast' }).click()
     await page.keyboard.press('Escape') // close the multi-select list
     await form.getByRole('button', { name: 'Create' }).click()
 
-    await toast(page, 'Menu item "Mocha" created').waitFor()
+    await toast(page, 'Menu item "Mocha" created as a draft').waitFor()
     // Multipart with the chosen file.
     expect(uploaded).toContain('filename="photo.png"')
     expect(body).toEqual({
+      categoryId: ESPRESSO.id,
       name: 'Mocha',
-      categoryId: COFFEE.id,
-      priceMinor: 420,
       description: '',
-      scheduleIds: [LUNCH.id],
-      status: 'ACTIVE',
-      imageAssetId: UPLOADED.id,
-      variantGroups: [],
+      imageId: UPLOADED.id,
+      optionSetIds: [],
+      variations: [{ valueIds: [], priceMinor: 420, status: 'active' }],
+      modifierGroups: [],
+      availabilityRuleIds: ['rule-1'],
     })
+  })
+
+  it('builds the price grid from two option sets, keeping prices, and sends every version', async () => {
+    let body: { optionSetIds?: string[], variations?: unknown[] } | undefined
+    const { page } = await open({
+      ...backend(),
+      'POST /admin/menu/items': (request) => {
+        body = request.body as typeof body
+        return menuItemOf('item-9', 'Flat white')
+      },
+    })
+    const form = await openNew(page)
+    await form.getByLabel('Name', { exact: true }).fill('Flat white')
+    await form.getByRole('combobox', { name: 'Category' }).click()
+    await page.getByRole('option', { name: 'Tea' }).click()
+
+    await addFromMenu(form, 'Add option set', 'Size')
+    await typePrice(form.getByRole('spinbutton', { name: 'Price of Small' }), '3')
+    await typePrice(form.getByRole('spinbutton', { name: 'Price of Large' }), '4')
+    await addFromMenu(form, 'Add option set', 'Temperature')
+    // The second set makes a 2 × 2 grid; the new combinations have no price yet.
+    await form.getByRole('button', { name: 'Create' }).click()
+    await expect.poll(() => form.getByText('Set a price, or switch it off').count()).toBe(4)
+    await typePrice(form.getByRole('spinbutton', { name: 'Price of Small, Hot' }), '3')
+    await typePrice(form.getByRole('spinbutton', { name: 'Price of Small, Iced' }), '3.25')
+    await typePrice(form.getByRole('spinbutton', { name: 'Price of Large, Hot' }), '4')
+    await form.getByRole('switch', { name: 'Sell Large, Iced' }).click()
+    // No more option sets than two.
+    expect(await form.getByRole('button', { name: 'Add option set' }).isDisabled()).toBe(true)
+    await form.getByRole('button', { name: 'Create' }).click()
+
+    await toast(page, 'Menu item "Flat white" created as a draft').waitFor()
+    expect(body?.optionSetIds).toEqual([SIZE.id, TEMP.id])
+    expect(body?.variations).toEqual([
+      { valueIds: ['val-s', 'val-hot'], priceMinor: 300, status: 'active' },
+      { valueIds: ['val-s', 'val-iced'], priceMinor: 325, status: 'active' },
+      { valueIds: ['val-l', 'val-hot'], priceMinor: 400, status: 'active' },
+      { valueIds: ['val-l', 'val-iced'], priceMinor: null, status: 'disabled' },
+    ])
+  })
+
+  it('edits from the version it read: grid, add-on prices and rules, image kept', async () => {
+    let body: Record<string, unknown> | undefined
+    const { page } = await open({
+      ...backend(),
+      'PATCH /admin/menu/items/{id}': (request) => {
+        body = request.body as Record<string, unknown>
+        return { ...LATTE, version: 4 }
+      },
+    })
+    const form = await openEdit(page, 'Latte')
+    // The grid as saved: Large, Iced is off (its price kept).
+    expect(await form.getByRole('switch', { name: 'Sell Large, Iced' }).getAttribute('aria-checked')).toBe('false')
+    await typePrice(form.getByRole('spinbutton', { name: 'Price of Large, Hot' }), '4.5')
+    // Oat back to its own price; Soy (own price) back to the library's.
+    await typePrice(form.getByRole('spinbutton', { name: 'Price of Oat in Milk' }), '0.75')
+    await typePrice(form.getByRole('spinbutton', { name: 'Price of Soy in Milk' }), '0.4')
+    await form.getByRole('checkbox', { name: /Own rules for this item/ }).click()
+    await typePrice(form.getByRole('spinbutton', { name: 'At least, Milk' }), '1')
+    await form.getByRole('button', { name: 'Save' }).click()
+
+    await toast(page, 'Menu item "Latte" updated').waitFor()
+    expect(body).toMatchObject({
+      version: 3,
+      categoryId: ESPRESSO.id,
+      imageId: 'asset-latte',
+      optionSetIds: [SIZE.id, TEMP.id],
+      variations: [
+        { valueIds: ['val-s', 'val-hot'], priceMinor: 350, status: 'active' },
+        { valueIds: ['val-s', 'val-iced'], priceMinor: 375, status: 'active' },
+        { valueIds: ['val-l', 'val-hot'], priceMinor: 450, status: 'active' },
+        { valueIds: ['val-l', 'val-iced'], priceMinor: 450, status: 'disabled' },
+      ],
+      modifierGroups: [{ groupId: MILK.id, rules: { minSelect: 1, maxSelect: 1 }, prices: [{ modifierId: 'mod-oat', priceDeltaMinor: 75 }] }],
+    })
+  })
+
+  it('adds an add-on group from the library, and checks its own rules before sending', async () => {
+    const { page, api } = await open({ ...backend([MATCHA_ROW], [{ ...MATCHA, variations: [{ ...MATCHA.variations[0]!, priceMinor: 300, status: 'active' }] }]) }, 'Matcha')
+    const form = await openEdit(page, 'Matcha')
+    await addFromMenu(form, 'Add add-on group', 'Milk')
+    await form.getByRole('region', { name: 'Add-on group Milk' }).waitFor()
+    await form.getByRole('checkbox', { name: /Own rules for this item/ }).click()
+    await typePrice(form.getByRole('spinbutton', { name: 'At least, Milk' }), '3')
+    // The library allows at most 1: raise it, so the check that fails is the active add-ons one.
+    await typePrice(form.getByRole('spinbutton', { name: 'At most, Milk' }), '3')
+    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByText('Customers must choose 3, but only 2 add-ons are active.').waitFor()
+    expect(api.calls.filter(c => c.startsWith('PATCH'))).toEqual([])
+  })
+
+  it('a refused save shows inside the panel, on its field, and keeps the input', async () => {
+    const { page } = await open({
+      ...backend(),
+      'PATCH /admin/menu/items/{id}': () => {
+        throw failures.conflict('VERSION_CONFLICT', 'This menu item was changed by someone else.')
+      },
+    })
+    const form = await openEdit(page, 'Latte')
+    await form.getByLabel('Name', { exact: true }).fill('Latte 2')
+    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByText('Someone else changed this menu item.', { exact: false }).waitFor()
+    expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte 2')
+  })
+
+  it('maps a server error on a version\'s price to its cell', async () => {
+    const { page } = await open({
+      ...backend(),
+      'PATCH /admin/menu/items/{id}': () => {
+        throw failures.validation('A version that\'s on needs a price', { 'variations.2.priceMinor': ['A version that\'s on needs a price'] })
+      },
+    })
+    const form = await openEdit(page, 'Latte')
+    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByText('Not saved').waitFor()
+    // Under "Large, Hot" (the third version), as well as in the alert.
+    await expect.poll(() => form.getByText('A version that\'s on needs a price').count()).toBe(2)
+  })
+
+  it('removes the image: saved with imageId null', async () => {
+    let body: Record<string, unknown> | undefined
+    const { page } = await open({
+      ...backend(),
+      'PATCH /admin/menu/items/{id}': (request) => {
+        body = request.body as Record<string, unknown>
+        return LATTE
+      },
+    })
+    const form = await openEdit(page, 'Latte')
+    await form.getByRole('button', { name: 'Remove', exact: true }).click()
+    await form.getByRole('button', { name: 'Save' }).click()
+    await expect.poll(() => body?.imageId).toBeNull()
   })
 
   it('rejects the wrong file type or a file over 5 MB without uploading', async () => {
@@ -242,7 +481,7 @@ describe('menu item form', () => {
     expect(api.calls.filter(c => c.includes('media'))).toEqual([])
   })
 
-  it('cannot save while the image is uploading, and shows an upload failure', async () => {
+  it('cannot save while the image is uploading, and keeps the old image when the upload fails', async () => {
     const upload = deferred()
     const { page, api } = await open({ ...backend(), 'POST /admin/media': upload.handler })
     const form = await openEdit(page, 'Latte')
@@ -252,219 +491,16 @@ describe('menu item form', () => {
     expect(await form.getByRole('button', { name: 'Save' }).isDisabled()).toBe(true)
 
     upload.fail(failures.validation('Use a JPEG, PNG or WebP image.'))
-    await toast(page, 'Could not upload "photo.png"').waitFor()
     await expect.poll(() => form.getByRole('button', { name: 'Save' }).isDisabled()).toBe(false)
-    // The previous image is still the one in the form.
     expect(await form.locator('img').getAttribute('src')).toBe('/media/menu/latte.png')
     expect(api.calls.filter(c => c.startsWith('PATCH'))).toEqual([])
   })
 
-  it('edits from the version it read, sending variants with their ids, schedules and image', async () => {
-    let body: unknown
-    const { page } = await open({
-      ...backend(),
-      'PATCH /admin/products/{id}': (request) => {
-        body = request.body
-        return { ...LATTE, name: 'Oat latte', version: 4 }
-      },
-    })
+  it('a changed price counts as unsaved: closing asks first', async () => {
+    const { page } = await open()
     const form = await openEdit(page, 'Latte')
-    // The variants are in the editor, untouched.
-    expect(await form.getByLabel('Name of group 1').inputValue()).toBe('Milk')
-    expect(await form.getByLabel('Name of option 2 in Milk').inputValue()).toBe('Oat')
-
-    await form.getByLabel('Name', { exact: true }).fill('Oat latte')
-    await form.getByRole('button', { name: 'Save' }).click()
-    await toast(page, 'Menu item "Oat latte" updated').waitFor()
-    expect(body).toEqual({
-      version: 3,
-      name: 'Oat latte',
-      categoryId: COFFEE.id,
-      priceMinor: 350,
-      description: 'Espresso and milk',
-      scheduleIds: ['sched-30'],
-      status: 'ACTIVE',
-      imageAssetId: 'asset-latte',
-      variantGroups: [{
-        id: 'grp-43',
-        name: 'Milk',
-        minSelect: 1,
-        maxSelect: 1,
-        options: [{ id: 'opt-73', name: 'Whole', priceDeltaMinor: 0 }, { id: 'opt-74', name: 'Oat', priceDeltaMinor: 50 }],
-      }],
-    })
-  })
-
-  it('removes the image: saved with imageAssetId null', async () => {
-    let body: Record<string, unknown> | undefined
-    const { page } = await open({
-      ...backend(),
-      'PATCH /admin/products/{id}': (request) => {
-        body = request.body as Record<string, unknown>
-        return { ...LATTE, image: null, version: 4 }
-      },
-    })
-    const form = await openEdit(page, 'Latte')
-    await form.getByRole('button', { name: 'Remove', exact: true }).click()
-    await form.getByRole('button', { name: 'Upload image' }).waitFor()
-    await form.getByRole('button', { name: 'Save' }).click()
-    await toast(page, /updated$/).waitFor()
-    expect(body?.imageAssetId).toBeNull()
-  })
-
-  it('keeps a selected inactive schedule visible, but does not offer inactive ones as new choices', async () => {
-    let body: Record<string, unknown> | undefined
-    const { page } = await open({
-      ...backend([{ ...LATTE, scheduleIds: [RETIRED.id] }]),
-      'PATCH /admin/products/{id}': (request) => {
-        body = request.body as Record<string, unknown>
-        return LATTE
-      },
-    })
-    const form = await openEdit(page, 'Latte')
-    const schedules = form.getByRole('combobox', { name: 'Schedules' })
-    await expect.poll(() => schedules.textContent()).toContain('Old promo (inactive)')
-
-    await schedules.click()
-    await page.getByRole('option', { name: 'Breakfast' }).click()
-    expect(await page.getByRole('option', { name: 'Old promo', exact: true }).count()).toBe(0)
-    await page.keyboard.press('Escape')
-    await form.getByRole('button', { name: 'Save' }).click()
-    await toast(page, /updated$/).waitFor()
-    expect(body?.scheduleIds).toEqual([RETIRED.id, BREAKFAST.id])
-  })
-
-  it('keeps the input and shows the server\'s reason when the save fails', async () => {
-    const { page } = await open({
-      ...backend(),
-      'PATCH /admin/products/{id}': () => {
-        throw failures.conflict('VERSION_CONFLICT', 'This menu item was changed by someone else. Reload it and try again.')
-      },
-    })
-    const form = await openEdit(page, 'Latte')
-    await form.getByLabel('Name', { exact: true }).fill('Latte 2')
-    await form.getByRole('button', { name: 'Save' }).click()
-    await page.getByText('This menu item was changed by someone else. Reload it and try again.').first().waitFor()
-    expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte 2')
-  })
-})
-
-describe('menu item delete', () => {
-  it('deletes after confirmation, naming the version it read', async () => {
-    let version: string | null = null
-    const { page, api } = await open({
-      ...backend(),
-      'DELETE /admin/products/{id}': ({ url }) => {
-        version = url.searchParams.get('version')
-        return null
-      },
-    })
-    await page.getByRole('button', { name: 'Actions for Matcha' }).click()
-    await page.getByRole('menuitem', { name: 'Delete' }).click()
-    await page.getByText('Delete "Matcha"?').waitFor()
-    await page.getByRole('button', { name: 'Delete' }).last().click()
-    await toast(page, 'Menu item "Matcha" deleted').waitFor()
-    expect(api.calls).toContain('DELETE /admin/products/prod-2')
-    expect(version).toBe('1')
-  })
-})
-
-const SIZE: VariantGroup = {
-  id: 'grp-50',
-  name: 'Size',
-  minSelect: 1,
-  maxSelect: 1,
-  options: [
-    { id: 'opt-90', name: 'Regular', priceDeltaMinor: 0 },
-    { id: 'opt-91', name: 'Large', priceDeltaMinor: 100 },
-  ],
-}
-const MILK_AND_SIZE = productOf(LATTE.id, 'Latte', COFFEE, { ...LATTE, variantGroups: [MILK, SIZE] })
-
-/** A PATCH handler that records the body and answers with the item. */
-function savingHandler(record: (body: Record<string, unknown>) => void): MockHandler {
-  return (request) => {
-    record(request.body as Record<string, unknown>)
-    return { ...MILK_AND_SIZE, version: MILK_AND_SIZE.version + 1 }
-  }
-}
-
-describe('menu item variants', () => {
-  it('adds, edits, removes and reorders (keyboard) groups and options, and sends the whole list', async () => {
-    let body: Record<string, unknown> | undefined
-    const { page } = await open({ ...backend([MILK_AND_SIZE]), 'PATCH /admin/products/{id}': savingHandler(b => (body = b)) })
-    const form = await openEdit(page, 'Latte')
-
-    // Milk: rename Oat, add Soy (+$0.75), move Soy up above Oat with the keyboard.
-    await form.getByLabel('Name of option 2 in Milk').fill('Oat milk')
-    await form.getByRole('button', { name: 'Add option' }).first().click()
-    await form.getByLabel('Name of option 3 in Milk').fill('Soy')
-    await form.getByRole('spinbutton', { name: 'Extra price of option 3 in Milk' }).fill('0.75')
-    await form.getByRole('button', { name: /^Reorder option Soy/ }).press('ArrowUp')
-    await expect.poll(() => form.getByLabel('Name of option 2 in Milk').inputValue()).toBe('Soy')
-
-    // Size: remove Large; then move the Size group above Milk.
-    await form.getByRole('button', { name: 'Remove option Large' }).click()
-    const sizeHandle = form.getByRole('button', { name: /^Reorder Size/ })
-    await sizeHandle.press('ArrowUp')
-    await expect.poll(() => form.getByLabel('Name of group 1').inputValue()).toBe('Size')
-    // Focus stays on the moved handle, so it can be moved again.
-    await expect.poll(() => sizeHandle.evaluate(el => el === document.activeElement)).toBe(true)
-
-    // A new group at the end, allowing several choices.
-    await form.getByRole('button', { name: 'Add variant group' }).click()
-    await form.getByLabel('Name of group 3').fill('Extras')
-    await form.getByLabel('Name of option 1 in Extras').fill('Extra shot')
-    await form.getByRole('spinbutton', { name: 'Extra price of option 1 in Extras' }).fill('0.5')
-    await form.getByRole('switch', { name: 'Customers can pick several' }).last().click()
-
-    await form.getByRole('button', { name: 'Save' }).click()
-    await toast(page, 'Menu item "Latte" updated').waitFor()
-    expect(body?.variantGroups).toEqual([
-      { id: 'grp-50', name: 'Size', minSelect: 1, maxSelect: 1, options: [
-        { id: 'opt-90', name: 'Regular', priceDeltaMinor: 0 },
-      ] },
-      { id: 'grp-43', name: 'Milk', minSelect: 1, maxSelect: 1, options: [
-        { id: 'opt-73', name: 'Whole', priceDeltaMinor: 0 },
-        { name: 'Soy', priceDeltaMinor: 75 },
-        { id: 'opt-74', name: 'Oat milk', priceDeltaMinor: 50 },
-      ] },
-      { name: 'Extras', minSelect: 0, maxSelect: null, options: [
-        { name: 'Extra shot', priceDeltaMinor: 50 },
-      ] },
-    ])
-  })
-
-  it('reorders groups by dragging the handle with the mouse', async () => {
-    let body: Record<string, unknown> | undefined
-    const { page } = await open({ ...backend([MILK_AND_SIZE]), 'PATCH /admin/products/{id}': savingHandler(b => (body = b)) })
-    const form = await openEdit(page, 'Latte')
-    await form.getByRole('button', { name: /^Reorder Size/ }).dragTo(form.getByRole('button', { name: /^Reorder Milk/ }))
-    await expect.poll(() => form.getByLabel('Name of group 1').inputValue()).toBe('Size')
-    await form.getByRole('button', { name: 'Save' }).click()
-    await toast(page, /updated$/).waitFor()
-    expect((body?.variantGroups as VariantGroup[]).map(v => v.name)).toEqual(['Size', 'Milk'])
-  })
-
-  it('checks new groups before sending anything', async () => {
-    const { page, api } = await open()
-    const form = await openEdit(page, 'Latte')
-    await form.getByRole('button', { name: 'Add variant group' }).click()
-    await form.getByRole('button', { name: 'Save' }).click()
-    await form.getByText('Group name is required').waitFor()
-    await form.getByText('Option name is required').waitFor()
-    // Removing the only option is checked on the next save (the user may be about to add one).
-    await form.getByRole('button', { name: 'Remove option 1' }).click()
-    await form.getByRole('button', { name: 'Save' }).click()
-    await form.getByText('Add at least one option').waitFor()
-    expect(api.calls.filter(c => c.startsWith('PATCH'))).toEqual([])
-  })
-
-  it('counts a reorder as an unsaved change', async () => {
-    const { page } = await open({ ...backend([MILK_AND_SIZE]) })
-    const form = await openEdit(page, 'Latte')
-    await form.getByRole('button', { name: /^Reorder Size/ }).press('ArrowUp')
-    await form.getByRole('button', { name: 'Cancel' }).click()
+    await typePrice(form.getByRole('spinbutton', { name: 'Price of Small, Hot' }), '9')
+    await form.locator('[data-slot="footer"]').getByRole('button', { name: 'Cancel' }).click()
     await page.getByText('Discard unsaved changes?').waitFor()
   })
 })

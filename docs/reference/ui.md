@@ -5,7 +5,6 @@
 - [`useConfirm`](#useconfirm)
 - [`useTableSelection`](#usetableselection)
 - [`<BulkActionsBar>`](#bulkactionsbar)
-- [`<StatusBadge>` and status constants](#statusbadge-and-status-constants)
 - [`previewList` and `pluralize`](#previewlist-and-pluralize)
 - [`<SearchInput>`](#searchinput)
 - [`<ListEmptyState>`](#listemptystate)
@@ -157,30 +156,6 @@ Put it **at the end of the page body** (`#body` of `UDashboardPanel`); it's `sti
 
 ---
 
-## `<StatusBadge>` and status constants
-
-Most backend resources share `status: 'ACTIVE' | 'INACTIVE'`.
-
-Source: `app/components/StatusBadge.vue`, `app/utils/status.ts`
-
-```vue
-<StatusBadge :status="row.original.status" />                 <!-- green "Active" / grey "Inactive" -->
-<USelect v-model="state.status" :items="STATUS_ITEMS" />       <!-- form field -->
-<USelect v-model="filters.status" :items="STATUS_FILTER_ITEMS" /> <!-- toolbar filter, includes "All statuses" (ANY) -->
-```
-
-| Export | Type | Description |
-|---|---|---|
-| `Status` | `'ACTIVE' \| 'INACTIVE'` | |
-| `STATUS_LABELS` | `Record<Status, string>` | `{ ACTIVE: 'Active', INACTIVE: 'Inactive' }` |
-| `STATUS_ITEMS` | `SelectItem[]` | Active, Inactive |
-| `STATUS_FILTER_ITEMS` | `SelectItem[]` | All statuses (`ANY`), Active, Inactive |
-| `<StatusBadge :status>` | component | Renders nothing if `status` is undefined. |
-
-Some resources have other status sets (e.g. customers: `ACTIVE | SUSPENDED | …`). Give those their own badge in the feature. Don't extend these constants.
-
----
-
 ## `previewList` and `pluralize`
 
 Text helpers for confirmations and summaries.
@@ -310,24 +285,11 @@ useSubmitShortcut(() => form.value?.submit()) // UForm.submit() runs validation 
 
 ---
 
-## `<StatusTabs>` and `useStatusCounts`
+## `<StatusTabs>`
 
-Status filter as tabs with counts, "All 24 · Active 20 · Inactive 4" (Shopify-style views). Replaces the status `USelect` in list toolbars; binds to the same filter value (`ANY` = all). The tabs sit in a `role="group"` named "Status" (`UTabs` can't name its `tablist`).
+Status filter as tabs with counts, "All 3 · Active 2 · Archived 1" (Shopify-style views). Binds to the list's status filter (`ANY` = "All"). The tabs sit in a `role="group"` named "Status" (`UTabs` can't name its `tablist`). Each resource names its own statuses: they differ (`active` / `archived`; menu items add `draft`), so there's no shared status constant or badge.
 
-Source: `app/components/StatusTabs.vue`, `app/composables/useStatusCounts.ts`
-
-```vue
-<StatusTabs v-model="filters.status" :counts="counts" />
-```
-
-```ts
-// Paginated lists: two tiny requests (pageSize=1, read `total`), with the other filters applied.
-const counts = useStatusCounts('schedules', () => ({ search: query.value.search }),
-  (query, status) => apiFetch<Page<Schedule>>('/admin/schedules', { query: { ...query, status, pageSize: 1 } }).then(p => p.total))
-// Lists loaded whole (Categories): count on the client and pass { ACTIVE, INACTIVE, all }.
-```
-
-Resources with other statuses (the menu API's `active` / `archived`) pass their own tabs; `counts` uses the same values:
+Source: `app/components/StatusTabs.vue`
 
 ```vue
 <StatusTabs
@@ -340,11 +302,11 @@ Resources with other statuses (the menu API's `active` / `archived`) pass their 
 | Prop | Description |
 |---|---|
 | `v-model` | The filter value: a status or `ANY` |
-| `tabs` | The statuses after "All", `{ label, value }[]`; default Active / Inactive (`ACTIVE` / `INACTIVE`) |
-| `counts` | Keyed by the tab values plus `all` (default `{ ACTIVE, INACTIVE, all }`); badges appear once known |
+| `tabs` | The statuses after "All", `{ label, value }[]` |
+| `counts` | Keyed by the tab values plus `all`; badges appear once known |
 | `disabled` | e.g. while an unsaved order locks the filters |
 
-`useStatusCounts` keys its query `<feature>:status-counts`, so `invalidate(feature)` refreshes the counts too. "All" is the sum (every record is ACTIVE or INACTIVE).
+Counts: a list loaded whole (Categories, the libraries) counts on the client; a paginated one asks its list endpoint with `pageSize: 1` per status and reads `total`, in one query keyed `<feature>:status-counts` so `invalidate(feature)` refreshes it (`useItemStatusCounts` in the products feature).
 
 ---
 
@@ -381,7 +343,7 @@ Source: `app/components/ListSkeleton.vue`
 
 | Prop | Default | |
 |---|---|---|
-| `label` | | Read by screen readers ("Loading schedules…") |
+| `label` | | Read by screen readers ("Loading menu items…") |
 | `variant` | `'row'` | `'row'` or `'card'` |
 | `count` | `5` | How many placeholders |
 

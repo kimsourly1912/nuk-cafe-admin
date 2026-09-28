@@ -2,6 +2,7 @@
 
 ← [API Reference](./README.md)
 
+- [`apiFetch`](#apifetch): call our API
 - [`useApiQuery`](#useapiquery): read data
 - [`usePaginatedQuery`](#usepaginatedquery): filters and pagination for list pages
 - [`ANY` / `toApiQuery`](#any--toapiquery): "All" option in filter selects
@@ -10,9 +11,33 @@
 
 ---
 
+## `apiFetch`
+
+Calls our API (`/api` + path, served by this app). Routes and error format: the [server standard](../server/architecture.md#surfaces-and-routes) ([errors](../server/architecture.md#errors)); request and response types: `shared/contracts/`.
+
+Source: `app/utils/api.ts` (auto-imported), engine `app/utils/api-fetch.ts`
+
+```ts
+import type { Page } from '#shared/contracts/common'
+import type { MenuCategory, UpdateCategoryInput } from '#shared/contracts/menu-categories'
+
+const categories = await apiFetch<MenuCategory[]>('/admin/menu/categories', { query: { status: 'all' } })
+const body: UpdateCategoryInput = { version: 3, name: 'Tea' }
+await apiFetch<MenuCategory>(`/admin/menu/categories/${id}`, { method: 'PATCH', body })
+```
+
+- same-origin cookie, 30 s timeout (pass `timeout` for uploads), **no retries**;
+- every failure throws [`ApiError`](./errors.md#apierror) (our error body and Better Auth's);
+- a 401 or 403 `NOT_ADMIN` clears the session (the app goes to login); a 403 `PASSWORD_CHANGE_REQUIRED` sends the app to the change-password page;
+- a response to a request started under a previous identity is discarded as a silent `aborted` error (D29).
+
+Call it only inside `useApiQuery` (reads) and `useMutation` (writes).
+
+---
+
 ## `useApiQuery`
 
-Reads data from the API (through [`apiFetch`](./api.md#calling-it-from-the-admin-ui)). A thin wrapper over Nuxt's [`useAsyncData`](https://nuxt.com/docs/api/composables/use-async-data) with boolean loading states and errors already normalized to [`ApiError`](./errors.md#apierror).
+Reads data from the API (through [`apiFetch`](#apifetch)). A thin wrapper over Nuxt's [`useAsyncData`](https://nuxt.com/docs/api/composables/use-async-data) with boolean loading states and errors already normalized to [`ApiError`](./errors.md#apierror).
 
 Source: `app/composables/useApiQuery.ts`
 
@@ -20,8 +45,8 @@ Source: `app/composables/useApiQuery.ts`
 
 ```ts
 const { data, loading, refreshing, error, refresh } = useApiQuery(
-  'schedules:list',
-  () => apiFetch<Page<Schedule>>('/admin/schedules', { query: toValue(query) }),
+  'products:list',
+  () => apiFetch<Page<MenuItemSummary>>('/admin/menu/items', { query: toValue(query) }),
   { watch: [() => ({ ...toValue(query) })] },
 )
 ```
@@ -62,8 +87,8 @@ function useApiQuery<T, DefaultT = undefined>(
 **Paginated list with filters** (refetches when the query changes):
 
 ```ts
-export function useScheduleList(query: MaybeRefOrGetter<ScheduleListQuery>) {
-  return useApiQuery('schedules:list', () => apiFetch<Page<Schedule>>('/admin/schedules', { query: toValue(query) }), {
+export function useItemList(query: MaybeRefOrGetter<ItemListFilters>) {
+  return useApiQuery('products:list', () => apiFetch<Page<MenuItemSummary>>('/admin/menu/items', { query: toValue(query) }), {
     watch: [() => ({ ...toValue(query) })],
   })
 }
@@ -71,17 +96,19 @@ export function useScheduleList(query: MaybeRefOrGetter<ScheduleListQuery>) {
 
 > Watch `() => ({ ...toValue(query) })`, not `query` itself. The spread creates a new object on every change, so changes to nested filters trigger a refetch.
 
-**Options for a picker** (parameterized key, empty-array default):
+**Options for a picker** (empty-array default; archived records included so a current value keeps its name):
 
 ```ts
-export function useCategoryOptions(filter: MaybeRefOrGetter<CategoryOptionsFilter> = {}) {
+export function useAvailabilityRuleOptions() {
   return useApiQuery(
-    () => `categories:options:${toValue(filter).level ?? 'all'}`,
-    () => apiFetch<Category[]>('/admin/categories', { query: { level: toValue(filter).level } }),
+    'availability-rules:options',
+    () => apiFetch<AvailabilityRule[]>('/admin/menu/availability-rules', { query: { status: 'all' } }),
     { default: () => [] }, // data is never undefined
   )
 }
 ```
+
+A key can also be a getter for a parameterized query (``() => `products:list:${toValue(filter).status}` ``). Every call site of one key must pass the same options: `categories:all` is shared by the Categories tree and `CategorySelect`, so neither sets a `default` (D69).
 
 **Template:**
 
@@ -107,7 +134,7 @@ export function useCategoryOptions(filter: MaybeRefOrGetter<CategoryOptionsFilte
 
 ## `usePaginatedQuery`
 
-Filter and pagination state for list pages, **kept in the URL** (`/categories?search=tea&status=ACTIVE&page=2`). Pages are 1-based both in `UPagination` and in the API (`page`, `pageSize`).
+Filter and pagination state for list pages, **kept in the URL** (`/products?search=tea&status=active&page=2`). Pages are 1-based both in `UPagination` and in the API (`page`, `pageSize`).
 
 Source: `app/composables/usePaginatedQuery.ts`, URL conversion in `app/utils/query.ts` (`toUrlQuery`, `fromUrlQuery`, unit-tested in `test/unit/query.test.ts`). E2E: `test/e2e/list-page.test.ts`. Decision: [D21](../decisions.md).
 
@@ -116,15 +143,15 @@ Source: `app/composables/usePaginatedQuery.ts`, URL conversion in `app/utils/que
 ```ts
 const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({
   search: '',
-  status: ANY as Status | Any,
-  day: ANY as Day | Any,
+  categoryId: ANY as string,
+  status: ANY as string,
 })
-const { data, loading } = useScheduleList(query)
+const { data, loading } = useItemList(query)
 ```
 
 ```vue
 <SearchInput v-model="filters.search" placeholder="Search categories…" />
-<USelect v-model="filters.status" :items="STATUS_FILTER_ITEMS" />
+<StatusTabs v-model="filters.status" :tabs="TABS" :counts="counts" />
 <UTable :data="rows" :loading="loading">
   <template #loading>Loading categories…</template>
   <template #empty>
@@ -228,7 +255,7 @@ function invalidate(...features: string[]): Promise<void>
 ```
 
 ```ts
-await invalidate('products', 'schedules') // refreshes 'products:list', 'schedules:options:…', … here and in other tabs
+await invalidate('products', 'option-sets') // refreshes 'products:list', 'option-sets:list', … here and in other tabs
 ```
 
 - Matches keys by prefix: `'products'` refreshes every key starting with `products:`. Queries not currently loaded are ignored.

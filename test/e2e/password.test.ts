@@ -84,12 +84,12 @@ describe('temporary password', () => {
   it('moves to the change-password page when a route asks for it mid-session', async () => {
     const page = await createPage()
     await mockApi(page, {
-      'GET /admin/schedules': () => {
+      'GET /admin/menu/availability-rules': () => {
         throw failures.passwordChangeRequired()
       },
     })
-    // Signed in normally; the Schedules list is the first request to meet the refusal.
-    await gotoViaSidebar(page, ['Schedules'])
+    // Signed in normally; the Availability list is the first request to meet the refusal.
+    await gotoViaSidebar(page, ['Availability'])
     await expect.poll(() => path(page)).toBe('/change-password')
   })
 })

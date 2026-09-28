@@ -48,16 +48,27 @@ function likeD1(client: Client): Client {
  * D1's limit of 100 bound parameters per statement.
  */
 export async function createTestDb(): Promise<Db> {
+  const client = await createTestClient()
+  for (const file of migrationFiles()) await applyMigration(client, file)
+  return drizzle({ client, casing: 'snake_case' })
+}
+
+/** An empty in-memory database like `createTestDb`'s (foreign keys on, D1's parameter limit), no migrations. */
+export async function createTestClient(): Promise<Client> {
   const client = likeD1(createClient({ url: ':memory:' }))
   await client.execute('PRAGMA foreign_keys = ON')
-  const files = readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort()
-  for (const file of files) {
-    const statements = readFileSync(`${migrationsDir}/${file}`, 'utf8').split('--> statement-breakpoint')
-    for (const statement of statements) {
-      if (statement.trim()) await client.execute(statement)
-    }
+  return client
+}
+
+/** The checked-in migration files, in order (`0000_initial.sql`, …). */
+export const migrationFiles = () => readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort()
+
+/** Runs one migration file statement by statement, as NuxtHub does. */
+export async function applyMigration(client: Client, file: string) {
+  const statements = readFileSync(`${migrationsDir}/${file}`, 'utf8').split('--> statement-breakpoint')
+  for (const statement of statements) {
+    if (statement.trim()) await client.execute(statement)
   }
-  return drizzle({ client, casing: 'snake_case' })
 }
 
 let users = 0

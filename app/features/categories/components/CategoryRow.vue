@@ -6,10 +6,10 @@
  * Clicking the row opens it; the handle, toggle, checkbox and menu don't.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { Category } from '#shared/contracts/menu'
+import type { MenuCategory } from '#shared/contracts/menu-categories'
 
 const props = defineProps<{
-  category: Category
+  category: MenuCategory
   level: 'main' | 'sub'
   actions: DropdownMenuItem[]
   selected: boolean
@@ -31,7 +31,8 @@ const emit = defineEmits<{
 }>()
 
 const name = computed(() => props.category.name)
-const inactive = computed(() => props.category.status === 'INACTIVE')
+const archived = computed(() => props.category.status === 'archived')
+const rules = computed(() => props.category.availabilityRules.map(r => r.name).join(', '))
 
 function onClick(event: MouseEvent) {
   if ((event.target as HTMLElement).closest('a, button, input, label')) return
@@ -87,16 +88,31 @@ function onClick(event: MouseEvent) {
     <div class="min-w-0 flex-1 pl-1">
       <span
         class="truncate"
-        :class="[level === 'main' ? 'font-medium text-highlighted' : 'text-default', (inactive || contextOnly) && 'text-muted']"
+        :class="[level === 'main' ? 'font-medium text-highlighted' : 'text-default', (archived || contextOnly) && 'text-muted']"
       >{{ name }}</span>
       <span
         v-if="level === 'main' && subCount !== undefined"
         class="ml-2 text-xs text-muted"
       >{{ subCount }} {{ subCount === 1 ? 'sub-category' : 'sub-categories' }}</span>
+      <span
+        v-if="rules"
+        class="ml-2 inline-flex items-center gap-1 text-xs text-muted"
+        :title="`Sold only during: ${rules}`"
+      >
+        <UIcon
+          name="i-lucide-clock"
+          class="size-3"
+        />{{ rules }}
+      </span>
     </div>
 
     <div class="w-20">
-      <StatusBadge :status="category.status" />
+      <UBadge
+        v-if="archived"
+        label="Archived"
+        color="neutral"
+        variant="subtle"
+      />
     </div>
 
     <UIcon
