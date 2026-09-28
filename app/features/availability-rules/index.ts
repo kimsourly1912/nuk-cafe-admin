@@ -3,3 +3,4 @@
 export { default as AvailabilityRuleSelect } from './components/AvailabilityRuleSelect.vue'
 export { useAvailabilityRuleOptions } from './composables/useAvailabilityRuleOptions'
 export { availabilityRulesNavigation } from './navigation'
+export { describeWindows } from './utils/windows'

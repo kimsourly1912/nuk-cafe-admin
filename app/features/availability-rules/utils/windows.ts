@@ -1,4 +1,6 @@
+import type { AvailabilityWindow } from '#shared/contracts/menu-availability'
 import type { WindowRow } from '../schemas/availability-rule-form'
+import { toRows } from '../schemas/availability-rule-form'
 
 /** How a rule's windows read in the list: "Mon–Fri · 7:00 AM – 11:00 AM". */
 
@@ -43,3 +45,11 @@ export function formatTimes(start: number, end: number): string {
 
 /** A row as one line: "Mon–Fri · 7:00 AM – 11:00 AM". */
 export const formatRow = (row: Required<WindowRow>) => `${formatWeekdays(row.days)} · ${formatTimes(row.start, row.end)}`
+
+/**
+ * PUBLIC. A rule's times in words, one row per group of days: "Mon–Fri · 7:00 AM – 11:00 AM;
+ * Sat, Sun · 8:00 AM – 12:00 PM". For other features that name a rule (the Categories list).
+ */
+export function describeWindows(windows: AvailabilityWindow[]): string {
+  return toRows(windows).map(row => formatRow({ days: row.days, start: row.start ?? 0, end: row.end ?? 0 })).join('; ')
+}

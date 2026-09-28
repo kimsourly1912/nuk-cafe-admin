@@ -1,5 +1,5 @@
 import type { AvailabilityRuleRef } from '#shared/contracts/menu-availability'
-import type { CategoryListQuery, CategoryStatusChangeInput, CreateCategoryInput, MenuCategory, ReorderCategoriesInput, UpdateCategoryInput } from '#shared/contracts/menu-categories'
+import type { CategoryListQuery, CategoryStatusChangeInput, CreateCategoryInput, MenuCategory, ReorderCategoriesInput, RestoreCategoryInput, UpdateCategoryInput } from '#shared/contracts/menu-categories'
 import type { Db, Statement } from '../../utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '../../utils/batch'
 import { newId } from '../../utils/ids'
@@ -17,7 +17,12 @@ import type { CategoryRow } from './categories.repository'
  * guards and an audit row; a guard failure means someone else changed something in between.
  */
 
-function toCategory(row: CategoryRow, childCounts: Map<string, number>, rules: Map<string, AvailabilityRuleRef[]>): MenuCategory {
+interface Counts {
+  children: Map<string, number>
+  items: Map<string, number>
+}
+
+function toCategory(row: CategoryRow, counts: Counts, rules: Map<string, AvailabilityRuleRef[]>): MenuCategory {
   return {
     id: row.id,
     parentId: row.parentId,
@@ -25,7 +30,8 @@ function toCategory(row: CategoryRow, childCounts: Map<string, number>, rules: M
     description: row.description,
     sortOrder: row.sortOrder,
     status: row.status,
-    childCount: childCounts.get(row.id) ?? 0,
+    childCount: counts.children.get(row.id) ?? 0,
+    itemCount: counts.items.get(row.id) ?? 0,
     availabilityRules: rules.get(row.id) ?? [],
     version: row.version,
     createdAt: toIso(row.createdAt),
@@ -36,8 +42,8 @@ function toCategory(row: CategoryRow, childCounts: Map<string, number>, rules: M
 async function loadCategory(db: Db, id: string): Promise<MenuCategory> {
   const row = await repo.findCategory(db, id)
   if (!row) throw categoryNotFound()
-  const [children, rules] = await Promise.all([repo.countChildren(db, id, 'active'), availabilityRepo.categoryRules(db, [id])])
-  return toCategory(row, new Map([[id, children]]), rules)
+  const [children, items, rules] = await Promise.all([repo.countChildren(db, id, 'active'), repo.countListedItems(db, id), availabilityRepo.categoryRules(db, [id])])
+  return toCategory(row, { children: new Map([[id, children]]), items: new Map([[id, items]]) }, rules)
 }
 
 const audit = (db: Db, actor: Actor, action: string, categoryId: string, metadata: Record<string, unknown>) =>
@@ -71,7 +77,7 @@ async function ensureParent(db: Db, parentId: string) {
  * (default `active`); with `all`, archived sub-categories stay under their parent.
  */
 export async function listCategories(db: Db, query: CategoryListQuery): Promise<MenuCategory[]> {
-  const [rows, childCounts] = await Promise.all([repo.listCategories(db, query.status), repo.activeChildCounts(db)])
+  const [rows, children, items] = await Promise.all([repo.listCategories(db, query.status), repo.activeChildCounts(db), repo.listedItemCounts(db)])
   const byParent = new Map<string | null, CategoryRow[]>()
   for (const row of rows) byParent.set(row.parentId, [...(byParent.get(row.parentId) ?? []), row])
   const ids = new Set(rows.map(r => r.id))
@@ -83,7 +89,7 @@ export async function listCategories(db: Db, query: CategoryListQuery): Promise<
     ...orphans,
   ]
   const rules = await availabilityRepo.categoryRules(db, ordered.map(row => row.id))
-  return ordered.map(row => toCategory(row, childCounts, rules))
+  return ordered.map(row => toCategory(row, { children, items }, rules))
 }
 
 export async function getCategory(db: Db, id: string): Promise<MenuCategory> {
@@ -181,9 +187,10 @@ export async function archiveCategory(db: Db, actor: Actor, id: string, input: C
 
 /**
  * Restores one archived category, at the end of its siblings. Its sub-categories stay archived
- * (restore the ones still wanted); a sub-category's parent must be active first.
+ * unless `withSubcategories` (a top-level category's archived sub-categories come back in the same
+ * write, keeping their order); a sub-category's parent must be active first.
  */
-export async function restoreCategory(db: Db, actor: Actor, id: string, input: CategoryStatusChangeInput): Promise<MenuCategory> {
+export async function restoreCategory(db: Db, actor: Actor, id: string, input: RestoreCategoryInput): Promise<MenuCategory> {
   const current = await repo.findCategory(db, id)
   if (!current) throw categoryNotFound()
   if (current.version !== input.version) throw categoryChanged()
@@ -193,11 +200,15 @@ export async function restoreCategory(db: Db, actor: Actor, id: string, input: C
     if (parent?.status !== 'active') throw parentArchived()
   }
 
+  const now = new Date()
+  const withSubs = input.withSubcategories && current.parentId === null
+  const subs = withSubs ? await repo.countChildren(db, id, 'archived') : 0
   const statements: Statement[] = [
     ...(current.parentId ? [repo.requireActiveTopLevel(db, current.parentId)] : []),
-    repo.updateCategoryStatement(db, id, input.version, { status: 'active', sortOrder: await repo.nextSortOrder(db, current.parentId) }, new Date()),
+    repo.updateCategoryStatement(db, id, input.version, { status: 'active', sortOrder: await repo.nextSortOrder(db, current.parentId) }, now),
     requireOneChange(db),
-    audit(db, actor, 'restore', id, {}),
+    ...(withSubs ? [repo.restoreChildrenStatement(db, id, now)] : []),
+    audit(db, actor, 'restore', id, withSubs ? { subCategories: subs } : {}),
   ]
   await runCategoryBatch(db, statements, current.name, () => current.parentId ? parentArchived() : categoryChanged())
   return loadCategory(db, id)
@@ -220,6 +231,6 @@ export async function reorderCategories(db: Db, actor: Actor, input: ReorderCate
   ]
   await runCategoryBatch(db, statements, '', () => siblingsChanged())
   const rows = await repo.findCategoriesByIds(db, input.items.map(i => i.id))
-  const [childCounts, rules] = await Promise.all([repo.activeChildCounts(db), availabilityRepo.categoryRules(db, rows.map(row => row.id))])
-  return rows.sort((a, b) => a.sortOrder - b.sortOrder).map(row => toCategory(row, childCounts, rules))
+  const [children, items, rules] = await Promise.all([repo.activeChildCounts(db), repo.listedItemCounts(db), availabilityRepo.categoryRules(db, rows.map(row => row.id))])
+  return rows.sort((a, b) => a.sortOrder - b.sortOrder).map(row => toCategory(row, { children, items }, rules))
 }

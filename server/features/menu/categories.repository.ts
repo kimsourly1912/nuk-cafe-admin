@@ -53,6 +53,16 @@ export async function activeChildCounts(db: Db): Promise<Map<string, number>> {
   return new Map(rows.map(r => [r.parentId!, r.n]))
 }
 
+/** Menu items that aren't archived, per category id (categories without any are left out). */
+export async function listedItemCounts(db: Db): Promise<Map<string, number>> {
+  const rows: { categoryId: string, n: number }[] = await db
+    .select({ categoryId: menuItems.categoryId, n: count() })
+    .from(menuItems)
+    .where(sql`${menuItems.status} <> 'archived'`)
+    .groupBy(menuItems.categoryId)
+  return new Map(rows.map(r => [r.categoryId, r.n]))
+}
+
 export async function countChildren(db: Db, id: string, status?: CategoryStatus): Promise<number> {
   const rows: { n: number }[] = await db.select({ n: count() }).from(menuCategories)
     .where(and(eq(menuCategories.parentId, id), status ? eq(menuCategories.status, status) : undefined))
@@ -129,6 +139,13 @@ export function archiveChildrenStatement(db: Db, parentId: string, now: Date): S
   return db.update(menuCategories)
     .set({ status: 'archived', version: sql`${menuCategories.version} + 1`, updatedAt: now })
     .where(and(eq(menuCategories.parentId, parentId), eq(menuCategories.status, 'active')))
+}
+
+/** Restores a parent's archived children (they keep their positions among themselves). */
+export function restoreChildrenStatement(db: Db, parentId: string, now: Date): Statement {
+  return db.update(menuCategories)
+    .set({ status: 'active', version: sql`${menuCategories.version} + 1`, updatedAt: now })
+    .where(and(eq(menuCategories.parentId, parentId), eq(menuCategories.status, 'archived')))
 }
 
 /** Moves one sibling to `sortOrder` if it's still active under `parentId` at `version`. */

@@ -305,6 +305,7 @@ Source: `app/components/StatusTabs.vue`
 | `tabs` | The statuses after "All", `{ label, value }[]` |
 | `counts` | Keyed by the tab values plus `all`; badges appear once known |
 | `disabled` | e.g. while an unsaved order locks the filters |
+| `size` | `'sm'` (default) or `'md'` where the tabs are the page's main filter (Categories) |
 
 Counts: a list loaded whole (Categories, the libraries) counts on the client; a paginated one asks its list endpoint with `pageSize: 1` per status and reads `total`, in one query keyed `<feature>:status-counts` so `invalidate(feature)` refreshes it (`useItemStatusCounts` in the products feature).
 

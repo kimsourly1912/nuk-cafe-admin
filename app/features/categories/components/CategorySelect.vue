@@ -3,7 +3,7 @@
  * PUBLIC. Category picker: a parent (`level="main"`), a menu item's category (`level="leaf"`), or
  * any category (a list filter). Contract: docs/feature-standard.md → "Resource picker conventions".
  *
- * - `main`: active top-level categories. `leaf`: active categories without sub-categories (items
+ * - `main`: active top-level categories without menu items (they can take subcategories). `leaf`: active categories without sub-categories (items
  *   go only in leaves, D44; one with archived sub-categories isn't a leaf either).
  * - The current value always stays visible, even when it isn't selectable (archived, no longer a
  *   leaf, gone): its label comes from the options if known, else from `currentLabel`.
@@ -52,7 +52,8 @@ const byId = computed(() => new Map(categories.value.map(c => [c.id, c])))
 /** Categories that have a sub-category, archived or not: never a leaf. */
 const parents = computed(() => new Set(categories.value.flatMap(c => (c.parentId ? [c.parentId] : []))))
 
-const fitsLevel = (c: MenuCategory) => props.level === 'main' ? c.parentId === null : props.level === 'leaf' ? !parents.value.has(c.id) : true
+/** `main`: top-level and free of menu items (a category holds subcategories or items, never both). */
+const fitsLevel = (c: MenuCategory) => props.level === 'main' ? c.parentId === null && !c.itemCount : props.level === 'leaf' ? !parents.value.has(c.id) : true
 
 /** "Coffee › Espresso" for a sub-category, so equal names under different mains stay apart. */
 const labelOf = (c: MenuCategory) => {
@@ -78,7 +79,9 @@ const currentItem = computed<SelectItem | undefined>(() => {
     ? ' (archived)'
     : known && props.level === 'leaf' && parents.value.has(id)
       ? ' (has sub-categories)'
-      : !known && status.value === 'success' ? ' (unavailable)' : ''
+      : known && props.level === 'main' && known.itemCount
+        ? ' (holds menu items)'
+        : !known && status.value === 'success' ? ' (unavailable)' : ''
   return { label: `${name}${note}`, value: id }
 })
 

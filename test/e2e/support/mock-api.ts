@@ -68,7 +68,7 @@ export const ADMIN: AdminSession = {
 
 /** A category of the new menu API (`/api/admin/menu/categories`). */
 export function menuCategoryOf(id: string, name: string, overrides: Partial<MenuCategory> = {}): MenuCategory {
-  return { id, name, description: '', parentId: null, status: 'active', sortOrder: 1, childCount: 0, availabilityRules: [], version: 1, createdAt: STAMP, updatedAt: STAMP, ...overrides }
+  return { id, name, description: '', parentId: null, status: 'active', sortOrder: 1, childCount: 0, itemCount: 0, availabilityRules: [], version: 1, createdAt: STAMP, updatedAt: STAMP, ...overrides }
 }
 
 /** A menu item as the list shows it (`GET /api/admin/menu/items`): a draft in Tea at $3.50. */

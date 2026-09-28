@@ -38,7 +38,8 @@ export interface TreeFilters {
 
 function matches(category: MenuCategory, { search, status }: TreeFilters) {
   const text = search?.trim().toLowerCase()
-  if (text && !category.name.toLowerCase().includes(text)) return false
+  // The name or the description (D72): "latte" finds the category described "Lattes and flat whites".
+  if (text && !category.name.toLowerCase().includes(text) && !category.description.toLowerCase().includes(text)) return false
   // Only a real status narrows; "all" (`ANY`) or none doesn't.
   if ((status === 'active' || status === 'archived') && category.status !== status) return false
   return true

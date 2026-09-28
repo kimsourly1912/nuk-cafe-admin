@@ -12,6 +12,7 @@ describe('category form', () => {
     status: 'active',
     sortOrder: 3,
     childCount: 0,
+    itemCount: 0,
     availabilityRules: [{ id: 'r1', name: 'Breakfast', status: 'active' }, { id: 'r2', name: 'Old', status: 'archived' }],
     version: 4,
     createdAt: '2026-09-26T00:00:00.000Z',

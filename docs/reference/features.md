@@ -12,7 +12,7 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 | `categories` | [`CategorySelect`](#categoryselect), [`useCategoryOptions`](#usecategoryoptions), `categoriesNavigation` |
 | `option-sets` | [`useOptionSetOptions`](#useoptionsetoptions), `optionSetsNavigation` ("Options") |
 | `modifier-groups` | [`useModifierGroupOptions`](#usemodifiergroupoptions), [`describeRules`, `formatDelta`](#describerules-formatdelta), `modifierGroupsNavigation` ("Add-ons") |
-| `availability-rules` | [`AvailabilityRuleSelect`](#availabilityruleselect), [`useAvailabilityRuleOptions`](#useavailabilityruleoptions), `availabilityRulesNavigation` |
+| `availability-rules` | [`AvailabilityRuleSelect`](#availabilityruleselect), [`useAvailabilityRuleOptions`](#useavailabilityruleoptions), [`describeWindows`](#describewindows), `availabilityRulesNavigation` |
 | `products` | `productsNavigation` ("Menu items"). A `ProductSelect` waits for its first consumer |
 
 When you add a feature, add its section here. Pickers follow the contract in [feature-standard.md → Resource picker conventions](../feature-standard.md#6-resource-picker-conventions).
@@ -45,7 +45,7 @@ import { CategorySelect } from '~/features/categories'
 | Prop | Type | Default | Description |
 |---|---|---|---|
 | `v-model` | `string \| undefined` | | Category id. Choosing the `noneLabel` option sets `undefined`. |
-| `level` | `'main' \| 'leaf'` | all | `main`: top-level categories. `leaf`: categories without sub-categories (one with only archived sub-categories isn't a leaf either). |
+| `level` | `'main' \| 'leaf'` | all | `main`: top-level categories without menu items (they can take subcategories). `leaf`: categories without sub-categories (one with only archived sub-categories isn't a leaf either). |
 | `excludeId` | `string` | | Hide one category. |
 | `noneLabel` | `string` | | Adds an option that clears the value. `USelect` can't hold `undefined`, and this handles that internally. |
 | `placeholder` | `string` | `'Select a category'` | |
@@ -109,6 +109,15 @@ function useAvailabilityRuleOptions() // → useApiQuery result, `data`: Availab
 
 - Key: `availability-rules:options`, refreshed by `invalidate('availability-rules')`.
 - Calls `GET /api/admin/menu/availability-rules?status=all`.
+
+### `describeWindows`
+
+A rule's times in words, one part per group of days: `"Mon–Fri · 7:00 AM – 11:00 AM; Sat, Sun · 8:00 AM – 12:00 PM"`. The Categories list uses it for its availability tooltips.
+
+```ts
+import { describeWindows } from '~/features/availability-rules'
+describeWindows(rule.windows)
+```
 
 ### `availabilityRulesNavigation`
 

@@ -15,6 +15,9 @@ import { useAllCategories } from './useCategoryOptions'
  * - A new order is local until saved, and counts as unsaved (route change, logout, reload ask).
  * - Save sends one request per list that changed, each with every active child and its version
  *   (`reorderRequests`), one after the other; a failure stops and keeps the order unsaved.
+ * - After a refused save (someone else changed a level: 409), `reload()` fetches the latest
+ *   categories and versions while keeping the local order (new or removed categories merged in),
+ *   so Save can be tried again without redoing the moves (D72).
  */
 export function useCategoryTree(
   filters: { search: string, status: string },
@@ -33,6 +36,8 @@ export function useCategoryTree(
 
   const { reorder } = useCategoryMutations()
   const saving = ref(false)
+  /** Why the last save stopped (kept until the next save or reload). */
+  const saveError = shallowRef<ApiError>()
   const notify = useNotify()
 
   const order = reactive<TreeOrder>({ mains: [], subs: {} })
@@ -40,6 +45,7 @@ export function useCategoryTree(
 
   /** Back to the server's order. */
   function reset() {
+    saveError.value = undefined
     order.mains = [...serverOrder.value.mains]
     order.subs = Object.fromEntries(Object.entries(serverOrder.value.subs).map(([main, ids]) => [main, [...ids]]))
     unsaved.markClean()
@@ -99,12 +105,14 @@ export function useCategoryTree(
     const requests = reorderRequests(serverOrder.value, order, versions)
     if (!requests.length) return reset()
     saving.value = true
+    saveError.value = undefined
     // One level at a time; each is atomic on the server. A failure stops here: the levels already
     // saved stay saved, and the refetch brings them back as the server order.
     let ok = true
     for (const request of requests) {
       const result = await reorder.execute(request)
       if (!result.ok) {
+        if (result.status === 'error') saveError.value = result.error
         ok = false
         break
       }
@@ -117,7 +125,15 @@ export function useCategoryTree(
     }
   }
 
+  /** The latest categories and versions; a pending order is kept (merged by the watch above). */
+  async function reload() {
+    await refresh()
+    saveError.value = undefined
+  }
+
   return {
+    /** Every category loaded, archived ones included. */
+    categories,
     tree,
     counts,
     total: computed(() => categories.value.length),
@@ -127,6 +143,8 @@ export function useCategoryTree(
     refresh,
     sortable,
     saving,
+    saveError,
+    reload,
     isDirty: unsaved.isDirty,
     moveMain,
     moveSub,

@@ -5,6 +5,7 @@ import { auditEvents } from '../../platform/platform.schema'
 import type { Actor } from '../../identity'
 import { menuCategories } from '../menu.schema'
 import { archiveCategory, createCategory, listCategories, reorderCategories, restoreCategory, updateCategory } from '../categories.service'
+import { archiveItem, createItem } from '../items.service'
 import { createTestDb } from '../../../tests/support/db'
 import { expectApiError } from '../../../tests/support/failure'
 import { interleaved } from '../../../tests/support/interleave'
@@ -186,9 +187,46 @@ describe('archiving and restoring', () => {
     await expectApiError(() => restoreCategory(db, actor, coffee.id, { version: archivedCoffee.version }), 409, 'CATEGORY_NAME_TAKEN')
   })
 
+  it('restores a top-level category with its archived sub-categories when asked, in their order', async () => {
+    const coffee = await create('Coffee')
+    await create('Iced', coffee.id)
+    await create('Hot', coffee.id)
+    const archived = await archiveCategory(db, actor, coffee.id, { version: coffee.version })
+    const restored = await restoreCategory(db, actor, coffee.id, { version: archived.version, withSubcategories: true })
+    expect(restored).toMatchObject({ status: 'active', childCount: 2 })
+    expect(names(await listCategories(db, { status: 'active' }))).toEqual(['Coffee', '  Iced', '  Hot'])
+    const [event] = await db.select().from(auditEvents).where(eq(auditEvents.action, 'menu.category.restore'))
+    expect(event?.metadata).toEqual({ subCategories: 2 })
+  })
+
+  it('restores nothing when the version is stale, sub-categories included', async () => {
+    const coffee = await create('Coffee')
+    await create('Iced', coffee.id)
+    await archiveCategory(db, actor, coffee.id, { version: coffee.version })
+    await expectApiError(() => restoreCategory(db, actor, coffee.id, { version: coffee.version, withSubcategories: true }), 409, 'VERSION_CONFLICT')
+    expect(await listCategories(db, { status: 'active' })).toEqual([])
+  })
+
   it('refuses restoring what isn\'t archived', async () => {
     const coffee = await create('Coffee')
     await expectApiError(() => restoreCategory(db, actor, coffee.id, { version: coffee.version }), 409, 'INVALID_STATE')
+  })
+})
+
+describe('item counts', () => {
+  it('counts each category\'s drafts and published items, not archived ones', async () => {
+    const drinks = await create('Drinks')
+    const food = await create('Food')
+    const item = (name: string) => createItem(db, actor, { categoryId: drinks.id, name, description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
+    await item('Latte')
+    const old = await item('Mocha')
+    await archiveItem(db, actor, old.id, { version: old.version })
+    const counts = Object.fromEntries((await listCategories(db, { status: 'active' })).map(c => [c.name, c.itemCount]))
+    expect(counts).toEqual({ Drinks: 1, Food: 0 })
+    // The single-category answers (a write's result) count the same way.
+    const renamed = await updateCategory(db, actor, drinks.id, { version: drinks.version, name: 'Beverages' })
+    expect(renamed.itemCount).toBe(1)
+    expect((await archiveCategory(db, actor, food.id, { version: food.version })).itemCount).toBe(0)
   })
 })
 
