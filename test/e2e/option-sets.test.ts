@@ -109,6 +109,16 @@ describe('options library', () => {
     await card(page, 'Milk').getByText('+4 more').waitFor()
   })
 
+  it('counts chips by the card\'s width, not the screen\'s (D86)', async () => {
+    const { page } = await open([MILK])
+    // Two columns from lg: at 1024px a card is narrow, so it shows the phone count
+    await page.setViewportSize({ width: 1024, height: 800 })
+    await expect.poll(() => chips(page, 'Milk')).toEqual(['Whole', 'Skim', 'Oat'])
+    // One column below lg: at 768px the card is wide again
+    await page.setViewportSize({ width: 768, height: 1024 })
+    await expect.poll(() => chips(page, 'Milk')).toEqual(['Whole', 'Skim', 'Oat', 'Soy', 'Almond'])
+  })
+
   it('offers only Archive (or Restore) in the card menu, never Delete', async () => {
     const archive = answering(SIZE, () => ({ status: 'archived' }))
     const restore = answering(OLD, () => ({ status: 'active' }))

@@ -89,7 +89,7 @@ usePageShortcuts({ n: () => create() })
           <SearchInput
             v-model="filters.search"
             placeholder="Search sets or values…"
-            class="w-64"
+            class="w-full sm:w-64"
           />
           <UIcon
             v-if="refreshing"

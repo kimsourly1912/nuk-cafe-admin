@@ -711,3 +711,9 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Status next to the name:** in the All and Archived views the Active/Archived badge sits beside the name instead of a fourth column, which left names about 100px at narrow widths.
 - **Record target:** the name block (name, status, description, meta line) is a ghost `UButton` named by the category: it opens the edit form (browse) or toggles the checkbox (select, out of the tab order since the checkbox is the keyboard target). Archived and context-only rows show plain text, padded to line up.
 - **Verified:** e2e `categories.test.ts` (40, 3 new: the name opens Edit with the actions beside it, stacked at 640px and in columns at 1024px, the status beside the name), `pickers` and `ui-foundations`; screenshots at 390, 768, 1024 and 1440.
+
+### D86: Options on the UI standard (Phase B step 5b), 2026-09-28
+
+- **Context:** the next page of step 5. The Options editor already met the standard (a slideover, A7: its value rows have no width switches; "Done reordering" sits in its header from `sm` and in the slideover's own `#footer` on phones, a thumb-reach choice by viewport). The library cards counted their value chips by the **viewport** (`sm:`), but from `lg` they sit in two columns, so at 1024px a card about 350px wide showed the wide count.
+- **Decision:** each card is its own container (`@container` on the `UCard` root); chips switch at `@sm` (a 24rem card): 3 and "+N more" on a narrow card, 5 on a wide one. The search box is `w-full sm:w-64` like Staff's.
+- **Verified:** e2e `option-sets.test.ts` (23, 1 new: 3 chips at 1024px in two columns, 5 at 768px in one).
