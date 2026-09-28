@@ -26,6 +26,14 @@ export default defineAppConfig({
     tabs: { slots: { trigger: 'max-sm:min-h-11' } },
     dropdownMenu: { slots: { item: 'max-sm:min-h-11 max-sm:items-center' } },
     navigationMenu: { slots: { link: 'max-sm:min-h-11' } },
+    // The toolbar never scrolls sideways on a phone (responsive-layout §5): its items wrap, and the
+    // left group (search, filters) takes the room it needs.
+    dashboardToolbar: {
+      slots: {
+        root: 'max-sm:flex-wrap max-sm:gap-y-2 max-sm:py-2',
+        left: 'max-sm:min-w-0 max-sm:flex-1 max-sm:flex-wrap',
+      },
+    },
     // 16px box + 14px on each side = 44px. `overflow-visible` so the hit area isn't clipped; the
     // indicator keeps the box's rounding itself.
     checkbox: {

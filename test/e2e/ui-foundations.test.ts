@@ -137,6 +137,28 @@ describe('primary color', () => {
   })
 })
 
+describe('warning color', () => {
+  it('uses the 800 shade in light mode: AA contrast as text and on its own tint', async () => {
+    const page = await open(1024)
+    expect(await cssVar(page, '--ui-warning')).toBe(await cssVar(page, '--ui-color-warning-800'))
+    const warning = await painted(page, await cssVar(page, '--ui-warning'))
+    const white = [255, 255, 255]
+    expect(contrast(warning, white)).toBeGreaterThanOrEqual(4.5)
+    // `text-warning` on `bg-warning/10` (subtle badges)
+    const tint = await painted(page, `color-mix(in oklab, ${await cssVar(page, '--ui-warning')} 10%, transparent)`)
+    expect(contrast(warning, tint)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('keeps Nuxt UI\'s 400 shade in dark mode, readable on the dark background', async () => {
+    const page = await open(1024, 812, 'dark')
+    await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(true)
+    expect(await cssVar(page, '--ui-warning')).toBe(await cssVar(page, '--ui-color-warning-400'))
+    const body = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
+    const warning = await painted(page, await cssVar(page, '--ui-warning'), body)
+    expect(contrast(warning, await painted(page, body))).toBeGreaterThanOrEqual(4.5)
+  })
+})
+
 describe('bottom action bar', () => {
   it('pins to the bottom of a phone and makes room: the last row scrolls clear of it', async () => {
     const page = await open(375, 667)

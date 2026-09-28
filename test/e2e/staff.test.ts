@@ -13,19 +13,22 @@ const VANNA = staffOf('staff-3', 'Vanna', {
   mustChangePassword: true,
 })
 
-async function open(rows: StaffMember[] = [SELF, SOPHEA, VANNA], extra: Parameters<typeof mockApi>[1] = {}) {
+async function open(rows: StaffMember[] = [SELF, SOPHEA, VANNA], extra: Parameters<typeof mockApi>[1] = {}, width?: number) {
   const page = await createPage()
+  if (width) await page.setViewportSize({ width, height: 844 })
   const api = await mockApi(page, {
     'GET /admin/staff': paginatedHandler(rows),
     'GET /admin/branches/options': () => [AIRPORT, RIVERSIDE],
     ...extra,
   })
   await page.goto(url('/staff'), { waitUntil: 'hydration' })
-  await page.getByRole('cell', { name: /Sophea/ }).first().waitFor()
+  await page.getByRole('button', { name: 'Sophea', exact: true }).waitFor()
   return { page, api }
 }
 
 const row = (page: Page, name: string) => page.getByRole('row').filter({ hasText: name })
+/** Opens a person from the table: their name is the record's button (not the whole row, D79). */
+const openMember = (page: Page, name: string) => page.getByRole('table').getByRole('button', { name, exact: true }).click()
 const writes = (calls: string[]) => calls.filter(c => !c.startsWith('GET'))
 
 async function rowAction(page: Page, name: string, action: string) {
@@ -122,7 +125,7 @@ describe('changing access', () => {
         return { ...SOPHEA, admin: true }
       },
     })
-    await row(page, 'Sophea').click()
+    await openMember(page, 'Sophea')
     const form = page.getByRole('dialog', { name: 'Access of Sophea' })
     await form.getByRole('switch', { name: 'Admin' }).click()
     await form.getByRole('button', { name: 'Remove branch 1' }).click()
@@ -133,7 +136,7 @@ describe('changing access', () => {
 
   it('won\'t let you remove your own admin role', async () => {
     const { page } = await open()
-    await row(page, 'alice').click()
+    await openMember(page, 'alice')
     const form = page.getByRole('dialog', { name: 'Access of alice' })
     await expect.poll(() => form.getByRole('switch', { name: 'Admin' }).isDisabled()).toBe(true)
     await form.getByText('You can\'t remove your own admin role.').waitFor()
@@ -159,5 +162,54 @@ describe('disabling', () => {
     await toast(page, 'Sophea no longer has staff access').waitFor()
     expect(writes(api.calls)).toEqual(['POST /admin/staff/staff-2/disable'])
     await row(page, 'Sophea').waitFor({ state: 'detached' })
+  })
+})
+
+describe('staff on a phone', () => {
+  const MANY = Array.from({ length: 45 }, (_, i) => staffOf(`staff-${i + 10}`, `Person ${i + 1}`))
+
+  for (const width of [320, 390]) {
+    it(`shows rows instead of a table, and nothing scrolls sideways at ${width}px`, async () => {
+      const { page } = await open([SELF, SOPHEA, VANNA, ...MANY], {}, width)
+      expect(await page.getByRole('table').count()).toBe(0)
+      const list = page.getByRole('list', { name: 'Staff' })
+      await list.getByRole('button', { name: 'Vanna', exact: true }).waitFor()
+      await list.getByText('Manager at Airport').waitFor()
+      await list.getByText('Temporary password').waitFor()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      // The toolbar wraps instead of scrolling: search on its own row, the filters below
+      const toolbar = page.getByPlaceholder('Search name or email…').locator('xpath=ancestor::*[contains(@class, "border-b")][1]')
+      expect(await toolbar.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+      const search = (await page.getByPlaceholder('Search name or email…').boundingBox())!
+      const role = (await page.getByRole('combobox', { name: 'Role' }).boundingBox())!
+      expect(role.y).toBeGreaterThan(search.y)
+      // Pagination fits too
+      await page.getByRole('navigation').last().scrollIntoViewIfNeeded()
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    })
+  }
+
+  it('opens a person from their row, full screen, with the actions beside the row (not inside it)', async () => {
+    const { page } = await open(undefined, {}, 390)
+    const target = page.getByRole('button', { name: 'Sophea', exact: true })
+    const actions = page.getByRole('button', { name: 'Actions for Sophea', exact: true })
+    expect(await actions.evaluate(el => el.parentElement?.closest('button, a') === null)).toBe(true)
+    const [targetBox, actionsBox] = [(await target.boundingBox())!, (await actions.boundingBox())!]
+    expect(targetBox.height).toBeGreaterThanOrEqual(44)
+    expect(actionsBox.width).toBeGreaterThanOrEqual(44)
+    expect(actionsBox.x).toBeGreaterThanOrEqual(targetBox.x + targetBox.width)
+
+    await target.click()
+    const form = page.getByRole('dialog', { name: 'Access of Sophea' })
+    await form.getByRole('switch', { name: 'Admin' }).waitFor()
+    await expect.poll(async () => Math.round((await form.boundingBox())!.width)).toBe(390)
+  })
+
+  it('offers the same actions from the row menu as on a desktop', async () => {
+    const { page } = await open(undefined, {}, 390)
+    const item = await rowAction(page, 'alice', 'Disable')
+    await expect.poll(() => item.getAttribute('data-disabled')).not.toBeNull()
+    await page.getByRole('menuitem', { name: 'Edit access' }).click()
+    await page.getByRole('dialog', { name: 'Access of alice' }).waitFor()
   })
 })

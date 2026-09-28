@@ -139,7 +139,7 @@ The one bottom action bar (D77 decision 3, D78): a page's mode bar (Select, Reor
 - **From `lg`,** `expanded` decides: `inline` sits where it's placed (above the list: Categories), `pinned` sticks to the bottom of the panel (place it **last** in the body: bulk bars), `hidden` isn't shown (the page has the action in its navbar: the Add-on page's Save changes).
 - **One bar at a time,** app-wide: the most recently opened one shows.
 
-It's a `role="toolbar"` named by `label`. Its only styling is Nuxt UI's surface tokens (`bg-default`, `border-default`); no blur, shadow or colors of its own. Overlays don't use it: a modal's or slideover's footer is Nuxt UI's own `#footer` slot (the Options editor's Done reordering).
+It's a `role="toolbar"` named by `label`. Its only styling is Nuxt UI's surface tokens (`bg-default`, `border-default`); no blur, shadow or colors of its own. Overlays don't use it (owner, 2026-09-28): a modal's or slideover's footer is Nuxt UI's own `#footer` slot (the Options editor's Done reordering).
 
 Source: `app/components/BottomActionBar.vue`
 
@@ -185,7 +185,7 @@ Put it **at the end of the page body** (`#body` of `UDashboardPanel`).
 
 ## `useLayoutContext`
 
-The viewport's width class for choices CSS can't make (D77, [responsive-layout §1](./responsive-layout.md#constrained-surfaces-container-queries)): `fullscreen` on a `UModal`, a `UDrawer` instead of a dropdown, which URL a list opens. Everything CSS can express uses Tailwind's `sm:`/`lg:` variants or container queries instead.
+The viewport's width class for choices CSS can't make (D77, [responsive-layout §1](./responsive-layout.md#constrained-surfaces-container-queries)): `fullscreen` on a `UModal`, a `UDrawer` instead of a dropdown, which URL a list opens, or which of two collections to mount (Staff's rows vs its table, D79: one tree in the DOM instead of two hidden by CSS). Everything CSS can express uses Tailwind's `sm:`/`lg:` variants or container queries instead.
 
 Source: `app/composables/useLayoutContext.ts`
 
