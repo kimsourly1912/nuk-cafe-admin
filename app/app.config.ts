@@ -2,10 +2,10 @@
  * Nuxt UI's global configuration: the one place component styling changes (D74, D77,
  * docs/reference/ui.md). Pages never override color, size, radius or shadow.
  *
- * Compact touch targets (D77, ui.md §6): below Tailwind's `sm` every interactive target is at least
- * 44px (`min-h-11`, and `min-w-11` for icon-only buttons), without changing the look from `sm` up.
- * Checkboxes, radios and switches keep their visual size and get a larger invisible hit area
- * (`after:` inset) instead. These are added to Nuxt UI's own classes (tailwind-merge), per component.
+ * Touch targets (D81, ui.md §6): controls keep Nuxt UI's default sizes at every width (the owner
+ * found 44px buttons too big on a phone). Only checkboxes, radios and switches get a larger
+ * *invisible* hit area below `sm` (an `after:` inset): their 16–20px box is hard to hit, and nothing
+ * changes visually. Classes here are added to Nuxt UI's own (tailwind-merge), per component.
  */
 export default defineAppConfig({
   ui: {
@@ -13,19 +13,6 @@ export default defineAppConfig({
       primary: 'amber',
       neutral: 'stone',
     },
-    button: {
-      slots: { base: 'max-sm:min-h-11' },
-      // Nuxt UI makes a button without a label `square`: icon-only buttons get 44×44.
-      variants: { square: { true: 'max-sm:min-w-11 max-sm:justify-center' } },
-    },
-    input: { slots: { base: 'max-sm:min-h-11' } },
-    inputNumber: { slots: { base: 'max-sm:min-h-11' } },
-    inputTime: { slots: { base: 'max-sm:min-h-11' } },
-    select: { slots: { base: 'max-sm:min-h-11' } },
-    selectMenu: { slots: { base: 'max-sm:min-h-11' } },
-    tabs: { slots: { trigger: 'max-sm:min-h-11' } },
-    dropdownMenu: { slots: { item: 'max-sm:min-h-11 max-sm:items-center' } },
-    navigationMenu: { slots: { link: 'max-sm:min-h-11' } },
     // The toolbar never scrolls sideways on a phone (responsive-layout §5): its items wrap, and the
     // left group (search, filters) takes the room it needs.
     dashboardToolbar: {
@@ -34,8 +21,8 @@ export default defineAppConfig({
         left: 'max-sm:min-w-0 max-sm:flex-1 max-sm:flex-wrap',
       },
     },
-    // 16px box + 14px on each side = 44px. `overflow-visible` so the hit area isn't clipped; the
-    // indicator keeps the box's rounding itself.
+    // Invisible hit areas below `sm`: 16px box + 14px on each side = 44px. `overflow-visible` so the
+    // hit area isn't clipped; the indicator keeps the box's rounding itself.
     checkbox: {
       slots: {
         base: 'max-sm:relative max-sm:overflow-visible max-sm:after:absolute max-sm:after:-inset-3.5',

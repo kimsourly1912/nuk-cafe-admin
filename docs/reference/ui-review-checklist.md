@@ -35,7 +35,7 @@ Check every changed screen at **320, 390, 768, 1024 and 1440 px** wide, plus one
 
 ## Touch and keyboard
 
-- [ ] On compact, every target is at least 44px (`min-h-11`; icon buttons `min-h-11 min-w-11`), with `gap-2` or more between targets, and the size comes from the central `app.config.ts` configuration, not from the page ([ui §6](./ui.md#6-density-and-touch-targets)).
+- [ ] Controls keep Nuxt UI's default sizes at every width (no `min-h-*`/`min-w-*` or size props for touch, D81); every target is at least 24×24px with `gap-2` or more between targets; a record's row is one large target by its content ([ui §6](./ui.md#6-density-and-touch-targets)).
 - [ ] Everything works with the keyboard alone, in a logical order; focus is visible everywhere.
 - [ ] Focus lands sensibly after open, close, save, delete and reorder; dialogs trap and restore focus.
 - [ ] Drag, swipe and long-press all have button or keyboard alternatives ([page-patterns §7](./page-patterns.md#7-gestures)).

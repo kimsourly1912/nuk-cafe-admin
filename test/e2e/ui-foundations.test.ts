@@ -29,9 +29,9 @@ async function open(width: number, height = 812, colorScheme: 'light' | 'dark' =
 }
 
 /**
- * Every visible Nuxt UI control (its `data-slot` root: buttons, fields, tabs) that's smaller than 44px:
- * `[what, width, height]`. The central configuration covers Nuxt UI's components only; plain
- * elements a page draws itself are its own step of the migration (docs/plans/ui-standardization.md).
+ * Every visible Nuxt UI control (its `data-slot` root: buttons, fields, tabs) smaller than WCAG 2.2
+ * AA's 24×24px (2.5.8) in either dimension: `[what, width, height]`. Plain elements a page draws
+ * itself are its own step of the migration (docs/plans/ui-standardization.md).
  */
 function smallTargets(page: Page) {
   return page.evaluate(() => {
@@ -40,8 +40,7 @@ function smallTargets(page: Page) {
       .filter(el => el.offsetParent !== null && !el.closest('[aria-hidden="true"]'))
       .map((el) => {
         const box = el.getBoundingClientRect()
-        const iconOnly = el.tagName === 'BUTTON' && !el.textContent?.trim()
-        const tooSmall = box.height < 44 || (iconOnly && box.width < 44)
+        const tooSmall = box.height < 24 || box.width < 24
         return tooSmall ? [el.getAttribute('aria-label') ?? el.textContent?.trim() ?? el.tagName, Math.round(box.width), Math.round(box.height)] : null
       })
       .filter(Boolean)
@@ -77,7 +76,7 @@ function contrast(a: number[], b: number[]) {
 const cssVar = (page: Page, name: string) => page.evaluate(n => getComputedStyle(document.documentElement).getPropertyValue(n).trim(), name)
 
 describe('touch targets', () => {
-  it('gives every button, tab and field at least 44px on a phone (icon-only buttons 44×44)', async () => {
+  it('keeps every button, tab and field at 24×24px or more on a phone (WCAG 2.2 AA)', async () => {
     const page = await open(375)
     expect(await smallTargets(page)).toEqual([])
     await page.getByRole('button', { name: 'Select', exact: true }).click()
@@ -85,10 +84,14 @@ describe('touch targets', () => {
     expect(await smallTargets(page)).toEqual([])
   })
 
-  it('keeps Nuxt UI\'s own sizes from sm up', async () => {
-    const page = await open(1024)
-    const box = (await page.getByRole('button', { name: 'Select', exact: true }).boundingBox())!
-    expect(box.height).toBeLessThan(40)
+  it('uses Nuxt UI\'s own sizes at every width: a phone\'s buttons are no bigger (D81)', async () => {
+    const height = async (width: number) => {
+      const page = await open(width)
+      return (await page.getByRole('button', { name: 'Select', exact: true }).boundingBox())!.height
+    }
+    const [phone, desktop] = [await height(375), await height(1024)]
+    expect(phone).toBe(desktop)
+    expect(phone).toBeLessThan(40)
   })
 
   it('gives a checkbox a 44px hit area on a phone without making it bigger', async () => {
@@ -137,25 +140,35 @@ describe('primary color', () => {
   })
 })
 
-describe('warning color', () => {
-  it('uses the 800 shade in light mode: AA contrast as text and on its own tint', async () => {
-    const page = await open(1024)
-    expect(await cssVar(page, '--ui-warning')).toBe(await cssVar(page, '--ui-color-warning-800'))
-    const warning = await painted(page, await cssVar(page, '--ui-warning'))
-    const white = [255, 255, 255]
-    expect(contrast(warning, white)).toBeGreaterThanOrEqual(4.5)
-    // `text-warning` on `bg-warning/10` (subtle badges)
-    const tint = await painted(page, `color-mix(in oklab, ${await cssVar(page, '--ui-warning')} 10%, transparent)`)
-    expect(contrast(warning, tint)).toBeGreaterThanOrEqual(4.5)
-  })
+/** The status colors (D80): the light-mode shade each uses, the lightest that passes AA. */
+const STATUS_SHADES = { warning: 800, success: 800, error: 700, info: 600 } as const
 
-  it('keeps Nuxt UI\'s 400 shade in dark mode, readable on the dark background', async () => {
+describe('status colors', () => {
+  for (const [color, shade] of Object.entries(STATUS_SHADES)) {
+    it(`${color} uses the ${shade} shade in light mode: AA as text on white and on its own tint`, async () => {
+      const page = await open(1024)
+      expect(await cssVar(page, `--ui-${color}`)).toBe(await cssVar(page, `--ui-color-${color}-${shade}`))
+      const value = await cssVar(page, `--ui-${color}`)
+      const text = await painted(page, value)
+      // Also the white label of a solid badge or button on it
+      expect(contrast(text, [255, 255, 255])).toBeGreaterThanOrEqual(4.5)
+      // `text-<color>` on `bg-<color>/10` (subtle badges, alerts)
+      expect(contrast(text, await painted(page, `color-mix(in oklab, ${value} 10%, transparent)`))).toBeGreaterThanOrEqual(4.5)
+    })
+  }
+
+  it('keeps Nuxt UI\'s 400 shades in dark mode, readable on the dark background and on their tint', async () => {
     const page = await open(1024, 812, 'dark')
     await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(true)
-    expect(await cssVar(page, '--ui-warning')).toBe(await cssVar(page, '--ui-color-warning-400'))
     const body = await page.evaluate(() => getComputedStyle(document.body).backgroundColor)
-    const warning = await painted(page, await cssVar(page, '--ui-warning'), body)
-    expect(contrast(warning, await painted(page, body))).toBeGreaterThanOrEqual(4.5)
+    for (const color of Object.keys(STATUS_SHADES)) {
+      expect(await cssVar(page, `--ui-${color}`)).toBe(await cssVar(page, `--ui-color-${color}-400`))
+      const value = await cssVar(page, `--ui-${color}`)
+      const text = await painted(page, value, body)
+      expect(contrast(text, await painted(page, body)), `${color} on the background`).toBeGreaterThanOrEqual(4.5)
+      const tint = await painted(page, `color-mix(in oklab, ${value} 10%, transparent)`, body)
+      expect(contrast(text, tint), `${color} on its tint`).toBeGreaterThanOrEqual(4.5)
+    }
   })
 })
 

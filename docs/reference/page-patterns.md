@@ -75,8 +75,8 @@ All 12 · Active 10 · Archived 2
 
 A compact record row has **two sibling targets**, never nested:
 
-1. **The record target:** a `ULink` (or `NuxtLink`) to the record's route, or, when the record opens in an overlay, a `UButton` (`color="neutral" variant="ghost" block`) whose default slot holds the content. It fills the row (`flex min-w-0 flex-1`), holds the name, the status badge and the meta line as plain, non-interactive content, and is at least `min-h-11` tall (the central compact configuration, [ui §6](./ui.md#6-density-and-touch-targets)). Its accessible name is the record's name.
-2. **The actions trigger:** a `UDropdownMenu` (or a `UDrawer` bottom sheet, by the layout-context rule in [responsive-layout §1](./responsive-layout.md#constrained-surfaces-container-queries)) whose trigger is an icon-only `UButton` (`icon="i-lucide-ellipsis-vertical" color="neutral" variant="ghost"`, `aria-label="Actions for <name>"`), 44×44 on compact.
+1. **The record target:** a `ULink` (or `NuxtLink`) to the record's route, or, when the record opens in an overlay, a `UButton` (`color="neutral" variant="ghost" block`) whose default slot holds the content. It fills the row (`flex min-w-0 flex-1`), holds the name, the status badge and the meta line as plain, non-interactive content, and is tall because of that content (two or three lines: 44px or more), with no size override ([ui §6](./ui.md#6-density-and-touch-targets)). Its accessible name is the record's name.
+2. **The actions trigger:** a `UDropdownMenu` (or a `UDrawer` bottom sheet, by the layout-context rule in [responsive-layout §1](./responsive-layout.md#constrained-surfaces-container-queries)) whose trigger is an icon-only `UButton` (`icon="i-lucide-ellipsis-vertical" color="neutral" variant="ghost"`, `aria-label="Actions for <name>"`), at Nuxt UI's default size.
 
 ```vue
 <li class="flex items-center gap-2">
