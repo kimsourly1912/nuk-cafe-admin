@@ -54,10 +54,10 @@ const unsaved = useModalUnsavedChanges(pending, {
   close: () => emit('close'),
 })
 
-// --- Reload after someone else changed the set (409) ---
-// Shown in the editor, not as a toast action: while the slide-over is open the toasts sit outside
-// the modal (aria-hidden), so their buttons can't be reached by keyboard or screen reader.
-const conflict = ref(false)
+// --- The last error, shown in the editor as well as in the toast ---
+// While the slide-over is open the toasts sit outside it (aria-hidden), so neither their text nor
+// their buttons reach keyboard and screen-reader users (D67). A version conflict offers Reload.
+const lastError = ref<{ message: string, conflict: boolean } | null>(null)
 const notify = useNotify()
 async function reload() {
   try {
@@ -66,15 +66,16 @@ async function reload() {
     drafts.name = fresh.name
     drafts.values = Object.fromEntries(fresh.values.map(value => [value.id, value.name]))
     order.value = activeValues(fresh).map(value => value.id)
-    conflict.value = false
+    lastError.value = null
   }
   catch (error) {
     notify.error('Could not reload the option set', error)
   }
 }
-/** Notes a version conflict (someone else saved first); passes the result on. */
-function checked<T extends { ok: boolean, status?: string, error?: { code?: string } }>(result: T): T {
-  if (!result.ok && result.status === 'error' && result.error?.code === 'VERSION_CONFLICT') conflict.value = true
+/** Notes the outcome of a change for the alert; passes the result on. */
+function checked<T extends { ok: boolean, status?: string, error?: { code?: string, message: string } }>(result: T): T {
+  if (result.ok) lastError.value = null
+  else if (result.status === 'error' && result.error) lastError.value = { message: result.error.message, conflict: result.error.code === 'VERSION_CONFLICT' }
   return result
 }
 
@@ -172,12 +173,12 @@ async function onHandleKey(event: KeyboardEvent, index: number) {
     <template #body>
       <div class="space-y-6">
         <UAlert
-          v-if="conflict"
-          color="warning"
+          v-if="lastError"
+          :color="lastError.conflict ? 'warning' : 'error'"
           variant="subtle"
-          title="Someone else changed this option set"
-          description="Reload it to see their changes, then try again."
-          :actions="[{ label: 'Reload', onClick: reload }]"
+          :title="lastError.conflict ? 'Someone else changed this option set' : 'That change wasn\'t saved'"
+          :description="lastError.conflict ? 'Reload it to see their changes, then try again.' : lastError.message"
+          :actions="lastError.conflict ? [{ label: 'Reload', onClick: reload }] : []"
         />
 
         <UAlert

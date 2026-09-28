@@ -1,10 +1,11 @@
-import { CURRENCY } from '#shared/contracts/menu'
-
 /**
  * The API stores prices as integer cents of USD (`priceMinor`); forms and the display work in
  * dollars. Convert only at the boundary: `toMinor` when sending, `fromMinor` when reading.
+ * Shared by every screen that shows prices (menu items, add-ons).
  */
-export { CURRENCY }
+
+/** The only currency at launch (D45). */
+export const CURRENCY = 'USD'
 
 /** `Intl.NumberFormat` options, shared by the display and `UInputNumber`. */
 export const PRICE_FORMAT: Intl.NumberFormatOptions = { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2, maximumFractionDigits: 2 }

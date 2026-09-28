@@ -2,7 +2,7 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { OptionSet, OptionValue } from '../../shared/contracts/menu-options'
-import { failures, mockApi, setupE2e, toast } from './support/mock-api'
+import { failures, MockFailure, mockApi, setupE2e, toast } from './support/mock-api'
 
 await setupE2e()
 
@@ -204,6 +204,19 @@ describe('option set editor', () => {
     await editor.getByRole('button', { name: 'Add', exact: true }).click()
     await toast(page, '"Extra large" added').waitFor()
     expect(bodies).toEqual([{ version: 1, name: 'Extra large' }, { version: 7, name: 'Extra large' }])
+  })
+
+  it('shows a refused change inside the editor too, where toasts can\'t be reached', async () => {
+    const { page } = await open([SIZE], {
+      'POST /admin/menu/option-sets/{id}/values': () => {
+        throw new MockFailure(409, 'OPTION_VALUE_NAME_TAKEN', 'This set already has a value named "small".')
+      },
+    })
+    const editor = await openEditor(page, 'Size')
+    await editor.getByLabel('New value').fill('small')
+    await editor.getByRole('button', { name: 'Add', exact: true }).click()
+    await editor.getByText('That change wasn\'t saved').waitFor()
+    await editor.getByText('This set already has a value named "small".').waitFor()
   })
 
   it('asks before closing with typed but unsaved text', async () => {

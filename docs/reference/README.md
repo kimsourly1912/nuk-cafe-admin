@@ -14,7 +14,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | [Data fetching](./data-fetching.md) | `useApiQuery`, `usePaginatedQuery` (URL sync), `ANY` / `toApiQuery`, `invalidate` (also other tabs), `invalidateInThisTab`, `invalidateAll` |
 | [Mutations](./mutations.md) | `useMutation` (create/update/delete, single and batch), `usePendingMutationCount` |
 | [Errors](./errors.md) | `ApiError`, `getErrorMessage`, `isSilentError`, error codes, `<ApiErrorAlert>`, `useNotify` |
-| [UI helpers](./ui.md) | `useConfirm`, `useTableSelection`, `<BulkActionsBar>`, `<StatusBadge>`, status constants, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, `useStatusCounts`, `<ListSkeleton>` |
+| [UI helpers](./ui.md) | `useConfirm`, `useTableSelection`, `<BulkActionsBar>`, `<StatusBadge>`, status constants, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, `useStatusCounts`, money (`toMinor`, `formatMinor`, …), `<ListSkeleton>` |
 | [App-wide behavior](./app-behavior.md) | Tab titles, refresh on tab focus/reconnect, offline banner, leave guards, session loss: every case handled |
 | [Forms: unsaved changes](./forms.md) | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard`, `isSameFormValue` |
 | [Auth](./auth.md) | `useAuth`, public pages |
@@ -47,6 +47,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<SearchInput>` | component | [UI helpers](./ui.md#searchinput) | Search as you type (debounced) |
 | `<ListEmptyState>` | component | [UI helpers](./ui.md#listemptystate) | "No X yet" vs "No X match your filters" |
 | `previewList`, `pluralize` | util | [UI helpers](./ui.md#previewlist-and-pluralize) | "Coffee, Tea and 3 more", "3 categories" |
+| `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT` | util | [UI helpers](./ui.md#money-tominor-fromminor-formatminor-formatprice-price_format) | Cents ↔ dollars, "$4.20" |
 | `useUnsavedChanges` | composable | [Forms](./forms.md#useunsavedchanges) | Warn before a page form's input is lost |
 | `useModalUnsavedChanges` | composable | [Forms](./forms.md#usemodalunsavedchanges) | Same, plus asking before the modal closes |
 | `useLeaveGuard` | composable | [Forms](./forms.md#useleaveguard) | App-wide "discard unsaved changes?" check |

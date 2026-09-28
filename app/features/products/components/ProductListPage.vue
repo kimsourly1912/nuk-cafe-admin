@@ -11,7 +11,6 @@ import { useLocalStorage } from '@vueuse/core'
 import { CategorySelect, useCategoryOptions } from '~/features/categories'
 import { useProductList, useProductMenu, useProductMutations, useProductStatusCounts } from '../composables/useProducts'
 import { menuSections } from '../utils/menu-sections'
-import { formatMinor } from '../utils/money'
 import ProductCard from './ProductCard.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
 

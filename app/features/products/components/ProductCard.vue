@@ -5,7 +5,6 @@
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Product } from '#shared/contracts/menu'
-import { formatMinor } from '../utils/money'
 
 const props = defineProps<{
   product: Product
