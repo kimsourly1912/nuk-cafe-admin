@@ -16,7 +16,6 @@ import { insertNodeAt, removeNode, useSortable } from '@vueuse/integrations/useS
 import { describeWindows, useAvailabilityRuleOptions } from '~/features/availability-rules'
 import { useCategoryMutations } from '../composables/useCategories'
 import { useCategoryTree } from '../composables/useCategoryTree'
-import { rowColumns } from '../schemas/category-display'
 import CategoryFormModal from './CategoryFormModal.vue'
 import CategoryRestoreModal from './CategoryRestoreModal.vue'
 import type { CategoryPageMode } from './CategoryRow.vue'
@@ -431,82 +430,83 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           @clear="clearFilters()"
         />
 
+        <!-- @container: the tree lays out by its own width, not the viewport's (D85) -->
         <div
           v-else
-          class="md:overflow-hidden md:rounded-lg md:border md:border-default"
+          class="@container"
         >
-          <!-- Column headings (desktop) -->
-          <div
-            class="hidden items-center gap-4 border-b border-default bg-elevated/25 px-4 py-2 text-sm font-medium text-muted"
-            :class="rowColumns(showStatus)"
-            aria-hidden="true"
-          >
-            <span>Category</span>
-            <span>Contains</span>
-            <span>Availability</span>
-            <span v-if="showStatus">Status</span>
-            <span class="text-right">Actions</span>
-          </div>
+          <div class="@2xl:overflow-hidden @2xl:rounded-lg @2xl:border @2xl:border-default">
+            <!-- Column headings of the wide layout; widths match CategoryRow -->
+            <div
+              class="hidden items-center gap-4 border-b border-default bg-elevated/25 px-4 py-2 text-sm font-medium text-muted @2xl:flex"
+              aria-hidden="true"
+            >
+              <span class="min-w-0 flex-1">Category</span>
+              <span class="w-36 shrink-0">Contains</span>
+              <span class="w-44 shrink-0">Availability</span>
+              <span class="w-12 shrink-0 text-right">Actions</span>
+            </div>
 
-          <div
-            ref="groupsEl"
-            role="list"
-            aria-label="Categories"
-            class="space-y-3 md:space-y-0 md:divide-y md:divide-default"
-          >
-            <CategoryTreeGroup
-              v-for="(group, i) in groups"
-              :key="group.main.id"
-              :group="group"
-              :mode="mode"
-              :movable="movable"
-              :expanded="isExpanded(group.main.id)"
-              :show-status="showStatus"
-              :selectable-status="view === 'all' ? undefined : view"
-              :index="i"
-              :count="groups.length"
-              :actions="rowActions"
-              :is-selected="selection.isSelected"
-              :is-busy="isBusy"
-              :rule-times="ruleTimes"
-              @open="category => openForm(category)"
-              @select="(category, value) => selection.toggle(category, value)"
-              @toggle="toggle(group.main.id)"
-              @add-sub="openForm(undefined, group.main.id)"
-              @move-main="by => moveMain(i, by, by < 0 ? '[data-move=up]' : '[data-move=down]')"
-              @main-handle-keydown="onMainKey($event, i)"
-              @move-sub="(from, to) => tree.moveSub(group.main.id, from, to)"
-            />
-          </div>
+            <div
+              ref="groupsEl"
+              role="list"
+              aria-label="Categories"
+              class="space-y-3 @2xl:space-y-0 @2xl:divide-y @2xl:divide-default"
+            >
+              <CategoryTreeGroup
+                v-for="(group, i) in groups"
+                :key="group.main.id"
+                :group="group"
+                :mode="mode"
+                :movable="movable"
+                :expanded="isExpanded(group.main.id)"
+                :show-status="showStatus"
+                :selectable-status="view === 'all' ? undefined : view"
+                :index="i"
+                :count="groups.length"
+                :actions="rowActions"
+                :is-selected="selection.isSelected"
+                :is-busy="isBusy"
+                :rule-times="ruleTimes"
+                @open="category => openForm(category)"
+                @select="(category, value) => selection.toggle(category, value)"
+                @toggle="toggle(group.main.id)"
+                @add-sub="openForm(undefined, group.main.id)"
+                @move-main="by => moveMain(i, by, by < 0 ? '[data-move=up]' : '[data-move=down]')"
+                @main-handle-keydown="onMainKey($event, i)"
+                @move-sub="(from, to) => tree.moveSub(group.main.id, from, to)"
+              />
+            </div>
 
-          <!-- Subcategories whose parent is gone: shown, not reorderable. -->
-          <div
-            v-if="tree.tree.value.orphans.length"
-            role="list"
-            aria-label="Without a parent category"
-            class="mt-3 overflow-hidden rounded-lg border border-default md:mt-0 md:rounded-none md:border-0 md:border-t"
-          >
-            <p class="border-b border-default bg-elevated/25 px-4 py-2 text-sm text-muted">
-              Without a parent category
-            </p>
-            <CategoryRow
-              v-for="orphan in tree.tree.value.orphans"
-              :key="orphan.id"
-              role="listitem"
-              :aria-label="orphan.name"
-              :category="orphan"
-              level="sub"
-              :mode="mode === 'reorder' ? 'browse' : mode"
-              :actions="rowActions(orphan)"
-              :show-status="showStatus"
-              :selected="selection.isSelected(orphan)"
-              :selectable="mode === 'select' && orphan.status === view"
-              :busy="isBusy(orphan.id)"
-              :rule-times="ruleTimes"
-              last
-              @open="openForm(orphan)"
-              @select="value => selection.toggle(orphan, value)"
-            />
+            <!-- Subcategories whose parent is gone: shown, not reorderable. -->
+            <div
+              v-if="tree.tree.value.orphans.length"
+              role="list"
+              aria-label="Without a parent category"
+              class="mt-3 overflow-hidden rounded-lg border border-default @2xl:mt-0 @2xl:rounded-none @2xl:border-0 @2xl:border-t"
+            >
+              <p class="border-b border-default bg-elevated/25 px-4 py-2 text-sm text-muted">
+                Without a parent category
+              </p>
+              <CategoryRow
+                v-for="orphan in tree.tree.value.orphans"
+                :key="orphan.id"
+                role="listitem"
+                :aria-label="orphan.name"
+                :category="orphan"
+                level="sub"
+                :mode="mode === 'reorder' ? 'browse' : mode"
+                :actions="rowActions(orphan)"
+                :show-status="showStatus"
+                :selected="selection.isSelected(orphan)"
+                :selectable="mode === 'select' && orphan.status === view"
+                :busy="isBusy(orphan.id)"
+                :rule-times="ruleTimes"
+                last
+                @open="openForm(orphan)"
+                @select="value => selection.toggle(orphan, value)"
+              />
+            </div>
           </div>
         </div>
       </div>
