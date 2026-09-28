@@ -5,7 +5,8 @@
  * pre-selected ones marked), what offers it, and Manage (or View, when archived) to open its page.
  * The ⋮ menu holds only Archive or Restore. While searching, the add-ons that match are listed.
  *
- * Rows: 3 on phones, 4 from `sm`, then "+N more" (CSS decides, so no resize listener).
+ * Rows: 3 on a narrow card, 4 from `@sm` (a 24rem card), then "+N more". The card is its own
+ * container (D88): in two columns at 1024px it is narrow though the screen is wide.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
@@ -26,7 +27,7 @@ const rule = computed(() => ruleParts(props.group.minSelect, props.group.maxSele
 
 const PHONE_ROWS = 3
 const WIDE_ROWS = 4
-const rowClass = (index: number) => (index < PHONE_ROWS ? 'flex' : index < WIDE_ROWS ? 'hidden sm:flex' : 'hidden')
+const rowClass = (index: number) => (index < PHONE_ROWS ? 'flex' : index < WIDE_ROWS ? 'hidden @sm:flex' : 'hidden')
 </script>
 
 <template>
@@ -36,7 +37,7 @@ const rowClass = (index: number) => (index < PHONE_ROWS ? 'flex' : index < WIDE_
     :aria-label="group.name"
     :aria-busy="busy || undefined"
     :class="busy && 'pointer-events-none opacity-50'"
-    :ui="{ root: 'flex flex-col', body: 'flex-1 space-y-3' }"
+    :ui="{ root: '@container flex flex-col', body: 'flex-1 space-y-3' }"
   >
     <div class="flex items-start gap-3">
       <UIcon
@@ -111,8 +112,8 @@ const rowClass = (index: number) => (index < PHONE_ROWS ? 'flex' : index < WIDE_
             name="i-lucide-circle-check"
             class="size-4 text-success"
           />
-          <span class="hidden sm:inline">Preselected</span>
-          <span class="sr-only sm:hidden">Preselected</span>
+          <span class="hidden @sm:inline">Preselected</span>
+          <span class="sr-only @sm:hidden">Preselected</span>
         </span>
         <span class="w-16 shrink-0 text-right tabular-nums">{{ formatDelta(addOn.priceDeltaMinor) }}</span>
       </li>
@@ -126,12 +127,12 @@ const rowClass = (index: number) => (index < PHONE_ROWS ? 'flex' : index < WIDE_
     <p
       v-if="addOns.length > PHONE_ROWS"
       class="text-xs text-muted"
-      :class="addOns.length > WIDE_ROWS ? '' : 'sm:hidden'"
+      :class="addOns.length > WIDE_ROWS ? '' : '@sm:hidden'"
     >
-      <span class="sm:hidden">+{{ addOns.length - PHONE_ROWS }} more</span>
+      <span class="@sm:hidden">+{{ addOns.length - PHONE_ROWS }} more</span>
       <span
         v-if="addOns.length > WIDE_ROWS"
-        class="hidden sm:inline"
+        class="hidden @sm:inline"
       >+{{ addOns.length - WIDE_ROWS }} more</span>
     </p>
 
@@ -143,7 +144,7 @@ const rowClass = (index: number) => (index < PHONE_ROWS ? 'flex' : index < WIDE_
     </p>
 
     <template #footer>
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-col gap-3 @sm:flex-row @sm:items-center @sm:justify-between">
         <p class="text-sm text-muted">
           {{ usageLabel(group.itemCount) }}
         </p>

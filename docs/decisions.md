@@ -723,3 +723,9 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Context:** the next page of step 5. Each Availability card switched to one row (details · weekly schedule · Manage) at the viewport's `lg`, but the one-row layout needs about 880px and at 1024px beside the sidebar the card is about 736px wide, so its content overflowed. The search box had a fixed width on phones.
 - **Decision:** each card is its own container (`@container` on the `UCard` root) and switches to one row at `@4xl` (a 56rem card): stacked beside the sidebar at 1024px, one row at 1440px. `WeekdayStrip` follows the same container (a 7-column grid until `@4xl`). The search box is `w-full sm:w-64` like Staff's.
 - **Verified:** e2e `availability-rules.test.ts` (16, 1 new: stacked and not overflowing at 1024px, one row at 1440px); screenshots at 1024 and 1440 px.
+
+### D88: The Add-ons library on the UI standard (Phase B step 5d), 2026-09-28
+
+- **Context:** the next page of step 5, the same case as Options (D86). Each library card counted its add-on rows by the **viewport** (`sm:`), but from `lg` the cards sit in two columns, so at 1024px a card about 350px wide showed the wide count. The search box had a fixed width on phones.
+- **Decision:** each card is its own container (`@container` on the `UCard` root); rows, the "Preselected" label and the footer switch at `@sm` (a 24rem card): 3 rows and "+N more" on a narrow card, 4 on a wide one. The search box is `w-full sm:w-64` like Staff's.
+- **Verified:** e2e `modifier-groups.test.ts` (36, 1 new: 3 rows at 1024px in two columns, 4 at 768px in one).
