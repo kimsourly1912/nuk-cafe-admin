@@ -4,6 +4,7 @@ import { afterEach, expect, inject } from 'vitest'
 import type { Page as ApiPage } from '../../../shared/contracts/common'
 import type { Category, Product, Schedule } from '../../../shared/contracts/menu'
 import type { AdminSession } from '../../../shared/contracts/identity'
+import type { MenuCategory } from '../../../shared/contracts/menu-categories'
 import type { BranchOption, StaffMember } from '../../../shared/contracts/staff'
 
 /** Requests no handler answered, across every `mockApi` of the current test. */
@@ -69,6 +70,11 @@ export function categoryOf(id: string, name: string, overrides: Partial<Category
   return { id, name, parentId: null, status: 'ACTIVE', sortOrder: 1, version: 1, createdAt: STAMP, updatedAt: STAMP, ...overrides }
 }
 
+/** A category of the new menu API (`/api/admin/menu/categories`). */
+export function menuCategoryOf(id: string, name: string, overrides: Partial<MenuCategory> = {}): MenuCategory {
+  return { id, name, description: '', parentId: null, status: 'active', sortOrder: 1, childCount: 0, availabilityRules: [], version: 1, createdAt: STAMP, updatedAt: STAMP, ...overrides }
+}
+
 export function scheduleOf(id: string, name: string, overrides: Partial<Schedule> = {}): Schedule {
   return {
     id,
@@ -126,6 +132,8 @@ export function staffOf(id: string, name: string, overrides: Partial<StaffMember
 
 export const TEA = categoryOf('cat-1', 'Tea')
 export const COFFEE = categoryOf('cat-2', 'Coffee', { sortOrder: 2 })
+export const MENU_TEA = menuCategoryOf('cat-1', 'Tea')
+export const MENU_COFFEE = menuCategoryOf('cat-2', 'Coffee', { sortOrder: 2 })
 
 export function pageOf<T>(items: T[], page = 1, pageSize = 20): ApiPage<T> {
   return { items, page, pageSize, total: items.length, totalPages: Math.max(1, Math.ceil(items.length / pageSize)) }
@@ -138,6 +146,10 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'POST /auth/sign-out': () => ({ success: true }),
   'GET /admin/me': () => ADMIN,
   'GET /admin/categories': () => [TEA, COFFEE],
+  'GET /admin/menu/categories': () => [MENU_TEA, MENU_COFFEE],
+  'POST /admin/menu/categories': ({ body }) => menuCategoryOf('cat-3', String((body as { name?: string })?.name ?? 'New')),
+  // The category form's rule picker.
+  'GET /admin/menu/availability-rules': () => [],
   'POST /admin/categories': ({ body }) => categoryOf('cat-3', String((body as { name?: string })?.name ?? 'New')),
 }
 

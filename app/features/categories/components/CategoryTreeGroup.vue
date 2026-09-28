@@ -4,7 +4,7 @@
  * their handle, or ↑/↓ on a focused handle): each main category numbers its own subs (D37).
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
-import type { Category } from '#shared/contracts/menu'
+import type { MenuCategory } from '#shared/contracts/menu-categories'
 import { insertNodeAt, removeNode, useSortable } from '@vueuse/integrations/useSortable'
 import type { CategoryGroup } from '../schemas/category-tree'
 import CategoryRow from './CategoryRow.vue'
@@ -13,14 +13,14 @@ const props = defineProps<{
   group: CategoryGroup
   sortable: boolean
   expanded: boolean
-  actions: (category: Category) => DropdownMenuItem[]
-  isSelected: (category: Category) => boolean
+  actions: (category: MenuCategory) => DropdownMenuItem[]
+  isSelected: (category: MenuCategory) => boolean
   isBusy: (id: string) => boolean
 }>()
 
 const emit = defineEmits<{
-  'open': [category: Category]
-  'select': [category: Category, value: boolean]
+  'open': [category: MenuCategory]
+  'select': [category: MenuCategory, value: boolean]
   'toggle': []
   'main-handle-keydown': [event: KeyboardEvent]
   'move-sub': [from: number, to: number]

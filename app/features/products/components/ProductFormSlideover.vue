@@ -9,7 +9,7 @@
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { Product } from '#shared/contracts/menu'
-import { CategorySelect } from '~/features/categories'
+import LegacyCategorySelect from './LegacyCategorySelect.vue'
 import { ScheduleSelect } from '~/features/schedules'
 import { useProductMutations } from '../composables/useProducts'
 import { productFormSchema, toCreateProductBody, toProductForm, toUpdateProductBody } from '../schemas/product-form'
@@ -133,7 +133,7 @@ async function onSubmit({ data }: FormSubmitEvent<ProductForm>) {
             name="categoryId"
             required
           >
-            <CategorySelect
+            <LegacyCategorySelect
               v-model="state.categoryId"
               :current-label="product?.category.name"
             />

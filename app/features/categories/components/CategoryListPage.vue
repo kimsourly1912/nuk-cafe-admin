@@ -5,7 +5,7 @@
  * the order is changed by drag and drop per level (docs/plans/list-ui-refresh.md, D37).
  */
 import type { BannerProps, DropdownMenuItem } from '@nuxt/ui'
-import type { Category } from '#shared/contracts/menu'
+import type { MenuCategory } from '#shared/contracts/menu-categories'
 import { insertNodeAt, removeNode, useSortable } from '@vueuse/integrations/useSortable'
 import { useCategoryMutations } from '../composables/useCategories'
 import { useCategoryTree } from '../composables/useCategoryTree'
@@ -13,17 +13,22 @@ import CategoryFormModal from './CategoryFormModal.vue'
 import CategoryRow from './CategoryRow.vue'
 import CategoryTreeGroup from './CategoryTreeGroup.vue'
 
-// --- Filters (kept in the URL) ---
+const TABS = [
+  { label: 'Active', value: 'active' },
+  { label: 'Archived', value: 'archived' },
+]
+
+// --- Filters (kept in the URL); archived categories are on their own tab ---
 const { filters, isFiltered, clearFilters } = usePaginatedQuery({
   search: '',
-  status: ANY as Status | Any,
+  status: 'active' as string,
 })
 
-const { remove, isBusy } = useCategoryMutations()
-const tree = useCategoryTree(filters, id => remove.isRemoved(id))
+const { archive, restore, isBusy } = useCategoryMutations()
+const tree = useCategoryTree(filters)
 
 // Every category shown, in order: for selection and bulk actions.
-const rows = computed<Category[]>(() => [
+const rows = computed<MenuCategory[]>(() => [
   ...tree.tree.value.groups.flatMap(g => [g.main, ...g.subs]),
   ...tree.tree.value.orphans,
 ])
@@ -40,9 +45,12 @@ function toggle(id: string) {
 // --- Selection & bulk actions ---
 const selection = useTableSelection(rows, c => c.id, { resetOn: [() => ({ ...filters })] })
 
-async function removeSelected() {
-  // Sub-categories go first (batch phases), so a main isn't refused for still having children.
-  const result = await remove.executeMany(selection.selected)
+/** Only active categories can be archived; archived ones in the selection are left out. */
+const archivable = computed(() => selection.selected.filter(c => c.status === 'active'))
+
+async function archiveSelected() {
+  // Sub-categories go first (batch phases): archiving a main archives its subs too.
+  const result = await archive.executeMany(archivable.value)
   // Keep only the rows that still need attention selected: failed, skipped (busy) and not started.
   selection.select([
     ...result.failed.map(f => f.input.id),
@@ -52,17 +60,22 @@ async function removeSelected() {
 }
 
 // --- Row actions ---
-function rowActions(category: Category): DropdownMenuItem[] {
+function rowActions(category: MenuCategory): DropdownMenuItem[] {
+  if (category.status === 'archived') {
+    return [{ label: 'Restore', icon: 'i-lucide-archive-restore', onSelect: () => restore.execute(category) }]
+  }
   const isMain = category.parentId === null
   return [
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openForm(category) },
     ...(isMain ? [{ label: 'Add sub-category', icon: 'i-lucide-list-plus', onSelect: () => openForm(undefined, category.id) }] : []),
-    { label: 'Delete', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => remove.execute(category) },
+    { label: 'Archive', icon: 'i-lucide-archive', onSelect: () => archive.execute(category) },
   ]
 }
 
 const formModal = useOverlay().create(CategoryFormModal)
-function openForm(category?: Category, parentId?: string) {
+function openForm(category?: MenuCategory, parentId?: string) {
+  // An archived category can't be edited (the server refuses): restore it first.
+  if (category?.status === 'archived') return
   formModal.open({ category, parentId })
 }
 
@@ -117,8 +130,8 @@ const banner = computed<BannerProps | undefined>(() => {
       icon: 'i-lucide-arrow-down-up',
       color: 'neutral',
       ui: HINT_UI,
-      title: 'Clear the search and status filter to change the order.',
-      actions: [{ label: 'Clear filters', color: 'neutral', variant: 'outline', onClick: () => clearFilters() }],
+      title: 'Clear the search and show the Active tab to change the order.',
+      actions: [{ label: 'Show all active', color: 'neutral', variant: 'outline', onClick: () => clearFilters() }],
     }
   }
   return undefined
@@ -183,6 +196,7 @@ const filtersLocked = computed(() => tree.isDirty.value || tree.saving.value)
       <div class="flex flex-wrap items-center justify-between gap-2">
         <StatusTabs
           v-model="filters.status"
+          :tabs="TABS"
           :counts="tree.counts.value"
           :disabled="filtersLocked"
         />
@@ -279,11 +293,11 @@ const filtersLocked = computed(() => tree.isDirty.value || tree.saving.value)
         @clear="selection.clear()"
       >
         <UButton
-          label="Delete"
-          icon="i-lucide-trash-2"
-          color="error"
+          label="Archive"
+          icon="i-lucide-archive"
           variant="subtle"
-          @click="removeSelected"
+          :disabled="!archivable.length"
+          @click="archiveSelected"
         />
       </BulkActionsBar>
     </template>

@@ -1,14 +1,15 @@
-import type { Category, CreateCategoryBody, ReorderCategoriesBody, UpdateCategoryBody } from '#shared/contracts/menu'
+import type { CreateCategoryInput, MenuCategory, ReorderCategoriesInput, UpdateCategoryInput } from '#shared/contracts/menu-categories'
 
+const BASE = '/admin/menu/categories'
 const NOUN: [string, string] = ['category', 'categories']
 
 /**
- * Update and remove of one category must never overlap (e.g. a bulk delete while an edit is
- * saving): both take this record lock, checked when each request actually starts.
+ * Update, archive and restore of one category must never overlap (e.g. a bulk archive while an
+ * edit is saving): all take this record lock, checked when each request actually starts.
  */
 const lockOf = (id: string) => `category:${id}`
 
-/** Features whose cached data shows categories (products display their category). */
+/** Features whose cached data shows categories (menu items show their category). */
 const AFFECTED = ['categories', 'products']
 
 /**
@@ -17,11 +18,11 @@ const AFFECTED = ['categories', 'products']
  */
 export function useCategoryMutations() {
   const create = useMutation(
-    (body: CreateCategoryBody) => apiFetch<Category>('/v1/admin/categories', { method: 'POST', body }),
+    (body: CreateCategoryInput) => apiFetch<MenuCategory>(BASE, { method: 'POST', body }),
     {
       id: 'categories:create',
       // Same name in flight = same submission (double submit); different names run in parallel.
-      key: body => body.name.trim().toLowerCase(),
+      key: body => `${body.parentId ?? 'top'}:${body.name.toLowerCase()}`,
       successMessage: (_, body) => `Category "${body.name}" created`,
       errorMessage: body => `Could not create "${body.name}"`,
       invalidate: AFFECTED,
@@ -29,8 +30,8 @@ export function useCategoryMutations() {
   )
 
   const update = useMutation(
-    ({ id, body }: { id: string, name: string, body: UpdateCategoryBody }) =>
-      apiFetch<Category>(`/v1/admin/categories/${id}`, { method: 'PATCH', body }),
+    ({ id, body }: { id: string, name: string, body: UpdateCategoryInput }) =>
+      apiFetch<MenuCategory>(`${BASE}/${id}`, { method: 'PATCH', body }),
     {
       id: 'categories:update',
       key: ({ id }) => id,
@@ -41,32 +42,33 @@ export function useCategoryMutations() {
     },
   )
 
-  const remove = useMutation(
-    (category: Category) => apiFetch<null>(`/v1/admin/categories/${category.id}`, { method: 'DELETE', query: { version: category.version } }),
+  /** Archiving a main category archives its sub-categories too (the server does it, D55). */
+  const archive = useMutation(
+    (category: MenuCategory) => apiFetch<MenuCategory>(`${BASE}/${category.id}/archive`, { method: 'POST', body: { version: category.version } }),
     {
-      id: 'categories:remove',
+      id: 'categories:archive',
       key: category => category.id,
       lock: category => lockOf(category.id),
-      removes: true,
       confirm: category => ({
-        title: `Delete "${category.name}"?`,
-        description: 'This cannot be undone.',
-        confirmLabel: 'Delete',
-        danger: true,
+        title: `Archive "${category.name}"?`,
+        description: category.childCount
+          ? `Its ${pluralize(category.childCount, ['sub-category', 'sub-categories'])} will be archived too. Menu items in it stay, but customers won't see them. You can restore it later.`
+          : 'Customers won\'t see it or its menu items. You can restore it later.',
+        confirmLabel: 'Archive',
       }),
-      successMessage: (_, category) => `Category "${category.name}" deleted`,
-      errorMessage: category => `Could not delete "${category.name}"`,
+      successMessage: (_, category) => `Category "${category.name}" archived`,
+      errorMessage: category => `Could not archive "${category.name}"`,
       invalidate: AFFECTED,
       batch: {
         noun: NOUN,
-        verb: ['Deleting', 'deleted'],
+        verb: ['Archiving', 'archived'],
         confirm: categories => ({
-          title: `Delete ${pluralize(categories.length, NOUN)}?`,
-          description: `${previewList(categories.map(c => c.name))}. This cannot be undone.`,
-          confirmLabel: 'Delete',
-          danger: true,
+          title: `Archive ${pluralize(categories.length, NOUN)}?`,
+          description: `${previewList(categories.map(c => c.name))}. Main categories take their sub-categories with them. You can restore them later.`,
+          confirmLabel: 'Archive',
         }),
-        // Sub-categories first, so a main category isn't rejected for still having children.
+        // Sub-categories first: archiving a main archives its subs, which would then fail as
+        // "already archived" if they came after.
         phases: categories => [
           categories.filter(c => c.parentId !== null),
           categories.filter(c => c.parentId === null),
@@ -75,13 +77,25 @@ export function useCategoryMutations() {
     },
   )
 
-  /** Saves the tree order: every changed list, whole (`sortOrderChanges`). One save at a time. */
+  /** Restores one category at the end of its level; its sub-categories stay archived. */
+  const restore = useMutation(
+    (category: MenuCategory) => apiFetch<MenuCategory>(`${BASE}/${category.id}/restore`, { method: 'POST', body: { version: category.version } }),
+    {
+      id: 'categories:restore',
+      key: category => category.id,
+      lock: category => lockOf(category.id),
+      successMessage: (_, category) => `Category "${category.name}" restored`,
+      errorMessage: category => `Could not restore "${category.name}"`,
+      invalidate: AFFECTED,
+    },
+  )
+
+  /** Saves one level's order (a parent's active children, each with its version). */
   const reorder = useMutation(
-    (body: ReorderCategoriesBody) => apiFetch<Category[]>('/v1/admin/categories/order', { method: 'PUT', body }),
+    (body: ReorderCategoriesInput) => apiFetch<MenuCategory[]>(`${BASE}/order`, { method: 'PUT', body }),
     {
       id: 'categories:sort',
-      key: () => 'order',
-      successMessage: 'Category order saved',
+      key: body => body.parentId ?? 'top',
       errorMessage: 'Could not save the category order',
       invalidate: AFFECTED,
     },
@@ -90,9 +104,10 @@ export function useCategoryMutations() {
   return {
     create,
     update,
-    remove,
+    archive,
+    restore,
     reorder,
     /** Any operation in flight for this category: disable its row actions. */
-    isBusy: (id: string) => update.isPending(id) || remove.isPending(id),
+    isBusy: (id: string) => update.isPending(id) || archive.isPending(id) || restore.isPending(id),
   }
 }

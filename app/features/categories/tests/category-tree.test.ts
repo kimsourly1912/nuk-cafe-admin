@@ -1,18 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import type { Category } from '#shared/contracts/menu'
-import { buildTree, countStatuses, filterTree, orderOf, sortOrderChanges } from '../schemas/category-tree'
+import type { MenuCategory } from '#shared/contracts/menu-categories'
+import { buildTree, countStatuses, filterTree, orderOf, reorderRequests } from '../schemas/category-tree'
 
-const main = (id: string, name: string, sortOrder: number, status = 'ACTIVE') =>
-  ({ id, name, parentId: null, sortOrder, status }) as Category
-const sub = (id: string, name: string, parent: string, sortOrder: number, status = 'ACTIVE') =>
-  ({ ...main(id, name, sortOrder, status), parentId: parent }) as Category
+const main = (id: string, name: string, sortOrder: number, status: MenuCategory['status'] = 'active') =>
+  ({ id, name, parentId: null, sortOrder, status, version: 1 }) as MenuCategory
+const sub = (id: string, name: string, parent: string, sortOrder: number, status: MenuCategory['status'] = 'active') =>
+  ({ ...main(id, name, sortOrder, status), parentId: parent }) as MenuCategory
 
 const CATEGORIES = [
   main('food', 'Food', 2),
   sub('toast', 'Toast', 'food', 1),
   main('drinks', 'Drinks', 1),
-  sub('tea', 'Tea', 'drinks', 2, 'INACTIVE'),
+  sub('tea', 'Tea', 'drinks', 2, 'archived'),
   sub('coffee', 'Coffee', 'drinks', 1),
+  sub('juice', 'Juice', 'drinks', 3),
+  main('old', 'Old menu', 3, 'archived'),
   sub('lost', 'Lost', 'gone', 1),
 ]
 
@@ -20,8 +22,9 @@ describe('category tree', () => {
   it('nests sub-categories under their main, both in sort order; lost subs apart', () => {
     const tree = buildTree(CATEGORIES)
     expect(tree.groups.map(g => [g.main.name, g.subs.map(s => s.name)])).toEqual([
-      ['Drinks', ['Coffee', 'Tea']],
+      ['Drinks', ['Coffee', 'Tea', 'Juice']],
       ['Food', ['Toast']],
+      ['Old menu', []],
     ])
     expect(tree.orphans.map(s => s.name)).toEqual(['Lost'])
   })
@@ -32,25 +35,30 @@ describe('category tree', () => {
   })
 
   it('filters by status, and ignores the "all" value', () => {
-    const inactive = filterTree(buildTree(CATEGORIES), { status: 'INACTIVE' })
-    expect(inactive.groups.map(g => [g.main.name, g.subs.map(s => s.name), !!g.contextOnly])).toEqual([['Drinks', ['Tea'], true]])
-    expect(filterTree(buildTree(CATEGORIES), { status: 'ALL' }).groups).toHaveLength(2)
+    const archived = filterTree(buildTree(CATEGORIES), { status: 'archived' })
+    expect(archived.groups.map(g => [g.main.name, g.subs.map(s => s.name), !!g.contextOnly])).toEqual([['Drinks', ['Tea'], true], ['Old menu', [], false]])
+    expect(filterTree(buildTree(CATEGORIES), { status: 'ALL' }).groups).toHaveLength(3)
   })
 
   it('counts statuses under the current search', () => {
-    expect(countStatuses(CATEGORIES)).toEqual({ ACTIVE: 5, INACTIVE: 1, all: 6 })
-    expect(countStatuses(CATEGORIES, 'o')).toEqual({ ACTIVE: 4, INACTIVE: 0, all: 4 })
+    expect(countStatuses(CATEGORIES)).toEqual({ active: 6, archived: 2, all: 8 })
+    expect(countStatuses(CATEGORIES, 'o')).toEqual({ active: 4, archived: 1, all: 5 })
   })
 
-  it('sends only the lists that changed, each whole, subs per main', () => {
+  it('orders only active categories: archived ones have no place', () => {
+    expect(orderOf(buildTree(CATEGORIES))).toEqual({ mains: ['drinks', 'food'], subs: { drinks: ['coffee', 'juice'], food: ['toast'] } })
+  })
+
+  it('saves one request per changed list, each with every active child and its version', () => {
     const server = orderOf(buildTree(CATEGORIES))
-    expect(server).toEqual({ mains: ['drinks', 'food'], subs: { drinks: ['coffee', 'tea'], food: ['toast'] } })
-    expect(sortOrderChanges(server, { ...server, subs: { ...server.subs, drinks: ['tea', 'coffee'] } })).toEqual({
-      lists: [{ parentId: 'drinks', ids: ['tea', 'coffee'] }],
-    })
-    expect(sortOrderChanges(server, { ...server, mains: ['food', 'drinks'] })).toEqual({
-      lists: [{ parentId: null, ids: ['food', 'drinks'] }],
-    })
-    expect(sortOrderChanges(server, server)).toEqual({ lists: [] })
+    const versions = new Map([['drinks', 3], ['food', 2], ['coffee', 5], ['juice', 1]])
+    expect(reorderRequests(server, { ...server, subs: { ...server.subs, drinks: ['juice', 'coffee'] } }, versions)).toEqual([
+      { parentId: 'drinks', items: [{ id: 'juice', version: 1 }, { id: 'coffee', version: 5 }] },
+    ])
+    expect(reorderRequests(server, { mains: ['food', 'drinks'], subs: { ...server.subs, drinks: ['juice', 'coffee'] } }, versions)).toEqual([
+      { parentId: null, items: [{ id: 'food', version: 2 }, { id: 'drinks', version: 3 }] },
+      { parentId: 'drinks', items: [{ id: 'juice', version: 1 }, { id: 'coffee', version: 5 }] },
+    ])
+    expect(reorderRequests(server, server, versions)).toEqual([])
   })
 })

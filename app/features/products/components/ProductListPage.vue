@@ -8,7 +8,8 @@
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { Product } from '#shared/contracts/menu'
 import { useLocalStorage } from '@vueuse/core'
-import { CategorySelect, useCategoryOptions } from '~/features/categories'
+import { useLegacyCategoryOptions as useCategoryOptions } from '../composables/useLegacyCategoryOptions'
+import LegacyCategorySelect from './LegacyCategorySelect.vue'
 import { useProductList, useProductMenu, useProductMutations, useProductStatusCounts } from '../composables/useProducts'
 import { menuSections } from '../utils/menu-sections'
 import ProductCard from './ProductCard.vue'
@@ -126,7 +127,7 @@ usePageShortcuts({ n: () => openForm() })
             placeholder="Search menu items…"
             class="w-64"
           />
-          <CategorySelect
+          <LegacyCategorySelect
             v-model="categoryFilter"
             none-label="All categories"
             include-inactive

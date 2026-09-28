@@ -227,15 +227,15 @@ What features must not do is **duplicate the engine**: no in-flight maps, double
 
 | Contract | Rule | `CategorySelect` today |
 |---|---|---|
-| Model | IDs only: `number \| undefined` (single) or `number[]` (multiple). Never objects | Single `number \| undefined` ✔ |
+| Model | IDs only: `number \| undefined` (single) or `number[]` (multiple). Never objects | Single `string \| undefined` ✔ |
 | Single vs multiple | Explicit: a separate component or a `multiple` prop, never inferred | Single only |
 | Optional value | A `noneLabel` option that sets `undefined` (`USelect` can't hold `undefined`). Required fields don't offer "none" | ✔ |
 | Loading / disabled | `loading` while options load. `disabled` passes through | Loading ✔, disabled via attrs |
 | Load error | Shows the failure with a retry, not an empty list | ✔ (e2e) |
-| Existing value (display) | An existing relationship **stays visible** with a label (from the record, e.g. `product.category.name`, or "Unknown category (unavailable)"), whether the related record is inactive, deleted, filtered out or not selectable. The picker never silently clears or replaces it. Keeping an existing value visible is **separate from** allowing it as a new selection | ✔ `currentLabel` prop, "(inactive)" / "(unavailable)" (e2e) |
-| New selections (eligibility) | Offered only per the relationship's **established** eligibility rules. An options or listing endpoint returning a record is **not** evidence that it may be selected, unless that endpoint's documented contract says so. Where eligibility for a class of records (e.g. inactive ones) is **[Open]**, defer that part of the selection behavior: don't offer those records as new selections yet, and record it as incomplete. This is a temporary deferral, **not** a rule that they're forbidden. The standard sets no permanent "always allowed" or "always forbidden" rule. A status marker next to an option is a [Choice] | Inactive categories are **not offered** as new selections while Q9 is open (deferral per this rule, D31); an inactive current value stays visible and selectable (e2e) |
+| Existing value (display) | An existing relationship **stays visible** with a label (from the record, e.g. `product.category.name`, or "Unknown category (unavailable)"), whether the related record is inactive, deleted, filtered out or not selectable. The picker never silently clears or replaces it. Keeping an existing value visible is **separate from** allowing it as a new selection | ✔ `currentLabel` prop, "(archived)" / "(has sub-categories)" / "(unavailable)" (e2e) |
+| New selections (eligibility) | Offered only per the relationship's **established** eligibility rules. An options or listing endpoint returning a record is **not** evidence that it may be selected, unless that endpoint's documented contract says so. Where eligibility for a class of records (e.g. inactive ones) is **[Open]**, defer that part of the selection behavior: don't offer those records as new selections yet, and record it as incomplete. This is a temporary deferral, **not** a rule that they're forbidden. The standard sets no permanent "always allowed" or "always forbidden" rule. A status marker next to an option is a [Choice] | Archived categories are **not offered** as new selections (the server refuses them, D45); an archived current value stays visible and selectable (e2e) |
 | Domain exclusions | Props named for the rule (`excludeId`: an item can't be its own parent) | ✔ |
-| Data source | Small sets: an unpaginated list or `/options` route, keyed per filter (`<feature>:options:<filter>`). Large sets: remote search against the paginated route (`USelectMenu` with search) | `/admin/categories`, `/admin/schedules/options` ✔ |
+| Data source | Small sets: an unpaginated list or `/options` route, keyed per filter (`<feature>:options:<filter>`). Large sets: remote search against the paginated route (`USelectMenu` with search) | `/admin/menu/categories?status=all`, one query shared with the tree (D69) ✔ |
 | Where it lives | `use<Feature>Options` + `<Feature>Select`, exported from `index.ts`, importing no other feature | ✔ |
 
 **[Choice]**: when a set is "large". Make it a configurable threshold (a constant or prop), and switch a picker to remote search when its resource can realistically exceed it. Products are the likely first case.
@@ -296,15 +296,15 @@ How the reference feature maps to this standard:
 |---|---|
 | Structure | [`app/features/categories/`](../app/features/categories/), route [`app/pages/categories/index.vue`](../app/pages/categories/index.vue) |
 | Public API | [`index.ts`](../app/features/categories/index.ts): `CategorySelect`, `useCategoryOptions`, `categoriesNavigation` |
-| Behavior | [`useCategories.ts`](../app/features/categories/composables/useCategories.ts): `useCategoryMutations` (create keyed by name, update/remove by id with a shared `lock`, `invalidate: ['categories', 'products']`, batch delete with sub-categories first), `isBusy`; [`useCategoryTree.ts`](../app/features/categories/composables/useCategoryTree.ts): the tree, filters and ordering |
-| Form rules + mapping | [`category-form.ts`](../app/features/categories/schemas/category-form.ts) (create and update bodies, `version`, `null` clears the parent), tests in [`category-form.test.ts`](../app/features/categories/tests/category-form.test.ts) |
+| Behavior | [`useCategories.ts`](../app/features/categories/composables/useCategories.ts): `useCategoryMutations` (create keyed by parent and name, update/archive/restore by id with a shared `lock`, `invalidate: ['categories', 'products']`, batch archive with sub-categories first, reorder one level per request), `isBusy`; [`useCategoryTree.ts`](../app/features/categories/composables/useCategoryTree.ts): the tree, filters and ordering |
+| Form rules + mapping | [`category-form.ts`](../app/features/categories/schemas/category-form.ts) (create and update bodies, `version`, `null` makes it a main category), tests in [`category-form.test.ts`](../app/features/categories/tests/category-form.test.ts) |
 | Form | [`CategoryFormModal.vue`](../app/features/categories/components/CategoryFormModal.vue): unsaved guard, Reopen draft, Ctrl/⌘+Enter |
 | List | [`CategoryListPage.vue`](../app/features/categories/components/CategoryListPage.vue) |
 | Picker | [`CategorySelect.vue`](../app/features/categories/components/CategorySelect.vue) + [`useCategoryOptions.ts`](../app/features/categories/composables/useCategoryOptions.ts) |
 | Tests | [`test/e2e/categories.test.ts`](../test/e2e/categories.test.ts), plus shared-behavior e2e on Categories (`list-page`, `unsaved-changes`, `shortcuts`, `freshness`) |
 
 **Gaps against this standard:**
-- It runs on the pre-standard `/api/v1` routes and is rebuilt on the new menu API in step 4.1 (two-level tree with "items only in leaves", D44).
+- (none since 3.8b part 3: it runs on the new menu API, D69.)
 - There is no plan document, because the feature predates this standard.
 
 ## Patterns from earlier features

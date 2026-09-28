@@ -71,17 +71,19 @@ export function useScheduleList(query: MaybeRefOrGetter<ScheduleListQuery>) {
 
 > Watch `() => ({ ...toValue(query) })`, not `query` itself. The spread creates a new object on every change, so changes to nested filters trigger a refetch.
 
-**Options for a picker** (parameterized key, empty-array default):
+**Options for a picker** (empty-array default; archived records included so a current value keeps its name):
 
 ```ts
-export function useCategoryOptions(filter: MaybeRefOrGetter<CategoryOptionsFilter> = {}) {
+export function useAvailabilityRuleOptions() {
   return useApiQuery(
-    () => `categories:options:${toValue(filter).level ?? 'all'}`,
-    () => apiFetch<Category[]>('/admin/categories', { query: { level: toValue(filter).level } }),
+    'availability-rules:options',
+    () => apiFetch<AvailabilityRule[]>('/admin/menu/availability-rules', { query: { status: 'all' } }),
     { default: () => [] }, // data is never undefined
   )
 }
 ```
+
+A key can also be a getter for a parameterized query (``() => `products:list:${toValue(filter).status}` ``). Every call site of one key must pass the same options: `categories:all` is shared by the Categories tree and `CategorySelect`, so neither sets a `default` (D69).
 
 **Template:**
 

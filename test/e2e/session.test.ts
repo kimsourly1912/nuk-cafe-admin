@@ -1,7 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import { ADMIN, beforeUnloadPrevented, categoryItem, categoryOf, deferred, failures, gotoHydrated, mockApi, openTabs, setupE2e, TEA, toast } from './support/mock-api'
+import { ADMIN, beforeUnloadPrevented, categoryItem, menuCategoryOf, deferred, failures, gotoHydrated, mockApi, openTabs, setupE2e, MENU_TEA, toast } from './support/mock-api'
 
 // The session-transition contract (plugins/session-boundary.client.ts, useAuth generation,
 // createApiFetch). Cases: docs/reference/app-behavior.md → "Session loss".
@@ -9,10 +9,10 @@ await setupE2e()
 
 const ALICE = { ...ADMIN, userId: 'user-alice', email: 'alice@nukcafe.test', name: 'alice' }
 const BOB = { ...ADMIN, userId: 'user-bob', email: 'bob@nukcafe.test', name: 'bob' }
-const ALICE_ONLY = categoryOf('cat-11', 'Alice-only draft')
-const BOB_ONLY = categoryOf('cat-12', 'Bob-only menu')
+const ALICE_ONLY = menuCategoryOf('cat-11', 'Alice-only draft')
+const BOB_ONLY = menuCategoryOf('cat-12', 'Bob-only menu')
 /** The Categories tree loads the whole list. */
-const LIST = 'GET /admin/categories'
+const LIST = 'GET /admin/menu/categories'
 const listOf = (...rows: object[]) => rows
 
 const form = (page: Page) => page.getByRole('dialog', { name: /New category|Edit category/ })
@@ -39,7 +39,7 @@ describe('session expiry', () => {
   it('expiring during a save goes to login: no discard dialog, no form left over, no error toast', async () => {
     const page = await createPage()
     await mockApi(page, {
-      'POST /admin/categories': () => {
+      'POST /admin/menu/categories': () => {
         throw failures.unauthorized()
       },
     })
@@ -76,7 +76,7 @@ describe('session expiry', () => {
     await page.goto(url('/categories'), { waitUntil: 'hydration' })
     await categoryItem(page, 'Tea').waitFor()
     api.set({
-      'POST /admin/categories': () => {
+      'POST /admin/menu/categories': () => {
         throw failures.notAdmin()
       },
     })
@@ -111,10 +111,10 @@ describe('switching users in the same browser', () => {
     const aliceSave = deferred()
     const api = await mockApi(page, {
       'GET /admin/me': () => ALICE,
-      [LIST]: () => listOf(TEA, ALICE_ONLY),
-      'PATCH /admin/categories/{id}': aliceSave.handler,
-      'DELETE /admin/categories/{id}': () => {
-        throw failures.conflict('CATEGORY_IN_USE', 'Alice cannot delete this')
+      [LIST]: () => listOf(MENU_TEA, ALICE_ONLY),
+      'PATCH /admin/menu/categories/{id}': aliceSave.handler,
+      'POST /admin/menu/categories/{id}/archive': () => {
+        throw failures.conflict('VERSION_CONFLICT', 'Alice cannot archive this')
       },
     })
     await page.goto(url('/categories'), { waitUntil: 'hydration' })
@@ -122,9 +122,9 @@ describe('switching users in the same browser', () => {
 
     // Alice leaves a batch result with "Retry failed" (it stays 10 s) and a save in flight.
     await page.getByRole('checkbox', { name: 'Select Alice-only draft' }).click()
-    await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Delete' }).click()
-    await page.getByRole('button', { name: 'Delete' }).last().click()
-    await toast(page, '0 categories deleted, 1 failed').waitFor()
+    await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Archive' }).click()
+    await page.getByRole('button', { name: 'Archive' }).last().click()
+    await toast(page, '0 categories archived, 1 failed').waitFor()
     await page.getByRole('button', { name: 'Actions for Tea' }).click()
     await page.getByRole('menuitem', { name: 'Edit' }).click()
     await form(page).locator('input').first().fill('Tea by Alice')
@@ -134,10 +134,10 @@ describe('switching users in the same browser', () => {
     await form(page).getByRole('button', { name: 'Close' }).first().click()
     await form(page).waitFor({ state: 'hidden' })
 
-    expect(await toast(page, '0 categories deleted, 1 failed').count()).toBe(1)
+    expect(await toast(page, '0 categories archived, 1 failed').count()).toBe(1)
     await logout(page, 'alice')
     await expect.poll(() => path(page)).toBe('/login')
-    expect(await toast(page, '0 categories deleted, 1 failed').count()).toBe(0)
+    expect(await toast(page, '0 categories archived, 1 failed').count()).toBe(0)
     expect(await page.getByRole('button', { name: 'Retry failed' }).count()).toBe(0)
 
     // Bob signs in; the backend now answers as Bob.
@@ -153,7 +153,7 @@ describe('switching users in the same browser', () => {
 
     // Alice's save finally answers: it must not toast or refresh anything in Bob's session.
     const loadsBefore = api.calls.filter(c => c === LIST).length
-    aliceSave.release({ ...TEA, name: 'Tea by Alice', version: 2 })
+    aliceSave.release({ ...MENU_TEA, name: 'Tea by Alice', version: 2 })
     await page.waitForTimeout(500)
     expect(await toast(page, /updated/).count()).toBe(0)
     expect(api.calls.filter(c => c === LIST).length).toBe(loadsBefore)

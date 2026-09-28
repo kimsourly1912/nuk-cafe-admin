@@ -22,7 +22,7 @@ Instructions for AI coding agents (Claude Code, Codex, and others) working in th
 
 NUK Cafe is one Nuxt full stack app: the customer website, the admin workspace and the cashier workspace, plus our own API (Nitro) with Better Auth, NuxtHub, Drizzle, SQLite locally and D1/R2/KV on Cloudflare. Product scope: [the system blueprint](docs/plans/system-blueprint.md). **How the server is built: the [server standard](docs/server/README.md)** (routes `/api/<surface>/…`, `server/features/` with service/repository layers, Better Auth roles and branches, the data model, operations). Build order: [progress.md → Next steps](docs/progress.md#next-steps-recommended-order).
 
-**Transition:** the menu screens (categories, schedules, menu items) still run on the pre-standard `/api/v1` routes (D41), now checked with `requirePermission`. Their server code lives in `server/legacy/` and is replaced in step 3.8b; don't extend it (ESLint forbids new code from importing it). Sign-in, staff and the **Availability**, **Options** and **Add-ons** pages (`app/features/availability-rules/`, `option-sets/`, `modifier-groups/`, the new API's first menu screens, D66–D68) run on the standard's `/api/admin` routes (D52).
+**Transition:** the Schedules and Menu items screens still run on the pre-standard `/api/v1` routes (D41), now checked with `requirePermission`. Their server code lives in `server/legacy/` and is replaced in step 3.8b; don't extend it (ESLint forbids new code from importing it). Sign-in, staff and the **Categories**, **Availability**, **Options** and **Add-ons** pages (`app/features/categories/`, `availability-rules/`, `option-sets/`, `modifier-groups/`, D66–D69) run on the standard's `/api/admin` routes (D52).
 
 The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Schedules (card list) or Menu items (card grid + table); Categories is a tree (D37).
 
@@ -89,7 +89,7 @@ shared/contracts/                # API contracts: request schemas + response typ
 
 ### Data freshness
 
-- Query keys are **namespaced by feature**: `<feature>:<name>` (`categories:list`, `categories:options:MAIN:all`). `useApiQuery` warns in dev when a key isn't namespaced.
+- Query keys are **namespaced by feature**: `<feature>:<name>` (`categories:all`, `availability-rules:options`). `useApiQuery` warns in dev when a key isn't namespaced.
 - Mutations declare `invalidate: ['<own feature>', '<affected feature>']`. The same invalidation reaches the app's **other open tabs** (feature names over a `BroadcastChannel`, never data), so they refresh too. Data from **other devices** is picked up when the user returns to the tab. `invalidate()` (`app/utils/invalidate.ts`) refetches every loaded key with those prefixes, so a feature never imports another feature's keys. Calls within 30ms are merged into one refresh per list (batches, parallel deletes). Example: category mutations invalidate `['categories', 'products']` because product lists show category names.
 
 ## CRUD state: `useApiQuery` and `useMutation`

@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-28 (step 3.8b part 2: the Options and Add-ons pages, D67, D68)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-28 (step 3.8b part 3a: Categories on the new API, D69; part 2 is PR #13)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -71,7 +71,7 @@ The admin screens that exist today. They run on the **pre-standard** `/api/v1` r
 |---|---|---|
 | auth | Better Auth `/api/auth/sign-in/email`, `sign-out`, `change-password`; `/api/admin/me` | **done** (D52): admins only, forced password change, change password from the user menu. server + unit + browser-mock (`auth`, `password`) + real-server |
 | staff | `/api/admin/staff`, `/api/admin/branches/options` | **done** (D49, D52): list with search and role/branch filters, add (temporary password shown once), change access, disable. server + unit + browser-mock (`staff.test.ts`) + real-server |
-| categories (menu) | `categories`, `categories/{id}`, `categories/order` | **done, reference feature**: tree of mains and subs, search + status tabs, create/edit, add sub-category, delete, batch delete, drag-to-sort per level, version checks. server + unit + browser-mock (`categories.test.ts`) + real-server |
+| categories (menu) | **new API** `/api/admin/menu/categories` | **done, reference feature** (3.8b part 3a, D69): tree of mains and subs, search, Active/Archived tabs, create/edit with description, parent and availability rules, add sub-category, archive (with its subs) and restore, batch archive, drag-to-sort per level (one request per level, with versions). server + unit + browser-mock (`categories.test.ts`, `pickers.test.ts`) + real-server (headless Chromium on `pnpm dev`: create, rule, reorder + reload, archive, restore) |
 | schedules (menu) | `schedules`, `schedules/options`, `schedules/{id}` | **done**: list (search, status, day), create, edit (menu items shown read-only, never sent), delete + bulk delete for schedules not in use; times as cafe time (D41). server + unit + browser-mock (`schedules.test.ts`) + real-server |
 | availability-rules = "Availability" | **new API** `/api/admin/menu/availability-rules` | **done** (3.8b part 1, D66): cards with each rule's times in words and what uses it, Active/Archived tabs, search, create/edit with rows of days and times (overnight, midnight end), the server's overlap error shown on its row, archive (disabled while in use) and restore. unit (12) + browser-mock (`availability-rules.test.ts`, 9) + real-server (headless Chromium on `pnpm dev`: create, overlap refused on the right row, overnight edit, archive, restore) |
 | option-sets = "Options" | **new API** `/api/admin/menu/option-sets` | **done** (3.8b part 2a, D67): cards with each set's values in order and what uses it, Active/Archived tabs, search; create with first values; an editor that saves each change at once (rename, add, rename/archive/restore a value, reorder by drag or ↑/↓) with the version of the last answer, an in-editor Reload after a conflict; archive and restore sets. unit (5) + browser-mock (`option-sets.test.ts`, 9) + real-server (headless Chromium on `pnpm dev`: 8 writes in a row, a duplicate refused by the server, archive and restore) |
@@ -125,7 +125,7 @@ The server is being rebuilt to the **server standard** ([docs/server/](server/RE
 | 3.6 ✅ | **Sold-out per branch:** `branch_item_states` + counter route (D64); stays until switched back (Q37) | Tests |
 | 3.7 ✅ | **Availability rules** (overnight windows; no rule = always, several = any; D45, D63): the rules library, rules on items and categories, the pure window check. Built before 3.6 (they don't depend on each other) | Tests of the window rules |
 | 3.8a ✅ | **Public menu API** (`GET /api/public/menu?branchId=`; no cache yet by the owner's choice, cache-ready: D65) | Public menu shows only active, available, in-stock versions |
-| 3.8b | **Move the admin menu screens onto the new API, then remove the legacy menu** (owner, 2026-09-27: **don't delete the screens**; D66). Categories and Menu items must move **together** (the item form's category picker and the legacy items' foreign key), and the item form needs the Options and Add-ons pages, so 3.8b absorbs phase 4 in this order: **part 1 ✅ Availability page** (replaces Schedules as a screen); **part 2 ✅** Options (D67) and Add-ons (D68) pages (4.2, 4.3); **part 3** Categories and Menu items together (4.1, 4.4), each verified in the browser (e2e + real-server), then remove `/api/v1`, `server/legacy`, the D41 tables, the Schedules screen and `shared/contracts/menu.ts`, and re-point AGENTS.md's reference-feature guidance | Every admin menu screen works on the new API; no code imports `server/legacy` |
+| 3.8b | **Move the admin menu screens onto the new API, then remove the legacy menu** (owner, 2026-09-27: **don't delete the screens**; D66). Categories and Menu items must move **together** (the item form's category picker and the legacy items' foreign key), and the item form needs the Options and Add-ons pages, so 3.8b absorbs phase 4 in this order: **part 1 ✅ Availability page** (replaces Schedules as a screen); **part 2 ✅** Options (D67) and Add-ons (D68) pages (4.2, 4.3); **part 3** Categories and Menu items together (4.1, 4.4; [plan](plans/menu-screens-move.md)): **3a ✅ Categories** (D69, local until PR #13 merges), 3b Menu items, 3c removal, each verified in the browser (e2e + real-server), then remove `/api/v1`, `server/legacy`, the D41 tables, the Schedules screen and `shared/contracts/menu.ts`, and re-point AGENTS.md's reference-feature guidance | Every admin menu screen works on the new API; no code imports `server/legacy` |
 
 ### Phase 4: admin menu screens
 
@@ -204,7 +204,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-28 (unit 149, server 374, e2e 157).
+- Run `pnpm lint`, `pnpm typecheck` and `pnpm test` before finishing. All pass as of 2026-09-28 (unit + server 524, e2e 159).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
