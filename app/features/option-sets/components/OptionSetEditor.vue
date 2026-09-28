@@ -1,20 +1,33 @@
 <script setup lang="ts">
 /**
- * Edits one option set. **Each change is saved at once** (D66): the API has one call per action and
- * answers with the whole set, whose `version` the next call sends. So the editor keeps the latest
- * set it got back (`current`) instead of a draft of everything.
+ * Edits one option set (D67, redesigned in D73). **Each change is saved at once**: the API has one
+ * call per action and answers with the whole set, whose `version` the next call sends. So the
+ * editor keeps the latest set it got back (`current`) instead of a draft of everything.
  *
- * Typed-but-unsaved text (the name, a value's new name, a value to add) is what the
- * unsaved-changes guard watches: closing with any of it asks first.
+ * - The header says what's happening: "Saving…", "Saved" or "Couldn't save".
+ * - Browse mode: the name and each value are read-only until Edit / Rename opens an inline edit
+ *   (one at a time; Enter saves, Escape cancels only that edit). "Add value" opens one too.
+ *   Typed-but-unsaved text is what the unsaved-changes guard watches.
+ * - Reorder mode: drag, ↑/↓ on a handle, or Move up / Move down. The order is saved shortly after
+ *   the last move (`createOrderAutosave`); a refused save puts back the saved order and stays in
+ *   the mode, with Reload after a version conflict.
+ * - Errors show inside the editor: while it's open, toasts sit outside it (aria-hidden).
+ * - An archived set is read-only, with Restore.
+ * - Right slide-over on wide screens, full screen on phones.
  *
  * Open via `useOverlay().create(OptionSetEditor)`; emits `close`.
  */
-import { moveArrayElement, useSortable } from '@vueuse/integrations/useSortable'
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { OptionSet, OptionValue } from '#shared/contracts/menu-options'
 import { MAX_OPTION_VALUES } from '#shared/contracts/menu-options'
-import { activeValues, archivedValues, fetchOptionSet, useOptionSetMutations } from '../composables/useOptionSets'
-import { setNameSchema, valueNameSchema } from '../schemas/option-set-form'
+import { insertNodeAt, removeNode, useSortable } from '@vueuse/integrations/useSortable'
 import * as v from 'valibot'
+import { activeValues, archivedValues, fetchOptionSet, useOptionSetMutations } from '../composables/useOptionSets'
+import { moveEntry, usageLabel } from '../schemas/option-set-display'
+import { setNameSchema, valueNameSchema } from '../schemas/option-set-form'
+import { createOrderAutosave } from '../utils/order-autosave'
+import OptionInlineEdit from './OptionInlineEdit.vue'
+import OptionValueRow from './OptionValueRow.vue'
 
 const props = defineProps<{ set: OptionSet }>()
 const emit = defineEmits<{ 'close': [], 'update:open': [open: boolean] }>()
@@ -23,326 +36,602 @@ const current = ref<OptionSet>(props.set)
 const archived = computed(() => current.value.status === 'archived')
 const active = computed(() => activeValues(current.value))
 const hidden = computed(() => archivedValues(current.value))
-
-/** What's typed: the set's name, each value's name, a new value. */
-const drafts = reactive({
-  name: props.set.name,
-  newValue: '',
-  values: Object.fromEntries(props.set.values.map(value => [value.id, value.name])) as Record<string, string>,
-})
-
-/** Take the server's answer as the truth: new values get a draft; renamed fields show their new name. */
-function apply(set: OptionSet, renamed: { set?: boolean, valueId?: string } = {}) {
-  current.value = set
-  if (renamed.set) drafts.name = set.name
-  for (const value of set.values) {
-    if (!(value.id in drafts.values) || renamed.valueId === value.id) drafts.values[value.id] = value.name
-  }
-}
+const full = computed(() => active.value.length >= MAX_OPTION_VALUES)
+const valueById = (id: string) => current.value.values.find(value => value.id === id)
 
 const mutations = useOptionSetMutations()
 const busy = computed(() => mutations.isBusy(current.value.id))
+const confirm = useConfirm()
+const notify = useNotify()
 
-// Only edits not saved yet: saving one of them clears it, and leaves the others watched.
-const pending = computed(() => ({
-  name: drafts.name.trim() !== current.value.name ? drafts.name : null,
-  newValue: drafts.newValue.trim() || null,
-  values: Object.fromEntries(current.value.values.filter(value => drafts.values[value.id]?.trim() !== value.name).map(value => [value.id, drafts.values[value.id]])),
-}))
-const unsaved = useModalUnsavedChanges(pending, {
-  initial: { name: null, newValue: null, values: {} },
-  close: () => emit('close'),
+// --- What the header says, and the last error (shown in the editor) ---
+const lastError = ref<{ message: string, conflict: boolean } | null>(null)
+const savedOnce = ref(false)
+const reorderPending = ref(false)
+const status = computed(() => (busy.value || reorderPending.value ? 'saving' : lastError.value ? 'error' : savedOnce.value ? 'saved' : 'idle'))
+
+/** Notes the outcome of a change for the header and the alert; passes the result on. */
+function checked<T extends { ok: boolean, status?: string, error?: { code?: string, message: string } }>(result: T): T {
+  if (result.ok) {
+    lastError.value = null
+    savedOnce.value = true
+  }
+  else if (result.status === 'error' && result.error) {
+    lastError.value = { message: result.error.message, conflict: result.error.code === 'VERSION_CONFLICT' }
+  }
+  return result
+}
+
+const errorEl = useTemplateRef<HTMLElement>('errorEl')
+watch(lastError, async (error) => {
+  if (!error) return
+  await nextTick()
+  errorEl.value?.scrollIntoView?.({ block: 'nearest' })
 })
 
-// --- The last error, shown in the editor as well as in the toast ---
-// While the slide-over is open the toasts sit outside it (aria-hidden), so neither their text nor
-// their buttons reach keyboard and screen-reader users (D67). A version conflict offers Reload.
-const lastError = ref<{ message: string, conflict: boolean } | null>(null)
-const notify = useNotify()
 async function reload() {
   try {
     const fresh = await fetchOptionSet(current.value.id)
+    autosave.cancel()
     current.value = fresh
-    drafts.name = fresh.name
-    drafts.values = Object.fromEntries(fresh.values.map(value => [value.id, value.name]))
-    order.value = activeValues(fresh).map(value => value.id)
+    syncOrder()
     lastError.value = null
+    const edit = editing.value
+    if (edit?.kind === 'value' && valueById(edit.id)?.status !== 'active') stopEdit()
   }
   catch (error) {
     notify.error('Could not reload the option set', error)
   }
 }
-/** Notes the outcome of a change for the alert; passes the result on. */
-function checked<T extends { ok: boolean, status?: string, error?: { code?: string, message: string } }>(result: T): T {
-  if (result.ok) lastError.value = null
-  else if (result.status === 'error' && result.error) lastError.value = { message: result.error.message, conflict: result.error.code === 'VERSION_CONFLICT' }
-  return result
+
+// --- Inline edits: the name, one value's name, or a new value (one at a time) ---
+type Edit = { kind: 'name' } | { kind: 'add' } | { kind: 'value', id: string }
+const editing = ref<Edit | null>(null)
+const draft = ref('')
+
+function originalOf(edit: Edit) {
+  if (edit.kind === 'name') return current.value.name
+  if (edit.kind === 'value') return valueById(edit.id)?.name ?? ''
+  return ''
+}
+const dirty = computed(() => editing.value !== null && draft.value.trim() !== originalOf(editing.value))
+const isRenaming = (value: OptionValue) => editing.value?.kind === 'value' && editing.value.id === value.id
+
+const unsaved = useModalUnsavedChanges(computed(() => ({ draft: dirty.value ? draft.value : null })), {
+  initial: { draft: null },
+  close: () => emit('close'),
+})
+
+/** An open edit with typed text asks before it's replaced; resolves whether to go on. */
+async function confirmDiscard() {
+  return !dirty.value || await confirm({ title: 'Discard unsaved changes?', description: 'The text you typed will be lost.', confirmLabel: 'Discard', cancelLabel: 'Keep editing', danger: true })
 }
 
-// --- Actions: each one call, with the version of the latest answer ---
-const nameError = computed(() => v.safeParse(setNameSchema, drafts.name).issues?.[0]?.message)
-const newValueError = computed(() => (drafts.newValue ? v.safeParse(valueNameSchema, drafts.newValue).issues?.[0]?.message : undefined))
-const valueError = (value: OptionValue) => v.safeParse(valueNameSchema, drafts.values[value.id] ?? '').issues?.[0]?.message
-
-async function saveName() {
-  if (nameError.value || !pending.value.name) return
-  const result = checked(await mutations.rename.execute({ set: current.value, name: drafts.name.trim() }))
-  if (result.ok) apply(result.data, { set: true })
+async function startEdit(edit: Edit) {
+  if (!await confirmDiscard()) return
+  editing.value = edit
+  draft.value = originalOf(edit)
 }
 
-async function addValue() {
-  const name = drafts.newValue.trim()
-  if (!name || newValueError.value) return
-  const result = checked(await mutations.addValue.execute({ set: current.value, name }))
-  if (!result.ok) return
-  drafts.newValue = ''
-  apply(result.data)
-  order.value = activeValues(result.data).map(value => value.id)
+function stopEdit() {
+  editing.value = null
+  draft.value = ''
 }
 
-async function renameValue(value: OptionValue) {
-  const name = drafts.values[value.id]?.trim() ?? ''
-  if (name === value.name || valueError(value)) return
-  const result = checked(await mutations.renameValue.execute({ set: current.value, value, name }))
-  if (result.ok) apply(result.data, { valueId: value.id })
+const draftError = computed(() => {
+  const edit = editing.value
+  if (!edit || (edit.kind === 'add' && !draft.value)) return undefined
+  return v.safeParse(edit.kind === 'name' ? setNameSchema : valueNameSchema, draft.value).issues?.[0]?.message
+})
+
+async function saveEdit() {
+  const edit = editing.value
+  const name = draft.value.trim()
+  if (!edit || draftError.value || !name) return
+  if (edit.kind !== 'add' && name === originalOf(edit)) return stopEdit()
+
+  if (edit.kind === 'name') {
+    const result = checked(await mutations.rename.execute({ set: current.value, name }))
+    if (!result.ok) return
+    current.value = result.data
+    stopEdit()
+  }
+  else if (edit.kind === 'value') {
+    const value = valueById(edit.id)
+    if (!value) return stopEdit()
+    const result = checked(await mutations.renameValue.execute({ set: current.value, value, name }))
+    if (!result.ok) return
+    current.value = result.data
+    stopEdit()
+  }
+  else {
+    const result = checked(await mutations.addValue.execute({ set: current.value, name }))
+    if (!result.ok) return
+    current.value = result.data
+    syncOrder()
+    // Stays open for the next value, until the set is full.
+    if (full.value) stopEdit()
+    else draft.value = ''
+  }
 }
 
+// --- Other changes ---
 async function archiveValue(value: OptionValue) {
   const result = checked(await mutations.archiveValue.execute({ set: current.value, value }))
   if (!result.ok) return
-  apply(result.data)
-  order.value = activeValues(result.data).map(v => v.id)
+  current.value = result.data
+  syncOrder()
 }
 
 async function restoreValue(value: OptionValue) {
   const result = checked(await mutations.restoreValue.execute({ set: current.value, value }))
   if (!result.ok) return
-  apply(result.data)
-  order.value = activeValues(result.data).map(v => v.id)
+  current.value = result.data
+  syncOrder()
+}
+
+async function archiveSet() {
+  const result = checked(await mutations.archive.execute({ set: current.value }))
+  if (!result.ok) return
+  current.value = result.data
+  stopEdit()
 }
 
 async function restoreSet() {
   const result = checked(await mutations.restore.execute({ set: current.value }))
-  if (result.ok) apply(result.data)
+  if (result.ok) current.value = result.data
 }
 
-// --- Order: drag a handle, or ↑/↓ on it; saved on drop ---
+const LAST_VALUE = 'An option set needs at least one active value.'
+
+function valueActions(value: OptionValue): DropdownMenuItem[] {
+  if (archived.value) return []
+  const last = active.value.length <= 1
+  return [
+    { label: 'Rename', icon: 'i-lucide-pencil', onSelect: () => startEdit({ kind: 'value', id: value.id }) },
+    { label: 'Archive', icon: 'i-lucide-archive', disabled: last, description: last ? LAST_VALUE : undefined, onSelect: () => archiveValue(value) },
+  ]
+}
+
+const showArchived = ref(false)
+
+// --- Order: saved shortly after the last move ---
+const mode = ref<'browse' | 'reorder'>('browse')
 const order = ref<string[]>(active.value.map(value => value.id))
-const valueById = (id: string) => current.value.values.find(value => value.id === id)!
-
-async function saveOrder(previous: string[]) {
-  const result = checked(await mutations.reorderValues.execute({ set: current.value, valueIds: [...order.value] }))
-  if (result.ok) apply(result.data)
-  else order.value = previous
+const rows = computed(() => order.value.map(id => valueById(id)).filter((value): value is OptionValue => value?.status === 'active'))
+function syncOrder() {
+  order.value = activeValues(current.value).map(value => value.id)
 }
 
-const listEl = useTemplateRef<HTMLElement>('listEl')
-const sortable = useSortable(listEl, order, {
-  handle: '[data-value-handle]',
-  animation: 150,
-  onUpdate: (event) => {
-    const previous = [...order.value]
-    moveArrayElement(order, event.oldIndex!, event.newIndex!, event)
-    nextTick(() => saveOrder(previous))
+let reorderFailed = false
+const autosave = createOrderAutosave({
+  delay: 500,
+  save: async (valueIds) => {
+    const result = checked(await mutations.reorderValues.execute({ set: current.value, valueIds }))
+    if (result.ok) current.value = result.data
+    return result.ok
+  },
+  onFailed: () => {
+    reorderFailed = true
+    syncOrder()
+  },
+  onChange: (pending) => {
+    reorderPending.value = pending
   },
 })
-watch([busy, archived], ([isBusy, isArchived]) => sortable.option('disabled', isBusy || isArchived), { immediate: true })
+// Closing during the short wait still saves (mutations outlive the editor).
+onBeforeUnmount(() => void autosave.flush())
 
-async function onHandleKey(event: KeyboardEvent, index: number) {
+const listEl = useTemplateRef<HTMLElement>('listEl')
+const reorderButton = useTemplateRef<{ $el: HTMLElement }>('reorderButton')
+
+async function startReorder() {
+  if (!await confirmDiscard()) return
+  stopEdit()
+  lastError.value = null
+  syncOrder()
+  mode.value = 'reorder'
+  await nextTick()
+  listEl.value?.querySelector<HTMLElement>('[data-value-handle]')?.focus()
+}
+
+async function finishReorder() {
+  reorderFailed = false
+  await autosave.flush()
+  if (reorderFailed) return
+  mode.value = 'browse'
+  await nextTick()
+  reorderButton.value?.$el?.focus()
+}
+
+// "Large moved to position 3" for screen readers, and a moment of highlight for everyone.
+const announcement = ref('')
+const highlighted = ref<string | null>(null)
+let highlightTimer: ReturnType<typeof setTimeout> | undefined
+onBeforeUnmount(() => clearTimeout(highlightTimer))
+
+async function moveValue(index: number, to: number, focus?: 'up' | 'down' | 'handle') {
+  const id = order.value[index]
+  if (!id || to < 0 || to >= order.value.length || to === index) return
+  order.value = moveEntry(order.value, index, to)
+  autosave.schedule(order.value)
+
+  announcement.value = ''
+  await nextTick()
+  announcement.value = `${valueById(id)?.name} moved to position ${to + 1}`
+  highlighted.value = id
+  clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => (highlighted.value = null), 1500)
+
+  if (!focus) return
+  // Focus stays on the moved row: the pressed button, or at either end the one still enabled.
+  const row = listEl.value?.querySelector<HTMLElement>(`[data-value="${id}"]`)
+  const pressed = focus === 'handle' ? '[data-value-handle]' : `[data-move=${focus}]`
+  const target = row?.querySelector<HTMLElement>(`${pressed}:not(:disabled)`)
+    ?? row?.querySelector<HTMLElement>('[data-move]:not(:disabled)')
+    ?? row?.querySelector<HTMLElement>('[data-value-handle]')
+  target?.focus()
+}
+
+function onHandleKey(event: KeyboardEvent, index: number) {
   const to = event.key === 'ArrowUp' ? index - 1 : event.key === 'ArrowDown' ? index + 1 : undefined
   if (to === undefined) return
   event.preventDefault()
-  if (to < 0 || to >= order.value.length || busy.value) return
-  const previous = [...order.value]
-  const list = [...order.value]
-  const [moved] = list.splice(index, 1)
-  list.splice(to, 0, moved!)
-  order.value = list
-  await saveOrder(previous)
-  await nextTick()
-  listEl.value?.querySelector<HTMLElement>(`[data-value-handle="${moved}"]`)?.focus()
+  moveValue(index, to, 'handle')
+}
+
+// Sortable moves the DOM row; put it back and move the data instead, so Vue owns the rows.
+const sortable = useSortable(listEl, [], {
+  handle: '[data-value-handle]',
+  animation: 150,
+  // The slide-over renders its body after this component mounts.
+  watchElement: true,
+  onUpdate: (event) => {
+    removeNode(event.item)
+    insertNodeAt(event.from, event.item, event.oldIndex!)
+    moveValue(event.oldIndex!, event.newIndex!)
+  },
+})
+watchEffect(() => sortable.option('disabled', mode.value !== 'reorder' || archived.value))
+
+/**
+ * Escape in reorder mode finishes reordering instead of closing the editor. (Inside an inline edit
+ * the input handles Escape and prevents its default, which already keeps the slide-over open.)
+ */
+function onEscape(event: KeyboardEvent) {
+  if (mode.value === 'reorder') {
+    event.preventDefault()
+    finishReorder()
+  }
 }
 </script>
 
 <template>
   <USlideover
     :title="current.name"
-    :description="archived ? 'Archived: restore it to edit.' : 'Changes are saved as you make them.'"
+    :content="{ onEscapeKeyDown: onEscape }"
+    :ui="{
+      content: 'max-sm:max-w-none sm:max-w-xl',
+      header: 'pt-[max(env(safe-area-inset-top),1rem)]',
+      body: 'pb-[max(env(safe-area-inset-bottom),1rem)]',
+      footer: 'pb-[max(env(safe-area-inset-bottom),1rem)] sm:hidden',
+    }"
     @update:open="unsaved.onOpenChange"
   >
+    <template #title>
+      <span class="flex flex-wrap items-center gap-2 pr-10">
+        <span class="min-w-0 break-words">{{ current.name }}</span>
+        <UBadge
+          :label="archived ? 'Archived' : 'Active'"
+          :color="archived ? 'neutral' : 'success'"
+          variant="subtle"
+          size="sm"
+        />
+      </span>
+    </template>
+    <template #description>
+      <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span>{{ usageLabel(current.itemCount) }}</span>
+        <span aria-hidden="true">·</span>
+        <span
+          role="status"
+          class="inline-flex items-center gap-1"
+          :class="status === 'error' && 'text-error'"
+        >
+          <template v-if="status === 'saving'">
+            <UIcon
+              name="i-lucide-loader-circle"
+              class="size-3.5 animate-spin"
+            />Saving…
+          </template>
+          <template v-else-if="status === 'saved'">
+            <UIcon
+              name="i-lucide-check"
+              class="size-3.5 text-success"
+            />Saved
+          </template>
+          <template v-else-if="status === 'error'">
+            <UIcon
+              name="i-lucide-circle-alert"
+              class="size-3.5"
+            />Couldn't save
+          </template>
+          <template v-else>Changes save automatically</template>
+        </span>
+      </span>
+    </template>
+
     <template #body>
       <div class="space-y-6">
         <UAlert
-          v-if="lastError"
-          :color="lastError.conflict ? 'warning' : 'error'"
-          variant="subtle"
-          :title="lastError.conflict ? 'Someone else changed this option set' : 'That change wasn\'t saved'"
-          :description="lastError.conflict ? 'Reload it to see their changes, then try again.' : lastError.message"
-          :actions="lastError.conflict ? [{ label: 'Reload', onClick: reload }] : []"
-        />
-
-        <UAlert
           v-if="archived"
+          icon="i-lucide-archive"
           color="neutral"
           variant="subtle"
-          title="This option set is archived"
-          description="Menu items that use it keep it, but it can't be added to others."
-          :actions="[{ label: 'Restore', loading: busy, onClick: restoreSet }]"
+          description="This option set is archived. Existing menu items keep it, but it cannot be added to other items."
+          :actions="[{ label: 'Restore option set', icon: 'i-lucide-archive-restore', size: 'lg', color: 'primary', variant: 'solid', loading: busy, onClick: restoreSet }]"
         />
 
-        <UFormField
-          label="Name"
-          :error="drafts.name !== current.name ? nameError : undefined"
+        <!-- Name -->
+        <section
+          v-if="mode === 'browse'"
+          aria-label="Name"
         >
-          <div class="flex gap-2">
-            <UInput
-              v-model="drafts.name"
-              :disabled="archived"
-              class="flex-1"
-              @keydown.enter.prevent="saveName"
-            />
+          <p class="mb-1 text-sm font-medium text-muted">
+            Name
+          </p>
+          <OptionInlineEdit
+            v-if="editing?.kind === 'name'"
+            v-model="draft"
+            label="Option set name"
+            :error="draftError"
+            :saving="busy"
+            @save="saveEdit"
+            @cancel="stopEdit"
+          />
+          <div
+            v-else
+            class="flex items-center justify-between gap-3 rounded-lg border border-default px-3 py-2"
+          >
+            <span class="min-w-0 break-words font-medium text-highlighted">{{ current.name }}</span>
             <UButton
-              v-if="pending.name !== null"
-              label="Save name"
-              :loading="mutations.rename.isPending(`option-set:${current.id}`)"
-              :disabled="busy || !!nameError"
-              @click="saveName"
+              v-if="!archived"
+              label="Edit"
+              icon="i-lucide-pencil"
+              color="neutral"
+              variant="ghost"
+              aria-label="Edit name"
+              class="min-h-11 sm:min-h-8"
+              @click="startEdit({ kind: 'name' })"
             />
           </div>
-        </UFormField>
-
-        <div class="space-y-2">
-          <p class="text-sm font-medium">
-            Values
-            <span class="font-normal text-muted">({{ active.length }} of {{ MAX_OPTION_VALUES }})</span>
-          </p>
-          <p class="text-xs text-muted">
-            Drag the handle (or press ↑/↓ on it) to reorder; menu items show values in this order.
-          </p>
-          <ul
-            ref="listEl"
-            class="space-y-2"
-          >
-            <li
-              v-for="(id, i) in order"
-              :key="id"
-              :aria-label="valueById(id).name"
-              class="flex items-start gap-2"
-            >
-              <UButton
-                icon="i-lucide-grip-vertical"
-                color="neutral"
-                variant="ghost"
-                :data-value-handle="id"
-                :aria-label="`Move ${valueById(id).name}`"
-                :disabled="busy || archived"
-                class="cursor-grab"
-                @keydown="onHandleKey($event, i)"
-              />
-              <UFormField
-                :error="drafts.values[id] !== valueById(id).name ? valueError(valueById(id)) : undefined"
-                class="flex-1"
-              >
-                <UInput
-                  v-model="drafts.values[id]"
-                  :aria-label="`Name of ${valueById(id).name}`"
-                  :disabled="archived"
-                  class="w-full"
-                  @keydown.enter.prevent="renameValue(valueById(id))"
-                />
-              </UFormField>
-              <UButton
-                v-if="pending.values[id] !== undefined"
-                label="Save"
-                :disabled="busy || !!valueError(valueById(id))"
-                @click="renameValue(valueById(id))"
-              />
-              <UTooltip :text="active.length <= 1 ? 'A set needs at least one value: archive the set instead' : 'Archive'">
-                <UButton
-                  icon="i-lucide-archive"
-                  color="neutral"
-                  variant="ghost"
-                  :aria-label="`Archive ${valueById(id).name}`"
-                  :disabled="busy || archived || active.length <= 1"
-                  @click="archiveValue(valueById(id))"
-                />
-              </UTooltip>
-            </li>
-          </ul>
-
-          <UFormField
-            v-if="!archived"
-            :error="newValueError"
-          >
-            <div class="flex gap-2">
-              <UInput
-                v-model="drafts.newValue"
-                placeholder="New value, e.g. Extra large"
-                aria-label="New value"
-                class="flex-1"
-                :disabled="active.length >= MAX_OPTION_VALUES"
-                @keydown.enter.prevent="addValue"
-              />
-              <UButton
-                label="Add"
-                icon="i-lucide-plus"
-                :disabled="busy || !drafts.newValue.trim() || !!newValueError || active.length >= MAX_OPTION_VALUES"
-                @click="addValue"
-              />
-            </div>
-          </UFormField>
-          <p
-            v-if="!archived && active.length >= MAX_OPTION_VALUES"
-            class="text-xs text-muted"
-          >
-            A set can have at most {{ MAX_OPTION_VALUES }} active values.
-          </p>
-        </div>
+        </section>
 
         <div
-          v-if="hidden.length"
-          class="space-y-2"
+          v-if="lastError"
+          ref="errorEl"
         >
-          <p class="text-sm font-medium">
-            Archived values
-          </p>
-          <p class="text-xs text-muted">
-            Menu item versions that use them are hidden until they're restored.
-          </p>
-          <ul class="space-y-1">
-            <li
-              v-for="value in hidden"
-              :key="value.id"
-              :aria-label="value.name"
-              class="flex items-center justify-between gap-2 text-sm"
-            >
-              <span class="text-muted">{{ value.name }}</span>
-              <UButton
-                label="Restore"
-                size="xs"
-                variant="soft"
-                :disabled="busy || archived || active.length >= MAX_OPTION_VALUES"
-                @click="restoreValue(value)"
-              />
-            </li>
-          </ul>
+          <UAlert
+            :color="lastError.conflict ? 'warning' : 'error'"
+            variant="subtle"
+            icon="i-lucide-circle-alert"
+            :title="lastError.conflict ? 'Someone else changed this option set' : 'That change wasn\'t saved'"
+            :description="lastError.conflict ? 'Reload it to see their changes, then try again.' : lastError.message"
+            :actions="lastError.conflict ? [{ label: 'Reload', icon: 'i-lucide-refresh-cw', color: 'neutral', variant: 'outline', onClick: reload }] : []"
+          />
         </div>
 
-        <p class="text-sm text-muted">
-          {{ current.itemCount ? `Used by ${pluralize(current.itemCount, ['menu item', 'menu items'])}.` : 'Not used by any menu item yet.' }}
-        </p>
+        <!-- Values -->
+        <section
+          aria-labelledby="option-values-heading"
+          class="space-y-3"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h3
+                id="option-values-heading"
+                class="flex flex-wrap items-center gap-2 font-semibold text-highlighted"
+              >
+                {{ mode === 'reorder' ? 'Reorder values' : 'Values' }}
+                <UBadge
+                  :label="`${active.length} of ${MAX_OPTION_VALUES}`"
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                />
+              </h3>
+              <p class="text-sm text-muted">
+                {{ mode === 'reorder' ? 'Drag values or use the arrow buttons. Every move saves automatically.' : 'Customer-facing order' }}
+              </p>
+            </div>
+            <UButton
+              v-if="mode === 'reorder'"
+              label="Done reordering"
+              icon="i-lucide-check"
+              :loading="reorderPending"
+              class="hidden sm:inline-flex"
+              @click="finishReorder()"
+            />
+            <UButton
+              v-else-if="!archived"
+              ref="reorderButton"
+              label="Reorder"
+              icon="i-lucide-arrow-down-up"
+              color="neutral"
+              variant="outline"
+              class="min-h-11 shrink-0 sm:min-h-8"
+              :disabled="active.length < 2 || busy"
+              @click="startReorder()"
+            />
+          </div>
+
+          <ol
+            ref="listEl"
+            aria-labelledby="option-values-heading"
+            class="space-y-2"
+          >
+            <OptionValueRow
+              v-for="(value, i) in rows"
+              :key="value.id"
+              :value="value"
+              :position="i + 1"
+              :mode="mode"
+              :actions="valueActions(value)"
+              :renaming="isRenaming(value)"
+              :can-move-up="i > 0"
+              :can-move-down="i < rows.length - 1"
+              :highlighted="highlighted === value.id"
+              @move="by => moveValue(i, i + by, by < 0 ? 'up' : 'down')"
+              @handle-keydown="onHandleKey($event, i)"
+            >
+              <OptionInlineEdit
+                v-model="draft"
+                :label="`Name of ${value.name}`"
+                :error="draftError"
+                :saving="busy"
+                @save="saveEdit"
+                @cancel="stopEdit"
+              />
+            </OptionValueRow>
+          </ol>
+          <p
+            aria-live="polite"
+            class="sr-only"
+          >
+            {{ announcement }}
+          </p>
+
+          <template v-if="mode === 'browse' && !archived">
+            <OptionInlineEdit
+              v-if="editing?.kind === 'add'"
+              v-model="draft"
+              label="New value"
+              save-label="Add"
+              placeholder="e.g. Extra large"
+              :error="draftError"
+              :saving="busy"
+              @save="saveEdit"
+              @cancel="stopEdit"
+            />
+            <template v-else>
+              <UButton
+                label="Add value"
+                icon="i-lucide-plus"
+                variant="outline"
+                block
+                size="lg"
+                class="min-h-11 border-dashed"
+                :disabled="full"
+                @click="startEdit({ kind: 'add' })"
+              />
+              <p
+                v-if="full"
+                class="text-sm text-muted"
+              >
+                A set can have at most {{ MAX_OPTION_VALUES }} active values. Archive one to add another.
+              </p>
+            </template>
+          </template>
+        </section>
+
+        <!-- Archived values -->
+        <section
+          v-if="hidden.length && mode === 'browse'"
+          class="rounded-lg border border-default"
+        >
+          <button
+            type="button"
+            class="flex min-h-11 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left font-medium text-highlighted focus-visible:outline-2 focus-visible:outline-primary"
+            :aria-expanded="showArchived"
+            aria-controls="option-archived-values"
+            @click="showArchived = !showArchived"
+          >
+            Archived values ({{ hidden.length }})
+            <UIcon
+              :name="showArchived ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+              class="size-4 text-muted"
+            />
+          </button>
+          <div
+            v-show="showArchived"
+            id="option-archived-values"
+            class="space-y-2 border-t border-default px-3 py-3"
+          >
+            <p class="text-sm text-muted">
+              Menu-item versions that use them are hidden until they're restored.
+            </p>
+            <p
+              v-if="full && !archived"
+              class="text-sm text-muted"
+            >
+              A set can have at most {{ MAX_OPTION_VALUES }} active values: archive one to restore another.
+            </p>
+            <ul class="space-y-1">
+              <li
+                v-for="value in hidden"
+                :key="value.id"
+                :aria-label="value.name"
+                class="flex min-h-11 items-center justify-between gap-2"
+              >
+                <span class="min-w-0 break-words text-muted">{{ value.name }}</span>
+                <UButton
+                  v-if="!archived"
+                  label="Restore"
+                  icon="i-lucide-archive-restore"
+                  color="neutral"
+                  variant="outline"
+                  size="sm"
+                  class="min-h-11 sm:min-h-8"
+                  :disabled="busy || full"
+                  :aria-label="`Restore ${value.name}`"
+                  @click="restoreValue(value)"
+                />
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- Danger zone -->
+        <section
+          v-if="!archived && mode === 'browse'"
+          aria-labelledby="option-danger-heading"
+          class="space-y-2 rounded-lg border border-error/30 p-4"
+        >
+          <h3
+            id="option-danger-heading"
+            class="font-semibold text-error"
+          >
+            Danger zone
+          </h3>
+          <p class="text-sm text-muted">
+            Existing menu items keep this set, but it cannot be added to other items until restored.
+          </p>
+          <UButton
+            label="Archive option set"
+            icon="i-lucide-archive"
+            color="error"
+            variant="outline"
+            class="min-h-11 sm:min-h-8"
+            :disabled="busy"
+            @click="archiveSet()"
+          />
+        </section>
       </div>
     </template>
 
-    <template #footer>
-      <div class="flex w-full justify-end">
-        <UButton
-          label="Done"
-          color="neutral"
-          variant="outline"
-          @click="unsaved.requestClose()"
-        />
-      </div>
+    <template
+      v-if="mode === 'reorder'"
+      #footer
+    >
+      <UButton
+        label="Done reordering"
+        icon="i-lucide-check"
+        size="xl"
+        block
+        :loading="reorderPending"
+        class="min-h-12"
+        @click="finishReorder()"
+      />
     </template>
   </USlideover>
 </template>
