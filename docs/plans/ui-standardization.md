@@ -8,7 +8,9 @@ _Started 2026-09-28. A rollout plan: delete it when the migration below is done 
 - [page-patterns.md](../reference/page-patterns.md): page blueprints, editing surfaces, gestures, states
 - [ui-review-checklist.md](../reference/ui-review-checklist.md): the pre-merge checklist
 
-**Source:** the owner's "NUK Cafe Admin — Responsive UI standardization" request (2026-09-28). No separate plan document was attached, so the request's required decisions are the working specification. They're marked **owner-directed** in the reference pages; everything else is **proposed**.
+**Source:** the owner's "NUK Cafe Admin — Responsive UI standardization" request (2026-09-28) and the owner's review of the first draft (same day), which approved eight directions and asked for the open items to be collected here. Approved rules are marked **owner-directed** in the reference pages. Every item still waiting on the owner is in [§6](#6-owner-decisions) and marked **Open** where it appears; open items are **not implementable**.
+
+**Nuxt UI is the component design system; Tailwind CSS tokens are the layout and styling language.** Every step below changes Nuxt UI configuration (`app/app.config.ts`, theme variables) or composes Nuxt UI components with Tailwind utilities. None adds a component library, a re-skin or arbitrary values.
 
 ---
 
@@ -17,6 +19,7 @@ _Started 2026-09-28. A rollout plan: delete it when the migration below is done 
 - Audited the routes, shell, shared components and docs (below).
 - Moved the old `docs/reference/ui.md` (a helper API reference) to [ui-helpers.md](../reference/ui-helpers.md) and updated every link, so `ui.md` can be the visual foundation.
 - Wrote the four reference pages and this plan; added a pointer in AGENTS.md; recorded D77.
+- Revised after the owner's review: container queries for constrained surfaces, the compact row composition, one save model at every width for settings, the approved directions, and this plan's owner-decision table.
 - **No application code changed.**
 
 ## 2. Route inventory
@@ -26,9 +29,9 @@ _Started 2026-09-28. A rollout plan: delete it when the migration below is done 
 | `/login` | Task flow | Centered `UCard` | Check the compact layout: primary at the bottom, 44px targets |
 | `/change-password` | Task flow | Centered `UCard` | Same |
 | `/` Dashboard | Placeholder | Welcome text | No pattern until reports (8.1) |
-| `/products` Menu items | Resource index (paginated; grid + table) | Editor: `USlideover` (`ProductFormSlideover`), `?item=` deep link | The List view is a `UTable` at every width (sideways scroll on compact). The editor is a long form: compact needs a focused full-screen route or sections |
+| `/products` Menu items | Resource index (paginated; grid + table) | Editor: `USlideover` (`ProductFormSlideover`), `?item=` deep link | The List view is a `UTable` at every width (sideways scroll on compact). The editor is a long form: it gets a focused route on compact (approved); its URLs are [decision 4](#6-owner-decisions) |
 | `/categories` | Resource index (tree) | Editor: `UModal` (full screen <640); Select/Reorder modes with a bottom mode bar | Mode bar switches at `md` (768), not 640/1024; it uses `backdrop-blur` |
-| `/options` | Resource index (library cards) | Editor: `USlideover` with save-each-change | Reorder mode footer only <640; slideover content should follow compact rules at every width |
+| `/options` | Resource index (library cards) | Editor: `USlideover` with save-each-change | Stays a slideover (approved). Its body becomes an `@container` so the contents follow the slideover's width, not the viewport; reorder footer only <640 today |
 | `/add-ons` | Resource index (library cards) | Opens a route | Closest to the standard |
 | `/add-ons/[id]` | Detail / editor route | Two columns → tabs <1024; add-on dialog; bottom sheet row actions <640 | Reference candidate |
 | `/availability` | Resource index (agenda cards) | Editor: `UModal` (full screen <640); archived read-only | Card layout switches at `lg`; conforms otherwise |
@@ -38,7 +41,7 @@ _Started 2026-09-28. A rollout plan: delete it when the migration below is done 
 
 ## 3. Shell and shared building blocks
 
-- **Shell:** `UDashboardGroup` + `UDashboardSidebar` (collapsible, resizable, a drawer below 1024px) + `UDashboardPanel` pages; the navigation is grouped in `app/utils/navigation.ts`; the user menu is in the sidebar footer. Global config: `app.config.ts` sets only `primary: amber`, `neutral: stone`; `main.css` adds pointer cursors.
+- **Shell:** `UDashboardGroup` + `UDashboardSidebar` (collapsible, resizable, a drawer below 1024px) + `UDashboardPanel` pages; the navigation is grouped in `app/utils/navigation.ts`; the user menu is in the sidebar footer. Global config: `app.config.ts` sets only `primary: amber`, `neutral: stone`; `app/assets/css/tailwind.css` imports Tailwind and Nuxt UI and adds pointer cursors.
 - **Shared behavior components** (keep; they're not a component library): `SearchInput`, `StatusTabs`, `ListSkeleton`, `ListEmptyState`, `ApiErrorAlert`, `BulkActionsBar`, `ConfirmDialog`, `OfflineBanner`, `ShortcutsHelp`.
 - **Feature-local layout pieces** that repeat a decision: `CategoryModeBar` (a fixed bottom bar), the Add-on page's Save bar, the Options editor's reorder footer, `BulkActionsBar` (sticky). That's **four bottom-bar implementations**.
 
@@ -47,13 +50,14 @@ _Started 2026-09-28. A rollout plan: delete it when the migration below is done 
 1. **Breakpoints:** compact detection uses `useMediaQuery('(max-width: 639px)')` in four components, while layouts switch at `sm` (Options/Add-ons chips), `md` (Categories rows and mode bar) and `lg` (Add-on page, Availability cards). → Standard: 640 and 1024 only ([responsive-layout §1](../reference/responsive-layout.md#1-width-classes-owner-directed)).
 2. **Editing surfaces** were chosen per feature (modal, slideover, route) without a rule. → [page-patterns §4](../reference/page-patterns.md#4-detail--editor).
 3. **Tables on compact:** `/staff` and `/products` (List) scroll sideways. → Grouped rows.
-4. **Touch targets:** D72/D73 used per-component `min-h-11` overrides; D74 removed them in favor of defaults (~32px icon buttons); the owner now requires 44–48px on compact. → A global compact rule, not per-component overrides ([ui §6](../reference/ui.md#6-density-and-touch-targets)).
-5. **Bottom bars:** four implementations with different safe-area, padding and blur handling. → One pattern ([responsive-layout §5–6](../reference/responsive-layout.md#5-page-anatomy)).
-6. **Full-screen overlays:** `fullscreen` detection is repeated in each modal (a `useMediaQuery` per component). `StaffFormModal` doesn't go full screen.
-7. **Row actions on compact:** a dropdown everywhere except Add-on rows (a bottom sheet).
+4. **Touch targets:** D72/D73 used per-component `min-h-11` overrides; D74 removed them in favor of defaults (~32px icon buttons); the owner now requires at least 44px on compact. → `max-sm:min-h-11` (and `min-w-11` for icon buttons) configured once per component in `app.config.ts`, not per page and not by a broad selector ([ui §6](../reference/ui.md#6-density-and-touch-targets)).
+5. **Bottom bars:** four implementations with different safe-area, padding and blur handling. → One pattern ([responsive-layout §5–6](../reference/responsive-layout.md#5-page-anatomy)); whether it becomes one shared component is [decision 3](#6-owner-decisions).
+6. **Full-screen overlays:** `fullscreen` detection is repeated in each modal (a `useMediaQuery` per component). `StaffFormModal` doesn't go full screen. → One layout-context composable ([responsive-layout §1](../reference/responsive-layout.md#constrained-surfaces-container-queries)).
+7. **Row actions on compact:** a dropdown everywhere except Add-on rows (a bottom sheet). How a record opens varies between pages (a Manage/View button on library cards, other patterns elsewhere). → The [compact row composition](../reference/page-patterns.md#compact-row-composition): one record target, a sibling actions trigger.
 8. **Save models:** save-each-change (Options, Add-on rows) vs a draft (every modal, Add-on settings); both are valid but need the rule in [page-patterns → Save models](../reference/page-patterns.md#save-models).
-9. **Decorative styling left:** `backdrop-blur` on the Categories mode bar and the Add-on Save bar.
-10. **Contrast:** amber-500 primary text on white is below 4.5:1 (links, active tabs, selected toggles, outline badges). Not measured per screen yet.
+9. **Decorative styling left:** `backdrop-blur` on the Categories mode bar and the Add-on Save bar. → Removed in the foundations step.
+10. **Contrast:** amber-500 primary text on white is below 4.5:1 (links, active tabs, selected toggles, outline badges). → Light mode's `--ui-primary` set to a darker shade (approved); measured in the foundations PR.
+11. **Container vs viewport:** content inside the Options slideover (`OptionSetEditor`) and the add-on rows in the Add-on page's main column (`AddOnRow`) switch on the **viewport** (`sm:`), although they have much less room than the viewport. → `@container` on the surface body and container variants inside.
 
 ## 5. Documentation conflicts resolved
 
@@ -62,31 +66,48 @@ _Started 2026-09-28. A rollout plan: delete it when the migration below is done 
 | `docs/reference/ui.md` was a helper API reference; the visual foundation needs that name | Moved to `ui-helpers.md`; links updated in README, mutations, data-fetching and feature-standard |
 | AGENTS.md held detailed styling rules (the D74 bullet) | Kept as a one-line principle plus a pointer; details live in `ui.md` |
 | AGENTS.md's page anatomy line ("Every page component renders a `UDashboardPanel`…") | Canonical home is [responsive-layout §5](../reference/responsive-layout.md#5-page-anatomy); AGENTS links to it |
-| D74 "Nuxt UI default sizes, no `min-h`/`min-w` overrides" vs the owner's 44–48px compact targets | Both hold: defaults per component, plus one **global** compact rule. D77 records it; the mechanism awaits approval |
+| D74 "Nuxt UI default sizes, no `min-h`/`min-w` overrides" vs the owner's 44px compact targets | Both hold: pages and components add no overrides; the compact `max-sm:min-h-11` minimum is part of each component's **central** configuration in `app.config.ts` (approved). D77 amends D74 |
+| First draft: "a slideover is compact-width, so its content uses the compact rules" vs viewport-only breakpoints | Viewport classes decide the shell, pages and which surface is used; a surface's contents follow its own width through `@container` and container variants; JavaScript choices use the layout-context composable or an explicit `compact` prop ([responsive-layout §1](../reference/responsive-layout.md#constrained-surfaces-container-queries)) |
+| First draft: "a row is one tap target" vs a `⋮` drawn inside it | Two sibling targets: the record link/content and the actions trigger; nothing nested ([page-patterns](../reference/page-patterns.md#compact-row-composition)) |
+| First draft: settings saved page-wide on expanded but per section on compact | One save model at every width: one shared draft and one final Save (recommended), or per-section saves everywhere ([decision 1](#6-owner-decisions)) |
 | feature-standard §4 "Layout" row chose collections informally | Links to [page-patterns §2](../reference/page-patterns.md#2-resource-index) |
 | forms.md "Where forms live" named surfaces with outdated examples (products as a full page, points and carbon settings) | forms.md stays canonical for **which guard** to use; the surface choice links to page-patterns |
 | ui-helpers documented a `StatusTabs` `size` prop removed in D74 | Row removed |
 
 ## 6. Owner decisions
 
-Not approved yet; the recommendation is marked.
+The complete list. **Approved** items are rules in the reference pages. **Open** items are blocked: nothing that depends on them is built until the owner decides, and the reference pages mark them **Open** where they appear.
 
-1. **Compact touch-target mechanism.** *Recommended:* one global rule in `main.css` for widths <640px giving buttons, inputs, selects, checkboxes' hit areas and menu items a 44px minimum (Nuxt UI keeps its visual sizes elsewhere). *Alternative:* set larger default sizes in `app.config.ts` for every width (heavier desktop).
-2. **Mobile navigation.** *Recommended:* app bar + drawer, no bottom bar in the admin workspace (the audit in [responsive-layout §4](../reference/responsive-layout.md#4-navigation-model)); revisit for the counter workspace.
-3. **Medium navigation:** drawer (the current Nuxt UI behavior) rather than an icon rail. *Recommended:* drawer.
-4. **Primary color contrast:** darken the light-mode primary used for text (e.g. amber-700 via `--ui-primary`) globally. *Recommended:* yes, after measuring.
-5. **Dark mode:** supported and switchable, or light only? The tokens allow both. *Recommended:* keep it token-clean; decide the switch later.
-6. **Menu item editor on compact:** move the long slideover form to a route (`/products/[id]`) with focused sections. *Recommended:* yes, when Menu items migrates.
-7. **Options editor surface:** keep the slideover (save-each-change) or move to a route like Add-ons. *Recommended:* keep the slideover; apply the compact rules.
+### Approved (owner, 2026-09-28 review)
+
+| # | Direction | Where it lives |
+|---|---|---|
+| A1 | Compact and medium admin navigation use the existing Nuxt UI dashboard app bar and drawer; **no admin bottom navigation** | [responsive-layout §3–4](../reference/responsive-layout.md#3-application-shell) |
+| A2 | Medium navigation stays a Nuxt UI drawer, **not a custom icon rail** | [responsive-layout §3](../reference/responsive-layout.md#3-application-shell) |
+| A3 | Compact targets are at least 44px (`min-h-11`/`min-w-11`; 48px is `min-h-12`/`min-w-12`), configured centrally through Nuxt UI configuration and Tailwind tokens, not broad selectors or per-page overrides | [ui §6](../reference/ui.md#6-density-and-touch-targets) |
+| A4 | Light-mode primary-text contrast corrected with Nuxt UI semantic theme variables (`--ui-primary`) | [ui §12](../reference/ui.md#12-accessibility-baseline-owner-directed-wcag-22-aa-minimum) |
+| A5 | Dark-mode-token-compatible implementation; **no color-mode switch yet** | [ui §2](../reference/ui.md#2-color-tokens) |
+| A6 | A focused route for the long Menu item editor on compact | [page-patterns §4](../reference/page-patterns.md#4-detail--editor) |
+| A7 | The Options editor stays a Nuxt UI slideover; its inner layout adapts with Tailwind responsive and container utilities | [page-patterns §4](../reference/page-patterns.md#4-detail--editor), [responsive-layout §1](../reference/responsive-layout.md#constrained-surfaces-container-queries) |
+| A8 | The current 4px spacing system and semantic Nuxt UI color roles are preserved | [ui §2–3](../reference/ui.md#2-color-tokens) |
+
+### Open (blocked, not implementable)
+
+| # | Decision | Recommendation | Alternative | Blocks |
+|---|---|---|---|---|
+| 1 | **Settings blueprint** ([page-patterns §3](../reference/page-patterns.md#3-settings)): sections with headings; which save model | Approve the blueprint with **one page-wide draft and one Save at every width**; on compact, long settings open pushed full-screen sections that edit the same draft, with one final Save changes | Independent section saves (a draft and Save per section) **consistently at every width** | Phase B step 6; the first settings page (step 5.1) |
+| 2 | **More than two filters on compact** | One "Filters" `UButton` in the toolbar (with the active-filter count) opening a `UDrawer` with the filters and Clear/Apply | Filters wrap onto extra toolbar rows | Any page that adds a third filter; no current page |
+| 3 | **One shared bottom action bar** replacing the four current bars (Categories mode bar, Add-on Save bar, Options reorder footer, `BulkActionsBar`) | Yes: one app component that owns only behavior and layout (fixed position per width class, safe-area padding, body padding, one bar at a time), rendering Nuxt UI buttons inside, no styling of its own | Keep the bars per feature, each following [responsive-layout §5–6](../reference/responsive-layout.md#5-page-anatomy) | The shared-bar part of Phase B step 1; pages keep their current bars until then |
+| 4 | **Menu item editor URLs across widths** (A6 keeps a slideover on medium and expanded) | The route `/products/[id]` and the slideover deep link `/products?item=<id>` both open the same item at **every** width; the width decides only which one the list opens | The route at every width (the slideover removed) | The Menu items migration (Phase B step 5, last) |
 
 ## 7. Phase B: migration sequence (after review)
 
 Each step is its own PR: build, e2e at the [verification widths](../reference/ui-review-checklist.md#verification-widths), update this plan, stop for review.
 
-1. **Foundations (global, no page changes):** the compact touch-target rule, the primary contrast fix (decisions 1 and 4); one shared composable for "is compact" (`useMediaQuery('(max-width: 639px)')`) replacing the four copies; one bottom action bar component (safe area, body padding, no blur).
-2. **Reference: resource index with a table → `/staff`.** Grouped rows on compact, full-screen modal, filters sheet if needed. Smallest page that proves the table→rows rule.
+1. **Foundations (global configuration, no page redesign):** the compact `max-sm:min-h-11` minimum in each Nuxt UI component's `app.config.ts` configuration (A3); the light-mode `--ui-primary` shade in `tailwind.css` (A4), measured; one layout-context composable on Tailwind's `sm`/`lg` values replacing the four `useMediaQuery` copies; `backdrop-blur` removed from the two bars; the shared bottom action bar **only if decision 3 is approved**.
+2. **Reference: resource index with a table → `/staff`.** The [compact row composition](../reference/page-patterns.md#compact-row-composition) on compact, a full-screen modal. It has two filters, so it doesn't wait on decision 2. Smallest page that proves the table→rows rule.
 3. **Reference: detail / editor route → `/add-ons/[id]`.** Align breakpoints and the Save bar with the foundations; confirm the tab and bottom-sheet patterns.
 4. **Reference: task flow → `/change-password`** (and `/login`): compact anatomy, primary at the bottom.
-5. **Bring the rest to the references:** `/categories` (breakpoints, the shared bar), `/options`, `/availability`, `/add-ons`, then `/products` (List view rows; the editor route if decision 6 is approved).
-6. **Settings reference:** the first settings page (step 5.1) is built to the blueprint.
+5. **Bring the rest to the references:** `/categories` (breakpoints, the shared bar), `/options`, `/availability`, `/add-ons`, then `/products` (List view rows; the compact editor route per A6, with URLs per decision 4). `/options` gets `@container` on the slideover body (A7).
+6. **Settings reference:** blocked until decision 1; then the first settings page (step 5.1) is built to the approved blueprint.
 7. **Close:** fold anything still useful into the reference pages, and delete this plan.

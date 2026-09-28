@@ -4,7 +4,9 @@
 
 Blueprints for the four kinds of admin page, with expanded and compact anatomy, the editing surfaces, gestures, and the states every page must handle. Behavior plumbing (queries, mutations, unsaved-changes guards) lives in [data-fetching](./data-fetching.md), [mutations](./mutations.md) and [forms](./forms.md); list behavior requirements live in [feature-standard §4](../feature-standard.md#4-list-page-behavior).
 
-Status labels: **owner-directed** and **proposed** (see [the rollout plan](../plans/ui-standardization.md#6-owner-decisions)). Current pages are **evidence**, not automatic rules. Where a page differs from its blueprint, the gap is listed in [the rollout plan's audit](../plans/ui-standardization.md#2-route-inventory).
+Every blueprint is composed from Nuxt UI components and laid out with Tailwind tokens ([ui.md](./ui.md)): Nuxt UI is the component design system, Tailwind CSS tokens are the layout and styling language. No blueprint needs a custom component for styling.
+
+Status labels: **owner-directed** and **Open** (waiting on an owner decision, not implementable; see [the owner-decision table](../plans/ui-standardization.md#6-owner-decisions)). Current pages are **evidence**, not automatic rules. Where a page differs from its blueprint, the gap is listed in [the rollout plan's audit](../plans/ui-standardization.md#2-route-inventory).
 
 ---
 
@@ -26,7 +28,7 @@ Status labels: **owner-directed** and **proposed** (see [the rollout plan](../pl
 ### Expanded anatomy
 
 ```
-Navbar:   Title                                    [+ New <thing>]
+Navbar:   Title                                    [+ New rule]
 Toolbar:  [Search…]  [filters]              [view actions: Reorder · Select · Grid/List]
 Body:     Intro sentence (muted)
           All 12 · Active 10 · Archived 2
@@ -45,7 +47,7 @@ Body:     Intro sentence (muted)
 | Full-width agenda cards | Each record has a structured summary read left to right | `/availability` |
 | Tree | Parent/child data | `/categories` |
 
-Opening a record: an explicit **Manage/Edit/View** button or the row itself. Never both a clickable row and nested buttons that compete. Other actions sit in the `⋮` menu. Archive/Restore follow [ui.md → action hierarchy](./ui.md#9-action-hierarchy-owner-directed).
+Opening a record: the record's name/content as a link, or an explicit **Manage/Edit/View** button. The open target and the `⋮` actions trigger are **siblings**; an interactive element is never nested inside another (no button inside a link, no link inside a clickable card). Other actions sit in the `⋮` menu. Archive/Restore follow [ui.md → action hierarchy](./ui.md#9-action-hierarchy-owner-directed).
 
 ### Compact anatomy
 
@@ -54,29 +56,58 @@ Opening a record: an explicit **Manage/Edit/View** button or the row itself. Nev
 [Search…                      ] [Filters]
 Intro sentence
 All 12 · Active 10 · Archived 2
-┌───────────────────────────────┐
-│ Name                    Badge │  ← one tap target: opens the record
-│ meta line · meta line       ⋮ │
-├───────────────────────────────┤
-│ …                             │
-└───────────────────────────────┘
+┌───────────────────────────┬───┐
+│ Name                Badge │ ⋮ │  ← left: the record link (one large target)
+│ meta line · meta line     │   │    right: a sibling actions button
+├───────────────────────────┼───┤
+│ …                         │   │
+└───────────────────────────┴───┘
 [Load more / pagination]
 ```
 
+- Each row is the [compact row composition](#compact-row-composition) below.
 - **Tables become grouped rows or cards; no sideways-scrolling table (owner-directed).** Each row keeps the one or two values that identify and distinguish it (name, status, one meta line). The rest is on the detail view.
 - Rows can be grouped under headings when the data has a natural group (category, day, role).
 - Selection and bulk actions are a mode ("Select") with a bottom bar, never always-on checkboxes.
 - Reorder is a mode with Move up/down buttons ([Gestures](#7-gestures)).
 
+### Compact row composition
+
+A compact record row has **two sibling targets**, never nested:
+
+1. **The record target:** a `ULink` (or `NuxtLink`) to the record's route, or, when the record opens in an overlay, a `UButton` (`color="neutral" variant="ghost" block`) whose default slot holds the content. It fills the row (`flex min-w-0 flex-1`), holds the name, the status badge and the meta line as plain, non-interactive content, and is at least `min-h-11` tall (the central compact configuration, [ui §6](./ui.md#6-density-and-touch-targets)). Its accessible name is the record's name.
+2. **The actions trigger:** a `UDropdownMenu` (or a `UDrawer` bottom sheet, by the layout-context rule in [responsive-layout §1](./responsive-layout.md#constrained-surfaces-container-queries)) whose trigger is an icon-only `UButton` (`icon="i-lucide-ellipsis-vertical" color="neutral" variant="ghost"`, `aria-label="Actions for <name>"`), 44×44 on compact.
+
+```vue
+<li class="flex items-center gap-2">
+  <ULink :to="`/add-ons/${group.id}`" class="flex min-w-0 flex-1 flex-col gap-1 py-3">
+    <span class="flex items-center gap-2">
+      <span class="truncate font-medium text-highlighted">{{ group.name }}</span>
+      <UBadge :label="statusLabel" color="neutral" variant="subtle" />
+    </span>
+    <span class="text-sm text-muted">{{ summary }}</span>
+  </ULink>
+  <UDropdownMenu :items="actions">
+    <UButton icon="i-lucide-ellipsis-vertical" color="neutral" variant="ghost" :aria-label="`Actions for ${group.name}`" />
+  </UDropdownMenu>
+</li>
+```
+
+- This is a composition of Nuxt UI components with Tailwind layout classes, **not a custom row component**. A feature may extract its own row component when it repeats the row's *content* (the Availability agenda card), never to restyle the row.
+- In Select mode, the checkbox is a third sibling before the record target, and the record target toggles selection instead of opening (one purpose per target at a time).
+- Focus: Nuxt UI's focus-visible ring on each target; Tab moves record → actions → next record.
+
 **Examples:**
-- `/staff`: the table becomes rows ("Name · role · branch" + status). This is the proposed first reference for the table→rows rule.
+- `/staff`: the table becomes rows ("Name · role · branch" + status). It's the rollout plan's first reference for the table→rows rule.
 - `/products`: the grid stays one column; the List view becomes rows.
 - `/categories`: already grouped cards per parent on compact (D72).
 - `/availability`: agenda cards stack (D76).
 
 ## 3. Settings
 
-**Purpose:** change configuration (branch hours, points rate). No instance exists yet; this blueprint is **proposed** and will be proven by the first settings page (step 5.1).
+**Purpose:** change configuration (branch hours, points rate). No instance exists yet.
+
+> **Open: the Settings blueprint is not approved and not implementable** ([decision 1](../plans/ui-standardization.md#6-owner-decisions)). Below is the recommendation the owner is asked to approve. The first settings page (step 5.1) waits for the decision.
 
 ### Expanded anatomy
 
@@ -91,10 +122,15 @@ Body:    Section heading          Fields…
 - Sections with a heading and a one-line description, fields beside or below (max readable width, not full screen width).
 - One draft per page with **Save changes** in the navbar (the page's primary action), enabled only when dirty. It's guarded by `useUnsavedChanges` ([forms](./forms.md)). Instant toggles (save at once) are allowed only where the change is harmless and reversible, and say so.
 
-### Compact anatomy
+**The save model is the same at every width.** A page-wide draft saved by one Save on expanded is the same page-wide draft saved by one Save on compact. Compact never turns it into sections that save independently.
 
-- Short settings: one column; Save changes in a bottom bar while dirty.
-- Long settings (more than ~2 screens): a **grouped list of sections**, each opening a **pushed full-screen section** with its own Save. One section is edited at a time.
+### Compact anatomy (recommended)
+
+- Short settings: one column; the same **Save changes** in a bottom bar while the draft is dirty.
+- Long settings (more than ~2 screens): a grouped list of sections, each opening a **pushed full-screen section** that edits the **same shared draft**. A section has Back (to the list, keeping its edits in the draft) and no Save of its own. **One final Save changes** (a bottom bar on the section list and on each section, the same action) sends the whole draft in one request. The list marks sections with unsaved edits.
+- The draft belongs to the settings page, not to a section, so moving between sections never loses or saves it; the unsaved-changes guard asks only when leaving the settings page. The foundations for this (sections as a query value on one route, so Back works and the page's draft survives) are verified when the first settings page is built.
+
+**Alternative (decision 1):** independent section saves (each section has its own draft and Save) used consistently **at every width**, including expanded. Better when sections map to separate API resources; worse when a change spans sections.
 
 ## 4. Detail / editor
 
@@ -110,8 +146,9 @@ Body:    Section heading          Fields…
 | Master–detail (expanded) | Working through many records in turn (queues) | none yet (future orders or feedback screens) |
 
 **Compact:**
-- Modals and slideovers are **full screen** (`fullscreen` on `UModal`; slideovers are full width below `sm`).
-- **Long forms use a focused full-screen route (owner-directed):** a slideover form that is several screens long on compact moves to a route or pushed screen, one section at a time.
+- Modals are **full screen** (`fullscreen` on `UModal`, from the layout-context composable). Slideovers fill a narrow viewport by Nuxt UI's own width; their contents already follow their `@container` ([responsive-layout §1](./responsive-layout.md#constrained-surfaces-container-queries)).
+- **The Options editor stays a `USlideover` at every width (owner-directed, approved 2026-09-28).** Its inner layout adapts with Tailwind responsive and container utilities; it doesn't become a route.
+- **Long forms use a focused route on compact (owner-directed).** The long **Menu item editor** gets a focused route on compact, one section at a time (approved 2026-09-28). The exact URLs, so a deep link opens the same record at every width, are **Open** ([decision 4](../plans/ui-standardization.md#6-owner-decisions)).
 - **Master–detail becomes a pushed screen or a bottom sheet (owner-directed):** the list is one screen; the detail pushes over it with Back. A bottom sheet is only for a short detail (a few fields or actions).
 
 ### Route anatomy (the `/add-ons/[id]` reference, D75)
@@ -167,10 +204,10 @@ Every page and overlay handles the states that can occur for it. This table is t
 |---|---|---|
 | **Loading (first)** | Placeholder rows or cards shaped like the content; never the empty state | `ListSkeleton`, `useApiQuery().loading` ([ui-helpers](./ui-helpers.md#listskeleton)) |
 | **Refreshing** | Existing content stays; a small spinner in the toolbar | `refreshing` ([data-fetching](./data-fetching.md)) |
-| **Initial empty** | "No <things> yet", one sentence of why it matters, and the create action (if the user may create) | `ListEmptyState` |
-| **Filtered empty** | "No <things> match your filters" + Clear filters. Say it when everything is archived ("Every add-on group is archived" + Show archived) | `ListEmptyState`, a feature-specific variant |
+| **Initial empty** | A title naming the resource ("No availability rules yet", "No staff yet"), one sentence of why it matters, and the create action (if the user may create) | `ListEmptyState` |
+| **Filtered empty** | A title naming the resource ("No availability rules match your filters", "No menu items match your search") + Clear filters. Say it when everything is archived ("Every add-on group is archived" + Show archived) | `ListEmptyState`, a feature-specific variant |
 | **Load error** | The safe message + Retry, in place of the content | `ApiErrorAlert` ([errors](./errors.md)) |
-| **Not found** | "This <thing> doesn't exist" + a way back (detail routes) | the page |
+| **Not found** | A sentence naming the record type ("This add-on group doesn't exist") + a way back (detail routes) | the page |
 | **Unauthorized / forbidden** | Session loss redirects to login; a forbidden action is hidden or disabled with the reason; the server still refuses | [app-behavior → Session loss](./app-behavior.md#session-loss) |
 | **Offline** | The offline banner; saves fail with a clear toast, input kept | [app-behavior → Offline](./app-behavior.md#offline-banner) |
 | **Saving** | The triggering control shows loading; inputs lock; the user may still close (the save continues) | [feature-standard → Save lifecycle](../feature-standard.md#save-lifecycle) |

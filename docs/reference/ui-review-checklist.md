@@ -2,7 +2,7 @@
 
 ← [API Reference](./README.md) · Rules: [ui.md](./ui.md) · [responsive-layout.md](./responsive-layout.md) · [page-patterns.md](./page-patterns.md)
 
-Run this before merging any UI change. Each line links to the rule it checks. A "no" is fixed, or explained in the PR as a known gap with an entry in the [rollout plan](../plans/ui-standardization.md).
+Run this before merging any UI change. Nuxt UI is the component design system and Tailwind CSS tokens are the layout and styling language ([ui.md](./ui.md)); every line below checks one rule. Each line links to the rule it checks. A "no" is fixed, or explained in the PR as a known gap with an entry in the [rollout plan](../plans/ui-standardization.md).
 
 ## Verification widths
 
@@ -13,21 +13,26 @@ Check every changed screen at **320, 390, 768, 1024 and 1440 px** wide, plus one
 - [ ] The page follows one [pattern](./page-patterns.md#1-choose-the-pattern); a deviation is written down with its reason.
 - [ ] The compact layout was **designed** (answers the four questions in [responsive-layout §2](./responsive-layout.md#2-compact-is-designed-not-shrunk-owner-directed)), not the desktop stacked.
 - [ ] Capabilities, permissions, URLs and validation are the same at every width ([responsive-layout §1](./responsive-layout.md#1-width-classes-owner-directed)).
-- [ ] Layout switches only at 640px and 1024px, by width ([§1](./responsive-layout.md#1-width-classes-owner-directed)).
+- [ ] Page layout switches only at the viewport's `sm` (640px) and `lg` (1024px), by width; no device detection and no arbitrary breakpoints ([§1](./responsive-layout.md#1-width-classes-owner-directed)).
+- [ ] Content inside a constrained surface (slideover, narrow column) lays out by its `@container` with Tailwind's default container variants; JavaScript choices come from the layout-context composable or an explicit `compact` prop ([§1](./responsive-layout.md#constrained-surfaces-container-queries)).
+- [ ] Compact record rows are the [row composition](./page-patterns.md#compact-row-composition): one large record target and a sibling actions trigger; no button inside a link, no custom row component for styling.
+- [ ] The save model is the same at every width: a page-wide draft is never split into independently saved sections on compact ([page-patterns §3–4](./page-patterns.md#save-models)).
+- [ ] Nothing depends on an **Open** item in [the owner-decision table](../plans/ui-standardization.md#6-owner-decisions).
 - [ ] No sideways-scrolling table on compact; no two-dimensional scrolling at 320px ([matrix](./responsive-layout.md#7-responsive-behavior-matrix)).
 
 ## Visual
 
-- [ ] Nuxt UI components at their default sizes and variants; no per-page restyling ([ui §1](./ui.md#1-principles)).
+- [ ] Nuxt UI components at their default sizes and variants; any change to them is in `app.config.ts`, never a per-page `ui` override of color, size, radius or shadow ([ui §1](./ui.md#1-principles)).
+- [ ] Tailwind tokens only: no arbitrary values (`[13px]`, `min-[700px]:`, `@[500px]:`), no one-off CSS; custom CSS only for theme variables, safe areas or behavior utilities can't express ([ui §1](./ui.md#1-principles)).
 - [ ] Semantic colors and surfaces only: no palette classes, hex, gradients, blur or custom shadows ([ui §2](./ui.md#2-color-tokens), [§8](./ui.md#8-surface-hierarchy)).
-- [ ] Spacing on the 4px ramp; no card inside a card ([ui §3](./ui.md#3-spacing-owner-directed-a-4px-ramp), [§8](./ui.md#8-surface-hierarchy)).
+- [ ] Spacing on the 4px ramp; no card inside a card ([ui §3](./ui.md#3-spacing-owner-directed-the-current-4px-ramp-is-preserved), [§8](./ui.md#8-surface-hierarchy)).
 - [ ] One primary action per page, at most one per card or overlay; destructive actions confirm and are never primary ([ui §9](./ui.md#9-action-hierarchy-owner-directed)).
 - [ ] Status shown with text (and icon), not color alone; badges only for status and counts ([ui §10](./ui.md#10-status-badges-and-pills)).
 - [ ] Icons match the one-icon-per-concept table ([ui §7](./ui.md#7-icons)).
 
 ## Touch and keyboard
 
-- [ ] On compact, every target is ≥44px (icon buttons 44×44), with ≥8px between targets ([ui §6](./ui.md#6-density-and-touch-targets)).
+- [ ] On compact, every target is at least 44px (`min-h-11`; icon buttons `min-h-11 min-w-11`), with `gap-2` or more between targets, and the size comes from the central `app.config.ts` configuration, not from the page ([ui §6](./ui.md#6-density-and-touch-targets)).
 - [ ] Everything works with the keyboard alone, in a logical order; focus is visible everywhere.
 - [ ] Focus lands sensibly after open, close, save, delete and reorder; dialogs trap and restore focus.
 - [ ] Drag, swipe and long-press all have button or keyboard alternatives ([page-patterns §7](./page-patterns.md#7-gestures)).
@@ -49,7 +54,7 @@ For each screen and overlay, show and test the applicable [states](./page-patter
 
 ## Accessibility
 
-- [ ] Text contrast ≥4.5:1 (3:1 large text and UI boundaries), including primary-colored text ([ui §12](./ui.md#12-accessibility-baseline-owner-directed-wcag-22-aa-minimum))
+- [ ] Text contrast ≥4.5:1 (3:1 large text and UI boundaries), including primary-colored text, in light and dark mode ([ui §12](./ui.md#12-accessibility-baseline-owner-directed-wcag-22-aa-minimum))
 - [ ] Headings in order; lists and tables are semantic; form errors are associated with their fields
 - [ ] Async results are announced (toast, inline alert, `role="status"`, `aria-live` for moves)
 - [ ] 200% text zoom keeps content usable; nothing depends on hover or motion (`motion-safe:`)

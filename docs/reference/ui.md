@@ -4,19 +4,24 @@
 
 The canonical visual rules for NUK Cafe Admin: tokens, spacing, radius, type, density, icons, surfaces, actions, motion and accessibility. Where a rule lives here, other documents link to it instead of repeating it.
 
+> **Nuxt UI is the component design system. Tailwind CSS tokens are the layout and styling language.** Every screen is composed from Nuxt UI components (their variants, slots and semantic colors, configured globally in `app/app.config.ts`) and laid out with Tailwind's standard spacing, breakpoint, container-query, typography and color-token utilities. There is no second component library and no custom visual language on top.
+
 Status labels used below:
-- **Owner-directed**: stated by the owner (D74, or the UI standardization request of 2026-09-28).
-- **Proposed**: this document's recommendation, not yet approved. The open questions are in [the rollout plan](../plans/ui-standardization.md#6-owner-decisions).
+- **Owner-directed**: stated by the owner (D74, the UI standardization request of 2026-09-28, or the approved directions of the 2026-09-28 review).
+- **Open**: waiting on an owner decision; **not implementable** until decided. Every open item is in [the owner-decision table](../plans/ui-standardization.md#6-owner-decisions).
+- Unlabelled rules are the standard as written in D77.
 
 ---
 
 ## 1. Principles
 
-1. **Nuxt UI first (owner-directed, D74).** Use Nuxt UI components with their default sizes and variants. Mockups decide layout, positions and content, not styling.
-2. **Configure globally, not per page.** Colors, radius, default sizes and component defaults change in `app/app.config.ts` (`ui.colors`, component `defaultVariants`, slots) or `app/assets/css/main.css` (theme variables). A page never restyles a component to look different from the same component elsewhere.
-3. **No parallel component library (owner-directed).** Shared app components ([ui-helpers.md](./ui-helpers.md)) wrap *behavior* (search, empty states, bulk actions). They don't re-skin Nuxt UI. Don't create `AppButton`, `BaseCard` or similar.
-4. **Allowed layout-only tweaks:** grid and flex placement, `min-w-0`, `shrink`, `break-words`, visibility per width class, a `ui` slot override that changes *layout* (e.g. a card body becoming a flex row), and `env(safe-area-inset-*)` padding. Anything that changes color, size, radius or shadow is not a layout tweak.
-5. **Avoid (owner-directed):** decorative gradients, glass and blur effects, arbitrary shadows, arbitrary values (`[13px]`, hex colors) except `env()` safe-area padding, excessive pills, and one-off styling.
+1. **Nuxt UI first (owner-directed, D74).** Use Nuxt UI components with their default sizes, variants and slots. Mockups decide layout, positions and content, not styling.
+2. **Configure globally, not per page (owner-directed).** Colors, radius, default sizes and component defaults change only in `app/app.config.ts` (`ui.colors`, a component's `slots`, `variants` or `defaultVariants`). Theme variables that Nuxt UI exposes as CSS variables (`--ui-primary`, `--ui-radius`) are set once in `app/assets/css/tailwind.css`. A page never restyles a component to look different from the same component elsewhere: no per-page `ui` overrides of color, size, radius or shadow.
+3. **No parallel component library (owner-directed).** Shared app components ([ui-helpers.md](./ui-helpers.md)) wrap *behavior* (search, empty states, bulk actions). They don't re-skin Nuxt UI. Don't create `AppButton`, `BaseCard`, a styled row component or similar.
+4. **Tailwind tokens only (owner-directed).** Layout uses Tailwind's standard scales: spacing (`gap-4`, `p-3`), breakpoints (`sm:`, `lg:`, `max-sm:`), container queries (`@container`, `@md:`), sizing (`min-h-11`, `max-w-md`), typography (`text-sm`, `font-semibold`) and Nuxt UI's semantic color utilities (`text-muted`, `bg-elevated`, `border-default`). **No arbitrary values** (`[13px]`, `min-[700px]:`, `@[500px]:`), no hex colors, no palette classes.
+5. **Allowed layout-only tweaks on a component:** grid and flex placement, `min-w-0`, `shrink`, `break-words`, visibility per width class, and a `ui` slot class that changes *layout* only (a card body becoming a flex row). Anything that changes color, size, radius or shadow is not a layout tweak and belongs in `app.config.ts`.
+6. **Custom CSS is limited (owner-directed)** to global theme variables, safe-area handling (`env(safe-area-inset-*)`, the one place a non-token value is allowed) and behavior that neither Nuxt UI nor Tailwind utilities can express (the existing pointer-cursor rule). No one-off CSS, no broad element selectors for styling.
+7. **Avoid (owner-directed):** decorative gradients, glass and blur effects (`backdrop-blur`), custom shadows, excessive pills, and one-off styling.
 
 ## 2. Color tokens
 
@@ -46,9 +51,11 @@ Status labels used below:
 
 Borders: `border-default` for separators and outlines, `border-muted` for very quiet dividers, `divide-default` between rows. Color is never the only signal: status also has text or an icon (§10).
 
-**Dark mode:** the tokens adapt by themselves. The app doesn't offer a color-mode switch today; whether dark mode is supported is an [owner decision](../plans/ui-standardization.md#6-owner-decisions). Until then, don't write light-only colors, so both modes keep working.
+**Semantic color roles are preserved (owner-directed, approved 2026-09-28).** A role keeps its meaning app-wide; a screen never repurposes `warning` for decoration or `primary` for emphasis.
 
-## 3. Spacing (owner-directed: a 4px ramp)
+**Dark mode (owner-directed, approved 2026-09-28): token-compatible, no switch yet.** Everything is written with semantic tokens so it works in both modes; nothing is light-only. The app doesn't add a color-mode switch. Nuxt UI's color mode (its default, following the system preference) stays as it is; screens are checked in both modes.
+
+## 3. Spacing (owner-directed: the current 4px ramp is preserved)
 
 Use Tailwind's spacing scale in 4px steps: `1` (4px), `2` (8), `3` (12), `4` (16), `5` (20), `6` (24), `8` (32), `10` (40), `12` (48), `16` (64). Half steps (`0.5`, `1.5`) only *inside* a compact control or badge, never between layout blocks.
 
@@ -84,9 +91,10 @@ Use Nuxt UI's `--ui-radius` (the default): controls and badges get the component
 ## 6. Density and touch targets
 
 - **Expanded and medium (≥640px):** Nuxt UI default sizes (`md` controls). WCAG 2.2 AA's 24×24px minimum (2.5.8) is the floor.
-- **Compact (<640px, owner-directed):** interactive targets are **44–48px** in their smaller dimension, and 44px for icon-only buttons in both dimensions. They must be met **globally** (one theme or config rule for compact widths), not with per-component `min-h-*` overrides. D74 removed those; the mechanism is an [owner decision](../plans/ui-standardization.md#6-owner-decisions).
-- Adjacent targets keep at least 8px between their hit areas on compact.
-- A row that opens something is one target (the whole row), not a small link inside it.
+- **Compact (<640px, owner-directed, approved 2026-09-28):** every interactive target is **at least 44px**: `min-h-11` in its smaller dimension, and `min-h-11 min-w-11` for icon-only buttons. Where a larger target helps (a bottom-bar primary action), use **48px**: `min-h-12` / `min-w-12`. Only these Tailwind tokens; no pixel values.
+- **Configured centrally, in one place (owner-directed):** the compact minimum is set once in `app/app.config.ts`, in the `slots` (or a size variant) of each Nuxt UI component the admin uses (button, input, select, select menu, checkbox and switch hit areas, tabs trigger, dropdown menu item, navigation link), with the compact-width variant: for example `ui.button.slots.base: 'max-sm:min-h-11'`. Pages and components never add `min-h-*`/`min-w-*` for touch size (D74), and there's no broad CSS selector (`button, a { … }`) for it. The foundations PR lists every configured component and measures each at 320px.
+- Adjacent targets keep at least `gap-2` (8px) between their hit areas on compact.
+- A record in a list has **one large content target** that opens it, with its actions trigger beside it as a sibling, never inside it ([page-patterns → Compact row composition](./page-patterns.md#compact-row-composition)).
 
 ## 7. Icons
 
@@ -146,7 +154,7 @@ Alerts (`UAlert`, `variant="subtle"`) are for states that need action or explain
 
 ## 12. Accessibility baseline (owner-directed: WCAG 2.2 AA minimum)
 
-- **Contrast:** text meets 4.5:1 (3:1 for large text and UI boundaries). Use the matching token on tinted backgrounds (`text-primary` on `bg-primary/10`), never a lighter shade. **Known gap (needs verification):** with `primary: 'amber'`, Nuxt UI's light-mode primary is amber-500, which as text on white is well below 4.5:1. That covers primary-colored text: links, the active tab, selected day toggles and outline badges. The fix is global (a darker `--ui-primary` shade for light mode in `main.css`), not per page; see [the rollout plan](../plans/ui-standardization.md#6-owner-decisions).
+- **Contrast:** text meets 4.5:1 (3:1 for large text and UI boundaries). Use the matching token on tinted backgrounds (`text-primary` on `bg-primary/10`), never a lighter shade. **Light-mode primary text (owner-directed, approved 2026-09-28):** with `primary: 'amber'`, Nuxt UI's light-mode primary is the 500 shade, which as text on white is below 4.5:1 (links, the active tab, selected day toggles, outline badges). The fix is **one semantic theme variable**: set light mode's `--ui-primary` to a darker shade of the same primary palette (e.g. `var(--ui-color-primary-700)`) in `app/assets/css/tailwind.css`, leaving dark mode on Nuxt UI's default. Never per page, never a palette class. The foundations PR measures the chosen shade as text on `bg-default` and on `bg-primary/10`, and white text on solid primary buttons (which the variable also darkens).
 - **Focus:** never remove focus outlines. Nuxt UI's focus-visible rings are the style. After an action, focus goes somewhere sensible: the next row after a delete, the moved row after a reorder, the trigger after a dialog closes.
 - **Names:** every control has a visible label or `aria-label`; row actions name their record ("Actions for Oat milk").
 - **Structure:** landmarks from the dashboard shell, headings in order, lists as `ul`/`ol`, tables as `UTable` with headers.
