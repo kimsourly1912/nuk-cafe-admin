@@ -26,6 +26,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: boolean] }>()
 
+const { isCompact } = useLayoutContext()
 const isEdit = props.member !== undefined
 const isSelf = isEdit && useAuth().user.value?.userId === props.member!.id
 // An admin can't remove their own admin role (the server refuses too: OWN_ACCESS).
@@ -97,6 +98,8 @@ async function onSubmit({ data }: FormSubmitEvent<StaffForm>) {
   <UModal
     :title="isEdit ? `Access of ${member!.name}` : 'Add staff member'"
     :description="isEdit ? member!.email : undefined"
+    :fullscreen="isCompact"
+    :ui="{ footer: 'pb-[max(env(safe-area-inset-bottom),1rem)]' }"
     @update:open="unsaved.onOpenChange"
   >
     <template #body>
@@ -215,10 +218,10 @@ async function onSubmit({ data }: FormSubmitEvent<StaffForm>) {
     </template>
 
     <template #footer>
-      <div class="flex w-full items-center justify-end gap-2">
+      <div class="flex w-full flex-wrap items-center justify-end gap-2">
         <span
           v-if="saving"
-          class="mr-auto text-xs text-muted"
+          class="mr-auto min-w-0 text-xs text-muted"
         >
           You can close this; saving continues in the background.
         </span>

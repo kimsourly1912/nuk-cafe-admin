@@ -98,7 +98,7 @@ A compact record row has **two sibling targets**, never nested:
 - Focus: Nuxt UI's focus-visible ring on each target; Tab moves record → actions → next record.
 
 **Examples:**
-- `/staff`: the table becomes rows ("Name · role · branch" + status). It's the rollout plan's first reference for the table→rows rule.
+- `/staff` (**the reference, D79**): the table becomes rows (name, email, access as one line of text, the Temporary password badge); the name is the record's button on the table too. Copy it for the table→rows rule.
 - `/products`: the grid stays one column; the List view becomes rows.
 - `/categories`: already grouped cards per parent on compact (D72).
 - `/availability`: agenda cards stack (D76).

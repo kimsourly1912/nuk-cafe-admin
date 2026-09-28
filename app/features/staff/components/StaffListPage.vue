@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * Staff: everyone with access to the admin app or a branch (D49, D52). A table, because the
- * question is "who can do what, where". Admins only.
+ * Staff: everyone with access to the admin app or a branch (D49, D52). A table from `sm`, because
+ * the question is "who can do what, where"; on phones a list of rows (D77 table → rows, D79): each
+ * row is one large button that opens the person, with the actions menu beside it. Admins only.
  */
 import type { DropdownMenuItem, SelectItem, TableColumn } from '@nuxt/ui'
 import type { StaffMember } from '#shared/contracts/staff'
@@ -11,6 +12,7 @@ import { describeAccess } from '../schemas/staff-form'
 import StaffFormModal from './StaffFormModal.vue'
 
 const { user } = useAuth()
+const { isCompact } = useLayoutContext()
 
 // --- Filters & pagination (kept in the URL) ---
 const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({
@@ -48,6 +50,8 @@ const columns: TableColumn<StaffMember>[] = [
 ]
 
 const isSelf = (member: StaffMember) => member.id === user.value?.userId
+/** "Admin · Manager at Riverside": access as text on a phone row (at most two badges per row). */
+const accessLine = (member: StaffMember) => describeAccess(member).join(' · ') || 'No access'
 
 function rowActions(member: StaffMember): DropdownMenuItem[] {
   return [
@@ -97,19 +101,19 @@ usePageShortcuts({ n: () => openForm() })
           <SearchInput
             v-model="filters.search"
             placeholder="Search name or email…"
-            class="w-64"
+            class="w-full sm:w-64"
           />
           <USelect
             v-model="filters.role"
             :items="roleItems"
             aria-label="Role"
-            class="w-36"
+            class="min-w-0 flex-1 sm:w-36 sm:flex-none"
           />
           <USelect
             v-model="filters.branchId"
             :items="branchItems"
             aria-label="Branch"
-            class="w-44"
+            class="min-w-0 flex-1 sm:w-44 sm:flex-none"
           />
           <UIcon
             v-if="refreshing"
@@ -142,26 +146,98 @@ usePageShortcuts({ n: () => openForm() })
         @clear="clearFilters()"
       />
 
+      <!-- Phones: rows, one large target each and the actions beside it (page-patterns §2) -->
+      <ul
+        v-else-if="isCompact"
+        aria-label="Staff"
+        class="divide-y divide-default rounded-lg border border-default"
+      >
+        <li
+          v-for="member in rows"
+          :key="member.id"
+          class="flex items-center gap-1 p-1"
+          :class="isBusy(member.id) && 'opacity-50'"
+        >
+          <UButton
+            color="neutral"
+            variant="ghost"
+            :aria-label="member.name"
+            :disabled="isBusy(member.id)"
+            class="min-w-0 flex-1 text-left"
+            @click="openForm(member)"
+          >
+            <span class="flex min-w-0 flex-col items-start gap-0.5">
+              <span class="max-w-full break-words font-medium text-highlighted">
+                {{ member.name }}
+                <span
+                  v-if="isSelf(member)"
+                  class="font-normal text-muted"
+                >(you)</span>
+              </span>
+              <span class="max-w-full truncate font-normal text-muted">{{ member.email }}</span>
+              <span class="max-w-full font-normal text-muted">{{ accessLine(member) }}</span>
+              <UBadge
+                v-if="member.mustChangePassword"
+                color="warning"
+                variant="outline"
+                icon="i-lucide-key-round"
+                class="mt-1"
+              >
+                Temporary password
+              </UBadge>
+            </span>
+          </UButton>
+          <UIcon
+            v-if="isBusy(member.id)"
+            name="i-lucide-loader-circle"
+            class="size-5 shrink-0 animate-spin text-muted"
+            aria-label="Working…"
+          />
+          <UDropdownMenu
+            v-else
+            :items="rowActions(member)"
+            :content="{ align: 'end' }"
+          >
+            <UButton
+              icon="i-lucide-ellipsis-vertical"
+              color="neutral"
+              variant="ghost"
+              :aria-label="`Actions for ${member.name}`"
+            />
+          </UDropdownMenu>
+        </li>
+      </ul>
+
+      <!-- shrink-0: the page body scrolls, not a table squeezed above the pagination (landscape phones) -->
       <UTable
         v-else
         :data="rows"
         :columns="columns"
-        :meta="{ class: { tr: row => (isBusy(row.original.id) ? 'opacity-50 pointer-events-none' : 'cursor-pointer') } }"
-        @select="(_, row) => openForm(row.original)"
+        class="shrink-0"
+        :meta="{ class: { tr: row => (isBusy(row.original.id) ? 'opacity-50 pointer-events-none' : '') } }"
       >
+        <!-- The name opens the person: the record's one target, beside (not around) its actions -->
         <template #name-cell="{ row }">
-          <div class="min-w-0">
-            <p class="font-medium text-highlighted">
-              {{ row.original.name }}
-              <span
-                v-if="isSelf(row.original)"
-                class="font-normal text-muted"
-              >(you)</span>
-            </p>
-            <p class="truncate text-muted">
-              {{ row.original.email }}
-            </p>
-          </div>
+          <UButton
+            color="neutral"
+            variant="ghost"
+            :aria-label="row.original.name"
+            class="-mx-2.5 -my-1.5 max-w-full text-left"
+            @click="openForm(row.original)"
+          >
+            <span class="flex min-w-0 flex-col">
+              <span class="font-medium text-highlighted">
+                {{ row.original.name }}
+                <span
+                  v-if="isSelf(row.original)"
+                  class="font-normal text-muted"
+                >(you)</span>
+              </span>
+              <span class="truncate font-normal text-muted">
+                {{ row.original.email }}
+              </span>
+            </span>
+          </UButton>
         </template>
 
         <template #access-cell="{ row }">
@@ -202,7 +278,6 @@ usePageShortcuts({ n: () => openForm() })
               color="neutral"
               variant="ghost"
               :aria-label="`Actions for ${row.original.name}`"
-              @click.stop
             />
           </UDropdownMenu>
         </template>
