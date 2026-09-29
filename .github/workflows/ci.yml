@@ -118,7 +118,7 @@ jobs:
           # The database answers through the Worker.
           curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors "$STAGING_URL/api/public/health" | grep -q '"ok"'
           # The app shell loads, with the security headers.
-          curl --fail --silent --show-error --head "$STAGING_URL/login" | grep -qi '^content-security-policy:'
+          curl --fail --silent --show-error --head "$STAGING_URL/admin/login" | grep -qi '^content-security-policy:'
           # An unknown API path is our JSON 404, not the app's HTML.
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/api/does-not-exist")" = 404
           # Admin routes refuse without a session.

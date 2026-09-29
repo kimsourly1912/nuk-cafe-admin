@@ -13,7 +13,7 @@ import { staffNavigation } from '~/features/staff'
  */
 export const navigationItems: NavigationMenuItem[][] = [
   [
-    { label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/' },
+    { label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/admin' },
   ],
   [
     { label: 'Menu', type: 'label' },

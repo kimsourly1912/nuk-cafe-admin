@@ -21,7 +21,7 @@ async function open(rows: StaffMember[] = [SELF, SOPHEA, VANNA], extra: Paramete
     'GET /admin/branches/options': () => [AIRPORT, RIVERSIDE],
     ...extra,
   })
-  await page.goto(url('/staff'), { waitUntil: 'hydration' })
+  await page.goto(url('/admin/staff'), { waitUntil: 'hydration' })
   await page.getByRole('button', { name: 'Sophea', exact: true }).waitFor()
   return { page, api }
 }

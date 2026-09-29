@@ -3,7 +3,7 @@
  * The Add-ons library (D59, redesigned in D75): reusable groups of extras with default prices and
  * selection rules. A card per group; the whole library is loaded once (small, unpaginated), so
  * search (group and add-on names) and the status tabs work on it here. A group opens on its own
- * page (`/add-ons/:id`); new groups are created in a modal, then opened there. No bulk actions and
+ * page (`/admin/add-ons/:id`); new groups are created in a modal, then opened there. No bulk actions and
  * no order of groups: menu items pick groups by name. docs/plans/modifier-groups.md
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
@@ -43,7 +43,7 @@ const createModal = useOverlay().create(ModifierGroupCreateModal)
 async function create() {
   // A new group opens on its page, to refine its add-ons straight away.
   const created = await createModal.open().result
-  if (created) await navigateTo(`/add-ons/${created.id}`)
+  if (created) await navigateTo(`/admin/add-ons/${created.id}`)
 }
 
 function actions(group: ModifierGroup): DropdownMenuItem[] {

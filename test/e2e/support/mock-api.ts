@@ -255,7 +255,8 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
   await page.route(`${origin}/api/**`, async (route: Route) => {
     const request = route.request()
     const requestUrl = new URL(request.url())
-    const path = requestUrl.pathname.replace(/^\/api(?=\/admin)/, '').replace(/^\/api\/auth/, '/auth')
+    // Keys name the route without `/api`: 'GET /admin/me', 'GET /public/menu', 'POST /auth/sign-out'.
+    const path = requestUrl.pathname.replace(/^\/api(?=\/(?:admin|public|shop|counter|auth)\b)/, '')
     const key = `${request.method()} ${path}`
     calls.push(key)
     // 'DELETE /admin/categories/cat-1' also matches a 'DELETE /admin/categories/{id}' handler.
@@ -297,11 +298,11 @@ export function beforeUnloadPrevented(page: Page) {
 }
 
 /**
- * Open the app at `/` and click through the sidebar, so back/forward stay in-app (SPA history).
+ * Open the admin at `/admin` and click through the sidebar, so back/forward stay in-app (SPA history).
  * Returns once the router has committed the last navigation: every link adds its history entry.
  */
 export async function gotoViaSidebar(page: Page, links: (string | RegExp)[]) {
-  await page.goto(url('/'), { waitUntil: 'hydration' })
+  await page.goto(url('/admin'), { waitUntil: 'hydration' })
   for (const name of links) {
     const link = page.getByRole('link', { name }).first()
     const path = await link.getAttribute('href')
@@ -322,7 +323,7 @@ export function toast(page: Page, title: string | RegExp) {
 }
 
 /**
- * A category in the Categories tree (`/categories`), by name. The tree loads
+ * A category in the Categories tree (`/admin/categories`), by name. The tree loads
  * `GET /admin/menu/categories`; the default handlers answer it with MENU_TEA and MENU_COFFEE.
  */
 export function categoryItem(page: Page, name: string) {

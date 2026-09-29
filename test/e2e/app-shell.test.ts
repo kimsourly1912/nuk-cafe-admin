@@ -17,7 +17,7 @@ describe('app shell', () => {
   it('titles the error page', async () => {
     const page = await createPage()
     await mockApi(page)
-    await page.goto(url('/does-not-exist'))
+    await page.goto(url('/admin/does-not-exist'))
     await expect.poll(() => page.title()).toBe('Page not found · NUK Cafe Admin')
   })
 })

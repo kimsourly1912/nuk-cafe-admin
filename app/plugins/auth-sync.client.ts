@@ -1,5 +1,5 @@
 import { useBroadcastChannel } from '@vueuse/core'
-import { loginRedirectTarget, useAuth } from '~/features/auth'
+import { isAdminPath, LOGIN_PATH, loginRedirectTarget, useAuth } from '~/features/auth'
 
 interface AuthMessage {
   event: 'login' | 'logout'
@@ -29,10 +29,11 @@ export default defineNuxtPlugin((nuxtApp) => {
       if (auth.isLoggedIn.value) auth.clearSession()
       return
     }
-    if (received?.event === 'login') {
+    // A customer-site tab (outside /admin) never reads the admin session (D93).
+    if (received?.event === 'login' && isAdminPath(router.currentRoute.value.path)) {
       await auth.fetchSession()
       const route = router.currentRoute.value
-      if (auth.isLoggedIn.value && route.path === '/login') {
+      if (auth.isLoggedIn.value && route.path === LOGIN_PATH) {
         await nuxtApp.runWithContext(() => navigateTo(loginRedirectTarget(route.query.redirect)))
       }
     }

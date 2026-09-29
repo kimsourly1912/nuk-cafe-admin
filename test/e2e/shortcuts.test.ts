@@ -9,7 +9,7 @@ await setupE2e()
 async function openCategories() {
   const page = await createPage()
   const api = await mockApi(page)
-  await page.goto(url('/categories'), { waitUntil: 'hydration' })
+  await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
   await categoryItem(page, 'Tea').waitFor()
   return { page, api }
 }

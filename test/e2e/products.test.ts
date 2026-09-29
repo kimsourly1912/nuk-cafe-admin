@@ -107,7 +107,7 @@ function backend(rows: MenuItemSummary[] = [LATTE_ROW, MATCHA_ROW], items: MenuI
 }
 
 /** `first: ''` doesn't wait for any card (empty list). */
-async function open(handlers: Record<string, MockHandler> = backend(), first = 'Latte', path = '/products') {
+async function open(handlers: Record<string, MockHandler> = backend(), first = 'Latte', path = '/admin/products') {
   const page = await createPage()
   const api = await mockApi(page, handlers)
   await page.goto(url(path), { waitUntil: 'hydration' })
@@ -254,7 +254,7 @@ describe('menu items list', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 390, height: 844 })
     await mockApi(page, backend())
-    await page.goto(url('/products'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/products'), { waitUntil: 'hydration' })
     await cardOf(page, 'Latte').waitFor()
     // Grid: one column
     const lefts = await page.getByRole('article').evaluateAll(cards => cards.map(c => Math.round(c.getBoundingClientRect().left)))
@@ -267,7 +267,7 @@ describe('menu items list', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     // On phones the item opens as its own page (D90).
     await list.getByRole('button', { name: 'Latte', exact: true }).click()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/products/item-1')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/products/item-1')
   })
 
   it('lays the grid out by the width it has: several columns at 1440px (D89)', async () => {
@@ -559,7 +559,7 @@ describe('menu item editor URLs (D90, decision 4)', () => {
   const params = (page: Page) => new URL(page.url()).searchParams
 
   it('from sm the list opens the slide-over at ?item= (filters kept); Back closes it, resizing changes nothing', async () => {
-    const { page } = await open(backend(), 'Matcha', '/products?status=draft')
+    const { page } = await open(backend(), 'Matcha', '/admin/products?status=draft')
     await cardOf(page, 'Matcha').click()
     const form = page.getByRole('dialog', { name: 'Edit menu item' })
     await expect.poll(() => form.getByLabel('Name', { exact: true }).inputValue()).toBe('Matcha')
@@ -579,7 +579,7 @@ describe('menu item editor URLs (D90, decision 4)', () => {
   })
 
   it('closing the slide-over removes only `item`, and asks only once about unsaved input', async () => {
-    const { page } = await open(backend(), 'Matcha', '/products?status=draft')
+    const { page } = await open(backend(), 'Matcha', '/admin/products?status=draft')
     await cardOf(page, 'Matcha').click()
     const form = page.getByRole('dialog', { name: 'Edit menu item' })
     await form.getByLabel('Name', { exact: true }).fill('Matcha 2')
@@ -596,9 +596,9 @@ describe('menu item editor URLs (D90, decision 4)', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 390, height: 844 })
     await mockApi(page, backend())
-    await page.goto(url('/products?status=active'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/products?status=active'), { waitUntil: 'hydration' })
     await cardOf(page, 'Latte').click()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/products/item-1')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/products/item-1')
     await expect.poll(() => page.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte')
     expect(await page.title()).toBe('Menu item · NUK Cafe Admin')
     // One section at a time.
@@ -609,7 +609,7 @@ describe('menu item editor URLs (D90, decision 4)', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
     await page.getByRole('button', { name: 'Back to Menu items' }).click()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/products')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/products')
     expect(params(page).get('status')).toBe('active')
   })
 
@@ -617,16 +617,16 @@ describe('menu item editor URLs (D90, decision 4)', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 390, height: 844 })
     await mockApi(page, backend())
-    await page.goto(url('/products'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/products'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: 'New menu item' }).click()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/products/new')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/products/new')
     await page.getByRole('tab', { name: 'Availability' }).click()
     await page.getByRole('toolbar', { name: 'Save' }).getByRole('button', { name: 'Create' }).click()
     await page.getByText('Name is required').waitFor()
     expect(await page.getByRole('tab', { name: 'Details' }).getAttribute('aria-selected')).toBe('true')
   })
 
-  it('/products/<id> opens the item at every width; Save sends the version read and returns to the list', async () => {
+  it('/admin/products/<id> opens the item at every width; Save sends the version read and returns to the list', async () => {
     let body: Record<string, unknown> | undefined
     const { page } = await open({
       ...backend(),
@@ -634,7 +634,7 @@ describe('menu item editor URLs (D90, decision 4)', () => {
         body = request.body as Record<string, unknown>
         return { ...LATTE, name: 'Latte 2', version: 4 }
       },
-    }, '', '/products/item-1')
+    }, '', '/admin/products/item-1')
     // Wide: every section at once, Save in the navbar.
     await expect.poll(() => page.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte')
     await page.getByRole('region', { name: 'Options and prices' }).waitFor()
@@ -643,16 +643,16 @@ describe('menu item editor URLs (D90, decision 4)', () => {
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await toast(page, 'Menu item "Latte 2" updated').waitFor()
     expect(body).toMatchObject({ version: 3, name: 'Latte 2' })
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/products')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/products')
   })
 
   it('leaving /products/<id> with unsaved input asks first', async () => {
-    const { page } = await open(backend(), '', '/products/item-1')
+    const { page } = await open(backend(), '', '/admin/products/item-1')
     await expect.poll(() => page.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte')
     await page.getByLabel('Name', { exact: true }).fill('Latte 2')
     await page.getByRole('link', { name: 'Categories' }).click()
     await page.getByText('Discard unsaved changes?').waitFor()
     await page.getByRole('button', { name: 'Keep editing' }).click()
-    expect(new URL(page.url()).pathname).toBe('/products/item-1')
+    expect(new URL(page.url()).pathname).toBe('/admin/products/item-1')
   })
 })

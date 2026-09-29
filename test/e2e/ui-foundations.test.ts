@@ -23,7 +23,7 @@ async function open(width: number, height = 812, colorScheme: 'light' | 'dark' =
   await page.emulateMedia({ colorScheme })
   await page.setViewportSize({ width, height })
   await mockApi(page, handlers)
-  await page.goto(url('/categories'), { waitUntil: 'hydration' })
+  await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
   await page.getByRole('listitem', { name: 'Coffee', exact: true }).waitFor()
   return page
 }

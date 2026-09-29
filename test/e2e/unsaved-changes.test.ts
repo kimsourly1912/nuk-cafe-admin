@@ -125,7 +125,7 @@ describe('unsaved changes: leaving the page', () => {
     await page.goBack()
     await discardDialog(page).waitFor()
     await answer(page, 'Keep editing')
-    await expect.poll(() => page.url()).toMatch(/\/categories$/)
+    await expect.poll(() => page.url()).toMatch(/\/admin\/categories$/)
     await expect(nameInput(page).inputValue()).resolves.toBe('Latte')
   })
 
@@ -134,7 +134,7 @@ describe('unsaved changes: leaving the page', () => {
     await openNewForm(page, 'Latte')
     await page.goBack()
     await answer(page, 'Discard')
-    await expect.poll(() => page.url()).not.toMatch(/\/categories$/)
+    await expect.poll(() => page.url()).not.toMatch(/\/admin\/categories$/)
     await form(page).waitFor({ state: 'hidden' })
     expect(await beforeUnloadPrevented(page)).toBe(false)
   })
@@ -154,7 +154,7 @@ describe('unsaved changes: leaving the page', () => {
   it('does not block navigation when nothing is unsaved', async () => {
     const { page } = await openCategories()
     await page.getByRole('link', { name: /Dashboard/ }).first().click()
-    await expect.poll(() => page.url()).not.toMatch(/\/categories$/)
+    await expect.poll(() => page.url()).not.toMatch(/\/admin\/categories$/)
     expect(await discardDialog(page).count()).toBe(0)
   })
 })
@@ -183,18 +183,18 @@ describe('unsaved changes: failed saves and forward', () => {
 
   it('asks on browser forward; Keep editing stays on the page', async () => {
     const { page } = await openCategories()
-    // History: / → /categories → / → /categories. Go back twice, then forward is available.
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/categories')
+    // History: /admin → /admin/categories → /admin → /admin/categories. Go back twice, then forward is available.
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/categories')
     await page.goBack()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin')
     await page.goBack()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/categories')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/categories')
     await openNewForm(page, 'Latte')
 
     await page.goForward()
     await discardDialog(page).waitFor()
     await answer(page, 'Keep editing')
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/categories')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/categories')
     await expect(nameInput(page).inputValue()).resolves.toBe('Latte')
   })
 })

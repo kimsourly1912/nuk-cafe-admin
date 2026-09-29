@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * `/branches` (D91): opens the only branch at once (launch has one), or lists them when there are
+ * `/admin/branches` (D91): opens the only branch at once (launch has one), or lists them when there are
  * several (staging has a second test branch). Branches are created by the seed task, not here.
  */
 import { useBranchOptions } from '../composables/useBranches'
@@ -9,7 +9,7 @@ const { data: branches, loading, error, refresh } = useBranchOptions()
 
 // One branch: its page is the Branch page (replace, so Back doesn't return here).
 watch(branches, (list) => {
-  if (list?.length === 1) navigateTo(`/branches/${list[0]!.id}`, { replace: true })
+  if (list?.length === 1) navigateTo(`/admin/branches/${list[0]!.id}`, { replace: true })
 }, { immediate: true })
 </script>
 
@@ -50,7 +50,7 @@ watch(branches, (list) => {
           class="p-1"
         >
           <UButton
-            :to="`/branches/${branch.id}`"
+            :to="`/admin/branches/${branch.id}`"
             :label="branch.name"
             icon="i-lucide-map-pin"
             trailing-icon="i-lucide-chevron-right"

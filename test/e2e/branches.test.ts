@@ -60,7 +60,7 @@ function backend(overrides: Record<string, MockHandler> = {}, branches = [RIVERS
   return { handlers, bodies }
 }
 
-async function open(handlers: Record<string, MockHandler>, width?: number, path = `/branches/${RIVERSIDE.id}`) {
+async function open(handlers: Record<string, MockHandler>, width?: number, path = `/admin/branches/${RIVERSIDE.id}`) {
   const page = await createPage()
   if (width) await page.setViewportSize({ width, height: 844 })
   const api = await mockApi(page, handlers)
@@ -82,15 +82,15 @@ describe('branch page', () => {
     const page = await createPage()
     await mockApi(page, backend().handlers)
     await gotoViaSidebar(page, ['Branch'])
-    await expect.poll(() => new URL(page.url()).pathname).toBe(`/branches/${RIVERSIDE.id}`)
+    await expect.poll(() => new URL(page.url()).pathname).toBe(`/admin/branches/${RIVERSIDE.id}`)
     await page.getByRole('heading', { name: 'Branch settings' }).waitFor()
     expect(await page.title()).toBe('Branch · NUK Cafe Admin')
   })
 
   it('lists the branches when there are several', async () => {
-    const { page } = await open(backend({}, [RIVERSIDE, AIRPORT]).handlers, undefined, '/branches')
+    const { page } = await open(backend({}, [RIVERSIDE, AIRPORT]).handlers, undefined, '/admin/branches')
     await page.getByRole('list', { name: 'Branches' }).getByRole('link', { name: 'Airport' }).click()
-    await expect.poll(() => new URL(page.url()).pathname).toBe(`/branches/${AIRPORT.id}`)
+    await expect.poll(() => new URL(page.url()).pathname).toBe(`/admin/branches/${AIRPORT.id}`)
   })
 })
 
@@ -200,7 +200,7 @@ describe('branch settings', () => {
 
 describe('dining tables', () => {
   async function openTables(overrides: Record<string, MockHandler> = {}, width?: number) {
-    const result = await open(backend(overrides).handlers, width, `/branches/${RIVERSIDE.id}?tab=tables`)
+    const result = await open(backend(overrides).handlers, width, `/admin/branches/${RIVERSIDE.id}?tab=tables`)
     await card(result.page, 'Table 01').waitFor()
     return result
   }

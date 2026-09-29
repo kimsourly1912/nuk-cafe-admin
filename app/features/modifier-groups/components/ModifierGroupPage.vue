@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * One add-on group on its own page, `/add-ons/:id` (D75): a wide Add-ons column (the add-ons with
+ * One add-on group on its own page, `/admin/add-ons/:id` (D75): a wide Add-ons column (the add-ons with
  * price and Preselected, search, Add / Edit in a dialog, the ⋮ actions, Reorder mode, archived
  * add-ons, and which menu items use the group) and a Settings column (name and selection rules).
  * On phones the two columns are the tabs "Add-ons" and "Settings".
@@ -241,14 +241,14 @@ const headerActions = computed(() => archived.value
             icon="i-lucide-arrow-left"
             color="neutral"
             variant="ghost"
-            to="/add-ons"
+            to="/admin/add-ons"
             aria-label="Back to Add-ons"
             class="lg:hidden"
           />
         </template>
         <template #title>
           <UBreadcrumb
-            :items="[{ label: 'Add-ons', to: '/add-ons' }, { label: group?.name ?? 'Add-on group' }]"
+            :items="[{ label: 'Add-ons', to: '/admin/add-ons' }, { label: group?.name ?? 'Add-on group' }]"
             class="hidden min-w-0 lg:flex"
           />
           <span class="truncate lg:hidden">{{ group?.name ?? 'Add-on group' }}</span>
@@ -298,7 +298,7 @@ const headerActions = computed(() => archived.value
         </p>
         <UButton
           label="Back to Add-ons"
-          to="/add-ons"
+          to="/admin/add-ons"
           color="neutral"
           variant="outline"
           class="mt-2"

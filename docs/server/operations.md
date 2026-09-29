@@ -88,7 +88,7 @@ On push to `main`, after those pass, the `deploy-staging` job (GitHub environmen
 2. `pnpm db:migrate:staging` (migrations before the Worker: expand, then contract);
 3. `wrangler deploy`;
 4. re-sends `NUXT_MAIL_RESEND_API_KEY` from the environment's secret (skipped when unset);
-5. smoke check: `GET /api/public/health` is ok (the database answers), `/login` has the CSP header, an unknown `/api` path is 404, `/api/admin/me` without a session is 401. Later: sign in, read the menu, place and complete a test order once orders exist.
+5. smoke check: `GET /api/public/health` is ok (the database answers), `/admin/login` has the CSP header, an unknown `/api` path is 404, `/api/admin/me` without a session is 401. Later: sign in, read the menu, place and complete a test order once orders exist.
 
 GitHub environment `staging` secrets: `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers" plus **Account → D1 → Edit**, this account only), `CLOUDFLARE_ACCOUNT_ID`, `NUXT_MAIL_RESEND_API_KEY`.
 

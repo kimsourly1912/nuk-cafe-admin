@@ -1,7 +1,7 @@
 import type { UnwrapRef } from 'vue'
 
 /**
- * Filter + pagination state for list pages, kept in the URL (`/categories?search=tea&page=2`),
+ * Filter + pagination state for list pages, kept in the URL (`/admin/categories?search=tea&page=2`),
  * so reload, back/forward and shared links keep the user's place.
  * - `page` is 1-based, as in UPagination and the API; `query` adds it and `pageSize` to the filters.
  * - Changing any filter resets to page 1.

@@ -20,7 +20,7 @@ type UrlQuery = Record<string, string | null | (string | null)[] | undefined>
 
 /**
  * List state → URL query. Only values that differ from the defaults are written, and page 1
- * is omitted, so a list without filters has a clean URL (`/categories`).
+ * is omitted, so a list without filters has a clean URL (`/admin/categories`).
  */
 export function toUrlQuery(filters: Record<string, unknown>, defaults: Record<string, unknown>, page: number) {
   const query: Record<string, string> = {}

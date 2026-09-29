@@ -17,7 +17,7 @@ Status labels: **owner-directed** and **Open** (waiting on an owner decision, no
 | Finding, scanning or acting on many records of one kind | [Resource index](#2-resource-index) | `/products`, `/categories`, `/options`, `/add-ons`, `/availability`, `/staff` |
 | Changing configuration that isn't a list of records | [Settings](#3-settings) | none yet (branch settings in step 5.1) |
 | Viewing or editing one record, possibly with sub-collections | [Detail / editor](#4-detail--editor) | `/add-ons/[id]`; overlays on the other indexes |
-| Completing one focused, sequential job | [Task flow](#5-task-flow) | `/login`, `/change-password` |
+| Completing one focused, sequential job | [Task flow](#5-task-flow) | `/admin/login`, `/admin/change-password` |
 
 `/` (Dashboard) is a placeholder. It gets a pattern (likely an overview of the resource-index family) when reports exist (step 8.1).
 
@@ -200,7 +200,7 @@ Don't mix both for the same fields. Never send several dependent calls behind on
 - **Compact:** full screen; title at the top; the primary action at the bottom in thumb reach, above the keyboard and the safe area.
 - One primary action per step; Cancel/Back is secondary. A multi-step flow keeps one unsaved-changes guard over all its steps ([forms](./forms.md)).
 - Errors appear beside the field or at the top of the step, and focus moves to them.
-- Reference: `/login` and `/change-password` (`AuthFrame` in the auth feature, D84). The submit button sits in the frame's footer, outside the form, joined to it with `form="<id>"` so Enter still submits.
+- Reference: `/admin/login` and `/admin/change-password` (`AuthFrame` in the auth feature, D84). The submit button sits in the frame's footer, outside the form, joined to it with `form="<id>"` so Enter still submits.
 
 ## 6. Bottom sheets
 

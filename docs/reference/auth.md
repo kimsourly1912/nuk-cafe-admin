@@ -31,7 +31,7 @@ const { user, isLoggedIn, logout } = useAuth()
 | `login(credentials)` | `({ email, password }) => Promise<void>` | Signs in with Better Auth (`POST /api/auth/sign-in/email`, which sets the cookie), then reads `/api/admin/me`. **Throws `ApiError`**: "Incorrect email or password." (`kind: 'business'`), rate limiting, or "This account doesn't have access to the admin app." (any 403: a customer or branch staff account, which is then signed out again). |
 | `changePassword(current, next)` | `(string, string) => Promise<void>` | Better Auth `POST /api/auth/change-password` with `revokeOtherSessions: true`, then reads the session again (the server has cleared a temporary-password flag). **Throws `ApiError`**: "Your current password is incorrect." (`INVALID_PASSWORD`), Better Auth's `PASSWORD_COMPROMISED` / length messages. |
 | `requirePasswordChange()` | `() => void` | Marks the session as needing a new password (used by `apiFetch` on 403 `PASSWORD_CHANGE_REQUIRED`); `plugins/api.ts` then navigates to the change-password page. |
-| `logout()` | `() => Promise<void>` | If a form has unsaved changes, asks first and does nothing on "Keep editing" ([`useLeaveGuard`](./forms.md#useleaveguard)). Then `POST /api/auth/sign-out`, navigates to `/login` and clears the user, even if the request fails. Other open tabs go to login too (`plugins/auth-sync.client.ts`). |
+| `logout()` | `() => Promise<void>` | If a form has unsaved changes, asks first and does nothing on "Keep editing" ([`useLeaveGuard`](./forms.md#useleaveguard)). Then `POST /api/auth/sign-out`, navigates to `/admin/login` and clears the user, even if the request fails. Other open tabs go to login too (`plugins/auth-sync.client.ts`). |
 | `clearSession()` | `() => void` | Clears the user locally (used by `apiFetch` on a 401 or 403 `NOT_ADMIN`). |
 | `can(permission)` | `(string) => boolean` | `'resource:action'` (`'staff:create'`), from the session's `permissions`. For hiding actions. The server checks every request regardless. |
 
@@ -69,9 +69,10 @@ catch (e) {
 definePageMeta({ public: true, layout: 'auth' })
 ```
 
-- Unauthenticated users are sent to `/login?redirect=<original path>`.
-- Logged-in users visiting `/login` are sent to `/`.
-- **On a temporary password**, every page sends to `/change-password?redirect=<original path>` (no sidebar: the `auth` layout). After the change the app continues to that path. The page is also in the user menu ("Change password") for a voluntary change; there it has a Back link, and after saving it goes back.
+- The customer site (every path outside `/admin`, D93) is public and never reads the admin session (`isAdminPath`).
+- Unauthenticated users on an admin page are sent to `/admin/login?redirect=<original path>`; after login, a `redirect` outside `/admin` goes to `/admin`.
+- Logged-in users visiting `/admin/login` are sent to `/admin`.
+- **On a temporary password**, every admin page sends to `/admin/change-password?redirect=<original path>` (no sidebar: the `auth` layout). After the change the app continues to that path. The page is also in the user menu ("Change password") for a voluntary change; there it has a Back link, and after saving it goes back.
 
 | Case | Behavior | Tested |
 |---|---|---|
@@ -89,7 +90,7 @@ definePageMeta({ public: true, layout: 'auth' })
 - Better Auth (`@nuxtjs/better-auth`, `server/auth.config.ts`) owns accounts and the session cookie (HttpOnly, same origin) and keeps it fresh itself: there is no token refresh in the app.
 - A Better Auth account is **not** admin access: customers and branch staff sign in through the same routes. Admin access is the platform role `admin` (`user.role`), checked by the server on every `/api/admin` request.
 - On the first navigation, the middleware calls `fetchSession()` once.
-- When any request answers 401 or 403 `NOT_ADMIN`, `apiFetch` clears the user and `plugins/api.ts` redirects to `/login?redirect=…`. No retry. (Removing someone's admin role also deletes their sessions, so they usually get a 401.)
+- When any request answers 401 or 403 `NOT_ADMIN`, `apiFetch` clears the user and `plugins/api.ts` redirects to `/admin/login?redirect=…`. No retry. (Removing someone's admin role also deletes their sessions, so they usually get a 401.)
 - Session-expiry errors are never toasted ([`isSilentError`](./errors.md#issilenterror)).
 
 ## First admin (local setup)
@@ -100,7 +101,7 @@ With the dev server running and `NUXT_SEED_ADMIN_EMAIL` set:
 curl http://localhost:3000/_nitro/tasks/db:seed
 ```
 
-prints the first admin's temporary password (and creates a demo branch). Sign in at `/login`; the app asks for a new password first. More staff: the **Staff** page. See [operations → Seed data](../server/operations.md).
+prints the first admin's temporary password (and creates a demo branch). Sign in at `/admin/login`; the app asks for a new password first. More staff: the **Staff** page. See [operations → Seed data](../server/operations.md).
 
 ## `loginRedirectTarget`
 
@@ -112,7 +113,7 @@ Where to go after login: the `?redirect=` value if it's a path on this site (`/c
 
 ## Across tabs
 
-`login()` and `logout()` fire the runtime hook `app:auth-changed`. `plugins/auth-sync.client.ts` forwards it to the app's other open tabs, so they log out (to `/login?redirect=<their page>`) or continue from the login page. Cases: [App-wide behavior → Session loss](./app-behavior.md#session-loss).
+`login()` and `logout()` fire the runtime hook `app:auth-changed`. `plugins/auth-sync.client.ts` forwards it to the app's other open tabs, so they log out (to `/admin/login?redirect=<their page>`) or continue from the login page. Cases: [App-wide behavior → Session loss](./app-behavior.md#session-loss).
 
 ## Identity generation
 

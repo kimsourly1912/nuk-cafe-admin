@@ -30,7 +30,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
     >
       <template #header="{ collapsed }">
         <NuxtLink
-          to="/"
+          to="/admin"
           class="flex items-center gap-2 font-semibold"
         >
           <UIcon

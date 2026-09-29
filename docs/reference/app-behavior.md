@@ -105,17 +105,18 @@ Every case is in [Forms: unsaved changes → Edge cases](./forms.md#edge-cases).
 
 | Case | Behavior |
 |---|---|
-| Session expired (401 from any request) | `clearSession()` → redirect to `/login?redirect=<current page>`. No refresh or retry: Better Auth keeps a live session's cookie fresh itself, so a 401 means it's over. **No unsaved-changes dialog**: staying isn't possible. Open form modals close, toasts clear (see the transition contract below) |
+| Session expired (401 from any request) | `clearSession()` → redirect to `/admin/login?redirect=<current page>`. No refresh or retry: Better Auth keeps a live session's cookie fresh itself, so a 401 means it's over. **No unsaved-changes dialog**: staying isn't possible. Open form modals close, toasts clear (see the transition contract below) |
 | Admin access removed mid-session (403 `NOT_ADMIN`; removing the role also deletes the sessions, so usually a 401) | Same as a 401 |
 | Many requests fail at once | One session change: `clearSession()` is idempotent |
 | A customer or branch-staff account signs in on the admin login | `/api/admin/me` answers 403; the account is signed out again and the form says "This account doesn't have access to the admin app." (e2e `auth.test.ts`, both `NOT_ADMIN` and the route gate's `FORBIDDEN`) |
-| Signed in on a temporary password, or a route answers 403 `PASSWORD_CHANGE_REQUIRED` | Every page goes to `/change-password` until it's changed ([auth → change-password page](./auth.md#public-pages-and-the-change-password-page)) |
+| Signed in on a temporary password, or a route answers 403 `PASSWORD_CHANGE_REQUIRED` | Every admin page goes to `/admin/change-password` until it's changed ([auth → change-password page](./auth.md#public-pages-and-the-change-password-page)) |
 | Better Auth refetches its own session (startup, tab focus) | No effect on the staff session: separate state keys (`staff-session:*` vs the module's `auth:*`) |
 | Log out with unsaved input | Asks first ([`useLeaveGuard`](./forms.md#useleaveguard)), **before** calling the backend |
-| **Logged out in another tab** | This tab goes to `/login?redirect=<current page>` at once. Unsaved input in this tab is lost without a dialog (the session is gone for every tab) |
-| **Logged in in another tab** | Tabs waiting on `/login` continue to their `redirect` target. Logged-in tabs re-read the session (it may be a different staff member now) |
+| **Logged out in another tab** | This tab goes to `/admin/login?redirect=<current page>` at once. Unsaved input in this tab is lost without a dialog (the session is gone for every tab) |
+| **Logged in in another tab** | Tabs waiting on `/admin/login` continue to their `redirect` target. Logged-in tabs re-read the session (it may be a different staff member now) |
 | Session expires in one tab | Only that tab redirects. The others find out on their next request (not broadcast) |
-| After login | Back to the `redirect` page. Only paths on this site: `/x` is allowed; `//other-site.com`, `https://…` and anything else go to `/` (`loginRedirectTarget`). Blocks open redirects through crafted login links |
+| After login | Back to the `redirect` page. Only admin paths: `/admin/x` is allowed; `//other-site.com`, `https://…`, a customer-site path and anything else go to `/admin` (`loginRedirectTarget`). Blocks open redirects through crafted login links |
+| A customer-site tab (any path outside `/admin`, D93) | Never reads the admin session: no login redirect, no password-change redirect, and another tab's login or logout leaves it alone (`isAdminPath`; e2e `shop-menu.test.ts` checks `/admin/me` is never called) |
 
 Source: `app/utils/api-fetch.ts`, `app/plugins/api.ts`, `app/plugins/auth-sync.client.ts` (VueUse `useBroadcastChannel`, channel `nuk-cafe-admin:auth`, hook `app:auth-changed` fired by `useAuth().login/logout`), `app/plugins/session-boundary.client.ts`, `app/middleware/*.global.ts`. See [Auth](./auth.md). Tests: `test/unit/api-fetch.test.ts`; e2e `test/e2e/auth.test.ts`, `test/e2e/session.test.ts` (each checked to fail with its mechanism disabled).
 

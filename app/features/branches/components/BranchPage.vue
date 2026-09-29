@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * A branch (`/branches/[id]`, D91, the owner's mockups): **Settings** and **Dining tables** tabs
+ * A branch (`/admin/branches/[id]`, D91, the owner's mockups): **Settings** and **Dining tables** tabs
  * under the navbar. The navbar's action follows the tab: Save changes (from `lg`; below it the
  * bottom bar) or New table. Both tabs stay mounted, so switching keeps the settings draft; the tab
  * is local state (`?tab=tables` opens that one), so switching never asks about unsaved changes.
@@ -45,7 +45,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
             icon="i-lucide-arrow-left"
             color="neutral"
             variant="ghost"
-            to="/branches"
+            to="/admin/branches"
             aria-label="All branches"
           />
         </template>

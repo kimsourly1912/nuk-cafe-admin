@@ -43,13 +43,13 @@ describe('session expiry', () => {
         throw failures.unauthorized()
       },
     })
-    await page.goto(url('/categories'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
     await categoryItem(page, 'Tea').waitFor()
     await openNewForm(page, 'Latte')
     await form(page).getByRole('button', { name: 'Create' }).click()
 
-    await expect.poll(() => path(page)).toBe('/login')
-    expect(new URL(page.url()).searchParams.get('redirect')).toBe('/categories')
+    await expect.poll(() => path(page)).toBe('/admin/login')
+    expect(new URL(page.url()).searchParams.get('redirect')).toBe('/admin/categories')
     await page.waitForTimeout(300)
     expect(await discardDialog(page).count()).toBe(0)
     expect(await form(page).count()).toBe(0)
@@ -64,8 +64,8 @@ describe('session expiry', () => {
         throw failures.unauthorized()
       },
     })
-    await page.goto(url('/categories'))
-    await expect.poll(() => path(page)).toBe('/login')
+    await page.goto(url('/admin/categories'))
+    await expect.poll(() => path(page)).toBe('/admin/login')
     await page.waitForTimeout(500)
     expect(api.calls.filter(c => c === LIST)).toHaveLength(1)
   })
@@ -73,7 +73,7 @@ describe('session expiry', () => {
   it('admin access removed mid-session (403 NOT_ADMIN) also goes to login', async () => {
     const page = await createPage()
     const api = await mockApi(page)
-    await page.goto(url('/categories'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
     await categoryItem(page, 'Tea').waitFor()
     api.set({
       'POST /admin/menu/categories': () => {
@@ -82,7 +82,7 @@ describe('session expiry', () => {
     })
     await openNewForm(page, 'Latte')
     await form(page).getByRole('button', { name: 'Create' }).click()
-    await expect.poll(() => path(page)).toBe('/login')
+    await expect.poll(() => path(page)).toBe('/admin/login')
   })
 })
 
@@ -91,13 +91,13 @@ describe('logout in another tab', () => {
     const [tab1, tab2] = await openTabs(2)
     await mockApi(tab1!)
     await mockApi(tab2!)
-    await gotoHydrated(tab1!, '/categories')
-    await gotoHydrated(tab2!, '/categories')
+    await gotoHydrated(tab1!, '/admin/categories')
+    await gotoHydrated(tab2!, '/admin/categories')
     await openNewForm(tab2!, 'Unsaved latte')
 
     await logout(tab1!, 'alice')
 
-    await expect.poll(() => path(tab2!)).toBe('/login')
+    await expect.poll(() => path(tab2!)).toBe('/admin/login')
     await tab2!.waitForTimeout(300)
     expect(await discardDialog(tab2!).count()).toBe(0)
     expect(await form(tab2!).count()).toBe(0)
@@ -117,7 +117,7 @@ describe('switching users in the same browser', () => {
         throw failures.conflict('VERSION_CONFLICT', 'Alice cannot archive this')
       },
     })
-    await page.goto(url('/categories'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
     await categoryItem(page, 'Alice-only draft').waitFor()
 
     // Alice leaves a batch result with "Retry failed" (it stays 10 s) and a save in flight.
@@ -137,7 +137,7 @@ describe('switching users in the same browser', () => {
 
     expect(await toast(page, '0 categories archived, 1 failed').count()).toBe(1)
     await logout(page, 'alice')
-    await expect.poll(() => path(page)).toBe('/login')
+    await expect.poll(() => path(page)).toBe('/admin/login')
     expect(await toast(page, '0 categories archived, 1 failed').count()).toBe(0)
     expect(await page.getByRole('button', { name: 'Retry failed' }).count()).toBe(0)
 
@@ -148,7 +148,7 @@ describe('switching users in the same browser', () => {
       [LIST]: () => listOf(BOB_ONLY),
     })
     await login(page, 'bob')
-    await expect.poll(() => path(page)).toBe('/')
+    await expect.poll(() => path(page)).toBe('/admin')
     await page.getByRole('link', { name: /Categories/ }).first().click()
     await categoryItem(page, 'Bob-only menu').waitFor()
 
@@ -170,14 +170,14 @@ describe('switching users in the same browser', () => {
       [LIST]: request => (aliceSignedIn ? aliceList.handler(request) : listOf(BOB_ONLY)),
       'POST /auth/sign-in/email': () => ({ token: 't' }),
     })
-    await page.goto(url('/categories'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
     await aliceList.started()
 
     await logout(page, 'alice')
-    await expect.poll(() => path(page)).toBe('/login')
+    await expect.poll(() => path(page)).toBe('/admin/login')
     aliceSignedIn = false
     await login(page, 'bob')
-    await expect.poll(() => path(page)).toBe('/')
+    await expect.poll(() => path(page)).toBe('/admin')
     await page.getByRole('link', { name: /Categories/ }).first().click()
     await categoryItem(page, 'Bob-only menu').waitFor()
 

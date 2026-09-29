@@ -5,8 +5,8 @@
  * remembered per viewer. States are actions: Publish, Unpublish, Archive, Restore (D70).
  * Links from other pages (D75): `?modifierGroupId=` shows the items offering an add-on group (a
  * filter that can be removed).
- * Opening an item (D90, page-patterns §4): on phones the list pushes `/products/<id>` (a new one:
- * `/products/new`), from `sm` it opens the slide-over at `?item=<id>` (a new one: no URL). The
+ * Opening an item (D90, page-patterns §4): on phones the list pushes `/admin/products/<id>` (a new one:
+ * `/admin/products/new`), from `sm` it opens the slide-over at `?item=<id>` (a new one: no URL). The
  * choice is made when opening; resizing never changes the URL. `?item=` opens the slide-over at
  * every width (links keep working); closing it removes only `item`, and Back closes it.
  * On the UI standard (D89): the name is each record's target; the List view is rows on phones and
@@ -128,7 +128,7 @@ const router = useRouter()
 
 function openForm(item?: MenuItemSummary) {
   if (isCompact.value) {
-    router.push(item ? `/products/${item.id}` : '/products/new')
+    router.push(item ? `/admin/products/${item.id}` : '/admin/products/new')
   }
   else if (!item) {
     formPanel.open({})

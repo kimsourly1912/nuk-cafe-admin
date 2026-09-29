@@ -13,7 +13,7 @@ const listLoads = (tab: { loads: () => number }) => tab.loads()
 /** Tabs opened in the same context share a BroadcastChannel, like tabs of one browser window. */
 const newContext = async () => (await getBrowser()).newContext()
 
-async function openTab(path = '/categories', context?: BrowserContext) {
+async function openTab(path = '/admin/categories', context?: BrowserContext) {
   const page = context ? await context.newPage() : await createPage()
   await page.clock.install()
   let treeLoads = 0
@@ -26,7 +26,7 @@ async function openTab(path = '/categories', context?: BrowserContext) {
   // Raw context pages lack test-utils' `waitUntil: 'hydration'` wrapper.
   await page.goto(url(path))
   await waitForHydration(page, url(path), 'hydration')
-  if (path === '/categories') await categoryItem(page, 'Tea').waitFor()
+  if (path === '/admin/categories') await categoryItem(page, 'Tea').waitFor()
   return { page, api, loads: () => treeLoads }
 }
 
@@ -48,8 +48,8 @@ async function createCategory(page: Page, name: string) {
 describe('data freshness: other tabs of this browser', () => {
   it('a save in tab 1 refreshes the same list in tab 2 at once, without switching tabs', async () => {
     const context = await newContext()
-    const tab1 = await openTab('/categories', context)
-    const tab2 = await openTab('/categories', context)
+    const tab1 = await openTab('/admin/categories', context)
+    const tab2 = await openTab('/admin/categories', context)
     const before = listLoads(tab2)
 
     await createCategory(tab1.page, 'Latte')
@@ -58,8 +58,8 @@ describe('data freshness: other tabs of this browser', () => {
 
   it('a tab showing another page does nothing (it loads fresh when opened)', async () => {
     const context = await newContext()
-    const tab1 = await openTab('/categories', context)
-    const tab2 = await openTab('/', context)
+    const tab1 = await openTab('/admin/categories', context)
+    const tab2 = await openTab('/admin', context)
     await createCategory(tab1.page, 'Latte')
     await tab1.page.waitForTimeout(500)
     expect(listLoads(tab2)).toBe(0)
@@ -67,8 +67,8 @@ describe('data freshness: other tabs of this browser', () => {
 
   it('the tab that saved refreshes once, and does not echo messages back', async () => {
     const context = await newContext()
-    const tab1 = await openTab('/categories', context)
-    const tab2 = await openTab('/categories', context)
+    const tab1 = await openTab('/admin/categories', context)
+    const tab2 = await openTab('/admin/categories', context)
     const before1 = listLoads(tab1)
     const before2 = listLoads(tab2)
     await createCategory(tab1.page, 'Latte')
