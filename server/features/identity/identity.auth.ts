@@ -140,6 +140,8 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
               address: { type: 'string', required: false },
               phone: { type: 'string', required: false },
               status: { type: 'string', required: false, defaultValue: 'active', input: false },
+              // The lock for the branch's settings and hours (D41, D91): every save names it.
+              version: { type: 'number', required: false, defaultValue: 1, input: false },
             },
           },
         },

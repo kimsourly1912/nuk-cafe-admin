@@ -64,3 +64,32 @@ export const pageQuerySchema = {
 export function totalPages(total: number, pageSize: number) {
   return Math.max(1, Math.ceil(total / pageSize))
 }
+
+// --- Weekly windows: availability rules and branch hours ---
+
+export const MINUTES_PER_DAY = 1440
+/** Windows in one week: three a day, every day. */
+export const MAX_WEEKLY_WINDOWS = 21
+
+/**
+ * One weekly window in a branch's local time. `weekday` is ISO 8601: 1 = Monday … 7 = Sunday.
+ * `endMinute` before `startMinute` runs past midnight into the next day (22:00–02:00); the window
+ * belongs to the day it starts on. `endMinute: 1440` is midnight at the end of the day. Overlaps
+ * between windows are checked by the server, which names the window.
+ */
+export interface WeeklyWindow {
+  weekday: number
+  startMinute: number
+  endMinute: number
+}
+
+const minuteOfDay = (min: number, max: number) => v.pipe(v.number(), v.integer('Must be whole minutes'), v.minValue(min), v.maxValue(max))
+
+export const weeklyWindowSchema = v.pipe(
+  v.strictObject({
+    weekday: v.pipe(v.number(), v.integer(), v.minValue(1, 'Must be 1 (Monday) to 7 (Sunday)'), v.maxValue(7, 'Must be 1 (Monday) to 7 (Sunday)')),
+    startMinute: minuteOfDay(0, MINUTES_PER_DAY - 1),
+    endMinute: minuteOfDay(1, MINUTES_PER_DAY),
+  }),
+  v.forward(v.check(w => w.startMinute !== w.endMinute, 'Must end at a different time than it starts'), ['endMinute']),
+)

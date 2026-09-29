@@ -85,6 +85,13 @@
       "when": 1790563453247,
       "tag": "0011_drop_legacy_menu",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790646269339,
+      "tag": "0012_branch_settings",
+      "breakpoints": true
     }
   ]
 }

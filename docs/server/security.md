@@ -174,7 +174,7 @@ Built in step 1.6 (D51).
 | **Rate limits** | Better Auth `customRules` (production only, database storage): sign-in 5/min, sign-up 5/10 min, password-reset request 3/10 min, reset 5/10 min, verification email 3/10 min, change password 5/min. Cloudflare WAF: `/api/shop/orders`, voucher lookup/redeem, `/api/public/tables/*` (QR guessing). |
 | **Body size** | JSON bodies ≤ 64 KB (`readValidBody`); uploads ≤ 5 MB. |
 | **Enumeration** | Other people's records are 404. Sign-in errors don't say whether the email exists (Better Auth default). |
-| **Tokens in URLs** | QR tokens are random (128-bit) and stored **hashed**; a leaked database doesn't reveal working QR links. Rotating a table's QR invalidates the old one. |
+| **Tokens in URLs** | A table's QR token is 128 bits of HMAC-SHA256(`NUXT_QR_SECRET`, table id and QR version), and only its SHA-256 is stored: a leaked database doesn't reveal working QR links, while the server can rebuild a table's QR for the admin to print again (D91). Rotating a table's QR invalidates the old one; an archived table's or branch's QR is 404, like an unknown one. A deployed build without the secret refuses to serve table QRs. |
 
 ## Uploads
 
