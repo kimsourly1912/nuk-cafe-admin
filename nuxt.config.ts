@@ -77,6 +77,9 @@ const STAGING = {
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/ui', '@nuxt/test-utils/module', '@nuxthub/core', '@nuxtjs/better-auth'],
+  $development: {
+    runtimeConfig: { public: { sampleData: { enabled: true, environment: 'Local' } } },
+  },
   $env: {
     staging: {
       // `--envName staging` replaces `$production` (one environment block applies), so the security
@@ -95,6 +98,9 @@ export default defineNuxtConfig({
               // Resend's test sender until the sending domain is set up (Q4): it delivers only to the
               // Resend account's own address, so staging can't mail anyone else.
               NUXT_MAIL_FROM: 'NUK Cafe <onboarding@resend.dev>',
+              // The Sample data page (D94): test data can be loaded and reset here.
+              NUXT_PUBLIC_SAMPLE_DATA_ENABLED: 'true',
+              NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT: 'Staging',
             },
             // Cloudflare calls the Worker on these; Nitro runs the matching tasks.
             triggers: { crons: Object.keys(SCHEDULED_TASKS) },
@@ -136,6 +142,10 @@ export default defineNuxtConfig({
     public: {
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',
+      // The Sample data page (D94): on for the dev server and staging (NUXT_PUBLIC_SAMPLE_DATA_ENABLED,
+      // NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT names the environment on the page). Off everywhere else:
+      // production never gets it, and its routes answer 404.
+      sampleData: { enabled: false, environment: '' },
     },
   },
   routeRules: {

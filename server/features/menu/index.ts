@@ -11,3 +11,6 @@ export { AvailabilityErrorCodes } from './availability.errors'
 export { listSoldOut, setSoldOut } from './soldout.service'
 export { SoldOutErrorCodes } from './soldout.errors'
 export { getPublicMenu } from './catalog.service'
+// Test data only (the sample-data feature, D94): every menu record, counted and deleted.
+export { countMenuData, deleteAllMenuStatements } from './reset.repository'
+export type { MenuDataCounts } from './reset.repository'

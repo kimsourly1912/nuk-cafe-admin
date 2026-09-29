@@ -4,6 +4,7 @@ import { ShortcutsHelp } from '#components'
 import { CHANGE_PASSWORD_PATH, useAuth } from '~/features/auth'
 
 const { user, logout } = useAuth()
+const sidebarItems = navigationItems({ sampleData: useRuntimeConfig().public.sampleData.enabled })
 const open = ref(false)
 
 const shortcutsHelp = useOverlay().create(ShortcutsHelp)
@@ -44,7 +45,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
       <template #default="{ collapsed }">
         <UNavigationMenu
           :collapsed="collapsed"
-          :items="navigationItems"
+          :items="sidebarItems"
           orientation="vertical"
           tooltip
         />
