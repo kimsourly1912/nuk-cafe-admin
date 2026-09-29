@@ -44,6 +44,16 @@ An illustrative proposal may be written down, labelled **awaiting approval**. It
 
 Evidence levels follow [progress.md → Verification levels](progress.md#verification-levels). Note that **e2e tests are browser-mock evidence** (real Chrome, mocked API); **server** and **real-server** evidence come from the server tests and from running against `pnpm dev` (or staging).
 
+### Designing a UI step with mockups (the owner's workflow)
+
+Every step with new screens starts with a design round before any code:
+
+1. **Brief and prompts.** The agent writes a design brief and one prompt per page for the owner's image tool (ChatGPT): the pages, their states (empty, error, success, expired), desktop 1440 and phone 390, the real copy and rules (limits, what the server enforces), and what is out of scope.
+2. **Upload.** The owner uploads the frames over several messages (at most 5 files per message) and says **"all uploaded"**. Until then the agent only confirms what arrived.
+3. **Review together.** The agent reviews all frames against the brief, the server's real behavior and the UI standard ([ui.md](reference/ui.md), [page-patterns.md](reference/page-patterns.md), D74: mockups decide layout and content, Nuxt UI decides styling). Per page: which frame to follow, what to change and why, what to reject (out of scope or against a rule), and any question only the owner can answer, each with a recommendation.
+4. **Approve.** The owner answers or accepts the recommendations. The agreed version goes into the step's plan and decisions entry.
+5. **Build on "next".** The owner says "next". Only then does the agent build, verify, document and open the PR (AGENTS.md → Checks), then stop for review.
+
 ---
 
 ## 1. Feature planning template
