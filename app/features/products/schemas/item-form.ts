@@ -284,3 +284,31 @@ export function toCreateItemBody(form: ItemForm): CreateItemInput {
 export function toUpdateItemBody(form: ItemForm, item: MenuItem): UpdateItemInput {
   return { version: item.version, ...fieldsOf(form) }
 }
+
+// --- Errors and sections ---
+
+/** A server field name as the form names it, so a refused field shows its message where it's edited. */
+export function formFieldOf(serverField: string): string {
+  return serverField
+    .replace(/^variations\.(\d+)\.priceMinor$/, 'grid.$1.price')
+    .replace(/^variations$/, 'grid')
+    .replace(/^modifierGroups\.(\d+)\.rules\.(minSelect|maxSelect)$/, 'addOnGroups.$1.$2')
+}
+
+/** The editor's sections: on phones the route shows one at a time (D90). */
+export const ITEM_FORM_SECTIONS = [
+  { value: 'details', label: 'Details' },
+  { value: 'prices', label: 'Prices' },
+  { value: 'add-ons', label: 'Add-ons' },
+  { value: 'availability', label: 'Availability' },
+] as const
+export type ItemFormSection = typeof ITEM_FORM_SECTIONS[number]['value']
+
+/** The section a form field is edited in, so an error in a hidden section can be shown. */
+export function sectionOf(field: string): ItemFormSection {
+  const root = field.split('.')[0]
+  if (root === 'optionSets' || root === 'grid') return 'prices'
+  if (root === 'addOnGroups') return 'add-ons'
+  if (root === 'availabilityRuleIds') return 'availability'
+  return 'details'
+}

@@ -87,6 +87,9 @@ export function useModalUnsavedChanges<T extends object>(
 
   async function requestClose() {
     if (isDirty.value && !await confirm(DISCARD_DIALOG)) return
+    // Discarded: the form stays registered until the overlay unmounts, and a navigation on close
+    // (the Menu items list removing `?item=`, D90) must not ask again.
+    markClean()
     options.close()
   }
 
