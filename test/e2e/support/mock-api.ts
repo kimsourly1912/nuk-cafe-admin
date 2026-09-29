@@ -296,12 +296,20 @@ export function beforeUnloadPrevented(page: Page) {
   })
 }
 
-/** Open the app at `/` and reach `path` through the sidebar, so back/forward stay in-app (SPA history). */
+/**
+ * Open the app at `/` and click through the sidebar, so back/forward stay in-app (SPA history).
+ * Returns once the router has committed the last navigation: every link adds its history entry.
+ */
 export async function gotoViaSidebar(page: Page, links: (string | RegExp)[]) {
   await page.goto(url('/'), { waitUntil: 'hydration' })
   for (const name of links) {
-    await page.getByRole('link', { name }).first().click()
-    await page.waitForLoadState('networkidle')
+    const link = page.getByRole('link', { name }).first()
+    const path = await link.getAttribute('href')
+    await link.click()
+    // A route change isn't a page load (`waitForLoadState` returns at once). Wait until the router
+    // commits it (the URL changes), or the next click cancels it while its page chunk or middleware
+    // is still pending, and its history entry is never pushed (the "asks on browser forward" flake).
+    await page.waitForURL(address => address.pathname === path)
   }
 }
 
