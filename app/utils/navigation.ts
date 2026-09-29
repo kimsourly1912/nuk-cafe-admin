@@ -1,5 +1,6 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 import { availabilityRulesNavigation } from '~/features/availability-rules'
+import { branchesNavigation } from '~/features/branches'
 import { categoriesNavigation } from '~/features/categories'
 import { modifierGroupsNavigation } from '~/features/modifier-groups'
 import { optionSetsNavigation } from '~/features/option-sets'
@@ -25,5 +26,6 @@ export const navigationItems: NavigationMenuItem[][] = [
   [
     { label: 'Admin', type: 'label' },
     staffNavigation,
+    branchesNavigation,
   ],
 ]

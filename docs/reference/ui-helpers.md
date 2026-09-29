@@ -407,3 +407,23 @@ Source: `app/components/ListSkeleton.vue`
 | `count` | `5` | How many placeholders |
 
 > Drive it with `useApiQuery`'s `loading`, and **don't give that query an empty-list `default`**: `loading` means "pending with no data yet", and `[]` counts as data, so the empty state would flash instead (a bug found by e2e, D37).
+
+## Times of day: `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute`
+
+Weekly windows (availability rules, branch hours) are minutes after midnight in the branch's local time. These helpers show them and bind them to `UInputTime` (D91). Source: `app/utils/clock.ts` (auto-imported; unit-tested code imports it from `~/utils/clock`).
+
+| Helper | Does |
+|---|---|
+| `formatClock(450)` | `"7:30 AM"`; `0` and `1440` are `"12:00 AM"` |
+| `timeRange(start, end)` | `"7:00 AM – 11:00 AM"`, `"All day"` for 0–1440 |
+| `isOvernight(start, end)` | An end before the start runs into the next day (an end of 12:00 AM doesn't) |
+| `minuteToTime(minute?)` / `timeToMinute(time)` | Minutes ↔ `UInputTime`'s `Time` value (`undefined` when empty) |
+
+```vue
+<UInputTime
+  :model-value="minuteToTime(window.start)"
+  :hour-cycle="12"
+  aria-label="Opens"
+  @update:model-value="value => window.start = timeToMinute(value)"
+/>
+```

@@ -52,6 +52,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<ListEmptyState>` | component | [UI helpers](./ui-helpers.md#listemptystate) | "No X yet" vs "No X match your filters" |
 | `previewList`, `pluralize` | util | [UI helpers](./ui-helpers.md#previewlist-and-pluralize) | "Coffee, Tea and 3 more", "3 categories" |
 | `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT` | util | [UI helpers](./ui-helpers.md#money-tominor-fromminor-formatminor-formatprice-price_format) | Cents ↔ dollars, "$4.20" |
+| `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute` | util | [UI helpers](./ui-helpers.md#times-of-day-formatclock-timerange-isovernight-minutetotime-timetominute) | Minutes after midnight ↔ "7:30 AM" and `UInputTime` |
 | `useUnsavedChanges` | composable | [Forms](./forms.md#useunsavedchanges) | Warn before a page form's input is lost |
 | `useModalUnsavedChanges` | composable | [Forms](./forms.md#usemodalunsavedchanges) | Same, plus asking before the modal closes |
 | `useLeaveGuard` | composable | [Forms](./forms.md#useleaveguard) | App-wide "discard unsaved changes?" check |
