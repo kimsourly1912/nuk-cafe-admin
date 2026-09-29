@@ -1,7 +1,8 @@
 import type { PublicMenu, PublicMenuQuery } from '#shared/contracts/public-menu'
 import type { Db } from '../../utils/batch'
 import { toIso } from '../../utils/time'
-import { getPublicBranch } from '../branches'
+import { getPublicBranch, listBranchOptions } from '../branches'
+import { notFound } from '../../utils/errors'
 import { assetUrls } from '../media'
 import type { RuleForCheck } from './availability.rules'
 import { localTime } from './availability.rules'
@@ -93,10 +94,13 @@ export async function loadCatalog(db: Db): Promise<Catalog> {
 
 /**
  * What the branch sells at `now`: available items (in the branch's time zone), their versions marked
- * sold out or not there, and whether the branch is open. Unknown and archived branches are 404.
+ * sold out or not there, and whether the branch is open. Without `branchId`, the first active branch
+ * (D95). Unknown and archived branches are 404, and so is no branch at all.
  */
 export async function getPublicMenu(db: Db, query: PublicMenuQuery, now = new Date()): Promise<PublicMenu> {
-  const branch = await getPublicBranch(db, query.branchId, now)
+  const branchId = query.branchId ?? (await listBranchOptions(db))[0]?.id
+  if (!branchId) throw notFound('This branch')
+  const branch = await getPublicBranch(db, branchId, now)
   const [catalog, soldOut] = await Promise.all([loadCatalog(db), soldOutIds(db, branch.id)])
   return {
     branch,

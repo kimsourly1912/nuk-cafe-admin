@@ -8,6 +8,8 @@ import { CHANGE_PASSWORD_PATH, isAdminPath, LOGIN_PATH, useAuth } from '~/featur
 export default defineNuxtPlugin({
   name: 'api',
   setup(nuxtApp) {
+    // Server rendering (the customer site) fetches per request instead (`apiFetch`, D95).
+    if (import.meta.server) return
     const router = useRouter()
     const auth = useAuth()
 

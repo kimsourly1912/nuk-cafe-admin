@@ -74,6 +74,7 @@ export interface PublicMenu {
 }
 
 export const publicMenuQuerySchema = v.object({
-  branchId: idSchema,
+  /** Omitted: the first active branch by name (launch has one, D45), so a page can render without knowing it (D95). */
+  branchId: v.optional(idSchema),
 })
 export type PublicMenuQuery = v.InferOutput<typeof publicMenuQuerySchema>

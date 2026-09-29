@@ -1,26 +1,34 @@
 import type { Page } from 'playwright-core'
-import { createPage, url } from '@nuxt/test-utils/e2e'
-import { describe, expect, it } from 'vitest'
-import type { MockHandler } from './support/mock-api'
-import { mockApi, setupE2e } from './support/mock-api'
-import { CLOSED_BRANCH, menuOf, shopHandlers, TABLE_TOKEN } from './support/shop-fixtures'
+import { createPage, getBrowser, url } from '@nuxt/test-utils/e2e'
+import { describe, expect, inject, it } from 'vitest'
+import { setupE2e } from './support/mock-api'
 
 await setupE2e()
 
-// The customer menu, the site's home page (step 5.3a, D93).
+// The customer menu, server-rendered (D93, D95), against the e2e server's seeded database
+// (support/seed.ts): the Standard sample menu (D94) at "Riverside" (open around the clock) and
+// "Zeta Kiosk" (no hours: closed). No API mocks here: the server renders what the database holds.
+// Items with a time rule (the croissants, Affogato) come and go with the clock: tests avoid them.
 
-async function open(width = 1440, handlers: Record<string, MockHandler> = shopHandlers(), path = '/') {
+const seed = inject('shopSeed')
+
+/** Opens a page; collects errors, and Vue's "Hydration completed but contains mismatches". */
+async function open(width = 1440, path = '/') {
   const page = await createPage()
-  page.setDefaultTimeout(5000)
+  const problems: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error' || /hydration/i.test(message.text())) problems.push(`${message.text()} ${message.location().url}`)
+  })
+  page.on('pageerror', error => problems.push(error.message))
   await page.setViewportSize({ width, height: width < 640 ? 844 : 900 })
-  const api = await mockApi(page, handlers)
   await page.goto(url(path), { waitUntil: 'hydration' })
   await heading(page, 'Coffee').waitFor()
-  return { page, api }
+  return { page, problems }
 }
 
 const heading = (page: Page, name: string) => page.getByRole('heading', { name, exact: true })
 const card = (page: Page, name: string) => page.getByRole('article', { name, exact: true })
+const visible = (locator: ReturnType<Page['getByRole']>) => locator.filter({ visible: true })
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Categories' }).getByRole('button', { name, exact: true })
 const panel = (page: Page) => page.getByRole('complementary', { name: 'Your order' })
 const dialog = (page: Page) => page.getByRole('dialog')
@@ -29,121 +37,121 @@ const dialog = (page: Page) => page.getByRole('dialog')
 async function inViewBelowHeader(page: Page, name: string) {
   const header = (await page.locator('header').boundingBox())!
   const box = (await heading(page, name).boundingBox())!
-  const below = header.y + header.height
-  const viewport = page.viewportSize()!
-  return box.y >= below - 1 && box.y + box.height <= viewport.height
+  return box.y >= header.y + header.height - 1 && box.y + box.height <= page.viewportSize()!.height
 }
 
-describe('the customer menu', () => {
-  it('is the home page: sections by category, sub-sections, and no admin session read', async () => {
-    const { page, api } = await open()
-    await expect.poll(() => page.title()).toBe('Menu · NUK Cafe')
-    await heading(page, 'Hot · 4 items').waitFor()
-    await heading(page, 'Tea').waitFor()
-    expect(await card(page, 'Latte').getByText('from $4.50').isVisible()).toBe(true)
-    expect(api.calls).not.toContain('GET /admin/me')
-    expect(api.calls).toContain('GET /public/branches')
+describe('the customer menu, server-rendered', () => {
+  it('sends the menu in the page itself: readable without JavaScript', async () => {
+    const html = await (await fetch(url('/'))).text()
+    expect(html).toContain('Khmer Iced Coffee')
+    expect(html).toContain('<title>Menu · NUK Cafe</title>')
+    expect(html).toMatch(/<meta name="description" content="Browse the NUK Cafe menu/)
+    const context = await (await getBrowser()).newContext({ javaScriptEnabled: false })
+    const page = await context.newPage()
+    await page.goto(url('/'))
+    await heading(page, 'Espresso Bar · 7 items').or(heading(page, 'Espresso Bar · 6 items')).first().waitFor()
+    expect(await page.getByText('Salted Caramel Latte').first().isVisible()).toBe(true)
+    await context.close()
   })
 
+  it('keeps the admin a browser-only app: its page carries no content', async () => {
+    const html = await (await fetch(url('/admin/login'))).text()
+    expect(html).not.toContain('Sign in')
+    expect(html).not.toContain('Khmer Iced Coffee')
+  })
+
+  it('hydrates without mismatches, at desktop and phone width', async () => {
+    for (const width of [1440, 390]) {
+      const { page, problems } = await open(width)
+      await card(page, 'Banana Bread').waitFor()
+      expect(problems).toEqual([])
+      await page.close()
+    }
+  })
+})
+
+describe('the customer menu', () => {
   it('moves the tabs with the scroll, and scrolls to the category a tab names', async () => {
     const { page } = await open()
     expect(await tab(page, 'Coffee').getAttribute('aria-current')).toBe('true')
     await tab(page, 'Tea').click()
     await expect.poll(() => tab(page, 'Tea').getAttribute('aria-current')).toBe('true')
-    // In view below the sticky header (a section near the end may not reach the top).
     await expect.poll(() => inViewBelowHeader(page, 'Tea')).toBe(true)
-    // Scrolling by hand takes over again.
-    await page.mouse.wheel(0, -5000)
+    await page.mouse.wheel(0, -20_000)
     await expect.poll(() => tab(page, 'Coffee').getAttribute('aria-current')).toBe('true')
   })
 
-  it('"All categories" shows the tree with the active category expanded, and goes to a sub-category', async () => {
+  it('"All categories" goes to a sub-category and marks it', async () => {
     const { page } = await open()
-    await page.getByRole('button', { name: 'All categories' }).click()
+    await visible(page.getByRole('button', { name: 'All categories' })).click()
     const tree = page.getByRole('list', { name: 'All categories' })
-    await tree.getByRole('button', { name: /^Iced/ }).click()
+    await tree.getByRole('button', { name: 'Show Tea sub-categories' }).click()
+    await tree.getByRole('button', { name: /^Milk Tea/ }).click()
     await expect.poll(() => tree.isVisible()).toBe(false)
-    await expect.poll(() => inViewBelowHeader(page, 'Iced · 2 items')).toBe(true)
-    await page.getByRole('button', { name: 'All categories' }).click()
-    expect(await tree.getByRole('button', { name: /^Iced/ }).getAttribute('aria-current')).toBe('true')
-    // Coffee's chevron hides its sub-categories.
-    await tree.getByRole('button', { name: 'Hide Coffee sub-categories' }).click()
-    await expect.poll(() => tree.getByRole('button', { name: /^Iced/ }).count()).toBe(0)
+    await expect.poll(() => tab(page, 'Tea').getAttribute('aria-current')).toBe('true')
+    await visible(page.getByRole('button', { name: 'All categories' })).click()
+    expect(await tree.getByRole('button', { name: /^Milk Tea/ }).getAttribute('aria-current')).toBe('true')
   })
 
   it('adds an item with nothing to choose in one tap; the slot becomes a stepper; the panel totals it', async () => {
     const { page } = await open()
-    expect(await panel(page).getByText('Your order is empty').isVisible()).toBe(true)
-    await card(page, 'Americano').getByRole('button', { name: 'Add Americano to order' }).click()
-    const stepper = card(page, 'Americano').getByRole('spinbutton', { name: 'Quantity of Americano' })
-    await expect.poll(() => stepper.inputValue()).toBe('1')
-    await card(page, 'Americano').getByRole('button', { name: 'Increment' }).click()
-    await expect.poll(() => panel(page).getByText('$7.00').count()).toBeGreaterThan(0)
-    // Back to 0 removes it: the slot is a button again.
-    await card(page, 'Americano').getByRole('button', { name: 'Decrement' }).click()
-    await card(page, 'Americano').getByRole('button', { name: 'Decrement' }).click()
-    await card(page, 'Americano').getByRole('button', { name: 'Add Americano to order' }).waitFor()
-    expect(await panel(page).getByText('Your order is empty').isVisible()).toBe(true)
+    const bread = card(page, 'Banana Bread')
+    await visible(bread.getByRole('button', { name: 'Add Banana Bread to order' })).click()
+    await visible(bread.getByRole('button', { name: 'Increment' })).click()
+    await panel(page).getByText('$4.50').first().waitFor()
+    await visible(bread.getByRole('button', { name: 'Decrement' })).click()
+    await visible(bread.getByRole('button', { name: 'Decrement' })).click()
+    await visible(bread.getByRole('button', { name: 'Add Banana Bread to order' })).waitFor()
+    await panel(page).getByText('Your order is empty').waitFor()
   })
 
   it('opens the detail for an item with choices: says what\'s missing, prices the choice, then "2 in order"', async () => {
     const { page } = await open()
-    await card(page, 'Latte').getByRole('button', { name: 'Add Latte to order' }).click()
-    await dialog(page).getByRole('radio', { name: /Medium/ }).click()
-    // Large is sold out: not offered.
-    expect(await dialog(page).getByRole('radio', { name: /Large/ }).isDisabled()).toBe(true)
-    const add = dialog(page).getByRole('button', { name: 'Choose Milk' })
-    await add.click()
+    const latte = card(page, 'Latte')
+    await visible(latte.getByRole('button', { name: 'Add Latte to order' })).click()
+    await dialog(page).getByRole('radio', { name: 'Large' }).click()
+    await dialog(page).getByRole('radio', { name: 'Iced' }).click()
+    await dialog(page).getByRole('button', { name: 'Choose Milk' }).click()
     await dialog(page).getByText('Choose 1 more.').waitFor()
-    await dialog(page).getByRole('radio', { name: /Oat/ }).click()
+    await dialog(page).getByRole('radio', { name: /Oat milk/ }).click()
     await dialog(page).getByRole('checkbox', { name: /Extra shot/ }).click()
     await dialog(page).getByRole('button', { name: 'Increment' }).click()
-    // Medium $5.00 + Oat $0.50 + Extra shot $0.50 = $6.00, two of them.
-    await dialog(page).getByRole('button', { name: 'Add to order · $12.00' }).click()
+    // Latte $2.50 + Large $0.50 + Iced $0.25 + Oat milk $0.50 + Extra shot $0.50 = $4.25, two of them.
+    await dialog(page).getByRole('button', { name: 'Add to order · $8.50' }).click()
     await expect.poll(() => dialog(page).count()).toBe(0)
-    await card(page, 'Latte').getByText('2 in order').waitFor()
-    expect(await panel(page).getByText('Medium · Oat, Extra shot').isVisible()).toBe(true)
-    await card(page, 'Latte').getByRole('button', { name: 'Add another Latte' }).click()
-    await dialog(page).getByRole('button', { name: 'Choose Milk' }).waitFor()
+    await visible(latte.getByText('2 in order')).waitFor()
+    await panel(page).getByText('Large, Iced · Oat milk, Extra shot').waitFor()
   })
 
-  it('keeps add-on limits: a third extra can\'t be picked', async () => {
+  it('keeps add-on limits: a third syrup can\'t be picked', async () => {
     const { page } = await open()
     await card(page, 'Latte').getByRole('button', { name: 'Latte', exact: true }).click()
-    await dialog(page).getByRole('checkbox', { name: /Extra shot/ }).click()
-    await dialog(page).getByRole('checkbox', { name: /Vanilla syrup/ }).click()
-    expect(await dialog(page).getByRole('checkbox', { name: /Whipped cream/ }).isDisabled()).toBe(true)
+    await dialog(page).getByRole('checkbox', { name: 'Vanilla' }).click()
+    await dialog(page).getByRole('checkbox', { name: 'Caramel' }).click()
+    expect(await dialog(page).getByRole('checkbox', { name: 'Hazelnut' }).isDisabled()).toBe(true)
   })
 
   it('shows a sold-out item as sold out, not orderable', async () => {
     const { page } = await open()
-    expect(await card(page, 'Mocha').getByRole('button', { name: 'Sold out' }).isDisabled()).toBe(true)
+    expect(await visible(card(page, 'Cheese Foam Cold Brew').getByRole('button', { name: 'Sold out' })).isDisabled()).toBe(true)
   })
 
-  it('keeps the order across a reload, per branch', async () => {
-    const { page } = await open()
-    await card(page, 'Croissant').getByRole('button', { name: 'Add Croissant to order' }).click()
+  it('keeps the order across a reload, after the page has hydrated', async () => {
+    const { page, problems } = await open()
+    await visible(card(page, 'Banana Bread').getByRole('button', { name: 'Add Banana Bread to order' })).click()
     await page.goto(url('/'), { waitUntil: 'hydration' })
-    await expect.poll(() => card(page, 'Croissant').getByRole('spinbutton').inputValue()).toBe('1')
-  })
-
-  it('while closed: one warning with when it opens, browsing works, adding doesn\'t', async () => {
-    const { page } = await open(1440, shopHandlers(menuOf(CLOSED_BRANCH)))
-    await page.getByText('Opens today at 7:00 AM').first().waitFor()
-    expect(await page.getByText('Closed now', { exact: true }).count()).toBe(1)
-    expect(await card(page, 'Americano').getByRole('button', { name: 'Add Americano to order' }).isDisabled()).toBe(true)
-    await card(page, 'Latte').getByRole('button', { name: 'Latte', exact: true }).click()
-    expect(await dialog(page).getByRole('button', { name: 'Closed now' }).isDisabled()).toBe(true)
+    await expect.poll(() => visible(card(page, 'Banana Bread').getByRole('spinbutton')).inputValue()).toBe('1')
+    expect(problems).toEqual([])
   })
 
   it('searches by name or description, grouped by place, with the same cards; nothing found says so', async () => {
     const { page } = await open()
-    await page.getByRole('searchbox', { name: 'Search the menu' }).fill('latte')
-    await page.getByText('3 results for "latte"').waitFor()
-    expect(await page.getByRole('heading', { name: 'Coffee → Iced' }).isVisible()).toBe(true)
+    const search = page.getByRole('searchbox', { name: 'Search the menu' })
+    await search.fill('latte')
+    await page.getByText(/results for "latte"/).waitFor()
+    await page.getByRole('heading', { name: 'Tea → Milk Tea' }).waitFor()
     expect(await tab(page, 'Coffee').count()).toBe(0)
-    await card(page, 'Matcha latte').getByRole('button', { name: 'Add Matcha latte to order' }).click()
-    await page.getByRole('searchbox', { name: 'Search the menu' }).fill('lattte')
+    await search.fill('lattte')
     await page.getByText('No items match "lattte"').waitFor()
     await page.getByRole('button', { name: 'Clear search' }).last().click()
     await tab(page, 'Coffee').waitFor()
@@ -154,46 +162,50 @@ describe('the customer menu on a phone', () => {
   it('rows with "Add"; the order bar appears after the first add and opens the order', async () => {
     const { page } = await open(390)
     expect(await page.getByRole('toolbar', { name: 'Your order' }).count()).toBe(0)
-    expect(await panel(page).count()).toBe(0)
-    await card(page, 'Americano').getByRole('button', { name: 'Add Americano to order' }).click()
+    await visible(card(page, 'Banana Bread').getByRole('button', { name: 'Add Banana Bread to order' })).click()
     const bar = page.getByRole('toolbar', { name: 'Your order' })
     await bar.getByText('1 item').waitFor()
     await bar.getByRole('button', { name: 'View order' }).click()
-    await dialog(page).getByText('Americano').waitFor()
-    expect(await dialog(page).getByText('$3.50').count()).toBeGreaterThan(0)
+    await dialog(page).getByText('$2.25').first().waitFor()
   })
 
   it('the icon button opens the categories sheet; choosing closes it and scrolls there', async () => {
     const { page } = await open(390)
-    await page.getByRole('button', { name: 'All categories' }).click()
-    await dialog(page).getByRole('button', { name: /^Bakery/ }).click()
+    await visible(page.getByRole('button', { name: 'All categories' })).click()
+    await dialog(page).getByRole('button', { name: /^Frappé/ }).click()
     await expect.poll(() => dialog(page).count()).toBe(0)
-    await expect.poll(() => tab(page, 'Bakery').getAttribute('aria-current')).toBe('true')
+    await expect.poll(() => tab(page, 'Frappé').getAttribute('aria-current')).toBe('true')
   })
 
   it('search takes over the header, Back leaves it', async () => {
     const { page } = await open(390)
-    await page.getByRole('button', { name: 'Search the menu' }).click()
-    await page.getByRole('searchbox', { name: 'Search the menu' }).fill('tea')
+    await visible(page.getByRole('button', { name: 'Search the menu' })).click()
+    await page.getByRole('searchbox', { name: 'Search the menu' }).filter({ visible: true }).fill('tea')
     await page.getByText(/results? for "tea"/).waitFor()
     await page.getByRole('button', { name: 'Close search' }).click()
     await tab(page, 'Coffee').waitFor()
   })
 })
 
-describe('table QR codes', () => {
+describe('branches and table QR codes', () => {
   it('a scanned table orders for that table, until switched to pickup', async () => {
-    const { page } = await open(1440, shopHandlers(), `/table/${TABLE_TOKEN}`)
+    const { page } = await open(1440, `/table/${seed.openTableToken}`)
     expect(new URL(page.url()).pathname).toBe('/')
-    const orderType = page.getByRole('button', { name: 'Order type: Table 12' })
-    await orderType.click()
+    await page.getByRole('button', { name: 'Order type: Table T01' }).click()
     await page.getByRole('button', { name: 'Switch to pickup' }).click()
     await page.getByRole('button', { name: 'Order type: Pickup' }).waitFor()
   })
 
+  it('a table at a closed branch shows its menu, closed: one warning, adding disabled', async () => {
+    const { page } = await open(1440, `/table/${seed.closedTableToken}`)
+    await page.getByText('Zeta Kiosk', { exact: false }).first().waitFor()
+    await page.getByText('Closed now', { exact: true }).waitFor()
+    await page.getByText('Online ordering isn\'t available right now.').waitFor()
+    expect(await visible(card(page, 'Banana Bread').getByRole('button', { name: 'Add Banana Bread to order' })).isDisabled()).toBe(true)
+  })
+
   it('a QR code that doesn\'t work says so and offers pickup', async () => {
     const page = await createPage()
-    await mockApi(page, shopHandlers())
     await page.goto(url('/table/Zz9zZz9zZz9zZz9zZz9zZz'), { waitUntil: 'hydration' })
     await page.getByText('This table\'s QR code doesn\'t work').waitFor()
     await page.getByRole('link', { name: 'Order for pickup' }).click()

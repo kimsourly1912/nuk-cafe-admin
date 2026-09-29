@@ -155,6 +155,20 @@ Auth is Better Auth's HttpOnly session cookie on this same origin (the admin UI 
 
 The admin session carries `permissions` (`resource:action`, D52); only platform admins use the admin app, and they hold every admin permission, so no screen hides anything yet. `useAuth().can('staff:create')` is there for when manager screens exist. Who may do what: [security.md → Roles and permissions](../server/security.md#roles-and-permissions) (D45); the server checks every request.
 
+## Server-rendered customer pages (D95)
+
+The customer site renders on the server; `/admin/**` and `/table/**` render in the browser only.
+
+| Case | Behavior |
+|---|---|
+| A visitor opens `/` | The server fetches the menu in-process and sends it in the page (readable without JavaScript, with a title and description); the browser takes over without fetching again |
+| Different layouts by width (rows vs cards, sheet vs popover, search field vs button, the order panel) | CSS only, so the server's page and the browser's first render agree; `useLayoutContext` isn't used on these pages |
+| The stored order, table or branch choice | Read after mounting: the first render shows the default branch, no table and an empty order, then the stored values apply (no hydration mismatch) |
+| A stored branch or table names another branch | The menu is fetched again for it after mounting (the server rendered the first branch by name) |
+| `apiFetch` while rendering | A per-request fetch, no session handling (public routes only); the browser's shared client isn't touched |
+
+Tests: e2e `shop-menu.test.ts` on a seeded database (hydration clean at 1440 and 390, checked to fail with a deliberate mismatch; the HTML carries the menu; JavaScript off).
+
 ## Keyboard shortcuts
 
 For staff who use the portal all day. Press **`?`** (or user menu → Keyboard shortcuts) for the list.

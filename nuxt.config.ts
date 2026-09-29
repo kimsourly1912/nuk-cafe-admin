@@ -119,12 +119,14 @@ export default defineNuxtConfig({
     // Vite dev server needs inline scripts and a websocket. The e2e suite runs a production build.
     routeRules: { '/**': { headers: securityHeaders() } },
   },
-  // The existing admin UI remains a SPA while Nitro hosts the new local API.
-  ssr: false,
+  // The customer site is server-rendered (D45, D95); the admin workspace stays a SPA
+  // (`routeRules` below). Counter screens will be SPAs too.
+  ssr: true,
   devtools: { enabled: true },
   app: {
     head: {
-      title: 'NUK Cafe Admin',
+      title: 'NUK Cafe',
+      htmlAttrs: { lang: 'en' },
     },
   },
   css: ['@/assets/css/tailwind.css'],
@@ -149,6 +151,12 @@ export default defineNuxtConfig({
     },
   },
   routeRules: {
+    // The admin workspace renders in the browser only: its pages need the staff session and never
+    // need search engines (D95).
+    '/admin': { ssr: false },
+    '/admin/**': { ssr: false },
+    // A table's QR link stores the table in this tab and moves on to the menu: browser work only.
+    '/table/**': { ssr: false },
     // Session gate per surface (@nuxtjs/better-auth), a second line behind each route's own
     // requirePermission / requireBranchPermission / requireCustomer (docs/server/security.md).
     '/api/admin/**': { auth: { only: 'user', user: { role: 'admin' } } },
@@ -167,6 +175,8 @@ export default defineNuxtConfig({
     scheduledTasks: SCHEDULED_TASKS,
   },
   hub: {
+    // The e2e build keeps its data apart (test/e2e/support/global-setup.ts, D95); everything else uses .data.
+    ...(process.env.E2E_HUB_DIR ? { dir: process.env.E2E_HUB_DIR } : {}),
     blob: true,
     db: {
       dialect: 'sqlite',

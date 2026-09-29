@@ -45,6 +45,8 @@ export default defineConfig({
         },
       },
       {
+        // The global setup seeds the e2e server's database through the server's own services (D95).
+        resolve: { alias },
         test: {
           name: 'e2e',
           include: ['test/e2e/**/*.test.ts'],

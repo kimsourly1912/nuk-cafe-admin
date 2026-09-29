@@ -69,7 +69,8 @@ export function useScrollSpy(ids: MaybeRefOrGetter<string[]>, offset: MaybeRefOr
 
   let frame = 0
   function schedule() {
-    if (frame) return
+    // Nothing to measure while rendering on the server (D95); the browser measures after mounting.
+    if (import.meta.server || frame) return
     frame = requestAnimationFrame(() => {
       frame = 0
       update()

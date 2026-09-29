@@ -32,7 +32,7 @@ Browser ──► Nuxt app (customer site · /admin · /counter)
 ```
 
 - The server owns every rule: prices, availability, order state, points, voucher use, permissions. A client asks; it never decides.
-- **Rendering (D45):** the public customer pages are to be server-rendered (fast first load, visible to search engines); the admin and counter workspaces stay single-page apps. Set per route with `routeRules` (`ssr: false` for `/admin/**` and `/counter/**`). Today the whole app is still `ssr: false`: the customer menu (D93) is client-rendered until SSR gets its own step and test setup (progress.md → Q38).
+- **Rendering (D45, D95):** the public customer pages are server-rendered (fast first load, visible to search engines); the admin and counter workspaces stay single-page apps, set per route with `routeRules` (`ssr: false` for `/admin/**`, `/table/**`, later `/counter/**`). While rendering, the app calls the API in-process (`useRequestFetch`).
 - **Paths (D93):** the admin workspace lives under `/admin`, the counter under `/counter`; every other path is the customer site (`/` is the menu, `/table/<token>` a table's QR code).
 - There is no public API for outside clients. If a native app comes later, it gets its own decision (bearer tokens, a versioned surface).
 

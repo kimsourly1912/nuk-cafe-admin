@@ -3,7 +3,8 @@
  * The sticky category bar (D93): "All categories" on the left (a popover from `sm`, an icon button
  * and a bottom sheet on phones), then the main categories as flat tabs that scroll sideways. The
  * active tab follows the section being read and scrolls itself into view; choosing a tab or a tree
- * entry scrolls the menu there.
+ * entry scrolls the menu there. Which trigger shows is CSS (both are rendered, each opens its own
+ * overlay), so the server's page and the browser's agree (D95).
  */
 import { usePreferredReducedMotion } from '@vueuse/core'
 import type { MenuSection } from '../utils/menu'
@@ -16,8 +17,8 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ go: [id: string] }>()
 
-const { isCompact } = useLayoutContext()
-const treeOpen = ref(false)
+const sheetOpen = ref(false)
+const popoverOpen = ref(false)
 const motion = usePreferredReducedMotion()
 /**
  * Closing the tree would return focus to its button, and a focus change can stop the smooth scroll
@@ -26,7 +27,8 @@ const motion = usePreferredReducedMotion()
 const keepFocus = (event: Event) => event.preventDefault()
 
 function go(id: string) {
-  treeOpen.value = false
+  sheetOpen.value = false
+  popoverOpen.value = false
   emit('go', id)
 }
 
@@ -44,8 +46,7 @@ watch(() => props.activeMainId, async (id) => {
 <template>
   <div class="flex items-center gap-2">
     <UDrawer
-      v-if="isCompact"
-      v-model:open="treeOpen"
+      v-model:open="sheetOpen"
       title="Categories"
       :content="{ onCloseAutoFocus: keepFocus }"
       :ui="{ content: 'max-h-[70dvh]', body: 'overflow-y-auto' }"
@@ -53,8 +54,9 @@ watch(() => props.activeMainId, async (id) => {
       <UButton
         icon="i-lucide-list"
         color="neutral"
-        :variant="treeOpen ? 'soft' : 'outline'"
+        :variant="sheetOpen ? 'soft' : 'outline'"
         aria-label="All categories"
+        class="sm:hidden"
       />
       <template #body>
         <MenuCategoryTree
@@ -66,8 +68,7 @@ watch(() => props.activeMainId, async (id) => {
       </template>
     </UDrawer>
     <UPopover
-      v-else
-      v-model:open="treeOpen"
+      v-model:open="popoverOpen"
       :content="{ align: 'start', onCloseAutoFocus: keepFocus }"
     >
       <UButton
@@ -76,7 +77,7 @@ watch(() => props.activeMainId, async (id) => {
         trailing-icon="i-lucide-chevron-down"
         color="neutral"
         variant="outline"
-        class="shrink-0"
+        class="shrink-0 max-sm:hidden"
       />
       <template #content>
         <div class="max-h-[min(26rem,70dvh)] w-72 overflow-y-auto p-2">
