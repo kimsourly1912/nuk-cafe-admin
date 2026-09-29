@@ -1,4 +1,3 @@
-import { createClient } from '@libsql/client'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
@@ -6,6 +5,7 @@ import type { CheckoutQuote, CounterOrder, Order } from '#shared/contracts/order
 import type { PublicMenu } from '#shared/contracts/public-menu'
 import type { SeedCustomer } from './support/seed'
 import { asNewVisitor, clientHeaders } from './support/client-address'
+import { e2eDatabase } from './support/database'
 import { setupE2e, toast } from './support/mock-api'
 
 await setupE2e()
@@ -62,7 +62,7 @@ const card = (page: Page, order: { pickupNumber: number }) => page.getByRole('ar
 const panel = (page: Page) => page.getByRole('dialog')
 
 async function sql(statement: string, args: (string | number)[] = []) {
-  const client = createClient({ url: `file:${seed.dbFile}` })
+  const client = e2eDatabase(seed.dbFile)
   try {
     await client.execute({ sql: statement, args })
   }

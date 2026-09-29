@@ -1,8 +1,8 @@
-import { createClient } from '@libsql/client'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
 import type { SeedCustomer } from './support/seed'
+import { e2eDatabase } from './support/database'
 import { setupE2e, toast } from './support/mock-api'
 import { asNewVisitor } from './support/client-address'
 
@@ -40,7 +40,7 @@ async function signIn(page: Page, customer: Pick<SeedCustomer, 'email' | 'passwo
 
 /** The newest email of a kind the server queued for an address: its link. */
 async function mailLink(to: string, kind: 'identity.verify-email' | 'identity.reset-password', after = 0) {
-  const client = createClient({ url: `file:${seed.dbFile}` })
+  const client = e2eDatabase(seed.dbFile)
   try {
     let link: string | undefined
     await expect.poll(async () => {

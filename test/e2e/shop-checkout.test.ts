@@ -1,8 +1,8 @@
-import { createClient } from '@libsql/client'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
 import type { SeedCustomer } from './support/seed'
+import { e2eDatabase } from './support/database'
 import { setupE2e } from './support/mock-api'
 import { asNewVisitor } from './support/client-address'
 
@@ -62,7 +62,7 @@ async function reviewOrder(page: Page) {
 }
 
 async function sql(statement: string, args: (string | number)[] = []) {
-  const client = createClient({ url: `file:${seed.dbFile}` })
+  const client = e2eDatabase(seed.dbFile)
   try {
     await client.execute({ sql: statement, args })
   }
