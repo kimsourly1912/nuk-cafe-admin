@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
-import { ORDER_STATUSES, ORDER_TYPES } from '#shared/contracts/orders'
+import { CANCEL_REASONS, ORDER_STATUSES, ORDER_TYPES, PAYMENT_METHODS, RETURN_METHODS } from '#shared/contracts/orders'
 import { newId } from '../../utils/ids'
 
 /**
@@ -39,6 +39,10 @@ export const orders = sqliteTable('orders', {
   placedAt: instant().notNull(),
   /** Unpaid after this: cancelled (the expiry task, step 6.6). */
   paymentDueAt: instant().notNull(),
+  /** When the counter recorded the payment, which started preparation (6.3, D101). */
+  paidAt: instant(),
+  readyAt: instant(),
+  completedAt: instant(),
   cancelledAt: instant(),
   version: integer().notNull().default(1),
   createdAt: instant().notNull().default(nowMs),
@@ -73,4 +77,65 @@ export const orderLines = sqliteTable('order_lines', {
 }, t => [
   check('order_lines_amounts_check', sql`${t.quantity} between 1 and 20 and ${t.unitPriceMinor} >= 0 and ${t.totalMinor} = ${t.unitPriceMinor} * ${t.quantity}`),
   uniqueIndex('order_lines_position_idx').on(t.orderId, t.position),
+])
+
+/**
+ * What happened to an order, one row per version (6.3, D101): placed, paid, ready, completed,
+ * cancelled; who did it and, for a cancellation, why. Written in the same batch as the change.
+ */
+export const orderEvents = sqliteTable('order_events', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  orderId: text().notNull().references(() => orders.id, { onDelete: 'cascade' }),
+  /** The order's version after this change: 1 when placed. */
+  toVersion: integer().notNull(),
+  /** `null`: the system (the unpaid-order expiry, 6.6). */
+  actorId: text().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
+  fromStatus: text({ enum: ORDER_STATUSES }),
+  toStatus: text({ enum: ORDER_STATUSES }).notNull(),
+  reason: text({ enum: CANCEL_REASONS }),
+  note: text(),
+  at: instant().notNull(),
+}, t => [
+  check('order_events_status_check', sql`${t.toStatus} in ('awaiting_payment', 'preparing', 'ready', 'completed', 'cancelled') and (${t.fromStatus} is null or ${t.fromStatus} in ('awaiting_payment', 'preparing', 'ready', 'completed', 'cancelled'))`),
+  check('order_events_reason_check', sql`${t.reason} is null or ${t.reason} in ('customer_changed_mind', 'item_unavailable', 'other')`),
+  uniqueIndex('order_events_version_idx').on(t.orderId, t.toVersion),
+])
+
+/**
+ * The payment taken at the counter (6.3, D101): **one per order** (unique), and recording it
+ * starts preparation. The amount is the order's total; cash in riel keeps the riel asked for and
+ * the rate used. A paid order cancelled before it was ready records how the money went back.
+ */
+export const counterPayments = sqliteTable('counter_payments', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  orderId: text().notNull().references(() => orders.id, { onDelete: 'restrict' }),
+  branchId: text().notNull().references(() => authSchema!.organization.id, { onDelete: 'restrict' }),
+  method: text({ enum: PAYMENT_METHODS }).notNull(),
+  amountMinor: integer().notNull(),
+  amountKhr: integer(),
+  khrPerUsd: integer(),
+  reference: text(),
+  collectedBy: text().notNull().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
+  collectedAt: instant().notNull(),
+  returnMethod: text({ enum: RETURN_METHODS }),
+  returnedBy: text().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
+  returnedAt: instant(),
+}, t => [
+  check('counter_payments_method_check', sql`${t.method} in ('cash_usd', 'cash_khr', 'khqr') and ${t.amountMinor} >= 0`),
+  check('counter_payments_khr_check', sql`(${t.method} = 'cash_khr') = (${t.amountKhr} is not null and ${t.khrPerUsd} is not null)`),
+  check('counter_payments_return_check', sql`(${t.returnMethod} is null and ${t.returnedAt} is null and ${t.returnedBy} is null) or (${t.returnMethod} in ('cash', 'khqr') and ${t.returnedAt} is not null and ${t.returnedBy} is not null)`),
+  uniqueIndex('counter_payments_order_idx').on(t.orderId),
+  index('counter_payments_branch_idx').on(t.branchId, t.collectedAt),
+])
+
+/** The riel rate an admin set, from `effectiveFrom` on (append-only; 6.3, D101). */
+export const exchangeRates = sqliteTable('exchange_rates', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  currency: text().notNull().default('KHR'),
+  perUsd: integer().notNull(),
+  effectiveFrom: instant().notNull(),
+  setBy: text().notNull().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
+}, t => [
+  check('exchange_rates_check', sql`${t.currency} = 'KHR' and ${t.perUsd} between 1000 and 10000`),
+  index('exchange_rates_effective_idx').on(t.currency, t.effectiveFrom),
 ])

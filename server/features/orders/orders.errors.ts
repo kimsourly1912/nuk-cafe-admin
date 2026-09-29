@@ -1,5 +1,6 @@
+import type { OrderStatus } from '#shared/contracts/orders'
 import { MAX_UNPAID_ORDERS } from '#shared/contracts/orders'
-import { apiError, notFound } from '../../utils/errors'
+import { apiError, ErrorCodes, notFound } from '../../utils/errors'
 
 /** Error codes of placing and reading orders (step 6.2, D99). */
 export const OrderErrorCodes = {
@@ -11,6 +12,16 @@ export const OrderErrorCodes = {
   PRICES_CHANGED: 'PRICES_CHANGED',
   TOO_MANY_UNPAID_ORDERS: 'TOO_MANY_UNPAID_ORDERS',
   TABLE_UNAVAILABLE: 'TABLE_UNAVAILABLE',
+  /** The counter (6.3, D101): the order moved on (or was cancelled) since the screen read it. */
+  ORDER_CHANGED: 'ORDER_CHANGED',
+  /** Its 30 minutes to pay are over: the expiry task cancels it (6.6). */
+  PAYMENT_EXPIRED: 'PAYMENT_EXPIRED',
+  /** Ready or completed: only an admin refund undoes it (Q36). */
+  ORDER_NOT_CANCELLABLE: 'ORDER_NOT_CANCELLABLE',
+  /** Cash in riel with no rate set by an admin. */
+  NO_EXCHANGE_RATE: 'NO_EXCHANGE_RATE',
+  /** The riel rate changed since the screen showed the amount. */
+  EXCHANGE_RATE_CHANGED: 'EXCHANGE_RATE_CHANGED',
 } as const
 
 export const orderingClosed = (message: string) => apiError(409, OrderErrorCodes.ORDERING_CLOSED, message)
@@ -29,3 +40,33 @@ export const tableUnavailable = () =>
 
 /** Unknown, or someone else's: the same answer, so ids reveal nothing. */
 export const orderNotFound = () => notFound('This order')
+
+const statusWords: Record<OrderStatus, string> = {
+  awaiting_payment: 'waiting for payment',
+  preparing: 'paid and being prepared',
+  ready: 'ready',
+  completed: 'completed',
+  cancelled: 'cancelled',
+}
+
+/** "Order 042 changed meanwhile: it's paid and being prepared now." The screen reloads it. */
+export const orderChanged = (pickupNumber: number, status: OrderStatus) =>
+  apiError(409, OrderErrorCodes.ORDER_CHANGED, `Order ${String(pickupNumber).padStart(3, '0')} changed meanwhile: it's ${statusWords[status]} now.`)
+
+export const paymentExpired = () =>
+  apiError(409, OrderErrorCodes.PAYMENT_EXPIRED, 'The 30 minutes to pay are over, so this order is cancelled. The customer can place a new one.')
+
+export const orderNotCancellable = () =>
+  apiError(409, OrderErrorCodes.ORDER_NOT_CANCELLABLE, 'A ready or completed order can\'t be cancelled at the counter. An admin can refund it.')
+
+export const noExchangeRate = () =>
+  apiError(409, OrderErrorCodes.NO_EXCHANGE_RATE, 'No riel rate is set yet. An admin sets it on the Payments page; take dollars or KHQR meanwhile.')
+
+export const exchangeRateChanged = (khrPerUsd: number) =>
+  apiError(409, OrderErrorCodes.EXCHANGE_RATE_CHANGED, `The riel rate changed to ៛${khrPerUsd.toLocaleString('en-US')} per dollar. Check the new amount and confirm again.`)
+
+/** A paid order's cancellation must say how the money went back; an unpaid one has none. */
+export const returnMethodInvalid = (paid: boolean) =>
+  apiError(400, ErrorCodes.VALIDATION_FAILED, paid ? 'Say how the money went back to the customer.' : 'This order wasn\'t paid: there is no money to give back.', {
+    fieldErrors: { returnMethod: [paid ? 'Say how the money went back' : 'Nothing was paid'] },
+  })

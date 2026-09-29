@@ -3,7 +3,8 @@ import type { PublicBranch } from './branches'
 import { idSchema } from './common'
 
 /**
- * Orders (phase 6). Step 6.2 (D99): placing an order, `POST /api/shop/orders`, and reading it back.
+ * Orders (phase 6). Step 6.3 (D101): the counter (below). Step 6.2 (D99): placing an order,
+ * `POST /api/shop/orders`, and reading it back.
  * Step 6.1 (D98): the checkout quote, `POST /api/public/checkout/quote`. The
  * server prices the lines from the menu as it is now, at the branch, and says what's wrong with
  * each line instead of refusing the request. Menu prices are final: no tax, no service charge
@@ -178,4 +179,142 @@ export interface Order {
   /** Pay at the counter before this, or the order is cancelled. */
   paymentDueAt: string
   cancelledAt: string | null
+}
+
+// --- The counter (step 6.3, D101) ---
+// `/api/counter/{branchId}/orders`: the branch's queue, and the commands that move an order along.
+// Recording the payment starts preparation (D45: no accept step). Each command names the order's
+// `version` (a stale one is refused with the order's current state) and sends an `Idempotency-Key`
+// (a retry returns the first answer).
+
+/** How the customer paid at the counter (D45). */
+export const PAYMENT_METHODS = ['cash_usd', 'cash_khr', 'khqr'] as const
+export type PaymentMethod = typeof PAYMENT_METHODS[number]
+/** How the money went back when a paid order is cancelled before it's ready (owner, 2026-09-29, Q36). */
+export const RETURN_METHODS = ['cash', 'khqr'] as const
+export type ReturnMethod = typeof RETURN_METHODS[number]
+export const CANCEL_REASONS = ['customer_changed_mind', 'item_unavailable', 'other'] as const
+export type CancelReason = typeof CANCEL_REASONS[number]
+/** The words after "Other" when cancelling, and a KHQR payment's reference. */
+export const CANCEL_NOTE_MAX = 200
+export const PAYMENT_REFERENCE_MAX = 64
+/** A plausible riel rate (per US dollar), so a typo like 41 or 41000 is refused. */
+export const KHR_PER_USD_MIN = 1000
+export const KHR_PER_USD_MAX = 10_000
+
+/**
+ * The riel for a USD amount at a rate, **rounded up to 100 riel** (the smallest note in use; owner,
+ * 2026-09-29). $8.75 at 4,100 = ៛35,875 → ៛35,900. Integer arithmetic only.
+ */
+export function toRiel(amountMinor: number, khrPerUsd: number): number {
+  return Math.floor((amountMinor * khrPerUsd + 9_999) / 10_000) * 100
+}
+
+const versionSchema = v.pipe(v.number(), v.integer(), v.minValue(1))
+
+/** `ready` and `complete`: the version the screen shows. */
+export const counterCommandSchema = v.strictObject({ version: versionSchema })
+export type CounterCommandInput = v.InferOutput<typeof counterCommandSchema>
+
+/**
+ * `pay`: the method, and for riel the rate the screen used (a rate changed since is refused, so
+ * the riel asked for is the riel recorded). The amount is always the order's total.
+ */
+export const payOrderSchema = v.variant('method', [
+  v.strictObject({ version: versionSchema, method: v.literal('cash_usd') }),
+  v.strictObject({ version: versionSchema, method: v.literal('cash_khr'), khrPerUsd: v.pipe(v.number(), v.integer(), v.minValue(KHR_PER_USD_MIN), v.maxValue(KHR_PER_USD_MAX)) }),
+  v.strictObject({
+    version: versionSchema,
+    method: v.literal('khqr'),
+    reference: v.optional(v.pipe(
+      v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(PAYMENT_REFERENCE_MAX, `At most ${PAYMENT_REFERENCE_MAX} characters`))),
+      v.transform(reference => reference || null),
+    ), null),
+  }),
+])
+export type PayOrderInput = v.InferOutput<typeof payOrderSchema>
+
+/**
+ * `cancel`: why (words required with "Other"), and for a paid order how the money went back
+ * (required then, refused for an unpaid one).
+ */
+export const cancelOrderSchema = v.pipe(
+  v.strictObject({
+    version: versionSchema,
+    reason: v.picklist(CANCEL_REASONS),
+    note: v.optional(v.pipe(
+      v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(CANCEL_NOTE_MAX, `At most ${CANCEL_NOTE_MAX} characters`))),
+      v.transform(note => note || null),
+    ), null),
+    returnMethod: v.optional(v.nullable(v.picklist(RETURN_METHODS)), null),
+  }),
+  v.forward(v.check(input => input.reason !== 'other' || Boolean(input.note), 'Say why the order is cancelled'), ['note']),
+)
+export type CancelOrderInput = v.InferOutput<typeof cancelOrderSchema>
+
+/** The payment recorded for an order. */
+export interface CounterPayment {
+  method: PaymentMethod
+  /** Always the order's total, in US cents. */
+  amountMinor: number
+  /** Cash in riel: the riel asked for and the rate used. */
+  amountKhr: number | null
+  khrPerUsd: number | null
+  reference: string | null
+  collectedAt: string
+  collectedBy: { name: string }
+  /** A paid order cancelled before it was ready: how the money went back. */
+  returnMethod: ReturnMethod | null
+  returnedAt: string | null
+}
+
+/** An order as the counter sees it. */
+export interface CounterOrder {
+  id: string
+  version: number
+  pickupNumber: number
+  businessDate: string
+  status: OrderStatus
+  orderType: OrderType
+  table: { label: string } | null
+  customer: { name: string }
+  lines: OrderLine[]
+  totalMinor: number
+  placedAt: string
+  paymentDueAt: string
+  paidAt: string | null
+  readyAt: string | null
+  completedAt: string | null
+  cancelledAt: string | null
+  payment: CounterPayment | null
+}
+
+/** The riel rate an admin set (append-only history). */
+export interface ExchangeRate {
+  khrPerUsd: number
+  effectiveFrom: string
+  setBy: { name: string }
+}
+
+/**
+ * `GET /api/counter/{branchId}/orders`: the orders still in play (waiting for payment and not past
+ * their time, preparing, ready), oldest first; the riel rate for payments; and the server's clock,
+ * so countdowns don't depend on the tablet's.
+ */
+export interface CounterQueue {
+  orders: CounterOrder[]
+  khrRate: ExchangeRate | null
+  serverTime: string
+}
+
+/** `POST /api/admin/exchange-rates`: a new riel rate, from now on. */
+export const setExchangeRateSchema = v.strictObject({
+  khrPerUsd: v.pipe(v.number(), v.integer(), v.minValue(KHR_PER_USD_MIN, `At least ${KHR_PER_USD_MIN}`), v.maxValue(KHR_PER_USD_MAX, `At most ${KHR_PER_USD_MAX}`)),
+})
+export type SetExchangeRateInput = v.InferOutput<typeof setExchangeRateSchema>
+
+/** `GET /api/admin/exchange-rates`: the current rate and the latest changes, newest first. */
+export interface ExchangeRates {
+  current: ExchangeRate | null
+  history: ExchangeRate[]
 }
