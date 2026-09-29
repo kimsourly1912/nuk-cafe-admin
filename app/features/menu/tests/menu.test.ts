@@ -43,7 +43,7 @@ const latte = item('latte', {
 })
 
 const menu: PublicMenu = {
-  branch: { id: 'b', name: 'Main', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: true, nextOpening: null },
+  branch: { id: 'b', name: 'Main', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: true, closesInMinutes: 600, nextOpening: null },
   currency: 'USD',
   at: '2026-09-29T00:00:00.000Z',
   categories: [

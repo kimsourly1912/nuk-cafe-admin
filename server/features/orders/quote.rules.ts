@@ -1,5 +1,5 @@
 import type { CheckoutQuote, OrderLineInput, QuoteLine, QuoteLineProblem } from '#shared/contracts/orders'
-import { QUOTE_TTL_MINUTES } from '#shared/contracts/orders'
+import { LAST_ORDERS_MINUTES, QUOTE_TTL_MINUTES } from '#shared/contracts/orders'
 import type { PublicMenu, PublicMenuItem } from '#shared/contracts/public-menu'
 
 /**
@@ -38,8 +38,8 @@ function choiceProblem(item: PublicMenuItem, modifierIds: string[]): QuoteLinePr
 /** One line against the menu: priced, or with the first problem found. */
 export function quoteLine(items: ReadonlyMap<string, PublicMenuItem>, line: OrderLineInput): QuoteLine {
   const base = { itemId: line.itemId, variationId: line.variationId, modifierIds: line.modifierIds, quantity: line.quantity, note: line.note }
-  const unpriced = (problem: QuoteLineProblem, item?: PublicMenuItem, detail = ''): QuoteLine =>
-    ({ ...base, name: item?.name ?? null, detail, imageUrl: item?.imageUrl ?? null, unitPriceMinor: null, totalMinor: null, problem })
+  const unpriced = (problem: QuoteLineProblem, item?: PublicMenuItem, detail = '', modifiers: QuoteLine['modifiers'] = []): QuoteLine =>
+    ({ ...base, name: item?.name ?? null, detail, modifiers, imageUrl: item?.imageUrl ?? null, unitPriceMinor: null, totalMinor: null, problem })
 
   const item = items.get(line.itemId)
   if (!item) return unpriced({ code: 'ITEM_UNAVAILABLE', message: 'This item isn\'t on the menu right now.' })
@@ -48,14 +48,26 @@ export function quoteLine(items: ReadonlyMap<string, PublicMenuItem>, line: Orde
 
   const addOns = new Map(item.modifierGroups.flatMap(group => group.modifiers).map(m => [m.id, m]))
   // In menu order, whatever order they were sent in.
-  const chosen = [...addOns.values()].filter(m => line.modifierIds.includes(m.id))
+  const chosen = [...addOns.values()].filter(m => line.modifierIds.includes(m.id)).map(m => ({ id: m.id, name: m.name, priceDeltaMinor: m.priceDeltaMinor }))
   const detail = [version.label, chosen.map(m => m.name).join(', ')].filter(Boolean).join(' · ')
   const problem = choiceProblem(item, line.modifierIds)
-  if (problem) return unpriced(problem, item, detail)
-  if (version.soldOut) return unpriced({ code: 'SOLD_OUT', message: 'Sold out.' }, item, detail)
+  if (problem) return unpriced(problem, item, detail, chosen)
+  if (version.soldOut) return unpriced({ code: 'SOLD_OUT', message: 'Sold out.' }, item, detail, chosen)
 
   const unitPriceMinor = version.priceMinor + chosen.reduce((sum, m) => sum + m.priceDeltaMinor, 0)
-  return { ...base, name: item.name, detail, imageUrl: item.imageUrl, unitPriceMinor, totalMinor: unitPriceMinor * line.quantity, problem: null }
+  return { ...base, name: item.name, detail, modifiers: chosen, imageUrl: item.imageUrl, unitPriceMinor, totalMinor: unitPriceMinor * line.quantity, problem: null }
+}
+
+/**
+ * Why the branch takes no online order now: closed, or closing within `LAST_ORDERS_MINUTES` (Q40:
+ * the counter can't take payment after closing).
+ */
+export function orderProblems(branch: PublicMenu['branch']): CheckoutQuote['problems'] {
+  if (!branch.openNow) return [{ code: 'BRANCH_CLOSED', message: `${branch.name} is closed now.` }]
+  if (branch.closesInMinutes !== null && branch.closesInMinutes <= LAST_ORDERS_MINUTES) {
+    return [{ code: 'LAST_ORDERS_PASSED', message: `Online orders close ${LAST_ORDERS_MINUTES} minutes before ${branch.name} closes.` }]
+  }
+  return []
 }
 
 /** The quote for `lines` against `menu` (the branch's menu at `menu.at`). */
@@ -63,7 +75,7 @@ export function quoteOrder(menu: PublicMenu, lines: OrderLineInput[]): CheckoutQ
   const items = new Map(menuItems(menu).map(item => [item.id, item]))
   const quoted = lines.map(line => quoteLine(items, line))
   const subtotalMinor = quoted.reduce((sum, line) => sum + (line.totalMinor ?? 0), 0)
-  const problems = menu.branch.openNow ? [] : [{ code: 'BRANCH_CLOSED' as const, message: `${menu.branch.name} is closed now.` }]
+  const problems = orderProblems(menu.branch)
   return {
     branch: menu.branch,
     currency: menu.currency,

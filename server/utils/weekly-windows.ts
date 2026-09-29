@@ -68,6 +68,23 @@ export function isInWindow(window: WeeklyWindow, at: LocalTime): boolean {
 }
 
 /**
+ * How many minutes until the windows stop covering `at`: to the end of the window `at` is in,
+ * continued through any window that starts right where it ends (7:00–12:00 then 12:00–21:00 is
+ * one stretch). `null` when `at` is in no window. At most a week (open around the clock).
+ */
+export function minutesUntilClosed(windows: WeeklyWindow[], at: LocalTime): number | null {
+  const now = (at.weekday - 1) * MINUTES_PER_DAY + at.minute
+  let covered = 0
+  for (;;) {
+    const moment = mod(now + covered, MINUTES_PER_WEEK)
+    const current = windows.map(stretch).find(w => mod(moment - w.start, MINUTES_PER_WEEK) < w.length)
+    if (!current) return covered === 0 ? null : covered
+    covered += current.length - mod(moment - current.start, MINUTES_PER_WEEK)
+    if (covered >= MINUTES_PER_WEEK) return MINUTES_PER_WEEK
+  }
+}
+
+/**
  * When the next window starts after `at` (not the one `at` is in): its weekday and start, and in
  * how many days on the local calendar (0: later today). `null` without windows.
  */
@@ -95,6 +112,19 @@ export function localTime(instant: Date, timeZone: string): LocalTime {
   }
   const parts = Object.fromEntries(format.formatToParts(instant).map(p => [p.type, p.value]))
   return { weekday: WEEKDAYS[parts.weekday!]!, minute: (Number(parts.hour) % 24) * 60 + Number(parts.minute) }
+}
+
+const dateFormatters = new Map<string, Intl.DateTimeFormat>()
+
+/** The branch's calendar date at `instant` (`YYYY-MM-DD`), in the IANA `timeZone`. */
+export function localDate(instant: Date, timeZone: string): string {
+  let format = dateFormatters.get(timeZone)
+  if (!format) {
+    // en-CA writes dates as YYYY-MM-DD.
+    format = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
+    dateFormatters.set(timeZone, format)
+  }
+  return format.format(instant)
 }
 
 /** Whether the runtime knows the IANA zone ("Asia/Phnom_Penh"; not "Mars/Base"). */

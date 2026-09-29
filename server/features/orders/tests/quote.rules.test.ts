@@ -31,9 +31,10 @@ const BRANCH = id(15)
 const item = (over: Partial<PublicMenuItem> & Pick<PublicMenuItem, 'id' | 'name' | 'variations'>): PublicMenuItem =>
   ({ description: '', imageUrl: null, optionSets: [], soldOut: false, modifierGroups: [], ...over })
 
-function menu(options: { open?: boolean, largeSoldOut?: boolean } = {}): PublicMenu {
+function menu(options: { open?: boolean, closesInMinutes?: number, largeSoldOut?: boolean } = {}): PublicMenu {
+  const open = options.open ?? true
   return {
-    branch: { id: BRANCH, name: 'Riverside', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: options.open ?? true, nextOpening: null },
+    branch: { id: BRANCH, name: 'Riverside', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: open, closesInMinutes: open ? options.closesInMinutes ?? 600 : null, nextOpening: null },
     currency: 'USD',
     at: '2026-09-29T03:00:00.000Z',
     categories: [{
@@ -147,6 +148,20 @@ describe('what can go wrong with a line', () => {
 })
 
 describe('the order as a whole', () => {
+  it('lists each line\'s add-ons with their prices, in menu order', () => {
+    expect(quoteOrder(menu(), THE_ORDER).lines[0]!.modifiers).toEqual([
+      { id: OAT, name: 'Oat milk', priceDeltaMinor: 50 },
+      { id: SHOT, name: 'Extra shot', priceDeltaMinor: 50 },
+    ])
+  })
+
+  it('last orders: 15 minutes before closing, not orderable; 16 minutes before, orderable', () => {
+    const late = quoteOrder(menu({ closesInMinutes: 15 }), THE_ORDER)
+    expect(late.problems).toEqual([{ code: 'LAST_ORDERS_PASSED', message: 'Online orders close 15 minutes before Riverside closes.' }])
+    expect(late.orderable).toBe(false)
+    expect(quoteOrder(menu({ closesInMinutes: 16 }), THE_ORDER).orderable).toBe(true)
+  })
+
   it('a closed branch: priced as usual, but not orderable', () => {
     const quote = quoteOrder(menu({ open: false }), THE_ORDER)
     expect(quote.totalMinor).toBe(1375)
