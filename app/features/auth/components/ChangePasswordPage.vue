@@ -8,7 +8,6 @@ import type { FormErrorEvent, FormSubmitEvent } from '@nuxt/ui'
 import { loginRedirectTarget, useAuth } from '../composables/useAuth'
 import { emptyPasswordForm, passwordFormSchema } from '../schemas/password-form'
 import type { PasswordForm } from '../schemas/password-form'
-import AuthFrame from './AuthFrame.vue'
 
 const route = useRoute()
 const { user, mustChangePassword, changePassword, logout } = useAuth()
@@ -59,7 +58,7 @@ const fields = [
 </script>
 
 <template>
-  <AuthFrame>
+  <TaskFrame>
     <template #header>
       <div class="space-y-1">
         <h1 class="text-lg font-semibold">
@@ -147,5 +146,5 @@ const fields = [
         />
       </div>
     </template>
-  </AuthFrame>
+  </TaskFrame>
 </template>

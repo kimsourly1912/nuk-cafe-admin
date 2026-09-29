@@ -86,7 +86,7 @@ The complete list. Every approved item is a rule in the reference pages.
 | A2 | Medium navigation stays a Nuxt UI drawer, **not a custom icon rail** | [responsive-layout §3](../reference/responsive-layout.md#3-application-shell) |
 | A3 | ~~Compact targets are at least 44px, configured centrally~~ **Replaced (owner, 2026-09-28, D81):** Nuxt UI's default sizes at every width, WCAG AA's 24px as the floor; invisible hit areas for checkboxes, radios and switches only | [ui §6](../reference/ui.md#6-density-and-touch-targets) |
 | A4 | Light-mode primary-text contrast corrected with Nuxt UI semantic theme variables (`--ui-primary`) | [ui §12](../reference/ui.md#12-accessibility-baseline-owner-directed-wcag-22-aa-minimum) |
-| A5 | Dark-mode-token-compatible implementation; **no color-mode switch yet** | [ui §2](../reference/ui.md#2-color-tokens) |
+| A5 | Dark-mode-token-compatible implementation; ~~no color-mode switch yet~~ **a switch since D96 (owner, 2026-09-29):** light by default, the system setting ignored, Nuxt UI's `UColorModeButton` | [ui §2](../reference/ui.md#2-color-tokens) |
 | A6 | A focused route for the long Menu item editor on compact | [page-patterns §4](../reference/page-patterns.md#4-detail--editor) |
 | A7 | The Options editor stays a Nuxt UI slideover; its inner layout adapts with Tailwind responsive and container utilities | [page-patterns §4](../reference/page-patterns.md#4-detail--editor), [responsive-layout §1](../reference/responsive-layout.md#constrained-surfaces-container-queries) |
 | A8 | The current 4px spacing system and semantic Nuxt UI color roles are preserved | [ui §2–3](../reference/ui.md#2-color-tokens) |

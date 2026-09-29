@@ -2,7 +2,6 @@
 import type { FormErrorEvent, FormSubmitEvent } from '@nuxt/ui'
 import * as v from 'valibot'
 import { loginRedirectTarget, useAuth } from '../composables/useAuth'
-import AuthFrame from './AuthFrame.vue'
 
 const schema = v.object({
   email: v.pipe(v.string(), v.trim(), v.minLength(1, 'Email is required'), v.email('Enter an email address')),
@@ -47,7 +46,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 </script>
 
 <template>
-  <AuthFrame>
+  <TaskFrame>
     <template #header>
       <div class="flex items-center gap-2">
         <UIcon
@@ -133,5 +132,5 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
         :loading="loading"
       />
     </template>
-  </AuthFrame>
+  </TaskFrame>
 </template>

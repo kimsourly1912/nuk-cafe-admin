@@ -53,7 +53,7 @@ Borders: `border-default` for separators and outlines, `border-muted` for very q
 
 **Semantic color roles are preserved (owner-directed, approved 2026-09-28).** A role keeps its meaning app-wide; a screen never repurposes `warning` for decoration or `primary` for emphasis.
 
-**Dark mode (owner-directed, approved 2026-09-28): token-compatible, no switch yet.** Everything is written with semantic tokens so it works in both modes; nothing is light-only. The app doesn't add a color-mode switch. Nuxt UI's color mode (its default, following the system preference) stays as it is; screens are checked in both modes.
+**Dark mode (owner-directed, 2026-09-28; switch added 2026-09-29, D96).** Everything is written with semantic tokens so it works in both modes; nothing is light-only. **Light by default, whatever the system prefers;** Nuxt UI's `UColorModeButton` switches (the admin sidebar's footer, the admin's sign-in pages, the store's header, the account pages), and the choice is kept in the browser for the whole site. Screens are checked in both modes.
 
 ## 3. Spacing (owner-directed: the current 4px ramp is preserved)
 

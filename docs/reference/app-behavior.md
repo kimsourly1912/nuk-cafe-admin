@@ -169,6 +169,32 @@ The customer site renders on the server; `/admin/**` and `/table/**` render in t
 
 Tests: e2e `shop-menu.test.ts` on a seeded database (hydration clean at 1440 and 390, checked to fail with a deliberate mismatch; the HTML carries the menu; JavaScript off).
 
+## Light and dark mode (D96)
+
+| Case | Behavior |
+|---|---|
+| First visit, system in dark mode | Light: the system setting is ignored |
+| The color-mode button (admin sidebar, admin sign-in, store header, account pages) | Switches at once; kept in this browser (`localStorage` `nuxt-color-mode`) for the store and the admin alike |
+| A server-rendered page with dark chosen | The module's inline script sets the mode before the first paint: no light flash, no hydration mismatch |
+
+Tests: e2e `color-mode.test.ts`, `ui-foundations.test.ts` (dark shades).
+
+## The customer's account on the store (D97)
+
+| Case | Behavior |
+|---|---|
+| Any visit | The server's page is the same for everyone; the header's account slot shows a placeholder until the browser knows (Better Auth's `get-session`, then `GET /api/shop/me` only with a session: no failed request for visitors) |
+| Sign in from the header | Back to the same page afterwards (`?redirect=`); other hosts, the admin and sign-in/password pages go to the menu instead |
+| Already signed in, opening `/sign-in` or `/sign-up` | Moves on to the return page |
+| Signed in, email not verified | A banner on the menu and a badge in the account menu, each with Resend email; one 60 s wait shared by every Resend in the tab |
+| The verification link | Verifies and signs in (Better Auth), lands on "Email verified"; expired, replaced or foreign: "This link doesn't work anymore", with a new link (signed in) or sign-in first |
+| The reset link | "Choose a new password", the token removed from the address bar; saving signs the account out everywhere and goes to sign-in, which says the password changed; expired or used: "This link doesn't work anymore" |
+| Forgot password for an unknown email | The same "If an account exists…" answer |
+| Signed in or out in another tab | The account is read again when this tab is next focused (data freshness), or at once from a tab of this site (the `account` invalidation) |
+| An admin signed in on `/admin` | Is signed in on the store too (one Better Auth session per browser); signing out on either signs out both |
+
+Tests: e2e `shop-account.test.ts`; unit `app/features/account/tests/account.test.ts`.
+
 ## Keyboard shortcuts
 
 For staff who use the portal all day. Press **`?`** (or user menu → Keyboard shortcuts) for the list.

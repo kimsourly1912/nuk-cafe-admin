@@ -52,21 +52,27 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
       </template>
 
       <template #footer="{ collapsed }">
-        <UDropdownMenu
-          :items="userMenu"
-          :content="{ align: 'start' }"
-          class="w-full"
+        <div
+          class="flex w-full items-center gap-1"
+          :class="{ 'flex-col': collapsed }"
         >
-          <UButton
-            :label="collapsed ? undefined : (user?.name || user?.email)"
-            icon="i-lucide-circle-user"
-            color="neutral"
-            variant="ghost"
-            block
-            :square="collapsed"
-            class="justify-start"
-          />
-        </UDropdownMenu>
+          <UDropdownMenu
+            :items="userMenu"
+            :content="{ align: 'start' }"
+            class="min-w-0 flex-1"
+          >
+            <UButton
+              :label="collapsed ? undefined : (user?.name || user?.email)"
+              icon="i-lucide-circle-user"
+              color="neutral"
+              variant="ghost"
+              block
+              :square="collapsed"
+              class="justify-start"
+            />
+          </UDropdownMenu>
+          <UColorModeButton />
+        </div>
       </template>
     </UDashboardSidebar>
 
