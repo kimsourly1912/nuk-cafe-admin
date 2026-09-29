@@ -2,4 +2,5 @@
 export { getCheckoutQuote } from './quote.service'
 export { quoteOrder } from './quote.rules'
 export { getOrder, placeOrder } from './orders.service'
+export { cancelOrderAtCounter, completeOrder, getCounterOrder, getExchangeRates, listCounterQueue, markOrderReady, payOrder, setExchangeRate } from './counter.service'
 export { OrderErrorCodes } from './orders.errors'

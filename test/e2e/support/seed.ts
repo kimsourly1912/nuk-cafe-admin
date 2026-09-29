@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm'
 import { organization, user } from '../../../server/db/tables'
 import { createTable, updateBranchSettings } from '../../../server/features/branches'
 import type { Actor } from '../../../server/features/identity'
+import { createStaff } from '../../../server/features/identity'
 import { loadSampleMenuStep } from '../../../server/features/sample-data'
 import { createTestAuth } from '../../../server/tests/support/auth'
 import { applyMigration, createAdmin, migrationFiles } from '../../../server/tests/support/db'
@@ -37,7 +38,7 @@ export interface ShopSeed {
    * files run in any order, so no other file may rely on its state (`apiUnverified` is
    * shop-orders-api's, since shop-account verifies `unverified`).
    */
-  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified', SeedCustomer>
+  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'cashier', SeedCustomer>
   /** A second table at Riverside (T02), for tests that archive it. */
   spareTableToken: string
 }
@@ -57,6 +58,9 @@ const CUSTOMERS: ShopSeed['customers'] = {
   shopperC: { name: 'Rith Men', email: 'rith@example.com', password: 'long-enough-password-6' },
   shopperUnverified: { name: 'Nary Heng', email: 'nary@example.com', password: 'long-enough-password-7' },
   apiUnverified: { name: 'Mealea Chea', email: 'mealea@example.com', password: 'long-enough-password-8' },
+  counterCustomer: { name: 'Pisey Ly', email: 'pisey@example.com', password: 'long-enough-password-9' },
+  // Not a customer: the counter's cashier (step 6.3), staff at Riverside.
+  cashier: { name: 'Sophea Keo', email: 'sophea@example.com', password: 'long-enough-password-10' },
 }
 
 async function addBranch(db: Db, name: string) {
@@ -100,9 +104,11 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
   // without the breached-password lookup (an external API). Their queued emails carry test links.
   const auth = createTestAuth(db)
   for (const customer of Object.values(CUSTOMERS)) await auth.api.signUpEmail({ body: customer })
-  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC]) {
+  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.cashier]) {
     await db.update(user).set({ emailVerified: true }).where(eq(user.email, customer.email))
   }
+  // An existing account keeps its password when it's given branch access (D49).
+  await createStaff(db, actor, { name: CUSTOMERS.cashier.name, email: CUSTOMERS.cashier.email, admin: false, memberships: [{ branchId: openBranchId, role: 'staff' }] })
   await client.execute('delete from outbox_messages')
 
   client.close()

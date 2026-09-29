@@ -108,7 +108,7 @@ stateDiagram-v2
   Ready --> Completed
 ```
 
-Whether staff may cancel an order that is already paid is still open (Q36). A future online payment method would use signed provider events, never a browser redirect alone.
+Staff and managers may cancel a paid order before it's ready, recording how the money went back; after that, only an admin refund (Q36, D101). A future online payment method would use signed provider events, never a browser redirect alone.
 
 | Rule | Enforcement point |
 |---|---|

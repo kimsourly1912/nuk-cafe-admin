@@ -89,6 +89,7 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
         statements: [
           repo.insertOrderStatement(db, order),
           ...repo.insertLinesStatements(db, orderId, lines),
+          repo.eventStatement(db, { orderId, toVersion: 1, actorId: actor.userId, fromStatus: null, toStatus: 'awaiting_payment', at: now }),
           repo.unpaidAtMostStatement(db, actor.userId, now, MAX_UNPAID_ORDERS),
         ],
         response: { orderId },
