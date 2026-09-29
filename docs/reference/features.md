@@ -8,7 +8,7 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 
 | Feature | Exports |
 |---|---|
-| `auth` | [`useAuth`](./auth.md#useauth), [`loginRedirectTarget`](./auth.md#loginredirecttarget), `SessionUser` |
+| `auth` | [`useAuth`](./auth.md#useauth), [`loginRedirectTarget`](./auth.md#loginredirecttarget), `SessionUser`; the password rules `passwordFormSchema`, `emptyPasswordForm`, `PasswordForm` (also the counter's change-password page, D102) |
 | `categories` | [`CategorySelect`](#categoryselect), [`useCategoryOptions`](#usecategoryoptions), `categoriesNavigation` |
 | `option-sets` | [`useOptionSetOptions`](#useoptionsetoptions), `optionSetsNavigation` ("Options") |
 | `modifier-groups` | [`useModifierGroupOptions`](#usemodifiergroupoptions), [`describeRules`, `formatDelta`](#describerules-formatdelta), `modifierGroupsNavigation` ("Add-ons") |
@@ -16,6 +16,9 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 | `products` | `productsNavigation` ("Menu items"). A `ProductSelect` waits for its first consumer |
 | `account` | `AccountButton`, `VerifyEmailBanner` (the store header); `useCustomerAccount` (the signed-in customer, browser only: `account`, `known`, `refresh`), `useResendVerification` (Resend with the shared 60 s wait), `ACCOUNT_PATHS`, `accountLink(path, returnTo)` (a sign-in or sign-up link that comes back). Used by Review order's gates (D97, D100) |
 | `orders` | `formatPickupNumber` ("007"), `tableName` ("Table T01" from "T01") (D100) |
+| `counter` | `useCounterSession` (the counter workspace's own session: `user` with its `branches`, `signIn`, `signOut`, `changePassword`, `clearSession`, `generation`), `isCounterPath`, `counterRedirectTarget`, `COUNTER_HOME_PATH`, `COUNTER_SIGN_IN_PATH`, `COUNTER_CHANGE_PASSWORD_PATH`: for the shell (middleware, the API plugin, tab titles) (D102) |
+| `menu` | `openingText` ("Opens tomorrow at 7:00 AM"; also the counter's closed banner, D102) |
+| `exchange-rates` | `exchangeRatesNavigation` ("Payments", D102) |
 
 When you add a feature, add its section here. Pickers follow the contract in [feature-standard.md → Resource picker conventions](../feature-standard.md#6-resource-picker-conventions).
 

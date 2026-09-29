@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { member, organization } from '../../../db/tables'
 import { newId } from '../../../utils/ids'
-import { adminSession, authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn } from '../identity.service'
+import { adminSession, authorizeBranch, counterSession, authorizeCustomer, authorizePlatform, authorizeSignedIn } from '../identity.service'
 import type { SessionUser } from '../identity.types'
 import { createTestDb, createUser } from '../../../tests/support/db'
 import { expectApiError } from '../../../tests/support/failure'
@@ -130,6 +130,32 @@ describe('counter surface', () => {
     await expectApiError(() => authorizeBranch(db, null, newId(), { order: ['read'] }), 401, 'UNAUTHENTICATED')
     const staff = { ...(await signedInMember('staff')), mustChangePassword: true }
     await expectApiError(() => authorizeBranch(db, staff, branchId, { order: ['read'] }), 403, 'PASSWORD_CHANGE_REQUIRED')
+  })
+
+  describe('the counter app\'s session (D102)', () => {
+    it('lists the active branches a member works at, with the role; not archived ones or unknown roles', async () => {
+      const archived = await addBranch('archived')
+      const staff = await signedInMember('staff')
+      await db.insert(member).values({ id: newId(), organizationId: otherBranchId, userId: staff.id, role: 'manager', createdAt: new Date() })
+      await db.insert(member).values({ id: newId(), organizationId: archived, userId: staff.id, role: 'staff', createdAt: new Date() })
+      const session = await counterSession(db, staff)
+      expect(session.branches.map(b => [b.id, b.role]).sort()).toEqual([[branchId, 'staff'], [otherBranchId, 'manager']].sort())
+    })
+
+    it('gives a platform admin every active branch (their own role where they are a member)', async () => {
+      const session = await counterSession(db, admin)
+      expect(session.branches.map(b => b.role)).toEqual(['admin', 'admin'])
+    })
+
+    it('answers on a temporary password; refuses no session (401) and a customer with no branch (403 NOT_STAFF)', async () => {
+      const staff = { ...(await signedInMember('staff')), mustChangePassword: true }
+      expect((await counterSession(db, staff)).mustChangePassword).toBe(true)
+      await expectApiError(() => counterSession(db, null), 401, 'UNAUTHENTICATED')
+      const customerOnly = await signedInMember(null)
+      const unknownRole = await signedInMember('owner')
+      await expectApiError(() => counterSession(db, customerOnly), 403, 'NOT_STAFF')
+      await expectApiError(() => counterSession(db, unknownRole), 403, 'NOT_STAFF')
+    })
   })
 })
 

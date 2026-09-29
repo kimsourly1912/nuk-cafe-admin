@@ -6,6 +6,8 @@ export const forbidden = () => apiError(403, ErrorCodes.FORBIDDEN, 'You don\'t h
 
 export const IdentityErrorCodes = {
   NOT_ADMIN: 'NOT_ADMIN',
+  /** Signed in, but not working at any branch: no counter app (D102). */
+  NOT_STAFF: 'NOT_STAFF',
 } as const
 
 /** Signed in, but not a platform admin: the admin app is admins only for now (D52). */
@@ -20,3 +22,6 @@ export const emailNotVerified = () =>
 
 /** Also for branches the caller isn't a member of: other people's records are 404 (security.md). */
 export const branchNotFound = () => notFound('The branch')
+
+export const notStaff = () =>
+  apiError(403, IdentityErrorCodes.NOT_STAFF, 'This account doesn\'t work at any branch, so it can\'t use the counter.')

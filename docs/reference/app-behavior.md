@@ -157,7 +157,7 @@ The admin session carries `permissions` (`resource:action`, D52); only platform 
 
 ## Server-rendered customer pages (D95)
 
-The customer site renders on the server; `/admin/**`, `/table/**`, `/checkout` and `/orders/**` render in the browser only.
+The customer site renders on the server; `/admin/**`, `/counter/**`, `/table/**`, `/checkout` and `/orders/**` render in the browser only.
 
 | Case | Behavior |
 |---|---|
@@ -218,6 +218,30 @@ Tests: e2e `shop-account.test.ts`; unit `app/features/account/tests/account.test
 | The order in this browser is full (30 lines) | A new line isn't added; a warning toast says so. More of a line already there still counts (up to 20) |
 
 Tests: e2e `shop-checkout.test.ts` (on the seeded database: the gates, a note, a price changed underneath, dine-in, a table archived underneath, the phone bar and sheet); unit `app/features/menu/tests/checkout.test.ts`, `app/features/orders/tests/order.test.ts`.
+
+## The counter workspace (D102)
+
+`/counter/**` renders in the browser only, with its own session (`useCounterSession`); the admin's session isn't involved.
+
+| Case | Behavior |
+|---|---|
+| Opening `/counter` signed out | `/counter/sign-in?redirect=…`; after signing in, back there |
+| A customer (no branch) signs in at the counter | "This account doesn't work at any branch, so it can't use the counter."; signed out again |
+| Staff on a temporary password | Every counter page goes to `/counter/change-password` first |
+| One branch / several (or an admin) | Straight to its queue / "Choose a branch" |
+| The queue | Refreshes every 10 seconds while the tab is visible, and on return to the tab; a failed refresh keeps the last queue with a warning |
+| A new order arrives | Its card is outlined with "New" for a minute and a short chime plays (unless muted in the user menu, kept in this browser; a browser may block sound until the first tap) |
+| "Pay by" | From the server's clock (the queue carries it); amber in the last 5 minutes; past it, the order leaves the queue (the server refuses its payment) |
+| Take payment: amount received less than the total | "Short by $x"; Confirm waits. Nothing typed means exact |
+| Cash in riel | The total at the rate in force, rounded up to ៛100; no rate set: a warning, take dollars or KHQR |
+| Another cashier (or tab) paid, or the rate changed, first | The panel says what the order is now (409 `ORDER_CHANGED`, `EXCHANGE_RATE_CHANGED`) with Reload; nothing is recorded |
+| No answer while paying or cancelling | "We couldn't confirm the payment. Try again: it won't be recorded twice." Try again sends the same `Idempotency-Key` |
+| Mark ready / Complete tapped twice, or while another command runs on the order | One request (the order's lock); the card shows a spinner |
+| Cancelling a paid order | Says how the money went back (cash or KHQR) and the full amount; a ready order can't be cancelled here |
+| Session lost (401) | Back to `/counter/sign-in?redirect=…`; the previous person's data is cleared (the session boundary) |
+| Phones | One list at a time, as tabs with counts; the order full screen; the cancel dialog a bottom sheet |
+
+Tests: e2e `counter.test.ts` (the real seeded server: sign-in, cash with change and short, riel and cancelling a paid order, a payment recorded meanwhile → Reload, phone tabs, a customer refused), `counter-orders-api.test.ts`; unit `app/features/counter/tests/counter.test.ts`.
 
 ## Keyboard shortcuts
 

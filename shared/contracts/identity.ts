@@ -30,3 +30,17 @@ export const newPasswordSchema = v.pipe(
   v.minLength(PASSWORD_MIN, `At least ${PASSWORD_MIN} characters`),
   v.maxLength(PASSWORD_MAX, `At most ${PASSWORD_MAX} characters`),
 )
+
+/**
+ * `GET /api/counter/me`: the signed-in staff member, for the counter app (step 6.3b, D102): the
+ * branches they work at (every active branch for a platform admin). Answers while a temporary
+ * password is in place, like `/admin/me`, so the app can ask for a new one. A customer with no
+ * branch is 403 `NOT_STAFF`.
+ */
+export interface CounterSession {
+  userId: string
+  email: string
+  name: string
+  mustChangePassword: boolean
+  branches: { id: string, name: string, role: 'admin' | 'manager' | 'staff' }[]
+}
