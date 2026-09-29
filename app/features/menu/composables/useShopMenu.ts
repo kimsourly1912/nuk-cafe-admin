@@ -9,6 +9,10 @@ import { addLine, parseLines, setLineQuantity } from '../utils/cart'
  * order before checkout. Reads go through `useApiQuery` (the menu refreshes when the customer comes
  * back to the tab, so sold-out switches show). The table and the order live in this browser only:
  * the table for this tab's visit (session storage), the order across visits (local storage).
+ *
+ * Server rendering (D95): the server can't see browser storage, so every stored value is read once
+ * the page is mounted (`initOnMounted`). The server and the browser's first render then agree (the
+ * default branch, no table, an empty order), and the stored values apply right after.
  */
 
 /** A dine-in table from a scanned QR code (`/table/<token>`), for this tab's visit. */
@@ -21,6 +25,7 @@ export interface TableContext {
 // Browser storage can be unavailable (private windows, blocked site data): VueUse falls back to the
 // default and reports the failure without throwing.
 const useStoredTable = createSharedComposable(() => useSessionStorage<TableContext | null>('nuk-cafe:table', null, {
+  initOnMounted: true,
   serializer: {
     read: (raw) => {
       try {
@@ -51,41 +56,45 @@ export function useTableContext() {
 }
 
 /** The branch the customer picked (only offered when there are several), across visits. */
-const useChosenBranch = createSharedComposable(() => useLocalStorage<string | null>('nuk-cafe:branch', null))
+const useChosenBranch = createSharedComposable(() => useLocalStorage<string | null>('nuk-cafe:branch', null, { initOnMounted: true }))
 
-/** The active branches, whether each is open, and which one's menu is shown. */
+/** The active branches, whether each is open, and which one's menu is asked for. */
 export function useShopBranch() {
   const { table } = useTableContext()
   const chosen = useChosenBranch()
   const query = useApiQuery('menu:branches', () => apiFetch<PublicBranch[]>('/public/branches'))
   const branches = computed(() => query.data.value ?? [])
-  /** A table's branch first, then the customer's pick while it's still active, then the first. */
-  const branchId = computed(() => {
+  /**
+   * A table's branch first, then the customer's pick while it's still active; otherwise none, and
+   * the server serves its first branch (the same on the server and in the browser, D95).
+   */
+  const requestedBranchId = computed(() => {
     const ids = branches.value.map(b => b.id)
     if (table.value && ids.includes(table.value.branchId)) return table.value.branchId
     if (chosen.value && ids.includes(chosen.value)) return chosen.value
-    return ids[0]
+    return undefined
   })
   return {
     ...query,
     branches,
-    branchId,
+    requestedBranchId,
     choose: (id: string) => {
       chosen.value = id
     },
   }
 }
 
-/** What the branch sells now, with its open status (`GET /api/public/menu`). */
+/** What the branch sells now, with its open status (`GET /api/public/menu`); the server's first branch without one. */
 export function usePublicMenu(branchId: Ref<string | undefined>) {
   return useApiQuery(
-    () => `menu:public:${branchId.value ?? 'none'}`,
-    () => (branchId.value ? apiFetch<PublicMenu>('/public/menu', { query: { branchId: branchId.value } }) : Promise.resolve(null)),
+    () => `menu:public:${branchId.value ?? 'default'}`,
+    () => apiFetch<PublicMenu>('/public/menu', { query: branchId.value ? { branchId: branchId.value } : {} }),
   )
 }
 
 /** Every branch's order, by branch id (a branch's menu decides what its lines mean). */
 const useStoredCarts = createSharedComposable(() => useLocalStorage<Record<string, CartLine[]>>('nuk-cafe:cart', {}, {
+  initOnMounted: true,
   serializer: {
     read: (raw) => {
       try {

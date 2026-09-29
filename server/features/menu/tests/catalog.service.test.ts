@@ -194,6 +194,13 @@ describe('the public menu', () => {
     expect(there.map(i => [i.name, i.soldOut])).toEqual([['Latte', false], ['Tea', false]])
   })
 
+  it('reads the first active branch by name when none is named (D95)', async () => {
+    const result = await getPublicMenu(db, {}, monday('09:00'))
+    const names = await db.select().from(organization)
+    const first = names.filter(b => b.status === 'active').sort((a, b) => a.name.localeCompare(b.name))[0]!
+    expect(result.branch.id).toBe(first.id)
+  })
+
   it('is 404 for an unknown or archived branch', async () => {
     await expectApiError(() => menu(monday('09:00'), newId()), 404, 'NOT_FOUND')
     const archived = await addBranch('archived')

@@ -13,6 +13,10 @@
  * - **The order**: a panel beside the menu from `lg`; below it a bottom bar once something is in
  *   it, opening the order in a bottom sheet. Checkout comes with step 6.2.
  * - **Closed**: one warning banner with when it opens; browsing works, adding doesn't.
+ *
+ * Server-rendered (D95): what differs by width is CSS, never `useLayoutContext`, so the server's page
+ * and the browser's first render agree. The menu is the server's first branch until the browser's
+ * stored table or branch choice (read after mounting) asks for another.
  */
 import { useElementSize } from '@vueuse/core'
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
@@ -26,22 +30,27 @@ import MenuItemDetail from './MenuItemDetail.vue'
 import MenuItemList from './MenuItemList.vue'
 import OrderPanel from './OrderPanel.vue'
 
-const { isCompact, isExpanded } = useLayoutContext()
-
 // --- Branch, table and menu ---
-const { branches, branchId, choose, loading: branchesLoading, error: branchesError, refresh: refreshBranches } = useShopBranch()
+const { branches, requestedBranchId, choose } = useShopBranch()
 const { table, clearTable } = useTableContext()
-const menuQuery = usePublicMenu(branchId)
+const menuQuery = usePublicMenu(requestedBranchId)
 const menu = computed(() => menuQuery.data.value ?? null)
-const branch = computed(() => menu.value?.branch ?? branches.value.find(b => b.id === branchId.value))
+const branch = computed(() => menu.value?.branch)
+/** The branch whose menu is shown (the order belongs to it). */
+const branchId = computed(() => branch.value?.id)
 const closed = computed(() => !branch.value?.openNow)
 const closedNote = computed(() => (branch.value ? openingText(branch.value) : undefined))
-const loading = computed(() => branchesLoading.value || menuQuery.loading.value)
-const loadError = computed(() => branchesError.value ?? menuQuery.error.value)
-function retry() {
-  if (branchesError.value) refreshBranches()
-  else menuQuery.refresh()
-}
+const loading = computed(() => menuQuery.loading.value)
+/** No active branch at all: the server has no menu to show yet. */
+const noBranch = computed(() => menuQuery.error.value?.kind === 'not_found')
+const loadError = computed(() => (noBranch.value ? undefined : menuQuery.error.value))
+const retry = () => menuQuery.refresh()
+
+useSeoMeta({
+  description: 'Browse the NUK Cafe menu and order coffee, tea and bakes for pickup or at your table.',
+  ogTitle: 'NUK Cafe menu',
+  ogDescription: 'Browse the NUK Cafe menu and order for pickup or at your table.',
+})
 
 /** "Table 12" (a label may already say "Table"), or "Pickup". */
 const orderType = computed(() => {
@@ -67,6 +76,9 @@ function closeSearch() {
 const header = useTemplateRef<HTMLElement>('header')
 const { height: headerHeight } = useElementSize(header, undefined, { box: 'border-box' })
 const offset = computed(() => headerHeight.value + 8)
+// The order panel sticks below the header: a CSS variable set in the browser, not a rendered style,
+// so the server's page (which can't measure) and the browser's agree.
+watch(offset, value => document.documentElement.style.setProperty('--shop-header', `${value}px`))
 const sectionIds = computed(() => (search.value ? [] : sections.value.flatMap(s => [s.id, ...s.subSections.map(sub => sub.id)])))
 const { active, scrollTo } = useScrollSpy(() => sectionIds.value.map(id => `section-${id}`), offset)
 const mainOf = computed(() => new Map(sections.value.flatMap(s => [[s.id, s.id], ...s.subSections.map(sub => [sub.id, s.id] as [string, string])])))
@@ -108,7 +120,7 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
       class="sticky top-0 z-30 border-b border-default bg-default/95 backdrop-blur"
     >
       <div class="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
-        <template v-if="isCompact && searching">
+        <template v-if="searching">
           <UButton
             icon="i-lucide-arrow-left"
             color="neutral"
@@ -144,14 +156,13 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
           </p>
           <div class="ms-auto flex items-center gap-2">
             <SearchInput
-              v-if="!isCompact"
               v-model="search"
               :delay="150"
               placeholder="Search the menu"
-              class="w-56 lg:w-72"
+              class="w-56 max-sm:hidden lg:w-72"
             />
             <UButton
-              v-else
+              class="sm:hidden"
               icon="i-lucide-search"
               color="neutral"
               variant="ghost"
@@ -256,7 +267,7 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
         </div>
 
         <div
-          v-else-if="!loadError && !branches.length"
+          v-else-if="noBranch"
           class="py-16 text-center text-muted"
         >
           The menu isn't available yet.
@@ -376,13 +387,10 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
       </div>
 
       <aside
-        v-if="isExpanded"
+        class="hidden lg:block"
         aria-label="Your order"
       >
-        <UCard
-          class="sticky"
-          :style="{ top: `${offset + 8}px` }"
-        >
+        <UCard class="sticky top-[calc(var(--shop-header,7rem)+0.5rem)]">
           <OrderPanel
             :cart="cart"
             :order-type="orderType"
@@ -411,7 +419,6 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
       />
     </BottomActionBar>
     <UDrawer
-      v-if="!isExpanded"
       v-model:open="orderOpen"
       title="Your order"
       :ui="{ header: 'sr-only', content: 'max-h-[85dvh]', body: 'overflow-y-auto' }"

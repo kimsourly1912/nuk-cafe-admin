@@ -265,7 +265,7 @@ The item returns each group with what applies **on this item**: `minSelect` / `m
 
 ### Public menu (step 3.8a, D65)
 
-`GET /api/public/menu?branchId=…` (anyone, `no-store`, contract `shared/contracts/public-menu.ts`): `{ branch, currency, at, categories }`. `branch` is a `PublicBranch` (below). Each top-level category holds `categories` (its sub-categories) or `items`; each item has `optionSets`, `variations` (`{ id, valueIds, label, priceMinor, soldOut }`), `soldOut` (every version is) and `modifierGroups` (the rules and prices that apply on it).
+`GET /api/public/menu?branchId=…` (anyone, `no-store`, contract `shared/contracts/public-menu.ts`; without `branchId`, the first active branch by name, D95; none at all is 404): `{ branch, currency, at, categories }`. `branch` is a `PublicBranch` (below). Each top-level category holds `categories` (its sub-categories) or `items`; each item has `optionSets`, `variations` (`{ id, valueIds, label, priceMinor, soldOut }`), `soldOut` (every version is) and `modifierGroups` (the rules and prices that apply on it).
 
 `GET /api/public/branches` (anyone, `no-store`, D93): the active branches by name as `PublicBranch` (`{ id, name, address, phone, timezone, openNow, nextOpening }`). `openNow` follows the branch's hours on its own clock; `nextOpening` (`{ inDays, weekday, startMinute }`, 0 days = later today) says when a closed branch opens, `null` while open or without hours.
 

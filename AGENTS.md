@@ -156,7 +156,7 @@ Every server change follows the [server standard](docs/server/README.md). The es
 - The middleware protects **every admin page (`/admin/**`) by default**. Opt out with `definePageMeta({ public: true })` (typed in `app/types/page-meta.d.ts`). The customer site (every other path) is public and never reads the admin session: anything session-related in the shell checks `isAdminPath()` from `~/features/auth` (D93).
 - **Session transitions** (login, logout, expiry, another staff member via another tab) clear the previous identity's query data, mutation outcomes, toasts, overlays and unsaved forms, and discard its in-flight responses (`plugins/session-boundary.client.ts`, `useAuth().generation`, D29). Features must not keep user data outside `useApiQuery`/`useMutation`/`useState`-based composables, or the boundary can't clear it.
 - App-wide behavior needs nothing from features: login/logout apply to all open tabs (`plugins/auth-sync.client.ts`), `?` shows keyboard shortcuts, tab titles from `definePageMeta({ title })`, a save in one tab refreshes the same lists in the app's other tabs at once, lists refetch when the user returns to the tab (data ≥ 5s old) or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards. Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
-- `ssr: false` keeps the app a SPA; Nitro serves our `/api` and Better Auth `/api/auth` from the same origin. Server-rendering the customer pages (D45) is open (progress.md → Q38, D93).
+- **Rendering (D95):** the customer site is server-rendered; `/admin/**` and `/table/**` are SPAs (`routeRules` `ssr: false`). On a server-rendered page, anything that differs by width is CSS (never `useLayoutContext`), browser storage is read after mounting (`initOnMounted`), and `apiFetch` fetches per request on the server. Nitro serves our `/api` and Better Auth `/api/auth` from the same origin.
 - `app/layouts/default.vue` is the admin's Nuxt UI dashboard shell; customer pages use `layout: 'shop'` (no sidebar, each page brings its header). The sidebar is `app/utils/navigation.ts`, which groups and orders each feature's exported `navigation` entry.
 - Every page component renders a `UDashboardPanel` with the anatomy in [responsive-layout.md → Page anatomy](docs/reference/responsive-layout.md#5-page-anatomy).
 
@@ -205,7 +205,7 @@ Expected to be promoted to the root when the first two features need them: `Prod
 `vitest.config.ts` projects:
 - **unit** (`test/unit`, `app/features/*/tests`): pure logic in Node: engines, form schemas and mappings.
 - **server** (`server/features/*/tests`, shared utils in `server/tests`): services against an in-memory SQLite database built from the checked-in migrations, foreign keys on (D42).
-- **e2e** (`test/e2e`): builds the app once and drives Chrome with the API mocked in the browser (`mockApi`).
+- **e2e** (`test/e2e`): builds the app once and drives Chrome. Admin tests mock the API in the browser (`mockApi`); the customer site's tests read a real database seeded before each run (`test/e2e/support/seed.ts`, the Standard sample menu, D95), because the server renders those pages.
 - **nuxt**: only created once a `*.nuxt.test.ts` exists (D42).
 
 ## Conventions

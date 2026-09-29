@@ -1,9 +1,13 @@
 <script setup lang="ts">
 /**
  * One item on the customer menu (D93). From `sm`: a card, the photo on the left, the text on the
- * right and the full-width add slot at the bottom. On phones (`row`): a row, the text on the left
- * with a small "Add", the photo on the right. The name opens the detail; so does the whole card
- * (a stretched button), except the add slot above it.
+ * right and the full-width add slot at the bottom. On phones: a row, the text on the left with a
+ * small "Add", the photo on the right. The name opens the detail; so does the whole card (a
+ * stretched button), except the add slot above it.
+ *
+ * Row or card is decided by CSS alone, so the server's page and the browser's agree at every width
+ * (D95): each add slot is rendered once per layout, the other hidden (`display: none`, so it's out
+ * of the accessibility tree too).
  */
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
 import { highlightParts, priceOf } from '../utils/menu'
@@ -13,7 +17,6 @@ const props = defineProps<{
   item: PublicMenuItem
   quantity: number
   closed: boolean
-  row?: boolean
   /** Search text to highlight in the name. */
   highlight?: string
 }>()
@@ -25,18 +28,11 @@ const nameParts = computed(() => highlightParts(props.item.name, props.highlight
 
 <template>
   <article
-    class="relative flex"
-    :class="row ? 'gap-3 py-4' : 'flex-col gap-3 rounded-lg border border-default bg-default p-3'"
+    class="relative flex gap-3 py-4 sm:flex-col sm:rounded-lg sm:border sm:border-default sm:bg-default sm:p-3"
     :aria-label="item.name"
   >
-    <div
-      class="flex min-w-0 flex-1 gap-3"
-      :class="row ? 'flex-row-reverse' : ''"
-    >
-      <div
-        class="flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-elevated"
-        :class="row ? 'size-22' : 'size-24'"
-      >
+    <div class="flex min-w-0 flex-1 gap-3 max-sm:flex-row-reverse">
+      <div class="flex size-22 shrink-0 items-center justify-center overflow-hidden rounded-md bg-elevated sm:size-24">
         <img
           v-if="item.imageUrl"
           :src="item.imageUrl"
@@ -92,12 +88,11 @@ const nameParts = computed(() => highlightParts(props.item.name, props.highlight
           />
         </div>
         <MenuAddControl
-          v-if="row"
           :item="item"
           :quantity="quantity"
           :closed="closed"
           compact
-          class="mt-2 self-start"
+          class="mt-2 self-start sm:hidden"
           @add="emit('add')"
           @choose="emit('open')"
           @set-quantity="value => emit('set-quantity', value)"
@@ -105,10 +100,10 @@ const nameParts = computed(() => highlightParts(props.item.name, props.highlight
       </div>
     </div>
     <MenuAddControl
-      v-if="!row"
       :item="item"
       :quantity="quantity"
       :closed="closed"
+      class="max-sm:hidden"
       @add="emit('add')"
       @choose="emit('open')"
       @set-quantity="value => emit('set-quantity', value)"
