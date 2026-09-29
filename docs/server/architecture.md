@@ -43,7 +43,7 @@ Routes are Nuxt file routes, **unversioned** (the apps deploy together with the 
 | Surface | Caller | Auth | Examples |
 |---|---|---|---|
 | `/api/auth/**` | anyone | Better Auth owns it | sign-up, sign-in, sign-out, verify email, reset password |
-| `/api/public/**` | anyone | none; read-only | `GET /api/public/menu`, `GET /api/public/branches`, `GET /api/public/tables/{token}` |
+| `/api/public/**` | anyone | none; read-only | `GET /api/public/menu`, `GET /api/public/branches`, `GET /api/public/tables/{token}`, `POST /api/public/checkout/quote` (a read: a POST only because the lines don't fit a query string, D98) |
 | `/api/shop/**` | signed-in customer (verified email) | session | `POST /api/shop/orders`, `GET /api/shop/points` |
 | `/api/counter/{branchId}/**` | branch `manager` / `staff` | session + branch membership | `POST /api/counter/{branchId}/orders/{orderId}/ready` |
 | `/api/admin/**` | platform `admin` | session + platform role | `PATCH /api/admin/menu/items/{itemId}` |
