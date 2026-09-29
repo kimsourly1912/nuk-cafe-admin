@@ -14,6 +14,8 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 | `modifier-groups` | [`useModifierGroupOptions`](#usemodifiergroupoptions), [`describeRules`, `formatDelta`](#describerules-formatdelta), `modifierGroupsNavigation` ("Add-ons") |
 | `availability-rules` | [`AvailabilityRuleSelect`](#availabilityruleselect), [`useAvailabilityRuleOptions`](#useavailabilityruleoptions), [`describeWindows`](#describewindows), `availabilityRulesNavigation` |
 | `products` | `productsNavigation` ("Menu items"). A `ProductSelect` waits for its first consumer |
+| `account` | `AccountButton`, `VerifyEmailBanner` (the store header); `useCustomerAccount` (the signed-in customer, browser only: `account`, `known`, `refresh`), `useResendVerification` (Resend with the shared 60 s wait), `ACCOUNT_PATHS`, `accountLink(path, returnTo)` (a sign-in or sign-up link that comes back). Used by Review order's gates (D97, D100) |
+| `orders` | `formatPickupNumber` ("007"), `tableName` ("Table T01" from "T01") (D100) |
 
 When you add a feature, add its section here. Pickers follow the contract in [feature-standard.md → Resource picker conventions](../feature-standard.md#6-resource-picker-conventions).
 

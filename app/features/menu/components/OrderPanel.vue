@@ -1,9 +1,8 @@
 <script setup lang="ts">
 /**
  * The order before checkout (D93): its lines with a quantity each (0 removes), the subtotal and
- * "Review order". A line whose item left the menu or sold out says so and doesn't count. Checkout
- * is step 6.2: until then the button is disabled with a note. Beside the menu from `lg`; in a
- * bottom sheet below it.
+ * "Review order" (`/checkout`, D100; not while closed). A line whose item left the menu or sold
+ * out says so and doesn't count. Beside the menu from `lg`; in a bottom sheet below it.
  */
 import type { ResolvedCart } from '../utils/cart'
 import { MAX_LINE_QUANTITY } from '../utils/cart'
@@ -117,11 +116,15 @@ const emit = defineEmits<{ 'set-quantity': [key: string, quantity: number] }>()
       </div>
       <UButton
         label="Review order"
+        to="/checkout"
         block
-        disabled
+        :disabled="closed || !cart.count"
       />
-      <p class="text-center text-sm text-muted">
-        {{ closed ? (closedNote ?? 'Closed now.') : 'Online ordering opens soon.' }}
+      <p
+        v-if="closed"
+        class="text-center text-sm text-muted"
+      >
+        {{ closedNote ?? 'Closed now.' }}
       </p>
     </div>
   </section>

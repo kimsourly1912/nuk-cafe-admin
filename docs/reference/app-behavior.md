@@ -157,7 +157,7 @@ The admin session carries `permissions` (`resource:action`, D52); only platform 
 
 ## Server-rendered customer pages (D95)
 
-The customer site renders on the server; `/admin/**` and `/table/**` render in the browser only.
+The customer site renders on the server; `/admin/**`, `/table/**`, `/checkout` and `/orders/**` render in the browser only.
 
 | Case | Behavior |
 |---|---|
@@ -194,6 +194,30 @@ Tests: e2e `color-mode.test.ts`, `ui-foundations.test.ts` (dark shades).
 | An admin signed in on `/admin` | Is signed in on the store too (one Better Auth session per browser); signing out on either signs out both |
 
 Tests: e2e `shop-account.test.ts`; unit `app/features/account/tests/account.test.ts`.
+
+## Review order and the order placed (D100)
+
+`/checkout` and `/orders/<id>` render in the browser only: everything on them is this visitor's own.
+
+| Case | Behavior |
+|---|---|
+| Opening Review order | The order kept in this browser, priced by the server (`POST /api/public/checkout/quote`); skeleton totals until the answer. Empty: "Your order is empty" with Back to the menu |
+| A quantity changed or a line removed | Priced again (the running request is cancelled, D30). Typing a note doesn't ask again: notes never change a price |
+| A line that can't be ordered (sold out, gone) | Marked on the line with Remove; the button is off with "Remove the unavailable items to continue." |
+| The cafe closed, or last orders passed (15 minutes before closing) | A warning with the next opening; the button is off with "Available when the cafe is open." The menu's Review order button is off while closed |
+| Signed out, pressing the button ("Sign in to place order") | The sign-in gate (a dialog, a bottom sheet on phones): Sign in or Create account, then back to `/checkout` with the order still there |
+| Signed in, email not verified | The verify gate: Resend (the shared 60 s wait) and "I've verified, continue", which reads the account again and places the order when it is verified |
+| A price changed since the page showed it | The server refuses (409 `PRICES_CHANGED`); the page asks again and shows "Prices have changed" with the old unit price struck through and the new total on the button: pressing it again accepts them. Nothing is placed at a price the customer didn't see |
+| The quote is more than 10 minutes old at "Place order" | Asked again first; if prices moved, shown as above instead of placing |
+| A table QR that stopped working (archived, new QR) | Refused with the reason and "Switch to pickup"; never switched to pickup silently (Q42) |
+| No answer, or a server error, while placing | "We couldn't confirm your order. Try again: you won't get a second order." Try again sends the same `Idempotency-Key`, so an order that was placed comes back instead of a second one. Any change to the order makes a new key |
+| Double click on Place order | One request: the controls are locked while placing |
+| Two unpaid orders already | The server's message; nothing else to do on the page |
+| Placed | The order in this browser is emptied; `/orders/<id>` (replacing `/checkout` in the history): the 3-digit number, "Waiting for payment", what to do next (for a table: "then we'll bring it to Table T01"), pay by the time 30 minutes on, the lines with their notes |
+| `/orders/<id>` reloaded, or opened in another tab | Read again from the server. Another account's order, or an unknown id: "This order wasn't found". Signed out: Sign in, then back |
+| The order in this browser is full (30 lines) | A new line isn't added; a warning toast says so. More of a line already there still counts (up to 20) |
+
+Tests: e2e `shop-checkout.test.ts` (on the seeded database: the gates, a note, a price changed underneath, dine-in, a table archived underneath, the phone bar and sheet); unit `app/features/menu/tests/checkout.test.ts`, `app/features/orders/tests/order.test.ts`.
 
 ## Keyboard shortcuts
 

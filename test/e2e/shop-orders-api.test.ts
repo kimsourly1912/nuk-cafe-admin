@@ -53,7 +53,7 @@ describe('placing an order over HTTP', () => {
   it('refuses: signed out 401, email not verified 403, no key 400, a changed total 409', async () => {
     const body = await anOrder()
     expect((await post(body, { 'idempotency-key': crypto.randomUUID() })).status).toBe(401)
-    const unverified = await signIn(seed.customers.unverified)
+    const unverified = await signIn(seed.customers.apiUnverified)
     const refused = await post(body, { 'cookie': unverified, 'idempotency-key': crypto.randomUUID() })
     expect([refused.status, (await refused.json()).data.code]).toEqual([403, 'EMAIL_NOT_VERIFIED'])
     const cookie = await signIn(seed.customers.reset)

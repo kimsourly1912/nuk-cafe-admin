@@ -1,8 +1,9 @@
 import { createSharedComposable, useLocalStorage, useSessionStorage } from '@vueuse/core'
 import type { PublicBranch, PublicTable } from '#shared/contracts/branches'
+import { ORDER_MAX_LINES } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
 import type { CartLine } from '../utils/cart'
-import { addLine, parseLines, setLineQuantity } from '../utils/cart'
+import { addLine, canAddLine, parseLines, setLineNote, setLineQuantity } from '../utils/cart'
 
 /**
  * The customer site's state (D93): which branch's menu, the table a QR code named, the menu, and the
@@ -20,6 +21,8 @@ export interface TableContext {
   branchId: string
   tableId: string
   label: string
+  /** The QR token: placing a dine-in order names the table by it (D99). */
+  token: string
 }
 
 // Browser storage can be unavailable (private windows, blocked site data): VueUse falls back to the
@@ -30,8 +33,8 @@ const useStoredTable = createSharedComposable(() => useSessionStorage<TableConte
     read: (raw) => {
       try {
         const value = JSON.parse(raw) as Partial<TableContext> | null
-        return value && typeof value.branchId === 'string' && typeof value.tableId === 'string' && typeof value.label === 'string'
-          ? { branchId: value.branchId, tableId: value.tableId, label: value.label }
+        return value && typeof value.branchId === 'string' && typeof value.tableId === 'string' && typeof value.label === 'string' && typeof value.token === 'string'
+          ? { branchId: value.branchId, tableId: value.tableId, label: value.label, token: value.token }
           : null
       }
       catch {
@@ -46,8 +49,8 @@ export function useTableContext() {
   const table = useStoredTable()
   return {
     table: readonly(table),
-    setTable: (scanned: PublicTable) => {
-      table.value = { branchId: scanned.branch.id, tableId: scanned.table.id, label: scanned.table.label }
+    setTable: (scanned: PublicTable, token: string) => {
+      table.value = { branchId: scanned.branch.id, tableId: scanned.table.id, label: scanned.table.label, token }
     },
     clearTable: () => {
       table.value = null
@@ -118,9 +121,19 @@ export function useCart(branchId: Ref<string | undefined>) {
     if (!branchId.value) return
     carts.value = { ...carts.value, [branchId.value]: next }
   }
+  const toast = useToast()
   return {
     lines,
-    add: (line: Omit<CartLine, 'key'>) => update(addLine(lines.value, line)),
+    add: (line: Omit<CartLine, 'key'>) => {
+      if (!canAddLine(lines.value, line)) {
+        toast.add({ title: 'Your order is full', description: `An order can have up to ${ORDER_MAX_LINES} different items. Place this one first.`, color: 'warning', icon: 'i-lucide-triangle-alert' })
+        return
+      }
+      update(addLine(lines.value, line))
+    },
     setQuantity: (key: string, quantity: number) => update(setLineQuantity(lines.value, key, quantity)),
+    setNote: (key: string, note: string) => update(setLineNote(lines.value, key, note)),
+    /** After the order is placed. */
+    clear: () => update([]),
   }
 }

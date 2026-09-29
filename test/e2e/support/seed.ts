@@ -30,8 +30,16 @@ export interface ShopSeed {
   closedTableToken: string
   /** The database file, for reading the account emails the server queued (the outbox). */
   dbFile: string
-  /** Customers: verified, not verified yet, and one whose password a test resets. */
-  customers: Record<'verified' | 'unverified' | 'reset', SeedCustomer>
+  /**
+   * Customers: verified, not verified yet, one whose password a test resets, and for checkout
+   * (D100) three verified shoppers and one unverified (each test places its own orders: one
+   * customer may have 2 unpaid at a time). Tests that change a customer (verify, reset) own it:
+   * files run in any order, so no other file may rely on its state (`apiUnverified` is
+   * shop-orders-api's, since shop-account verifies `unverified`).
+   */
+  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified', SeedCustomer>
+  /** A second table at Riverside (T02), for tests that archive it. */
+  spareTableToken: string
 }
 
 export interface SeedCustomer {
@@ -44,6 +52,11 @@ const CUSTOMERS: ShopSeed['customers'] = {
   verified: { name: 'Dara Sok', email: 'dara@example.com', password: 'long-enough-password-1' },
   unverified: { name: 'Sokha Chan', email: 'sokha@example.com', password: 'long-enough-password-2' },
   reset: { name: 'Vanna Kim', email: 'vanna@example.com', password: 'long-enough-password-3' },
+  shopperA: { name: 'Bopha Lim', email: 'bopha@example.com', password: 'long-enough-password-4' },
+  shopperB: { name: 'Chenda Ou', email: 'chenda@example.com', password: 'long-enough-password-5' },
+  shopperC: { name: 'Rith Men', email: 'rith@example.com', password: 'long-enough-password-6' },
+  shopperUnverified: { name: 'Nary Heng', email: 'nary@example.com', password: 'long-enough-password-7' },
+  apiUnverified: { name: 'Mealea Chea', email: 'mealea@example.com', password: 'long-enough-password-8' },
 }
 
 async function addBranch(db: Db, name: string) {
@@ -82,15 +95,16 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
   const qr = { secret: qrSecret, baseUrl: 'http://e2e.local' }
   const openTable = await createTable(db, actor, openBranchId, { label: 'T01', area: 'Main floor' }, qr)
   const closedTable = await createTable(db, actor, closedBranchId, { label: 'K01', area: null }, qr)
+  const spareTable = await createTable(db, actor, openBranchId, { label: 'T02', area: 'Main floor' }, qr)
   // Created as a visitor would (hashed password, customer profile, a queued verification email), but
   // without the breached-password lookup (an external API). Their queued emails carry test links.
   const auth = createTestAuth(db)
   for (const customer of Object.values(CUSTOMERS)) await auth.api.signUpEmail({ body: customer })
-  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset]) {
+  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC]) {
     await db.update(user).set({ emailVerified: true }).where(eq(user.email, customer.email))
   }
   await client.execute('delete from outbox_messages')
 
   client.close()
-  return { dbFile, customers: CUSTOMERS, openBranchId, closedBranchId, openTableToken: tokenOf(openTable.qrUrl), closedTableToken: tokenOf(closedTable.qrUrl) }
+  return { dbFile, customers: CUSTOMERS, spareTableToken: tokenOf(spareTable.qrUrl), openBranchId, closedBranchId, openTableToken: tokenOf(openTable.qrUrl), closedTableToken: tokenOf(closedTable.qrUrl) }
 }

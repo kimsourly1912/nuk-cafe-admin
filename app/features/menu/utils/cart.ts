@@ -1,4 +1,4 @@
-import { LINE_MAX_QUANTITY } from '#shared/contracts/orders'
+import { LINE_MAX_QUANTITY, LINE_NOTE_MAX, ORDER_MAX_LINES } from '#shared/contracts/orders'
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
 
 /**
@@ -21,17 +21,24 @@ export interface CartLine {
   quantity: number
   /** The name when it was added, shown if the item has left the menu since. */
   name: string
+  /** "Less ice": for the counter, at most `LINE_NOTE_MAX` characters (checkout, D100). */
+  note?: string | null
 }
 
 export const lineKey = (variationId: string, modifierIds: string[]) => `${variationId}:${[...modifierIds].sort().join(',')}`
 
 const clamp = (quantity: number) => Math.min(MAX_LINE_QUANTITY, Math.max(0, Math.floor(quantity)))
 
-/** Adds a line, or more of the same choice to its line. */
+/** Whether another line can be added (an order holds at most `ORDER_MAX_LINES`, D98). */
+export const canAddLine = (lines: CartLine[], line: Pick<CartLine, 'variationId' | 'modifierIds'>) =>
+  lines.length < ORDER_MAX_LINES || lines.some(l => l.key === lineKey(line.variationId, line.modifierIds))
+
+/** Adds a line, or more of the same choice to its line; a new line past the limit is ignored. */
 export function addLine(lines: CartLine[], line: Omit<CartLine, 'key'>): CartLine[] {
   const key = lineKey(line.variationId, line.modifierIds)
   const existing = lines.find(l => l.key === key)
   if (existing) return setLineQuantity(lines, key, existing.quantity + line.quantity)
+  if (!canAddLine(lines, line)) return lines
   const quantity = clamp(line.quantity)
   return quantity ? [...lines, { ...line, key, quantity }] : lines
 }
@@ -40,6 +47,12 @@ export function addLine(lines: CartLine[], line: Omit<CartLine, 'key'>): CartLin
 export function setLineQuantity(lines: CartLine[], key: string, quantity: number): CartLine[] {
   const next = clamp(quantity)
   return next ? lines.map(l => (l.key === key ? { ...l, quantity: next } : l)) : lines.filter(l => l.key !== key)
+}
+
+/** A line's note (trimmed, at most `LINE_NOTE_MAX` characters; blank removes it). */
+export function setLineNote(lines: CartLine[], key: string, note: string): CartLine[] {
+  const value = note.slice(0, LINE_NOTE_MAX)
+  return lines.map(l => (l.key === key ? { ...l, note: value.trim() ? value : null } : l))
 }
 
 /** How many of an item are in the order, over all its lines. */
@@ -97,11 +110,12 @@ export function parseLines(value: unknown): CartLine[] {
   if (!Array.isArray(value)) return []
   return value.flatMap((raw): CartLine[] => {
     if (!raw || typeof raw !== 'object') return []
-    const { itemId, variationId, modifierIds, quantity, name } = raw as Record<string, unknown>
+    const { itemId, variationId, modifierIds, quantity, name, note } = raw as Record<string, unknown>
     if (typeof itemId !== 'string' || typeof variationId !== 'string' || typeof name !== 'string') return []
     if (!Array.isArray(modifierIds) || !modifierIds.every(id => typeof id === 'string')) return []
     const count = typeof quantity === 'number' ? clamp(quantity) : 0
     if (!count) return []
-    return [{ key: lineKey(variationId, modifierIds), itemId, variationId, modifierIds, quantity: count, name }]
+    const kept = typeof note === 'string' && note.trim() ? note.slice(0, LINE_NOTE_MAX) : null
+    return [{ key: lineKey(variationId, modifierIds), itemId, variationId, modifierIds, quantity: count, name, note: kept }]
   })
 }
