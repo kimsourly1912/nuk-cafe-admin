@@ -1,5 +1,8 @@
 import * as v from 'valibot'
-import { idSchema, nameSchema, versionSchema } from './common'
+import type { WeeklyWindow } from './common'
+import { idSchema, MAX_WEEKLY_WINDOWS, nameSchema, versionSchema, weeklyWindowSchema } from './common'
+
+export { MINUTES_PER_DAY } from './common'
 
 /**
  * Availability rules (`/api/admin/menu/availability-rules`, D45, D63): named sets of weekly time
@@ -14,21 +17,12 @@ export type AvailabilityStatus = typeof AVAILABILITY_STATUSES[number]
 
 export const AVAILABILITY_RULE_NAME_MAX = 40
 /** Windows per rule: three a day, every day. */
-export const MAX_AVAILABILITY_WINDOWS = 21
+export const MAX_AVAILABILITY_WINDOWS = MAX_WEEKLY_WINDOWS
 /** Rules on one item or category. */
 export const MAX_TARGET_RULES = 5
-export const MINUTES_PER_DAY = 1440
 
-/**
- * One weekly window. `weekday` is ISO 8601: 1 = Monday … 7 = Sunday. `endMinute` before
- * `startMinute` runs past midnight into the next day (22:00–02:00); the window belongs to the day
- * it starts on. `endMinute: 1440` is midnight at the end of the day.
- */
-export interface AvailabilityWindow {
-  weekday: number
-  startMinute: number
-  endMinute: number
-}
+/** One weekly window of a rule (the same shape as branch hours: `WeeklyWindow`). */
+export type AvailabilityWindow = WeeklyWindow
 
 export interface AvailabilityRule {
   id: string
@@ -52,20 +46,9 @@ export interface AvailabilityRuleRef {
   status: AvailabilityStatus
 }
 
-const minute = (min: number, max: number) => v.pipe(v.number(), v.integer('Must be whole minutes'), v.minValue(min), v.maxValue(max))
-
-const windowSchema = v.pipe(
-  v.strictObject({
-    weekday: v.pipe(v.number(), v.integer(), v.minValue(1, 'Must be 1 (Monday) to 7 (Sunday)'), v.maxValue(7, 'Must be 1 (Monday) to 7 (Sunday)')),
-    startMinute: minute(0, MINUTES_PER_DAY - 1),
-    endMinute: minute(1, MINUTES_PER_DAY),
-  }),
-  v.forward(v.check(w => w.startMinute !== w.endMinute, 'Must end at a different time than it starts'), ['endMinute']),
-)
-
 /** Overlaps between windows are checked by the server, which names the window. */
 const windowsSchema = v.pipe(
-  v.array(windowSchema),
+  v.array(weeklyWindowSchema),
   v.minLength(1, 'Add at least one time window'),
   v.maxLength(MAX_AVAILABILITY_WINDOWS, `At most ${MAX_AVAILABILITY_WINDOWS} time windows`),
 )

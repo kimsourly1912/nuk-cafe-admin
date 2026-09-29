@@ -1,6 +1,6 @@
 # Progress
 
-_Last updated: 2026-09-28 (the Menu item editor route, D90, awaiting review: step 5 of the UI standard complete; the Menu items list on the UI standard, D89, merged; the Add-ons library on the UI standard, D88, merged; Availability on the UI standard, D87, merged; Options on the UI standard, D86, merged; Categories on the UI standard, D85, merged; task-flow pages on the UI standard, D84, merged; faster check workflow, D83, merged; Add-on group page on the UI standard, D82, merged; default control sizes on phones, D81, and status-color contrast, D80, merged; Staff on the UI standard, D79, merged; UI foundations, D78, merged; responsive UI standard, D77; Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
+_Last updated: 2026-09-29 (step 5.1a, branch settings and dining tables on the server, D91, awaiting review; the unsaved-changes e2e flake found and fixed; the Menu item editor route, D90, merged: step 5 of the UI standard complete; the Menu items list on the UI standard, D89, merged; the Add-ons library on the UI standard, D88, merged; Availability on the UI standard, D87, merged; Options on the UI standard, D86, merged; Categories on the UI standard, D85, merged; task-flow pages on the UI standard, D84, merged; faster check workflow, D83, merged; Add-on group page on the UI standard, D82, merged; default control sizes on phones, D81, and status-color contrast, D80, merged; Staff on the UI standard, D79, merged; UI foundations, D78, merged; responsive UI standard, D77; Availability weekly agenda, D76; Add-ons library and group page, D75; Categories and Options back on Nuxt UI defaults, D74; Options redesign, D73; Categories redesign, D72; step 3.8b done, D69–D71)._ Update this file whenever you finish or start work (see AGENTS.md → "Resuming work").
 
 ## Verification levels
 
@@ -19,7 +19,7 @@ Every "done" item states how it was checked. Keep using these labels:
 
 | Part | What exists | Verified |
 |---|---|---|
-| Server | Features `identity`, `branches`, `media`, `menu` (categories, option sets, add-on groups, items with the price grid, availability rules, sold-out, the public menu), `platform` (audit, idempotency, outbox); migrations `0000`–`0011` | server (every test builds the DB from the migrations, foreign keys on and D1's parameter limit enforced); staging (step 2) |
+| Server | Features `identity`, `branches` (settings, weekly hours, dining tables with rebuildable QR tokens, D91), `media`, `menu` (categories, option sets, add-on groups, items with the price grid, availability rules, sold-out, the public menu), `platform` (audit, idempotency, outbox); migrations `0000`–`0012` | server (every test builds the DB from the migrations, foreign keys on and D1's parameter limit enforced); staging (step 2) |
 | Admin UI | Staff, Menu items, Categories, Options, Add-ons, Availability; auth with forced password change | unit, browser-mock (e2e), real-server (headless Chromium on `pnpm dev`, per feature below) |
 
 **Found by the browser tests and fixed:** `useAuth` kept the staff session in `useState('auth:user')`, the key `@nuxtjs/better-auth` uses for its own session. Its refetch on tab focus overwrote the staff session (and would have put a Better Auth user where a staff session belongs). Keys are now `staff-session:*`; regression test in `auth.test.ts` (checked to fail with the old key).
@@ -137,7 +137,7 @@ The server follows the **server standard** ([docs/server/](server/README.md), D4
 
 | # | Step | Done when |
 |---|---|---|
-| 5.1 | **Branch settings + dining tables:** timezone, address, hours; tables with hashed QR tokens and rotation; admin pages | Tests: unknown or archived tokens rejected |
+| 5.1 | **Branch settings + dining tables** ([plan](plans/branch-settings.md), D91): **5.1a server** done, awaiting review (settings and hours with one version, tables, QR tokens rebuilt from `NUXT_QR_SECRET` and stored hashed, rotation, `GET /api/public/tables/{token}`; server tests 22, real-server smoke on `pnpm dev`); **5.1b** the admin pages from the owner's mockups | Tests: unknown or archived tokens rejected |
 | 5.2 | **Customer site shell:** SSR public pages, SPA admin/counter (D45), layout, sign-up / sign-in / verify / reset pages | e2e of the account journeys |
 | 5.3 | **Menu browsing:** categories as tabs, sub-categories as sections, item page with options and add-ons, QR table context | e2e |
 
@@ -198,7 +198,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Before a PR: `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` and the changed feature's e2e files; CI runs everything (AGENTS.md → Checks, D83). All pass as of 2026-09-28 (unit + server 511, e2e 223).
+- Before a PR: `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` and the changed feature's e2e files; CI runs everything (AGENTS.md → Checks, D83). All pass as of 2026-09-29 (unit + server 535, e2e 243).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.

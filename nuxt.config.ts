@@ -129,6 +129,10 @@ export default defineNuxtConfig({
     // ("NUK Cafe <no-reply@…>", a domain verified in Resend; Q4). Without a key the dev server
     // prints mail to the console; a production build refuses to (the links are secrets).
     mail: { resendApiKey: '', from: '' },
+    // Table QR codes (D91, docs/server/operations.md → Configuration): NUXT_QR_SECRET, a long random
+    // secret per environment. Changing it invalidates every printed QR. Deployed builds refuse to
+    // serve table QRs without it; the dev server uses a local one.
+    qrSecret: '',
     public: {
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',
