@@ -1,10 +1,11 @@
+import type { CustomerAccount } from '#shared/contracts/account'
 import { ensureProfile } from '~~/server/features/customers'
 
 /**
  * The signed-in customer's own profile: member code (shown as a QR at the counter) and whether
  * the email is verified. Reading works before verification; ordering doesn't (D51).
  */
-export default defineEventHandler(async (event) => {
+export default defineEventHandler(async (event): Promise<CustomerAccount> => {
   const actor = await requireSignedIn(event)
   const session = await getUserSession(event)
   const profile = await ensureProfile(useDb(), actor.userId)

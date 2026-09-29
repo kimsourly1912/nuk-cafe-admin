@@ -19,6 +19,7 @@
  * stored table or branch choice (read after mounting) asks for another.
  */
 import { useElementSize } from '@vueuse/core'
+import { AccountButton, VerifyEmailBanner } from '~/features/account'
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
 import { usePublicMenu, useCart, useShopBranch, useTableContext } from '../composables/useShopMenu'
 import { useScrollSpy } from '../composables/useScrollSpy'
@@ -217,6 +218,8 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
                 </div>
               </template>
             </UPopover>
+            <UColorModeButton />
+            <AccountButton />
           </div>
         </template>
       </div>
@@ -235,6 +238,7 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
 
     <main class="mx-auto max-w-7xl px-4 pt-4 pb-10 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8">
       <div class="min-w-0 space-y-8">
+        <VerifyEmailBanner />
         <UAlert
           v-if="branch && closed"
           color="warning"

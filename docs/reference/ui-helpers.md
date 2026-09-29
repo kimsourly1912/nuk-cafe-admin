@@ -4,6 +4,7 @@
 
 - [`useConfirm`](#useconfirm)
 - [`useTableSelection`](#usetableselection)
+- [`<TaskFrame>`](#taskframe)
 - [`<BottomActionBar>`](#bottomactionbar)
 - [`<BulkActionsBar>`](#bulkactionsbar)
 - [`useLayoutContext`](#uselayoutcontext)
@@ -130,6 +131,24 @@ Without a table (cards, trees), bind the helpers:
 - The object is reactive: use `selection.count`, and don't destructure it.
 
 ---
+
+## `<TaskFrame>`
+
+The frame of a task-flow page ([page-patterns §5](./page-patterns.md#5-task-flow), D84, D97): a centered `UCard` from `sm` with the actions in its footer; on phones the full screen, the title at the top, the actions at the bottom above the safe area. CSS only (no `useLayoutContext`), so a server-rendered page and the browser agree. The layout gives it the height: a flex parent at least the screen tall (layouts `auth` and `account`).
+
+Source: `app/components/TaskFrame.vue`. Slots: `header`, default, `footer` (each optional).
+
+```vue
+<TaskFrame>
+  <template #header><h1 class="text-xl font-semibold">Sign in</h1></template>
+  <UForm id="sign-in-form" :schema="schema" :state="state" @submit="onSubmit">…</UForm>
+  <template #footer>
+    <UButton type="submit" form="sign-in-form" label="Sign in" block />
+  </template>
+</TaskFrame>
+```
+
+The submit button is outside the form, joined with `form="<id>"`: Enter still submits.
 
 ## `<BottomActionBar>`
 

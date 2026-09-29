@@ -130,6 +130,10 @@ export default defineNuxtConfig({
     },
   },
   css: ['@/assets/css/tailwind.css'],
+  // Light unless the person picks dark with the color-mode button (D96): the system setting is
+  // ignored. The choice is kept in this browser (localStorage `nuxt-color-mode`) and applied before
+  // the first paint by the color-mode script, on server-rendered and browser-only pages alike.
+  colorMode: { preference: 'light', fallback: 'light' },
   runtimeConfig: {
     // The seed task's first admin (server/tasks/db/seed.ts): NUXT_SEED_ADMIN_EMAIL, NUXT_SEED_ADMIN_NAME.
     seed: { adminEmail: '', adminName: 'Admin' },

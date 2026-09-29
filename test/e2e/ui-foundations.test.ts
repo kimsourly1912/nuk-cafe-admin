@@ -20,7 +20,8 @@ const handlers: Record<string, MockHandler> = {
 
 async function open(width: number, height = 812, colorScheme: 'light' | 'dark' = 'light') {
   const page = await createPage()
-  await page.emulateMedia({ colorScheme })
+  // The app ignores the system setting (D96): dark is the person's choice, kept in this browser.
+  if (colorScheme === 'dark') await page.addInitScript(() => localStorage.setItem('nuxt-color-mode', 'dark'))
   await page.setViewportSize({ width, height })
   await mockApi(page, handlers)
   await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
