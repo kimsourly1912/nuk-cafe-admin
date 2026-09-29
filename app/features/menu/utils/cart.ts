@@ -1,3 +1,4 @@
+import { LINE_MAX_QUANTITY } from '#shared/contracts/orders'
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
 
 /**
@@ -7,7 +8,8 @@ import type { PublicMenuItem } from '#shared/contracts/public-menu'
  * on the server; nothing here is authoritative.
  */
 
-export const MAX_LINE_QUANTITY = 99
+/** The most of one line an order may hold (checkout refuses more, D98). */
+export const MAX_LINE_QUANTITY = LINE_MAX_QUANTITY
 
 export interface CartLine {
   /** The version and add-ons: the same choice twice is one line with a larger quantity. */
