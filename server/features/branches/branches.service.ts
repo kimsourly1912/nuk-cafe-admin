@@ -64,6 +64,11 @@ export async function getPublicBranch(db: Db, id: string, now = new Date()): Pro
   return toPublicBranch(branch, await repo.hoursOf(db, id), now)
 }
 
+/** The labels of a branch's active tables (no QR links: for counts and sample data, D94). */
+export async function activeTableLabels(db: Db, branchId: string): Promise<string[]> {
+  return (await repo.listTables(db, branchId, 'active')).map(table => table.label)
+}
+
 /** Every active branch for customers, by name (launch has one, D45). */
 export async function listPublicBranches(db: Db, now = new Date()): Promise<PublicBranch[]> {
   const options = await repo.listActiveBranches(db)

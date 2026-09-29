@@ -61,6 +61,7 @@ Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudf
 | `NUXT_PUBLIC_SITE_URL` | The app's origin (trusted origins, links in emails) | `http://localhost:3000` | the environment's URL |
 | `NUXT_MAIL_RESEND_API_KEY` | Sending email | unset (console mail) | secret |
 | `NUXT_MAIL_FROM` | Sender address | | e.g. `NUK Cafe <no-reply@…>` |
+| `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` / `_ENVIRONMENT` | The Sample data page and its routes (D94), and the environment's name on it | on (`Local`, the dev server only) | `true` / `Staging` (`wrangler.vars` in `nuxt.config.ts`); **never set in production** (the routes answer 404) |
 | `NUXT_QR_SECRET` | Signs table QR tokens (D91). **Changing it invalidates every printed QR** | unset (the dev server uses a local secret) | secret, set once per environment (`wrangler secret put NUXT_QR_SECRET`); without it the table routes answer 500 `QR_NOT_CONFIGURED` |
 | `NUXT_SEED_ADMIN_EMAIL` / `_NAME` | The seed task's first admin | `.env` | not used (see Staging → First admin) |
 
@@ -77,7 +78,7 @@ Rules:
 - **Expand, then contract.** The new Worker starts after the migration, and the old one may still serve requests for a moment, so a migration must work with both: add columns/tables first, move the code, remove old columns in a later release.
 - No destructive change (dropping a column or table, narrowing a type) without an export of the affected data first.
 - Migrations are never edited after they reached staging; fix forward with a new one.
-- Seed data comes from a **Nitro task**, never from migrations. `db:seed` (`server/tasks/db/seed.ts`) creates the first admin (from `NUXT_SEED_ADMIN_EMAIL` / `NUXT_SEED_ADMIN_NAME`, with a temporary password printed once) and a "Main branch" (in `NUXT_PUBLIC_CAFE_TIME_ZONE`); each part is skipped once it exists, so it's safe to repeat. Locally, with the dev server running: `curl http://localhost:3000/_nitro/tasks/db:seed` (the Nuxt CLI has no `task` command; that endpoint exists only in dev). Deployed environments don't run it: see Staging → First admin. A demo menu comes with the menu steps.
+- Seed data comes from a **Nitro task**, never from migrations. `db:seed` (`server/tasks/db/seed.ts`) creates the first admin (from `NUXT_SEED_ADMIN_EMAIL` / `NUXT_SEED_ADMIN_NAME`, with a temporary password printed once) and a "Main branch" (in `NUXT_PUBLIC_CAFE_TIME_ZONE`); each part is skipped once it exists, so it's safe to repeat. Locally, with the dev server running: `curl http://localhost:3000/_nitro/tasks/db:seed` (the Nuxt CLI has no `task` command; that endpoint exists only in dev). Deployed environments don't run it: see Staging → First admin. Test data beyond that comes from the admin's **Sample data** page (D94), not from a task: a sample menu in three sizes, branch hours and tables, and a reset, where `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` is on.
 
 ## Deploys
 

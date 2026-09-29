@@ -417,6 +417,21 @@ Feature: `platform`.
 | `idempotency_keys` | `actor_id`, `operation`, `key`, `request_hash` (SHA-256 of canonical JSON), `response` (JSON), `created_at`, `expires_at`; unique (`actor_id`, `operation`, `key`) | Removed after 24 h; a key counts until removed |
 | `outbox_messages` | `kind`, `payload` (JSON), `status` (`pending` \| `sent` \| `failed`), `attempts`, `next_attempt_at`, `locked_until` (delivery claim), `last_error` (one line), `created_at`, `sent_at` | Must-not-lose side effects, delivered at least once by `platform:deliver-outbox` |
 
+## Sample data (D94)
+
+Feature: `sample-data`, only where `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` is on (local and staging). It owns no menu data: it creates records through the menu's and branches' services, finds them again by name, and deletes the menu through the menu feature's `deleteAllMenuStatements` (every menu table, children first) and uploads through media's `deleteUploads`.
+
+| Table | Columns | Notes |
+|---|---|---|
+| `sample_data_runs` | `id` (`'menu'`: at most one row), `size` (`small` \| `standard` \| `large`), `started_by`, `started_at`, `finished_at`, `locked_until` (step lock) | From the first step of a sample menu load until a reset; lets an unfinished load continue on a menu that isn't empty |
+
+| Route (admin, 404 when off) | Does |
+|---|---|
+| `GET /api/admin/sample-data` | The state: menu counts and uploads, the load and its steps, each active branch's hours and tables |
+| `POST /api/admin/sample-data/menu` `{ size }` | One step (at most 2 records): starts on an empty menu or continues an unfinished load of that size. 409 `SAMPLE_MENU_NOT_EMPTY`, `SAMPLE_MENU_LOADED`, `SAMPLE_MENU_OTHER_SIZE`, `SAMPLE_DATA_BUSY` |
+| `POST /api/admin/sample-data/branch` `{ branchId, tablesOnly? }` | Sample hours (unless `tablesOnly`), then up to 4 missing sample tables; `remainingTables` |
+| `POST /api/admin/sample-data/reset` `{ confirm: 'RESET' }` | Every menu record and the load in one audited batch, then up to 20 uploads; call again while `photos` isn't 0 |
+
 ## Open questions
 
 Tracked in one place, with the step each blocks and a suggested default: [progress.md → Open questions](../progress.md#open-questions--waiting-on-others). Still open for these tables: Q36 (cancelling a paid order) and Q24 (retention and erasure periods).

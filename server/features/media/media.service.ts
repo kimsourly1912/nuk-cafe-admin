@@ -121,3 +121,29 @@ export async function purgeExpiredUploads(db: Db, store: ObjectStore, options: {
   }
   return report
 }
+
+/** How many uploads exist (the sample-data reset's confirmation, D94). */
+export async function countUploads(db: Db): Promise<number> {
+  return repo.countAssets(db)
+}
+
+/**
+ * Deletes up to `limit` uploads, row and object, oldest first: test data resets only (the sample-data
+ * feature, D94), after the records that used them are gone. Call again until none are left (a
+ * Worker request may only make so many queries). Row first, like the purge: a missing object is
+ * harmless, an object without a row would never be cleaned up.
+ */
+export async function deleteUploads(db: Db, store: ObjectStore, limit: number): Promise<PurgeReport> {
+  const report: PurgeReport = { deleted: 0, kept: 0, objectErrors: [] }
+  for (const asset of await repo.firstAssets(db, limit)) {
+    await repo.deleteAsset(db, asset.id)
+    report.deleted++
+    try {
+      await store.del(asset.objectKey)
+    }
+    catch (error) {
+      report.objectErrors.push({ objectKey: asset.objectKey, error: String(error) })
+    }
+  }
+  return report
+}

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lt } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, lt } from 'drizzle-orm'
 import type { Db, Statement } from '../../utils/batch'
 import { readInChunks } from '../../utils/batch'
 import { mediaAssets } from './media.schema'
@@ -72,4 +72,19 @@ export async function deleteIfStillExpired(db: Db, id: string, before: Date): Pr
     .where(and(eq(mediaAssets.id, id), eq(mediaAssets.state, 'temporary'), lt(mediaAssets.stateChangedAt, before)))
     .returning({ id: mediaAssets.id })
   return rows.length === 1
+}
+
+/** Every upload, attached or not (test data resets only, D94). */
+export async function countAssets(db: Db): Promise<number> {
+  const rows = await db.select({ n: count() }).from(mediaAssets)
+  return rows[0]?.n ?? 0
+}
+
+/** The next uploads to delete, oldest first. */
+export async function firstAssets(db: Db, limit: number): Promise<{ id: string, objectKey: string }[]> {
+  return db.select({ id: mediaAssets.id, objectKey: mediaAssets.objectKey }).from(mediaAssets).orderBy(asc(mediaAssets.createdAt)).limit(limit)
+}
+
+export async function deleteAsset(db: Db, id: string): Promise<void> {
+  await db.delete(mediaAssets).where(eq(mediaAssets.id, id))
 }
