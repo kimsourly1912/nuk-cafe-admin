@@ -192,6 +192,10 @@ export default defineNuxtConfig({
     db: {
       dialect: 'sqlite',
       casing: 'snake_case',
+      // Local SQLite (dev and e2e, D103): wait up to 5 s for another writer to finish instead of
+      // failing at once with SQLITE_BUSY (a second process writing to the file, e.g. a test). D1,
+      // on staging and in production, has no file lock and ignores it.
+      connection: { timeout: 5000 },
     },
   },
   hooks: {

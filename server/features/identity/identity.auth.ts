@@ -72,7 +72,13 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
       },
     },
     // UUID v7 like every other table, so Better Auth's ids (users, branches) pass readIdParam.
-    advanced: { database: { generateId: () => newId() } },
+    advanced: {
+      database: { generateId: () => newId() },
+      // Rate limits count per client address (D103). Cloudflare sets `cf-connecting-ip` itself (a
+      // client can't forge it); Better Auth's default, `x-forwarded-for`, a client can. Without an
+      // address every request shares one bucket: all visitors together get 5 sign-ins a minute.
+      ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
+    },
     trustedOrigins: siteUrl ? [new URL(siteUrl).origin] : [],
     session: {
       // 7 days for everyone, extended once a day while used (D45).

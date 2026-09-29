@@ -5,6 +5,7 @@ import { describe, expect, inject, it } from 'vitest'
 import type { CheckoutQuote, CounterOrder, Order } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
 import type { SeedCustomer } from './support/seed'
+import { asNewVisitor, clientHeaders } from './support/client-address'
 import { setupE2e, toast } from './support/mock-api'
 
 await setupE2e()
@@ -19,7 +20,7 @@ const origin = new URL(url('/')).origin
 const number = (order: { pickupNumber: number }) => String(order.pickupNumber).padStart(3, '0')
 
 async function signInOverHttp(account: { email: string, password: string }) {
-  const response = await fetch(url('/api/auth/sign-in/email'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(account) })
+  const response = await fetch(url('/api/auth/sign-in/email'), { method: 'POST', headers: { 'content-type': 'application/json', origin, ...clientHeaders() }, body: JSON.stringify(account) })
   expect(response.status).toBe(200)
   return response.headers.getSetCookie().map(c => c.split(';')[0]).join('; ')
 }
@@ -43,6 +44,7 @@ async function placeOrder(customer: SeedCustomer): Promise<Order> {
 /** Signs the cashier in at /counter; with one branch, the queue opens. */
 async function cashierAtCounter(width = 1180) {
   const page = await createPage()
+  await asNewVisitor(page)
   const problems: string[] = []
   page.on('pageerror', error => problems.push(error.message))
   await page.setViewportSize({ width, height: width < 640 ? 844 : 820 })
@@ -165,6 +167,7 @@ describe('the counter', () => {
 
   it('refuses an account that works at no branch, on the sign-in page', async () => {
     const page = await createPage()
+    await asNewVisitor(page)
     await page.goto(url('/counter/sign-in'), { waitUntil: 'hydration' })
     await page.getByLabel('Email').fill(seed.customers.verified.email)
     await page.getByLabel('Password', { exact: true }).fill(seed.customers.verified.password)
