@@ -165,6 +165,9 @@ export default defineNuxtConfig({
     // browser work only, like a table's QR link (D100).
     '/checkout': { ssr: false },
     '/orders/**': { ssr: false },
+    // The counter workspace, like the admin: the staff session, no search engines (D102).
+    '/counter': { ssr: false },
+    '/counter/**': { ssr: false },
     // Session gate per surface (@nuxtjs/better-auth), a second line behind each route's own
     // requirePermission / requireBranchPermission / requireCustomer (docs/server/security.md).
     '/api/admin/**': { auth: { only: 'user', user: { role: 'admin' } } },
@@ -189,6 +192,10 @@ export default defineNuxtConfig({
     db: {
       dialect: 'sqlite',
       casing: 'snake_case',
+      // Local SQLite (dev and e2e, D103): wait up to 5 s for another writer to finish instead of
+      // failing at once with SQLITE_BUSY (a second process writing to the file, e.g. a test). D1,
+      // on staging and in production, has no file lock and ignores it.
+      connection: { timeout: 5000 },
     },
   },
   hooks: {

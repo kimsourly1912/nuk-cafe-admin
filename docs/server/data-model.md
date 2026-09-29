@@ -413,6 +413,7 @@ placed (unpaid) ──payment recorded──► preparing ──► ready ──
 
 | Route | Permission | Does |
 |---|---|---|
+| `GET /api/counter/me` | signed in (a temporary password too) | The counter app's session (D102): the branches this account works at with its role (every active branch for an admin); 403 `NOT_STAFF` for an account at no branch |
 | `GET …/orders` | `order: ['read']` | `{ orders, khrRate, serverTime }`: to pay (not past their time), preparing and ready, oldest first, with lines, the customer's name and the payment |
 | `GET …/orders/{orderId}` | `order: ['read']` | One of the branch's orders, any status; another branch's is 404 |
 | `POST …/orders/{orderId}/pay` `{ version, method, khrPerUsd? \| reference? }` | `payment: ['collect']` | Awaiting payment → preparing. Riel: the rate must be the one in force (409 `EXCHANGE_RATE_CHANGED`, `NO_EXCHANGE_RATE`); past the 30 minutes: 409 `PAYMENT_EXPIRED` |

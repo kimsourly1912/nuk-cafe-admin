@@ -1,6 +1,6 @@
-import type { AdminSession } from '#shared/contracts/identity'
+import type { AdminSession, CounterSession } from '#shared/contracts/identity'
 import type { Db } from '../../utils/batch'
-import { branchNotFound, emailNotVerified, forbidden, notAdmin, passwordChangeRequired, unauthenticated } from './identity.errors'
+import { branchNotFound, emailNotVerified, forbidden, notAdmin, notStaff, passwordChangeRequired, unauthenticated } from './identity.errors'
 import { branchRoles, platformRoles, platformStatements } from './identity.permissions'
 import type { BranchPermission, BranchRole, PlatformPermission, PlatformRole } from './identity.permissions'
 import * as repo from './identity.repository'
@@ -88,5 +88,29 @@ export function adminSession(user: SessionUser | null | undefined): AdminSession
     role: 'admin',
     permissions: grantedPermissions(roles),
     mustChangePassword: Boolean(user.mustChangePassword),
+  }
+}
+
+/**
+ * The counter app's session check (`GET /api/counter/me`, D102): the branches this account works
+ * at, with its role there; a platform admin works at every active branch. Answers on a temporary
+ * password too (the app asks for a new one; every other counter route refuses). Not signed in or
+ * banned: 401. No branch and not an admin: 403 `NOT_STAFF`.
+ */
+export async function counterSession(db: Db, user: SessionUser | null | undefined): Promise<CounterSession> {
+  if (!user || user.banned) throw unauthenticated()
+  const admin = platformRolesOf(user).includes('admin')
+  const members = await repo.memberBranches(db, user.id)
+  const roleOf = new Map(members.filter(m => m.role in branchRoles).map(m => [m.id, m.role as BranchRole]))
+  const branches = admin
+    ? (await repo.activeBranches(db)).map(branch => ({ ...branch, role: roleOf.get(branch.id) ?? 'admin' as const }))
+    : members.filter(m => roleOf.has(m.id)).map(m => ({ id: m.id, name: m.name, role: roleOf.get(m.id)! }))
+  if (!branches.length && !admin) throw notStaff()
+  return {
+    userId: user.id,
+    email: user.email ?? '',
+    name: user.name ?? '',
+    mustChangePassword: Boolean(user.mustChangePassword),
+    branches,
   }
 }

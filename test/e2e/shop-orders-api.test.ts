@@ -3,6 +3,7 @@ import { describe, expect, inject, it } from 'vitest'
 import type { CheckoutQuote, Order } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
 import { setupE2e } from './support/mock-api'
+import { clientHeaders } from './support/client-address'
 
 await setupE2e()
 
@@ -14,7 +15,7 @@ const origin = new URL(url('/')).origin
 
 /** Signs in through Better Auth; returns the session cookie. */
 async function signIn(customer: { email: string, password: string }) {
-  const response = await fetch(url('/api/auth/sign-in/email'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify(customer) })
+  const response = await fetch(url('/api/auth/sign-in/email'), { method: 'POST', headers: { 'content-type': 'application/json', origin, ...clientHeaders() }, body: JSON.stringify(customer) })
   expect(response.status).toBe(200)
   return response.headers.getSetCookie().map(c => c.split(';')[0]).join('; ')
 }

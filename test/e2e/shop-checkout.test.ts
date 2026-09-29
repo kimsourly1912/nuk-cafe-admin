@@ -1,9 +1,10 @@
-import { createClient } from '@libsql/client'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
 import type { SeedCustomer } from './support/seed'
+import { e2eDatabase } from './support/database'
 import { setupE2e } from './support/mock-api'
+import { asNewVisitor } from './support/client-address'
 
 await setupE2e()
 
@@ -17,6 +18,7 @@ const seed = inject('shopSeed')
 /** Opens a page; collects errors, and Vue's "Hydration completed but contains mismatches". */
 async function open(path: string, width = 1440) {
   const page = await createPage()
+  await asNewVisitor(page)
   const problems: string[] = []
   page.on('console', (message) => {
     if (message.type() === 'error' || /hydration/i.test(message.text())) problems.push(`${message.text()} ${message.location().url}`)
@@ -60,7 +62,7 @@ async function reviewOrder(page: Page) {
 }
 
 async function sql(statement: string, args: (string | number)[] = []) {
-  const client = createClient({ url: `file:${seed.dbFile}` })
+  const client = e2eDatabase(seed.dbFile)
   try {
     await client.execute({ sql: statement, args })
   }
