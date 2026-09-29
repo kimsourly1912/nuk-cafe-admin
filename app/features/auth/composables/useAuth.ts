@@ -13,13 +13,20 @@ function identityOf(user: SessionUser | null): string | null {
   return user?.userId ?? null
 }
 
-/** Where to go after login: the `?redirect=` target if it's a path on this site, else the dashboard. */
-export function loginRedirectTarget(redirect: unknown): string {
-  return typeof redirect === 'string' && redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
+/** The admin workspace lives under `/admin`; every other page is the customer site (D93). */
+export function isAdminPath(path: string): boolean {
+  return path === '/admin' || path.startsWith('/admin/')
 }
 
+/** Where to go after login: the `?redirect=` target if it's an admin page, else the dashboard. */
+export function loginRedirectTarget(redirect: unknown): string {
+  return typeof redirect === 'string' && isAdminPath(redirect.split(/[?#]/)[0]!) ? redirect : '/admin'
+}
+
+export const LOGIN_PATH = '/admin/login'
+
 /** The page every signed-in admin is sent to while on a temporary password. */
-export const CHANGE_PASSWORD_PATH = '/change-password'
+export const CHANGE_PASSWORD_PATH = '/admin/change-password'
 
 const NO_ADMIN_ACCESS = 'This account doesn\'t have access to the admin app.'
 
@@ -144,7 +151,7 @@ export function useAuth() {
     }
     finally {
       // Navigate first so the session-lost watcher in plugins/api.ts doesn't also redirect.
-      await navigateTo('/login')
+      await navigateTo(LOGIN_PATH)
       clearSession()
       await nuxtApp.callHook('app:auth-changed', 'logout')
     }

@@ -42,7 +42,7 @@ function backend(initial: Row[] = [TOAST, FOOD, TEA, JUICE, COFFEE, DRINKS], ext
   } satisfies Record<string, MockHandler>
 }
 
-async function open(handlers: Record<string, MockHandler> = backend(), path = '/categories') {
+async function open(handlers: Record<string, MockHandler> = backend(), path = '/admin/categories') {
   const page = await createPage()
   const api = await mockApi(page, handlers)
   await page.goto(url(path), { waitUntil: 'hydration' })
@@ -238,7 +238,7 @@ describe('categories tree', () => {
   })
 
   it('a subcategory under an archived parent can\'t be restored before its parent', async () => {
-    const { page } = await open(backend([main('cat-1', 'Drinks', 1, { status: 'archived' }), { ...TEA }]), '/categories?status=archived')
+    const { page } = await open(backend([main('cat-1', 'Drinks', 1, { status: 'archived' }), { ...TEA }]), '/admin/categories?status=archived')
     await page.getByRole('button', { name: 'Actions for Tea' }).click()
     const restore = page.getByRole('menuitem', { name: 'Restore (restore "Drinks" first)' })
     await restore.waitFor()
@@ -287,7 +287,7 @@ describe('category contents and follow-ups', () => {
         bodies.push(body)
         return { ...archivedFood, status: 'active', childCount: 0 }
       },
-    }), '/categories?status=archived')
+    }), '/admin/categories?status=archived')
     await page.getByRole('button', { name: 'Actions for Food' }).click()
     await page.getByRole('menuitem', { name: 'Restore' }).click()
     const dialog = page.getByRole('dialog', { name: 'Restore "Food"?' })
@@ -395,7 +395,7 @@ describe('category selection', () => {
         order.push(url.pathname.split('/').at(-2)!)
         return null
       },
-    }), '/categories?status=archived')
+    }), '/admin/categories?status=archived')
     await button(page, 'Select').click()
     await page.getByRole('checkbox', { name: 'Select Tea' }).click()
     await page.getByRole('checkbox', { name: 'Select Drinks' }).click()
@@ -525,7 +525,7 @@ describe('category order', () => {
   })
 
   it('reorders the whole active tree: starting it clears a search and shows the Active tab', async () => {
-    const { page } = await open(backend(), '/categories?search=o&status=all')
+    const { page } = await open(backend(), '/admin/categories?search=o&status=all')
     await item(page, 'Coffee').waitFor()
     await button(page, 'Reorder').click()
     await expect.poll(() => page.getByRole('button', { name: /^Reorder / }).count()).toBe(5)
@@ -539,7 +539,7 @@ describe('categories on a phone', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 375, height: 812 })
     const api = await mockApi(page, handlers)
-    await page.goto(url('/categories'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
     await item(page, 'Toast').waitFor()
     return { page, api }
   }
@@ -575,7 +575,7 @@ describe('categories on a phone', () => {
 })
 
 describe('categories on the UI standard (D85)', () => {
-  async function openAt(width: number, path = '/categories') {
+  async function openAt(width: number, path = '/admin/categories') {
     const page = await createPage()
     await page.setViewportSize({ width, height: 844 })
     await mockApi(page, backend())
@@ -605,7 +605,7 @@ describe('categories on the UI standard (D85)', () => {
   })
 
   it('shows the status next to the name in the All view', async () => {
-    const page = await openAt(1024, '/categories?status=all')
+    const page = await openAt(1024, '/admin/categories?status=all')
     await item(page, 'Tea').getByText('Archived', { exact: true }).waitFor()
     const name = (await item(page, 'Tea').getByText('Tea', { exact: true }).boundingBox())!
     const badge = (await item(page, 'Tea').getByText('Archived', { exact: true }).boundingBox())!

@@ -265,13 +265,15 @@ The item returns each group with what applies **on this item**: `minSelect` / `m
 
 ### Public menu (step 3.8a, D65)
 
-`GET /api/public/menu?branchId=…` (anyone, `no-store`, contract `shared/contracts/public-menu.ts`): `{ branch, currency, at, categories }`. Each top-level category holds `categories` (its sub-categories) or `items`; each item has `optionSets`, `variations` (`{ id, valueIds, label, priceMinor }`) and `modifierGroups` (the rules and prices that apply on it).
+`GET /api/public/menu?branchId=…` (anyone, `no-store`, contract `shared/contracts/public-menu.ts`): `{ branch, currency, at, categories }`. `branch` is a `PublicBranch` (below). Each top-level category holds `categories` (its sub-categories) or `items`; each item has `optionSets`, `variations` (`{ id, valueIds, label, priceMinor, soldOut }`), `soldOut` (every version is) and `modifierGroups` (the rules and prices that apply on it).
+
+`GET /api/public/branches` (anyone, `no-store`, D93): the active branches by name as `PublicBranch` (`{ id, name, address, phone, timezone, openNow, nextOpening }`). `openNow` follows the branch's hours on its own clock; `nextOpening` (`{ inDays, weekday, startMinute }`, 0 days = later today) says when a closed branch opens, `null` while open or without hours.
 
 | Shown | Rule |
 |---|---|
 | Categories | Active, with something to show (empty ones are left out) |
 | Items | Active, in an active category, available now on the branch's clock (item, category and parent rules; an archived or missing rule never matches) |
-| Versions | Sellable (active, priced, no archived value) and not sold out at this branch; an item with none left is left out |
+| Versions | Sellable (active, priced, no archived value); sold out at this branch → `soldOut: true`, still listed (D93; hidden until then, D65) |
 | Option values | Only those a listed version uses |
 | Add-ons | Active groups and add-ons; the item's own prices and rules; the minimum capped at the add-ons offered |
 

@@ -6,6 +6,11 @@
   [role='button']:not(:disabled) {
     cursor: pointer;
   }
+
+  /* SearchInput has its own Clear button; Chromium would add a second one. */
+  input[type='search']::-webkit-search-cancel-button {
+    appearance: none;
+  }
 }
 
 /*

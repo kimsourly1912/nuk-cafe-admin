@@ -1,7 +1,7 @@
 import type { PublicMenu, PublicMenuQuery } from '#shared/contracts/public-menu'
 import type { Db } from '../../utils/batch'
 import { toIso } from '../../utils/time'
-import { getActiveBranch } from '../branches'
+import { getPublicBranch } from '../branches'
 import { assetUrls } from '../media'
 import type { RuleForCheck } from './availability.rules'
 import { localTime } from './availability.rules'
@@ -92,14 +92,14 @@ export async function loadCatalog(db: Db): Promise<Catalog> {
 }
 
 /**
- * What the branch sells at `now`: available items (in the branch's time zone) with their versions
- * that aren't sold out there. Unknown and archived branches are 404.
+ * What the branch sells at `now`: available items (in the branch's time zone), their versions marked
+ * sold out or not there, and whether the branch is open. Unknown and archived branches are 404.
  */
 export async function getPublicMenu(db: Db, query: PublicMenuQuery, now = new Date()): Promise<PublicMenu> {
-  const branch = await getActiveBranch(db, query.branchId)
+  const branch = await getPublicBranch(db, query.branchId, now)
   const [catalog, soldOut] = await Promise.all([loadCatalog(db), soldOutIds(db, branch.id)])
   return {
-    branch: { id: branch.id, name: branch.name },
+    branch,
     currency: 'USD',
     at: toIso(now),
     categories: menuAt(catalog, localTime(now, branch.timezone), soldOut),

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * The Menu item editor as a page: `/products/[id]` (the canonical, shareable URL) and
- * `/products/new` (D90, page-patterns §4 "Menu item editor URLs"). The list opens it on phones; it
+ * The Menu item editor as a page: `/admin/products/[id]` (the canonical, shareable URL) and
+ * `/admin/products/new` (D90, page-patterns §4 "Menu item editor URLs"). The list opens it on phones; it
  * works at every width. On phones it's a focused screen, one section at a time (tabs), with Save in
  * the bottom bar; from `lg` the sections are one column and Save is in the navbar. The same editor
  * as the slide-over (`useItemEditor`, `ProductFormFields`): same data, rules and actions.
@@ -44,8 +44,8 @@ const router = useRouter()
 /** Back to the list: to the entry it came from (search and filters kept), or the list itself. */
 function leave() {
   const back = window.history.state?.back
-  if (typeof back === 'string' && /^\/products(\?|$)/.test(back)) router.back()
-  else navigateTo('/products')
+  if (typeof back === 'string' && /^\/admin\/products(\?|$)/.test(back)) router.back()
+  else navigateTo('/admin/products')
 }
 
 const fields = useTemplateRef('fields')

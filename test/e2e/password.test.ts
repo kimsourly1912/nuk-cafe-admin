@@ -39,9 +39,9 @@ describe('temporary password', () => {
     const backend = temporaryPasswordBackend()
     await mockApi(page, backend.handlers)
 
-    await page.goto(url('/categories'), { waitUntil: 'hydration' })
-    await expect.poll(() => path(page)).toBe('/change-password')
-    expect(new URL(page.url()).searchParams.get('redirect')).toBe('/categories')
+    await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
+    await expect.poll(() => path(page)).toBe('/admin/change-password')
+    expect(new URL(page.url()).searchParams.get('redirect')).toBe('/admin/categories')
     await page.getByRole('heading', { name: 'Choose your password' }).waitFor()
     // No app around it: the sidebar isn't there.
     expect(await page.getByRole('link', { name: 'Categories' }).count()).toBe(0)
@@ -49,7 +49,7 @@ describe('temporary password', () => {
     await fillPasswords(page, 'Temp-1234-abcd', 'my own password')
     await page.getByRole('button', { name: 'Change password' }).click()
 
-    await expect.poll(() => path(page)).toBe('/categories')
+    await expect.poll(() => path(page)).toBe('/admin/categories')
     await toast(page, 'Password changed').waitFor()
     expect(backend.bodies).toEqual([{ currentPassword: 'Temp-1234-abcd', newPassword: 'my own password', revokeOtherSessions: true }])
   })
@@ -58,19 +58,19 @@ describe('temporary password', () => {
     const page = await createPage()
     const backend = temporaryPasswordBackend()
     await mockApi(page, backend.handlers)
-    await page.goto(url('/change-password'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/change-password'), { waitUntil: 'hydration' })
 
     await fillPasswords(page, 'wrong', 'my own password')
     await page.getByRole('button', { name: 'Change password' }).click()
     await page.getByText('Your current password is incorrect.').waitFor()
-    expect(path(page)).toBe('/change-password')
+    expect(path(page)).toBe('/admin/change-password')
   })
 
   it('checks the repeat and refuses the same password before sending anything', async () => {
     const page = await createPage()
     const backend = temporaryPasswordBackend()
     await mockApi(page, backend.handlers)
-    await page.goto(url('/change-password'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/change-password'), { waitUntil: 'hydration' })
 
     await fillPasswords(page, 'Temp-1234-abcd', 'my own password', 'my own passwort')
     await page.getByRole('button', { name: 'Change password' }).click()
@@ -90,7 +90,7 @@ describe('temporary password', () => {
     })
     // Signed in normally; the Availability list is the first request to meet the refusal.
     await gotoViaSidebar(page, ['Availability'])
-    await expect.poll(() => path(page)).toBe('/change-password')
+    await expect.poll(() => path(page)).toBe('/admin/change-password')
   })
 })
 
@@ -104,7 +104,7 @@ describe('changing one\'s password', () => {
         return { token: null, user: { id: ADMIN.userId } }
       },
     })
-    await page.goto(url('/categories'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: 'alice', exact: true }).click()
     await page.getByRole('menuitem', { name: 'Change password' }).click()
 
@@ -112,7 +112,7 @@ describe('changing one\'s password', () => {
     await fillPasswords(page, 'my own password', 'a better password')
     await page.getByRole('button', { name: 'Change password' }).click()
     await toast(page, 'Password changed').waitFor()
-    await expect.poll(() => path(page)).toBe('/')
+    await expect.poll(() => path(page)).toBe('/admin')
     expect(bodies).toHaveLength(1)
   })
 })
@@ -122,7 +122,7 @@ describe('change password as a task flow (D84)', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 390, height: 844 })
     await mockApi(page, temporaryPasswordBackend().handlers)
-    await page.goto(url('/change-password'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/change-password'), { waitUntil: 'hydration' })
     await page.getByRole('heading', { name: 'Choose your password' }).waitFor()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     const logOut = (await page.getByRole('button', { name: 'Log out' }).boundingBox())!
@@ -134,7 +134,7 @@ describe('change password as a task flow (D84)', () => {
   it('moves focus to the server\'s error after a failed change', async () => {
     const page = await createPage()
     await mockApi(page, temporaryPasswordBackend().handlers)
-    await page.goto(url('/change-password'), { waitUntil: 'hydration' })
+    await page.goto(url('/admin/change-password'), { waitUntil: 'hydration' })
     await fillPasswords(page, 'wrong', 'my own password')
     await page.getByRole('button', { name: 'Change password' }).click()
     await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('role'))).toBe('alert')

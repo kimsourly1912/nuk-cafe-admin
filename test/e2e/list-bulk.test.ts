@@ -29,7 +29,7 @@ function backend(initial: MenuItemSummary[]) {
   }
 }
 
-async function open(handlers: Record<string, MockHandler>, path = '/products', first = 'Item 1') {
+async function open(handlers: Record<string, MockHandler>, path = '/admin/products', first = 'Item 1') {
   const page = await createPage()
   const api = await mockApi(page, handlers)
   await page.goto(url(path), { waitUntil: 'hydration' })
@@ -143,7 +143,7 @@ describe('list state after archiving and navigation', () => {
     const { page } = await open({
       'GET /admin/menu/items': server.list,
       'POST /admin/menu/items/{id}/archive': server.archive(),
-    }, '/products?status=draft&page=2', 'Item 21')
+    }, '/admin/products?status=draft&page=2', 'Item 21')
 
     await page.getByRole('button', { name: 'Actions for Item 21' }).click()
     await page.getByRole('menuitem', { name: 'Archive' }).click()

@@ -83,7 +83,8 @@ describe('the public menu', () => {
     })
 
     const result = await menu()
-    expect(result).toMatchObject({ branch: { id: branchId }, currency: 'USD', at: '2026-09-28T02:00:00.000Z' })
+    // No opening hours yet: closed, with no next opening (D93).
+    expect(result).toMatchObject({ branch: { id: branchId, openNow: false, nextOpening: null }, currency: 'USD', at: '2026-09-28T02:00:00.000Z' })
     expect(result.categories).toMatchObject([{ name: 'Drinks', description: 'All day', items: [], categories: [{ name: 'Hot' }] }])
     const [shown] = items(result)
     expect(shown).toEqual({
@@ -93,9 +94,10 @@ describe('the public menu', () => {
       imageUrl: `/media/menu/${image}.png`,
       optionSets: [{ id: size.id, name: 'Size', values: [{ id: v(size, 'Small'), name: 'Small' }, { id: v(size, 'Large'), name: 'Large' }] }],
       variations: [
-        { id: expect.any(String), valueIds: [v(size, 'Small')], label: 'Small', priceMinor: 300 },
-        { id: expect.any(String), valueIds: [v(size, 'Large')], label: 'Large', priceMinor: 400 },
+        { id: expect.any(String), valueIds: [v(size, 'Small')], label: 'Small', priceMinor: 300, soldOut: false },
+        { id: expect.any(String), valueIds: [v(size, 'Large')], label: 'Large', priceMinor: 400, soldOut: false },
       ],
+      soldOut: false,
       modifierGroups: [{ id: milk.id, name: 'Milk', minSelect: 1, maxSelect: 1, modifiers: [
         { id: expect.any(String), name: 'Whole', priceDeltaMinor: 0, isDefault: true },
         { id: oat, name: 'Oat', priceDeltaMinor: 75, isDefault: false },
@@ -179,13 +181,17 @@ describe('the public menu', () => {
     expect(names(await menu())).toEqual([])
   })
 
-  it('leaves out versions sold out at this branch only, and items with nothing left', async () => {
+  it('marks versions sold out at this branch only, and items with nothing left (D93)', async () => {
     const item = await latte()
     const tea = await published('Tea')
     await setSoldOut(db, staffAt(branchId), { variationIds: [item.variations.find(x => x.label === 'Large')!.id, tea.variations[0]!.id], soldOut: true })
     const here = items(await menu())
-    expect(here.map(i => [i.name, i.variations.map(x => x.label)])).toEqual([['Latte', ['Small']]])
-    expect(names(await menu(monday('09:00'), otherBranch))).toEqual(['Latte', 'Tea'])
+    expect(here.map(i => [i.name, i.soldOut, i.variations.map(x => [x.label, x.soldOut])])).toEqual([
+      ['Latte', false, [['Small', false], ['Large', true]]],
+      ['Tea', true, [['', true]]],
+    ])
+    const there = items(await menu(monday('09:00'), otherBranch))
+    expect(there.map(i => [i.name, i.soldOut])).toEqual([['Latte', false], ['Tea', false]])
   })
 
   it('is 404 for an unknown or archived branch', async () => {

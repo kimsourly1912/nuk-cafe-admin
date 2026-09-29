@@ -150,7 +150,7 @@ const rowClass = (index: number) => (index < PHONE_ROWS ? 'flex' : index < WIDE_
         </p>
         <UButton
           :label="archived ? 'View' : 'Manage'"
-          :to="`/add-ons/${group.id}`"
+          :to="`/admin/add-ons/${group.id}`"
           color="neutral"
           variant="outline"
           trailing-icon="i-lucide-chevron-right"

@@ -1,11 +1,13 @@
 import * as v from 'valibot'
+import type { PublicBranch } from './branches'
 import { idSchema } from './common'
 
 /**
  * The customer menu (`GET /api/public/menu?branchId=…`, D65): what a branch sells **right now**.
  * Only active items in active categories, available at this moment in the branch's time zone
  * (their own, their category's and the parent category's availability rules), with their sellable
- * versions that aren't sold out at the branch. Empty categories are left out.
+ * versions, each marked sold out or not at the branch (D93: shown as "Sold out", not hidden). Empty
+ * categories are left out.
  *
  * A menu read is never a reservation: checkout checks availability and prices again.
  */
@@ -35,6 +37,8 @@ export interface PublicMenuVariation {
   /** "Large, Iced" (`''` without option sets). */
   label: string
   priceMinor: number
+  /** Switched off at this branch (D64): shown, not orderable. */
+  soldOut: boolean
 }
 
 export interface PublicMenuItem {
@@ -46,6 +50,8 @@ export interface PublicMenuItem {
   optionSets: { id: string, name: string, values: { id: string, name: string }[] }[]
   /** At least one, in the grid's order. */
   variations: PublicMenuVariation[]
+  /** Every version is sold out at this branch. */
+  soldOut: boolean
   modifierGroups: PublicMenuModifierGroup[]
 }
 
@@ -59,7 +65,8 @@ export interface PublicMenuCategory {
 }
 
 export interface PublicMenu {
-  branch: { id: string, name: string }
+  /** The branch and whether it takes orders now (D93). */
+  branch: PublicBranch
   currency: 'USD'
   /** The moment the menu was computed for (ISO 8601 UTC). */
   at: string
