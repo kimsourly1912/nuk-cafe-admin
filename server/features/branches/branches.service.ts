@@ -6,7 +6,7 @@ import { isStaleWrite, isUniqueViolation, requireOneChange } from '../../utils/b
 import { newId } from '../../utils/ids'
 import { notFound } from '../../utils/errors'
 import { toIso } from '../../utils/time'
-import { isInWindow, isKnownTimeZone, localTime, nextStart, sortWindows, windowsProblem } from '../../utils/weekly-windows'
+import { isInWindow, isKnownTimeZone, localTime, minutesUntilClosed, nextStart, sortWindows, windowsProblem } from '../../utils/weekly-windows'
 import type { Actor } from '../identity'
 import { auditStatement } from '../platform'
 import { branchArchived, branchChanged, branchHoursProblem, branchNotFound, tableArchived, tableChanged, tableLabelTaken, tableLimit, tableNotArchived, tableNotFound, unknownTimezone } from './branches.errors'
@@ -53,6 +53,7 @@ function toPublicBranch(branch: BranchRow, hours: WeeklyWindow[], now: Date): Pu
     phone: branch.phone ?? null,
     timezone: branch.timezone,
     openNow,
+    closesInMinutes: openNow ? minutesUntilClosed(hours, at) : null,
     nextOpening: openNow ? null : nextStart(hours, at),
   }
 }

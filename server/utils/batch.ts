@@ -38,6 +38,11 @@ export function requireCount(db: Db, count: SQL, expected: number): Statement {
   return guard(db, sql`(${count}) = ${expected}`)
 }
 
+/** A guard statement: aborts the batch when the scalar subquery `count` exceeds `max`. */
+export function requireAtMost(db: Db, count: SQL, max: number): Statement {
+  return guard(db, sql`(${count}) <= ${max}`)
+}
+
 /**
  * D1 refuses a statement with more than 100 bound parameters ("too many SQL variables"; checked on
  * staging, D62). libsql allows 32,766, so the test database enforces D1's limit

@@ -253,8 +253,14 @@ describe('branches for customers (D93)', () => {
       phone: null,
       timezone: 'Asia/Phnom_Penh',
       openNow: true,
+      // Until 19:00 (D99: online orders stop 15 minutes before).
+      closesInMinutes: 540,
       nextOpening: null,
     })
+    // Saturday 23:00 there: open until 02:00, past midnight.
+    expect((await getPublicBranch(db, branch, at('2026-10-03T16:00:00Z'))).closesInMinutes).toBe(180)
+    // Closed: nothing to count down.
+    expect((await getPublicBranch(db, branch, at('2026-09-28T13:00:00Z'))).closesInMinutes).toBeNull()
   })
 
   it('says when a closed branch opens: later today, tomorrow, or a later weekday', async () => {

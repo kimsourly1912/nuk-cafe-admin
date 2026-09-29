@@ -124,6 +124,11 @@ export interface PublicBranch {
   phone: string | null
   timezone: string
   openNow: boolean
+  /**
+   * While open: minutes until it closes (through back-to-back windows); `null` while closed. Online
+   * orders stop `LAST_ORDERS_MINUTES` before (D99).
+   */
+  closesInMinutes: number | null
   /** While closed: when it opens next; `null` while open, or with no opening hours at all. */
   nextOpening: NextOpening | null
 }
