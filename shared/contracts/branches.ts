@@ -102,3 +102,28 @@ export interface PublicTable {
   branch: { id: string, name: string }
   table: { id: string, label: string }
 }
+
+/** When a closed branch opens next, on its own clock. */
+export interface NextOpening {
+  /** 0: later today, 1: tomorrow, up to 7 (the same weekday next week). */
+  inDays: number
+  /** ISO: 1 = Monday … 7 = Sunday. */
+  weekday: number
+  /** Minutes after midnight. */
+  startMinute: number
+}
+
+/**
+ * A branch as customers see it (`GET /api/public/branches`, and the menu's `branch`, D93): its
+ * details and whether it takes orders now. Orders are accepted only while it's open (D45).
+ */
+export interface PublicBranch {
+  id: string
+  name: string
+  address: string | null
+  phone: string | null
+  timezone: string
+  openNow: boolean
+  /** While closed: when it opens next; `null` while open, or with no opening hours at all. */
+  nextOpening: NextOpening | null
+}

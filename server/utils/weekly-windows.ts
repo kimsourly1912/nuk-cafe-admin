@@ -67,6 +67,22 @@ export function isInWindow(window: WeeklyWindow, at: LocalTime): boolean {
   return mod((at.weekday - 1) * MINUTES_PER_DAY + at.minute - start, MINUTES_PER_WEEK) < length
 }
 
+/**
+ * When the next window starts after `at` (not the one `at` is in): its weekday and start, and in
+ * how many days on the local calendar (0: later today). `null` without windows.
+ */
+export function nextStart(windows: WeeklyWindow[], at: LocalTime): { inDays: number, weekday: number, startMinute: number } | null {
+  const now = (at.weekday - 1) * MINUTES_PER_DAY + at.minute
+  let best: { wait: number, window: WeeklyWindow } | undefined
+  for (const window of windows) {
+    // A start exactly now belongs to the window `at` is in: the next one is a week away.
+    const wait = mod(stretch(window).start - now, MINUTES_PER_WEEK) || MINUTES_PER_WEEK
+    if (!best || wait < best.wait) best = { wait, window }
+  }
+  if (!best) return null
+  return { inDays: Math.floor((at.minute + best.wait) / MINUTES_PER_DAY), weekday: best.window.weekday, startMinute: best.window.startMinute }
+}
+
 const WEEKDAYS: Record<string, number> = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 }
 const formatters = new Map<string, Intl.DateTimeFormat>()
 

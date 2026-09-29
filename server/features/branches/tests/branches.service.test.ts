@@ -5,7 +5,7 @@ import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
 import { organization } from '../../../db/tables'
 import type { Actor } from '../../identity'
 import { auditEvents } from '../../platform/platform.schema'
-import { archiveTable, createTable, getBranchSettings, listTables, resolveTableToken, restoreTable, rotateTableQr, updateBranchSettings, updateTable } from '../branches.service'
+import { archiveTable, createTable, getBranchSettings, getPublicBranch, listPublicBranches, listTables, resolveTableToken, restoreTable, rotateTableQr, updateBranchSettings, updateTable } from '../branches.service'
 import { diningTables } from '../branches.schema'
 import type { QrConfig } from '../branches.qr'
 import { qrConfigFrom, tableToken, tokenHash } from '../branches.qr'
@@ -232,5 +232,57 @@ describe('dining tables', () => {
     // 10 rows a statement: 70 parameters, under D1's 100.
     for (let i = 0; i < rows.length; i += 10) await db.insert(diningTables).values(rows.slice(i, i + 10))
     await expectApiError(() => createTable(db, actor, branch, { label: 'One more', area: null }, qr), 409, 'TABLE_LIMIT')
+  })
+})
+
+describe('branches for customers (D93)', () => {
+  const at = (iso: string) => new Date(iso)
+  const openHours = async () => updateBranchSettings(db, actor, branch, {
+    version: 1,
+    address: '#123 St. 63',
+    // Weekdays 07:00–19:00, Saturday 08:00–02:00 (overnight), no Sunday.
+    hours: [...weekdays(420, 1140), w(6, 480, 120)],
+  })
+
+  it('is open inside its hours, on its own clock, with no next opening', async () => {
+    await openHours()
+    expect(await getPublicBranch(db, branch, MONDAY_10AM)).toEqual({
+      id: branch,
+      name: expect.any(String),
+      address: '#123 St. 63',
+      phone: null,
+      timezone: 'Asia/Phnom_Penh',
+      openNow: true,
+      nextOpening: null,
+    })
+  })
+
+  it('says when a closed branch opens: later today, tomorrow, or a later weekday', async () => {
+    await openHours()
+    // Monday 06:00 there: later today at 07:00.
+    expect((await getPublicBranch(db, branch, at('2026-09-27T23:00:00Z'))).nextOpening).toEqual({ inDays: 0, weekday: 1, startMinute: 420 })
+    // Monday 20:00 there: Tuesday at 07:00.
+    expect((await getPublicBranch(db, branch, at('2026-09-28T13:00:00Z'))).nextOpening).toEqual({ inDays: 1, weekday: 2, startMinute: 420 })
+    // Sunday 03:00 there (Saturday's window ended at 02:00): Monday, tomorrow.
+    expect((await getPublicBranch(db, branch, at('2026-09-26T20:00:00Z'))).nextOpening).toEqual({ inDays: 1, weekday: 1, startMinute: 420 })
+    // Sunday 01:00 there: still in Saturday's overnight window.
+    expect((await getPublicBranch(db, branch, at('2026-09-26T18:00:00Z'))).openNow).toBe(true)
+  })
+
+  it('opens a week later when its only window just ended, and never without hours', async () => {
+    await updateBranchSettings(db, actor, branch, { version: 1, hours: [w(1, 420, 600)] })
+    // Monday 10:00 exactly: the window ended (end excluded); it opens next Monday.
+    expect((await getPublicBranch(db, branch, MONDAY_10AM)).nextOpening).toEqual({ inDays: 7, weekday: 1, startMinute: 420 })
+    const other = await addBranch()
+    expect(await getPublicBranch(db, other, MONDAY_10AM)).toMatchObject({ openNow: false, nextOpening: null })
+  })
+
+  it('lists active branches by name; an archived or unknown one is 404', async () => {
+    const archived = await addBranch()
+    await db.update(organization).set({ name: 'Archived', status: 'archived' }).where(eq(organization.id, archived))
+    const listed = await listPublicBranches(db, MONDAY_10AM)
+    expect(listed.map(b => b.id)).toEqual([branch])
+    await expectApiError(() => getPublicBranch(db, archived), 404, 'NOT_FOUND')
+    await expectApiError(() => getPublicBranch(db, newId()), 404, 'NOT_FOUND')
   })
 })

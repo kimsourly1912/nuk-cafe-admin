@@ -32,7 +32,8 @@ Browser ──► Nuxt app (customer site · /admin · /counter)
 ```
 
 - The server owns every rule: prices, availability, order state, points, voucher use, permissions. A client asks; it never decides.
-- **Rendering (D45):** the public customer pages are server-rendered (fast first load, visible to search engines); the admin and counter workspaces stay single-page apps. Set per route with `routeRules` (`ssr: false` for `/admin/**` and `/counter/**`) in step 5.2; today the whole app is `ssr: false`.
+- **Rendering (D45):** the public customer pages are to be server-rendered (fast first load, visible to search engines); the admin and counter workspaces stay single-page apps. Set per route with `routeRules` (`ssr: false` for `/admin/**` and `/counter/**`). Today the whole app is still `ssr: false`: the customer menu (D93) is client-rendered until SSR gets its own step and test setup (progress.md → Q38).
+- **Paths (D93):** the admin workspace lives under `/admin`, the counter under `/counter`; every other path is the customer site (`/` is the menu, `/table/<token>` a table's QR code).
 - There is no public API for outside clients. If a native app comes later, it gets its own decision (bearer tokens, a versioned surface).
 
 ## Surfaces and routes
@@ -42,7 +43,7 @@ Routes are Nuxt file routes, **unversioned** (the apps deploy together with the 
 | Surface | Caller | Auth | Examples |
 |---|---|---|---|
 | `/api/auth/**` | anyone | Better Auth owns it | sign-up, sign-in, sign-out, verify email, reset password |
-| `/api/public/**` | anyone | none; read-only | `GET /api/public/menu`, `GET /api/public/tables/{token}` |
+| `/api/public/**` | anyone | none; read-only | `GET /api/public/menu`, `GET /api/public/branches`, `GET /api/public/tables/{token}` |
 | `/api/shop/**` | signed-in customer (verified email) | session | `POST /api/shop/orders`, `GET /api/shop/points` |
 | `/api/counter/{branchId}/**` | branch `manager` / `staff` | session + branch membership | `POST /api/counter/{branchId}/orders/{orderId}/ready` |
 | `/api/admin/**` | platform `admin` | session + platform role | `PATCH /api/admin/menu/items/{itemId}` |

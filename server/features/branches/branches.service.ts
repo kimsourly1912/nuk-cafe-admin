@@ -1,11 +1,12 @@
-import type { BranchSettings, CreateTableInput, DiningTable, PublicTable, TableListQuery, TableVersionInput, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
+import type { BranchSettings, CreateTableInput, DiningTable, PublicBranch, PublicTable, TableListQuery, TableVersionInput, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
 import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
+import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '../../utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '../../utils/batch'
 import { newId } from '../../utils/ids'
 import { notFound } from '../../utils/errors'
 import { toIso } from '../../utils/time'
-import { isInWindow, isKnownTimeZone, localTime, sortWindows, windowsProblem } from '../../utils/weekly-windows'
+import { isInWindow, isKnownTimeZone, localTime, nextStart, sortWindows, windowsProblem } from '../../utils/weekly-windows'
 import type { Actor } from '../identity'
 import { auditStatement } from '../platform'
 import { branchArchived, branchChanged, branchHoursProblem, branchNotFound, tableArchived, tableChanged, tableLabelTaken, tableLimit, tableNotArchived, tableNotFound, unknownTimezone } from './branches.errors'
@@ -41,18 +42,32 @@ export async function listBranchOptions(db: Db): Promise<repo.BranchOptionRow[]>
   return repo.listActiveBranches(db)
 }
 
-export interface OpenBranch {
-  id: string
-  name: string
-  /** IANA zone of its wall clock ("Asia/Phnom_Penh"): opening hours and availability use it. */
-  timezone: string
+/** The branch as customers see it at `now`: open by its hours on its own clock, or when it opens. */
+function toPublicBranch(branch: BranchRow, hours: WeeklyWindow[], now: Date): PublicBranch {
+  const at = localTime(now, branch.timezone)
+  const openNow = hours.some(window => isInWindow(window, at))
+  return {
+    id: branch.id,
+    name: branch.name,
+    address: branch.address ?? null,
+    phone: branch.phone ?? null,
+    timezone: branch.timezone,
+    openNow,
+    nextOpening: openNow ? null : nextStart(hours, at),
+  }
 }
 
-/** An active branch for the public surface; unknown and archived ones are 404. */
-export async function getActiveBranch(db: Db, id: string): Promise<OpenBranch> {
+/** An active branch for customers (the menu's header, D93); unknown and archived ones are 404. */
+export async function getPublicBranch(db: Db, id: string, now = new Date()): Promise<PublicBranch> {
   const branch = await repo.findBranch(db, id)
   if (!branch || branch.status !== 'active') throw notFound('This branch')
-  return { id: branch.id, name: branch.name, timezone: branch.timezone }
+  return toPublicBranch(branch, await repo.hoursOf(db, id), now)
+}
+
+/** Every active branch for customers, by name (launch has one, D45). */
+export async function listPublicBranches(db: Db, now = new Date()): Promise<PublicBranch[]> {
+  const options = await repo.listActiveBranches(db)
+  return Promise.all(options.map(option => getPublicBranch(db, option.id, now)))
 }
 
 // --- Settings and hours ---

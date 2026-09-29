@@ -56,16 +56,16 @@ describe('the menu at a moment', () => {
     expect(shown(menuAt(catalog, at('08:00'), nothingSoldOut))).toEqual([['food', [], ['c']]])
   })
 
-  it('leaves out sold-out versions, the option values only they used, and items with nothing left', () => {
+  it('marks sold-out versions (their values stay offered) and items with nothing left (D93)', () => {
     const latte = item('latte', 'drinks', {
       optionSets: [{ id: 'size', name: 'Size', values: [{ id: 's', name: 'Small' }, { id: 'l', name: 'Large' }] }],
       variations: [{ id: 'latte-s', valueIds: ['s'], label: 'Small', priceMinor: 300 }, { id: 'latte-l', valueIds: ['l'], label: 'Large', priceMinor: 400 }],
     })
     const catalog: Catalog = { categories: [category('drinks')], items: [latte, item('tea', 'drinks')], rules }
     const [drinks] = menuAt(catalog, at('08:00'), new Set(['latte-l', 'tea-v']))
-    expect(drinks!.items.map(i => i.id)).toEqual(['latte'])
-    expect(drinks!.items[0]!.variations.map(v => v.label)).toEqual(['Small'])
-    expect(drinks!.items[0]!.optionSets[0]!.values.map(v => v.name)).toEqual(['Small'])
+    expect(drinks!.items.map(i => [i.id, i.soldOut])).toEqual([['latte', false], ['tea', true]])
+    expect(drinks!.items[0]!.variations.map(v => [v.label, v.soldOut])).toEqual([['Small', false], ['Large', true]])
+    expect(drinks!.items[0]!.optionSets[0]!.values.map(v => v.name)).toEqual(['Small', 'Large'])
   })
 
   it('leaves out empty sub-categories and categories', () => {
