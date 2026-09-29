@@ -204,7 +204,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 
 ## How to verify
 
-- Before a PR: `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` and the changed feature's e2e files; CI runs everything (AGENTS.md → Checks, D83). All pass as of 2026-09-29 (unit + server 574, e2e 285).
+- Before a PR: `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` and the changed feature's e2e files; CI runs everything (AGENTS.md → Checks, D83). All pass as of 2026-09-29 (unit + server 585, e2e 300).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
