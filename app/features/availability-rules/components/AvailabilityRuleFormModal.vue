@@ -13,7 +13,6 @@
  * opens read-only with Restore.
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
-import { Time } from '@internationalized/date'
 import type { AvailabilityRule } from '#shared/contracts/menu-availability'
 import { AVAILABILITY_RULE_NAME_MAX } from '#shared/contracts/menu-availability'
 import { useAvailabilityRuleMutations } from '../composables/useAvailabilityRules'
@@ -51,12 +50,9 @@ const unsaved = useModalUnsavedChanges(state, {
 const form = useTemplateRef('form')
 useSubmitShortcut(() => form.value?.submit())
 
-// UInputTime works with `Time` objects; the form keeps minutes after midnight.
-const toTime = (minute?: number) => (minute === undefined ? undefined : new Time(Math.floor(minute / 60), minute % 60))
-function toMinute(time: unknown): number | undefined {
-  if (!time || typeof time !== 'object' || !('hour' in time) || !('minute' in time)) return undefined
-  return Number(time.hour) * 60 + Number(time.minute)
-}
+// UInputTime works with `Time` objects; the form keeps minutes after midnight (app/utils/clock.ts).
+const toTime = minuteToTime
+const toMinute = timeToMinute
 
 function toggleDay(row: AvailabilityRuleForm['rows'][number], day: number) {
   row.days = row.days.includes(day) ? row.days.filter(d => d !== day) : [...row.days, day].sort((a, b) => a - b)
