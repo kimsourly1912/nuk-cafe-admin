@@ -15,7 +15,7 @@ const { data, error, refresh } = useApiQuery('menu:table', () => apiFetch<Public
 
 watch(data, (scanned) => {
   if (!scanned) return
-  setTable(scanned)
+  setTable(scanned, token.value)
   navigateTo('/', { replace: true })
 }, { immediate: true })
 

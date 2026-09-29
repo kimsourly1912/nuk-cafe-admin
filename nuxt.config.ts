@@ -161,6 +161,10 @@ export default defineNuxtConfig({
     '/admin/**': { ssr: false },
     // A table's QR link stores the table in this tab and moves on to the menu: browser work only.
     '/table/**': { ssr: false },
+    // Checkout and a customer's order are theirs alone and read browser storage and the session:
+    // browser work only, like a table's QR link (D100).
+    '/checkout': { ssr: false },
+    '/orders/**': { ssr: false },
     // Session gate per surface (@nuxtjs/better-auth), a second line behind each route's own
     // requirePermission / requireBranchPermission / requireCustomer (docs/server/security.md).
     '/api/admin/**': { auth: { only: 'user', user: { role: 'admin' } } },
