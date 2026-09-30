@@ -1000,3 +1000,35 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
   - The counter's tests pass unchanged on the shared runner.
   - e2e `shop-orders-api.test.ts`, +1 test over HTTP: list, 401, 404, 400 without a key, cancel, replay, then 409.
   - All server and unit tests pass (686).
+
+### D107: An AI assistant for admins, on any provider (phase 9 plan), 2026-09-30
+
+- **Context:**
+  - The owner wants an assistant that helps with the portal: answering questions, guiding through workflows, drafting menu items from a description, and improving or translating menu wording.
+  - They will use their own API key and may choose **any AI provider**.
+  - Asked to build it before 6.5b.
+  - Review answers: "use your defaults", with the panel as `USidebar` instead of a slide-over.
+- **Decision:** the plan in [plans/ai-assistant.md](plans/ai-assistant.md), steps 9.0–9.3. Its rules:
+  - **The AI suggests, a person saves.** No write tools. Drafts open in the existing item editor; wording suggestions replace a field only when chosen. Every save goes through the existing services, with their validation, `version` and audit.
+  - **Provider-neutral through the Vercel AI SDK** (`ai`, with `@ai-sdk/anthropic` / `openai` / `google` / `openai-compatible`, `@ai-sdk/valibot`, `@ai-sdk/vue`):
+    - The provider, model and key are settings. One file (`model.ts`) names providers; no other feature imports AI.
+    - Supported means covered by the plan's quality check.
+    - Nuxt UI 4.11's chat components are built for it; it runs on Workers (checked on staging in 9.0).
+  - **Knowledge is Markdown in the code** (`server/features/assistant/help/`), sent whole with each question, most stable text first so the provider's prompt caching can reuse it:
+    - A table would need an editor and a second source of truth for text that changes with the app.
+    - There is no search index (RAG) while the guide is small.
+    - There is no answer cache on our side.
+  - **No stored conversation or preferences:**
+    - The chat lives in the browser tab and is cleared at the session boundary (D29).
+    - The server records only usage metadata (`assistant_usage`), for a daily limit per admin (100, guarded against two requests taking the last slot) and cost reports, kept 90 days.
+  - **Admins only** (`assistant: ['use']`). The assistant is off, with routes 404 and buttons hidden, without a key.
+  - The panel is **`USidebar`** on the right (owner). It is docked from `lg`, so the page stays usable while following the steps, and is a slide-over below `lg`.
+- **Alternatives:**
+  - Each provider's own SDK: the Anthropic SDK is Claude-only, and writing our own adapters duplicates the AI SDK.
+  - A router service with one key for every provider (another company sees all the data).
+  - Cloudflare Workers AI only (weaker models, especially in Khmer).
+  - A help-content table.
+  - Saved history.
+  - A slide-over panel (covers the page being explained).
+  - Each alternative, and every other option deferred, with what would bring it back, is in [plans/ai-later.md](plans/ai-later.md).
+- **Open:** Q43, the provider account and key for staging and production, with a spending cap. Translation waits for decisions on languages and the customer site's language switch ([ai-later.md](plans/ai-later.md)).
