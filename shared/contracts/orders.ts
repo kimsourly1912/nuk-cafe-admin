@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import type { PublicBranch } from './branches'
-import { idSchema } from './common'
+import type { Page } from './common'
+import { idSchema, pageQuerySchema } from './common'
 
 /**
  * Orders (phase 6). Step 6.3 (D101): the counter (below). Step 6.2 (D99): placing an order,
@@ -160,9 +161,40 @@ export interface OrderLine {
   note: string | null
 }
 
-/** An order as its customer sees it (`GET /api/shop/orders/{id}`, and the answer to placing it). */
+/** Who cancelled an order, as its customer is told (step 6.5, D106). */
+export const CANCELLED_BY = ['customer', 'cafe', 'system'] as const
+export type CancelledBy = typeof CANCELLED_BY[number]
+
+/** The payment as the customer sees it (no cashier, no reference). */
+export interface OrderPayment {
+  method: PaymentMethod
+  amountMinor: number
+  /** Cash in riel: the riel paid. */
+  amountKhr: number | null
+  collectedAt: string
+  /** Cancelled after paying (before it was ready): how the money went back. */
+  returnMethod: ReturnMethod | null
+  returnedAt: string | null
+}
+
+/**
+ * Why an order was cancelled: by its customer (while unpaid), by the cafe (with its reason; the
+ * staff's own words stay at the counter), or by the system (not paid within 30 minutes, D104).
+ */
+export interface OrderCancellation {
+  by: CancelledBy
+  /** The cafe's reason; `null` for the customer and the system. */
+  reason: CancelReason | null
+}
+
+/**
+ * An order as its customer sees it (`GET /api/shop/orders/{id}`, and the answer to placing it).
+ * Tracking (step 6.5, D106) reads the times each step happened, the payment and the cancellation.
+ */
 export interface Order {
   id: string
+  /** Send it back to cancel (`POST /api/shop/orders/{id}/cancel`). */
+  version: number
   branch: { id: string, name: string }
   /** 1, 2, 3 … per branch and business day; shown as "042". */
   pickupNumber: number
@@ -178,7 +210,44 @@ export interface Order {
   placedAt: string
   /** Pay at the counter before this, or the order is cancelled. */
   paymentDueAt: string
+  paidAt: string | null
+  readyAt: string | null
+  completedAt: string | null
   cancelledAt: string | null
+  payment: OrderPayment | null
+  cancellation: OrderCancellation | null
+}
+
+/** One order in the customer's list: enough for a row, without the lines. */
+export interface OrderSummary {
+  id: string
+  branch: { id: string, name: string }
+  pickupNumber: number
+  businessDate: string
+  status: OrderStatus
+  orderType: OrderType
+  table: { label: string } | null
+  /** Units across the lines ("3 items"). */
+  itemCount: number
+  totalMinor: number
+  placedAt: string
+  paymentDueAt: string
+}
+
+/** Statuses still in play for the customer: shown under "In progress". */
+export const IN_PROGRESS_STATUSES = ['awaiting_payment', 'preparing', 'ready'] as const satisfies readonly OrderStatus[]
+
+/** `GET /api/shop/orders?page=&pageSize=`: the signed-in customer's orders. */
+export const customerOrdersQuerySchema = v.object(pageQuerySchema)
+export type CustomerOrdersQuery = v.InferOutput<typeof customerOrdersQuerySchema>
+
+/**
+ * The customer's orders (step 6.5, D106): every one still in play, newest first, and the finished
+ * ones (completed or cancelled) a page at a time, newest first.
+ */
+export interface CustomerOrders {
+  inProgress: OrderSummary[]
+  past: Page<OrderSummary>
 }
 
 // --- The counter (step 6.3, D101) ---
@@ -215,6 +284,13 @@ const versionSchema = v.pipe(v.number(), v.integer(), v.minValue(1))
 /** `ready` and `complete`: the version the screen shows. */
 export const counterCommandSchema = v.strictObject({ version: versionSchema })
 export type CounterCommandInput = v.InferOutput<typeof counterCommandSchema>
+
+/**
+ * `POST /api/shop/orders/{id}/cancel` (header `Idempotency-Key`): the customer cancels their own
+ * order while it's unpaid (D45), naming the version they saw (step 6.5, D106).
+ */
+export const cancelMyOrderSchema = v.strictObject({ version: versionSchema })
+export type CancelMyOrderInput = v.InferOutput<typeof cancelMyOrderSchema>
 
 /**
  * `pay`: the method, and for riel the rate the screen used (a rate changed since is refused, so

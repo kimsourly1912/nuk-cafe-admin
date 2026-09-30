@@ -90,7 +90,9 @@ describe('the customer menu', () => {
     await expect.poll(() => tree.isVisible()).toBe(false)
     await expect.poll(() => tab(page, 'Tea').getAttribute('aria-current')).toBe('true')
     await visible(page.getByRole('button', { name: 'All categories' })).click()
-    expect(await tree.getByRole('button', { name: /^Milk Tea/ }).getAttribute('aria-current')).toBe('true')
+    // The Tea tab is marked as soon as the scroll reaches Tea; Milk Tea only once its own section
+    // does (the smooth scroll can still be moving under load): wait for it.
+    await expect.poll(() => tree.getByRole('button', { name: /^Milk Tea/ }).getAttribute('aria-current')).toBe('true')
   })
 
   it('adds an item with nothing to choose in one tap; the slot becomes a stepper; the panel totals it', async () => {

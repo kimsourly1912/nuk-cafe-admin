@@ -70,3 +70,14 @@ export const returnMethodInvalid = (paid: boolean) =>
   apiError(400, ErrorCodes.VALIDATION_FAILED, paid ? 'Say how the money went back to the customer.' : 'This order wasn\'t paid: there is no money to give back.', {
     fieldErrors: { returnMethod: [paid ? 'Say how the money went back' : 'Nothing was paid'] },
   })
+
+const number = (pickupNumber: number) => String(pickupNumber).padStart(3, '0')
+
+/**
+ * The customer's cancel (step 6.5, D106) on an order that moved on: paid meanwhile ("ask at the
+ * counter", where staff can still cancel it before it's ready, Q36), or already cancelled.
+ */
+export function cannotCancelNow(pickupNumber: number, status: OrderStatus) {
+  if (status === 'cancelled') return apiError(409, OrderErrorCodes.ORDER_CHANGED, `Order ${number(pickupNumber)} is already cancelled.`)
+  return apiError(409, OrderErrorCodes.ORDER_NOT_CANCELLABLE, `Order ${number(pickupNumber)} is paid now, so it can't be cancelled here. Ask at the counter.`)
+}

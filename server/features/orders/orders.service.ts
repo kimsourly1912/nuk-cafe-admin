@@ -1,4 +1,5 @@
-import type { Order, PlaceOrderInput } from '#shared/contracts/orders'
+import type { CancelledBy, CancelMyOrderInput, CancelReason, OrderCancellation, CustomerOrders, CustomerOrdersQuery, Order, OrderSummary, PlaceOrderInput } from '#shared/contracts/orders'
+import { totalPages } from '#shared/contracts/common'
 import { BUSINESS_DAY_START_MINUTE, MAX_UNPAID_ORDERS, PAYMENT_WINDOW_MINUTES } from '#shared/contracts/orders'
 import type { Db } from '../../utils/batch'
 import { newId } from '../../utils/ids'
@@ -8,7 +9,8 @@ import { resolveTableToken } from '../branches'
 import type { Actor } from '../identity'
 import { getPublicMenu } from '../menu'
 import { withIdempotency } from '../platform'
-import { orderingClosed, orderNotFound, orderNotOrderable, pricesChanged, tableUnavailable, tooManyUnpaidOrders } from './orders.errors'
+import { runOrderCommand } from './commands'
+import { cannotCancelNow, orderingClosed, orderNotFound, orderNotOrderable, pricesChanged, tableUnavailable, tooManyUnpaidOrders } from './orders.errors'
 import * as repo from './orders.repository'
 import { quoteOrder } from './quote.rules'
 
@@ -100,13 +102,30 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
   return { orderId: response.orderId, replayed }
 }
 
-/** An order as its customer sees it. Someone else's is 404, like an unknown id. */
+/**
+ * Who cancelled, as the customer is told: the system (no actor), themselves, or the cafe (any
+ * staff), with the cafe's reason. A staff member cancelling their own order counts as the customer.
+ */
+function cancellation(event: { actorId: string | null, reason: CancelReason | null }, customerId: string): OrderCancellation {
+  const by: CancelledBy = event.actorId === null ? 'system' : event.actorId === customerId ? 'customer' : 'cafe'
+  return { by, reason: by === 'cafe' ? event.reason : null }
+}
+
+/**
+ * An order as its customer sees it, with what tracking needs (step 6.5, D106): the times of each
+ * step, the payment, and who cancelled it and why. Someone else's is 404, like an unknown id.
+ */
 export async function getOrder(db: Db, actor: Actor, id: string): Promise<Order> {
   const row = await repo.findOrder(db, id)
   if (!row || row.customerId !== actor.userId) throw orderNotFound()
-  const lines = await repo.linesOf(db, id)
+  const [lines, [payment], cancel] = await Promise.all([
+    repo.linesOf(db, id),
+    repo.paymentsOf(db, [id]),
+    row.status === 'cancelled' ? repo.cancelEventOf(db, id) : undefined,
+  ])
   return {
     id: row.id,
+    version: row.version,
     branch: { id: row.branchId, name: row.branchName },
     pickupNumber: row.pickupNumber,
     businessDate: row.businessDate,
@@ -128,6 +147,76 @@ export async function getOrder(db: Db, actor: Actor, id: string): Promise<Order>
     currency: 'USD',
     placedAt: toIso(row.placedAt),
     paymentDueAt: toIso(row.paymentDueAt),
+    paidAt: row.paidAt ? toIso(row.paidAt) : null,
+    readyAt: row.readyAt ? toIso(row.readyAt) : null,
+    completedAt: row.completedAt ? toIso(row.completedAt) : null,
     cancelledAt: row.cancelledAt ? toIso(row.cancelledAt) : null,
+    payment: payment
+      ? {
+          method: payment.method,
+          amountMinor: payment.amountMinor,
+          amountKhr: payment.amountKhr,
+          collectedAt: toIso(payment.collectedAt),
+          returnMethod: payment.returnMethod,
+          returnedAt: payment.returnedAt ? toIso(payment.returnedAt) : null,
+        }
+      : null,
+    cancellation: cancel ? cancellation(cancel, row.customerId) : null,
   }
+}
+
+/** Orders still in play shown at once: more than a customer can have in practice (two unpaid). */
+const IN_PROGRESS_LIMIT = 50
+
+/**
+ * The signed-in customer's orders (step 6.5, D106): everything still in play, and a page of the
+ * finished ones, both newest first.
+ */
+export async function listMyOrders(db: Db, actor: Actor, query: CustomerOrdersQuery): Promise<CustomerOrders> {
+  const [inProgress, past] = await Promise.all([
+    repo.findCustomerOrdersInProgress(db, actor.userId, IN_PROGRESS_LIMIT),
+    repo.findCustomerOrdersPast(db, actor.userId, query),
+  ])
+  const counts = await repo.itemCounts(db, [...inProgress, ...past.rows].map(row => row.id))
+  const summary = (row: repo.OrderRow): OrderSummary => ({
+    id: row.id,
+    branch: { id: row.branchId, name: row.branchName },
+    pickupNumber: row.pickupNumber,
+    businessDate: row.businessDate,
+    status: row.status,
+    orderType: row.orderType,
+    table: row.tableLabel ? { label: row.tableLabel } : null,
+    itemCount: counts.get(row.id) ?? 0,
+    totalMinor: row.totalMinor,
+    placedAt: toIso(row.placedAt),
+    paymentDueAt: toIso(row.paymentDueAt),
+  })
+  return {
+    inProgress: inProgress.map(summary),
+    past: { items: past.rows.map(summary), page: query.page, pageSize: query.pageSize, total: past.total, totalPages: totalPages(past.total, query.pageSize) },
+  }
+}
+
+/**
+ * The customer cancels their own order while it's unpaid (D45, step 6.5, D106): guarded by status
+ * and version like the counter's commands, so a payment recorded at the same moment wins (the
+ * customer is told to ask at the counter), and idempotent per `Idempotency-Key`. The event
+ * records the customer as the actor and "changed their mind" as the reason.
+ */
+export async function cancelMyOrder(db: Db, actor: Actor, orderId: string, input: CancelMyOrderInput, key: string, now = new Date()): Promise<Order> {
+  await runOrderCommand(db, {
+    actor,
+    orderId,
+    key,
+    operation: 'customer_cancel',
+    version: input.version,
+    request: { ...input },
+    now,
+    owns: order => order.customerId === actor.userId,
+    changed: order => cannotCancelNow(order.pickupNumber, order.status),
+  }, (order) => {
+    if (order.status !== 'awaiting_payment') throw cannotCancelNow(order.pickupNumber, order.status)
+    return { to: 'cancelled', reason: { reason: 'customer_changed_mind', note: null }, metadata: { by: 'customer' } }
+  })
+  return getOrder(db, actor, orderId)
 }

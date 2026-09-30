@@ -405,7 +405,7 @@ placed (unpaid) ──payment recorded──► preparing ──► ready ──
 ```
 
 - No separate accept step: **recording the counter payment starts preparation.**
-- A customer can cancel only while unpaid (the button comes in 6.5). Staff, managers and admins can cancel unpaid orders, with a reason.
+- A customer can cancel only while unpaid (`POST /api/shop/orders/{id}/cancel`, 6.5a, D106, below). Staff, managers and admins can cancel unpaid orders, with a reason.
 - **Q36 (owner, 2026-09-29, D101):** staff and managers may also cancel a **paid order before it's ready**, recording how the money went back (cash or KHQR, the full amount). A ready or completed order needs an admin refund.
 - An unpaid order past its 30 minutes can't be paid (409 `PAYMENT_EXPIRED`) and leaves the queue; within a minute the expiry task (`orders:expire-unpaid`, D104) marks it cancelled: an `order_events` row with no actor and the note "Not paid within 30 minutes". Index `orders_status_due_idx` (status, `payment_due_at`) answers the task's query.
 
@@ -420,6 +420,14 @@ placed (unpaid) ──payment recorded──► preparing ──► ready ──
 | `POST …/orders/{orderId}/ready` `{ version }` | `order: ['ready']` | Preparing → ready |
 | `POST …/orders/{orderId}/complete` `{ version }` | `order: ['complete']` | Ready → completed (points: 7.1) |
 | `POST …/orders/{orderId}/cancel` `{ version, reason, note?, returnMethod? }` | `order: ['cancel']` | Unpaid or preparing → cancelled; `note` required with `other`; `returnMethod` required for a paid order and refused for an unpaid one (400); ready or completed: 409 `ORDER_NOT_CANCELLABLE` |
+
+**The customer's orders** (`/api/shop/orders`, step 6.5a, D106): only the customer's own; someone else's is 404, like an unknown id.
+
+| Route | Who | Does |
+|---|---|---|
+| `GET /api/shop/orders?page=&pageSize=` | signed in | `{ inProgress, past }`: every order still in play (waiting for payment, preparing, ready), and a `Page` of completed and cancelled ones, both newest first; each an `OrderSummary` (number, status, pickup or table, `itemCount` = units, total, times) |
+| `GET /api/shop/orders/{id}` | signed in | The `Order` with what tracking needs: `version`; `paidAt`, `readyAt`, `completedAt`, `cancelledAt`; `payment` (method, amount, riel, when; how it went back if cancelled after paying; not the cashier or the KHQR reference); `cancellation` `{ by: customer \| cafe \| system, reason }` (the cafe's reason only; the staff's own words stay at the counter), read from the cancel event's actor |
+| `POST /api/shop/orders/{id}/cancel` `{ version }` (header `Idempotency-Key`) | a verified customer | Waiting for payment → cancelled, recorded with the customer as the actor and the reason `customer_changed_mind`, audited as `orders.order.customer_cancel`. Paid meanwhile: 409 `ORDER_NOT_CANCELLABLE` ("… is paid now, so it can't be cancelled here. Ask at the counter."); already cancelled: 409 `ORDER_CHANGED`. The same guarded batch as the counter's commands (`commands.ts`), so a payment recorded at that moment wins |
 
 The riel rate (admin, `settings: ['manage']`): `GET /api/admin/exchange-rates` (`{ current, history }`, the latest 20) and `POST /api/admin/exchange-rates` `{ khrPerUsd }` (from now on; the same rate again changes nothing).
 - A refund or cancellation after completion reverses loyalty (see above).

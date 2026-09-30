@@ -1,10 +1,11 @@
 import type { CancelOrderInput, CounterCommandInput, CounterOrder, CounterQueue, ExchangeRate, ExchangeRates, OrderStatus, PayOrderInput, SetExchangeRateInput } from '#shared/contracts/orders'
 import { toRiel } from '#shared/contracts/orders'
-import type { Db, Statement } from '../../utils/batch'
-import { isStaleWrite, isUniqueViolation, requireOneChange } from '../../utils/batch'
+import type { Db } from '../../utils/batch'
 import { toIso } from '../../utils/time'
 import type { Actor, BranchActor } from '../identity'
-import { auditStatement, withIdempotency } from '../platform'
+import { auditStatement } from '../platform'
+import type { OrderStep } from './commands'
+import { runOrderCommand } from './commands'
 import { exchangeRateChanged, noExchangeRate, orderChanged, orderNotCancellable, orderNotFound, paymentExpired, returnMethodInvalid } from './orders.errors'
 import * as repo from './orders.repository'
 
@@ -90,81 +91,29 @@ export async function getCounterOrder(db: Db, actor: BranchActor, orderId: strin
   return order!
 }
 
-/** Thrown by a guard inside the batch; replaced by the order's state now, read afresh. */
-class OrderMovedOn extends Error {}
-
-interface Step {
-  to: OrderStatus
-  /** Statements beyond the status change, its event and the audit entry. */
-  statements?: Statement[]
-  reason?: CancelInputReason
-  metadata?: Record<string, unknown>
-}
-type CancelInputReason = Pick<CancelOrderInput, 'reason' | 'note'>
-
 /**
- * Runs one counter command: finds the branch's order, lets `plan` refuse it or say where it goes,
- * then writes the change guarded by status and version, its event, `plan`'s statements and the
- * audit entry in one batch, stored under the idempotency key.
+ * Runs one counter command on one of the branch's orders (`runOrderCommand`: guarded by status
+ * and version, one batch, idempotent), then reads it back as the counter sees it.
  */
 async function runCommand(
   db: Db,
   actor: BranchActor,
   orderId: string,
   key: string,
-  command: { operation: string, input: CounterCommandInput, request: unknown, now: Date },
-  plan: (order: repo.OrderRow) => Step | Promise<Step>,
+  command: { operation: string, input: CounterCommandInput, request: object, now: Date },
+  plan: (order: repo.OrderRow) => OrderStep | Promise<OrderStep>,
 ): Promise<CounterOrder> {
-  const { operation, input, now } = command
-  try {
-    await withIdempotency(
-      db,
-      { actorId: actor.userId, operation: `orders.${operation}`, key },
-      { orderId, branchId: actor.branchId, ...(command.request as object) },
-      async () => {
-        const order = await repo.findOrder(db, orderId)
-        if (!order || order.branchId !== actor.branchId) throw orderNotFound()
-        if (order.version !== input.version) throw orderChanged(order.pickupNumber, order.status)
-        const step = await plan(order)
-        const change: repo.OrderChange = { orderId, fromStatus: order.status, toStatus: step.to, version: order.version, at: now }
-        return {
-          statements: [
-            repo.transitionStatement(db, change),
-            requireOneChange(db),
-            repo.eventStatement(db, {
-              orderId,
-              toVersion: order.version + 1,
-              actorId: actor.userId,
-              fromStatus: order.status,
-              toStatus: step.to,
-              reason: step.reason?.reason ?? null,
-              note: step.reason?.note ?? null,
-              at: now,
-            }),
-            ...(step.statements ?? []),
-            auditStatement(db, actor, {
-              action: `orders.order.${operation}`,
-              targetType: 'order',
-              targetId: orderId,
-              branchId: actor.branchId,
-              metadata: { from: order.status, to: step.to, ...step.metadata },
-            }),
-          ],
-          response: { orderId },
-        }
-      },
-      { onStale: () => new OrderMovedOn(), now },
-    )
-  }
-  catch (error) {
-    // Another command changed the order between our read and our write (or paid it: the payment's
-    // unique index, the last guard). Say what it is now.
-    if (error instanceof OrderMovedOn || isStaleWrite(error) || isUniqueViolation(error)) {
-      const current = await repo.findOrder(db, orderId)
-      if (current) throw orderChanged(current.pickupNumber, current.status)
-    }
-    throw error
-  }
+  await runOrderCommand(db, {
+    actor,
+    orderId,
+    key,
+    operation: command.operation,
+    version: command.input.version,
+    request: { branchId: actor.branchId, ...command.request },
+    now: command.now,
+    owns: order => order.branchId === actor.branchId,
+    changed: order => orderChanged(order.pickupNumber, order.status),
+  }, plan)
   return getCounterOrder(db, actor, orderId)
 }
 
