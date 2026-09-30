@@ -101,6 +101,10 @@ export default defineNuxtConfig({
               // The Sample data page (D94): test data can be loaded and reset here.
               NUXT_PUBLIC_SAMPLE_DATA_ENABLED: 'true',
               NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT: 'Staging',
+              // The AI assistant (D107, D108; owner, 2026-09-30): Gemini. The key is the Worker
+              // secret NUXT_AI_API_KEY, set by the owner; without it the assistant stays off.
+              NUXT_AI_PROVIDER: 'google',
+              NUXT_AI_MODEL: 'gemini-3.5-flash',
             },
             // Cloudflare calls the Worker on these; Nitro runs the matching tasks.
             triggers: { crons: Object.keys(SCHEDULED_TASKS) },
