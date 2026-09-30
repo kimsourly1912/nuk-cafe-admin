@@ -15,9 +15,9 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 | `availability-rules` | [`AvailabilityRuleSelect`](#availabilityruleselect), [`useAvailabilityRuleOptions`](#useavailabilityruleoptions), [`describeWindows`](#describewindows), `availabilityRulesNavigation` |
 | `products` | `productsNavigation` ("Menu items"). A `ProductSelect` waits for its first consumer |
 | `account` | `AccountButton`, `VerifyEmailBanner` (the store header); `useCustomerAccount` (the signed-in customer, browser only: `account`, `known`, `refresh`), `useResendVerification` (Resend with the shared 60 s wait), `ACCOUNT_PATHS`, `accountLink(path, returnTo)` (a sign-in or sign-up link that comes back). Used by Review order's gates (D97, D100) |
-| `orders` | `formatPickupNumber` ("007"), `tableName` ("Table T01" from "T01") (D100) |
+| `orders` | `formatPickupNumber` ("007"), `tableName` ("Table T01" from "T01") (D100); `ActiveOrdersBar`, the menu's bar for an order in progress (mount it only for a signed-in customer: it reads `/api/shop/orders`, D114) |
 | `counter` | `useCounterSession` (the counter workspace's own session: `user` with its `branches`, `signIn`, `signOut`, `changePassword`, `clearSession`, `generation`), `isCounterPath`, `counterRedirectTarget`, `COUNTER_HOME_PATH`, `COUNTER_SIGN_IN_PATH`, `COUNTER_CHANGE_PASSWORD_PATH`: for the shell (middleware, the API plugin, tab titles) (D102) |
-| `menu` | `openingText` ("Opens tomorrow at 7:00 AM"; also the counter's closed banner, D102) |
+| `menu` | `openingText` ("Opens tomorrow at 7:00 AM"; also the counter's closed banner, D102); `useOrderAgain()` → `orderAgain({ branchId, lines: PastLine[] })`: adds an earlier order's lines still on that branch's menu to the order in this browser, returns `{ added, skipped }` (D114) |
 | `exchange-rates` | `exchangeRatesNavigation` ("Payments", D102) |
 
 When you add a feature, add its section here. Pickers follow the contract in [feature-standard.md → Resource picker conventions](../feature-standard.md#6-resource-picker-conventions).

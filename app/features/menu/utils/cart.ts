@@ -119,3 +119,43 @@ export function parseLines(value: unknown): CartLine[] {
     return [{ key: lineKey(variationId, modifierIds), itemId, variationId, modifierIds, quantity: count, name, note: kept }]
   })
 }
+
+/** A line of an earlier order, as Order again reads it (step 6.5b, D114). */
+export interface PastLine {
+  itemId: string
+  variationId: string
+  modifierIds: string[]
+  quantity: number
+  note: string | null
+  /** The name it was sold under, for "… isn't available now". */
+  name: string
+}
+
+/**
+ * Order again: the lines still on the menu as they were (the item, the same version not sold out,
+ * every add-on still offered), with their notes, ready to add; the others are named as skipped.
+ * Add-ons are put in menu order, like a line added from the menu.
+ */
+export function reorderLines(lines: PastLine[], items: PublicMenuItem[]): { lines: Omit<CartLine, 'key'>[], skipped: string[] } {
+  const byId = new Map(items.map(item => [item.id, item]))
+  const kept: Omit<CartLine, 'key'>[] = []
+  const skipped: string[] = []
+  for (const line of lines) {
+    const item = byId.get(line.itemId)
+    const version = item?.variations.find(v => v.id === line.variationId)
+    const offered = item?.modifierGroups.flatMap(g => g.modifiers.map(m => m.id)) ?? []
+    if (!item || !version || version.soldOut || !line.modifierIds.every(id => offered.includes(id))) {
+      if (!skipped.includes(line.name)) skipped.push(line.name)
+      continue
+    }
+    kept.push({
+      itemId: item.id,
+      variationId: version.id,
+      modifierIds: offered.filter(id => line.modifierIds.includes(id)),
+      quantity: line.quantity,
+      name: item.name,
+      note: line.note,
+    })
+  }
+  return { lines: kept, skipped }
+}

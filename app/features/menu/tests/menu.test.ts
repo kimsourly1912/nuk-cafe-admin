@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PublicMenu, PublicMenuItem, PublicMenuModifierGroup } from '#shared/contracts/public-menu'
-import { addLine, lineKey, MAX_LINE_QUANTITY, parseLines, quantityOfItem, resolveCart, setLineQuantity } from '../utils/cart'
+import { addLine, lineKey, MAX_LINE_QUANTITY, parseLines, quantityOfItem, reorderLines, resolveCart, setLineQuantity } from '../utils/cart'
 import { hasChoices, highlightParts, menuItems, menuSections, priceOf, searchMenu } from '../utils/menu'
 import { openingText } from '../utils/opening'
 import { chooseValue, chosenModifierIds, defaultSelection, groupRule, isValueOrderable, selectionProblems, toggleModifier, unitPriceOf, variationOf } from '../utils/selection'
@@ -205,5 +205,30 @@ describe('opening text', () => {
     expect(closed(7, 1)).toBe('Opens next Monday at 7:00 AM')
     expect(openingText({ openNow: true, nextOpening: null })).toBeUndefined()
     expect(openingText({ openNow: false, nextOpening: null })).toBeUndefined()
+  })
+})
+
+describe('Order again (step 6.5b, D114)', () => {
+  const past = (itemId: string, variationId: string, modifierIds: string[] = [], name = itemId) =>
+    ({ itemId, variationId, modifierIds, quantity: 2, note: 'Less ice', name })
+
+  it('keeps the lines still on the menu as they were, notes kept, add-ons in menu order', () => {
+    const result = reorderLines([past('latte', 's-hot', ['Shot', 'Oat'])], [latte])
+    expect(result).toEqual({
+      lines: [{ itemId: 'latte', variationId: 's-hot', modifierIds: ['Oat', 'Shot'], quantity: 2, name: 'Latte', note: 'Less ice' }],
+      skipped: [],
+    })
+  })
+
+  it('skips an item gone from the menu, a version gone or sold out, and a line with an add-on no longer offered', () => {
+    const result = reorderLines([
+      past('bread', 'bread-v', [], 'Banana Bread'),
+      past('latte', 'gone', [], 'Latte'),
+      past('latte', 'l-iced', [], 'Latte'),
+      past('latte', 'l-hot', ['Caramel'], 'Latte'),
+      past('latte', 'l-hot', ['Whole']),
+    ], [latte])
+    expect(result.skipped).toEqual(['Banana Bread', 'Latte'])
+    expect(result.lines.map(l => [l.variationId, l.modifierIds])).toEqual([['l-hot', ['Whole']]])
   })
 })

@@ -10,6 +10,7 @@
  * - **Search** replaces the sections with the matches, grouped by where they are, in the same cards.
  * - **Items**: cards from `sm`, rows on phones; the add slot changes in place (`MenuAddControl`);
  *   the name opens the detail (`MenuItemDetail`).
+ * - **An order in progress** (signed in): a bar above the sections to its page (step 6.5b, D114).
  * - **The order**: a panel beside the menu from `lg`; below it a bottom bar once something is in
  *   it, opening the order in a bottom sheet. Checkout comes with step 6.2.
  * - **Closed**: one warning banner with when it opens; browsing works, adding doesn't.
@@ -19,7 +20,8 @@
  * stored table or branch choice (read after mounting) asks for another.
  */
 import { useElementSize } from '@vueuse/core'
-import { AccountButton, VerifyEmailBanner } from '~/features/account'
+import { AccountButton, useCustomerAccount, VerifyEmailBanner } from '~/features/account'
+import { ActiveOrdersBar } from '~/features/orders'
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
 import { usePublicMenu, useCart, useShopBranch, useTableContext } from '../composables/useShopMenu'
 import { useScrollSpy } from '../composables/useScrollSpy'
@@ -30,6 +32,9 @@ import MenuCategoryBar from './MenuCategoryBar.vue'
 import MenuItemDetail from './MenuItemDetail.vue'
 import MenuItemList from './MenuItemList.vue'
 import OrderPanel from './OrderPanel.vue'
+
+// The bar for an order in progress: only for a signed-in customer (read in the browser, D97).
+const { account } = useCustomerAccount()
 
 // --- Branch, table and menu ---
 const { branches, requestedBranchId, choose } = useShopBranch()
@@ -239,6 +244,7 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
     <main class="mx-auto max-w-7xl px-4 pt-4 pb-10 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8">
       <div class="min-w-0 space-y-8">
         <VerifyEmailBanner />
+        <ActiveOrdersBar v-if="account" />
         <UAlert
           v-if="branch && closed"
           color="warning"

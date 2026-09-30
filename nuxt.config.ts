@@ -177,6 +177,7 @@ export default defineNuxtConfig({
     // Checkout and a customer's order are theirs alone and read browser storage and the session:
     // browser work only, like a table's QR link (D100).
     '/checkout': { ssr: false },
+    '/orders': { ssr: false },
     '/orders/**': { ssr: false },
     // The counter workspace, like the admin: the staff session, no search engines (D102).
     '/counter': { ssr: false },

@@ -70,7 +70,7 @@ Source: `app/plugins/data-freshness.client.ts` (VueUse `useBroadcastChannel`, `u
 **Why not the alternatives** (researched 2026-09-26, see D22):
 - Listening to `focus` instead of `visibilitychange`: `focus` also fires after alert/confirm dialogs, file pickers, iframes and DevTools, which causes needless refetches. TanStack Query dropped it for this reason.
 - Syncing **data** between tabs (TanStack's `broadcastQueryClient`): experimental, fails on non-cloneable values (Vue proxies, Files), and puts cached data on the channel. Sending only feature names is enough: each tab refetches with its own cookies.
-- Polling: costs requests all day for changes that are rare. If the orders pickup queue needs live data, poll that screen only (`useIntervalFn`) or use server push once the backend offers it.
+- Polling: costs requests all day for changes that are rare. Live screens poll on their own (`useIntervalFn`, visible tab only): the counter's queue (D102) and a customer's order in progress (D114). Server push is planned for later ([plans/live-updates.md](../plans/live-updates.md)).
 - Server push (WebSocket/SSE): the only way to see another device's change instantly. The backend has no such endpoint today.
 
 ---
@@ -157,7 +157,7 @@ The admin session carries `permissions` (`resource:action`, D52); only platform 
 
 ## Server-rendered customer pages (D95)
 
-The customer site renders on the server; `/admin/**`, `/counter/**`, `/table/**`, `/checkout` and `/orders/**` render in the browser only.
+The customer site renders on the server; `/admin/**`, `/counter/**`, `/table/**`, `/checkout`, `/orders` and `/orders/**` render in the browser only.
 
 | Case | Behavior |
 |---|---|
@@ -213,11 +213,31 @@ Tests: e2e `shop-account.test.ts`; unit `app/features/account/tests/account.test
 | No answer, or a server error, while placing | "We couldn't confirm your order. Try again: you won't get a second order." Try again sends the same `Idempotency-Key`, so an order that was placed comes back instead of a second one. Any change to the order makes a new key |
 | Double click on Place order | One request: the controls are locked while placing |
 | Two unpaid orders already | The server's message; nothing else to do on the page |
-| Placed | The order in this browser is emptied; `/orders/<id>` (replacing `/checkout` in the history): the 3-digit number, "Waiting for payment", what to do next (for a table: "then we'll bring it to Table T01"), pay by the time 30 minutes on, the lines with their notes |
+| Placed | The order in this browser is emptied; `/orders/<id>` (replacing `/checkout` in the history): the 3-digit number, "Waiting for payment", what to do next (a table order is collected at the counter too, D106), "Pay at the counter by …" with the minutes left, the lines with their notes. Tracking: below |
 | `/orders/<id>` reloaded, or opened in another tab | Read again from the server. Another account's order, or an unknown id: "This order wasn't found". Signed out: Sign in, then back |
 | The order in this browser is full (30 lines) | A new line isn't added; a warning toast says so. More of a line already there still counts (up to 20) |
 
 Tests: e2e `shop-checkout.test.ts` (on the seeded database: the gates, a note, a price changed underneath, dine-in, a table archived underneath, the phone bar and sheet); unit `app/features/menu/tests/checkout.test.ts`, `app/features/orders/tests/order.test.ts`.
+
+## Order tracking (D114)
+
+`/orders/<id>` follows the order; `/orders` lists them; the menu shows a bar while one is in progress. All read in the browser only.
+
+| Case | Behavior |
+|---|---|
+| The counter takes payment, marks it ready or completes it | The page reads the order again every 10 s while it's in progress and the tab is visible (and on return to the tab, D22): the badge, the four steps, "Paid $9.75 · Cash · 10:21 AM", "Updated just now". It stops once the order is completed or cancelled |
+| Ready | A success panel with "Ready for pickup" and the number; the tab title becomes "Ready: 042" |
+| The time to pay runs out on this device's clock | The last 5 minutes in red; at 0 "Time's up: this order will be cancelled" until the expiry task (D104) cancels it within a minute (the server decides, not the device) |
+| Cancel order (only while unpaid) | A confirm sheet (a dialog from `sm`), Keep order as the main button. Cancelled: "You cancelled this order", no steps |
+| The cashier takes payment while the sheet is open | The server refuses (409): the sheet shows "Order 042 is paid now, so it can't be cancelled here. Ask at the counter." with Close, and the page reads the order again (Preparing) |
+| No answer while cancelling | "Try again" sends the same `Idempotency-Key`: never two cancels |
+| Cancelled by the cafe or not paid in time | "Cancelled by the cafe: item unavailable." / "Not paid within 30 minutes", and "$9.75 returned in cash." when a payment went back. Never the staff's own note (D106) |
+| Order again (completed orders) | The lines still on the branch's menu (same version and add-ons, notes kept) go into the order in this browser, then the menu: "Added 2 items to your order", and "Banana Bread isn't available now." for the rest. The table isn't carried over |
+| Your orders | In progress (cards), then Past (20 at a time, Load more; a refresh reads every page shown again). Empty: "No orders yet" and Browse the menu. Signed out: Sign in, then back |
+| The menu, signed in, an order in progress | A bar above the first section: "Order 042 · Preparing · View" (green "Order 042 is ready"); several: "2 orders in progress", to Your orders. Read every 10 s only while an order is in progress |
+| The menu, signed out | No bar and no request for orders |
+
+Tests: e2e `shop-tracking.test.ts` (on the seeded database: the counter moves the order and the page follows, Order again, cancel on a phone, the race with a payment, another's order, the bar and Your orders, no request signed out); unit `app/features/orders/tests/order.test.ts`, `app/features/menu/tests/menu.test.ts` (Order again).
 
 ## The counter workspace (D102)
 

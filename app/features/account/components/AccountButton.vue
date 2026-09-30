@@ -118,6 +118,16 @@ async function signOutNow() {
         </div>
         <USeparator />
         <UButton
+          label="Your orders"
+          icon="i-lucide-receipt"
+          to="/orders"
+          color="neutral"
+          variant="ghost"
+          block
+          class="justify-start"
+          @click="open = false"
+        />
+        <UButton
           label="Sign out"
           icon="i-lucide-log-out"
           color="neutral"

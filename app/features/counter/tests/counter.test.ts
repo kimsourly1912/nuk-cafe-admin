@@ -7,8 +7,8 @@ const order = (over: Partial<CounterOrder> = {}): CounterOrder => ({
   id: 'o1', version: 1, pickupNumber: 42, businessDate: '2026-09-29', status: 'awaiting_payment', orderType: 'pickup', table: null,
   customer: { name: 'Sokha Chan' },
   lines: [
-    { itemId: 'i1', itemName: 'Iced Latte', detail: 'Large', modifiers: [], unitPriceMinor: 475, quantity: 1, totalMinor: 475, note: null },
-    { itemId: 'i2', itemName: 'Banana Bread', detail: '', modifiers: [], unitPriceMinor: 250, quantity: 2, totalMinor: 500, note: null },
+    { itemId: 'i1', variationId: 'v1', itemName: 'Iced Latte', detail: 'Large', modifiers: [], unitPriceMinor: 475, quantity: 1, totalMinor: 475, note: null },
+    { itemId: 'i2', variationId: 'v2', itemName: 'Banana Bread', detail: '', modifiers: [], unitPriceMinor: 250, quantity: 2, totalMinor: 500, note: null },
   ],
   totalMinor: 975, placedAt: '2026-09-29T03:00:00.000Z', paymentDueAt: '2026-09-29T03:30:00.000Z',
   paidAt: null, readyAt: null, completedAt: null, cancelledAt: null, payment: null, ...over,
