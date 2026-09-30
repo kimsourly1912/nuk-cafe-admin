@@ -1,0 +1,1 @@
+CREATE INDEX `orders_status_due_idx` ON `orders` (`status`,`payment_due_at`);

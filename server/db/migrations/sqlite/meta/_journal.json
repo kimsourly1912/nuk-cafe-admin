@@ -113,6 +113,13 @@
       "when": 1790690295946,
       "tag": "0015_counter_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1790729354348,
+      "tag": "0016_orders_status_due_index",
+      "breakpoints": true
     }
   ]
 }

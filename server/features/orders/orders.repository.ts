@@ -248,6 +248,14 @@ export function insertRateStatement(db: Db, rate: { perUsd: number, effectiveFro
 }
 
 /** Unpaid orders still due, for tests and the expiry task (6.6). */
+/** Unpaid orders whose time to pay is over (the expiry task, 6.6), oldest first. */
+export async function findExpiredUnpaid(db: Db, now: Date, limit: number): Promise<{ id: string, version: number, branchId: string }[]> {
+  return db.select({ id: orders.id, version: orders.version, branchId: orders.branchId }).from(orders)
+    .where(and(eq(orders.status, 'awaiting_payment'), lte(orders.paymentDueAt, now)))
+    .orderBy(asc(orders.paymentDueAt))
+    .limit(limit)
+}
+
 export async function unpaidCount(db: Db, customerId: string, now: Date): Promise<number> {
   const [row] = await db.select({ count: sql<number>`count(*)` }).from(orders)
     .where(and(eq(orders.customerId, customerId), eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now)))
