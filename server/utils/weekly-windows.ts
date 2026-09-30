@@ -127,6 +127,29 @@ export function localDate(instant: Date, timeZone: string): string {
   return format.format(instant)
 }
 
+/** How far the zone's wall clock is ahead of UTC at `instant`, in milliseconds. */
+function zoneOffsetMs(instant: number, timeZone: string): number {
+  const at = new Date(instant)
+  const wall = Date.parse(`${localDate(at, timeZone)}T00:00:00Z`) + localTime(at, timeZone).minute * 60_000
+  return wall - (instant - (instant % 60_000))
+}
+
+/**
+ * The instant it is `minute` minutes after midnight on the local `date` (`YYYY-MM-DD`) in
+ * `timeZone`: `zonedInstant('2026-09-30', 240, 'Asia/Phnom_Penh')` is 04:00 there, 21:00 UTC the day
+ * before (reports' business days, D110). Two passes find the offset at that wall time.
+ */
+export function zonedInstant(date: string, minute: number, timeZone: string): Date {
+  const wall = Date.parse(`${date}T00:00:00Z`) + minute * 60_000
+  const first = wall - zoneOffsetMs(wall, timeZone)
+  return new Date(wall - zoneOffsetMs(first, timeZone))
+}
+
+/** The business date `days` after `date` (both `YYYY-MM-DD`; negative goes back). */
+export function addDays(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+}
+
 /** Whether the runtime knows the IANA zone ("Asia/Phnom_Penh"; not "Mars/Base"). */
 export function isKnownTimeZone(timeZone: string): boolean {
   try {

@@ -24,7 +24,7 @@ export const platformStatements = {
   voucherTemplate: ['manage'],
   loyalty: ['adjust'],
   settings: ['manage'],
-  report: ['read'],
+  report: ['read', 'export'],
   audit: ['read'],
   // The AI assistant (phase 9, D107): admins only for now.
   assistant: ['use'],
@@ -45,7 +45,7 @@ export const platformRoles = {
     voucherTemplate: ['manage'],
     loyalty: ['adjust'],
     settings: ['manage'],
-    report: ['read'],
+    report: ['read', 'export'],
     audit: ['read'],
     assistant: ['use'],
   }),

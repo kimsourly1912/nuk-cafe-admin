@@ -17,9 +17,8 @@ A person can have different roles at different branches.
 1. Press **Add staff member** (or **N**).
 2. **Name** and **Email**.
 3. Tick **Admin** for full access, and/or under **Branches** press **Add branch**, pick the branch and the role (Manager or Staff).
-4. Press **Add**.
-5. A **Temporary password** appears. **Copy** it and give it to the person in person or through a private channel. It won't be shown again.
-6. At their first sign-in they must choose their own password.
+4. Press **Add**, then **Copy** the **Temporary password** that appears and give it to the person in person or through a private channel. It won't be shown again, so this step is part of adding them.
+5. At their first sign-in they must choose their own password.
 
 If the email already belongs to a customer account (someone who orders on the website), that account gets the access instead; they keep their own password and no temporary password is shown.
 
