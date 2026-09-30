@@ -383,6 +383,43 @@ export interface CounterQueue {
   orders: CounterOrder[]
   khrRate: ExchangeRate | null
   serverTime: string
+  /** Orders of today's business day already completed or cancelled ("Finished today (24)", step 10.2). */
+  finishedToday: number
+}
+
+/**
+ * `GET /api/counter/{branchId}/orders/finished` (step 10.2, D116): today's business day's orders
+ * that left the queue (completed or cancelled), the most recently finished first. Read only.
+ */
+export interface CounterFinishedOrders {
+  /** `YYYY-MM-DD`: the business day shown (it starts at 4:00 in the branch's time zone). */
+  businessDate: string
+  orders: CounterOrder[]
+}
+
+/** Who took a step: nobody (the system, e.g. the 30-minute expiry), the customer, or a staff member. */
+export interface CounterStepActor {
+  kind: 'system' | 'customer' | 'staff'
+  /** The staff member's name, or the customer's first name; `null` for the system. */
+  name: string | null
+}
+
+/** One recorded step of an order: placed, paid, ready, completed or cancelled. */
+export interface CounterTimelineStep {
+  at: string
+  toStatus: OrderStatus
+  by: CounterStepActor
+  /** A cancel's reason, and the staff's own note (the counter sees it; customers never do, D106). */
+  reason: CancelReason | null
+  note: string | null
+}
+
+/** `GET /api/counter/{branchId}/orders/{id}/history`: the order with every step and who took it. */
+export interface CounterOrderHistory {
+  order: CounterOrder
+  timeline: CounterTimelineStep[]
+  /** Who handed the money back, for a paid order cancelled before it was ready. */
+  returnedBy: string | null
 }
 
 /** `POST /api/admin/exchange-rates`: a new riel rate, from now on. */

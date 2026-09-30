@@ -1,4 +1,4 @@
-import type { CancelOrderInput, CounterCommandInput, CounterOrder, CounterQueue, ExchangeRate, ExchangeRates, OrderStatus, PayOrderInput, SetExchangeRateInput } from '#shared/contracts/orders'
+import type { CancelOrderInput, CounterCommandInput, CounterFinishedOrders, CounterOrder, CounterOrderHistory, CounterQueue, ExchangeRate, ExchangeRates, OrderStatus, PayOrderInput, SetExchangeRateInput } from '#shared/contracts/orders'
 import { toRiel } from '#shared/contracts/orders'
 import type { Db } from '../../utils/batch'
 import { toIso } from '../../utils/time'
@@ -9,6 +9,8 @@ import { runOrderCommand } from './commands'
 import { exchangeRateChanged, noExchangeRate, orderChanged, orderNotCancellable, orderNotFound, paymentExpired, returnMethodInvalid } from './orders.errors'
 import { ORDER_EVENTS } from './orders.events'
 import * as repo from './orders.repository'
+import * as reportsRepo from './reports.repository'
+import { businessDateAt, firstName } from './reports.rules'
 
 /**
  * The counter (docs/server/data-model.md → Orders & payment, step 6.3, D101): the branch's queue
@@ -79,10 +81,54 @@ async function withDetails(db: Db, rows: repo.OrderRow[]): Promise<CounterOrder[
 
 const toRate = (row: repo.RateRow): ExchangeRate => ({ khrPerUsd: row.perUsd, effectiveFrom: toIso(row.effectiveFrom), setBy: { name: row.setByName } })
 
-/** The branch's orders still in play, the riel rate, and the server's clock. */
+/** The branch's business day at `now` (it starts at 4:00 in the branch's time zone, D99). */
+async function businessDateOf(db: Db, branchId: string, now: Date): Promise<string> {
+  const branch = await reportsRepo.findReportBranch(db, branchId)
+  if (!branch) throw orderNotFound()
+  return businessDateAt(now, branch.timeZone)
+}
+
+/** The branch's orders still in play, the riel rate, the server's clock, and how many finished today. */
 export async function listCounterQueue(db: Db, actor: BranchActor, now = new Date()): Promise<CounterQueue> {
-  const [rows, rate] = await Promise.all([repo.findActiveOrders(db, actor.branchId, now), repo.currentRate(db, now)])
-  return { orders: await withDetails(db, rows), khrRate: rate ? toRate(rate) : null, serverTime: now.toISOString() }
+  const [rows, rate, today] = await Promise.all([repo.findActiveOrders(db, actor.branchId, now), repo.currentRate(db, now), businessDateOf(db, actor.branchId, now)])
+  const [orders, finishedToday] = await Promise.all([withDetails(db, rows), repo.countFinishedOrders(db, actor.branchId, today)])
+  return { orders, khrRate: rate ? toRate(rate) : null, serverTime: now.toISOString(), finishedToday }
+}
+
+/**
+ * Today's orders that left the queue (step 10.2, D116): completed or cancelled, of the business day
+ * they were placed in, the most recently finished first. Read only: the counter looks an order up
+ * ("I paid, why was it cancelled?"), it doesn't change it. Older days are in the admin's Reports.
+ */
+export async function listFinishedToday(db: Db, actor: BranchActor, now = new Date()): Promise<CounterFinishedOrders> {
+  const businessDate = await businessDateOf(db, actor.branchId, now)
+  return { businessDate, orders: await withDetails(db, await repo.findFinishedOrders(db, actor.branchId, businessDate)) }
+}
+
+/**
+ * One of the branch's orders with every step and who took it (step 10.2): the system (the expiry),
+ * the customer (their first name), or a staff member (their name). The staff's own cancel note is
+ * shown here, never to the customer (D106).
+ */
+export async function getCounterOrderHistory(db: Db, actor: BranchActor, orderId: string): Promise<CounterOrderHistory> {
+  const row = await repo.findOrder(db, orderId)
+  if (!row || row.branchId !== actor.branchId) throw orderNotFound()
+  const [[order], events, returnedBy] = await Promise.all([withDetails(db, [row]), reportsRepo.eventsOf(db, orderId), reportsRepo.returnedByName(db, orderId)])
+  return {
+    order: order!,
+    timeline: events.map(event => ({
+      at: toIso(event.at),
+      toStatus: event.toStatus,
+      by: event.actorId === null
+        ? { kind: 'system' as const, name: null }
+        : event.actorId === row.customerId
+          ? { kind: 'customer' as const, name: firstName(row.customerName) }
+          : { kind: 'staff' as const, name: event.actorName },
+      reason: event.reason,
+      note: event.note,
+    })),
+    returnedBy,
+  }
 }
 
 /** One of the branch's orders, whatever its status. Another branch's is 404, like an unknown id. */

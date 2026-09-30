@@ -7,9 +7,10 @@ import { updateBranchSettings } from '../../branches'
 import type { Actor, BranchActor } from '../../identity'
 import { createCategory, createItem, publishItem } from '../../menu'
 import { auditEvents } from '../../platform/platform.schema'
-import { cancelOrderAtCounter, completeOrder, getCounterOrder, getExchangeRates, listCounterQueue, markOrderReady, payOrder, setExchangeRate } from '../counter.service'
+import { cancelOrderAtCounter, completeOrder, getCounterOrder, getCounterOrderHistory, getExchangeRates, listCounterQueue, listFinishedToday, markOrderReady, payOrder, setExchangeRate } from '../counter.service'
+import { expireUnpaidOrders } from '../expiry.service'
 import { counterPayments, orderEvents, orders } from '../orders.schema'
-import { placeOrder } from '../orders.service'
+import { cancelMyOrder, placeOrder } from '../orders.service'
 import { createTestDb, createUser } from '../../../tests/support/db'
 import { expectApiError } from '../../../tests/support/failure'
 import { interleaved } from '../../../tests/support/interleave'
@@ -328,5 +329,69 @@ describe('the riel rate', () => {
     expect(rates.current).toMatchObject({ khrPerUsd: 4120, setBy: { name: 'Kim' } })
     expect(rates.history.map(rate => rate.khrPerUsd)).toEqual([4120, 4100])
     expect((await db.select().from(auditEvents).where(eq(auditEvents.action, 'orders.exchange_rate.set')))).toHaveLength(2)
+  })
+})
+
+describe('finished today (step 10.2, D116)', () => {
+  /** Places, pays, readies and completes an order; returns its id. */
+  async function completed(customer: Actor, placedAt: string, doneAt: string) {
+    const orderId = await place(customer, monday(placedAt))
+    await pay(orderId, cash, cashier, monday(placedAt))
+    await markOrderReady(db, colleague, orderId, { version: 2 }, key(), monday(placedAt))
+    await completeOrder(db, cashier, orderId, { version: 3 }, key(), monday(doneAt))
+    return orderId
+  }
+
+  it('lists today\'s completed and cancelled orders, the most recently finished first; not those in play, another branch\'s, or another day\'s', async () => {
+    const picked = await completed(sokha, '12:00', '12:20')
+    const byCafe = await place(dara, monday('12:02'))
+    await pay(byCafe, cash, cashier, monday('12:03'))
+    await cancelOrderAtCounter(db, cashier, byCafe, cancelInput({ version: 2, reason: 'item_unavailable', note: 'Out of oat milk', returnMethod: 'cash' }), key(), monday('12:10'))
+    const byCustomer = await place(sokha, monday('12:04'))
+    await cancelMyOrder(db, sokha, byCustomer, { version: 1 }, key(), monday('12:06'))
+    const expired = await place(dara, monday('12:05'))
+    await expireUnpaidOrders(db, monday('12:40'))
+    const inPlay = await place(sokha, monday('12:30'))
+    await place(sokha, monday('12:31'), otherBranchId)
+
+    const finished = await listFinishedToday(db, cashier, monday('13:00'))
+    expect(finished.businessDate).toBe('2026-09-28')
+    expect(finished.orders.map(o => o.id)).toEqual([expired, picked, byCafe, byCustomer])
+    expect(finished.orders.find(o => o.id === byCafe)!.payment).toMatchObject({ method: 'cash_usd', returnMethod: 'cash' })
+    expect(finished.orders.map(o => o.id)).not.toContain(inPlay)
+    expect((await listCounterQueue(db, cashier, monday('13:00'))).finishedToday).toBe(4)
+
+    // The business day starts at 4:00: still Monday's until then, then a new, empty day.
+    const tuesday = (hhmm: string) => new Date(`2026-09-29T${hhmm}:00+07:00`)
+    expect((await listFinishedToday(db, cashier, tuesday('03:59'))).orders).toHaveLength(4)
+    const next = await listFinishedToday(db, cashier, tuesday('04:00'))
+    expect([next.businessDate, next.orders]).toEqual(['2026-09-29', []])
+    expect((await listCounterQueue(db, cashier, tuesday('04:00'))).finishedToday).toBe(0)
+  })
+
+  it('an order\'s history: every step with who took it, the staff\'s note and who gave the money back', async () => {
+    const orderId = await place(sokha)
+    await pay(orderId, cash, cashier, monday('12:03'))
+    await cancelOrderAtCounter(db, colleague, orderId, cancelInput({ version: 2, reason: 'item_unavailable', note: 'Out of oat milk', returnMethod: 'cash' }), key(), monday('12:10'))
+
+    const history = await getCounterOrderHistory(db, cashier, orderId)
+    expect(history.order).toMatchObject({ id: orderId, status: 'cancelled' })
+    expect(history.timeline).toEqual([
+      { at: NOON.toISOString(), toStatus: 'awaiting_payment', by: { kind: 'customer', name: 'Sokha' }, reason: null, note: null },
+      { at: monday('12:03').toISOString(), toStatus: 'preparing', by: { kind: 'staff', name: 'Sophea' }, reason: null, note: null },
+      { at: monday('12:10').toISOString(), toStatus: 'cancelled', by: { kind: 'staff', name: 'Vanna' }, reason: 'item_unavailable', note: 'Out of oat milk' },
+    ])
+    expect(history.returnedBy).toBe('Vanna')
+  })
+
+  it('an expired order\'s cancel is the system\'s; another branch\'s order is not found', async () => {
+    const orderId = await place(sokha)
+    await expireUnpaidOrders(db, monday('12:40'))
+    const history = await getCounterOrderHistory(db, cashier, orderId)
+    expect(history.timeline.at(-1)).toMatchObject({ toStatus: 'cancelled', by: { kind: 'system', name: null } })
+    expect(history.returnedBy).toBeNull()
+
+    const elsewhere = await place(dara, NOON, otherBranchId)
+    await expectApiError(() => getCounterOrderHistory(db, cashier, elsewhere), 404, 'NOT_FOUND')
   })
 })

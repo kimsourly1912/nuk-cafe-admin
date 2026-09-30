@@ -260,6 +260,9 @@ Tests: e2e `shop-tracking.test.ts` (on the seeded database: the counter moves th
 | Cancelling a paid order | Says how the money went back (cash or KHQR) and the full amount; a ready order can't be cancelled here |
 | Session lost (401) | Back to `/counter/sign-in?redirect=…`; the previous person's data is cleared (the session boundary) |
 | Phones | One list at a time, as tabs with counts; the order full screen; the cancel dialog a bottom sheet |
+| Finished today (`/counter/<branchId>/finished`, D116) | Today's business day (from 4:00 in the branch's zone) completed and cancelled orders, the most recently finished first; the queue's switch shows the count ("Finished today (24)"). Read again when a counter command changes an order and on return to the tab; no timer. Read only |
+| Finished today: an order opened | Beside the list from `lg`, a side panel below, full screen on phones: items, why it was cancelled (the staff's note included) and who returned the money, each step with who took it (first names; "automatically" for the 30-minute expiry) |
+| `?order=` for an order no longer in the queue (Telegram's Open order) | Goes to Finished today with that order open (any of the branch's orders, even another day's); the link leaves the URL |
 | Sold out (`/counter/<branchId>/sold-out`, D105) | One switch per version of what the menu lists now; a switched-off row says since when and by whom; it stays off until switched back. Two people at once, or a retry, end in the state asked for (D64) |
 | Switching one back on while showing only the sold-out ones | The row stays, now Available, so a slip can be undone there; it leaves the list when the filter, search or category changes |
 | The badge and "Since … by" disagree while the page refreshes | Can't: both come from the sold-out list (the menu only until the list loads) |

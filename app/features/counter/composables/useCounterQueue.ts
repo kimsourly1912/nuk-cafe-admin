@@ -2,6 +2,9 @@ import { useDocumentVisibility, useIntervalFn, useLocalStorage } from '@vueuse/c
 import type { CounterOrder, CounterQueue } from '#shared/contracts/orders'
 import { NEW_FOR_MS } from '../utils/counter'
 
+/** The new-order sound, on or off in this browser (the header's user menu, on every counter page). */
+export const useCounterMuted = () => useLocalStorage('counter:muted', false, { initOnMounted: true })
+
 /** The queue refreshes this often while the tab is visible (owner, 2026-09-29, D102). */
 export const QUEUE_REFRESH_MS = 10_000
 
@@ -33,7 +36,7 @@ export function useCounterQueue(branchId: MaybeRefOrGetter<string>) {
   const now = computed(() => tick.value + offset.value)
 
   // --- New orders ---
-  const muted = useLocalStorage('counter:muted', false, { initOnMounted: true })
+  const muted = useCounterMuted()
   const firstSeen = ref(new Map<string, number>())
   let loaded = false
   watch(() => query.data.value, (queue) => {

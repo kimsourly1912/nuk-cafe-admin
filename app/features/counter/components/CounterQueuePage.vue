@@ -3,7 +3,8 @@
  * The counter's queue (`/counter/<branchId>`, step 6.3b, D102, the owner's frames): To pay ·
  * Preparing · Ready, oldest first, refreshed every 10 seconds. Three columns from `sm` (a tablet at
  * the counter); on phones one list at a time, as tabs with counts. A card's one action: Take
- * payment (opens the order), Mark ready, Complete. Search by number or name. New orders are marked
+ * payment (opens the order), Mark ready, Complete. Search by number or name. Queue | Finished today
+ * (N) switches to today's finished orders (step 10.2, D116). New orders are marked
  * for a minute, with a chime (mute it in the user menu). A closed branch says when it opens.
  *
  * Browser-only (`routeRules`), so the width can choose what renders (`useLayoutContext`).
@@ -20,6 +21,7 @@ import CounterCancelModal from './CounterCancelModal.vue'
 import CounterHeader from './CounterHeader.vue'
 import CounterOrderCard from './CounterOrderCard.vue'
 import CounterOrderPanel from './CounterOrderPanel.vue'
+import CounterViewSwitch from './CounterViewSwitch.vue'
 
 const route = useRoute()
 const branchId = computed(() => String(route.params.branchId ?? ''))
@@ -72,16 +74,20 @@ function afterCancel() {
 const reload = () => query.refresh()
 
 // `?order=<id>`: Telegram's "Open order" (D113, R2). Opens it once the queue has loaded, then leaves
-// the URL, so a reload doesn't open it again. A finished order isn't in the queue: said so.
+// the URL, so a reload doesn't open it again. An order no longer in the queue opens on Finished
+// today (step 10.2), whose panel reads any of the branch's orders.
 const router = useRouter()
-const notify = useNotify()
 watch(() => [route.query.order, queue.value] as const, ([orderId, loaded]) => {
   if (typeof orderId !== 'string' || !orderId || !loaded) return
   const order = loaded.orders.find(o => o.id === orderId)
-  if (order) openOrder(order)
-  else notify.warning('This order isn\'t in the queue anymore', 'It was completed or cancelled.')
-  const { order: _, ...rest } = route.query
-  router.replace({ query: rest })
+  if (order) {
+    openOrder(order)
+    const { order: _, ...rest } = route.query
+    router.replace({ query: rest })
+  }
+  else {
+    router.replace({ path: `/counter/${branchId.value}/finished`, query: { order: orderId } })
+  }
 }, { immediate: true })
 
 useSeoMeta({ robots: 'noindex' })
@@ -111,6 +117,11 @@ useSeoMeta({ robots: 'noindex' })
     </div>
 
     <template v-else>
+      <CounterViewSwitch
+        :branch-id="branchId"
+        current="queue"
+        :finished-count="queue?.finishedToday ?? null"
+      />
       <div
         v-if="closedNote || (branchStatus && !branchStatus.openNow)"
         class="px-4 pt-3"

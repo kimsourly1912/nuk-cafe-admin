@@ -1,0 +1,1 @@
+CREATE INDEX `orders_branch_date_idx` ON `orders` (`branch_id`,`business_date`);
