@@ -1121,4 +1121,8 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
     - the daily limit without Try again;
     - on a phone, opened from the menu, a link closes the sheet and opens the page.
   - Screenshots 1440 and 390.
-  - **Not verified yet:** the quality check against the real model (no key in the build environment; the owner runs it, or it's checked on staging after the merge), and Stop in the browser (a mocked answer arrives whole).
+  - **Not verified yet:** Stop in the browser (a mocked answer arrives whole).
+  - **Quality check against OpenAI `gpt-5.4-mini` (owner, 2026-09-30): 23 of 25.** English and Khmer answers used the right labels and links. Out-of-scope and injection questions were refused. Tokens: 351,630 in (329,728 cached, 94%), 2,163 out; 1–6 s per answer. Two misses, fixed afterwards:
+    - "How do I add a cashier?" stopped at **Add** and left out handing over the temporary password. The guide now puts it in the same step, and the rules say to give the steps up to the end of the task.
+    - "Where are the sales reports?" answered "I don’t know" correctly; the check missed the curly apostrophe. The check now normalizes apostrophes.
+    - Also tightened: no link to a page the answer doesn't send the admin to (one answer linked the Dashboard), and no offers of more help.

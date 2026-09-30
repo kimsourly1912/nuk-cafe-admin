@@ -81,7 +81,8 @@ describe.skipIf(!settings)('help quality check (spends a little)', () => {
     totals.output += usage.outputTokens ?? 0
     totals.cached += usage.inputTokenDetails?.cacheReadTokens ?? 0
 
-    const lower = text.toLowerCase()
+    // Models write curly apostrophes (don’t); the expected words use straight ones.
+    const lower = text.toLowerCase().replace(/[‘’]/g, '\'')
     const problems = [
       ...c.expect.filter(group => !group.some(word => lower.includes(word.toLowerCase()))).map(group => `missing one of: ${group.join(' | ')}`),
       ...(c.never ?? []).filter(word => lower.includes(word.toLowerCase()) || links.includes(word)).map(word => `contains: ${word}`),
