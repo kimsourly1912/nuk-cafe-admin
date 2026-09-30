@@ -58,6 +58,10 @@ export type UpdateStaffAccessInput = v.InferOutput<typeof updateStaffAccessSchem
 export const disableStaffSchema = v.object({ version: versionSchema })
 export type DisableStaffInput = v.InferOutput<typeof disableStaffSchema>
 
+/** `POST /api/admin/staff/{userId}/reset-password`: the version the admin saw. */
+export const resetStaffPasswordSchema = v.object({ version: versionSchema })
+export type ResetStaffPasswordInput = v.InferOutput<typeof resetStaffPasswordSchema>
+
 export const staffListQuerySchema = v.object({
   ...pageQuerySchema,
   search: optionalParam(v.pipe(v.string(), v.trim(), v.maxLength(100))),
@@ -92,6 +96,15 @@ export interface CreatedStaff {
    * already had an account: that person keeps their own password.
    */
   temporaryPassword: string | null
+}
+
+/**
+ * A staff member's new temporary password (step 10.1): shown to the admin **once**, like a new
+ * account's. The person chooses their own at their next sign-in; every session they had ended.
+ */
+export interface StaffPasswordReset {
+  staff: StaffMember
+  temporaryPassword: string
 }
 
 /** `GET /api/admin/branches/options`: active branches for pickers. */

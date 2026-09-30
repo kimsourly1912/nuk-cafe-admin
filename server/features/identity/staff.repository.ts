@@ -152,6 +152,33 @@ export function replaceMembershipsStatements(db: Db, userId: string, memberships
   return statements
 }
 
+/**
+ * Asks for a new password at the next sign-in, only if the account is still at the version read.
+ * Follow it with `requireOneChange`.
+ */
+export function requirePasswordChangeStatement(db: Db, userId: string, expected: Date, next: Date): Statement {
+  return db.update(user)
+    .set({ mustChangePassword: true, updatedAt: next })
+    .where(and(eq(user.id, userId), eq(user.updatedAt, expected)))
+}
+
+/** Whether the account signs in with an email and password (Better Auth's "credential" provider). */
+export async function hasPasswordAccount(db: Db, userId: string): Promise<boolean> {
+  const rows = await db.select({ id: account.id }).from(account)
+    .where(and(eq(account.userId, userId), eq(account.providerId, 'credential'))).limit(1)
+  return rows.length > 0
+}
+
+/** Replaces the password, or adds one to an account that had none. */
+export function setPasswordStatement(db: Db, userId: string, passwordHash: string, now: Date, exists: boolean): Statement {
+  if (exists) {
+    return db.update(account)
+      .set({ password: passwordHash, updatedAt: now })
+      .where(and(eq(account.userId, userId), eq(account.providerId, 'credential')))
+  }
+  return db.insert(account).values({ id: newId(), accountId: userId, providerId: 'credential', userId, password: passwordHash, createdAt: now, updatedAt: now })
+}
+
 /** Signs the account out everywhere: Better Auth reads sessions from this table on every request. */
 export function deleteSessionsStatement(db: Db, userId: string): Statement {
   return db.delete(session).where(eq(session.userId, userId))

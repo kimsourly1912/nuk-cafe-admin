@@ -15,9 +15,13 @@ export const staffAlreadyExists = () =>
     fieldErrors: { email: ['Already a staff member'] },
   })
 
-export const ownAccess = (what: 'remove admin' | 'disable') => apiError(409, StaffErrorCodes.OWN_ACCESS, what === 'disable'
-  ? 'You can\'t disable your own access. Ask another admin.'
-  : 'You can\'t remove your own admin role. Ask another admin.')
+const OWN_ACCESS_MESSAGES = {
+  'disable': 'You can\'t disable your own access. Ask another admin.',
+  'remove admin': 'You can\'t remove your own admin role. Ask another admin.',
+  'reset password': 'You can\'t reset your own password here. Use Change password in your account menu.',
+} as const
+
+export const ownAccess = (what: keyof typeof OWN_ACCESS_MESSAGES) => apiError(409, StaffErrorCodes.OWN_ACCESS, OWN_ACCESS_MESSAGES[what])
 
 export const lastAdmin = () =>
   apiError(409, StaffErrorCodes.LAST_ADMIN, 'The cafe needs at least one admin. Make someone else an admin first.')

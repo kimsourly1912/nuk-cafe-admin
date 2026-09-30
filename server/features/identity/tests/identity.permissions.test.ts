@@ -17,6 +17,7 @@ const platformMatrix: Row[] = [
   ['staff', 'create', ['admin']],
   ['staff', 'update', ['admin']],
   ['staff', 'disable', ['admin']],
+  ['staff', 'reset-password', ['admin']],
   ['voucherTemplate', 'manage', ['admin']],
   ['loyalty', 'adjust', ['admin']],
   ['settings', 'manage', ['admin']],

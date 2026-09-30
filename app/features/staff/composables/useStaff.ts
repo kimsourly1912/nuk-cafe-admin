@@ -1,9 +1,9 @@
 import type { Page } from '#shared/contracts/common'
-import type { BranchOption, CreatedStaff, CreateStaffInput, StaffListQuery, StaffMember, UpdateStaffAccessInput } from '#shared/contracts/staff'
+import type { BranchOption, CreatedStaff, CreateStaffInput, StaffListQuery, StaffMember, StaffPasswordReset, UpdateStaffAccessInput } from '#shared/contracts/staff'
 
 export type { StaffListQuery }
 
-/** Updating and disabling one person must never overlap: both take this record lock. */
+/** Updating, disabling and resetting one person must never overlap: all take this record lock. */
 const lockOf = (id: string) => `staff:${id}`
 
 /** Paginated staff list (people with access). Refetches whenever `query` changes. */
@@ -69,11 +69,34 @@ export function useStaffMutations() {
     },
   )
 
+  /**
+   * A new temporary password for someone who forgot theirs (step 10.1, D115). The page shows it
+   * once, like a new account's; they're signed out everywhere and choose their own at sign-in.
+   */
+  const resetPassword = useMutation(
+    (member: StaffMember) => apiFetch<StaffPasswordReset>(`/admin/staff/${member.id}/reset-password`, { method: 'POST', body: { version: member.version } }),
+    {
+      id: 'staff:reset-password',
+      key: member => member.id,
+      lock: member => lockOf(member.id),
+      confirm: member => ({
+        title: `Reset ${member.name}'s password?`,
+        description: 'You get a temporary password to give them. Their current password stops working and they\'re signed out everywhere. They choose a new one when they sign in.',
+        confirmLabel: 'Reset password',
+        danger: true,
+      }),
+      successMessage: false,
+      errorMessage: member => `Could not reset ${member.name}'s password`,
+      invalidate: ['staff'],
+    },
+  )
+
   return {
     create,
     updateAccess,
     disable,
+    resetPassword,
     /** Any operation in flight for this person: disable their row actions. */
-    isBusy: (id: string) => updateAccess.isPending(id) || disable.isPending(id),
+    isBusy: (id: string) => updateAccess.isPending(id) || disable.isPending(id) || resetPassword.isPending(id),
   }
 }

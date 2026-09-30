@@ -1265,3 +1265,23 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
   - `shop-checkout.test.ts` updated to the tracking wording (pay by, minutes left, a table order collected at the counter).
   - unit `order.test.ts` 9 (steps, countdown edges, cancellation wording, payment line, dates, the bar), `menu.test.ts` +2 (Order again keeps and skips lines); server `orders.service.test.ts` expects the version on each line.
   - lint, typecheck, unit + server 777; e2e locally: `shop-tracking`, `shop-checkout`, `shop-menu`, `shop-account`, `shop-orders-api`, `counter`, `counter-orders-api`, `reports`, `color-mode` (the full suite runs in CI). Screenshots at 390 and 1440 px.
+
+### D115: Points and vouchers deferred; launch essentials first; an admin resets a staff password (step 10.1), 2026-09-30
+
+- **Context:** the owner decided that points and vouchers (phase 7, the blueprint's "part of launch", D45) aren't important for a coffee shop's launch, and asked to focus on what a working cafe runs into first. The first of those: a staff member who forgets their password has no way back in. Resetting by email can't reach them (staging mail goes only to the Resend account's own address until the cafe has a sending domain, Q4), and the owner can't buy a domain yet.
+- **Decision:**
+  - **Phase 7 is deferred**, not dropped: the blueprint's rules stay as the design for when the owner asks for it. The member code on the customer's account stays (harmless, and loyalty would use it). A new **phase 10, launch essentials**: 10.1 reset a staff password, 10.2 the counter's finished orders today (with a mockup round), 10.3 the order of items within a category, 10.4 production groundwork that needs no domain (a restore drill, error alerts).
+  - **10.1:** `POST /api/admin/staff/{userId}/reset-password` `{ version }` gives a staff member a new temporary password (the same generator as a new account), returned once and shown in the Staff page's existing one-time dialog. In **one batch**: `mustChangePassword` set and the version moved on (guarded by the version read, `requireOneChange`), the credential password replaced (or added, for an account without one), every session deleted, and an audit entry `staff.password.reset` without the password.
+  - **A permission of its own,** `staff: ['reset-password']` (admins only): setting someone's password can take over their account, so it can be granted separately from editing access later (to managers, say).
+  - **Only for staff:** a customer (including a disabled staff member, who is a customer again) is "not found" here; customers reset by email. **Never one's own** (409 `OWN_ACCESS`: "Use Change password in your account menu"), which the row menu also shows.
+  - **Another admin can be reset too:** admins can already change each other's access, and the audit entry records who did it.
+  - The Staff page: **Reset password** in each row's menu (desktop and phone), a confirm that says what happens (their password stops working, signed out everywhere), then the temporary password once, with "Their old password no longer works…".
+- **Alternatives:**
+  - Better Auth's admin `setUserPassword` endpoint: it doesn't set our `mustChangePassword`, end sessions and audit in the same batch as our version guard.
+  - Reuse `staff: ['update']`: ties a takeover-capable action to editing roles.
+  - Email reset for staff: needs the sending domain (Q4).
+  - Let admins reset their own password here: Change password already exists and asks for the current one.
+- **Verified:**
+  - server `staff.service.test.ts` +5: the new password works and the old one doesn't, sessions end, must change; a person who had changed theirs and another admin; the audit entry without the password; own account, stale version, a customer, a disabled staff member and an unknown account refused; **two admins resetting at once: one wins and only its password works** (checked to fail with `requireOneChange` removed: both "succeed" and one handed-over password is dead). `identity.permissions.test.ts`: only admins hold `reset-password`.
+  - e2e `staff.test.ts` +3 (mocked API): confirm, the version sent, the password shown once with the reset wording; Cancel sends nothing; one's own row has it disabled with the reason.
+  - lint, typecheck, unit + server 783.
