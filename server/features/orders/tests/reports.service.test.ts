@@ -10,7 +10,8 @@ import { cancelOrderAtCounter, markOrderReady, payOrder, setExchangeRate } from 
 import { expireUnpaidOrders } from '../expiry.service'
 import { cancelMyOrder, placeOrder } from '../orders.service'
 import { csvCell, csvFilename, moneyText } from '../reports.csv'
-import { itemSalesExport, itemSalesReport, orderHistory, orderHistoryDetail, orderHistoryExport, reportBranches, reportSummary, summaryExport } from '../reports.service'
+import { itemsMessage, periodText } from '../reports.message'
+import { itemSalesExport, itemSalesReport, orderHistory, orderHistoryDetail, orderHistoryExport, reportBranches, reportMessage, reportSummary, summaryExport } from '../reports.service'
 import { businessDateAt, periodInstants } from '../reports.rules'
 import { createTestDb, createUser } from '../../../tests/support/db'
 import { expectApiError } from '../../../tests/support/failure'
@@ -304,5 +305,43 @@ describe('CSV (8.1b, D111)', () => {
 
   it('lists the active branches with today\'s business date in each zone', async () => {
     expect(await reportBranches(db, at(TUE, '03:00'))).toEqual([{ id: branchId, name: 'Riverside', timeZone: 'Asia/Phnom_Penh', today: MON }])
+  })
+})
+
+describe('Telegram message (8.1c, D112)', () => {
+  it('sends the Summary\'s figures, short, with the period and when they were read', async () => {
+    await monday()
+    const past = await reportMessage(db, { kind: 'summary', query: { branchId, from: MON, to: MON } }, { attachCsv: true }, at(TUE, '12:00'))
+    expect(past.html).toContain('<b>Summary · Riverside</b>')
+    expect(past.html).toContain('Paid sales <b>$41.00</b> · 5 orders · average $8.20')
+    expect(past.text).not.toContain('<b>')
+    expect(past.text).toContain('Mon 28 Sep 2026')
+    expect(past.text).toContain('Business days 4:00 AM to 4:00 AM, Asia/Phnom_Penh.')
+    expect(past.csv?.filename).toBe('riverside-2026-09-28-summary.csv')
+    expect(past.audit).toEqual({ report: 'summary', branchId, from: MON, to: MON })
+    expect(JSON.stringify(past)).not.toMatch(/@example\.com/)
+
+    const today = await reportMessage(db, { kind: 'summary', query: { branchId, from: MON, to: MON } }, { attachCsv: false }, at(MON, '12:00'))
+    expect(today.text).toContain('Figures as of 12:00 PM. Business day ends at 4:00 AM.')
+    expect(today.csv).toBeNull()
+  })
+
+  it('lists items in the page\'s filters and order, with totals', async () => {
+    await monday()
+    const message = await reportMessage(db, { kind: 'items', query: { branchId, from: MON, to: MON, sort: 'sales', direction: 'desc' } }, { attachCsv: true }, at(TUE, '12:00'))
+    expect(message.text).toMatch(/^Sales by item · Riverside\nMon 28 Sep 2026\n\n1\. /)
+    expect(message.text).toContain('Totals for 2 items: 6 sold · $41.00')
+    expect(message.csv?.filename).toBe('riverside-2026-09-28-items.csv')
+    await expectApiError(() => reportMessage(db, { kind: 'items', query: { branchId, from: TUE, to: MON } }, { attachCsv: false }), 400, 'VALIDATION_FAILED')
+  })
+
+  it('escapes names for Telegram\'s HTML and says how many more there are', () => {
+    const report = { branch: { id: 'b', name: 'R&D <Cafe>', timeZone: 'Asia/Phnom_Penh' }, period: { from: MON, to: TUE, start: '', end: '' }, asOf: at(TUE, '12:00').toISOString() }
+    const rows = Array.from({ length: 17 }, (_, i) => ({ itemId: `i${i}`, name: i ? `Item ${i}` : 'Tea <b>&', categoryId: null, categoryName: null, quantity: 1, salesMinor: 100, refundedMinor: 0 }))
+    const html = itemsMessage(report, rows, { search: '', categoryId: undefined }, null, false)
+    expect(html).toContain('<b>Sales by item · R&amp;D &lt;Cafe&gt;</b>')
+    expect(html).toContain('1. Tea &lt;b&gt;&amp;: 1 sold · $1.00')
+    expect(html).toContain('…and 2 more.')
+    expect(periodText({ from: MON, to: TUE })).toBe('28 – 29 Sep 2026')
   })
 })

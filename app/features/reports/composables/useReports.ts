@@ -1,6 +1,7 @@
 import type { LocationQuery } from 'vue-router'
 import type { ItemSalesReport, OrderHistory, OrderHistoryDetail, ReportBranch, ReportPeriodQuery, ReportSummary } from '#shared/contracts/reports'
 import { csvFilename } from '#shared/contracts/reports'
+import type { ReportMessageInput, ReportMessagePreview, ReportSent, SendReportInput, TelegramDestination } from '#shared/contracts/notifications'
 import type { Period } from '../utils/period'
 import { validPeriod } from '../utils/period'
 
@@ -147,4 +148,44 @@ function saveFile(blob: Blob, filename: string) {
   link.click()
   link.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+// --- Send to Telegram (8.1c, D112) ---
+
+/** Where a report can be sent; `enabled: false` where Telegram isn't set up. */
+export function useReportDestinations() {
+  return useApiQuery('reports:destinations', () => apiFetch<{ enabled: boolean, destinations: TelegramDestination[] }>('/admin/reports/destinations'))
+}
+
+/** The page's query as the URL has it: the server checks it with the report's own schema. */
+export function queryText(query: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(Object.entries(query).filter(([, value]) => value !== undefined && value !== null && value !== '').map(([key, value]) => [key, String(value)]))
+}
+
+/** The message the server would send, as text (the preview is the real message). */
+export function useTelegramPreview(report: MaybeRefOrGetter<ReportMessageInput>) {
+  return useApiQuery(
+    () => `reports:telegram-preview:${toValue(report).kind}`,
+    () => apiFetch<ReportMessagePreview>('/admin/reports/telegram-preview', { method: 'POST', body: toValue(report) }),
+    { watch: [() => JSON.stringify(toValue(report))] },
+  )
+}
+
+export interface SendInput extends SendReportInput {
+  /** One per request the admin makes: Try again reuses it, so a lost answer never sends twice. */
+  key: string
+}
+
+export function useSendReport() {
+  return useMutation(
+    ({ key, ...body }: SendInput) => apiFetch<ReportSent>('/admin/reports/send', { method: 'POST', body, headers: { 'Idempotency-Key': key } }),
+    {
+      id: 'reports:send',
+      key: input => input.destinationId,
+      successMessage: sent => `Sent to ${sent.destination.title}`,
+      errorMessage: 'Could not send to Telegram',
+      // "Last sent" on the Telegram page.
+      invalidate: ['telegram'],
+    },
+  )
 }

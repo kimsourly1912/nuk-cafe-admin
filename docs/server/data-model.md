@@ -452,6 +452,17 @@ Feature: `assistant` ([plan](../plans/ai-assistant.md)). The AI only suggests: t
 
 Routes (`/api/admin/assistant`, `assistant: ['use']`, 404 when no key is set): `GET /api/admin/assistant` (the daily limit and today's use; the app shows the assistant only when it answers) and `POST …/chat` (step 9.1, D109: the help assistant's streamed answer from the help guide in `server/features/assistant/help/*.md`, with `link_to_page` buttons limited to `pages.ts`). The 9.0 `ping` was removed in 9.1. The draft and wording routes come with 9.2–9.3.
 
+## Telegram (step 8.1c, D112)
+
+Feature: `notifications` (the Telegram page is "Telegram"). The bot's token and webhook secret are Worker secrets; the tables hold chats and one-time links, never a working code.
+
+| Table | Columns | Notes |
+|---|---|---|
+| `telegram_destinations` | `chat_id` (Telegram's id as text, **unique**), `kind` (`private` \| `group`), `title`, `status` (`connected` \| `blocked` \| `disconnected`), `connected_by` → user (set null), `connected_at`, `last_sent_at`, `blocked_at`, `version`, `created_at`, `updated_at` | One row per chat: reconnecting brings the row back (upsert on `chat_id`). **Blocked** when Telegram says the bot was removed or blocked (a `my_chat_member` update, or a 403 on send). A supergroup upgrade moves `chat_id`. Disconnected rows stay for the delivery history (8.1d). Disconnect names the `version` it saw |
+| `telegram_links` | `code_hash` (SHA-256 of the random code, **unique**), `kind`, `status` (`waiting` \| `confirm` \| `connected` \| `cancelled` \| `expired`), `created_by` → user (cascade), `expires_at` (10 minutes), `chat_id`, `chat_title`, `member_count`, `destination_id` → destination (set null), `created_at` | The code is only in the link the admin opens. Every step (`waiting` → `connected`, `waiting` → `confirm` → `connected`) is a conditional update guarded in its batch, so a code works once even when two chats race with it. Links a day past expiry are deleted when the next one is made |
+
+Routes: `/api/admin/telegram` (`settings: ['manage']`): `GET` (on or off, the bot's name, the chats), `POST links` (`{ kind }`, the link), `GET links/{id}` (its progress, only for its creator), `POST links/{id}/confirm`, `POST links/{id}/cancel` (a group waiting is left), `POST destinations/{id}/test`, `POST destinations/{id}/disconnect` (`{ version }`). Reports (`report: ['export']`): `GET /api/admin/reports/destinations`, `POST …/telegram-preview` (`{ kind, query }` → the message as text), `POST …/send` (`{ report, destinationId, attachCsv }` with `Idempotency-Key`). The webhook: `POST /api/webhooks/telegram` (the secret header, no session).
+
 ## Sample data (D94)
 
 Feature: `sample-data`, only where `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` is on (local and staging). It owns no menu data: it creates records through the menu's and branches' services, finds them again by name, and deletes the menu through the menu feature's `deleteAllMenuStatements` (every menu table, children first) and uploads through media's `deleteUploads`.

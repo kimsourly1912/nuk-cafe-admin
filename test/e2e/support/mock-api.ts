@@ -42,7 +42,7 @@ export function setupE2e() {
  *
  * **Unknown endpoints fail visibly:** HTTP 501, and the test fails in `afterEach`.
  */
-export type MockHandler = (request: { url: URL, body: unknown }) => unknown | Promise<unknown>
+export type MockHandler = (request: { url: URL, body: unknown, headers: Record<string, string> }) => unknown | Promise<unknown>
 
 export interface MockApi {
   /** Every request seen, as `'METHOD /path'`. */
@@ -272,7 +272,7 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
       return
     }
     try {
-      const data = await handler({ url: requestUrl, body: requestBody(request) })
+      const data = await handler({ url: requestUrl, body: requestBody(request), headers: request.headers() })
       await route.fulfill({ status: 200, json: data ?? null })
     }
     catch (error) {

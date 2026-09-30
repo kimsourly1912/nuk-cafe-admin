@@ -7,10 +7,11 @@
  * definition is in docs/plans/reports.md (D110) and, short, at the bottom of the page and the print.
  */
 import type { ReportSummary } from '#shared/contracts/reports'
-import { useReportDownload, useReportScope, useReportSummary } from '../composables/useReports'
+import { queryText, useReportDestinations, useReportDownload, useReportScope, useReportSummary } from '../composables/useReports'
 import { changeText, formatRiel, METHOD_LABELS, negativeMinor } from '../utils/display'
-import { previousLabel } from '../utils/period'
+import { periodButtonLabel, periodLabel, previousLabel } from '../utils/period'
 import ReportDefinitions from './ReportDefinitions.vue'
+import SendToTelegramModal from './SendToTelegramModal.vue'
 import ReportHeader from './ReportHeader.vue'
 import ReportPrintHeader from './ReportPrintHeader.vue'
 import SalesChart from './SalesChart.vue'
@@ -32,6 +33,16 @@ function downloadCsv() {
 
 const printPage = () => window.print()
 
+// Send to Telegram, where it's set up (D112): the message is built on the server from this query.
+const telegram = useReportDestinations()
+const sendModal = useOverlay().create(SendToTelegramModal)
+function openSend() {
+  if (!scope.value || !period.value || !branch.value) return
+  const label = periodButtonLabel(period.value, branch.value.today)
+  const dates = periodLabel(period.value)
+  sendModal.open({ kind: 'summary', title: `Summary · ${label === dates ? dates : `${label} (${dates})`}`, query: queryText(scope.value) })
+}
+
 const paymentsTotal = (report: ReportSummary) => ({
   orders: report.payments.reduce((sum, p) => sum + p.orders, 0),
   amountMinor: report.payments.reduce((sum, p) => sum + p.amountMinor, 0),
@@ -52,10 +63,12 @@ const paymentsTotal = (report: ReportSummary) => ({
         :as-of="data?.asOf"
         :refreshing="summary.refreshing.value"
         :downloading="download.isPending('summary')"
+        :can-send="telegram.data.value?.enabled"
         @period="setPeriod"
         @branch="setBranch"
         @download="downloadCsv"
         @print="printPage"
+        @send="openSend"
       />
     </template>
 

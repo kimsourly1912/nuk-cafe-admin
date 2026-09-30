@@ -11,6 +11,7 @@ import payments from './payments.md'
 import reports from './reports.md'
 import sampleData from './sample-data.md'
 import staff from './staff.md'
+import telegram from './telegram.md'
 
 /**
  * The staff help guide (step 9.1, D109): what the assistant knows, one Markdown file per screen,
@@ -29,6 +30,7 @@ export const HELP_PAGES = [
   { name: 'staff', text: staff },
   { name: 'branch', text: branch },
   { name: 'payments', text: payments },
+  { name: 'telegram', text: telegram },
   { name: 'reports', text: reports },
   { name: 'counter', text: counter },
   { name: 'sample-data', text: sampleData },
