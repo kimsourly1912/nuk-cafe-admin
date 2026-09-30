@@ -20,6 +20,8 @@ export interface SoldOutVariation {
   /** When it was switched off, and by whom (a user id). */
   updatedAt: string
   updatedBy: string
+  /** Their name, for "since 10:15 AM by Sophea" (D105); `null` when that account is gone. */
+  updatedByName: string | null
 }
 
 /** What's sold out at the branch now, by item name then version. */

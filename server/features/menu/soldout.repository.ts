@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm'
+import { user } from '../../db/tables'
 import type { Db, Statement } from '../../utils/batch'
 import { chunk, insertPieces, readInChunks } from '../../utils/batch'
 import { branchItemStates, menuItemOptionSets, menuItems, menuItemVariations, menuOptionValues, menuVariationOptionValues } from './menu.schema'
@@ -15,6 +16,8 @@ export interface SoldOutRow {
   itemName: string
   updatedAt: Date
   updatedBy: string
+  /** The name of who switched it off; `null` when that account is gone. */
+  updatedByName: string | null
 }
 
 /** These variations with their own and their item's status (unknown ids are left out). */
@@ -30,8 +33,9 @@ export async function findVariations(db: Db, ids: string[]): Promise<SellableVer
  * left out: they aren't sold anyway, and their switch comes back if they return.
  */
 export async function listSoldOut(db: Db, branchId: string): Promise<SoldOutRow[]> {
-  return db.select({ variationId: branchItemStates.variationId, itemId: menuItems.id, itemName: menuItems.name, updatedAt: branchItemStates.updatedAt, updatedBy: branchItemStates.updatedBy })
+  return db.select({ variationId: branchItemStates.variationId, itemId: menuItems.id, itemName: menuItems.name, updatedAt: branchItemStates.updatedAt, updatedBy: branchItemStates.updatedBy, updatedByName: user.name })
     .from(branchItemStates)
+    .leftJoin(user, eq(user.id, branchItemStates.updatedBy))
     .innerJoin(menuItemVariations, eq(menuItemVariations.id, branchItemStates.variationId))
     .innerJoin(menuItems, eq(menuItems.id, menuItemVariations.itemId))
     .where(and(eq(branchItemStates.branchId, branchId), eq(branchItemStates.soldOut, true), ne(menuItems.status, 'archived'), ne(menuItemVariations.status, 'retired')))

@@ -81,6 +81,7 @@ useSeoMeta({ robots: 'noindex' })
       v-model:muted="muted"
       :branch-name="branch?.name ?? 'Branch'"
       :open-now="branchStatus ? branchStatus.openNow : null"
+      :sold-out-to="branch ? `/counter/${branch.id}/sold-out` : undefined"
     />
 
     <div

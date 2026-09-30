@@ -117,7 +117,7 @@ An item without option sets has exactly one version with one price ("Croissant $
 | `menu_availability_rules` | `name` ("Breakfast"), `status`, `version` | Library. `version` covers its windows. Names unique among active rules. **Can't be archived while a draft, an active item or an active category uses it** (D63) |
 | `menu_availability_windows` | `rule_id`, `weekday` (ISO: 1 = Monday), `start_minute` (0–1439), `end_minute` (1–1440) | Several windows per rule (at most 21), **never overlapping** (D63); PK (`rule_id`, `weekday`, `start_minute`). **Overnight windows are allowed** (D45): an end before the start means the next day, and the window belongs to the weekday it starts on. Times are in the branch timezone |
 | `menu_category_availability`, `menu_item_availability` | links to rules (at most 5 each) | **No rule = available whenever the branch is open; several rules = available when any matches** (D45). An item is available only if its category is too, and a sub-category's items only if its parent is too (D63). **An archived rule never matches** |
-| `branch_item_states` | `branch_id` → organization, `variation_id`, `sold_out`, `updated_by`, `updated_at` | PK (`branch_id`, `variation_id`). The counter's "86" switch, per version (Large sold out, Regular still available), per branch (D64). Stays until switched back ([Open] Q37: reset daily?). Later: a branch price override |
+| `branch_item_states` | `branch_id` → organization, `variation_id`, `sold_out`, `updated_by`, `updated_at` | PK (`branch_id`, `variation_id`). The counter's "86" switch, per version (Large sold out, Regular still available), per branch (D64). Stays until switched back (Q37, owner, D105: no daily reset). Later: a branch price override |
 | `menu_translations` | Not at launch | **English only at launch** (D45). Added as `*_translations` tables when a second language is needed |
 
 ### Rules that keep the UI clean
@@ -287,7 +287,7 @@ Same feature (`soldout.*`), contract `shared/contracts/menu-sold-out.ts`, on the
 
 | Route | Permission | Does |
 |---|---|---|
-| `GET /api/counter/{branchId}/sold-out` | `menu:read` | What's sold out at the branch: `{ branchId, variations: [{ variationId, itemId, itemName, label, updatedAt, updatedBy }] }` by item name, then version |
+| `GET /api/counter/{branchId}/sold-out` | `menu:read` | What's sold out at the branch: `{ branchId, variations: [{ variationId, itemId, itemName, label, updatedAt, updatedBy, updatedByName }] } (`updatedByName` since D105; `null` when the account is gone)` by item name, then version |
 | `PUT /api/counter/{branchId}/sold-out` | `menu:setSoldOut` (staff, manager, admin) | `{ variationIds (1–400), soldOut }`: sets the state (never toggles) and returns the list. Audited as `menu.sold_out.set` |
 
 | Case | Result | Test |

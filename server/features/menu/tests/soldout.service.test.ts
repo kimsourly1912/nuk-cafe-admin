@@ -78,6 +78,15 @@ describe('sold out at a branch', () => {
     expect(audit!.metadata).toEqual({ soldOut: true, variationIds: [version(latte, 'Large'), croissant.variations[0]!.id] })
   })
 
+  it('names who switched it off (D105); an account that no longer exists has no name', async () => {
+    const sophea = await createUser(db, 'sophea@example.com', 'Sophea Keo')
+    const latte = await item('Latte', [size])
+    await setSoldOut(db, { ...atA, userId: sophea.id }, { variationIds: [version(latte, 'Small')], soldOut: true })
+    await setSoldOut(db, atA, { variationIds: [version(latte, 'Large')], soldOut: true })
+    const list = await listSoldOut(db, atA)
+    expect(list.variations.map(v => [v.label, v.updatedByName])).toEqual([['Small', 'Sophea Keo'], ['Large', null]])
+  })
+
   it('is per branch: sold out at one, still on sale at the other', async () => {
     const latte = await item('Latte', [size])
     await setSoldOut(db, atA, { variationIds: [version(latte, 'Small')], soldOut: true })
