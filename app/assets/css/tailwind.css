@@ -42,3 +42,46 @@
   --ui-error: var(--ui-color-error-400);
   --ui-info: var(--ui-color-info-400);
 }
+
+/*
+ * Printing (the reports' Print button, D111): black on white in either color mode, A4, and the
+ * page's content flowing over as many sheets as it needs. The shell hides its own parts
+ * (`print:hidden` on the sidebar and the assistant) and the report pages their toolbars; the
+ * dashboard's fixed, scrolling frame is let go so nothing is cut at the first sheet.
+ */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm 12mm;
+  }
+
+  :root,
+  .light,
+  .dark {
+    color-scheme: light;
+    --ui-text-dimmed: var(--ui-color-neutral-500);
+    --ui-text-muted: var(--ui-color-neutral-600);
+    --ui-text-toned: var(--ui-color-neutral-700);
+    --ui-text: var(--ui-color-neutral-900);
+    --ui-text-highlighted: #000;
+    --ui-bg: #fff;
+    --ui-bg-muted: #fff;
+    --ui-bg-elevated: var(--ui-color-neutral-100);
+    --ui-bg-accented: var(--ui-color-neutral-300);
+    --ui-border: var(--ui-color-neutral-300);
+    --ui-border-muted: var(--ui-color-neutral-300);
+    --ui-border-accented: var(--ui-color-neutral-400);
+    --ui-primary: var(--ui-color-neutral-800);
+    --ui-warning: var(--ui-color-neutral-800);
+    --ui-success: var(--ui-color-neutral-800);
+    --ui-error: var(--ui-color-neutral-800);
+    --ui-info: var(--ui-color-neutral-800);
+  }
+
+  html,
+  body {
+    background: #fff;
+    height: auto;
+    overflow: visible;
+  }
+}

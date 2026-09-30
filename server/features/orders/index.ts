@@ -5,4 +5,4 @@ export { cancelMyOrder, getOrder, listMyOrders, placeOrder } from './orders.serv
 export { cancelOrderAtCounter, completeOrder, getCounterOrder, getExchangeRates, listCounterQueue, markOrderReady, payOrder, setExchangeRate } from './counter.service'
 export { OrderErrorCodes } from './orders.errors'
 export { expireUnpaidOrders } from './expiry.service'
-export { itemSalesReport, orderHistory, orderHistoryDetail, reportSummary } from './reports.service'
+export { itemSalesExport, itemSalesReport, orderHistory, orderHistoryDetail, orderHistoryExport, reportBranches, reportSummary, summaryExport } from './reports.service'

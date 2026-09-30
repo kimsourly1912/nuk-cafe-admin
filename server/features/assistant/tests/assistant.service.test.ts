@@ -205,10 +205,10 @@ describe('the help chat (9.1, D109)', () => {
 
   it('an invented page is refused and never shown as a link', async () => {
     const { model } = answering(
-      [linkCall('reports'), finish('tool-calls')],
+      [linkCall('loyalty'), finish('tool-calls')],
       [...text('There is no such page.'), finish('stop')],
     )
-    const parts = await streamed(await chatWithAssistant(db, sokha, settings, model, ask('Where are reports?'), context().context, at('10:00')))
+    const parts = await streamed(await chatWithAssistant(db, sokha, settings, model, ask('Where are loyalty points?'), context().context, at('10:00')))
     expect(parts.filter(p => p.type === 'tool-output-available')).toEqual([])
     expect(parts).toContainEqual(expect.objectContaining({ type: 'tool-input-error', toolName: 'link_to_page' }))
   })

@@ -9,7 +9,8 @@ import { createCategory, createItem, publishItem, updateCategory, updateItem } f
 import { cancelOrderAtCounter, markOrderReady, payOrder, setExchangeRate } from '../counter.service'
 import { expireUnpaidOrders } from '../expiry.service'
 import { cancelMyOrder, placeOrder } from '../orders.service'
-import { itemSalesReport, orderHistory, orderHistoryDetail, reportSummary } from '../reports.service'
+import { csvCell, csvFilename, moneyText } from '../reports.csv'
+import { itemSalesExport, itemSalesReport, orderHistory, orderHistoryDetail, orderHistoryExport, reportBranches, reportSummary, summaryExport } from '../reports.service'
 import { businessDateAt, periodInstants } from '../reports.rules'
 import { createTestDb, createUser } from '../../../tests/support/db'
 import { expectApiError } from '../../../tests/support/failure'
@@ -263,5 +264,45 @@ describe('order history (D110)', () => {
     expect(e.timeline.at(-1)).toMatchObject({ toStatus: 'cancelled', by: { kind: 'system', name: null } })
     expect(e.payment.state).toBe('not_paid')
     await expectApiError(() => orderHistoryDetail(db, newId()), 404, 'NOT_FOUND')
+  })
+})
+
+describe('CSV (8.1b, D111)', () => {
+  it('neutralizes formulas, quotes what needs it and keeps amounts exact', () => {
+    expect(csvCell('=HYPERLINK("x")')).toBe(`"'=HYPERLINK(""x"")"`)
+    expect(csvCell('+1')).toBe('\'+1')
+    expect(csvCell('-2')).toBe('\'-2')
+    expect(csvCell('@SUM(A1)')).toBe('\'@SUM(A1)')
+    expect(csvCell('Iced Latte, large')).toBe('"Iced Latte, large"')
+    expect(csvCell('ឡាតេ ៛')).toBe('ឡាតេ ៛')
+    expect(csvCell({ amount: '-14.00' })).toBe('-14.00')
+    expect(csvCell(null)).toBe('')
+    expect([moneyText(875), moneyText(-1400), moneyText(5), moneyText(0)]).toEqual(['8.75', '-14.00', '0.05', '0.00'])
+    expect(csvFilename('Riverside', { from: MON, to: MON }, 'summary')).toBe('riverside-2026-09-28-summary.csv')
+    expect(csvFilename('Zeta Kiosk!', { from: MON, to: TUE }, 'orders')).toBe('zeta-kiosk-2026-09-28-to-2026-09-29-orders.csv')
+  })
+
+  it('exports every matching row, in the page\'s order, agreeing with the report', async () => {
+    await monday()
+    const items = await itemSalesExport(db, parseInput(itemSalesQuerySchema, { branchId, from: MON, to: MON, pageSize: '1' }))
+    const lines = items.csv.replace(/^\uFEFF/, '').trimEnd().split('\r\n')
+    expect(items.csv.startsWith('\uFEFF')).toBe(true)
+    expect(lines).toEqual([
+      'Item,Category,Quantity sold,Paid sales (USD),Refunded (USD)',
+      'Iced Latte,Coffee,4,35.00,0.00',
+      'Croissant,Bakery,2,6.00,0.00',
+    ])
+    const orders = await orderHistoryExport(db, parseInput(orderHistoryQuerySchema, { branchId, from: MON, to: MON, pageSize: '2', sort: 'number', direction: 'asc' }))
+    const orderLines = orders.csv.trimEnd().split('\r\n')
+    expect(orderLines).toHaveLength(1 + 7)
+    expect(orderLines[1]).toBe('001,2026-09-28,2026-09-28 09:00,Pickup,,Paid,Cash USD,Preparing,8.75')
+    expect(orders.filename).toBe('riverside-2026-09-28-orders.csv')
+    const summary = await summaryExport(db, period(TUE), at(TUE, '12:00'))
+    expect(summary.csv).toContain('Sales,Refunds,1,-8.75,')
+    expect(summary.csv).toContain('Sales,Net sales,,-8.75,')
+  })
+
+  it('lists the active branches with today\'s business date in each zone', async () => {
+    expect(await reportBranches(db, at(TUE, '03:00'))).toEqual([{ id: branchId, name: 'Riverside', timeZone: 'Asia/Phnom_Penh', today: MON }])
   })
 })

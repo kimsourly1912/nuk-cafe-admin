@@ -14,6 +14,11 @@ export async function findReportBranch(db: Db, id: string): Promise<{ id: string
   return row
 }
 
+/** Active branches by name. */
+export async function activeBranches(db: Db): Promise<{ id: string, name: string, timeZone: string }[]> {
+  return db.select({ id: organization.id, name: organization.name, timeZone: organization.timezone }).from(organization).where(eq(organization.status, 'active')).orderBy(asc(organization.name))
+}
+
 interface Range { branchId: string, start: Date, end: Date }
 
 /** Payments collected in `[start, end)`. */

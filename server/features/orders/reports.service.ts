@@ -1,13 +1,14 @@
 import type { PaymentMethod } from '#shared/contracts/orders'
 import { PAYMENT_METHODS } from '#shared/contracts/orders'
-import type { ItemSalesQuery, ItemSalesReport, OrderHistory, OrderHistoryDetail, OrderHistoryQuery, ReportContext, ReportPeriodQuery, ReportSummary } from '#shared/contracts/reports'
+import type { ItemSalesQuery, ItemSalesReport, ReportBranch, OrderHistory, OrderHistoryDetail, OrderHistoryQuery, OrderHistoryRow, ReportContext, ReportPeriodQuery, ReportSummary } from '#shared/contracts/reports'
 import { REPORT_BEST_SELLERS } from '#shared/contracts/reports'
 import { totalPages } from '#shared/contracts/common'
 import type { Db } from '../../utils/batch'
-import { notFound } from '../../utils/errors'
+import { apiError, ErrorCodes, notFound } from '../../utils/errors'
 import { toIso } from '../../utils/time'
 import { orderNotFound } from './orders.errors'
 import * as orderRepo from './orders.repository'
+import { csvFilename, itemsCsv, ordersCsv, summaryCsv } from './reports.csv'
 import * as repo from './reports.repository'
 import { averageMinor, bestSellers, businessDateAt, categoriesOf, firstName, itemSalesRows, itemSalesTable, paymentState, periodInstants, previousPeriod, salesTrend } from './reports.rules'
 
@@ -31,6 +32,11 @@ async function context(db: Db, query: ReportPeriodQuery, now: Date): Promise<Con
     asOf: toIso(now),
     range: { branchId: branch.id, start, end },
   }
+}
+
+/** The branches reports can cover, each with today's business date in its own zone. */
+export async function reportBranches(db: Db, now = new Date()): Promise<ReportBranch[]> {
+  return (await repo.activeBranches(db)).map(branch => ({ ...branch, today: businessDateAt(now, branch.timeZone) }))
 }
 
 const reportContext = ({ range: _, ...rest }: Context): ReportContext => rest
@@ -101,23 +107,25 @@ export async function itemSalesReport(db: Db, query: ItemSalesQuery, now = new D
   }
 }
 
+const historyRow = (row: repo.HistoryRow): OrderHistoryRow => ({
+  id: row.id,
+  pickupNumber: row.pickupNumber,
+  businessDate: row.businessDate,
+  placedAt: toIso(row.placedAt),
+  orderType: row.orderType,
+  tableLabel: row.tableLabel,
+  payment: { state: paymentState(row.status, row.paymentId ? { returnedAt: row.returnedAt } : null), method: row.method },
+  status: row.status,
+  totalMinor: row.totalMinor,
+})
+
 /** Orders placed in the business dates, with their payment and progress. */
 export async function orderHistory(db: Db, query: OrderHistoryQuery, now = new Date()): Promise<OrderHistory> {
   const ctx = await context(db, query, now)
   const { rows, total } = await repo.orderHistory(db, query)
   return {
     ...reportContext(ctx),
-    orders: rows.map(row => ({
-      id: row.id,
-      pickupNumber: row.pickupNumber,
-      businessDate: row.businessDate,
-      placedAt: toIso(row.placedAt),
-      orderType: row.orderType,
-      tableLabel: row.tableLabel,
-      payment: { state: paymentState(row.status, row.paymentId ? { returnedAt: row.returnedAt } : null), method: row.method },
-      status: row.status,
-      totalMinor: row.totalMinor,
-    })),
+    orders: rows.map(historyRow),
     page: query.page,
     pageSize: query.pageSize,
     total,
@@ -183,4 +191,30 @@ export async function orderHistoryDetail(db: Db, id: string): Promise<OrderHisto
       note: event.note,
     })),
   }
+}
+
+// --- CSV (8.1b, D111): every matching row, the filters and order of the page ---
+
+/** The most orders one export holds (R5: about 20,000 at our volume in 93 days). */
+export const ORDER_EXPORT_MAX = 20_000
+
+export interface CsvFile { filename: string, csv: string }
+
+export async function summaryExport(db: Db, query: ReportPeriodQuery, now = new Date()): Promise<CsvFile> {
+  const summary = await reportSummary(db, query, now)
+  return { filename: csvFilename(summary.branch.name, query, 'summary'), csv: summaryCsv(summary) }
+}
+
+export async function itemSalesExport(db: Db, query: ItemSalesQuery, now = new Date()): Promise<CsvFile> {
+  const ctx = await context(db, query, now)
+  const [paid, refunded] = await Promise.all([repo.itemTotals(db, ctx.range, 'collected'), repo.itemTotals(db, ctx.range, 'returned')])
+  const { rows } = itemSalesTable(itemSalesRows(paid, refunded), query)
+  return { filename: csvFilename(ctx.branch.name, query, 'items'), csv: itemsCsv(rows) }
+}
+
+export async function orderHistoryExport(db: Db, query: OrderHistoryQuery, now = new Date()): Promise<CsvFile> {
+  const ctx = await context(db, query, now)
+  const { rows, total } = await repo.orderHistory(db, { ...query, page: 1, pageSize: ORDER_EXPORT_MAX })
+  if (total > ORDER_EXPORT_MAX) throw apiError(422, ErrorCodes.VALIDATION_FAILED, `More than ${ORDER_EXPORT_MAX.toLocaleString('en-US')} orders match. Choose a shorter period or narrow the filters.`)
+  return { filename: csvFilename(ctx.branch.name, query, 'orders'), csv: ordersCsv(rows.map(historyRow), ctx.branch.timeZone) }
 }

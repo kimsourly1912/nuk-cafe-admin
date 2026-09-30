@@ -1173,3 +1173,28 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
     - the detail's payment, riel, and a timeline naming the customer, the cashier and the system.
   - `identity.permissions.test.ts`: `report: ['export']` for admins only.
   - unit + server 725 pass; lint and typecheck clean.
+
+### D111: The report pages, CSV and Print (step 8.1b), 2026-09-30
+
+- **Context:** stage 2 of [plans/reports.md](plans/reports.md): the pages on D110's routes, from the owner's frames, with the deviations agreed in the review (Cash riel, the existing shell, `$` chart labels trimmed to the hours with sales, no Send to Telegram yet, Nuxt UI's selected row, a timeline naming only who acted).
+- **Decision:**
+  - **Pages:** `app/features/reports/` with **Reports → Summary, Sales by item, Order history** in the sidebar between Menu and Admin (`/admin/reports/summary`, `/items`, `/orders`; `/admin/reports` goes to Summary).
+  - **The period and branch are in the URL** (`?from=&to=`, `&branch=` only when there are several) and remembered in the tab (`useState('report-scope')`), so moving between reports keeps them. Presets (Today, Yesterday, Last 7 days, This month) and a calendar range come from **the branch's business date sent by the server** (`GET /api/admin/reports/branches` gives `today`), never the browser's clock. A period no report can show (reversed, over 93 days, in the future, not a date) falls back to today.
+  - **Summary:** four stat cards with the change against the period before, net sales, the chart (a few `div` bars with dollar gridlines, not a chart library: at most 24 or 93 bars; a screen-reader table with the same numbers), Payments, Current orders (live, only for today) or Orders placed, Best sellers, Cancelled not paid, and "How these are counted".
+  - **Sales by item:** sorted **on the server** by each column's header (`SortButton`), the totals of every matching item as the table's footer, rows on phones with a sort select.
+  - **Order history:** filters at once from `sm`; on phones in a bottom sheet applied together with **Apply filters**, shown as removable chips (the UI standard's compact filters). `?order=<id>` opens the order (a side panel, full screen on phones); Back closes it when this list opened it. Letters in the number search are dropped before asking (the server accepts digits only).
+  - **CSV:** `GET /api/admin/reports/{summary,items,orders}.csv` (`report: ['export']`), the same query as the page without paging; every matching row in the page's order; UTF-8 with a byte-order mark, CRLF, RFC 4180 quoting; text starting with `= + - @`, tab or CR prefixed with `'`; money as exact decimals from cents; times in the branch's zone; `no-store`, never saved on the server. Orders stop at 20,000 with a 422 saying to narrow the period (R5). The file name (`riverside-2026-09-30-summary.csv`) is one shared function (`csvFilename` in the contract). The app downloads through `apiFetch` inside a `useMutation` (the session, `ApiError`, pending state and toasts), then saves a `Blob`; the browser's text decoding drops the byte-order mark, so it's put back.
+  - **Print:** the browser's print (`window.print()`). A print-only header (cafe, branch, report, period with business day and zone, figures as of, printed at and by), toolbars and the shell hidden (`print:hidden`), the dashboard's fixed scrolling frame released, A4 portrait, black on white in either color mode (the color tokens restated under `@media print` in `tailwind.css`), cards kept whole (`break-inside-avoid`). Page numbers are the browser's.
+  - **The help assistant** knows the reports: `help/reports.md`, and the three pages in its link list.
+- **Alternatives:**
+  - A chart library (`@unovis/vue`, Nuxt UI's dashboard template): a dependency for two bar charts.
+  - A plain `<a href="….csv">` download: a refusal (over 20,000 orders, a lost session) would open a JSON page instead of a message.
+  - A server-rendered PDF: printing to PDF from the browser already gives one.
+  - Dates from the browser's clock: wrong between midnight and 04:00, and for a browser in another zone.
+- **Found while building:** the scope watcher first watched the scope **object**; it wrote the remembered scope, which the scope reads, so each run made a new object and ran again: the page hung. It now watches the values as a string. Every reports e2e test would time out again with the old watcher.
+- **Verified:**
+  - server `reports.service.test.ts` 12 (3 new: the CSV cell rules, formula guard, quoting, Khmer text, exact amounts, file names; the three exports on the worked Monday; `today` at 03:00 still the day before);
+  - unit `app/features/reports/tests/reports.test.ts` 8 (presets, labels, the period fallback including 93 and 94 days, the chart trimming and scale, badges, the timeline's words);
+  - e2e `reports.test.ts` 13 on a mocked API (the Summary for today and a preset, the period kept across reports, a bad URL period, empty and error states, the CSV download's bytes, BOM and query, a refused download, print media, Sales by item sort and category, Order history filters, the panel with Back, `?order=` from a link, the number search, and the phone's filter sheet, chips and full-screen order);
+  - screenshots at 1440 and 390 px, print media;
+  - lint, typecheck, unit + server 736, the full e2e suite 345.
