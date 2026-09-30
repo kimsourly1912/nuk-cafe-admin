@@ -1126,3 +1126,50 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
     - "How do I add a cashier?" stopped at **Add** and left out handing over the temporary password. The guide now puts it in the same step, and the rules say to give the steps up to the end of the task.
     - "Where are the sales reports?" answered "I don’t know" correctly; the check missed the curly apostrophe. The check now normalizes apostrophes.
     - Also tightened: no link to a page the answer doesn't send the admin to (one answer linked the Dashboard), and no offers of more help.
+
+### D110: Reports on the server (step 8.1a), 2026-09-30
+
+- **Context:** the owner's reporting scope (sales, best sellers, order history, print, CSV, Telegram), reviewed against the repository ([plans/reports.md](plans/reports.md)). The owner accepted the defaults R1–R6 (admins only, Open order in the counter app, first names only, no summary on closed days, 93 days, gross item sales with a Refunded column). Stage 1: the numbers, on the server.
+- **Decision:**
+  - **The order lifecycle is unchanged.** One status per order (`awaiting_payment → preparing → ready → completed`, or `cancelled`) and one payment row. Reports derive two views:
+    - **Payment:** `unpaid`, `paid`, `refunded` (the money returned), `not_paid` (cancelled with no payment).
+    - **Progress:** the status.
+  - **Definitions** are in the plan's table. The main ones:
+    - **Paid sales:** counted when the payment was collected, each order once (the payment's unique index).
+    - **Refunds:** counted when the money went back.
+    - **Net sales:** paid sales minus refunds.
+    - **Average order:** paid sales ÷ paid orders, whole cents, rounded half up.
+    - **Cash riel:** keeps the riel taken at each payment's own rate.
+    - **Cancelled, not paid** and **Orders placed** count by the business day the order was placed.
+    - **Current orders:** live, and only when the period includes today.
+  - **Business days** reuse D99's rule: 04:00 to 04:00 in the **branch's** time zone. A period's instants are `[from 04:00, to+1 04:00)`, found with `zonedInstant`, which works in any zone, daylight saving included. At most 93 days.
+  - **The category as sold:** `order_lines` gains `category_id` and `category_name`, filled at placement from the menu. Migration `0018` fills existing lines from the current menu (only staging test orders exist) and adds indexes on `order_lines.item_id` and `counter_payments(branch_id, returned_at)`. Names, versions, add-ons and prices were already kept as sold.
+  - **Where the code lives:** in the **orders** feature (`reports.rules.ts` pure, `reports.repository.ts`, `reports.service.ts`), because every number comes from order tables. Sums are integers in SQL. Sales by item groups in SQL and filters, sorts and pages in the service: one branch sells a few hundred items at most, and the totals then cover every matching row.
+  - **Routes** (`report: ['read']`):
+    - `GET /api/admin/reports/summary`
+    - `GET /api/admin/reports/items`
+    - `GET /api/admin/reports/orders`
+    - `GET /api/admin/reports/orders/{id}`
+    
+    Every answer carries the branch, the period and its instants, and `asOf`.
+  - **Permissions:** `report: ['read', 'export']` for platform admins. `export` guards CSV and sending, from stage 2.
+  - **Privacy:** the order detail shows the customer's first name only (R3).
+- **Alternatives:**
+  - A separate payment status column on orders (a second source of truth for the same fact).
+  - Grouping by the UTC date or the browser's zone (wrong around midnight and 04:00).
+  - A reports feature reading another feature's tables (the numbers are the orders feature's).
+  - Pre-aggregated daily tables (not needed at one branch's volume).
+- **Verified:**
+  - server `reports.service.test.ts`, 9 tests, on a hand-worked Monday of orders: cash USD, KHQR, cash riel, an expiry, a customer's cancel, a paid order refunded the next day, and a payment at 00:30 that still belongs to Monday. It checks:
+    - business-day boundaries (03:59 and 04:00; New York in daylight saving);
+    - period limits;
+    - paid sales, the average and the payment split with riel;
+    - the refund on the day the money went back, and net sales;
+    - hourly and daily trends;
+    - live counts, and an expired wait not counted;
+    - names, categories and prices as sold after the menu was renamed and repriced;
+    - filters, sorting, paging and totals;
+    - order history filters and paging;
+    - the detail's payment, riel, and a timeline naming the customer, the cashier and the system.
+  - `identity.permissions.test.ts`: `report: ['export']` for admins only.
+  - unit + server 725 pass; lint and typecheck clean.

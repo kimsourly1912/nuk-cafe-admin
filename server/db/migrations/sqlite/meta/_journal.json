@@ -127,6 +127,13 @@
       "when": 1790741244553,
       "tag": "0017_assistant_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1790757306398,
+      "tag": "0018_order_line_categories",
+      "breakpoints": true
     }
   ]
 }

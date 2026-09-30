@@ -26,6 +26,8 @@ export interface NewOrderLine {
   itemId: string
   variationId: string
   itemName: string
+  categoryId: string | null
+  categoryName: string | null
   detail: string
   modifiers: QuotedModifier[]
   unitPriceMinor: number

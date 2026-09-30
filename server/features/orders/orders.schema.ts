@@ -68,6 +68,12 @@ export const orderLines = sqliteTable('order_lines', {
   itemId: text().notNull(),
   variationId: text().notNull(),
   itemName: text().notNull(),
+  /**
+   * The item's category when it was sold (reports, 8.1, D110): the sub-category if it has one. Kept
+   * as sold, like the name; null only for lines whose item had left the menu when this was added.
+   */
+  categoryId: text(),
+  categoryName: text(),
   /** "Large, Iced · Oat milk, Extra shot". */
   detail: text().notNull(),
   /** The add-ons as priced: `[{ id, name, priceDeltaMinor }]`. */
@@ -79,6 +85,8 @@ export const orderLines = sqliteTable('order_lines', {
 }, t => [
   check('order_lines_amounts_check', sql`${t.quantity} between 1 and 20 and ${t.unitPriceMinor} >= 0 and ${t.totalMinor} = ${t.unitPriceMinor} * ${t.quantity}`),
   uniqueIndex('order_lines_position_idx').on(t.orderId, t.position),
+  // Sales by item groups the lines of paid orders by item (8.1, D110).
+  index('order_lines_item_idx').on(t.itemId),
 ])
 
 /**
@@ -128,6 +136,8 @@ export const counterPayments = sqliteTable('counter_payments', {
   check('counter_payments_return_check', sql`(${t.returnMethod} is null and ${t.returnedAt} is null and ${t.returnedBy} is null) or (${t.returnMethod} in ('cash', 'khqr') and ${t.returnedAt} is not null and ${t.returnedBy} is not null)`),
   uniqueIndex('counter_payments_order_idx').on(t.orderId),
   index('counter_payments_branch_idx').on(t.branchId, t.collectedAt),
+  // Refunds by the day the money went back (reports, 8.1, D110).
+  index('counter_payments_returned_idx').on(t.branchId, t.returnedAt),
 ])
 
 /** The riel rate an admin set, from `effectiveFrom` on (append-only; 6.3, D101). */

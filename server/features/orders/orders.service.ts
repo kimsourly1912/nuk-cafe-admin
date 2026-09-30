@@ -1,10 +1,10 @@
 import type { CancelledBy, CancelMyOrderInput, CancelReason, OrderCancellation, CustomerOrders, CustomerOrdersQuery, Order, OrderSummary, PlaceOrderInput } from '#shared/contracts/orders'
+import type { PublicMenuCategory } from '#shared/contracts/public-menu'
 import { totalPages } from '#shared/contracts/common'
-import { BUSINESS_DAY_START_MINUTE, MAX_UNPAID_ORDERS, PAYMENT_WINDOW_MINUTES } from '#shared/contracts/orders'
+import { MAX_UNPAID_ORDERS, PAYMENT_WINDOW_MINUTES } from '#shared/contracts/orders'
 import type { Db } from '../../utils/batch'
 import { newId } from '../../utils/ids'
 import { toIso } from '../../utils/time'
-import { localDate } from '../../utils/weekly-windows'
 import { resolveTableToken } from '../branches'
 import type { Actor } from '../identity'
 import { getPublicMenu } from '../menu'
@@ -13,6 +13,7 @@ import { runOrderCommand } from './commands'
 import { cannotCancelNow, orderingClosed, orderNotFound, orderNotOrderable, pricesChanged, tableUnavailable, tooManyUnpaidOrders } from './orders.errors'
 import * as repo from './orders.repository'
 import { quoteOrder } from './quote.rules'
+import { businessDateAt } from './reports.rules'
 
 /**
  * Placing and reading orders (docs/server/data-model.md → Orders, step 6.2, D99). The lines are
@@ -23,10 +24,8 @@ import { quoteOrder } from './quote.rules'
 
 const MINUTE = 60_000
 
-/** The branch's business day at `now`: the local date, the day starting at 4:00 (Q39). */
-export function businessDateAt(now: Date, timezone: string): string {
-  return localDate(new Date(now.getTime() - BUSINESS_DAY_START_MINUTE * MINUTE), timezone)
-}
+/** The branch's business day at an instant: the local date, the day starting at 4:00 (Q39). */
+export { businessDateAt }
 
 /** The table a QR token names, if it's an active table of this branch. */
 async function tableFor(db: Db, branchId: string, token: string | null) {
@@ -39,6 +38,16 @@ async function tableFor(db: Db, branchId: string, token: string | null) {
     // Unknown or archived: refused below, never switched to pickup silently (Q42).
   }
   throw tableUnavailable()
+}
+
+/** Each item's category on the menu (its sub-category when it has one), kept on the line as sold (D110). */
+function categoriesOfItems(categories: PublicMenuCategory[]): Map<string, { id: string, name: string }> {
+  const byItem = new Map<string, { id: string, name: string }>()
+  for (const category of categories) {
+    for (const item of category.items) byItem.set(item.id, { id: category.id, name: category.name })
+    for (const [id, found] of categoriesOfItems(category.categories)) byItem.set(id, found)
+  }
+  return byItem
 }
 
 /**
@@ -75,11 +84,14 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
         placedAt: now,
         paymentDueAt: new Date(now.getTime() + PAYMENT_WINDOW_MINUTES * MINUTE),
       }
+      const categories = categoriesOfItems(menu.categories)
       const lines = quote.lines.map((line, position): repo.NewOrderLine => ({
         position,
         itemId: line.itemId,
         variationId: line.variationId,
         itemName: line.name!,
+        categoryId: categories.get(line.itemId)?.id ?? null,
+        categoryName: categories.get(line.itemId)?.name ?? null,
         detail: line.detail,
         modifiers: line.modifiers,
         unitPriceMinor: line.unitPriceMinor!,

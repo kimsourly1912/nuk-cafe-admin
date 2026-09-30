@@ -73,7 +73,8 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | voucher template | manage | ✔ | | |
 | settings | KHR exchange rate, branch hours | ✔ | | |
 | loyalty | adjust points | ✔ | ✔ | |
-| report / audit | read | ✔ | own branch | |
+| report | read, export (the reports, their CSV and print, and sending them to Telegram; 8.1, D110) | ✔ | read, own branch (not used yet: managers have no admin portal, D52) | |
+| audit | read | ✔ | own branch | |
 | assistant | use the AI assistant (phase 9, D107, D108) | ✔ | | |
 | Better Auth `user` / `session` admin endpoints | create, list, set role, ban, set password, revoke sessions… | ✔ (no impersonation) | | |
 | Better Auth `organization` / `member` / `invitation` / `ac` endpoints | update, delete, add or remove members, invite | | | |

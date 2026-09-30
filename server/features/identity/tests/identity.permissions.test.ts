@@ -22,6 +22,7 @@ const platformMatrix: Row[] = [
   ['settings', 'manage', ['admin']],
   ['assistant', 'use', ['admin']],
   ['report', 'read', ['admin']],
+  ['report', 'export', ['admin']],
   ['audit', 'read', ['admin']],
   // Better Auth's admin endpoints.
   ['user', 'create', ['admin']],
