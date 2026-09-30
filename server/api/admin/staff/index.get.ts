@@ -1,5 +1,5 @@
 import { staffListQuerySchema } from '#shared/contracts/staff'
-import { listStaff } from '~~/server/features/identity'
+import { listStaff } from '#server/features/identity'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, { staff: ['read'] })

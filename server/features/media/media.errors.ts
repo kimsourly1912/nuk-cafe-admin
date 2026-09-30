@@ -1,5 +1,5 @@
 import { IMAGE_MAX_BYTES } from '#shared/contracts/media'
-import { apiError, ErrorCodes } from '../../utils/errors'
+import { apiError, ErrorCodes } from '#server/utils/errors'
 
 export const MediaErrorCodes = {
   MEDIA_NOT_AVAILABLE: 'MEDIA_NOT_AVAILABLE',

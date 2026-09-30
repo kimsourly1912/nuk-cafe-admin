@@ -1,6 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm'
-import type { Db } from '../../utils/batch'
-import { member, organization } from '../../db/tables'
+import type { Db } from '#server/utils/batch'
+import { member, organization } from '#server/db/tables'
 
 export interface BranchAccessRow {
   status: string | null

@@ -1,4 +1,4 @@
-import { listPublicBranches } from '~~/server/features/branches'
+import { listPublicBranches } from '#server/features/branches'
 
 /**
  * `GET /api/public/branches`: every active branch with whether it's open now, for anyone (D93).

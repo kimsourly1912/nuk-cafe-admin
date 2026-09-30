@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { branchRoles, platformRoles } from '../identity.permissions'
-import type { BranchRole, PlatformRole } from '../identity.permissions'
+import { branchRoles, platformRoles } from '#server/features/identity/identity.permissions'
+import type { BranchRole, PlatformRole } from '#server/features/identity/identity.permissions'
 
 // The role matrix of docs/server/security.md (D45), one row per grant. A change to a role must
 // change this table too.

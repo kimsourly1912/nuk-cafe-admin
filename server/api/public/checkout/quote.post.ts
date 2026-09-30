@@ -1,5 +1,5 @@
 import { checkoutQuoteSchema } from '#shared/contracts/orders'
-import { getCheckoutQuote } from '~~/server/features/orders'
+import { getCheckoutQuote } from '#server/features/orders'
 
 /**
  * `POST /api/public/checkout/quote` `{ branchId, lines }`: the lines priced as the branch sells them

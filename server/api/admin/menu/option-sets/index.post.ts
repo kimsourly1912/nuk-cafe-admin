@@ -1,5 +1,5 @@
 import { createOptionSetSchema } from '#shared/contracts/menu-options'
-import { createOptionSet } from '~~/server/features/menu'
+import { createOptionSet } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['write'] })

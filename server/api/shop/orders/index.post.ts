@@ -1,5 +1,5 @@
 import { placeOrderSchema } from '#shared/contracts/orders'
-import { getOrder, placeOrder } from '~~/server/features/orders'
+import { getOrder, placeOrder } from '#server/features/orders'
 
 /**
  * `POST /api/shop/orders` (header `Idempotency-Key`) `{ branchId, tableToken?, lines,

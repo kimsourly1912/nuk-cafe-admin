@@ -1,5 +1,5 @@
 import type { Update } from 'grammy/types'
-import { handleUpdate, secretMatches } from '~~/server/features/notifications'
+import { handleUpdate, secretMatches } from '#server/features/notifications'
 
 /**
  * Telegram's webhook (step 8.1c, D112). Not a browser request: no session and no origin check

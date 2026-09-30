@@ -1,4 +1,4 @@
-import { expireUnpaidOrders } from '~~/server/features/orders'
+import { expireUnpaidOrders } from '#server/features/orders'
 
 /** Every minute (nuxt.config.ts → scheduled tasks): cancels orders still unpaid after 30 minutes (D104). */
 export default defineTask({

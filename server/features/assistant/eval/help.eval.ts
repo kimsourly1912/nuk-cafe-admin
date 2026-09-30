@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { Actor } from '../../identity'
-import { chatWithAssistant } from '../assistant.service'
-import { languageModel } from '../assistant.model'
-import { assistantSettingsFrom } from '../assistant.settings'
-import { createTestDb, createUser } from '../../../tests/support/db'
+import type { Actor } from '#server/features/identity'
+import { chatWithAssistant } from '#server/features/assistant/assistant.service'
+import { languageModel } from '#server/features/assistant/assistant.model'
+import { assistantSettingsFrom } from '#server/features/assistant/assistant.settings'
+import { createTestDb, createUser } from '#server/tests/support/db'
 
 /**
  * The help assistant's quality check (step 9.1, D107, D109): real questions against the configured

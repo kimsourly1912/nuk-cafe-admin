@@ -1,5 +1,5 @@
 import type { CustomerAccount } from '#shared/contracts/account'
-import { ensureProfile } from '~~/server/features/customers'
+import { ensureProfile } from '#server/features/customers'
 
 /**
  * The signed-in customer's own profile: member code (shown as a QR at the counter) and whether

@@ -1,4 +1,4 @@
-import { expireIdempotencyKeys } from '~~/server/features/platform'
+import { expireIdempotencyKeys } from '#server/features/platform'
 
 /** Daily (nuxt.config.ts → nitro.scheduledTasks): removes idempotency keys past their 24 hours. */
 export default defineTask({

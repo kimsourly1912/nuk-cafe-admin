@@ -1,5 +1,5 @@
 import { updateTableSchema } from '#shared/contracts/branches'
-import { updateTable } from '~~/server/features/branches'
+import { updateTable } from '#server/features/branches'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { branch: ['update'] })

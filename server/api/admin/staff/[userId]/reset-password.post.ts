@@ -1,5 +1,5 @@
 import { resetStaffPasswordSchema } from '#shared/contracts/staff'
-import { resetStaffPassword } from '~~/server/features/identity'
+import { resetStaffPassword } from '#server/features/identity'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { staff: ['reset-password'] })

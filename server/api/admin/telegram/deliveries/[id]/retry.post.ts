@@ -1,4 +1,4 @@
-import { retryDelivery } from '~~/server/features/notifications'
+import { retryDelivery } from '#server/features/notifications'
 
 /** Retry a failed delivery: its saved message, sent again now. */
 export default defineEventHandler(async (event) => {

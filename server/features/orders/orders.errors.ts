@@ -1,6 +1,6 @@
 import type { OrderStatus } from '#shared/contracts/orders'
 import { MAX_UNPAID_ORDERS } from '#shared/contracts/orders'
-import { apiError, ErrorCodes, notFound } from '../../utils/errors'
+import { apiError, ErrorCodes, notFound } from '#server/utils/errors'
 
 /** Error codes of placing and reading orders (step 6.2, D99). */
 export const OrderErrorCodes = {

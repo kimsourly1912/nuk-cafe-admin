@@ -1,4 +1,4 @@
-import { getCounterOrder } from '~~/server/features/orders'
+import { getCounterOrder } from '#server/features/orders'
 
 /** One of the branch's orders, whatever its status (D101). */
 export default defineEventHandler(async (event) => {

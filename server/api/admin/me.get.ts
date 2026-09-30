@@ -1,4 +1,4 @@
-import { adminSession } from '~~/server/features/identity'
+import { adminSession } from '#server/features/identity'
 
 /**
  * The admin app's session check: who is signed in, what they may do, and whether they must change

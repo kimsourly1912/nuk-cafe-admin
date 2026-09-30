@@ -1,5 +1,5 @@
 import { orderHistoryQuerySchema } from '#shared/contracts/reports'
-import { orderHistoryExport } from '~~/server/features/orders'
+import { orderHistoryExport } from '#server/features/orders'
 
 /** `GET /api/admin/reports/orders.csv` (8.1b, D111): Order history as CSV, every matching row. */
 export default defineEventHandler(async (event) => {

@@ -1,6 +1,6 @@
 import { BUSINESS_DAY_START_MINUTE } from '#shared/contracts/orders'
 import type { ItemSalesQuery, ItemSalesRow, ReportContext, ReportSummary } from '#shared/contracts/reports'
-import { localTime } from '../../utils/weekly-windows'
+import { localTime } from '#server/utils/weekly-windows'
 import { businessDateAt } from './reports.rules'
 import { METHOD_LABELS } from './reports.csv'
 

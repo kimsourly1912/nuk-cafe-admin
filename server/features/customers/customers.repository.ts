@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import type { Db, Statement } from '../../utils/batch'
+import type { Db, Statement } from '#server/utils/batch'
 import { customerProfiles } from './customers.schema'
 
 export interface ProfileRow {

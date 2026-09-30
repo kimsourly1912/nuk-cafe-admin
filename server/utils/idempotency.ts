@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
 import * as v from 'valibot'
-import { idempotencyKeyRequired } from '../features/platform'
+import { idempotencyKeyRequired } from '#server/features/platform'
 
 const keySchema = v.pipe(v.string(), v.uuid())
 

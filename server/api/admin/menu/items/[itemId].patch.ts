@@ -1,5 +1,5 @@
 import { updateItemSchema } from '#shared/contracts/menu-items'
-import { updateItem } from '~~/server/features/menu'
+import { updateItem } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['write'] })

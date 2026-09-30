@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import { assistantOff, assistantSettingsFrom, languageModel } from '../features/assistant'
+import { assistantOff, assistantSettingsFrom, languageModel } from '#server/features/assistant'
 
 /**
  * Route glue for `/api/admin/assistant/**` (phase 9, D107, D108): without an AI key the assistant

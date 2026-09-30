@@ -1,6 +1,6 @@
 import type { OrderStatus, OrderType, PaymentMethod } from '#shared/contracts/orders'
 import type { ItemSalesRow, OrderHistoryRow, PaymentState, ReportSummary } from '#shared/contracts/reports'
-import { localDate, localTime } from '../../utils/weekly-windows'
+import { localDate, localTime } from '#server/utils/weekly-windows'
 
 export { csvFilename } from '#shared/contracts/reports'
 

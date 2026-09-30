@@ -1,7 +1,7 @@
 import { and, asc, count, eq, inArray, ne, sql } from 'drizzle-orm'
 import type { AvailabilityRuleRef, AvailabilityStatus, AvailabilityWindow } from '#shared/contracts/menu-availability'
-import type { Db, Statement } from '../../utils/batch'
-import { chunk, insertPieces, readInChunks, requireCount } from '../../utils/batch'
+import type { Db, Statement } from '#server/utils/batch'
+import { chunk, insertPieces, readInChunks, requireCount } from '#server/utils/batch'
 import { menuAvailabilityRules, menuAvailabilityWindows, menuCategories, menuCategoryAvailability, menuItemAvailability, menuItems } from './menu.schema'
 
 export interface RuleRow {

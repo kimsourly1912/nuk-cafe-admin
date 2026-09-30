@@ -2,7 +2,7 @@ import type { OrderStatus } from '#shared/contracts/orders'
 import { BUSINESS_DAY_START_MINUTE } from '#shared/contracts/orders'
 import type { ItemSalesQuery, ItemSalesRow, PaymentState, TrendPoint } from '#shared/contracts/reports'
 import { daysBetween } from '#shared/contracts/reports'
-import { addDays, localDate, localTime, zonedInstant } from '../../utils/weekly-windows'
+import { addDays, localDate, localTime, zonedInstant } from '#server/utils/weekly-windows'
 
 /**
  * Pure rules of the reports (step 8.1, docs/plans/reports.md, D110): business days, periods, the

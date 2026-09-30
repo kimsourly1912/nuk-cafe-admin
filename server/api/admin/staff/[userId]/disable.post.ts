@@ -1,5 +1,5 @@
 import { disableStaffSchema } from '#shared/contracts/staff'
-import { disableStaff } from '~~/server/features/identity'
+import { disableStaff } from '#server/features/identity'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { staff: ['disable'] })

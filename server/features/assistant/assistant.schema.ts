@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
 import { AI_PROVIDERS, ASSISTANT_FEATURES, ASSISTANT_OUTCOMES } from '#shared/contracts/assistant'
-import { newId } from '../../utils/ids'
+import { newId } from '#server/utils/ids'
 
 /**
  * The assistant's usage (step 9.0, D108): one row per request to the AI provider, for the daily

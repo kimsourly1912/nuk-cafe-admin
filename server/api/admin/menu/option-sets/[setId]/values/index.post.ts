@@ -1,5 +1,5 @@
 import { addOptionValueSchema } from '#shared/contracts/menu-options'
-import { addOptionValue } from '~~/server/features/menu'
+import { addOptionValue } from '#server/features/menu'
 
 /** Adds a value at the end of the set; returns the whole set. */
 export default defineEventHandler(async (event) => {

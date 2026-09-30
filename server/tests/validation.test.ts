@@ -1,8 +1,8 @@
 import type { H3Event } from 'h3'
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
-import { parseInput, readIdParam } from '../utils/validation'
-import { failure } from './support/failure'
+import { parseInput, readIdParam } from '#server/utils/validation'
+import { failure } from '#server/tests/support/failure'
 
 const schema = v.strictObject({
   name: v.pipe(v.string(), v.trim(), v.minLength(1, 'Required')),

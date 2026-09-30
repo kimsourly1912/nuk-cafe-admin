@@ -1,5 +1,5 @@
 import { IMAGE_MAX_BYTES } from '#shared/contracts/media'
-import { uploadImage } from '~~/server/features/media'
+import { uploadImage } from '#server/features/media'
 
 /**
  * Uploads an image (multipart, field `file`): JPEG, PNG or WebP up to 5 MB, checked by its bytes.

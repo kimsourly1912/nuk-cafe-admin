@@ -1,6 +1,6 @@
 import { createError } from 'h3'
 import { describe, expect, it } from 'vitest'
-import { apiError, ErrorCodes, toErrorResponse } from '../utils/errors'
+import { apiError, ErrorCodes, toErrorResponse } from '#server/utils/errors'
 
 describe('apiError', () => {
   it('carries the status, code, user message and field errors', () => {

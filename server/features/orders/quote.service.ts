@@ -1,6 +1,6 @@
 import type { CheckoutQuote, CheckoutQuoteInput } from '#shared/contracts/orders'
-import type { Db } from '../../utils/batch'
-import { getPublicMenu } from '../menu'
+import type { Db } from '#server/utils/batch'
+import { getPublicMenu } from '#server/features/menu'
 import { quoteOrder } from './quote.rules'
 
 /**
