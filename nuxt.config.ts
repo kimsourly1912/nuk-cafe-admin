@@ -58,7 +58,7 @@ function securityHeaders(): Record<string, string> {
 /** Scheduled jobs, cron in UTC (docs/server/operations.md → Scheduled jobs). */
 const SCHEDULED_TASKS: Record<string, string[]> = {
   '* * * * *': ['platform:deliver-outbox', 'orders:expire-unpaid'],
-  '15 3 * * *': ['platform:expire-idempotency-keys'],
+  '15 3 * * *': ['platform:expire-idempotency-keys', 'assistant:purge-usage'],
   '5 * * * *': ['media:purge-temporary'],
 }
 
@@ -145,6 +145,11 @@ export default defineNuxtConfig({
     // secret per environment. Changing it invalidates every printed QR. Deployed builds refuse to
     // serve table QRs without it; the dev server uses a local one.
     qrSecret: '',
+    // The AI assistant (phase 9, D107, D108; docs/server/operations.md → Configuration):
+    // NUXT_AI_PROVIDER (anthropic | openai | google | openai-compatible), NUXT_AI_MODEL,
+    // NUXT_AI_API_KEY (a secret), NUXT_AI_BASE_URL (openai-compatible only), NUXT_AI_DAILY_LIMIT.
+    // Without a key the assistant is off: its routes answer 404.
+    ai: { provider: '', model: '', apiKey: '', baseUrl: '', dailyLimit: 100 },
     public: {
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',

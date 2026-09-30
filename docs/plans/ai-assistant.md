@@ -98,9 +98,9 @@ All `POST`, admin surface, `assistant: ['use']`; 404 when the assistant is off. 
 
 ## Data model (9.0, one migration)
 
-`assistant_usage`: `id`, `user_id` → user (restrict), `feature` (`chat` \| `menu_item_draft` \| `rewrite`), `provider`, `model`, `input_tokens`, `output_tokens`, `cached_input_tokens` (null when the provider doesn't say), `outcome`, `at`. Index (`user_id`, `at`). **No question or answer text** (owner, A4).
+`assistant_usage`: `id`, `user_id` → user (cascade: usage is the admin's own data), `day` (the local date, Asia/Phnom_Penh), `feature` (`chat` \| `menu_item_draft` \| `rewrite`), `provider`, `model`, `input_tokens`, `output_tokens`, `cached_input_tokens` (null when the provider doesn't say), `outcome`, `at`. Index (`user_id`, `at`). **No question or answer text** (owner, A4).
 
-- **Limit:** before calling the provider, the server inserts the row (`outcome` `pending`) in one batch with a guard (`requireAtMost`: the user's rows since local midnight, Asia/Phnom_Penh, counting this one, at most the limit), so two requests at once can't both take the last slot; after the call it fills in the tokens and the outcome. A failed call still counts (it may have cost tokens). A refused request is not inserted (nothing to record but a 429). So `outcome` is `pending` \| `ok` \| `error`.
+- **Limit:** before calling the provider, the server inserts the row (`outcome` `pending`) in one batch with a guard (`requireAtMost`: the user's rows with today's `day`, counting this one, at most the limit), so two requests at once can't both take the last slot; after the call it fills in the tokens and the outcome. A failed call still counts (it may have cost tokens). A refused request is not inserted (nothing to record but a 429). So `outcome` is `pending` \| `ok` \| `error`.
 - **Retention [Choice]:** rows older than 90 days deleted by a daily task (cost reports need about a quarter).
 
 ## Screens (mockups first, per step)
@@ -130,7 +130,7 @@ All `POST`, admin surface, `assistant: ['use']`; 404 when the assistant is off. 
 
 | Step | Builds | Done when |
 |---|---|---|
-| **9.0** | Packages; `model.ts` (the one place naming providers); settings and the feature switch; `assistant: ['use']`; `assistant_usage` + migration + limit + retention task; errors; a hidden `POST /api/admin/assistant/ping` that makes one tiny call (for the staging check), removed in 9.1 | Server tests; the staging check above passes with the owner's key (Q43) |
+| **9.0** | Packages; `assistant.model.ts` (the one place naming providers); settings and the feature switch; `assistant: ['use']`; `assistant_usage` + migration + limit + retention task; errors; a hidden `POST /api/admin/assistant/ping` that makes one tiny call (for the staging check), removed in 9.1 | Server tests; the staging check above passes with the owner's key (Q43) |
 | **9.1** | The help guide (drafted by the agent from the code, reviewed by the owner), the page list, `/chat`, the panel | e2e; the quality check's help questions |
 | **9.2** | `/menu-item-draft`, the dialog, the editor's prefill and banner | e2e; the quality check's descriptions |
 | **9.3** | `/rewrite`, the Improve popover | e2e; the quality check's wording cases |

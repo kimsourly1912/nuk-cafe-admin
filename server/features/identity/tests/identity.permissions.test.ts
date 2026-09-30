@@ -20,6 +20,7 @@ const platformMatrix: Row[] = [
   ['voucherTemplate', 'manage', ['admin']],
   ['loyalty', 'adjust', ['admin']],
   ['settings', 'manage', ['admin']],
+  ['assistant', 'use', ['admin']],
   ['report', 'read', ['admin']],
   ['audit', 'read', ['admin']],
   // Better Auth's admin endpoints.

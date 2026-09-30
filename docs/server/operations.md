@@ -63,6 +63,7 @@ Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudf
 | `NUXT_MAIL_FROM` | Sender address | | e.g. `NUK Cafe <no-reply@…>` |
 | `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` / `_ENVIRONMENT` | The Sample data page and its routes (D94), and the environment's name on it | on (`Local`, the dev server only) | `true` / `Staging` (`wrangler.vars` in `nuxt.config.ts`); **never set in production** (the routes answer 404) |
 | `NUXT_QR_SECRET` | Signs table QR tokens (D91). **Changing it invalidates every printed QR** | unset (the dev server uses a local secret) | secret, set once per environment (`wrangler secret put NUXT_QR_SECRET`); without it the table routes answer 500 `QR_NOT_CONFIGURED` |
+| `NUXT_AI_PROVIDER`, `NUXT_AI_MODEL`, `NUXT_AI_API_KEY`, `NUXT_AI_BASE_URL`, `NUXT_AI_DAILY_LIMIT` | The AI assistant (D107, D108): the provider (`anthropic` \| `openai` \| `google` \| `openai-compatible`), its model id, the key, a base URL (required for `openai-compatible`; optional for a proxy), requests per admin per day (default 100) | unset (the assistant is off: its routes answer 404) | the key is a secret (`wrangler secret put NUXT_AI_API_KEY`), the rest plain variables; a key with an unknown provider, no model or (for `openai-compatible`) no URL answers 500 `AI_NOT_CONFIGURED`. Set a spending cap on the provider's account (Q43) |
 | `NUXT_SEED_ADMIN_EMAIL` / `_NAME` | The seed task's first admin | `.env` | not used (see Staging → First admin) |
 
 Bindings (D1, R2, KV) are configured per environment in `nuxt.config.ts` (`$env.<name>`: NuxtHub turns `hub.db.connection.databaseId` and `hub.blob.bucketName` into the Worker's `DB` and `BLOB` bindings), not as variables. **`--envName staging` replaces `$production`**: settings every deployed build needs (the security headers) are repeated in each environment block.
@@ -106,12 +107,13 @@ Production: manual workflow from a commit that is live on staging: export the da
 
 Nitro tasks in `server/tasks/`, scheduled in `nuxt.config.ts` (`nitro.scheduledTasks`, cron in UTC): Cloudflare cron triggers in deployed environments; the dev server runs them itself. Every task is **idempotent** (safe to run twice) and logs what it did. Locally a task runs on demand with `curl http://localhost:3000/_nitro/tasks/<name>` (dev only).
 
-Built so far: `platform:deliver-outbox` and `orders:expire-unpaid` (every minute), `platform:expire-idempotency-keys` (daily at 03:15 UTC) and `media:purge-temporary` (hourly at :05).
+Built so far: `platform:deliver-outbox` and `orders:expire-unpaid` (every minute), `platform:expire-idempotency-keys` and `assistant:purge-usage` (daily at 03:15 UTC) and `media:purge-temporary` (hourly at :05).
 
 | Task | Schedule | Does |
 |---|---|---|
 | `media:purge-temporary` | hourly | Deletes temporary assets older than 24 h and their R2 objects |
 | `platform:expire-idempotency-keys` | daily | Removes expired idempotency keys |
+| `assistant:purge-usage` | daily | Removes AI assistant usage rows older than 90 days (D108) |
 | `platform:deliver-outbox` | every minute | Sends pending outbox messages with retries and backoff |
 | `loyalty:expire-vouchers` | daily | Marks vouchers past `expires_at` as expired |
 | `orders:expire-unpaid` | every minute | Cancels orders still unpaid 30 minutes after placing (D45, D104): 100 a run, each guarded by status and version (a payment at that moment wins), an event with no actor and an audit entry |
