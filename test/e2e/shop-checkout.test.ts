@@ -98,7 +98,9 @@ describe('placing an order', () => {
     await page.getByRole('heading', { name: /^Your number \d{3}$/ }).waitFor()
     await page.getByText('Waiting for payment').waitFor()
     await page.getByText('Pay at the counter to start your order. Show this number to the cashier.').waitFor()
-    expect(await page.locator('p', { hasText: 'Pay within 30 minutes' }).innerText()).toMatch(/^Pay within 30 minutes or the order is cancelled: by \d{1,2}:\d{2}\s[AP]M\.$/)
+    // Tracking (6.5b, D114): the time to pay and the minutes left.
+    await page.getByText(/^Pay at the counter by \d{1,2}:\d{2}\s[AP]M$/).waitFor()
+    await page.getByText(/^(29|30) min left\. Unpaid orders are cancelled after 30 minutes\.$/).waitFor()
     const summary = page.getByRole('list', { name: 'Order summary' })
     await summary.getByText('1 × Banana Bread').waitFor()
     await summary.getByText('Warm it up, please').waitFor()
@@ -160,7 +162,7 @@ describe('placing an order', () => {
 })
 
 describe('dine-in', () => {
-  it('a table\'s QR code orders to that table; the order page says it will be brought there', async () => {
+  it('a table\'s QR code orders to that table; the order page says to collect it at the counter', async () => {
     const { page } = await signedIn(seed.customers.shopperC)
     await page.goto(url(`/table/${seed.openTableToken}`), { waitUntil: 'hydration' })
     await addToOrder(page, 'Banana Bread')
@@ -168,8 +170,10 @@ describe('dine-in', () => {
     await page.getByText('Dine-in · Table T01').waitFor()
     await button(page, 'Place order · $2.25').click()
     await page.waitForURL(onOrderPage)
-    await page.getByText('Pay at the counter, then we\'ll bring it to Table T01.').waitFor()
-    await page.getByText('Riverside · Dine-in · Table T01').waitFor()
+    // No table service (D106): a table order is collected at the counter too.
+    await page.getByText('Table T01 order').waitFor()
+    await page.getByText('Pay at the counter to start your order. Show this number to the cashier.').waitFor()
+    await page.getByText('Riverside · Table T01').waitFor()
   })
 
   it('a table that stopped taking orders is refused, never switched silently; "Switch to pickup" then places it', async () => {

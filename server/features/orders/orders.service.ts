@@ -149,6 +149,7 @@ export async function getOrder(db: Db, actor: Actor, id: string): Promise<Order>
     table: row.tableLabel ? { label: row.tableLabel } : null,
     lines: lines.map(line => ({
       itemId: line.itemId,
+      variationId: line.variationId,
       itemName: line.itemName,
       detail: line.detail,
       modifiers: line.modifiers,

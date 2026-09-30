@@ -152,6 +152,8 @@ export type PlaceOrderInput = v.InferOutput<typeof placeOrderSchema>
 
 export interface OrderLine {
   itemId: string
+  /** The version sold (step 6.5b: Order again adds the same one). */
+  variationId: string
   itemName: string
   detail: string
   modifiers: QuotedModifier[]

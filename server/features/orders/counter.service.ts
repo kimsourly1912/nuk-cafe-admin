@@ -38,6 +38,7 @@ const toCounterOrder = (row: repo.OrderRow, lines: Awaited<ReturnType<typeof rep
   customer: { name: row.customerName },
   lines: lines.map(line => ({
     itemId: line.itemId,
+    variationId: line.variationId,
     itemName: line.itemName,
     detail: line.detail,
     modifiers: line.modifiers,
