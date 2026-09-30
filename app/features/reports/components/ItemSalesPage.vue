@@ -7,12 +7,14 @@
  */
 import type { SelectItem, TableColumn } from '@nuxt/ui'
 import type { ItemSalesRow, ItemSalesSort } from '#shared/contracts/reports'
-import { useItemSales, useReportDownload, useReportScope } from '../composables/useReports'
+import { queryText, useItemSales, useReportDestinations, useReportDownload, useReportScope } from '../composables/useReports'
 import { negativeMinor } from '../utils/display'
 import ReportDefinitions from './ReportDefinitions.vue'
+import SendToTelegramModal from './SendToTelegramModal.vue'
 import ReportHeader from './ReportHeader.vue'
 import ReportPrintHeader from './ReportPrintHeader.vue'
 import SortButton from './SortButton.vue'
+import { periodButtonLabel, periodLabel } from '../utils/period'
 
 const { branches, branch, period, scope, setPeriod, setBranch } = useReportScope()
 const { isCompact } = useLayoutContext()
@@ -66,6 +68,16 @@ function downloadCsv() {
 }
 const printPage = () => window.print()
 
+// Send to Telegram, where it's set up (D112): the message is built on the server from this query.
+const telegram = useReportDestinations()
+const sendModal = useOverlay().create(SendToTelegramModal)
+function openSend() {
+  if (!request.value || !period.value || !branch.value) return
+  const label = periodButtonLabel(period.value, branch.value.today)
+  const dates = periodLabel(period.value)
+  sendModal.open({ kind: 'items', title: `Sales by item · ${label === dates ? dates : `${label} (${dates})`}`, query: queryText(request.value) })
+}
+
 const range = computed(() => {
   if (!data.value?.total) return ''
   const first = (data.value.page - 1) * data.value.pageSize + 1
@@ -87,10 +99,12 @@ const range = computed(() => {
         :as-of="data?.asOf"
         :refreshing="report.refreshing.value"
         :downloading="download.isPending('items')"
+        :can-send="telegram.data.value?.enabled"
         @period="setPeriod"
         @branch="setBranch"
         @download="downloadCsv"
         @print="printPage"
+        @send="openSend"
       />
       <UDashboardToolbar class="print:hidden">
         <template #left>

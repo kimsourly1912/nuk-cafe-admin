@@ -4,6 +4,7 @@ import { branchesNavigation } from '~/features/branches'
 import { categoriesNavigation } from '~/features/categories'
 import { exchangeRatesNavigation } from '~/features/exchange-rates'
 import { modifierGroupsNavigation } from '~/features/modifier-groups'
+import { notificationsNavigation } from '~/features/notifications'
 import { optionSetsNavigation } from '~/features/option-sets'
 import { productsNavigation } from '~/features/products'
 import { reportsNavigation } from '~/features/reports'
@@ -37,6 +38,7 @@ export function navigationItems(options: { sampleData: boolean }): NavigationMen
       staffNavigation,
       branchesNavigation,
       exchangeRatesNavigation,
+      notificationsNavigation,
       ...(options.sampleData ? [sampleDataNavigation] : []),
     ],
   ]

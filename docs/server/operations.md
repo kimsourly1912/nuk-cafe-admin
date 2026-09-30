@@ -64,6 +64,7 @@ Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudf
 | `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` / `_ENVIRONMENT` | The Sample data page and its routes (D94), and the environment's name on it | on (`Local`, the dev server only) | `true` / `Staging` (`wrangler.vars` in `nuxt.config.ts`); **never set in production** (the routes answer 404) |
 | `NUXT_QR_SECRET` | Signs table QR tokens (D91). **Changing it invalidates every printed QR** | unset (the dev server uses a local secret) | secret, set once per environment (`wrangler secret put NUXT_QR_SECRET`); without it the table routes answer 500 `QR_NOT_CONFIGURED` |
 | `NUXT_AI_PROVIDER`, `NUXT_AI_MODEL`, `NUXT_AI_API_KEY`, `NUXT_AI_BASE_URL`, `NUXT_AI_DAILY_LIMIT` | The AI assistant (D107, D108): the provider (`anthropic` \| `openai` \| `google` \| `openai-compatible`), its model id, the key, a base URL (required for `openai-compatible`; optional for a proxy), requests per admin per day (default 100) | unset (the assistant is off: its routes answer 404) | the key is a secret (`wrangler secret put NUXT_AI_API_KEY`), the rest plain variables; a key with an unknown provider, no model or (for `openai-compatible`) no URL answers 500 `AI_NOT_CONFIGURED`. Set a spending cap on the provider's account (Q43) |
+| `NUXT_TELEGRAM_BOT_TOKEN`, `NUXT_TELEGRAM_BOT_USERNAME`, `NUXT_TELEGRAM_WEBHOOK_SECRET` | Telegram (D112): the bot's token from @BotFather, its name without `@`, and the secret Telegram sends with every webhook call (32–256 letters, digits, `_` or `-`) | unset (Telegram is off: its routes answer 404, the Telegram page says it isn't set up) | the token and the webhook secret are secrets (`wrangler secret put …`), the name a plain variable; a token without a valid name or secret answers 500 `TELEGRAM_NOT_CONFIGURED`. Then point the webhook at the site once: [Telegram](#telegram) |
 | `NUXT_SEED_ADMIN_EMAIL` / `_NAME` | The seed task's first admin | `.env` | not used (see Staging → First admin) |
 
 Bindings (D1, R2, KV) are configured per environment in `nuxt.config.ts` (`$env.<name>`: NuxtHub turns `hub.db.connection.databaseId` and `hub.blob.bucketName` into the Worker's `DB` and `BLOB` bindings), not as variables. **`--envName staging` replaces `$production`**: settings every deployed build needs (the security headers) are repeated in each environment block.
@@ -125,6 +126,24 @@ Built so far: `platform:deliver-outbox` and `orders:expire-unpaid` (every minute
 - **Locally**, without a key, the dev server prints each email (with its link) to the console. A production build without a key **refuses** to send (the messages stay queued and are logged as failing), so one-time links never land in production logs.
 - Delivery takes up to a minute (the outbox task's schedule).
 - Templates: plain, short, the app's name, one link; no tracking pixels. English only until translations are decided (Q21).
+
+## Telegram
+
+The bot sends reports and (from 8.1d) alerts to the chats connected on **Admin → Telegram** (D112). Telegram calls our webhook, `POST /api/webhooks/telegram`, which checks the secret header before reading anything.
+
+**Setting up an environment** (the owner, on their own machine; the token is never pasted into a chat or a file in the repository):
+
+1. In Telegram, talk to **@BotFather**: `/newbot`, choose a name (e.g. "NUK Cafe") and a username ending in `bot` (e.g. `NukCafeBot`). It answers with the **token**. `/setjoingroups` → Enable (so it can join the staff group); `/setprivacy` → Enable (it only sees commands in groups).
+2. Make a webhook secret: 48 random characters, e.g. `node -e "console.log(require('crypto').randomBytes(36).toString('base64url'))"`.
+3. Set them on the Worker: `wrangler secret put NUXT_TELEGRAM_BOT_TOKEN`, `wrangler secret put NUXT_TELEGRAM_WEBHOOK_SECRET`, and `NUXT_TELEGRAM_BOT_USERNAME` as a plain variable (`wrangler.vars` in `nuxt.config.ts`, deployed with the next merge).
+4. Point the webhook at the site, once (and again if the address or the secret changes):
+   `curl -s "https://api.telegram.org/bot<TOKEN>/setWebhook" -d url=https://<site>/api/webhooks/telegram -d secret_token=<SECRET> -d 'allowed_updates=["message","my_chat_member"]'`
+   Telegram answers `{"ok":true,…}`. `…/getWebhookInfo` shows the last error, if any.
+5. Open **Admin → Telegram** and connect your private chat and the staff group.
+
+Locally Telegram can't reach the dev server, so connecting is tested against staging; the server tests use a fake Telegram (grammY's `Api` with its `fetch` replaced).
+
+**How it behaves:** connect links work once, for 10 minutes, and only their hash is stored; a group is connected only after an admin of that group added the bot and a portal admin confirmed it. A chat that removed or blocked the bot is marked **Blocked**; a group upgraded to a supergroup keeps working (its new id is followed). A send that fails says why (blocked, Telegram's wait, or refused) and can be tried again with the same idempotency key, so a lost answer never sends twice.
 
 ## Monitoring
 

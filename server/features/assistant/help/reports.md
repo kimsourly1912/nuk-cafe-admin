@@ -33,7 +33,9 @@ Press an order's number to open it: its items with options, add-ons and notes, t
 - **Download CSV** saves a spreadsheet file with every matching row (not only the page shown), with the page's filters and order. It opens in Excel or Google Sheets.
 - **Print** prints the report in black and white on A4, with the branch, the period, when it was printed and by whom, and how the numbers are counted.
 
-On a phone both are in the **⋯** (Actions) menu.
+- **Send to Telegram** (Summary and Sales by item, once Telegram is set up): choose a connected chat, check the **Preview** (it's exactly the message sent), tick **Attach CSV** for the file too, and press **Send**. Choosing a group warns that everyone in it will see the figures. If Telegram refuses, the dialog stays open with the reason and **Try again** (it never sends twice).
+
+On a phone these are in the **⋯** (Actions) menu.
 
 ## Common problems
 

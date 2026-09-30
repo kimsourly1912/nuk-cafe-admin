@@ -154,6 +154,10 @@ export default defineNuxtConfig({
     // NUXT_AI_API_KEY (a secret), NUXT_AI_BASE_URL (openai-compatible only), NUXT_AI_DAILY_LIMIT.
     // Without a key the assistant is off: its routes answer 404.
     ai: { provider: '', model: '', apiKey: '', baseUrl: '', dailyLimit: 100 },
+    // Telegram (step 8.1c, D112; docs/server/operations.md → Telegram): NUXT_TELEGRAM_BOT_TOKEN (a
+    // secret, from @BotFather), NUXT_TELEGRAM_BOT_USERNAME (without @), NUXT_TELEGRAM_WEBHOOK_SECRET
+    // (a secret, 32+ letters/digits). Without a token Telegram is off: its routes answer 404.
+    telegram: { botToken: '', botUsername: '', webhookSecret: '' },
     public: {
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',

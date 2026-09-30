@@ -7,7 +7,7 @@ The admin portal is where admins set up NUK Cafe (the menu, staff, the branch an
 - **Dashboard**: the start page.
 - **Menu**: Menu items, Categories, Options, Add-ons, Availability.
 - **Reports**: Summary, Sales by item, Order history.
-- **Admin**: Staff, Branch, Payments, and Sample data (test environments only).
+- **Admin**: Staff, Branch, Payments, Telegram, and Sample data (test environments only).
 
 On a phone, open the sidebar with the menu button at the top left.
 

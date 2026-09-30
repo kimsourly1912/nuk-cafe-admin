@@ -108,6 +108,7 @@ async function open(path: string, handlers: Record<string, MockHandler> = {}, wi
     'GET /admin/reports/items': record(itemsOf),
     'GET /admin/reports/orders': record(historyOf),
     'GET /admin/reports/orders/{id}': () => DETAIL,
+    'GET /admin/reports/destinations': () => ({ enabled: false, destinations: [] }),
     ...handlers,
   })
   await page.goto(url(path), { waitUntil: 'hydration' })

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Every report page's header (D111, the owner's frames): the title with Download CSV and Print (one
- * Actions menu on phones), then the period, the branch when there are several, and what the numbers
+ * Every report page's header (D111, the owner's frames): the title with Download CSV, Print and,
+ * where Telegram is set up, Send to Telegram (one Actions menu on phones), then the period, the branch when there are several, and what the numbers
  * mean: "Riverside · Asia/Phnom_Penh · business day 4:00 AM – 4:00 AM · Updated 2:35 PM". None of
  * it prints: the print header (`ReportPrintHeader`) says the same on paper.
  */
@@ -20,8 +20,10 @@ const props = defineProps<{
   asOf?: string
   refreshing?: boolean
   downloading?: boolean
+  /** Send to Telegram (Summary and Sales by item, where Telegram is set up; D112). */
+  canSend?: boolean
 }>()
-const emit = defineEmits<{ period: [period: Period], branch: [id: string], download: [], print: [] }>()
+const emit = defineEmits<{ period: [period: Period], branch: [id: string], download: [], print: [], send: [] }>()
 
 const { isCompact } = useLayoutContext()
 
@@ -30,6 +32,7 @@ const branchItems = computed<SelectItem[]>(() => props.branches.map(b => ({ labe
 const actions = computed<DropdownMenuItem[]>(() => [
   { label: 'Download CSV', icon: 'i-lucide-download', disabled: props.downloading || !props.branch, onSelect: () => emit('download') },
   { label: 'Print', icon: 'i-lucide-printer', disabled: !props.branch, onSelect: () => emit('print') },
+  ...(props.canSend ? [{ label: 'Send to Telegram', icon: 'i-lucide-send', disabled: !props.branch, onSelect: () => emit('send') }] : []),
 ])
 </script>
 
@@ -72,6 +75,15 @@ const actions = computed<DropdownMenuItem[]>(() => [
           variant="outline"
           :disabled="!branch"
           @click="emit('print')"
+        />
+        <UButton
+          v-if="canSend"
+          label="Send to Telegram"
+          icon="i-lucide-send"
+          color="neutral"
+          variant="outline"
+          :disabled="!branch"
+          @click="emit('send')"
         />
       </template>
     </template>

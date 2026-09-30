@@ -1,14 +1,17 @@
 import type { PaymentMethod } from '#shared/contracts/orders'
 import { PAYMENT_METHODS } from '#shared/contracts/orders'
+import type { ReportMessageInput } from '#shared/contracts/notifications'
 import type { ItemSalesQuery, ItemSalesReport, ReportBranch, OrderHistory, OrderHistoryDetail, OrderHistoryQuery, OrderHistoryRow, ReportContext, ReportPeriodQuery, ReportSummary } from '#shared/contracts/reports'
-import { REPORT_BEST_SELLERS } from '#shared/contracts/reports'
+import { itemSalesQuerySchema, REPORT_BEST_SELLERS, reportPeriodQuerySchema } from '#shared/contracts/reports'
 import { totalPages } from '#shared/contracts/common'
 import type { Db } from '../../utils/batch'
 import { apiError, ErrorCodes, notFound } from '../../utils/errors'
 import { toIso } from '../../utils/time'
+import { parseInput } from '../../utils/validation'
 import { orderNotFound } from './orders.errors'
 import * as orderRepo from './orders.repository'
 import { csvFilename, itemsCsv, ordersCsv, summaryCsv } from './reports.csv'
+import { itemsMessage, plainText, summaryMessage } from './reports.message'
 import * as repo from './reports.repository'
 import { averageMinor, bestSellers, businessDateAt, categoriesOf, firstName, itemSalesRows, itemSalesTable, paymentState, periodInstants, previousPeriod, salesTrend } from './reports.rules'
 
@@ -217,4 +220,47 @@ export async function orderHistoryExport(db: Db, query: OrderHistoryQuery, now =
   const { rows, total } = await repo.orderHistory(db, { ...query, page: 1, pageSize: ORDER_EXPORT_MAX })
   if (total > ORDER_EXPORT_MAX) throw apiError(422, ErrorCodes.VALIDATION_FAILED, `More than ${ORDER_EXPORT_MAX.toLocaleString('en-US')} orders match. Choose a shorter period or narrow the filters.`)
   return { filename: csvFilename(ctx.branch.name, query, 'orders'), csv: ordersCsv(rows.map(historyRow), ctx.branch.timeZone) }
+}
+
+// --- Telegram (8.1c, D112): a report as a message, with its CSV when asked ---
+
+export interface ReportMessage {
+  /** Telegram's HTML. */
+  html: string
+  /** The same message as plain text, for the portal's preview. */
+  text: string
+  csv: CsvFile | null
+  /** What was sent, for the audit trail: the report and its period, never figures. */
+  audit: Record<string, unknown>
+}
+
+/**
+ * The message for Send to Telegram, from the page's own query (checked by the report's schema
+ * here, like the page's request): the Summary, or Sales by item in the page's filters and order.
+ */
+export async function reportMessage(db: Db, input: ReportMessageInput, options: { attachCsv: boolean }, now = new Date()): Promise<ReportMessage> {
+  if (input.kind === 'summary') {
+    const query = parseInput(reportPeriodQuerySchema, input.query)
+    const summary = await reportSummary(db, query, now)
+    const html = summaryMessage(summary)
+    return {
+      html,
+      text: plainText(html),
+      csv: options.attachCsv ? { filename: csvFilename(summary.branch.name, query, 'summary'), csv: summaryCsv(summary) } : null,
+      audit: { report: 'summary', branchId: query.branchId, from: query.from, to: query.to },
+    }
+  }
+  const query = parseInput(itemSalesQuerySchema, input.query)
+  const ctx = await context(db, query, now)
+  const [paid, refunded] = await Promise.all([repo.itemTotals(db, ctx.range, 'collected'), repo.itemTotals(db, ctx.range, 'returned')])
+  const all = itemSalesRows(paid, refunded)
+  const { rows } = itemSalesTable(all, query)
+  const categoryName = query.categoryId ? categoriesOf(all).find(c => c.id === query.categoryId)?.name ?? null : null
+  const html = itemsMessage(reportContext(ctx), rows, query, categoryName, options.attachCsv)
+  return {
+    html,
+    text: plainText(html),
+    csv: options.attachCsv ? { filename: csvFilename(ctx.branch.name, query, 'items'), csv: itemsCsv(rows) } : null,
+    audit: { report: 'items', branchId: query.branchId, from: query.from, to: query.to },
+  }
 }
