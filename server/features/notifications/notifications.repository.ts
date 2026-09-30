@@ -1,8 +1,9 @@
-import { and, asc, eq, inArray, lt, ne, sql } from 'drizzle-orm'
-import type { DestinationKind, TelegramLinkStatus } from '#shared/contracts/notifications'
+import { and, asc, desc, eq, inArray, lt, lte, ne, sql } from 'drizzle-orm'
+import type { DestinationKind, NotificationKind, TelegramLinkStatus } from '#shared/contracts/notifications'
 import { user } from '../../db/tables'
 import type { Db, Statement } from '../../utils/batch'
-import { telegramDestinations, telegramLinks } from './notifications.schema'
+import type { StoredMessage } from './notifications.schema'
+import { notificationDeliveries, notificationRules, telegramDestinations, telegramLinks } from './notifications.schema'
 
 /** All SQL of Telegram (docs/server/architecture.md → Repository). */
 
@@ -146,4 +147,126 @@ export async function cancelLink(db: Db, id: string): Promise<boolean> {
 /** Links that expired a day ago or more: nothing reads them any more. */
 export async function deleteOldLinks(db: Db, before: Date): Promise<void> {
   await db.delete(telegramLinks).where(lt(telegramLinks.expiresAt, before))
+}
+
+// --- Notification rules (8.1d, D113) ---
+
+export async function listRules(db: Db) {
+  return db.select({ kind: notificationRules.kind, destinationId: notificationRules.destinationId, attachCsv: notificationRules.attachCsv })
+    .from(notificationRules)
+    .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationRules.destinationId))
+    .where(ne(telegramDestinations.status, 'disconnected'))
+}
+
+/** The connected chats a kind of notification goes to. */
+export async function targetsOf(db: Db, kind: NotificationKind) {
+  return db.select({ destinationId: notificationRules.destinationId, attachCsv: notificationRules.attachCsv })
+    .from(notificationRules)
+    .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationRules.destinationId))
+    .where(and(eq(notificationRules.kind, kind), eq(telegramDestinations.status, 'connected')))
+}
+
+export async function setRule(db: Db, rule: { kind: NotificationKind, destinationId: string, attachCsv: boolean, createdBy: string }): Promise<void> {
+  await db.insert(notificationRules).values(rule)
+    .onConflictDoUpdate({ target: [notificationRules.kind, notificationRules.destinationId], set: { attachCsv: rule.attachCsv } })
+}
+
+export async function removeRule(db: Db, kind: NotificationKind, destinationId: string): Promise<void> {
+  await db.delete(notificationRules).where(and(eq(notificationRules.kind, kind), eq(notificationRules.destinationId, destinationId)))
+}
+
+// --- Deliveries ---
+
+export type DeliveryRow = typeof notificationDeliveries.$inferSelect
+
+export interface NewDelivery {
+  id: string
+  kind: DeliveryRow['kind']
+  destinationId: string
+  dedupeKey: string
+  subject: string
+  message: StoredMessage
+  status?: DeliveryRow['status']
+  attempts?: number
+  createdAt: Date
+  nextAttemptAt: Date
+  sentAt?: Date
+}
+
+/** Saves a delivery unless the chat already has one about the same thing (the dedupe key). */
+export function insertDeliveryStatement(db: Db, delivery: NewDelivery): Statement {
+  return db.insert(notificationDeliveries).values(delivery).onConflictDoNothing()
+}
+
+/** Which of these chats already have a delivery with this key. */
+export async function deliveredTo(db: Db, dedupeKey: string, destinationIds: string[]): Promise<Set<string>> {
+  if (!destinationIds.length) return new Set()
+  const rows = await db.select({ destinationId: notificationDeliveries.destinationId }).from(notificationDeliveries)
+    .where(and(eq(notificationDeliveries.dedupeKey, dedupeKey), inArray(notificationDeliveries.destinationId, destinationIds)))
+  return new Set(rows.map(row => row.destinationId))
+}
+
+export async function dueDeliveries(db: Db, now: Date, limit: number, ids?: string[]): Promise<DeliveryRow[]> {
+  return db.select().from(notificationDeliveries)
+    .where(and(eq(notificationDeliveries.status, 'pending'), lte(notificationDeliveries.nextAttemptAt, now), ids ? inArray(notificationDeliveries.id, ids) : undefined))
+    .orderBy(asc(notificationDeliveries.nextAttemptAt))
+    .limit(limit)
+}
+
+/**
+ * Claims a due delivery for one run: counts the try and pushes its next time out, only if it's still
+ * pending and due. Two overlapping runs never send it at once.
+ */
+export async function claimDelivery(db: Db, row: DeliveryRow, now: Date, until: Date): Promise<boolean> {
+  const claimed = await db.update(notificationDeliveries)
+    .set({ attempts: sql`${notificationDeliveries.attempts} + 1`, nextAttemptAt: until })
+    .where(and(eq(notificationDeliveries.id, row.id), eq(notificationDeliveries.status, 'pending'), lte(notificationDeliveries.nextAttemptAt, now)))
+    .returning({ id: notificationDeliveries.id })
+  return claimed.length > 0
+}
+
+export async function markDelivered(db: Db, id: string, destinationId: string, at: Date): Promise<void> {
+  await db.batch([
+    db.update(notificationDeliveries).set({ status: 'sent', sentAt: at, lastError: null }).where(eq(notificationDeliveries.id, id)),
+    sentStatement(db, destinationId, at),
+  ])
+}
+
+export async function markRetry(db: Db, id: string, next: Date, reason: string): Promise<void> {
+  await db.update(notificationDeliveries).set({ status: 'pending', nextAttemptAt: next, lastError: reason }).where(eq(notificationDeliveries.id, id))
+}
+
+export async function markFailed(db: Db, id: string, reason: string): Promise<void> {
+  await db.update(notificationDeliveries).set({ status: 'failed', lastError: reason }).where(eq(notificationDeliveries.id, id))
+}
+
+/** Retry: a failed delivery goes back to pending, due now, with its tries counted afresh. */
+export async function requeueFailed(db: Db, id: string, now: Date): Promise<boolean> {
+  const changed = await db.update(notificationDeliveries)
+    .set({ status: 'pending', attempts: 0, nextAttemptAt: now, lastError: null })
+    .where(and(eq(notificationDeliveries.id, id), eq(notificationDeliveries.status, 'failed')))
+    .returning({ id: notificationDeliveries.id })
+  return changed.length > 0
+}
+
+export async function findDelivery(db: Db, id: string) {
+  const [row] = await db.select({ delivery: notificationDeliveries, title: telegramDestinations.title, destinationStatus: telegramDestinations.status })
+    .from(notificationDeliveries)
+    .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationDeliveries.destinationId))
+    .where(eq(notificationDeliveries.id, id))
+  return row
+}
+
+export async function recentDeliveries(db: Db, limit: number) {
+  return db.select({ delivery: notificationDeliveries, title: telegramDestinations.title })
+    .from(notificationDeliveries)
+    .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationDeliveries.destinationId))
+    .orderBy(desc(notificationDeliveries.createdAt))
+    .limit(limit)
+}
+
+/** Deliveries from before `cutoff` (history kept 90 days). */
+export async function deleteDeliveriesBefore(db: Db, cutoff: Date): Promise<number> {
+  const removed = await db.delete(notificationDeliveries).where(lt(notificationDeliveries.createdAt, cutoff)).returning({ id: notificationDeliveries.id })
+  return removed.length
 }

@@ -38,6 +38,8 @@ export interface TelegramOverview {
   botUsername: string | null
   /** Connected and blocked ones; disconnected ones aren't listed. */
   destinations: TelegramDestination[]
+  /** Which chat gets which notification (8.1d, D113). */
+  rules: NotificationRule[]
 }
 
 /** How long a connect link works (and a group waits for its confirmation). */
@@ -104,4 +106,70 @@ export interface ReportMessagePreview {
 export interface ReportSent {
   destination: { id: string, title: string }
   sentAt: string
+}
+
+// --- Notifications and their delivery (step 8.1d, D113) ---
+
+/**
+ * - `new_order`: an order placed (for the staff group);
+ * - `payment`: its payment taken;
+ * - `closing_summary`: the day's Summary, 30 minutes after the last opening window ends.
+ */
+export const NOTIFICATION_KINDS = ['new_order', 'payment', 'closing_summary'] as const
+export type NotificationKind = typeof NOTIFICATION_KINDS[number]
+
+/** One chat receiving one kind of notification. */
+export interface NotificationRule {
+  kind: NotificationKind
+  destinationId: string
+  /** Closing summary only: the day's CSV as a second message. */
+  attachCsv: boolean
+}
+
+export const setNotificationRuleSchema = v.object({
+  kind: v.picklist(NOTIFICATION_KINDS),
+  destinationId: v.pipe(v.string(), v.minLength(1)),
+  enabled: v.boolean(),
+  attachCsv: v.optional(v.boolean(), false),
+})
+export type SetNotificationRuleInput = v.InferOutput<typeof setNotificationRuleSchema>
+
+/**
+ * - `pending`: waiting to be sent, or to be tried again (`nextAttemptAt`, after Telegram asked to
+ *   wait or didn't answer);
+ * - `sent`;
+ * - `failed`: it stopped trying (the chat is blocked, or 8 tries failed); Retry sends it again.
+ */
+export const DELIVERY_STATUSES = ['pending', 'sent', 'failed'] as const
+export type DeliveryStatus = typeof DELIVERY_STATUSES[number]
+
+/** The most tries before a delivery is `failed` (1, 2, 4 … minutes apart, at most 6 h). */
+export const DELIVERY_MAX_ATTEMPTS = 8
+
+export interface NotificationDelivery {
+  id: string
+  kind: NotificationKind | 'report'
+  /** "New order #042", "Closing summary · Tue 30 Sep 2026". */
+  subject: string
+  destination: { id: string, title: string }
+  status: DeliveryStatus
+  attempts: number
+  /** When the next try is due (`pending` after a failed try). */
+  nextAttemptAt: string | null
+  /** Why the last try failed, in the admin's words. */
+  lastError: string | null
+  createdAt: string
+  sentAt: string | null
+}
+
+export interface NotificationDeliveries {
+  deliveries: NotificationDelivery[]
+}
+
+/** A delivery's message as it was saved (the closing summary's snapshot), as plain text. */
+export interface DeliverySnapshot {
+  id: string
+  subject: string
+  text: string
+  attachment: string | null
 }

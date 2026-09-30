@@ -1,4 +1,4 @@
-import type { CreateTelegramLinkInput, NewTelegramLink, TelegramDestination, TelegramLink, TelegramOverview } from '#shared/contracts/notifications'
+import type { CreateTelegramLinkInput, DeliverySnapshot, NewTelegramLink, NotificationDeliveries, NotificationDelivery, NotificationRule, SetNotificationRuleInput, TelegramDestination, TelegramLink, TelegramOverview } from '#shared/contracts/notifications'
 
 /** The Telegram page's data (`/api/admin/telegram`, D112): whether it's set up, and the chats. */
 export function useTelegramOverview() {
@@ -60,4 +60,38 @@ export function useTelegramMutations() {
   )
   const isBusy = (id: string) => sendTest.isPending(id) || disconnect.isPending(id)
   return { createLink, confirmLink, cancelLink, sendTest, disconnect, isBusy }
+}
+
+// --- Notifications and their delivery (8.1d, D113) ---
+
+/** The delivery history: the latest 50 messages. Refreshed every 30 seconds while shown. */
+export function useDeliveries() {
+  return useApiQuery('telegram:deliveries', () => apiFetch<NotificationDeliveries>('/admin/telegram/deliveries'))
+}
+
+export const fetchSnapshot = (id: string) => apiFetch<DeliverySnapshot>(`/admin/telegram/deliveries/${id}`)
+
+export function useNotificationMutations() {
+  const setRule = useMutation(
+    (input: SetNotificationRuleInput) => apiFetch<NotificationRule[]>('/admin/telegram/rules', { method: 'PUT', body: input }),
+    {
+      id: 'telegram:set-rule',
+      // One switch at a time per chat and notification; different ones in parallel.
+      key: input => `${input.kind}:${input.destinationId}`,
+      successMessage: false,
+      errorMessage: 'Could not change the notification',
+      invalidate: ['telegram'],
+    },
+  )
+  const retry = useMutation(
+    (delivery: NotificationDelivery) => apiFetch<NotificationDelivery>(`/admin/telegram/deliveries/${delivery.id}/retry`, { method: 'POST' }),
+    {
+      id: 'telegram:retry',
+      key: d => d.id,
+      successMessage: (after, d) => (after.status === 'sent' ? `"${d.subject}" sent to ${d.destination.title}` : `"${d.subject}" will be tried again`),
+      errorMessage: 'Could not retry',
+      invalidate: ['telegram'],
+    },
+  )
+  return { setRule, retry }
 }

@@ -3,10 +3,11 @@ import { toRiel } from '#shared/contracts/orders'
 import type { Db } from '../../utils/batch'
 import { toIso } from '../../utils/time'
 import type { Actor, BranchActor } from '../identity'
-import { auditStatement } from '../platform'
+import { auditStatement, outboxStatement } from '../platform'
 import type { OrderStep } from './commands'
 import { runOrderCommand } from './commands'
 import { exchangeRateChanged, noExchangeRate, orderChanged, orderNotCancellable, orderNotFound, paymentExpired, returnMethodInvalid } from './orders.errors'
+import { ORDER_EVENTS } from './orders.events'
 import * as repo from './orders.repository'
 
 /**
@@ -149,7 +150,7 @@ export async function payOrder(db: Db, actor: BranchActor, orderId: string, inpu
         reference: input.method === 'khqr' ? input.reference : null,
         collectedBy: actor.userId,
         collectedAt: now,
-      })],
+      }), outboxStatement(db, ORDER_EVENTS.paid, { orderId })],
       metadata: { method: input.method, amountMinor: order.totalMinor, amountKhr },
     }
   })

@@ -1,14 +1,14 @@
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import type { NewTelegramLink, TelegramDestination, TelegramLink, TelegramOverview } from '../../shared/contracts/notifications'
+import type { NewTelegramLink, NotificationDelivery, NotificationRule, SetNotificationRuleInput, TelegramDestination, TelegramLink, TelegramOverview } from '../../shared/contracts/notifications'
 import type { ReportBranch, ReportSummary } from '../../shared/contracts/reports'
 import type { MockHandler } from './support/mock-api'
 import { MockFailure, mockApi, setupE2e, toast } from './support/mock-api'
 
 await setupE2e()
 
-// Telegram (step 8.1c, D112) on a mocked API: the Telegram page (connect, test, disconnect) and
-// Send to Telegram from a report.
+// Telegram (steps 8.1c and 8.1d, D112, D113) on a mocked API: the Telegram page (connect, test,
+// disconnect, notifications, delivery history) and Send to Telegram from a report.
 
 const destinationOf = (id: string, title: string, overrides: Partial<TelegramDestination> = {}): TelegramDestination => ({
   id,
@@ -32,14 +32,14 @@ const linkOf = (kind: 'private' | 'group', overrides: Partial<TelegramLink> = {}
 async function openTelegram(overview: TelegramOverview, handlers: Record<string, MockHandler> = {}, width = 1440) {
   const page = await createPage()
   await page.setViewportSize({ width, height: 900 })
-  const api = await mockApi(page, { 'GET /admin/telegram': () => overview, ...handlers })
+  const api = await mockApi(page, { 'GET /admin/telegram': () => overview, 'GET /admin/telegram/deliveries': () => ({ deliveries: [] }), ...handlers })
   await page.goto(url('/admin/telegram'), { waitUntil: 'hydration' })
   return { page, api }
 }
 
 describe('Telegram page', () => {
   it('says when Telegram isn\'t set up, with the buttons off', async () => {
-    const { page } = await openTelegram({ enabled: false, botUsername: null, destinations: [] })
+    const { page } = await openTelegram({ enabled: false, botUsername: null, destinations: [], rules: [] })
     await page.getByText('Telegram isn\'t set up for this app yet.').waitFor()
     expect(await page.getByRole('button', { name: 'Connect Telegram' }).isDisabled()).toBe(true)
     expect(await page.getByRole('button', { name: 'Connect a group' }).isDisabled()).toBe(true)
@@ -47,7 +47,7 @@ describe('Telegram page', () => {
   })
 
   it('connects a private chat: the link opens Telegram, the page notices when it\'s done', async () => {
-    let overview: TelegramOverview = { enabled: true, botUsername: 'NukCafeBot', destinations: [] }
+    let overview: TelegramOverview = { enabled: true, botUsername: 'NukCafeBot', destinations: [], rules: [] }
     let polls = 0
     const created: unknown[] = []
     const { page } = await openTelegram(overview, {
@@ -77,7 +77,7 @@ describe('Telegram page', () => {
 
   it('a group waits for the admin\'s confirmation; Cancel makes the bot leave', async () => {
     const posted: string[] = []
-    const { page } = await openTelegram({ enabled: true, botUsername: 'NukCafeBot', destinations: [] }, {
+    const { page } = await openTelegram({ enabled: true, botUsername: 'NukCafeBot', destinations: [], rules: [] }, {
       'POST /admin/telegram/links': () => ({ ...linkOf('group'), url: 'https://t.me/NukCafeBot?startgroup=abc' }),
       'GET /admin/telegram/links/{id}': () => linkOf('group', { status: 'confirm', chat: { title: 'NUK Riverside Staff', memberCount: 8 } }),
       'POST /admin/telegram/links/{id}/cancel': ({ url: u }) => {
@@ -105,7 +105,7 @@ describe('Telegram page', () => {
 
   it('Send test, a blocked chat\'s Reconnect, and Disconnect asked first with the version', async () => {
     const disconnected: unknown[] = []
-    const { page } = await openTelegram({ enabled: true, botUsername: 'NukCafeBot', destinations: [GROUP, PRIVATE_BLOCKED] }, {
+    const { page } = await openTelegram({ enabled: true, botUsername: 'NukCafeBot', destinations: [GROUP, PRIVATE_BLOCKED], rules: [] }, {
       'POST /admin/telegram/destinations/{id}/test': () => ({ ...GROUP, lastSentAt: '2026-09-30T05:00:00.000Z' }),
       'POST /admin/telegram/destinations/{id}/disconnect': ({ body }) => {
         disconnected.push(body)
@@ -197,5 +197,81 @@ describe('Send to Telegram', () => {
     await page.goto(url('/admin/reports/summary'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: 'Print' }).waitFor()
     expect(await page.getByRole('button', { name: 'Send to Telegram' }).count()).toBe(0)
+  })
+})
+
+describe('Notifications and delivery history (8.1d)', () => {
+  const deliveryOf = (id: string, subject: string, overrides: Partial<NotificationDelivery> = {}): NotificationDelivery => ({
+    id,
+    kind: 'new_order',
+    subject,
+    destination: { id: GROUP.id, title: GROUP.title },
+    status: 'sent',
+    attempts: 1,
+    nextAttemptAt: null,
+    lastError: null,
+    createdAt: '2026-09-30T02:02:00.000Z',
+    sentAt: '2026-09-30T02:02:05.000Z',
+    ...overrides,
+  })
+
+  it('turns a notification on for a chat, with the group warning and Attach CSV for the closing summary', async () => {
+    const owner = destinationOf('dest-3', 'Kim', { kind: 'private' })
+    let rules: NotificationRule[] = [{ kind: 'new_order', destinationId: GROUP.id, attachCsv: false }]
+    const saved: SetNotificationRuleInput[] = []
+    const { page } = await openTelegram({ enabled: true, botUsername: 'nuk_cafe_bot', destinations: [GROUP, owner], rules }, {
+      'GET /admin/telegram': () => ({ enabled: true, botUsername: 'nuk_cafe_bot', destinations: [GROUP, owner], rules }),
+      'PUT /admin/telegram/rules': ({ body }) => {
+        const input = body as SetNotificationRuleInput
+        saved.push(input)
+        rules = rules.filter(r => !(r.kind === input.kind && r.destinationId === input.destinationId))
+        if (input.enabled) rules.push({ kind: input.kind, destinationId: input.destinationId, attachCsv: input.attachCsv })
+        return rules
+      },
+    })
+    const section = (name: string) => page.getByRole('group', { name: `Send ${name} to` })
+    await section('new orders').waitFor()
+    expect(await section('new orders').getByRole('switch', { name: /NUK Riverside Staff/ }).getAttribute('aria-checked')).toBe('true')
+
+    await section('closing summary').getByRole('switch', { name: /NUK Riverside Staff/ }).click()
+    await expect.poll(() => saved).toEqual([{ kind: 'closing_summary', destinationId: GROUP.id, enabled: true, attachCsv: false }])
+    await page.getByText('Everyone in NUK Riverside Staff will see your sales.').waitFor()
+    await section('closing summary').getByRole('checkbox', { name: /Attach CSV/ }).click()
+    await expect.poll(() => saved.at(-1)).toEqual({ kind: 'closing_summary', destinationId: GROUP.id, enabled: true, attachCsv: true })
+
+    await section('new orders').getByRole('switch', { name: /NUK Riverside Staff/ }).click()
+    await expect.poll(() => saved.at(-1)).toEqual({ kind: 'new_order', destinationId: GROUP.id, enabled: false, attachCsv: false })
+  })
+
+  it('shows sent, retrying and failed messages; Retry only once it stopped; View shows the saved message', async () => {
+    const retried: string[] = []
+    let deliveries = [
+      deliveryOf('del-1', 'New order #042'),
+      deliveryOf('del-2', 'New order #043', { status: 'pending', attempts: 2, nextAttemptAt: '2026-09-30T02:05:00.000Z', lastError: 'Telegram didn\'t accept it. Trying again.' }),
+      deliveryOf('del-3', 'Closing summary · Tue 29 Sep 2026', { kind: 'closing_summary', status: 'failed', attempts: 8, lastError: 'Telegram didn\'t accept it after 8 tries.' }),
+    ]
+    const { page } = await openTelegram({ enabled: true, botUsername: 'nuk_cafe_bot', destinations: [GROUP], rules: [] }, {
+      'GET /admin/telegram/deliveries': () => ({ deliveries }),
+      'POST /admin/telegram/deliveries/{id}/retry': ({ url: u }) => {
+        const id = u.pathname.split('/').at(-2)!
+        retried.push(id)
+        deliveries = deliveries.map(d => (d.id === id ? { ...d, status: 'sent', attempts: 1, lastError: null } : d))
+        return deliveries.find(d => d.id === id)
+      },
+      'GET /admin/telegram/deliveries/{id}': () => ({ id: 'del-3', subject: 'Closing summary · Tue 29 Sep 2026', text: 'Closing summary · Riverside\nTue 29 Sep 2026\n\nPaid sales $41.00', attachment: 'riverside-2026-09-29-summary.csv' }),
+    })
+    await page.getByText('New order #042').waitFor()
+    await page.getByText(/Retrying at/).waitFor()
+    expect(await page.getByRole('button', { name: 'Retry New order #043' }).count()).toBe(0)
+    await page.getByText('Telegram didn\'t accept it after 8 tries.').waitFor()
+
+    await page.getByRole('button', { name: 'View Closing summary · Tue 29 Sep 2026' }).click()
+    await page.getByRole('dialog').getByText('Paid sales $41.00', { exact: false }).waitFor()
+    await page.getByRole('dialog').getByText('riverside-2026-09-29-summary.csv').waitFor()
+    await page.getByRole('dialog').getByRole('button', { name: 'Close' }).first().click()
+
+    await page.getByRole('button', { name: 'Retry Closing summary · Tue 29 Sep 2026' }).click()
+    await toast(page, '"Closing summary · Tue 29 Sep 2026" sent to NUK Riverside Staff').waitFor()
+    expect(retried).toEqual(['del-3'])
   })
 })

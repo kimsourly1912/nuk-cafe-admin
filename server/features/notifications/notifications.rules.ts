@@ -75,3 +75,6 @@ export function sendFailure(error: unknown, title: string) {
 
 /** Telegram's HTML: only `&`, `<` and `>` need escaping in text. */
 export const escapeHtml = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/** A message as plain text (previews, the delivery history): tags removed, entities back to text. */
+export const plainText = (html: string) => html.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')

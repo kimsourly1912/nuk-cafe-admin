@@ -1,5 +1,4 @@
 import type { Api } from 'grammy'
-import { InputFile } from 'grammy'
 import type { Message, Update } from 'grammy/types'
 import type { CreateTelegramLinkInput, NewTelegramLink, ReportSent, TelegramDestination, TelegramLink, TelegramOverview } from '#shared/contracts/notifications'
 import { TELEGRAM_LINK_MINUTES } from '#shared/contracts/notifications'
@@ -13,6 +12,7 @@ import { log } from '../../utils/log'
 import { toIso } from '../../utils/time'
 import { destinationBlocked, destinationNotFound, linkNotFound, linkUnusable } from './notifications.errors'
 import * as repo from './notifications.repository'
+import { listRules, sendStored } from './notifications.delivery'
 import { chatTitle, escapeHtml, hashLinkCode, isBlockedError, isGroup, linkUrl, newLinkCode, sendFailure, startCode } from './notifications.rules'
 import type { TelegramSettings } from './notifications.settings'
 
@@ -53,8 +53,9 @@ function linkOf(row: repo.LinkRow, now: Date): TelegramLink {
 
 /** The Telegram page: whether it's on, the bot's name, and the chats. */
 export async function telegramOverview(db: Db, settings: TelegramSettings | null): Promise<TelegramOverview> {
-  if (!settings) return { enabled: false, botUsername: null, destinations: [] }
-  return { enabled: true, botUsername: settings.botUsername, destinations: (await repo.listDestinations(db)).map(destinationOf) }
+  if (!settings) return { enabled: false, botUsername: null, destinations: [], rules: [] }
+  const [destinations, rules] = await Promise.all([repo.listDestinations(db), listRules(db)])
+  return { enabled: true, botUsername: settings.botUsername, destinations: destinations.map(destinationOf), rules }
 }
 
 /** Only connected chats can be chosen to send to (the Send dialog shows blocked ones disabled). */
@@ -234,6 +235,8 @@ async function connectedDestination(db: Db, id: string) {
 }
 
 export interface OutgoingMessage {
+  /** For the delivery history: "Summary · Tue 30 Sep 2026". */
+  subject: string
   /** Telegram's HTML (text escaped with `escapeHtml`). */
   html: string
   /** A file sent after the message, e.g. the report's CSV. */
@@ -246,10 +249,7 @@ export interface OutgoingMessage {
  */
 async function deliver(db: Db, api: Api, row: repo.DestinationRow, message: OutgoingMessage, now: Date) {
   try {
-    await api.sendMessage(row.chatId, message.html, { parse_mode: 'HTML', link_preview_options: { is_disabled: true } })
-    if (message.document) {
-      await api.sendDocument(row.chatId, new InputFile(new TextEncoder().encode(message.document.content), message.document.filename))
-    }
+    await sendStored(api, row.chatId, { html: message.html, document: message.document })
   }
   catch (error) {
     if (isBlockedError(error)) await repo.markBlocked(db, row.chatId, now)
@@ -261,7 +261,7 @@ async function deliver(db: Db, api: Api, row: repo.DestinationRow, message: Outg
 /** Send test: a short message, so the admin sees the chat works. */
 export async function sendTestMessage(db: Db, api: Api, actor: Actor, id: string, now = new Date()): Promise<TelegramDestination> {
   const row = await connectedDestination(db, id)
-  await deliver(db, api, row, { html: `✅ <b>Test from NUK Cafe</b>\nMessages for ${escapeHtml(row.title)} arrive here.` }, now)
+  await deliver(db, api, row, { subject: 'Test', html: `✅ <b>Test from NUK Cafe</b>\nMessages for ${escapeHtml(row.title)} arrive here.` }, now)
   await db.batch([
     repo.sentStatement(db, id, now),
     auditStatement(db, actor, { action: 'notifications.telegram.test', targetType: 'telegram_destination', targetId: id }),
@@ -301,6 +301,8 @@ export async function sendReport(
     return {
       statements: [
         repo.sentStatement(db, row.id, now),
+        // In the delivery history with the alerts (8.1d, D113), as sent.
+        repo.insertDeliveryStatement(db, { id: newId(), kind: 'report', destinationId: row.id, dedupeKey: `report:${key}`, subject: message.subject, message: { html: message.html }, status: 'sent', attempts: 1, createdAt: now, nextAttemptAt: now, sentAt: now }),
         auditStatement(db, actor, { action: 'report.send', targetType: 'telegram_destination', targetId: row.id, metadata: { ...audit, attachCsv: request.attachCsv } }),
       ],
       response: { destination: { id: row.id, title: row.title }, sentAt: toIso(now) },

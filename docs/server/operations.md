@@ -108,7 +108,7 @@ Production: manual workflow from a commit that is live on staging: export the da
 
 Nitro tasks in `server/tasks/`, scheduled in `nuxt.config.ts` (`nitro.scheduledTasks`, cron in UTC): Cloudflare cron triggers in deployed environments; the dev server runs them itself. Every task is **idempotent** (safe to run twice) and logs what it did. Locally a task runs on demand with `curl http://localhost:3000/_nitro/tasks/<name>` (dev only).
 
-Built so far: `platform:deliver-outbox` and `orders:expire-unpaid` (every minute), `platform:expire-idempotency-keys` and `assistant:purge-usage` (daily at 03:15 UTC) and `media:purge-temporary` (hourly at :05).
+Built so far: `platform:deliver-outbox`, `orders:expire-unpaid` and `notifications:deliver` (every minute), `platform:expire-idempotency-keys`, `assistant:purge-usage` and `notifications:purge-deliveries` (daily at 03:15 UTC) and `media:purge-temporary` (hourly at :05).
 
 | Task | Schedule | Does |
 |---|---|---|
@@ -116,6 +116,8 @@ Built so far: `platform:deliver-outbox` and `orders:expire-unpaid` (every minute
 | `platform:expire-idempotency-keys` | daily | Removes expired idempotency keys |
 | `assistant:purge-usage` | daily | Removes AI assistant usage rows older than 90 days (D108) |
 | `platform:deliver-outbox` | every minute | Sends pending outbox messages with retries and backoff |
+| `notifications:deliver` | every minute | Queues the closing summaries that are due and sends due Telegram deliveries, with retries (D113) |
+| `notifications:purge-deliveries` | daily | Removes Telegram deliveries older than 90 days |
 | `loyalty:expire-vouchers` | daily | Marks vouchers past `expires_at` as expired |
 | `orders:expire-unpaid` | every minute | Cancels orders still unpaid 30 minutes after placing (D45, D104): 100 a run, each guarded by status and version (a payment at that moment wins), an event with no actor and an audit entry |
 
@@ -135,13 +137,15 @@ The bot sends reports and (from 8.1d) alerts to the chats connected on **Admin �
 
 1. In Telegram, talk to **@BotFather**: `/newbot`, choose a name (e.g. "NUK Cafe") and a username ending in `bot` (e.g. `NukCafeBot`). It answers with the **token**. `/setjoingroups` → Enable (so it can join the staff group); `/setprivacy` → Enable (it only sees commands in groups).
 2. Make a webhook secret: 48 random characters, e.g. `node -e "console.log(require('crypto').randomBytes(36).toString('base64url'))"`.
-3. Set them on the Worker: `wrangler secret put NUXT_TELEGRAM_BOT_TOKEN`, `wrangler secret put NUXT_TELEGRAM_WEBHOOK_SECRET`, and `NUXT_TELEGRAM_BOT_USERNAME` as a plain variable (`wrangler.vars` in `nuxt.config.ts`, deployed with the next merge).
+3. Set all three on the Worker as secrets: `wrangler secret put NUXT_TELEGRAM_BOT_TOKEN`, `… NUXT_TELEGRAM_WEBHOOK_SECRET` and `… NUXT_TELEGRAM_BOT_USERNAME` (the name without `@`, e.g. `nuk_cafe_bot`; not secret, but a secret survives every deploy, while a plain variable set in the dashboard is replaced by the deploy's, and the same name as both a variable in `nuxt.config.ts` and a secret makes the deploy fail). Staging: `@nuk_cafe_bot`, set by the owner on 2026-09-30.
 4. Point the webhook at the site, once (and again if the address or the secret changes):
    `curl -s "https://api.telegram.org/bot<TOKEN>/setWebhook" -d url=https://<site>/api/webhooks/telegram -d secret_token=<SECRET> -d 'allowed_updates=["message","my_chat_member"]'`
    Telegram answers `{"ok":true,…}`. `…/getWebhookInfo` shows the last error, if any.
 5. Open **Admin → Telegram** and connect your private chat and the staff group.
 
 Locally Telegram can't reach the dev server, so connecting is tested against staging; the server tests use a fake Telegram (grammY's `Api` with its `fetch` replaced).
+
+**Notifications (8.1d, D113):** on the Telegram page, each chat can get **new orders**, **payments** and the **closing summary** (with its CSV as a second message). Orders write `orders.placed` / `orders.paid` outbox events in their own batches; `platform:deliver-outbox` turns them into deliveries (one per chat and order) and sends them at once. `notifications:deliver` (every minute) queues each branch's closing summary 30 minutes after the business day's last opening window ends (not on a closed day; skipped if more than 12 hours late) and sends whatever is due: Telegram's wait is respected, other failures back off 1, 2, 4 … minutes, and after 8 tries a delivery is **Failed** (Retry on the page). The history is kept 90 days (`notifications:purge-deliveries`). A lost answer after Telegram accepted a message can repeat it (Telegram has no idempotency key).
 
 **How it behaves:** connect links work once, for 10 minutes, and only their hash is stored; a group is connected only after an admin of that group added the bot and a portal admin confirmed it. A chat that removed or blocked the bot is marked **Blocked**; a group upgraded to a supergroup keeps working (its new id is followed). A send that fails says why (blocked, Telegram's wait, or refused) and can be tried again with the same idempotency key, so a lost answer never sends twice.
 

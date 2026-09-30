@@ -70,7 +70,7 @@ describe('settings and rules', () => {
     expect(telegramSettingsFrom({ botToken: '1:x', botUsername: '@NukCafeBot', webhookSecret: 'a'.repeat(32) })).toEqual({ botToken: '1:x', botUsername: 'NukCafeBot', webhookSecret: 'a'.repeat(32) })
     await expectApiError(() => telegramSettingsFrom({ botToken: '1:x', webhookSecret: 'a'.repeat(32) }), 500, 'TELEGRAM_NOT_CONFIGURED')
     await expectApiError(() => telegramSettingsFrom({ botToken: '1:x', botUsername: 'NukCafeBot', webhookSecret: 'short' }), 500, 'TELEGRAM_NOT_CONFIGURED')
-    expect(await telegramOverview(db, null)).toEqual({ enabled: false, botUsername: null, destinations: [] })
+    expect(await telegramOverview(db, null)).toEqual({ enabled: false, botUsername: null, destinations: [], rules: [] })
   })
 
   it('reads start codes and compares the webhook secret', () => {
@@ -222,7 +222,7 @@ describe('chats', () => {
 })
 
 describe('sending a report', () => {
-  const build = (attach = false) => async () => ({ html: '<b>Summary · Riverside</b>', document: attach ? { filename: 'riverside-2026-09-30-summary.csv', content: '﻿a,b\r\n' } : undefined, audit: { report: 'summary' } })
+  const build = (attach = false) => async () => ({ subject: 'Summary · Wed 30 Sep 2026', html: '<b>Summary · Riverside</b>', document: attach ? { filename: 'riverside-2026-09-30-summary.csv', content: '﻿a,b\r\n' } : undefined, audit: { report: 'summary' } })
 
   it('sends once per key: a retry after a lost answer doesn\'t send twice', async () => {
     const destination = await connectedGroup()

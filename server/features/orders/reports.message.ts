@@ -49,9 +49,10 @@ function asOfLine(report: ReportContext): string {
   return `Business days ${clock(BUSINESS_DAY_START_MINUTE)} to ${clock(BUSINESS_DAY_START_MINUTE)}, ${zone}.`
 }
 
-export function summaryMessage(summary: ReportSummary): string {
+/** `title`: "Summary" when sent from the page, "Closing summary" at the end of the day (D113). */
+export function summaryMessage(summary: ReportSummary, title = 'Summary'): string {
   const lines = [
-    `<b>Summary · ${esc(summary.branch.name)}</b>`,
+    `<b>${esc(title)} · ${esc(summary.branch.name)}</b>`,
     periodText(summary.period),
     '',
     `Paid sales <b>${money(summary.paid.salesMinor)}</b> · ${count(summary.paid.orders)} ${summary.paid.orders === 1 ? 'order' : 'orders'}${summary.paid.averageMinor === null ? '' : ` · average ${money(summary.paid.averageMinor)}`}`,

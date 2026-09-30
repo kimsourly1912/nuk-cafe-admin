@@ -15,6 +15,7 @@ export default defineEventHandler(async (event) => {
   return sendReport(db, api, actor, key, input, async () => {
     const message = await reportMessage(db, input.report, { attachCsv: input.attachCsv })
     return {
+      subject: message.subject,
       html: message.html,
       document: message.csv ? { filename: message.csv.filename, content: message.csv.csv } : undefined,
       audit: message.audit,

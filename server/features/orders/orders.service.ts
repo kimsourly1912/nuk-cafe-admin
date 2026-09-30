@@ -2,13 +2,14 @@ import type { CancelledBy, CancelMyOrderInput, CancelReason, OrderCancellation, 
 import type { PublicMenuCategory } from '#shared/contracts/public-menu'
 import { totalPages } from '#shared/contracts/common'
 import { MAX_UNPAID_ORDERS, PAYMENT_WINDOW_MINUTES } from '#shared/contracts/orders'
+import { ORDER_EVENTS } from './orders.events'
 import type { Db } from '../../utils/batch'
 import { newId } from '../../utils/ids'
 import { toIso } from '../../utils/time'
 import { resolveTableToken } from '../branches'
 import type { Actor } from '../identity'
 import { getPublicMenu } from '../menu'
-import { withIdempotency } from '../platform'
+import { outboxStatement, withIdempotency } from '../platform'
 import { runOrderCommand } from './commands'
 import { cannotCancelNow, orderingClosed, orderNotFound, orderNotOrderable, pricesChanged, tableUnavailable, tooManyUnpaidOrders } from './orders.errors'
 import * as repo from './orders.repository'
@@ -105,6 +106,8 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
           ...repo.insertLinesStatements(db, orderId, lines),
           repo.eventStatement(db, { orderId, toVersion: 1, actorId: actor.userId, fromStatus: null, toStatus: 'awaiting_payment', at: now }),
           repo.unpaidAtMostStatement(db, actor.userId, now, MAX_UNPAID_ORDERS),
+          // A neutral event for whoever listens (the Telegram alerts, D113): orders don't know them.
+          outboxStatement(db, ORDER_EVENTS.placed, { orderId }),
         ],
         response: { orderId },
       }
