@@ -204,7 +204,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 | # | Question | Blocks | Suggested default |
 |---|---|---|---|
 | Q4 | Staging and production domains, and the email sending domain | 2.1, 8.2 | |
-| Q43 | The AI provider for production, and a monthly spending cap on its account (D107). **Staging answered (owner, 2026-09-30):** Gemini, `gemini-3.5-flash`, key set as a Worker secret | Production launch of the assistant | Gemini as on staging; the cap set on Google's side |
+| Q43 | The AI provider for production, and a monthly spending cap on its account (D107). **Staging answered (owner, 2026-09-30):** OpenAI, `gpt-5.4-mini`, key set as a Worker secret (first set up as Gemini by mistake: Google refused the OpenAI key) | Production launch of the assistant | OpenAI as on staging; the cap set on OpenAI's side |
 | Q24 | Acceptable data loss and downtime (RPO/RTO), who receives alerts and when, data retention and erasure periods | 8.2 | |
 
 ## Known limitations
