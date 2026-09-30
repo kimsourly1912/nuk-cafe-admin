@@ -176,3 +176,60 @@ describe('the counter', () => {
     expect(new URL(page.url()).pathname).toBe('/counter/sign-in')
   })
 })
+
+// Coconut Coffee: published, sizes, no time rule, and no other test orders it (switching it off
+// here can't change another file's menu).
+describe('sold out at the counter (D105)', () => {
+  const coconut = async () => {
+    const menu = await (await fetch(url(`/api/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
+    return menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(s => s.items)]).find(i => i.name === 'Coconut Coffee')!
+  }
+
+  it('switches one version off from the queue\'s Sold out button; the customer menu shows it; "N sold out" lists it; switching back restores it', async () => {
+    const { page, problems } = await cashierAtCounter()
+    await page.getByRole('link', { name: 'Sold out' }).click()
+    await page.waitForURL(u => u.pathname === `/counter/${seed.openBranchId}/sold-out`)
+    await page.getByRole('heading', { name: 'Sold out', exact: true }).waitFor()
+
+    await page.getByRole('textbox', { name: 'Find an item' }).fill('coconut')
+    const [first] = (await coconut()).variations
+    const name = `Coconut Coffee · ${first!.label}`
+    const row = page.getByRole('listitem', { name, exact: true })
+    const available = row.getByRole('switch', { name: `${name}: available` })
+    expect(await available.isChecked()).toBe(true)
+
+    await available.click()
+    await row.getByText('Sold out', { exact: true }).first().waitFor()
+    await expect.poll(() => row.innerText()).toMatch(/Since \d{1,2}:\d{2}\s[AP]M by Sophea/)
+    // The customer's menu shows it sold out.
+    await expect.poll(async () => (await coconut()).variations.find(v => v.id === first!.id)!.soldOut).toBe(true)
+
+    // Only the sold-out ones.
+    await page.getByRole('textbox', { name: 'Find an item' }).fill('')
+    await page.getByRole('button', { name: /^\d+ sold out$/ }).click()
+    await row.waitFor()
+    expect(await page.getByRole('listitem').filter({ hasText: 'Coconut Coffee' }).count()).toBe(1)
+
+    // Switched back on: it stays in view (a slip can be undone there) until the filter changes.
+    await available.click()
+    await expect.poll(() => available.isChecked()).toBe(true)
+    expect(await row.getByText('Available', { exact: true }).isVisible()).toBe(true)
+    await expect.poll(async () => (await coconut()).variations.find(v => v.id === first!.id)!.soldOut).toBe(false)
+    // Showing everything and then only the sold-out ones again: it's gone from them.
+    await page.getByRole('button', { name: /^\d+ sold out$/ }).click()
+    await page.getByRole('button', { name: /^\d+ sold out$/ }).click()
+    await expect.poll(() => row.count()).toBe(0)
+    expect(problems).toEqual([])
+  })
+
+  it('on a phone: the category chips scroll, and each row keeps its switch', async () => {
+    const { page } = await cashierAtCounter(390)
+    await page.goto(url(`/counter/${seed.openBranchId}/sold-out`), { waitUntil: 'hydration' })
+    await page.getByRole('navigation', { name: 'Categories' }).getByRole('button', { name: 'All' }).waitFor()
+    const [first] = (await coconut()).variations
+    const row = page.getByRole('listitem', { name: `Coconut Coffee · ${first!.label}`, exact: true })
+    await row.scrollIntoViewIfNeeded()
+    expect(await row.getByRole('switch').isVisible()).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  })
+})

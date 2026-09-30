@@ -240,8 +240,12 @@ Tests: e2e `shop-checkout.test.ts` (on the seeded database: the gates, a note, a
 | Cancelling a paid order | Says how the money went back (cash or KHQR) and the full amount; a ready order can't be cancelled here |
 | Session lost (401) | Back to `/counter/sign-in?redirect=…`; the previous person's data is cleared (the session boundary) |
 | Phones | One list at a time, as tabs with counts; the order full screen; the cancel dialog a bottom sheet |
+| Sold out (`/counter/<branchId>/sold-out`, D105) | One switch per version of what the menu lists now; a switched-off row says since when and by whom; it stays off until switched back. Two people at once, or a retry, end in the state asked for (D64) |
+| Switching one back on while showing only the sold-out ones | The row stays, now Available, so a slip can be undone there; it leaves the list when the filter, search or category changes |
+| The badge and "Since … by" disagree while the page refreshes | Can't: both come from the sold-out list (the menu only until the list loads) |
+| A customer's open menu | Shows the change on its next load (no push); the Review order page re-checks every line anyway (D100) |
 
-Tests: e2e `counter.test.ts` (the real seeded server: sign-in, cash with change and short, riel and cancelling a paid order, a payment recorded meanwhile → Reload, phone tabs, a customer refused), `counter-orders-api.test.ts`; unit `app/features/counter/tests/counter.test.ts`.
+Tests: e2e `counter.test.ts` (the real seeded server: sign-in, cash with change and short, riel and cancelling a paid order, a payment recorded meanwhile → Reload, phone tabs, a customer refused, sold out switched off and back with the customer menu following, the Sold out page on a phone), `counter-orders-api.test.ts`; unit `app/features/counter/tests/counter.test.ts`, `sold-out.test.ts`.
 
 ## Keyboard shortcuts
 

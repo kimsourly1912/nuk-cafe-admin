@@ -23,6 +23,7 @@ export async function listSoldOut(db: Db, actor: BranchActor): Promise<SoldOutLi
       label: labels.get(row.variationId) ?? '',
       updatedAt: toIso(row.updatedAt),
       updatedBy: row.updatedBy,
+      updatedByName: row.updatedByName,
     })),
   }
 }

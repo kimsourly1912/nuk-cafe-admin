@@ -1,14 +1,20 @@
 <script setup lang="ts">
 /**
  * The counter's header (D102, the owner's frames): NUK Cafe, the branch and whether it's open, the
- * order search, the color mode and the user menu (the chime on or off, another branch, change
- * password, sign out). The "Sold out" button waits for its own page (the owner's review).
+ * order search (on the queue), Sold out (the page that switches items off, 6.3c, D105), the color
+ * mode and the user menu (the chime on or off, another branch, change password, sign out).
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { COUNTER_CHANGE_PASSWORD_PATH, COUNTER_HOME_PATH, useCounterSession } from '../composables/useCounterSession'
 
-defineProps<{ branchName: string, openNow: boolean | null }>()
-const search = defineModel<string>('search', { required: true })
+defineProps<{
+  branchName: string
+  openNow: boolean | null
+  /** The Sold out page's address; the button is left out on that page itself. */
+  soldOutTo?: string
+}>()
+/** The queue's order search; left out when not bound (the Sold out page has its own). */
+const search = defineModel<string | undefined>('search', { default: undefined })
 const muted = defineModel<boolean>('muted', { required: true })
 
 const { user, signOut } = useCounterSession()
@@ -46,12 +52,23 @@ const menu = computed<DropdownMenuItem[][]>(() => [
         variant="subtle"
         class="shrink-0"
       />
+      <div class="ms-auto" />
       <UInput
+        v-if="search !== undefined"
         v-model="search"
         icon="i-lucide-search"
         placeholder="Order number"
         aria-label="Search orders by number or name"
-        class="ms-auto w-32 sm:w-72"
+        class="w-32 sm:w-72"
+      />
+      <UButton
+        v-if="soldOutTo"
+        :to="soldOutTo"
+        icon="i-lucide-ban"
+        label="Sold out"
+        color="neutral"
+        variant="outline"
+        :ui="{ label: 'max-sm:sr-only' }"
       />
       <UColorModeButton class="max-sm:hidden" />
       <UDropdownMenu
