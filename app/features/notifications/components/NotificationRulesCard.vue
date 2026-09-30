@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * Which chat gets which notification (step 8.1d, D113, the owner's frames): new orders, payments
- * and the closing summary, each with a switch per connected chat, saved at once. A closing summary
+ * Which chat gets which notification (step 8.1d, D113, the owner's frames): new orders, payments,
+ * the closing summary and server errors (step 10.4, D118), each with a switch per connected chat, saved at once. A closing summary
  * can bring its CSV; sent to a group, everyone there sees the figures (said next to the switch).
  */
 import type { NotificationKind, NotificationRule, TelegramDestination } from '#shared/contracts/notifications'
@@ -15,6 +15,7 @@ const KINDS: { kind: NotificationKind, title: string, description: string, icon:
   { kind: 'new_order', title: 'New orders', description: 'When a customer places an order, before it\'s paid: the items, notes and total, with Open order for the counter app.', icon: 'i-lucide-receipt' },
   { kind: 'payment', title: 'Payment confirmed', description: 'When the counter takes an order\'s payment: preparation can start.', icon: 'i-lucide-banknote' },
   { kind: 'closing_summary', title: 'Closing summary', description: 'The day\'s figures, 30 minutes after closing time. Not sent on a closed day.', icon: 'i-lucide-chart-column' },
+  { kind: 'server_error', title: 'Server errors', description: 'When the app fails unexpectedly: which page and a request id to find it in the logs. At most one per page every 15 minutes.', icon: 'i-lucide-triangle-alert' },
 ]
 
 const ruleOf = (kind: NotificationKind, destinationId: string) => props.rules.find(r => r.kind === kind && r.destinationId === destinationId)

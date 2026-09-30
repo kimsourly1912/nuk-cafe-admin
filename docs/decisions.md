@@ -1311,3 +1311,19 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
   - Full screen on phones.
 - **Alternatives:** a Reorder mode on the grid (it would have to leave pagination, status tabs and search aside, which is the dialog in disguise); ordering by name (no way to put best sellers first).
 - **Verified:** e2e `products.test.ts` +3 (mocked API): the category's items in order without archived ones, a move announced, Save sends every item with its version in the new order; a 409 says so, and Reload reads the order again; Cancel with a move asks first. `shortcuts.test.ts` passes with the renamed `R` entry. Screenshots at 1440 and 390 px. The server's order rule is covered since 3.5a (`items.service.test.ts`).
+
+### D118: Server error alerts on Telegram and the restore drill runbook (step 10.4), 2026-09-30
+
+- **Context:** production groundwork that needs no domain (phase 10, D115). Staging and production have no alert when the app fails; the owner already uses Telegram (8.1). The restore drill (operations.md) had no written steps, and it needs the owner's Cloudflare login.
+- **Decision:**
+  - **A fourth notification kind, `server_error`**, switched per chat on the Telegram page like the others. The Nitro error handler, on every 5xx under `/api/**`, queues an alert in the background (`event.waitUntil`; the notifications feature imported only then, and a failure while alerting only logged, so the response never depends on it).
+  - **What it says:** the method, the route (segments with a digit and 8+ characters become `{id}`), the status and the request id. **Never the error's text** (it can hold SQL or someone's data); Workers Logs have it under the request id.
+  - **At most one per route and chat every 15 minutes:** the window is part of the delivery's dedupe key, so the existing unique index (D113) drops the rest, also when two failures land at once. Sent by `notifications:deliver` within a minute, with its retries; blocked chats get none.
+  - **Migration `0022`** rebuilds `notification_rules` (SQLite can't change a CHECK in place): copy, drop, rename, written by hand without the foreign-key pragmas drizzle-kit adds (nothing references the table; D1 keeps foreign keys on); `db generate` reports no drift.
+  - **Not covered:** a failure the Worker can't answer at all, and scheduled task failures (logged). Cloudflare's own 5xx alerts come with production (8.2).
+  - **The restore drill is a runbook** (operations.md → Restore drill): note the Time Travel bookmark, make a visible change, restore and time it, check the app, write the result into progress.md. The owner runs it (it needs the Wrangler login and undoes staging's test data written after the bookmark).
+- **Alternatives:** email alerts (no sending domain yet, Q4); Cloudflare notifications only (need production's plan and a domain; they'd say "5xx rose", not which route); the error's message in the alert (leaks internals to a chat).
+- **Verified:**
+  - server `notifications.delivery.test.ts` +4: route naming; nothing without a rule; the message with the route, status and request id and no error text, sent to the chat; one per route and chat per window, also for two failures at once, another route or the next window alerting again; a blocked chat none. `server/tests/migrations.test.ts` +1: the rebuild keeps every rule over existing rows, accepts the new kind, still refuses an unknown one, and a chat's rules still go with it.
+  - The error handler's call is not exercised end to end (no route fails on purpose); the e2e build, which bundles it, passes the full suite (368).
+  - **Not verified yet:** the restore drill on staging (the owner).

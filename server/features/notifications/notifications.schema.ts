@@ -76,7 +76,7 @@ export const notificationRules = sqliteTable('notification_rules', {
   createdAt: instant().notNull().default(nowMs),
 }, t => [
   primaryKey({ columns: [t.kind, t.destinationId] }),
-  check('notification_rules_kind_check', sql`${t.kind} in ('new_order', 'payment', 'closing_summary')`),
+  check('notification_rules_kind_check', sql`${t.kind} in ('new_order', 'payment', 'closing_summary', 'server_error')`),
 ])
 
 /**

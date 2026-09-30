@@ -1,7 +1,7 @@
 import type { Api } from 'grammy'
 import { GrammyError, InputFile } from 'grammy'
 import type { DeliverySnapshot, NotificationDelivery, NotificationKind, NotificationRule, SetNotificationRuleInput } from '#shared/contracts/notifications'
-import { DELIVERY_MAX_ATTEMPTS } from '#shared/contracts/notifications'
+import { DELIVERY_MAX_ATTEMPTS, SERVER_ERROR_ALERT_WINDOW_MINUTES } from '#shared/contracts/notifications'
 import { getBranchSettings } from '../branches'
 import type { Actor } from '../identity'
 import { orderAlert, reportBranches, reportMessage } from '../orders'
@@ -13,7 +13,8 @@ import { log } from '../../utils/log'
 import { toIso } from '../../utils/time'
 import { addDays } from '../../utils/weekly-windows'
 import { destinationBlocked, destinationNotFound } from './notifications.errors'
-import { alertSubject, CLOSING_SUMMARY_DELAY_MINUTES, CLOSING_SUMMARY_WINDOW_HOURS, closingInstant, newOrderMessage, paymentMessage } from './notifications.messages'
+import { alertSubject, CLOSING_SUMMARY_DELAY_MINUTES, CLOSING_SUMMARY_WINDOW_HOURS, closingInstant, newOrderMessage, paymentMessage, routeOf, serverErrorMessage } from './notifications.messages'
+import type { ServerErrorInfo } from './notifications.messages'
 import * as repo from './notifications.repository'
 import { isBlockedError, plainText } from './notifications.rules'
 import type { StoredMessage } from './notifications.schema'
@@ -125,6 +126,37 @@ export async function queueOrderAlert(db: Db, kind: Extract<NotificationKind, 'n
   }))
   if (deliveries.length) await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
   return deliveries.map(d => d.id)
+}
+
+// --- Server errors (step 10.4, D118) ---
+
+/**
+ * Queues a "server error" alert for every chat that wants them: at most one per route and chat in
+ * each `SERVER_ERROR_ALERT_WINDOW_MINUTES` window (the dedupe key names the window, and the unique
+ * index drops a second one at once). Sent by `notifications:deliver` within a minute, with its
+ * retries. Called by the error handler; never throws there (it catches).
+ */
+export async function queueServerErrorAlert(db: Db, info: ServerErrorInfo, now = new Date()): Promise<string[]> {
+  const targets = await repo.targetsOf(db, 'server_error')
+  if (!targets.length) return []
+  const window = Math.floor(now.getTime() / (SERVER_ERROR_ALERT_WINDOW_MINUTES * MINUTE))
+  const route = `${info.method} ${routeOf(info.path)}`
+  const dedupeKey = `server_error:${route}:${window}`
+  const message = serverErrorMessage(info, SERVER_ERROR_ALERT_WINDOW_MINUTES)
+  const deliveries = targets.map((target): repo.NewDelivery => ({
+    id: newId(),
+    kind: 'server_error',
+    destinationId: target.destinationId,
+    dedupeKey,
+    subject: `Server error · ${route}`,
+    message,
+    createdAt: now,
+    nextAttemptAt: now,
+  }))
+  await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
+  // The ones this call saved (another request in the window may have been first).
+  const saved = await repo.deliveryIds(db, deliveries.map(d => d.id))
+  return deliveries.map(d => d.id).filter(id => saved.has(id))
 }
 
 // --- The closing summary ---
