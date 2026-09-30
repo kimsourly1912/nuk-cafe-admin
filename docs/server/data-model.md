@@ -407,7 +407,7 @@ placed (unpaid) ──payment recorded──► preparing ──► ready ──
 - No separate accept step: **recording the counter payment starts preparation.**
 - A customer can cancel only while unpaid (the button comes in 6.5). Staff, managers and admins can cancel unpaid orders, with a reason.
 - **Q36 (owner, 2026-09-29, D101):** staff and managers may also cancel a **paid order before it's ready**, recording how the money went back (cash or KHQR, the full amount). A ready or completed order needs an admin refund.
-- An unpaid order past its 30 minutes can't be paid (409 `PAYMENT_EXPIRED`) and leaves the queue; the expiry task (6.6) marks it cancelled.
+- An unpaid order past its 30 minutes can't be paid (409 `PAYMENT_EXPIRED`) and leaves the queue; within a minute the expiry task (`orders:expire-unpaid`, D104) marks it cancelled: an `order_events` row with no actor and the note "Not paid within 30 minutes". Index `orders_status_due_idx` (status, `payment_due_at`) answers the task's query.
 
 **The counter** (`/api/counter/{branchId}/orders`, branch members and admins, D101). Every command takes `{ version, … }` and an `Idempotency-Key`, answers the order as it is now, and writes the change (guarded by status and version), its event, the payment and an audit entry in one batch. A stale version or a status that moved on is 409 `ORDER_CHANGED` ("Order 042 changed meanwhile: it's paid and being prepared now."); the same key again returns the first answer.
 

@@ -5,3 +5,7 @@ allowBuilds:
   workerd: true
 minimumReleaseAgeExclude:
   - '@nuxtjs/better-auth@0.3.5'
+# undici 7.29.1 fixes GHSA-w293-vg96-wgc3 and GHSA-rfgv-xxqx-mfg5 (high); wrangler > miniflare pins 7.29.0.
+# Remove once wrangler ships a miniflare on a patched undici.
+overrides:
+  undici@7: ^7.29.1
