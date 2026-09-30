@@ -956,3 +956,47 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
   - unit `app/features/counter/tests/sold-out.test.ts`, 3 tests: rows, filters and the kept row, and which source decides sold out.
   - e2e `counter.test.ts` against the real seeded server, 2 new tests: switched off from the queue's button with "Since … by Sophea" shown, the customer menu following, "N sold out" listing it, switched back while filtered and still shown, then gone from the filter. The phone layout: chips, switches, no sideways scroll. Removing the kept-row logic makes the first test fail.
   - Screenshots at 1180 px, light and dark, and at 390 px.
+
+### D106: Order tracking on the server (step 6.5a), 2026-09-30
+
+- **Context:** the customer's order page (D100) knew only "waiting for payment". Tracking (the owner's 6.5 frames and review, 2026-09-30, "use your defaults") needs each step's time, the payment, who cancelled and why, a list of the customer's orders, and the customer's own cancel while unpaid (D45).
+- **Decision:**
+  - **`Order` grows** (contract `shared/contracts/orders.ts`): `version`; `paidAt`, `readyAt`, `completedAt`; `payment` (method, amount, riel, when, and how it went back if the order was cancelled after paying). The cashier's name and the KHQR reference stay at the counter.
+  - **`cancellation: { by, reason }`**, read from the cancel event's actor:
+    - `by` is `system` when there is no actor (D104), `customer` when the actor is the order's customer, and `cafe` otherwise. A staff member cancelling their own order counts as the customer.
+    - The customer sees only the cafe's reason code, never the staff's own words (they may be internal).
+  - **`GET /api/shop/orders?page=&pageSize=`** returns `{ inProgress, past }`:
+    - `inProgress`: every order still in play, newest first (at most 50; in practice a few, since two can be unpaid).
+    - `past`: a `Page` of completed and cancelled orders, newest first, with the id breaking ties.
+    - Each entry is an `OrderSummary` with `itemCount` (units). The existing `orders_customer_idx` answers it, so there's no migration.
+  - **`POST /api/shop/orders/{id}/cancel` `{ version }`**, with an `Idempotency-Key`, for a verified customer:
+    - It is refused unless the order is waiting for payment. Paid meanwhile: 409 `ORDER_NOT_CANCELLABLE`, "Order 042 is paid now, so it can't be cancelled here. Ask at the counter." Already cancelled: 409 `ORDER_CHANGED`.
+    - The event records the customer as the actor with the existing reason `customer_changed_mind`. A new reason value would mean rebuilding `order_events` for its `CHECK`, and the actor already says who did it.
+    - It is audited as `orders.order.customer_cancel`.
+  - **One command runner:** the counter's guarded batch moved to `server/features/orders/commands.ts` (`runOrderCommand`) and is shared by the counter's commands and the customer's cancel:
+    - the find and ownership check;
+    - the version check;
+    - the update guarded by status and version, with `requireOneChange`;
+    - the event, whose unique version is a second guard;
+    - the audit entry;
+    - idempotency, and the "what it is now" refusal. Ownership and the refusal's wording are per caller.
+  - **Correction for 6.5b:** the order page's "we'll bring it to Table T12" (D100) becomes "collect at the counter". No table-service step exists, and the owner accepted that default for 6.5.
+- **Alternatives:**
+  - A separate "my orders" endpoint per status (two requests for one screen).
+  - Cursor pagination (the API's convention is `page` and `pageSize`; the page drops an entry it already shows).
+  - A new cancel reason `customer` (a table rebuild for what the actor already says).
+  - Showing the staff's note (it may be internal).
+  - Copying the counter's runner (the race handling is the subtle part and belongs in one place).
+- **Verified:**
+  - server `tracking.service.test.ts`, 8 tests:
+    - each step's time, version and payment;
+    - the three kinds of cancellation, with the money returned and the staff note hidden;
+    - the list: in progress, pages, only their own, item counts;
+    - the customer's cancel: event, audit, and the unpaid limit freed;
+    - someone else's order is 404;
+    - paid, whatever version is sent, and already cancelled;
+    - a replay answers the same and cancels once;
+    - a payment between read and write wins. With `requireOneChange` removed the event's unique version still refuses it; with both guards removed the test fails, like D101.
+  - The counter's tests pass unchanged on the shared runner.
+  - e2e `shop-orders-api.test.ts`, +1 test over HTTP: list, 401, 404, 400 without a key, cancel, replay, then 409.
+  - All server and unit tests pass (686).

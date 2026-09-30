@@ -126,6 +126,47 @@ export async function findActiveOrders(db: Db, branchId: string, now: Date): Pro
     .orderBy(asc(orders.placedAt))
 }
 
+// --- The customer's orders (6.5, D106) ---
+
+const IN_PROGRESS: OrderStatus[] = ['awaiting_payment', 'preparing', 'ready']
+const FINISHED: OrderStatus[] = ['completed', 'cancelled']
+/** Newest first; the id breaks ties so pages never overlap. */
+const newestFirst = [desc(orders.placedAt), desc(orders.id)]
+
+/** The customer's orders still in play, newest first (a few at most: two can be unpaid). */
+export async function findCustomerOrdersInProgress(db: Db, customerId: string, limit: number): Promise<OrderRow[]> {
+  return selectOrders(db)
+    .where(and(eq(orders.customerId, customerId), inArray(orders.status, IN_PROGRESS)))
+    .orderBy(...newestFirst)
+    .limit(limit)
+}
+
+/** A page of the customer's completed and cancelled orders, newest first, and how many there are. */
+export async function findCustomerOrdersPast(db: Db, customerId: string, page: { page: number, pageSize: number }): Promise<{ rows: OrderRow[], total: number }> {
+  const where = and(eq(orders.customerId, customerId), inArray(orders.status, FINISHED))
+  const [rows, [count]] = await Promise.all([
+    selectOrders(db).where(where).orderBy(...newestFirst).limit(page.pageSize).offset((page.page - 1) * page.pageSize),
+    db.select({ total: sql<number>`count(*)` }).from(orders).where(where),
+  ])
+  return { rows, total: count?.total ?? 0 }
+}
+
+/** Units per order (the sum of the lines' quantities). */
+export async function itemCounts(db: Db, orderIds: string[]): Promise<Map<string, number>> {
+  const rows: { orderId: string, count: number }[] = await readInChunks(orderIds, ids => db
+    .select({ orderId: orderLines.orderId, count: sql<number>`sum(${orderLines.quantity})` })
+    .from(orderLines).where(inArray(orderLines.orderId, ids)).groupBy(orderLines.orderId))
+  return new Map(rows.map(row => [row.orderId, Number(row.count)]))
+}
+
+/** The event that cancelled the order, if it was: who did it (`null`: the system) and why. */
+export async function cancelEventOf(db: Db, orderId: string): Promise<{ actorId: string | null, reason: CancelReason | null } | undefined> {
+  const [row] = await db.select({ actorId: orderEvents.actorId, reason: orderEvents.reason }).from(orderEvents)
+    .where(and(eq(orderEvents.orderId, orderId), eq(orderEvents.toStatus, 'cancelled')))
+    .orderBy(desc(orderEvents.toVersion)).limit(1)
+  return row
+}
+
 export async function linesOf(db: Db, orderId: string) {
   return db.select().from(orderLines).where(eq(orderLines.orderId, orderId)).orderBy(asc(orderLines.position))
 }

@@ -112,6 +112,7 @@ describe('placing an order', () => {
     const order = await placed(sokha)
     expect(order).toEqual({
       id: expect.any(String),
+      version: 1,
       branch: { id: branchId, name: 'Riverside' },
       pickupNumber: 1,
       businessDate: '2026-09-28',
@@ -127,7 +128,12 @@ describe('placing an order', () => {
       currency: 'USD',
       placedAt: '2026-09-28T05:00:00.000Z',
       paymentDueAt: '2026-09-28T05:30:00.000Z',
+      paidAt: null,
+      readyAt: null,
+      completedAt: null,
       cancelledAt: null,
+      payment: null,
+      cancellation: null,
     })
   })
 

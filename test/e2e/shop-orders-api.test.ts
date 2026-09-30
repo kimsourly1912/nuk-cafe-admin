@@ -1,6 +1,6 @@
 import { url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
-import type { CheckoutQuote, Order } from '#shared/contracts/orders'
+import type { CheckoutQuote, CustomerOrders, Order } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
 import { setupE2e } from './support/mock-api'
 import { clientHeaders } from './support/client-address'
@@ -68,5 +68,40 @@ describe('placing an order over HTTP', () => {
     const order = await (await post(await anOrder(), { 'cookie': owner, 'idempotency-key': crypto.randomUUID() })).json() as Order
     const other = await signIn(seed.customers.verified)
     expect((await fetch(url(`/api/shop/orders/${order.id}`), { headers: { cookie: other } })).status).toBe(404)
+  })
+})
+
+// Tracking (step 6.5a, D106): the customer's list and cancelling while unpaid, as `tracker` (whose
+// orders no other file touches).
+describe('the customer\'s orders over HTTP (D106)', () => {
+  const cancel = (id: string, body: unknown, headers: Record<string, string>) =>
+    fetch(url(`/api/shop/orders/${id}/cancel`), { method: 'POST', headers: { 'content-type': 'application/json', origin, ...headers }, body: JSON.stringify(body) })
+
+  it('lists them; cancels an unpaid one once (the same key answers the same); refuses signed out and someone else', async () => {
+    const cookie = await signIn(seed.customers.tracker)
+    const order = await (await post(await anOrder(), { 'cookie': cookie, 'idempotency-key': crypto.randomUUID() })).json() as Order
+    expect(order.version).toBe(1)
+
+    const list = await (await fetch(url('/api/shop/orders?pageSize=5'), { headers: { cookie } })).json() as CustomerOrders
+    expect(list.inProgress.map(o => o.id)).toContain(order.id)
+    expect(list.past.pageSize).toBe(5)
+    expect((await fetch(url('/api/shop/orders'))).status).toBe(401)
+
+    const other = await signIn(seed.customers.verified)
+    expect((await cancel(order.id, { version: 1 }, { 'cookie': other, 'idempotency-key': crypto.randomUUID() })).status).toBe(404)
+    expect((await cancel(order.id, { version: 1 }, { 'idempotency-key': crypto.randomUUID() })).status).toBe(401)
+    expect((await cancel(order.id, { version: 1 }, { cookie })).status).toBe(400)
+
+    const key = crypto.randomUUID()
+    const first = await cancel(order.id, { version: 1 }, { cookie, 'idempotency-key': key })
+    expect(first.status).toBe(200)
+    expect(await first.json()).toMatchObject({ status: 'cancelled', version: 2, cancellation: { by: 'customer', reason: null } })
+    expect((await cancel(order.id, { version: 1 }, { cookie, 'idempotency-key': key })).status).toBe(200)
+    const again = await cancel(order.id, { version: 2 }, { cookie, 'idempotency-key': crypto.randomUUID() })
+    expect([again.status, (await again.json()).data.code]).toEqual([409, 'ORDER_CHANGED'])
+
+    const after = await (await fetch(url('/api/shop/orders'), { headers: { cookie } })).json() as CustomerOrders
+    expect(after.inProgress.map(o => o.id)).not.toContain(order.id)
+    expect(after.past.items[0]).toMatchObject({ id: order.id, status: 'cancelled', itemCount: 2 })
   })
 })
