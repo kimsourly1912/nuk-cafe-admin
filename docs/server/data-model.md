@@ -442,6 +442,16 @@ Feature: `platform`.
 | `idempotency_keys` | `actor_id`, `operation`, `key`, `request_hash` (SHA-256 of canonical JSON), `response` (JSON), `created_at`, `expires_at`; unique (`actor_id`, `operation`, `key`) | Removed after 24 h; a key counts until removed |
 | `outbox_messages` | `kind`, `payload` (JSON), `status` (`pending` \| `sent` \| `failed`), `attempts`, `next_attempt_at`, `locked_until` (delivery claim), `last_error` (one line), `created_at`, `sent_at` | Must-not-lose side effects, delivered at least once by `platform:deliver-outbox` |
 
+## AI assistant (phase 9, D107, D108)
+
+Feature: `assistant` ([plan](../plans/ai-assistant.md)). The AI only suggests: the feature writes no app data. The provider is chosen by settings (`assistant.model.ts` is the only file that names providers).
+
+| Table | Columns | Notes |
+|---|---|---|
+| `assistant_usage` | `user_id` → user (cascade: an admin's usage goes with the account), `day` (`YYYY-MM-DD` in Asia/Phnom_Penh), `feature` (`ping` \| `chat` \| `menu_item_draft` \| `rewrite`), `provider`, `model`, `input_tokens`, `output_tokens`, `cached_input_tokens` (`null` while pending or when the provider doesn't say), `outcome` (`pending` \| `ok` \| `error`), `at` | One row per request to the provider, **never the question or the answer**. Inserted before the call with a guard in the same batch (the admin's rows that day, this one included, at most `NUXT_AI_DAILY_LIMIT`), so two requests can't both take the last slot: 429 `AI_LIMIT_REACHED`. A failed call still counts. Indexes (`user_id`, `day`) and `at`; removed after 90 days by `assistant:purge-usage` |
+
+Routes (`/api/admin/assistant`, `assistant: ['use']`, 404 when no key is set): `POST …/ping` (step 9.0 only: a tiny streamed answer to check the provider and streaming on staging, removed in 9.1). The chat, draft and wording routes come with 9.1–9.3.
+
 ## Sample data (D94)
 
 Feature: `sample-data`, only where `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` is on (local and staging). It owns no menu data: it creates records through the menu's and branches' services, finds them again by name, and deletes the menu through the menu feature's `deleteAllMenuStatements` (every menu table, children first) and uploads through media's `deleteUploads`.

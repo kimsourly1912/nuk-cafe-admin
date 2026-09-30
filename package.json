@@ -20,12 +20,17 @@
     "typecheck": "nuxt typecheck"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.68",
+    "@ai-sdk/google": "^4.0.85",
+    "@ai-sdk/openai": "^4.0.80",
+    "@ai-sdk/openai-compatible": "^3.0.59",
     "@internationalized/date": "^3.12.4",
     "@nuxt/ui": "^4.11.2",
     "@nuxthub/core": "0.10.8",
     "@nuxtjs/better-auth": "0.3.5",
     "@vueuse/core": "^15.0.0",
     "@vueuse/integrations": "^15.0.0",
+    "ai": "^7.0.122",
     "better-auth": "^1.7.3",
     "drizzle-orm": "^0.45.3",
     "h3": "1.15.11",

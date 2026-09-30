@@ -74,6 +74,7 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | settings | KHR exchange rate, branch hours | ✔ | | |
 | loyalty | adjust points | ✔ | ✔ | |
 | report / audit | read | ✔ | own branch | |
+| assistant | use the AI assistant (phase 9, D107, D108) | ✔ | | |
 | Better Auth `user` / `session` admin endpoints | create, list, set role, ban, set password, revoke sessions… | ✔ (no impersonation) | | |
 | Better Auth `organization` / `member` / `invitation` / `ac` endpoints | update, delete, add or remove members, invite | | | |
 

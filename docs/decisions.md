@@ -1011,7 +1011,7 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Decision:** the plan in [plans/ai-assistant.md](plans/ai-assistant.md), steps 9.0–9.3. Its rules:
   - **The AI suggests, a person saves.** No write tools. Drafts open in the existing item editor; wording suggestions replace a field only when chosen. Every save goes through the existing services, with their validation, `version` and audit.
   - **Provider-neutral through the Vercel AI SDK** (`ai`, with `@ai-sdk/anthropic` / `openai` / `google` / `openai-compatible`, `@ai-sdk/valibot`, `@ai-sdk/vue`):
-    - The provider, model and key are settings. One file (`model.ts`) names providers; no other feature imports AI.
+    - The provider, model and key are settings. One file (`assistant.model.ts`, built in 9.0) names providers; no other feature imports AI.
     - Supported means covered by the plan's quality check.
     - Nuxt UI 4.11's chat components are built for it; it runs on Workers (checked on staging in 9.0).
   - **Knowledge is Markdown in the code** (`server/features/assistant/help/`), sent whole with each question, most stable text first so the provider's prompt caching can reuse it:
@@ -1032,3 +1032,44 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
   - A slide-over panel (covers the page being explained).
   - Each alternative, and every other option deferred, with what would bring it back, is in [plans/ai-later.md](plans/ai-later.md).
 - **Open:** Q43, the provider account and key for staging and production, with a spending cap. Translation waits for decisions on languages and the customer site's language switch ([ai-later.md](plans/ai-later.md)).
+
+### D108: The AI assistant's groundwork (step 9.0), 2026-09-30
+
+- **Context:** the plan (D107, [plans/ai-assistant.md](plans/ai-assistant.md)) starts with what every later step needs: the packages, the provider setting, the feature switch, the permission, and a daily limit per admin with usage records.
+- **Decision:**
+  - **Packages:** `ai` 7.0 with `@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/google` and `@ai-sdk/openai-compatible`. `@ai-sdk/vue` comes with 9.1, and `@ai-sdk/valibot` with 9.2, when they're used.
+  - **Settings:** runtime config `ai` (`NUXT_AI_PROVIDER`, `_MODEL`, `_API_KEY`, `_BASE_URL`, `_DAILY_LIMIT`), read by `assistantSettingsFrom`:
+    - **no key** means the assistant is **off**: its routes answer 404, like Sample data;
+    - **a key with an unknown provider, no model, or an OpenAI-compatible provider without its URL** is refused with 500 `AI_NOT_CONFIGURED`. The key shows the assistant was meant to be on, so it isn't silently switched off;
+    - a daily limit that isn't a positive whole number falls back to 100.
+  - **`assistant.model.ts` is the only file that names providers.** It turns the settings into the AI SDK's `LanguageModel`.
+  - **Route glue `requireAssistant(event)`** (`server/utils/assistant.ts`): switched off first (404 for everyone), then `assistant: ['use']`, which only admins hold.
+  - **`assistant_usage`** (migration `0017`):
+    - A row is inserted **before** each call to the provider, with its local `day` (Asia/Phnom_Penh), in a batch with a `requireAtMost` guard: that admin's rows that day, this one included, at most the limit. Past it: 429 `AI_LIMIT_REACHED`, and the provider is never called.
+    - After the call the row gets the tokens, including cached input where the provider reports it, and `ok` or `error`. A failed call still counts, since it may have cost tokens.
+    - Metadata only: never the question or the answer.
+    - The user foreign key **cascades**: an admin's usage is their own data and goes with the account.
+    - `assistant:purge-usage` (daily, 03:15 UTC) removes rows older than 90 days.
+  - **Streams:** usage is finished in `streamText`'s `onFinish` / `onError` through `event.waitUntil`, so the Worker writes the row after the response has streamed.
+    - The provider's error is logged; the admin sees only "The assistant can't answer right now."
+    - One request may take up to 30 s (`AbortSignal.timeout`), with one retry.
+  - **`POST /api/admin/assistant/ping`:** a tiny streamed answer (the AI SDK's UI message stream) to check settings, provider, streaming through the Worker and usage on staging. It counts against the limit and is removed in 9.1.
+- **Alternatives:**
+  - Counting the limit from midnight timestamps instead of a stored `day` (timezone arithmetic in SQL; a text day is simpler and indexable).
+  - A limit kept in KV (outside the database's atomic batch).
+  - Switching the assistant off when its settings are incomplete (hides a deployment mistake).
+  - Restricting user deletion because of usage rows (the rows aren't worth keeping without the person).
+- **Verified:**
+  - server `assistant.service.test.ts`, 11 tests, with the AI SDK's `MockLanguageModelV4`, so no test calls a provider:
+    - settings: off without a key, refused when incomplete, the limit's fallback;
+    - each provider built from its setting;
+    - the limit per admin and per local day, with midnight in Phnom Penh starting a new day;
+    - two requests racing for the last slot: one passes. The test fails with the guard removed;
+    - a streamed ping records its tokens, with cached input;
+    - a provider failure is logged and recorded as `error`;
+    - past the limit the provider is never called;
+    - the 90-day cleanup;
+    - an account removed takes its usage with it.
+  - `identity.permissions.test.ts`: `assistant: ['use']` for admins only.
+  - The staging Worker builds with the packages: 6.66 MB, 1.73 MB gzipped, within Cloudflare's limits.
+  - **Not verified yet:** a real provider's streamed answer through the staging Worker. It needs the key (Q43): set the `NUXT_AI_*` values on the staging Worker, then `POST /api/admin/assistant/ping` signed in as an admin.

@@ -26,6 +26,8 @@ export const platformStatements = {
   settings: ['manage'],
   report: ['read'],
   audit: ['read'],
+  // The AI assistant (phase 9, D107): admins only for now.
+  assistant: ['use'],
 } as const
 
 export const platformAc = createAccessControl(platformStatements)
@@ -45,6 +47,7 @@ export const platformRoles = {
     settings: ['manage'],
     report: ['read'],
     audit: ['read'],
+    assistant: ['use'],
   }),
 }
 
