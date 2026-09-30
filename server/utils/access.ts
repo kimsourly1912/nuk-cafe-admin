@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
-import { authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn } from '../features/identity'
-import type { Actor, BranchActor, BranchPermission, PlatformPermission, SessionUser } from '../features/identity'
+import { authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn } from '#server/features/identity'
+import type { Actor, BranchActor, BranchPermission, PlatformPermission, SessionUser } from '#server/features/identity'
 import { useDb } from './db'
 
 /**

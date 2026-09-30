@@ -1,5 +1,5 @@
 import { reorderModifiersSchema } from '#shared/contracts/menu-modifiers'
-import { reorderModifiers } from '~~/server/features/menu'
+import { reorderModifiers } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['write'] })

@@ -1,4 +1,4 @@
-import { resolveTableToken } from '~~/server/features/branches'
+import { resolveTableToken } from '#server/features/branches'
 
 /**
  * `GET /api/public/tables/{token}`: the branch and table a scanned QR names, for anyone. Unknown

@@ -1,4 +1,4 @@
-import { listBranchOptions } from '~~/server/features/branches'
+import { listBranchOptions } from '#server/features/branches'
 
 /** Active branches for pickers: `[{ id, name }]`, by name. */
 export default defineEventHandler(async (event) => {

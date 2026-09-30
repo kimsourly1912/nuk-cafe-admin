@@ -1,4 +1,4 @@
-import type { Statement } from '../../utils/batch'
+import type { Statement } from '#server/utils/batch'
 
 /** Who changed something, as the audit trail records it (usually the access helpers' actor). */
 export interface AuditActor {

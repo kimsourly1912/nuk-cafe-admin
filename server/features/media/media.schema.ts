@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
-import { newId } from '../../utils/ids'
+import { newId } from '#server/utils/ids'
 
 /**
  * Uploaded files (docs/server/data-model.md → Media, D57). The bytes live in R2 (NuxtHub blob);

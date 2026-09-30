@@ -2,8 +2,8 @@ import { and, asc, count, desc, eq, gte, isNotNull, isNull, lt, sql } from 'driz
 import type { SQL } from 'drizzle-orm'
 import type { OrderStatus, OrderType, PaymentMethod } from '#shared/contracts/orders'
 import type { OrderHistoryQuery } from '#shared/contracts/reports'
-import { organization, user } from '../../db/tables'
-import type { Db } from '../../utils/batch'
+import { organization, user } from '#server/db/tables'
+import type { Db } from '#server/utils/batch'
 import { counterPayments, orderEvents, orderLines, orders } from './orders.schema'
 import type { ItemTotalsRow } from './reports.rules'
 

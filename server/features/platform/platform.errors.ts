@@ -1,4 +1,4 @@
-import { apiError, ErrorCodes } from '../../utils/errors'
+import { apiError, ErrorCodes } from '#server/utils/errors'
 
 export const idempotencyMismatch = () => apiError(422, ErrorCodes.IDEMPOTENCY_MISMATCH,
   'This request reuses the key of a different request. Start the action again.')

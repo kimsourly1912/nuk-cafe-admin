@@ -1,4 +1,4 @@
-import { sendTestMessage } from '~~/server/features/notifications'
+import { sendTestMessage } from '#server/features/notifications'
 
 /** Send test: a short message to a connected chat. */
 export default defineEventHandler(async (event) => {

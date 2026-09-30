@@ -1,7 +1,7 @@
 import { and, count, eq, lt, sql } from 'drizzle-orm'
 import type { AiProvider, AssistantFeature, AssistantOutcome } from '#shared/contracts/assistant'
-import type { Db, Statement } from '../../utils/batch'
-import { requireAtMost } from '../../utils/batch'
+import type { Db, Statement } from '#server/utils/batch'
+import { requireAtMost } from '#server/utils/batch'
 import { assistantUsage } from './assistant.schema'
 
 /** All SQL of the assistant (docs/server/architecture.md → Repository). */

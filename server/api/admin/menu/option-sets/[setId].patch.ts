@@ -1,5 +1,5 @@
 import { renameOptionSetSchema } from '#shared/contracts/menu-options'
-import { renameOptionSet } from '~~/server/features/menu'
+import { renameOptionSet } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['write'] })

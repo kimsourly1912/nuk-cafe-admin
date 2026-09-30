@@ -1,5 +1,5 @@
 import { reorderItemsSchema } from '#shared/contracts/menu-items'
-import { reorderItems } from '~~/server/features/menu'
+import { reorderItems } from '#server/features/menu'
 
 /** The new order of a category's items. */
 export default defineEventHandler(async (event) => {

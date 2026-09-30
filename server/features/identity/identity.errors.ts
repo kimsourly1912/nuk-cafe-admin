@@ -1,4 +1,4 @@
-import { apiError, ErrorCodes, notFound } from '../../utils/errors'
+import { apiError, ErrorCodes, notFound } from '#server/utils/errors'
 
 export const unauthenticated = () => apiError(401, ErrorCodes.UNAUTHENTICATED, 'Sign in to continue.')
 

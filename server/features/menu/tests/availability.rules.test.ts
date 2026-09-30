@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AvailabilityWindow } from '#shared/contracts/menu-availability'
-import type { RuleForCheck } from '../availability.rules'
-import { isAvailableAt, isInWindow, localTime, sortWindows, windowsProblem } from '../availability.rules'
+import type { RuleForCheck } from '#server/features/menu/availability.rules'
+import { isAvailableAt, isInWindow, localTime, sortWindows, windowsProblem } from '#server/features/menu/availability.rules'
 
 const MON = 1
 const TUE = 2

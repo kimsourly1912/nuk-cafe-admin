@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, inArray, lt, lte, ne, sql } from 'drizzle-orm'
 import type { DestinationKind, NotificationKind, TelegramLinkStatus } from '#shared/contracts/notifications'
-import { user } from '../../db/tables'
-import type { Db, Statement } from '../../utils/batch'
+import { user } from '#server/db/tables'
+import type { Db, Statement } from '#server/utils/batch'
 import type { StoredMessage } from './notifications.schema'
 import { notificationDeliveries, notificationRules, telegramDestinations, telegramLinks } from './notifications.schema'
 

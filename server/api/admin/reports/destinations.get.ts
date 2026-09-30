@@ -1,5 +1,5 @@
 import type { TelegramDestination } from '#shared/contracts/notifications'
-import { listDestinations } from '~~/server/features/notifications'
+import { listDestinations } from '#server/features/notifications'
 
 /**
  * `GET /api/admin/reports/destinations`: where Send to Telegram can send (report: ['export'], not

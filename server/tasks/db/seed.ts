@@ -1,5 +1,5 @@
-import { seedDemoBranch } from '~~/server/features/branches'
-import { seedFirstAdmin } from '~~/server/features/identity'
+import { seedDemoBranch } from '#server/features/branches'
+import { seedFirstAdmin } from '#server/features/identity'
 
 /**
  * The first admin and a demo branch. Locally, with the dev server running:

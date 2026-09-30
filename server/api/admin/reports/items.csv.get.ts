@@ -1,5 +1,5 @@
 import { itemSalesQuerySchema } from '#shared/contracts/reports'
-import { itemSalesExport } from '~~/server/features/orders'
+import { itemSalesExport } from '#server/features/orders'
 
 /** `GET /api/admin/reports/items.csv` (8.1b, D111): Sales by item as CSV, every matching row. */
 export default defineEventHandler(async (event) => {

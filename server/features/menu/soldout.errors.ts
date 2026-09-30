@@ -1,4 +1,4 @@
-import { apiError } from '../../utils/errors'
+import { apiError } from '#server/utils/errors'
 
 export const SoldOutErrorCodes = {
   VARIATION_NOT_AVAILABLE: 'VARIATION_NOT_AVAILABLE',

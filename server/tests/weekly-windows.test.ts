@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { localDate, localTime, minutesUntilClosed } from '../utils/weekly-windows'
-import { businessDateAt } from '../features/orders/orders.service'
+import { localDate, localTime, minutesUntilClosed } from '#server/utils/weekly-windows'
+import { businessDateAt } from '#server/features/orders/orders.service'
 
 const w = (weekday: number, startMinute: number, endMinute: number) => ({ weekday, startMinute, endMinute })
 const at = (weekday: number, hhmm: string) => ({ weekday, minute: Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3)) })

@@ -1,4 +1,4 @@
-import { getAvailabilityRule } from '~~/server/features/menu'
+import { getAvailabilityRule } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, { menu: ['read'] })

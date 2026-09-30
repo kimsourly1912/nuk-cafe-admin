@@ -1,5 +1,5 @@
 import { updateBranchSettingsSchema } from '#shared/contracts/branches'
-import { updateBranchSettings } from '~~/server/features/branches'
+import { updateBranchSettings } from '#server/features/branches'
 
 /** Saves the branch's details and/or hours from the version read. Hours are a setting (security.md). */
 export default defineEventHandler(async (event) => {

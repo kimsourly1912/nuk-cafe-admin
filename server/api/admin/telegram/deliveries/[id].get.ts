@@ -1,4 +1,4 @@
-import { deliverySnapshot } from '~~/server/features/notifications'
+import { deliverySnapshot } from '#server/features/notifications'
 
 /** View snapshot: a delivery's saved message, as text. */
 export default defineEventHandler(async (event) => {

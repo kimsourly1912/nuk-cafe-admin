@@ -1,6 +1,6 @@
 import { and, asc, count, eq, inArray, lt } from 'drizzle-orm'
-import type { Db, Statement } from '../../utils/batch'
-import { readInChunks } from '../../utils/batch'
+import type { Db, Statement } from '#server/utils/batch'
+import { readInChunks } from '#server/utils/batch'
 import { mediaAssets } from './media.schema'
 
 export interface MediaRow {

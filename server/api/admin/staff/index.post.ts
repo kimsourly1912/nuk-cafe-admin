@@ -1,5 +1,5 @@
 import { createStaffSchema } from '#shared/contracts/staff'
-import { createStaff } from '~~/server/features/identity'
+import { createStaff } from '#server/features/identity'
 
 /** 201 with the temporary password, shown to the admin once (null for an existing account). */
 export default defineEventHandler(async (event) => {

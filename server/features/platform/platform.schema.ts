@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import { newId } from '../../utils/ids'
+import { newId } from '#server/utils/ids'
 
 /**
  * Platform tables (docs/server/data-model.md → Platform, D50): the audit trail, idempotency keys

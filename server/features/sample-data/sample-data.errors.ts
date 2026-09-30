@@ -1,4 +1,4 @@
-import { apiError, notFound } from '../../utils/errors'
+import { apiError, notFound } from '#server/utils/errors'
 
 export const SampleDataErrorCodes = {
   SAMPLE_MENU_NOT_EMPTY: 'SAMPLE_MENU_NOT_EMPTY',

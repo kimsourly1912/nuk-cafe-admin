@@ -1,7 +1,7 @@
 import type { H3Event } from 'h3'
 import { getRequestURL } from 'h3'
-import { qrConfigFrom } from '../features/branches'
-import type { QrConfig } from '../features/branches'
+import { qrConfigFrom } from '#server/features/branches'
+import type { QrConfig } from '#server/features/branches'
 
 /**
  * The table QR settings for a request (D91): `NUXT_QR_SECRET`, and the customer site's origin

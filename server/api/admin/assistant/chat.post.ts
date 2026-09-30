@@ -1,5 +1,5 @@
 import { assistantChatSchema } from '#shared/contracts/assistant'
-import { AI_UNAVAILABLE_MESSAGE, chatWithAssistant } from '~~/server/features/assistant'
+import { AI_UNAVAILABLE_MESSAGE, chatWithAssistant } from '#server/features/assistant'
 
 /**
  * `POST /api/admin/assistant/chat` (step 9.1, D109): the help assistant's answer to the latest

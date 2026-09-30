@@ -1,5 +1,5 @@
 import { publicMenuQuerySchema } from '#shared/contracts/public-menu'
-import { getPublicMenu } from '~~/server/features/menu'
+import { getPublicMenu } from '#server/features/menu'
 
 /**
  * `GET /api/public/menu?branchId=…`: what the branch sells right now, for anyone (D65). Not cached

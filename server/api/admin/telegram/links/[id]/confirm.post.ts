@@ -1,4 +1,4 @@
-import { confirmLink } from '~~/server/features/notifications'
+import { confirmLink } from '#server/features/notifications'
 
 /** Connects the group a link brought, after the admin confirmed it. */
 export default defineEventHandler(async (event) => {

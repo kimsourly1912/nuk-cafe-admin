@@ -1,8 +1,8 @@
 import { defineServerAuth } from '@nuxtjs/better-auth/config'
-import type { Db } from './utils/batch'
+import type { Db } from '#server/utils/batch'
 // Not the feature's index: the module loads this file at build time to generate the auth schema,
 // before 'hub:db:schema' exists, so it must not pull in the identity repository.
-import { identityAuthOptions } from './features/identity/identity.auth'
+import { identityAuthOptions } from '#server/features/identity/identity.auth'
 
 export default defineServerAuth(({ runtimeConfig, db }) => identityAuthOptions({
   // NuxtHub's database, the one Better Auth itself uses.

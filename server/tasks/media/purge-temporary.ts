@@ -1,4 +1,4 @@
-import { purgeExpiredUploads } from '~~/server/features/media'
+import { purgeExpiredUploads } from '#server/features/media'
 
 /** Hourly (nuxt.config.ts → scheduled tasks): deletes uploads no record has used for 24 hours. */
 export default defineTask({

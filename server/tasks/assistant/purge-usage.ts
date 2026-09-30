@@ -1,4 +1,4 @@
-import { purgeAssistantUsage } from '~~/server/features/assistant'
+import { purgeAssistantUsage } from '#server/features/assistant'
 
 /** Daily (nuxt.config.ts → nitro.scheduledTasks): removes assistant usage rows past their 90 days (D108). */
 export default defineTask({

@@ -1,5 +1,5 @@
 import { setSoldOutSchema } from '#shared/contracts/menu-sold-out'
-import { setSoldOut } from '~~/server/features/menu'
+import { setSoldOut } from '#server/features/menu'
 
 /** `{ variationIds, soldOut }`: switches versions off or back on at this branch. */
 export default defineEventHandler(async (event) => {

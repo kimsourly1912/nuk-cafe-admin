@@ -1,5 +1,5 @@
 import type { AdminSession, CounterSession } from '#shared/contracts/identity'
-import type { Db } from '../../utils/batch'
+import type { Db } from '#server/utils/batch'
 import { branchNotFound, emailNotVerified, forbidden, notAdmin, notStaff, passwordChangeRequired, unauthenticated } from './identity.errors'
 import { branchRoles, platformRoles, platformStatements } from './identity.permissions'
 import type { BranchPermission, BranchRole, PlatformPermission, PlatformRole } from './identity.permissions'

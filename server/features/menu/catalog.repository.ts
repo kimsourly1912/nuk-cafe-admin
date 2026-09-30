@@ -1,6 +1,6 @@
 import { and, asc, eq, sql } from 'drizzle-orm'
 import type { AvailabilityStatus, AvailabilityWindow } from '#shared/contracts/menu-availability'
-import type { Db } from '../../utils/batch'
+import type { Db } from '#server/utils/batch'
 import { sellable } from './items.repository'
 import { menuAvailabilityRules, menuAvailabilityWindows, menuCategories, menuCategoryAvailability, menuItemAvailability, menuItemModifierGroups, menuItemModifierPrices, menuItemOptionSets, menuItems, menuItemVariations, menuModifierGroups, menuModifiers, menuOptionSets, menuOptionValues } from './menu.schema'
 

@@ -1,5 +1,5 @@
 import { payOrderSchema } from '#shared/contracts/orders'
-import { payOrder } from '~~/server/features/orders'
+import { payOrder } from '#server/features/orders'
 
 /**
  * `{ version, method, khrPerUsd? | reference? }` (header `Idempotency-Key`): records the payment,
