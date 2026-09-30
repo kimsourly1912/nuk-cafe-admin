@@ -18,6 +18,14 @@ const alias = {
   'hub:db:schema': path('./.nuxt/hub/db/schema.mjs'),
 }
 
+/** Nitro imports `.md` files as text (the assistant's help guide, D109); the server tests do the same. */
+const markdownAsText = {
+  name: 'markdown-as-text',
+  transform(code: string, id: string) {
+    return id.endsWith('.md') ? { code: `export default ${JSON.stringify(code)}`, map: null } : undefined
+  },
+}
+
 // Tests live next to what they test:
 // - feature tests: app/features/<name>/tests/*.test.ts
 // - shared code tests: test/unit, test/nuxt, test/e2e
@@ -37,6 +45,7 @@ export default defineConfig({
       {
         // Server services against an in-memory SQLite database built from the real migrations.
         resolve: { alias },
+        plugins: [markdownAsText],
         test: {
           name: 'server',
           // server/tests: shared server utils; server/features/*/tests: features (docs/server/architecture.md → Tests).
@@ -59,6 +68,15 @@ export default defineConfig({
           expect: { poll: { timeout: 5_000 } },
         },
       },
+      // The assistant's quality check calls the real AI provider (spends a little): only on request
+      // (`ASSISTANT_EVAL=1 … pnpm vitest run --project eval`), never in CI (D109).
+      ...(process.env.ASSISTANT_EVAL
+        ? [{
+            resolve: { alias },
+            plugins: [markdownAsText],
+            test: { name: 'eval', include: ['server/features/*/eval/**/*.eval.ts'], environment: 'node', maxConcurrency: 1, fileParallelism: false },
+          }]
+        : []),
       // Loading Nuxt for this project runs NuxtHub's module setup, which rewrites .data/db/migrations
       // and raced with a running dev server (or another Nuxt process) on Windows, failing the whole
       // run. There are no Nuxt-environment tests yet, so the project exists only once one does.

@@ -13,6 +13,7 @@ export const SHORTCUTS = [
   { kbds: ['meta', 'enter'], label: 'Save the open form' },
   { kbds: ['escape'], label: 'Close the dialog (asks first if there are unsaved changes)' },
   { kbds: ['escape'], label: 'Leave Select or Reorder (Categories; an unsaved order stays until saved or discarded)' },
+  { kbds: ['meta', '/'], label: 'Open or close the assistant (where it is on)' },
   { kbds: ['?'], label: 'Show keyboard shortcuts' },
 ] as const
 

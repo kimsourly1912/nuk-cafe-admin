@@ -40,7 +40,7 @@ NUXT_AI_BASE_URL   openai-compatible only
 NUXT_AI_DAILY_LIMIT  per admin, default 100
 ```
 
-The public runtime config carries only `assistant.enabled` (a key is set), so the app knows to show the buttons.
+The app asks `GET /api/admin/assistant` (the daily limit and today's use; 404 when no key is set) to know whether to show the assistant (D109: replaces a public `assistant.enabled` flag, which would have been a second setting to keep in step with the key).
 
 ## Boundaries
 
@@ -105,7 +105,7 @@ All `POST`, admin surface, `assistant: ['use']`; 404 when the assistant is off. 
 
 ## Screens (mockups first, per step)
 
-- **9.1 Help panel:** `USidebar` on the right (owner): docked beside the page from `lg` (**[Choice]** `collapsible="offcanvas"`, the page narrows while it's open); below `lg` its own slide-over, full screen on phones. Opened by an "Ask" button in the admin navbar and `Ctrl`/`⌘`+`/` (added to the shortcuts list). Inside: suggested questions for the current page, the messages (`UChatMessages`), link results as buttons (`UChatTool`), the prompt (`UChatPrompt`) with Stop; "Clear chat"; an error row with Try again; "AI can make mistakes: check before you act" under the prompt. **Needs verification:** `USidebar` beside `UDashboardGroup`'s panel (layout and focus); every page still fits at its narrower width.
+- **9.1 Help panel:** `USidebar` on the right (owner): docked beside the page from `lg` (**[Choice]** `collapsible="offcanvas"`, the page narrows while it's open); below `lg` its own slide-over, full screen on phones. Opened by an **Assistant** button in the admin sidebar's footer (inside the menu on phones; D109: each page owns its navbar) and `Ctrl`/`⌘`+`/` (added to the shortcuts list). Inside: suggested questions for the current page, the messages (`UChatMessages`), link results as buttons (`UChatTool`), the prompt (`UChatPrompt`) with Stop; "Clear chat"; an error row with Try again; "AI can make mistakes: check before you act" under the prompt. **Needs verification:** `USidebar` beside `UDashboardGroup`'s panel (layout and focus); every page still fits at its narrower width.
 - **9.2 Draft from description:** "Draft with AI" beside New item on Menu items → a dialog (a sheet on phones) with a text box and an example → the item editor at `/admin/products/new` (D90) filled in, with a banner "Drafted by AI: check everything before saving" and the `notFound` list with links to create them.
 - **9.3 Improve:** an "Improve" button beside Name and Description in the item editor → a popover (a sheet on phones) with the suggestions, each with Use; Use replaces the field's text (still unsaved; the unsaved-changes guard applies as usual).
 
