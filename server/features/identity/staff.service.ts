@@ -1,7 +1,7 @@
 import { hashPassword } from 'better-auth/crypto'
 import type { Page } from '#shared/contracts/common'
 import { totalPages } from '#shared/contracts/common'
-import type { BranchRoleName, CreatedStaff, CreateStaffInput, DisableStaffInput, StaffListQuery, StaffMember, UpdateStaffAccessInput } from '#shared/contracts/staff'
+import type { BranchRoleName, CreatedStaff, CreateStaffInput, DisableStaffInput, ResetStaffPasswordInput, StaffListQuery, StaffMember, StaffPasswordReset, UpdateStaffAccessInput } from '#shared/contracts/staff'
 import type { Db, Statement } from '../../utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '../../utils/batch'
 import { newId } from '../../utils/ids'
@@ -176,6 +176,41 @@ export async function disableStaff(db: Db, actor: Actor, userId: string, input: 
     staffAudit(db, actor, 'staff.disable', userId, {}),
   ]
   await runAccessBatch(db, statements, userId, input.version)
+}
+
+/**
+ * Gives a staff member a new temporary password (step 10.1, D115), for one who forgot theirs: staff
+ * can't reset it by email until the cafe has a sending domain (Q4), and an admin hands it over in
+ * person anyway. They must choose their own at the next sign-in, and every session they had ends,
+ * so the old password (or whoever knew it) is out at once. Only for staff (a customer resets by
+ * email), never one's own (Change password), and audited without the password.
+ */
+export async function resetStaffPassword(db: Db, actor: Actor, userId: string, input: ResetStaffPasswordInput): Promise<StaffPasswordReset> {
+  if (actor.userId === userId) throw ownAccess('reset password')
+  const target = await repo.findAccount(db, userId)
+  if (!target) throw staffNotFound()
+  const memberships = await repo.membershipsOf(db, [userId])
+  if (!isPlatformAdmin(target.role) && !memberships.length) throw staffNotFound()
+  if (target.updatedAt.getTime() !== input.version) throw staffChanged()
+
+  const temporaryPassword = generateTemporaryPassword()
+  const now = new Date()
+  const statements: Statement[] = [
+    repo.requirePasswordChangeStatement(db, userId, target.updatedAt, nextVersion(target.updatedAt, now)),
+    requireOneChange(db),
+    repo.setPasswordStatement(db, userId, await hashPassword(temporaryPassword), now, await repo.hasPasswordAccount(db, userId)),
+    repo.deleteSessionsStatement(db, userId),
+    staffAudit(db, actor, 'staff.password.reset', userId, {}),
+  ]
+  try {
+    await db.batch(statements as [Statement, ...Statement[]])
+  }
+  catch (error) {
+    // Someone changed the account between the read and the write.
+    if (isStaleWrite(error)) throw staffChanged()
+    throw error
+  }
+  return { staff: await loadStaffMember(db, userId), temporaryPassword }
 }
 
 /**

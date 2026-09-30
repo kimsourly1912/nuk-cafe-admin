@@ -10,6 +10,7 @@ import { useAuth } from '~/features/auth'
 import { useBranchOptions, useStaffList, useStaffMutations } from '../composables/useStaff'
 import { describeAccess } from '../schemas/staff-form'
 import StaffFormModal from './StaffFormModal.vue'
+import TemporaryPasswordModal from './TemporaryPasswordModal.vue'
 
 const { user } = useAuth()
 const { isCompact } = useLayoutContext()
@@ -22,7 +23,7 @@ const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginate
 })
 
 const { data, loading, refreshing, error, refresh } = useStaffList(query)
-const { disable, isBusy } = useStaffMutations()
+const { disable, resetPassword, isBusy } = useStaffMutations()
 const branches = useBranchOptions()
 
 // Disabled people disappear at once, before the refreshed list arrives.
@@ -57,6 +58,13 @@ function rowActions(member: StaffMember): DropdownMenuItem[] {
   return [
     { label: 'Edit access', icon: 'i-lucide-shield', onSelect: () => openForm(member) },
     {
+      label: 'Reset password',
+      icon: 'i-lucide-key-round',
+      disabled: isSelf(member),
+      description: isSelf(member) ? 'Use Change password in your account menu' : undefined,
+      onSelect: () => reset(member),
+    },
+    {
       label: 'Disable',
       icon: 'i-lucide-user-x',
       color: 'error',
@@ -65,6 +73,13 @@ function rowActions(member: StaffMember): DropdownMenuItem[] {
       onSelect: () => disable.execute(member),
     },
   ]
+}
+
+const passwordModal = useOverlay().create(TemporaryPasswordModal)
+async function reset(member: StaffMember) {
+  const result = await resetPassword.execute(member)
+  // Shown once: it's the only time the password can be read.
+  if (result.ok) void passwordModal.open({ name: result.data.staff.name, email: result.data.staff.email, password: result.data.temporaryPassword, reset: true })
 }
 
 const formModal = useOverlay().create(StaffFormModal)

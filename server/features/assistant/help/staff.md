@@ -32,9 +32,16 @@ Click their name, change **Admin** or their branches and roles, then **Save**. T
 
 From their row's menu choose **Disable**. They lose admin and branch access and are signed out everywhere. Their account keeps working as a customer account, and you can give them access again later with **Add staff member** and the same email.
 
+## Reset a forgotten password
+
+From their row's menu choose **Reset password**, then confirm. A **Temporary password** appears: **Copy** it and give it to the person in person or through a private channel. It won't be shown again. Their old password stops working at once and they are signed out everywhere (the admin portal and the counter app). At their next sign-in they must choose a new password.
+
+You can't reset your own password here: use **Change password** in your account menu.
+
 ## Common problems
 
 - **"The cafe needs at least one admin. Make someone else an admin first."**: you can't remove or disable the last admin.
 - **"You can't remove your own admin role."**: another admin must do it.
 - **"This person already has staff access. Edit them instead."**: find them in the list and change their access.
-- **A staff member forgot their password**: admins can't reset it from this page yet. The same account works on the customer website, where **Forgot password** on the sign-in page emails a reset link; the new password then works in the counter app and the admin portal too.
+- **A staff member forgot their password**: use **Reset password** from their row's menu (above).
+- **"You can't reset your own password here."**: use **Change password** in your account menu.

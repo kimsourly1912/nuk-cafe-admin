@@ -165,6 +165,46 @@ describe('disabling', () => {
   })
 })
 
+describe('resetting a password (step 10.1, D115)', () => {
+  it('asks first, sends the version, then shows the new temporary password once', async () => {
+    let sent: unknown
+    const { page, api } = await open(undefined, {
+      'POST /admin/staff/{id}/reset-password': ({ body }) => {
+        sent = body
+        return { staff: { ...SOPHEA, mustChangePassword: true, version: SOPHEA.version + 1 }, temporaryPassword: 'Rt4k-9pQx-M2wz-7hNc' }
+      },
+    })
+    await (await rowAction(page, 'Sophea', 'Reset password')).click()
+    const confirm = page.getByRole('alertdialog').or(page.getByRole('dialog'))
+    await confirm.getByText('Their current password stops working', { exact: false }).waitFor()
+    await confirm.getByRole('button', { name: 'Reset password' }).click()
+
+    const shown = page.getByRole('dialog', { name: 'Temporary password' })
+    await shown.getByTestId('temporary-password').filter({ hasText: 'Rt4k-9pQx-M2wz-7hNc' }).waitFor()
+    await shown.getByText('Their old password no longer works', { exact: false }).waitFor()
+    expect(sent).toEqual({ version: SOPHEA.version })
+    expect(writes(api.calls)).toEqual(['POST /admin/staff/staff-2/reset-password'])
+    await shown.getByRole('button', { name: 'Done' }).click()
+    await shown.waitFor({ state: 'detached' })
+  })
+
+  it('cancelling the question sends nothing', async () => {
+    const { page, api } = await open()
+    await (await rowAction(page, 'Sophea', 'Reset password')).click()
+    const confirm = page.getByRole('alertdialog').or(page.getByRole('dialog'))
+    await confirm.getByRole('button', { name: 'Cancel' }).click()
+    await confirm.waitFor({ state: 'detached' })
+    expect(writes(api.calls)).toEqual([])
+  })
+
+  it('won\'t reset your own (Change password is in your account menu)', async () => {
+    const { page } = await open()
+    const item = await rowAction(page, 'alice', 'Reset password')
+    await expect.poll(() => item.getAttribute('data-disabled')).not.toBeNull()
+    await item.getByText('Use Change password in your account menu').waitFor()
+  })
+})
+
 describe('staff on a phone', () => {
   const MANY = Array.from({ length: 45 }, (_, i) => staffOf(`staff-${i + 10}`, `Person ${i + 1}`))
 

@@ -41,7 +41,7 @@ flowchart LR
 - One backend serves customer, staff, and manager experiences. The customer-facing experience starts as a website; native mobile authentication and UI are future work.
 - Customers can order for pickup or dine-in at one branch, with USD prices and pay-at-counter checkout. Delivery and online payment are outside the confirmed launch scope.
 - Customers sign in with email and password; an account is required to order. A dine-in customer scans the table's QR code; the server resolves its opaque token to the active table. Preparation starts only after staff record counter payment.
-- Points and vouchers are part of launch, so the first production order flow is not complete until earn/spend and redemption rules are implemented and tested. Completion earns 1 point per USD; points buy vouchers, and staff can issue vouchers without a purchase. The earning base, exchange and voucher rules were decided on 2026-09-27 (D45).
+- **Deferred (owner, 2026-09-30, D115): points and vouchers are out of the launch scope.** The rules in this document stay as the design for when they come back (phase 7). Originally: points and vouchers are part of launch, so the first production order flow is not complete until earn/spend and redemption rules are implemented and tested. Completion earns 1 point per USD; points buy vouchers, and staff can issue vouchers without a purchase. The earning base, exchange and voucher rules were decided on 2026-09-27 (D45).
 
 ## 2. Capability map
 

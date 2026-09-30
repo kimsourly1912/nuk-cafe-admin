@@ -11,7 +11,7 @@ import { createTestAuth, signIn } from '../../../tests/support/auth'
 import type { TestAuth } from '../../../tests/support/auth'
 import { createTestDb } from '../../../tests/support/db'
 import { expectApiError, failure } from '../../../tests/support/failure'
-import { createStaff, disableStaff, listStaff, seedFirstAdmin, updateStaffAccess } from '../staff.service'
+import { createStaff, disableStaff, listStaff, resetStaffPassword, seedFirstAdmin, updateStaffAccess } from '../staff.service'
 import type { Actor } from '../identity.types'
 
 let db: Db
@@ -201,6 +201,72 @@ describe('disable', () => {
 
   it('answers 404 for an unknown account', async () => {
     expect(await failure(disableStaff(db, actor, newId(), { version: 1 }))).toEqual({ status: 404, code: 'NOT_FOUND' })
+  })
+})
+
+describe('reset password (step 10.1, D115)', () => {
+  it('gives a new temporary password: the old one stops working, every session ends, and they must change it', async () => {
+    const created = await createStaff(db, actor, staffInput())
+    const headers = await signIn(auth, 'sophea@example.com', created.temporaryPassword!)
+
+    const reset = await resetStaffPassword(db, actor, created.staff.id, { version: created.staff.version })
+
+    expect(reset.temporaryPassword).toMatch(/^[A-Za-z2-9]{4}(-[A-Za-z2-9]{4}){3}$/)
+    expect(reset.temporaryPassword).not.toBe(created.temporaryPassword)
+    expect(reset.staff).toMatchObject({ id: created.staff.id, mustChangePassword: true })
+    expect(reset.staff.version).toBeGreaterThan(created.staff.version)
+    expect(await auth.api.getSession({ headers })).toBeNull()
+    await expect(signIn(auth, 'sophea@example.com', created.temporaryPassword!)).rejects.toThrow()
+    const fresh = await signIn(auth, 'sophea@example.com', reset.temporaryPassword)
+    expect((await auth.api.getSession({ headers: fresh }))?.user).toMatchObject({ mustChangePassword: true })
+  })
+
+  it('works for a person who had changed their password (must change again), and for another admin', async () => {
+    const created = await createStaff(db, actor, staffInput({ admin: true, memberships: [] }))
+    await db.update(user).set({ mustChangePassword: false }).where(eq(user.id, created.staff.id))
+    const [current] = (await listStaff(db, { ...PAGE, search: 'sophea' })).items
+    const reset = await resetStaffPassword(db, actor, created.staff.id, { version: current!.version })
+    expect(reset.staff).toMatchObject({ admin: true, mustChangePassword: true })
+  })
+
+  it('audits who reset whose password, never the password', async () => {
+    const created = await createStaff(db, actor, staffInput())
+    const reset = await resetStaffPassword(db, actor, created.staff.id, { version: created.staff.version })
+    const rows = await db.select().from(auditEvents).where(eq(auditEvents.action, 'staff.password.reset'))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ actorId: actor.userId, targetType: 'user', targetId: created.staff.id })
+    expect(JSON.stringify(rows[0])).not.toContain(reset.temporaryPassword)
+  })
+
+  it('refuses one\'s own password, a stale version, a customer and an unknown account', async () => {
+    const owner = (await listStaff(db, { ...PAGE, search: 'owner' })).items[0]!
+    await expectApiError(() => resetStaffPassword(db, actor, actor.userId, { version: owner.version }), 409, 'OWN_ACCESS')
+
+    const created = await createStaff(db, actor, staffInput())
+    await expectApiError(() => resetStaffPassword(db, actor, created.staff.id, { version: created.staff.version - 1 }), 409, 'VERSION_CONFLICT')
+    // Still the first password: nothing changed.
+    await expect(signIn(auth, 'sophea@example.com', created.temporaryPassword!)).resolves.toBeDefined()
+
+    // A customer resets by email; a disabled staff member is a customer again.
+    const customerId = await signUpCustomer('guest@example.com')
+    expect(await failure(resetStaffPassword(db, actor, customerId, { version: 1 }))).toEqual({ status: 404, code: 'NOT_FOUND' })
+    await disableStaff(db, actor, created.staff.id, { version: created.staff.version })
+    expect(await failure(resetStaffPassword(db, actor, created.staff.id, { version: created.staff.version }))).toEqual({ status: 404, code: 'NOT_FOUND' })
+    expect(await failure(resetStaffPassword(db, actor, newId(), { version: 1 }))).toEqual({ status: 404, code: 'NOT_FOUND' })
+  })
+
+  it('two admins resetting the same person at once: one wins, and only its password works', async () => {
+    const created = await createStaff(db, actor, staffInput())
+    const second = await createStaff(db, actor, staffInput({ name: 'Dara', email: 'dara@example.com', admin: true, memberships: [] }))
+    const secondActor: Actor = { userId: second.staff.id, role: 'admin' }
+    const input = { version: created.staff.version }
+    const results = await Promise.allSettled([resetStaffPassword(db, actor, created.staff.id, input), resetStaffPassword(db, secondActor, created.staff.id, input)])
+
+    const won = results.filter(r => r.status === 'fulfilled')
+    expect(won).toHaveLength(1)
+    expect((results.find(r => r.status === 'rejected') as PromiseRejectedResult).reason).toMatchObject({ statusCode: 409, data: { code: 'VERSION_CONFLICT' } })
+    // The admin who saw a password can hand over one that works.
+    await expect(signIn(auth, 'sophea@example.com', won[0]!.value.temporaryPassword)).resolves.toBeDefined()
   })
 })
 
