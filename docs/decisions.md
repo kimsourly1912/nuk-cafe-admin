@@ -1072,4 +1072,4 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
     - an account removed takes its usage with it.
   - `identity.permissions.test.ts`: `assistant: ['use']` for admins only.
   - The staging Worker builds with the packages: 6.66 MB, 1.73 MB gzipped, within Cloudflare's limits.
-  - **Not verified yet:** a real provider's streamed answer through the staging Worker. It needs the key (Q43): set the `NUXT_AI_*` values on the staging Worker, then `POST /api/admin/assistant/ping` signed in as an admin.
+  - **Verified on staging (2026-09-30):** the owner's `POST /api/admin/assistant/ping` as an admin streamed OpenAI `gpt-5.4-mini`'s answer through the Worker. The `assistant_usage` rows show `ok` with 20 input and 12 output tokens, written after the stream through `waitUntil`. The earlier attempts with `google` and the same OpenAI key were refused by Google and recorded as `error` with no tokens, counting against the limit as designed.
