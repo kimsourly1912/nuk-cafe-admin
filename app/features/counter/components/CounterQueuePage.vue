@@ -71,6 +71,19 @@ function afterCancel() {
 
 const reload = () => query.refresh()
 
+// `?order=<id>`: Telegram's "Open order" (D113, R2). Opens it once the queue has loaded, then leaves
+// the URL, so a reload doesn't open it again. A finished order isn't in the queue: said so.
+const router = useRouter()
+const notify = useNotify()
+watch(() => [route.query.order, queue.value] as const, ([orderId, loaded]) => {
+  if (typeof orderId !== 'string' || !orderId || !loaded) return
+  const order = loaded.orders.find(o => o.id === orderId)
+  if (order) openOrder(order)
+  else notify.warning('This order isn\'t in the queue anymore', 'It was completed or cancelled.')
+  const { order: _, ...rest } = route.query
+  router.replace({ query: rest })
+}, { immediate: true })
+
 useSeoMeta({ robots: 'noindex' })
 </script>
 

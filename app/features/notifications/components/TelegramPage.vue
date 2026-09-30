@@ -4,11 +4,13 @@
  * messages go to. Connect your private chat or a staff group with a one-time link; each chat shows
  * its state (Connected, or Blocked when the bot was removed or blocked there) and when something
  * was last sent, with Send test and Disconnect (asked first), or Reconnect. Every admin sees every
- * chat. Which messages go where comes with the alerts (8.1d).
+ * chat. Below: which chat gets which notification, and the delivery history (8.1d, D113).
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { DestinationKind, TelegramDestination } from '#shared/contracts/notifications'
 import { useTelegramMutations, useTelegramOverview } from '../composables/useTelegram'
+import DeliveryHistoryCard from './DeliveryHistoryCard.vue'
+import NotificationRulesCard from './NotificationRulesCard.vue'
 import TelegramConnectModal from './TelegramConnectModal.vue'
 
 const { data, error, loading, refresh } = useTelegramOverview()
@@ -232,6 +234,14 @@ function actions(destination: TelegramDestination): DropdownMenuItem[] {
               </li>
             </ul>
           </UCard>
+
+          <template v-if="enabled && !loading">
+            <NotificationRulesCard
+              :destinations="destinations"
+              :rules="data?.rules ?? []"
+            />
+            <DeliveryHistoryCard />
+          </template>
         </template>
       </div>
     </template>

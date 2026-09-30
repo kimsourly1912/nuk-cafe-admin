@@ -11,7 +11,7 @@ import { parseInput } from '../../utils/validation'
 import { orderNotFound } from './orders.errors'
 import * as orderRepo from './orders.repository'
 import { csvFilename, itemsCsv, ordersCsv, summaryCsv } from './reports.csv'
-import { itemsMessage, plainText, summaryMessage } from './reports.message'
+import { itemsMessage, periodText, plainText, summaryMessage } from './reports.message'
 import * as repo from './reports.repository'
 import { averageMinor, bestSellers, businessDateAt, categoriesOf, firstName, itemSalesRows, itemSalesTable, paymentState, periodInstants, previousPeriod, salesTrend } from './reports.rules'
 
@@ -225,6 +225,8 @@ export async function orderHistoryExport(db: Db, query: OrderHistoryQuery, now =
 // --- Telegram (8.1c, D112): a report as a message, with its CSV when asked ---
 
 export interface ReportMessage {
+  /** "Summary · Tue 30 Sep 2026", for the delivery history. */
+  subject: string
   /** Telegram's HTML. */
   html: string
   /** The same message as plain text, for the portal's preview. */
@@ -238,12 +240,13 @@ export interface ReportMessage {
  * The message for Send to Telegram, from the page's own query (checked by the report's schema
  * here, like the page's request): the Summary, or Sales by item in the page's filters and order.
  */
-export async function reportMessage(db: Db, input: ReportMessageInput, options: { attachCsv: boolean }, now = new Date()): Promise<ReportMessage> {
+export async function reportMessage(db: Db, input: ReportMessageInput, options: { attachCsv: boolean, title?: string }, now = new Date()): Promise<ReportMessage> {
   if (input.kind === 'summary') {
     const query = parseInput(reportPeriodQuerySchema, input.query)
     const summary = await reportSummary(db, query, now)
-    const html = summaryMessage(summary)
+    const html = summaryMessage(summary, options.title)
     return {
+      subject: `${options.title ?? 'Summary'} · ${periodText(query)}`,
       html,
       text: plainText(html),
       csv: options.attachCsv ? { filename: csvFilename(summary.branch.name, query, 'summary'), csv: summaryCsv(summary) } : null,
@@ -258,6 +261,7 @@ export async function reportMessage(db: Db, input: ReportMessageInput, options: 
   const categoryName = query.categoryId ? categoriesOf(all).find(c => c.id === query.categoryId)?.name ?? null : null
   const html = itemsMessage(reportContext(ctx), rows, query, categoryName, options.attachCsv)
   return {
+    subject: `Sales by item · ${periodText(query)}`,
     html,
     text: plainText(html),
     csv: options.attachCsv ? { filename: csvFilename(ctx.branch.name, query, 'items'), csv: itemsCsv(rows) } : null,

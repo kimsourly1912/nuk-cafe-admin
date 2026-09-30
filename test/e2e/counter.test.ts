@@ -152,6 +152,23 @@ describe('the counter', () => {
     await panel(page).getByText(/by Sophea · KHQR \$2\.25/).waitFor()
   })
 
+  it('`?order=` (Telegram\'s Open order, D113) opens that order, then leaves the URL', async () => {
+    const order = await placeOrder(seed.customers.counterShopperA)
+    try {
+      const { page } = await cashierAtCounter()
+      await page.goto(url(`/counter/${seed.openBranchId}?order=${order.id}`), { waitUntil: 'hydration' })
+      await panel(page).getByText('1 × Banana Bread').waitFor()
+      await expect.poll(() => new URL(page.url()).search).toBe('')
+      // An order no longer in the queue says so.
+      await page.goto(url(`/counter/${seed.openBranchId}?order=00000000-0000-7000-8000-000000000000`), { waitUntil: 'hydration' })
+      await toast(page, 'This order isn\'t in the queue anymore').waitFor()
+    }
+    finally {
+      // Not left unpaid: the customer may have two at most.
+      await sql('update orders set status = \'cancelled\' where id = ?', [order.id])
+    }
+  })
+
   it('on a phone: one list at a time, as tabs with counts', async () => {
     const order = await placeOrder(seed.customers.counterShopperB)
     const { page } = await cashierAtCounter(390)
