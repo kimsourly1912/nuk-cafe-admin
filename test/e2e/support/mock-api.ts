@@ -133,6 +133,10 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /admin/menu/availability-rules': () => [],
   'GET /admin/menu/option-sets': () => [],
   'GET /admin/menu/modifier-groups': () => [],
+  // The help assistant is off unless a test turns it on (no AI key: its routes answer 404, D109).
+  'GET /admin/assistant': () => {
+    throw failures.notFound('This page was not found.')
+  },
 }
 
 /** Throw this from a handler to answer with an error in the API's format. */

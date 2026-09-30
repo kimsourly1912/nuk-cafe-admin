@@ -1073,3 +1073,52 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
   - `identity.permissions.test.ts`: `assistant: ['use']` for admins only.
   - The staging Worker builds with the packages: 6.66 MB, 1.73 MB gzipped, within Cloudflare's limits.
   - **Verified on staging (2026-09-30):** the owner's `POST /api/admin/assistant/ping` as an admin streamed OpenAI `gpt-5.4-mini`'s answer through the Worker. The `assistant_usage` rows show `ok` with 20 input and 12 output tokens, written after the stream through `waitUntil`. The earlier attempts with `google` and the same OpenAI key were refused by Google and recorded as `error` with no tokens, counting against the limit as designed.
+
+### D109: The help assistant (step 9.1), 2026-09-30
+
+- **Context:** the first feature on the groundwork (D108): admins ask how to do something in the portal and get short steps with buttons to the right pages. The owner skipped the mockup round for it: Nuxt UI's own chat components, as they are.
+- **Decision:**
+  - **The help guide** is Markdown in the code, one file per screen (`server/features/assistant/help/*.md`): general use, how the menu fits together, Menu items, Categories, Options, Add-ons, Availability, Staff, Branch, Payments, the counter app and how orders work, Sample data. Each holds the screen's purpose, its tasks as numbered steps with the exact labels, and its errors in plain words. It was drafted from the code (labels, limits and server messages checked against it) for the owner to review. **A change to a screen updates its page in the same pull request.**
+  - **What the model gets**, most stable first, so the provider's prompt cache reuses the start (Anthropic's cache point marked on it; OpenAI and Gemini cache long starts by themselves):
+    1. the rules: answer only from the guide, say "I don't know" rather than guess, exact labels in bold, numbered steps, the question's language, never claim to have done something, plain text;
+    2. the page list;
+    3. the whole guide (Sample data only where it exists, D94);
+    4. then the page the admin is on;
+    5. then the conversation.
+    
+    The rules and the page are the SDK's `instructions` (AI SDK 7 refuses system messages among the messages).
+  - **Links:** a `link_to_page` tool whose input is a key of the page list (`pages.ts`: the admin's fixed routes and the counter app), checked by a validator on the tool. An invented key becomes a tool error, never a button. At most 3 steps (text, then links).
+  - **The conversation** lives in the browser tab and is sent whole, its latest 20 messages, each checked with the SDK's `safeValidateUIMessages` (message shapes, and the link tool's inputs and outputs, so a forged link to another site is refused). It must end with a question of at most 2,000 characters, and no system messages are accepted. It's checked **before** a daily slot is taken; nothing is stored (A4).
+  - **`GET /api/admin/assistant`** (the limit and today's use, 404 when off) tells the app whether to show the assistant. This replaces the plan's public `assistant.enabled` flag, which would have been a second setting to keep in step with the key.
+  - **The panel:** `USidebar` on the right with `collapsible="offcanvas"`, 26rem wide, beside the page from `lg` (the page narrows) and a slide-over below, full width on phones.
+    - Contents: suggested questions per page, `UChatMessages`, `UChatPrompt` with `UChatPromptSubmit` (Stop while answering), Clear chat, an error row with Try again (not after the daily limit), and "AI can make mistakes: check before you act", with the questions left today once 10 or fewer remain.
+    - The panel is mounted with the shell, closed. Mounted at the moment it opened, `USidebar`'s own phone handling closed it again.
+    - Closed, it's `inert` and renders no contents. Otherwise its question box, which focuses itself, took the focus from every page: the full e2e suite caught it, with typing and single-key shortcuts going into the hidden panel.
+    - It's opened by an **Assistant** button in the sidebar footer (on phones, inside the menu) and `Ctrl`/`⌘`+`/`, which also works while typing. **Not the navbar**, as the plan said: each page owns its navbar, and the button would have had to be added to every page.
+  - **Answers** are shown as text: one paragraph per line, `**bold**` as bold, everything else as written (Vue text nodes, never HTML), with no Markdown library.
+  - **The browser's request** goes through `apiFetch` (`responseType: 'stream'`). A lost session, a required password change and an old identity's answer are handled like any request. An error answer's JSON is read, so the limit's message shows. A session change clears the chat.
+  - **Build pitfall found:** Nitro imports `.md` as text, and a chunk holding such text skips Nitro's `import.meta` rewrite. With the guide bundled into Nitro's main chunk, the server looked for its static files in `server/chunks/public` and every page lost its scripts and styles. The guide is now imported dynamically (its own chunk). The server tests load `.md` the same way through a small Vite plugin (`vitest.config.ts`).
+  - **The quality check** is `server/features/assistant/eval/help.eval.ts`: 25 questions (5 in Khmer, one outside the guide, one prompt-injection) with the facts a good answer names. It runs only on request (`ASSISTANT_EVAL=1`, with the provider settings) and never in CI.
+- **Alternatives:**
+  - Markdown links written by the model, checked in the browser (a model can write any address; the tool's key can't be anything else).
+  - Rendering the answer with a Markdown library (`@nuxtjs/mdc`: a module for two formats the prompt allows).
+  - Keeping the guide in the database (D107: it changes with the code).
+- **Verified:**
+  - server `assistant.service.test.ts`, 23 tests, with `MockLanguageModelV4`:
+    - the prompt's parts and order, the same start on every page and question, the cache mark;
+    - Sample data in the guide and the page list only where it's on;
+    - a link becomes a button and the answer continues; an invented page and a Sample data link where it's off are refused. Both tests fail with the tool's validator removed;
+    - the earlier conversation is sent with its links;
+    - bad conversations are refused before a slot is taken: an answer last, an empty or too long question, a system message, broken parts, a forged link;
+    - provider failure, the limit, and the status per admin;
+    - the page list and every `/admin` or `/counter` path in the guide exist as routes; every help file has a title.
+  - unit `chat.test.ts` (5): the latest 20, links once each and only finished ones, text around links, bold, suggestions per page.
+  - e2e `assistant.test.ts` (6), the chat route mocked with the SDK's event stream:
+    - hidden when off, the shortcut included;
+    - docked beside the page, a suggestion answered with bold labels, a link that navigates with the panel and conversation kept;
+    - follow-ups carry the conversation, and Clear chat;
+    - a failed answer and Try again;
+    - the daily limit without Try again;
+    - on a phone, opened from the menu, a link closes the sheet and opens the page.
+  - Screenshots 1440 and 390.
+  - **Not verified yet:** the quality check against the real model (no key in the build environment; the owner runs it, or it's checked on staging after the merge), and Stop in the browser (a mocked answer arrives whole).

@@ -4,4 +4,4 @@ export { AI_UNAVAILABLE_MESSAGE, AssistantErrorCodes, assistantOff } from './ass
 export { languageModel } from './assistant.model'
 export { assistantSettingsFrom } from './assistant.settings'
 export type { AssistantSettings } from './assistant.settings'
-export { finishUsage, pingAssistant, purgeAssistantUsage, startUsage, usageResult } from './assistant.service'
+export { assistantStatus, chatWithAssistant, finishUsage, purgeAssistantUsage, startUsage, usageResult } from './assistant.service'

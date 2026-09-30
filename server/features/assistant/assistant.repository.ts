@@ -1,4 +1,4 @@
-import { and, eq, lt, sql } from 'drizzle-orm'
+import { and, count, eq, lt, sql } from 'drizzle-orm'
 import type { AiProvider, AssistantFeature, AssistantOutcome } from '#shared/contracts/assistant'
 import type { Db, Statement } from '../../utils/batch'
 import { requireAtMost } from '../../utils/batch'
@@ -38,6 +38,12 @@ export interface UsageResult {
 /** Fills in how a pending request ended. */
 export async function finishUsage(db: Db, id: string, result: UsageResult): Promise<void> {
   await db.update(assistantUsage).set(result).where(and(eq(assistantUsage.id, id), eq(assistantUsage.outcome, 'pending')))
+}
+
+/** The user's requests on a local day (every outcome counts against the limit). */
+export async function countUsage(db: Db, userId: string, day: string): Promise<number> {
+  const [row] = await db.select({ count: count() }).from(assistantUsage).where(and(eq(assistantUsage.userId, userId), eq(assistantUsage.day, day)))
+  return row?.count ?? 0
 }
 
 /** Removes rows from before `cutoff`; returns how many. */
