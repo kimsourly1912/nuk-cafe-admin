@@ -280,3 +280,17 @@ Source: `app/composables/useShortcuts.ts` (`usePageShortcuts`, `useSubmitShortcu
 ## Icons
 
 Icons are bundled into the client build; nothing is fetched from `api.iconify.design` at runtime (decision D18). Write icon names as **literal strings** (`'i-lucide-tags'`, or a ternary of two literals). A name built at runtime (`` `i-lucide-${x}` ``) isn't found by the build scan and renders blank.
+
+## Printing
+
+The reports' **Print** (D111) uses the browser's print dialog; any admin page prints the same way.
+
+| Case | Handled by |
+|---|---|
+| The sidebar, the assistant and a page's toolbars would print | `print:hidden` on each (the layout, `ReportHeader`) |
+| The dashboard is a fixed, scrolling frame: only the first screen would print | `print:static print:block print:overflow-visible` on `UDashboardGroup`, `print:overflow-visible` on the report panels' body |
+| Printing in dark mode would print light text on white | The color tokens restated for print in `tailwind.css` (black on white, status colors in gray) |
+| A card cut between two sheets | `break-inside-avoid` on the report cards |
+| When and by whom it was printed | `ReportPrintHeader`, the time read on `beforeprint` |
+
+Covered by `test/e2e/reports.test.ts` ("prints only the report"), which emulates print media.

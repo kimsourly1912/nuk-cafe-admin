@@ -29,6 +29,13 @@ const validPeriod = <T extends { from: string, to: string }>() => [
   v.check<T, string>(input => daysBetween(input.from, input.to) < REPORT_MAX_DAYS, `A report covers at most ${REPORT_MAX_DAYS} days`),
 ] as const
 
+/** A report's CSV file name: `riverside-2026-09-30-summary.csv`, `riverside-2026-09-01-to-2026-09-30-items.csv`. */
+export function csvFilename(branchName: string, period: { from: string, to: string }, kind: 'summary' | 'items' | 'orders'): string {
+  const branch = branchName.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'branch'
+  const dates = period.from === period.to ? period.from : `${period.from}-to-${period.to}`
+  return `${branch}-${dates}-${kind}.csv`
+}
+
 /** Whole days from one business date to another (both `YYYY-MM-DD`). */
 export function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
@@ -42,6 +49,15 @@ const optionalText = (max: number) => v.optional(v.pipe(v.string(), v.trim(), v.
 const reportPeriodEntries = v.object(periodEntries)
 export const reportPeriodQuerySchema = v.pipe(reportPeriodEntries, ...validPeriod<v.InferOutput<typeof reportPeriodEntries>>())
 export type ReportPeriodQuery = v.InferOutput<typeof reportPeriodQuerySchema>
+
+/** `GET /api/admin/reports/branches`: the branches a report can cover, with today's business date there. */
+export interface ReportBranch {
+  id: string
+  name: string
+  timeZone: string
+  /** The business date now (04:00 to 04:00), for the date presets. */
+  today: string
+}
 
 export interface ReportContext {
   branch: { id: string, name: string, timeZone: string }

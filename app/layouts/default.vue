@@ -26,12 +26,15 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
 </script>
 
 <template>
-  <UDashboardGroup unit="rem">
+  <UDashboardGroup
+    unit="rem"
+    class="print:static print:block print:overflow-visible"
+  >
     <UDashboardSidebar
       v-model:open="open"
       collapsible
       resizable
-      class="bg-elevated/25"
+      class="bg-elevated/25 print:hidden"
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
       <template #header="{ collapsed }">
@@ -110,6 +113,6 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
 
     <!-- Mounted with the shell, closed: only the Ask button or Ctrl/⌘+/ opens it, where it's on.
          Mounting it at the moment it opens would let USidebar close it again on phones. -->
-    <AssistantPanel />
+    <AssistantPanel class="print:hidden" />
   </UDashboardGroup>
 </template>

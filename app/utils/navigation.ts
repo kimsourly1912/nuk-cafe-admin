@@ -6,6 +6,7 @@ import { exchangeRatesNavigation } from '~/features/exchange-rates'
 import { modifierGroupsNavigation } from '~/features/modifier-groups'
 import { optionSetsNavigation } from '~/features/option-sets'
 import { productsNavigation } from '~/features/products'
+import { reportsNavigation } from '~/features/reports'
 import { sampleDataNavigation } from '~/features/sample-data'
 import { staffNavigation } from '~/features/staff'
 
@@ -26,6 +27,10 @@ export function navigationItems(options: { sampleData: boolean }): NavigationMen
       optionSetsNavigation,
       modifierGroupsNavigation,
       availabilityRulesNavigation,
+    ],
+    [
+      { label: 'Reports', type: 'label' },
+      ...reportsNavigation,
     ],
     [
       { label: 'Admin', type: 'label' },

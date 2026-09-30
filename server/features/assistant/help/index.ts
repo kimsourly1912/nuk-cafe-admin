@@ -8,6 +8,7 @@ import menuItems from './menu-items.md'
 import menu from './menu.md'
 import options from './options.md'
 import payments from './payments.md'
+import reports from './reports.md'
 import sampleData from './sample-data.md'
 import staff from './staff.md'
 
@@ -15,7 +16,7 @@ import staff from './staff.md'
  * The staff help guide (step 9.1, D109): what the assistant knows, one Markdown file per screen,
  * bundled into the server (Nitro imports `.md` as text). It describes the app, so a change to a
  * screen updates its page here in the same pull request. Order: general first, then the menu, the
- * admin pages and the counter.
+ * admin pages, the reports and the counter.
  */
 export const HELP_PAGES = [
   { name: 'general', text: general },
@@ -28,6 +29,7 @@ export const HELP_PAGES = [
   { name: 'staff', text: staff },
   { name: 'branch', text: branch },
   { name: 'payments', text: payments },
+  { name: 'reports', text: reports },
   { name: 'counter', text: counter },
   { name: 'sample-data', text: sampleData },
 ] as const

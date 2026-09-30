@@ -1,11 +1,12 @@
 # Using the admin portal
 
-The admin portal is where admins set up NUK Cafe: the menu, staff, the branch and payments. Customers order on the cafe's website; staff take payment and prepare orders in the counter app.
+The admin portal is where admins set up NUK Cafe (the menu, staff, the branch and payments) and see how sales went (reports). Customers order on the cafe's website; staff take payment and prepare orders in the counter app.
 
 ## The sidebar
 
 - **Dashboard**: the start page.
 - **Menu**: Menu items, Categories, Options, Add-ons, Availability.
+- **Reports**: Summary, Sales by item, Order history.
 - **Admin**: Staff, Branch, Payments, and Sample data (test environments only).
 
 On a phone, open the sidebar with the menu button at the top left.
