@@ -1,5 +1,5 @@
 import { modifierVersionSchema } from '#shared/contracts/menu-modifiers'
-import { restoreModifier } from '~~/server/features/menu'
+import { restoreModifier } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['write'] })

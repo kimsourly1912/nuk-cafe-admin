@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Reorder menu items (step 10.3, D117): choose a category, then drag its items (or use the arrows)
+ * Reorder menu items (step 10.3, D118): choose a category, then drag its items (or use the arrows)
  * and Save order. Customers see a category's items in this order (the public menu sorts by it).
  * One request with every item's version: if someone changed an item meanwhile, the server refuses
  * and nothing moves; the dialog says so with Reload (latest order, the moves dropped). Full screen

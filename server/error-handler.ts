@@ -1,5 +1,5 @@
-import { toErrorResponse } from './utils/errors'
-import { log } from './utils/log'
+import { toErrorResponse } from '#server/utils/errors'
+import { log } from '#server/utils/log'
 
 /**
  * Error responses for `/api/**` (docs/server/architecture.md → Errors). Registered first in
@@ -8,7 +8,7 @@ import { log } from './utils/log'
  * - The body is h3's shape with our `data.code` and the request id.
  * - 5xx never carry details to the client; the cause is logged with the request id, and chats that
  *   want server errors on Telegram get an alert naming the route and the request id (step 10.4,
- *   D118). The alert is queued in the background and can't fail the response.
+ *   D119). The alert is queued in the background and can't fail the response.
  */
 /**
  * Imported when needed, so the notifications feature (and grammY) stays out of the handler's chunk
@@ -16,7 +16,7 @@ import { log } from './utils/log'
  */
 async function alertServerError(info: { method: string, path: string, status: number, requestId: string | null }, event: Parameters<typeof log>[3]) {
   try {
-    const { queueServerErrorAlert } = await import('./features/notifications')
+    const { queueServerErrorAlert } = await import('#server/features/notifications')
     await queueServerErrorAlert(useDb(), info)
   }
   catch (failure) {

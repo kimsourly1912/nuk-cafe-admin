@@ -1,5 +1,5 @@
 import { createTelegramLinkSchema } from '#shared/contracts/notifications'
-import { createLink } from '~~/server/features/notifications'
+import { createLink } from '#server/features/notifications'
 
 /** `{ kind }`: a one-time link to connect a private chat or a group (10 minutes, D112). */
 export default defineEventHandler(async (event) => {

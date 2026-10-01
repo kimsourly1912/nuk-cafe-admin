@@ -1,4 +1,4 @@
-import { apiError, ErrorCodes, notFound, versionConflict } from '../../utils/errors'
+import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const AvailabilityErrorCodes = {
   AVAILABILITY_RULE_NAME_TAKEN: 'AVAILABILITY_RULE_NAME_TAKEN',

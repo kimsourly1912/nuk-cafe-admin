@@ -1,5 +1,5 @@
 import { reportPeriodQuerySchema } from '#shared/contracts/reports'
-import { summaryExport } from '~~/server/features/orders'
+import { summaryExport } from '#server/features/orders'
 
 /** `GET /api/admin/reports/summary.csv` (8.1b, D111): the Summary as CSV, every matching row. */
 export default defineEventHandler(async (event) => {

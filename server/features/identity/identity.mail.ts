@@ -1,4 +1,4 @@
-import type { OutboxHandler } from '../platform'
+import type { OutboxHandler } from '#server/features/platform'
 
 /**
  * Account emails (docs/server/operations.md → Email, D51): verification and password reset.

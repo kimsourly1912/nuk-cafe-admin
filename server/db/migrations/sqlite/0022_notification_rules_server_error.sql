@@ -1,4 +1,4 @@
--- Step 10.4 (D118): the "server_error" notification kind. SQLite can't change a CHECK in place, so
+-- Step 10.4 (D119): the "server_error" notification kind. SQLite can't change a CHECK in place, so
 -- the table is rebuilt: copy, drop, rename. Nothing references notification_rules, so no foreign
 -- key pragma is needed (D1 keeps foreign keys on).
 CREATE TABLE `__new_notification_rules` (

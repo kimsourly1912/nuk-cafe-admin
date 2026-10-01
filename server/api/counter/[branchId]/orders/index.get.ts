@@ -1,4 +1,4 @@
-import { listCounterQueue } from '~~/server/features/orders'
+import { listCounterQueue } from '#server/features/orders'
 
 /** The branch's orders still in play (to pay, preparing, ready), the riel rate and the server's clock (D101). */
 export default defineEventHandler(async (event) => {

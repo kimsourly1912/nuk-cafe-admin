@@ -657,7 +657,7 @@ describe('menu item editor URLs (D90, decision 4)', () => {
   })
 })
 
-describe('reordering a category\'s items (step 10.3, D117)', () => {
+describe('reordering a category\'s items (step 10.3, D118)', () => {
   const CHAI = summaryOf(menuItemOf('item-20', 'Chai', { categoryId: 'cat-1' }), { sortOrder: 1, version: 3 })
   const GREEN = summaryOf(menuItemOf('item-21', 'Green tea', { categoryId: 'cat-1' }), { sortOrder: 2, version: 5, status: 'active' })
   const OOLONG = summaryOf(menuItemOf('item-22', 'Oolong', { categoryId: 'cat-1' }), { sortOrder: 3, version: 7, status: 'active' })

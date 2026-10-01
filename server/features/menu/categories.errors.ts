@@ -1,4 +1,4 @@
-import { apiError, ErrorCodes, notFound, versionConflict } from '../../utils/errors'
+import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const CategoryErrorCodes = {
   CATEGORY_HAS_ITEMS: 'CATEGORY_HAS_ITEMS',

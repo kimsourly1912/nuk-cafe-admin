@@ -1,5 +1,5 @@
 import { cancelOrderSchema } from '#shared/contracts/orders'
-import { cancelOrderAtCounter } from '~~/server/features/orders'
+import { cancelOrderAtCounter } from '#server/features/orders'
 
 /**
  * `{ version, reason, note?, returnMethod? }` (header `Idempotency-Key`): cancels an order that

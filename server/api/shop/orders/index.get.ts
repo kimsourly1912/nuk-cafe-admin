@@ -1,5 +1,5 @@
 import { customerOrdersQuerySchema } from '#shared/contracts/orders'
-import { listMyOrders } from '~~/server/features/orders'
+import { listMyOrders } from '#server/features/orders'
 
 /**
  * `GET /api/shop/orders?page=&pageSize=`: the signed-in customer's orders still in play, and a page

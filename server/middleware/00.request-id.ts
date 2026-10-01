@@ -1,4 +1,4 @@
-import { newId } from '../utils/ids'
+import { newId } from '#server/utils/ids'
 
 /**
  * Gives every request an id (Cloudflare's `cf-ray` when present, else a new one), available as

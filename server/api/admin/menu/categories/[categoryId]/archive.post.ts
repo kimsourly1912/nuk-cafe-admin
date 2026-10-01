@@ -1,5 +1,5 @@
 import { categoryStatusChangeSchema } from '#shared/contracts/menu-categories'
-import { archiveCategory } from '~~/server/features/menu'
+import { archiveCategory } from '#server/features/menu'
 
 /** Archives the category and its sub-categories. */
 export default defineEventHandler(async (event) => {

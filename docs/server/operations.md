@@ -101,7 +101,7 @@ Production: manual workflow from a commit that is live on staging: export the da
 
 - **D1 Time Travel**: point-in-time restore for the retention window of the Cloudflare plan (checked on staging: `wrangler d1 time-travel info nuk-cafe-staging` gives the current bookmark). Note the bookmark before every production migration.
 - **R2**: menu images are re-uploadable; no separate backup at launch.
-- **Restore drill** on staging before launch and then yearly: restore to a bookmark, check the app works, write down how long it took. Runbook below (step 10.4, D118).
+- **Restore drill** on staging before launch and then yearly: restore to a bookmark, check the app works, write down how long it took. Runbook below (step 10.4, D119).
 
 ### Restore drill (staging)
 
@@ -182,7 +182,7 @@ Locally Telegram can't reach the dev server, so connecting is tested against sta
 
 - **Workers Logs** for structured logs (see [security.md → Logging](./security.md#logging-and-privacy)); every error log has the request id.
 - `GET /api/public/health` answers 200 when the Worker can reach D1 (no details).
-- **Server error alerts on Telegram** (step 10.4, D118): Admin → Telegram → Notifications → **Server errors**, per chat. Every unexpected failure (a 500 on `/api/**`) queues an alert with the route, the status and the request id (never the error's text: it stays in Workers Logs, found by the request id); at most one per route and chat every 15 minutes; sent by `notifications:deliver` within a minute. Not covered: a failure the Worker can't answer at all (it never reaches the handler), and scheduled tasks (their failures are logged).
+- **Server error alerts on Telegram** (step 10.4, D119): Admin → Telegram → Notifications → **Server errors**, per chat. Every unexpected failure (a 500 on `/api/**`) queues an alert with the route, the status and the request id (never the error's text: it stays in Workers Logs, found by the request id); at most one per route and chat every 15 minutes; sent by `notifications:deliver` within a minute. Not covered: a failure the Worker can't answer at all (it never reaches the handler), and scheduled tasks (their failures are logged).
 - Alerts (Cloudflare notifications) on a spike of 5xx responses and on Worker exceptions: set up with production (8.2).
 - [Open] Q24: who receives alerts, and during which hours.
 

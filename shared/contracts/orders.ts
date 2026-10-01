@@ -388,7 +388,7 @@ export interface CounterQueue {
 }
 
 /**
- * `GET /api/counter/{branchId}/orders/finished` (step 10.2, D116): today's business day's orders
+ * `GET /api/counter/{branchId}/orders/finished` (step 10.2, D117): today's business day's orders
  * that left the queue (completed or cancelled), the most recently finished first. Read only.
  */
 export interface CounterFinishedOrders {

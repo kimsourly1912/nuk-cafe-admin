@@ -17,7 +17,7 @@ const order = (over: Partial<CounterOrder> = {}): CounterOrder => ({
   payment: payment(), ...over,
 })
 
-describe('finished today (step 10.2, D116)', () => {
+describe('finished today (step 10.2, D117)', () => {
   it('a row: when it finished, the payment note, the items', () => {
     expect(finishedAt(order())).toBe(at('11:00'))
     expect(finishedAt(order({ status: 'completed', completedAt: at('10:34'), cancelledAt: null }))).toBe(at('10:34'))

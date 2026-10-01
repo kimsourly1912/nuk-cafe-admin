@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Menu items in a category's order (step 10.3, D117; the Add-ons reorder list's pattern, D75): a
+ * Menu items in a category's order (step 10.3, D118; the Add-ons reorder list's pattern, D75): a
  * drag handle (↑/↓ on it also move), the position, the name and whether it's published, and Move
  * up / Move down. Moves change the dialog's pending order only; it saves with Save order. Focus
  * stays on the moved row, and the new position is announced.

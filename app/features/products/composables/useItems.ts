@@ -158,7 +158,7 @@ export function useItemMutations() {
 }
 
 /**
- * A category's items in their order, for Reorder (step 10.3, D117): drafts and published items,
+ * A category's items in their order, for Reorder (step 10.3, D118): drafts and published items,
  * the ones a reorder must list (archived items keep their place but aren't shown). Every page is
  * read, so a category with more than one page of items is complete.
  */

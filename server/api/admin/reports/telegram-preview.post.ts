@@ -1,6 +1,6 @@
 import type { ReportMessagePreview } from '#shared/contracts/notifications'
 import { reportMessageSchema } from '#shared/contracts/notifications'
-import { reportMessage } from '~~/server/features/orders'
+import { reportMessage } from '#server/features/orders'
 
 /**
  * `{ kind, query }`: the message Send to Telegram would send for this report and query, as plain

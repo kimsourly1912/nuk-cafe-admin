@@ -1,4 +1,4 @@
-import { getStaffMember } from '~~/server/features/identity'
+import { getStaffMember } from '#server/features/identity'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, { staff: ['read'] })

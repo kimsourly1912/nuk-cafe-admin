@@ -1,4 +1,4 @@
-import { assistantStatus } from '~~/server/features/assistant'
+import { assistantStatus } from '#server/features/assistant'
 
 /**
  * `GET /api/admin/assistant` (step 9.1, D109): whether the assistant is on here (404 when no AI key

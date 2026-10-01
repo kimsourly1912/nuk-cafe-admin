@@ -1,4 +1,4 @@
-import { apiError, notFound } from '../../utils/errors'
+import { apiError, notFound } from '#server/utils/errors'
 
 /** Error codes of Telegram (step 8.1c, D112). */
 export const NotificationErrorCodes = {

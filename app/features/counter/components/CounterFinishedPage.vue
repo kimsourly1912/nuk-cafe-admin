@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * "Finished today" (`/counter/<branchId>/finished`, step 10.2, D116, the owner's frames): today's
+ * "Finished today" (`/counter/<branchId>/finished`, step 10.2, D117, the owner's frames): today's
  * orders that left the queue, completed or cancelled, the most recently finished first, so a
  * cashier can look one up. Search by number or name, All / Completed / Cancelled with counts. A
  * table from `sm` (the order number opens it), rows on phones. The order opens beside the list

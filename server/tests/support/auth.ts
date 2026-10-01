@@ -1,8 +1,8 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import * as authSchema from '#auth/schema'
-import { identityAuthOptions } from '../../features/identity/identity.auth'
-import type { Db } from '../../utils/batch'
+import { identityAuthOptions } from '#server/features/identity/identity.auth'
+import type { Db } from '#server/utils/batch'
 
 export const TEST_SITE = 'https://cafe.example'
 

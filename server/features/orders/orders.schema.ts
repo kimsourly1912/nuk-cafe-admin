@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
 import { CANCEL_REASONS, ORDER_STATUSES, ORDER_TYPES, PAYMENT_METHODS, RETURN_METHODS } from '#shared/contracts/orders'
-import { newId } from '../../utils/ids'
+import { newId } from '#server/utils/ids'
 
 /**
  * Orders (docs/server/data-model.md → Orders, step 6.2, D99). An order is a **snapshot**: its

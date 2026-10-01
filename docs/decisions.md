@@ -1286,7 +1286,14 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
   - e2e `staff.test.ts` +3 (mocked API): confirm, the version sent, the password shown once with the reset wording; Cancel sends nothing; one's own row has it disabled with the reason.
   - lint, typecheck, unit + server 783.
 
-### D116: The counter's finished orders today (step 10.2), 2026-09-30
+### D116: Consistent Nuxt server import aliases, 2026-10-01
+
+- **Context:** the owner requested a server-only standards update and import cleanup. The standard recommended `../../utils/<file>` and examples used `~~/server/`, while Nuxt 4 documents `#server` and `#shared`.
+- **Decision:** use `#server/` and `#shared/` for parent and root paths throughout server code, including tests, re-exports and dynamic imports; retain same-directory `./` imports. This is a project convention, not a Nuxt ban on relative imports. Keep explicit imports, public feature boundaries, D47's direct build-time auth-options import and D49's lazy customers import. Mirror `#server` in plain Node Vitest projects. ESLint rejects old path spellings and cross-feature deep imports through the new alias.
+- **Scope:** server imports, lint/test alias configuration, and server/agent documentation; no client changes or business behavior changes.
+- **Verification:** Nuxt preparation, lint, typecheck, all 783 unit/server tests and the production Node build pass. A target-equivalence scan checked all 671 rewritten imports in 243 server files. Sixteen temporary lint probes rejected forbidden static/dynamic paths and cross-feature internals; disabling the guards removed the rejection. Seven HTTP e2e checks (`shop-orders-api`, `counter-orders-api`) pass against the built server; their shared harness was temporarily set to `browser: false` because these tests use HTTP only, then restored unchanged. Browser e2e could not run here: Chrome is absent and downloads failed; the existing CI runs the full browser suite before merge.
+
+### D117: The counter's finished orders today (step 10.2), 2026-09-30
 
 - **Context:** once an order is completed or cancelled it leaves the queue, and a cashier had no way to look it up ("I paid, why was it cancelled?", "did we give the money back?"). The owner's frames (2026-09-30): a Queue | Finished today (24) switch, a table with the payment note, a read-only panel with the cancellation and a timeline of who did each step, rows on phones. Reviewed: one search (the list's, not also the header's), a phone row opens the order full screen.
 - **Decision:**
@@ -1301,7 +1308,7 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
   - unit `finished.test.ts` 5 (payment notes, chips, the cancellation card's wording, the timeline).
   - e2e `counter.test.ts` +2 and one updated (real seeded server): the switch's count, the table row with its payment, the panel's steps, the chips and search; the phone rows and full-screen order; `?order=` for a finished order opens it on Finished today. Screenshots at 1440 and 390 px against the frames.
 
-### D117: Reorder menu items within a category (step 10.3), 2026-09-30
+### D118: Reorder menu items within a category (step 10.3), 2026-09-30
 
 - **Context:** the customer menu shows a category's items by their position, but no screen could set it: items appeared in the order they were created, so a cafe couldn't put best sellers first. The server has had `PUT /api/admin/menu/items/order` since step 3.5a (every listed item with its version, one batch, audited; the public menu sorts by the position).
 - **Decision:**
@@ -1312,7 +1319,7 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Alternatives:** a Reorder mode on the grid (it would have to leave pagination, status tabs and search aside, which is the dialog in disguise); ordering by name (no way to put best sellers first).
 - **Verified:** e2e `products.test.ts` +3 (mocked API): the category's items in order without archived ones, a move announced, Save sends every item with its version in the new order; a 409 says so, and Reload reads the order again; Cancel with a move asks first. `shortcuts.test.ts` passes with the renamed `R` entry. Screenshots at 1440 and 390 px. The server's order rule is covered since 3.5a (`items.service.test.ts`).
 
-### D118: Server error alerts on Telegram and the restore drill runbook (step 10.4), 2026-09-30
+### D119: Server error alerts on Telegram and the restore drill runbook (step 10.4), 2026-09-30
 
 - **Context:** production groundwork that needs no domain (phase 10, D115). Staging and production have no alert when the app fails; the owner already uses Telegram (8.1). The restore drill (operations.md) had no written steps, and it needs the owner's Cloudflare login.
 - **Decision:**

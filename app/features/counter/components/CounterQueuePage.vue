@@ -4,7 +4,7 @@
  * Preparing · Ready, oldest first, refreshed every 10 seconds. Three columns from `sm` (a tablet at
  * the counter); on phones one list at a time, as tabs with counts. A card's one action: Take
  * payment (opens the order), Mark ready, Complete. Search by number or name. Queue | Finished today
- * (N) switches to today's finished orders (step 10.2, D116). New orders are marked
+ * (N) switches to today's finished orders (step 10.2, D117). New orders are marked
  * for a minute, with a chime (mute it in the user menu). A closed branch says when it opens.
  *
  * Browser-only (`routeRules`), so the width can choose what renders (`useLayoutContext`).

@@ -1,5 +1,5 @@
 import { addModifierSchema } from '#shared/contracts/menu-modifiers'
-import { addModifier } from '~~/server/features/menu'
+import { addModifier } from '#server/features/menu'
 
 /** Adds an add-on at the end of the group; returns the whole group. */
 export default defineEventHandler(async (event) => {

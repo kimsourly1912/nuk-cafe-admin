@@ -3,7 +3,7 @@ import { formatMinor } from '~/utils/money'
 import { clockTime, firstName, formatRiel, PAYMENT_METHOD_LABELS } from './counter'
 
 /**
- * "Finished today" (step 10.2, D116, the owner's frames): what a row and the order panel say about
+ * "Finished today" (step 10.2, D117, the owner's frames): what a row and the order panel say about
  * an order that left the queue. Staff are named by first name, like the rest of the counter. Read only.
  */
 

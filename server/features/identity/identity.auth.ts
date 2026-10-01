@@ -1,10 +1,10 @@
 import { createAuthMiddleware, isAPIError } from 'better-auth/api'
 import { admin, haveIBeenPwned, organization } from 'better-auth/plugins'
 import type { ServerAuthConfig } from '@nuxtjs/better-auth/config'
-import type { Db } from '../../utils/batch'
-import { newId } from '../../utils/ids'
-import { log } from '../../utils/log'
-import { outboxStatement } from '../platform'
+import type { Db } from '#server/utils/batch'
+import { newId } from '#server/utils/ids'
+import { log } from '#server/utils/log'
+import { outboxStatement } from '#server/features/platform'
 import { MAIL_KINDS } from './identity.mail'
 import { branchAc, branchRoles, platformAc, platformRoles } from './identity.permissions'
 
@@ -61,7 +61,7 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
           // file at build time, before the customers schema's imports exist.
           after: async (user) => {
             try {
-              const { ensureProfile } = await import('../customers')
+              const { ensureProfile } = await import('#server/features/customers')
               await ensureProfile(db, user.id)
             }
             catch (error) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyMigration, createTestClient, migrationFiles } from './support/db'
+import { applyMigration, createTestClient, migrationFiles } from '#server/tests/support/db'
 
 // Migrations that change tables holding data are checked against data, not only an empty
 // database: staging runs them over its rows.

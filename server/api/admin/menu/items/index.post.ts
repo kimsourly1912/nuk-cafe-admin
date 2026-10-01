@@ -1,5 +1,5 @@
 import { createItemSchema } from '#shared/contracts/menu-items'
-import { createItem } from '~~/server/features/menu'
+import { createItem } from '#server/features/menu'
 
 /** A new item, as a draft. */
 export default defineEventHandler(async (event) => {

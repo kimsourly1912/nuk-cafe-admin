@@ -119,7 +119,7 @@ export const NOTIFICATION_KINDS = ['new_order', 'payment', 'closing_summary', 's
 export type NotificationKind = typeof NOTIFICATION_KINDS[number]
 
 /**
- * Server errors (step 10.4, D118): at most one alert per route in this many minutes, per chat, so a
+ * Server errors (step 10.4, D119): at most one alert per route in this many minutes, per chat, so a
  * failing page during a rush doesn't flood the chat.
  */
 export const SERVER_ERROR_ALERT_WINDOW_MINUTES = 15

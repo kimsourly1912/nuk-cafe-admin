@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { OrderLineInput } from '#shared/contracts/orders'
 import { checkoutQuoteSchema, orderLineInputSchema } from '#shared/contracts/orders'
 import type { PublicMenu, PublicMenuItem } from '#shared/contracts/public-menu'
-import { quoteOrder } from '../quote.rules'
+import { quoteOrder } from '#server/features/orders/quote.rules'
 
 // Written examples (step 6.1's "totals match written examples", D98), on a hand-built menu:
 // Iced Latte   Regular $3.00, Large $3.25; Milk: choose 1 (Whole $0, Oat $0.50); Extras: up to 2

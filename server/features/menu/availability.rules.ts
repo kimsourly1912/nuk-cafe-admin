@@ -1,6 +1,6 @@
 import type { AvailabilityStatus, AvailabilityWindow } from '#shared/contracts/menu-availability'
-import type { LocalTime } from '../../utils/weekly-windows'
-import { isInWindow } from '../../utils/weekly-windows'
+import type { LocalTime } from '#server/utils/weekly-windows'
+import { isInWindow } from '#server/utils/weekly-windows'
 
 /**
  * Pure availability rules (no I/O; docs/server/data-model.md → Menu, D45, D63). The window rules
@@ -8,8 +8,8 @@ import { isInWindow } from '../../utils/weekly-windows'
  * in `server/utils/weekly-windows.ts` (D91), and re-exported here for the menu.
  */
 
-export type { LocalTime } from '../../utils/weekly-windows'
-export { describeWindow, isInWindow, localTime, sortWindows, windowsProblem } from '../../utils/weekly-windows'
+export type { LocalTime } from '#server/utils/weekly-windows'
+export { describeWindow, isInWindow, localTime, sortWindows, windowsProblem } from '#server/utils/weekly-windows'
 
 /** A rule as the availability check needs it. */
 export interface RuleForCheck {

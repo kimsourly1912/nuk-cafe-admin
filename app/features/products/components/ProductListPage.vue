@@ -173,7 +173,7 @@ watch(() => route.query.item, (itemId) => {
   }
 }, { immediate: true })
 
-// Reorder (step 10.3, D117): one category's items, starting from the category filtered on.
+// Reorder (step 10.3, D118): one category's items, starting from the category filtered on.
 const reorderModal = useOverlay().create(ProductReorderModal)
 function openReorder() {
   if (!selecting.value) reorderModal.open({ categoryId: categoryFilter.value })

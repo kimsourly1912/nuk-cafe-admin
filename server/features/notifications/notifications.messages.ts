@@ -2,8 +2,8 @@ import type { WeeklyWindow } from '#shared/contracts/common'
 import { MINUTES_PER_DAY } from '#shared/contracts/common'
 import type { NotificationKind } from '#shared/contracts/notifications'
 import { BUSINESS_DAY_START_MINUTE } from '#shared/contracts/orders'
-import type { OrderAlert } from '../orders'
-import { addDays, zonedInstant } from '../../utils/weekly-windows'
+import type { OrderAlert } from '#server/features/orders'
+import { addDays, zonedInstant } from '#server/utils/weekly-windows'
 import { escapeHtml } from './notifications.rules'
 import type { StoredMessage } from './notifications.schema'
 
@@ -18,7 +18,7 @@ const riel = (amount: number) => `៛${amount.toLocaleString('en-US')}`
 const METHODS = { cash_usd: 'Cash USD', cash_khr: 'Cash riel', khqr: 'KHQR' } as const
 
 /** "#042": pickup numbers restart every business day. */
-/** What failed, for a server error alert (step 10.4, D118): never the error's own text. */
+/** What failed, for a server error alert (step 10.4, D119): never the error's own text. */
 export interface ServerErrorInfo {
   method: string
   /** The path without its query. */

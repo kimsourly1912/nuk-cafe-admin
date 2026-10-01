@@ -1,5 +1,5 @@
 import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
-import { apiError, ErrorCodes, notFound, versionConflict } from '../../utils/errors'
+import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const BranchErrorCodes = {
   BRANCH_HOURS: 'BRANCH_HOURS',

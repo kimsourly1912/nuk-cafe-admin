@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Which chat gets which notification (step 8.1d, D113, the owner's frames): new orders, payments,
- * the closing summary and server errors (step 10.4, D118), each with a switch per connected chat, saved at once. A closing summary
+ * the closing summary and server errors (step 10.4, D119), each with a switch per connected chat, saved at once. A closing summary
  * can bring its CSV; sent to a group, everyone there sees the figures (said next to the switch).
  */
 import type { NotificationKind, NotificationRule, TelegramDestination } from '#shared/contracts/notifications'

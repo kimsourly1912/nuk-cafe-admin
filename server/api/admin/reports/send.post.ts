@@ -1,6 +1,6 @@
 import { sendReportSchema } from '#shared/contracts/notifications'
-import { sendReport } from '~~/server/features/notifications'
-import { reportMessage } from '~~/server/features/orders'
+import { sendReport } from '#server/features/notifications'
+import { reportMessage } from '#server/features/orders'
 
 /**
  * `{ report: { kind, query }, destinationId, attachCsv }` with an `Idempotency-Key`: sends the

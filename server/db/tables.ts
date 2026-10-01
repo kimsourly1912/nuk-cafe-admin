@@ -5,4 +5,4 @@
 // Better Auth's tables (plugins included) as NuxtHub merges them; '#auth/schema' types only the core ones.
 export { account, member, organization, session, user } from 'hub:db:schema'
 // Owned by the platform feature (D50).
-export { auditEvents } from '../features/platform/platform.schema'
+export { auditEvents } from '#server/features/platform/platform.schema'

@@ -1,7 +1,7 @@
 import type { CounterFinishedOrders, CounterOrderHistory } from '#shared/contracts/orders'
 
 /**
- * Today's finished orders (step 10.2, D116): read when the page opens, again when the counter's
+ * Today's finished orders (step 10.2, D117): read when the page opens, again when the counter's
  * commands change an order (they invalidate `counter`) and on return to the tab (D22). No timer:
  * a finished order doesn't change.
  */

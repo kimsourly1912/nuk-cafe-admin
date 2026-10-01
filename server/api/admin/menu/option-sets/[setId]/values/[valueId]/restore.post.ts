@@ -1,5 +1,5 @@
 import { optionVersionSchema } from '#shared/contracts/menu-options'
-import { restoreOptionValue } from '~~/server/features/menu'
+import { restoreOptionValue } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['write'] })

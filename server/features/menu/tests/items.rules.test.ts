@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ExistingVariation, GridEntry, GridPlan, GridSet } from '../items.rules'
-import { combinationKey, gridCombinations, isGridProblem, planGrid } from '../items.rules'
+import type { ExistingVariation, GridEntry, GridPlan, GridSet } from '#server/features/menu/items.rules'
+import { combinationKey, gridCombinations, isGridProblem, planGrid } from '#server/features/menu/items.rules'
 
 const SIZE: GridSet = { id: 'size', activeValueIds: ['s', 'm', 'l'], archivedValueIds: [] }
 const TEMP: GridSet = { id: 'temp', activeValueIds: ['hot', 'iced'], archivedValueIds: [] }

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { member, organization } from '../../../db/tables'
-import { newId } from '../../../utils/ids'
-import { adminSession, authorizeBranch, counterSession, authorizeCustomer, authorizePlatform, authorizeSignedIn } from '../identity.service'
-import type { SessionUser } from '../identity.types'
-import { createTestDb, createUser } from '../../../tests/support/db'
-import { expectApiError } from '../../../tests/support/failure'
-import type { Db } from '../../../utils/batch'
+import { member, organization } from '#server/db/tables'
+import { newId } from '#server/utils/ids'
+import { adminSession, authorizeBranch, counterSession, authorizeCustomer, authorizePlatform, authorizeSignedIn } from '#server/features/identity/identity.service'
+import type { SessionUser } from '#server/features/identity/identity.types'
+import { createTestDb, createUser } from '#server/tests/support/db'
+import { expectApiError } from '#server/tests/support/failure'
+import type { Db } from '#server/utils/batch'
 
 const customer: SessionUser = { id: newId(), emailVerified: true, role: 'customer' }
 const admin: SessionUser = { id: newId(), emailVerified: true, role: 'admin' }

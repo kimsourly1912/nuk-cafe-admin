@@ -1,6 +1,6 @@
 import type { ImageType } from '#shared/contracts/media'
 import { IMAGE_TYPES } from '#shared/contracts/media'
-import { newId } from '../../utils/ids'
+import { newId } from '#server/utils/ids'
 
 /** Pure media rules (no I/O). */
 

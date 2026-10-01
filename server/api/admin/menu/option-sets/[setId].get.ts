@@ -1,4 +1,4 @@
-import { getOptionSet } from '~~/server/features/menu'
+import { getOptionSet } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, { menu: ['read'] })

@@ -1,5 +1,5 @@
 import { updateCategorySchema } from '#shared/contracts/menu-categories'
-import { updateCategory } from '~~/server/features/menu'
+import { updateCategory } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['write'] })

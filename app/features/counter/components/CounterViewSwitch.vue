@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Queue | Finished today (24) (step 10.2, D116, the owner's frames): two links, one per page, so
+ * Queue | Finished today (24) (step 10.2, D117, the owner's frames): two links, one per page, so
  * each view has its own address and Back works. The business day's start is noted beside it.
  */
 const props = defineProps<{

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * A finished order, read only (step 10.2, D116, the owner's frames): the number and status, the
+ * A finished order, read only (step 10.2, D117, the owner's frames): the number and status, the
  * items and total, why it was cancelled (the staff's own note included, and how the money went
  * back), and the timeline with who took each step. Only Close: nothing here changes an order.
  */
