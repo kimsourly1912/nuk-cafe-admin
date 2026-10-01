@@ -163,6 +163,24 @@ describe('the counter', () => {
     await panel(page).getByText(/by Sophea · KHQR \$2\.25/).waitFor()
   })
 
+  it('paid by someone else while the panel is open: the refresh says so, and Mark ready waits for OK (release check 10.5)', { timeout: 60_000 }, async () => {
+    const order = await placeOrder(seed.customers.counterShopperB)
+    const { page } = await cashierAtCounter()
+    await page.getByRole('button', { name: `Take payment: order ${number(order)}` }).click()
+    await panel(page).getByRole('button', { name: 'Confirm payment · $2.25' }).waitFor()
+
+    // Another cashier takes it; this panel learns it from the queue's next refresh (every 10 s).
+    await command(order, 'pay', { version: 1, method: 'cash_usd' })
+    await panel(page).getByText('Paid meanwhile by Sophea: it\'s being prepared.').waitFor({ timeout: 20_000 })
+    // The button under the cashier's finger isn't silently swapped for Mark ready.
+    expect(await panel(page).getByRole('button', { name: /^Confirm payment/ }).count()).toBe(0)
+    expect(await panel(page).getByRole('button', { name: 'Mark ready' }).count()).toBe(0)
+
+    await panel(page).getByRole('button', { name: 'OK', exact: true }).click()
+    await panel(page).getByRole('button', { name: 'Mark ready' }).waitFor()
+    await panel(page).getByText(/by Sophea · Cash USD \$2\.25/).waitFor()
+  })
+
   it('`?order=` (Telegram\'s Open order, D113) opens that order, then leaves the URL', async () => {
     const order = await placeOrder(seed.customers.counterShopperA)
     try {
