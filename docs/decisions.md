@@ -1334,3 +1334,14 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
   - server `notifications.delivery.test.ts` +4: route naming; nothing without a rule; the message with the route, status and request id and no error text, sent to the chat; one per route and chat per window, also for two failures at once, another route or the next window alerting again; a blocked chat none. `server/tests/migrations.test.ts` +1: the rebuild keeps every rule over existing rows, accepts the new kind, still refuses an unknown one, and a chat's rules still go with it.
   - The error handler's call is not exercised end to end (no route fails on purpose); the e2e build, which bundles it, passes the full suite (368).
   - **The restore drill on staging** (the owner, 2026-10-01): in the Cloudflare dashboard (D1 → Time Travel, restore by date; the runbook first assumed Wrangler only), about 2 seconds; admin sign-in, the customer menu and the counter worked afterwards. The free plan's window is 7 days.
+
+### D120: The release check (step 10.5), 2026-10-01
+
+- **Context:** the blueprint lists the scenarios the first release must pass (§8): money, double orders, the table QR, who sees what. Each feature had its own tests, but nothing tied scenario to proof, so "is it safe to open?" was a belief.
+- **Decision:**
+  - **One page, `docs/plans/release-check.md`:** each scenario, the tests that prove it, and its status. The loyalty rows wait for phase 7 (D115). Production (8.2) launches when every row is ✅ and the hand check passed.
+  - **Gaps filled with tests, not new code:** a signed-out visitor at a table QR keeps the table through sign-in (e2e, real server); a wrong-branch command leaves the order, payment, events and audit untouched; two staff marking ready at once; completing retried with the same key; an upload whose item save fails stays unattached and reusable. All passed against the existing code: no bug found.
+  - **A hand check on staging** (five steps, about 20 minutes) for what tests can't see: a real phone at a QR, two real devices at the counter, the real Worker and D1.
+- **Found:** an order's status change has two guards, the batch's version check and the unique index `order_events_version_idx`. With the first removed, the ready race still ends with one winner (the second writer fails on the index).
+- **Alternatives:** an end-to-end suite against staging itself (needs test accounts and data reset on a shared environment, and email we can't send yet, Q4); leaving the mapping to 8.2 (the gaps would surface at launch).
+- **Verified:** server `counter.service.test.ts` +2 and one extended, `items.service.test.ts` +1; e2e `shop-checkout.test.ts` +1 (a new seeded customer, `tableGuest`); the race test run with `requireOneChange` removed (still passes, through the index, as above).

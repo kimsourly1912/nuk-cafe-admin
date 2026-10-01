@@ -112,6 +112,16 @@ describe('creating', () => {
     await expectApiError(() => croissantWith(image), 422, 'MEDIA_NOT_AVAILABLE')
     await expectApiError(() => croissantWith(newId()), 422, 'MEDIA_NOT_AVAILABLE')
   })
+
+  it('an upload whose item save fails at the write stays unattached: no item points at it, it can be used again, and the hourly purge removes it if not (release check 10.5)', async () => {
+    const image = await upload()
+    const racing = interleaved(db, () => db.update(menuOptionValues).set({ status: 'archived' }).where(eq(menuOptionValues.id, v(size, 'Large'))))
+    await expectApiError(() => createItem(racing, actor, { categoryId: hot, name: 'Latte', description: '', imageId: image, optionSetIds: [size.id], variations: grid([size]), modifierGroups: [], availabilityRuleIds: [] }), 422, 'PRICE_GRID')
+    // The batch was all or nothing: the image is still temporary, which the purge deletes after 24 hours (media tests).
+    expect(await assetState(image)).toBe('temporary')
+    expect((await listItems(db, { categoryId: hot, page: 1, pageSize: 50 })).items.map(item => item.name)).not.toContain('Latte')
+    expect((await croissantWith(image)).image?.id).toBe(image)
+  })
 })
 
 /** A top-level category with an item directly in it (a leaf, since it has no sub-categories). */

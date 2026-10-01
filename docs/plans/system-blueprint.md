@@ -131,6 +131,8 @@ Moved out of this document so they can't drift:
 
 ## 8. Release test scenarios
 
+Each scenario is mapped to the tests that prove it, with a hand check on staging, in [release-check.md](release-check.md) (step 10.5).
+
 These scenarios are required for the first release, in addition to form and list behavior. Every scenario should be reproducible against a staging deployment using test accounts, a test table, and a second test branch for the permission check.
 
 | Scenario | Expected result |
