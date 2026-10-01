@@ -1333,4 +1333,4 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Verified:**
   - server `notifications.delivery.test.ts` +4: route naming; nothing without a rule; the message with the route, status and request id and no error text, sent to the chat; one per route and chat per window, also for two failures at once, another route or the next window alerting again; a blocked chat none. `server/tests/migrations.test.ts` +1: the rebuild keeps every rule over existing rows, accepts the new kind, still refuses an unknown one, and a chat's rules still go with it.
   - The error handler's call is not exercised end to end (no route fails on purpose); the e2e build, which bundles it, passes the full suite (368).
-  - **Not verified yet:** the restore drill on staging (the owner).
+  - **The restore drill on staging** (the owner, 2026-10-01): in the Cloudflare dashboard (D1 → Time Travel, restore by date; the runbook first assumed Wrangler only), about 2 seconds; admin sign-in, the customer menu and the counter worked afterwards. The free plan's window is 7 days.

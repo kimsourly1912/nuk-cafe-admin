@@ -105,20 +105,22 @@ Production: manual workflow from a commit that is live on staging: export the da
 
 ### Restore drill (staging)
 
-Run by the owner (it needs a Wrangler login to the Cloudflare account). About 10 minutes. **It puts the whole staging database back to the bookmark**: anything written on staging after it (orders, menu changes) is undone. Staging holds test data only; tell anyone testing on it first.
+D1 Time Travel is Cloudflare's, always on, no code of ours: every change is kept for the plan's window (**7 days on the free plan**, as the dashboard says; 30 on Workers Paid). It covers **only the D1 database**: R2 images and Worker secrets aren't rolled back. Run by the owner, about 10 minutes. **It puts the whole staging database back**: anything written on staging after the chosen moment (orders, menu changes, Telegram links) is undone. Staging holds test data only; tell anyone testing on it first.
 
-1. **Note the bookmark (now):**
-   `npx wrangler d1 time-travel info nuk-cafe-staging`
-   Copy the bookmark it prints.
-2. **Make a change you can see:** on staging, Admin → Categories → add a category named **Restore drill**.
-3. **Restore, and time it** (PowerShell):
-   `Measure-Command { npx wrangler d1 time-travel restore nuk-cafe-staging --bookmark=<bookmark from step 1> }`
-   Confirm when asked. Wrangler also prints the bookmark from just before the restore: keep it, it undoes the restore the same way.
+**In the dashboard** (the usual way): Storage & databases → D1 → `nuk-cafe-staging` → **Time Travel**.
+
+1. **Note the time now** (the dashboard shows times in your browser's zone, GMT+7 in Phnom Penh).
+2. **A minute later, make a change you can see:** on staging, Admin → Categories → add a category named **Restore drill**.
+3. **Restore, and time it:** Restore database → **Date** → the time from step 1 (a minute or two before the change) → **Restore database**. The page then shows the bookmark from just before the restore, **once**: copy it; **Undo** (or Bookmark → that id) puts the change back.
 4. **Check the app:**
    - `https://nuk-cafe-staging.kimsur61.workers.dev/api/public/health` answers 200;
    - the **Restore drill** category is gone;
    - you can sign in to the admin, the customer menu loads, and the counter queue opens.
 5. **Write it down** in `docs/progress.md` (step 10.4): the date, how long step 3 took, and anything that didn't work.
+
+**With Wrangler** (the same, from a terminal; also what a script would use): `npx wrangler d1 time-travel info nuk-cafe-staging` prints the current bookmark; `npx wrangler d1 time-travel restore nuk-cafe-staging --bookmark=<bookmark>` restores to it and prints the one from before the restore.
+
+**Done 2026-10-01 by the owner** (dashboard, by date): restored in about 2 seconds; afterwards admin sign-in, the customer menu and the counter worked with their data.
 
 For production (8.2): note the bookmark before every migration (see Deploys); a restore there loses real orders written after the bookmark, so it's the last resort after redeploying the previous Worker.
 - [Open] Q24: acceptable data loss and downtime (RPO/RTO) and the Cloudflare plan (Time Travel window).
