@@ -217,6 +217,7 @@ Expected to be promoted to the root when the first two features need them: `Prod
 
 - Prefer Nuxt-native tools (`useAsyncData`, `useState`, `useRuntimeConfig`, route middleware), then `@vueuse/core` (import it explicitly: it isn't auto-imported), before adding a library or hand-rolling a utility. There is no Pinia: shared state is `useState` inside a composable.
 - Define new API contracts in project-owned code. Import Valibot as `import * as v from 'valibot'`.
+- **Local build modules** live in `modules/` (Nuxt registers them): today only `reka-namespaced.ts`, which keeps Reka UI's namespaced barrel from bundling the admin's calendar into the customer menu (D123). Import Nuxt's kit as `nuxt/kit` (pnpm doesn't let the app import `@nuxt/kit` or `vite`).
 - Icons are bundled at build time, never fetched (decisions D18). Write icon names as literal strings (`'i-lucide-tags'`), not template strings, and install `@iconify-json/<collection>` before using a new collection.
 - `USelect` cannot hold an empty or `undefined` value. Use `ANY` for "all" filters and let the `<Feature>Select` components handle "none".
 - **Design system first (owner, 2026-09-28, D74).** Mockups are a reference for layout, element positions and content, not for styling; Nuxt UI defaults and global configuration decide styling. The rules are in [ui.md](docs/reference/ui.md). When a mockup needs something the design system lacks, ask first.
