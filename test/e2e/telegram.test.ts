@@ -77,9 +77,11 @@ describe('Telegram page', () => {
 
   it('a group waits for the admin\'s confirmation; Cancel makes the bot leave', async () => {
     const posted: string[] = []
+    // Each link is new, as on the server: the second dialog never shares the first one's polled link.
+    let links = 0
     const { page } = await openTelegram({ enabled: true, botUsername: 'NukCafeBot', destinations: [], rules: [] }, {
-      'POST /admin/telegram/links': () => ({ ...linkOf('group'), url: 'https://t.me/NukCafeBot?startgroup=abc' }),
-      'GET /admin/telegram/links/{id}': () => linkOf('group', { status: 'confirm', chat: { title: 'NUK Riverside Staff', memberCount: 8 } }),
+      'POST /admin/telegram/links': () => ({ ...linkOf('group', { id: `link-${++links}` }), url: 'https://t.me/NukCafeBot?startgroup=abc' }),
+      'GET /admin/telegram/links/{id}': ({ url: u }) => linkOf('group', { id: u.pathname.split('/').at(-1)!, status: 'confirm', chat: { title: 'NUK Riverside Staff', memberCount: 8 } }),
       'POST /admin/telegram/links/{id}/cancel': ({ url: u }) => {
         posted.push(u.pathname)
         return linkOf('group', { status: 'cancelled' })
@@ -96,11 +98,13 @@ describe('Telegram page', () => {
     await dialog.getByText('Everyone in this group sees what\'s sent there.').waitFor()
     await dialog.getByRole('button', { name: 'Cancel' }).click()
     await expect.poll(() => posted).toEqual(['/api/admin/telegram/links/link-1/cancel'])
+    // Like a person: the dialog is gone before Connect a group is pressed again.
+    await expect.poll(() => page.getByRole('dialog').count()).toBe(0)
 
-    await page.getByRole('button', { name: 'Connect a group' }).click()
+    await page.getByRole('button', { name: 'Connect a group' }).click({ timeout: 10_000 })
     await page.getByRole('dialog').getByRole('button', { name: 'Connect' }).click({ timeout: 10_000 })
-    await toast(page, 'NUK Riverside Staff is connected').waitFor()
-    expect(posted.at(-1)).toBe('/api/admin/telegram/links/link-1/confirm')
+    await toast(page, 'NUK Riverside Staff is connected').waitFor({ timeout: 10_000 })
+    expect(posted.at(-1)).toBe('/api/admin/telegram/links/link-2/confirm')
   })
 
   it('Send test, a blocked chat\'s Reconnect, and Disconnect asked first with the version', async () => {
