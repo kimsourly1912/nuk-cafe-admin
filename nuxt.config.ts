@@ -85,6 +85,9 @@ const RATE_LIMITS = [
   { name: 'RATE_LIMIT_PUBLIC', namespace_id: '1002', simple: { limit: 600, period: 60 as const } },
 ]
 
+/** How long one render of the customer menu page is reused (D122). */
+const MENU_PAGE_CACHE_SECONDS = 60
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/ui', '@nuxt/test-utils/module', '@nuxthub/core', '@nuxtjs/better-auth'],
@@ -196,6 +199,11 @@ export default defineNuxtConfig({
     // The counter workspace, like the admin: the staff session, no search engines (D102).
     '/counter': { ssr: false },
     '/counter/**': { ssr: false },
+    // The customer menu (D122): the same page for everyone (the account is read in the browser), so
+    // one render serves every visitor for a minute, refreshed in the background. Rendering it costs
+    // ~10× the menu data. Sold-out marks and the open state can lag up to a minute; checkout checks
+    // everything again. Off in the e2e build, whose tests change the menu and reload at once.
+    ...(process.env.E2E_HUB_DIR ? {} : { '/': { swr: MENU_PAGE_CACHE_SECONDS } }),
     // Session gate per surface (@nuxtjs/better-auth), a second line behind each route's own
     // requirePermission / requireBranchPermission / requireCustomer (docs/server/security.md).
     '/api/admin/**': { auth: { only: 'user', user: { role: 'admin' } } },

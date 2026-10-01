@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /**
- * Menu item image: preview + Upload/Replace/Remove. The file is checked (type, size) and uploaded
- * as soon as it's picked; the form then holds the upload's `url` and asset `id`. Remove clears
+ * Menu item image: preview + Upload/Replace/Remove. The file is checked (type), made smaller in the
+ * browser (at most 1600 px, WebP, D122), checked for size, and uploaded as soon as it's picked; the form then holds the upload's `url` and asset `id`. Remove clears
  * both: the item is saved without an image (`imageId: null`).
  */
 import { useFileDialog } from '@vueuse/core'
 import { IMAGE_MAX_BYTES, IMAGE_TYPES, useItemMutations } from '../composables/useItems'
+import { IMAGE_MAX_ORIGINAL_BYTES, shrinkImage } from '../utils/shrink-image'
 
 const props = defineProps<{ disabled?: boolean }>()
 
@@ -17,10 +18,14 @@ const uploading = defineModel<boolean>('uploading', { default: false })
 const { uploadImage } = useItemMutations()
 const formKey = useId()
 watchEffect(() => {
-  uploading.value = uploadImage.isPending(formKey)
+  // Both read every time, so the effect always tracks both.
+  const pending = uploadImage.isPending(formKey)
+  uploading.value = preparing.value || pending
 })
 
 const problem = ref<string>()
+/** Making the photo smaller (a moment for a big phone photo), before the upload starts. */
+const preparing = ref(false)
 const maxMb = IMAGE_MAX_BYTES / 1024 / 1024
 
 const { open, onChange } = useFileDialog({ accept: IMAGE_TYPES.join(','), multiple: false, reset: true })
@@ -33,11 +38,19 @@ onChange(async (files) => {
     problem.value = 'Use a JPEG, PNG or WebP image.'
     return
   }
-  if (file.size > IMAGE_MAX_BYTES) {
-    problem.value = `The image is larger than ${maxMb} MB.`
+  if (file.size > IMAGE_MAX_ORIGINAL_BYTES) {
+    problem.value = `The image is larger than ${IMAGE_MAX_ORIGINAL_BYTES / 1024 / 1024} MB.`
     return
   }
-  const result = await uploadImage.execute({ file, form: formKey })
+  preparing.value = true
+  const upload = await shrinkImage(file).finally(() => {
+    preparing.value = false
+  })
+  if (upload.size > IMAGE_MAX_BYTES) {
+    problem.value = `The image is still larger than ${maxMb} MB after making it smaller. Try another photo.`
+    return
+  }
+  const result = await uploadImage.execute({ file: upload, form: formKey })
   if (!result.ok) return
   imageUrl.value = result.data.url
   imageId.value = result.data.id
@@ -81,7 +94,7 @@ function removeImage() {
         />
       </div>
       <p class="text-xs text-muted">
-        {{ uploading ? 'Uploading…' : `JPEG, PNG or WebP, up to ${maxMb} MB.` }}
+        {{ preparing ? 'Preparing the photo…' : uploading ? 'Uploading…' : 'JPEG, PNG or WebP. Large photos are made smaller before upload.' }}
       </p>
       <p
         v-if="problem"
