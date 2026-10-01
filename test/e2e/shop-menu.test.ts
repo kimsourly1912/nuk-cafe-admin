@@ -54,6 +54,22 @@ describe('the customer menu, server-rendered', () => {
     await context.close()
   })
 
+  it('loads none of the admin\'s calendar, date or time fields, even after opening a popover (D123)', async () => {
+    const page = await createPage()
+    const scripts: Promise<string>[] = []
+    page.on('response', (response) => {
+      if (response.request().resourceType() === 'script') scripts.push(response.text())
+    })
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto(url('/'), { waitUntil: 'hydration' })
+    // "All categories" is a popover: Reka UI's namespaced barrel used to bring the calendar with it.
+    await visible(page.getByRole('button', { name: 'All categories' })).click()
+    await page.getByRole('list', { name: 'All categories' }).waitFor()
+    const code = (await Promise.all(scripts)).join('\n')
+    expect(code.length).toBeGreaterThan(100_000)
+    expect(['CalendarRoot', 'DateFieldRoot', 'TimeFieldRoot'].filter(part => code.includes(part))).toEqual([])
+  })
+
   it('keeps the admin a browser-only app: its page carries no content', async () => {
     const html = await (await fetch(url('/admin/login'))).text()
     expect(html).not.toContain('Sign in')
