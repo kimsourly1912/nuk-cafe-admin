@@ -74,6 +74,17 @@ const STAGING = {
   r2Bucket: 'nuk-cafe-staging-media',
 }
 
+/**
+ * Per-address limits on the public API (D121, server/utils/rate-limit.ts): Cloudflare's Workers
+ * rate-limit bindings, no custom domain needed. Generous, since the cafe's Wi-Fi is one address for
+ * many customers: a person ordering makes a few quotes a minute, a script thousands. The namespace
+ * ids only need to be unique in the Cloudflare account; a production Worker uses its own.
+ */
+const RATE_LIMITS = [
+  { name: 'RATE_LIMIT_QUOTE', namespace_id: '1001', simple: { limit: 120, period: 60 as const } },
+  { name: 'RATE_LIMIT_PUBLIC', namespace_id: '1002', simple: { limit: 600, period: 60 as const } },
+]
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/ui', '@nuxt/test-utils/module', '@nuxthub/core', '@nuxtjs/better-auth'],
@@ -108,6 +119,9 @@ export default defineNuxtConfig({
             },
             // Cloudflare calls the Worker on these; Nitro runs the matching tasks.
             triggers: { crons: Object.keys(SCHEDULED_TASKS) },
+            // Nitro's Wrangler type predates rate-limit bindings; Wrangler 4 reads them (checked in the
+            // built wrangler.json).
+            ...({ ratelimits: RATE_LIMITS } as Record<string, unknown>),
           },
         },
       },
