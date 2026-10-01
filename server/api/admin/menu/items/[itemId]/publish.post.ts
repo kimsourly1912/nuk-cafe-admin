@@ -1,5 +1,5 @@
 import { itemVersionSchema } from '#shared/contracts/menu-items'
-import { publishItem } from '~~/server/features/menu'
+import { publishItem } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['publish'] })

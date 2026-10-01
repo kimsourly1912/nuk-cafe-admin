@@ -1,4 +1,4 @@
-import { apiError, notFound } from '../../utils/errors'
+import { apiError, notFound } from '#server/utils/errors'
 
 /** Error codes of the AI assistant (phase 9, D107, D108). */
 export const AssistantErrorCodes = {

@@ -1,4 +1,4 @@
-import { apiError, ErrorCodes, notFound, versionConflict } from '../../utils/errors'
+import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const StaffErrorCodes = {
   STAFF_ALREADY_EXISTS: 'STAFF_ALREADY_EXISTS',

@@ -1,5 +1,5 @@
 import { counterCommandSchema } from '#shared/contracts/orders'
-import { completeOrder } from '~~/server/features/orders'
+import { completeOrder } from '#server/features/orders'
 
 /** `{ version }` (header `Idempotency-Key`): Ready → completed (handed to the customer) (D101). */
 export default defineEventHandler(async (event) => {

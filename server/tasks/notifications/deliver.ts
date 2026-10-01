@@ -1,4 +1,4 @@
-import { deliverDue, queueClosingSummaries } from '~~/server/features/notifications'
+import { deliverDue, queueClosingSummaries } from '#server/features/notifications'
 
 /**
  * Every minute (nuxt.config.ts → nitro.scheduledTasks; D113): queues the closing summaries that are

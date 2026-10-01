@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
 import { DELIVERY_STATUSES, DESTINATION_KINDS, DESTINATION_STATUSES, NOTIFICATION_KINDS, TELEGRAM_LINK_STATUSES } from '#shared/contracts/notifications'
-import { newId } from '../../utils/ids'
+import { newId } from '#server/utils/ids'
 
 /**
  * Telegram (step 8.1c, D112): the chats the cafe's messages go to, and the one-time links that

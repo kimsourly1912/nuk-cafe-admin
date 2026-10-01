@@ -1,7 +1,7 @@
 import type { H3Event } from 'h3'
 import { Api } from 'grammy'
-import { telegramOff, telegramSettingsFrom } from '../features/notifications'
-import type { TelegramSettings } from '../features/notifications'
+import { telegramOff, telegramSettingsFrom } from '#server/features/notifications'
+import type { TelegramSettings } from '#server/features/notifications'
 
 /**
  * Route glue for Telegram (step 8.1c, D112). `useTelegram` is the settings, or `null` when this

@@ -1,5 +1,5 @@
 import { destinationVersionSchema } from '#shared/contracts/notifications'
-import { disconnectDestination } from '~~/server/features/notifications'
+import { disconnectDestination } from '#server/features/notifications'
 
 /** `{ version }`: stops sending to a chat (the bot leaves a group). */
 export default defineEventHandler(async (event) => {

@@ -1,9 +1,9 @@
-import { accountMailHandlers, consoleSender, resendSender } from '~~/server/features/identity'
-import type { MailSender } from '~~/server/features/identity'
-import { deliverDue, queueOrderAlert } from '~~/server/features/notifications'
-import { ORDER_EVENTS } from '~~/server/features/orders'
-import { deliverOutbox } from '~~/server/features/platform'
-import type { OutboxHandler } from '~~/server/features/platform'
+import { accountMailHandlers, consoleSender, resendSender } from '#server/features/identity'
+import type { MailSender } from '#server/features/identity'
+import { deliverDue, queueOrderAlert } from '#server/features/notifications'
+import { ORDER_EVENTS } from '#server/features/orders'
+import { deliverOutbox } from '#server/features/platform'
+import type { OutboxHandler } from '#server/features/platform'
 
 /**
  * Resend when a key is set. Without one, the dev server prints mail to the console; anything else

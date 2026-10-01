@@ -1,4 +1,4 @@
-import { purgeDeliveries } from '~~/server/features/notifications'
+import { purgeDeliveries } from '#server/features/notifications'
 
 /** Daily (nuxt.config.ts → nitro.scheduledTasks): the delivery history is kept 90 days (D113). */
 export default defineTask({

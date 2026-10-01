@@ -1,5 +1,5 @@
-import { toErrorResponse } from './utils/errors'
-import { log } from './utils/log'
+import { toErrorResponse } from '#server/utils/errors'
+import { log } from '#server/utils/log'
 
 /**
  * Error responses for `/api/**` (docs/server/architecture.md → Errors). Registered first in

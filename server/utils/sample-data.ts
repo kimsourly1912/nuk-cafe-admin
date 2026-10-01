@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import { sampleDataOff } from '../features/sample-data'
+import { sampleDataOff } from '#server/features/sample-data'
 
 /**
  * Route glue for `/api/admin/sample-data/**` (D94): the environment must turn sample data on

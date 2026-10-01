@@ -15,6 +15,9 @@ Every "done" item states how it was checked. Keep using these labels:
 
 ## Current state
 
+**Server import aliases (2026-10-01, D116):** standards and server imports updated to `#server` / `#shared`; same-directory `./` retained. ESLint rejects parent-relative server imports and cross-feature deep aliases. Verified: Nuxt prepare, lint, typecheck, 783 unit/server tests, production Node build, 7 real-server HTTP checks with the browser disabled temporarily (harness restored), import-target equivalence for 671 imports in 243 server files, and lint rejection probes. Browser e2e blocked locally by unavailable Chrome/download failures; the full suite runs in CI. PR for owner review, not merged.
+
+
 **Everything on the server standard (2026-09-28, step 3.8b):** every admin screen runs on `/api/admin` (D52), and the pre-standard `/api/v1` menu, its tables (dropped by migration `0011_drop_legacy_menu`) and the Schedules screen are gone (D71). History: the admin first moved off the Spring API onto our own `/api/v1` (D40–D42), then onto the server standard feature by feature (steps 1.7 and 3.8b).
 
 | Part | What exists | Verified |

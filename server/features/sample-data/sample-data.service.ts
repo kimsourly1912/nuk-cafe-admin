@@ -4,12 +4,12 @@ import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { OptionSet } from '#shared/contracts/menu-options'
 import type { AvailabilityRule } from '#shared/contracts/menu-availability'
 import type { LoadSampleBranchInput, LoadSampleMenuInput, SampleBranchResult, SampleDataState, SampleMenuSize, SampleMenuStage } from '#shared/contracts/sample-data'
-import type { Db, Statement } from '../../utils/batch'
-import { activeTableLabels, createTable, getBranchSettings, listBranchOptions, updateBranchSettings } from '../branches'
-import type { QrConfig } from '../branches'
-import type { Actor } from '../identity'
-import { countUploads, deleteUploads } from '../media'
-import type { ObjectStore } from '../media'
+import type { Db, Statement } from '#server/utils/batch'
+import { activeTableLabels, createTable, getBranchSettings, listBranchOptions, updateBranchSettings } from '#server/features/branches'
+import type { QrConfig } from '#server/features/branches'
+import type { Actor } from '#server/features/identity'
+import { countUploads, deleteUploads } from '#server/features/media'
+import type { ObjectStore } from '#server/features/media'
 import {
   archiveItem,
   countMenuData,
@@ -27,9 +27,9 @@ import {
   listOptionSets,
   publishItem,
   setSoldOut,
-} from '../menu'
-import type { MenuDataCounts } from '../menu'
-import { auditStatement } from '../platform'
+} from '#server/features/menu'
+import type { MenuDataCounts } from '#server/features/menu'
+import { auditStatement } from '#server/features/platform'
 import type { CategoryKey, SampleItem } from './sample-data.catalog'
 import {
   combinations,

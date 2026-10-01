@@ -1,5 +1,5 @@
 import { MAX_OPTION_VALUES } from '#shared/contracts/menu-options'
-import { apiError, ErrorCodes, notFound, versionConflict } from '../../utils/errors'
+import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const OptionErrorCodes = {
   OPTION_SET_NAME_TAKEN: 'OPTION_SET_NAME_TAKEN',

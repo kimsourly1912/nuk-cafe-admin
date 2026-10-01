@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Catalog, CatalogCategory, CatalogItem } from '../catalog.rules'
-import { groupOnItem, menuAt } from '../catalog.rules'
+import type { Catalog, CatalogCategory, CatalogItem } from '#server/features/menu/catalog.rules'
+import { groupOnItem, menuAt } from '#server/features/menu/catalog.rules'
 
 const MON = 1
 const at = (hhmm: string) => ({ weekday: MON, minute: Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3)) })

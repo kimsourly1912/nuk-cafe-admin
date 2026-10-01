@@ -1,5 +1,5 @@
 import { cancelMyOrderSchema } from '#shared/contracts/orders'
-import { cancelMyOrder } from '~~/server/features/orders'
+import { cancelMyOrder } from '#server/features/orders'
 
 /**
  * `{ version }` (header `Idempotency-Key`): the customer cancels their own unpaid order (D45, step

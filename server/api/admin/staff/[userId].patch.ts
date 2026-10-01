@@ -1,5 +1,5 @@
 import { updateStaffAccessSchema } from '#shared/contracts/staff'
-import { updateStaffAccess } from '~~/server/features/identity'
+import { updateStaffAccess } from '#server/features/identity'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { staff: ['update'] })

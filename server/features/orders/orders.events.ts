@@ -1,5 +1,5 @@
 import type { OrderStatus, OrderType, PaymentMethod } from '#shared/contracts/orders'
-import type { Db } from '../../utils/batch'
+import type { Db } from '#server/utils/batch'
 import { firstName } from './reports.rules'
 import * as repo from './orders.repository'
 

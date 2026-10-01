@@ -1,4 +1,4 @@
-import type { Db } from '../../utils/batch'
+import type { Db } from '#server/utils/batch'
 
 /**
  * The database, but its next `batch` first runs `meanwhile` (another request's write): the change

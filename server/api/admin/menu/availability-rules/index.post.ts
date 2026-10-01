@@ -1,5 +1,5 @@
 import { createAvailabilityRuleSchema } from '#shared/contracts/menu-availability'
-import { createAvailabilityRule } from '~~/server/features/menu'
+import { createAvailabilityRule } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['write'] })

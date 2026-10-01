@@ -1,6 +1,6 @@
 import { and, eq, isNull, lt, or } from 'drizzle-orm'
 import type { SampleMenuSize } from '#shared/contracts/sample-data'
-import type { Db, Statement } from '../../utils/batch'
+import type { Db, Statement } from '#server/utils/batch'
 import { SAMPLE_MENU_RUN_ID, sampleDataRuns } from './sample-data.schema'
 
 export interface RunRow {

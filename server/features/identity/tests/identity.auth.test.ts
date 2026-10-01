@@ -1,12 +1,12 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as authSchema from '#auth/schema'
-import { identityAuthOptions } from '../identity.auth'
-import { seedFirstAdmin } from '../staff.service'
-import { createTestAuth, sessionHeaders, signIn, TEST_SITE as SITE } from '../../../tests/support/auth'
-import type { TestAuth as Auth } from '../../../tests/support/auth'
-import { createTestDb } from '../../../tests/support/db'
-import type { Db } from '../../../utils/batch'
+import { identityAuthOptions } from '#server/features/identity/identity.auth'
+import { seedFirstAdmin } from '#server/features/identity/staff.service'
+import { createTestAuth, sessionHeaders, signIn, TEST_SITE as SITE } from '#server/tests/support/auth'
+import type { TestAuth as Auth } from '#server/tests/support/auth'
+import { createTestDb } from '#server/tests/support/db'
+import type { Db } from '#server/utils/batch'
 
 // Our Better Auth configuration against the real migration (server/db/migrations).
 let db: Db

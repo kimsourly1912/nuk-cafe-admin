@@ -5,17 +5,17 @@ import { eq } from 'drizzle-orm'
 import { simulateReadableStream } from 'ai'
 import { MockLanguageModelV4 } from 'ai/test'
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { Actor } from '../../identity'
-import { assistantUsage } from '../assistant.schema'
-import { languageModel } from '../assistant.model'
-import { assistantStatus, chatWithAssistant, purgeAssistantUsage, startUsage } from '../assistant.service'
-import type { AssistantSettings } from '../assistant.settings'
-import { HELP_PAGES, helpGuide } from '../help'
-import { ASSISTANT_PAGES, pageAt } from '../pages'
-import { assistantSettingsFrom } from '../assistant.settings'
-import { createTestDb, createUser } from '../../../tests/support/db'
-import { expectApiError } from '../../../tests/support/failure'
-import type { Db } from '../../../utils/batch'
+import type { Actor } from '#server/features/identity'
+import { assistantUsage } from '#server/features/assistant/assistant.schema'
+import { languageModel } from '#server/features/assistant/assistant.model'
+import { assistantStatus, chatWithAssistant, purgeAssistantUsage, startUsage } from '#server/features/assistant/assistant.service'
+import type { AssistantSettings } from '#server/features/assistant/assistant.settings'
+import { HELP_PAGES, helpGuide } from '#server/features/assistant/help'
+import { ASSISTANT_PAGES, pageAt } from '#server/features/assistant/pages'
+import { assistantSettingsFrom } from '#server/features/assistant/assistant.settings'
+import { createTestDb, createUser } from '#server/tests/support/db'
+import { expectApiError } from '#server/tests/support/failure'
+import type { Db } from '#server/utils/batch'
 
 // The assistant's groundwork (step 9.0, D108) against the migrations: settings, the provider
 // choice, the daily limit per admin (guarded in the batch), usage records and their cleanup. The
@@ -338,7 +338,7 @@ describe('cleanup (D108)', () => {
 
   it('an account removed takes its usage with it', async () => {
     await startUsage(db, dara, settings, 'chat', at('09:00'))
-    const { user } = await import('../../../db/tables')
+    const { user } = await import('#server/db/tables')
     await db.delete(user).where(eq(user.id, dara.userId))
     expect(await rows()).toHaveLength(0)
   })

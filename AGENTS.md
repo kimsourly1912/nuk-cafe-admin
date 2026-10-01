@@ -76,7 +76,7 @@ app/
 ├── pages/                       # THIN route files: definePageMeta + render <Feature>Page
 ├── components/ composables/ utils/   # SHARED across features only (auto-imported)
 ├── layouts/ middleware/ plugins/ types/   # app shell
-server/                          # our API, per docs/server/architecture.md (pre-standard code still in api/v1 and db/schema)
+server/                          # our API, per docs/server/architecture.md
 shared/contracts/                # API contracts: request schemas + response types, used by server and app
 ```
 
@@ -86,7 +86,7 @@ shared/contracts/                # API contracts: request schemas + response typ
 2. **`index.ts` exports only building blocks:** pickers (`CategorySelect`), display components, option composables (`useCategoryOptions`), types and `navigation`. **Never export pages or forms from `index.ts`.** Otherwise features that use each other (a menu item picks categories; a category could list its items) would import each other's screens and create cycles.
 3. **Cross-feature imports go through the public API only:** `import { CategorySelect } from '~/features/categories'`. Deep imports (`~/features/x/composables/...`) and relative paths that leave the feature (`../../x`) are lint errors.
 4. **Public building blocks must not import other features.** This keeps the dependency graph one level deep, so no cycles can form. Screens (pages, forms) may import other features' public APIs.
-5. **Inside a feature, use relative imports** (`../composables/useCategories`). Feature code is *not* auto-imported. Root shared code *is* auto-imported everywhere (`apiFetch`, `getErrorMessage`, `invalidate`, `usePaginatedQuery`, `useConfirm`, `StatusTabs`, `ANY`, `formatMinor`, ...).
+5. **Inside an app feature, use relative imports** (`../composables/useCategories`). Feature code is *not* auto-imported. Root shared code *is* auto-imported everywhere (`apiFetch`, `getErrorMessage`, `invalidate`, `usePaginatedQuery`, `useConfirm`, `StatusTabs`, `ANY`, `formatMinor`, ...).
 6. **Route files in `app/pages/` stay thin.** They hold `definePageMeta` (always with a `title` for the browser tab) plus one `<Feature>…Page.vue` from the feature (the only deep import pages are allowed). Routes stay discoverable in one place.
 7. **Name feature folders after the resource they manage**, so a folder maps to its routes (`/api/admin/<resource>`) and contracts: `categories`, `products` (shown as "Menu items" in the UI), `availability-rules` (shown as "Availability"), `option-sets` (shown as "Options"), `modifier-groups` (shown as "Add-ons"), `menu` (the customer menu, `/api/public/menu`), `account` (the customer's own account: its pages and the header's account button, on Better Auth and `/api/shop/me`, D97), `orders` (the customer's orders: the order page with tracking, Your orders and the menu's order bar, `/api/shop/orders`, D100, D114), `counter` (the cashier's workspace: its session, queue and commands on `/api/counter/{branchId}`, D102), `exchange-rates` (shown as "Payments", D102), `reports` (the admin's Summary, Sales by item and Order history, with CSV and Print, on `/api/admin/reports`, D110, D111), `notifications` (shown as "Telegram": connected chats and sending there, on `/api/admin/telegram`, D112), `sample-data` (test data, D94), `assistant` (the AI help assistant's panel, on `/api/admin/assistant`, D107, D109; its help guide is `server/features/assistant/help/*.md`: **a change to an admin screen updates its page there**), `rewards` (reward categories live inside it: they're not menu categories), `vouchers`, `banners`, `customers`, `staff`, `auth`.
 
@@ -145,6 +145,7 @@ Every server change follows the [server standard](docs/server/README.md). The es
 
 - **Library first:** Better Auth (`admin` + `organization` plugins, access control), `@nuxtjs/better-auth`, NuxtHub and Cloudflare features before our own code ([security.md → What the libraries do](docs/server/security.md#what-the-libraries-do)).
 - **Routes** are thin, unversioned, per surface: `/api/public`, `/api/shop`, `/api/counter/{branchId}`, `/api/admin`.
+- **Imports:** use `#server/` for server paths and `#shared/` for shared paths, including tests and dynamic imports. Same-directory `./` imports are allowed; parent-relative imports and `~~/server/` are lint errors. Cross-feature imports still use the public `index.ts`. The app feature relative-import rule above is app-only. See [Imports and aliases](docs/server/architecture.md#imports-and-aliases), including the build-time auth exception.
 - **Features** live in `server/features/<feature>/` with fixed layers: `index.ts` (public API), `*.schema.ts`, `*.types.ts`, `*.repository.ts` (all SQL), `*.service.ts` (rules and use cases), `*.errors.ts`, `tests/`.
 - **Writes:** `version` checks, one atomic `db.batch` with guards, idempotency keys for money/points/vouchers, audit in the same batch.
 - **The app calls the API only through `apiFetch`**, inside `useApiQuery` / `useMutation` (`ApiError`, session handling, stale-response discard).

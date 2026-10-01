@@ -1,4 +1,4 @@
-import { telegramOverview } from '~~/server/features/notifications'
+import { telegramOverview } from '#server/features/notifications'
 
 /** `GET /api/admin/telegram` (step 8.1c, D112): whether Telegram is set up here, and the chats. */
 export default defineEventHandler(async (event) => {

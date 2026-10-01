@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { newId } from '../utils/ids'
-import { log } from '../utils/log'
+import { newId } from '#server/utils/ids'
+import { log } from '#server/utils/log'
 
 describe('newId', () => {
   it('makes UUID v7 ids that sort by creation', () => {

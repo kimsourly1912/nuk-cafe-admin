@@ -1,8 +1,8 @@
 import { and, asc, count, eq, inArray, isNull, max, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { CategoryStatus } from '#shared/contracts/menu-categories'
-import type { Db, Statement } from '../../utils/batch'
-import { readInChunks, requireCount } from '../../utils/batch'
+import type { Db, Statement } from '#server/utils/batch'
+import { readInChunks, requireCount } from '#server/utils/batch'
 import { menuCategories, menuItems } from './menu.schema'
 
 export interface CategoryRow {

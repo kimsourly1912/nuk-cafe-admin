@@ -3,9 +3,9 @@ import { fileURLToPath } from 'node:url'
 import { createClient } from '@libsql/client'
 import type { Client } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
-import type { Db } from '../../utils/batch'
+import type { Db } from '#server/utils/batch'
 import { eq } from 'drizzle-orm'
-import { user } from '../../db/tables'
+import { user } from '#server/db/tables'
 
 const migrationsDir = fileURLToPath(new URL('../../../server/db/migrations/sqlite', import.meta.url))
 

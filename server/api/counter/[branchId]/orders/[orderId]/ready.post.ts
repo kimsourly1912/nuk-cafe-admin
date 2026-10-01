@@ -1,5 +1,5 @@
 import { counterCommandSchema } from '#shared/contracts/orders'
-import { markOrderReady } from '~~/server/features/orders'
+import { markOrderReady } from '#server/features/orders'
 
 /** `{ version }` (header `Idempotency-Key`): Preparing → ready (D101). */
 export default defineEventHandler(async (event) => {

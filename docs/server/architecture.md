@@ -5,6 +5,7 @@
 - [Shape of the system](#shape-of-the-system)
 - [Surfaces and routes](#surfaces-and-routes)
 - [Features](#features): layout, the layers inside a feature, rules
+- [Imports and aliases](#imports-and-aliases)
 - [Anatomy of a route](#anatomy-of-a-route)
 - [Conventions](#conventions): ids, money, time, naming, responses, lists
 - [Writing data](#writing-data): versions, archiving, atomic writes, idempotency, audit
@@ -151,12 +152,30 @@ export async function exchangePoints(db: Db, actor: Actor, input: ExchangeInput,
 }
 ```
 
+## Imports and aliases
+
+Nuxt 4 documents [`#server`](https://nuxt.com/docs/4.x/directory-structure/server#import-aliases) for `server/` and [`#shared`](https://nuxt.com/docs/4.x/directory-structure/shared) for `shared/`. Relative imports are valid Nuxt; the following stricter rules are **our project convention**, enforced by ESLint:
+
+| Target | Import |
+|---|---|
+| Server utility or another server directory | `#server/utils/batch`, `#server/tests/support/db` |
+| Another feature's public API | `#server/features/platform` (its `index.ts`) |
+| Shared contract or pure utility | `#shared/contracts/orders` |
+| Sibling file in the same directory | `./orders.repository` (allowed, including barrel exports) |
+| Parent directory, including in tests | Use `#server/` or `#shared/`; never `../`, `../../`, or `~~/server/` |
+
+Use these aliases for value imports, type imports, re-exports and dynamic imports. Aliases do not bypass feature boundaries: production code reaches another feature only through its public `index.ts`. Feature tests and evaluations may import internals to verify rules and database invariants.
+
+Features keep explicit imports so plain Node tests do not depend on Nitro auto-imports. `vitest.config.ts` mirrors `#server` and `#shared` for those projects; Nuxt supplies them for the app and server build. Do not override generated TypeScript paths or define duplicate aliases in `nuxt.config.ts`. `~/` and `@/` target the app source directory in Nuxt 4, not `server/`.
+
+**Build-time exception (D47):** `server/auth.config.ts` imports `#server/features/identity/identity.auth` directly because Better Auth loads it before the generated database schema exists. Keep this exception and the lazy customer-profile import; do not replace either with an eager import through the identity barrel.
+
 ## Anatomy of a route
 
 ```ts
 // server/api/admin/menu/items/[itemId].patch.ts
 import { updateItemInput } from '#shared/contracts/menu'
-import { menu } from '~~/server/features/menu'
+import { menu } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { menu: ['write'] })   // 1. who, allowed?
@@ -301,7 +320,7 @@ Check that a guard test guards something: remove the guard and see it fail.
 
 ### Shared server utilities
 
-All in `server/utils/`. Routes get them by auto-import; features import them explicitly (`../../utils/<file>`) so their tests run without Nitro.
+All in `server/utils/`. Routes get them by auto-import; features import them explicitly (`'#server/utils/<file>'`) so their tests run without Nitro.
 
 | File | Exports | Use |
 |---|---|---|
