@@ -704,18 +704,30 @@ describe('reordering a category\'s items (step 10.3, D118)', () => {
   })
 
   it('someone changed an item meanwhile: says so, nothing moves, Reload brings the latest order', async () => {
-    const { page, api } = await open(reorderBackend(() => {
+    const handlers = reorderBackend(() => {
       throw failures.conflict('ITEMS_CHANGED', 'These menu items were changed by someone else.')
-    }))
+    })
+    const read = handlers['GET /admin/menu/items']!
+    const reloadRead = deferred()
+    let holdReads = false
+    handlers['GET /admin/menu/items'] = ((input: Parameters<MockHandler>[0]) => (holdReads ? reloadRead.handler(input) : read(input))) as MockHandler
+    const { page } = await open(handlers)
     const dialog = await openReorder(page)
     await dialog.getByRole('button', { name: 'Move Chai down' }).click()
     await dialog.getByRole('button', { name: 'Save order' }).click()
     await dialog.getByText('Someone changed these items meanwhile').waitFor()
-    const reads = api.calls.filter(c => c === 'GET /admin/menu/items').length
+
+    // While the latest order loads, the refused one stays refused: the alert stays and Save is off.
+    holdReads = true
     await dialog.getByRole('button', { name: 'Reload' }).click()
-    await expect.poll(() => api.calls.filter(c => c === 'GET /admin/menu/items').length).toBeGreaterThan(reads)
+    await reloadRead.started()
+    await dialog.getByText('Someone changed these items meanwhile').waitFor()
+    expect(await dialog.getByRole('button', { name: 'Save order' }).isDisabled()).toBe(true)
+
+    reloadRead.release(read({ url: new URL('http://localhost/api/admin/menu/items?categoryId=cat-1') } as Parameters<MockHandler>[0]))
     await expect.poll(() => dialog.getByText('Someone changed these items meanwhile').count()).toBe(0)
     expect(await dialog.getByRole('listitem').first().getAttribute('aria-label')).toBe('Chai')
+    expect(await dialog.getByRole('button', { name: 'Save order' }).isDisabled()).toBe(true)
   })
 
   it('closing with a move asks first', async () => {

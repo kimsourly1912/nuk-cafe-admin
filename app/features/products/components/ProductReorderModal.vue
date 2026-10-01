@@ -59,9 +59,22 @@ async function save() {
   }
 }
 
+// The conflict stays on screen (and Save disabled) until the latest order is in: clearing it first
+// would show the refused order as savable while the reload runs. A failed reload keeps it, to try again.
+const reloading = ref(false)
 async function reload() {
-  error.value = null
-  await query.refresh()
+  reloading.value = true
+  try {
+    await query.refresh()
+    if (query.error.value) return
+    order.value = [...(query.data.value ?? [])]
+    error.value = null
+    await nextTick()
+    unsaved.markClean()
+  }
+  finally {
+    reloading.value = false
+  }
 }
 
 watch(categoryId, () => {
@@ -105,7 +118,7 @@ watch(categoryId, () => {
           :icon="conflict ? 'i-lucide-refresh-cw' : 'i-lucide-circle-alert'"
           :title="conflict ? 'Someone changed these items meanwhile' : getErrorMessage(error)"
           :description="conflict ? 'Nothing was moved. Reload to see the latest order, then move them again.' : undefined"
-          :actions="conflict ? [{ label: 'Reload', color: 'neutral', variant: 'outline', onClick: reload }] : undefined"
+          :actions="conflict ? [{ label: 'Reload', color: 'neutral', variant: 'outline', loading: reloading, onClick: reload }] : undefined"
         />
 
         <p
