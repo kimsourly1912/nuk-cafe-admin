@@ -521,15 +521,62 @@ describe('menu item form', () => {
     await expect.poll(() => body?.imageId).toBeNull()
   })
 
-  it('rejects the wrong file type or a file over 5 MB without uploading', async () => {
+  it('rejects the wrong file type, a file over 25 MB, or one still over 5 MB after shrinking, without uploading', async () => {
     const { page, api } = await open()
     const form = await openNew(page)
     await chooseImage(form, { name: 'notes.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF') })
     await form.getByText('Use a JPEG, PNG or WebP image.').waitFor()
+    await chooseImage(form, { name: 'enormous.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(25 * 1024 * 1024 + 1) })
+    await form.getByText('The image is larger than 25 MB.').waitFor()
+    // Not a real image: it can't be made smaller, so the 5 MB limit applies to it as it is.
     await chooseImage(form, { name: 'huge.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(5 * 1024 * 1024 + 1) })
-    await form.getByText('The image is larger than 5 MB.').waitFor()
+    await form.getByText('The image is still larger than 5 MB after making it smaller. Try another photo.').waitFor()
     expect(api.calls.filter(c => c.includes('media'))).toEqual([])
   })
+
+  it('a big photo is made smaller in the browser before upload: WebP, at most 1600 px (D122)', async () => {
+    const { page } = await open()
+    // The upload's raw bytes (the mock's handlers get text, which garbles binary).
+    let uploaded: Buffer | undefined
+    await page.route('**/api/admin/media', async (route) => {
+      uploaded = route.request().postDataBuffer() ?? undefined
+      await route.fulfill({ json: UPLOADED })
+    })
+    // A real 3200 × 2400 photo-like PNG, drawn in the page (noise compresses badly, like a photo).
+    const photo = Buffer.from(await page.evaluate(async () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 3200
+      canvas.height = 2400
+      const context = canvas.getContext('2d')!
+      const pixels = context.createImageData(3200, 2400)
+      for (let i = 0; i < pixels.data.length; i += 4) {
+        pixels.data[i] = (i * 7) % 256
+        pixels.data[i + 1] = (i * 13) % 256
+        pixels.data[i + 2] = (i * 3) % 256
+        pixels.data[i + 3] = 255
+      }
+      context.putImageData(pixels, 0, 0)
+      const blob = await new Promise<Blob>(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+      return [...new Uint8Array(await blob.arrayBuffer())]
+    }))
+    const form = await openNew(page)
+    await chooseImage(form, { name: 'IMG_2041.png', mimeType: 'image/png', buffer: photo })
+    await expect.poll(() => form.locator('img').getAttribute('src')).toBe(UPLOADED.url)
+
+    const multipart = uploaded!.toString('latin1')
+    expect(multipart).toContain('filename="IMG_2041.webp"')
+    expect(multipart).toContain('Content-Type: image/webp')
+    expect(uploaded!.length).toBeLessThan(photo.length / 2)
+    // The uploaded image is 1600 × 1200: cut the WebP out (its RIFF header holds its length) and
+    // read its size back in the page.
+    const start = uploaded!.indexOf('RIFF')
+    const webp = uploaded!.subarray(start, start + 8 + uploaded!.readUInt32LE(start + 4))
+    const size = await page.evaluate(async (bytes) => {
+      const bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/webp' }))
+      return [bitmap.width, bitmap.height]
+    }, [...webp])
+    expect(size).toEqual([1600, 1200])
+  }, 60_000)
 
   it('cannot save while the image is uploading, and keeps the old image when the upload fails', async () => {
     const upload = deferred()

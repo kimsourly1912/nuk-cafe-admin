@@ -7,7 +7,7 @@ A new item is created as a **Draft**: customers don't see it until you publish i
 ## Create a menu item
 
 1. Press **New menu item** (or **N**).
-2. **Image** (optional): upload a JPEG, PNG or WebP photo, at most 5 MB.
+2. **Image** (optional): upload a JPEG, PNG or WebP photo. A large phone photo is made smaller before it uploads (at most 1600 px, under 5 MB); photos over 25 MB are refused.
 3. **Name** and **Category** (required). The category must be one without subcategories: choose the subcategory, not its main category.
 4. **Description** (optional).
 5. **Options and prices**: see below. Without option sets the item has one version: enter its **Price**.
