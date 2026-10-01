@@ -235,13 +235,16 @@ describe('creating an account', () => {
 })
 
 describe('on a phone', () => {
-  it('the account pages fill the screen with the action at the bottom; the header has a sign-in icon', async () => {
+  it('the account pages fill the screen with the action at the bottom; the header\'s account icon opens Sign in (D124)', async () => {
     const { page, problems } = await open('/sign-in', 390)
     const submit = button(page, 'Sign in')
     const box = (await submit.boundingBox())!
     expect(box.y + box.height).toBeGreaterThan(844 - 120)
     await page.goto(url('/'), { waitUntil: 'hydration' })
-    await page.getByRole('link', { name: 'Sign in' }).waitFor()
+    await page.getByRole('button', { name: 'Account', exact: true }).click()
+    await page.getByRole('link', { name: 'Create account' }).waitFor()
+    await page.getByRole('link', { name: 'Sign in' }).click()
+    await heading(page, 'Sign in').waitFor()
     expect(problems).toEqual([])
   })
 })

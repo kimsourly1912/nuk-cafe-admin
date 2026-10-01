@@ -1,3 +1,4 @@
+import type { Workspace } from '#shared/contracts/account'
 import type { AdminSession, CounterSession } from '#shared/contracts/identity'
 import type { Db } from '#server/utils/batch'
 import { branchNotFound, emailNotVerified, forbidden, notAdmin, notStaff, passwordChangeRequired, unauthenticated } from './identity.errors'
@@ -113,4 +114,16 @@ export async function counterSession(db: Db, user: SessionUser | null | undefine
     mustChangePassword: Boolean(user.mustChangePassword),
     branches,
   }
+}
+
+/**
+ * The staff workspaces an account may open, for the customer site's account menu (`GET /api/shop/me`):
+ * the admin app for a platform admin (D52), the counter for whoever `counterSession` accepts (an
+ * admin, or a member of an active branch with a known role). Only links: each workspace checks
+ * access on its own routes.
+ */
+export async function workspacesOf(db: Db, user: SessionUser): Promise<Workspace[]> {
+  if (platformRolesOf(user).includes('admin')) return ['admin', 'counter']
+  const members = await repo.memberBranches(db, user.id)
+  return members.some(m => m.role in branchRoles) ? ['counter'] : []
 }

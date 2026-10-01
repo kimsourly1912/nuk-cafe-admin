@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
- * Items of one section (or one search group): rows on phones, cards from `sm` in a grid laid out by
- * the column's own width (one, two or three per row; D93). CSS only, so the server's page and the
- * browser's agree (D95).
+ * Items of one section (or one search group): rows on phones, grouped in one white box on the page's
+ * gray (D124); cards from `sm` in a grid laid out by the column's own width (one, two or three per
+ * row; D93). CSS only, so the server's page and the browser's agree (D95).
  */
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
 import MenuItemCard from './MenuItemCard.vue'
@@ -22,7 +22,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="@container">
-    <div class="grid grid-cols-1 max-sm:divide-y max-sm:divide-default sm:gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
+    <div class="grid grid-cols-1 max-sm:divide-y max-sm:divide-default max-sm:rounded-lg max-sm:border max-sm:border-default max-sm:bg-default max-sm:px-4 sm:gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
       <MenuItemCard
         v-for="item in items"
         :key="item.id"

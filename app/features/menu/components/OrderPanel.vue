@@ -1,11 +1,14 @@
 <script setup lang="ts">
 /**
- * The order before checkout (D93): its lines with a quantity each (0 removes), the subtotal and
- * "Review order" (`/checkout`, D100; not while closed). A line whose item left the menu or sold
- * out says so and doesn't count. Beside the menu from `lg`; in a bottom sheet below it.
+ * The order before checkout beside the menu, from `lg` (D93): the title with the item count, the
+ * order type and "Clear order"; the lines; the subtotal and "Review order". At most as tall as the
+ * screen below the header: the title and the totals stay in view, only the lines scroll (D124).
+ * Below `lg` the same parts sit in the order drawer's header, body and footer (`MenuPage`).
  */
 import type { ResolvedCart } from '../utils/cart'
-import { MAX_LINE_QUANTITY } from '../utils/cart'
+import OrderActions from './OrderActions.vue'
+import OrderLines from './OrderLines.vue'
+import OrderTotals from './OrderTotals.vue'
 
 defineProps<{
   cart: ResolvedCart
@@ -14,118 +17,45 @@ defineProps<{
   closed: boolean
   closedNote?: string
 }>()
-const emit = defineEmits<{ 'set-quantity': [key: string, quantity: number] }>()
+const emit = defineEmits<{ 'set-quantity': [key: string, quantity: number], 'clear': [] }>()
 </script>
 
 <template>
   <section
     aria-labelledby="order-heading"
-    class="flex flex-col gap-4"
+    class="flex max-h-[calc(100dvh-var(--shop-header,7rem)-1rem)] flex-col overflow-hidden rounded-lg border border-default bg-default"
   >
-    <div class="flex items-baseline justify-between gap-2">
-      <h2
-        id="order-heading"
-        class="text-lg font-semibold text-highlighted"
-      >
-        Your order
-      </h2>
-      <span class="text-sm text-muted">{{ orderType }}</span>
-    </div>
-
-    <div
-      v-if="!cart.lines.length"
-      class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-default px-4 py-8 text-center"
-    >
-      <UIcon
-        name="i-lucide-shopping-bag"
-        class="size-8 text-dimmed"
-      />
-      <p class="font-medium text-highlighted">
-        Your order is empty
-      </p>
-      <p class="text-sm text-muted">
-        Add items from the menu.
-      </p>
-    </div>
-
-    <ul
-      v-else
-      class="divide-y divide-default"
-    >
-      <li
-        v-for="line in cart.lines"
-        :key="line.key"
-        class="flex flex-col gap-2 py-3"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <p
-              class="font-medium"
-              :class="line.available ? 'text-highlighted' : 'text-muted line-through'"
-            >
-              {{ line.name }}
-            </p>
-            <p
-              v-if="line.detail"
-              class="text-sm text-muted"
-            >
-              {{ line.detail }}
-            </p>
-            <UBadge
-              v-if="!line.available"
-              label="No longer available"
-              color="warning"
-              variant="subtle"
-              size="sm"
-              class="mt-1"
-            />
-          </div>
-          <span
-            v-if="line.available"
-            class="shrink-0 text-sm font-medium text-highlighted"
-          >{{ formatMinor(line.unitPriceMinor * line.quantity) }}</span>
-        </div>
-        <UInputNumber
-          v-if="line.available"
-          :model-value="line.quantity"
-          :min="0"
-          :max="MAX_LINE_QUANTITY"
-          size="sm"
-          :aria-label="`Quantity of ${line.name}`"
-          class="w-28"
-          @update:model-value="value => emit('set-quantity', line.key, value ?? 0)"
-        />
-        <UButton
-          v-else
-          label="Remove"
-          icon="i-lucide-trash-2"
-          color="neutral"
-          variant="link"
-          size="sm"
-          class="self-start px-0"
-          :aria-label="`Remove ${line.name}`"
-          @click="emit('set-quantity', line.key, 0)"
-        />
-      </li>
-    </ul>
-
-    <div class="space-y-3 border-t border-default pt-4">
-      <div class="flex items-baseline justify-between">
-        <span class="text-sm text-muted">Subtotal</span>
-        <span class="font-semibold text-highlighted">{{ formatMinor(cart.subtotalMinor) }}</span>
+    <div class="flex items-start justify-between gap-3 border-b border-default p-4">
+      <div>
+        <h2
+          id="order-heading"
+          class="text-lg font-semibold text-highlighted"
+        >
+          Your order
+        </h2>
+        <p class="text-sm text-muted">
+          {{ pluralize(cart.count, ['item', 'items']) }}
+        </p>
       </div>
-      <UButton
-        label="Review order"
-        to="/checkout"
-        block
-        :disabled="closed || !cart.count"
+      <OrderActions
+        :order-type="orderType"
+        :count="cart.lines.length"
+        @clear="emit('clear')"
       />
-      <p
-        v-if="closed"
-        class="text-center text-sm text-muted"
-      >
-        {{ closedNote ?? 'Closed now.' }}
-      </p>
+    </div>
+    <div class="min-h-0 flex-1 overflow-y-auto p-4">
+      <OrderLines
+        :cart="cart"
+        @set-quantity="(key, quantity) => emit('set-quantity', key, quantity)"
+      />
+    </div>
+    <div class="border-t border-default p-4">
+      <OrderTotals
+        :subtotal-minor="cart.subtotalMinor"
+        :count="cart.count"
+        :closed="closed"
+        :closed-note="closedNote"
+      />
     </div>
   </section>
 </template>
