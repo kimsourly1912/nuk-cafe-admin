@@ -156,3 +156,36 @@ export function useItemMutations() {
     isBusy: (id: string) => [update, publish, unpublish, archive, restore].some(m => m.isPending(id)),
   }
 }
+
+/**
+ * A category's items in their order, for Reorder (step 10.3, D118): drafts and published items,
+ * the ones a reorder must list (archived items keep their place but aren't shown). Every page is
+ * read, so a category with more than one page of items is complete.
+ */
+export function useCategoryItems(categoryId: MaybeRefOrGetter<string | undefined>) {
+  return useApiQuery(
+    () => `products:category-order:${toValue(categoryId) ?? 'none'}`,
+    async () => {
+      const id = toValue(categoryId)
+      if (!id) return []
+      const items: MenuItemSummary[] = []
+      for (let page = 1; ; page++) {
+        const answer = await apiFetch<Page<MenuItemSummary>>(BASE, { query: { categoryId: id, page, pageSize: 100 } })
+        items.push(...answer.items)
+        if (page >= answer.totalPages) break
+      }
+      return items.filter(item => item.status !== 'archived').sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+    },
+    { server: false },
+  )
+}
+
+/**
+ * Saves a category's order (`PUT /admin/menu/items/order`): every item with the version it was
+ * read at, in the new order. Someone else's change meanwhile is refused (409) and nothing moves.
+ * The dialog keeps its own saving state and shows a refusal in place (Reload).
+ */
+export async function saveItemOrder(categoryId: string, items: Pick<MenuItemSummary, 'id' | 'version'>[]) {
+  await apiFetch<null>(`${BASE}/order`, { method: 'PUT', body: { categoryId, items: items.map(item => ({ id: item.id, version: item.version })) } })
+  await invalidate(...AFFECTED)
+}

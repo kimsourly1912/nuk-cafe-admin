@@ -128,6 +128,29 @@ export async function findActiveOrders(db: Db, branchId: string, now: Date): Pro
     .orderBy(asc(orders.placedAt))
 }
 
+/** When an order left the queue: completed or cancelled. */
+const finishedAt = sql`coalesce(${orders.completedAt}, ${orders.cancelledAt})`
+
+/** A business day's finished orders at a branch hold at most this many (a cafe's day is far fewer). */
+export const FINISHED_LIMIT = 500
+
+/**
+ * A business day's orders that left the queue (step 10.2), the most recently finished first; the
+ * id breaks ties. Uses `orders_branch_date_idx`.
+ */
+export async function findFinishedOrders(db: Db, branchId: string, businessDate: string): Promise<OrderRow[]> {
+  return selectOrders(db)
+    .where(and(eq(orders.branchId, branchId), eq(orders.businessDate, businessDate), inArray(orders.status, ['completed', 'cancelled'])))
+    .orderBy(desc(finishedAt), desc(orders.id))
+    .limit(FINISHED_LIMIT)
+}
+
+export async function countFinishedOrders(db: Db, branchId: string, businessDate: string): Promise<number> {
+  const [row] = await db.select({ n: sql<number>`count(*)` }).from(orders)
+    .where(and(eq(orders.branchId, branchId), eq(orders.businessDate, businessDate), inArray(orders.status, ['completed', 'cancelled'])))
+  return row?.n ?? 0
+}
+
 // --- The customer's orders (6.5, D106) ---
 
 const IN_PROGRESS: OrderStatus[] = ['awaiting_payment', 'preparing', 'ready']

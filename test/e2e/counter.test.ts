@@ -57,6 +57,17 @@ async function cashierAtCounter(width = 1180) {
   return { page, problems }
 }
 
+/** A counter command over HTTP, as the cashier. */
+async function command(order: Order, action: 'pay' | 'ready' | 'complete' | 'cancel', body: Record<string, unknown>) {
+  const cookie = await signInOverHttp(seed.customers.cashier)
+  const response = await fetch(url(`/api/counter/${seed.openBranchId}/orders/${order.id}/${action}`), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin, cookie, 'idempotency-key': crypto.randomUUID() },
+    body: JSON.stringify(body),
+  })
+  expect(response.status).toBe(200)
+}
+
 const column = (page: Page, name: string) => page.getByRole('region', { name: new RegExp(`^${name}`) })
 const card = (page: Page, order: { pickupNumber: number }) => page.getByRole('article', { name: `Order ${number(order)}` })
 const panel = (page: Page) => page.getByRole('dialog')
@@ -159,14 +170,59 @@ describe('the counter', () => {
       await page.goto(url(`/counter/${seed.openBranchId}?order=${order.id}`), { waitUntil: 'hydration' })
       await panel(page).getByText('1 × Banana Bread').waitFor()
       await expect.poll(() => new URL(page.url()).search).toBe('')
-      // An order no longer in the queue says so.
-      await page.goto(url(`/counter/${seed.openBranchId}?order=00000000-0000-7000-8000-000000000000`), { waitUntil: 'hydration' })
-      await toast(page, 'This order isn\'t in the queue anymore').waitFor()
+      // Once it has left the queue, the link opens it on Finished today (step 10.2).
+      await command(order, 'cancel', { version: 1, reason: 'customer_changed_mind', note: null, returnMethod: null })
+      await page.goto(url(`/counter/${seed.openBranchId}?order=${order.id}`), { waitUntil: 'hydration' })
+      await page.waitForURL(u => u.pathname === `/counter/${seed.openBranchId}/finished`)
+      await page.getByRole('heading', { name: `Order ${number(order)}` }).waitFor()
+      await page.getByText('Cancelled by Sophea: customer changed their mind').waitFor()
+      await expect.poll(() => new URL(page.url()).search).toBe('')
     }
     finally {
       // Not left unpaid: the customer may have two at most.
-      await sql('update orders set status = \'cancelled\' where id = ?', [order.id])
+      await sql('update orders set status = \'cancelled\' where id = ? and status = \'awaiting_payment\'', [order.id])
     }
+  })
+
+  it('Finished today (step 10.2): a completed order is listed with its payment; its panel shows each step and who took it; the chips and search filter', async () => {
+    const order = await placeOrder(seed.customers.counterShopperB)
+    await command(order, 'pay', { version: 1, method: 'khqr' })
+    await command(order, 'ready', { version: 2 })
+    await command(order, 'complete', { version: 3 })
+    const { page, problems } = await cashierAtCounter()
+
+    await page.getByRole('link', { name: /^Finished today \(\d+\)$/ }).click()
+    await page.waitForURL(u => u.pathname === `/counter/${seed.openBranchId}/finished`)
+    const row = page.getByRole('row').filter({ has: page.getByRole('button', { name: `Order ${number(order)}`, exact: true }) })
+    await row.getByText('KHQR', { exact: true }).waitFor()
+    await row.getByText('Completed').waitFor()
+
+    await row.getByRole('button', { name: `Order ${number(order)}`, exact: true }).click()
+    const aside = page.getByRole('complementary', { name: 'Order' })
+    await aside.getByRole('heading', { name: `Order ${number(order)}` }).waitFor()
+    await aside.getByText(/KHQR \$2\.25 · by Sophea$/).waitFor()
+    await aside.getByText('Completed', { exact: true }).last().waitFor()
+    await aside.getByRole('button', { name: 'Close' }).click()
+    await aside.waitFor({ state: 'detached' })
+
+    await page.getByRole('button', { name: /^Cancelled/ }).click()
+    await expect.poll(() => row.count()).toBe(0)
+    await page.getByRole('button', { name: /^All/ }).click()
+    await page.getByPlaceholder('Search number or name').fill('no such customer')
+    await page.getByText('No matching orders').waitFor()
+    expect(problems).toEqual([])
+  })
+
+  it('Finished today on a phone: rows, and the order full screen', async () => {
+    const order = await placeOrder(seed.customers.counterShopperA)
+    await command(order, 'pay', { version: 1, method: 'cash_usd' })
+    await command(order, 'ready', { version: 2 })
+    await command(order, 'complete', { version: 3 })
+    const { page } = await cashierAtCounter(390)
+    await page.goto(url(`/counter/${seed.openBranchId}/finished`), { waitUntil: 'hydration' })
+    await page.getByRole('button', { name: `Order ${number(order)}, Completed` }).click()
+    await panel(page).getByRole('heading', { name: `Order ${number(order)}` }).waitFor()
+    await panel(page).getByText(/Cash USD \$2\.25 · by Sophea$/).waitFor()
   })
 
   it('on a phone: one list at a time, as tabs with counts', async () => {

@@ -198,6 +198,13 @@ export function insertDeliveryStatement(db: Db, delivery: NewDelivery): Statemen
   return db.insert(notificationDeliveries).values(delivery).onConflictDoNothing()
 }
 
+/** Which of these deliveries exist (a dropped duplicate doesn't). */
+export async function deliveryIds(db: Db, ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set()
+  const rows = await db.select({ id: notificationDeliveries.id }).from(notificationDeliveries).where(inArray(notificationDeliveries.id, ids))
+  return new Set(rows.map(row => row.id))
+}
+
 /** Which of these chats already have a delivery with this key. */
 export async function deliveredTo(db: Db, dedupeKey: string, destinationIds: string[]): Promise<Set<string>> {
   if (!destinationIds.length) return new Set()

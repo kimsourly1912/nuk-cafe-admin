@@ -656,3 +656,85 @@ describe('menu item editor URLs (D90, decision 4)', () => {
     expect(new URL(page.url()).pathname).toBe('/admin/products/item-1')
   })
 })
+
+describe('reordering a category\'s items (step 10.3, D118)', () => {
+  const CHAI = summaryOf(menuItemOf('item-20', 'Chai', { categoryId: 'cat-1' }), { sortOrder: 1, version: 3 })
+  const GREEN = summaryOf(menuItemOf('item-21', 'Green tea', { categoryId: 'cat-1' }), { sortOrder: 2, version: 5, status: 'active' })
+  const OOLONG = summaryOf(menuItemOf('item-22', 'Oolong', { categoryId: 'cat-1' }), { sortOrder: 3, version: 7, status: 'active' })
+  const OLD = summaryOf(menuItemOf('item-23', 'Old tea', { categoryId: 'cat-1' }), { sortOrder: 4, status: 'archived' })
+
+  function reorderBackend(put: MockHandler) {
+    return {
+      ...backend(),
+      'GET /admin/menu/items': ({ url }: { url: URL }) => {
+        const inTea = url.searchParams.get('categoryId') === 'cat-1'
+        const rows = inTea ? [OOLONG, CHAI, GREEN, OLD] : [LATTE_ROW, MATCHA_ROW]
+        return { items: rows, page: 1, pageSize: 100, total: rows.length, totalPages: 1 }
+      },
+      'PUT /admin/menu/items/order': put,
+    } as Record<string, MockHandler>
+  }
+
+  async function openReorder(page: Page) {
+    await page.getByRole('button', { name: 'Reorder' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Reorder menu items' })
+    await dialog.getByRole('combobox', { name: 'Category' }).click()
+    await page.getByRole('option', { name: 'Tea' }).click()
+    await dialog.getByRole('list', { name: 'Menu items in order' }).waitFor()
+    return dialog
+  }
+
+  it('lists the category\'s items in their order (not archived ones), moves one, and saves every item with its version', async () => {
+    let sent: unknown
+    const { page, api } = await open(reorderBackend(({ body }) => {
+      sent = body
+      return null
+    }))
+    const dialog = await openReorder(page)
+    const names = () => dialog.getByRole('listitem').evaluateAll(rows => rows.map(row => row.getAttribute('aria-label')))
+    expect(await names()).toEqual(['Chai', 'Green tea', 'Oolong'])
+    expect(await dialog.getByRole('button', { name: 'Save order' }).isDisabled()).toBe(true)
+
+    await dialog.getByRole('button', { name: 'Move Oolong up' }).click()
+    await dialog.getByText('Oolong moved to position 2 of 3').waitFor()
+    await dialog.getByRole('button', { name: 'Save order' }).click()
+    await toast(page, 'Order saved').waitFor()
+    expect(sent).toEqual({ categoryId: 'cat-1', items: [{ id: 'item-20', version: 3 }, { id: 'item-22', version: 7 }, { id: 'item-21', version: 5 }] })
+    expect(api.calls.filter(c => c.startsWith('PUT'))).toEqual(['PUT /admin/menu/items/order'])
+  })
+
+  it('someone changed an item meanwhile: says so, nothing moves, Reload brings the latest order', async () => {
+    const handlers = reorderBackend(() => {
+      throw failures.conflict('ITEMS_CHANGED', 'These menu items were changed by someone else.')
+    })
+    const read = handlers['GET /admin/menu/items']!
+    const reloadRead = deferred()
+    let holdReads = false
+    handlers['GET /admin/menu/items'] = ((input: Parameters<MockHandler>[0]) => (holdReads ? reloadRead.handler(input) : read(input))) as MockHandler
+    const { page } = await open(handlers)
+    const dialog = await openReorder(page)
+    await dialog.getByRole('button', { name: 'Move Chai down' }).click()
+    await dialog.getByRole('button', { name: 'Save order' }).click()
+    await dialog.getByText('Someone changed these items meanwhile').waitFor()
+
+    // While the latest order loads, the refused one stays refused: the alert stays and Save is off.
+    holdReads = true
+    await dialog.getByRole('button', { name: 'Reload' }).click()
+    await reloadRead.started()
+    await dialog.getByText('Someone changed these items meanwhile').waitFor()
+    expect(await dialog.getByRole('button', { name: 'Save order' }).isDisabled()).toBe(true)
+
+    reloadRead.release(read({ url: new URL('http://localhost/api/admin/menu/items?categoryId=cat-1') } as Parameters<MockHandler>[0]))
+    await expect.poll(() => dialog.getByText('Someone changed these items meanwhile').count()).toBe(0)
+    expect(await dialog.getByRole('listitem').first().getAttribute('aria-label')).toBe('Chai')
+    expect(await dialog.getByRole('button', { name: 'Save order' }).isDisabled()).toBe(true)
+  })
+
+  it('closing with a move asks first', async () => {
+    const { page } = await open(reorderBackend(() => null))
+    const dialog = await openReorder(page)
+    await dialog.getByRole('button', { name: 'Move Chai down' }).click()
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByText('Discard unsaved changes?').waitFor()
+  })
+})

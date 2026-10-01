@@ -7,8 +7,8 @@ import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { payOrder, placeOrder } from '#server/features/orders'
 import { outboxMessages } from '#server/features/platform/platform.schema'
-import { deliverDue, listDeliveries, queueClosingSummaries, queueOrderAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
-import { closingInstant } from '#server/features/notifications/notifications.messages'
+import { deliverDue, listDeliveries, queueClosingSummaries, queueOrderAlert, queueServerErrorAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
+import { closingInstant, routeOf } from '#server/features/notifications/notifications.messages'
 import * as repo from '#server/features/notifications/notifications.repository'
 import { notificationDeliveries, telegramDestinations } from '#server/features/notifications/notifications.schema'
 import { sendReport, telegramOverview } from '#server/features/notifications/notifications.service'
@@ -275,5 +275,50 @@ describe('rules and history', () => {
   it('a report sent from the portal is in the history, as sent', async () => {
     await sendReport(db, telegram.api, admin, crypto.randomUUID(), { destinationId: owner, report: {}, attachCsv: false }, async () => ({ subject: 'Summary · Mon 28 Sep 2026', html: '<b>Summary</b>', audit: {} }), at(MON, '12:00'))
     expect(await listDeliveries(db)).toMatchObject([{ kind: 'report', subject: 'Summary · Mon 28 Sep 2026', status: 'sent', destination: { title: 'Kim' } }])
+  })
+})
+
+describe('server errors (step 10.4, D119)', () => {
+  const failed = (path: string, requestId = 'req-1') => ({ method: 'POST', path, status: 500, requestId })
+
+  it('names ids in a route once, so one broken page is one alert', () => {
+    expect(routeOf('/api/shop/orders/01a0f33c-3eb1-71c2-8deb-d67aee32e4c9/cancel?x=1')).toBe('/api/shop/orders/{id}/cancel')
+    expect(routeOf('/api/admin/menu/items')).toBe('/api/admin/menu/items')
+  })
+
+  it('queues nothing without a chat that wants them; with one, the route, status and request id, never the error\'s text', async () => {
+    expect(await queueServerErrorAlert(db, failed('/api/shop/orders'), at(MON, '10:00'))).toEqual([])
+    await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
+    const ids = await queueServerErrorAlert(db, failed('/api/shop/orders'), at(MON, '10:00'))
+    expect(ids).toHaveLength(1)
+    const [row] = await deliveries()
+    expect(row).toMatchObject({ kind: 'server_error', destinationId: owner, subject: 'Server error · POST /api/shop/orders' })
+    expect(row!.message.html).toContain('<code>POST /api/shop/orders</code>')
+    expect(row!.message.html).toContain('500 · request <code>req-1</code>')
+
+    await deliverDue(db, telegram.api, at(MON, '10:00'), { ids })
+    expect(telegram.sent()).toHaveLength(1)
+    expect(telegram.sent()[0]!.payload).toMatchObject({ chat_id: '555', parse_mode: 'HTML' })
+  })
+
+  it('at most one per route and chat in 15 minutes, even when two failures land at once', async () => {
+    await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
+    await setNotificationRule(db, admin, { kind: 'server_error', destinationId: group, enabled: true, attachCsv: false })
+    const [first, second] = await Promise.all([
+      queueServerErrorAlert(db, failed('/api/shop/orders/01a0f33c-3eb1-71c2-8deb-d67aee32e4c9/cancel', 'a'), at(MON, '10:01')),
+      queueServerErrorAlert(db, failed('/api/shop/orders/01a0f33c-3eb1-71c2-8deb-d67aee32e4c8/cancel', 'b'), at(MON, '10:02')),
+    ])
+    expect(first!.length + second!.length).toBe(2)
+    expect(await deliveries()).toHaveLength(2)
+    // Another route is its own alert; the same route in the next window alerts again.
+    expect(await queueServerErrorAlert(db, failed('/api/admin/staff'), at(MON, '10:03'))).toHaveLength(2)
+    expect(await queueServerErrorAlert(db, failed('/api/shop/orders/01a0f33c-3eb1-71c2-8deb-d67aee32e4c9/cancel'), at(MON, '10:16'))).toHaveLength(2)
+    expect(await deliveries()).toHaveLength(6)
+  })
+
+  it('a blocked chat gets none', async () => {
+    await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
+    await db.update(telegramDestinations).set({ status: 'blocked' }).where(eq(telegramDestinations.id, owner))
+    expect(await queueServerErrorAlert(db, failed('/api/shop/orders'), at(MON, '10:00'))).toEqual([])
   })
 })

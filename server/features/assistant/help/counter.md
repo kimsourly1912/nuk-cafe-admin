@@ -36,6 +36,16 @@ Branch staff, managers and admins use the **counter app** at `/counter` (its own
 
 A ready or completed order can't be cancelled.
 
+## Finished today
+
+Switch from **Queue** to **Finished today (24)** at the top to see today's orders that are already completed or cancelled, newest first. Today means the cafe's business day, which starts at 4:00 AM.
+
+- Search by order number or name, and use **All**, **Completed** or **Cancelled**.
+- Each row shows when it finished, pickup or table, the customer's first name, the items, the total and how it was paid ("Cash USD · Returned" when the money went back, "Unpaid" when it was never paid).
+- Click the order number (tap the row on a phone) to see its items, why it was cancelled (with the staff's note and who returned the money), and a timeline of every step with who did it.
+- It's read only: nothing here changes an order. Older days are in the admin's **Reports → Order history**.
+- Telegram's **Open order** on an order that has already finished opens it here.
+
 ## Sold out
 
 The counter's **Sold out** page (`/counter/<branch>/sold-out`) switches individual versions sold out at this branch, for example "Iced Latte · Large". Customers see "Sold out" and can't order it. It stays sold out until staff switch it back. Each row says since when and who marked it. To remove an item from the menu for good, an admin unpublishes or archives it in **Menu items** instead.

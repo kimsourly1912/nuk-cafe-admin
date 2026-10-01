@@ -55,6 +55,8 @@ export const orders = sqliteTable('orders', {
   uniqueIndex('orders_pickup_number_idx').on(t.branchId, t.businessDate, t.pickupNumber),
   index('orders_customer_idx').on(t.customerId, t.placedAt),
   index('orders_branch_status_idx').on(t.branchId, t.status),
+  // The counter's finished orders of a business day (step 10.2).
+  index('orders_branch_date_idx').on(t.branchId, t.businessDate),
   // The expiry task's question every minute: unpaid orders past their time (6.6, D104).
   index('orders_status_due_idx').on(t.status, t.paymentDueAt),
 ])

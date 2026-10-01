@@ -115,8 +115,14 @@ export interface ReportSent {
  * - `payment`: its payment taken;
  * - `closing_summary`: the day's Summary, 30 minutes after the last opening window ends.
  */
-export const NOTIFICATION_KINDS = ['new_order', 'payment', 'closing_summary'] as const
+export const NOTIFICATION_KINDS = ['new_order', 'payment', 'closing_summary', 'server_error'] as const
 export type NotificationKind = typeof NOTIFICATION_KINDS[number]
+
+/**
+ * Server errors (step 10.4, D119): at most one alert per route in this many minutes, per chat, so a
+ * failing page during a rush doesn't flood the chat.
+ */
+export const SERVER_ERROR_ALERT_WINDOW_MINUTES = 15
 
 /** One chat receiving one kind of notification. */
 export interface NotificationRule {

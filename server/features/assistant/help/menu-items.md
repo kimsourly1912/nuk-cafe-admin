@@ -42,6 +42,17 @@ From the item's **⋮** menu in the list:
 
 To mark something out of stock for today, don't unpublish it: staff use **Sold out** in the counter app.
 
+## Change the order of items in a category
+
+Customers see a category's items in the order you set here, for example best sellers first.
+
+1. Press **Reorder** in the toolbar (or the **R** key). If you're filtering by a category, it opens on that category.
+2. Choose the **Category**.
+3. Drag an item by its handle, or use its up and down arrows.
+4. Press **Save order**. Archived items aren't listed and keep their place.
+
+If someone changed one of these items at the same moment, nothing is moved: press **Reload**, then move them again.
+
 ## Edit a menu item
 
 Click the item's name (or **⋮ → Edit**), change it, then **Save**. Changes to a published item show on the customer menu at once.

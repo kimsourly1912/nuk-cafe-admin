@@ -31,3 +31,33 @@ describe('0011_drop_legacy_menu', () => {
     for (const file of files.slice(drop + 1)) await applyMigration(client, file)
   })
 })
+
+describe('0022_notification_rules_server_error', () => {
+  it('rebuilds the rules table keeping every rule, then takes the new kind and still refuses an unknown one', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const rebuild = files.indexOf('0022_notification_rules_server_error.sql')
+    expect(rebuild).toBeGreaterThan(0)
+    for (const file of files.slice(0, rebuild)) await applyMigration(client, file)
+
+    await client.batch([
+      `insert into telegram_destinations (id, kind, chat_id, title, status) values ('d1', 'group', '-100', 'Staff', 'connected')`,
+      `insert into notification_rules (kind, destination_id, attach_csv) values ('new_order', 'd1', 0)`,
+      `insert into notification_rules (kind, destination_id, attach_csv) values ('closing_summary', 'd1', 1)`,
+    ], 'write')
+
+    await applyMigration(client, files[rebuild]!)
+
+    const { rows } = await client.execute('select kind, destination_id, attach_csv from notification_rules order by kind')
+    expect(rows.map(row => ({ ...row }))).toEqual([
+      { kind: 'closing_summary', destination_id: 'd1', attach_csv: 1 },
+      { kind: 'new_order', destination_id: 'd1', attach_csv: 0 },
+    ])
+    await client.execute(`insert into notification_rules (kind, destination_id) values ('server_error', 'd1')`)
+    await expect(client.execute(`insert into notification_rules (kind, destination_id) values ('nonsense', 'd1')`)).rejects.toThrow(/CHECK/)
+    // A chat's rules still go with it.
+    await client.execute(`delete from telegram_destinations where id = 'd1'`)
+    expect((await client.execute('select count(*) as n from notification_rules')).rows[0]!.n).toBe(0)
+    for (const file of files.slice(rebuild + 1)) await applyMigration(client, file)
+  })
+})

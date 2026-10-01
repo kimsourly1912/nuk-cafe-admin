@@ -18,6 +18,36 @@ const riel = (amount: number) => `៛${amount.toLocaleString('en-US')}`
 const METHODS = { cash_usd: 'Cash USD', cash_khr: 'Cash riel', khqr: 'KHQR' } as const
 
 /** "#042": pickup numbers restart every business day. */
+/** What failed, for a server error alert (step 10.4, D119): never the error's own text. */
+export interface ServerErrorInfo {
+  method: string
+  /** The path without its query. */
+  path: string
+  status: number
+  requestId: string | null
+}
+
+/**
+ * The route a failing request belongs to: ids (any segment with a digit and 8+ characters) become
+ * `{id}`, so one broken page is one alert, whichever order or item it was.
+ */
+export const routeOf = (path: string) => path.split('?')[0]!.split('/').map(part => (/\d/.test(part) && part.length >= 8 ? '{id}' : part)).join('/')
+
+/**
+ * "⚠️ Server error · POST /api/shop/orders/{id}/cancel · 500 · request …". The error's text stays in
+ * Workers Logs (it can hold internal details or someone's data); the request id finds it there.
+ */
+export function serverErrorMessage(info: ServerErrorInfo, windowMinutes: number): StoredMessage {
+  const lines = [
+    '⚠️ <b>Server error</b>',
+    `<code>${escapeHtml(`${info.method} ${routeOf(info.path)}`)}</code>`,
+    `${info.status}${info.requestId ? ` · request <code>${escapeHtml(info.requestId)}</code>` : ''}`,
+    '',
+    `Find it in Workers Logs by the request id. The same page failing again in the next ${windowMinutes} minutes isn't sent again.`,
+  ]
+  return { html: lines.join('\n') }
+}
+
 export const orderNumber = (pickupNumber: number) => `#${String(pickupNumber).padStart(3, '0')}`
 
 /**

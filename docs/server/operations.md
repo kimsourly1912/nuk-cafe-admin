@@ -101,7 +101,26 @@ Production: manual workflow from a commit that is live on staging: export the da
 
 - **D1 Time Travel**: point-in-time restore for the retention window of the Cloudflare plan (checked on staging: `wrangler d1 time-travel info nuk-cafe-staging` gives the current bookmark). Note the bookmark before every production migration.
 - **R2**: menu images are re-uploadable; no separate backup at launch.
-- **Restore drill** on staging before launch and then yearly: restore to a bookmark, check the app works, write down how long it took.
+- **Restore drill** on staging before launch and then yearly: restore to a bookmark, check the app works, write down how long it took. Runbook below (step 10.4, D119).
+
+### Restore drill (staging)
+
+Run by the owner (it needs a Wrangler login to the Cloudflare account). About 10 minutes. **It puts the whole staging database back to the bookmark**: anything written on staging after it (orders, menu changes) is undone. Staging holds test data only; tell anyone testing on it first.
+
+1. **Note the bookmark (now):**
+   `npx wrangler d1 time-travel info nuk-cafe-staging`
+   Copy the bookmark it prints.
+2. **Make a change you can see:** on staging, Admin → Categories → add a category named **Restore drill**.
+3. **Restore, and time it** (PowerShell):
+   `Measure-Command { npx wrangler d1 time-travel restore nuk-cafe-staging --bookmark=<bookmark from step 1> }`
+   Confirm when asked. Wrangler also prints the bookmark from just before the restore: keep it, it undoes the restore the same way.
+4. **Check the app:**
+   - `https://nuk-cafe-staging.kimsur61.workers.dev/api/public/health` answers 200;
+   - the **Restore drill** category is gone;
+   - you can sign in to the admin, the customer menu loads, and the counter queue opens.
+5. **Write it down** in `docs/progress.md` (step 10.4): the date, how long step 3 took, and anything that didn't work.
+
+For production (8.2): note the bookmark before every migration (see Deploys); a restore there loses real orders written after the bookmark, so it's the last resort after redeploying the previous Worker.
 - [Open] Q24: acceptable data loss and downtime (RPO/RTO) and the Cloudflare plan (Time Travel window).
 
 ## Scheduled jobs
@@ -163,7 +182,8 @@ Locally Telegram can't reach the dev server, so connecting is tested against sta
 
 - **Workers Logs** for structured logs (see [security.md → Logging](./security.md#logging-and-privacy)); every error log has the request id.
 - `GET /api/public/health` answers 200 when the Worker can reach D1 (no details).
-- Alerts (Cloudflare notifications) on a spike of 5xx responses and on Worker exceptions.
+- **Server error alerts on Telegram** (step 10.4, D119): Admin → Telegram → Notifications → **Server errors**, per chat. Every unexpected failure (a 500 on `/api/**`) queues an alert with the route, the status and the request id (never the error's text: it stays in Workers Logs, found by the request id); at most one per route and chat every 15 minutes; sent by `notifications:deliver` within a minute. Not covered: a failure the Worker can't answer at all (it never reaches the handler), and scheduled tasks (their failures are logged).
+- Alerts (Cloudflare notifications) on a spike of 5xx responses and on Worker exceptions: set up with production (8.2).
 - [Open] Q24: who receives alerts, and during which hours.
 
 ## Platform facts

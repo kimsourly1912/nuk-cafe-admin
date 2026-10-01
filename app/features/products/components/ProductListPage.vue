@@ -22,6 +22,7 @@ import { ITEM_STATUS_LABELS, priceRange } from '../utils/item-display'
 import ProductCard from './ProductCard.vue'
 import ProductGroupFilter from './ProductGroupFilter.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
+import ProductReorderModal from './ProductReorderModal.vue'
 
 const TABS = [
   { label: 'Draft', value: 'draft' },
@@ -172,7 +173,13 @@ watch(() => route.query.item, (itemId) => {
   }
 }, { immediate: true })
 
-usePageShortcuts({ n: () => openForm(), s: () => startSelect() })
+// Reorder (step 10.3, D118): one category's items, starting from the category filtered on.
+const reorderModal = useOverlay().create(ProductReorderModal)
+function openReorder() {
+  if (!selecting.value) reorderModal.open({ categoryId: categoryFilter.value })
+}
+
+usePageShortcuts({ n: () => openForm(), s: () => startSelect(), r: () => openReorder() })
 
 // Escape leaves Select mode. Not a `defineShortcuts` key: those prevent the default, and Escape
 // must still close menus, selects and dialogs first (they win: nothing happens here then).
@@ -230,6 +237,21 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           />
         </template>
         <template #right>
+          <UTooltip
+            text="Arrange the items of a category"
+            :kbds="['r']"
+          >
+            <UButton
+              icon="i-lucide-arrow-up-down"
+              color="neutral"
+              variant="outline"
+              aria-label="Reorder"
+              :disabled="selecting"
+              @click="openReorder()"
+            >
+              <span class="hidden lg:inline">Reorder</span>
+            </UButton>
+          </UTooltip>
           <UTooltip
             text="Select menu items to archive"
             :kbds="['s']"
