@@ -32,3 +32,19 @@ What the tests can't see: real phones, the real Worker and D1, two real devices.
 5. **Image without a save (row 10).** In Admin → Menu items, open an item, upload a photo, then close without saving (Discard). The item keeps its old image (or none) on the customer menu.
 
 Write the date and anything odd into `docs/progress.md` (step 10.5).
+
+## Hand check result, 2026-10-01 (staging, run for the owner by an AI browser agent): NOT PASSED
+
+| Check | Result |
+|---|---|
+| 1. Table QR, signed out | **Not done.** A valid T08 QR kept the table through a signed-in checkout and the order page; a made-up QR showed the refusal page. The signed-out round trip and a real phone scan are still to do. |
+| 2. Price changed underneath | **Passed.** Macchiato quoted $2.25, changed to $2.35: refused with both prices shown; placing again made order 002 at $2.35, Table T08. Price restored to $2.25. |
+| 3. Two cashiers | **Passed on the server, found a counter hazard.** The database shows **one payment per order** (002, 003, 004). On 002 and 003 "ready" was recorded 1 second after "paid": the second cashier's open panel had refreshed and its **Confirm payment** button had become **Mark ready** under the click. Fixed: the panel now says "Paid meanwhile by …" and offers the next step only after **OK** (e2e `counter.test.ts`, checked to fail without the guard). |
+| 4. Ready twice | **Not shown.** The second window refreshed and hid Mark ready before its click; no stale-version refusal was exercised by hand (the server test covers it, row 7). |
+| 5. Image without a save | **Passed.** Upload, close, Discard: no image on the customer menu. The 24-hour cleanup isn't visible by hand (server test, row 10). |
+
+**Blocker found: Cloudflare Error 1102, "Worker exceeded resource limits"** (Ray a43c2ce298723fad, 14:32 UTC): the customer menu and saving the branch hours failed. The Workers **Free** plan allows **10 ms of CPU per request**; server rendering, sessions and password hashing use more, and under steady use Cloudflare starts stopping the Worker. None of these failures reached our error handler (no server-error alert was queued), which fits a stop by Cloudflare rather than an error in the app. To confirm: dashboard → Workers → nuk-cafe-staging → Metrics → Errors → "Exceeded CPU Time Limits". The fix is the Workers Paid plan (5 USD a month), which production needs anyway (Q24).
+
+**Left on staging:** Thursday closes at 23:20 (checked in D1: minute 1400); set it back to 21:20 in Admin → Branch once saves work. Test orders 002–004 are Ready at Table T08, one payment each.
+
+**Still to do before sign-off:** checks 1 (signed out, a real phone) and 4 by two people on two devices, after the 1102 fix.

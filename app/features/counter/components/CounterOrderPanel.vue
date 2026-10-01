@@ -14,8 +14,13 @@
  *
  * A refused payment says why here: changed meanwhile (Reload), the 30 minutes over, or no answer
  * (Try again with the same key: never recorded twice).
+ *
+ * The queue refreshes underneath an open panel. If the order moves on meanwhile (another cashier
+ * paid it or marked it ready), the panel says so and offers the next action only after OK:
+ * otherwise a click meant for "Confirm payment" lands on the "Mark ready" that replaced it (found
+ * in the release check on staging, 10.5).
  */
-import type { CounterOrder, ExchangeRate, PaymentMethod, PayOrderInput } from '#shared/contracts/orders'
+import type { CounterOrder, ExchangeRate, OrderStatus, PaymentMethod, PayOrderInput } from '#shared/contracts/orders'
 import { toRiel } from '#shared/contracts/orders'
 import { useCounterActions } from '../composables/useCounterActions'
 import type { Change, CommandFailure } from '../utils/counter'
@@ -52,6 +57,32 @@ watch(() => props.order?.id, () => {
   receivedKhr.value = null
   reference.value = ''
   failure.value = null
+})
+
+// --- A change by someone else while the panel is open ---
+/** The status this panel last showed as the starting point: on opening, after its own action, after OK. */
+const seenStatus = ref<OrderStatus | null>(null)
+watch([open, () => props.order?.id], () => {
+  seenStatus.value = props.order?.status ?? null
+}, { immediate: true })
+const changedMeanwhile = computed(() => {
+  const order = props.order
+  if (!order || seenStatus.value === null || order.status === seenStatus.value) return null
+  if (order.status === 'preparing') return order.payment ? `Paid meanwhile by ${firstName(order.payment.collectedBy.name)}: it's being prepared.` : 'Paid meanwhile: it\'s being prepared.'
+  if (order.status === 'ready') return 'Marked ready meanwhile.'
+  if (order.status === 'completed') return 'Completed meanwhile.'
+  if (order.status === 'cancelled') return 'Cancelled meanwhile.'
+  return 'This order changed meanwhile.'
+})
+function acknowledgeChange() {
+  seenStatus.value = props.order?.status ?? null
+}
+// Reload is the cashier asking for the order as it is now: what it brings needs no OK.
+let reloading = false
+watch(() => props.order?.status, (status) => {
+  if (!reloading || !status) return
+  seenStatus.value = status
+  reloading = false
 })
 
 const totalMinor = computed(() => props.order?.totalMinor ?? 0)
@@ -92,6 +123,7 @@ async function confirmPayment() {
   failure.value = null
   try {
     await actions.pay(order, body.value, key.value)
+    seenStatus.value = 'preparing'
     toast.add({ title: `Order ${orderNumber(order)} paid`, description: 'It\'s now being prepared.', color: 'success', icon: 'i-lucide-circle-check' })
     open.value = false
   }
@@ -105,6 +137,7 @@ async function confirmPayment() {
 
 function reload() {
   failure.value = null
+  reloading = true
   emit('reload')
 }
 
@@ -114,8 +147,12 @@ const nextAction = computed(() => {
   return null
 })
 async function runNext() {
-  const result = await nextAction.value?.run()
-  if (result?.ok) open.value = false
+  const action = nextAction.value
+  const result = await action?.run()
+  if (result?.ok) {
+    seenStatus.value = props.order?.status ?? null
+    open.value = false
+  }
 }
 const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
 </script>
@@ -150,6 +187,19 @@ const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
         This order isn't in the queue anymore.
       </p>
       <template v-else>
+        <div
+          v-if="changedMeanwhile"
+          role="alert"
+        >
+          <UAlert
+            color="warning"
+            variant="subtle"
+            icon="i-lucide-info"
+            :title="changedMeanwhile"
+            description="Check the order before the next step."
+            :actions="[{ label: 'OK', color: 'neutral', variant: 'outline', onClick: acknowledgeChange }]"
+          />
+        </div>
         <div
           v-if="failure"
           role="alert"
@@ -352,7 +402,7 @@ const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
     </template>
 
     <template
-      v-if="order && order.status !== 'completed' && order.status !== 'cancelled'"
+      v-if="order && order.status !== 'completed' && order.status !== 'cancelled' && !changedMeanwhile"
       #footer
     >
       <UButton

@@ -27,6 +27,8 @@ Branch staff, managers and admins use the **counter app** at `/counter` (its own
    - **KHQR**: ask the customer to scan the counter KHQR and pay the total. Confirm only after the payment appears in the merchant app. **Transaction reference** is optional.
 3. Press **Confirm payment**. The order moves to Preparing.
 
+If another cashier pays or moves the order while you have it open, the panel says so (for example "Paid meanwhile by Sophea") and shows the next step only after you press **OK**.
+
 ## Cancel an order
 
 1. Open it and press **Cancel order**.
