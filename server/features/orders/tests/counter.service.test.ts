@@ -148,6 +148,13 @@ describe('the queue', () => {
     const elsewhere = await place(sokha, NOON, otherBranchId)
     await expectApiError(() => getCounterOrder(db, cashier, elsewhere), 404, 'NOT_FOUND')
     await expectApiError(() => pay(elsewhere), 404, 'NOT_FOUND')
+    await expectApiError(() => markOrderReady(db, cashier, elsewhere, { version: 1 }, key(), monday('12:05')), 404, 'NOT_FOUND')
+    await expectApiError(() => cancelOrderAtCounter(db, cashier, elsewhere, cancelInput(), key(), monday('12:05')), 404, 'NOT_FOUND')
+    // Nothing was written (release check 10.5): the order, its payments, its events and the audit are untouched.
+    expect(await statusOf(elsewhere)).toBe('awaiting_payment')
+    expect(await paymentsOf(elsewhere)).toEqual([])
+    expect(await eventsOf(elsewhere)).toHaveLength(1)
+    expect(await db.select().from(auditEvents).where(eq(auditEvents.targetId, elsewhere))).toEqual([])
     await expectApiError(() => getCounterOrder(db, cashier, newId()), 404, 'NOT_FOUND')
   })
 })
@@ -243,6 +250,30 @@ describe('two cashiers, or a retry', () => {
     expect(again).toEqual(first)
     expect(await paymentsOf(orderId)).toHaveLength(1)
     await expectApiError(() => pay(orderId, { version: 1, method: 'khqr', reference: null }, cashier, monday('12:06'), db, same), 422, 'IDEMPOTENCY_MISMATCH')
+  })
+
+  it('two staff marking the same order ready at once: one wins, the other is told it changed (release check 10.5)', async () => {
+    const orderId = await place(sokha)
+    await pay(orderId)
+    const on = racing(2)
+    const results = await Promise.allSettled([
+      markOrderReady(on, cashier, orderId, { version: 2 }, key(), monday('12:10')),
+      markOrderReady(on, colleague, orderId, { version: 2 }, key(), monday('12:10')),
+    ])
+    expect(results.map(r => r.status).sort()).toEqual(['fulfilled', 'rejected'])
+    expect(((results.find(r => r.status === 'rejected') as PromiseRejectedResult).reason).data.code).toBe('ORDER_CHANGED')
+    expect((await eventsOf(orderId)).map(e => e.toStatus)).toEqual(['awaiting_payment', 'preparing', 'ready'])
+  })
+
+  it('completing retried with the same key answers the same and completes once; a new key is refused (release check 10.5)', async () => {
+    const orderId = await place(sokha)
+    await pay(orderId)
+    await markOrderReady(db, cashier, orderId, { version: 2 }, key(), monday('12:10'))
+    const same = key()
+    const first = await completeOrder(db, cashier, orderId, { version: 3 }, same, monday('12:12'))
+    expect(await completeOrder(db, cashier, orderId, { version: 3 }, same, monday('12:13'))).toEqual(first)
+    await expectApiError(() => completeOrder(db, colleague, orderId, { version: 3 }, key(), monday('12:13')), 409, 'ORDER_CHANGED')
+    expect((await eventsOf(orderId)).filter(e => e.toStatus === 'completed')).toHaveLength(1)
   })
 
   it('a riel payment retried after the rate changed still returns the first answer', async () => {

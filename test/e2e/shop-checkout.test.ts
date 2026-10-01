@@ -176,6 +176,27 @@ describe('dine-in', () => {
     await page.getByText('Riverside · Table T01').waitFor()
   })
 
+  it('signed out at a table: ordering asks to sign in, and the table is still there after signing in (release check 10.5)', async () => {
+    const { page, problems } = await open(`/table/${seed.openTableToken}`)
+    await addToOrder(page, 'Banana Bread')
+    await reviewOrder(page)
+    await page.getByText('Dine-in · Table T01').waitFor()
+
+    await button(page, 'Sign in to place order').click()
+    await page.getByRole('dialog').getByRole('link', { name: 'Sign in' }).click()
+    await page.waitForURL(at('/sign-in'))
+    await signIn(page, seed.customers.tableGuest)
+    await page.waitForURL(at('/checkout'))
+
+    // The table came back with the order: still dine-in at T01, never pickup instead.
+    await page.getByText('Dine-in · Table T01').waitFor()
+    await button(page, 'Place order · $2.25').click()
+    await page.waitForURL(onOrderPage)
+    await page.getByText('Table T01 order').waitFor()
+    await page.getByText('Riverside · Table T01').waitFor()
+    expect(problems).toEqual([])
+  })
+
   it('a table that stopped taking orders is refused, never switched silently; "Switch to pickup" then places it', async () => {
     const { page } = await signedIn(seed.customers.shopperC)
     await page.goto(url(`/table/${seed.spareTableToken}`), { waitUntil: 'hydration' })

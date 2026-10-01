@@ -38,7 +38,7 @@ export interface ShopSeed {
    * files run in any order, so no other file may rely on its state (`apiUnverified` is
    * shop-orders-api's, since shop-account verifies `unverified`).
    */
-  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC', SeedCustomer>
+  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'tableGuest', SeedCustomer>
   /** A second table at Riverside (T02), for tests that archive it. */
   spareTableToken: string
 }
@@ -68,6 +68,8 @@ const CUSTOMERS: ShopSeed['customers'] = {
   followerA: { name: 'Sophal Chea', email: 'sophal@example.com', password: 'long-enough-password-14' },
   followerB: { name: 'Leakena Tan', email: 'leakena@example.com', password: 'long-enough-password-15' },
   followerC: { name: 'Visal Ung', email: 'visal@example.com', password: 'long-enough-password-16' },
+  // The release check (10.5): signs in from a table's QR link and places a dine-in order.
+  tableGuest: { name: 'Chanthy Nob', email: 'chanthy@example.com', password: 'long-enough-password-17' },
   // Not a customer: the counter's cashier (step 6.3), staff at Riverside.
   cashier: { name: 'Sophea Keo', email: 'sophea@example.com', password: 'long-enough-password-10' },
 }
@@ -113,7 +115,7 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
   // without the breached-password lookup (an external API). Their queued emails carry test links.
   const auth = createTestAuth(db)
   for (const customer of Object.values(CUSTOMERS)) await auth.api.signUpEmail({ body: customer })
-  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.cashier]) {
+  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.tableGuest, CUSTOMERS.cashier]) {
     await db.update(user).set({ emailVerified: true }).where(eq(user.email, customer.email))
   }
   // An existing account keeps its password when it's given branch access (D49).
