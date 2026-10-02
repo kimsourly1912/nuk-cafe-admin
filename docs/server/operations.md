@@ -41,7 +41,7 @@ Nothing crosses environments: no production data in staging, no shared secrets, 
 
 **Deploy by hand only what is on `main`** (or the branch about to be merged next): a branch deploy runs its migrations ahead of `main`, and the next deploy from `main` then runs older code against a newer database. (Happened in step 3.1: fixed by merging it right after.)
 
-**Deploys** (step 2.2, D54): every push to `main` that passes the checks deploys itself (`.github/workflows/ci.yml` → `deploy-staging`). By hand, with Wrangler logged in (`npx wrangler login`): `pnpm deploy:staging` = `pnpm build:staging` (`nuxt build --envName staging`) → `pnpm db:migrate:staging` (`wrangler d1 migrations apply DB --remote`, tracked in `_hub_migrations`) → `wrangler deploy`.
+**Deploys** (step 2.2, D54, D133): every push to `main` deploys itself (its pull request ran the checks) (`.github/workflows/ci.yml` → `deploy-staging`). By hand, with Wrangler logged in (`npx wrangler login`): `pnpm deploy:staging` = `pnpm build:staging` (`nuxt build --envName staging`) → `pnpm db:migrate:staging` (`wrangler d1 migrations apply DB --remote`, tracked in `_hub_migrations`) → `wrangler deploy`.
 
 **First admin on staging:** there's no seed endpoint on a deployed Worker (`/_nitro/tasks` is dev only). Sign up on the site (`POST /api/auth/sign-up/email`, or the customer sign-up page once it exists), then promote the account:
 
@@ -85,9 +85,9 @@ Rules:
 
 ## Deploys
 
-CI on every push and pull request (`.github/workflows/ci.yml`), as parallel jobs: `check` (lint, typecheck, `pnpm audit --audit-level high`, unit + server tests) and `e2e (1/3)` to `e2e (3/3)` (`vitest --shard`, each builds the app once). Lower advisories are reviewed with dependency updates.
+CI on every pull request and on demand (`.github/workflows/ci.yml`, Actions → CI → Run workflow), as parallel jobs: `check` (lint, typecheck, `pnpm audit --audit-level high`, unit + server tests) and `e2e (1/3)` to `e2e (3/3)` (`vitest --shard`, each builds the app once). Lower advisories are reviewed with dependency updates.
 
-On push to `main`, after those pass, the `deploy-staging` job (GitHub environment `staging`, one deploy at a time, never cancelled halfway):
+On push to `main` (a merged pull request, already checked there: D133), the `deploy-staging` job runs straight away (GitHub environment `staging`, one deploy at a time, never cancelled halfway):
 1. `pnpm build:staging`;
 2. `pnpm db:migrate:staging` (migrations before the Worker: expand, then contract);
 3. `wrangler deploy`;

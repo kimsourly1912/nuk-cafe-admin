@@ -48,8 +48,8 @@ pnpm vitest run -t "refreshes once"
 
 **Checks (D83):**
 - **Before opening a PR, locally:** `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, and the e2e files of the feature you changed (`pnpm vitest run --project e2e test/e2e/<feature>.test.ts`). The e2e build is reused while no build input changed (`E2E_REBUILD=1` forces one), so rerunning tests or taking screenshots costs no rebuild.
-- **The full suite runs in CI** (`.github/workflows/ci.yml`: lint, typecheck, audit, unit/server, e2e in 3 shards) on every PR, and again on `main` before the staging deploy, which runs only when every job passed. A shared building block or app-wide change (a root composable, `app.config.ts`, a plugin) also runs the full `pnpm test:e2e` locally first.
-- **Merge only when the PR's checks are green.** A red PR is fixed on the same PR; a red `main` is fixed before any new work.
+- **The full suite runs in CI** (`.github/workflows/ci.yml`: lint, typecheck, audit, unit/server, e2e in 3 shards) on every PR. A merge to `main` deploys to staging **without running them again** (D133): the PR already checked its code merged with `main` as it was. If `main` moved after the PR's checks ran (another PR merged meanwhile), press **Update branch** on the PR so its checks run on the new `main` before merging, or run the workflow on `main` by hand afterwards (Actions → CI → Run workflow). A shared building block or app-wide change (a root composable, `app.config.ts`, a plugin) also runs the full `pnpm test:e2e` locally first.
+- **Merge only when the PR's checks are green.** A red PR is fixed on the same PR; a failed staging deploy or a red manual run on `main` is fixed before any new work.
 - **"Remove the guard and see the test fail"** is required for new guards (locks, permissions, money, idempotency, version checks); optional elsewhere.
 - **Docs per step:** one `decisions.md` entry and the step's line in `progress.md`; reference pages only when a shared building block or a rule changes.
 
