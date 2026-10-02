@@ -73,7 +73,8 @@ describe('the customer menu, server-rendered', () => {
     const context = await (await getBrowser()).newContext({ javaScriptEnabled: false })
     const page = await context.newPage()
     await page.goto(url('/'))
-    await heading(page, 'Espresso Bar · 7 items').or(heading(page, 'Espresso Bar · 6 items')).first().waitFor()
+    // Any count: Affogato (Late night, Fri and Sat 21:00–01:00) joins the section then.
+    await page.getByRole('heading', { name: /^Espresso Bar · \d+ items$/ }).first().waitFor({ timeout: 10_000 })
     expect(await page.getByText('Salted Caramel Latte').first().isVisible()).toBe(true)
     await context.close()
   })

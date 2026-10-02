@@ -1,4 +1,7 @@
-# Checks on each push to main and each pull request; a push to main then deploys to staging.
+# Checks on each pull request; a push to main (a merged pull request) deploys to staging without
+# running them again: the pull request already checked the code merged with main as it was (D133).
+# Run the workflow by hand (Actions → CI → Run workflow) to check main itself, e.g. after merging
+# two pull requests back to back.
 # E2E runs against a production build in the runner's preinstalled Google Chrome
 # (test/e2e/support/global-setup.ts); the backend is mocked, so the checks need no secrets.
 # Setup follows https://pnpm.io/continuous-integration (decision D24). Deploy: D54.
@@ -8,13 +11,18 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
+# A newer push to a pull request cancels its older run. On main, never: the deploy starts right
+# away (D133), and a cancel between the migrations and the Worker would leave staging half done.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
+    # Pull requests and runs by hand; not a push to main (D133).
+    if: github.event_name != 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -46,6 +54,7 @@ jobs:
   # (D56). Add a shard when the slowest one passes about 2 minutes.
   e2e:
     name: e2e (${{ matrix.shard }}/3)
+    if: github.event_name != 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
@@ -66,8 +75,8 @@ jobs:
         run: pnpm test:e2e --shard=${{ matrix.shard }}/3
 
   deploy-staging:
-    # Only after every check passed, and only for main: pull requests never deploy.
-    needs: [check, e2e]
+    # Only a push to main (a merged pull request, checked there: D133); pull requests and runs by
+    # hand never deploy. The smoke check below still guards the deploy.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
