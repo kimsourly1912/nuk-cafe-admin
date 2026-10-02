@@ -26,7 +26,7 @@ _2026-10-02. The owner's choice after the KHQR research: a dynamic KHQR shown **
 - **`NUXT_BAKONG_TOKEN`** (a Worker secret, set by the owner; never in chat) turns it on; `NUXT_BAKONG_API_URL` (default `https://api-bakong.nbc.gov.kh`) can point at a relay later. Setup and renewal: [operations.md → KHQR](../server/operations.md#khqr).
 - `POST /api/counter/{branchId}/orders/{orderId}/khqr/{chargeId}/check`: the server asks Bakong by MD5; **paid** only when Bakong's answer names our account, the charge's currency and amount; then it records the payment as the cashier who asked (the same payment as `pay`, keyed by the QR). The counter asks every **5 s** while the QR is on screen, until 5 minutes after it expired. Confirm stays as the fallback.
 - **Payments → Automatic check with Bakong:** On/Off and **Test connection** (`POST /api/admin/khqr/test`).
-- **The 403 test:** the owner's first **Test connection** on staging. A refusal says "Bakong refused this server" and cashiers confirm by hand. If refused, the free fallback is a Cloudflare Tunnel to a device at the cafe (needs a domain, Q4).
+- **The 403 test:** done (owner, 2026-10-02): **Connected** on staging, Bakong answers the Worker. Should it ever refuse (another Cloudflare location, a Bakong policy change), a refusal says "Bakong refused this server" and cashiers confirm by hand. If refused, the free fallback is a Cloudflare Tunnel to a device at the cafe (needs a domain, Q4).
 - **Token expiry:** shown at the counter ("Automatic check unavailable") and on Payments; a Telegram reminder before the 90 days is left for later.
 
 ## Edge cases
