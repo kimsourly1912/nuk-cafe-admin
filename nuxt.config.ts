@@ -281,7 +281,8 @@ export default defineNuxtConfig({
       // Icon names must be literal strings ('i-lucide-tags') to be found; built names aren't.
       scan: {
         // .ts is excluded by default, but navigation.ts, useMutation.ts, ... hold icon names.
-        globInclude: ['app/**/*.{vue,ts}'],
+        // The phone countries' flags are named in the shared contract (D127).
+        globInclude: ['app/**/*.{vue,ts}', 'shared/contracts/phone.ts'],
         globExclude: ['app/generated/**', 'node_modules', '.*'],
       },
     },

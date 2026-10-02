@@ -1,8 +1,10 @@
 import * as v from 'valibot'
 import type { BranchSettings, UpdateBranchSettingsInput } from '#shared/contracts/branches'
-import { BRANCH_ADDRESS_MAX, BRANCH_NAME_MAX, BRANCH_PHONE_MAX } from '#shared/contracts/branches'
+import { BRANCH_ADDRESS_MAX, BRANCH_NAME_MAX } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import { MINUTES_PER_DAY } from '#shared/contracts/common'
+import type { PhoneCountry } from '#shared/contracts/phone'
+import { DEFAULT_PHONE_COUNTRY, parsePhone, PHONE_COUNTRIES } from '#shared/contracts/phone'
 
 /**
  * The Branch settings draft (D91, page-patterns §3: one draft, one Save). Hours are edited per day,
@@ -31,7 +33,9 @@ export interface BranchForm {
   name: string
   timezone: string
   address: string
+  /** As typed, for `phoneCountry` (D127); sent as E.164. */
   phone: string
+  phoneCountry: PhoneCountry
   /** Monday (index 0) to Sunday. */
   days: DayHours[]
 }
@@ -55,13 +59,24 @@ const daySchema = v.variant('open', [
   v.object({ open: v.literal(false), windows: v.array(v.any()) }),
 ])
 
-export const branchFormSchema = v.object({
+/** What's wrong with the phone, if anything: blank is fine (no phone). */
+function phoneProblem(form: { phone: string, phoneCountry: PhoneCountry }): string | undefined {
+  if (!form.phone.trim()) return undefined
+  const result = parsePhone(form.phone, form.phoneCountry)
+  return result.ok ? undefined : result.message
+}
+
+export const branchFormSchema = v.pipe(v.object({
   name: v.pipe(v.string(), v.trim(), v.minLength(1, 'Name is required'), v.maxLength(BRANCH_NAME_MAX, `Max ${BRANCH_NAME_MAX} characters`)),
   timezone: v.pipe(v.string(), v.minLength(1, 'Choose a time zone')),
   address: v.pipe(v.string(), v.maxLength(BRANCH_ADDRESS_MAX, `Max ${BRANCH_ADDRESS_MAX} characters`)),
-  phone: v.pipe(v.string(), v.maxLength(BRANCH_PHONE_MAX, `Max ${BRANCH_PHONE_MAX} characters`)),
+  phone: v.string(),
+  phoneCountry: v.picklist(PHONE_COUNTRIES.map(country => country.code)),
   days: v.pipe(v.array(daySchema), v.length(7)),
-})
+}), v.forward(
+  v.partialCheck([['phone'], ['phoneCountry']], form => !phoneProblem(form), issue => phoneProblem(issue.input as { phone: string, phoneCountry: PhoneCountry }) ?? ''),
+  ['phone'],
+))
 
 /** The draft for these settings: each day open with its windows, or closed with the default times. */
 export function toBranchForm(settings: BranchSettings): BranchForm {
@@ -71,7 +86,10 @@ export function toBranchForm(settings: BranchSettings): BranchForm {
       .map(window => ({ start: window.startMinute, end: window.endMinute % MINUTES_PER_DAY }))
     return windows.length ? { open: true, windows } : { open: false, windows: [{ ...DEFAULT_WINDOW }] }
   })
-  return { name: settings.name, timezone: settings.timezone, address: settings.address ?? '', phone: settings.phone ?? '', days }
+  // A saved number shows without its country code; one saved as free text before D127 shows as it is.
+  const saved = settings.phone ? parsePhone(settings.phone) : undefined
+  const phone = saved?.ok ? { phone: saved.local, phoneCountry: saved.country } : { phone: settings.phone ?? '', phoneCountry: DEFAULT_PHONE_COUNTRY }
+  return { name: settings.name, timezone: settings.timezone, address: settings.address ?? '', ...phone, days }
 }
 
 /** Where each window sent in `hours` sits in the form, in the same order. */
@@ -86,6 +104,13 @@ export function toHours(form: BranchForm): WeeklyWindow[] {
   return sentWindows(form).map(({ dayIndex, window }) => ({ weekday: dayIndex + 1, startMinute: window.start!, endMinute: apiEnd(window.end!) }))
 }
 
+/** The phone to send: E.164 when it reads; else as typed, for the server to refuse. */
+function toE164(form: BranchForm): string | null {
+  if (!form.phone.trim()) return null
+  const result = parsePhone(form.phone, form.phoneCountry)
+  return result.ok ? result.e164 : form.phone.trim()
+}
+
 /** The complete draft in one request, from the version it was based on (the settings blueprint). */
 export function toUpdateBranchBody(form: BranchForm, version: number): UpdateBranchSettingsInput {
   return {
@@ -93,7 +118,7 @@ export function toUpdateBranchBody(form: BranchForm, version: number): UpdateBra
     name: form.name.trim(),
     timezone: form.timezone,
     address: form.address.trim() || null,
-    phone: form.phone.trim() || null,
+    phone: toE164(form),
     hours: toHours(form),
   }
 }

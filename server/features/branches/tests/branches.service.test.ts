@@ -49,10 +49,10 @@ describe('branch settings', () => {
       version: 1,
       name: 'NUK Cafe Phnom Penh',
       address: '#123 St. 63',
-      phone: '012 345 678',
+      phone: '+85512345678',
       hours: [w(6, 480, 1140), ...weekdays(480, 1140)],
     })
-    expect(saved).toMatchObject({ name: 'NUK Cafe Phnom Penh', address: '#123 St. 63', phone: '012 345 678', version: 2 })
+    expect(saved).toMatchObject({ name: 'NUK Cafe Phnom Penh', address: '#123 St. 63', phone: '+85512345678', version: 2 })
     expect(saved.hours).toEqual([...weekdays(480, 1140), w(6, 480, 1140)])
     expect((await getBranchSettings(db, branch, MONDAY_10AM)).openNow).toBe(true)
     // Sunday 10:00 there: closed.
@@ -64,7 +64,7 @@ describe('branch settings', () => {
   })
 
   it('keeps absent fields; null or blank clears address and phone; [] closes the branch', async () => {
-    await updateBranchSettings(db, actor, branch, { version: 1, address: 'Somewhere', phone: '1', hours: weekdays(480, 1140) })
+    await updateBranchSettings(db, actor, branch, { version: 1, address: 'Somewhere', phone: '+85512345678', hours: weekdays(480, 1140) })
     const saved = await updateBranchSettings(db, actor, branch, { version: 2, address: null, phone: null })
     expect(saved).toMatchObject({ address: null, phone: null })
     expect(saved.hours).toHaveLength(5)

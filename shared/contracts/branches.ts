@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import type { WeeklyWindow } from './common'
 import { MAX_WEEKLY_WINDOWS, nameSchema, textSchema, versionSchema, weeklyWindowSchema } from './common'
+import { phoneSchema } from './phone'
 
 /**
  * Branch settings and dining tables (`/api/admin/branches/{branchId}`, step 5.1, D91). A branch is
@@ -12,7 +13,6 @@ import { MAX_WEEKLY_WINDOWS, nameSchema, textSchema, versionSchema, weeklyWindow
 
 export const BRANCH_NAME_MAX = 60
 export const BRANCH_ADDRESS_MAX = 200
-export const BRANCH_PHONE_MAX = 30
 export const TABLE_LABEL_MAX = 20
 export const TABLE_AREA_MAX = 40
 /** Tables per branch, archived ones included. */
@@ -24,6 +24,7 @@ export interface BranchSettings {
   /** IANA zone of the branch's wall clock ("Asia/Phnom_Penh"): its hours and the menu's rules use it. */
   timezone: string
   address: string | null
+  /** E.164 (`+85512345678`, D127); a branch saved before D127 may hold free text until its next save. */
   phone: string | null
   status: 'active' | 'archived'
   /** By weekday, then start time. None: never open. */
@@ -43,7 +44,7 @@ export const updateBranchSettingsSchema = v.strictObject({
   name: v.optional(nameSchema(BRANCH_NAME_MAX)),
   timezone: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(64, 'Not a time zone'))),
   address: v.optional(optionalText(BRANCH_ADDRESS_MAX)),
-  phone: v.optional(optionalText(BRANCH_PHONE_MAX)),
+  phone: v.optional(phoneSchema),
   hours: v.optional(v.pipe(
     v.array(weeklyWindowSchema),
     v.maxLength(MAX_WEEKLY_WINDOWS, `At most ${MAX_WEEKLY_WINDOWS} opening windows`),

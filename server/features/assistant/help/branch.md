@@ -8,6 +8,8 @@ At the top: whether the branch is open now, its time zone and today's hours.
 
 **Branch information:** **Branch name**, **Address**, **Phone**, **Time zone**.
 
+**Phone:** choose the country by its flag (Cambodia, Hong Kong or Argentina), then type the number as you would locally (`012 345 678` is fine). Pasting a full number such as `+852 9123 4567` picks the country for you. A number that isn't valid for the chosen country can't be saved; the message under the field says which country it checked.
+
 **Weekly hours:** customers can place orders only while the branch is open.
 
 1. For each day, switch **Open** on or off.

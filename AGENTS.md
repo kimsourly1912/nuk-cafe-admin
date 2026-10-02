@@ -197,6 +197,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `RecordSelect` | `components/` | A dropdown of records: `USelectMenu` with search and virtual scroll, `pinned` "All"/"None" |
 | `AppDrawer` | `components/` | Every drawer and bottom sheet: `UDrawer` without a handle or dragging (`UDrawer` is a lint error elsewhere) |
 | `ToolbarTabs`, `useUrlTab` | `components/`, `composables/` | Tabs on a toolbar's line; a page's tab in the URL (`?tab=`) |
+| `PhoneInput`, `parsePhone` / `phoneSchema` | `components/`, `shared/contracts/phone.ts` | Every phone number: a country (flag, dial code) and the number; stored and sent as E.164, checked by libphonenumber on both sides (D127) |
 
 Expected to be promoted to the root when the first two features need them: `ProductImageInput` (in `app/features/products/`; rewards, banners and vouchers will need uploads too, through `POST /api/admin/media`).
 

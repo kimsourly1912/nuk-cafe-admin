@@ -231,10 +231,9 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
             label="Phone"
             name="phone"
           >
-            <UInput
+            <PhoneInput
               v-model="state.phone"
-              type="tel"
-              class="w-full"
+              v-model:country="state.phoneCountry"
             />
           </UFormField>
           <UFormField
