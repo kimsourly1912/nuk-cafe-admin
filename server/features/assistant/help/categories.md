@@ -34,6 +34,7 @@ Published items stay on the customer menu the whole time, under the temporary ca
 1. Press **Reorder** (or **R**).
 2. Drag rows by the handle, or use **Move up** / **Move down**. Subcategories move within their main category.
 3. Press **Save order**, or **Discard** to cancel.
+4. Press **Done** (the Reorder button) to leave.
 
 ## Archive and restore
 

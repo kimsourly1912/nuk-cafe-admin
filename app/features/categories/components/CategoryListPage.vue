@@ -196,10 +196,12 @@ function openForm(category?: MenuCategory, parentId?: string) {
 usePageShortcuts({
   n: () => openForm(),
   s: () => {
-    if (mode.value === 'browse' && view.value !== 'all' && selectableRows.value.length) startSelect()
+    if (mode.value === 'select') exitSelect()
+    else if (mode.value === 'browse' && view.value !== 'all' && selectableRows.value.length) startSelect()
   },
   r: () => {
-    if (mode.value !== 'reorder' && tree.total.value > 1) startReorder()
+    if (mode.value === 'reorder') finishReorder()
+    else if (mode.value === 'browse' && tree.total.value > 1) startReorder()
   },
 })
 
@@ -260,36 +262,35 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           >
             <span class="hidden lg:inline">{{ allExpanded ? 'Collapse all' : 'Expand all' }}</span>
           </UButton>
+          <!-- Modes are toggles (D129): the button that starts Reorder or Select leaves it. -->
           <UTooltip
-            text="Reorder categories"
+            :text="mode === 'reorder' ? (tree.isDirty.value || tree.saving.value ? 'Save or discard the new order first' : 'Leave Reorder mode') : 'Reorder categories'"
             :kbds="['r']"
           >
             <UButton
-              icon="i-lucide-arrow-down-up"
+              :icon="mode === 'reorder' ? 'i-lucide-check' : 'i-lucide-arrow-down-up'"
               color="neutral"
               :variant="mode === 'reorder' ? 'soft' : 'outline'"
-              aria-label="Reorder"
-              :aria-pressed="mode === 'reorder'"
-              :disabled="mode === 'reorder' || tree.total.value < 2"
-              @click="startReorder()"
+              :aria-label="mode === 'reorder' ? 'Done reordering' : 'Reorder'"
+              :disabled="mode === 'reorder' ? tree.isDirty.value || tree.saving.value : mode === 'select' || tree.total.value < 2"
+              @click="mode === 'reorder' ? finishReorder() : startReorder()"
             >
-              <span class="hidden lg:inline">Reorder</span>
+              <span class="hidden lg:inline">{{ mode === 'reorder' ? 'Done' : 'Reorder' }}</span>
             </UButton>
           </UTooltip>
           <UTooltip
-            :text="view === 'all' ? 'Choose Active or Archived to select categories' : 'Select categories to archive or restore'"
+            :text="mode === 'select' ? 'Leave Select mode' : view === 'all' ? 'Choose Active or Archived to select categories' : 'Select categories to archive or restore'"
             :kbds="view === 'all' ? undefined : ['s']"
           >
             <UButton
-              icon="i-lucide-list-checks"
+              :icon="mode === 'select' ? 'i-lucide-x' : 'i-lucide-list-checks'"
               color="neutral"
               :variant="mode === 'select' ? 'soft' : 'outline'"
-              aria-label="Select"
-              :aria-pressed="mode === 'select'"
-              :disabled="view === 'all' || mode !== 'browse' || !selectableRows.length"
-              @click="startSelect()"
+              :aria-label="mode === 'select' ? 'Cancel selection' : 'Select'"
+              :disabled="mode !== 'select' && (view === 'all' || mode !== 'browse' || !selectableRows.length)"
+              @click="mode === 'select' ? exitSelect() : startSelect()"
             >
-              <span class="hidden lg:inline">Select</span>
+              <span class="hidden lg:inline">{{ mode === 'select' ? 'Cancel' : 'Select' }}</span>
             </UButton>
           </UTooltip>
         </template>
@@ -315,7 +316,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           :count="selection.count"
           :all-selected="selection.allSelected"
           @toggle-all="selection.toggleAll(!selection.allSelected)"
-          @exit="exitSelect()"
         >
           <UButton
             v-if="view === 'archived'"
@@ -383,13 +383,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
                 @click="saveOrder()"
               />
             </template>
-            <UButton
-              v-else
-              label="Done"
-              color="neutral"
-              variant="outline"
-              @click="finishReorder()"
-            />
           </div>
         </BottomActionBar>
 

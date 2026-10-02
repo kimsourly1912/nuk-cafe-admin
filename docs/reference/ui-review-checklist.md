@@ -36,6 +36,7 @@ Check every changed screen at **320, 390, 768, 1024 and 1440 px** wide, plus one
 - [ ] The page sets no max-width or breakpoint for its width; a settings or form page has `page-narrow` ([ui §13](./ui.md#13-page-width-owner-2026-10-02-d126)). Checked at 1920px too.
 - [ ] Every dropdown of records (or a long fixed list) is searchable and virtualized (`<RecordSelect>`); `USelect` only for fixed sets ([ui §14](./ui.md#14-dropdowns-owner-2026-10-02-d126)).
 - [ ] One line under tabs: `<ToolbarTabs>` in a toolbar; the tab is in the URL (`useUrlTab`); the sidebar marks the section ([ui §15](./ui.md#15-tabs-and-the-sidebar-owner-2026-10-02-d126)). A tab row that doesn't fit scrolls with every label whole, the active tab centered.
+- [ ] The list toolbar doesn't scroll sideways at 320, 680 and 1024 px; a mode's button also leaves it; the bulk bar has no ✕ ([ui §16a](./ui.md#16a-list-toolbars-and-modes-owner-2026-10-02-d129)).
 - [ ] A paginated list ends with `<ListPagination>`; a quantity is a `<QuantityStepper>` ([ui §16](./ui.md#16-pagination-and-quantities-owner-2026-10-02-d128)).
 - [ ] Drawers and bottom sheets are `<AppDrawer>`: no handle, no dragging, an X ([ui §8](./ui.md#8-surface-hierarchy)).
 

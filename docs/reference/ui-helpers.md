@@ -182,7 +182,7 @@ Source: `app/components/BottomActionBar.vue`
 
 ## `<BulkActionsBar>`
 
-The **Select mode** bar (page-patterns §2: selection is a mode, never always-on checkboxes; D89): "5 selected · Select all · *your actions* · ✕". A [`BottomActionBar`](#bottomactionbar): fixed to the bottom of the screen below `lg`, inline where it's placed from `lg` (under the status tabs). Render it while the page is in Select mode (`v-if`), so it shows with nothing selected too; ✕ leaves the mode. It's a `role="toolbar"` named "Bulk actions". The page owns the mode: a **Select** toolbar button (`S`), checkboxes and the name selecting while in it, the ⋮ menus hidden, Escape leaving it (a plain keydown listener, like Categories). Used by Categories and Menu items.
+The **Select mode** bar (page-patterns §2: selection is a mode, never always-on checkboxes; D89): "5 selected · Select all" and *your actions* ("None selected" while nothing is). A [`BottomActionBar`](#bottomactionbar): fixed to the bottom of the screen below `lg`, inline where it's placed from `lg` (under the status tabs). Render it while the page is in Select mode (`v-if`), so it shows with nothing selected too. It's a `role="toolbar"` named "Bulk actions". **It carries actions only (D129):** the page's **Select** toolbar button is a toggle (it reads **Cancel**, "Cancel selection", while selecting; `S` toggles too), and Escape leaves the mode. On phones the count has its own line and the actions share the next in equal widths. The page owns the mode: the toggle, checkboxes and the name selecting while in it, the ⋮ menus hidden, Escape (a plain keydown listener, like Categories). Used by Categories and Menu items.
 
 Source: `app/components/BulkActionsBar.vue`
 
@@ -194,7 +194,6 @@ Source: `app/components/BulkActionsBar.vue`
     :count="selection.count"
     :all-selected="selection.allSelected"
     @toggle-all="selection.toggleAll(!selection.allSelected)"
-    @exit="exitSelect()"
   >
     <UButton label="Archive selected" icon="i-lucide-archive" color="neutral" variant="subtle" :disabled="!selection.count" @click="archiveSelected" />
   </BulkActionsBar>
@@ -208,7 +207,6 @@ Source: `app/components/BulkActionsBar.vue`
 | `allSelected: boolean` | Whether every selectable row is selected: the link reads "Unselect all". |
 | default slot | Action buttons; disable them while `count` is 0. |
 | `@toggle-all` | Clicked Select all / Unselect all. |
-| `@exit` | Clicked ✕. Clear the selection and leave the mode. |
 
 ## `useLayoutContext`
 
