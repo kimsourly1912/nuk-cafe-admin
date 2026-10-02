@@ -1,16 +1,21 @@
-import { deliverDue, queueClosingSummaries } from '#server/features/notifications'
+import { deliverDue, queueBakongTokenReminder, queueClosingSummaries } from '#server/features/notifications'
 
 /**
  * Every minute (nuxt.config.ts → nitro.scheduledTasks; D113): queues the closing summaries that are
- * due, then sends every due delivery (alerts retried, summaries, their CSV). Nothing without a bot.
+ * due and the Bakong token's reminders (10.16, D132), then sends every due delivery (alerts
+ * retried, summaries, their CSV). Nothing without a bot.
  */
 export default defineTask({
-  meta: { name: 'notifications:deliver', description: 'Queue closing summaries and send due Telegram messages' },
+  meta: { name: 'notifications:deliver', description: 'Queue closing summaries and reminders, and send due Telegram messages' },
   async run() {
     const settings = useTelegram()
     if (!settings) return { result: { off: true, queued: 0, sent: 0, retried: 0, failed: 0 } }
     const db = useDb()
-    const queued = await queueClosingSummaries(db, useRuntimeConfig().public.siteUrl as string | undefined)
+    const siteUrl = useRuntimeConfig().public.siteUrl as string | undefined
+    const queued = [
+      ...await queueClosingSummaries(db, siteUrl),
+      ...await queueBakongTokenReminder(db, bakongStatus().tokenExpiresAt, siteUrl),
+    ]
     const report = await deliverDue(db, telegramApi(settings))
     if (queued.length || report.sent || report.retried || report.failed) log('info', 'Telegram deliveries', { queued: queued.length, ...report })
     return { result: { off: false, queued: queued.length, ...report } }

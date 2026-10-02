@@ -7,8 +7,8 @@ import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { payOrder, placeOrder } from '#server/features/orders'
 import { outboxMessages } from '#server/features/platform/platform.schema'
-import { deliverDue, listDeliveries, queueClosingSummaries, queueOrderAlert, queueServerErrorAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
-import { closingInstant, routeOf } from '#server/features/notifications/notifications.messages'
+import { deliverDue, listDeliveries, queueBakongTokenReminder, queueClosingSummaries, queueOrderAlert, queueServerErrorAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
+import { closingInstant, routeOf, bakongReminderStage } from '#server/features/notifications/notifications.messages'
 import * as repo from '#server/features/notifications/notifications.repository'
 import { notificationDeliveries, telegramDestinations } from '#server/features/notifications/notifications.schema'
 import { sendReport, telegramOverview } from '#server/features/notifications/notifications.service'
@@ -320,5 +320,63 @@ describe('server errors (step 10.4, D119)', () => {
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
     await db.update(telegramDestinations).set({ status: 'blocked' }).where(eq(telegramDestinations.id, owner))
     expect(await queueServerErrorAlert(db, failed('/api/shop/orders'), at(MON, '10:00'))).toEqual([])
+  })
+})
+
+describe('the Bakong token\'s reminders (step 10.16, D132)', () => {
+  /** The token stops working at 07:00 on Mon 2026-12-21 in Phnom Penh. */
+  const EXPIRES = new Date('2026-12-21T07:00:00+07:00')
+  const before = (days: number, hours = 0) => new Date(EXPIRES.getTime() - (days * 24 + hours) * 3_600_000)
+
+  it('is due 14, 7, 3 and 1 days before and on the day; a late server sends the next one down', () => {
+    expect(bakongReminderStage(EXPIRES, before(20))).toBeNull()
+    expect(bakongReminderStage(EXPIRES, before(14, 1))).toBeNull()
+    expect(bakongReminderStage(EXPIRES, before(14))).toBe(14)
+    expect(bakongReminderStage(EXPIRES, before(8))).toBe(14)
+    expect(bakongReminderStage(EXPIRES, before(6))).toBe(7)
+    expect(bakongReminderStage(EXPIRES, before(3))).toBe(3)
+    expect(bakongReminderStage(EXPIRES, before(0, 5))).toBe(1)
+    expect(bakongReminderStage(EXPIRES, EXPIRES)).toBe(0)
+    expect(bakongReminderStage(EXPIRES, before(-30))).toBe(0)
+  })
+
+  it('goes once per stage to the chats that get server errors, with the date and what to do', async () => {
+    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(7))).toEqual([])
+    await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
+    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(20))).toEqual([])
+    expect(await queueBakongTokenReminder(db, null, SITE, before(7))).toEqual([])
+
+    const ids = await queueBakongTokenReminder(db, EXPIRES, SITE, before(7))
+    expect(ids).toHaveLength(1)
+    // Every minute after that, nothing more until the next stage.
+    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(6, 23))).toEqual([])
+    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(4))).toEqual([])
+    const [row] = await deliveries()
+    expect(row).toMatchObject({ kind: 'server_error', destinationId: owner, subject: 'Bakong token expires in 7 days' })
+    expect(row!.message.html).toContain('<b>The Bakong token expires in 7 days</b> (21 Dec 2026)')
+    expect(row!.message.html).toContain('NUXT_BAKONG_TOKEN')
+    expect(row!.message.button).toEqual({ text: 'Open Payments', url: `${SITE}/admin/payments` })
+
+    await deliverDue(db, telegram.api, before(7), { ids })
+    expect(telegram.sent()).toHaveLength(1)
+
+    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(3))).toHaveLength(1)
+    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, EXPIRES)).toHaveLength(1)
+    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(-2))).toEqual([])
+    expect((await deliveries()).map(d => d.subject)).toEqual(['Bakong token expires in 7 days', 'Bakong token expires in 3 days', 'Bakong token expired'])
+    expect((await deliveries())[2]!.message.html).toContain('<b>The Bakong token has expired</b>')
+  })
+
+  it('starts over for a new token; two runs at once queue one per chat', async () => {
+    await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
+    await setNotificationRule(db, admin, { kind: 'server_error', destinationId: group, enabled: true, attachCsv: false })
+    const [first, second] = await Promise.all([
+      queueBakongTokenReminder(db, EXPIRES, SITE, before(1)),
+      queueBakongTokenReminder(db, EXPIRES, SITE, before(1)),
+    ])
+    expect(first!.length + second!.length).toBe(2)
+    const renewed = new Date(EXPIRES.getTime() + 90 * 24 * 3_600_000)
+    expect(await queueBakongTokenReminder(db, renewed, SITE, new Date(renewed.getTime() - 24 * 3_600_000))).toHaveLength(2)
+    expect(await deliveries()).toHaveLength(4)
   })
 })

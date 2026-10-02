@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bakongClient, readBakongAnswer } from '#server/features/orders/bakong'
+import { bakongClient, bakongTokenExpiry, readBakongAnswer } from '#server/features/orders/bakong'
 
 // The Bakong Open API's `check_transaction_by_md5` (step 10.15b, D131): what each answer means.
 
@@ -69,5 +69,24 @@ describe('the client', () => {
     expect(await slow.checkByMd5('x')).toMatchObject({ kind: 'unavailable', problem: 'error' })
     const html = bakongClient({ apiUrl: 'https://bakong.test', token: 't', fetch: async () => new Response('<html>Forbidden</html>', { status: 403 }) })
     expect(await html.checkByMd5('x')).toMatchObject({ kind: 'unavailable', problem: 'refused' })
+  })
+})
+
+describe('the token\'s expiry (D132)', () => {
+  /** A JWT shaped like Bakong's (the signature isn't checked). */
+  const jwt = (payload: unknown) => `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.c2lnbmF0dXJl`
+
+  it('reads `exp` from the token, in seconds', () => {
+    expect(bakongTokenExpiry(jwt({ data: { id: 'x' }, iat: 1_790_000_000, exp: 1_797_776_000 }))).toEqual(new Date(1_797_776_000_000))
+    // base64url without padding, with - and _.
+    expect(bakongTokenExpiry(` ${jwt({ exp: 1_797_776_000, n: '>>>???' })} `)).toEqual(new Date(1_797_776_000_000))
+  })
+
+  it('is null for a token that isn\'t a JWT or carries no usable `exp`', () => {
+    expect(bakongTokenExpiry('plain-token')).toBeNull()
+    expect(bakongTokenExpiry('a.!!!.c')).toBeNull()
+    expect(bakongTokenExpiry(jwt({ iat: 1 }))).toBeNull()
+    expect(bakongTokenExpiry(jwt({ exp: '1797776000' }))).toBeNull()
+    expect(bakongTokenExpiry(jwt({ exp: -1 }))).toBeNull()
   })
 })

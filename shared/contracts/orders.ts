@@ -500,6 +500,8 @@ export interface KhqrSettings {
   updatedBy: { name: string } | null
   /** Whether `NUXT_BAKONG_TOKEN` is set: the counter then records a QR's payment by itself (10.15b, D131). */
   automaticCheck: boolean
+  /** When that token stops working (read from it, 10.16, D132); `null` without one or when it carries no date. */
+  tokenExpiresAt: string | null
 }
 
 /** `POST /api/counter/{branchId}/orders/{id}/khqr`: the QR for this order in a currency. */
@@ -526,6 +528,9 @@ export interface KhqrCharge {
 // --- Checking a KHQR with Bakong (step 10.15b, D131) ---
 // The server asks Bakong whether the QR was paid (by its MD5); paid to our account in its currency
 // and amount, the payment is recorded as the cashier who asked. Otherwise the cashier confirms by hand.
+
+/** From this many days before the Bakong token stops working, Payments warns and Telegram reminds (10.16, D132). */
+export const BAKONG_TOKEN_WARNING_DAYS = 14
 
 /** Why the automatic check can't say: no token, Bakong refused the token or this server, or anything else. */
 export type KhqrCheckProblem = 'not_set_up' | 'token' | 'refused' | 'error'

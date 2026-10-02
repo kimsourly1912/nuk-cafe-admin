@@ -1,7 +1,7 @@
 import type { WeeklyWindow } from '#shared/contracts/common'
 import { MINUTES_PER_DAY } from '#shared/contracts/common'
 import type { NotificationKind } from '#shared/contracts/notifications'
-import { BUSINESS_DAY_START_MINUTE } from '#shared/contracts/orders'
+import { BAKONG_TOKEN_WARNING_DAYS, BUSINESS_DAY_START_MINUTE } from '#shared/contracts/orders'
 import type { OrderAlert } from '#server/features/orders'
 import { addDays, zonedInstant } from '#server/utils/weekly-windows'
 import { escapeHtml } from './notifications.rules'
@@ -46,6 +46,46 @@ export function serverErrorMessage(info: ServerErrorInfo, windowMinutes: number)
     `Find it in Workers Logs by the request id. The same page failing again in the next ${windowMinutes} minutes isn't sent again.`,
   ]
   return { html: lines.join('\n') }
+}
+
+// --- The Bakong token's reminders (step 10.16, D132) ---
+
+const DAY = 24 * 60 * 60_000
+/** The reminders before the token stops working (days left), and one on the day (0). */
+export const BAKONG_TOKEN_REMINDER_DAYS = [BAKONG_TOKEN_WARNING_DAYS, 7, 3, 1, 0] as const
+
+/** Whole days until `expiresAt`, counted up: 13.2 days left is 14; 0 or less once it has passed. */
+export const daysUntil = (expiresAt: Date, now: Date) => Math.ceil((expiresAt.getTime() - now.getTime()) / DAY)
+
+/**
+ * The reminder due now: the smallest of `BAKONG_TOKEN_REMINDER_DAYS` at or above the days left (so a
+ * server that was down on day 7 still sends the 7-day one on day 6), 0 once it has expired, `null`
+ * while more than 14 days are left. Each is sent once per token (the dedupe key names both).
+ */
+export function bakongReminderStage(expiresAt: Date, now: Date): number | null {
+  const left = daysUntil(expiresAt, now)
+  if (left <= 0) return 0
+  const stages = BAKONG_TOKEN_REMINDER_DAYS.filter(days => days > 0 && left <= days)
+  return stages.length ? Math.min(...stages) : null
+}
+
+/** "🔑 The Bakong token expires in 7 days (21 Dec 2026)", or "has expired", with what to do. */
+export function bakongTokenMessage(expiresAt: Date, now: Date, siteUrl?: string): StoredMessage {
+  const left = daysUntil(expiresAt, now)
+  const date = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Phnom_Penh' }).format(expiresAt)
+  const lines = left > 0
+    ? [
+        `🔑 <b>The Bakong token expires in ${left} ${left === 1 ? 'day' : 'days'}</b> (${date})`,
+        '',
+        'After that the counter can\'t check KHQR payments with Bakong; cashiers confirm them by hand. Get a new token from Bakong\'s developer portal and replace the server secret NUXT_BAKONG_TOKEN, then press Test connection on Payments.',
+      ]
+    : [
+        `🔑 <b>The Bakong token has expired</b> (${date})`,
+        '',
+        'The counter can\'t check KHQR payments with Bakong: cashiers confirm them by hand. Get a new token from Bakong\'s developer portal and replace the server secret NUXT_BAKONG_TOKEN, then press Test connection on Payments.',
+      ]
+  const button = siteUrl?.startsWith('https://') ? { text: 'Open Payments', url: new URL('/admin/payments', siteUrl).toString() } : undefined
+  return { html: lines.join('\n'), button }
 }
 
 export const orderNumber = (pickupNumber: number) => `#${String(pickupNumber).padStart(3, '0')}`

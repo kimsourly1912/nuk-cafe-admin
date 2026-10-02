@@ -112,3 +112,21 @@ export function bakongClient(options: BakongClientOptions): BakongClient {
 
   return { checkByMd5 }
 }
+
+/**
+ * When the token stops working (step 10.16, D132): Bakong's tokens are JWTs whose payload carries
+ * `exp` (seconds). Read only, never verified: it's our own secret, and the date only drives the
+ * Payments page and the reminders. `null` for anything that isn't a JWT with an `exp`.
+ */
+export function bakongTokenExpiry(token: string): Date | null {
+  const payload = token.trim().split('.')[1]
+  if (!payload) return null
+  try {
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payload.length / 4) * 4, '=')
+    const exp = (JSON.parse(atob(base64)) as { exp?: unknown }).exp
+    return typeof exp === 'number' && Number.isFinite(exp) && exp > 0 ? new Date(exp * 1000) : null
+  }
+  catch {
+    return null
+  }
+}
