@@ -153,3 +153,113 @@ describe('list page: loading and out-of-order responses', () => {
     await card(page, 'Item 45').waitFor()
   })
 })
+
+describe('list page: the pager (D128)', () => {
+  const visibleOf = (locator: ReturnType<Page['locator']>) => locator.filter({ visible: true })
+  const pageBox = (page: Page) => page.getByRole('spinbutton', { name: 'Page number' })
+  const rowsPerPage = (page: Page) => visibleOf(page.getByRole('combobox', { name: 'Rows per page' }))
+
+  it('goes to a typed page on Enter, kept within the pages that exist', async () => {
+    const { page } = await open()
+    await card(page, 'Green tea').waitFor()
+    await expect(page.getByText('of 3', { exact: true }).isVisible()).resolves.toBe(true)
+    await pageBox(page).fill('3')
+    await pageBox(page).press('Enter')
+    await expect.poll(() => query(page)).toEqual({ page: '3' })
+    await card(page, 'Item 41').waitFor()
+
+    await pageBox(page).fill('99')
+    await pageBox(page).press('Enter')
+    await expect.poll(() => pageBox(page).inputValue()).toBe('3')
+    expect(query(page)).toEqual({ page: '3' })
+  })
+
+  it('a new page size goes back to page 1, asks the API for it and stays in the URL', async () => {
+    const sizes: string[] = []
+    const list = paginatedHandler(MANY)
+    const page = await createPage()
+    await mockApi(page, {
+      'GET /admin/menu/items': (request) => {
+        if (!isCount(request)) sizes.push(`${request.url.searchParams.get('page')}/${request.url.searchParams.get('pageSize')}`)
+        return list(request)
+      },
+    })
+    await page.goto(url('/admin/products?page=2'), { waitUntil: 'hydration' })
+    await card(page, 'Item 21').waitFor()
+
+    await rowsPerPage(page).click()
+    await page.getByRole('option', { name: '50', exact: true }).click()
+    await expect.poll(() => query(page)).toEqual({ pageSize: '50' })
+    await card(page, 'Item 45').waitFor()
+    expect(sizes.at(-1)).toBe('1/50')
+    // Everything fits one page now: no page numbers
+    expect(await page.getByRole('button', { name: 'Page 2' }).count()).toBe(0)
+
+    await page.reload({ waitUntil: 'networkidle' })
+    await card(page, 'Item 45').waitFor()
+    expect(query(page)).toEqual({ pageSize: '50' })
+  })
+
+  it('on a phone: previous and next around "Page n of N", rows per page under them', async () => {
+    const page = await createPage()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await mockApi(page, { 'GET /admin/menu/items': paginatedHandler(MANY) })
+    await page.goto(url('/admin/products'), { waitUntil: 'hydration' })
+    await page.getByRole('button', { name: 'Next page' }).waitFor()
+    // The numbered pager is the desktop's
+    expect(await page.getByRole('button', { name: 'Page 2' }).isVisible()).toBe(false)
+    expect(await page.getByRole('button', { name: 'Previous page' }).isDisabled()).toBe(true)
+
+    await page.getByRole('button', { name: 'Next page' }).click()
+    await expect.poll(() => query(page)).toEqual({ page: '2' })
+    await expect.poll(() => pageBox(page).inputValue()).toBe('2')
+    expect(await rowsPerPage(page).count()).toBe(1)
+    const pager = await page.getByRole('navigation', { name: 'Pagination' }).boundingBox()
+    expect(pager!.x + pager!.width).toBeLessThanOrEqual(390)
+  })
+})
+
+describe('list page: status tabs that don\'t fit (D128)', () => {
+  /** The tab row's scroll position, how far it can scroll, and whether a label is cut off. */
+  const tabRow = (page: Page) => page.getByRole('group', { name: 'Status' }).getByRole('tablist').evaluate((list) => {
+    const labels = [...list.querySelectorAll<HTMLElement>('[role="tab"] [data-slot="label"]')]
+    const active = list.querySelector<HTMLElement>('[role="tab"][data-state="active"]')!
+    const ideal = active.offsetLeft - (list.clientWidth - active.offsetWidth) / 2
+    return {
+      scrollLeft: list.scrollLeft,
+      scrolls: list.scrollWidth > list.clientWidth,
+      cut: labels.filter(label => label.scrollWidth > label.clientWidth).map(label => label.textContent),
+      /** How far the row is from centering the active tab (as far as the row can scroll). */
+      offCenter: Math.abs(list.scrollLeft - Math.min(Math.max(ideal, 0), list.scrollWidth - list.clientWidth)),
+      pageScrollsSideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    }
+  })
+
+  async function openAt(path: string) {
+    const page = await createPage()
+    await page.setViewportSize({ width: 320, height: 700 })
+    await mockApi(page, { 'GET /admin/menu/items': paginatedHandler(MANY) })
+    await page.goto(url(path), { waitUntil: 'hydration' })
+    await page.getByRole('group', { name: 'Status' }).getByRole('tab').first().waitFor()
+    return page
+  }
+
+  it('shows every label in full; the row scrolls, not the page', async () => {
+    const page = await openAt('/admin/products')
+    const row = await tabRow(page)
+    expect(row.cut).toEqual([])
+    expect(row.scrolls).toBe(true)
+    expect(row.pageScrollsSideways).toBe(false)
+  })
+
+  it('brings a tapped tab, or the one in the URL, to the middle of the row', async () => {
+    const page = await openAt('/admin/products?status=archived')
+    await expect.poll(async () => (await tabRow(page)).scrollLeft).toBeGreaterThan(0)
+
+    await page.getByRole('group', { name: 'Status' }).getByRole('tab', { name: /^All/ }).click()
+    await expect.poll(async () => (await tabRow(page)).scrollLeft).toBe(0)
+    await page.getByRole('group', { name: 'Status' }).getByRole('tab', { name: /^Published/ }).click()
+    await expect.poll(() => query(page)).toEqual({ status: 'active' })
+    await expect.poll(async () => (await tabRow(page)).offCenter).toBeLessThan(2)
+  })
+})

@@ -11,14 +11,19 @@ import type { TabsItem } from '@nuxt/ui'
 
 defineProps<{ items: (TabsItem & { value: T })[] }>()
 const tab = defineModel<T>({ required: true })
+
+// Labels never cut: a row that doesn't fit scrolls, the chosen tab centered (D128).
+const root = useTemplateRef('root')
+useCenteredTab(root, () => tab.value)
 </script>
 
 <template>
   <UTabs
+    ref="root"
     v-model="tab"
     :items="items"
     :content="false"
     variant="link"
-    :ui="{ root: 'self-end max-sm:-mb-2', list: 'mb-0 border-b-0 px-0', indicator: 'bottom-0' }"
+    :ui="{ root: 'min-w-0 max-w-full self-end max-sm:-mb-2', list: 'mb-0 border-b-0 px-0', indicator: 'bottom-0' }"
   />
 </template>

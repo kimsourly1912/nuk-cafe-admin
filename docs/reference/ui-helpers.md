@@ -12,7 +12,7 @@
 - [`<SearchInput>`](#searchinput)
 - [`<ListEmptyState>`](#listemptystate)
 - [Keyboard shortcuts: `usePageShortcuts`, `useSubmitShortcut`, `<ShortcutsHelp>`](#keyboard-shortcuts)
-- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127)
+- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127), [`useCenteredTab`](#usecenteredtab), [`<ListPagination>`](#listpagination), [`<QuantityStepper>`](#quantitystepper) (D128)
 
 ---
 
@@ -385,6 +385,8 @@ Source: `app/components/StatusTabs.vue`
 | `counts` | Keyed by the tab values plus `all`; badges appear once known |
 | `disabled` | e.g. while an unsaved order locks the filters |
 
+Labels are never cut (D128): a row that doesn't fit scrolls sideways (no scrollbar shown), and the chosen status is brought to the middle of the row ([`useCenteredTab`](#usecenteredtab)); only the row scrolls, never the page.
+
 Counts: a list loaded whole (Categories, the libraries) counts on the client; a paginated one asks its list endpoint with `pageSize: 1` per status and reads `total`, in one query keyed `<feature>:status-counts` so `invalidate(feature)` refreshes it (`useItemStatusCounts` in the products feature).
 
 ---
@@ -557,3 +559,53 @@ Source: `app/components/PhoneInput.vue`; the rules in `shared/contracts/phone.ts
 | `formatPhone(e164)` | `+855 12 345 678` for display |
 
 A form keeps `phone` and `phoneCountry` in its draft, validates them together (`v.forward(v.partialCheck(…), ['phone'])`, the Branch form), and sends `parsePhone(…).e164`.
+
+---
+
+## `useCenteredTab`
+
+Keeps a scrolling tab row's active tab in the middle (D128). Every `UTabs` scrolls sideways when its labels don't fit (`app.config.ts`: the list `overflow-x-auto scrollbar-none`, triggers `shrink-0`, labels never truncated). This composable scrolls only the row (never the page) so the active tab is centered: smoothly when it changes (a tap, the arrow keys, the URL; at once with reduced motion), at once on mounting and whenever the row or a tab changes size (counts arriving). A row that fits doesn't move. `<StatusTabs>` and `<ToolbarTabs>` call it; a page with its own `UTabs` calls it with a template ref around them.
+
+Source: `app/composables/useCenteredTab.ts`. E2E: `list-page.test.ts` → "status tabs that don't fit".
+
+```ts
+const tabsRow = useTemplateRef('tabsRow') // on the UTabs or an element around it
+useCenteredTab(tabsRow, () => tab.value)
+```
+
+---
+
+## `<ListPagination>`
+
+The pager of every paginated list (D128): "Page [3] of 10 · Rows per page [20]" on the left; first, previous, the page numbers ("1 2 3 … 8 9 10"), next and last on the right. Typing a page goes there on Enter (or leaving the box), kept between 1 and the last page. Rows per page is 10, 20, 50 or 100 (`PAGE_SIZES`); a new size goes back to page 1 and is kept in the URL (`usePaginatedQuery`). On phones: previous, "Page [3] of 10" and next on one line, rows per page under it. Nothing shows while the whole list fits on the smallest page.
+
+Source: `app/components/ListPagination.vue`. Used by Staff, Menu items, Sales by item and Order history. E2E: `list-page.test.ts` → "the pager".
+
+```vue
+<ListPagination v-model:page="page" v-model:page-size="pageSize" :total="data?.total ?? 0" />
+```
+
+| Prop / model | Description |
+|---|---|
+| `v-model:page` | 1-based, from `usePaginatedQuery` |
+| `v-model:page-size` | From `usePaginatedQuery` |
+| `total` | The list's `total` from the API |
+
+---
+
+## `<QuantityStepper>`
+
+A quantity: − the number + in a pill (D128), Nuxt UI buttons and input. The number stays within `min`–`max`; − is disabled at `min`, + at `max`. The field has `inputmode="none"`, so a tap on a phone or tablet doesn't open the keyboard (− and + are the way there); with a keyboard a number can be typed (applied on Enter or leaving the field, kept within the limits; anything else goes back) and ↑ / ↓ step it. The same markup for every visitor, so it's safe on server-rendered pages.
+
+Source: `app/components/QuantityStepper.vue`. Used by the customer menu (the card's stepper from 0, which removes; the order's lines and the item detail from 1) and Review order. Customer orders stop at 20 per line (`LINE_MAX_QUANTITY`, D98). E2E: `shop-menu.test.ts` → "a line's card".
+
+```vue
+<QuantityStepper v-model="quantity" :max="LINE_MAX_QUANTITY" :label="item.name" size="sm" />
+```
+
+| Prop | Description |
+|---|---|
+| `v-model` | The quantity |
+| `label` | What is counted, for the names: "Increase quantity of Iced Latte", "Quantity of Iced Latte" |
+| `min` / `max` | Default 1 and 99 |
+| `disabled`, `size` | `'sm'` or `'md'` (default) |

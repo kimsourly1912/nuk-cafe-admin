@@ -49,16 +49,15 @@ const size = computed(() => (props.compact ? 'sm' : 'md'))
       :aria-label="`Customize ${item.name}`"
       @click="emit('choose')"
     />
-    <UInputNumber
+    <QuantityStepper
       v-else-if="quantity > 0"
       :model-value="quantity"
       :min="0"
       :max="MAX_LINE_QUANTITY"
       :size="size"
       :disabled="closed"
-      :aria-label="`Quantity of ${item.name}`"
-      class="w-28"
-      @update:model-value="value => emit('set-quantity', value ?? 0)"
+      :label="item.name"
+      @update:model-value="value => emit('set-quantity', value)"
     />
     <UButton
       v-else

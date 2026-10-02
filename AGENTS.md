@@ -197,6 +197,9 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `RecordSelect` | `components/` | A dropdown of records: `USelectMenu` with search and virtual scroll, `pinned` "All"/"None" |
 | `AppDrawer` | `components/` | Every drawer and bottom sheet: `UDrawer` without a handle or dragging (`UDrawer` is a lint error elsewhere) |
 | `ToolbarTabs`, `useUrlTab` | `components/`, `composables/` | Tabs on a toolbar's line; a page's tab in the URL (`?tab=`) |
+| `ListPagination` | `components/` | The pager of every paginated list: "Page [n] of N · Rows per page", page numbers; `pageSize` in the URL (D128) |
+| `QuantityStepper` | `components/` | Every quantity: − n + in a pill, no keyboard on touch screens (D128) |
+| `useCenteredTab` | `composables/` | A scrolling tab row keeps its active tab in the middle (`StatusTabs`, `ToolbarTabs` call it) (D128) |
 | `PhoneInput`, `parsePhone` / `phoneSchema` | `components/`, `shared/contracts/phone.ts` | Every phone number: a country (flag, dial code) and the number; stored and sent as E.164, checked by libphonenumber on both sides (D127) |
 
 Expected to be promoted to the root when the first two features need them: `ProductImageInput` (in `app/features/products/`; rewards, banners and vouchers will need uploads too, through `POST /api/admin/media`).
@@ -226,6 +229,7 @@ Expected to be promoted to the root when the first two features need them: `Prod
 - Icons are bundled at build time, never fetched (decisions D18). Write icon names as literal strings (`'i-lucide-tags'`), not template strings, and install `@iconify-json/<collection>` before using a new collection.
 - `USelect` cannot hold an empty or `undefined` value. Use `ANY` for "all" filters and let the `<Feature>Select` components handle "none".
 - **Dropdowns (owner, 2026-10-02, D126):** the cafe's records (categories, branches, rules, add-on groups, staff) or a long list use `<RecordSelect>` (search and virtual scroll, `pinned` "All"/"None"); `USelect` only for a fixed set the code defines (status, role, sort). See [ui.md §14](docs/reference/ui.md#14-dropdowns-owner-2026-10-02-d126).
+- **Tabs, pages and quantities (D128):** tab labels are never cut: a row that doesn't fit scrolls and centers the active tab (`useCenteredTab`); every paginated list ends with `<ListPagination>`; every quantity is a `<QuantityStepper>`, never `UInputNumber` ([ui.md §15–16](docs/reference/ui.md#16-pagination-and-quantities-owner-2026-10-02-d128)).
 - **Page width (D126):** admin pages set no max-width or width breakpoints: the shell centers them at 80rem; a settings or form page adds `class="page-narrow"` (56rem) to its `UDashboardPanel` ([ui.md §13](docs/reference/ui.md#13-page-width-owner-2026-10-02-d126)). Drawers and sheets are `<AppDrawer>`; tabs in a toolbar are `<ToolbarTabs>` with `useUrlTab`.
 - **Design system first (owner, 2026-09-28, D74).** Mockups are a reference for layout, element positions and content, not for styling; Nuxt UI defaults and global configuration decide styling. The rules are in [ui.md](docs/reference/ui.md). When a mockup needs something the design system lacks, ask first.
 - The UI chrome is English only. Translatable content fields (`nameI18n`, ...) are data, preserved on update.

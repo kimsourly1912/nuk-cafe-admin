@@ -289,17 +289,15 @@ const range = computed(() => {
             </template>
           </UTable>
 
-          <div class="flex flex-wrap items-center justify-between gap-2 print:hidden">
-            <p class="text-sm text-muted">
-              {{ range }} · The CSV includes all matching items.
-            </p>
-            <UPagination
-              v-if="data.totalPages > 1"
-              v-model:page="page"
-              :total="data.total"
-              :items-per-page="pageSize"
-            />
-          </div>
+          <p class="text-sm text-muted print:hidden">
+            {{ range }} · The CSV includes all matching items.
+          </p>
+          <ListPagination
+            v-model:page="page"
+            v-model:page-size="pageSize"
+            :total="data.total"
+            class="print:hidden"
+          />
         </template>
 
         <ReportDefinitions kind="items" />

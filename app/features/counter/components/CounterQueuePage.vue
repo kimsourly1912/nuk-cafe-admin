@@ -40,6 +40,8 @@ const search = ref('')
 const orders = computed(() => (queue.value?.orders ?? []).filter(order => matchesSearch(order, search.value)))
 const columns = computed(() => COLUMNS.map(column => ({ ...column, orders: orders.value.filter(order => order.status === column.status) })))
 const tab = ref<ColumnId>('to_pay')
+const tabsRow = useTemplateRef('tabsRow')
+useCenteredTab(tabsRow, () => tab.value)
 const tabItems = computed(() => columns.value.map(column => ({ label: column.label, value: column.id, badge: { label: String(column.orders.length), color: column.color, variant: 'subtle' as const } })))
 const shownColumn = computed(() => columns.value.find(column => column.id === tab.value)!)
 const empty = computed(() => queue.value !== null && queue.value.orders.length === 0)
@@ -175,6 +177,7 @@ useSeoMeta({ robots: 'noindex' })
         class="flex-1"
       >
         <UTabs
+          ref="tabsRow"
           v-model="tab"
           :items="tabItems"
           :content="false"
