@@ -6,10 +6,11 @@
 import { useBranchOptions } from '../composables/useBranches'
 
 const { data: branches, loading, error, refresh } = useBranchOptions()
+const route = useRoute()
 
-// One branch: its page is the Branch page (replace, so Back doesn't return here).
+// One branch: its page is the Branch page (replace, so Back doesn't return here; `?tab=` is kept).
 watch(branches, (list) => {
-  if (list?.length === 1) navigateTo(`/admin/branches/${list[0]!.id}`, { replace: true })
+  if (list?.length === 1) navigateTo({ path: `/admin/branches/${list[0]!.id}`, query: route.query }, { replace: true })
 }, { immediate: true })
 </script>
 

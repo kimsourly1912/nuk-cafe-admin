@@ -244,7 +244,7 @@ describe('Reports: Sales by item', () => {
     await page.getByRole('button', { name: 'Paid sales, sorted descending' }).click()
     await expect.poll(() => lastQuery(requests)).toMatchObject({ sort: 'sales', direction: 'asc' })
 
-    await page.getByRole('combobox', { name: 'Category' }).click()
+    await page.getByRole('button', { name: 'Category', exact: true }).click()
     await page.getByRole('option', { name: 'Coffee' }).click()
     await expect.poll(() => lastQuery(requests).categoryId).toBe('cat-2')
     expect(page.url()).toContain('categoryId=cat-2')
@@ -320,5 +320,75 @@ describe('Reports: Order history', () => {
     await panel.getByText('Reference 8812').waitFor()
     const box = await panel.boundingBox()
     expect(box?.width).toBeGreaterThan(370) // the whole width, less a scrollbar
+  })
+})
+
+// The period picker and sheets (D126).
+describe('Reports: choosing a period', () => {
+  /** A day of its own month (a month's grid also shows the neighbours' days). */
+  const day = (page: Page, name: string) => page.getByRole('button', { name }).and(page.locator(':not([data-outside-view])'))
+
+  it('from sm: two months ending with today\'s; the hover lights the days from the first click to the pointer, the second click applies', async () => {
+    const { page, requests } = await open('/admin/reports/summary')
+    await page.getByText('$1,284.50').first().waitFor()
+    await page.getByRole('button', { name: /^Period:/ }).click()
+    await page.getByText('August - September 2026').first().waitFor()
+
+    await day(page, 'Thursday, September 3, 2026').click()
+    await day(page, 'Monday, September 7, 2026').hover()
+    // Sep 3 to 7, not the whole 93-day window Reka's own limit would light.
+    await expect.poll(() => page.locator('[data-highlighted]:not([data-outside-view])').count()).toBe(5)
+    // Too far from the first day to end the range: disabled while choosing.
+    expect(await page.locator('[data-reka-calendar-cell-trigger][data-disabled]').count()).toBeGreaterThan(0)
+
+    await day(page, 'Monday, September 7, 2026').click()
+    await expect.poll(() => lastQuery(requests)).toMatchObject({ from: '2026-09-03', to: '2026-09-07' })
+    await page.getByRole('dialog').waitFor({ state: 'hidden' })
+  })
+
+  it('on a phone: a sheet of presets; Custom range applies only on Apply', async () => {
+    const { page, requests } = await open('/admin/reports/summary', {}, 390)
+    await page.getByText('$1,284.50').first().waitFor()
+    await page.getByRole('button', { name: /^Period:/ }).click()
+    const sheet = page.getByRole('dialog', { name: 'Period' })
+    await sheet.getByRole('button', { name: 'Custom range' }).click()
+    const custom = page.getByRole('dialog', { name: 'Custom range' })
+    await custom.getByText('From choose a day').waitFor()
+    const apply = custom.getByRole('button', { name: 'Apply' })
+    expect(await apply.isDisabled()).toBe(true)
+
+    await day(page, 'Thursday, September 10, 2026').click()
+    await day(page, 'Saturday, September 12, 2026').click()
+    await custom.getByText('To Sat 12 Sep 2026').waitFor()
+    const before = requests.length
+    await page.waitForTimeout(300)
+    expect(requests.length).toBe(before)
+    await apply.click()
+    await expect.poll(() => lastQuery(requests)).toMatchObject({ from: '2026-09-10', to: '2026-09-12' })
+    await custom.waitFor({ state: 'hidden' })
+  })
+
+  it('sheets have no drag handle and don\'t move when dragged; X closes them', async () => {
+    const { page } = await open('/admin/reports/orders', {}, 390)
+    await page.getByRole('button', { name: 'Order #042' }).waitFor()
+    await page.getByRole('button', { name: 'Filters', exact: true }).click()
+    const sheet = page.getByRole('dialog', { name: 'Filters' })
+    await sheet.getByRole('button', { name: 'Apply filters' }).waitFor()
+    await page.waitForTimeout(600) // the sheet's opening animation
+    expect(await sheet.locator('[data-slot="handle"]').count()).toBe(0)
+
+    // Drag the sheet's title down, as a finger would: it stays where it is.
+    const title = sheet.getByRole('heading', { name: 'Filters' })
+    const before = (await title.boundingBox())!
+    await page.mouse.move(before.x + 10, before.y + 5)
+    await page.mouse.down()
+    for (let y = 1; y <= 10; y++) await page.mouse.move(before.x + 10, before.y + 5 + y * 30)
+    await page.mouse.up()
+    await page.waitForTimeout(500)
+    expect((await title.boundingBox())!.y).toBeCloseTo(before.y, 0)
+    expect(await sheet.isVisible()).toBe(true)
+
+    await sheet.getByRole('button', { name: 'Close' }).click()
+    await sheet.waitFor({ state: 'hidden' })
   })
 })

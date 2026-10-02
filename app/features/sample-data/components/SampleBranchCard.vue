@@ -70,10 +70,11 @@ async function load() {
       class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
     >
       <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-        <USelect
+        <RecordSelect
           v-if="state.branches.length > 1"
           v-model="branchId"
           :items="state.branches.map(b => ({ label: b.name, value: b.id }))"
+          noun="branches"
           aria-label="Branch"
           :disabled="busy || loading"
           class="sm:w-48"

@@ -145,10 +145,10 @@ describe('categories tree', () => {
     }))
     await page.getByRole('button', { name: 'Add subcategory to Food' }).click()
     const form = page.getByRole('dialog', { name: 'New subcategory' })
-    await expect.poll(() => form.getByRole('combobox', { name: 'Parent category' }).textContent()).toContain('Food')
+    await expect.poll(() => form.getByRole('button', { name: 'Parent category', exact: true }).textContent()).toContain('Food')
     await form.getByLabel('Name').fill('Sandwiches')
     await form.getByLabel('Description').fill('Toasted to order')
-    await form.getByRole('combobox', { name: 'Availability' }).click()
+    await form.getByRole('button', { name: 'Availability', exact: true }).click()
     await page.getByRole('option', { name: 'Breakfast' }).click()
     await page.keyboard.press('Escape')
     await form.getByRole('button', { name: 'Create' }).click()
@@ -161,7 +161,7 @@ describe('categories tree', () => {
     await item(page, 'Drinks').getByRole('button', { name: 'Drinks', exact: true }).click()
     const form = page.getByRole('dialog', { name: 'Edit category' })
     await form.getByText('It has subcategories, so it stays a top-level category.').waitFor()
-    expect(await form.getByRole('combobox', { name: 'Parent category' }).isDisabled()).toBe(true)
+    expect(await form.getByRole('button', { name: 'Parent category', exact: true }).isDisabled()).toBe(true)
   })
 
   it('a save refused because someone else saved first keeps the input; Reload takes the latest version', async () => {
@@ -267,7 +267,7 @@ describe('category contents and follow-ups', () => {
     await page.keyboard.press('Escape')
 
     await page.getByRole('button', { name: 'New category' }).first().click()
-    await page.getByRole('dialog', { name: 'New category' }).getByRole('combobox', { name: 'Parent category' }).click()
+    await page.getByRole('dialog', { name: 'New category' }).getByRole('button', { name: 'Parent category', exact: true }).click()
     await page.getByRole('option', { name: 'Drinks' }).waitFor()
     expect(await page.getByRole('option', { name: /Snacks/ }).count()).toBe(0)
   })

@@ -5,7 +5,7 @@
  * mean: "Riverside · Asia/Phnom_Penh · business day 4:00 AM – 4:00 AM · Updated 2:35 PM". None of
  * it prints: the print header (`ReportPrintHeader`) says the same on paper.
  */
-import type { DropdownMenuItem, SelectItem } from '@nuxt/ui'
+import type { DropdownMenuItem } from '@nuxt/ui'
 import type { ReportBranch } from '#shared/contracts/reports'
 import { BUSINESS_DAY_TEXT, clockIn } from '../utils/display'
 import type { Period } from '../utils/period'
@@ -27,7 +27,7 @@ const emit = defineEmits<{ period: [period: Period], branch: [id: string], downl
 
 const { isCompact } = useLayoutContext()
 
-const branchItems = computed<SelectItem[]>(() => props.branches.map(b => ({ label: b.name, value: b.id })))
+const branchItems = computed(() => props.branches.map(b => ({ label: b.name, value: b.id })))
 
 const actions = computed<DropdownMenuItem[]>(() => [
   { label: 'Download CSV', icon: 'i-lucide-download', disabled: props.downloading || !props.branch, onSelect: () => emit('download') },
@@ -104,10 +104,11 @@ const actions = computed<DropdownMenuItem[]>(() => [
           :today="branch.today"
           @change="emit('period', $event)"
         />
-        <USelect
+        <RecordSelect
           v-if="branches.length > 1"
           :model-value="branch.id"
           :items="branchItems"
+          noun="branches"
           aria-label="Branch"
           class="w-44"
           @update:model-value="emit('branch', String($event))"

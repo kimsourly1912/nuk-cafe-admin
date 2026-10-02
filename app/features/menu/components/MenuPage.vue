@@ -475,10 +475,9 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
       />
     </BottomActionBar>
     <!-- Below lg: from the right on tablets, a bottom sheet on phones; only the lines scroll (D124) -->
-    <UDrawer
+    <AppDrawer
       v-model:open="orderOpen"
       :direction="isCompact ? 'bottom' : 'right'"
-      :handle="isCompact"
       title="Your order"
       :description="pluralize(cart.count, ['item', 'items'])"
       close
@@ -512,7 +511,7 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
           :closed-note="closedNote"
         />
       </template>
-    </UDrawer>
+    </AppDrawer>
 
     <MenuItemDetail
       v-if="detailItem"

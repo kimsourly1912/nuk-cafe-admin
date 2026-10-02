@@ -76,7 +76,7 @@ All 12 · Active 10 · Archived 2
 A compact record row has **two sibling targets**, never nested:
 
 1. **The record target:** a `ULink` (or `NuxtLink`) to the record's route, or, when the record opens in an overlay, a `UButton` (`color="neutral" variant="ghost" block`) whose default slot holds the content. It fills the row (`flex min-w-0 flex-1`), holds the name, the status badge and the meta line as plain, non-interactive content, and is tall because of that content (two or three lines: 44px or more), with no size override ([ui §6](./ui.md#6-density-and-touch-targets)). Its accessible name is the record's name.
-2. **The actions trigger:** a `UDropdownMenu` (or a `UDrawer` bottom sheet, by the layout-context rule in [responsive-layout §1](./responsive-layout.md#constrained-surfaces-container-queries)) whose trigger is an icon-only `UButton` (`icon="i-lucide-ellipsis-vertical" color="neutral" variant="ghost"`, `aria-label="Actions for <name>"`), at Nuxt UI's default size.
+2. **The actions trigger:** a `UDropdownMenu` (or an `AppDrawer` bottom sheet, by the layout-context rule in [responsive-layout §1](./responsive-layout.md#constrained-surfaces-container-queries)) whose trigger is an icon-only `UButton` (`icon="i-lucide-ellipsis-vertical" color="neutral" variant="ghost"`, `aria-label="Actions for <name>"`), at Nuxt UI's default size.
 
 ```vue
 <li class="flex items-center gap-2">
@@ -204,7 +204,7 @@ Don't mix both for the same fields. Never send several dependent calls behind on
 
 ## 6. Bottom sheets
 
-A bottom sheet (`UDrawer`) is for **brief contextual actions or choices** on compact (owner-directed): a row's actions, a quick pick from ≤ ~7 options, or a short detail. It has a title naming the record, the actions (disabled ones with their reason), and Cancel. **Not** for forms longer than one or two fields; those go full-screen. On medium and expanded, the same actions are a dropdown or popover. The Add-on row actions are the current example (`AddOnActions.vue`).
+A bottom sheet (`AppDrawer`: no handle, no dragging, D126) is for **brief contextual actions or choices** on compact (owner-directed): a row's actions, a quick pick from ≤ ~7 options, or a short detail. It has a title naming the record, the actions (disabled ones with their reason), and Cancel. **Not** for forms longer than one or two fields; those go full-screen. On medium and expanded, the same actions are a dropdown or popover. The Add-on row actions are the current example (`AddOnActions.vue`).
 
 ## 7. Gestures
 

@@ -12,6 +12,7 @@
 - [`<SearchInput>`](#searchinput)
 - [`<ListEmptyState>`](#listemptystate)
 - [Keyboard shortcuts: `usePageShortcuts`, `useSubmitShortcut`, `<ShortcutsHelp>`](#keyboard-shortcuts)
+- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126)
 
 ---
 
@@ -445,4 +446,90 @@ Weekly windows (availability rules, branch hours) are minutes after midnight in 
   aria-label="Opens"
   @update:model-value="value => window.start = timeToMinute(value)"
 />
+```
+
+---
+
+## `<StatCard>`
+
+One number on a page (ui.md §8, D126): Nuxt UI's `subtle` card (`bg-elevated/50` with a light ring), a muted label, the value large, an optional change and icon. It renders `dt`/`dd`, so place it in a `<dl>`.
+
+Source: `app/components/StatCard.vue`
+
+```vue
+<dl class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+  <StatCard label="Paid sales" :value="formatMinor(paid)" :change="{ text: '+12%', up: true }" change-label="vs yesterday" />
+  <StatCard label="Refunds" :value="negativeMinor(refunds)">
+    <template #value><span class="text-base font-normal text-muted">(2)</span></template>
+  </StatCard>
+</dl>
+```
+
+| Prop / slot | Description |
+|---|---|
+| `label`, `value` | The muted label and the formatted value |
+| `icon` | Optional, beside the label |
+| `change`, `changeLabel` | `{ text, up }`: green when up, red when down; "vs yesterday" in muted text |
+| `#value` | Added after the value (a count in brackets) |
+| default slot | Below, for a note |
+
+---
+
+## `<RecordSelect>`
+
+A dropdown of the cafe's records (ui.md §14, D126): `USelectMenu` with a search box and virtual scroll. Search matches anywhere in the label; `pinned` values stay first and are never filtered out; no match says "No {noun} match “…”" (a row of its own when pinned rows remain). Attributes (`aria-label`, `placeholder`, `loading`, `disabled`, `multiple`, …) go to the select. Its trigger is a button (`aria-haspopup="listbox"`): in e2e, `getByRole('button', { name, exact: true })`, and wait for the `listbox` to close after picking before typing elsewhere (it hands focus back to its button as it closes).
+
+Source: `app/components/RecordSelect.vue`. Used by `CategorySelect`, `AvailabilityRuleSelect`, and the branch and category filters.
+
+```vue
+<RecordSelect v-model="filters.branchId" :items="branchItems" noun="branches" :pinned="[ANY]" aria-label="Branch" />
+```
+
+| Prop | Description |
+|---|---|
+| `v-model` | A value, or values with `multiple` |
+| `items` | `{ label, value, disabled? }[]` |
+| `noun` | Plural: "Search branches…", "No branches match" |
+| `pinned` | Values always shown above the matches ("All", "None") |
+
+---
+
+## `<AppDrawer>`
+
+`UDrawer` without dragging (ui.md §8, D126): no handle, `handle-only`, so the sheet never moves under a finger; its X is on unless `:close="false"`. Every other prop, event and slot is `UDrawer`'s, also through `<component :is>` (`resolveComponent('AppDrawer')`). `UDrawer` itself is a lint error outside this file.
+
+Source: `app/components/AppDrawer.vue`
+
+```vue
+<AppDrawer v-model:open="open" title="Filters">
+  <UButton label="Filters" />
+  <template #body>…</template>
+</AppDrawer>
+```
+
+---
+
+## `<ToolbarTabs>`
+
+Tabs in a `UDashboardToolbar` (ui.md §15, D126): the tabs drop their own line and sit on the toolbar's, the active underline right above it.
+
+Source: `app/components/ToolbarTabs.vue`
+
+```vue
+<UDashboardToolbar>
+  <ToolbarTabs v-model="tab" :items="tabs" aria-label="Branch sections" />
+</UDashboardToolbar>
+```
+
+---
+
+## `useUrlTab`
+
+A page's tab kept in the URL (ui.md §15, D126). The first tab is the default and leaves the URL clean. Switching replaces the URL with `history.replaceState` (keeping Vue Router's `state.current` in step), not a route change: Back still leaves the page, and the unsaved-changes guard, which asks on every navigation, doesn't ask when a tab with a draft is only hidden. A page that redirects to the tab's page passes the query on (the Branch list).
+
+Source: `app/composables/useUrlTab.ts`
+
+```ts
+const tab = useUrlTab(['settings', 'tables'] as const)            // ?tab=tables
+const section = useUrlTab(ITEM_FORM_SECTIONS.map(s => s.value), 'section')
 ```

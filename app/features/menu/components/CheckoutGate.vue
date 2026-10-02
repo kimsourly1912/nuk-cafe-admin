@@ -13,7 +13,7 @@ const emit = defineEmits<{ verified: [] }>()
 const { isCompact } = useLayoutContext()
 // A dialog from `sm`, a bottom sheet on phones: the same content in either.
 const Modal = resolveComponent('UModal')
-const Drawer = resolveComponent('UDrawer')
+const Drawer = resolveComponent('AppDrawer')
 const { account, refresh } = useCustomerAccount()
 const verification = useResendVerification()
 const checking = ref(false)

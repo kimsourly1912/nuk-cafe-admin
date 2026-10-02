@@ -16,7 +16,7 @@ const emit = defineEmits<{ cancelled: [order: Order], changed: [] }>()
 
 const { isCompact } = useLayoutContext()
 const Modal = resolveComponent('UModal')
-const Drawer = resolveComponent('UDrawer')
+const Drawer = resolveComponent('AppDrawer')
 
 const number = computed(() => formatPickupNumber(props.order.pickupNumber))
 const saving = ref(false)

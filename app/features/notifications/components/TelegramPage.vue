@@ -44,7 +44,10 @@ function actions(destination: TelegramDestination): DropdownMenuItem[] {
 </script>
 
 <template>
-  <UDashboardPanel id="telegram">
+  <UDashboardPanel
+    id="telegram"
+    class="page-narrow"
+  >
     <template #header>
       <UDashboardNavbar title="Telegram">
         <template #leading>
@@ -54,7 +57,7 @@ function actions(destination: TelegramDestination): DropdownMenuItem[] {
     </template>
 
     <template #body>
-      <div class="mx-auto w-full max-w-4xl space-y-6">
+      <div class="space-y-6">
         <ApiErrorAlert
           v-if="error"
           :error="error"

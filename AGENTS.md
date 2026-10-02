@@ -193,6 +193,10 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`, `CURRENCY` | `utils/money.ts` | Cents (API) ↔ dollars (forms, display), "$4.20" |
 | `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute` | `utils/clock.ts` | Weekly windows' minutes after midnight ↔ "7:30 AM" and `UInputTime` (availability rules, branch hours) |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
+| `StatCard` | `components/` | One number on a page, in a soft card (never a number styled by hand) |
+| `RecordSelect` | `components/` | A dropdown of records: `USelectMenu` with search and virtual scroll, `pinned` "All"/"None" |
+| `AppDrawer` | `components/` | Every drawer and bottom sheet: `UDrawer` without a handle or dragging (`UDrawer` is a lint error elsewhere) |
+| `ToolbarTabs`, `useUrlTab` | `components/`, `composables/` | Tabs on a toolbar's line; a page's tab in the URL (`?tab=`) |
 
 Expected to be promoted to the root when the first two features need them: `ProductImageInput` (in `app/features/products/`; rewards, banners and vouchers will need uploads too, through `POST /api/admin/media`).
 
@@ -220,5 +224,7 @@ Expected to be promoted to the root when the first two features need them: `Prod
 - **Local build modules** live in `modules/` (Nuxt registers them): today only `reka-namespaced.ts`, which keeps Reka UI's namespaced barrel from bundling the admin's calendar into the customer menu (D123). Import Nuxt's kit as `nuxt/kit` (pnpm doesn't let the app import `@nuxt/kit` or `vite`).
 - Icons are bundled at build time, never fetched (decisions D18). Write icon names as literal strings (`'i-lucide-tags'`), not template strings, and install `@iconify-json/<collection>` before using a new collection.
 - `USelect` cannot hold an empty or `undefined` value. Use `ANY` for "all" filters and let the `<Feature>Select` components handle "none".
+- **Dropdowns (owner, 2026-10-02, D126):** the cafe's records (categories, branches, rules, add-on groups, staff) or a long list use `<RecordSelect>` (search and virtual scroll, `pinned` "All"/"None"); `USelect` only for a fixed set the code defines (status, role, sort). See [ui.md §14](docs/reference/ui.md#14-dropdowns-owner-2026-10-02-d126).
+- **Page width (D126):** admin pages set no max-width or width breakpoints: the shell centers them at 80rem; a settings or form page adds `class="page-narrow"` (56rem) to its `UDashboardPanel` ([ui.md §13](docs/reference/ui.md#13-page-width-owner-2026-10-02-d126)). Drawers and sheets are `<AppDrawer>`; tabs in a toolbar are `<ToolbarTabs>` with `useUrlTab`.
 - **Design system first (owner, 2026-09-28, D74).** Mockups are a reference for layout, element positions and content, not for styling; Nuxt UI defaults and global configuration decide styling. The rules are in [ui.md](docs/reference/ui.md). When a mockup needs something the design system lacks, ask first.
 - The UI chrome is English only. Translatable content fields (`nameI18n`, ...) are data, preserved on update.

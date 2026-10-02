@@ -89,3 +89,12 @@ export function previousLabel(period: Period, today: string): string {
   if (days === 1) return period.from === today ? 'vs yesterday' : 'vs the day before'
   return `vs the ${days} days before`
 }
+
+/**
+ * While a range is being chosen from `anchor` (the first day picked): days that would make it
+ * longer than `REPORT_MAX_DAYS`, before or after. The calendar disables them, so the hover
+ * highlight can follow the pointer from the first day instead of lighting the whole allowed window.
+ */
+export function beyondRangeLimit(anchor: string, day: string): boolean {
+  return Math.abs(daysBetween(anchor, day)) >= REPORT_MAX_DAYS
+}

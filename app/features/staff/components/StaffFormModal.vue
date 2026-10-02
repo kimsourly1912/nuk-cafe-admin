@@ -37,7 +37,7 @@ const state = reactive<StaffForm>(structuredClone(toRaw(props.draft) ?? toStaffF
 const schema = (isEdit ? staffAccessFormSchema : staffCreateFormSchema) as typeof staffCreateFormSchema
 
 const branches = useBranchOptions()
-const branchItems = computed<SelectItem[]>(() => (branches.data.value ?? []).map(b => ({ label: b.name, value: b.id })))
+const branchItems = computed(() => (branches.data.value ?? []).map(b => ({ label: b.name, value: b.id })))
 const roleItems: SelectItem[] = BRANCH_ROLES.map(role => ({ label: ROLE_LABELS[role], value: role }))
 const unusedBranch = computed(() => branches.data.value?.find(b => !state.memberships.some(m => m.branchId === b.id)))
 
@@ -169,9 +169,10 @@ async function onSubmit({ data }: FormSubmitEvent<StaffForm>) {
                 :name="`memberships.${index}.branchId`"
                 class="flex-1"
               >
-                <USelect
+                <RecordSelect
                   v-model="membership.branchId"
                   :items="branchItems"
+                  noun="branches"
                   :aria-label="`Branch ${index + 1}`"
                   class="w-full"
                 />

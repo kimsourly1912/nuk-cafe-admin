@@ -4,7 +4,7 @@
 
 ## Choosing the period
 
-The date button at the top left of every report chooses the period: **Today**, **Yesterday**, **Last 7 days**, **This month**, or two days on the calendar (the first and last day; at most 93 days). The line under it says which branch, its time zone, and when the numbers were read ("Updated 2:35 PM").
+The date button at the top left of every report chooses the period: **Today**, **Yesterday**, **Last 7 days**, **This month**, or two days on the calendar (the first and last day; at most 93 days). On a computer the calendar shows last month and this month, and the second day you click applies the period. On a phone the date button opens a sheet: tap a period, or **Custom range**, tap the first and last day, then **Apply**. The line under it says which branch, its time zone, and when the numbers were read ("Updated 2:35 PM").
 
 A **business day runs from 4:00 AM to 4:00 AM** in the branch's time zone (Asia/Phnom_Penh for Riverside). A payment at 12:30 AM counts on the day before. Moving from one report to another keeps the period.
 

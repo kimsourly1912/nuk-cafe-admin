@@ -17,7 +17,7 @@ const emit = defineEmits<{ cancelled: [], reload: [] }>()
 
 const { isCompact } = useLayoutContext()
 const Modal = resolveComponent('UModal')
-const Drawer = resolveComponent('UDrawer')
+const Drawer = resolveComponent('AppDrawer')
 const actions = useCounterActions(() => props.branchId)
 const toast = useToast()
 

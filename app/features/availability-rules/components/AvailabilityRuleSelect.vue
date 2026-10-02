@@ -7,11 +7,11 @@
  *   an archived rule until it's removed (D63). Nothing is cleared silently.
  * - New selections: only active rules (the server refuses archived ones).
  * - A failed load shows the error with Retry instead of an empty list.
+ * - Searchable with virtual scroll (`RecordSelect`, ui.md → Dropdowns).
  *
  * @example
  * <AvailabilityRuleSelect v-model="state.availabilityRuleIds" aria-label="Availability" />
  */
-import type { SelectItem } from '@nuxt/ui'
 import { MAX_TARGET_RULES } from '#shared/contracts/menu-availability'
 import { useAvailabilityRuleOptions } from '../composables/useAvailabilityRuleOptions'
 
@@ -32,7 +32,7 @@ const { data: rules, status, error, refresh } = useAvailabilityRuleOptions()
 const selectable = computed(() => rules.value.filter(r => r.status === 'active'))
 
 /** Chosen ids that aren't selectable: kept visible with the best label known. */
-const currentItems = computed<SelectItem[]>(() => model.value
+const currentItems = computed<{ label: string, value: string }[]>(() => model.value
   .filter(id => !selectable.value.some(r => r.id === id))
   .map((id) => {
     const known = rules.value.find(r => r.id === id)
@@ -41,7 +41,7 @@ const currentItems = computed<SelectItem[]>(() => model.value
   }))
 
 const full = computed(() => model.value.length >= MAX_TARGET_RULES)
-const items = computed<SelectItem[]>(() => [
+const items = computed<{ label: string, value: string, disabled?: boolean }[]>(() => [
   ...currentItems.value,
   ...selectable.value.map(r => ({ label: r.name, value: r.id, disabled: full.value && !model.value.includes(r.id) })),
 ])
@@ -52,14 +52,16 @@ const items = computed<SelectItem[]>(() => [
     class="space-y-1"
     :class="attrs.class ?? 'w-full'"
   >
-    <USelect
+    <RecordSelect
       v-bind="selectAttrs"
-      v-model="model"
+      :model-value="model"
       :items="items"
+      noun="rules"
       multiple
       :loading="status === 'pending'"
       :placeholder="placeholder ?? 'Whenever the cafe is open'"
       class="w-full"
+      @update:model-value="value => model = Array.isArray(value) ? value : []"
     />
     <p
       v-if="error"

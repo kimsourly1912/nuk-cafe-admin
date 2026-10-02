@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { chartPoints, niceScale } from '../utils/chart'
 import { changeText, eventBy, eventTitle, hourLabel, orderTypeText, paymentBadge } from '../utils/display'
-import { addDays, periodButtonLabel, periodLabel, presetOf, presetPeriod, previousLabel, validPeriod } from '../utils/period'
+import { addDays, beyondRangeLimit, periodButtonLabel, periodLabel, presetOf, presetPeriod, previousLabel, validPeriod } from '../utils/period'
 
 describe('report periods', () => {
+  it('limits a range being chosen to REPORT_MAX_DAYS either side of its first day', () => {
+    expect(beyondRangeLimit('2026-10-01', '2026-10-05')).toBe(false)
+    expect(beyondRangeLimit('2026-10-01', addDays('2026-10-01', 92))).toBe(false)
+    expect(beyondRangeLimit('2026-10-01', addDays('2026-10-01', 93))).toBe(true)
+    expect(beyondRangeLimit('2026-10-01', addDays('2026-10-01', -92))).toBe(false)
+    expect(beyondRangeLimit('2026-10-01', addDays('2026-10-01', -93))).toBe(true)
+  })
+
   const today = '2026-09-30'
 
   it('builds the presets from the branch\'s business date', () => {

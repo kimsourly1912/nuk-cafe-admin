@@ -21,7 +21,10 @@ async function reset() {
 </script>
 
 <template>
-  <UDashboardPanel id="sample-data">
+  <UDashboardPanel
+    id="sample-data"
+    class="page-narrow"
+  >
     <template #header>
       <UDashboardNavbar title="Sample data">
         <template #leading>
@@ -31,7 +34,7 @@ async function reset() {
     </template>
 
     <template #body>
-      <div class="mx-auto w-full max-w-4xl space-y-6">
+      <div class="space-y-6">
         <UAlert
           v-if="!enabled"
           color="neutral"
