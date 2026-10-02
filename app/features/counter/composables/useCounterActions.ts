@@ -1,4 +1,4 @@
-import type { CancelOrderInput, CounterOrder, PayOrderInput } from '#shared/contracts/orders'
+import type { CancelOrderInput, CounterOrder, KhqrCharge, KhqrCurrency, PayOrderInput } from '#shared/contracts/orders'
 import { orderNumber } from '../utils/counter'
 
 /**
@@ -50,6 +50,11 @@ export function useCounterActions(branchId: MaybeRefOrGetter<string>) {
     return paid
   }
 
+  /** The order's KHQR in a currency (step 10.15, D130): the open one, or a new one. Changes no order. */
+  function khqr(order: CounterOrder, currency: KhqrCurrency) {
+    return apiFetch<KhqrCharge>(path(order, 'khqr'), { method: 'POST', body: { currency } })
+  }
+
   async function cancel(order: CounterOrder, input: CancelOrderInput, key: string) {
     const cancelled = await post(order, 'cancel', input, key)
     await invalidate('counter')
@@ -59,5 +64,5 @@ export function useCounterActions(branchId: MaybeRefOrGetter<string>) {
   /** Any command in flight for this order (the card dims and shows a spinner). */
   const isBusy = (order: CounterOrder) => markReady.isPending(order.id) || complete.isPending(order.id)
 
-  return { markReady, complete, pay, cancel, isBusy }
+  return { markReady, complete, pay, khqr, cancel, isBusy }
 }

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 /**
- * A table's QR code as an image (D91). Dark on light in both themes: scanners need the contrast,
- * so its colors belong to the image (`utils/qr.ts`), not the UI theme.
+ * A QR code as an image: a table's link (D91), an order's KHQR at the counter (D130). Dark on light
+ * in both themes: scanners need the contrast, so its colors belong to the image (`utils/qr-code.ts`),
+ * not the UI theme.
  */
-import { qrImage } from '../utils/qr'
 
 const props = defineProps<{
   value: string
-  /** What it opens, for screen readers: "QR code for Table 01". */
+  /** What it is, for screen readers: "QR code for Table 01". */
   label: string
 }>()
 

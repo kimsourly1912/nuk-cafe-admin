@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
-import { CANCEL_REASONS, ORDER_STATUSES, ORDER_TYPES, PAYMENT_METHODS, RETURN_METHODS } from '#shared/contracts/orders'
+import { CANCEL_REASONS, KHQR_CURRENCIES, ORDER_STATUSES, ORDER_TYPES, PAYMENT_METHODS, RETURN_METHODS } from '#shared/contracts/orders'
 import { newId } from '#server/utils/ids'
 
 /**
@@ -127,6 +127,8 @@ export const counterPayments = sqliteTable('counter_payments', {
   amountKhr: integer(),
   khrPerUsd: integer(),
   reference: text(),
+  /** The QR the counter showed, for a KHQR payment made with one (step 10.15, D130). */
+  khqrChargeId: text().references(() => khqrCharges.id, { onDelete: 'restrict' }),
   collectedBy: text().notNull().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
   collectedAt: instant().notNull(),
   returnMethod: text({ enum: RETURN_METHODS }),
@@ -140,6 +142,51 @@ export const counterPayments = sqliteTable('counter_payments', {
   index('counter_payments_branch_idx').on(t.branchId, t.collectedAt),
   // Refunds by the day the money went back (reports, 8.1, D110).
   index('counter_payments_returned_idx').on(t.branchId, t.returnedAt),
+])
+
+/**
+ * KHQR at the counter (step 10.15, D130): the Bakong account that receives the money and what
+ * customers see before paying. One row (id `default`), versioned; absent until an admin saves it.
+ */
+export const khqrSettings = sqliteTable('khqr_settings', {
+  id: text().primaryKey(),
+  enabled: integer({ mode: 'boolean' }).notNull(),
+  accountId: text().notNull(),
+  merchantName: text().notNull(),
+  merchantCity: text().notNull(),
+  /** `USD`, `KHR` or `USD,KHR`. */
+  currencies: text().notNull(),
+  version: integer().notNull().default(1),
+  updatedBy: text().notNull().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
+  updatedAt: instant().notNull(),
+}, t => [
+  check('khqr_settings_check', sql`${t.id} = 'default' and ${t.currencies} in ('USD', 'KHR', 'USD,KHR')`),
+])
+
+/**
+ * A KHQR made for one order (step 10.15, D130): its text (what the QR code draws) and that text's
+ * MD5, which Bakong looks payments up by (10.15b). Kept after payment: the payment points at it.
+ */
+export const khqrCharges = sqliteTable('khqr_charges', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  orderId: text().notNull().references(() => orders.id, { onDelete: 'restrict' }),
+  branchId: text().notNull().references(() => authSchema!.organization.id, { onDelete: 'restrict' }),
+  currency: text({ enum: KHQR_CURRENCIES }).notNull(),
+  /** Cents for USD, riel for KHR. */
+  amount: integer().notNull(),
+  khrPerUsd: integer(),
+  accountId: text().notNull(),
+  merchantName: text().notNull(),
+  qr: text().notNull(),
+  md5: text().notNull(),
+  billNumber: text().notNull(),
+  createdBy: text().notNull().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
+  createdAt: instant().notNull(),
+  expiresAt: instant().notNull(),
+}, t => [
+  check('khqr_charges_check', sql`${t.currency} in ('USD', 'KHR') and ${t.amount} > 0 and (${t.currency} = 'KHR') = (${t.khrPerUsd} is not null) and ${t.expiresAt} > ${t.createdAt}`),
+  uniqueIndex('khqr_charges_md5_idx').on(t.md5),
+  index('khqr_charges_order_idx').on(t.orderId, t.currency, t.expiresAt),
 ])
 
 /** The riel rate an admin set, from `effectiveFrom` on (append-only; 6.3, D101). */

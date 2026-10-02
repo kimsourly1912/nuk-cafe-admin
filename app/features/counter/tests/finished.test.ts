@@ -5,7 +5,7 @@ import { cancellationSummary, filterFinished, finishedAt, itemSummary, paymentNo
 const at = (hhmm: string) => new Date(`2026-09-30T${hhmm}:00`).toISOString()
 
 const payment = (over: Partial<CounterPayment> = {}): CounterPayment => ({
-  method: 'cash_usd', amountMinor: 450, amountKhr: null, khrPerUsd: null, reference: null,
+  method: 'cash_usd', amountMinor: 450, amountKhr: null, khrPerUsd: null, reference: null, khqrChargeId: null,
   collectedAt: at('10:47'), collectedBy: { name: 'Sophea Keo' }, returnMethod: null, returnedAt: null, ...over,
 })
 

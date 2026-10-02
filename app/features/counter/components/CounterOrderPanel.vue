@@ -6,8 +6,9 @@
  * - **To pay:** the method (Cash USD · Cash riel · KHQR, "Payment starts preparation"). Cash: the
  *   amount received with quick amounts and the change to give (nothing typed = exact; less = short,
  *   and Confirm waits). Riel: the total at the rate in force, rounded up to ៛100, and when the rate
- *   was set. KHQR: no code on screen (no Bakong connection, the owner's review): the customer scans
- *   the counter's KHQR, the cashier checks the merchant app, then confirms, with an optional
+ *   was set. KHQR: once an admin set it up (step 10.15, D130), a QR made for this order with its
+ *   total and number (`CounterKhqr`), in dollars or riel; otherwise the customer scans the counter's
+ *   printed KHQR. Either way the cashier checks the bank app, then confirms, with an optional
  *   reference. "Confirm payment · $7.25".
  * - **Preparing / ready:** who took the payment and how; Mark ready or Complete.
  * - **Cancel order** (not once ready): the cancel dialog.
@@ -20,16 +21,22 @@
  * otherwise a click meant for "Confirm payment" lands on the "Mark ready" that replaced it (found
  * in the release check on staging, 10.5).
  */
-import type { CounterOrder, ExchangeRate, OrderStatus, PaymentMethod, PayOrderInput } from '#shared/contracts/orders'
+import type { CounterOrder, ExchangeRate, KhqrCharge, KhqrCurrency, OrderStatus, PaymentMethod, PayOrderInput } from '#shared/contracts/orders'
 import { toRiel } from '#shared/contracts/orders'
 import { useCounterActions } from '../composables/useCounterActions'
 import type { Change, CommandFailure } from '../utils/counter'
+import { khqrAmountText } from '../utils/khqr'
+import CounterKhqr from './CounterKhqr.vue'
 import { changeDue, clockTime, commandFailure, firstName, formatRiel, orderNumber, orderTypeText, PAYMENT_METHOD_LABELS, paymentText, rielQuickAmounts, usdQuickAmounts } from '../utils/counter'
 
 const props = defineProps<{
   order: CounterOrder | null
   branchId: string
   khrRate: ExchangeRate | null
+  /** KHQR at the counter: the currencies offered, or `null` while it isn't set up (D130). */
+  khqr: { currencies: KhqrCurrency[] } | null
+  /** The server's clock minus this tablet's. */
+  serverOffset: number
 }>()
 const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{ cancel: [order: CounterOrder], reload: [] }>()
@@ -47,6 +54,8 @@ const method = ref<PaymentMethod>('cash_usd')
 const receivedUsd = ref<number | null>(null)
 const receivedKhr = ref<number | null>(null)
 const reference = ref('')
+/** The QR on screen (KHQR set up), which the payment names. */
+const khqrCharge = ref<KhqrCharge | null>(null)
 const submitting = ref(false)
 const failure = ref<{ kind: CommandFailure, message: string } | null>(null)
 
@@ -56,6 +65,7 @@ watch(() => props.order?.id, () => {
   receivedUsd.value = null
   receivedKhr.value = null
   reference.value = ''
+  khqrCharge.value = null
   failure.value = null
 })
 
@@ -102,7 +112,8 @@ const body = computed<PayOrderInput | null>(() => {
   if (!order) return null
   if (method.value === 'cash_usd') return { version: order.version, method: 'cash_usd' }
   if (method.value === 'cash_khr') return props.khrRate ? { version: order.version, method: 'cash_khr', khrPerUsd: props.khrRate.khrPerUsd } : null
-  return { version: order.version, method: 'khqr', reference: reference.value.trim() || null }
+  if (props.khqr && !khqrCharge.value) return null
+  return { version: order.version, method: 'khqr', chargeId: khqrCharge.value?.id ?? null, reference: reference.value.trim() || null }
 })
 /** One key per payment as sent: Try again reuses it; any change makes a new one. */
 const key = ref(crypto.randomUUID())
@@ -112,6 +123,7 @@ watch(() => JSON.stringify([props.order?.id, body.value]), () => {
 
 const confirmLabel = computed(() => {
   if (method.value === 'cash_khr') return totalKhr.value === null ? 'Confirm payment' : `Confirm payment · ${formatRiel(totalKhr.value)}`
+  if (method.value === 'khqr' && khqrCharge.value) return `Confirm KHQR payment · ${khqrAmountText(khqrCharge.value)}`
   return `Confirm payment · ${formatMinor(totalMinor.value)}`
 })
 const canConfirm = computed(() => Boolean(body.value) && change.value.kind !== 'short' && !submitting.value)
@@ -354,7 +366,17 @@ const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
           </template>
 
           <template v-else>
+            <CounterKhqr
+              v-if="khqr"
+              v-model:charge="khqrCharge"
+              :order="order"
+              :branch-id="branchId"
+              :currencies="khqr.currencies"
+              :server-offset="serverOffset"
+              :disabled="submitting"
+            />
             <UAlert
+              v-else
               color="neutral"
               variant="subtle"
               icon="i-lucide-qr-code"

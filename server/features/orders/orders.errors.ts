@@ -1,6 +1,6 @@
 import type { OrderStatus } from '#shared/contracts/orders'
 import { MAX_UNPAID_ORDERS } from '#shared/contracts/orders'
-import { apiError, ErrorCodes, notFound } from '#server/utils/errors'
+import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 /** Error codes of placing and reading orders (step 6.2, D99). */
 export const OrderErrorCodes = {
@@ -22,6 +22,10 @@ export const OrderErrorCodes = {
   NO_EXCHANGE_RATE: 'NO_EXCHANGE_RATE',
   /** The riel rate changed since the screen showed the amount. */
   EXCHANGE_RATE_CHANGED: 'EXCHANGE_RATE_CHANGED',
+  /** KHQR at the counter (10.15, D130): an admin hasn't set it up, it's off, or not in that currency. */
+  KHQR_NOT_SET_UP: 'KHQR_NOT_SET_UP',
+  /** A payment named a QR made for another order. */
+  KHQR_CHARGE_INVALID: 'KHQR_CHARGE_INVALID',
 } as const
 
 export const orderingClosed = (message: string) => apiError(409, OrderErrorCodes.ORDERING_CLOSED, message)
@@ -64,6 +68,17 @@ export const noExchangeRate = () =>
 
 export const exchangeRateChanged = (khrPerUsd: number) =>
   apiError(409, OrderErrorCodes.EXCHANGE_RATE_CHANGED, `The riel rate changed to ៛${khrPerUsd.toLocaleString('en-US')} per dollar. Check the new amount and confirm again.`)
+
+export const khqrNotSetUp = (currency?: string) =>
+  apiError(409, OrderErrorCodes.KHQR_NOT_SET_UP, currency
+    ? `KHQR in ${currency === 'KHR' ? 'riel' : 'dollars'} isn't set up. An admin sets it on the Payments page.`
+    : 'KHQR isn\'t set up yet. An admin sets it on the Payments page; use the counter\'s printed KHQR meanwhile.')
+
+export const khqrChargeInvalid = () =>
+  apiError(409, OrderErrorCodes.KHQR_CHARGE_INVALID, 'That QR was made for another order. Show this order\'s QR and confirm again.')
+
+/** The KHQR settings were saved by someone else since the page read them. */
+export const khqrSettingsChanged = () => versionConflict('The KHQR settings')
 
 /** A paid order's cancellation must say how the money went back; an unpaid one has none. */
 export const returnMethodInvalid = (paid: boolean) =>

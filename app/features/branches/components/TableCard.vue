@@ -6,7 +6,6 @@
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
-import TableQrCode from './TableQrCode.vue'
 
 const props = defineProps<{
   table: DiningTable
@@ -36,7 +35,7 @@ const archived = computed(() => props.table.status === 'archived')
         class="size-20 shrink-0 p-1.5"
         @click="emit('view')"
       >
-        <TableQrCode
+        <QrCode
           :value="table.qrUrl"
           :label="`QR code for ${table.label}`"
           class="size-full"

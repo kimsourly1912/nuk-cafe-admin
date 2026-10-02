@@ -1,6 +1,7 @@
 <script setup lang="ts">
 /**
- * Payments (`/admin/payments`, D102, the owner's frames): the riel rate cash payments in riel use.
+ * Payments (`/admin/payments`, D102, the owner's frames): KHQR at the counter (step 10.15, D130), and
+ * the riel rate cash payments in riel use.
  * The current rate and who set it when, beside a Change rate form; below, the history (the latest
  * 20, the current one marked). A new rate applies from now on; each payment keeps the rate it used.
  */
@@ -8,6 +9,7 @@ import type { TableColumn } from '@nuxt/ui'
 import type { ExchangeRate } from '#shared/contracts/orders'
 import { KHR_PER_USD_MAX, KHR_PER_USD_MIN, setExchangeRateSchema } from '#shared/contracts/orders'
 import { useExchangeRateMutations, useExchangeRates } from '../composables/useExchangeRates'
+import KhqrSettingsCard from './KhqrSettingsCard.vue'
 
 const { data, error, loading, refresh } = useExchangeRates()
 const { set } = useExchangeRateMutations()
@@ -50,6 +52,7 @@ const columns: TableColumn<ExchangeRate>[] = [
 
     <template #body>
       <div class="space-y-6">
+        <KhqrSettingsCard />
         <ApiErrorAlert
           v-if="error"
           :error="error"

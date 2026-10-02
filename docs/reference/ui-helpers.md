@@ -12,7 +12,7 @@
 - [`<SearchInput>`](#searchinput)
 - [`<ListEmptyState>`](#listemptystate)
 - [Keyboard shortcuts: `usePageShortcuts`, `useSubmitShortcut`, `<ShortcutsHelp>`](#keyboard-shortcuts)
-- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127), [`useCenteredTab`](#usecenteredtab), [`<ListPagination>`](#listpagination), [`<QuantityStepper>`](#quantitystepper) (D128)
+- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127), [`useCenteredTab`](#usecenteredtab), [`<ListPagination>`](#listpagination), [`<QuantityStepper>`](#quantitystepper) (D128), [`<QrCode>`](#qrcode) (D130)
 
 ---
 
@@ -532,6 +532,18 @@ Source: `app/composables/useUrlTab.ts`
 ```ts
 const tab = useUrlTab(['settings', 'tables'] as const)            // ?tab=tables
 const section = useUrlTab(ITEM_FORM_SECTIONS.map(s => s.value), 'section')
+```
+
+---
+
+## `<QrCode>`
+
+A QR code as an inline SVG, dark on light in both themes (scanners need the contrast, so the colors belong to the image): a table's link (D91), an order's KHQR at the counter (D130). `role="img"` named by `label`. The drawing is `qrImage(value)` (`uqr`, error correction M, a 2-module quiet zone); `qrSvg(value)` gives a standalone SVG file (the table downloads).
+
+Source: `app/components/QrCode.vue`, `app/utils/qr-code.ts` (both auto-imported).
+
+```vue
+<QrCode :value="charge.qr" :label="`KHQR for order 042, $8.75`" class="w-56" />
 ```
 
 ---

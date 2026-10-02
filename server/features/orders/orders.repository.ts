@@ -243,6 +243,7 @@ export interface NewPayment {
   amountKhr: number | null
   khrPerUsd: number | null
   reference: string | null
+  khqrChargeId?: string | null
   collectedBy: string
   collectedAt: Date
 }
@@ -264,6 +265,7 @@ export interface PaymentRow {
   amountKhr: number | null
   khrPerUsd: number | null
   reference: string | null
+  khqrChargeId: string | null
   collectedAt: Date
   collectedByName: string
   returnMethod: ReturnMethod | null
@@ -278,6 +280,7 @@ export async function paymentsOf(db: Db, orderIds: string[]): Promise<PaymentRow
     amountKhr: counterPayments.amountKhr,
     khrPerUsd: counterPayments.khrPerUsd,
     reference: counterPayments.reference,
+    khqrChargeId: counterPayments.khqrChargeId,
     collectedAt: counterPayments.collectedAt,
     collectedByName: user.name,
     returnMethod: counterPayments.returnMethod,

@@ -6,7 +6,6 @@
 import { useClipboard } from '@vueuse/core'
 import type { DiningTable } from '#shared/contracts/branches'
 import { downloadQrPng, downloadQrSvg } from '../utils/qr'
-import TableQrCode from './TableQrCode.vue'
 
 const props = defineProps<{ table: DiningTable & { qrUrl: string } }>()
 defineEmits<{ close: [] }>()
@@ -23,7 +22,7 @@ const { copy, copied } = useClipboard({ legacy: true })
   >
     <template #body>
       <div class="space-y-4">
-        <TableQrCode
+        <QrCode
           :value="table.qrUrl"
           :label="`QR code for ${table.label}`"
           class="mx-auto w-full max-w-64"

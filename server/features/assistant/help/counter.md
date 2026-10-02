@@ -24,7 +24,7 @@ Branch staff, managers and admins use the **counter app** at `/counter` (its own
 2. Choose the **Payment method**:
    - **Cash USD**: enter **Amount received (USD)** (or tap a quick amount, or **Exact**). The change to give back shows, or how much is short.
    - **Cash riel**: the total in riel at the rate set on Admin → Payments, rounded up to ៛100. Enter **Amount received (៛)**.
-   - **KHQR**: ask the customer to scan the counter KHQR and pay the total. Confirm only after the payment appears in the merchant app. **Transaction reference** is optional.
+   - **KHQR**: when an admin has set it up, a QR for this order appears with the amount, "Order 042" and the minutes left; with dollars and riel both offered, choose **US dollars** or **Riel**. The customer scans it with their banking app. Once it expires, press **New QR**. Otherwise, ask the customer to scan the counter's printed KHQR and pay the total. Either way, confirm only after the payment appears in your bank app. **Transaction reference** is optional.
 3. Press **Confirm payment**. The order moves to Preparing.
 
 If another cashier pays or moves the order while you have it open, the panel says so (for example "Paid meanwhile by Sophea") and shows the next step only after you press **OK**.

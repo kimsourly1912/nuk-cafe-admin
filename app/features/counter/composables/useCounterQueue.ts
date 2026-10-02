@@ -63,6 +63,8 @@ export function useCounterQueue(branchId: MaybeRefOrGetter<string>) {
     query,
     queue: computed(() => query.data.value ?? null),
     now,
+    /** The server's clock minus this tablet's, for countdowns by the second (the KHQR's). */
+    serverOffset: readonly(offset),
     isNew,
     muted,
   }

@@ -141,6 +141,42 @@ describe('the counter', () => {
     await sql('delete from exchange_rates')
   })
 
+  it('KHQR at the counter (D130): a QR for this order in dollars or riel, with its number and minutes left; the payment names it', async () => {
+    const admin = '(select id from user where email = \'e2e-admin@example.com\')'
+    await sql(`insert into khqr_settings (id, enabled, account_id, merchant_name, merchant_city, currencies, version, updated_by, updated_at) values ('default', 1, 'nukcafe@aclb', 'NUK Cafe', 'Phnom Penh', 'USD,KHR', 1, ${admin}, ?)`, [Date.now()])
+    await sql(`insert into exchange_rates (id, currency, per_usd, effective_from, set_by) values (?, 'KHR', 4100, ?, ${admin})`, [crypto.randomUUID(), Date.now() - 60_000])
+    try {
+      const order = await placeOrder(seed.customers.counterShopperA)
+      const { page, problems } = await cashierAtCounter()
+      await page.getByRole('button', { name: `Take payment: order ${number(order)}` }).click()
+      const sheet = panel(page)
+      await sheet.getByRole('tab', { name: 'KHQR' }).click()
+      await sheet.getByRole('img', { name: `KHQR for order ${number(order)}, $2.25` }).waitFor()
+      await sheet.getByText(`Order ${number(order)} · to NUK Cafe`).waitFor()
+      expect(await sheet.getByText(/^Works for 1[45]:\d\d$/).count()).toBe(1)
+
+      await sheet.getByRole('button', { name: 'Riel' }).click()
+      // $2.25 at ៛4,100 = ៛9,225, rounded up to ៛9,300.
+      await sheet.getByRole('img', { name: `KHQR for order ${number(order)}, ៛9,300` }).waitFor()
+      await sheet.getByRole('button', { name: 'Confirm KHQR payment · ៛9,300' }).click()
+      await toast(page, `Order ${number(order)} paid`).waitFor()
+
+      const client = e2eDatabase(seed.dbFile)
+      try {
+        const { rows } = await client.execute({ sql: 'select p.method, c.currency, c.amount from counter_payments p join khqr_charges c on c.id = p.khqr_charge_id where p.order_id = ?', args: [order.id] })
+        expect(rows.map(row => [row.method, row.currency, row.amount])).toEqual([['khqr', 'KHR', 9300]])
+      }
+      finally {
+        client.close()
+      }
+      expect(problems).toEqual([])
+    }
+    finally {
+      await sql('delete from khqr_settings')
+      await sql('delete from exchange_rates')
+    }
+  })
+
   it('a payment someone else recorded first: says so, and Reload shows the order as it is', async () => {
     const order = await placeOrder(seed.customers.counterShopperB)
     const { page } = await cashierAtCounter()
