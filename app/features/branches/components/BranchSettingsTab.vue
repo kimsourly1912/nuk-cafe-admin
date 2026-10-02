@@ -32,7 +32,9 @@ const todaysHours = computed(() => {
   return windows.length ? windows.map(w => timeRange(w.startMinute, w.endMinute)).join(', ') : 'Closed today'
 })
 
-const zones = computed(() => timezoneOptions(state.timezone))
+// Built from the saved zone, not the draft: picking a zone doesn't rebuild ~420 options (each needs a
+// date formatter). The draft can only be a listed zone or the saved one.
+const zones = computed(() => timezoneOptions(saved.value.timezone))
 
 // --- Save ---
 const conflict = ref(false)
@@ -99,8 +101,8 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
     </div>
 
     <!-- What's saved. Phones: one card, a row each (it would fill the first screen as three); from sm: three cards -->
-    <dl class="divide-y divide-default rounded-lg border border-default sm:grid sm:grid-cols-3 sm:gap-4 sm:divide-y-0 sm:border-0">
-      <div class="flex items-center gap-3 p-4 sm:rounded-lg sm:border sm:border-default">
+    <dl class="divide-y divide-default rounded-lg border border-default bg-elevated/50 sm:grid sm:grid-cols-3 sm:gap-4 sm:divide-y-0 sm:border-0 sm:bg-transparent">
+      <div class="flex items-center gap-3 p-4 sm:rounded-lg sm:border sm:border-default sm:bg-elevated/50">
         <UChip
           :color="saved.openNow ? 'success' : 'neutral'"
           standalone
@@ -117,7 +119,7 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
           </dd>
         </div>
       </div>
-      <div class="flex items-center gap-3 p-4 sm:rounded-lg sm:border sm:border-default">
+      <div class="flex items-center gap-3 p-4 sm:rounded-lg sm:border sm:border-default sm:bg-elevated/50">
         <UIcon
           name="i-lucide-clock"
           class="size-5 shrink-0 text-muted sm:size-6"
@@ -132,7 +134,7 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
           </dd>
         </div>
       </div>
-      <div class="flex items-center gap-3 p-4 sm:rounded-lg sm:border sm:border-default">
+      <div class="flex items-center gap-3 p-4 sm:rounded-lg sm:border sm:border-default sm:bg-elevated/50">
         <UIcon
           name="i-lucide-calendar"
           class="size-5 shrink-0 text-muted sm:size-6"
@@ -246,6 +248,7 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
               :items="zones"
               value-key="value"
               :search-input="{ placeholder: 'Search time zones…' }"
+              virtualize
               aria-label="Time zone"
               class="w-full"
             />

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * An add-on's ⋮ actions (D75): a dropdown menu from `sm`, a bottom sheet (`UDrawer`) with the
+ * An add-on's ⋮ actions (D75): a dropdown menu from `sm`, a bottom sheet (`AppDrawer`) with the
  * add-on's name, its actions and Cancel on phones (owner, 2026-09-28). A disabled action shows why.
  *
  * @example
@@ -32,7 +32,7 @@ function choose(action: AddOnAction) {
 </script>
 
 <template>
-  <UDrawer
+  <AppDrawer
     v-if="phone"
     v-model:open="open"
     :title="name"
@@ -81,7 +81,7 @@ function choose(action: AddOnAction) {
         @click="open = false"
       />
     </template>
-  </UDrawer>
+  </AppDrawer>
   <UDropdownMenu
     v-else
     :items="menuItems"

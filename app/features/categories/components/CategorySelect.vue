@@ -10,12 +10,12 @@
  * - Archived categories are never offered for new selections (D45), except with `includeArchived`
  *   (filters, where no relationship is made).
  * - A failed options load shows the error with Retry instead of an empty list.
+ * - Searchable with virtual scroll (`RecordSelect`, ui.md → Dropdowns): "milk" finds "Tea › Milk Tea".
  *
  * @example
  * <CategorySelect v-model="state.categoryId" level="leaf" :current-label="item?.categoryName" />
  * <CategorySelect v-model="state.parentId" level="main" none-label="None (main category)" />
  */
-import type { SelectItem } from '@nuxt/ui'
 import type { MenuCategory } from '#shared/contracts/menu-categories'
 import { useCategoryOptions } from '../composables/useCategoryOptions'
 
@@ -43,7 +43,7 @@ const props = defineProps<{
 
 const model = defineModel<string | undefined>()
 
-// USelect can't hold `undefined` or '', so "none" is represented internally by this value.
+// A select can't hold `undefined` or '', so "none" is represented internally by this value.
 const NONE = '__none__'
 
 const { data: categories, status, error, refresh } = useCategoryOptions()
@@ -70,7 +70,7 @@ const selectable = computed(() => {
 })
 
 /** The current value when it isn't selectable: kept visible (and kept) with the best label known. */
-const currentItem = computed<SelectItem | undefined>(() => {
+const currentItem = computed<{ label: string, value: string } | undefined>(() => {
   const id = model.value
   if (id === undefined || selectable.value.some(c => c.id === id)) return undefined
   const known = byId.value.get(id)
@@ -85,7 +85,7 @@ const currentItem = computed<SelectItem | undefined>(() => {
   return { label: `${name}${note}`, value: id }
 })
 
-const items = computed<SelectItem[]>(() => [
+const items = computed<{ label: string, value: string }[]>(() => [
   ...(props.noneLabel ? [{ label: props.noneLabel, value: NONE }] : []),
   ...(currentItem.value ? [currentItem.value] : []),
   ...selectable.value.map(c => ({ label: labelOf(c), value: c.id })),
@@ -104,10 +104,12 @@ const value = computed({
     class="space-y-1"
     :class="attrs.class ?? 'w-full'"
   >
-    <USelect
+    <RecordSelect
       v-bind="selectAttrs"
       v-model="value"
       :items="items"
+      noun="categories"
+      :pinned="[NONE]"
       :loading="status === 'pending'"
       :placeholder="placeholder ?? 'Select a category'"
       class="w-full"

@@ -168,7 +168,7 @@ const zone = computed(() => data.value?.branch.timeZone ?? branch.value?.timeZon
             placeholder="Order number"
             class="min-w-0 flex-1 sm:w-40 sm:flex-none"
           />
-          <UDrawer
+          <AppDrawer
             v-if="isCompact"
             v-model:open="sheetOpen"
             title="Filters"
@@ -207,7 +207,7 @@ const zone = computed(() => data.value?.branch.timeZone ?? branch.value?.timeZon
                 @click="applyDraft"
               />
             </template>
-          </UDrawer>
+          </AppDrawer>
           <template v-else>
             <USelect
               v-for="key in FILTERS"

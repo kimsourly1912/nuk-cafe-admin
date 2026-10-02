@@ -144,6 +144,12 @@ async function chooseImage(form: Locator, file: { name: string, mimeType: string
 const PNG = { name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from('89504e470d0a1a0a', 'hex') }
 
 /** `UInputNumber` updates its model on blur. */
+/** Picks a searchable dropdown's option (RecordSelect) and waits for its list to close: it hands focus back to its button as it closes. */
+async function chooseOption(page: Page, name: string) {
+  await page.getByRole('option', { name }).click()
+  await page.getByRole('listbox').waitFor({ state: 'hidden' })
+}
+
 async function typePrice(field: Locator, value: string) {
   await field.fill(value)
   await field.blur()
@@ -244,10 +250,21 @@ describe('menu items list', () => {
     await page.getByPlaceholder('Search menu items…').fill('lat')
     await expect.poll(() => seen.at(-1)?.get('search')).toBe('lat')
 
-    await page.getByRole('combobox', { name: 'Category' }).click()
+    await page.getByRole('button', { name: 'Category', exact: true }).click()
     await page.getByRole('option', { name: 'Drinks › Espresso' }).click()
     await expect.poll(() => seen.at(-1)?.get('categoryId')).toBe(ESPRESSO.id)
     await expect.poll(() => new URL(page.url()).searchParams.get('categoryId')).toBe(ESPRESSO.id)
+  })
+
+  it('the category filter is searchable: matches anywhere in the path, All categories stays, and no match says so (D126)', async () => {
+    const { page } = await open(backend())
+    await page.getByRole('button', { name: 'Category', exact: true }).click()
+    const search = page.getByPlaceholder('Search categories…')
+    await search.fill('esp')
+    await expect.poll(() => page.getByRole('option').allTextContents()).toEqual(['All categories', 'Drinks › Espresso'])
+    await search.fill('zzz')
+    await expect.poll(() => page.getByRole('option').allTextContents()).toEqual(['All categories'])
+    await page.getByRole('listbox').getByText('No categories match “zzz”').waitFor()
   })
 
   it('on phones: the List view is rows (no table), the page fits, and a row\'s name opens it (D89, D90)', async () => {
@@ -364,12 +381,12 @@ describe('menu item form', () => {
     await expect.poll(() => form.locator('img').getAttribute('src')).toBe(UPLOADED.url)
     await form.getByLabel('Name', { exact: true }).fill('Mocha')
     // Only leaves are offered: Drinks has a sub-category.
-    await form.getByRole('combobox', { name: 'Category' }).click()
+    await form.getByRole('button', { name: 'Category', exact: true }).click()
     await page.getByRole('option', { name: 'Drinks › Espresso' }).waitFor()
     expect(await page.getByRole('option', { name: 'Drinks', exact: true }).count()).toBe(0)
-    await page.getByRole('option', { name: 'Drinks › Espresso' }).click()
+    await chooseOption(page, 'Drinks › Espresso')
     await typePrice(form.getByRole('spinbutton', { name: 'Price' }), '4.2')
-    await form.getByRole('combobox', { name: 'Availability' }).click()
+    await form.getByRole('button', { name: 'Availability', exact: true }).click()
     await page.getByRole('option', { name: 'Breakfast' }).click()
     await page.keyboard.press('Escape') // close the multi-select list
     await form.getByRole('button', { name: 'Create', exact: true }).click()
@@ -400,8 +417,8 @@ describe('menu item form', () => {
     })
     const form = await openNew(page)
     await form.getByLabel('Name', { exact: true }).fill('Flat white')
-    await form.getByRole('combobox', { name: 'Category' }).click()
-    await page.getByRole('option', { name: 'Tea' }).click()
+    await form.getByRole('button', { name: 'Category', exact: true }).click()
+    await chooseOption(page, 'Tea')
 
     await addFromMenu(form, 'Add option set', 'Size')
     await typePrice(form.getByRole('spinbutton', { name: 'Price of Small' }), '3')
@@ -636,8 +653,8 @@ describe('publishing from the form (D125)', () => {
     })
     const form = await openNew(page)
     await form.getByLabel('Name', { exact: true }).fill('Mocha')
-    await form.getByRole('combobox', { name: 'Category' }).click()
-    await page.getByRole('option', { name: 'Tea' }).click()
+    await form.getByRole('button', { name: 'Category', exact: true }).click()
+    await chooseOption(page, 'Tea')
     await typePrice(form.getByRole('spinbutton', { name: 'Price' }), '4.2')
     await form.getByRole('button', { name: 'Create and publish' }).click()
 
@@ -806,8 +823,8 @@ describe('reordering a category\'s items (step 10.3, D118)', () => {
   async function openReorder(page: Page) {
     await page.getByRole('button', { name: 'Reorder' }).click()
     const dialog = page.getByRole('dialog', { name: 'Reorder menu items' })
-    await dialog.getByRole('combobox', { name: 'Category' }).click()
-    await page.getByRole('option', { name: 'Tea' }).click()
+    await dialog.getByRole('button', { name: 'Category', exact: true }).click()
+    await chooseOption(page, 'Tea')
     await dialog.getByRole('list', { name: 'Menu items in order' }).waitFor()
     return dialog
   }

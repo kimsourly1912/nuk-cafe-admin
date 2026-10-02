@@ -106,49 +106,31 @@ const paymentsTotal = (report: ReportSummary) => ({
 
         <section aria-label="Sales">
           <dl class="grid grid-cols-2 gap-3 lg:grid-cols-4 print:grid-cols-4">
-            <UCard :ui="{ body: 'p-4 sm:p-4' }">
-              <dt class="text-sm text-muted">
-                Paid sales
-              </dt>
-              <dd class="mt-1 text-2xl font-semibold text-highlighted tabular-nums">
-                {{ formatMinor(data.paid.salesMinor) }}
-              </dd>
-              <dd
-                v-if="change && period && branch"
-                class="mt-1 text-xs"
-                :class="change.up ? 'text-success' : 'text-error'"
+            <StatCard
+              label="Paid sales"
+              :value="formatMinor(data.paid.salesMinor)"
+              :change="change && period && branch ? change : undefined"
+              :change-label="period && branch ? previousLabel(period, branch.today) : undefined"
+            />
+            <StatCard
+              label="Paid orders"
+              :value="data.paid.orders.toLocaleString('en-US')"
+            />
+            <StatCard
+              label="Average order"
+              :value="formatMinor(data.paid.averageMinor)"
+            />
+            <StatCard
+              label="Refunds"
+              :value="negativeMinor(data.refunds.amountMinor)"
+            >
+              <template
+                v-if="data.refunds.orders"
+                #value
               >
-                {{ change.text }} <span class="text-muted">{{ previousLabel(period, branch.today) }}</span>
-              </dd>
-            </UCard>
-            <UCard :ui="{ body: 'p-4 sm:p-4' }">
-              <dt class="text-sm text-muted">
-                Paid orders
-              </dt>
-              <dd class="mt-1 text-2xl font-semibold text-highlighted tabular-nums">
-                {{ data.paid.orders.toLocaleString('en-US') }}
-              </dd>
-            </UCard>
-            <UCard :ui="{ body: 'p-4 sm:p-4' }">
-              <dt class="text-sm text-muted">
-                Average order
-              </dt>
-              <dd class="mt-1 text-2xl font-semibold text-highlighted tabular-nums">
-                {{ formatMinor(data.paid.averageMinor) }}
-              </dd>
-            </UCard>
-            <UCard :ui="{ body: 'p-4 sm:p-4' }">
-              <dt class="text-sm text-muted">
-                Refunds
-              </dt>
-              <dd class="mt-1 text-2xl font-semibold text-highlighted tabular-nums">
-                {{ negativeMinor(data.refunds.amountMinor) }}
-                <span
-                  v-if="data.refunds.orders"
-                  class="text-base font-normal text-muted"
-                >({{ data.refunds.orders }})</span>
-              </dd>
-            </UCard>
+                <span class="text-base font-normal text-muted">({{ data.refunds.orders }})</span>
+              </template>
+            </StatCard>
           </dl>
           <p class="mt-2 text-sm text-muted">
             Net sales <span class="font-semibold text-highlighted tabular-nums">{{ formatMinor(data.netSalesMinor) }}</span>

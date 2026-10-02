@@ -6,7 +6,7 @@
  * complete the button says what's missing ("Choose Milk") and takes the customer there. Values
  * that only lead to sold-out versions are disabled. Adding is refused while the branch is closed.
  */
-import { UDrawer, UModal } from '#components'
+import { AppDrawer, UModal } from '#components'
 import type { PublicMenuItem, PublicMenuModifierGroup } from '#shared/contracts/public-menu'
 import { MAX_LINE_QUANTITY } from '../utils/cart'
 import type { Selection } from '../utils/selection'
@@ -22,7 +22,7 @@ const emit = defineEmits<{ add: [line: { variationId: string, modifierIds: strin
 const open = defineModel<boolean>('open', { default: false })
 
 const { isCompact } = useLayoutContext()
-const Shell = computed(() => (isCompact.value ? UDrawer : UModal))
+const Shell = computed(() => (isCompact.value ? AppDrawer : UModal))
 
 const selection = ref<Selection>(defaultSelection(props.item))
 const quantity = ref(1)

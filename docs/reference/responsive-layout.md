@@ -106,12 +106,12 @@ What each element becomes per width class. Page-type specifics and examples: [pa
 | Primary action | Navbar, labelled | Navbar, labelled | Navbar (icon-only only if it can't fit) |
 | Search | Toolbar, fixed width | Toolbar | Toolbar, full row |
 | Filters (≤2) | Toolbar | Toolbar | Toolbar, wrapping to a second row if needed |
-| Filters (>2) | Toolbar | Toolbar | Labelled **Filters** button (with count) → `UDrawer` with Clear and Apply; same query state (owner-directed) |
+| Filters (>2) | Toolbar | Toolbar | Labelled **Filters** button (with count) → `AppDrawer` with Clear and Apply; same query state (owner-directed) |
 | Status tabs | Body | Body | Body; must fit without scrolling (short labels) |
 | Comparable columns | `UTable` | `UTable` if it fits, else grouped rows | **Grouped rows or cards; never a sideways-scrolling table** (owner-directed) |
 | Card collection | 2-column grid or full-width agenda cards | 1–2 columns | 1 column |
 | Opening a record | Its name/content link or a Manage/View button | Same | One large content target; actions trigger beside it ([row composition](./page-patterns.md#compact-row-composition)) |
-| Row actions | `⋮` `UDropdownMenu` | `⋮` `UDropdownMenu` | `⋮` `UDropdownMenu`, or a `UDrawer` bottom sheet for richer actions |
+| Row actions | `⋮` `UDropdownMenu` | `⋮` `UDropdownMenu` | `⋮` `UDropdownMenu`, or an `AppDrawer` bottom sheet for richer actions |
 | Selection / bulk | Select mode + floating bar | Same | Select mode + bottom bar |
 | Reorder | Drag + buttons + keys | Same | Move up/down buttons (drag optional) |
 | Short form (≤ ~6 fields) | `UModal` | `UModal` | Full-screen `UModal` |

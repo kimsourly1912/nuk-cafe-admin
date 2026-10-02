@@ -85,3 +85,29 @@
     overflow: visible;
   }
 }
+
+/*
+ * The admin page width (D126, ui.md → Page width): on a wide screen a page's content is centered and
+ * capped, its navbar and toolbar lined up with it. Pages set no breakpoints: every admin page is
+ * "wide" (lists, tables, reports: 80rem) unless its UDashboardPanel has `page-narrow` (settings and
+ * forms: 56rem). Below the cap the side padding stays Nuxt UI's (1rem, 1.5rem from `sm`).
+ * `app.config.ts` applies `--page-gutter` to UDashboardNavbar, UDashboardToolbar and the panel body;
+ * `100%` there is the panel's width, so it works beside the sidebar and the assistant panel too.
+ */
+:root {
+  --page-max: var(--container-7xl);
+  --page-pad: calc(var(--spacing) * 4);
+  --page-gutter: max(var(--page-pad), calc((100% - var(--page-max)) / 2));
+}
+
+@media (width >= 40rem) {
+  :root {
+    --page-pad: calc(var(--spacing) * 6);
+  }
+}
+
+/* --page-gutter is restated: a custom property's var() is resolved where it's declared. */
+@utility page-narrow {
+  --page-max: var(--container-4xl);
+  --page-gutter: max(var(--page-pad), calc((100% - var(--page-max)) / 2));
+}

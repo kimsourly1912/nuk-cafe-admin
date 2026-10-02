@@ -5,7 +5,9 @@ import { AssistantPanel, useAssistant } from '~/features/assistant'
 import { CHANGE_PASSWORD_PATH, useAuth } from '~/features/auth'
 
 const { user, logout } = useAuth()
-const sidebarItems = navigationItems({ sampleData: useRuntimeConfig().public.sampleData.enabled })
+const allItems = navigationItems({ sampleData: useRuntimeConfig().public.sampleData.enabled })
+const route = useRoute()
+const sidebarItems = computed(() => withActiveItem(allItems, route.path))
 const open = ref(false)
 // The help assistant (D109): only where an AI key is set.
 const assistant = useAssistant()

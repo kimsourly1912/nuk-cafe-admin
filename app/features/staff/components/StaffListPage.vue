@@ -39,7 +39,7 @@ const roleItems: SelectItem[] = [
   { label: 'Manager', value: 'manager' },
   { label: 'Staff', value: 'staff' },
 ]
-const branchItems = computed<SelectItem[]>(() => [
+const branchItems = computed(() => [
   { label: 'Any branch', value: ANY },
   ...(branches.data.value ?? []).map(b => ({ label: b.name, value: b.id })),
 ])
@@ -124,9 +124,11 @@ usePageShortcuts({ n: () => openForm() })
             aria-label="Role"
             class="min-w-0 flex-1 sm:w-36 sm:flex-none"
           />
-          <USelect
+          <RecordSelect
             v-model="filters.branchId"
             :items="branchItems"
+            noun="branches"
+            :pinned="[ANY]"
             aria-label="Branch"
             class="min-w-0 flex-1 sm:w-44 sm:flex-none"
           />

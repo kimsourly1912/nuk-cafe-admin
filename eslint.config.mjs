@@ -51,6 +51,18 @@ export default withNuxt(
       }],
     },
   },
+  // Drawers and bottom sheets don't drag (ui.md → Overlays): AppDrawer wraps UDrawer, nothing else uses it.
+  {
+    files: ['app/**/*.vue'],
+    ignores: ['app/components/AppDrawer.vue'],
+    rules: {
+      'vue/no-restricted-html-elements': ['error', { element: ['UDrawer'], message: 'Use <AppDrawer>: drawers don\'t drag (ui.md → Overlays).' }],
+      'no-restricted-syntax': ['error',
+        { selector: 'CallExpression[callee.name="resolveComponent"][arguments.0.value="UDrawer"]', message: 'Use AppDrawer: drawers don\'t drag (ui.md → Overlays).' },
+        { selector: 'ImportSpecifier[imported.name="UDrawer"]', message: 'Use AppDrawer: drawers don\'t drag (ui.md → Overlays).' },
+      ],
+    },
+  },
   // Server imports (docs/server/architecture.md → Imports and aliases).
   {
     files: ['server/**/*.ts'],

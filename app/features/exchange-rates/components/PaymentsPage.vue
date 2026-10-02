@@ -36,7 +36,10 @@ const columns: TableColumn<ExchangeRate>[] = [
 </script>
 
 <template>
-  <UDashboardPanel id="payments">
+  <UDashboardPanel
+    id="payments"
+    class="page-narrow"
+  >
     <template #header>
       <UDashboardNavbar title="Payments">
         <template #leading>
@@ -46,7 +49,7 @@ const columns: TableColumn<ExchangeRate>[] = [
     </template>
 
     <template #body>
-      <div class="mx-auto w-full max-w-4xl space-y-6">
+      <div class="space-y-6">
         <ApiErrorAlert
           v-if="error"
           :error="error"
@@ -70,8 +73,8 @@ const columns: TableColumn<ExchangeRate>[] = [
               </p>
             </template>
 
-            <div class="grid gap-6 md:grid-cols-2 md:divide-x md:divide-default">
-              <div class="space-y-1">
+            <div class="grid gap-6 md:grid-cols-2 md:items-start">
+              <div class="space-y-1 rounded-md bg-elevated/50 p-4">
                 <p class="text-sm text-muted">
                   Current rate
                 </p>
@@ -103,7 +106,7 @@ const columns: TableColumn<ExchangeRate>[] = [
                 :schema="setExchangeRateSchema"
                 :state="state"
                 :disabled="saving"
-                class="space-y-3 md:ps-6"
+                class="space-y-3"
                 @submit="save"
               >
                 <UFormField

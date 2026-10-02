@@ -301,3 +301,78 @@ describe('dining tables', () => {
     await page.getByRole('button', { name: 'New table' }).waitFor()
   })
 })
+
+// The admin page shell (D126): the sidebar's active item, the tab in the URL, one line under
+// toolbar tabs, the page width, and the time zone list drawn only where it's seen.
+describe('page shell (D126)', () => {
+  const sidebarCurrent = (page: Page) => page.locator('nav a[aria-current="page"]').allTextContents()
+
+  it('keeps Branch active in the sidebar on its page, on either tab, and keeps the tab in the URL', async () => {
+    const { page } = await open(backend().handlers)
+    await card(page, 'Current status').or(page.getByRole('heading', { name: 'Branch settings' })).first().waitFor()
+    expect((await sidebarCurrent(page)).map(text => text.trim())).toEqual(['Branch'])
+    await page.getByRole('tab', { name: /Dining tables/ }).click()
+    await card(page, 'Table 01').waitFor()
+    expect((await sidebarCurrent(page)).map(text => text.trim())).toEqual(['Branch'])
+    expect(new URL(page.url()).searchParams.get('tab')).toBe('tables')
+
+    // A reload opens the same tab; back on Settings the URL is clean again.
+    await page.goto(page.url(), { waitUntil: 'hydration' })
+    await card(page, 'Table 01').waitFor()
+    await page.getByRole('tab', { name: /Settings/ }).click()
+    await page.getByRole('heading', { name: 'Branch settings' }).waitFor()
+    expect(new URL(page.url()).searchParams.has('tab')).toBe(false)
+  })
+
+  it('/branches?tab=tables opens the only branch on that tab', async () => {
+    const { page } = await open(backend().handlers, undefined, '/admin/branches?tab=tables')
+    await card(page, 'Table 01').waitFor()
+    expect(new URL(page.url()).pathname).toBe(`/admin/branches/${RIVERSIDE.id}`)
+  })
+
+  it('draws one line under the tabs: the toolbar\'s, with the active tab\'s underline on it', async () => {
+    const { page } = await open(backend().handlers)
+    await page.getByRole('heading', { name: 'Branch settings' }).waitFor()
+    const lines = await page.getByRole('tablist').first().evaluate((list) => {
+      const toolbar = list.closest('[data-slot="root"]')!.parentElement!.closest('.border-b') ?? list.parentElement!.parentElement!
+      const indicator = list.querySelector('[data-slot="indicator"]')!.getBoundingClientRect()
+      const box = toolbar.getBoundingClientRect()
+      return {
+        listBorder: getComputedStyle(list).borderBottomWidth,
+        toolbarBorder: getComputedStyle(toolbar).borderBottomWidth,
+        // Inside the toolbar (its scrolling box clips anything lower), right above its line.
+        indicatorShown: indicator.height > 0 && indicator.bottom <= box.bottom - 1 && indicator.bottom >= box.bottom - 2,
+      }
+    })
+    expect(lines).toEqual({ listBorder: '0px', toolbarBorder: '1px', indicatorShown: true })
+  })
+
+  it('on a wide screen centers the page at the narrow width, the navbar lined up with it', async () => {
+    const { page } = await open(backend().handlers, 1920)
+    await page.getByRole('heading', { name: 'Branch settings' }).waitFor()
+    const box = await page.getByRole('heading', { name: 'Branch settings' }).evaluate((heading) => {
+      const body = heading.closest('[data-slot="body"]')!
+      const panel = body.getBoundingClientRect()
+      const content = heading.getBoundingClientRect()
+      const title = document.querySelector('[data-slot="title"]')!.getBoundingClientRect()
+      return { left: content.left - panel.left, right: panel.right - (content.left + body.clientWidth - parseFloat(getComputedStyle(body).paddingLeft) - parseFloat(getComputedStyle(body).paddingRight)), width: body.clientWidth - parseFloat(getComputedStyle(body).paddingLeft) - parseFloat(getComputedStyle(body).paddingRight), titleLeft: title.left - panel.left }
+    })
+    expect(box.width).toBe(896) // page-narrow: 56rem
+    expect(Math.abs(box.left - box.right)).toBeLessThan(2)
+    // The navbar's title starts where the content does (after the sidebar toggle).
+    expect(box.titleLeft).toBeGreaterThanOrEqual(box.left)
+    expect(box.titleLeft).toBeLessThan(box.left + 64)
+  })
+
+  it('draws only the time zones in view, and finds one by name', async () => {
+    const { page } = await open(backend().handlers)
+    await page.locator('[aria-label="Time zone"]').first().click()
+    const search = page.getByPlaceholder('Search time zones…')
+    await search.waitFor()
+    // About 420 zones; only the visible rows (and a few more) are in the page.
+    await expect.poll(() => page.getByRole('option').count()).toBeGreaterThan(5)
+    expect(await page.getByRole('option').count()).toBeLessThan(40)
+    await search.fill('phnom')
+    await expect.poll(() => page.getByRole('option').allTextContents()).toEqual(['(GMT+07:00) Phnom Penh'])
+  })
+})

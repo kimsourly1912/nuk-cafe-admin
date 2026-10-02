@@ -5,7 +5,7 @@
  * Search and category in the URL, sorted by the server (every column's header), 20 a page with the
  * totals of every matching item in the table's last row. The CSV holds every matching item.
  */
-import type { SelectItem, TableColumn } from '@nuxt/ui'
+import type { TableColumn } from '@nuxt/ui'
 import type { ItemSalesRow, ItemSalesSort } from '#shared/contracts/reports'
 import { queryText, useItemSales, useReportDestinations, useReportDownload, useReportScope } from '../composables/useReports'
 import { negativeMinor } from '../utils/display'
@@ -44,7 +44,7 @@ watch(() => data.value?.totalPages, (totalPages) => {
   if (totalPages !== undefined && page.value > Math.max(totalPages, 1)) page.value = Math.max(totalPages, 1)
 })
 
-const categoryItems = computed<SelectItem[]>(() => [
+const categoryItems = computed(() => [
   { label: 'All categories', value: ANY },
   ...(data.value?.categories ?? []).map(c => ({ label: c.name, value: c.id })),
 ])
@@ -113,9 +113,11 @@ const range = computed(() => {
             placeholder="Find an item…"
             class="w-full sm:w-64"
           />
-          <USelect
+          <RecordSelect
             v-model="filters.categoryId"
             :items="categoryItems"
+            noun="categories"
+            :pinned="[ANY]"
             aria-label="Category"
             class="w-full sm:w-48"
           />

@@ -3,7 +3,8 @@
  * A branch (`/admin/branches/[id]`, D91, the owner's mockups): **Settings** and **Dining tables** tabs
  * under the navbar. The navbar's action follows the tab: Save changes (from `lg`; below it the
  * bottom bar) or New table. Both tabs stay mounted, so switching keeps the settings draft; the tab
- * is local state (`?tab=tables` opens that one), so switching never asks about unsaved changes.
+ * is kept in the URL (`?tab=tables`, `useUrlTab`) without a route change, so switching never asks
+ * about unsaved changes.
  */
 import { useBranchOptions, useBranchSettings, useBranchTables } from '../composables/useBranches'
 import BranchSettingsTab from './BranchSettingsTab.vue'
@@ -11,18 +12,17 @@ import BranchTablesTab from './BranchTablesTab.vue'
 
 const props = defineProps<{ id: string }>()
 
-const route = useRoute()
 const { data: settings, error, refresh } = useBranchSettings(props.id)
 const { data: tables } = useBranchTables(props.id)
 const { data: branches } = useBranchOptions()
 
 type Tab = 'settings' | 'tables'
-const tab = ref<Tab>(route.query.tab === 'tables' ? 'tables' : 'settings')
+const tab = useUrlTab<Tab>(['settings', 'tables'])
 const tabs = computed(() => [
-  { label: 'Settings', value: 'settings', icon: 'i-lucide-settings' },
+  { label: 'Settings', value: 'settings' as const, icon: 'i-lucide-settings' },
   {
     label: 'Dining tables',
-    value: 'tables',
+    value: 'tables' as const,
     icon: 'i-lucide-armchair',
     badge: tables.value ? { label: String(tables.value.filter(t => t.status === 'active').length), color: 'neutral' as const, variant: 'subtle' as const, size: 'sm' as const } : undefined,
   },
@@ -35,7 +35,10 @@ const title = computed(() => settings.value?.name ?? 'Branch')
 </script>
 
 <template>
-  <UDashboardPanel id="branch">
+  <UDashboardPanel
+    id="branch"
+    class="page-narrow"
+  >
     <template #header>
       <UDashboardNavbar>
         <template #leading>
@@ -88,11 +91,9 @@ const title = computed(() => settings.value?.name ?? 'Branch')
       </UDashboardNavbar>
 
       <UDashboardToolbar>
-        <UTabs
+        <ToolbarTabs
           v-model="tab"
           :items="tabs"
-          :content="false"
-          variant="link"
           aria-label="Branch sections"
         />
       </UDashboardToolbar>

@@ -220,7 +220,7 @@ useUnsavedChanges(
 )
 
 // --- Phones: Add-ons and Settings are tabs ---
-const tab = ref<'addons' | 'settings'>('addons')
+const tab = useUrlTab(['addons', 'settings'] as const)
 const tabs = computed(() => [
   { label: 'Add-ons', value: 'addons', badge: { label: String(active.value.length), color: 'neutral' as const, variant: 'subtle' as const, size: 'sm' as const } },
   { label: 'Settings', value: 'settings' },

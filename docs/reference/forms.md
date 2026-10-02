@@ -3,7 +3,7 @@
 Warn the user before input they haven't saved is lost.
 
 - [`useUnsavedChanges`](#useunsavedchanges): page forms
-- [`useModalUnsavedChanges`](#usemodalunsavedchanges): forms in `UModal` / `USlideover` / `UDrawer`
+- [`useModalUnsavedChanges`](#usemodalunsavedchanges): forms in `UModal` / `USlideover` / `AppDrawer`
 - [`useLeaveGuard`](#useleaveguard): the app-wide check
 - [`isSameFormValue` and `cloneFormValue`](#issameformvalue-and-cloneformvalue)
 
@@ -128,7 +128,7 @@ async function onSubmit() {
 
 ## `useModalUnsavedChanges`
 
-`useUnsavedChanges` plus asking before the modal closes. It works for `UModal`, `USlideover` and `UDrawer` (they share the `update:open` API).
+`useUnsavedChanges` plus asking before the modal closes. It works for `UModal`, `USlideover` and `AppDrawer` (they share the `update:open` API).
 
 ```ts
 function useModalUnsavedChanges<T extends object>(

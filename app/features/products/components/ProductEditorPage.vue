@@ -37,7 +37,7 @@ const title = computed(() => loaded.value?.name ?? (isEdit ? 'Menu item' : 'New 
 
 // --- Sections: one at a time on phones ---
 const { isCompact } = useLayoutContext()
-const section = ref<ItemFormSection>('details')
+const section = useUrlTab<ItemFormSection>(ITEM_FORM_SECTIONS.map(s => s.value), 'section')
 const sectionTabs = ITEM_FORM_SECTIONS.map(s => ({ label: s.label, value: s.value }))
 
 // --- Leave and save ---
@@ -71,7 +71,10 @@ async function onSubmit() {
 </script>
 
 <template>
-  <UDashboardPanel id="product-editor">
+  <UDashboardPanel
+    id="product-editor"
+    class="page-narrow"
+  >
     <template #header>
       <UDashboardNavbar>
         <template #leading>
@@ -124,7 +127,7 @@ async function onSubmit() {
     </template>
 
     <template #body>
-      <div class="mx-auto w-full max-w-3xl space-y-4">
+      <div class="space-y-4">
         <p class="text-sm text-muted">
           {{ loaded ? `Status: ${ITEM_STATUS_LABELS[loaded.status]}` : isEdit ? 'Loading…' : 'Create saves a draft; Create and publish also puts it on the menu.' }}
         </p>

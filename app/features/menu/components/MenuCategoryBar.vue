@@ -45,7 +45,7 @@ watch(() => props.activeMainId, async (id) => {
 
 <template>
   <div class="flex items-center gap-2">
-    <UDrawer
+    <AppDrawer
       v-model:open="sheetOpen"
       title="Categories"
       :content="{ onCloseAutoFocus: keepFocus }"
@@ -66,7 +66,7 @@ watch(() => props.activeMainId, async (id) => {
           @go="go"
         />
       </template>
-    </UDrawer>
+    </AppDrawer>
     <UPopover
       v-model:open="popoverOpen"
       :content="{ align: 'start', onCloseAutoFocus: keepFocus }"

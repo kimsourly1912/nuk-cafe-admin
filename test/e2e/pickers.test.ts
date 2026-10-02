@@ -20,7 +20,7 @@ async function editRow(page: Page, name: string, handlers: Record<string, MockHa
   await page.getByRole('menuitem', { name: 'Edit' }).click()
   const form = page.getByRole('dialog', { name: 'Edit category' })
   await form.waitFor()
-  return { api, form, parent: form.getByRole('combobox', { name: 'Parent category' }) }
+  return { api, form, parent: form.getByRole('button', { name: 'Parent category', exact: true }) }
 }
 
 describe('CategorySelect', () => {
@@ -42,7 +42,7 @@ describe('CategorySelect', () => {
     // First click, with the empty autofocused name still focused: no blur validation may shift the button.
     await form.getByRole('button', { name: 'Retry' }).click()
     await form.getByText('Could not load categories:').waitFor({ state: 'hidden' })
-    await form.getByRole('combobox', { name: 'Parent category' }).click()
+    await form.getByRole('button', { name: 'Parent category', exact: true }).click()
     await page.getByRole('option', { name: 'Tea' }).waitFor()
   })
 

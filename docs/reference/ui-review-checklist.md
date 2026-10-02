@@ -18,7 +18,7 @@ Check every changed screen at **320, 390, 768, 1024 and 1440 px** wide, plus one
 - [ ] Compact record rows are the [row composition](./page-patterns.md#compact-row-composition): one large record target and a sibling actions trigger; no button inside a link, no custom row component for styling.
 - [ ] The save model is the same at every width: a page-wide draft is never split into independently saved sections on compact ([page-patterns §3–4](./page-patterns.md#save-models)).
 - [ ] Nothing depends on an **Open** item in [the owner-decision table](../plans/ui-standardization.md#6-owner-decisions).
-- [ ] More than two filters on compact: a labelled Filters button (with count) → `UDrawer` with Clear and Apply, writing the same URL query as the toolbar ([responsive-layout §5](./responsive-layout.md#5-page-anatomy)).
+- [ ] More than two filters on compact: a labelled Filters button (with count) → `AppDrawer` with Clear and Apply, writing the same URL query as the toolbar ([responsive-layout §5](./responsive-layout.md#5-page-anatomy)).
 - [ ] Bottom actions use the shared bottom action bar with ordinary Nuxt UI buttons; only one bar is visible ([responsive-layout §5](./responsive-layout.md#5-page-anatomy)).
 - [ ] Where a record has two URLs (Menu items), both open it at every width, resizing never changes the URL, and Back keeps the list's query ([page-patterns §4](./page-patterns.md#menu-item-editor-urls-owner-directed-decision-4-approved-2026-09-28)).
 - [ ] No sideways-scrolling table on compact; no two-dimensional scrolling at 320px ([matrix](./responsive-layout.md#7-responsive-behavior-matrix)).
@@ -32,6 +32,11 @@ Check every changed screen at **320, 390, 768, 1024 and 1440 px** wide, plus one
 - [ ] One primary action per page, at most one per card or overlay; destructive actions confirm and are never primary ([ui §9](./ui.md#9-action-hierarchy-owner-directed)).
 - [ ] Status shown with text (and icon), not color alone; badges only for status and counts ([ui §10](./ui.md#10-status-badges-and-pills)).
 - [ ] Icons match the one-icon-per-concept table ([ui §7](./ui.md#7-icons)).
+- [ ] Numbers are `<StatCard>`s; a card's header strip comes from `app.config.ts` ([ui §8](./ui.md#8-surface-hierarchy)).
+- [ ] The page sets no max-width or breakpoint for its width; a settings or form page has `page-narrow` ([ui §13](./ui.md#13-page-width-owner-2026-10-02-d126)). Checked at 1920px too.
+- [ ] Every dropdown of records (or a long fixed list) is searchable and virtualized (`<RecordSelect>`); `USelect` only for fixed sets ([ui §14](./ui.md#14-dropdowns-owner-2026-10-02-d126)).
+- [ ] One line under tabs: `<ToolbarTabs>` in a toolbar; the tab is in the URL (`useUrlTab`); the sidebar marks the section ([ui §15](./ui.md#15-tabs-and-the-sidebar-owner-2026-10-02-d126)).
+- [ ] Drawers and bottom sheets are `<AppDrawer>`: no handle, no dragging, an X ([ui §8](./ui.md#8-surface-hierarchy)).
 
 ## Touch and keyboard
 

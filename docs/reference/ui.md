@@ -46,7 +46,7 @@ Status labels used below:
 | Surface | Use |
 |---|---|
 | `bg-default` | Page, cards, overlays |
-| `bg-elevated` (`/25`–`/50`) | Sidebar, a quiet grouped area (a table header, a main-category row) |
+| `bg-elevated` (`/25`–`/50`) | Sidebar, a quiet grouped area (a table header, a main-category row), a card's header strip (`/25`, set once in `app.config.ts`), a number's soft card (`/50`, [`<StatCard>`](./ui-helpers.md#statcard)) |
 | `bg-muted`, `bg-accented` | Rare; hover and pressed states come from Nuxt UI |
 
 Borders: `border-default` for separators and outlines, `border-muted` for very quiet dividers, `divide-default` between rows. Color is never the only signal: status also has text or an icon (§10).
@@ -121,8 +121,21 @@ A feature's own icon is the one in its `navigation.ts`; its cards reuse it rathe
 From the page outwards:
 1. **Page** (`UDashboardPanel` body, `bg-default`).
 2. **Section**: a heading plus content, separated by space or `USeparator`. Prefer sections to boxes.
-3. **Card** (`UCard`, `variant="outline"`): one record in a collection, or one group of settings. **No card inside a card.** Rows inside a card use `divide-y`.
-4. **Overlays**: `UModal`, `USlideover`, `UDrawer`, menus and popovers. They're the only surfaces with shadows (Nuxt UI's own).
+3. **Card** (`UCard`, `variant="outline"`): one record in a collection, or one group of settings. **No card inside a card.** Rows inside a card use `divide-y`. A card's header is a quiet `bg-elevated/25` strip (`app.config.ts`, D126), so a group's title reads as its heading.
+4. **Overlays**: `UModal`, `USlideover`, `AppDrawer` (never `UDrawer` itself, below), menus and popovers. They're the only surfaces with shadows (Nuxt UI's own).
+
+**Which surface (owner, 2026-10-02, D126):**
+
+| What | Surface |
+|---|---|
+| The admin page | `bg-default` |
+| A number (Reports Summary, a status card, a current rate) | [`<StatCard>`](./ui-helpers.md#statcard): Nuxt UI's `subtle` card, `bg-elevated/50` with a light ring, muted label, large value. Never a number styled by hand on a white box |
+| A small figure inside a card (Current orders' three counts, the current rate beside its form) | `rounded-md bg-elevated/50 p-3` to `p-4`, no ring |
+| A record with actions (a menu item, an option set, a dining table) | Outline card, white |
+| A group of settings (Branch information, Weekly hours) | Outline card with a header; the strip comes from `app.config.ts` |
+| A table header row, a main-category row | `bg-elevated/50` |
+
+**Drawers and bottom sheets don't drag (owner, 2026-10-02, D126).** A sheet that moves under a finger closes by accident while its content scrolls or a stepper is tapped. `<AppDrawer>` is `UDrawer` with no handle and no dragging, its X on by default; it closes with X, a tap outside, Escape or Back. `UDrawer` is a lint error anywhere else (`eslint.config.mjs`).
 
 Alerts (`UAlert`, `variant="subtle"`) are for states that need action or explain a blocked action (conflict, archived, load error). A page's standing explanation is a muted intro paragraph, not an alert (D74).
 
@@ -164,3 +177,38 @@ Alerts (`UAlert`, `variant="subtle"`) are for states that need action or explain
 - **Announcements:** async results reach screen readers: toasts (`aria-live`), inline alerts, `role="status"` for "Saving…/Saved", `aria-live="polite"` for reorder positions.
 - **Input:** everything works by keyboard; no hover-only information (tooltips duplicate something reachable); gestures have button alternatives ([page-patterns → Gestures](./page-patterns.md#7-gestures)).
 - **Reflow and zoom:** content works at 320 CSS px wide and at 200% text zoom without two-dimensional scrolling ([checklist](./ui-review-checklist.md)).
+
+## 13. Page width (owner, 2026-10-02, D126)
+
+On a wide screen an admin page's content is centered and capped, so lines stay short and the eye doesn't travel across a 1920px screen. **Pages set no breakpoints and no max-width.** The navbar, the toolbar and the body share one side padding, `--page-gutter` (`app/assets/css/tailwind.css`, applied in `app.config.ts`), so the title, the tabs and the content line up:
+
+| Page type | Width | How |
+|---|---|---|
+| Lists, tables, reports, detail pages (the default) | 80rem (1280px) | nothing |
+| Settings and forms (Branch, Payments, Telegram, Sample data, the Menu item editor) | 56rem (896px) | `class="page-narrow"` on the page's `UDashboardPanel` |
+
+Below the cap the side padding is Nuxt UI's (16px, 24px from `sm`). The width is the panel's, so it holds beside the sidebar and the assistant panel. The customer site and the counter have their own layouts.
+
+## 14. Dropdowns (owner, 2026-10-02, D126)
+
+Pick by **where the items come from**, not by how many there are today:
+
+| Items | Component |
+|---|---|
+| A fixed set the code defines that never grows: status, role, sort, order type, payment method | `USelect` |
+| **The cafe's own records**, which grow with use: categories, branches, availability rules, add-on groups, staff | [`<RecordSelect>`](./ui-helpers.md#recordselect): `USelectMenu` with a search box and virtual scroll |
+| A long fixed list: time zones, countries | `USelectMenu` with `virtualize` and a search box (the Branch time zone) |
+| Records that can reach thousands: menu items, customers, orders | `USelectMenu` searched on the server (typing asks the API, results in pages). None yet |
+
+- Search matches anywhere in the label: "milk" finds "Tea › Milk Tea".
+- "All …" and "None" (`pinned`) stay first and are never filtered out; no match says "No categories match “…”".
+- Virtual scroll is always on for records: it costs nothing on a short list and keeps a long one fast (only the rows in view are in the page).
+- Exception: the customer site's branch choice stays a `USelect` (a handful of branches; the menu's JavaScript is kept small, D123).
+
+## 15. Tabs and the sidebar (owner, 2026-10-02, D126)
+
+- Tabs in a `UDashboardToolbar` are [`<ToolbarTabs>`](./ui-helpers.md#toolbartabs): the toolbar's full-width line is the tabs' line, with the active tab's underline on it. Never two lines.
+- Status tabs (`<StatusTabs>`) have no line of their own either.
+- Tabs anywhere else (a section switcher in a page body, a panel) keep Nuxt UI's `link` line, full width.
+- A page's tabs are kept in the URL with [`useUrlTab`](./ui-helpers.md#useurltab) (`?tab=tables`): a reload or a shared link opens the same tab, Back still leaves the page, and switching never asks about unsaved changes.
+- The sidebar's active item is the section the page is in, also on pages under it (`/admin/branches/<id>`, `/admin/products/new`): `withActiveItem` in `app/utils/navigation-active.ts`, used by the layout. Features add nothing.
