@@ -43,13 +43,16 @@ Nothing crosses environments: no production data in staging, no shared secrets, 
 
 **Deploys** (step 2.2, D54, D133): every push to `main` deploys itself (its pull request ran the checks) (`.github/workflows/ci.yml` → `deploy-staging`). By hand, with Wrangler logged in (`npx wrangler login`): `pnpm deploy:staging` = `pnpm build:staging` (`nuxt build --envName staging`) → `pnpm db:migrate:staging` (`wrangler d1 migrations apply DB --remote`, tracked in `_hub_migrations`) → `wrangler deploy`.
 
-**First admin on staging:** there's no seed endpoint on a deployed Worker (`/_nitro/tasks` is dev only). Sign up on the site (`POST /api/auth/sign-up/email`, or the customer sign-up page once it exists), then promote the account:
+**First owner on staging** (D135): there's no seed endpoint on a deployed Worker (`/_nitro/tasks` is dev only). On the existing staging database nothing is needed: migration `0024_tenants` made the data the tenant "NUK Cafe" (`nuk`) and its admins its owners. On an empty database: sign up on the site, then create the cafe and make the account its owner:
 
 ```bash
-npx wrangler d1 execute nuk-cafe-staging --remote --command "UPDATE user SET role = 'admin' WHERE email = 'you@example.com'"
+npx wrangler d1 execute nuk-cafe-staging --remote --command "INSERT INTO organization (id, name, slug, created_at, status, version) VALUES (lower(hex(randomblob(16))), 'NUK Cafe', 'nuk', unixepoch() * 1000, 'active', 1)"
+npx wrangler d1 execute nuk-cafe-staging --remote --command "INSERT INTO member (id, organization_id, user_id, role, created_at) SELECT lower(hex(randomblob(16))), o.id, u.id, 'owner', unixepoch() * 1000 FROM organization o, user u WHERE o.slug = 'nuk' AND u.email = 'you@example.com'"
 ```
 
-Everyone else is added from the Staff page. The demo branch was inserted the same way ("Main branch").
+Everyone else is added from the Staff page; branches come from the seed locally, or an insert into `branches` with the tenant's id. The global `admin` role is gone (D135): `superadmin` is the platform team's, set the same way on `user.role` when the platform console exists (T2).
+
+**Migration `0024_tenants` (D135)** rebuilds the branch and order tables. Before the deploy that carries it, note the time for a D1 Time Travel restore (Restore drill below); after it, admin sign-in, the menu, a dine-in order and the counter are checked by hand.
 
 ## Configuration
 
@@ -66,7 +69,7 @@ Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudf
 | `NUXT_AI_PROVIDER`, `NUXT_AI_MODEL`, `NUXT_AI_API_KEY`, `NUXT_AI_BASE_URL`, `NUXT_AI_DAILY_LIMIT` | The AI assistant (D107, D108): the provider (`anthropic` \| `openai` \| `google` \| `openai-compatible`), its model id, the key, a base URL (required for `openai-compatible`; optional for a proxy), requests per admin per day (default 100) | unset (the assistant is off: its routes answer 404) | the key is a secret (`wrangler secret put NUXT_AI_API_KEY`), the rest plain variables; a key with an unknown provider, no model or (for `openai-compatible`) no URL answers 500 `AI_NOT_CONFIGURED`. Set a spending cap on the provider's account (Q43) |
 | `NUXT_TELEGRAM_BOT_TOKEN`, `NUXT_TELEGRAM_BOT_USERNAME`, `NUXT_TELEGRAM_WEBHOOK_SECRET` | Telegram (D112): the bot's token from @BotFather, its name without `@`, and the secret Telegram sends with every webhook call (32–256 letters, digits, `_` or `-`) | unset (Telegram is off: its routes answer 404, the Telegram page says it isn't set up) | all three are Worker secrets (`wrangler secret put …`; the name isn't secret, but a secret survives every deploy: see [Telegram](#telegram)); a token without a valid name or secret answers 500 `TELEGRAM_NOT_CONFIGURED`. Then point the webhook at the site once: [Telegram](#telegram) |
 | `NUXT_BAKONG_TOKEN`, `NUXT_BAKONG_API_URL` | Checking counter KHQRs with Bakong (D131): the Bakong Open API token (90 days) and its address (default `https://api-bakong.nbc.gov.kh`; a relay can stand in front of it) | unset (cashiers confirm KHQR payments by hand) | the token is a Worker secret (`wrangler secret put NUXT_BAKONG_TOKEN`), renewed every 90 days: see [KHQR](#khqr) |
-| `NUXT_SEED_ADMIN_EMAIL` / `_NAME` | The seed task's first admin | `.env` | not used (see Staging → First admin) |
+| `NUXT_SEED_ADMIN_EMAIL` / `_NAME` | The seed task's first owner of the cafe | `.env` | not used (see Staging → First owner) |
 
 Bindings (D1, R2, KV) are configured per environment in `nuxt.config.ts` (`$env.<name>`: NuxtHub turns `hub.db.connection.databaseId` and `hub.blob.bucketName` into the Worker's `DB` and `BLOB` bindings), not as variables. **`--envName staging` replaces `$production`**: settings every deployed build needs (the security headers) are repeated in each environment block.
 
@@ -81,7 +84,7 @@ Rules:
 - **Expand, then contract.** The new Worker starts after the migration, and the old one may still serve requests for a moment, so a migration must work with both: add columns/tables first, move the code, remove old columns in a later release.
 - No destructive change (dropping a column or table, narrowing a type) without an export of the affected data first.
 - Migrations are never edited after they reached staging; fix forward with a new one.
-- Seed data comes from a **Nitro task**, never from migrations. `db:seed` (`server/tasks/db/seed.ts`) creates the first admin (from `NUXT_SEED_ADMIN_EMAIL` / `NUXT_SEED_ADMIN_NAME`, with a temporary password printed once) and a "Main branch" (in `NUXT_PUBLIC_CAFE_TIME_ZONE`); each part is skipped once it exists, so it's safe to repeat. Locally, with the dev server running: `curl http://localhost:3000/_nitro/tasks/db:seed` (the Nuxt CLI has no `task` command; that endpoint exists only in dev). Deployed environments don't run it: see Staging → First admin. Test data beyond that comes from the admin's **Sample data** page (D94), not from a task: a sample menu in three sizes, branch hours and tables, and a reset, where `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` is on.
+- Seed data comes from a **Nitro task**, never from migrations. `db:seed` (`server/tasks/db/seed.ts`) creates the cafe (the tenant "NUK Cafe", D135), its first owner (from `NUXT_SEED_ADMIN_EMAIL` / `NUXT_SEED_ADMIN_NAME`, with a temporary password printed once) and a "Main branch" (in `NUXT_PUBLIC_CAFE_TIME_ZONE`); each part is skipped once it exists, so it's safe to repeat. Locally, with the dev server running: `curl http://localhost:3000/_nitro/tasks/db:seed` (the Nuxt CLI has no `task` command; that endpoint exists only in dev). Deployed environments don't run it: see Staging → First owner. Test data beyond that comes from the admin's **Sample data** page (D94), not from a task: a sample menu in three sizes, branch hours and tables, and a reset, where `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` is on.
 
 ## Deploys
 

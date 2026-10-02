@@ -6,5 +6,6 @@ import { getPublicMenu } from '#server/features/menu'
  * yet: it reads the database every time, so sold-out switches and edits show at once.
  */
 export default defineEventHandler(async (event) => {
-  return getPublicMenu(useDb(), readValidQuery(event, publicMenuQuerySchema))
+  const tenant = await requireTenant(event)
+  return getPublicMenu(useDb(), tenant.id, readValidQuery(event, publicMenuQuerySchema))
 })

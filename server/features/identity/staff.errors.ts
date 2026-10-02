@@ -4,6 +4,7 @@ export const StaffErrorCodes = {
   STAFF_ALREADY_EXISTS: 'STAFF_ALREADY_EXISTS',
   OWN_ACCESS: 'OWN_ACCESS',
   LAST_ADMIN: 'LAST_ADMIN',
+  STAFF_ELSEWHERE: 'STAFF_ELSEWHERE',
 } as const
 
 export const staffNotFound = () => notFound('This staff member')
@@ -25,6 +26,10 @@ export const ownAccess = (what: keyof typeof OWN_ACCESS_MESSAGES) => apiError(40
 
 export const lastAdmin = () =>
   apiError(409, StaffErrorCodes.LAST_ADMIN, 'The cafe needs at least one admin. Make someone else an admin first.')
+
+/** A password reset for someone who also works at another cafe (D134): the password opens every one. */
+export const staffElsewhere = () =>
+  apiError(409, StaffErrorCodes.STAFF_ELSEWHERE, 'This person also has access to another cafe, so you can\'t reset their password here. They can reset it from the sign-in page.')
 
 /** Memberships naming a branch that doesn't exist or is archived. */
 export const unknownBranches = (indexes: number[]) => apiError(400, ErrorCodes.VALIDATION_FAILED, 'Some branches can\'t be used.', {

@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { CreateItemInput, MenuItem } from '#shared/contracts/menu-items'
 import type { OptionSet } from '#shared/contracts/menu-options'
-import { member, organization } from '#server/db/tables'
 import type { BranchActor, SessionUser } from '#server/features/identity'
 import { authorizeBranch } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
@@ -11,7 +10,7 @@ import { archiveItem, createItem, restoreItem, updateItem } from '#server/featur
 import { branchItemStates } from '#server/features/menu/menu.schema'
 import { createOptionSet } from '#server/features/menu/options.service'
 import { listSoldOut, setSoldOut } from '#server/features/menu/soldout.service'
-import { createTestDb, createUser } from '#server/tests/support/db'
+import { addBranchStaff, createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -24,11 +23,11 @@ let atB: BranchActor
 let category: string
 let size: OptionSet
 let temp: OptionSet
-const admin = { userId: 'admin-1', role: 'admin' as const }
+const admin = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner' as const }
 
 async function addBranch() {
   const id = newId()
-  await db.insert(organization).values({ id, name: `Branch ${id}`, slug: id, timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+  await insertBranch(db, { id, name: `Branch ${id}`, timezone: 'Asia/Phnom_Penh', status: 'active' })
   return id
 }
 
@@ -36,8 +35,8 @@ beforeEach(async () => {
   db = await createTestDb()
   branchA = await addBranch()
   branchB = await addBranch()
-  atA = { userId: 'staff-a', role: 'customer', branchId: branchA, branchRole: 'staff', requestId: 'req-a' }
-  atB = { userId: 'staff-b', role: 'customer', branchId: branchB, branchRole: 'staff' }
+  atA = { userId: 'staff-a', tenantId: TEST_TENANT, role: 'customer', branchId: branchA, branchRole: 'staff', requestId: 'req-a' }
+  atB = { userId: 'staff-b', tenantId: TEST_TENANT, role: 'customer', branchId: branchB, branchRole: 'staff' }
   category = (await createCategory(db, admin, { name: 'Coffee', description: '', parentId: null, availabilityRuleIds: [] })).id
   size = await createOptionSet(db, admin, { name: 'Size', values: ['Small', 'Large'] })
   temp = await createOptionSet(db, admin, { name: 'Temperature', values: ['Hot', 'Iced'] })
@@ -183,20 +182,20 @@ describe('sold out at a branch', () => {
 describe('who may switch', () => {
   async function staffOf(branchId: string, role: string): Promise<SessionUser> {
     const account = await createUser(db)
-    await db.insert(member).values({ id: newId(), organizationId: branchId, userId: account.id, role, createdAt: new Date() })
+    await addBranchStaff(db, branchId, account.id, role)
     return { id: account.id, emailVerified: true, role: 'customer' }
   }
 
   it('lets staff and managers switch at their own branch only', async () => {
     const staff = await staffOf(branchA, 'staff')
     const manager = await staffOf(branchA, 'manager')
-    await expect(authorizeBranch(db, staff, branchA, { menu: ['setSoldOut'] })).resolves.toMatchObject({ branchId: branchA, branchRole: 'staff' })
-    await expect(authorizeBranch(db, manager, branchA, { menu: ['setSoldOut'] })).resolves.toMatchObject({ branchRole: 'manager' })
-    await expectApiError(() => authorizeBranch(db, staff, branchB, { menu: ['setSoldOut'] }), 404, 'NOT_FOUND')
+    await expect(authorizeBranch(db, staff, TEST_TENANT, branchA, { menu: ['setSoldOut'] })).resolves.toMatchObject({ branchId: branchA, branchRole: 'staff' })
+    await expect(authorizeBranch(db, manager, TEST_TENANT, branchA, { menu: ['setSoldOut'] })).resolves.toMatchObject({ branchRole: 'manager' })
+    await expectApiError(() => authorizeBranch(db, staff, TEST_TENANT, branchB, { menu: ['setSoldOut'] }), 404, 'NOT_FOUND')
   })
 
   it('refuses customers who aren\'t branch staff', async () => {
     const customer = await createUser(db)
-    await expectApiError(() => authorizeBranch(db, { id: customer.id, emailVerified: true, role: 'customer' }, branchA, { menu: ['setSoldOut'] }), 404, 'NOT_FOUND')
+    await expectApiError(() => authorizeBranch(db, { id: customer.id, emailVerified: true, role: 'customer' }, TEST_TENANT, branchA, { menu: ['setSoldOut'] }), 404, 'NOT_FOUND')
   })
 })

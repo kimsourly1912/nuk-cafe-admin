@@ -10,14 +10,13 @@ import { accountMailHandlers, consoleSender, MAIL_KINDS, resendSender } from '#s
 import type { MailMessage } from '#server/features/identity/identity.mail'
 import { authorizeCustomer } from '#server/features/identity/identity.service'
 import type { SessionUser } from '#server/features/identity/identity.types'
-import { createStaff, seedFirstAdmin } from '#server/features/identity/staff.service'
+import { createStaff, seedFirstOwner } from '#server/features/identity/staff.service'
 import { createTestAuth, sessionHeaders, signIn } from '#server/tests/support/auth'
 import type { TestAuth } from '#server/tests/support/auth'
-import { createTestDb } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
-import { organization } from '#server/db/tables'
 
 let db: Db
 let auth: TestAuth
@@ -64,7 +63,7 @@ describe('sign-up', () => {
     const { headers } = await signUp()
     const user = await sessionUser(headers)
     expect(user).toMatchObject({ emailVerified: false })
-    await expectApiError(() => authorizeCustomer(user), 403, 'EMAIL_NOT_VERIFIED')
+    await expectApiError(() => authorizeCustomer(db, user, TEST_TENANT), 403, 'EMAIL_NOT_VERIFIED')
   })
 
   it('verifies the email from the link', async () => {
@@ -72,7 +71,7 @@ describe('sign-up', () => {
     await auth.api.verifyEmail({ query: { token: await tokenFrom(MAIL_KINDS.verifyEmail) } })
     const user = await sessionUser(headers)
     expect(user).toMatchObject({ emailVerified: true })
-    expect(authorizeCustomer(user)).toMatchObject({ role: 'customer' })
+    expect(await authorizeCustomer(db, user, TEST_TENANT)).toMatchObject({ role: 'customer' })
   })
 })
 
@@ -86,10 +85,10 @@ describe('customer profile', () => {
   })
 
   it('is created with a staff account, in the same batch', async () => {
-    const seeded = await seedFirstAdmin(db, { name: 'Owner', email: 'owner@example.com' })
+    const seeded = await seedFirstOwner(db, await ensureTenant(db), { name: 'Owner', email: 'owner@example.com' })
     const branchId = newId()
-    await db.insert(organization).values({ id: branchId, name: 'Riverside', slug: 'riverside', timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
-    const created = await createStaff(db, { userId: seeded!.staff.id, role: 'admin' }, { name: 'Sophea', email: 'sophea@example.com', admin: false, memberships: [{ branchId, role: 'staff' }] })
+    await insertBranch(db, { id: branchId, name: 'Riverside', timezone: 'Asia/Phnom_Penh' })
+    const created = await createStaff(db, { userId: seeded!.staff.id, tenantId: TEST_TENANT, role: 'owner' }, { name: 'Sophea', email: 'sophea@example.com', admin: false, memberships: [{ branchId, role: 'staff' }] })
     for (const userId of [seeded!.staff.id, created.staff.id]) {
       expect(await db.select().from(customerProfiles).where(eq(customerProfiles.userId, userId))).toHaveLength(1)
     }
@@ -125,7 +124,7 @@ describe('password reset', () => {
   })
 
   it('clears a temporary password, like changing it does', async () => {
-    const seeded = await seedFirstAdmin(db, { name: 'Owner', email: 'owner@example.com' })
+    const seeded = await seedFirstOwner(db, await ensureTenant(db), { name: 'Owner', email: 'owner@example.com' })
     await auth.api.requestPasswordReset({ body: { email: 'owner@example.com' } })
     await auth.api.resetPassword({ body: { token: await tokenFrom(MAIL_KINDS.resetPassword), newPassword: 'the owner\'s own password' } })
     const [row] = await db.select({ flag: authSchema.user.mustChangePassword }).from(authSchema.user).where(eq(authSchema.user.id, seeded!.staff.id))
@@ -133,7 +132,7 @@ describe('password reset', () => {
   })
 
   it('keeps a temporary password when the reset fails', async () => {
-    const seeded = await seedFirstAdmin(db, { name: 'Owner', email: 'owner@example.com' })
+    const seeded = await seedFirstOwner(db, await ensureTenant(db), { name: 'Owner', email: 'owner@example.com' })
     await expect(auth.api.resetPassword({ body: { token: 'not-a-token', newPassword: 'the owner\'s own password' } })).rejects.toThrow()
     const [row] = await db.select({ flag: authSchema.user.mustChangePassword }).from(authSchema.user).where(eq(authSchema.user.id, seeded!.staff.id))
     expect(row!.flag).toBe(true)

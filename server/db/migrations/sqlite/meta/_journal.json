@@ -169,6 +169,13 @@
       "when": 1790940612239,
       "tag": "0023_khqr",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1790962796630,
+      "tag": "0024_tenants",
+      "breakpoints": true
     }
   ]
 }

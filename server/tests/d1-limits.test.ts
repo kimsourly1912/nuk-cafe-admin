@@ -8,7 +8,6 @@ import { MAX_MODIFIERS } from '#shared/contracts/menu-modifiers'
 import { MAX_OPTION_VALUES } from '#shared/contracts/menu-options'
 import { MAX_MEMBERSHIPS } from '#shared/contracts/staff'
 import { MAX_PAGE_SIZE } from '#shared/contracts/common'
-import { member, organization } from '#server/db/tables'
 import type { Actor } from '#server/features/identity'
 import { createStaff, listStaff, updateStaffAccess } from '#server/features/identity/staff.service'
 import { createAvailabilityRule, listAvailabilityRules } from '#server/features/menu/availability.service'
@@ -21,7 +20,7 @@ import { getPublicMenu } from '#server/features/menu/catalog.service'
 import { mediaAssets } from '#server/features/media/media.schema'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
-import { createAdmin, createTestDb, createUser, D1_MAX_PARAMS } from '#server/tests/support/db'
+import { addBranchStaff, createAdmin, createTestDb, createUser, D1_MAX_PARAMS, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 
 /**
  * D1 refuses a statement with more than 100 bound parameters (D62); the test database does too.
@@ -29,7 +28,7 @@ import { createAdmin, createTestDb, createUser, D1_MAX_PARAMS } from '#server/te
  */
 
 let db: Db
-const actor: Actor = { userId: 'admin-1', role: 'admin', requestId: 'req-1' }
+const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', requestId: 'req-1' }
 
 beforeEach(async () => {
   db = await createTestDb()
@@ -99,7 +98,7 @@ describe('menu at its limits', () => {
 describe('sold out at its limits', () => {
   it('switches every version of the largest price grid off and back on', async () => {
     const branchId = newId()
-    await db.insert(organization).values({ id: branchId, name: 'Main', slug: 'main', timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+    await insertBranch(db, { id: branchId, name: 'Main', timezone: 'Asia/Phnom_Penh', status: 'active' })
     const drinks = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
     const size = await createOptionSet(db, actor, { name: 'Size', values: names(MAX_OPTION_VALUES, 'Size') })
     const milk = await createOptionSet(db, actor, { name: 'Milk', values: names(MAX_OPTION_VALUES, 'Milk') })
@@ -107,7 +106,7 @@ describe('sold out at its limits', () => {
     const item = await createItem(db, actor, { categoryId: drinks.id, name: 'Latte', description: '', imageId: null, optionSetIds: [size.id, milk.id], variations, modifierGroups: [], availabilityRuleIds: [] })
     const variationIds = item.variations.map(v => v.id)
     expect(variationIds).toHaveLength(MAX_SOLD_OUT_VARIATIONS)
-    const staff = { userId: 'staff-1', role: 'customer' as const, branchId, branchRole: 'staff' as const }
+    const staff = { userId: 'staff-1', tenantId: TEST_TENANT, role: 'customer' as const, branchId, branchRole: 'staff' as const }
     expect((await setSoldOut(db, staff, { variationIds, soldOut: true })).variations).toHaveLength(MAX_SOLD_OUT_VARIATIONS)
     expect((await setSoldOut(db, staff, { variationIds, soldOut: false })).variations).toHaveLength(0)
   })
@@ -116,7 +115,7 @@ describe('sold out at its limits', () => {
 describe('the public menu at its limits', () => {
   it('lists more items with images than fit in one statement', async () => {
     const branchId = newId()
-    await db.insert(organization).values({ id: branchId, name: 'Main', slug: 'main', timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+    await insertBranch(db, { id: branchId, name: 'Main', timezone: 'Asia/Phnom_Penh', status: 'active' })
     const drinks = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
     for (const name of names(120, 'Item')) {
       const imageId = newId()
@@ -124,7 +123,7 @@ describe('the public menu at its limits', () => {
       const item = await createItem(db, actor, { categoryId: drinks.id, name, description: '', imageId, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
       await publishItem(db, actor, item.id, { version: item.version })
     }
-    const menu = await getPublicMenu(db, { branchId })
+    const menu = await getPublicMenu(db, TEST_TENANT, { branchId })
     expect(menu.categories[0]!.items.filter(i => i.imageUrl)).toHaveLength(120)
   })
 })
@@ -153,9 +152,9 @@ describe('availability rules at their limits', () => {
 describe('staff at their limits', () => {
   it('gives one person the most branches, and lists a full page of staff', async () => {
     const admin = await createAdmin(db)
-    const owner: Actor = { userId: admin.userId, role: 'admin' }
+    const owner: Actor = { userId: admin.userId, tenantId: TEST_TENANT, role: 'owner' }
     const branchIds = Array.from({ length: MAX_MEMBERSHIPS }, () => newId())
-    for (const [i, id] of branchIds.entries()) await db.insert(organization).values({ id, name: `Branch ${i}`, slug: id, timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+    for (const [i, id] of branchIds.entries()) await insertBranch(db, { id, name: `Branch ${i}`, timezone: 'Asia/Phnom_Penh', status: 'active' })
     const memberships = branchIds.map(branchId => ({ branchId, role: 'staff' as const }))
     const created = await createStaff(db, owner, { name: 'Sophea', email: 'sophea@example.com', admin: false, memberships })
     expect(created.staff.memberships).toHaveLength(MAX_MEMBERSHIPS)
@@ -165,9 +164,9 @@ describe('staff at their limits', () => {
     // Accounts with a membership, written directly: createStaff would hash 100 passwords.
     for (let i = 0; i < MAX_PAGE_SIZE; i++) {
       const account = await createUser(db, `staff${i}@example.com`, `Staff ${i}`)
-      await db.insert(member).values({ id: newId(), organizationId: branchIds[0]!, userId: account.id, role: 'staff', createdAt: new Date() })
+      await addBranchStaff(db, branchIds[0]!, account.id, 'staff')
     }
-    const page = await listStaff(db, { page: 1, pageSize: MAX_PAGE_SIZE })
+    const page = await listStaff(db, owner, { page: 1, pageSize: MAX_PAGE_SIZE })
     expect(page.items).toHaveLength(MAX_PAGE_SIZE)
   })
 })

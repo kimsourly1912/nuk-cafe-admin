@@ -101,7 +101,7 @@ With the dev server running and `NUXT_SEED_ADMIN_EMAIL` set:
 curl http://localhost:3000/_nitro/tasks/db:seed
 ```
 
-prints the first admin's temporary password (and creates a demo branch). Sign in at `/admin/login`; the app asks for a new password first. More staff: the **Staff** page. See [operations → Seed data](../server/operations.md).
+creates the cafe (a tenant, D135), prints its first owner's temporary password (and creates a demo branch). Sign in at `/admin/login`; the app asks for a new password first. More staff: the **Staff** page. See [operations → Seed data](../server/operations.md).
 
 ## `loginRedirectTarget`
 

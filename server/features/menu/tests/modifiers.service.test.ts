@@ -6,13 +6,13 @@ import { auditEvents } from '#server/features/platform/platform.schema'
 import { menuModifierGroups, menuModifiers } from '#server/features/menu/menu.schema'
 import { addModifier, archiveModifier, archiveModifierGroup, createModifierGroup, listModifierGroups, reorderModifiers, restoreModifier, restoreModifierGroup, updateModifier, updateModifierGroup } from '#server/features/menu/modifiers.service'
 import { selectionProblem } from '#server/features/menu/modifiers.rules'
-import { createTestDb } from '#server/tests/support/db'
+import { createTestDb, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
 
 let db: Db
-const actor: Actor = { userId: 'admin-1', role: 'admin', requestId: 'req-1' }
+const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', requestId: 'req-1' }
 
 beforeEach(async () => {
   db = await createTestDb()

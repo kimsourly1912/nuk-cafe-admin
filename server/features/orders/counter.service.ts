@@ -84,8 +84,8 @@ async function withDetails(db: Db, rows: repo.OrderRow[]): Promise<CounterOrder[
 const toRate = (row: repo.RateRow): ExchangeRate => ({ khrPerUsd: row.perUsd, effectiveFrom: toIso(row.effectiveFrom), setBy: { name: row.setByName } })
 
 /** The branch's business day at `now` (it starts at 4:00 in the branch's time zone, D99). */
-async function businessDateOf(db: Db, branchId: string, now: Date): Promise<string> {
-  const branch = await reportsRepo.findReportBranch(db, branchId)
+async function businessDateOf(db: Db, tenantId: string, branchId: string, now: Date): Promise<string> {
+  const branch = await reportsRepo.findReportBranch(db, tenantId, branchId)
   if (!branch) throw orderNotFound()
   return businessDateAt(now, branch.timeZone)
 }
@@ -95,7 +95,7 @@ async function businessDateOf(db: Db, branchId: string, now: Date): Promise<stri
  * Bakong, `automaticCheck`, D131), the server's clock, and how many finished today.
  */
 export async function listCounterQueue(db: Db, actor: BranchActor, now = new Date(), automaticCheck = false): Promise<CounterQueue> {
-  const [rows, rate, today, khqr] = await Promise.all([repo.findActiveOrders(db, actor.branchId, now), repo.currentRate(db, now), businessDateOf(db, actor.branchId, now), counterKhqr(db, automaticCheck)])
+  const [rows, rate, today, khqr] = await Promise.all([repo.findActiveOrders(db, actor.branchId, now), repo.currentRate(db, now), businessDateOf(db, actor.tenantId, actor.branchId, now), counterKhqr(db, automaticCheck)])
   const [orders, finishedToday] = await Promise.all([withDetails(db, rows), repo.countFinishedOrders(db, actor.branchId, today)])
   return { orders, khrRate: rate ? toRate(rate) : null, khqr, serverTime: now.toISOString(), finishedToday }
 }
@@ -106,7 +106,7 @@ export async function listCounterQueue(db: Db, actor: BranchActor, now = new Dat
  * ("I paid, why was it cancelled?"), it doesn't change it. Older days are in the admin's Reports.
  */
 export async function listFinishedToday(db: Db, actor: BranchActor, now = new Date()): Promise<CounterFinishedOrders> {
-  const businessDate = await businessDateOf(db, actor.branchId, now)
+  const businessDate = await businessDateOf(db, actor.tenantId, actor.branchId, now)
   return { businessDate, orders: await withDetails(db, await repo.findFinishedOrders(db, actor.branchId, businessDate)) }
 }
 
@@ -195,6 +195,7 @@ export async function payOrder(db: Db, actor: BranchActor, orderId: string, inpu
     return {
       to: 'preparing',
       statements: [repo.insertPaymentStatement(db, {
+        tenantId: actor.tenantId,
         orderId,
         branchId: actor.branchId,
         method: input.method,
@@ -225,6 +226,7 @@ export async function recordCheckedKhqrPayment(db: Db, actor: BranchActor, order
     return {
       to: 'preparing',
       statements: [repo.insertPaymentStatement(db, {
+        tenantId: actor.tenantId,
         orderId: current.id,
         branchId: actor.branchId,
         method: 'khqr',

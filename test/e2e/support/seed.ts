@@ -3,13 +3,13 @@ import { dirname } from 'node:path'
 import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { eq } from 'drizzle-orm'
-import { organization, user } from '../../../server/db/tables'
+import { user } from '../../../server/db/tables'
 import { createTable, updateBranchSettings } from '../../../server/features/branches'
 import type { Actor } from '../../../server/features/identity'
 import { createStaff } from '../../../server/features/identity'
 import { loadSampleMenuStep } from '../../../server/features/sample-data'
 import { createTestAuth } from '../../../server/tests/support/auth'
-import { applyMigration, createAdmin, migrationFiles } from '../../../server/tests/support/db'
+import { applyMigration, createAdmin, insertBranch, migrationFiles, TEST_TENANT } from '../../../server/tests/support/db'
 import type { Db } from '../../../server/utils/batch'
 
 /**
@@ -76,7 +76,7 @@ const CUSTOMERS: ShopSeed['customers'] = {
 
 async function addBranch(db: Db, name: string) {
   const id = crypto.randomUUID()
-  await db.insert(organization).values({ id, name, slug: name.toLowerCase().replaceAll(' ', '-'), timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+  await insertBranch(db, { id, name, timezone: 'Asia/Phnom_Penh' })
   return id
 }
 
@@ -93,7 +93,8 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
   const db: Db = drizzle({ client, casing: 'snake_case' })
 
   const admin = await createAdmin(db, 'e2e-admin@example.com')
-  const actor: Actor = { userId: admin.userId, role: 'admin' }
+  // The cafe (a tenant, D134) and its owner; until addresses name a tenant (T1.5) it's the only one.
+  const actor: Actor = { userId: admin.userId, tenantId: TEST_TENANT, role: 'owner' }
   const openBranchId = await addBranch(db, 'Riverside')
   const closedBranchId = await addBranch(db, 'Zeta Kiosk')
 

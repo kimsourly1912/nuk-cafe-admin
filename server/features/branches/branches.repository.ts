@@ -3,24 +3,24 @@ import type { DiningTableStatus } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
 import { insertPieces } from '#server/utils/batch'
-import { organization } from '#server/db/tables'
-import { branchHours, diningTables } from './branches.schema'
+import { branches, branchHours, diningTables } from './branches.schema'
 
 /**
- * Branches are Better Auth organizations (D44): the seed task creates them, the admin edits their
- * settings, hours and dining tables (step 5.1, D91).
+ * A tenant's branches (D44, D134): the seed task creates them, the admin edits their settings, hours
+ * and dining tables (step 5.1, D91). Every read names the tenant; a branch of another tenant is
+ * "not found".
  */
 
-export async function hasAnyBranch(db: Db): Promise<boolean> {
-  const rows = await db.select({ id: organization.id }).from(organization).limit(1)
+export async function hasAnyBranch(db: Db, tenantId: string): Promise<boolean> {
+  const rows = await db.select({ id: branches.id }).from(branches).where(eq(branches.tenantId, tenantId)).limit(1)
   return rows.length > 0
 }
 
-export function insertBranchStatement(db: Db, row: { id: string, name: string, slug: string, timezone: string, now: Date }): Statement {
-  return db.insert(organization).values({
+export function insertBranchStatement(db: Db, row: { id: string, tenantId: string, name: string, timezone: string, now: Date }): Statement {
+  return db.insert(branches).values({
     id: row.id,
+    tenantId: row.tenantId,
     name: row.name,
-    slug: row.slug,
     timezone: row.timezone,
     currency: 'USD',
     status: 'active',
@@ -39,17 +39,17 @@ export interface BranchRow {
 }
 
 const branchColumns = {
-  id: organization.id,
-  name: organization.name,
-  timezone: organization.timezone,
-  address: organization.address,
-  phone: organization.phone,
-  status: organization.status,
-  version: organization.version,
+  id: branches.id,
+  name: branches.name,
+  timezone: branches.timezone,
+  address: branches.address,
+  phone: branches.phone,
+  status: branches.status,
+  version: branches.version,
 }
 
-export async function findBranch(db: Db, id: string): Promise<BranchRow | undefined> {
-  const rows: BranchRow[] = await db.select(branchColumns).from(organization).where(eq(organization.id, id)).limit(1)
+export async function findBranch(db: Db, tenantId: string, id: string): Promise<BranchRow | undefined> {
+  const rows: BranchRow[] = await db.select(branchColumns).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, id))).limit(1)
   return rows[0]
 }
 
@@ -59,10 +59,10 @@ export interface BranchOptionRow {
 }
 
 /** Active branches by name, for pickers. */
-export async function listActiveBranches(db: Db): Promise<BranchOptionRow[]> {
-  return db.select({ id: organization.id, name: organization.name }).from(organization)
-    .where(eq(organization.status, 'active'))
-    .orderBy(asc(organization.name))
+export async function listActiveBranches(db: Db, tenantId: string): Promise<BranchOptionRow[]> {
+  return db.select({ id: branches.id, name: branches.name }).from(branches)
+    .where(and(eq(branches.tenantId, tenantId), eq(branches.status, 'active')))
+    .orderBy(asc(branches.name))
 }
 
 /** The branch's opening windows, by weekday, then start. */
@@ -76,16 +76,16 @@ export async function hoursOf(db: Db, branchId: string): Promise<WeeklyWindow[]>
  * Moves the branch to the next version if it's still at `version` and active, applying `changes`.
  * Follow it with `requireOneChange`.
  */
-export function touchBranchStatement(db: Db, id: string, version: number, changes: Partial<Pick<BranchRow, 'name' | 'timezone' | 'address' | 'phone'>>): Statement {
-  return db.update(organization)
-    .set({ ...changes, version: sql`${organization.version} + 1` })
-    .where(and(eq(organization.id, id), eq(organization.version, version), eq(organization.status, 'active')))
+export function touchBranchStatement(db: Db, tenantId: string, id: string, version: number, changes: Partial<Pick<BranchRow, 'name' | 'timezone' | 'address' | 'phone'>>): Statement {
+  return db.update(branches)
+    .set({ ...changes, version: sql`${branches.version} + 1` })
+    .where(and(eq(branches.tenantId, tenantId), eq(branches.id, id), eq(branches.version, version), eq(branches.status, 'active')))
 }
 
-export function replaceHoursStatements(db: Db, branchId: string, windows: WeeklyWindow[]): Statement[] {
+export function replaceHoursStatements(db: Db, tenantId: string, branchId: string, windows: WeeklyWindow[]): Statement[] {
   return [
-    db.delete(branchHours).where(eq(branchHours.branchId, branchId)),
-    ...insertPieces(branchHours, windows).map(piece => db.insert(branchHours).values(piece.map(window => ({ branchId, ...window })))),
+    db.delete(branchHours).where(and(eq(branchHours.tenantId, tenantId), eq(branchHours.branchId, branchId))),
+    ...insertPieces(branchHours, windows).map(piece => db.insert(branchHours).values(piece.map(window => ({ tenantId, branchId, ...window })))),
   ]
 }
 
@@ -134,7 +134,7 @@ export async function countTables(db: Db, branchId: string): Promise<number> {
   return row?.n ?? 0
 }
 
-export function insertTableStatement(db: Db, row: { id: string, branchId: string, label: string, area: string | null, qrTokenHash: string, now: Date }): Statement {
+export function insertTableStatement(db: Db, row: { id: string, tenantId: string, branchId: string, label: string, area: string | null, qrTokenHash: string, now: Date }): Statement {
   return db.insert(diningTables).values({ ...row, qrVersion: 1, qrRotatedAt: row.now, createdAt: row.now, updatedAt: row.now })
 }
 
@@ -154,22 +154,24 @@ export interface ScannedTableRow {
   tableId: string
   label: string
   tableStatus: DiningTableStatus
+  tenantId: string
   branchId: string
   branchName: string
   branchStatus: string | null
 }
 
-/** The table whose QR token hashes to `hash`, with its branch. */
+/** The table whose QR token hashes to `hash`, with its branch and tenant (a QR names both, D134). */
 export async function findTableByTokenHash(db: Db, hash: string): Promise<ScannedTableRow | undefined> {
   const rows: ScannedTableRow[] = await db.select({
     tableId: diningTables.id,
     label: diningTables.label,
     tableStatus: diningTables.status,
-    branchId: organization.id,
-    branchName: organization.name,
-    branchStatus: organization.status,
+    tenantId: branches.tenantId,
+    branchId: branches.id,
+    branchName: branches.name,
+    branchStatus: branches.status,
   }).from(diningTables)
-    .innerJoin(organization, eq(organization.id, diningTables.branchId))
+    .innerJoin(branches, eq(branches.id, diningTables.branchId))
     .where(eq(diningTables.qrTokenHash, hash))
     .limit(1)
   return rows[0]

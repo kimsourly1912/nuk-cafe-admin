@@ -16,8 +16,9 @@ import * as repo from './branches.repository'
 import type { BranchRow, TableRow } from './branches.repository'
 
 /**
- * Branches (docs/server/data-model.md → Branches, D44, D91). The seed task creates them; the admin
- * edits their settings and hours (one `version` on the branch covers both) and their dining tables
+ * A tenant's branches (docs/server/data-model.md → Branches, D44, D91, D134). Every function names
+ * the tenant (from the actor, or the request for public reads); another tenant's branch is "not
+ * found". The seed task creates them; the admin edits their settings and hours (one `version` on the branch covers both) and their dining tables
  * (each with its own `version`). QR tokens: `branches.qr.ts`.
  */
 
@@ -30,16 +31,16 @@ export interface SeededBranch {
  * The seed task's demo branch, only while no branch exists (so it runs safely on every deploy of a
  * disposable environment). Returns `null` when branches already exist.
  */
-export async function seedDemoBranch(db: Db, input: { timezone: string }): Promise<SeededBranch | null> {
-  if (await repo.hasAnyBranch(db)) return null
-  const branch = { id: newId(), name: 'Main branch', slug: 'main', timezone: input.timezone, now: new Date() }
+export async function seedDemoBranch(db: Db, tenantId: string, input: { timezone: string }): Promise<SeededBranch | null> {
+  if (await repo.hasAnyBranch(db, tenantId)) return null
+  const branch = { id: newId(), tenantId, name: 'Main branch', timezone: input.timezone, now: new Date() }
   await db.batch([repo.insertBranchStatement(db, branch)])
   return { id: branch.id, name: branch.name }
 }
 
 /** Active branches (id and name), for pickers such as the staff form's. */
-export async function listBranchOptions(db: Db): Promise<repo.BranchOptionRow[]> {
-  return repo.listActiveBranches(db)
+export async function listBranchOptions(db: Db, tenantId: string): Promise<repo.BranchOptionRow[]> {
+  return repo.listActiveBranches(db, tenantId)
 }
 
 /** The branch as customers see it at `now`: open by its hours on its own clock, or when it opens. */
@@ -59,21 +60,22 @@ function toPublicBranch(branch: BranchRow, hours: WeeklyWindow[], now: Date): Pu
 }
 
 /** An active branch for customers (the menu's header, D93); unknown and archived ones are 404. */
-export async function getPublicBranch(db: Db, id: string, now = new Date()): Promise<PublicBranch> {
-  const branch = await repo.findBranch(db, id)
+export async function getPublicBranch(db: Db, tenantId: string, id: string, now = new Date()): Promise<PublicBranch> {
+  const branch = await repo.findBranch(db, tenantId, id)
   if (!branch || branch.status !== 'active') throw notFound('This branch')
   return toPublicBranch(branch, await repo.hoursOf(db, id), now)
 }
 
 /** The labels of a branch's active tables (no QR links: for counts and sample data, D94). */
-export async function activeTableLabels(db: Db, branchId: string): Promise<string[]> {
+export async function activeTableLabels(db: Db, tenantId: string, branchId: string): Promise<string[]> {
+  await loadBranch(db, tenantId, branchId)
   return (await repo.listTables(db, branchId, 'active')).map(table => table.label)
 }
 
 /** Every active branch for customers, by name (launch has one, D45). */
-export async function listPublicBranches(db: Db, now = new Date()): Promise<PublicBranch[]> {
-  const options = await repo.listActiveBranches(db)
-  return Promise.all(options.map(option => getPublicBranch(db, option.id, now)))
+export async function listPublicBranches(db: Db, tenantId: string, now = new Date()): Promise<PublicBranch[]> {
+  const options = await repo.listActiveBranches(db, tenantId)
+  return Promise.all(options.map(option => getPublicBranch(db, tenantId, option.id, now)))
 }
 
 // --- Settings and hours ---
@@ -81,15 +83,15 @@ export async function listPublicBranches(db: Db, now = new Date()): Promise<Publ
 const audit = (db: Db, actor: Actor, action: string, targetType: string, targetId: string, metadata: Record<string, unknown>) =>
   auditStatement(db, actor, { action: `branch.${action}`, targetType, targetId, metadata })
 
-async function loadBranch(db: Db, id: string): Promise<BranchRow> {
-  const branch = await repo.findBranch(db, id)
+async function loadBranch(db: Db, tenantId: string, id: string): Promise<BranchRow> {
+  const branch = await repo.findBranch(db, tenantId, id)
   if (!branch) throw branchNotFound()
   return branch
 }
 
 /** The branch's settings, and whether it's open at `now` (its hours, in its timezone). */
-export async function getBranchSettings(db: Db, id: string, now = new Date()): Promise<BranchSettings> {
-  const branch = await loadBranch(db, id)
+export async function getBranchSettings(db: Db, tenantId: string, id: string, now = new Date()): Promise<BranchSettings> {
+  const branch = await loadBranch(db, tenantId, id)
   const hours = await repo.hoursOf(db, id)
   const at = localTime(now, branch.timezone)
   return {
@@ -108,7 +110,8 @@ export async function getBranchSettings(db: Db, id: string, now = new Date()): P
 
 /** Saves the fields sent, from the version read: details and hours together, audited. */
 export async function updateBranchSettings(db: Db, actor: Actor, id: string, input: UpdateBranchSettingsInput): Promise<BranchSettings> {
-  const branch = await loadBranch(db, id)
+  const { tenantId } = actor
+  const branch = await loadBranch(db, tenantId, id)
   if (branch.status === 'archived') throw branchArchived()
   if ((branch.version ?? 1) !== input.version) throw branchChanged()
   if (input.timezone !== undefined && !isKnownTimeZone(input.timezone)) throw unknownTimezone(input.timezone)
@@ -132,9 +135,9 @@ export async function updateBranchSettings(db: Db, actor: Actor, id: string, inp
 
   try {
     await db.batch([
-      repo.touchBranchStatement(db, id, input.version, changes),
+      repo.touchBranchStatement(db, tenantId, id, input.version, changes),
       requireOneChange(db),
-      ...(hours ? repo.replaceHoursStatements(db, id, hours) : []),
+      ...(hours ? repo.replaceHoursStatements(db, tenantId, id, hours) : []),
       audit(db, actor, 'update', 'branch', id, { ...changed, ...(hours && { hours: { from: before, to: hours } }) }),
     ] as [Statement, ...Statement[]])
   }
@@ -142,7 +145,7 @@ export async function updateBranchSettings(db: Db, actor: Actor, id: string, inp
     if (isStaleWrite(error)) throw branchChanged()
     throw error
   }
-  return getBranchSettings(db, id)
+  return getBranchSettings(db, tenantId, id)
 }
 
 // --- Dining tables ---
@@ -165,8 +168,8 @@ async function toTable(row: TableRow, qr: QrConfig): Promise<DiningTable> {
   }
 }
 
-async function activeBranch(db: Db, branchId: string): Promise<BranchRow> {
-  const branch = await loadBranch(db, branchId)
+async function activeBranch(db: Db, tenantId: string, branchId: string): Promise<BranchRow> {
+  const branch = await loadBranch(db, tenantId, branchId)
   if (branch.status === 'archived') throw branchArchived()
   return branch
 }
@@ -177,8 +180,9 @@ async function loadTable(db: Db, branchId: string, tableId: string, qr: QrConfig
   return toTable(row, qr)
 }
 
-/** The table, checked: in this branch, at the version read, and active (unless restoring). */
-async function openTable(db: Db, branchId: string, tableId: string, version: number, allowArchived = false): Promise<TableRow> {
+/** The table, checked: in this branch of the tenant, at the version read, and active (unless restoring). */
+async function openTable(db: Db, tenantId: string, branchId: string, tableId: string, version: number, allowArchived = false): Promise<TableRow> {
+  await loadBranch(db, tenantId, branchId)
   const row = await repo.findTable(db, branchId, tableId)
   if (!row) throw tableNotFound()
   if (row.version !== version) throw tableChanged()
@@ -198,8 +202,8 @@ async function runTableBatch(db: Db, statements: Statement[], label: string) {
   }
 }
 
-export async function listTables(db: Db, branchId: string, query: TableListQuery, qr: QrConfig): Promise<DiningTable[]> {
-  await loadBranch(db, branchId)
+export async function listTables(db: Db, tenantId: string, branchId: string, query: TableListQuery, qr: QrConfig): Promise<DiningTable[]> {
+  await loadBranch(db, tenantId, branchId)
   const rows = await repo.listTables(db, branchId, query.status)
   rows.sort((a, b) => byLabel.compare(a.label, b.label))
   return Promise.all(rows.map(row => toTable(row, qr)))
@@ -210,12 +214,12 @@ export async function listTables(db: Db, branchId: string, query: TableListQuery
  * before the write: two simultaneous adds at the limit can both pass).
  */
 export async function createTable(db: Db, actor: Actor, branchId: string, input: CreateTableInput, qr: QrConfig): Promise<DiningTable> {
-  await activeBranch(db, branchId)
+  await activeBranch(db, actor.tenantId, branchId)
   if (await repo.countTables(db, branchId) >= MAX_BRANCH_TABLES) throw tableLimit()
   const id = newId()
   const hash = await tokenHash(await tableToken(qr.secret, id, 1))
   await runTableBatch(db, [
-    repo.insertTableStatement(db, { id, branchId, label: input.label, area: input.area, qrTokenHash: hash, now: new Date() }),
+    repo.insertTableStatement(db, { id, tenantId: actor.tenantId, branchId, label: input.label, area: input.area, qrTokenHash: hash, now: new Date() }),
     audit(db, actor, 'table.create', 'dining_table', id, { branchId, label: input.label, area: input.area }),
   ], input.label)
   return loadTable(db, branchId, id, qr)
@@ -223,7 +227,7 @@ export async function createTable(db: Db, actor: Actor, branchId: string, input:
 
 /** Renames the table or changes its area; its QR stays the same. */
 export async function updateTable(db: Db, actor: Actor, branchId: string, tableId: string, input: UpdateTableInput, qr: QrConfig): Promise<DiningTable> {
-  const current = await openTable(db, branchId, tableId, input.version)
+  const current = await openTable(db, actor.tenantId, branchId, tableId, input.version)
   const changes = {
     ...(input.label !== undefined && { label: input.label }),
     ...(input.area !== undefined && { area: input.area }),
@@ -241,7 +245,7 @@ export async function updateTable(db: Db, actor: Actor, branchId: string, tableI
 
 /** Archives the table: its QR stops working until it's restored. */
 export async function archiveTable(db: Db, actor: Actor, branchId: string, tableId: string, input: TableVersionInput, qr: QrConfig): Promise<DiningTable> {
-  const current = await openTable(db, branchId, tableId, input.version)
+  const current = await openTable(db, actor.tenantId, branchId, tableId, input.version)
   await runTableBatch(db, [
     repo.touchTableStatement(db, tableId, input.version, new Date(), { status: 'archived' }),
     requireOneChange(db),
@@ -252,8 +256,8 @@ export async function archiveTable(db: Db, actor: Actor, branchId: string, table
 
 /** Restores the table with the same QR, unless an active table took its label meanwhile. */
 export async function restoreTable(db: Db, actor: Actor, branchId: string, tableId: string, input: TableVersionInput, qr: QrConfig): Promise<DiningTable> {
-  await activeBranch(db, branchId)
-  const current = await openTable(db, branchId, tableId, input.version, true)
+  await activeBranch(db, actor.tenantId, branchId)
+  const current = await openTable(db, actor.tenantId, branchId, tableId, input.version, true)
   if (current.status !== 'archived') throw tableNotArchived()
   await runTableBatch(db, [
     repo.touchTableStatement(db, tableId, input.version, new Date(), { status: 'active' }, true),
@@ -265,7 +269,7 @@ export async function restoreTable(db: Db, actor: Actor, branchId: string, table
 
 /** Gives the table a new QR: the printed one stops working at once. */
 export async function rotateTableQr(db: Db, actor: Actor, branchId: string, tableId: string, input: TableVersionInput, qr: QrConfig): Promise<DiningTable> {
-  const current = await openTable(db, branchId, tableId, input.version)
+  const current = await openTable(db, actor.tenantId, branchId, tableId, input.version)
   const qrVersion = current.qrVersion + 1
   const now = new Date()
   await runTableBatch(db, [
@@ -278,11 +282,11 @@ export async function rotateTableQr(db: Db, actor: Actor, branchId: string, tabl
 }
 
 /**
- * The table a scanned QR names. Unknown tokens, archived tables and archived branches are all the
- * same 404, so a QR says nothing about why it doesn't work.
+ * The table a scanned QR names, in this tenant. Unknown tokens, another tenant's, archived tables and
+ * archived branches are all the same 404, so a QR says nothing about why it doesn't work.
  */
-export async function resolveTableToken(db: Db, token: string): Promise<PublicTable> {
+export async function resolveTableToken(db: Db, tenantId: string, token: string): Promise<PublicTable> {
   const row = isTokenShaped(token) ? await repo.findTableByTokenHash(db, await tokenHash(token)) : undefined
-  if (!row || row.tableStatus !== 'active' || row.branchStatus !== 'active') throw tableNotFound()
+  if (!row || row.tenantId !== tenantId || row.tableStatus !== 'active' || row.branchStatus !== 'active') throw tableNotFound()
   return { branch: { id: row.branchId, name: row.branchName }, table: { id: row.tableId, label: row.label } }
 }

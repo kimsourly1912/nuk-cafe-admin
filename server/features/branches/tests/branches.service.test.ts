@@ -2,14 +2,14 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
-import { organization } from '#server/db/tables'
+import { branches } from '#server/db/tables'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import { archiveTable, createTable, getBranchSettings, getPublicBranch, listPublicBranches, listTables, resolveTableToken, restoreTable, rotateTableQr, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
 import { diningTables } from '#server/features/branches/branches.schema'
 import type { QrConfig } from '#server/features/branches/branches.qr'
 import { qrConfigFrom, tableToken, tokenHash } from '#server/features/branches/branches.qr'
-import { createTestDb } from '#server/tests/support/db'
+import { createTestDb, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -17,12 +17,12 @@ import { newId } from '#server/utils/ids'
 
 let db: Db
 let branch: string
-const actor: Actor = { userId: 'admin-1', role: 'admin', requestId: 'req-1' }
+const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', requestId: 'req-1' }
 const qr: QrConfig = { secret: 'test-secret', baseUrl: 'https://cafe.example' }
 
 async function addBranch(timezone = 'Asia/Phnom_Penh') {
   const id = newId()
-  await db.insert(organization).values({ id, name: `Branch ${id}`, slug: id, timezone, status: 'active', createdAt: new Date() })
+  await insertBranch(db, { id, name: `Branch ${id}`, timezone, status: 'active' })
   return id
 }
 
@@ -40,7 +40,7 @@ const auditOf = async (targetId: string) => db.select().from(auditEvents).where(
 
 describe('branch settings', () => {
   it('reads the branch at version 1 with no hours: closed', async () => {
-    const settings = await getBranchSettings(db, branch, MONDAY_10AM)
+    const settings = await getBranchSettings(db, TEST_TENANT, branch, MONDAY_10AM)
     expect(settings).toMatchObject({ id: branch, timezone: 'Asia/Phnom_Penh', address: null, phone: null, status: 'active', hours: [], openNow: false, today: 1, version: 1 })
   })
 
@@ -54,9 +54,9 @@ describe('branch settings', () => {
     })
     expect(saved).toMatchObject({ name: 'NUK Cafe Phnom Penh', address: '#123 St. 63', phone: '+85512345678', version: 2 })
     expect(saved.hours).toEqual([...weekdays(480, 1140), w(6, 480, 1140)])
-    expect((await getBranchSettings(db, branch, MONDAY_10AM)).openNow).toBe(true)
+    expect((await getBranchSettings(db, TEST_TENANT, branch, MONDAY_10AM)).openNow).toBe(true)
     // Sunday 10:00 there: closed.
-    expect(await getBranchSettings(db, branch, new Date('2026-09-27T03:00:00Z'))).toMatchObject({ openNow: false, today: 7 })
+    expect(await getBranchSettings(db, TEST_TENANT, branch, new Date('2026-09-27T03:00:00Z'))).toMatchObject({ openNow: false, today: 7 })
 
     const [row] = await auditOf(branch)
     expect(row).toMatchObject({ action: 'branch.update', actorId: 'admin-1', requestId: 'req-1' })
@@ -74,8 +74,8 @@ describe('branch settings', () => {
   it('opens past midnight on the day a window starts', async () => {
     await updateBranchSettings(db, actor, branch, { version: 1, hours: [w(5, 1080, 120)] })
     // Saturday 01:00 in Phnom Penh: Friday's 18:00–02:00.
-    expect((await getBranchSettings(db, branch, new Date('2026-10-02T18:00:00Z'))).openNow).toBe(true)
-    expect((await getBranchSettings(db, branch, new Date('2026-10-02T19:30:00Z'))).openNow).toBe(false)
+    expect((await getBranchSettings(db, TEST_TENANT, branch, new Date('2026-10-02T18:00:00Z'))).openNow).toBe(true)
+    expect((await getBranchSettings(db, TEST_TENANT, branch, new Date('2026-10-02T19:30:00Z'))).openNow).toBe(false)
   })
 
   it('follows a new timezone at once', async () => {
@@ -83,21 +83,21 @@ describe('branch settings', () => {
     // 03:00 UTC Monday is 10:00 in Phnom Penh (open), 23:00 Sunday in New York (closed).
     const saved = await updateBranchSettings(db, actor, branch, { version: 2, timezone: 'America/New_York' })
     expect(saved.timezone).toBe('America/New_York')
-    expect((await getBranchSettings(db, branch, MONDAY_10AM)).openNow).toBe(false)
+    expect((await getBranchSettings(db, TEST_TENANT, branch, MONDAY_10AM)).openNow).toBe(false)
   })
 
   it('refuses an unknown timezone and overlapping windows on their fields', async () => {
     await expectApiError(() => updateBranchSettings(db, actor, branch, { version: 1, timezone: 'Mars/Base' }), 422, 'UNKNOWN_TIMEZONE', ['timezone'])
     await expectApiError(() => updateBranchSettings(db, actor, branch, { version: 1, hours: [w(1, 1320, 120), w(2, 60, 180)] }), 422, 'BRANCH_HOURS', ['hours.1'])
-    expect((await getBranchSettings(db, branch)).version).toBe(1)
+    expect((await getBranchSettings(db, TEST_TENANT, branch)).version).toBe(1)
   })
 
   it('refuses a stale version, and one that goes stale between the check and the write', async () => {
     await updateBranchSettings(db, actor, branch, { version: 1, name: 'First' })
     await expectApiError(() => updateBranchSettings(db, actor, branch, { version: 1, name: 'Second' }), 409, 'VERSION_CONFLICT')
-    const racing = interleaved(db, () => db.update(organization).set({ version: 3 }).where(eq(organization.id, branch)))
+    const racing = interleaved(db, () => db.update(branches).set({ version: 3 }).where(eq(branches.id, branch)))
     await expectApiError(() => updateBranchSettings(racing, actor, branch, { version: 2, name: 'Third', hours: weekdays(0, 60) }), 409, 'VERSION_CONFLICT')
-    const settings = await getBranchSettings(db, branch)
+    const settings = await getBranchSettings(db, TEST_TENANT, branch)
     expect(settings).toMatchObject({ name: 'First', hours: [] })
   })
 
@@ -107,7 +107,7 @@ describe('branch settings', () => {
   })
 
   it('404s an unknown branch', async () => {
-    await expectApiError(() => getBranchSettings(db, newId()), 404, 'NOT_FOUND')
+    await expectApiError(() => getBranchSettings(db, TEST_TENANT, newId()), 404, 'NOT_FOUND')
   })
 })
 
@@ -144,18 +144,18 @@ describe('dining tables', () => {
 
   it('shows the same QR again, and resolves it to the branch and table', async () => {
     const table = await createTable(db, actor, branch, { label: 'Table 1', area: null }, qr)
-    const [listed] = await listTables(db, branch, { status: 'active' }, qr)
+    const [listed] = await listTables(db, TEST_TENANT, branch, { status: 'active' }, qr)
     expect(listed!.qrUrl).toBe(table.qrUrl)
-    expect(await resolveTableToken(db, tokenOf(table.qrUrl))).toEqual({ branch: { id: branch, name: `Branch ${branch}` }, table: { id: table.id, label: 'Table 1' } })
+    expect(await resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl))).toEqual({ branch: { id: branch, name: `Branch ${branch}` }, table: { id: table.id, label: 'Table 1' } })
   })
 
   it('lists by label as people read them, per status', async () => {
     for (const label of ['Table 10', 'Table 2', 'patio 1']) await createTable(db, actor, branch, { label, area: null }, qr)
     const old = await createTable(db, actor, branch, { label: 'Old', area: null }, qr)
     await archiveTable(db, actor, branch, old.id, { version: 1 }, qr)
-    expect((await listTables(db, branch, { status: 'active' }, qr)).map(t => t.label)).toEqual(['patio 1', 'Table 2', 'Table 10'])
-    expect((await listTables(db, branch, { status: 'archived' }, qr)).map(t => [t.label, t.qrUrl])).toEqual([['Old', null]])
-    expect(await listTables(db, branch, { status: 'all' }, qr)).toHaveLength(4)
+    expect((await listTables(db, TEST_TENANT, branch, { status: 'active' }, qr)).map(t => t.label)).toEqual(['patio 1', 'Table 2', 'Table 10'])
+    expect((await listTables(db, TEST_TENANT, branch, { status: 'archived' }, qr)).map(t => [t.label, t.qrUrl])).toEqual([['Old', null]])
+    expect(await listTables(db, TEST_TENANT, branch, { status: 'all' }, qr)).toHaveLength(4)
   })
 
   it('refuses a label an active table in the branch has (any case); other branches and archived tables don\'t count', async () => {
@@ -179,15 +179,15 @@ describe('dining tables', () => {
     const table = await createTable(db, actor, branch, { label: 'T1', area: null }, qr)
     const racing = interleaved(db, () => db.update(diningTables).set({ version: 2 }).where(eq(diningTables.id, table.id)))
     await expectApiError(() => rotateTableQr(racing, actor, branch, table.id, { version: 1 }, qr), 409, 'VERSION_CONFLICT')
-    expect(await resolveTableToken(db, tokenOf(table.qrUrl))).toMatchObject({ table: { id: table.id } })
+    expect(await resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl))).toMatchObject({ table: { id: table.id } })
   })
 
   it('rotating makes a new QR and the printed one stops working', async () => {
     const table = await createTable(db, actor, branch, { label: 'T1', area: null }, qr)
     const rotated = await rotateTableQr(db, actor, branch, table.id, { version: 1 }, qr)
     expect(rotated.qrUrl).not.toBe(table.qrUrl)
-    await expectApiError(() => resolveTableToken(db, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
-    expect(await resolveTableToken(db, tokenOf(rotated.qrUrl))).toMatchObject({ table: { id: table.id } })
+    await expectApiError(() => resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
+    expect(await resolveTableToken(db, TEST_TENANT, tokenOf(rotated.qrUrl))).toMatchObject({ table: { id: table.id } })
     const audits = await auditOf(table.id)
     expect(audits.map(a => a.action)).toContain('branch.table.rotate_qr')
     expect(JSON.stringify(audits)).not.toContain(tokenOf(rotated.qrUrl))
@@ -197,7 +197,7 @@ describe('dining tables', () => {
     const table = await createTable(db, actor, branch, { label: 'T1', area: null }, qr)
     const archived = await archiveTable(db, actor, branch, table.id, { version: 1 }, qr)
     expect(archived).toMatchObject({ status: 'archived', qrUrl: null })
-    await expectApiError(() => resolveTableToken(db, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
+    await expectApiError(() => resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
     await expectApiError(() => updateTable(db, actor, branch, table.id, { version: 2, label: 'X' }, qr), 409, 'INVALID_STATE')
     await expectApiError(() => rotateTableQr(db, actor, branch, table.id, { version: 2 }, qr), 409, 'INVALID_STATE')
     const restored = await restoreTable(db, actor, branch, table.id, { version: 2 }, qr)
@@ -207,17 +207,17 @@ describe('dining tables', () => {
 
   it('a table in an archived branch doesn\'t resolve, and the branch\'s tables can\'t be added to', async () => {
     const table = await createTable(db, actor, branch, { label: 'T1', area: null }, qr)
-    await db.update(organization).set({ status: 'archived' }).where(eq(organization.id, branch))
-    await expectApiError(() => resolveTableToken(db, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
+    await db.update(branches).set({ status: 'archived' }).where(eq(branches.id, branch))
+    await expectApiError(() => resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
     await expectApiError(() => createTable(db, actor, branch, { label: 'T2', area: null }, qr), 409, 'INVALID_STATE')
   })
 
   it('an unknown or malformed token, another secret\'s token, and another branch\'s table are 404', async () => {
     const table = await createTable(db, actor, branch, { label: 'T1', area: null }, qr)
-    await expectApiError(() => resolveTableToken(db, 'x'.repeat(22)), 404, 'NOT_FOUND')
-    await expectApiError(() => resolveTableToken(db, '../../etc'), 404, 'NOT_FOUND')
+    await expectApiError(() => resolveTableToken(db, TEST_TENANT, 'x'.repeat(22)), 404, 'NOT_FOUND')
+    await expectApiError(() => resolveTableToken(db, TEST_TENANT, '../../etc'), 404, 'NOT_FOUND')
     const otherSecretToken = await tableToken('another-secret', table.id, 1)
-    await expectApiError(() => resolveTableToken(db, otherSecretToken), 404, 'NOT_FOUND')
+    await expectApiError(() => resolveTableToken(db, TEST_TENANT, otherSecretToken), 404, 'NOT_FOUND')
     const otherBranch = await addBranch()
     await expectApiError(() => updateTable(db, actor, otherBranch, table.id, { version: 1, label: 'X' }, qr), 404, 'NOT_FOUND')
   })
@@ -225,11 +225,12 @@ describe('dining tables', () => {
   it(`allows at most ${MAX_BRANCH_TABLES} tables per branch, archived ones included`, async () => {
     const rows = await Promise.all(Array.from({ length: MAX_BRANCH_TABLES }, async (_, i) => ({
       id: newId(),
+      tenantId: TEST_TENANT,
       branchId: branch,
       label: `T${i}`,
       qrTokenHash: await tokenHash(`token-${i}`),
     })))
-    // 10 rows a statement: 70 parameters, under D1's 100.
+    // 10 rows a statement: 80 parameters, under D1's 100.
     for (let i = 0; i < rows.length; i += 10) await db.insert(diningTables).values(rows.slice(i, i + 10))
     await expectApiError(() => createTable(db, actor, branch, { label: 'One more', area: null }, qr), 409, 'TABLE_LIMIT')
   })
@@ -246,7 +247,7 @@ describe('branches for customers (D93)', () => {
 
   it('is open inside its hours, on its own clock, with no next opening', async () => {
     await openHours()
-    expect(await getPublicBranch(db, branch, MONDAY_10AM)).toEqual({
+    expect(await getPublicBranch(db, TEST_TENANT, branch, MONDAY_10AM)).toEqual({
       id: branch,
       name: expect.any(String),
       address: '#123 St. 63',
@@ -258,37 +259,74 @@ describe('branches for customers (D93)', () => {
       nextOpening: null,
     })
     // Saturday 23:00 there: open until 02:00, past midnight.
-    expect((await getPublicBranch(db, branch, at('2026-10-03T16:00:00Z'))).closesInMinutes).toBe(180)
+    expect((await getPublicBranch(db, TEST_TENANT, branch, at('2026-10-03T16:00:00Z'))).closesInMinutes).toBe(180)
     // Closed: nothing to count down.
-    expect((await getPublicBranch(db, branch, at('2026-09-28T13:00:00Z'))).closesInMinutes).toBeNull()
+    expect((await getPublicBranch(db, TEST_TENANT, branch, at('2026-09-28T13:00:00Z'))).closesInMinutes).toBeNull()
   })
 
   it('says when a closed branch opens: later today, tomorrow, or a later weekday', async () => {
     await openHours()
     // Monday 06:00 there: later today at 07:00.
-    expect((await getPublicBranch(db, branch, at('2026-09-27T23:00:00Z'))).nextOpening).toEqual({ inDays: 0, weekday: 1, startMinute: 420 })
+    expect((await getPublicBranch(db, TEST_TENANT, branch, at('2026-09-27T23:00:00Z'))).nextOpening).toEqual({ inDays: 0, weekday: 1, startMinute: 420 })
     // Monday 20:00 there: Tuesday at 07:00.
-    expect((await getPublicBranch(db, branch, at('2026-09-28T13:00:00Z'))).nextOpening).toEqual({ inDays: 1, weekday: 2, startMinute: 420 })
+    expect((await getPublicBranch(db, TEST_TENANT, branch, at('2026-09-28T13:00:00Z'))).nextOpening).toEqual({ inDays: 1, weekday: 2, startMinute: 420 })
     // Sunday 03:00 there (Saturday's window ended at 02:00): Monday, tomorrow.
-    expect((await getPublicBranch(db, branch, at('2026-09-26T20:00:00Z'))).nextOpening).toEqual({ inDays: 1, weekday: 1, startMinute: 420 })
+    expect((await getPublicBranch(db, TEST_TENANT, branch, at('2026-09-26T20:00:00Z'))).nextOpening).toEqual({ inDays: 1, weekday: 1, startMinute: 420 })
     // Sunday 01:00 there: still in Saturday's overnight window.
-    expect((await getPublicBranch(db, branch, at('2026-09-26T18:00:00Z'))).openNow).toBe(true)
+    expect((await getPublicBranch(db, TEST_TENANT, branch, at('2026-09-26T18:00:00Z'))).openNow).toBe(true)
   })
 
   it('opens a week later when its only window just ended, and never without hours', async () => {
     await updateBranchSettings(db, actor, branch, { version: 1, hours: [w(1, 420, 600)] })
     // Monday 10:00 exactly: the window ended (end excluded); it opens next Monday.
-    expect((await getPublicBranch(db, branch, MONDAY_10AM)).nextOpening).toEqual({ inDays: 7, weekday: 1, startMinute: 420 })
+    expect((await getPublicBranch(db, TEST_TENANT, branch, MONDAY_10AM)).nextOpening).toEqual({ inDays: 7, weekday: 1, startMinute: 420 })
     const other = await addBranch()
-    expect(await getPublicBranch(db, other, MONDAY_10AM)).toMatchObject({ openNow: false, nextOpening: null })
+    expect(await getPublicBranch(db, TEST_TENANT, other, MONDAY_10AM)).toMatchObject({ openNow: false, nextOpening: null })
   })
 
   it('lists active branches by name; an archived or unknown one is 404', async () => {
     const archived = await addBranch()
-    await db.update(organization).set({ name: 'Archived', status: 'archived' }).where(eq(organization.id, archived))
-    const listed = await listPublicBranches(db, MONDAY_10AM)
+    await db.update(branches).set({ name: 'Archived', status: 'archived' }).where(eq(branches.id, archived))
+    const listed = await listPublicBranches(db, TEST_TENANT, MONDAY_10AM)
     expect(listed.map(b => b.id)).toEqual([branch])
-    await expectApiError(() => getPublicBranch(db, archived), 404, 'NOT_FOUND')
-    await expectApiError(() => getPublicBranch(db, newId()), 404, 'NOT_FOUND')
+    await expectApiError(() => getPublicBranch(db, TEST_TENANT, archived), 404, 'NOT_FOUND')
+    await expectApiError(() => getPublicBranch(db, TEST_TENANT, newId()), 404, 'NOT_FOUND')
+  })
+})
+
+// Another cafe's branches don't exist from here (D134): every read and write names the tenant.
+describe('tenants', () => {
+  const OTHER = 'tenant-2'
+  const theirOwner: Actor = { userId: 'their-owner', tenantId: OTHER, role: 'owner' }
+  let theirs: string
+
+  beforeEach(async () => {
+    theirs = newId()
+    await insertBranch(db, { id: theirs, name: 'Their branch', timezone: 'Asia/Phnom_Penh', tenantId: OTHER })
+  })
+
+  it('lists and reads only the tenant\'s own branches', async () => {
+    expect((await listPublicBranches(db, TEST_TENANT)).map(b => b.id)).toEqual([branch])
+    expect((await listPublicBranches(db, OTHER)).map(b => b.id)).toEqual([theirs])
+    await expectApiError(() => getBranchSettings(db, TEST_TENANT, theirs), 404, 'NOT_FOUND')
+    await expectApiError(() => getPublicBranch(db, TEST_TENANT, theirs), 404, 'NOT_FOUND')
+    await expectApiError(() => listTables(db, TEST_TENANT, theirs, { status: 'active' }, qr), 404, 'NOT_FOUND')
+  })
+
+  it('refuses every write to another tenant\'s branch and its tables, changing nothing', async () => {
+    const table = await createTable(db, theirOwner, theirs, { label: 'T1', area: null }, qr)
+    await expectApiError(() => updateBranchSettings(db, actor, theirs, { version: 1, name: 'Mine now' }), 404, 'NOT_FOUND')
+    await expectApiError(() => createTable(db, actor, theirs, { label: 'T2', area: null }, qr), 404, 'NOT_FOUND')
+    await expectApiError(() => updateTable(db, actor, theirs, table.id, { version: table.version, label: 'X' }, qr), 404, 'NOT_FOUND')
+    await expectApiError(() => archiveTable(db, actor, theirs, table.id, { version: table.version }, qr), 404, 'NOT_FOUND')
+    await expectApiError(() => rotateTableQr(db, actor, theirs, table.id, { version: table.version }, qr), 404, 'NOT_FOUND')
+    expect((await getBranchSettings(db, OTHER, theirs)).name).toBe('Their branch')
+    expect((await listTables(db, OTHER, theirs, { status: 'all' }, qr)).map(t => [t.label, t.version, t.status])).toEqual([['T1', 1, 'active']])
+  })
+
+  it('doesn\'t resolve another tenant\'s table QR', async () => {
+    const table = await createTable(db, theirOwner, theirs, { label: 'T1', area: null }, qr)
+    await expectApiError(() => resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
+    expect((await resolveTableToken(db, OTHER, tokenOf(table.qrUrl))).table.id).toBe(table.id)
   })
 })

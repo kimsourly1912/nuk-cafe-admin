@@ -13,7 +13,7 @@ import type { AssistantSettings } from '#server/features/assistant/assistant.set
 import { HELP_PAGES, helpGuide } from '#server/features/assistant/help'
 import { ASSISTANT_PAGES, pageAt } from '#server/features/assistant/pages'
 import { assistantSettingsFrom } from '#server/features/assistant/assistant.settings'
-import { createTestDb, createUser } from '#server/tests/support/db'
+import { createTestDb, createUser, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 
@@ -37,8 +37,8 @@ type Prompt = Parameters<DoStream>[0]['prompt']
 
 beforeEach(async () => {
   db = await createTestDb()
-  sokha = { userId: (await createUser(db)).id, role: 'admin' }
-  dara = { userId: (await createUser(db)).id, role: 'admin' }
+  sokha = { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'owner' }
+  dara = { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'owner' }
 })
 
 describe('settings (D108)', () => {

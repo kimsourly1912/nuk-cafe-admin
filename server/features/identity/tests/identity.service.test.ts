@@ -1,197 +1,243 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { member, organization } from '#server/db/tables'
+import { branches, member, organization } from '#server/db/tables'
+import { eq } from 'drizzle-orm'
 import { newId } from '#server/utils/ids'
-import { adminSession, authorizeBranch, counterSession, authorizeCustomer, authorizePlatform, authorizeSignedIn, workspacesOf } from '#server/features/identity/identity.service'
+import { adminSession, authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, counterSession, currentTenant, workspacesOf } from '#server/features/identity/identity.service'
 import type { SessionUser } from '#server/features/identity/identity.types'
-import { createTestDb, createUser } from '#server/tests/support/db'
+import { addBranchStaff, createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 
-const customer: SessionUser = { id: newId(), emailVerified: true, role: 'customer' }
-const admin: SessionUser = { id: newId(), emailVerified: true, role: 'admin' }
+// Access decisions with tenants (D134): a membership in one tenant gives nothing in another, and
+// another tenant's branches don't exist from here.
+
+const OTHER = 'tenant-2'
+let db: Db
+
+beforeEach(async () => {
+  db = await createTestDb()
+  await ensureTenant(db, TEST_TENANT)
+  await ensureTenant(db, OTHER)
+})
+
+async function person(tenantRole: 'owner' | 'member' | null = null, tenantId = TEST_TENANT): Promise<SessionUser> {
+  const row = await createUser(db)
+  if (tenantRole) await db.insert(member).values({ id: newId(), organizationId: tenantId, userId: row.id, role: tenantRole, createdAt: new Date() })
+  return { id: row.id, emailVerified: true, role: 'customer', email: row.email, name: 'Test User' }
+}
+
+async function addBranch(status = 'active', tenantId = TEST_TENANT) {
+  const id = newId()
+  await insertBranch(db, { id, name: `Branch ${id}`, timezone: 'Asia/Phnom_Penh', status, tenantId })
+  return id
+}
+
+async function staffAt(branchId: string, role: string, tenantId = TEST_TENANT): Promise<SessionUser> {
+  const user = await person()
+  await addBranchStaff(db, branchId, user.id, role, tenantId)
+  return user
+}
+
+describe('the tenant a request acts in (until addresses name it, T1.5)', () => {
+  it('is the oldest tenant; none, or a suspended one, is 404', async () => {
+    expect((await currentTenant(db)).id).toBe(TEST_TENANT)
+    await db.update(organization).set({ status: 'suspended' }).where(eq(organization.id, TEST_TENANT))
+    await expectApiError(async () => currentTenant(db), 404, 'NOT_FOUND')
+    await expectApiError(async () => currentTenant(await createTestDb()), 404, 'NOT_FOUND')
+  })
+})
 
 describe('signed in', () => {
-  it('refuses no session with 401', async () => {
-    await expectApiError(() => authorizeSignedIn(null), 401, 'UNAUTHENTICATED')
-    await expectApiError(() => authorizeSignedIn(undefined), 401, 'UNAUTHENTICATED')
+  it('refuses no session or a banned user with 401, a temporary password with 403 on every surface', async () => {
+    const customer = await person()
+    await expectApiError(async () => authorizeSignedIn(db, null, TEST_TENANT), 401, 'UNAUTHENTICATED')
+    await expectApiError(async () => authorizeSignedIn(db, { ...customer, banned: true }, TEST_TENANT), 401, 'UNAUTHENTICATED')
+    const temporary = { ...customer, mustChangePassword: true }
+    await expectApiError(async () => authorizeSignedIn(db, temporary, TEST_TENANT), 403, 'PASSWORD_CHANGE_REQUIRED')
+    await expectApiError(async () => authorizeCustomer(db, temporary, TEST_TENANT), 403, 'PASSWORD_CHANGE_REQUIRED')
+    await expectApiError(async () => authorizeTenant(db, { ...(await person('owner')), mustChangePassword: true }, TEST_TENANT, { menu: ['read'] }), 403, 'PASSWORD_CHANGE_REQUIRED')
+    await expectApiError(async () => authorizePlatform({ ...customer, role: 'superadmin', mustChangePassword: true }, { tenant: ['read'] }), 403, 'PASSWORD_CHANGE_REQUIRED')
   })
 
-  it('refuses a banned user with 401', async () => {
-    await expectApiError(() => authorizeSignedIn({ ...customer, banned: true }), 401, 'UNAUTHENTICATED')
-  })
-
-  it('refuses a temporary password with 403 on every surface', async () => {
-    const staff = { ...customer, mustChangePassword: true }
-    await expectApiError(() => authorizeSignedIn(staff), 403, 'PASSWORD_CHANGE_REQUIRED')
-    await expectApiError(() => authorizeCustomer(staff), 403, 'PASSWORD_CHANGE_REQUIRED')
-    await expectApiError(() => authorizePlatform({ ...admin, mustChangePassword: true }, { menu: ['read'] }), 403, 'PASSWORD_CHANGE_REQUIRED')
-  })
-
-  it('treats a missing or unknown role as customer', async () => {
-    expect(authorizeSignedIn({ ...customer, role: null }).role).toBe('customer')
-    expect(authorizeSignedIn({ ...customer, role: 'owner' }).role).toBe('customer')
-    expect(authorizeSignedIn({ ...customer, role: 'customer,admin' }).role).toBe('admin')
+  it('acts in the tenant with their role there, or as a customer', async () => {
+    const owner = await person('owner')
+    expect(await authorizeSignedIn(db, owner, TEST_TENANT)).toEqual({ userId: owner.id, tenantId: TEST_TENANT, role: 'owner' })
+    // Owning another cafe changes nothing here; nor does a platform role.
+    expect((await authorizeSignedIn(db, owner, OTHER)).role).toBe('customer')
+    expect((await authorizeSignedIn(db, { ...owner, role: 'superadmin' }, OTHER)).role).toBe('customer')
   })
 })
 
 describe('shop', () => {
   it('needs a verified email', async () => {
-    await expectApiError(() => authorizeCustomer({ ...customer, emailVerified: false }), 403, 'EMAIL_NOT_VERIFIED')
-    expect(authorizeCustomer(customer)).toEqual({ userId: customer.id, role: 'customer' })
+    const customer = await person()
+    await expectApiError(async () => authorizeCustomer(db, { ...customer, emailVerified: false }, TEST_TENANT), 403, 'EMAIL_NOT_VERIFIED')
+    expect(await authorizeCustomer(db, customer, TEST_TENANT)).toEqual({ userId: customer.id, tenantId: TEST_TENANT, role: 'customer' })
   })
 })
 
 describe('admin surface', () => {
-  it('grants what the platform role grants', async () => {
-    expect(authorizePlatform(admin, { menu: ['write'], staff: ['create'] })).toEqual({ userId: admin.id, role: 'admin' })
+  it('grants an owner what the owner role grants, in their own tenant only', async () => {
+    const owner = await person('owner')
+    expect(await authorizeTenant(db, owner, TEST_TENANT, { menu: ['write'], staff: ['create'] })).toEqual({ userId: owner.id, tenantId: TEST_TENANT, role: 'owner' })
+    await expectApiError(async () => authorizeTenant(db, owner, OTHER, { menu: ['read'] }), 403, 'FORBIDDEN')
   })
 
-  it('refuses customers with 403', async () => {
-    await expectApiError(() => authorizePlatform(customer, { menu: ['read'] }), 403, 'FORBIDDEN')
-  })
-
-  it('refuses an action no role holds, and a request with any action not granted', async () => {
-    await expectApiError(() => authorizePlatform(admin, { user: ['impersonate'] }), 403, 'FORBIDDEN')
-    await expectApiError(() => authorizePlatform(admin, { menu: ['write'], user: ['impersonate'] }), 403, 'FORBIDDEN')
+  it('refuses members, customers and super admins with 403, and an action no role holds', async () => {
+    await expectApiError(async () => authorizeTenant(db, await person('member'), TEST_TENANT, { menu: ['read'] }), 403, 'FORBIDDEN')
+    await expectApiError(async () => authorizeTenant(db, await person(), TEST_TENANT, { menu: ['read'] }), 403, 'FORBIDDEN')
+    await expectApiError(async () => authorizeTenant(db, { ...(await person()), role: 'superadmin' }, TEST_TENANT, { menu: ['read'] }), 403, 'FORBIDDEN')
+    const owner = await person('owner')
+    await expectApiError(async () => authorizeTenant(db, owner, TEST_TENANT, { menu: ['write'], member: ['create'] }), 403, 'FORBIDDEN')
   })
 
   it('refuses no session with 401 before looking at permissions', async () => {
-    await expectApiError(() => authorizePlatform(null, { menu: ['read'] }), 401, 'UNAUTHENTICATED')
+    await expectApiError(async () => authorizeTenant(db, null, TEST_TENANT, { menu: ['read'] }), 401, 'UNAUTHENTICATED')
+  })
+})
+
+describe('platform surface (T2)', () => {
+  it('grants a super admin the platform\'s actions; refuses everyone else', async () => {
+    const superadmin = { ...(await person()), role: 'superadmin' }
+    expect(authorizePlatform(superadmin, { tenant: ['create'] })).toEqual({ userId: superadmin.id })
+    await expectApiError(async () => authorizePlatform(await person('owner'), { tenant: ['read'] }), 403, 'FORBIDDEN')
+    await expectApiError(async () => authorizePlatform(null, { tenant: ['read'] }), 401, 'UNAUTHENTICATED')
   })
 })
 
 describe('counter surface', () => {
-  let db: Db
   let branchId: string
   let otherBranchId: string
 
-  async function addBranch(status = 'active') {
-    const id = newId()
-    await db.insert(organization).values({ id, name: `Branch ${id}`, slug: id, timezone: 'Asia/Phnom_Penh', status, createdAt: new Date() })
-    return id
-  }
-
-  async function signedInMember(role: string | null, inBranch = branchId): Promise<SessionUser> {
-    const row = await createUser(db)
-    if (role) await db.insert(member).values({ id: newId(), organizationId: inBranch, userId: row.id, role, createdAt: new Date() })
-    return { id: row.id, emailVerified: true, role: 'customer' }
-  }
-
   beforeEach(async () => {
-    db = await createTestDb()
     branchId = await addBranch()
     otherBranchId = await addBranch()
   })
 
-  it('grants a member what their branch role grants, and says who acts', async () => {
-    const staff = await signedInMember('staff')
-    await expect(authorizeBranch(db, staff, branchId, { order: ['cancel'], payment: ['collect'] }))
-      .resolves.toEqual({ userId: staff.id, role: 'customer', branchId, branchRole: 'staff' })
-    const manager = await signedInMember('manager')
-    await expect(authorizeBranch(db, manager, branchId, { voucher: ['issue'] })).resolves.toMatchObject({ branchRole: 'manager' })
+  it('grants staff what their branch role grants, and says who acts', async () => {
+    const staff = await staffAt(branchId, 'staff')
+    await expect(authorizeBranch(db, staff, TEST_TENANT, branchId, { order: ['cancel'], payment: ['collect'] }))
+      .resolves.toEqual({ userId: staff.id, tenantId: TEST_TENANT, role: 'member', branchId, branchRole: 'staff' })
+    const manager = await staffAt(branchId, 'manager')
+    await expect(authorizeBranch(db, manager, TEST_TENANT, branchId, { voucher: ['issue'] })).resolves.toMatchObject({ branchRole: 'manager' })
   })
 
-  it('refuses a member without the permission with 403', async () => {
-    const staff = await signedInMember('staff')
-    await expectApiError(() => authorizeBranch(db, staff, branchId, { voucher: ['issue'] }), 403, 'FORBIDDEN')
-    const manager = await signedInMember('manager')
-    await expectApiError(() => authorizeBranch(db, manager, branchId, { payment: ['refund'] }), 403, 'FORBIDDEN')
+  it('refuses staff without the permission with 403', async () => {
+    await expectApiError(async () => authorizeBranch(db, await staffAt(branchId, 'staff'), TEST_TENANT, branchId, { voucher: ['issue'] }), 403, 'FORBIDDEN')
+    await expectApiError(async () => authorizeBranch(db, await staffAt(branchId, 'manager'), TEST_TENANT, branchId, { payment: ['refund'] }), 403, 'FORBIDDEN')
   })
 
-  it('answers 404 for another branch, as for one that doesn\'t exist', async () => {
-    const staff = await signedInMember('staff', otherBranchId)
-    await expectApiError(() => authorizeBranch(db, staff, branchId, { order: ['read'] }), 404, 'NOT_FOUND')
-    await expectApiError(() => authorizeBranch(db, staff, newId(), { order: ['read'] }), 404, 'NOT_FOUND')
+  it('answers 404 for another branch, an unknown one, and one the caller doesn\'t work at', async () => {
+    const staff = await staffAt(otherBranchId, 'staff')
+    await expectApiError(async () => authorizeBranch(db, staff, TEST_TENANT, branchId, { order: ['read'] }), 404, 'NOT_FOUND')
+    await expectApiError(async () => authorizeBranch(db, staff, TEST_TENANT, newId(), { order: ['read'] }), 404, 'NOT_FOUND')
+    await expectApiError(async () => authorizeBranch(db, await person(), TEST_TENANT, branchId, { order: ['read'] }), 404, 'NOT_FOUND')
   })
 
-  it('answers 404 for a signed-in customer with no membership', async () => {
-    const nobody = await signedInMember(null)
-    await expectApiError(() => authorizeBranch(db, nobody, branchId, { order: ['read'] }), 404, 'NOT_FOUND')
+  it('answers 404 for another tenant\'s branch, even to its own staff and owners (D134)', async () => {
+    const theirs = await addBranch('active', OTHER)
+    const theirStaff = await staffAt(theirs, 'manager', OTHER)
+    const theirOwner = await person('owner', OTHER)
+    // From this tenant, their branch doesn't exist…
+    await expectApiError(async () => authorizeBranch(db, theirStaff, TEST_TENANT, theirs, { order: ['read'] }), 404, 'NOT_FOUND')
+    await expectApiError(async () => authorizeBranch(db, theirOwner, TEST_TENANT, theirs, { order: ['read'] }), 404, 'NOT_FOUND')
+    // …and an owner here holds nothing there.
+    await expectApiError(async () => authorizeBranch(db, await person('owner'), OTHER, theirs, { order: ['read'] }), 404, 'NOT_FOUND')
+    await expect(authorizeBranch(db, theirStaff, OTHER, theirs, { order: ['read'] })).resolves.toMatchObject({ tenantId: OTHER, branchRole: 'manager' })
   })
 
-  it('answers 404 for a membership role we don\'t know', async () => {
-    const owner = await signedInMember('owner')
-    await expectApiError(() => authorizeBranch(db, owner, branchId, { order: ['read'] }), 404, 'NOT_FOUND')
-  })
-
-  it('answers 404 for an archived branch, even to its members and admins', async () => {
+  it('answers 404 for an archived branch, even to its staff and owners', async () => {
     const archived = await addBranch('archived')
-    const staff = await signedInMember('staff', archived)
-    await expectApiError(() => authorizeBranch(db, staff, archived, { order: ['read'] }), 404, 'NOT_FOUND')
-    await expectApiError(() => authorizeBranch(db, admin, archived, { order: ['read'] }), 404, 'NOT_FOUND')
+    await expectApiError(async () => authorizeBranch(db, await staffAt(archived, 'staff'), TEST_TENANT, archived, { order: ['read'] }), 404, 'NOT_FOUND')
+    await expectApiError(async () => authorizeBranch(db, await person('owner'), TEST_TENANT, archived, { order: ['read'] }), 404, 'NOT_FOUND')
   })
 
-  it('lets a platform admin act in any branch without being a member', async () => {
-    await expect(authorizeBranch(db, admin, branchId, { payment: ['refund'], voucher: ['issue'] }))
-      .resolves.toEqual({ userId: admin.id, role: 'admin', branchId })
+  it('lets an owner act in any branch of the tenant without being on its staff', async () => {
+    const owner = await person('owner')
+    await expect(authorizeBranch(db, owner, TEST_TENANT, branchId, { payment: ['refund'], voucher: ['issue'] }))
+      .resolves.toEqual({ userId: owner.id, tenantId: TEST_TENANT, role: 'owner', branchId })
   })
 
   it('checks the session before the branch', async () => {
-    await expectApiError(() => authorizeBranch(db, null, newId(), { order: ['read'] }), 401, 'UNAUTHENTICATED')
-    const staff = { ...(await signedInMember('staff')), mustChangePassword: true }
-    await expectApiError(() => authorizeBranch(db, staff, branchId, { order: ['read'] }), 403, 'PASSWORD_CHANGE_REQUIRED')
+    await expectApiError(async () => authorizeBranch(db, null, TEST_TENANT, newId(), { order: ['read'] }), 401, 'UNAUTHENTICATED')
+    const staff = { ...(await staffAt(branchId, 'staff')), mustChangePassword: true }
+    await expectApiError(async () => authorizeBranch(db, staff, TEST_TENANT, branchId, { order: ['read'] }), 403, 'PASSWORD_CHANGE_REQUIRED')
   })
 
   describe('the counter app\'s session (D102)', () => {
-    it('lists the active branches a member works at, with the role; not archived ones or unknown roles', async () => {
+    it('lists the tenant\'s active branches a person works at, with the role; not archived ones nor another tenant\'s', async () => {
       const archived = await addBranch('archived')
-      const staff = await signedInMember('staff')
-      await db.insert(member).values({ id: newId(), organizationId: otherBranchId, userId: staff.id, role: 'manager', createdAt: new Date() })
-      await db.insert(member).values({ id: newId(), organizationId: archived, userId: staff.id, role: 'staff', createdAt: new Date() })
-      const session = await counterSession(db, staff)
+      const theirs = await addBranch('active', OTHER)
+      const staff = await staffAt(branchId, 'staff')
+      await addBranchStaff(db, otherBranchId, staff.id, 'manager')
+      await addBranchStaff(db, archived, staff.id, 'staff')
+      await addBranchStaff(db, theirs, staff.id, 'manager', OTHER)
+      const session = await counterSession(db, staff, TEST_TENANT)
       expect(session.branches.map(b => [b.id, b.role]).sort()).toEqual([[branchId, 'staff'], [otherBranchId, 'manager']].sort())
+      expect((await counterSession(db, staff, OTHER)).branches.map(b => b.id)).toEqual([theirs])
     })
 
-    it('gives a platform admin every active branch (their own role where they are a member)', async () => {
-      const session = await counterSession(db, admin)
+    it('gives an owner every active branch of the tenant', async () => {
+      await addBranch('active', OTHER)
+      const session = await counterSession(db, await person('owner'), TEST_TENANT)
       expect(session.branches.map(b => b.role)).toEqual(['admin', 'admin'])
     })
 
-    it('answers on a temporary password; refuses no session (401) and a customer with no branch (403 NOT_STAFF)', async () => {
-      const staff = { ...(await signedInMember('staff')), mustChangePassword: true }
-      expect((await counterSession(db, staff)).mustChangePassword).toBe(true)
-      await expectApiError(() => counterSession(db, null), 401, 'UNAUTHENTICATED')
-      const customerOnly = await signedInMember(null)
-      const unknownRole = await signedInMember('owner')
-      await expectApiError(() => counterSession(db, customerOnly), 403, 'NOT_STAFF')
-      await expectApiError(() => counterSession(db, unknownRole), 403, 'NOT_STAFF')
+    it('answers on a temporary password; refuses no session (401) and someone with no branch here (403 NOT_STAFF)', async () => {
+      const staff = { ...(await staffAt(branchId, 'staff')), mustChangePassword: true }
+      expect((await counterSession(db, staff, TEST_TENANT)).mustChangePassword).toBe(true)
+      await expectApiError(async () => counterSession(db, null, TEST_TENANT), 401, 'UNAUTHENTICATED')
+      await expectApiError(async () => counterSession(db, await person(), TEST_TENANT), 403, 'NOT_STAFF')
+      await expectApiError(async () => counterSession(db, await person('member'), TEST_TENANT), 403, 'NOT_STAFF')
+      await expectApiError(async () => counterSession(db, await person('owner', OTHER), TEST_TENANT), 403, 'NOT_STAFF')
     })
   })
 
   describe('the workspaces in the account menu (D124)', () => {
-    it('offers an admin both, branch staff the counter, and a customer neither', async () => {
-      expect(await workspacesOf(db, admin)).toEqual(['admin', 'counter'])
-      expect(await workspacesOf(db, await signedInMember('manager'))).toEqual(['counter'])
-      expect(await workspacesOf(db, await signedInMember(null))).toEqual([])
+    it('offers an owner both, branch staff the counter, and a customer neither, in this tenant', async () => {
+      expect(await workspacesOf(db, await person('owner'), TEST_TENANT)).toEqual(['admin', 'counter'])
+      expect(await workspacesOf(db, await staffAt(branchId, 'manager'), TEST_TENANT)).toEqual(['counter'])
+      expect(await workspacesOf(db, await person(), TEST_TENANT)).toEqual([])
+      expect(await workspacesOf(db, await person('owner', OTHER), TEST_TENANT)).toEqual([])
     })
 
-    it('doesn\'t offer the counter for an archived branch or an unknown role', async () => {
+    it('doesn\'t offer the counter for an archived branch', async () => {
       const archived = await addBranch('archived')
-      const former = await signedInMember(null)
-      await db.insert(member).values({ id: newId(), organizationId: archived, userId: former.id, role: 'staff', createdAt: new Date() })
-      expect(await workspacesOf(db, former)).toEqual([])
-      expect(await workspacesOf(db, await signedInMember('owner'))).toEqual([])
+      expect(await workspacesOf(db, await staffAt(archived, 'staff'), TEST_TENANT)).toEqual([])
     })
   })
 })
 
 describe('admin app session', () => {
-  const owner: SessionUser = { ...admin, email: 'owner@example.com', name: 'Owner' }
-
-  it('describes an admin, with what they may do', () => {
-    const session = adminSession(owner)
-    expect(session).toMatchObject({ userId: owner.id, email: 'owner@example.com', name: 'Owner', role: 'admin', mustChangePassword: false })
+  it('describes an owner, with what they may do', async () => {
+    const owner = await person('owner')
+    const session = await adminSession(db, owner, TEST_TENANT)
+    expect(session).toMatchObject({ userId: owner.id, email: owner.email, role: 'admin', mustChangePassword: false })
     expect(session.permissions).toEqual(expect.arrayContaining(['menu:write', 'staff:create', 'branch:read']))
-    expect(session.permissions).not.toContain('user:impersonate')
+    expect(session.permissions).not.toContain('member:create')
   })
 
-  it('answers an admin on a temporary password, so the app can ask for a new one', () => {
-    expect(adminSession({ ...owner, mustChangePassword: true })).toMatchObject({ mustChangePassword: true })
+  it('answers an owner on a temporary password, so the app can ask for a new one', async () => {
+    expect(await adminSession(db, { ...(await person('owner')), mustChangePassword: true }, TEST_TENANT)).toMatchObject({ mustChangePassword: true })
   })
 
-  it('refuses everyone else: 401 without a session, 403 NOT_ADMIN for customers and branch staff', async () => {
-    await expectApiError(() => adminSession(null), 401, 'UNAUTHENTICATED')
-    await expectApiError(() => adminSession({ ...owner, banned: true }), 401, 'UNAUTHENTICATED')
-    await expectApiError(() => adminSession(customer), 403, 'NOT_ADMIN')
+  it('refuses everyone else: 401 without a session, 403 NOT_ADMIN for customers, branch staff and other tenants\' owners', async () => {
+    await expectApiError(async () => adminSession(db, null, TEST_TENANT), 401, 'UNAUTHENTICATED')
+    await expectApiError(async () => adminSession(db, { ...(await person('owner')), banned: true }, TEST_TENANT), 401, 'UNAUTHENTICATED')
+    await expectApiError(async () => adminSession(db, await person(), TEST_TENANT), 403, 'NOT_ADMIN')
+    await expectApiError(async () => adminSession(db, await person('member'), TEST_TENANT), 403, 'NOT_ADMIN')
+    await expectApiError(async () => adminSession(db, await person('owner', OTHER), TEST_TENANT), 403, 'NOT_ADMIN')
+    await expectApiError(async () => adminSession(db, { ...(await person()), role: 'superadmin' }, TEST_TENANT), 403, 'NOT_ADMIN')
+  })
+})
+
+// The branches table keeps a branch inside its tenant (D134): the composite key refuses staff,
+// hours or tables pointing at another tenant's branch.
+describe('the database keeps branches in their tenant', () => {
+  it('refuses a staff row naming another tenant for a branch', async () => {
+    const branchId = await addBranch()
+    const user = await person()
+    await expect(addBranchStaff(db, branchId, user.id, 'staff', OTHER)).rejects.toMatchObject({ cause: { message: expect.stringMatching(/FOREIGN KEY/) } })
+    expect(await db.select().from(branches).where(eq(branches.id, branchId))).toHaveLength(1)
   })
 })

@@ -63,8 +63,8 @@ export async function labels(db: Db, variationIds: string[]): Promise<Map<string
  * Marks these variations sold out at the branch. A row already sold out is left as it is (who
  * switched it off first stays on record); one switched back on before is switched off again.
  */
-export function markSoldOutStatements(db: Db, branchId: string, variationIds: string[], userId: string, now: Date): Statement[] {
-  const rows = variationIds.map(variationId => ({ branchId, variationId, soldOut: true, updatedBy: userId, updatedAt: now }))
+export function markSoldOutStatements(db: Db, tenantId: string, branchId: string, variationIds: string[], userId: string, now: Date): Statement[] {
+  const rows = variationIds.map(variationId => ({ tenantId, branchId, variationId, soldOut: true, updatedBy: userId, updatedAt: now }))
   return insertPieces(branchItemStates, rows).map(piece => db.insert(branchItemStates).values(piece)
     .onConflictDoUpdate({
       target: [branchItemStates.branchId, branchItemStates.variationId],

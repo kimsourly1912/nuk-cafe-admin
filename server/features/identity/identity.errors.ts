@@ -10,7 +10,7 @@ export const IdentityErrorCodes = {
   NOT_STAFF: 'NOT_STAFF',
 } as const
 
-/** Signed in, but not a platform admin: the admin app is admins only for now (D52). */
+/** Signed in, but not an owner of the cafe: the admin app is owners only for now (D52, D134). */
 export const notAdmin = () =>
   apiError(403, IdentityErrorCodes.NOT_ADMIN, 'This account doesn\'t have access to the admin app.')
 
@@ -25,3 +25,6 @@ export const branchNotFound = () => notFound('The branch')
 
 export const notStaff = () =>
   apiError(403, IdentityErrorCodes.NOT_STAFF, 'This account doesn\'t work at any branch, so it can\'t use the counter.')
+
+/** No tenant to act in (an empty database), or a suspended one (D134). */
+export const tenantNotFound = () => notFound('The cafe')

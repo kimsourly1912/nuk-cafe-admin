@@ -31,7 +31,7 @@ export async function expireUnpaidOrders(db: Db, now = new Date()): Promise<Expi
       await db.batch([
         repo.transitionStatement(db, { orderId: order.id, fromStatus: 'awaiting_payment', toStatus: 'cancelled', version: order.version, at: now }),
         requireOneChange(db),
-        repo.eventStatement(db, { orderId: order.id, toVersion: order.version + 1, actorId: null, fromStatus: 'awaiting_payment', toStatus: 'cancelled', note: EXPIRY_NOTE, at: now }),
+        repo.eventStatement(db, { tenantId: order.tenantId, orderId: order.id, toVersion: order.version + 1, actorId: null, fromStatus: 'awaiting_payment', toStatus: 'cancelled', note: EXPIRY_NOTE, at: now }),
         auditStatement(db, { userId: null }, { action: 'orders.order.expire', targetType: 'order', targetId: order.id, branchId: order.branchId, metadata: { from: 'awaiting_payment', to: 'cancelled' } }),
       ])
       report.expired++

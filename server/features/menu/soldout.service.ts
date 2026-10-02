@@ -47,7 +47,7 @@ export async function setSoldOut(db: Db, actor: BranchActor, input: SetSoldOutIn
 
   const now = new Date()
   const change = input.soldOut
-    ? repo.markSoldOutStatements(db, actor.branchId, input.variationIds, actor.userId, now)
+    ? repo.markSoldOutStatements(db, actor.tenantId, actor.branchId, input.variationIds, actor.userId, now)
     : repo.markOnSaleStatements(db, actor.branchId, input.variationIds, actor.userId, now)
   const audit = auditStatement(db, actor, {
     action: 'menu.sold_out.set',

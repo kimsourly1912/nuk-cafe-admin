@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, inArray, lte, or, sql } from 'drizzle-orm'
 import type { CancelReason, OrderStatus, OrderType, PaymentMethod, QuotedModifier, ReturnMethod } from '#shared/contracts/orders'
-import { organization, user } from '#server/db/tables'
+import { branches, user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
 import { insertPieces, readInChunks, requireAtMost } from '#server/utils/batch'
 import { counterPayments, exchangeRates, orderEvents, orderLines, orders } from './orders.schema'
@@ -9,6 +9,7 @@ import { counterPayments, exchangeRates, orderEvents, orderLines, orders } from 
 
 export interface NewOrder {
   id: string
+  tenantId: string
   branchId: string
   customerId: string
   businessDate: string
@@ -47,8 +48,8 @@ export function insertOrderStatement(db: Db, order: NewOrder): Statement {
 }
 
 /** The lines, in pieces small enough for D1's parameter limit (30 lines at most anyway). */
-export function insertLinesStatements(db: Db, orderId: string, lines: NewOrderLine[]): Statement[] {
-  return insertPieces(orderLines, lines).map(piece => db.insert(orderLines).values(piece.map(line => ({ ...line, orderId }))))
+export function insertLinesStatements(db: Db, tenantId: string, orderId: string, lines: NewOrderLine[]): Statement[] {
+  return insertPieces(orderLines, lines).map(piece => db.insert(orderLines).values(piece.map(line => ({ ...line, tenantId, orderId }))))
 }
 
 /**
@@ -61,6 +62,7 @@ export function unpaidAtMostStatement(db: Db, customerId: string, now: Date, max
 
 export interface OrderRow {
   id: string
+  tenantId: string
   branchId: string
   branchName: string
   customerId: string
@@ -83,8 +85,9 @@ export interface OrderRow {
 
 const orderColumns = {
   id: orders.id,
+  tenantId: orders.tenantId,
   branchId: orders.branchId,
-  branchName: organization.name,
+  branchName: branches.name,
   customerId: orders.customerId,
   customerName: user.name,
   pickupNumber: orders.pickupNumber,
@@ -104,7 +107,7 @@ const orderColumns = {
 }
 
 const selectOrders = (db: Db) => db.select(orderColumns).from(orders)
-  .innerJoin(organization, eq(organization.id, orders.branchId))
+  .innerJoin(branches, eq(branches.id, orders.branchId))
   .innerJoin(user, eq(user.id, orders.customerId))
 
 export async function findOrder(db: Db, id: string): Promise<OrderRow | undefined> {
@@ -231,11 +234,12 @@ export function transitionStatement(db: Db, change: OrderChange): Statement {
     .where(and(eq(orders.id, change.orderId), eq(orders.status, change.fromStatus), eq(orders.version, change.version)))
 }
 
-export function eventStatement(db: Db, event: { orderId: string, toVersion: number, actorId: string | null, fromStatus: OrderStatus | null, toStatus: OrderStatus, reason?: CancelReason | null, note?: string | null, at: Date }): Statement {
+export function eventStatement(db: Db, event: { tenantId: string, orderId: string, toVersion: number, actorId: string | null, fromStatus: OrderStatus | null, toStatus: OrderStatus, reason?: CancelReason | null, note?: string | null, at: Date }): Statement {
   return db.insert(orderEvents).values(event)
 }
 
 export interface NewPayment {
+  tenantId: string
   orderId: string
   branchId: string
   method: PaymentMethod
@@ -318,8 +322,8 @@ export function insertRateStatement(db: Db, rate: { perUsd: number, effectiveFro
 
 /** Unpaid orders still due, for tests and the expiry task (6.6). */
 /** Unpaid orders whose time to pay is over (the expiry task, 6.6), oldest first. */
-export async function findExpiredUnpaid(db: Db, now: Date, limit: number): Promise<{ id: string, version: number, branchId: string }[]> {
-  return db.select({ id: orders.id, version: orders.version, branchId: orders.branchId }).from(orders)
+export async function findExpiredUnpaid(db: Db, now: Date, limit: number): Promise<{ id: string, tenantId: string, version: number, branchId: string }[]> {
+  return db.select({ id: orders.id, tenantId: orders.tenantId, version: orders.version, branchId: orders.branchId }).from(orders)
     .where(and(eq(orders.status, 'awaiting_payment'), lte(orders.paymentDueAt, now)))
     .orderBy(asc(orders.paymentDueAt))
     .limit(limit)

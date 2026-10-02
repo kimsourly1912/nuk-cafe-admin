@@ -2,21 +2,22 @@ import { and, asc, count, desc, eq, gte, isNotNull, isNull, lt, sql } from 'driz
 import type { SQL } from 'drizzle-orm'
 import type { OrderStatus, OrderType, PaymentMethod } from '#shared/contracts/orders'
 import type { OrderHistoryQuery } from '#shared/contracts/reports'
-import { organization, user } from '#server/db/tables'
+import { branches, user } from '#server/db/tables'
 import type { Db } from '#server/utils/batch'
 import { counterPayments, orderEvents, orderLines, orders } from './orders.schema'
 import type { ItemTotalsRow } from './reports.rules'
 
 /** The reports' SQL (step 8.1, D110). Money is summed as integers in SQL, never as floats. */
 
-export async function findReportBranch(db: Db, id: string): Promise<{ id: string, name: string, timeZone: string } | undefined> {
-  const [row] = await db.select({ id: organization.id, name: organization.name, timeZone: organization.timezone }).from(organization).where(eq(organization.id, id))
+/** The tenant's branch (D134): another tenant's is `undefined`, like a missing one. */
+export async function findReportBranch(db: Db, tenantId: string, id: string): Promise<{ id: string, name: string, timeZone: string } | undefined> {
+  const [row] = await db.select({ id: branches.id, name: branches.name, timeZone: branches.timezone }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, id)))
   return row
 }
 
-/** Active branches by name. */
-export async function activeBranches(db: Db): Promise<{ id: string, name: string, timeZone: string }[]> {
-  return db.select({ id: organization.id, name: organization.name, timeZone: organization.timezone }).from(organization).where(eq(organization.status, 'active')).orderBy(asc(organization.name))
+/** The tenant's active branches by name. */
+export async function activeBranches(db: Db, tenantId: string): Promise<{ id: string, name: string, timeZone: string }[]> {
+  return db.select({ id: branches.id, name: branches.name, timeZone: branches.timezone }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.status, 'active'))).orderBy(asc(branches.name))
 }
 
 interface Range { branchId: string, start: Date, end: Date }

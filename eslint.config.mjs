@@ -106,4 +106,19 @@ export default withNuxt(
       ])],
     },
   })),
+  // A schema may reference another feature's table for a foreign key (D134: `(tenant_id, branch_id)`
+  // → branches), importing its *.schema.ts directly: a feature's index.ts reaches the database
+  // through hub:db:schema, which is built from these files.
+  {
+    files: ['server/features/*/*.schema.ts'],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [
+        ...SERVER_IMPORTS,
+        {
+          regex: String.raw`^#server/features/[^/]+/(?![^/]+\.schema(?:\.ts)?$).+`,
+          message: 'A schema imports another feature only for its table: #server/features/<name>/<name>.schema.',
+        },
+      ] }],
+    },
+  },
 )

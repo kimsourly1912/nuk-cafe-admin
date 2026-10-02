@@ -1,15 +1,17 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { check, foreignKey, index, integer, sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
 import { CANCEL_REASONS, KHQR_CURRENCIES, ORDER_STATUSES, ORDER_TYPES, PAYMENT_METHODS, RETURN_METHODS } from '#shared/contracts/orders'
 import { newId } from '#server/utils/ids'
+import { branches, tenantId } from '#server/features/branches/branches.schema'
 
 /**
  * Orders (docs/server/data-model.md → Orders, step 6.2, D99). An order is a **snapshot**: its
  * lines keep the names, choices and prices as they were when it was placed, so a later menu edit,
  * archive or sample-data reset never changes it. Menu ids are kept for reports, without foreign
  * keys (menu records can be reset in test environments, D94). Registered with NuxtHub through the
- * `hub:db:schema:extend` hook.
+ * `hub:db:schema:extend` hook. Every row carries its tenant (D134); links between orders, payments,
+ * QRs and branches are composite foreign keys `(tenant_id, …)`, so none crosses tenants.
  */
 
 const nowMs = sql`(cast(unixepoch('subsecond') * 1000 as integer))`
@@ -17,8 +19,9 @@ const instant = () => integer({ mode: 'timestamp_ms' })
 
 export const orders = sqliteTable('orders', {
   id: text().primaryKey().$defaultFn(() => newId()),
+  tenantId: tenantId(),
   // Branches and accounts are archived or disabled, never deleted while orders point at them.
-  branchId: text().notNull().references(() => authSchema!.organization.id, { onDelete: 'restrict' }),
+  branchId: text().notNull(),
   customerId: text().notNull().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
   /** The branch's business day (`YYYY-MM-DD`, starting at 4:00 local time, D99). */
   businessDate: text().notNull(),
@@ -48,6 +51,9 @@ export const orders = sqliteTable('orders', {
   createdAt: instant().notNull().default(nowMs),
   updatedAt: instant().notNull().default(nowMs),
 }, t => [
+  foreignKey({ name: 'orders_branch_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }).onDelete('restrict'),
+  // The target of every `(tenant_id, order_id)` foreign key.
+  unique('orders_tenant_id_unique').on(t.tenantId, t.id),
   check('orders_status_check', sql`${t.status} in ('awaiting_payment', 'preparing', 'ready', 'completed', 'cancelled')`),
   check('orders_type_check', sql`(${t.orderType} = 'pickup' and ${t.tableId} is null) or (${t.orderType} = 'dine_in' and ${t.tableId} is not null)`),
   check('orders_amounts_check', sql`${t.subtotalMinor} >= 0 and ${t.totalMinor} >= 0 and ${t.pickupNumber} >= 1`),
@@ -64,7 +70,8 @@ export const orders = sqliteTable('orders', {
 /** One line of an order, as it was priced when placed. */
 export const orderLines = sqliteTable('order_lines', {
   id: text().primaryKey().$defaultFn(() => newId()),
-  orderId: text().notNull().references(() => orders.id, { onDelete: 'cascade' }),
+  tenantId: tenantId(),
+  orderId: text().notNull(),
   /** 0, 1, 2 … in the order the customer listed them. */
   position: integer().notNull(),
   itemId: text().notNull(),
@@ -85,6 +92,7 @@ export const orderLines = sqliteTable('order_lines', {
   totalMinor: integer().notNull(),
   note: text(),
 }, t => [
+  foreignKey({ name: 'order_lines_order_fk', columns: [t.tenantId, t.orderId], foreignColumns: [orders.tenantId, orders.id] }).onDelete('cascade'),
   check('order_lines_amounts_check', sql`${t.quantity} between 1 and 20 and ${t.unitPriceMinor} >= 0 and ${t.totalMinor} = ${t.unitPriceMinor} * ${t.quantity}`),
   uniqueIndex('order_lines_position_idx').on(t.orderId, t.position),
   // Sales by item groups the lines of paid orders by item (8.1, D110).
@@ -97,7 +105,8 @@ export const orderLines = sqliteTable('order_lines', {
  */
 export const orderEvents = sqliteTable('order_events', {
   id: text().primaryKey().$defaultFn(() => newId()),
-  orderId: text().notNull().references(() => orders.id, { onDelete: 'cascade' }),
+  tenantId: tenantId(),
+  orderId: text().notNull(),
   /** The order's version after this change: 1 when placed. */
   toVersion: integer().notNull(),
   /** `null`: the system (the unpaid-order expiry, 6.6). */
@@ -108,6 +117,7 @@ export const orderEvents = sqliteTable('order_events', {
   note: text(),
   at: instant().notNull(),
 }, t => [
+  foreignKey({ name: 'order_events_order_fk', columns: [t.tenantId, t.orderId], foreignColumns: [orders.tenantId, orders.id] }).onDelete('cascade'),
   check('order_events_status_check', sql`${t.toStatus} in ('awaiting_payment', 'preparing', 'ready', 'completed', 'cancelled') and (${t.fromStatus} is null or ${t.fromStatus} in ('awaiting_payment', 'preparing', 'ready', 'completed', 'cancelled'))`),
   check('order_events_reason_check', sql`${t.reason} is null or ${t.reason} in ('customer_changed_mind', 'item_unavailable', 'other')`),
   uniqueIndex('order_events_version_idx').on(t.orderId, t.toVersion),
@@ -120,21 +130,26 @@ export const orderEvents = sqliteTable('order_events', {
  */
 export const counterPayments = sqliteTable('counter_payments', {
   id: text().primaryKey().$defaultFn(() => newId()),
-  orderId: text().notNull().references(() => orders.id, { onDelete: 'restrict' }),
-  branchId: text().notNull().references(() => authSchema!.organization.id, { onDelete: 'restrict' }),
+  tenantId: tenantId(),
+  orderId: text().notNull(),
+  branchId: text().notNull(),
   method: text({ enum: PAYMENT_METHODS }).notNull(),
   amountMinor: integer().notNull(),
   amountKhr: integer(),
   khrPerUsd: integer(),
   reference: text(),
   /** The QR the counter showed, for a KHQR payment made with one (step 10.15, D130). */
-  khqrChargeId: text().references(() => khqrCharges.id, { onDelete: 'restrict' }),
+  khqrChargeId: text(),
   collectedBy: text().notNull().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
   collectedAt: instant().notNull(),
   returnMethod: text({ enum: RETURN_METHODS }),
   returnedBy: text().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
   returnedAt: instant(),
 }, t => [
+  foreignKey({ name: 'counter_payments_order_fk', columns: [t.tenantId, t.orderId], foreignColumns: [orders.tenantId, orders.id] }).onDelete('restrict'),
+  foreignKey({ name: 'counter_payments_branch_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }).onDelete('restrict'),
+  // Not enforced while `khqr_charge_id` is null (a cash payment), as SQL does for composite keys.
+  foreignKey({ name: 'counter_payments_khqr_charge_fk', columns: [t.tenantId, t.khqrChargeId], foreignColumns: [khqrCharges.tenantId, khqrCharges.id] }).onDelete('restrict'),
   check('counter_payments_method_check', sql`${t.method} in ('cash_usd', 'cash_khr', 'khqr') and ${t.amountMinor} >= 0`),
   check('counter_payments_khr_check', sql`(${t.method} = 'cash_khr') = (${t.amountKhr} is not null and ${t.khrPerUsd} is not null)`),
   check('counter_payments_return_check', sql`(${t.returnMethod} is null and ${t.returnedAt} is null and ${t.returnedBy} is null) or (${t.returnMethod} in ('cash', 'khqr') and ${t.returnedAt} is not null and ${t.returnedBy} is not null)`),
@@ -169,8 +184,9 @@ export const khqrSettings = sqliteTable('khqr_settings', {
  */
 export const khqrCharges = sqliteTable('khqr_charges', {
   id: text().primaryKey().$defaultFn(() => newId()),
-  orderId: text().notNull().references(() => orders.id, { onDelete: 'restrict' }),
-  branchId: text().notNull().references(() => authSchema!.organization.id, { onDelete: 'restrict' }),
+  tenantId: tenantId(),
+  orderId: text().notNull(),
+  branchId: text().notNull(),
   currency: text({ enum: KHQR_CURRENCIES }).notNull(),
   /** Cents for USD, riel for KHR. */
   amount: integer().notNull(),
@@ -184,6 +200,10 @@ export const khqrCharges = sqliteTable('khqr_charges', {
   createdAt: instant().notNull(),
   expiresAt: instant().notNull(),
 }, t => [
+  foreignKey({ name: 'khqr_charges_order_fk', columns: [t.tenantId, t.orderId], foreignColumns: [orders.tenantId, orders.id] }).onDelete('restrict'),
+  foreignKey({ name: 'khqr_charges_branch_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }).onDelete('restrict'),
+  // The target of the payment's `(tenant_id, khqr_charge_id)`.
+  unique('khqr_charges_tenant_id_unique').on(t.tenantId, t.id),
   check('khqr_charges_check', sql`${t.currency} in ('USD', 'KHR') and ${t.amount} > 0 and (${t.currency} = 'KHR') = (${t.khrPerUsd} is not null) and ${t.expiresAt} > ${t.createdAt}`),
   uniqueIndex('khqr_charges_md5_idx').on(t.md5),
   index('khqr_charges_order_idx').on(t.orderId, t.currency, t.expiresAt),

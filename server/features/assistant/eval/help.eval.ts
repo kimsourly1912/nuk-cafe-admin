@@ -71,7 +71,7 @@ describe.skipIf(!settings)('help quality check (spends a little)', () => {
 
   it.each(CASES)('$question', { timeout: 90_000 }, async (c) => {
     const db = await createTestDb()
-    const actor: Actor = { userId: (await createUser(db)).id, role: 'admin' }
+    const actor: Actor = { userId: (await createUser(db)).id, tenantId: 'eval-tenant', role: 'owner' }
     const result = await chatWithAssistant(db, actor, settings!, languageModel(settings!), {
       messages: [{ id: 'q', role: 'user', parts: [{ type: 'text', text: c.question }] }],
       page: c.page ?? '/admin',

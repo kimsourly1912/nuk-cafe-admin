@@ -1,7 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { SampleDataState, SampleMenuSize } from '#shared/contracts/sample-data'
-import { organization } from '#server/db/tables'
 import { createTable, getBranchSettings } from '#server/features/branches'
 import type { QrConfig } from '#server/features/branches'
 import type { Actor } from '#server/features/identity'
@@ -11,21 +10,21 @@ import { auditEvents } from '#server/features/platform/platform.schema'
 import { loadSampleBranch, loadSampleMenuStep, resetSampleMenu } from '#server/features/sample-data/sample-data.service'
 import { claimRun } from '#server/features/sample-data/sample-data.repository'
 import { itemsForSize, SAMPLE_TABLES } from '#server/features/sample-data/sample-data.catalog'
-import { createTestDb } from '#server/tests/support/db'
+import { createTestDb, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 
 let db: Db
 let branchId: string
-const admin: Actor = { userId: 'admin-1', role: 'admin', requestId: 'req-1' }
+const admin: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', requestId: 'req-1' }
 const qr: QrConfig = { secret: 'test-secret', baseUrl: 'https://cafe.example' }
 const ENV = 'Test'
 
 beforeEach(async () => {
   db = await createTestDb()
   branchId = newId()
-  await db.insert(organization).values({ id: branchId, name: 'Riverside', slug: branchId, timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+  await insertBranch(db, { id: branchId, name: 'Riverside', timezone: 'Asia/Phnom_Penh', status: 'active' })
 })
 
 /** Runs steps until the load finishes, like the page does; returns the last state and the step count. */
@@ -143,7 +142,7 @@ describe('sample hours and tables', () => {
   it('sets the hours, then adds the tables a few per call, keeping labels already in use', async () => {
     await createTable(db, admin, branchId, { label: 'T01', area: 'Terrace' }, qr)
     let result = await loadSampleBranch(db, admin, { branchId, tablesOnly: false }, qr, ENV)
-    expect((await getBranchSettings(db, branchId)).hours).toHaveLength(7)
+    expect((await getBranchSettings(db, TEST_TENANT, branchId)).hours).toHaveLength(7)
     const calls = [result.remainingTables]
     while (result.remainingTables > 0) {
       result = await loadSampleBranch(db, admin, { branchId, tablesOnly: true }, qr, ENV)

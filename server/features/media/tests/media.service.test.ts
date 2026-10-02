@@ -7,13 +7,13 @@ import { mediaAssets } from '#server/features/media/media.schema'
 import { attachStatements, purgeExpiredUploads, releaseStatement, uploadImage } from '#server/features/media/media.service'
 import type { ObjectStore } from '#server/features/media/media.service'
 import { sniffImageType } from '#server/features/media/media.rules'
-import { createTestDb } from '#server/tests/support/db'
+import { createTestDb, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { isStaleWrite } from '#server/utils/batch'
 
 let db: Db
-const actor: Actor = { userId: 'admin-1', role: 'admin', requestId: 'req-1' }
+const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', requestId: 'req-1' }
 
 /** An object store in memory, that can be told to fail. */
 function memoryStore() {

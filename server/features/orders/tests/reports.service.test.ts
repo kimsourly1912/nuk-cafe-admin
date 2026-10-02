@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { PayOrderInput } from '#shared/contracts/orders'
 import { toRiel } from '#shared/contracts/orders'
 import { itemSalesQuerySchema, orderHistoryQuerySchema, reportPeriodQuerySchema } from '#shared/contracts/reports'
-import { organization } from '#server/db/tables'
 import { updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem, updateCategory, updateItem } from '#server/features/menu'
@@ -13,7 +12,7 @@ import { csvCell, csvFilename, moneyText } from '#server/features/orders/reports
 import { itemsMessage, periodText } from '#server/features/orders/reports.message'
 import { itemSalesExport, itemSalesReport, orderHistory, orderHistoryDetail, orderHistoryExport, reportBranches, reportMessage, reportSummary, summaryExport } from '#server/features/orders/reports.service'
 import { businessDateAt, periodInstants } from '#server/features/orders/reports.rules'
-import { createTestDb, createUser } from '#server/tests/support/db'
+import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -23,7 +22,7 @@ import { parseInput } from '#server/utils/validation'
 // expiry services and the migrations. One Monday of orders, with every number worked out by hand.
 
 let db: Db
-const admin: Actor = { userId: 'admin-1', role: 'admin' }
+const admin: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner' }
 let branchId: string
 let latte: { itemId: string, variationId: string, version: number }
 let croissant: { itemId: string, variationId: string }
@@ -67,7 +66,7 @@ const period = (from: string, to = from) => parseInput(reportPeriodQuerySchema, 
 beforeEach(async () => {
   db = await createTestDb()
   branchId = newId()
-  await db.insert(organization).values({ id: branchId, name: 'Riverside', slug: branchId, timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+  await insertBranch(db, { id: branchId, name: 'Riverside', timezone: 'Asia/Phnom_Penh', status: 'active' })
   await updateBranchSettings(db, admin, branchId, { version: 1, hours })
   const coffee = await createCategory(db, admin, { name: 'Coffee', description: '', parentId: null, availabilityRuleIds: [] })
   const bakery = await createCategory(db, admin, { name: 'Bakery', description: '', parentId: null, availabilityRuleIds: [] })
@@ -77,10 +76,10 @@ beforeEach(async () => {
   customers.length = 0
   customerIndex = 0
   for (const name of ['Sokha Chan', 'Dara Sok', 'Vanna Lim', 'Bopha Keo', 'Rithy Om', 'Maly Chea', 'Nita Heng', 'Sina Ly']) {
-    customers.push({ userId: (await createUser(db, `${name.split(' ')[0]!.toLowerCase()}@example.com`, name)).id, role: 'customer' })
+    customers.push({ userId: (await createUser(db, `${name.split(' ')[0]!.toLowerCase()}@example.com`, name)).id, tenantId: TEST_TENANT, role: 'customer' })
   }
-  cashier = { userId: (await createUser(db, 'sophea@example.com', 'Sophea Meas')).id, role: 'customer', branchId, branchRole: 'staff' }
-  const rateSetter: Actor = { userId: (await createUser(db, 'kim@example.com', 'Kim')).id, role: 'admin' }
+  cashier = { userId: (await createUser(db, 'sophea@example.com', 'Sophea Meas')).id, tenantId: TEST_TENANT, role: 'customer', branchId, branchRole: 'staff' }
+  const rateSetter: Actor = { userId: (await createUser(db, 'kim@example.com', 'Kim')).id, tenantId: TEST_TENANT, role: 'owner' }
   await setExchangeRate(db, rateSetter, { khrPerUsd: RATE }, at(MON, '06:00'))
 })
 
@@ -133,7 +132,7 @@ describe('business days (D110)', () => {
 describe('the summary (D110)', () => {
   it('counts each paid order once, at payment time, and refunds when the money went back', async () => {
     await monday()
-    const summary = await reportSummary(db, period(MON), at(TUE, '12:00'))
+    const summary = await reportSummary(db, TEST_TENANT, period(MON), at(TUE, '12:00'))
     expect(summary.paid).toEqual({ salesMinor: 4100, orders: 5, averageMinor: 820 })
     expect(summary.refunds).toEqual({ amountMinor: 0, orders: 0 })
     expect(summary.netSalesMinor).toBe(4100)
@@ -152,7 +151,7 @@ describe('the summary (D110)', () => {
     expect(summary.period).toEqual({ from: MON, to: MON, start: '2026-09-27T21:00:00.000Z', end: '2026-09-28T21:00:00.000Z' })
     expect(summary.asOf).toBe(at(TUE, '12:00').toISOString())
 
-    const tuesday = await reportSummary(db, period(TUE), at(TUE, '12:00'))
+    const tuesday = await reportSummary(db, TEST_TENANT, period(TUE), at(TUE, '12:00'))
     expect(tuesday.paid).toEqual({ salesMinor: 0, orders: 0, averageMinor: null })
     expect(tuesday.refunds).toEqual({ amountMinor: 875, orders: 1 })
     expect(tuesday.netSalesMinor).toBe(-875)
@@ -161,13 +160,13 @@ describe('the summary (D110)', () => {
 
   it('shows sales by hour for one day, by business date for longer', async () => {
     await monday()
-    const day = await reportSummary(db, period(MON), at(TUE, '12:00'))
+    const day = await reportSummary(db, TEST_TENANT, period(MON), at(TUE, '12:00'))
     expect(day.trend.unit).toBe('hour')
     expect(day.trend.points.map(p => p.key)).toEqual(['04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '00', '01', '02', '03'])
     const sales = Object.fromEntries(day.trend.points.filter(p => p.orders).map(p => [p.key, p.salesMinor]))
     expect(sales).toEqual({ '09': 875, '10': 600, '11': 875, '14': 875, '00': 875 })
 
-    const week = await reportSummary(db, period(MON, '2026-10-04'), at(TUE, '12:00'))
+    const week = await reportSummary(db, TEST_TENANT, period(MON, '2026-10-04'), at(TUE, '12:00'))
     expect(week.trend.unit).toBe('day')
     expect(week.trend.points).toHaveLength(7)
     expect(week.trend.points[0]).toEqual({ key: MON, salesMinor: 4100, orders: 5 })
@@ -181,10 +180,10 @@ describe('the summary (D110)', () => {
     await pay(ready.orderId, at(MON, '15:04'))
     await markOrderReady(db, cashier, ready.orderId, { version: 2 }, crypto.randomUUID(), at(MON, '15:05'))
     expect(waiting).toBeTruthy()
-    const summary = await reportSummary(db, period(MON), at(MON, '15:10'))
+    const summary = await reportSummary(db, TEST_TENANT, period(MON), at(MON, '15:10'))
     expect(summary.current).toEqual({ awaitingPayment: 1, preparing: 1, ready: 1 })
     // Past its 30 minutes, a waiting order isn't counted (the expiry task cancels it).
-    expect((await reportSummary(db, period(MON), at(MON, '15:40'))).current?.awaitingPayment).toBe(0)
+    expect((await reportSummary(db, TEST_TENANT, period(MON), at(MON, '15:40'))).current?.awaitingPayment).toBe(0)
   })
 })
 
@@ -195,7 +194,7 @@ describe('sales by item (D110)', () => {
     const coffee = await updateCategory(db, admin, coffeeId, { version: 1, name: 'Coffee & Tea' })
     expect(coffee.name).toBe('Coffee & Tea')
 
-    const report = await itemSalesReport(db, parseInput(itemSalesQuerySchema, { branchId, from: MON, to: MON }), at(TUE, '12:00'))
+    const report = await itemSalesReport(db, TEST_TENANT, parseInput(itemSalesQuerySchema, { branchId, from: MON, to: MON }), at(TUE, '12:00'))
     expect(report.items.map(row => [row.name, row.categoryName, row.quantity, row.salesMinor, row.refundedMinor])).toEqual([
       ['Iced Latte', 'Coffee', 4, 3500, 0],
       ['Croissant', 'Bakery', 2, 600, 0],
@@ -204,19 +203,19 @@ describe('sales by item (D110)', () => {
     expect(report.categories.map(c => c.name)).toEqual(['Bakery', 'Coffee'])
 
     // G's refund counts on Tuesday, when the money went back.
-    const tuesday = await itemSalesReport(db, parseInput(itemSalesQuerySchema, { branchId, from: TUE, to: TUE }), at(TUE, '12:00'))
+    const tuesday = await itemSalesReport(db, TEST_TENANT, parseInput(itemSalesQuerySchema, { branchId, from: TUE, to: TUE }), at(TUE, '12:00'))
     expect(tuesday.items.map(row => [row.name, row.quantity, row.salesMinor, row.refundedMinor])).toEqual([['Iced Latte', 0, 0, 875]])
   })
 
   it('filters, sorts and pages, with totals over every matching row', async () => {
     await monday()
     const query = (over: Record<string, string>) => parseInput(itemSalesQuerySchema, { branchId, from: MON, to: MON, ...over })
-    const bySales = await itemSalesReport(db, query({ sort: 'sales', direction: 'asc', pageSize: '1' }))
+    const bySales = await itemSalesReport(db, TEST_TENANT, query({ sort: 'sales', direction: 'asc', pageSize: '1' }))
     expect(bySales.items.map(row => row.name)).toEqual(['Croissant'])
     expect(bySales).toMatchObject({ total: 2, totalPages: 2, totals: { items: 2, salesMinor: 4100 } })
-    expect((await itemSalesReport(db, query({ search: 'crois' }))).totals).toEqual({ items: 1, quantity: 2, salesMinor: 600, refundedMinor: 0 })
-    expect((await itemSalesReport(db, query({ categoryId: coffeeId }))).items.map(row => row.name)).toEqual(['Iced Latte'])
-    expect((await itemSalesReport(db, query({ sort: 'name', direction: 'asc' }))).items.map(row => row.name)).toEqual(['Croissant', 'Iced Latte'])
+    expect((await itemSalesReport(db, TEST_TENANT, query({ search: 'crois' }))).totals).toEqual({ items: 1, quantity: 2, salesMinor: 600, refundedMinor: 0 })
+    expect((await itemSalesReport(db, TEST_TENANT, query({ categoryId: coffeeId }))).items.map(row => row.name)).toEqual(['Iced Latte'])
+    expect((await itemSalesReport(db, TEST_TENANT, query({ sort: 'name', direction: 'asc' }))).items.map(row => row.name)).toEqual(['Croissant', 'Iced Latte'])
   })
 })
 
@@ -224,7 +223,7 @@ describe('order history (D110)', () => {
   it('lists the orders placed in the period with their payment and progress, filtered', async () => {
     const o = await monday()
     const query = (over: Record<string, string> = {}) => parseInput(orderHistoryQuerySchema, { branchId, from: MON, to: MON, ...over })
-    const all = await orderHistory(db, query(), at(TUE, '12:00'))
+    const all = await orderHistory(db, TEST_TENANT, query(), at(TUE, '12:00'))
     expect(all.total).toBe(7)
     const byId = Object.fromEntries(all.orders.map(row => [row.id, [row.payment.state, row.payment.method, row.status]]))
     expect(byId[o.a.orderId]).toEqual(['paid', 'cash_usd', 'preparing'])
@@ -234,22 +233,22 @@ describe('order history (D110)', () => {
     // Newest first by default.
     expect(all.orders[0]!.id).toBe(o.h.orderId)
 
-    const ids = async (over: Record<string, string>) => (await orderHistory(db, query(over))).orders.map(row => row.id).sort()
+    const ids = async (over: Record<string, string>) => (await orderHistory(db, TEST_TENANT, query(over))).orders.map(row => row.id).sort()
     expect(await ids({ payment: 'refunded' })).toEqual([o.g.orderId])
     expect(await ids({ payment: 'not_paid' })).toEqual([o.e.orderId, o.f.orderId].sort())
     expect(await ids({ payment: 'paid', method: 'khqr' })).toEqual([o.b.orderId, o.h.orderId].sort())
     expect(await ids({ progress: 'cancelled' })).toEqual([o.e.orderId, o.f.orderId, o.g.orderId].sort())
     expect(await ids({ search: '1' })).toEqual([o.a.orderId])
-    const paged = await orderHistory(db, query({ sort: 'total', direction: 'asc', pageSize: '2', page: '1' }))
+    const paged = await orderHistory(db, TEST_TENANT, query({ sort: 'total', direction: 'asc', pageSize: '2', page: '1' }))
     expect(paged).toMatchObject({ total: 7, totalPages: 4 })
     expect(paged.orders[0]!.totalMinor).toBe(600)
     // Tuesday has no orders placed (H, at 00:10 Tuesday, belongs to Monday's business day).
-    expect((await orderHistory(db, parseInput(orderHistoryQuerySchema, { branchId, from: TUE, to: TUE }))).total).toBe(0)
+    expect((await orderHistory(db, TEST_TENANT, parseInput(orderHistoryQuerySchema, { branchId, from: TUE, to: TUE }))).total).toBe(0)
   })
 
   it('shows an order as sold, its payment and every recorded step with who took it', async () => {
     const o = await monday()
-    const g = await orderHistoryDetail(db, o.g.orderId)
+    const g = await orderHistoryDetail(db, TEST_TENANT, o.g.orderId)
     expect(g.customerFirstName).toBe('Maly')
     expect(g.payment).toMatchObject({ state: 'refunded', method: 'cash_usd', amountMinor: 875, collectedBy: 'Sophea Meas', returnMethod: 'cash', returnedBy: 'Sophea Meas', returnedAt: at(TUE, '09:00').toISOString() })
     expect(g.timeline.map(e => [e.toStatus, e.by.kind, e.by.name, e.reason])).toEqual([
@@ -257,14 +256,14 @@ describe('order history (D110)', () => {
       ['preparing', 'staff', 'Sophea Meas', null],
       ['cancelled', 'staff', 'Sophea Meas', 'item_unavailable'],
     ])
-    const a = await orderHistoryDetail(db, o.a.orderId)
+    const a = await orderHistoryDetail(db, TEST_TENANT, o.a.orderId)
     expect(a.lines).toEqual([{ itemName: 'Iced Latte', categoryName: 'Coffee', detail: '', modifiers: [], unitPriceMinor: 875, quantity: 1, totalMinor: 875, note: 'Less ice' }])
-    const c = await orderHistoryDetail(db, o.c.orderId)
+    const c = await orderHistoryDetail(db, TEST_TENANT, o.c.orderId)
     expect(c.payment).toMatchObject({ method: 'cash_khr', amountKhr: 35_900, khrPerUsd: RATE })
-    const e = await orderHistoryDetail(db, o.e.orderId)
+    const e = await orderHistoryDetail(db, TEST_TENANT, o.e.orderId)
     expect(e.timeline.at(-1)).toMatchObject({ toStatus: 'cancelled', by: { kind: 'system', name: null } })
     expect(e.payment.state).toBe('not_paid')
-    await expectApiError(() => orderHistoryDetail(db, newId()), 404, 'NOT_FOUND')
+    await expectApiError(() => orderHistoryDetail(db, TEST_TENANT, newId()), 404, 'NOT_FOUND')
   })
 })
 
@@ -285,7 +284,7 @@ describe('CSV (8.1b, D111)', () => {
 
   it('exports every matching row, in the page\'s order, agreeing with the report', async () => {
     await monday()
-    const items = await itemSalesExport(db, parseInput(itemSalesQuerySchema, { branchId, from: MON, to: MON, pageSize: '1' }))
+    const items = await itemSalesExport(db, TEST_TENANT, parseInput(itemSalesQuerySchema, { branchId, from: MON, to: MON, pageSize: '1' }))
     const lines = items.csv.replace(/^\uFEFF/, '').trimEnd().split('\r\n')
     expect(items.csv.startsWith('\uFEFF')).toBe(true)
     expect(lines).toEqual([
@@ -293,25 +292,25 @@ describe('CSV (8.1b, D111)', () => {
       'Iced Latte,Coffee,4,35.00,0.00',
       'Croissant,Bakery,2,6.00,0.00',
     ])
-    const orders = await orderHistoryExport(db, parseInput(orderHistoryQuerySchema, { branchId, from: MON, to: MON, pageSize: '2', sort: 'number', direction: 'asc' }))
+    const orders = await orderHistoryExport(db, TEST_TENANT, parseInput(orderHistoryQuerySchema, { branchId, from: MON, to: MON, pageSize: '2', sort: 'number', direction: 'asc' }))
     const orderLines = orders.csv.trimEnd().split('\r\n')
     expect(orderLines).toHaveLength(1 + 7)
     expect(orderLines[1]).toBe('001,2026-09-28,2026-09-28 09:00,Pickup,,Paid,Cash USD,Preparing,8.75')
     expect(orders.filename).toBe('riverside-2026-09-28-orders.csv')
-    const summary = await summaryExport(db, period(TUE), at(TUE, '12:00'))
+    const summary = await summaryExport(db, TEST_TENANT, period(TUE), at(TUE, '12:00'))
     expect(summary.csv).toContain('Sales,Refunds,1,-8.75,')
     expect(summary.csv).toContain('Sales,Net sales,,-8.75,')
   })
 
   it('lists the active branches with today\'s business date in each zone', async () => {
-    expect(await reportBranches(db, at(TUE, '03:00'))).toEqual([{ id: branchId, name: 'Riverside', timeZone: 'Asia/Phnom_Penh', today: MON }])
+    expect(await reportBranches(db, TEST_TENANT, at(TUE, '03:00'))).toEqual([{ id: branchId, name: 'Riverside', timeZone: 'Asia/Phnom_Penh', today: MON }])
   })
 })
 
 describe('Telegram message (8.1c, D112)', () => {
   it('sends the Summary\'s figures, short, with the period and when they were read', async () => {
     await monday()
-    const past = await reportMessage(db, { kind: 'summary', query: { branchId, from: MON, to: MON } }, { attachCsv: true }, at(TUE, '12:00'))
+    const past = await reportMessage(db, TEST_TENANT, { kind: 'summary', query: { branchId, from: MON, to: MON } }, { attachCsv: true }, at(TUE, '12:00'))
     expect(past.html).toContain('<b>Summary · Riverside</b>')
     expect(past.html).toContain('Paid sales <b>$41.00</b> · 5 orders · average $8.20')
     expect(past.text).not.toContain('<b>')
@@ -321,18 +320,18 @@ describe('Telegram message (8.1c, D112)', () => {
     expect(past.audit).toEqual({ report: 'summary', branchId, from: MON, to: MON })
     expect(JSON.stringify(past)).not.toMatch(/@example\.com/)
 
-    const today = await reportMessage(db, { kind: 'summary', query: { branchId, from: MON, to: MON } }, { attachCsv: false }, at(MON, '12:00'))
+    const today = await reportMessage(db, TEST_TENANT, { kind: 'summary', query: { branchId, from: MON, to: MON } }, { attachCsv: false }, at(MON, '12:00'))
     expect(today.text).toContain('Figures as of 12:00 PM. Business day ends at 4:00 AM.')
     expect(today.csv).toBeNull()
   })
 
   it('lists items in the page\'s filters and order, with totals', async () => {
     await monday()
-    const message = await reportMessage(db, { kind: 'items', query: { branchId, from: MON, to: MON, sort: 'sales', direction: 'desc' } }, { attachCsv: true }, at(TUE, '12:00'))
+    const message = await reportMessage(db, TEST_TENANT, { kind: 'items', query: { branchId, from: MON, to: MON, sort: 'sales', direction: 'desc' } }, { attachCsv: true }, at(TUE, '12:00'))
     expect(message.text).toMatch(/^Sales by item · Riverside\nMon 28 Sep 2026\n\n1\. /)
     expect(message.text).toContain('Totals for 2 items: 6 sold · $41.00')
     expect(message.csv?.filename).toBe('riverside-2026-09-28-items.csv')
-    await expectApiError(() => reportMessage(db, { kind: 'items', query: { branchId, from: TUE, to: MON } }, { attachCsv: false }), 400, 'VALIDATION_FAILED')
+    await expectApiError(() => reportMessage(db, TEST_TENANT, { kind: 'items', query: { branchId, from: TUE, to: MON } }, { attachCsv: false }), 400, 'VALIDATION_FAILED')
   })
 
   it('escapes names for Telegram\'s HTML and says how many more there are', () => {

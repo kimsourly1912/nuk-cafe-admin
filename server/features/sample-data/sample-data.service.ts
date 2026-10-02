@@ -128,10 +128,10 @@ const isEmpty = (counts: MenuDataCounts) =>
 
 // --- State ---
 
-export async function getSampleDataState(db: Db, environment: string): Promise<SampleDataState> {
-  const [counts, photos, run, branches] = await Promise.all([countMenuData(db), countUploads(db), repo.findRun(db), listBranchOptions(db)])
+export async function getSampleDataState(db: Db, tenantId: string, environment: string): Promise<SampleDataState> {
+  const [counts, photos, run, branches] = await Promise.all([countMenuData(db), countUploads(db), repo.findRun(db), listBranchOptions(db, tenantId)])
   const summaries = await Promise.all(branches.map(async (branch) => {
-    const [settings, labels] = await Promise.all([getBranchSettings(db, branch.id), activeTableLabels(db, branch.id)])
+    const [settings, labels] = await Promise.all([getBranchSettings(db, tenantId, branch.id), activeTableLabels(db, tenantId, branch.id)])
     return { id: branch.id, name: branch.name, hoursSet: settings.hours.length > 0, tables: labels.length }
   }))
   return {
@@ -171,7 +171,7 @@ export async function loadSampleMenuStep(db: Db, actor: Actor, input: LoadSample
   finally {
     await repo.releaseRun(db, finished ? new Date() : undefined)
   }
-  return getSampleDataState(db, environment)
+  return getSampleDataState(db, actor.tenantId, environment)
 }
 
 /** Creates the next records; `true` once nothing is left to create. */
@@ -240,7 +240,7 @@ async function settleItem(db: Db, actor: Actor, created: MenuItem, item: SampleI
   const published = await publishItem(db, actor, created.id, { version: created.version })
   if (item.state !== 'soldOut') return
   const variationIds = published.variations.map(v => v.id)
-  for (const branch of await listBranchOptions(db)) {
+  for (const branch of await listBranchOptions(db, actor.tenantId)) {
     await setSoldOut(db, { ...actor, branchId: branch.id }, { variationIds, soldOut: true })
   }
 }
@@ -254,15 +254,15 @@ async function settleItem(db: Db, actor: Actor, created: MenuItem, item: SampleI
  */
 export async function loadSampleBranch(db: Db, actor: Actor, input: LoadSampleBranchInput, qr: QrConfig, environment: string): Promise<SampleBranchResult> {
   if (!input.tablesOnly) {
-    const settings = await getBranchSettings(db, input.branchId)
+    const settings = await getBranchSettings(db, actor.tenantId, input.branchId)
     await updateBranchSettings(db, actor, input.branchId, { version: settings.version, hours: SAMPLE_HOURS })
   }
-  const taken = new Set((await activeTableLabels(db, input.branchId)).map(lower))
+  const taken = new Set((await activeTableLabels(db, actor.tenantId, input.branchId)).map(lower))
   const missing = SAMPLE_TABLES.filter(table => !taken.has(lower(table.label)))
   for (const table of missing.slice(0, TABLES_PER_STEP)) {
     await createTable(db, actor, input.branchId, table, qr)
   }
-  return { state: await getSampleDataState(db, environment), remainingTables: Math.max(0, missing.length - TABLES_PER_STEP) }
+  return { state: await getSampleDataState(db, actor.tenantId, environment), remainingTables: Math.max(0, missing.length - TABLES_PER_STEP) }
 }
 
 // --- Reset ---
@@ -285,5 +285,5 @@ export async function resetSampleMenu(db: Db, actor: Actor, store: ObjectStore, 
     await db.batch(statements as [Statement, ...Statement[]])
   }
   await deleteUploads(db, store, PHOTOS_PER_STEP)
-  return getSampleDataState(db, environment)
+  return getSampleDataState(db, actor.tenantId, environment)
 }

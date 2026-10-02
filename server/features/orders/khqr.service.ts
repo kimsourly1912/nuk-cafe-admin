@@ -114,7 +114,7 @@ export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: stri
     amount = toRiel(order.totalMinor, rate.perUsd)
   }
 
-  const branch = await reportsRepo.findReportBranch(db, actor.branchId)
+  const branch = await reportsRepo.findReportBranch(db, actor.tenantId, actor.branchId)
   const billNumber = `Order ${String(order.pickupNumber).padStart(3, '0')}`
   const expiresAt = new Date(Math.min(now.getTime() + KHQR_LIFETIME_MINUTES * 60_000, order.paymentDueAt.getTime()))
   const { qr, md5 } = buildKhqr({
@@ -129,6 +129,7 @@ export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: stri
     expiresAt,
   })
   return toCharge(await khqrRepo.insertCharge(db, {
+    tenantId: actor.tenantId,
     orderId,
     branchId: actor.branchId,
     currency: input.currency,
