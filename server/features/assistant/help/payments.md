@@ -13,6 +13,15 @@ Once it's on, the counter shows a QR made for each order: the customer scans it 
 
 Turned off (or not filled in), the counter asks customers to scan its printed KHQR, as before.
 
+### Automatic check with Bakong
+
+Under the KHQR settings, **Automatic check with Bakong** says **On** or **Off**. On, the counter records a KHQR payment by itself as soon as Bakong confirms it was paid to the cafe's account, in the right amount: the cashier doesn't have to press Confirm. Cashiers can still confirm by hand.
+
+- It's turned on by the owner, who sets the Bakong token (from Bakong's developer portal) as a server secret. It isn't entered on this page.
+- **Test connection** asks Bakong once and says whether it answered.
+- Bakong's token lasts 90 days. When it expires, the test says Bakong didn't accept it: the owner gets a new token and replaces the secret. Meanwhile cashiers confirm by hand.
+- **"Bakong refused this server"**: Bakong may answer only servers in Cambodia. Cashiers confirm by hand until that's solved.
+
 ## Set or change the rate
 
 1. Enter **Riel per $1**, for example 4100. It must be between 1,000 and 10,000.

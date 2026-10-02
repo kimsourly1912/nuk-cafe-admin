@@ -1,4 +1,4 @@
-import type { ExchangeRates, KhqrSettings, KhqrSettingsInput, SetExchangeRateInput } from '#shared/contracts/orders'
+import type { BakongConnectionTest, ExchangeRates, KhqrSettings, KhqrSettingsInput, SetExchangeRateInput } from '#shared/contracts/orders'
 
 /** The riel rate in force and its history (`/api/admin/exchange-rates`, D101). */
 export function useExchangeRates() {
@@ -38,4 +38,9 @@ export function useKhqrSettingsMutations() {
     },
   )
   return { save }
+}
+
+/** Whether this server can ask Bakong with its token (10.15b, D131). Changes nothing. */
+export function testBakongConnection() {
+  return apiFetch<BakongConnectionTest>('/admin/khqr/test', { method: 'POST' })
 }

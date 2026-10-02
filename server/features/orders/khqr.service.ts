@@ -1,4 +1,4 @@
-import type { CreateKhqrInput, KhqrCharge, KhqrSettings, KhqrSettingsInput } from '#shared/contracts/orders'
+import type { CounterQueue, CreateKhqrInput, KhqrCharge, KhqrSettings, KhqrSettingsInput } from '#shared/contracts/orders'
 import { KHQR_LIFETIME_MINUTES, toRiel } from '#shared/contracts/orders'
 import type { Db } from '#server/utils/batch'
 import { requireOneChange, runBatch } from '#server/utils/batch'
@@ -18,7 +18,7 @@ import * as reportsRepo from './reports.repository'
  * money goes straight from the customer's bank to that account: nothing here holds or moves it.
  */
 
-const toSettings = (row: khqrRepo.KhqrSettingsRow | undefined): KhqrSettings => row
+const toSettings = (row: khqrRepo.KhqrSettingsRow | undefined, automaticCheck: boolean): KhqrSettings => row
   ? {
       version: row.version,
       enabled: row.enabled,
@@ -28,15 +28,17 @@ const toSettings = (row: khqrRepo.KhqrSettingsRow | undefined): KhqrSettings => 
       currencies: row.currencies,
       updatedAt: toIso(row.updatedAt),
       updatedBy: { name: row.updatedByName },
+      automaticCheck,
     }
-  : { version: 0, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: [], updatedAt: null, updatedBy: null }
+  : { version: 0, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: [], updatedAt: null, updatedBy: null, automaticCheck }
 
-export async function getKhqrSettings(db: Db): Promise<KhqrSettings> {
-  return toSettings(await khqrRepo.findSettings(db))
+/** The settings; `automaticCheck`: whether this server has a Bakong token (10.15b, D131). */
+export async function getKhqrSettings(db: Db, automaticCheck = false): Promise<KhqrSettings> {
+  return toSettings(await khqrRepo.findSettings(db), automaticCheck)
 }
 
 /** Saves the account and what customers see (`settings: ['manage']`), from the version the page read; audited. */
-export async function saveKhqrSettings(db: Db, actor: Actor, input: KhqrSettingsInput, now = new Date()): Promise<KhqrSettings> {
+export async function saveKhqrSettings(db: Db, actor: Actor, input: KhqrSettingsInput, now = new Date(), automaticCheck = false): Promise<KhqrSettings> {
   const before = await khqrRepo.findSettings(db)
   if ((before?.version ?? 0) !== input.version) throw khqrSettingsChanged()
   const { version, ...rest } = input
@@ -50,13 +52,13 @@ export async function saveKhqrSettings(db: Db, actor: Actor, input: KhqrSettings
       metadata: { from: before ? { enabled: before.enabled, accountId: before.accountId, merchantName: before.merchantName, merchantCity: before.merchantCity, currencies: before.currencies } : null, to: rest },
     }),
   ], khqrSettingsChanged)
-  return getKhqrSettings(db)
+  return getKhqrSettings(db, automaticCheck)
 }
 
-/** What the counter needs to know: the currencies offered, or `null` while KHQR isn't on. */
-export async function counterKhqr(db: Db): Promise<{ currencies: KhqrSettings['currencies'] } | null> {
+/** What the counter needs to know: the currencies offered and whether it's checked with Bakong, or `null` while KHQR isn't on. */
+export async function counterKhqr(db: Db, automaticCheck = false): Promise<CounterQueue['khqr']> {
   const settings = await khqrRepo.findSettings(db)
-  return settings?.enabled ? { currencies: settings.currencies } : null
+  return settings?.enabled ? { currencies: settings.currencies, automaticCheck } : null
 }
 
 const toCharge = (row: khqrRepo.ChargeRow): KhqrCharge => ({

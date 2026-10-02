@@ -21,11 +21,11 @@
  * otherwise a click meant for "Confirm payment" lands on the "Mark ready" that replaced it (found
  * in the release check on staging, 10.5).
  */
-import type { CounterOrder, ExchangeRate, KhqrCharge, KhqrCurrency, OrderStatus, PaymentMethod, PayOrderInput } from '#shared/contracts/orders'
+import type { CounterOrder, ExchangeRate, KhqrCharge, KhqrCheck, KhqrCurrency, OrderStatus, PaymentMethod, PayOrderInput } from '#shared/contracts/orders'
 import { toRiel } from '#shared/contracts/orders'
 import { useCounterActions } from '../composables/useCounterActions'
 import type { Change, CommandFailure } from '../utils/counter'
-import { khqrAmountText } from '../utils/khqr'
+import { khqrAmountText, khqrReceivedText } from '../utils/khqr'
 import CounterKhqr from './CounterKhqr.vue'
 import { changeDue, clockTime, commandFailure, firstName, formatRiel, orderNumber, orderTypeText, PAYMENT_METHOD_LABELS, paymentText, rielQuickAmounts, usdQuickAmounts } from '../utils/counter'
 
@@ -34,7 +34,7 @@ const props = defineProps<{
   branchId: string
   khrRate: ExchangeRate | null
   /** KHQR at the counter: the currencies offered, or `null` while it isn't set up (D130). */
-  khqr: { currencies: KhqrCurrency[] } | null
+  khqr: { currencies: KhqrCurrency[], automaticCheck: boolean } | null
   /** The server's clock minus this tablet's. */
   serverOffset: number
 }>()
@@ -145,6 +145,26 @@ async function confirmPayment() {
   finally {
     submitting.value = false
   }
+}
+
+/** Bakong confirmed the QR and the server recorded the payment as this cashier (10.15b, D131). */
+function onKhqrPaid(paid: CounterOrder) {
+  seenStatus.value = 'preparing'
+  toast.add({ title: `Order ${orderNumber(paid)} paid`, description: 'Bakong confirmed the KHQR payment. It\'s now being prepared.', color: 'success', icon: 'i-lucide-circle-check' })
+  open.value = false
+  void invalidate('counter')
+}
+
+/** Paid on Bakong after the order was paid another way or cancelled: the money goes back. Stays until dismissed. */
+function onKhqrRefund(check: Extract<KhqrCheck, { status: 'refund_needed' }>) {
+  toast.add({
+    title: `Order ${orderNumber(check.order)}: a KHQR payment arrived after it was ${check.order.status === 'cancelled' ? 'cancelled' : 'paid'}`,
+    description: `Bakong says ${khqrReceivedText(check.received)}. Give it back to the customer.`,
+    color: 'warning',
+    icon: 'i-lucide-triangle-alert',
+    duration: Number.POSITIVE_INFINITY,
+  })
+  void invalidate('counter')
 }
 
 function reload() {
@@ -373,7 +393,10 @@ const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
               :branch-id="branchId"
               :currencies="khqr.currencies"
               :server-offset="serverOffset"
+              :automatic-check="khqr.automaticCheck"
               :disabled="submitting"
+              @paid="onKhqrPaid"
+              @refund="onKhqrRefund"
             />
             <UAlert
               v-else

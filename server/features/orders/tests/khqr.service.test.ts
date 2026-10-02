@@ -138,7 +138,7 @@ describe('the QR for an order', () => {
     await expectApiError(() => qr(orderId), 409, 'KHQR_NOT_SET_UP')
     expect((await listCounterQueue(db, cashier, NOON)).khqr).toBeNull()
     await saveKhqrSettings(db, owner, { ...SETTINGS, version: 1, currencies: ['USD'] })
-    expect((await listCounterQueue(db, cashier, NOON)).khqr).toEqual({ currencies: ['USD'] })
+    expect((await listCounterQueue(db, cashier, NOON)).khqr).toEqual({ currencies: ['USD'], automaticCheck: false })
     await expectApiError(() => qr(orderId, 'KHR'), 409, 'KHQR_NOT_SET_UP')
   })
 

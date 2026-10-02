@@ -177,6 +177,62 @@ describe('the counter', () => {
     }
   })
 
+  it('KHQR checked with Bakong (D131): the payment is recorded as soon as Bakong confirms it; something else arriving is said and records nothing', async () => {
+    const admin = '(select id from user where email = \'e2e-admin@example.com\')'
+    await sql(`insert into khqr_settings (id, enabled, account_id, merchant_name, merchant_city, currencies, version, updated_by, updated_at) values ('default', 1, 'nukcafe@aclb', 'NUK Cafe', 'Phnom Penh', 'USD', 1, ${admin}, ?)`, [Date.now()])
+    const client = e2eDatabase(seed.dbFile)
+    /** The QR the counter made for the order (its MD5 is what the server asks Bakong about). */
+    async function chargeOf(order: Order) {
+      let charge: { id: string, md5: string } | undefined
+      await expect.poll(async () => {
+        const { rows } = await client.execute({ sql: 'select id, md5 from khqr_charges where order_id = ?', args: [order.id] })
+        charge = rows[0] as unknown as typeof charge
+        return charge
+      }).toBeTruthy()
+      return charge!
+    }
+    /** Tells the stand-in for Bakong that this QR was paid. */
+    const bakongPaid = (md5: string, amount: number, toAccountId = 'nukcafe@aclb') => fetch(`${inject('fakeBakongUrl')}/__test/transactions`, {
+      method: 'POST',
+      body: JSON.stringify({ md5, transaction: { hash: `hash-${md5.slice(0, 8)}`, fromAccountId: 'customer@abaa', toAccountId, currency: 'USD', amount, externalRef: `FT${md5.slice(0, 10)}`, createdDateMs: Date.now() } }),
+    })
+    try {
+      const order = await placeOrder(seed.customers.counterShopperA)
+      const odd = await placeOrder(seed.customers.counterShopperB)
+      const { page, problems } = await cashierAtCounter()
+
+      await page.getByRole('button', { name: `Take payment: order ${number(order)}` }).click()
+      const sheet = panel(page)
+      await sheet.getByRole('tab', { name: 'KHQR' }).click()
+      await sheet.getByRole('img', { name: `KHQR for order ${number(order)}, $2.25` }).waitFor()
+      await sheet.getByText('Waiting for the payment: it\'s recorded as soon as Bakong confirms it.').waitFor()
+      // Above the QR, so a tablet's panel shows it without scrolling (820 px tall here).
+      const status = await sheet.getByText('Waiting for the payment: it\'s recorded as soon as Bakong confirms it.').boundingBox()
+      expect(status!.y + status!.height).toBeLessThan(820)
+      const charge = await chargeOf(order)
+      await bakongPaid(charge.md5, 2.25)
+      // Nobody presses Confirm: the next check (every 5 s) records it and closes the panel.
+      await toast(page, `Order ${number(order)} paid`).waitFor({ timeout: 15_000 })
+      await expect.poll(() => sheet.count()).toBe(0)
+      const { rows } = await client.execute({ sql: 'select method, khqr_charge_id, reference from counter_payments where order_id = ?', args: [order.id] })
+      expect(rows.map(row => [row.method, row.khqr_charge_id, row.reference])).toEqual([['khqr', charge.id, `FT${charge.md5.slice(0, 10)}`]])
+
+      await page.getByRole('button', { name: `Take payment: order ${number(odd)}` }).click()
+      await sheet.getByRole('tab', { name: 'KHQR' }).click()
+      await sheet.getByRole('img', { name: `KHQR for order ${number(odd)}, $2.25` }).waitFor()
+      const oddCharge = await chargeOf(odd)
+      await bakongPaid(oddCharge.md5, 2)
+      await sheet.getByText('A payment arrived on this QR that doesn\'t match it').waitFor({ timeout: 15_000 })
+      await sheet.getByText(/Bakong says \$2\.00 to nukcafe@aclb\. Nothing was recorded/).waitFor()
+      expect((await client.execute({ sql: 'select count(*) as n from counter_payments where order_id = ?', args: [odd.id] })).rows[0]!.n).toBe(0)
+      expect(problems).toEqual([])
+    }
+    finally {
+      client.close()
+      await sql('delete from khqr_settings')
+    }
+  })
+
   it('a payment someone else recorded first: says so, and Reload shows the order as it is', async () => {
     const order = await placeOrder(seed.customers.counterShopperB)
     const { page } = await cashierAtCounter()
