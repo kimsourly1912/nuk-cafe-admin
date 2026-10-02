@@ -239,6 +239,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 - The public API is rate limited per client address by Workers bindings (D121: the checkout quote 120 a minute, the rest of `/api/public/**` 600); the WAF rules for `/api/shop/orders` and the edge wait for a custom domain (Q4).
 - The menu page `/` is cached for 60 s per Worker instance (D122): sold-out marks, the open state and menu edits can show up to a minute late there; checkout always reads the current menu.
 - Uploads: abandoned or replaced images stay as `temporary` assets for up to 24 hours, then `media:purge-temporary` (hourly) deletes them and their R2 objects.
+- The dependency audit ignores one advisory by id (owner, 2026-10-02, D54): `node-forge` GHSA-86w9-cpqp-85rv, dev server only, no fix yet. Remove the exemption in `pnpm-workspace.yaml` once `node-forge` is patched.
 - Backups: D1 Time Travel covers the database only (7 days on the free plan); R2 images aren't rolled back by a restore.
 - A 409 (someone else saved first) shows the server's message and keeps the form open. The Categories form and order offer Reload (latest version, input kept, D72); other forms still need close and reopen. No merge UI.
 - Unsaved-changes comparison treats `1` and `'1'` as different and array order as meaningful (see docs/reference/forms.md).
