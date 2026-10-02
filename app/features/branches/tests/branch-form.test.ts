@@ -8,7 +8,7 @@ const settings = (hours: BranchSettings['hours']): BranchSettings => ({
   name: 'Main branch',
   timezone: 'Asia/Phnom_Penh',
   address: null,
-  phone: '012',
+  phone: '+85512345678',
   status: 'active',
   hours,
   openNow: false,
@@ -21,7 +21,7 @@ const errorsOf = (form: unknown) => (v.safeParse(branchFormSchema, form).issues 
 describe('branch form', () => {
   it('opens each day with its windows; closed days keep default times', () => {
     const form = toBranchForm(settings([w(1, 480, 1140), w(1, 1200, 1320), w(5, 1080, 120), w(6, 0, 1440)]))
-    expect(form).toMatchObject({ name: 'Main branch', timezone: 'Asia/Phnom_Penh', address: '', phone: '012' })
+    expect(form).toMatchObject({ name: 'Main branch', timezone: 'Asia/Phnom_Penh', address: '', phone: '12 345 678', phoneCountry: 'KH' })
     expect(form.days[0]).toEqual({ open: true, windows: [{ start: 480, end: 1140 }, { start: 1200, end: 1320 }] })
     expect(form.days[1]).toEqual({ open: false, windows: [{ start: 480, end: 1140 }] })
     expect(form.days[4]).toEqual({ open: true, windows: [{ start: 1080, end: 120 }] })
@@ -38,7 +38,7 @@ describe('branch form', () => {
       name: 'Main branch',
       timezone: 'Asia/Phnom_Penh',
       address: null,
-      phone: '012',
+      phone: '+85512345678',
       hours: [w(1, 420, 1140), w(6, 0, 1440)],
     })
   })
@@ -50,6 +50,25 @@ describe('branch form', () => {
     form.days[1] = { open: false, windows: [{ start: undefined, end: undefined }] }
     expect(errorsOf(form)).toEqual(['days.0.windows.0.end: Closing time is required', 'days.0.windows.1.end: Must close at a different time than it opens'])
     expect(errorsOf({ ...form, name: ' ', days: form.days.map(() => ({ open: false, windows: [] })) })).toEqual(['name: Name is required'])
+  })
+
+  it('reads the phone for its country, sends it as E.164, and names a wrong one on the field (D127)', () => {
+    const form = toBranchForm(settings([]))
+    form.phone = '9123 4567'
+    form.phoneCountry = 'HK'
+    expect(errorsOf(form)).toEqual([])
+    expect(toUpdateBranchBody(form, 4).phone).toBe('+85291234567')
+    form.phone = '1234'
+    expect(errorsOf(form)).toEqual(['phone: Enter a valid Hong Kong phone number'])
+    form.phone = '  '
+    expect(errorsOf(form)).toEqual([])
+    expect(toUpdateBranchBody(form, 4).phone).toBeNull()
+  })
+
+  it('shows a phone saved as free text before D127 as it is, to be fixed on the next save', () => {
+    const form = toBranchForm({ ...settings([]), phone: 'ask at the counter' })
+    expect(form).toMatchObject({ phone: 'ask at the counter', phoneCountry: 'KH' })
+    expect(errorsOf(form)).toEqual(['phone: Enter a valid Cambodian phone number'])
   })
 
   it('maps the server\'s hours.N to the window it names, counting open days only', () => {

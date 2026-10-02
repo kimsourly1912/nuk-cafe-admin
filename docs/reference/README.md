@@ -53,6 +53,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<AppDrawer>` | component | [UI helpers](./ui-helpers.md#appdrawer) | `UDrawer` without dragging: every drawer and bottom sheet |
 | `<ToolbarTabs>` | component | [UI helpers](./ui-helpers.md#toolbartabs) | Tabs on a toolbar's line |
 | `useUrlTab` | composable | [UI helpers](./ui-helpers.md#useurltab) | A page's tab in the URL (`?tab=`) |
+| `<PhoneInput>`, `parsePhone` | component, shared util | [UI helpers](./ui-helpers.md#phoneinput) | A phone number with its country; E.164 on the wire (D127) |
 | `<ListSkeleton>` | component | [UI helpers](./ui-helpers.md#listskeleton) | First-load placeholders |
 | `<SearchInput>` | component | [UI helpers](./ui-helpers.md#searchinput) | Search as you type (debounced) |
 | `<ListEmptyState>` | component | [UI helpers](./ui-helpers.md#listemptystate) | "No X yet" vs "No X match your filters" |

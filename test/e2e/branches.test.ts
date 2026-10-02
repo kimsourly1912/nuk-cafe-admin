@@ -124,7 +124,7 @@ describe('branch settings', () => {
       name: 'NUK Cafe Riverside',
       timezone: 'Asia/Phnom_Penh',
       address: '#123 St. 63',
-      phone: '012 345 678',
+      phone: '+85512345678',
       hours: [...monToFri, w(6, 480, 1140)],
     }])
     await expect.poll(() => saveButton(page).isDisabled()).toBe(true)
@@ -374,5 +374,45 @@ describe('page shell (D126)', () => {
     expect(await page.getByRole('option').count()).toBeLessThan(40)
     await search.fill('phnom')
     await expect.poll(() => page.getByRole('option').allTextContents()).toEqual(['(GMT+07:00) Phnom Penh'])
+  })
+})
+
+// The phone field (D127): a country with its flag and code beside the number, sent as E.164.
+describe('branch phone', () => {
+  const phone = (page: Page) => page.getByLabel('Phone', { exact: true })
+  const country = (page: Page) => page.getByRole('combobox', { name: 'Country code' })
+
+  it('shows a saved number without its code, under its country\'s flag', async () => {
+    const { page } = await open(backend({ 'GET /admin/branches/{id}': () => ({ ...SETTINGS, phone: '+85291234567' }) }).handlers)
+    await expect.poll(() => phone(page).inputValue()).toBe('9123 4567')
+    expect(await country(page).textContent()).toContain('+852')
+  })
+
+  it('a pasted full number switches the country; leaving drops the trunk 0; it saves as E.164', async () => {
+    const { handlers, bodies } = backend()
+    const { page } = await open(handlers)
+    await phone(page).fill('+852 9123 4567')
+    await expect.poll(() => phone(page).inputValue()).toBe('9123 4567')
+    expect(await country(page).textContent()).toContain('+852')
+
+    await country(page).click()
+    await page.getByRole('option', { name: 'Cambodia (+855)' }).click()
+    await phone(page).fill('012345678')
+    await phone(page).blur()
+    await expect.poll(() => phone(page).inputValue()).toBe('12 345 678')
+    await saveButton(page).click()
+    await toast(page, 'Branch settings saved').waitFor()
+    expect(bodies.at(-1)).toMatchObject({ phone: '+85512345678' })
+  })
+
+  it('names the country in the error for a wrong number, and sends nothing', async () => {
+    const { handlers, bodies } = backend()
+    const { page } = await open(handlers)
+    await country(page).click()
+    await page.getByRole('option', { name: 'Argentina (+54)' }).click()
+    await phone(page).fill('1234')
+    await saveButton(page).click()
+    await page.getByText('Enter a valid Argentine phone number').waitFor()
+    expect(bodies).toEqual([])
   })
 })

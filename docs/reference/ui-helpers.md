@@ -12,7 +12,7 @@
 - [`<SearchInput>`](#searchinput)
 - [`<ListEmptyState>`](#listemptystate)
 - [Keyboard shortcuts: `usePageShortcuts`, `useSubmitShortcut`, `<ShortcutsHelp>`](#keyboard-shortcuts)
-- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126)
+- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127)
 
 ---
 
@@ -533,3 +533,27 @@ Source: `app/composables/useUrlTab.ts`
 const tab = useUrlTab(['settings', 'tables'] as const)            // ?tab=tables
 const section = useUrlTab(ITEM_FORM_SECTIONS.map(s => s.value), 'section')
 ```
+
+---
+
+## `<PhoneInput>`
+
+A phone number (D127): the country (flag and dial code, a `USelect` in the input's leading slot) and the number as one field. People type or paste anything; the form's schema decides validity with `parsePhone(text, country)` from `#shared/contracts/phone` (the server checks the same rules on the E.164 it receives). A full number typed or pasted (`+852 9123 4567`, `00855…`, `855…`) switches the country and keeps the local part; leaving the field drops a trunk 0 and groups the digits (`012345678` → `12 345 678`). The select sits inside the input so the `UFormField`'s id, name and label stay the number's; it has its own id.
+
+Source: `app/components/PhoneInput.vue`; the rules in `shared/contracts/phone.ts` (`PHONE_COUNTRIES`, `parsePhone`, `formatPhone`, `phoneSchema`).
+
+```vue
+<UFormField label="Phone" name="phone">
+  <PhoneInput v-model="state.phone" v-model:country="state.phoneCountry" />
+</UFormField>
+```
+
+| Piece | Description |
+|---|---|
+| `v-model` | The number as typed (`12 345 678`) |
+| `v-model:country` | `'KH' \| 'HK' \| 'AR'` |
+| `parsePhone(text, country?)` | `{ ok: true, e164, country, national, local }` or `{ ok: false, reason, message }` ("Enter a valid Cambodian phone number", "Only Cambodia, Hong Kong or Argentina numbers for now"); without `country` only a full `+…` number reads |
+| `phoneSchema` | A request field: a full number in a supported country → E.164; blank or `null` → `null` |
+| `formatPhone(e164)` | `+855 12 345 678` for display |
+
+A form keeps `phone` and `phoneCountry` in its draft, validates them together (`v.forward(v.partialCheck(…), ['phone'])`, the Branch form), and sends `parsePhone(…).e164`.
