@@ -56,6 +56,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `useCenteredTab` | composable | [UI helpers](./ui-helpers.md#usecenteredtab) | A scrolling tab row keeps its active tab in the middle (D128) |
 | `<ListPagination>` | component | [UI helpers](./ui-helpers.md#listpagination) | "Page [3] of 10 · Rows per page" and the page numbers; every paginated list (D128) |
 | `<QuantityStepper>` | component | [UI helpers](./ui-helpers.md#quantitystepper) | − n + in a pill, no keyboard on touch screens (D128) |
+| `<QrCode>`, `qrImage`, `qrSvg` | component, util | [UI helpers](./ui-helpers.md#qrcode) | A QR code (a table's link, a KHQR), dark on light in both themes (D130) |
 | `<PhoneInput>`, `parsePhone` | component, shared util | [UI helpers](./ui-helpers.md#phoneinput) | A phone number with its country; E.164 on the wire (D127) |
 | `<ListSkeleton>` | component | [UI helpers](./ui-helpers.md#listskeleton) | First-load placeholders |
 | `<SearchInput>` | component | [UI helpers](./ui-helpers.md#searchinput) | Search as you type (debounced) |

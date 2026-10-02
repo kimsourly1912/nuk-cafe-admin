@@ -7,6 +7,7 @@ import { auditStatement, outboxStatement } from '#server/features/platform'
 import type { OrderStep } from './commands'
 import { runOrderCommand } from './commands'
 import { exchangeRateChanged, noExchangeRate, orderChanged, orderNotCancellable, orderNotFound, paymentExpired, returnMethodInvalid } from './orders.errors'
+import { counterKhqr, requireOrderCharge } from './khqr.service'
 import { ORDER_EVENTS } from './orders.events'
 import * as repo from './orders.repository'
 import * as reportsRepo from './reports.repository'
@@ -63,6 +64,7 @@ const toCounterOrder = (row: repo.OrderRow, lines: Awaited<ReturnType<typeof rep
         amountKhr: payment.amountKhr,
         khrPerUsd: payment.khrPerUsd,
         reference: payment.reference,
+        khqrChargeId: payment.khqrChargeId,
         collectedAt: toIso(payment.collectedAt),
         collectedBy: { name: payment.collectedByName },
         returnMethod: payment.returnMethod,
@@ -90,9 +92,9 @@ async function businessDateOf(db: Db, branchId: string, now: Date): Promise<stri
 
 /** The branch's orders still in play, the riel rate, the server's clock, and how many finished today. */
 export async function listCounterQueue(db: Db, actor: BranchActor, now = new Date()): Promise<CounterQueue> {
-  const [rows, rate, today] = await Promise.all([repo.findActiveOrders(db, actor.branchId, now), repo.currentRate(db, now), businessDateOf(db, actor.branchId, now)])
+  const [rows, rate, today, khqr] = await Promise.all([repo.findActiveOrders(db, actor.branchId, now), repo.currentRate(db, now), businessDateOf(db, actor.branchId, now), counterKhqr(db)])
   const [orders, finishedToday] = await Promise.all([withDetails(db, rows), repo.countFinishedOrders(db, actor.branchId, today)])
-  return { orders, khrRate: rate ? toRate(rate) : null, serverTime: now.toISOString(), finishedToday }
+  return { orders, khrRate: rate ? toRate(rate) : null, khqr, serverTime: now.toISOString(), finishedToday }
 }
 
 /**
@@ -185,6 +187,8 @@ export async function payOrder(db: Db, actor: BranchActor, orderId: string, inpu
       if (rate.perUsd !== input.khrPerUsd) throw exchangeRateChanged(rate.perUsd)
     }
     const amountKhr = rate ? toRiel(order.totalMinor, rate.perUsd) : null
+    // A QR shown at the counter (10.15, D130) must be this order's.
+    const charge = input.method === 'khqr' && input.chargeId ? await requireOrderCharge(db, actor, orderId, input.chargeId) : undefined
     return {
       to: 'preparing',
       statements: [repo.insertPaymentStatement(db, {
@@ -195,10 +199,11 @@ export async function payOrder(db: Db, actor: BranchActor, orderId: string, inpu
         amountKhr,
         khrPerUsd: rate?.perUsd ?? null,
         reference: input.method === 'khqr' ? input.reference : null,
+        khqrChargeId: charge?.id ?? null,
         collectedBy: actor.userId,
         collectedAt: now,
       }), outboxStatement(db, ORDER_EVENTS.paid, { orderId })],
-      metadata: { method: input.method, amountMinor: order.totalMinor, amountKhr },
+      metadata: { method: input.method, amountMinor: order.totalMinor, amountKhr, ...(charge && { khqrChargeId: charge.id, khqrCurrency: charge.currency, khqrAmount: charge.amount }) },
     }
   })
 }

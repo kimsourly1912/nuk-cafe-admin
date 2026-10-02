@@ -1,4 +1,4 @@
-import type { ExchangeRates, SetExchangeRateInput } from '#shared/contracts/orders'
+import type { ExchangeRates, KhqrSettings, KhqrSettingsInput, SetExchangeRateInput } from '#shared/contracts/orders'
 
 /** The riel rate in force and its history (`/api/admin/exchange-rates`, D101). */
 export function useExchangeRates() {
@@ -18,4 +18,24 @@ export function useExchangeRateMutations() {
     },
   )
   return { set }
+}
+
+/** KHQR at the counter (`/api/admin/khqr`, step 10.15, D130): the receiving Bakong account. */
+export function useKhqrSettings() {
+  return useApiQuery('exchange-rates:khqr', () => apiFetch<KhqrSettings>('/admin/khqr'))
+}
+
+export function useKhqrSettingsMutations() {
+  const save = useMutation(
+    (input: KhqrSettingsInput) => apiFetch<KhqrSettings>('/admin/khqr', { method: 'PUT', body: input }),
+    {
+      id: 'exchange-rates:khqr',
+      lock: () => 'khqr-settings',
+      successMessage: (settings: KhqrSettings) => (settings.enabled ? 'KHQR settings saved: the counter shows a QR for each order' : 'KHQR settings saved: KHQR at the counter is off'),
+      errorMessage: 'Could not save the KHQR settings',
+      // The counter's queue says whether KHQR is on.
+      invalidate: ['exchange-rates', 'counter'],
+    },
+  )
+  return { save }
 }

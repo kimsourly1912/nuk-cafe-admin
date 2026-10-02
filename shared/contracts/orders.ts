@@ -304,6 +304,8 @@ export const payOrderSchema = v.variant('method', [
   v.strictObject({
     version: versionSchema,
     method: v.literal('khqr'),
+    /** The QR the counter showed (step 10.15, D130); none when the counter's printed KHQR was used. */
+    chargeId: v.optional(v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(64)))),
     reference: v.optional(v.pipe(
       v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(PAYMENT_REFERENCE_MAX, `At most ${PAYMENT_REFERENCE_MAX} characters`))),
       v.transform(reference => reference || null),
@@ -339,6 +341,8 @@ export interface CounterPayment {
   amountKhr: number | null
   khrPerUsd: number | null
   reference: string | null
+  /** The QR the counter showed for this payment (step 10.15, D130). */
+  khqrChargeId: string | null
   collectedAt: string
   collectedBy: { name: string }
   /** A paid order cancelled before it was ready: how the money went back. */
@@ -382,6 +386,8 @@ export interface ExchangeRate {
 export interface CounterQueue {
   orders: CounterOrder[]
   khrRate: ExchangeRate | null
+  /** KHQR at the counter (step 10.15): the currencies offered, or `null` while it isn't set up. */
+  khqr: { currencies: KhqrCurrency[] } | null
   serverTime: string
   /** Orders of today's business day already completed or cancelled ("Finished today (24)", step 10.2). */
   finishedToday: number
@@ -432,4 +438,82 @@ export type SetExchangeRateInput = v.InferOutput<typeof setExchangeRateSchema>
 export interface ExchangeRates {
   current: ExchangeRate | null
   history: ExchangeRate[]
+}
+
+// --- KHQR at the counter (step 10.15, D130) ---
+// A dynamic KHQR (the National Bank of Cambodia's payment QR) made for one order: the customer scans
+// it with any Cambodian banking app, the amount already in it. An admin sets the receiving Bakong
+// account; the money goes straight there.
+
+export const KHQR_CURRENCIES = ['USD', 'KHR'] as const
+export type KhqrCurrency = typeof KHQR_CURRENCIES[number]
+/** The KHQR's limits (NBC's SDK). Its text is ASCII: the name customers see is in Latin letters. */
+export const KHQR_ACCOUNT_MAX = 32
+export const KHQR_NAME_MAX = 25
+export const KHQR_CITY_MAX = 15
+/** How long a QR at the counter works: 15 minutes, or until the order's time to pay is over. */
+export const KHQR_LIFETIME_MINUTES = 15
+
+const ASCII_TEXT = /^[\x20-\x7E]+$/
+const asciiText = (max: number, what: string) => v.pipe(
+  v.string(),
+  v.trim(),
+  v.nonEmpty(`Enter the ${what}`),
+  v.maxLength(max, `At most ${max} characters`),
+  v.regex(ASCII_TEXT, 'Latin letters, digits and simple punctuation only'),
+)
+
+/** `PUT /api/admin/khqr`: the receiving account and what customers see, with the version read. */
+export const khqrSettingsSchema = v.strictObject({
+  version: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  enabled: v.boolean(),
+  accountId: v.pipe(
+    v.string(),
+    v.trim(),
+    v.toLowerCase(),
+    v.nonEmpty('Enter the Bakong account ID'),
+    v.maxLength(KHQR_ACCOUNT_MAX, `At most ${KHQR_ACCOUNT_MAX} characters`),
+    v.regex(/^[\w.-]+@[a-z\d]+$/, 'A Bakong account ID looks like name@bank'),
+  ),
+  merchantName: asciiText(KHQR_NAME_MAX, 'name customers see'),
+  merchantCity: asciiText(KHQR_CITY_MAX, 'city'),
+  currencies: v.pipe(
+    v.array(v.picklist(KHQR_CURRENCIES)),
+    v.minLength(1, 'Choose at least one currency'),
+    v.transform(list => KHQR_CURRENCIES.filter(currency => list.includes(currency))),
+  ),
+})
+export type KhqrSettingsInput = v.InferOutput<typeof khqrSettingsSchema>
+
+/** `GET /api/admin/khqr`: version 0 until it's first saved. */
+export interface KhqrSettings {
+  version: number
+  enabled: boolean
+  accountId: string | null
+  merchantName: string | null
+  merchantCity: string | null
+  currencies: KhqrCurrency[]
+  updatedAt: string | null
+  updatedBy: { name: string } | null
+}
+
+/** `POST /api/counter/{branchId}/orders/{id}/khqr`: the QR for this order in a currency. */
+export const createKhqrSchema = v.strictObject({ currency: v.picklist(KHQR_CURRENCIES) })
+export type CreateKhqrInput = v.InferOutput<typeof createKhqrSchema>
+
+/** One QR made for an order (the open one is answered again while it works). */
+export interface KhqrCharge {
+  id: string
+  currency: KhqrCurrency
+  /** Cents for USD, riel for KHR. */
+  amount: number
+  /** For riel: the rate it was made at (rounded up to ៛100, as cash riel). */
+  khrPerUsd: number | null
+  /** The QR's text, drawn as the QR code. */
+  qr: string
+  /** "Order 042": the bill number in the customer's and the cafe's bank history. */
+  billNumber: string
+  merchantName: string
+  createdAt: string
+  expiresAt: string
 }

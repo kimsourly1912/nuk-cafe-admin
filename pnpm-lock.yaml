@@ -130,6 +130,9 @@ importers:
       '@internationalized/date':
         specifier: ^3.12.4
         version: 3.12.4
+      '@noble/hashes':
+        specifier: ^2.4.0
+        version: 2.4.0
       '@nuxt/ui':
         specifier: ^4.11.2
         version: 4.11.2(5488ece5f2c44ab3f17111aeb3316e44)

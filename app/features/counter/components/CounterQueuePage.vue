@@ -28,7 +28,7 @@ const branchId = computed(() => String(route.params.branchId ?? ''))
 const { user } = useCounterSession()
 const branch = computed(() => user.value?.branches.find(b => b.id === branchId.value) ?? null)
 
-const { query, queue, now, isNew, muted } = useCounterQueue(branchId)
+const { query, queue, now, serverOffset, isNew, muted } = useCounterQueue(branchId)
 const status = useApiQuery('counter:branch-status', () => apiFetch<PublicBranch[]>('/public/branches'), { server: false })
 const branchStatus = computed(() => status.data.value?.find(b => b.id === branchId.value) ?? null)
 const closedNote = computed(() => (branchStatus.value ? openingText(branchStatus.value) : undefined))
@@ -283,6 +283,8 @@ useSeoMeta({ robots: 'noindex' })
       :order="selected"
       :branch-id="branchId"
       :khr-rate="queue?.khrRate ?? null"
+      :khqr="queue?.khqr ?? null"
+      :server-offset="serverOffset"
       @cancel="askCancel"
       @reload="reload()"
     />
