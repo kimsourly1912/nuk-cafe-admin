@@ -206,6 +206,9 @@ describe('the counter', () => {
       await sheet.getByRole('tab', { name: 'KHQR' }).click()
       await sheet.getByRole('img', { name: `KHQR for order ${number(order)}, $2.25` }).waitFor()
       await sheet.getByText('Waiting for the payment: it\'s recorded as soon as Bakong confirms it.').waitFor()
+      // Above the QR, so a tablet's panel shows it without scrolling (820 px tall here).
+      const status = await sheet.getByText('Waiting for the payment: it\'s recorded as soon as Bakong confirms it.').boundingBox()
+      expect(status!.y + status!.height).toBeLessThan(820)
       const charge = await chargeOf(order)
       await bakongPaid(charge.md5, 2.25)
       // Nobody presses Confirm: the next check (every 5 s) records it and closes the panel.

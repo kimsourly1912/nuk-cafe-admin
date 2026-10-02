@@ -124,6 +124,37 @@ const currencyLabel = (value: KhqrCurrency) => (value === 'KHR' ? 'Riel' : 'US d
       />
     </UFieldGroup>
 
+    <!-- The automatic check's status above the QR: below it, a tablet's panel hides it under the fold. -->
+    <template v-if="automaticCheck && charge">
+      <UAlert
+        v-if="check?.status === 'mismatch'"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-triangle-alert"
+        title="A payment arrived on this QR that doesn't match it"
+        :description="`Bakong says ${khqrReceivedText(check.received)}. Nothing was recorded: check your bank app before confirming.`"
+      />
+      <UAlert
+        v-else-if="check?.status === 'unavailable'"
+        color="neutral"
+        variant="subtle"
+        icon="i-lucide-cloud-off"
+        :title="`Automatic check unavailable. ${khqrCheckProblemText(check.problem)}`"
+        description="Confirm after the payment appears in your bank app."
+        :actions="check.problem === 'error' ? [] : [{ label: 'Try again', color: 'neutral', variant: 'outline', onClick: checkAgain }]"
+      />
+      <p
+        v-else-if="check?.status !== 'refund_needed'"
+        class="flex items-center gap-2 text-sm text-muted"
+        role="status"
+      >
+        <UIcon
+          name="i-lucide-loader-circle"
+          class="size-4 shrink-0 animate-spin"
+        />
+        Waiting for the payment: it's recorded as soon as Bakong confirms it.
+      </p>
+    </template>
     <UAlert
       v-if="failure"
       color="warning"
@@ -174,38 +205,8 @@ const currencyLabel = (value: KhqrCurrency) => (value === 'KHR' ? 'Riel' : 'US d
         </p>
       </template>
     </div>
-    <template v-if="automaticCheck && charge">
-      <UAlert
-        v-if="check?.status === 'mismatch'"
-        color="warning"
-        variant="subtle"
-        icon="i-lucide-triangle-alert"
-        title="A payment arrived on this QR that doesn't match it"
-        :description="`Bakong says ${khqrReceivedText(check.received)}. Nothing was recorded: check your bank app before confirming.`"
-      />
-      <UAlert
-        v-else-if="check?.status === 'unavailable'"
-        color="neutral"
-        variant="subtle"
-        icon="i-lucide-cloud-off"
-        :title="`Automatic check unavailable. ${khqrCheckProblemText(check.problem)}`"
-        description="Confirm after the payment appears in your bank app."
-        :actions="check.problem === 'error' ? [] : [{ label: 'Try again', color: 'neutral', variant: 'outline', onClick: checkAgain }]"
-      />
-      <p
-        v-else-if="check?.status !== 'refund_needed'"
-        class="flex items-center gap-2 text-sm text-muted"
-        role="status"
-      >
-        <UIcon
-          name="i-lucide-loader-circle"
-          class="size-4 shrink-0 animate-spin"
-        />
-        Waiting for the payment: it's recorded as soon as Bakong confirms it.
-      </p>
-    </template>
     <p
-      v-else
+      v-if="!automaticCheck"
       class="text-sm text-muted"
     >
       Confirm only after the payment appears in your bank app.
