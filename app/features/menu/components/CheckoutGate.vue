@@ -50,9 +50,11 @@ async function checkVerified() {
     :is="isCompact ? Drawer : Modal"
     v-model:open="shown"
     :title="open === 'verify' ? 'Verify your email to place orders' : 'Sign in to place your order'"
+    :close="false"
     :ui="{ header: 'sr-only' }"
   >
-    <!-- The dialog's title (hidden, it names the dialog) is shown again under the icon. -->
+    <!-- The dialog's title (hidden, it names the dialog) is shown again under the icon. No X: it would be
+         hidden with the header; a tap outside or Escape closes it. -->
     <template #body>
       <div class="flex flex-col items-center gap-3 p-2 text-center">
         <UIcon
