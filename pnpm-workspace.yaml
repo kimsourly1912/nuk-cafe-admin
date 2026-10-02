@@ -9,3 +9,9 @@ minimumReleaseAgeExclude:
 # Remove once wrangler ships a miniflare on a patched undici.
 overrides:
   undici@7: ^7.29.1
+# node-forge GHSA-86w9-cpqp-85rv (high, no patched version): only through listhen, the dev server's
+# HTTPS listener (nuxt > @nuxt/cli, nitropack > listhen); not in the Worker build. Remove once
+# node-forge ships a fix (D54).
+auditConfig:
+  ignoreGhsas:
+    - GHSA-86w9-cpqp-85rv

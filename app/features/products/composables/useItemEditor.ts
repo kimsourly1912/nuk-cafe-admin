@@ -27,6 +27,11 @@ export interface ItemEditorOptions {
  * continues if the editor is closed; a failure then offers "Reopen" with the input restored. A
  * refused save is also kept in `lastError`, shown inside the editor (a toast can't be reached while a
  * slide-over is open, D67). An archived item is read-only.
+ *
+ * "Save and publish" (a new item or a draft, D125) saves, then publishes the version the save
+ * returned, through the list's own publish action. If the server refuses to publish (nothing to
+ * sell yet, a category that holds sub-categories), the item stays saved as a draft and the editor
+ * closes; the toast says it was saved but not published, and why.
  */
 export function useItemEditor(options: ItemEditorOptions) {
   const { itemId, item, draft, onLoaded, reopen } = options
@@ -43,7 +48,9 @@ export function useItemEditor(options: ItemEditorOptions) {
   const initial = toItemForm(item, addOnLibrary.value)
   const state = reactive<ItemForm>(cloneFormValue(draft ?? initial))
 
-  const { create, update } = useItemMutations()
+  const { create, update, publish } = useItemMutations()
+  /** A new item or a draft can be published from the form. */
+  const canPublish = computed(() => !archived.value && (!isEdit || loaded.value?.status === 'draft'))
   const saving = ref(false)
   const uploading = ref(false)
   /** The last refused save, shown inside the editor. */
@@ -65,8 +72,13 @@ export function useItemEditor(options: ItemEditorOptions) {
     closed = true
   })
 
-  /** Saves the form. Resolves `true` when saved; on a refusal, the error (also in `lastError`). */
-  async function save(): Promise<{ ok: true } | { ok: false, error?: ApiError }> {
+  /**
+   * Saves the form, and publishes it when asked (`canPublish` only). Resolves `ok` once saved: a
+   * refused publish leaves a saved draft, reported by its own toast. On a refused save, the error
+   * (also in `lastError`).
+   */
+  async function save(options: { publish?: boolean } = {}): Promise<{ ok: true } | { ok: false, error?: ApiError }> {
+    const publishing = Boolean(options.publish && canPublish.value)
     if (uploading.value || archived.value) return { ok: false }
     const input = cloneFormValue(state)
     const overrides = { errorActions: () => (closed ? [{ label: 'Reopen', onClick: () => reopen(loaded.value, input) }] : []) }
@@ -74,11 +86,16 @@ export function useItemEditor(options: ItemEditorOptions) {
     lastError.value = undefined
     saving.value = true
     const result = loaded.value
-      ? await update.execute({ id: loaded.value.id, name: input.name.trim(), body: toUpdateItemBody(input, loaded.value) }, overrides)
-      : await create.execute(toCreateItemBody(input), overrides)
-    saving.value = false
+      ? await update.execute({ id: loaded.value.id, name: input.name.trim(), body: toUpdateItemBody(input, loaded.value), publishing }, overrides)
+      : await create.execute({ body: toCreateItemBody(input), publishing }, overrides)
 
-    if (result.ok) return { ok: true }
+    if (result.ok) {
+      const saved = result.data
+      if (publishing) await publish.execute({ id: saved.id, name: saved.name, version: saved.version, afterSave: true })
+      saving.value = false
+      return { ok: true }
+    }
+    saving.value = false
     if (result.status !== 'error') return { ok: false }
     lastError.value = result.error.code === 'VERSION_CONFLICT'
       ? 'Someone else changed this menu item. Close it and open it again to see their changes (your input will be lost).'
@@ -86,5 +103,5 @@ export function useItemEditor(options: ItemEditorOptions) {
     return { ok: false, error: result.error }
   }
 
-  return { isEdit, itemQuery, loaded, ready, archived, initial, state, saving, uploading, lastError, save }
+  return { isEdit, itemQuery, loaded, ready, archived, canPublish, initial, state, saving, uploading, lastError, save }
 }

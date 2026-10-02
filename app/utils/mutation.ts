@@ -68,8 +68,8 @@ export interface MutationOptions<TInput, TResult> {
   lock?: (input: TInput) => MutationKey
   /** Ask before running (e.g. deletes). */
   confirm?: MaybeFn<ConfirmOptions, [input: TInput]>
-  /** Toast title on success. `false` for no toast. */
-  successMessage?: MaybeFn<string, [data: TResult, input: TInput]> | false
+  /** Toast title on success. `false` (or a function returning `false` for this call) for no toast. */
+  successMessage?: MaybeFn<string | false, [data: TResult, input: TInput]> | false
   /** Toast title on failure; the description is the ApiError's user-safe message. */
   errorMessage?: MaybeFn<string, [input: TInput]>
   /** Features whose cached data to refresh after success (see `invalidate`). */

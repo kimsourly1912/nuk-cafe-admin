@@ -10,7 +10,8 @@
  * choice is made when opening; resizing never changes the URL. `?item=` opens the slide-over at
  * every width (links keep working); closing it removes only `item`, and Back closes it.
  * On the UI standard (D89): the name is each record's target; the List view is rows on phones and
- * the table from `sm`; the grid's columns follow its container; bulk archive is a Select mode.
+ * the table from `sm`; the grid's columns follow its container; bulk publish and archive are a
+ * Select mode (publish takes the selected drafts, D125).
  * docs/plans/menu-screens-move.md
  */
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
@@ -61,7 +62,7 @@ watch(() => data.value?.totalPages, (totalPages) => {
   if (totalPages !== undefined && page.value > Math.max(totalPages, 1)) page.value = Math.max(totalPages, 1)
 })
 
-// --- Select mode: bulk archive, so only items that aren't archived can be selected ---
+// --- Select mode: bulk publish and archive, so only items that aren't archived can be selected ---
 const selecting = ref(false)
 const selectableRows = computed(() => rows.value.filter(item => item.status !== 'archived'))
 const selection = useTableSelection(selectableRows, item => item.id, { resetOn: [query] })
@@ -78,8 +79,20 @@ watch(() => filters.status, (status) => {
   if (status === 'archived') exitSelect()
 })
 
+/** Publishing applies to drafts only (D125); published items in the selection are left as they are. */
+const selectedDrafts = computed(() => selection.selected.filter(item => item.status === 'draft'))
+
+async function publishSelected() {
+  await settle(publish.executeMany(selectedDrafts.value))
+}
+
 async function archiveSelected() {
-  const result = await archive.executeMany(selection.selected)
+  await settle(archive.executeMany(selection.selected))
+}
+
+/** After a bulk action: keep only the items that still need attention selected. */
+async function settle(running: ReturnType<typeof archive.executeMany>) {
+  const result = await running
   if (result.cancelled) return
   // Keep only the items that still need attention selected: failed, skipped (busy) and not started.
   const keep = [
@@ -253,7 +266,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             </UButton>
           </UTooltip>
           <UTooltip
-            text="Select menu items to archive"
+            text="Select menu items to publish or archive"
             :kbds="['s']"
           >
             <UButton
@@ -304,6 +317,14 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         @toggle-all="selection.toggleAll(!selection.allSelected)"
         @exit="exitSelect()"
       >
+        <UButton
+          :label="selectedDrafts.length && selectedDrafts.length < selection.count ? `Publish ${pluralize(selectedDrafts.length, ['draft', 'drafts'])}` : 'Publish selected'"
+          icon="i-lucide-send"
+          color="neutral"
+          variant="subtle"
+          :disabled="!selectedDrafts.length"
+          @click="publishSelected"
+        />
         <UButton
           label="Archive selected"
           icon="i-lucide-archive"

@@ -6,7 +6,8 @@
  * the bottom bar; from `lg` the sections are one column and Save is in the navbar. The same editor
  * as the slide-over (`useItemEditor`, `ProductFormFields`): same data, rules and actions.
  *
- * Saving returns to the list, like the slide-over closing. Back (and ←) returns to the list with its
+ * Saving returns to the list, like the slide-over closing. A new item or a draft also has "Save and
+ * publish" (D125). Back (and ←) returns to the list with its
  * search and filters: the route was pushed from it. Unsaved input is guarded by the route guard.
  */
 import { useItemEditor } from '../composables/useItemEditor'
@@ -28,7 +29,7 @@ const editor = useItemEditor({
   // The page may be gone by then: reopen the input in the slide-over, which works on any page.
   reopen: (item, draft) => overlay.create(ProductFormSlideover, { destroyOnClose: true }).open({ item, draft }),
 })
-const { isEdit, itemQuery, loaded, ready, archived, state, saving, uploading, lastError } = editor
+const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError } = editor
 
 const unsaved = useUnsavedChanges(state, { initial: editor.initial, paused: saving })
 
@@ -49,10 +50,17 @@ function leave() {
 }
 
 const fields = useTemplateRef('fields')
-useSubmitShortcut(() => fields.value?.submit())
+/** Which button submitted the form: "Save and publish" sets it (D125); Save and Ctrl/⌘+Enter clear it. */
+const publishNext = ref(false)
+function submit(publish: boolean) {
+  publishNext.value = publish
+  fields.value?.submit()
+}
+useSubmitShortcut(() => submit(false))
 
 async function onSubmit() {
-  const result = await editor.save()
+  const result = await editor.save({ publish: publishNext.value })
+  publishNext.value = false
   if (!result.ok) {
     fields.value?.setServerErrors(result.error?.fieldErrors)
     return
@@ -85,6 +93,16 @@ async function onSubmit() {
           <span class="truncate lg:hidden">{{ title }}</span>
         </template>
         <template #right>
+          <UButton
+            v-if="canPublish"
+            :label="isEdit ? 'Save and publish' : 'Create and publish'"
+            color="neutral"
+            variant="outline"
+            class="hidden lg:inline-flex"
+            :loading="saving && publishNext"
+            :disabled="uploading || !ready || saving"
+            @click="submit(true)"
+          />
           <UTooltip
             v-if="!archived"
             :text="isEdit ? 'Save' : 'Create'"
@@ -96,8 +114,9 @@ async function onSubmit() {
               :label="isEdit ? 'Save' : 'Create'"
               icon="i-lucide-save"
               class="hidden lg:inline-flex"
-              :loading="saving"
-              :disabled="uploading || !ready"
+              :loading="saving && !publishNext"
+              :disabled="uploading || !ready || (saving && publishNext)"
+              @click="publishNext = false"
             />
           </UTooltip>
         </template>
@@ -107,7 +126,7 @@ async function onSubmit() {
     <template #body>
       <div class="mx-auto w-full max-w-3xl space-y-4">
         <p class="text-sm text-muted">
-          {{ loaded ? `Status: ${ITEM_STATUS_LABELS[loaded.status]}` : isEdit ? 'Loading…' : 'Saved as a draft: publish it from the list when it\'s ready.' }}
+          {{ loaded ? `Status: ${ITEM_STATUS_LABELS[loaded.status]}` : isEdit ? 'Loading…' : 'Create saves a draft; Create and publish also puts it on the menu.' }}
         </p>
 
         <ApiErrorAlert
@@ -154,12 +173,22 @@ async function onSubmit() {
             {{ uploading ? 'Waiting for the image upload…' : saving ? 'Saving continues if you leave.' : '' }}
           </p>
           <UButton
+            v-if="canPublish"
+            :label="isEdit ? 'Save and publish' : 'Create and publish'"
+            color="neutral"
+            variant="outline"
+            :loading="saving && publishNext"
+            :disabled="uploading || saving"
+            @click="submit(true)"
+          />
+          <UButton
             type="submit"
             form="product-page-form"
             :label="isEdit ? 'Save' : 'Create'"
             icon="i-lucide-save"
-            :loading="saving"
-            :disabled="uploading"
+            :loading="saving && !publishNext"
+            :disabled="uploading || (saving && publishNext)"
+            @click="publishNext = false"
           />
         </BottomActionBar>
       </div>

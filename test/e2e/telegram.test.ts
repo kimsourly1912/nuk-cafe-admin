@@ -79,9 +79,15 @@ describe('Telegram page', () => {
     const posted: string[] = []
     // Each link is new, as on the server: the second dialog never shares the first one's polled link.
     let links = 0
+    // The bot joins the group only once the test has read the instructions: answering "confirm" on
+    // the first poll let a loaded runner skip the waiting step before the test looked (10.10).
+    let joined = false
     const { page } = await openTelegram({ enabled: true, botUsername: 'NukCafeBot', destinations: [], rules: [] }, {
       'POST /admin/telegram/links': () => ({ ...linkOf('group', { id: `link-${++links}` }), url: 'https://t.me/NukCafeBot?startgroup=abc' }),
-      'GET /admin/telegram/links/{id}': ({ url: u }) => linkOf('group', { id: u.pathname.split('/').at(-1)!, status: 'confirm', chat: { title: 'NUK Riverside Staff', memberCount: 8 } }),
+      'GET /admin/telegram/links/{id}': ({ url: u }) => {
+        const id = u.pathname.split('/').at(-1)!
+        return joined ? linkOf('group', { id, status: 'confirm', chat: { title: 'NUK Riverside Staff', memberCount: 8 } }) : linkOf('group', { id })
+      },
       'POST /admin/telegram/links/{id}/cancel': ({ url: u }) => {
         posted.push(u.pathname)
         return linkOf('group', { status: 'cancelled' })
@@ -93,10 +99,11 @@ describe('Telegram page', () => {
     })
     await page.getByRole('button', { name: 'Connect a group' }).click()
     const dialog = page.getByRole('dialog')
-    await dialog.getByText('choose your staff group', { exact: false }).waitFor()
+    await dialog.getByText('choose your staff group', { exact: false }).waitFor({ timeout: 10_000 })
+    joined = true
     await dialog.getByText('(group, 8 members)').waitFor({ timeout: 10_000 })
-    await dialog.getByText('Everyone in this group sees what\'s sent there.').waitFor()
-    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await dialog.getByText('Everyone in this group sees what\'s sent there.').waitFor({ timeout: 5000 })
+    await dialog.getByRole('button', { name: 'Cancel' }).click({ timeout: 5000 })
     await expect.poll(() => posted).toEqual(['/api/admin/telegram/links/link-1/cancel'])
     // Like a person: the dialog is gone before Connect a group is pressed again.
     await expect.poll(() => page.getByRole('dialog').count()).toBe(0)

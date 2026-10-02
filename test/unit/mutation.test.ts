@@ -127,6 +127,14 @@ describe('execute (single item)', () => {
     expect(deps.failure).toHaveBeenCalledWith(expect.any(String), expect.any(String), [reopen])
   })
 
+  it('shows no success toast when the message function answers false for that call', async () => {
+    const { mutation, deps } = setup(async () => {}, { successMessage: (_, item) => (item.id === 1 ? false : `Deleted ${item.name}`) })
+    await mutation.execute(a)
+    expect(deps.success).not.toHaveBeenCalled()
+    await mutation.execute(b)
+    expect(deps.success).toHaveBeenCalledWith('Deleted B')
+  })
+
   it('marks removed items until the refresh lands, then clears them', async () => {
     const refresh = deferred()
     const { mutation, deps } = setup(async () => {})

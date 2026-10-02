@@ -5,7 +5,8 @@
  * the list has summaries) or nothing for a new one; emits `close(true)` when saved. The state and
  * save live in `useItemEditor`, the fields in `ProductFormFields`. Like the other forms it stays
  * open while saving but can be closed: the save continues, and a failure offers "Reopen" with the
- * input restored. An archived item is shown read-only.
+ * input restored. An archived item is shown read-only. A new item or a draft also has "Save and
+ * publish" / "Create and publish" (D125): saved, then published; a refused publish leaves a draft.
  */
 import type { MenuItem } from '#shared/contracts/menu-items'
 import { useItemEditor } from '../composables/useItemEditor'
@@ -35,7 +36,7 @@ const editor = useItemEditor({
   onLoaded: () => unsaved.markClean(),
   reopen: (item, draft) => overlay.create(ProductFormSlideover, { destroyOnClose: true }).open({ item, draft }),
 })
-const { isEdit, itemQuery, loaded, ready, archived, state, saving, uploading, lastError } = editor
+const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError } = editor
 
 const unsaved = useModalUnsavedChanges(state, {
   initial: editor.initial,
@@ -44,10 +45,17 @@ const unsaved = useModalUnsavedChanges(state, {
 })
 
 const fields = useTemplateRef('fields')
-useSubmitShortcut(() => fields.value?.submit())
+/** Which button submitted the form: "Save and publish" sets it (D125); Save and Ctrl/⌘+Enter clear it. */
+const publishNext = ref(false)
+function submit(publish: boolean) {
+  publishNext.value = publish
+  fields.value?.submit()
+}
+useSubmitShortcut(() => submit(false))
 
 async function onSubmit() {
-  const result = await editor.save()
+  const result = await editor.save({ publish: publishNext.value })
+  publishNext.value = false
   if (!result.ok) {
     fields.value?.setServerErrors(result.error?.fieldErrors)
     return
@@ -60,7 +68,7 @@ async function onSubmit() {
 <template>
   <USlideover
     :title="isEdit ? (archived ? 'Archived menu item' : 'Edit menu item') : 'New menu item'"
-    :description="loaded ? `Status: ${ITEM_STATUS_LABELS[loaded.status]}` : 'Saved as a draft: publish it from the list when it\'s ready.'"
+    :description="loaded ? `Status: ${ITEM_STATUS_LABELS[loaded.status]}` : 'Create saves a draft; Create and publish also puts it on the menu.'"
     :ui="{ content: 'max-w-2xl' }"
     @update:open="unsaved.onOpenChange"
   >
@@ -104,6 +112,15 @@ async function onSubmit() {
           variant="outline"
           @click="unsaved.requestClose()"
         />
+        <UButton
+          v-if="canPublish"
+          :label="isEdit ? 'Save and publish' : 'Create and publish'"
+          color="neutral"
+          variant="outline"
+          :loading="saving && publishNext"
+          :disabled="uploading || !ready || saving"
+          @click="submit(true)"
+        />
         <UTooltip
           v-if="!archived"
           :text="isEdit ? 'Save' : 'Create'"
@@ -113,8 +130,9 @@ async function onSubmit() {
             type="submit"
             form="product-form"
             :label="isEdit ? 'Save' : 'Create'"
-            :loading="saving"
-            :disabled="uploading || !ready"
+            :loading="saving && !publishNext"
+            :disabled="uploading || !ready || (saving && publishNext)"
+            @click="publishNext = false"
           />
         </UTooltip>
       </div>

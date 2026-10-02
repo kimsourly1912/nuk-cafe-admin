@@ -17,15 +17,15 @@ const uploading = defineModel<boolean>('uploading', { default: false })
 
 const { uploadImage } = useItemMutations()
 const formKey = useId()
+const problem = ref<string>()
+/** Making the photo smaller (a moment for a big phone photo), before the upload starts. */
+const preparing = ref(false)
+// Runs at once, during setup: declared after `preparing`, which it reads.
 watchEffect(() => {
   // Both read every time, so the effect always tracks both.
   const pending = uploadImage.isPending(formKey)
   uploading.value = preparing.value || pending
 })
-
-const problem = ref<string>()
-/** Making the photo smaller (a moment for a big phone photo), before the upload starts. */
-const preparing = ref(false)
 const maxMb = IMAGE_MAX_BYTES / 1024 / 1024
 
 const { open, onChange } = useFileDialog({ accept: IMAGE_TYPES.join(','), multiple: false, reset: true })

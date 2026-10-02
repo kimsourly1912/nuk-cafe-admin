@@ -68,7 +68,7 @@ describe('bulk archive vs an edit in progress', () => {
     await page.getByRole('menuitem', { name: 'Edit' }).click()
     const form = page.getByRole('dialog', { name: 'Edit menu item' })
     await form.getByLabel('Name', { exact: true }).fill('Item 1b')
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
     await save.started()
     await form.locator('[data-slot="footer"]').getByRole('button', { name: 'Close' }).click()
     await form.waitFor({ state: 'hidden' })
@@ -134,6 +134,34 @@ describe('bulk archive: Stop and Retry failed', () => {
     await toast(page, /^1 menu item archived$/).waitFor()
     expect(archives(api.calls)).toEqual(['POST /admin/menu/items/item-1/archive', 'POST /admin/menu/items/item-2/archive', 'POST /admin/menu/items/item-2/archive'])
     expect(await page.getByRole('alertdialog').count()).toBe(0)
+  })
+})
+
+describe('bulk publish (D125)', () => {
+  it('publishes the selected drafts only, after asking; a refused one stays selected with the reason', async () => {
+    const rows = [
+      menuItemSummaryOf('item-1', 'Item 1'),
+      menuItemSummaryOf('item-2', 'Item 2'),
+      menuItemSummaryOf('item-3', 'Item 3', { status: 'active' }),
+    ]
+    const { page, api } = await open({
+      'GET /admin/menu/items': paginatedHandler(rows),
+      'POST /admin/menu/items/{id}/publish': (request) => {
+        if (idOf(request) === 'item-2') throw failures.validation('Switch on and price at least one version before publishing.')
+        return menuItemOf(idOf(request), 'x', { status: 'active' })
+      },
+    })
+    await selectAll(page)
+    await selectedCount(page, 3).waitFor()
+    await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Publish 2 drafts' }).click()
+    const confirm = page.getByRole('alertdialog').or(page.getByRole('dialog'))
+    await confirm.getByText('Publish 2 menu items?').waitFor()
+    await confirm.getByRole('button', { name: 'Publish', exact: true }).click()
+
+    await toast(page, '1 menu item published, 1 failed').waitFor()
+    await page.getByText('Switch on and price at least one version before publishing. (1)').first().waitFor()
+    expect(api.calls.filter(c => c.endsWith('/publish')).sort()).toEqual(['POST /admin/menu/items/item-1/publish', 'POST /admin/menu/items/item-2/publish'])
+    await selectedCount(page, 1).waitFor()
   })
 })
 
