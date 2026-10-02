@@ -90,9 +90,12 @@ async function businessDateOf(db: Db, branchId: string, now: Date): Promise<stri
   return businessDateAt(now, branch.timeZone)
 }
 
-/** The branch's orders still in play, the riel rate, the server's clock, and how many finished today. */
-export async function listCounterQueue(db: Db, actor: BranchActor, now = new Date()): Promise<CounterQueue> {
-  const [rows, rate, today, khqr] = await Promise.all([repo.findActiveOrders(db, actor.branchId, now), repo.currentRate(db, now), businessDateOf(db, actor.branchId, now), counterKhqr(db)])
+/**
+ * The branch's orders still in play, the riel rate, KHQR (and whether this server checks it with
+ * Bakong, `automaticCheck`, D131), the server's clock, and how many finished today.
+ */
+export async function listCounterQueue(db: Db, actor: BranchActor, now = new Date(), automaticCheck = false): Promise<CounterQueue> {
+  const [rows, rate, today, khqr] = await Promise.all([repo.findActiveOrders(db, actor.branchId, now), repo.currentRate(db, now), businessDateOf(db, actor.branchId, now), counterKhqr(db, automaticCheck)])
   const [orders, finishedToday] = await Promise.all([withDetails(db, rows), repo.countFinishedOrders(db, actor.branchId, today)])
   return { orders, khrRate: rate ? toRate(rate) : null, khqr, serverTime: now.toISOString(), finishedToday }
 }
@@ -204,6 +207,36 @@ export async function payOrder(db: Db, actor: BranchActor, orderId: string, inpu
         collectedAt: now,
       }), outboxStatement(db, ORDER_EVENTS.paid, { orderId })],
       metadata: { method: input.method, amountMinor: order.totalMinor, amountKhr, ...(charge && { khqrChargeId: charge.id, khqrCurrency: charge.currency, khqrAmount: charge.amount }) },
+    }
+  })
+}
+
+/**
+ * Records a KHQR payment Bakong confirmed (step 10.15b, D131), as the cashier whose screen asked:
+ * the same payment as `pay`, naming the QR and Bakong's reference, from the order's version now.
+ * Not refused after the pay-by time: the money has arrived (if the expiry cancelled the order
+ * first, this is refused and the caller says the money goes back). Keyed by the QR: asking again
+ * records nothing new, and two cashiers asking at once record one payment (the version guard and
+ * the payment's unique index).
+ */
+export async function recordCheckedKhqrPayment(db: Db, actor: BranchActor, order: repo.OrderRow, charge: { id: string, currency: string, amount: number }, reference: string | null, now = new Date()): Promise<CounterOrder> {
+  return runCommand(db, actor, order.id, `khqr-check:${charge.id}`, { operation: 'pay', input: { version: order.version }, request: { method: 'khqr', chargeId: charge.id, checked: true }, now }, (current) => {
+    requireStatus(current, ['awaiting_payment'])
+    return {
+      to: 'preparing',
+      statements: [repo.insertPaymentStatement(db, {
+        orderId: current.id,
+        branchId: actor.branchId,
+        method: 'khqr',
+        amountMinor: current.totalMinor,
+        amountKhr: null,
+        khrPerUsd: null,
+        reference: reference?.slice(0, 64) ?? null,
+        khqrChargeId: charge.id,
+        collectedBy: actor.userId,
+        collectedAt: now,
+      }), outboxStatement(db, ORDER_EVENTS.paid, { orderId: current.id })],
+      metadata: { method: 'khqr', amountMinor: current.totalMinor, amountKhr: null, khqrChargeId: charge.id, khqrCurrency: charge.currency, khqrAmount: charge.amount, checkedWithBakong: true },
     }
   })
 }

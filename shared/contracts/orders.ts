@@ -386,8 +386,11 @@ export interface ExchangeRate {
 export interface CounterQueue {
   orders: CounterOrder[]
   khrRate: ExchangeRate | null
-  /** KHQR at the counter (step 10.15): the currencies offered, or `null` while it isn't set up. */
-  khqr: { currencies: KhqrCurrency[] } | null
+  /**
+   * KHQR at the counter (step 10.15): the currencies offered, and whether the server asks Bakong
+   * whether a QR was paid (10.15b, D131); `null` while it isn't set up.
+   */
+  khqr: { currencies: KhqrCurrency[], automaticCheck: boolean } | null
   serverTime: string
   /** Orders of today's business day already completed or cancelled ("Finished today (24)", step 10.2). */
   finishedToday: number
@@ -495,6 +498,8 @@ export interface KhqrSettings {
   currencies: KhqrCurrency[]
   updatedAt: string | null
   updatedBy: { name: string } | null
+  /** Whether `NUXT_BAKONG_TOKEN` is set: the counter then records a QR's payment by itself (10.15b, D131). */
+  automaticCheck: boolean
 }
 
 /** `POST /api/counter/{branchId}/orders/{id}/khqr`: the QR for this order in a currency. */
@@ -517,3 +522,32 @@ export interface KhqrCharge {
   createdAt: string
   expiresAt: string
 }
+
+// --- Checking a KHQR with Bakong (step 10.15b, D131) ---
+// The server asks Bakong whether the QR was paid (by its MD5); paid to our account in its currency
+// and amount, the payment is recorded as the cashier who asked. Otherwise the cashier confirms by hand.
+
+/** Why the automatic check can't say: no token, Bakong refused the token or this server, or anything else. */
+export type KhqrCheckProblem = 'not_set_up' | 'token' | 'refused' | 'error'
+
+/** What Bakong says arrived on a QR, in the currency's units (dollars or riel). */
+export interface KhqrReceived {
+  currency: string
+  amount: number
+  toAccountId: string
+}
+
+/** `POST /api/counter/{branchId}/orders/{id}/khqr/{chargeId}/check`. */
+export type KhqrCheck
+  /** Paid: the payment is recorded (now, or earlier by this QR); the order as it is now. */
+  = | { status: 'paid', order: CounterOrder }
+  /** Not paid yet. */
+    | { status: 'waiting' }
+  /** Something arrived on this QR that isn't its amount, currency or account: nothing recorded. */
+    | { status: 'mismatch', received: KhqrReceived }
+  /** Paid, but the order was already paid another way or cancelled: the money goes back. */
+    | { status: 'refund_needed', received: KhqrReceived, order: CounterOrder }
+    | { status: 'unavailable', problem: KhqrCheckProblem }
+
+/** `POST /api/admin/khqr/test`: whether this server can ask Bakong with its token. */
+export type BakongConnectionTest = { status: 'connected' } | { status: 'unavailable', problem: KhqrCheckProblem, detail: string | null }

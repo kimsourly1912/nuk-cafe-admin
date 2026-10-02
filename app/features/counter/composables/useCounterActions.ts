@@ -1,4 +1,4 @@
-import type { CancelOrderInput, CounterOrder, KhqrCharge, KhqrCurrency, PayOrderInput } from '#shared/contracts/orders'
+import type { CancelOrderInput, CounterOrder, KhqrCharge, KhqrCheck, KhqrCurrency, PayOrderInput } from '#shared/contracts/orders'
 import { orderNumber } from '../utils/counter'
 
 /**
@@ -55,6 +55,15 @@ export function useCounterActions(branchId: MaybeRefOrGetter<string>) {
     return apiFetch<KhqrCharge>(path(order, 'khqr'), { method: 'POST', body: { currency } })
   }
 
+  /**
+   * Asks the server to check the QR with Bakong (step 10.15b, D131). Paid as it should be, the server
+   * records the payment as this cashier. The caller refreshes the queue once it has shown the
+   * answer: refreshed first, the paid order leaves the payment form and the answer goes unseen.
+   */
+  function checkKhqr(order: CounterOrder, charge: KhqrCharge) {
+    return apiFetch<KhqrCheck>(`${path(order, 'khqr')}/${encodeURIComponent(charge.id)}/check`, { method: 'POST' })
+  }
+
   async function cancel(order: CounterOrder, input: CancelOrderInput, key: string) {
     const cancelled = await post(order, 'cancel', input, key)
     await invalidate('counter')
@@ -64,5 +73,5 @@ export function useCounterActions(branchId: MaybeRefOrGetter<string>) {
   /** Any command in flight for this order (the card dims and shows a spinner). */
   const isBusy = (order: CounterOrder) => markReady.isPending(order.id) || complete.isPending(order.id)
 
-  return { markReady, complete, pay, khqr, cancel, isBusy }
+  return { markReady, complete, pay, khqr, checkKhqr, cancel, isBusy }
 }

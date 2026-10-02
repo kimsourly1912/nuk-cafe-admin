@@ -5,12 +5,15 @@ import { createServer } from 'node:net'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { TestProject } from 'vitest/node'
+import { FAKE_BAKONG_TOKEN, startFakeBakong } from './fake-bakong'
 import type { ShopSeed } from './seed'
 import { seedShop } from './seed'
 
 declare module 'vitest' {
   export interface ProvidedContext {
     e2eHost: string
+    /** The stand-in for Bakong the e2e server asks (`fake-bakong.ts`, D131). */
+    fakeBakongUrl: string
     /** The customer site's seeded data (`seed.ts`, D95). */
     shopSeed: ShopSeed
   }
@@ -60,6 +63,10 @@ export default async function ({ provide }: TestProject) {
   const shopSeed = await seedShop(join(rootDir, E2E_HUB_DIR, 'db', 'sqlite.db'), E2E_QR_SECRET)
   provide('shopSeed', shopSeed)
 
+  // The counter's automatic KHQR check (D131) asks this stand-in instead of Bakong.
+  const bakong = await startFakeBakong()
+  provide('fakeBakongUrl', bakong.url)
+
   const port = await freePort()
   const host = `http://127.0.0.1:${port}`
   const server = spawn(process.execPath, ['.output/server/index.mjs'], {
@@ -69,7 +76,9 @@ export default async function ({ provide }: TestProject) {
       // Better Auth needs the site's address and a secret in a production build (its routes answer
       // 500 without them). Test values: this server only ever serves the test browser.
       NUXT_PUBLIC_SITE_URL: host,
-      NUXT_BETTER_AUTH_SECRET: 'e2e-better-auth-secret-at-least-32-characters' },
+      NUXT_BETTER_AUTH_SECRET: 'e2e-better-auth-secret-at-least-32-characters',
+      NUXT_BAKONG_API_URL: bakong.url,
+      NUXT_BAKONG_TOKEN: FAKE_BAKONG_TOKEN },
     stdio: 'ignore',
   })
   await waitUntilUp(host)
@@ -77,6 +86,7 @@ export default async function ({ provide }: TestProject) {
 
   return () => {
     server.kill()
+    bakong.close()
   }
 }
 
