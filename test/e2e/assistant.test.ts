@@ -55,7 +55,7 @@ async function open(path = '/admin/staff', width = 1440) {
     // The pages the tests visit, empty: only the panel matters here.
     'GET /admin/branches/options': () => [],
     'GET /admin/exchange-rates': () => ({ current: null, history: [] }),
-    'GET /admin/khqr': () => ({ version: 0, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: [], updatedAt: null, updatedBy: null, automaticCheck: false }),
+    'GET /admin/khqr': () => ({ version: 0, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: [], updatedAt: null, updatedBy: null, automaticCheck: false, tokenExpiresAt: null }),
   })
   // The Ask button and the shortcut work once the assistant's status has loaded.
   const status = page.waitForResponse(response => response.url().endsWith('/api/admin/assistant'))

@@ -8,12 +8,15 @@
  *
  * The automatic check (10.15b, D131): with the `NUXT_BAKONG_TOKEN` secret set, the counter records
  * a QR's payment as soon as Bakong confirms it. Test connection asks Bakong once, so a refused
- * token or server shows here rather than at the counter.
+ * token or server shows here rather than at the counter. The token's expiry (read from it on the
+ * server, 10.16, D132) shows here too, amber within 14 days and red once expired; Telegram reminds
+ * the chats that get server errors.
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { BakongConnectionTest, KhqrCheckProblem, KhqrCurrency, KhqrSettings, KhqrSettingsInput } from '#shared/contracts/orders'
 import { KHQR_ACCOUNT_MAX, KHQR_CITY_MAX, KHQR_NAME_MAX, khqrSettingsSchema } from '#shared/contracts/orders'
 import { testBakongConnection, useKhqrSettings, useKhqrSettingsMutations } from '../composables/useExchangeRates'
+import { tokenExpiry } from '../utils/bakong-token'
 
 const { data, error, loading, refresh } = useKhqrSettings()
 const { save } = useKhqrSettingsMutations()
@@ -80,6 +83,9 @@ const problemText: Record<KhqrCheckProblem, string> = {
   refused: 'Bakong refused this server. Bakong may answer only servers in Cambodia; until then, cashiers confirm KHQR payments by hand.',
   error: 'Bakong didn\'t answer. Try again in a minute.',
 }
+
+const expiry = computed(() => (data.value?.tokenExpiresAt ? tokenExpiry(data.value.tokenExpiresAt, Date.now()) : null))
+const expiryColor = { neutral: 'neutral', warning: 'warning', error: 'error' } as const
 
 const currencyItems: { label: string, value: KhqrCurrency }[] = [
   { label: 'US dollars', value: 'USD' },
@@ -225,6 +231,24 @@ const currencyItems: { label: string, value: KhqrCurrency }[] = [
           {{ data.automaticCheck
             ? 'The counter records a KHQR payment as soon as Bakong confirms it; cashiers can still confirm by hand.'
             : 'Cashiers confirm each KHQR payment after it appears in the bank app. To check automatically, the owner sets the Bakong token as the server secret NUXT_BAKONG_TOKEN.' }}
+        </p>
+        <UAlert
+          v-if="data.automaticCheck && expiry"
+          :color="expiryColor[expiry.tone]"
+          variant="subtle"
+          :icon="expiry.tone === 'neutral' ? 'i-lucide-key-round' : 'i-lucide-triangle-alert'"
+          :title="expiry.title"
+          :description="expiry.tone === 'neutral'
+            ? 'Bakong tokens last 90 days. Telegram reminds the chats that get server errors 14, 7, 3 and 1 days before.'
+            : expiry.tone === 'warning'
+              ? 'Get a new token from Bakong\'s developer portal and replace the server secret NUXT_BAKONG_TOKEN before then, or cashiers will have to confirm KHQR payments by hand.'
+              : 'Cashiers confirm KHQR payments by hand until a new token is set: get one from Bakong\'s developer portal and replace the server secret NUXT_BAKONG_TOKEN.'"
+        />
+        <p
+          v-else-if="data.automaticCheck"
+          class="text-sm text-muted"
+        >
+          This token carries no expiry date: Bakong tokens last 90 days, so note the day you set it.
         </p>
         <UButton
           v-if="data.automaticCheck"

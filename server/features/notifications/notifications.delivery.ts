@@ -13,7 +13,7 @@ import { log } from '#server/utils/log'
 import { toIso } from '#server/utils/time'
 import { addDays } from '#server/utils/weekly-windows'
 import { destinationBlocked, destinationNotFound } from './notifications.errors'
-import { alertSubject, CLOSING_SUMMARY_DELAY_MINUTES, CLOSING_SUMMARY_WINDOW_HOURS, closingInstant, newOrderMessage, paymentMessage, routeOf, serverErrorMessage } from './notifications.messages'
+import { alertSubject, bakongReminderStage, bakongTokenMessage, CLOSING_SUMMARY_DELAY_MINUTES, CLOSING_SUMMARY_WINDOW_HOURS, closingInstant, newOrderMessage, paymentMessage, routeOf, serverErrorMessage } from './notifications.messages'
 import type { ServerErrorInfo } from './notifications.messages'
 import * as repo from './notifications.repository'
 import { isBlockedError, plainText } from './notifications.rules'
@@ -155,6 +155,40 @@ export async function queueServerErrorAlert(db: Db, info: ServerErrorInfo, now =
   }))
   await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
   // The ones this call saved (another request in the window may have been first).
+  const saved = await repo.deliveryIds(db, deliveries.map(d => d.id))
+  return deliveries.map(d => d.id).filter(id => saved.has(id))
+}
+
+// --- The Bakong token's reminders (step 10.16, D132) ---
+
+/**
+ * Reminds the chats that get server errors (operational alerts) that the Bakong token is about to
+ * stop working: 14, 7, 3 and 1 days before, and on the day. Checked every minute, but nothing is
+ * read from the database while more than 14 days are left. Each reminder goes once per chat and
+ * token: the dedupe key names the token's expiry and the stage, so a new token starts over.
+ */
+export async function queueBakongTokenReminder(db: Db, expiresAt: Date | null, siteUrl?: string, now = new Date()): Promise<string[]> {
+  if (!expiresAt) return []
+  const stage = bakongReminderStage(expiresAt, now)
+  if (stage === null) return []
+  const targets = await repo.targetsOf(db, 'server_error')
+  if (!targets.length) return []
+  const dedupeKey = `bakong_token:${expiresAt.getTime()}:${stage}`
+  const done = await repo.deliveredTo(db, dedupeKey, targets.map(t => t.destinationId))
+  const message = bakongTokenMessage(expiresAt, now, siteUrl)
+  const deliveries = targets.filter(t => !done.has(t.destinationId)).map((target): repo.NewDelivery => ({
+    id: newId(),
+    kind: 'server_error',
+    destinationId: target.destinationId,
+    dedupeKey,
+    subject: stage === 0 ? 'Bakong token expired' : `Bakong token expires in ${stage} ${stage === 1 ? 'day' : 'days'}`,
+    message,
+    createdAt: now,
+    nextAttemptAt: now,
+  }))
+  if (!deliveries.length) return []
+  await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
+  // The ones this call saved (an overlapping run may have been first: the unique index drops ours).
   const saved = await repo.deliveryIds(db, deliveries.map(d => d.id))
   return deliveries.map(d => d.id).filter(id => saved.has(id))
 }

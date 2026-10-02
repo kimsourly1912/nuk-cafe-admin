@@ -194,7 +194,7 @@ The counter shows a KHQR made for each order (D130), set up on **Admin → Payme
    - **Bakong didn't accept the token**: it was mistyped or has expired: set it again.
    - **Bakong refused this server**: Bakong reportedly answers only servers in Cambodia in production, and a Worker runs in Cloudflare's data center nearest the request (often Singapore for Phnom Penh). Cashiers confirm by hand meanwhile. The free way around it is a small relay inside Cambodia (a Cloudflare Tunnel to a device at the cafe, which needs a domain, Q4) with `NUXT_BAKONG_API_URL` pointing at it.
 
-**Renewing:** set the new token the same way before the 90 days end (put a reminder in your calendar the day you set it). An expired token shows at the counter as "Automatic check unavailable" and on Payments as "Bakong didn't accept the token"; payments are never lost meanwhile, they are confirmed by hand.
+**Renewing:** set the new token the same way before the 90 days end. The app reads the expiry date from the token (D132): **Payments** shows it ("Token expires 21 Dec 2026 · 80 days left", amber within 14 days), and Telegram reminds the chats with **Server errors and reminders** on 14, 7, 3 and 1 days before and on the day; a new token's date replaces the old one by itself. An expired token shows at the counter as "Automatic check unavailable" and on Payments as "Bakong didn't accept the token"; payments are never lost meanwhile, they are confirmed by hand.
 
 ## Monitoring
 

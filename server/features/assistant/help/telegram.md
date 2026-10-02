@@ -34,9 +34,9 @@ Under **Notifications**, choose which chats get each message; a switch saves at 
 - **Payment confirmed**: when the counter takes the payment.
 - **Closing summary**: the day's figures (paid sales, orders, average, refunds, payments, top items), **30 minutes after closing time**, for that business day. Nothing is sent on a day the branch is closed. **Attach CSV** adds the day's file as a second message. Sent to a group, everyone there sees the sales.
 
-### Server errors
+### Server errors and reminders
 
-**Server errors** sends a short alert when the app fails unexpectedly (a customer or staff member sees "Something went wrong on our side"). It says which page failed and a request id: give that id to whoever maintains the app, who finds the details in the server logs. The same page failing again within 15 minutes isn't sent again. Turn it on for your private chat rather than the staff group.
+**Server errors and reminders** sends a short alert when the app fails unexpectedly (a customer or staff member sees "Something went wrong on our side"). It says which page failed and a request id: give that id to whoever maintains the app, who finds the details in the server logs. The same page failing again within 15 minutes isn't sent again. Turn it on for your private chat rather than the staff group. The same switch sends reminders before the Bakong token expires (14, 7, 3 and 1 days before, and on the day), with an **Open Payments** button.
 
 ## Delivery history
 

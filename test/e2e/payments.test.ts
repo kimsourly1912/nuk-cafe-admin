@@ -10,7 +10,7 @@ await setupE2e()
 const rate = (khrPerUsd: number, effectiveFrom: string, name = 'Kim'): ExchangeRate => ({ khrPerUsd, effectiveFrom, setBy: { name } })
 const HISTORY = [rate(4100, '2026-09-29T02:00:00.000Z'), rate(4080, '2026-09-28T01:55:00.000Z', 'Dara')]
 
-const KHQR_OFF: KhqrSettings = { version: 0, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: [], updatedAt: null, updatedBy: null, automaticCheck: false }
+const KHQR_OFF: KhqrSettings = { version: 0, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: [], updatedAt: null, updatedBy: null, automaticCheck: false, tokenExpiresAt: null }
 
 async function open(start: ExchangeRates, khqr: KhqrSettings = KHQR_OFF, options: { conflictOnce?: boolean, bakongTest?: BakongConnectionTest[] } = {}) {
   let state = start
@@ -30,7 +30,7 @@ async function open(start: ExchangeRates, khqr: KhqrSettings = KHQR_OFF, options
         throw failures.conflict('VERSION_CONFLICT', 'The KHQR settings were changed by someone else. Reload it and try again.')
       }
       const input = body as KhqrSettings
-      khqrState = { ...input, version: input.version + 1, updatedAt: '2026-10-02T05:00:00.000Z', updatedBy: { name: 'Admin' }, automaticCheck: khqrState.automaticCheck }
+      khqrState = { ...input, version: input.version + 1, updatedAt: '2026-10-02T05:00:00.000Z', updatedBy: { name: 'Admin' }, automaticCheck: khqrState.automaticCheck, tokenExpiresAt: khqrState.tokenExpiresAt }
       return khqrState
     },
     'POST /admin/khqr/test': () => options.bakongTest?.shift() ?? { status: 'connected' },
@@ -89,7 +89,7 @@ describe('Payments', () => {
   })
 
   it('KHQR: refuses a Khmer name or an ID without @bank before sending; someone else\'s save shows Reload, which keeps the input', async () => {
-    const settings: KhqrSettings = { version: 1, enabled: true, accountId: 'nukcafe@aclb', merchantName: 'NUK Cafe', merchantCity: 'Phnom Penh', currencies: ['USD'], updatedAt: '2026-10-01T05:00:00.000Z', updatedBy: { name: 'Kim' }, automaticCheck: false }
+    const settings: KhqrSettings = { version: 1, enabled: true, accountId: 'nukcafe@aclb', merchantName: 'NUK Cafe', merchantCity: 'Phnom Penh', currencies: ['USD'], updatedAt: '2026-10-01T05:00:00.000Z', updatedBy: { name: 'Kim' }, automaticCheck: false, tokenExpiresAt: null }
     const { page, saved } = await open({ current: HISTORY[0]!, history: HISTORY }, settings, { conflictOnce: true })
     const form = page.getByRole('region', { name: 'KHQR at the counter' })
     await expect.poll(() => form.getByLabel('Bakong account ID').inputValue()).toBe('nukcafe@aclb')
@@ -120,11 +120,14 @@ describe('Payments', () => {
     await off.page.getByText(/To check automatically, the owner sets the Bakong token as the server secret NUXT_BAKONG_TOKEN/).waitFor()
     expect(await off.page.getByRole('button', { name: 'Test connection' }).count()).toBe(0)
 
-    const settings: KhqrSettings = { version: 1, enabled: true, accountId: 'nukcafe@aclb', merchantName: 'NUK Cafe', merchantCity: 'Phnom Penh', currencies: ['USD'], updatedAt: '2026-10-01T05:00:00.000Z', updatedBy: { name: 'Kim' }, automaticCheck: true }
+    const settings: KhqrSettings = { version: 1, enabled: true, accountId: 'nukcafe@aclb', merchantName: 'NUK Cafe', merchantCity: 'Phnom Penh', currencies: ['USD'], updatedAt: '2026-10-01T05:00:00.000Z', updatedBy: { name: 'Kim' }, automaticCheck: true, tokenExpiresAt: new Date(Date.now() + 4.5 * 24 * 3_600_000).toISOString() }
     const { page } = await open({ current: null, history: [] }, settings, {
       bakongTest: [{ status: 'unavailable', problem: 'refused', detail: 'Bakong refused this server (403)' }, { status: 'connected' }],
     })
     await page.getByText(/The counter records a KHQR payment as soon as Bakong confirms it/).waitFor()
+    // The token's expiry, read from it on the server (D132): amber within 14 days.
+    await page.getByText(/^Token expires \d{1,2} \w{3} \d{4} · 5 days left$/).waitFor()
+    await page.getByText(/replace the server secret NUXT_BAKONG_TOKEN before then/).waitFor()
     await page.getByRole('button', { name: 'Test connection' }).click()
     await page.getByText(/Bakong refused this server\. Bakong may answer only servers in Cambodia/).waitFor()
     await page.getByText('Bakong refused this server (403)').waitFor()

@@ -19,7 +19,7 @@ Under the KHQR settings, **Automatic check with Bakong** says **On** or **Off**.
 
 - It's turned on by the owner, who sets the Bakong token (from Bakong's developer portal) as a server secret. It isn't entered on this page.
 - **Test connection** asks Bakong once and says whether it answered.
-- Bakong's token lasts 90 days. When it expires, the test says Bakong didn't accept it: the owner gets a new token and replaces the secret. Meanwhile cashiers confirm by hand.
+- Bakong's token lasts 90 days. The page shows when it expires ("Token expires 21 Dec 2026 · 80 days left"), in amber from 14 days before and red once expired, and Telegram reminds the chats with **Server errors and reminders** on 14, 7, 3 and 1 days before and on the day. Before then, the owner gets a new token from Bakong's developer portal and replaces the secret. Once expired, cashiers confirm by hand until a new one is set.
 - **"Bakong refused this server"**: Bakong may answer only servers in Cambodia. Cashiers confirm by hand until that's solved.
 
 ## Set or change the rate
