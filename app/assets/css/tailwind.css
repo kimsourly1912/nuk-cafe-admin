@@ -111,3 +111,13 @@
   --page-max: var(--container-4xl);
   --page-gutter: max(var(--page-pad), calc((100% - var(--page-max)) / 2));
 }
+
+/* A row that scrolls sideways without a scrollbar (tab rows, D128): touch and trackpads scroll it,
+   and the tapped tab is scrolled into view (useCenteredTab). */
+@utility scrollbar-none {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

@@ -23,13 +23,19 @@ const items = computed<TabsItem[]>(() => [
   { label: 'All', value: ANY as string, badge: props.counts?.all },
   ...props.tabs.map(tab => ({ ...tab, badge: props.counts?.[tab.value] })),
 ].map(item => ({ ...item, disabled: props.disabled, badge: item.badge === undefined ? undefined : { label: String(item.badge), color: 'neutral', variant: 'subtle', size: 'sm' } })))
+
+// Labels never cut: a row that doesn't fit scrolls, the chosen status centered (D128).
+const root = useTemplateRef('root')
+useCenteredTab(root, () => status.value)
 </script>
 
 <template>
   <!-- UTabs puts attributes on its wrapper, not the tablist: the group carries the name. -->
   <div
+    ref="root"
     role="group"
     aria-label="Status"
+    class="min-w-0 max-w-full"
   >
     <UTabs
       v-model="status"
@@ -37,7 +43,7 @@ const items = computed<TabsItem[]>(() => [
       :content="false"
       variant="link"
       size="sm"
-      :ui="{ root: 'w-auto', list: 'border-b-0' }"
+      :ui="{ root: 'w-auto max-w-full', list: 'border-b-0' }"
     />
   </div>
 </template>

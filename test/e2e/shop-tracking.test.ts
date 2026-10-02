@@ -102,7 +102,7 @@ describe('following an order', () => {
     await page.waitForURL(u => u.pathname === '/')
     await expect.poll(() => page.getByText('Added 2 items to your order').first().isVisible()).toBe(true)
     const panel = page.getByRole('complementary', { name: 'Your order' })
-    await expect.poll(() => panel.getByText('Banana Bread').isVisible()).toBe(true)
+    await expect.poll(() => panel.getByText('Banana Bread', { exact: true }).isVisible()).toBe(true)
     expect(problems).toEqual([])
   })
 

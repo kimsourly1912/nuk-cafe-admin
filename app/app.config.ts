@@ -30,6 +30,13 @@ export default defineAppConfig({
         left: 'max-sm:min-w-0 max-sm:flex-1 max-sm:flex-wrap',
       },
     },
+    // Tabs never cut a label (owner, 2026-10-02, D128): a row that doesn't fit scrolls sideways (no
+    // scrollbar), tabs keep their width, and the link variant's underline sits inside the row (a
+    // scrolling box clips what hangs below it). The tapped tab is centered by useCenteredTab.
+    tabs: {
+      slots: { list: 'overflow-x-auto scrollbar-none', trigger: 'shrink-0', label: 'overflow-visible whitespace-nowrap' },
+      compoundVariants: [{ orientation: 'horizontal', variant: 'link', class: { indicator: 'bottom-0' } }],
+    },
     // Surfaces (D126, ui.md → Surfaces): a card's header is a quiet strip, so a group's title reads as
     // its heading; numbers use <StatCard> (the soft `subtle` card).
     card: {

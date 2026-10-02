@@ -39,7 +39,7 @@ const onOrderPage = (u: URL) => u.pathname.startsWith('/orders/')
 async function addToOrder(page: Page, name: string) {
   await heading(page, 'Coffee').waitFor()
   await visible(card(page, name).getByRole('button', { name: `Add ${name} to order` })).click()
-  await expect.poll(() => visible(card(page, name).getByRole('spinbutton')).inputValue()).toBe('1')
+  await expect.poll(() => visible(card(page, name).getByRole('textbox', { name: `Quantity of ${name}` })).inputValue()).toBe('1')
 }
 
 async function signIn(page: Page, customer: Pick<SeedCustomer, 'email' | 'password'>) {

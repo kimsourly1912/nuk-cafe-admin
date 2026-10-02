@@ -453,6 +453,7 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
           :closed="closed"
           :closed-note="closedNote"
           @set-quantity="cartStore.setQuantity"
+          @set-note="cartStore.setNote"
           @clear="clearOrder"
         />
       </aside>
@@ -501,6 +502,7 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
         <OrderLines
           :cart="cart"
           @set-quantity="cartStore.setQuantity"
+          @set-note="cartStore.setNote"
         />
       </template>
       <template #footer>

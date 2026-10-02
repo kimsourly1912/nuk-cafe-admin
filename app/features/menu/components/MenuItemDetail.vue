@@ -193,13 +193,12 @@ function submit() {
     <template #footer>
       <div class="w-full space-y-2">
         <div class="flex w-full items-center gap-3">
-          <UInputNumber
+          <QuantityStepper
             v-model="quantity"
-            :min="1"
             :max="MAX_LINE_QUANTITY"
             :disabled="item.soldOut || closed"
-            aria-label="Quantity"
-            class="w-32 shrink-0"
+            :label="item.name"
+            class="shrink-0"
           />
           <UButton
             :label="buttonLabel"

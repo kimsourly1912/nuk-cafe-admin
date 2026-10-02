@@ -211,4 +211,11 @@ Pick by **where the items come from**, not by how many there are today:
 - Status tabs (`<StatusTabs>`) have no line of their own either.
 - Tabs anywhere else (a section switcher in a page body, a panel) keep Nuxt UI's `link` line, full width.
 - A page's tabs are kept in the URL with [`useUrlTab`](./ui-helpers.md#useurltab) (`?tab=tables`): a reload or a shared link opens the same tab, Back still leaves the page, and switching never asks about unsaved changes.
+- **Tabs that don't fit scroll (D128):** every `UTabs` row scrolls sideways with its scrollbar hidden; a label is never cut or shortened. The active tab is brought to the middle of the row when it changes (a tap, the keyboard, the URL) and on load ([`useCenteredTab`](./ui-helpers.md#usecenteredtab)); only the row scrolls, never the page.
 - The sidebar's active item is the section the page is in, also on pages under it (`/admin/branches/<id>`, `/admin/products/new`): `withActiveItem` in `app/utils/navigation-active.ts`, used by the layout. Features add nothing.
+
+## 16. Pagination and quantities (owner, 2026-10-02, D128)
+
+- **Every paginated list ends with [`<ListPagination>`](./ui-helpers.md#listpagination):** "Page [n] of N · Rows per page" on the left, first / previous / numbers with ellipsis / next / last on the right; on phones previous, "Page [n] of N" and next, with rows per page under them. Rows per page is 10, 20, 50 or 100, kept in the URL; changing it goes back to page 1. Never a bare `UPagination`.
+- **Every quantity is a [`<QuantityStepper>`](./ui-helpers.md#quantitystepper)** (− n + in a pill), never `UInputNumber`: on touch screens it opens no keyboard. Its limits come from the rule it serves (20 per line for customer orders, D98; 99 by default).
+- **An order line** (the customer menu's order, Review order): the photo (or a cup when there is none), the name, the choices, a status only when something is wrong, the line's total on the right; under a divider, "Add a note" on the left and the trash with the stepper on the right. In the order panel each line is a soft card (`UCard` `subtle`).

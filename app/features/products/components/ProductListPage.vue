@@ -529,16 +529,11 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         </template>
       </UTable>
 
-      <div
-        v-if="(data?.totalPages ?? 0) > 1"
-        class="flex justify-end border-t border-default pt-4"
-      >
-        <UPagination
-          v-model:page="page"
-          :total="data?.total ?? 0"
-          :items-per-page="pageSize"
-        />
-      </div>
+      <ListPagination
+        v-model:page="page"
+        v-model:page-size="pageSize"
+        :total="data?.total ?? 0"
+      />
     </template>
   </UDashboardPanel>
 </template>

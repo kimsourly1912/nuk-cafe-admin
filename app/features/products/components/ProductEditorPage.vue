@@ -38,6 +38,8 @@ const title = computed(() => loaded.value?.name ?? (isEdit ? 'Menu item' : 'New 
 // --- Sections: one at a time on phones ---
 const { isCompact } = useLayoutContext()
 const section = useUrlTab<ItemFormSection>(ITEM_FORM_SECTIONS.map(s => s.value), 'section')
+const tabsRow = useTemplateRef('tabsRow')
+useCenteredTab(tabsRow, () => section.value)
 const sectionTabs = ITEM_FORM_SECTIONS.map(s => ({ label: s.label, value: s.value }))
 
 // --- Leave and save ---
@@ -146,6 +148,7 @@ async function onSubmit() {
         <template v-else>
           <UTabs
             v-if="isCompact"
+            ref="tabsRow"
             v-model="section"
             :items="sectionTabs"
             :content="false"

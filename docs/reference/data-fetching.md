@@ -134,7 +134,7 @@ A key can also be a getter for a parameterized query (``() => `products:list:${t
 
 ## `usePaginatedQuery`
 
-Filter and pagination state for list pages, **kept in the URL** (`/products?search=tea&status=active&page=2`). Pages are 1-based both in `UPagination` and in the API (`page`, `pageSize`).
+Filter and pagination state for list pages, **kept in the URL** (`/products?search=tea&status=active&page=2&pageSize=50`). Pages are 1-based both in [`<ListPagination>`](./ui-helpers.md#listpagination) and in the API (`page`, `pageSize`).
 
 Source: `app/composables/usePaginatedQuery.ts`, URL conversion in `app/utils/query.ts` (`toUrlQuery`, `fromUrlQuery`, unit-tested in `test/unit/query.test.ts`). E2E: `test/e2e/list-page.test.ts`. Decision: [D21](../decisions.md).
 
@@ -159,7 +159,7 @@ const { data, loading } = useItemList(query)
                     @create="openForm()" @clear="clearFilters()" />
   </template>
 </UTable>
-<UPagination v-model:page="page" :total="data?.total ?? 0" :items-per-page="pageSize" />
+<ListPagination v-model:page="page" v-model:page-size="pageSize" :total="data?.total ?? 0" />
 ```
 
 See [`<SearchInput>`](./ui-helpers.md#searchinput) and [`<ListEmptyState>`](./ui-helpers.md#listemptystate).
@@ -172,7 +172,7 @@ function usePaginatedQuery<T extends Record<string, unknown>>(
   options?: { pageSize?: number, syncUrl?: boolean },  // 20, true
 ): {
   page: Ref<number>                                   // 1-based
-  pageSize: number
+  pageSize: Ref<number>                               // one of PAGE_SIZES (10, 20, 50, 100), D128
   filters: Reactive<T>                                // bind inputs to these
   query: ComputedRef<ApiQuery<T> & { page: number, pageSize: number }> // ANY/'' removed
   isFiltered: ComputedRef<boolean>                    // any filter differs from its default
@@ -182,7 +182,7 @@ function usePaginatedQuery<T extends Record<string, unknown>>(
 
 ### Behavior
 
-- **Changing any filter resets `page` to 1.**
+- **Changing any filter, or the page size, resets `page` to 1.**
 - `query` drops `ANY` and empty strings (via [`toApiQuery`](#any--toapiquery)), so unset filters aren't sent. `query.page = page`, `query.pageSize = pageSize`.
 - **URL sync** (`syncUrl: true`, the default):
 
@@ -190,7 +190,8 @@ function usePaginatedQuery<T extends Record<string, unknown>>(
 |---|---|
 | Open or reload `/categories?search=tea&page=2` | Filters and page are read from the URL |
 | Change a filter or the page | URL updated with `router.replace`: **no history entry**, so Back leaves the list instead of undoing filters one by one |
-| Default values (`''`, `ANY`, page 1) | Left out of the URL, so an unfiltered list is just `/categories` |
+| Default values (`''`, `ANY`, page 1, the default page size) | Left out of the URL, so an unfiltered list is just `/categories` |
+| `pageSize=50` in the URL | Read when it's one of `PAGE_SIZES` (10, 20, 50, 100; the server allows at most 100); anything else falls back to the default (D128) |
 | Sidebar link to the list while filtered | Opens the bare list and **resets** the filters (the URL is the source of truth) |
 | Bad values in the URL (`page=-1`, `page=abc`, repeated keys) | Fall back to the default (page 1) |
 | Number defaults (`minPoints: 0`) | Parsed as numbers from the URL; strings stay strings |

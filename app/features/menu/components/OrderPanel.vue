@@ -17,7 +17,7 @@ defineProps<{
   closed: boolean
   closedNote?: string
 }>()
-const emit = defineEmits<{ 'set-quantity': [key: string, quantity: number], 'clear': [] }>()
+const emit = defineEmits<{ 'set-quantity': [key: string, quantity: number], 'set-note': [key: string, note: string], 'clear': [] }>()
 </script>
 
 <template>
@@ -47,6 +47,7 @@ const emit = defineEmits<{ 'set-quantity': [key: string, quantity: number], 'cle
       <OrderLines
         :cart="cart"
         @set-quantity="(key, quantity) => emit('set-quantity', key, quantity)"
+        @set-note="(key, note) => emit('set-note', key, note)"
       />
     </div>
     <div class="border-t border-default p-4">

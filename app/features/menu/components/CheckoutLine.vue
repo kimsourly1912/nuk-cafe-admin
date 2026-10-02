@@ -89,41 +89,16 @@ const noteOpen = ref(Boolean(props.line.note))
       </div>
     </div>
 
-    <!-- Lined up under the name, past the photo when there is one -->
+    <!-- The same shape as the order's line on the menu (D128): the note on the left, the trash and
+         the quantity on the right; lined up under the name, past the photo when there is one. -->
     <div
-      class="flex items-center justify-between gap-3"
-      :class="{ 'sm:ps-17': quoted?.imageUrl }"
-    >
-      <UInputNumber
-        v-if="!problem"
-        :model-value="line.quantity"
-        :min="1"
-        :max="MAX_LINE_QUANTITY"
-        :disabled="disabled"
-        :aria-label="`Quantity of ${name}`"
-        class="w-32"
-        @update:model-value="value => emit('set-quantity', value ?? 1)"
-      />
-      <span v-else />
-      <UButton
-        :label="problem ? 'Remove' : undefined"
-        icon="i-lucide-trash-2"
-        color="neutral"
-        :variant="problem ? 'outline' : 'ghost'"
-        :disabled="disabled"
-        :aria-label="`Remove ${name}`"
-        @click="emit('set-quantity', 0)"
-      />
-    </div>
-
-    <div
-      v-if="!problem"
+      class="flex items-center justify-between gap-2"
       :class="{ 'sm:ps-17': quoted?.imageUrl }"
     >
       <UButton
-        v-if="!noteOpen"
+        v-if="!problem && !noteOpen"
         label="Add a note"
-        icon="i-lucide-plus"
+        icon="i-lucide-notebook-pen"
         color="neutral"
         variant="link"
         size="sm"
@@ -131,8 +106,33 @@ const noteOpen = ref(Boolean(props.line.note))
         :disabled="disabled"
         @click="noteOpen = true"
       />
+      <span v-else />
+      <div class="flex items-center gap-1">
+        <UButton
+          :label="problem ? 'Remove' : undefined"
+          icon="i-lucide-trash-2"
+          color="neutral"
+          :variant="problem ? 'outline' : 'ghost'"
+          :disabled="disabled"
+          :aria-label="`Remove ${name}`"
+          @click="emit('set-quantity', 0)"
+        />
+        <QuantityStepper
+          v-if="!problem"
+          :model-value="line.quantity"
+          :max="MAX_LINE_QUANTITY"
+          :disabled="disabled"
+          :label="name"
+          @update:model-value="value => emit('set-quantity', value)"
+        />
+      </div>
+    </div>
+
+    <div
+      v-if="!problem && noteOpen"
+      :class="{ 'sm:ps-17': quoted?.imageUrl }"
+    >
       <UFormField
-        v-else
         :label="`Note for ${name}`"
         :help="`${(line.note ?? '').length}/${LINE_NOTE_MAX}`"
         :ui="{ label: 'sr-only', help: 'text-end' }"

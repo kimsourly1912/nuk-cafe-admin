@@ -17,7 +17,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | [Data fetching](./data-fetching.md) | `apiFetch`, `useApiQuery`, `usePaginatedQuery` (URL sync), `ANY` / `toApiQuery`, `invalidate` (also other tabs), `invalidateInThisTab`, `invalidateAll` |
 | [Mutations](./mutations.md) | `useMutation` (create/update/delete, single and batch), `usePendingMutationCount` |
 | [Errors](./errors.md) | `ApiError`, `getErrorMessage`, `isSilentError`, error codes, `<ApiErrorAlert>`, `useNotify` |
-| [UI helpers](./ui-helpers.md) | `useConfirm`, `useTableSelection`, `<TaskFrame>`, `<BottomActionBar>`, `<BulkActionsBar>`, `useLayoutContext`, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, money (`toMinor`, `formatMinor`, …), `<ListSkeleton>`, `<StatCard>`, `<RecordSelect>`, `<AppDrawer>`, `<ToolbarTabs>`, `useUrlTab` |
+| [UI helpers](./ui-helpers.md) | `useConfirm`, `useTableSelection`, `<TaskFrame>`, `<BottomActionBar>`, `<BulkActionsBar>`, `useLayoutContext`, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, money (`toMinor`, `formatMinor`, …), `<ListSkeleton>`, `<StatCard>`, `<RecordSelect>`, `<AppDrawer>`, `<ToolbarTabs>`, `useUrlTab`, `useCenteredTab`, `<ListPagination>`, `<QuantityStepper>` |
 | [App-wide behavior](./app-behavior.md) | Tab titles, refresh on tab focus/reconnect, offline banner, leave guards, session loss: every case handled |
 | [Forms: unsaved changes](./forms.md) | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard`, `isSameFormValue` |
 | [Auth](./auth.md) | `useAuth`, public pages |
@@ -53,6 +53,9 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<AppDrawer>` | component | [UI helpers](./ui-helpers.md#appdrawer) | `UDrawer` without dragging: every drawer and bottom sheet |
 | `<ToolbarTabs>` | component | [UI helpers](./ui-helpers.md#toolbartabs) | Tabs on a toolbar's line |
 | `useUrlTab` | composable | [UI helpers](./ui-helpers.md#useurltab) | A page's tab in the URL (`?tab=`) |
+| `useCenteredTab` | composable | [UI helpers](./ui-helpers.md#usecenteredtab) | A scrolling tab row keeps its active tab in the middle (D128) |
+| `<ListPagination>` | component | [UI helpers](./ui-helpers.md#listpagination) | "Page [3] of 10 · Rows per page" and the page numbers; every paginated list (D128) |
+| `<QuantityStepper>` | component | [UI helpers](./ui-helpers.md#quantitystepper) | − n + in a pill, no keyboard on touch screens (D128) |
 | `<PhoneInput>`, `parsePhone` | component, shared util | [UI helpers](./ui-helpers.md#phoneinput) | A phone number with its country; E.164 on the wire (D127) |
 | `<ListSkeleton>` | component | [UI helpers](./ui-helpers.md#listskeleton) | First-load placeholders |
 | `<SearchInput>` | component | [UI helpers](./ui-helpers.md#searchinput) | Search as you type (debounced) |
@@ -132,7 +135,7 @@ async function removeSelected() {
   <ListSkeleton v-else-if="loading" label="Loading rewards…" variant="card" />
   <ListEmptyState v-else-if="!rows.length" noun="rewards" ... />
   <!-- cards (RewardCard, like ProductCard) or a UTable, by what the screen is for (list-ui-refresh.md) -->
-  <UPagination v-model:page="page" :total="data?.total ?? 0" :items-per-page="pageSize" />
+  <ListPagination v-model:page="page" v-model:page-size="pageSize" :total="data?.total ?? 0" />
   <BulkActionsBar v-if="selecting" :count="selection.count" :all-selected="selection.allSelected" @toggle-all="selection.toggleAll(!selection.allSelected)" @exit="exitSelect()">
     <UButton label="Archive selected" color="neutral" variant="subtle" :disabled="!selection.count" @click="archiveSelected" />
   </BulkActionsBar>

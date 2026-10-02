@@ -221,6 +221,8 @@ useUnsavedChanges(
 
 // --- Phones: Add-ons and Settings are tabs ---
 const tab = useUrlTab(['addons', 'settings'] as const)
+const tabsRow = useTemplateRef('tabsRow')
+useCenteredTab(tabsRow, () => tab.value)
 const tabs = computed(() => [
   { label: 'Add-ons', value: 'addons', badge: { label: String(active.value.length), color: 'neutral' as const, variant: 'subtle' as const, size: 'sm' as const } },
   { label: 'Settings', value: 'settings' },
@@ -363,6 +365,7 @@ const headerActions = computed(() => archived.value
         />
 
         <UTabs
+          ref="tabsRow"
           v-model="tab"
           :items="tabs"
           :content="false"
