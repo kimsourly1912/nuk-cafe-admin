@@ -217,11 +217,13 @@ describe('creating an account', () => {
     await page.getByLabel('Email').fill('new@example.com')
     await page.getByLabel('Password', { exact: true }).fill('password123')
     await button(page, 'Create account').click()
-    await page.getByText('This password has appeared in a data breach. Choose another one.').waitFor()
+    await page.getByText('This password has appeared in a data breach. Choose another one.').waitFor({ timeout: 10000 })
     await expect.poll(() => page.getByLabel('Password', { exact: true }).evaluate(el => el === document.activeElement)).toBe(true)
     await page.getByLabel('Password', { exact: true }).fill('another-long-password')
+    // Typing clears the field's error after UForm's debounce; the button moves up then, so wait first.
+    await page.getByText('This password has appeared in a data breach. Choose another one.').waitFor({ state: 'hidden', timeout: 5000 })
     await button(page, 'Create account').click()
-    await page.getByText('An account with this email already exists. Sign in instead.').waitFor()
+    await page.getByText('An account with this email already exists. Sign in instead.').waitFor({ timeout: 10000 })
     expect(problems.filter(p => !/status of 4\d\d/.test(p))).toEqual([])
   })
 
