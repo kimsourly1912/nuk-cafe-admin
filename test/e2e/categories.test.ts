@@ -344,8 +344,10 @@ describe('category selection', () => {
     await tab(page, /^Active/).click()
     await button(page, 'Select').click()
     await page.getByRole('checkbox', { name: 'Select Drinks' }).waitFor()
-    await page.getByRole('button', { name: 'Exit selection' }).click()
+    // A toggle (D129): the same button leaves Select mode.
+    await button(page, 'Cancel selection').click()
     await expect.poll(() => page.getByRole('checkbox').count()).toBe(0)
+    await button(page, 'Select').waitFor()
   })
 
   it('bulk-archives the selection, subcategories first, after one confirmation that warns about subcategories', async () => {
@@ -423,7 +425,8 @@ describe('category order', () => {
     expect(await page.getByRole('button', { name: /^Reorder / }).count()).toBe(0)
     await button(page, 'Reorder').click()
     await expect.poll(() => page.getByRole('button', { name: /^Reorder / }).count()).toBe(5)
-    await button(page, 'Done').click()
+    // A toggle (D129): the same button leaves Reorder mode.
+    await button(page, 'Done reordering').click()
     await expect.poll(() => page.getByRole('button', { name: /^Reorder / }).count()).toBe(0)
   })
 
@@ -481,10 +484,12 @@ describe('category order', () => {
     const { page, api } = await open()
     await button(page, 'Reorder').click()
     await page.getByRole('button', { name: /^Reorder Food/ }).press('ArrowUp')
+    // Unsaved moves: Done waits for Save or Discard.
+    expect(await button(page, 'Done reordering').isDisabled()).toBe(true)
     await button(page, 'Discard').click()
     await expect.poll(() => shown(page)).toEqual(['Drinks', 'Coffee', 'Juice', 'Food', 'Toast'])
     expect(api.calls.filter(c => c.startsWith('PUT'))).toEqual([])
-    await button(page, 'Done').waitFor()
+    await expect.poll(() => button(page, 'Done reordering').isEnabled()).toBe(true)
   })
 
   it('keeps the new order when someone else changed a level; Reload takes their versions and Save works again', async () => {

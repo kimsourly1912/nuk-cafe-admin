@@ -74,6 +74,10 @@ function exitSelect() {
   selection.clear()
   selecting.value = false
 }
+function toggleSelect() {
+  if (selecting.value) exitSelect()
+  else startSelect()
+}
 // The Archived tab has nothing to archive.
 watch(() => filters.status, (status) => {
   if (status === 'archived') exitSelect()
@@ -192,7 +196,13 @@ function openReorder() {
   if (!selecting.value) reorderModal.open({ categoryId: categoryFilter.value })
 }
 
-usePageShortcuts({ n: () => openForm(), s: () => startSelect(), r: () => openReorder() })
+usePageShortcuts({ n: () => openForm(), s: () => toggleSelect(), r: () => openReorder() })
+
+/** Phones: Reorder and Select behind ⋯ (D129). */
+const moreActions = computed(() => [
+  { label: 'Reorder', icon: 'i-lucide-arrow-up-down', onSelect: openReorder },
+  { label: 'Select', icon: 'i-lucide-list-checks', disabled: !selectableRows.value.length, onSelect: startSelect },
+])
 
 // Escape leaves Select mode. Not a `defineShortcuts` key: those prevent the default, and Escape
 // must still close menus, selects and dialogs first (they win: nothing happens here then).
@@ -224,19 +234,25 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         </template>
       </UDashboardNavbar>
 
-      <UDashboardToolbar>
-        <template #left>
-          <SearchInput
-            v-model="filters.search"
-            placeholder="Search menu items…"
-            class="w-full sm:w-64"
-          />
+      <!-- Three layouts (D129): phones put the search on its own line, the category with the view
+           on the next and Reorder and Select in a ⋯ menu; tablets one line of icon buttons; labels
+           from xl. Nothing scrolls sideways at any width. -->
+      <UDashboardToolbar
+        data-list-toolbar
+        :ui="{ root: 'flex-wrap gap-y-2 max-sm:py-2' }"
+      >
+        <SearchInput
+          v-model="filters.search"
+          placeholder="Search menu items…"
+          class="w-full sm:w-auto sm:max-w-xs sm:min-w-0 sm:flex-1"
+        />
+        <div class="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
           <CategorySelect
             v-model="categoryFilter"
             none-label="All categories"
             include-archived
             aria-label="Category"
-            class="min-w-0 flex-1 sm:w-56 sm:flex-none"
+            class="min-w-0 flex-1 sm:w-48 sm:flex-none lg:w-56"
           />
           <ProductGroupFilter
             v-if="filters.modifierGroupId"
@@ -246,10 +262,33 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           <UIcon
             v-if="refreshing"
             name="i-lucide-loader-circle"
-            class="size-4 animate-spin text-muted"
+            class="size-4 shrink-0 animate-spin text-muted"
           />
-        </template>
-        <template #right>
+        </div>
+        <div class="ms-auto flex shrink-0 items-center gap-2">
+          <!-- Phones: Reorder and Select in one menu; while selecting, Cancel in its place. -->
+          <UButton
+            v-if="selecting"
+            label="Cancel"
+            icon="i-lucide-x"
+            color="neutral"
+            variant="soft"
+            class="sm:hidden"
+            @click="exitSelect()"
+          />
+          <UDropdownMenu
+            v-else
+            :items="moreActions"
+            :content="{ align: 'end' }"
+          >
+            <UButton
+              icon="i-lucide-ellipsis"
+              color="neutral"
+              variant="outline"
+              aria-label="More actions"
+              class="sm:hidden"
+            />
+          </UDropdownMenu>
           <UTooltip
             text="Arrange the items of a category"
             :kbds="['r']"
@@ -260,25 +299,27 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               variant="outline"
               aria-label="Reorder"
               :disabled="selecting"
+              class="max-sm:hidden"
               @click="openReorder()"
             >
-              <span class="hidden lg:inline">Reorder</span>
+              <span class="hidden xl:inline">Reorder</span>
             </UButton>
           </UTooltip>
+          <!-- A toggle: the button that starts Select mode leaves it (D129). -->
           <UTooltip
-            text="Select menu items to publish or archive"
+            :text="selecting ? 'Leave Select mode' : 'Select menu items to publish or archive'"
             :kbds="['s']"
           >
             <UButton
-              icon="i-lucide-list-checks"
+              :icon="selecting ? 'i-lucide-x' : 'i-lucide-list-checks'"
               color="neutral"
               :variant="selecting ? 'soft' : 'outline'"
-              aria-label="Select"
-              :aria-pressed="selecting"
-              :disabled="selecting || !selectableRows.length"
-              @click="startSelect()"
+              :aria-label="selecting ? 'Cancel selection' : 'Select'"
+              :disabled="!selecting && !selectableRows.length"
+              class="max-sm:hidden"
+              @click="toggleSelect()"
             >
-              <span class="hidden lg:inline">Select</span>
+              <span class="hidden xl:inline">{{ selecting ? 'Cancel' : 'Select' }}</span>
             </UButton>
           </UTooltip>
           <UFieldGroup>
@@ -299,7 +340,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               @click="view = 'list'"
             />
           </UFieldGroup>
-        </template>
+        </div>
       </UDashboardToolbar>
     </template>
 
@@ -315,7 +356,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         :count="selection.count"
         :all-selected="selection.allSelected"
         @toggle-all="selection.toggleAll(!selection.allSelected)"
-        @exit="exitSelect()"
       >
         <UButton
           :label="selectedDrafts.length && selectedDrafts.length < selection.count ? `Publish ${pluralize(selectedDrafts.length, ['draft', 'drafts'])}` : 'Publish selected'"

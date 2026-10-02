@@ -214,6 +214,11 @@ Pick by **where the items come from**, not by how many there are today:
 - **Tabs that don't fit scroll (D128):** every `UTabs` row scrolls sideways with its scrollbar hidden; a label is never cut or shortened. The active tab is brought to the middle of the row when it changes (a tap, the keyboard, the URL) and on load ([`useCenteredTab`](./ui-helpers.md#usecenteredtab)); only the row scrolls, never the page.
 - The sidebar's active item is the section the page is in, also on pages under it (`/admin/branches/<id>`, `/admin/products/new`): `withActiveItem` in `app/utils/navigation-active.ts`, used by the layout. Features add nothing.
 
+## 16a. List toolbars and modes (owner, 2026-10-02, D129)
+
+- A list toolbar never scrolls sideways: search on its own line on phones, one line with icon actions on tablets, labels from `xl`; mode actions behind `⋯` on phones ([responsive-layout §5](./responsive-layout.md#5-page-anatomy)).
+- A mode (Select, Reorder) is a toggle: the button that starts it leaves it. Bulk bars carry actions only: the count on one line and, on phones, the actions in equal widths on the next.
+
 ## 16. Pagination and quantities (owner, 2026-10-02, D128)
 
 - **Every paginated list ends with [`<ListPagination>`](./ui-helpers.md#listpagination):** "Page [n] of N · Rows per page" on the left, first / previous / numbers with ellipsis / next / last on the right; on phones previous, "Page [n] of N" and next, with rows per page under them. Rows per page is 10, 20, 50 or 100, kept in the URL; changing it goes back to page 1. Never a bare `UPagination`.

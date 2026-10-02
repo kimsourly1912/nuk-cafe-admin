@@ -39,7 +39,7 @@ async function open(handlers: Record<string, MockHandler>, path = '/admin/produc
 
 const card = (page: Page, name: string) => page.getByRole('article', { name, exact: true })
 const archives = (calls: string[]) => calls.filter(c => c.endsWith('/archive'))
-const selectedCount = (page: Page, n: number) => page.getByText(`${n} selected`)
+const selectedCount = (page: Page, n: number) => page.getByText(n ? `${n} selected` : 'None selected', { exact: true })
 
 /** Select mode, then Select all in its bar (D89). */
 async function selectAll(page: Page) {

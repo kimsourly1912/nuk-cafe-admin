@@ -45,7 +45,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `useTableSelection` | composable | [UI helpers](./ui-helpers.md#usetableselection) | Selection for tables, card grids and trees |
 | `<TaskFrame>` | component | [UI helpers](./ui-helpers.md#taskframe) | A task-flow page's frame: a card from `sm`, the full screen with the action at the bottom on phones |
 | `<BottomActionBar>` | component | [UI helpers](./ui-helpers.md#bottomactionbar) | The one bottom bar: mode, Save and bulk bars |
-| `<BulkActionsBar>` | component | [UI helpers](./ui-helpers.md#bulkactionsbar) | The Select mode bar: "5 selected · Select all · actions · ✕" (a `BottomActionBar`) |
+| `<BulkActionsBar>` | component | [UI helpers](./ui-helpers.md#bulkactionsbar) | The Select mode bar: "5 selected · Select all" and the actions; Select mode left from its toolbar toggle (D129) (a `BottomActionBar`) |
 | `useLayoutContext` | composable | [UI helpers](./ui-helpers.md#uselayoutcontext) | `isCompact` / `isExpanded` for choices CSS can't make |
 | `<StatusTabs>` | component | [UI helpers](./ui-helpers.md#statustabs) | "All 3 · Active 2 · Archived 1" |
 | `<StatCard>` | component | [UI helpers](./ui-helpers.md#statcard) | One number on a page, in a soft card |

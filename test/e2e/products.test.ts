@@ -187,13 +187,13 @@ describe('menu items list', () => {
     expect(await page.getByRole('checkbox').count()).toBe(0)
     await page.getByRole('button', { name: 'Select', exact: true }).click()
     const bar = page.getByRole('toolbar', { name: 'Bulk actions' })
-    await bar.getByText('0 selected').waitFor()
+    await bar.getByText('None selected').waitFor()
     expect(await bar.getByRole('button', { name: 'Archive selected' }).isDisabled()).toBe(true)
     await cardOf(page, 'Matcha').click()
     await bar.getByText('1 selected').waitFor()
     expect(await page.getByRole('dialog').count()).toBe(0)
     await cardOf(page, 'Matcha').getByRole('checkbox', { name: 'Select Matcha' }).click()
-    await bar.getByText('0 selected').waitFor()
+    await bar.getByText('None selected').waitFor()
     // Menus are hidden while selecting.
     expect(await page.getByRole('button', { name: 'Actions for Latte' }).count()).toBe(0)
     await page.keyboard.press('Escape')
@@ -882,4 +882,91 @@ describe('reordering a category\'s items (step 10.3, D118)', () => {
     await dialog.getByRole('button', { name: 'Cancel' }).click()
     await page.getByText('Discard unsaved changes?').waitFor()
   })
+})
+
+describe('the toolbar and Select mode at every width (D129)', () => {
+  /** The toolbar's box and whether it, the page or the bulk bar scrolls sideways. */
+  const layout = (page: Page) => page.evaluate(() => {
+    const toolbar = document.querySelector<HTMLElement>('[data-list-toolbar]')
+    const bar = document.querySelector<HTMLElement>('[role="toolbar"][aria-label="Bulk actions"]')
+    const count = bar?.querySelector<HTMLElement>('span.font-semibold')
+    return {
+      pageSideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      toolbarSideways: toolbar ? toolbar.scrollWidth > toolbar.clientWidth : false,
+      barSideways: bar ? bar.scrollWidth > bar.clientWidth : false,
+      /** The count's line: one line of text, not a word per line. */
+      countLines: count ? Math.round(count.getBoundingClientRect().height / Number.parseFloat(getComputedStyle(count).lineHeight)) : 0,
+    }
+  })
+
+  async function openAt(width: number) {
+    const page = await createPage()
+    await page.setViewportSize({ width, height: 800 })
+    await mockApi(page, backend())
+    await page.goto(url('/admin/products'), { waitUntil: 'hydration' })
+    await cardOf(page, 'Latte').waitFor()
+    return page
+  }
+
+  it('the Select button is a toggle: Cancel leaves the mode where it started', async () => {
+    const { page } = await open()
+    await page.getByRole('button', { name: 'Select', exact: true }).click()
+    const bar = page.getByRole('toolbar', { name: 'Bulk actions' })
+    await cardOf(page, 'Matcha').click()
+    await bar.getByText('1 selected').waitFor()
+    // No ✕ in the bar: it carries actions only.
+    expect(await bar.getByRole('button', { name: /Exit|Cancel/ }).count()).toBe(0)
+    await page.getByRole('button', { name: 'Cancel selection' }).click()
+    await bar.waitFor({ state: 'detached' })
+    expect(await page.getByRole('checkbox').count()).toBe(0)
+    await page.getByRole('button', { name: 'Select', exact: true }).waitFor()
+    // S toggles too.
+    await page.keyboard.press('s')
+    await bar.waitFor()
+    await page.keyboard.press('s')
+    await bar.waitFor({ state: 'detached' })
+  })
+
+  it('on a phone: search on its own line, Reorder and Select behind ⋯, Cancel in its place while selecting; the bar on two lines', async () => {
+    const page = await openAt(390)
+    const search = await page.getByRole('searchbox', { name: 'Search menu items…' }).boundingBox()
+    const category = await page.getByRole('button', { name: 'Category', exact: true }).boundingBox()
+    expect(category!.y).toBeGreaterThan(search!.y + search!.height - 1)
+    expect(search!.width).toBeGreaterThan(300)
+    expect(await page.getByRole('button', { name: 'Select', exact: true }).count()).toBe(0)
+
+    await page.getByRole('button', { name: 'More actions' }).click()
+    await page.getByRole('menuitem', { name: 'Select' }).click()
+    const bar = page.getByRole('toolbar', { name: 'Bulk actions' })
+    await bar.getByText('None selected').waitFor()
+    await cardOf(page, 'Matcha').click()
+    await bar.getByText('1 selected').waitFor()
+    expect(await layout(page)).toMatchObject({ pageSideways: false, toolbarSideways: false, barSideways: false, countLines: 1 })
+    // The actions share one row under the count.
+    const publish = (await bar.getByRole('button', { name: /^Publish/ }).boundingBox())!
+    const archive = (await bar.getByRole('button', { name: 'Archive selected' }).boundingBox())!
+    expect(Math.abs(publish.y - archive.y)).toBeLessThan(2)
+    expect(Math.abs(publish.width - archive.width)).toBeLessThan(2)
+
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await bar.waitFor({ state: 'detached' })
+    await page.getByRole('button', { name: 'More actions' }).waitFor()
+  })
+
+  for (const width of [320, 680, 768, 1024, 1440]) {
+    it(`nothing scrolls sideways at ${width} px, in Select mode too`, async () => {
+      const page = await openAt(width)
+      expect(await layout(page)).toMatchObject({ pageSideways: false, toolbarSideways: false })
+      if (width < 640) {
+        await page.getByRole('button', { name: 'More actions' }).click()
+        await page.getByRole('menuitem', { name: 'Select' }).click()
+      }
+      else {
+        await page.getByRole('button', { name: 'Select', exact: true }).click()
+      }
+      await cardOf(page, 'Matcha').click()
+      await page.getByRole('toolbar', { name: 'Bulk actions' }).getByText('1 selected').waitFor()
+      expect(await layout(page)).toMatchObject({ pageSideways: false, toolbarSideways: false, barSideways: false, countLines: 1 })
+    })
+  }
 })

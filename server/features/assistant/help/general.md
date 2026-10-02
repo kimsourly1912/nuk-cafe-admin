@@ -32,7 +32,7 @@ Where there's no Reload button, close the form, open it again and redo the chang
 - **Search**: type in the search box; the list filters as you type. Press **/** to jump to it.
 - **Tabs** such as All, Active, Archived filter by status and show counts. On a narrow screen, swipe the tabs sideways to see them all.
 - **Pages**: long lists (Staff, Menu items, Sales by item, Order history) show 20 rows a page. Below the list, type a page number and press Enter, or use the arrows and page numbers; **Rows per page** shows 10, 20, 50 or 100 at a time.
-- **Select**: a button in the toolbar starts selecting several rows for a bulk action (for example **Archive selected**). Escape leaves it.
+- **Select**: a button in the toolbar starts selecting several rows for a bulk action (for example **Archive selected**). The same button, now **Cancel**, stops selecting (or press Escape). On a phone, Select and Reorder are in the **⋯** menu next to the filters.
 - **Archive** hides something from customers without deleting it; **Restore** brings it back. Nothing on the menu is deleted, so past orders keep their details.
 
 ## Keyboard shortcuts
