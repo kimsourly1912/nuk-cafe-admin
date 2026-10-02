@@ -333,7 +333,7 @@ describe('menu item states', () => {
     const form = page.getByRole('dialog', { name: 'Archived menu item' })
     await form.getByText('This menu item is archived. Restore it from the list to edit it.').waitFor()
     expect(await form.getByLabel('Name', { exact: true }).isDisabled()).toBe(true)
-    expect(await form.getByRole('button', { name: 'Save' }).count()).toBe(0)
+    expect(await form.getByRole('button', { name: 'Save', exact: true }).count()).toBe(0)
   })
 })
 
@@ -356,7 +356,7 @@ describe('menu item form', () => {
     const form = await openNew(page)
 
     // Nothing is sent while required fields are empty.
-    await form.getByRole('button', { name: 'Create' }).click()
+    await form.getByRole('button', { name: 'Create', exact: true }).click()
     await form.getByText('Category is required').waitFor()
     await form.getByText('Set a price, or switch it off').waitFor()
 
@@ -372,7 +372,7 @@ describe('menu item form', () => {
     await form.getByRole('combobox', { name: 'Availability' }).click()
     await page.getByRole('option', { name: 'Breakfast' }).click()
     await page.keyboard.press('Escape') // close the multi-select list
-    await form.getByRole('button', { name: 'Create' }).click()
+    await form.getByRole('button', { name: 'Create', exact: true }).click()
 
     await toast(page, 'Menu item "Mocha" created as a draft').waitFor()
     // Multipart with the chosen file.
@@ -408,7 +408,7 @@ describe('menu item form', () => {
     await typePrice(form.getByRole('spinbutton', { name: 'Price of Large' }), '4')
     await addFromMenu(form, 'Add option set', 'Temperature')
     // The second set makes a 2 × 2 grid; the new combinations have no price yet.
-    await form.getByRole('button', { name: 'Create' }).click()
+    await form.getByRole('button', { name: 'Create', exact: true }).click()
     await expect.poll(() => form.getByText('Set a price, or switch it off').count()).toBe(4)
     await typePrice(form.getByRole('spinbutton', { name: 'Price of Small, Hot' }), '3')
     await typePrice(form.getByRole('spinbutton', { name: 'Price of Small, Iced' }), '3.25')
@@ -416,7 +416,7 @@ describe('menu item form', () => {
     await form.getByRole('switch', { name: 'Sell Large, Iced' }).click()
     // No more option sets than two.
     expect(await form.getByRole('button', { name: 'Add option set' }).isDisabled()).toBe(true)
-    await form.getByRole('button', { name: 'Create' }).click()
+    await form.getByRole('button', { name: 'Create', exact: true }).click()
 
     await toast(page, 'Menu item "Flat white" created as a draft').waitFor()
     expect(body?.optionSetIds).toEqual([SIZE.id, TEMP.id])
@@ -446,7 +446,7 @@ describe('menu item form', () => {
     await typePrice(form.getByRole('spinbutton', { name: 'Price of Soy in Milk' }), '0.4')
     await form.getByRole('checkbox', { name: /Own rules for this item/ }).click()
     await typePrice(form.getByRole('spinbutton', { name: 'At least, Milk' }), '1')
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
 
     await toast(page, 'Menu item "Latte" updated').waitFor()
     expect(body).toMatchObject({
@@ -473,7 +473,7 @@ describe('menu item form', () => {
     await typePrice(form.getByRole('spinbutton', { name: 'At least, Milk' }), '3')
     // The library allows at most 1: raise it, so the check that fails is the active add-ons one.
     await typePrice(form.getByRole('spinbutton', { name: 'At most, Milk' }), '3')
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
     await form.getByText('Customers must choose 3, but only 2 add-ons are active.').waitFor()
     expect(api.calls.filter(c => c.startsWith('PATCH'))).toEqual([])
   })
@@ -487,7 +487,7 @@ describe('menu item form', () => {
     })
     const form = await openEdit(page, 'Latte')
     await form.getByLabel('Name', { exact: true }).fill('Latte 2')
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
     await form.getByText('Someone else changed this menu item.', { exact: false }).waitFor()
     expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte 2')
   })
@@ -500,7 +500,7 @@ describe('menu item form', () => {
       },
     })
     const form = await openEdit(page, 'Latte')
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
     await form.getByText('Not saved').waitFor()
     // Under "Large, Hot" (the third version), as well as in the alert.
     await expect.poll(() => form.getByText('A version that\'s on needs a price').count()).toBe(2)
@@ -517,7 +517,7 @@ describe('menu item form', () => {
     })
     const form = await openEdit(page, 'Latte')
     await form.getByRole('button', { name: 'Remove', exact: true }).click()
-    await form.getByRole('button', { name: 'Save' }).click()
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
     await expect.poll(() => body?.imageId).toBeNull()
   })
 
@@ -585,10 +585,10 @@ describe('menu item form', () => {
     await chooseImage(form, PNG)
     await upload.started()
     await form.getByText('Waiting for the image upload…').waitFor()
-    expect(await form.getByRole('button', { name: 'Save' }).isDisabled()).toBe(true)
+    expect(await form.getByRole('button', { name: 'Save', exact: true }).isDisabled()).toBe(true)
 
     upload.fail(failures.validation('Use a JPEG, PNG or WebP image.'))
-    await expect.poll(() => form.getByRole('button', { name: 'Save' }).isDisabled()).toBe(false)
+    await expect.poll(() => form.getByRole('button', { name: 'Save', exact: true }).isDisabled()).toBe(false)
     expect(await form.locator('img').getAttribute('src')).toBe('/media/menu/latte.png')
     expect(api.calls.filter(c => c.startsWith('PATCH'))).toEqual([])
   })
@@ -599,6 +599,87 @@ describe('menu item form', () => {
     await typePrice(form.getByRole('spinbutton', { name: 'Price of Small, Hot' }), '9')
     await form.locator('[data-slot="footer"]').getByRole('button', { name: 'Cancel' }).click()
     await page.getByText('Discard unsaved changes?').waitFor()
+  })
+})
+
+describe('publishing from the form (D125)', () => {
+  /** A draft with a priced version: the form can save it. */
+  const CHAI = menuItemOf('item-4', 'Chai')
+  const withChai = () => backend([LATTE_ROW, MATCHA_ROW, summaryOf(CHAI)], [LATTE, MATCHA, CHAI])
+
+  it('opening the form, new or to edit, raises no error in the page', async () => {
+    const { page } = await open()
+    const errors: string[] = []
+    // The app's error handler catches it (and toasts "Unexpected error"), so it shows as a console error.
+    page.on('pageerror', error => errors.push(error.message))
+    page.on('console', (message) => {
+      if (message.type() === 'error') errors.push(message.text())
+    })
+    const created = await openNew(page)
+    await created.getByLabel('Name', { exact: true }).waitFor()
+    await created.locator('[data-slot="footer"]').getByRole('button', { name: 'Cancel' }).click()
+    await created.waitFor({ state: 'hidden' })
+    await openEdit(page, 'Matcha')
+    await page.waitForTimeout(300)
+    expect(errors).toEqual([])
+  })
+
+  it('Create and publish: saves, then publishes the version the save returned, with one toast', async () => {
+    let published: unknown
+    const { page, api } = await open({
+      ...backend(),
+      'POST /admin/menu/items': () => menuItemOf('item-9', 'Mocha', { version: 1 }),
+      'POST /admin/menu/items/{id}/publish': ({ body }) => {
+        published = body
+        return menuItemOf('item-9', 'Mocha', { status: 'active', version: 2 })
+      },
+    })
+    const form = await openNew(page)
+    await form.getByLabel('Name', { exact: true }).fill('Mocha')
+    await form.getByRole('combobox', { name: 'Category' }).click()
+    await page.getByRole('option', { name: 'Tea' }).click()
+    await typePrice(form.getByRole('spinbutton', { name: 'Price' }), '4.2')
+    await form.getByRole('button', { name: 'Create and publish' }).click()
+
+    await toast(page, 'Menu item "Mocha" published').waitFor()
+    await form.waitFor({ state: 'hidden' })
+    expect(await toast(page, 'Menu item "Mocha" created as a draft').count()).toBe(0)
+    const writes = api.calls.filter(call => call.startsWith('POST /admin/menu/items'))
+    expect(writes).toEqual(['POST /admin/menu/items', 'POST /admin/menu/items/item-9/publish'])
+    expect(published).toEqual({ version: 1 })
+  })
+
+  it('Save and publish on a draft: a refused publish leaves it saved as a draft, and the toast says why', async () => {
+    let published: unknown
+    const { page } = await open({
+      ...withChai(),
+      'PATCH /admin/menu/items/{id}': () => ({ ...CHAI, name: 'Chai latte', version: 5 }),
+      'POST /admin/menu/items/{id}/publish': ({ body }) => {
+        published = body
+        throw failures.validation('This category holds sub-categories: move the item to one of them.')
+      },
+    })
+    const form = await openEdit(page, 'Chai')
+    await form.getByLabel('Name', { exact: true }).fill('Chai latte')
+    await form.getByRole('button', { name: 'Save and publish' }).click()
+    await toast(page, '"Chai latte" was saved as a draft, but not published').waitFor()
+    await page.getByText('This category holds sub-categories: move the item to one of them.').first().waitFor()
+    await form.waitFor({ state: 'hidden' })
+    expect(published).toEqual({ version: 5 })
+  })
+
+  it('a published item has only Save; Save on a draft doesn\'t publish', async () => {
+    const { page, api } = await open({ ...withChai(), 'PATCH /admin/menu/items/{id}': () => CHAI })
+    let form = await openEdit(page, 'Latte')
+    expect(await form.getByRole('button', { name: 'Save and publish' }).count()).toBe(0)
+    await form.locator('[data-slot="footer"]').getByRole('button', { name: 'Cancel' }).click()
+    await form.waitFor({ state: 'hidden' })
+
+    form = await openEdit(page, 'Chai')
+    await form.getByLabel('Name', { exact: true }).fill('Chai 2')
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
+    await toast(page, 'Menu item "Chai 2" updated').waitFor()
+    expect(api.calls.some(call => call.endsWith('/publish'))).toBe(false)
   })
 })
 
@@ -668,7 +749,7 @@ describe('menu item editor URLs (D90, decision 4)', () => {
     await page.getByRole('button', { name: 'New menu item' }).click()
     await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/products/new')
     await page.getByRole('tab', { name: 'Availability' }).click()
-    await page.getByRole('toolbar', { name: 'Save' }).getByRole('button', { name: 'Create' }).click()
+    await page.getByRole('toolbar', { name: 'Save', exact: true }).getByRole('button', { name: 'Create', exact: true }).click()
     await page.getByText('Name is required').waitFor()
     expect(await page.getByRole('tab', { name: 'Details' }).getAttribute('aria-selected')).toBe('true')
   })

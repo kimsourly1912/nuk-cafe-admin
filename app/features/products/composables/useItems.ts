@@ -55,6 +55,8 @@ interface ItemRef {
   id: string
   name: string
   version: number
+  /** Published right after the form saved it (D125): a refusal says the save itself went through. */
+  afterSave?: boolean
 }
 
 /** A state change: publish, unpublish, archive or restore, from the version read. */
@@ -66,7 +68,7 @@ function action(name: string, past: string, options: Partial<MutationOptions<Ite
       key: item => item.id,
       lock: item => lockOf(item.id),
       successMessage: (_, item) => `Menu item "${item.name}" ${past}`,
-      errorMessage: item => `Could not ${name} "${item.name}"`,
+      errorMessage: item => (item.afterSave ? `"${item.name}" was saved as a draft, but not ${past}` : `Could not ${name} "${item.name}"`),
       invalidate: AFFECTED,
       ...options,
     },
@@ -78,32 +80,44 @@ function action(name: string, past: string, options: Partial<MutationOptions<Ite
  * even after the form was closed.
  */
 export function useItemMutations() {
+  // `publishing`: the form publishes right after (D125), and that toast says what happened.
   const create = useMutation(
-    (body: CreateItemInput) => apiFetch<MenuItem>(BASE, { method: 'POST', body }),
+    ({ body }: { body: CreateItemInput, publishing?: boolean }) => apiFetch<MenuItem>(BASE, { method: 'POST', body }),
     {
       id: 'products:create',
       // Same name in the same category in flight = the same submission (a double submit).
-      key: body => `${body.categoryId}:${body.name.trim().toLowerCase()}`,
-      successMessage: (_, body) => `Menu item "${body.name}" created as a draft`,
-      errorMessage: body => `Could not create "${body.name}"`,
+      key: ({ body }) => `${body.categoryId}:${body.name.trim().toLowerCase()}`,
+      successMessage: (_, { body, publishing }) => (publishing ? false : `Menu item "${body.name}" created as a draft`),
+      errorMessage: ({ body }) => `Could not create "${body.name}"`,
       invalidate: AFFECTED,
     },
   )
 
   const update = useMutation(
-    ({ id, body }: { id: string, name: string, body: UpdateItemInput }) =>
+    ({ id, body }: { id: string, name: string, body: UpdateItemInput, publishing?: boolean }) =>
       apiFetch<MenuItem>(`${BASE}/${id}`, { method: 'PATCH', body }),
     {
       id: 'products:update',
       key: ({ id }) => id,
       lock: ({ id }) => lockOf(id),
-      successMessage: (_, { name }) => `Menu item "${name}" updated`,
+      successMessage: (_, { name, publishing }) => (publishing ? false : `Menu item "${name}" updated`),
       errorMessage: ({ name }) => `Could not save "${name}"`,
       invalidate: AFFECTED,
     },
   )
 
-  const publish = action('publish', 'published')
+  const publish = action('publish', 'published', {
+    // Bulk publish from Select mode (D125): drafts only; each is checked by the server as one.
+    batch: {
+      noun: NOUN,
+      verb: ['Publishing', 'published'],
+      confirm: items => ({
+        title: `Publish ${pluralize(items.length, NOUN)}?`,
+        description: `${previewList(items.map(i => i.name))}. Customers will see them on the menu.`,
+        confirmLabel: 'Publish',
+      }),
+    },
+  })
   const unpublish = action('unpublish', 'unpublished')
   const restore = action('restore', 'restored as a draft')
   const archive = action('archive', 'archived', {

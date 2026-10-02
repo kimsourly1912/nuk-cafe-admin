@@ -13,8 +13,10 @@ A new item is created as a **Draft**: customers don't see it until you publish i
 5. **Options and prices**: see below. Without option sets the item has one version: enter its **Price**.
 6. **Add-ons** (optional): **Add add-on group** to offer extras from the Add-ons library.
 7. **Availability** (optional): choose rules to limit when it's sold. None means whenever the branch is open. Its category's rules apply too.
-8. Press **Create**. It's saved as a draft.
-9. To put it on the menu, open the item's **⋮** menu in the list and choose **Publish**.
+8. Press **Create** to save it as a draft, or **Create and publish** to put it on the menu at once.
+9. A draft can be published later: **Save and publish** in its editor, or **⋮ → Publish** in the list.
+
+If publishing is refused (for example no version is switched on with a price, or the category has subcategories), the item is still saved as a draft and a message says why.
 
 On a phone the editor shows one section at a time (Details, Prices, Add-ons, Availability) with Save at the bottom.
 
@@ -38,6 +40,7 @@ From the item's **⋮** menu in the list:
 - **Publish**: puts a draft on the customer menu. It needs at least one version switched on with a price.
 - **Unpublish**: takes it off the menu and back to draft.
 - **Archive**: hides it and makes it read-only. Past orders keep it. Several at once: **Select**, tick the items, **Archive selected**.
+- **Publish several at once**: **Select**, tick the items, **Publish selected** (only drafts are published; the button says how many). Items that can't be published stay ticked, and the message says why.
 - **Restore** (on an archived item): back to draft, editable again.
 
 To mark something out of stock for today, don't unpublish it: staff use **Sold out** in the counter app.
