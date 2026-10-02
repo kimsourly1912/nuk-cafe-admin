@@ -12,7 +12,8 @@
  *   the name opens the detail (`MenuItemDetail`).
  * - **An order in progress** (signed in): a bar above the sections to its page (step 6.5b, D114).
  * - **The order**: a panel beside the menu from `lg`; below it a bottom bar once something is in
- *   it, opening the order in a bottom sheet. Checkout comes with step 6.2.
+ *   it, opening the order in a drawer (from the right on tablets, a bottom sheet on phones). The
+ *   title and the totals stay in view; only the lines scroll. "Clear order" asks first (D124).
  * - **Closed**: one warning banner with when it opens; browsing works, adding doesn't.
  *
  * Server-rendered (D95): what differs by width is CSS, never `useLayoutContext`, so the server's page
@@ -31,7 +32,10 @@ import { openingText } from '../utils/opening'
 import MenuCategoryBar from './MenuCategoryBar.vue'
 import MenuItemDetail from './MenuItemDetail.vue'
 import MenuItemList from './MenuItemList.vue'
+import OrderActions from './OrderActions.vue'
+import OrderLines from './OrderLines.vue'
 import OrderPanel from './OrderPanel.vue'
+import OrderTotals from './OrderTotals.vue'
 
 // The bar for an order in progress: only for a signed-in customer (read in the browser, D97).
 const { account } = useCustomerAccount()
@@ -97,6 +101,23 @@ const cartStore = useCart(branchId)
 const cart = computed(() => resolveCart(cartStore.lines.value, allItems.value))
 const quantityOf = (item: PublicMenuItem) => quantityOfItem(cartStore.lines.value, item.id)
 const orderOpen = ref(false)
+// The drawer's side: only its open content depends on it, never the server's page (closed there), so
+// this is the one width choice made in script (D95, D124).
+const { isCompact } = useLayoutContext()
+const confirm = useConfirm()
+
+async function clearOrder() {
+  const count = cart.value.count
+  const ok = await confirm({
+    title: 'Clear your order?',
+    description: `All ${pluralize(count, ['item', 'items'])} will be removed from your order.`,
+    confirmLabel: 'Remove all',
+    danger: true,
+  })
+  if (!ok) return
+  cartStore.clear()
+  orderOpen.value = false
+}
 
 /** An item with nothing to choose: its only version, no add-ons. */
 function quickAdd(item: PublicMenuItem) {
@@ -120,12 +141,12 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
 </script>
 
 <template>
-  <div class="min-h-dvh">
+  <div class="min-h-dvh bg-muted">
     <header
       ref="header"
-      class="sticky top-0 z-30 border-b border-default bg-default/95 backdrop-blur"
+      class="sticky top-0 z-30 border-b border-default bg-default"
     >
-      <div class="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4">
+      <div class="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:gap-3">
         <template v-if="searching">
           <UButton
             icon="i-lucide-arrow-left"
@@ -143,29 +164,51 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
           />
         </template>
         <template v-else>
-          <NuxtLink
-            to="/"
-            class="flex shrink-0 items-center gap-2 font-semibold text-highlighted"
-          >
+          <div class="flex min-w-0 items-center gap-2 sm:gap-2.5">
             <UIcon
               name="i-lucide-coffee"
-              class="size-5 text-primary"
+              class="size-6 shrink-0 text-primary"
             />
-            NUK Cafe
-          </NuxtLink>
-          <p
-            v-if="branch"
-            class="hidden min-w-0 truncate text-sm text-muted md:block"
-          >
-            {{ branch.name }} ·
-            <span :class="branch.openNow ? 'text-success' : 'text-muted'">{{ branch.openNow ? 'Open now' : 'Closed' }}</span>
-          </p>
-          <div class="ms-auto flex items-center gap-2">
+            <div class="min-w-0 lg:flex lg:items-center lg:gap-4">
+              <NuxtLink
+                to="/"
+                class="block whitespace-nowrap font-semibold leading-tight text-highlighted lg:text-lg"
+              >
+                NUK Cafe
+              </NuxtLink>
+              <p
+                v-if="branch"
+                class="flex min-w-0 items-center gap-1.5 text-xs text-muted lg:rounded-full lg:border lg:border-default lg:py-0.5 lg:ps-3 lg:pe-1 lg:text-sm"
+                :title="branch.name"
+              >
+                <span class="truncate">{{ branch.name }}</span>
+                <UBadge
+                  :color="branch.openNow ? 'success' : 'warning'"
+                  variant="subtle"
+                  size="sm"
+                  class="shrink-0 rounded-full"
+                >
+                  <span
+                    class="size-1.5 rounded-full"
+                    :class="branch.openNow ? 'bg-success' : 'bg-warning'"
+                  />
+                  <template v-if="branch.openNow">
+                    <span class="lg:hidden">Open</span>
+                    <span class="max-lg:hidden">Open now</span>
+                  </template>
+                  <template v-else>
+                    Closed
+                  </template>
+                </UBadge>
+              </p>
+            </div>
+          </div>
+          <div class="ms-auto flex shrink-0 items-center gap-1 sm:gap-2">
             <SearchInput
               v-model="search"
               :delay="150"
               placeholder="Search the menu"
-              class="w-56 max-sm:hidden lg:w-72"
+              class="w-48 max-sm:hidden md:w-56 lg:w-72"
             />
             <UButton
               class="sm:hidden"
@@ -182,6 +225,8 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
                 trailing-icon="i-lucide-chevron-down"
                 color="neutral"
                 variant="outline"
+                class="max-sm:px-2"
+                :ui="{ trailingIcon: 'max-[22.5rem]:hidden' }"
                 :aria-label="`Order type: ${orderType}`"
               />
               <template #content>
@@ -223,7 +268,8 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
                 </div>
               </template>
             </UPopover>
-            <UColorModeButton />
+            <!-- Below lg, Appearance is in the account menu (D124) -->
+            <UColorModeButton class="max-lg:hidden" />
             <AccountButton />
           </div>
         </template>
@@ -400,15 +446,15 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
         class="hidden lg:block"
         aria-label="Your order"
       >
-        <UCard class="sticky top-[calc(var(--shop-header,7rem)+0.5rem)]">
-          <OrderPanel
-            :cart="cart"
-            :order-type="orderType"
-            :closed="closed"
-            :closed-note="closedNote"
-            @set-quantity="cartStore.setQuantity"
-          />
-        </UCard>
+        <OrderPanel
+          class="sticky top-[calc(var(--shop-header,7rem)+0.5rem)]"
+          :cart="cart"
+          :order-type="orderType"
+          :closed="closed"
+          :closed-note="closedNote"
+          @set-quantity="cartStore.setQuantity"
+          @clear="clearOrder"
+        />
       </aside>
     </main>
 
@@ -428,18 +474,42 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
         @click="orderOpen = true"
       />
     </BottomActionBar>
+    <!-- Below lg: from the right on tablets, a bottom sheet on phones; only the lines scroll (D124) -->
     <UDrawer
       v-model:open="orderOpen"
+      :direction="isCompact ? 'bottom' : 'right'"
+      :handle="isCompact"
       title="Your order"
-      :ui="{ header: 'sr-only', content: 'max-h-[85dvh]', body: 'overflow-y-auto' }"
+      :description="pluralize(cart.count, ['item', 'items'])"
+      close
+      :ui="{
+        content: isCompact ? 'max-h-[85dvh]' : 'w-full max-w-md',
+        container: 'overflow-y-hidden',
+        header: 'border-b border-default pb-4',
+        title: 'text-lg',
+        body: 'min-h-0 overflow-y-auto',
+        footer: 'border-t border-default pt-4 pb-[env(safe-area-inset-bottom)]',
+      }"
     >
-      <template #body>
-        <OrderPanel
-          :cart="cart"
+      <template #actions>
+        <OrderActions
           :order-type="orderType"
+          :count="cart.lines.length"
+          @clear="clearOrder"
+        />
+      </template>
+      <template #body>
+        <OrderLines
+          :cart="cart"
+          @set-quantity="cartStore.setQuantity"
+        />
+      </template>
+      <template #footer>
+        <OrderTotals
+          :subtotal-minor="cart.subtotalMinor"
+          :count="cart.count"
           :closed="closed"
           :closed-note="closedNote"
-          @set-quantity="cartStore.setQuantity"
         />
       </template>
     </UDrawer>

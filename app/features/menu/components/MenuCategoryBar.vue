@@ -54,7 +54,7 @@ watch(() => props.activeMainId, async (id) => {
       <UButton
         icon="i-lucide-list"
         color="neutral"
-        :variant="sheetOpen ? 'soft' : 'outline'"
+        :variant="sheetOpen ? 'soft' : 'ghost'"
         aria-label="All categories"
         class="sm:hidden"
       />
@@ -76,7 +76,7 @@ watch(() => props.activeMainId, async (id) => {
         icon="i-lucide-list"
         trailing-icon="i-lucide-chevron-down"
         color="neutral"
-        variant="outline"
+        variant="ghost"
         class="shrink-0 max-sm:hidden"
       />
       <template #content>
@@ -104,7 +104,7 @@ watch(() => props.activeMainId, async (id) => {
         :color="section.id === activeMainId ? 'primary' : 'neutral'"
         :variant="section.id === activeMainId ? 'soft' : 'ghost'"
         :aria-current="section.id === activeMainId ? 'true' : undefined"
-        class="shrink-0"
+        class="shrink-0 rounded-full px-4"
         @click="go(section.id)"
       />
     </nav>

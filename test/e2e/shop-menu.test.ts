@@ -1,6 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage, getBrowser, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
+import type { PublicMenu } from '#shared/contracts/public-menu'
 import { setupE2e } from './support/mock-api'
 
 await setupE2e()
@@ -32,6 +33,29 @@ const visible = (locator: ReturnType<Page['getByRole']>) => locator.filter({ vis
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Categories' }).getByRole('button', { name, exact: true })
 const panel = (page: Page) => page.getByRole('complementary', { name: 'Your order' })
 const dialog = (page: Page) => page.getByRole('dialog')
+
+/** Opens the menu with 12 different lines already in the order (stored as the browser keeps it). */
+async function openWithLongOrder(width: number, height = width < 640 ? 844 : 900) {
+  const menu = await (await fetch(url(`/api/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
+  const items = menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(sub => sub.items)]).filter(item => !item.soldOut).slice(0, 12)
+  expect(items).toHaveLength(12)
+  const lines = items.map(item => ({ itemId: item.id, variationId: item.variations[0]!.id, modifierIds: [], quantity: 1, name: item.name }))
+  const page = await createPage()
+  await page.addInitScript(([branch, stored]) => localStorage.setItem('nuk-cafe:cart', JSON.stringify({ [branch]: stored })), [seed.openBranchId, lines] as const)
+  await page.setViewportSize({ width, height })
+  await page.goto(url('/'), { waitUntil: 'hydration' })
+  await heading(page, 'Coffee').waitFor()
+  return page
+}
+
+/** Fully inside the window, top to bottom. */
+async function onScreen(page: Page, locator: ReturnType<Page['getByRole']>) {
+  const box = (await locator.boundingBox())!
+  return box.y >= 0 && box.y + box.height <= page.viewportSize()!.height
+}
+
+/** The page doesn't scroll sideways. */
+const noSidewaysScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
 
 /** The heading is on screen, not under the sticky header. */
 async function inViewBelowHeader(page: Page, name: string) {
@@ -126,7 +150,7 @@ describe('the customer menu', () => {
   it('opens the detail for an item with choices: says what\'s missing, prices the choice, then "2 in order"', async () => {
     const { page } = await open()
     const latte = card(page, 'Latte')
-    await visible(latte.getByRole('button', { name: 'Add Latte to order' })).click()
+    await visible(latte.getByRole('button', { name: 'Customize Latte' })).click()
     await dialog(page).getByRole('radio', { name: 'Large' }).click()
     await dialog(page).getByRole('radio', { name: 'Iced' }).click()
     await dialog(page).getByRole('button', { name: 'Choose Milk' }).click()
@@ -173,6 +197,87 @@ describe('the customer menu', () => {
     await page.getByText('No items match "lattte"').waitFor()
     await page.getByRole('button', { name: 'Clear search' }).last().click()
     await tab(page, 'Coffee').waitFor()
+  })
+})
+
+describe('the order beside the menu and in its drawer (D124)', () => {
+  it('a long order keeps its title and "Review order" on screen: only the lines scroll', async () => {
+    const page = await openWithLongOrder(1440)
+    await panel(page).getByText('12 items').waitFor()
+    const review = panel(page).getByRole('link', { name: 'Review order' })
+    expect(await onScreen(page, review)).toBe(true)
+    const lines = panel(page).getByRole('list', { name: 'Items in your order' })
+    expect(await lines.evaluate(list => list.parentElement!.scrollHeight > list.parentElement!.clientHeight)).toBe(true)
+    await lines.evaluate(list => list.parentElement!.scrollTo({ top: list.parentElement!.scrollHeight }))
+    expect(await onScreen(page, panel(page).getByRole('heading', { name: 'Your order' }))).toBe(true)
+    expect(await onScreen(page, review)).toBe(true)
+  })
+
+  it('removes a line with its trash; the stepper stops at 1 (only the trash removes)', async () => {
+    const { page } = await open()
+    await visible(card(page, 'Banana Bread').getByRole('button', { name: 'Add Banana Bread to order' })).click()
+    const lines = panel(page).getByRole('list', { name: 'Items in your order' })
+    expect(await lines.getByRole('button', { name: 'Decrement' }).isDisabled()).toBe(true)
+    await lines.getByRole('button', { name: 'Remove Banana Bread' }).click()
+    await panel(page).getByText('Your order is empty').waitFor()
+  })
+
+  it('"Clear order" asks first; Cancel keeps the order, "Remove all" empties it', async () => {
+    const page = await openWithLongOrder(1440)
+    await panel(page).getByRole('button', { name: 'Clear order' }).click()
+    await dialog(page).getByText('All 12 items will be removed from your order.').waitFor()
+    await dialog(page).getByRole('button', { name: 'Cancel' }).click()
+    await expect.poll(() => dialog(page).count()).toBe(0)
+    expect(await panel(page).getByText('12 items').isVisible()).toBe(true)
+    await panel(page).getByRole('button', { name: 'Clear order' }).click()
+    await dialog(page).getByRole('button', { name: 'Remove all' }).click()
+    await panel(page).getByText('Your order is empty').waitFor()
+    expect(await panel(page).getByRole('button', { name: 'Clear order' }).count()).toBe(0)
+  })
+
+  it('on a phone, the sheet keeps its title and "Review order" while the lines scroll', async () => {
+    const page = await openWithLongOrder(390)
+    await page.getByRole('toolbar', { name: 'Your order' }).getByRole('button', { name: 'View order' }).click()
+    const sheet = dialog(page)
+    await sheet.getByText('12 items').waitFor()
+    const body = sheet.locator('[data-slot="body"]')
+    expect(await body.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true)
+    await body.evaluate(element => element.scrollTo({ top: element.scrollHeight }))
+    // Polled: the sheet slides up when it opens.
+    await expect.poll(() => onScreen(page, sheet.getByRole('link', { name: 'Review order' }))).toBe(true)
+    expect(await onScreen(page, sheet.getByRole('heading', { name: 'Your order' }))).toBe(true)
+  })
+
+  it('on a tablet, the order opens from the right, the full height', async () => {
+    const page = await openWithLongOrder(768, 1024)
+    await page.getByRole('toolbar', { name: 'Your order' }).getByRole('button', { name: 'View order' }).click()
+    await dialog(page).getByText('12 items').waitFor()
+    // Wait for the slide-in to end before measuring.
+    await expect.poll(async () => Math.round((await dialog(page).boundingBox())!.x + (await dialog(page).boundingBox())!.width)).toBe(768)
+    const box = (await dialog(page).boundingBox())!
+    expect(box.height).toBeGreaterThan(1000)
+    expect(await onScreen(page, dialog(page).getByRole('link', { name: 'Review order' }))).toBe(true)
+  })
+})
+
+describe('the header at every width (D124)', () => {
+  it('fits without scrolling sideways, from 320 px to desktop', async () => {
+    for (const width of [320, 390, 768, 1024, 1440]) {
+      const { page } = await open(width)
+      expect(await noSidewaysScroll(page), `at ${width} px`).toBe(true)
+      await page.close()
+    }
+  })
+
+  it('below lg, Appearance is in the account menu, also signed out', async () => {
+    const { page } = await open(390)
+    expect(await page.getByRole('button', { name: /Switch to (dark|light) mode/ }).filter({ visible: true }).count()).toBe(0)
+    await visible(page.getByRole('button', { name: 'Account' })).click()
+    await page.getByRole('link', { name: 'Create account' }).waitFor()
+    await page.getByRole('button', { name: 'Dark' }).click()
+    await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(true)
+    await page.getByRole('button', { name: 'Light' }).click()
+    await expect.poll(() => page.evaluate(() => document.documentElement.classList.contains('dark'))).toBe(false)
   })
 })
 

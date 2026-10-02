@@ -266,6 +266,21 @@ describe('the counter', () => {
     await page.getByRole('alert').filter({ hasText: 'This account doesn\'t work at any branch, so it can\'t use the counter.' }).waitFor()
     expect(new URL(page.url()).pathname).toBe('/counter/sign-in')
   })
+
+  it('the customer site\'s account menu links staff to the counter, and only them (D124)', async () => {
+    const me = async (account: SeedCustomer) => (await (await fetch(url('/api/shop/me'), { headers: { cookie: await signInOverHttp(account) } })).json()).workspaces
+    expect(await me(seed.customers.cashier)).toEqual(['counter'])
+    expect(await me(seed.customers.verified)).toEqual([])
+
+    const { page } = await cashierAtCounter(1440)
+    await page.goto(url('/'), { waitUntil: 'hydration' })
+    await page.getByRole('button', { name: `Account: ${seed.customers.cashier.name}` }).click()
+    const counter = page.getByRole('link', { name: 'Counter' })
+    expect(await counter.getAttribute('href')).toBe('/counter')
+    expect(await page.getByRole('link', { name: 'Admin workspace' }).count()).toBe(0)
+    await counter.click()
+    await page.waitForURL(u => u.pathname === `/counter/${seed.openBranchId}`)
+  })
 })
 
 // Coconut Coffee: published, sizes, no time rule, and no other test orders it (switching it off

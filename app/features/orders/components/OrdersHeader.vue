@@ -17,7 +17,7 @@ import { AccountButton } from '~/features/account'
         NUK Cafe
       </NuxtLink>
       <div class="ms-auto flex items-center gap-2">
-        <UColorModeButton />
+        <UColorModeButton class="max-lg:hidden" />
         <AccountButton />
       </div>
     </div>

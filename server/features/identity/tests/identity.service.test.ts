@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { member, organization } from '#server/db/tables'
 import { newId } from '#server/utils/ids'
-import { adminSession, authorizeBranch, counterSession, authorizeCustomer, authorizePlatform, authorizeSignedIn } from '#server/features/identity/identity.service'
+import { adminSession, authorizeBranch, counterSession, authorizeCustomer, authorizePlatform, authorizeSignedIn, workspacesOf } from '#server/features/identity/identity.service'
 import type { SessionUser } from '#server/features/identity/identity.types'
 import { createTestDb, createUser } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
@@ -155,6 +155,22 @@ describe('counter surface', () => {
       const unknownRole = await signedInMember('owner')
       await expectApiError(() => counterSession(db, customerOnly), 403, 'NOT_STAFF')
       await expectApiError(() => counterSession(db, unknownRole), 403, 'NOT_STAFF')
+    })
+  })
+
+  describe('the workspaces in the account menu (D124)', () => {
+    it('offers an admin both, branch staff the counter, and a customer neither', async () => {
+      expect(await workspacesOf(db, admin)).toEqual(['admin', 'counter'])
+      expect(await workspacesOf(db, await signedInMember('manager'))).toEqual(['counter'])
+      expect(await workspacesOf(db, await signedInMember(null))).toEqual([])
+    })
+
+    it('doesn\'t offer the counter for an archived branch or an unknown role', async () => {
+      const archived = await addBranch('archived')
+      const former = await signedInMember(null)
+      await db.insert(member).values({ id: newId(), organizationId: archived, userId: former.id, role: 'staff', createdAt: new Date() })
+      expect(await workspacesOf(db, former)).toEqual([])
+      expect(await workspacesOf(db, await signedInMember('owner'))).toEqual([])
     })
   })
 })

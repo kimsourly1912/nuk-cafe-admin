@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * The add slot of an item card or row (D93). It changes in place, at the same size:
- * - an item with nothing to choose: "Add to order", then a quantity stepper (0 removes it);
- * - an item with choices: "Add to order" opens its detail, then "2 in order" and "Add another";
- * - sold out, or the branch closed: a disabled button saying so.
- * `compact` is the phone row's smaller "Add"; otherwise the button fills the card's width.
+ * The add slot of an item card or row (D93, revised in D124). It changes in place:
+ * - an item with nothing to choose: "Add", then a quantity stepper (0 removes it);
+ * - an item with choices: "Customize" opens its detail (how many are in the order is the card's to say);
+ * - sold out: a disabled "Sold out"; the branch closed: the button disabled.
+ * `compact` is the phone row's smaller size.
  */
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
 import { MAX_LINE_QUANTITY } from '../utils/cart'
@@ -38,46 +38,37 @@ const size = computed(() => (props.compact ? 'sm' : 'md'))
       color="neutral"
       variant="soft"
       :size="size"
-      :block="!compact"
       disabled
     />
+    <UButton
+      v-else-if="choices"
+      label="Customize"
+      :size="size"
+      :variant="compact ? 'soft' : 'solid'"
+      :disabled="closed"
+      :aria-label="`Customize ${item.name}`"
+      @click="emit('choose')"
+    />
     <UInputNumber
-      v-else-if="!choices && quantity > 0"
+      v-else-if="quantity > 0"
       :model-value="quantity"
       :min="0"
       :max="MAX_LINE_QUANTITY"
       :size="size"
       :disabled="closed"
       :aria-label="`Quantity of ${item.name}`"
-      :class="compact ? 'w-28' : 'w-full'"
+      class="w-28"
       @update:model-value="value => emit('set-quantity', value ?? 0)"
     />
-    <div
-      v-else-if="choices && quantity > 0"
-      class="flex items-center justify-between gap-2"
-    >
-      <span class="text-sm font-medium text-highlighted">{{ quantity }} in order</span>
-      <UButton
-        label="Add another"
-        icon="i-lucide-plus"
-        color="neutral"
-        variant="outline"
-        :size="size"
-        :disabled="closed"
-        :aria-label="`Add another ${item.name}`"
-        @click="emit('choose')"
-      />
-    </div>
     <UButton
       v-else
-      :label="compact ? 'Add' : 'Add to order'"
+      label="Add"
       icon="i-lucide-plus"
       :size="size"
-      :block="!compact"
       :variant="compact ? 'soft' : 'solid'"
       :disabled="closed"
       :aria-label="`Add ${item.name} to order`"
-      @click="choices ? emit('choose') : emit('add')"
+      @click="emit('add')"
     />
   </div>
 </template>
