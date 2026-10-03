@@ -115,7 +115,7 @@ describe('the counter', () => {
   })
 
   it('cash in riel at the rate an admin set, rounded up to ៛100; then cancelling the paid order records the money returned', async () => {
-    await sql('insert into exchange_rates (id, currency, per_usd, effective_from, set_by) values (?, \'KHR\', 4100, ?, (select id from user where email = \'e2e-admin@example.com\'))', [crypto.randomUUID(), Date.now() - 60_000])
+    await sql('insert into exchange_rates (id, tenant_id, currency, per_usd, effective_from, set_by) values (?, (select id from organization), \'KHR\', 4100, ?, (select id from user where email = \'e2e-admin@example.com\'))', [crypto.randomUUID(), Date.now() - 60_000])
     const order = await placeOrder(seed.customers.counterShopperA)
     const { page } = await cashierAtCounter()
     await page.getByRole('button', { name: `Take payment: order ${number(order)}` }).click()
@@ -143,8 +143,8 @@ describe('the counter', () => {
 
   it('KHQR at the counter (D130): a QR for this order in dollars or riel, with its number and minutes left; the payment names it', async () => {
     const admin = '(select id from user where email = \'e2e-admin@example.com\')'
-    await sql(`insert into khqr_settings (id, enabled, account_id, merchant_name, merchant_city, currencies, version, updated_by, updated_at) values ('default', 1, 'nukcafe@aclb', 'NUK Cafe', 'Phnom Penh', 'USD,KHR', 1, ${admin}, ?)`, [Date.now()])
-    await sql(`insert into exchange_rates (id, currency, per_usd, effective_from, set_by) values (?, 'KHR', 4100, ?, ${admin})`, [crypto.randomUUID(), Date.now() - 60_000])
+    await sql(`insert into khqr_settings (tenant_id, enabled, account_id, merchant_name, merchant_city, currencies, version, updated_by, updated_at) values ((select id from organization), 1, 'nukcafe@aclb', 'NUK Cafe', 'Phnom Penh', 'USD,KHR', 1, ${admin}, ?)`, [Date.now()])
+    await sql(`insert into exchange_rates (id, tenant_id, currency, per_usd, effective_from, set_by) values (?, (select id from organization), 'KHR', 4100, ?, ${admin})`, [crypto.randomUUID(), Date.now() - 60_000])
     try {
       const order = await placeOrder(seed.customers.counterShopperA)
       const { page, problems } = await cashierAtCounter()
@@ -179,7 +179,7 @@ describe('the counter', () => {
 
   it('KHQR checked with Bakong (D131): the payment is recorded as soon as Bakong confirms it; something else arriving is said and records nothing', async () => {
     const admin = '(select id from user where email = \'e2e-admin@example.com\')'
-    await sql(`insert into khqr_settings (id, enabled, account_id, merchant_name, merchant_city, currencies, version, updated_by, updated_at) values ('default', 1, 'nukcafe@aclb', 'NUK Cafe', 'Phnom Penh', 'USD', 1, ${admin}, ?)`, [Date.now()])
+    await sql(`insert into khqr_settings (tenant_id, enabled, account_id, merchant_name, merchant_city, currencies, version, updated_by, updated_at) values ((select id from organization), 1, 'nukcafe@aclb', 'NUK Cafe', 'Phnom Penh', 'USD', 1, ${admin}, ?)`, [Date.now()])
     const client = e2eDatabase(seed.dbFile)
     /** The QR the counter made for the order (its MD5 is what the server asks Bakong about). */
     async function chargeOf(order: Order) {

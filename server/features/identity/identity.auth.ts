@@ -55,14 +55,16 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
     databaseHooks: {
       user: {
         create: {
-          // Every account gets a customer profile (member code). D1 has no transactions, so this
-          // runs after the account is stored; if it fails, the account still works and
-          // `ensureProfile` creates the profile on first use. Loaded lazily: the module loads this
-          // file at build time, before the customers schema's imports exist.
+          // Every account gets a customer profile (member code) in the cafe it signed up at (the
+          // only one until T1.5 names it in the path; D137). D1 has no transactions, so this runs
+          // after the account is stored; if it fails, the account still works and `ensureProfile`
+          // creates the profile on first use. Loaded lazily: the module loads this file at build
+          // time, before the schemas' imports exist.
           after: async (user) => {
             try {
-              const { ensureProfile } = await import('#server/features/customers')
-              await ensureProfile(db, user.id)
+              const [{ ensureProfile }, { currentTenant }] = await Promise.all([import('#server/features/customers'), import('./identity.service')])
+              const tenant = await currentTenant(db).catch(() => null)
+              if (tenant) await ensureProfile(db, tenant.id, user.id)
             }
             catch (error) {
               log('error', 'Customer profile not created at sign-up; created on first use instead', { userId: user.id, error: String(error) })

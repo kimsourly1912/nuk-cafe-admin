@@ -95,7 +95,7 @@ async function businessDateOf(db: Db, tenantId: string, branchId: string, now: D
  * Bakong, `automaticCheck`, D131), the server's clock, and how many finished today.
  */
 export async function listCounterQueue(db: Db, actor: BranchActor, now = new Date(), automaticCheck = false): Promise<CounterQueue> {
-  const [rows, rate, today, khqr] = await Promise.all([repo.findActiveOrders(db, actor.branchId, now), repo.currentRate(db, now), businessDateOf(db, actor.tenantId, actor.branchId, now), counterKhqr(db, automaticCheck)])
+  const [rows, rate, today, khqr] = await Promise.all([repo.findActiveOrders(db, actor.branchId, now), repo.currentRate(db, actor.tenantId, now), businessDateOf(db, actor.tenantId, actor.branchId, now), counterKhqr(db, actor.tenantId, automaticCheck)])
   const [orders, finishedToday] = await Promise.all([withDetails(db, rows), repo.countFinishedOrders(db, actor.branchId, today)])
   return { orders, khrRate: rate ? toRate(rate) : null, khqr, serverTime: now.toISOString(), finishedToday }
 }
@@ -116,7 +116,7 @@ export async function listFinishedToday(db: Db, actor: BranchActor, now = new Da
  * shown here, never to the customer (D106).
  */
 export async function getCounterOrderHistory(db: Db, actor: BranchActor, orderId: string): Promise<CounterOrderHistory> {
-  const row = await repo.findOrder(db, orderId)
+  const row = await repo.findOrder(db, actor.tenantId, orderId)
   if (!row || row.branchId !== actor.branchId) throw orderNotFound()
   const [[order], events, returnedBy] = await Promise.all([withDetails(db, [row]), reportsRepo.eventsOf(db, orderId), reportsRepo.returnedByName(db, orderId)])
   return {
@@ -138,7 +138,7 @@ export async function getCounterOrderHistory(db: Db, actor: BranchActor, orderId
 
 /** One of the branch's orders, whatever its status. Another branch's is 404, like an unknown id. */
 export async function getCounterOrder(db: Db, actor: BranchActor, orderId: string): Promise<CounterOrder> {
-  const row = await repo.findOrder(db, orderId)
+  const row = await repo.findOrder(db, actor.tenantId, orderId)
   if (!row || row.branchId !== actor.branchId) throw orderNotFound()
   const [order] = await withDetails(db, [row])
   return order!
@@ -184,7 +184,7 @@ export async function payOrder(db: Db, actor: BranchActor, orderId: string, inpu
   return runCommand(db, actor, orderId, key, { operation: 'pay', input, request: input, now }, async (order) => {
     requireStatus(order, ['awaiting_payment'])
     if (order.paymentDueAt.getTime() <= now.getTime()) throw paymentExpired()
-    const rate = input.method === 'cash_khr' ? await repo.currentRate(db, now) : undefined
+    const rate = input.method === 'cash_khr' ? await repo.currentRate(db, actor.tenantId, now) : undefined
     if (input.method === 'cash_khr') {
       if (!rate) throw noExchangeRate()
       if (rate.perUsd !== input.khrPerUsd) throw exchangeRateChanged(rate.perUsd)
@@ -283,19 +283,19 @@ export async function cancelOrderAtCounter(db: Db, actor: BranchActor, orderId: 
 
 const HISTORY = 20
 
-export async function getExchangeRates(db: Db, now = new Date()): Promise<ExchangeRates> {
-  const [current, history] = await Promise.all([repo.currentRate(db, now), repo.rateHistory(db, HISTORY)])
+export async function getExchangeRates(db: Db, tenantId: string, now = new Date()): Promise<ExchangeRates> {
+  const [current, history] = await Promise.all([repo.currentRate(db, tenantId, now), repo.rateHistory(db, tenantId, HISTORY)])
   return { current: current ? toRate(current) : null, history: history.map(toRate) }
 }
 
 /** A new rate from now on; the history keeps every earlier one. Setting the current rate again changes nothing. */
 export async function setExchangeRate(db: Db, actor: Actor, input: SetExchangeRateInput, now = new Date()): Promise<ExchangeRates> {
-  const current = await repo.currentRate(db, now)
+  const current = await repo.currentRate(db, actor.tenantId, now)
   if (current?.perUsd !== input.khrPerUsd) {
     await db.batch([
-      repo.insertRateStatement(db, { perUsd: input.khrPerUsd, effectiveFrom: now, setBy: actor.userId }),
+      repo.insertRateStatement(db, { tenantId: actor.tenantId, perUsd: input.khrPerUsd, effectiveFrom: now, setBy: actor.userId }),
       auditStatement(db, actor, { action: 'orders.exchange_rate.set', targetType: 'exchange_rate', metadata: { from: current?.perUsd ?? null, to: input.khrPerUsd } }),
     ])
   }
-  return getExchangeRates(db, now)
+  return getExchangeRates(db, actor.tenantId, now)
 }

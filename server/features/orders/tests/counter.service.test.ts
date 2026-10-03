@@ -352,7 +352,7 @@ describe('the riel rate', () => {
   })
 
   it('keeps every change, newest first; setting the same rate again changes nothing', async () => {
-    expect(await getExchangeRates(db, monday('08:00'))).toEqual({ current: null, history: [] })
+    expect(await getExchangeRates(db, TEST_TENANT, monday('08:00'))).toEqual({ current: null, history: [] })
     await setExchangeRate(db, rateSetter, { khrPerUsd: 4100 }, monday('09:00'))
     await setExchangeRate(db, rateSetter, { khrPerUsd: 4100 }, monday('09:30'))
     const rates = await setExchangeRate(db, rateSetter, { khrPerUsd: 4120 }, monday('10:00'))

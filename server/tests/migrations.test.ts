@@ -228,3 +228,57 @@ describe('0025_menu_tenants', () => {
     expect((await client.execute('select count(*) as n from organization')).rows[0]!.n).toBe(0)
   })
 })
+
+describe('0026_tenant_settings', () => {
+  const TENANT = '01a0fdb3-d860-7284-bc6b-2f8ab7a1d6cd'
+  const before = async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0026_tenant_settings.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    return { client, files, at }
+  }
+
+  it('gives profiles, the KHQR settings and the riel rates the tenant, and makes member codes unique per tenant', async () => {
+    const { client, files, at } = await before()
+    await client.batch([
+      `insert into organization (id, name, slug, created_at, status, version) values ('${TENANT}', 'NUK Cafe', 'nuk', 1, 'active', 1)`,
+      `insert into user (id, name, email, role) values ('u1', 'Dara', 'dara@example.com', 'customer'), ('u2', 'Mia', 'mia@example.com', 'customer')`,
+      `insert into customer_profiles (user_id, member_code, phone, marketing_opt_in) values ('u1', 'AAAA-BBBB', '+85512345678', 1), ('u2', 'CCCC-DDDD', null, 0)`,
+      `insert into khqr_settings (id, enabled, account_id, merchant_name, merchant_city, currencies, version, updated_by, updated_at) values ('default', 1, 'nuk@aclb', 'NUK', 'Phnom Penh', 'USD,KHR', 3, 'u2', 5)`,
+      `insert into exchange_rates (id, currency, per_usd, effective_from, set_by) values ('r1', 'KHR', 4100, 10, 'u2')`,
+    ], 'write')
+
+    await applyMigration(client, files[at]!)
+    const all = async (sql: string) => (await client.execute(sql)).rows.map(row => ({ ...row }))
+
+    expect(await all('select tenant_id, user_id, member_code, phone, marketing_opt_in from customer_profiles order by user_id')).toEqual([
+      { tenant_id: TENANT, user_id: 'u1', member_code: 'AAAA-BBBB', phone: '+85512345678', marketing_opt_in: 1 },
+      { tenant_id: TENANT, user_id: 'u2', member_code: 'CCCC-DDDD', phone: null, marketing_opt_in: 0 },
+    ])
+    expect(await all('select tenant_id, account_id, currencies, version from khqr_settings')).toEqual([{ tenant_id: TENANT, account_id: 'nuk@aclb', currencies: 'USD,KHR', version: 3 }])
+    expect(await all('select id, tenant_id, per_usd from exchange_rates')).toEqual([{ id: 'r1', tenant_id: TENANT, per_usd: 4100 }])
+    expect(await all(`select name from sqlite_master where instr(sql, '__new_') > 0`)).toEqual([])
+    expect(await all('pragma foreign_key_check')).toEqual([])
+
+    // Another tenant: its own profile for the same account, the same member code, its own settings.
+    await client.batch([
+      `insert into organization (id, name, slug, created_at) values ('t2', 'Other', 'other', 2)`,
+      `insert into customer_profiles (tenant_id, user_id, member_code) values ('t2', 'u1', 'AAAA-BBBB')`,
+      `insert into khqr_settings (tenant_id, enabled, account_id, merchant_name, merchant_city, currencies, updated_by, updated_at) values ('t2', 0, 'other@aclb', 'Other', 'Siem Reap', 'USD', 'u1', 6)`,
+    ], 'write')
+    // Within one tenant a member code and a profile per account stay unique.
+    await client.execute(`insert into user (id, name, email, role) values ('u3', 'Sok', 'sok@example.com', 'customer')`)
+    await expect(client.execute(`insert into customer_profiles (tenant_id, user_id, member_code) values ('${TENANT}', 'u3', 'AAAA-BBBB')`)).rejects.toThrow(/UNIQUE/)
+    await expect(client.execute(`insert into customer_profiles (tenant_id, user_id, member_code) values ('${TENANT}', 'u1', 'EEEE-FFFF')`)).rejects.toThrow(/UNIQUE/)
+    await expect(client.execute(`insert into khqr_settings (tenant_id, enabled, account_id, merchant_name, merchant_city, currencies, updated_by, updated_at) values ('t2', 1, 'x', 'x', 'x', 'USD', 'u1', 7)`)).rejects.toThrow(/UNIQUE/)
+    for (const file of files.slice(at + 1)) await applyMigration(client, file)
+  })
+
+  it('leaves an empty database without a tenant', async () => {
+    const { client, files, at } = await before()
+    await applyMigration(client, files[at]!)
+    expect((await client.execute('select count(*) as n from organization')).rows[0]!.n).toBe(0)
+  })
+})

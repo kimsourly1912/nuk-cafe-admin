@@ -23,6 +23,7 @@ let auth: TestAuth
 
 beforeEach(async () => {
   db = await createTestDb()
+  await ensureTenant(db)
   auth = createTestAuth(db)
 })
 
@@ -49,7 +50,7 @@ async function sessionUser(headers: Headers) {
 }
 
 describe('sign-up', () => {
-  it('queues one verification email and creates the customer profile', async () => {
+  it('queues one verification email and creates the customer profile in the cafe', async () => {
     const { userId } = await signUp()
     const mails = await queued(MAIL_KINDS.verifyEmail)
     expect(mails).toHaveLength(1)
@@ -57,6 +58,7 @@ describe('sign-up', () => {
 
     const [profile] = await db.select().from(customerProfiles).where(eq(customerProfiles.userId, userId))
     expect(profile!.memberCode).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/)
+    expect(profile!.tenantId).toBe(TEST_TENANT)
   })
 
   it('lets an unverified customer sign in, but not order', async () => {
@@ -79,9 +81,9 @@ describe('customer profile', () => {
   it('is created on first use when the sign-up hook didn\'t manage to', async () => {
     const { userId } = await signUp()
     await db.delete(customerProfiles).where(eq(customerProfiles.userId, userId))
-    const profile = await ensureProfile(db, userId)
+    const profile = await ensureProfile(db, TEST_TENANT, userId)
     expect(profile.memberCode).toMatch(/^.{4}-.{4}$/)
-    expect(await ensureProfile(db, userId)).toEqual(profile)
+    expect(await ensureProfile(db, TEST_TENANT, userId)).toEqual(profile)
   })
 
   it('is created with a staff account, in the same batch', async () => {
@@ -92,6 +94,26 @@ describe('customer profile', () => {
     for (const userId of [seeded!.staff.id, created.staff.id]) {
       expect(await db.select().from(customerProfiles).where(eq(customerProfiles.userId, userId))).toHaveLength(1)
     }
+  })
+
+  it('is one per cafe: the same account gets its own profile in another cafe, on first use there', async () => {
+    const { userId } = await signUp()
+    const ours = await ensureProfile(db, TEST_TENANT, userId)
+    const theirs = await ensureProfile(db, await ensureTenant(db, 'tenant-2'), userId)
+    expect(theirs.memberCode).not.toBe(ours.memberCode)
+    expect((await db.select().from(customerProfiles).where(eq(customerProfiles.userId, userId))).map(p => p.tenantId).sort()).toEqual([TEST_TENANT, 'tenant-2'])
+    // Each cafe reads its own.
+    expect(await ensureProfile(db, TEST_TENANT, userId)).toEqual(ours)
+    expect(await ensureProfile(db, 'tenant-2', userId)).toEqual(theirs)
+  })
+
+  it('is created when an existing account joins another cafe\'s staff', async () => {
+    const { userId } = await signUp('sophea@example.com')
+    const other = await ensureTenant(db, 'tenant-2')
+    const branchId = newId()
+    await insertBranch(db, { id: branchId, name: 'Their branch', timezone: 'Asia/Phnom_Penh', tenantId: other })
+    await createStaff(db, { userId: 'their-owner', tenantId: other, role: 'owner' }, { name: 'Sophea', email: 'sophea@example.com', admin: false, memberships: [{ branchId, role: 'staff' }] })
+    expect((await db.select().from(customerProfiles).where(eq(customerProfiles.userId, userId))).map(p => p.tenantId).sort()).toEqual([TEST_TENANT, other])
   })
 
   it('reads member codes the way people type them', () => {

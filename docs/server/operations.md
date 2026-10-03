@@ -56,6 +56,8 @@ Everyone else is added from the Staff page; branches come from the seed locally,
 
 **Migration `0025_menu_tenants` (D136)** rebuilds the menu tables and `media_assets` the same way. Same routine: note the time before the deploy; after it, the admin menu screens, an item's photo, a new upload (its URL under `/media/t/…`), sold out at the counter and a checkout are checked by hand.
 
+**Migration `0026_tenant_settings` (D137)** rebuilds `customer_profiles`, `khqr_settings` and `exchange_rates` with the tenant. Same routine; afterwards: the account menu's member code (unchanged), Payments (the riel rate and the KHQR settings as before), a riel cash payment and a KHQR at the counter.
+
 ## Configuration
 
 Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudflare secrets, never committed. `.env.example` lists every name.

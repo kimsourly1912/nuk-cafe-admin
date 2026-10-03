@@ -84,7 +84,7 @@ beforeEach(async () => {
 
 describe('the KHQR settings', () => {
   it('start off, then save from the version read; a stale save is refused and changes nothing', async () => {
-    expect(await getKhqrSettings(db)).toMatchObject({ version: 0, enabled: false, accountId: null, currencies: [] })
+    expect(await getKhqrSettings(db, TEST_TENANT)).toMatchObject({ version: 0, enabled: false, accountId: null, currencies: [] })
     const saved = await saveKhqrSettings(db, owner, SETTINGS, NOON)
     expect(saved).toMatchObject({ version: 1, enabled: true, accountId: 'nukcafe@aclb', merchantName: 'NUK Cafe', currencies: ['USD', 'KHR'], updatedBy: { name: 'Kim' } })
 
@@ -92,7 +92,7 @@ describe('the KHQR settings', () => {
     await expectApiError(() => saveKhqrSettings(db, admin, { ...SETTINGS, accountId: 'other@abaa' }), 409, 'VERSION_CONFLICT')
     await saveKhqrSettings(db, owner, { ...SETTINGS, version: 1, currencies: ['USD'] })
     await expectApiError(() => saveKhqrSettings(db, owner, { ...SETTINGS, version: 1, enabled: false }), 409, 'VERSION_CONFLICT')
-    expect(await getKhqrSettings(db)).toMatchObject({ version: 2, enabled: true, accountId: 'nukcafe@aclb', currencies: ['USD'] })
+    expect(await getKhqrSettings(db, TEST_TENANT)).toMatchObject({ version: 2, enabled: true, accountId: 'nukcafe@aclb', currencies: ['USD'] })
 
     const audits = await db.select().from(auditEvents).where(eq(auditEvents.action, 'orders.khqr_settings.save'))
     expect(audits).toHaveLength(2)
@@ -117,7 +117,7 @@ describe('the KHQR settings', () => {
       saveKhqrSettings(racer, admin, { ...SETTINGS, version: 1, merchantName: 'Second' }),
     ])
     expect(results.map(result => result.status).sort()).toEqual(['fulfilled', 'rejected'])
-    expect((await getKhqrSettings(db)).version).toBe(2)
+    expect((await getKhqrSettings(db, TEST_TENANT)).version).toBe(2)
   })
 
   it('takes an account like name@bank and a name the QR can carry (Latin letters, at most 25)', () => {

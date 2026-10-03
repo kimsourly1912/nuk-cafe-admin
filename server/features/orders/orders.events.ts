@@ -33,7 +33,7 @@ export interface OrderAlert {
 
 /** `null` when the order doesn't exist (an event for a deleted test order). */
 export async function orderAlert(db: Db, orderId: string): Promise<OrderAlert | null> {
-  const row = await repo.findOrder(db, orderId)
+  const row = await repo.findOrderForTask(db, orderId)
   if (!row) return null
   const [lines, [payment]] = await Promise.all([repo.linesOf(db, orderId), repo.paymentsOf(db, [orderId])])
   return {

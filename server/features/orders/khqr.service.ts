@@ -43,18 +43,18 @@ const toSettings = (row: khqrRepo.KhqrSettingsRow | undefined, bakong: BakongSta
 }
 
 /** The settings, with what this server knows about its Bakong token (`bakong`). */
-export async function getKhqrSettings(db: Db, bakong: BakongStatus = NO_TOKEN): Promise<KhqrSettings> {
-  return toSettings(await khqrRepo.findSettings(db), bakong)
+export async function getKhqrSettings(db: Db, tenantId: string, bakong: BakongStatus = NO_TOKEN): Promise<KhqrSettings> {
+  return toSettings(await khqrRepo.findSettings(db, tenantId), bakong)
 }
 
 /** Saves the account and what customers see (`settings: ['manage']`), from the version the page read; audited. */
 export async function saveKhqrSettings(db: Db, actor: Actor, input: KhqrSettingsInput, now = new Date(), bakong: BakongStatus = NO_TOKEN): Promise<KhqrSettings> {
-  const before = await khqrRepo.findSettings(db)
+  const before = await khqrRepo.findSettings(db, actor.tenantId)
   if ((before?.version ?? 0) !== input.version) throw khqrSettingsChanged()
   const { version, ...rest } = input
   const values = { ...rest, updatedBy: actor.userId, updatedAt: now }
   await runBatch(db, [
-    version === 0 ? khqrRepo.insertSettingsStatement(db, values) : khqrRepo.updateSettingsStatement(db, version, values),
+    version === 0 ? khqrRepo.insertSettingsStatement(db, actor.tenantId, values) : khqrRepo.updateSettingsStatement(db, actor.tenantId, version, values),
     requireOneChange(db),
     auditStatement(db, actor, {
       action: 'orders.khqr_settings.save',
@@ -62,12 +62,12 @@ export async function saveKhqrSettings(db: Db, actor: Actor, input: KhqrSettings
       metadata: { from: before ? { enabled: before.enabled, accountId: before.accountId, merchantName: before.merchantName, merchantCity: before.merchantCity, currencies: before.currencies } : null, to: rest },
     }),
   ], khqrSettingsChanged)
-  return getKhqrSettings(db, bakong)
+  return getKhqrSettings(db, actor.tenantId, bakong)
 }
 
 /** What the counter needs to know: the currencies offered and whether it's checked with Bakong, or `null` while KHQR isn't on. */
-export async function counterKhqr(db: Db, automaticCheck = false): Promise<CounterQueue['khqr']> {
-  const settings = await khqrRepo.findSettings(db)
+export async function counterKhqr(db: Db, tenantId: string, automaticCheck = false): Promise<CounterQueue['khqr']> {
+  const settings = await khqrRepo.findSettings(db, tenantId)
   return settings?.enabled ? { currencies: settings.currencies, automaticCheck } : null
 }
 
@@ -93,12 +93,12 @@ const MIN_REMAINING_MS = 60_000
  * Two cashiers at once may make two: both are this order's, and either can be paid.
  */
 export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: string, input: CreateKhqrInput, now = new Date()): Promise<KhqrCharge> {
-  const order = await repo.findOrder(db, orderId)
+  const order = await repo.findOrder(db, actor.tenantId, orderId)
   if (!order || order.branchId !== actor.branchId) throw orderNotFound()
   if (order.status !== 'awaiting_payment') throw orderChanged(order.pickupNumber, order.status)
   if (order.paymentDueAt.getTime() <= now.getTime()) throw paymentExpired()
 
-  const settings = await khqrRepo.findSettings(db)
+  const settings = await khqrRepo.findSettings(db, actor.tenantId)
   if (!settings?.enabled) throw khqrNotSetUp()
   if (!settings.currencies.includes(input.currency)) throw khqrNotSetUp(input.currency)
 
@@ -108,7 +108,7 @@ export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: stri
   let amount = order.totalMinor
   let khrPerUsd: number | null = null
   if (input.currency === 'KHR') {
-    const rate = await repo.currentRate(db, now)
+    const rate = await repo.currentRate(db, actor.tenantId, now)
     if (!rate) throw noExchangeRate()
     khrPerUsd = rate.perUsd
     amount = toRiel(order.totalMinor, rate.perUsd)
@@ -152,7 +152,7 @@ export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: stri
  * they see arrive.
  */
 export async function requireOrderCharge(db: Db, actor: BranchActor, orderId: string, chargeId: string): Promise<khqrRepo.ChargeRow> {
-  const charge = await khqrRepo.findCharge(db, chargeId)
+  const charge = await khqrRepo.findCharge(db, actor.tenantId, chargeId)
   if (!charge || charge.orderId !== orderId || charge.branchId !== actor.branchId) throw khqrChargeInvalid()
   return charge
 }

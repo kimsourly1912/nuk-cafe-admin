@@ -11,7 +11,7 @@ export default defineEventHandler(async (event): Promise<CustomerAccount> => {
   const actor = await requireSignedIn(event)
   const session = await getUserSession(event)
   const db = useDb()
-  const profile = await ensureProfile(db, actor.userId)
+  const profile = await ensureProfile(db, actor.tenantId, actor.userId)
   return {
     name: session!.user.name,
     email: session!.user.email,

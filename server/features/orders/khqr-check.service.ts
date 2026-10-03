@@ -51,7 +51,7 @@ export async function checkKhqrCharge(db: Db, actor: BranchActor, orderId: strin
   const received = toReceived(answer.transaction)
   if (!matchesCharge(charge, answer.transaction)) return { status: 'mismatch', received }
 
-  const order = await repo.findOrder(db, orderId)
+  const order = await repo.findOrder(db, actor.tenantId, orderId)
   if (order?.status === 'awaiting_payment') {
     try {
       return { status: 'paid', order: await recordCheckedKhqrPayment(db, actor, order, charge, answer.transaction.externalRef ?? answer.transaction.hash, now) }
