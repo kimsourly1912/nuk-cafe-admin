@@ -393,3 +393,42 @@ describe('0028_platform_tenants', () => {
     expect((await client.execute('select count(*) as n from organization')).rows[0]!.n).toBe(0)
   })
 })
+
+describe('0029_nuk_address', () => {
+  const TENANT = '01a0fdb3-d860-7284-bc6b-2f8ab7a1d6cd'
+
+  async function upTo0029() {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0029_nuk_address.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    return { client, apply: () => applyMigration(client, files[at]!) }
+  }
+  const slugs = async (client: Awaited<ReturnType<typeof createTestClient>>) =>
+    (await client.execute('select id, slug from organization order by id')).rows.map(row => ({ ...row }))
+
+  it('gives NUK Cafe the address "nuk" when 0024 named it "nuk-cafe" and "nuk" is free', async () => {
+    const { client, apply } = await upTo0029()
+    await client.execute(`insert into organization (id, name, slug, created_at) values ('${TENANT}', 'NUK Cafe', 'nuk-cafe', 1)`)
+    await apply()
+    expect(await slugs(client)).toEqual([{ id: TENANT, slug: 'nuk' }])
+  })
+
+  it('changes nothing when "nuk" is taken, already right, or the database is empty', async () => {
+    const taken = await upTo0029()
+    await taken.client.execute(`insert into organization (id, name, slug, created_at) values ('${TENANT}', 'NUK Cafe', 'nuk-cafe', 1)`)
+    await taken.client.execute(`insert into organization (id, name, slug, created_at) values ('t2', 'Other', 'nuk', 1)`)
+    await taken.apply()
+    expect(await slugs(taken.client)).toEqual([{ id: TENANT, slug: 'nuk-cafe' }, { id: 't2', slug: 'nuk' }])
+
+    const right = await upTo0029()
+    await right.client.execute(`insert into organization (id, name, slug, created_at) values ('${TENANT}', 'NUK Cafe', 'nuk', 1)`)
+    await right.apply()
+    expect(await slugs(right.client)).toEqual([{ id: TENANT, slug: 'nuk' }])
+
+    const empty = await upTo0029()
+    await empty.apply()
+    expect(await slugs(empty.client)).toEqual([])
+  })
+})

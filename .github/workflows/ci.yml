@@ -126,6 +126,9 @@ jobs:
           set -eu
           # The database answers through the Worker.
           curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors "$STAGING_URL/api/health" | grep -q '"ok"'
+          # NUK Cafe answers at its address `nuk` (D141, 0029); if not, show what the Worker said.
+          code="$(curl --silent --output cafe.json --write-out '%{http_code}' "$STAGING_URL/api/c/nuk/public/branches")"
+          if [ "$code" != 200 ]; then echo "GET /api/c/nuk/public/branches answered $code:"; cat cafe.json; echo; exit 1; fi
           # The app shell loads at NUK Cafe's address (D141), with the security headers.
           curl --fail --silent --show-error --head "$STAGING_URL/c/nuk/admin/login" | grep -qi '^content-security-policy:'
           # Addresses from before cafe addresses move to NUK Cafe's.
