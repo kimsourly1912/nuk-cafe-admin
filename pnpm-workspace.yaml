@@ -12,6 +12,10 @@ overrides:
 # node-forge GHSA-86w9-cpqp-85rv (high, no patched version): only through listhen, the dev server's
 # HTTPS listener (nuxt > @nuxt/cli, nitropack > listhen); not in the Worker build. Remove once
 # node-forge ships a fix (D54).
+# braces GHSA-vfj7-8cjw-p6xm (high, stack exhaustion on deeply nested patterns; no patched version):
+# only through the build's file globbing (nitropack > globby > fast-glob > micromatch), fed our own
+# patterns; not in the built server. Remove once braces ships a fix (D54).
 auditConfig:
   ignoreGhsas:
     - GHSA-86w9-cpqp-85rv
+    - GHSA-vfj7-8cjw-p6xm
