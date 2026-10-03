@@ -397,6 +397,9 @@ describe('branch phone', () => {
 
     await country(page).click()
     await page.getByRole('option', { name: 'Cambodia (+855)' }).click()
+    // The list hands focus back to its button as it closes: a fill() meanwhile lands before the old number.
+    await page.getByRole('listbox').waitFor({ state: 'hidden' })
+    await expect.poll(() => country(page).textContent()).toContain('+855')
     await phone(page).fill('012345678')
     await phone(page).blur()
     await expect.poll(() => phone(page).inputValue()).toBe('12 345 678')
