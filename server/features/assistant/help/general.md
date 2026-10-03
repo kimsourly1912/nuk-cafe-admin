@@ -11,7 +11,7 @@ The admin portal is where admins set up their cafe (its profile, the menu, staff
 
 On a phone, open the sidebar with the menu button at the top left.
 
-If you run more than one cafe, the cafe's name at the top of the sidebar is a menu: choose another cafe to open its admin, or **All your cafes** for the list of every cafe you work at (**Your cafes**, with Admin and Counter for each). Each cafe opens fresh, as its own page.
+The cafe's name at the top of the sidebar is a menu: **View menu** opens your customer menu in a new tab (also at the bottom of the sidebar), and **All your cafes** lists every cafe you work at (**Your cafes**, with Admin and Counter for each). If you run more than one cafe, the menu also lists them: choose one to open its admin. Each cafe opens fresh, as its own page.
 
 ## Saving your work
 

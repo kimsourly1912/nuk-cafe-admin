@@ -362,3 +362,30 @@ describe('branches and table QR codes', () => {
     expect(await page.getByRole('button', { name: 'Order type: Pickup' }).isVisible()).toBe(true)
   })
 })
+
+// An item's own address (D145): the admin's View on menu, or a shared link.
+describe('an item\'s address', () => {
+  it('opens that item\'s detail on the menu; closing it leaves the address', async () => {
+    const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
+    const latte = menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(sub => sub.items)]).find(item => item.name === 'Latte')!
+    // Not `open()`: it waits for a heading, and the open item hides the page behind it.
+    const page = await createPage()
+    const problems: string[] = []
+    page.on('console', (message) => {
+      if (message.type() === 'error' || /hydration/i.test(message.text())) problems.push(message.text())
+    })
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto(url(`/c/nuk?item=${latte.id}`), { waitUntil: 'hydration' })
+    await dialog(page).getByRole('heading', { name: 'Latte' }).waitFor({ timeout: 8000 })
+    await page.keyboard.press('Escape')
+    await dialog(page).waitFor({ state: 'hidden', timeout: 8000 })
+    await expect.poll(() => new URL(page.url()).searchParams.has('item')).toBe(false)
+    expect(problems).toEqual([])
+  })
+
+  it('says so when the item isn\'t on the menu (a draft, archived, or outside its hours)', async () => {
+    const { page } = await open(390, '/c/nuk?item=not-on-the-menu')
+    await page.getByText('This item isn\'t on the menu right now').first().waitFor()
+    expect(await dialog(page).count()).toBe(0)
+  })
+})

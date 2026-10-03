@@ -16,6 +16,7 @@ import type { ItemFormSection } from '../schemas/item-form'
 import { ITEM_STATUS_LABELS } from '../utils/item-display'
 import ProductFormFields from './ProductFormFields.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
+import ViewOnMenuButton from './ViewOnMenuButton.vue'
 
 const tenantPath = useTenantPath()
 
@@ -101,6 +102,11 @@ async function onSubmit() {
           <span class="truncate lg:hidden">{{ title }}</span>
         </template>
         <template #right>
+          <ViewOnMenuButton
+            v-if="loaded"
+            :item-id="loaded.id"
+            :status="loaded.status"
+          />
           <UButton
             v-if="canPublish"
             :label="isEdit ? 'Save and publish' : 'Create and publish'"
