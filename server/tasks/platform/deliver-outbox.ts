@@ -1,4 +1,4 @@
-import { accountMailHandlers, consoleSender, resendSender } from '#server/features/identity'
+import { accountMailHandlers, activeTenants, consoleSender, resendSender } from '#server/features/identity'
 import type { MailSender } from '#server/features/identity'
 import { deliverDue, queueOrderAlert } from '#server/features/notifications'
 import { ORDER_EVENTS } from '#server/features/orders'
@@ -43,7 +43,9 @@ async function orderAlert(tenantId: string | null, kind: 'new_order' | 'payment'
   const settings = useTelegram()
   if (!settings || !tenantId || typeof orderId !== 'string') return
   const db = useDb()
-  const ids = await queueOrderAlert(db, tenantId, kind, orderId, useRuntimeConfig().public.siteUrl as string | undefined)
+  // "Open order" opens the order's own cafe's counter (`/c/<slug>/counter/…`, D141).
+  const tenant = (await activeTenants(db)).find(t => t.id === tenantId)
+  const ids = await queueOrderAlert(db, tenantId, kind, orderId, tenant ? cafeSiteUrl(tenant.slug) : undefined)
   await deliverDue(db, telegramApi(settings), new Date(), { ids })
 }
 

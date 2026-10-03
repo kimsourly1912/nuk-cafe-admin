@@ -10,6 +10,7 @@ import type { PasswordForm } from '~/features/auth'
 import { counterRedirectTarget, useCounterSession } from '../composables/useCounterSession'
 
 const route = useRoute()
+const slug = useTenantSlug()
 const { user, mustChangePassword, changePassword, signOut } = useCounterSession()
 const toast = useToast()
 
@@ -47,7 +48,7 @@ async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
   saving.value = false
   unsaved.markClean()
   toast.add({ title: 'Password changed', description: 'You were signed out on your other devices.', color: 'success', icon: 'i-lucide-circle-check' })
-  await navigateTo(counterRedirectTarget(route.query.redirect))
+  await navigateTo(counterRedirectTarget(route.query.redirect, slug.value))
 }
 
 const fields = [
@@ -142,7 +143,7 @@ const fields = [
           label="Back"
           color="neutral"
           variant="link"
-          :to="counterRedirectTarget(route.query.redirect)"
+          :to="counterRedirectTarget(route.query.redirect, slug)"
         />
       </div>
     </template>

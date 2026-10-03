@@ -16,6 +16,8 @@ import ReportHeader from './ReportHeader.vue'
 import ReportPrintHeader from './ReportPrintHeader.vue'
 import SalesChart from './SalesChart.vue'
 
+const tenantPath = useTenantPath()
+
 const { branches, branch, period, scope, setPeriod, setBranch } = useReportScope()
 const summary = useReportSummary(scope)
 const download = useReportDownload()
@@ -333,7 +335,7 @@ const paymentsTotal = (report: ReportSummary) => ({
                   trailing-icon="i-lucide-arrow-right"
                   color="neutral"
                   variant="link"
-                  :to="{ path: '/admin/reports/items', query: { from: data.period.from, to: data.period.to } }"
+                  :to="{ path: tenantPath('/admin/reports/items'), query: { from: data.period.from, to: data.period.to } }"
                   class="print:hidden"
                 />
               </div>

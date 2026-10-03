@@ -26,11 +26,17 @@ const { copy, copied } = useClipboard({ copiedDuring: 2000, legacy: true })
 const open = ref(false)
 const guestOpen = ref(false)
 
+const tenantPath = useTenantPath()
+
+// This cafe's workspaces (D124, D141).
 const WORKSPACE_LINKS = {
-  admin: { label: 'Admin workspace', icon: 'i-lucide-layout-dashboard', to: '/admin' },
-  counter: { label: 'Counter', icon: 'i-lucide-store', to: '/counter' },
+  admin: { label: 'Admin workspace', icon: 'i-lucide-layout-dashboard', page: '/admin' },
+  counter: { label: 'Counter', icon: 'i-lucide-store', page: '/counter' },
 } as const
-const workspaces = computed(() => (account.value?.workspaces ?? []).map(id => ({ id, ...WORKSPACE_LINKS[id] })))
+const workspaces = computed(() => (account.value?.workspaces ?? []).map((id) => {
+  const { page, ...link } = WORKSPACE_LINKS[id]
+  return { id, ...link, to: tenantPath(page) }
+}))
 
 const initials = computed(() => (account.value ? initialsOf(account.value.name, account.value.email) : ''))
 
@@ -170,7 +176,7 @@ async function signOutNow() {
         <UButton
           label="Your orders"
           icon="i-lucide-receipt"
-          to="/orders"
+          :to="tenantPath('/orders')"
           color="neutral"
           variant="ghost"
           block

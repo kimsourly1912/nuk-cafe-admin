@@ -21,6 +21,21 @@ const dynamicRestrictions = patterns => patterns.map(({ regex, message }) => ({
 const featureNames = readdirSync(new URL('./server/features/', import.meta.url), { withFileTypes: true })
   .filter(entry => entry.isDirectory()).map(entry => entry.name)
 
+// A cafe's pages (D141): `/`, `/admin…`, `/counter…`, `/orders…`, `/checkout` live under `/c/<slug>`.
+// Links to them go through `useTenantPath()` (`tenantPath('/admin/products')`); a bare one would
+// leave the cafe. API paths (`apiFetch('/admin/…')`) aren't links and aren't checked.
+const CAFE_PAGE = String.raw`/^\/(?:admin|counter|orders|checkout)(?:[/?]|$)|^\/$/`
+const CAFE_PAGE_START = String.raw`/^\/(?:admin|counter|orders|checkout)(?:[/?$]|$)/`
+const CAFE_LINK_MESSAGE = 'A cafe\'s page lives under its address: use tenantPath(\'…\') from useTenantPath() (D141).'
+const CAFE_LINK_RESTRICTIONS = [
+  `CallExpression[callee.name="navigateTo"] > Literal[value=${CAFE_PAGE}]`,
+  `CallExpression[callee.name="navigateTo"] > TemplateLiteral[quasis.0.value.raw=${CAFE_PAGE_START}]`,
+  `CallExpression[callee.property.name=/^(?:push|replace)$/] > Literal[value=${CAFE_PAGE}]`,
+  `CallExpression[callee.property.name=/^(?:push|replace)$/] > TemplateLiteral[quasis.0.value.raw=${CAFE_PAGE_START}]`,
+  `Property[key.name=/^(?:to|path)$/] > Literal[value=${CAFE_PAGE}]`,
+  `Property[key.name=/^(?:to|path)$/] > TemplateLiteral[quasis.0.value.raw=${CAFE_PAGE_START}]`,
+].map(selector => ({ selector, message: CAFE_LINK_MESSAGE }))
+
 export default withNuxt(
   {
     files: ['app/**/*.{ts,vue}'],
@@ -52,15 +67,26 @@ export default withNuxt(
     },
   },
   // Drawers and bottom sheets don't drag (ui.md → Overlays): AppDrawer wraps UDrawer, nothing else uses it.
+  // A cafe's pages live under its address (D141): links go through `useTenantPath()`.
   {
     files: ['app/**/*.vue'],
     ignores: ['app/components/AppDrawer.vue'],
     rules: {
       'vue/no-restricted-html-elements': ['error', { element: ['UDrawer'], message: 'Use <AppDrawer>: drawers don\'t drag (ui.md → Overlays).' }],
+      'vue/no-restricted-static-attribute': ['error', { key: 'to', value: CAFE_PAGE, message: CAFE_LINK_MESSAGE }],
       'no-restricted-syntax': ['error',
         { selector: 'CallExpression[callee.name="resolveComponent"][arguments.0.value="UDrawer"]', message: 'Use AppDrawer: drawers don\'t drag (ui.md → Overlays).' },
         { selector: 'ImportSpecifier[imported.name="UDrawer"]', message: 'Use AppDrawer: drawers don\'t drag (ui.md → Overlays).' },
+        ...CAFE_LINK_RESTRICTIONS,
       ],
+    },
+  },
+  {
+    files: ['app/**/*.ts'],
+    // Features name their sidebar entries inside the cafe; the layout gives them its address.
+    ignores: ['app/features/*/navigation.ts', 'app/utils/navigation.ts', 'app/**/tests/**'],
+    rules: {
+      'no-restricted-syntax': ['error', ...CAFE_LINK_RESTRICTIONS],
     },
   },
   // Server imports (docs/server/architecture.md → Imports and aliases).

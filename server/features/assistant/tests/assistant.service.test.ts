@@ -322,10 +322,10 @@ describe('the page list (9.1, D109)', () => {
   })
 })
 
-/** Whether `app/pages` has a route for the path (`<branch>` and `[id]` segments match anything). */
+/** Whether a cafe's pages (`app/pages/c/[slug]`, D141) have a route for the path (`<branch>` and `[id]` segments match anything). */
 function routeExists(path: string): boolean {
   const segments = path.split('/').filter(Boolean)
-  const pages = fileURLToPath(new URL('../../../../app/pages', import.meta.url))
+  const pages = fileURLToPath(new URL('../../../../app/pages/c/[slug]', import.meta.url))
   function walk(dir: string, rest: string[]): boolean {
     if (!rest.length) return existsSync(join(dir, 'index.vue'))
     const [head, ...tail] = rest

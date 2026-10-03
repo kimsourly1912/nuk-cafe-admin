@@ -42,7 +42,7 @@ function backend(groups: ModifierGroup[] = [MILK, SYRUPS, OLD], extra: Record<st
   }
 }
 
-async function open(handlers: Record<string, MockHandler> = backend(), path = '/admin/add-ons', width?: number) {
+async function open(handlers: Record<string, MockHandler> = backend(), path = '/c/nuk/admin/add-ons', width?: number) {
   const page = await createPage()
   if (width) await page.setViewportSize({ width, height: 844 })
   const api = await mockApi(page, handlers)
@@ -52,7 +52,7 @@ async function open(handlers: Record<string, MockHandler> = backend(), path = '/
 
 /** A group's page, loaded. */
 async function openGroup(handlers: Record<string, MockHandler> = backend(), id = 'grp-1', width?: number) {
-  const opened = await open(handlers, `/admin/add-ons/${id}`, width)
+  const opened = await open(handlers, `/c/nuk/admin/add-ons/${id}`, width)
   await opened.page.getByRole('heading', { level: 2 }).first().waitFor()
   return opened
 }
@@ -187,10 +187,10 @@ describe('add-ons library', () => {
   it('opens a group on its own page, and Back returns to the library', async () => {
     const { page } = await open()
     await card(page, 'Milk choices').getByRole('link', { name: 'Manage Milk choices' }).click()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/add-ons/grp-1')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/add-ons/grp-1')
     await page.getByRole('heading', { level: 2, name: 'Milk choices' }).waitFor()
     await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'Add-ons' }).click()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/add-ons')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/add-ons')
   })
 })
 
@@ -227,7 +227,7 @@ describe('new add-on group', () => {
       maxSelect: 2,
       modifiers: [{ name: 'Vanilla', priceDeltaMinor: 60, isDefault: true }, { name: 'Caramel', priceDeltaMinor: 60, isDefault: false }],
     }])
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/add-ons/grp-9')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/add-ons/grp-9')
     await page.getByRole('heading', { level: 2, name: 'Syrups' }).waitFor()
   })
 
@@ -259,7 +259,7 @@ describe('add-on group page', () => {
     await page.getByRole('heading', { name: 'Used by 5 menu items' }).waitFor()
     expect(api.calls).toContain('GET /admin/menu/items')
     await page.getByRole('link', { name: /Iced latte/ }).waitFor()
-    expect(await page.getByRole('link', { name: /Iced latte/ }).getAttribute('href')).toBe('/admin/products?item=item-1')
+    expect(await page.getByRole('link', { name: /Iced latte/ }).getAttribute('href')).toBe('/c/nuk/admin/products?item=item-1')
     // Settings: derived rule, status, last updated.
     await page.getByText('Customers must choose exactly 1. Menu items can override these rules.').waitFor()
     await page.getByText('Last updated Sep 28, 2026').waitFor()
@@ -461,7 +461,7 @@ describe('group settings', () => {
   })
 
   it('says when a group doesn\'t exist', async () => {
-    const { page } = await open(backend(), '/admin/add-ons/grp-404')
+    const { page } = await open(backend(), '/c/nuk/admin/add-ons/grp-404')
     await page.getByText('This add-on group doesn\'t exist').waitFor()
     await page.getByRole('link', { name: 'Back to Add-ons' }).first().waitFor()
   })
@@ -533,7 +533,7 @@ describe('reordering add-ons', () => {
 
 describe('add-ons on a phone', () => {
   it('fits the library without scrolling sideways', async () => {
-    const { page } = await open(backend(), '/admin/add-ons', 390)
+    const { page } = await open(backend(), '/c/nuk/admin/add-ons', 390)
     await card(page, 'Milk choices').waitFor()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })
@@ -623,7 +623,7 @@ describe('from an add-on group to its menu items', () => {
 
   it('filters Menu items by the group, named and removable', async () => {
     const seen: URLSearchParams[] = []
-    const { page } = await open(ITEMS_BACKEND(seen), '/admin/products?modifierGroupId=grp-1')
+    const { page } = await open(ITEMS_BACKEND(seen), '/c/nuk/admin/products?modifierGroupId=grp-1')
     await page.getByRole('button', { name: 'Offers Milk choices: remove this filter' }).waitFor()
     expect(seen[0]?.get('modifierGroupId')).toBe('grp-1')
     await page.getByRole('article', { name: 'Iced latte', exact: true }).waitFor()
@@ -635,7 +635,7 @@ describe('from an add-on group to its menu items', () => {
 
   it('opens the item a link names, and closing it removes only `item` from the URL (D90)', async () => {
     const seen: URLSearchParams[] = []
-    const { page, api } = await open(ITEMS_BACKEND(seen), '/admin/products?modifierGroupId=grp-1&item=item-1')
+    const { page, api } = await open(ITEMS_BACKEND(seen), '/c/nuk/admin/products?modifierGroupId=grp-1&item=item-1')
     await expect.poll(() => api.calls).toContain('GET /admin/menu/items/item-1')
     await expect.poll(() => page.getByRole('dialog').getByLabel('Name', { exact: true }).inputValue()).toBe('Iced latte')
     expect(new URL(page.url()).searchParams.get('item')).toBe('item-1')

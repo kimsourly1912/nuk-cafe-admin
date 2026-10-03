@@ -25,6 +25,8 @@ import ProductGroupFilter from './ProductGroupFilter.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
 import ProductReorderModal from './ProductReorderModal.vue'
 
+const tenantPath = useTenantPath()
+
 const TABS = [
   { label: 'Draft', value: 'draft' },
   { label: 'Published', value: 'active' },
@@ -146,7 +148,7 @@ const router = useRouter()
 
 function openForm(item?: MenuItemSummary) {
   if (isCompact.value) {
-    router.push(item ? `/admin/products/${item.id}` : '/admin/products/new')
+    router.push(tenantPath(item ? `/admin/products/${item.id}` : '/admin/products/new'))
   }
   else if (!item) {
     formPanel.open({})

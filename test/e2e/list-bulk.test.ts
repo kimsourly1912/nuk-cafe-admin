@@ -11,7 +11,7 @@ import { deferred, failures, menuItemOf, menuItemSummaryOf, mockApi, paginatedHa
 await setupE2e()
 
 const rowsOf = (n: number): MenuItemSummary[] => Array.from({ length: n }, (_, i) => menuItemSummaryOf(`item-${i + 1}`, `Item ${i + 1}`))
-/** `/admin/menu/items/item-3/archive` → `item-3`. */
+/** `/c/nuk/admin/menu/items/item-3/archive` → `item-3`. */
 const idOf = (request: { url: URL }) => request.url.pathname.split('/').at(-2)!
 
 /** A backend whose list reflects archiving, like the real one. */
@@ -29,7 +29,7 @@ function backend(initial: MenuItemSummary[]) {
   }
 }
 
-async function open(handlers: Record<string, MockHandler>, path = '/admin/products', first = 'Item 1') {
+async function open(handlers: Record<string, MockHandler>, path = '/c/nuk/admin/products', first = 'Item 1') {
   const page = await createPage()
   const api = await mockApi(page, handlers)
   await page.goto(url(path), { waitUntil: 'hydration' })
@@ -171,7 +171,7 @@ describe('list state after archiving and navigation', () => {
     const { page } = await open({
       'GET /admin/menu/items': server.list,
       'POST /admin/menu/items/{id}/archive': server.archive(),
-    }, '/admin/products?status=draft&page=2', 'Item 21')
+    }, '/c/nuk/admin/products?status=draft&page=2', 'Item 21')
 
     await page.getByRole('button', { name: 'Actions for Item 21' }).click()
     await page.getByRole('menuitem', { name: 'Archive' }).click()

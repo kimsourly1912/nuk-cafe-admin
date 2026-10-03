@@ -12,13 +12,13 @@ export default defineTask({
     const settings = useTelegram()
     if (!settings) return { result: { off: true, queued: 0, sent: 0, retried: 0, failed: 0 } }
     const db = useDb()
-    const siteUrl = useRuntimeConfig().public.siteUrl as string | undefined
     const queued: string[] = []
-    for (const tenant of await activeTenants(db)) queued.push(...await queueClosingSummaries(db, tenant.id, siteUrl))
+    // Each cafe's buttons open its own pages (`/c/<slug>/…`, D141).
+    for (const tenant of await activeTenants(db)) queued.push(...await queueClosingSummaries(db, tenant.id, cafeSiteUrl(tenant.slug)))
     // The Bakong token is still one server setting, NUK Cafe's: its reminders go to the first
     // tenant's chats until each cafe has its own token (T2).
     const tokenTenant = await currentTenant(db).catch(() => null)
-    if (tokenTenant) queued.push(...await queueBakongTokenReminder(db, tokenTenant.id, bakongStatus().tokenExpiresAt, siteUrl))
+    if (tokenTenant) queued.push(...await queueBakongTokenReminder(db, tokenTenant.id, bakongStatus().tokenExpiresAt, cafeSiteUrl(tokenTenant.slug)))
     const report = await deliverDue(db, telegramApi(settings))
     if (queued.length || report.sent || report.retried || report.failed) log('info', 'Telegram deliveries', { queued: queued.length, ...report })
     return { result: { off: false, queued: queued.length, ...report } }

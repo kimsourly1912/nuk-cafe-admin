@@ -103,7 +103,7 @@ On push to `main` (a merged pull request, already checked there: D133), the `dep
 2. `pnpm db:migrate:staging` (migrations before the Worker: expand, then contract);
 3. `wrangler deploy`;
 4. re-sends `NUXT_MAIL_RESEND_API_KEY` from the environment's secret (skipped when unset);
-5. smoke check: `GET /api/health` is ok (the database answers), `/admin/login` has the CSP header, an unknown `/api` path is 404, NUK Cafe's `/api/c/nuk/admin/me` without a session is 401 (D140). Later: sign in, read the menu, place and complete a test order once orders exist.
+5. smoke check: `GET /api/health` is ok (the database answers), NUK Cafe's `/c/nuk/admin/login` has the CSP header and `/admin/login` redirects there (D141), an unknown `/api` path is 404, NUK Cafe's `/api/c/nuk/admin/me` without a session is 401 (D140). Later: sign in, read the menu, place and complete a test order once orders exist.
 
 GitHub environment `staging` secrets: `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers" plus **Account → D1 → Edit**, this account only), `CLOUDFLARE_ACCOUNT_ID`, `NUXT_MAIL_RESEND_API_KEY`.
 

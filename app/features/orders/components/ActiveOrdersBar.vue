@@ -13,7 +13,8 @@ import { orderBarText } from '../utils/order'
 const query = useCustomerOrders({ poll: true })
 const orders = computed(() => query.data.value?.inProgress ?? [])
 const bar = computed(() => orderBarText(orders.value))
-const to = computed(() => (orders.value.length === 1 ? `/orders/${encodeURIComponent(orders.value[0]!.id)}` : '/orders'))
+const tenantPath = useTenantPath()
+const to = computed(() => tenantPath(orders.value.length === 1 ? `/orders/${encodeURIComponent(orders.value[0]!.id)}` : '/orders'))
 </script>
 
 <template>

@@ -45,20 +45,20 @@ export function formatAnswer(text: string): TextRun[][] {
   )))
 }
 
-/** Questions to start with, for the page the admin is on. */
-const SUGGESTIONS: { path: string, questions: string[] }[] = [
-  { path: '/admin/products', questions: ['How do I add a new menu item?', 'Why can\'t customers see my menu item?', 'How do versions and prices work?'] },
-  { path: '/admin/categories', questions: ['How do I add a subcategory?', 'How do I change the order of categories?', 'Why can\'t I add a subcategory here?'] },
-  { path: '/admin/options', questions: ['What is an option set?', 'I added a value but customers can\'t choose it. Why?'] },
-  { path: '/admin/add-ons', questions: ['How do I make an add-on group required?', 'Can one item charge a different add-on price?'] },
-  { path: '/admin/availability', questions: ['How do I sell breakfast items only in the morning?', 'How do times past midnight work?'] },
-  { path: '/admin/staff', questions: ['How do I add a cashier?', 'What can a manager do?', 'How do I remove someone\'s access?'] },
-  { path: '/admin/branches', questions: ['How do I change the opening hours?', 'How do I print a table\'s QR code?', 'A table\'s QR code doesn\'t work. What do I check?'] },
-  { path: '/admin/payments', questions: ['How does the riel rate work?', 'What happens if the rate changes during a payment?'] },
-  { path: '/admin/sample-data', questions: ['What does the sample menu include?', 'What does Reset delete?'] },
+/** Questions to start with, for the page the admin is on (named inside the cafe, D141). */
+const SUGGESTIONS: { page: string, questions: string[] }[] = [
+  { page: '/admin/products', questions: ['How do I add a new menu item?', 'Why can\'t customers see my menu item?', 'How do versions and prices work?'] },
+  { page: '/admin/categories', questions: ['How do I add a subcategory?', 'How do I change the order of categories?', 'Why can\'t I add a subcategory here?'] },
+  { page: '/admin/options', questions: ['What is an option set?', 'I added a value but customers can\'t choose it. Why?'] },
+  { page: '/admin/add-ons', questions: ['How do I make an add-on group required?', 'Can one item charge a different add-on price?'] },
+  { page: '/admin/availability', questions: ['How do I sell breakfast items only in the morning?', 'How do times past midnight work?'] },
+  { page: '/admin/staff', questions: ['How do I add a cashier?', 'What can a manager do?', 'How do I remove someone\'s access?'] },
+  { page: '/admin/branches', questions: ['How do I change the opening hours?', 'How do I print a table\'s QR code?', 'A table\'s QR code doesn\'t work. What do I check?'] },
+  { page: '/admin/payments', questions: ['How does the riel rate work?', 'What happens if the rate changes during a payment?'] },
+  { page: '/admin/sample-data', questions: ['What does the sample menu include?', 'What does Reset delete?'] },
 ]
 const GENERAL = ['How do I set up the menu?', 'How do customers order and pay?', 'What can I do in this portal?']
 
 export function suggestionsFor(path: string): string[] {
-  return SUGGESTIONS.find(s => path === s.path || path.startsWith(`${s.path}/`))?.questions ?? GENERAL
+  return SUGGESTIONS.find(s => path === s.page || path.startsWith(`${s.page}/`))?.questions ?? GENERAL
 }

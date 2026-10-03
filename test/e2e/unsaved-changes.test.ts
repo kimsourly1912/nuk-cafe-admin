@@ -184,17 +184,17 @@ describe('unsaved changes: failed saves and forward', () => {
   it('asks on browser forward; Keep editing stays on the page', async () => {
     const { page } = await openCategories()
     // History: /admin → /admin/categories → /admin → /admin/categories. Go back twice, then forward is available.
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/categories')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
     await page.goBack()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin')
     await page.goBack()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/categories')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
     await openNewForm(page, 'Latte')
 
     await page.goForward()
     await discardDialog(page).waitFor()
     await answer(page, 'Keep editing')
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin/categories')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
     await expect(nameInput(page).inputValue()).resolves.toBe('Latte')
   })
 })

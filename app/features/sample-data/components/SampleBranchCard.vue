@@ -7,6 +7,8 @@
 import type { SampleDataState } from '#shared/contracts/sample-data'
 import { branchSummary } from '../utils/state'
 
+const tenantPath = useTenantPath()
+
 const props = defineProps<{
   state: SampleDataState
   loading: boolean
@@ -92,7 +94,7 @@ async function load() {
           <UButton
             v-if="loadedBefore"
             label="Open Branch"
-            :to="`/admin/branches/${branch.id}`"
+            :to="tenantPath(`/admin/branches/${branch.id}`)"
             variant="link"
             class="px-0"
           />

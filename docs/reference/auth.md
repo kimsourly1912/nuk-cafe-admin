@@ -7,7 +7,7 @@
 - [How the session works](#how-the-session-works)
 - [First admin (local setup)](#first-admin-local-setup)
 
-Source: `app/features/auth/`. Import it from `~/features/auth` (feature code isn't auto-imported).
+Source: `app/features/auth/`. Import it from `~/features/auth` (feature code isn't auto-imported). Paths here are inside a cafe (D141): `/admin/login` means `/c/<slug>/admin/login`; the paths are functions of the cafe (`loginPath(slug)`, `changePasswordPath(slug)`, `adminHomePath(slug)`, `loginRedirectTarget(redirect, slug)`).
 
 ---
 

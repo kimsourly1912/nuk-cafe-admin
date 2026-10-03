@@ -43,7 +43,7 @@ async function openWithLongOrder(width: number, height = width < 640 ? 844 : 900
   const page = await createPage()
   await page.addInitScript(([branch, stored]) => localStorage.setItem('nuk-cafe:cart', JSON.stringify({ [branch]: stored })), [seed.openBranchId, lines] as const)
   await page.setViewportSize({ width, height })
-  await page.goto(url('/'), { waitUntil: 'hydration' })
+  await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
   await heading(page, 'Coffee').waitFor()
   return page
 }
@@ -66,13 +66,13 @@ async function inViewBelowHeader(page: Page, name: string) {
 
 describe('the customer menu, server-rendered', () => {
   it('sends the menu in the page itself: readable without JavaScript', async () => {
-    const html = await (await fetch(url('/'))).text()
+    const html = await (await fetch(url('/c/nuk'))).text()
     expect(html).toContain('Khmer Iced Coffee')
     expect(html).toContain('<title>Menu · NUK Cafe</title>')
     expect(html).toMatch(/<meta name="description" content="Browse the NUK Cafe menu/)
     const context = await (await getBrowser()).newContext({ javaScriptEnabled: false })
     const page = await context.newPage()
-    await page.goto(url('/'))
+    await page.goto(url('/c/nuk'))
     // Any count: Affogato (Late night, Fri and Sat 21:00–01:00) joins the section then.
     await page.getByRole('heading', { name: /^Espresso Bar · \d+ items$/ }).first().waitFor({ timeout: 10_000 })
     expect(await page.getByText('Salted Caramel Latte').first().isVisible()).toBe(true)
@@ -86,7 +86,7 @@ describe('the customer menu, server-rendered', () => {
       if (response.request().resourceType() === 'script') scripts.push(response.text())
     })
     await page.setViewportSize({ width: 1440, height: 900 })
-    await page.goto(url('/'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
     // "All categories" is a popover: Reka UI's namespaced barrel used to bring the calendar with it.
     await visible(page.getByRole('button', { name: 'All categories' })).click()
     await page.getByRole('list', { name: 'All categories' }).waitFor()
@@ -96,7 +96,7 @@ describe('the customer menu, server-rendered', () => {
   })
 
   it('keeps the admin a browser-only app: its page carries no content', async () => {
-    const html = await (await fetch(url('/admin/login'))).text()
+    const html = await (await fetch(url('/c/nuk/admin/login'))).text()
     expect(html).not.toContain('Sign in')
     expect(html).not.toContain('Khmer Iced Coffee')
   })
@@ -182,7 +182,7 @@ describe('the customer menu', () => {
   it('keeps the order across a reload, after the page has hydrated', async () => {
     const { page, problems } = await open()
     await visible(card(page, 'Banana Bread').getByRole('button', { name: 'Add Banana Bread to order' })).click()
-    await page.goto(url('/'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
     await expect.poll(() => visible(card(page, 'Banana Bread').getByRole('textbox', { name: 'Quantity of Banana Bread' })).inputValue()).toBe('1')
     expect(problems).toEqual([])
   })
@@ -244,7 +244,7 @@ describe('the order beside the menu and in its drawer (D124)', () => {
     await line.getByRole('button', { name: 'Add a note' }).click()
     await line.getByRole('textbox', { name: 'Note for Banana Bread' }).fill('Warm please')
     await expect.poll(() => line.getByRole('button', { name: 'Add a note' }).count()).toBe(0)
-    await page.goto(url('/checkout'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/checkout'), { waitUntil: 'hydration' })
     await expect.poll(() => page.getByRole('textbox', { name: 'Note for Banana Bread' }).inputValue()).toBe('Warm please')
   })
 
@@ -339,7 +339,7 @@ describe('the customer menu on a phone', () => {
 describe('branches and table QR codes', () => {
   it('a scanned table orders for that table, until switched to pickup', async () => {
     const { page } = await open(1440, `/table/${seed.openTableToken}`)
-    expect(new URL(page.url()).pathname).toBe('/')
+    expect(new URL(page.url()).pathname).toBe('/c/nuk')
     await page.getByRole('button', { name: 'Order type: Table T01' }).click()
     await page.getByRole('button', { name: 'Switch to pickup' }).click()
     await page.getByRole('button', { name: 'Order type: Pickup' }).waitFor()

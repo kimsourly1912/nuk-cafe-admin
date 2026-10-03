@@ -10,6 +10,8 @@ import { useCustomerOrders } from '../composables/useOrders'
 import { formatPickupNumber, itemsText, orderTypeText, placedText, statusBadge } from '../utils/order'
 import OrdersHeader from './OrdersHeader.vue'
 
+const tenantPath = useTenantPath()
+
 const route = useRoute()
 const pages = ref(1)
 const query = useCustomerOrders({ pages })
@@ -23,7 +25,7 @@ const hasMore = computed(() => Boolean(list.value && list.value.past.items.lengt
 const empty = computed(() => Boolean(list.value && !list.value.inProgress.length && !list.value.past.items.length))
 
 const now = Date.now()
-const link = (order: OrderSummary) => `/orders/${encodeURIComponent(order.id)}`
+const link = (order: OrderSummary) => tenantPath(`/orders/${encodeURIComponent(order.id)}`)
 
 useSeoMeta({ robots: 'noindex' })
 </script>
@@ -81,7 +83,7 @@ useSeoMeta({ robots: 'noindex' })
           </p>
           <UButton
             label="Browse the menu"
-            to="/"
+            :to="tenantPath('/')"
           />
         </div>
       </UCard>

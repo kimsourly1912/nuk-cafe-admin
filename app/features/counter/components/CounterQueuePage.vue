@@ -14,7 +14,7 @@ import type { CounterOrder } from '#shared/contracts/orders'
 import { openingText } from '~/features/menu'
 import { useCounterActions } from '../composables/useCounterActions'
 import { useCounterQueue } from '../composables/useCounterQueue'
-import { COUNTER_HOME_PATH, useCounterSession } from '../composables/useCounterSession'
+import { useCounterSession } from '../composables/useCounterSession'
 import type { ColumnId } from '../utils/counter'
 import { COLUMNS, matchesSearch } from '../utils/counter'
 import CounterCancelModal from './CounterCancelModal.vue'
@@ -22,6 +22,8 @@ import CounterHeader from './CounterHeader.vue'
 import CounterOrderCard from './CounterOrderCard.vue'
 import CounterOrderPanel from './CounterOrderPanel.vue'
 import CounterViewSwitch from './CounterViewSwitch.vue'
+
+const tenantPath = useTenantPath()
 
 const route = useRoute()
 const branchId = computed(() => String(route.params.branchId ?? ''))
@@ -88,7 +90,7 @@ watch(() => [route.query.order, queue.value] as const, ([orderId, loaded]) => {
     router.replace({ query: rest })
   }
   else {
-    router.replace({ path: `/counter/${branchId.value}/finished`, query: { order: orderId } })
+    router.replace({ path: tenantPath(`/counter/${branchId.value}/finished`), query: { order: orderId } })
   }
 }, { immediate: true })
 
@@ -102,7 +104,7 @@ useSeoMeta({ robots: 'noindex' })
       v-model:muted="muted"
       :branch-name="branch?.name ?? 'Branch'"
       :open-now="branchStatus ? branchStatus.openNow : null"
-      :sold-out-to="branch ? `/counter/${branch.id}/sold-out` : undefined"
+      :sold-out-to="branch ? tenantPath(`/counter/${branch.id}/sold-out`) : undefined"
     />
 
     <div
@@ -114,7 +116,7 @@ useSeoMeta({ robots: 'noindex' })
       </p>
       <UButton
         label="Choose a branch"
-        :to="COUNTER_HOME_PATH"
+        :to="tenantPath('/counter')"
       />
     </div>
 

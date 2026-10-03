@@ -37,17 +37,24 @@ import OrderLines from './OrderLines.vue'
 import OrderPanel from './OrderPanel.vue'
 import OrderTotals from './OrderTotals.vue'
 
+const tenantPath = useTenantPath()
+
 // The bar for an order in progress: only for a signed-in customer (read in the browser, D97).
 const { account } = useCustomerAccount()
 
 // --- Branch, table and menu ---
 const { branches, requestedBranchId, choose } = useShopBranch()
-const { table, clearTable } = useTableContext()
+const { table: storedTable, clearTable } = useTableContext()
 const menuQuery = usePublicMenu(requestedBranchId)
 const menu = computed(() => menuQuery.data.value ?? null)
 const branch = computed(() => menu.value?.branch)
 /** The branch whose menu is shown (the order belongs to it). */
 const branchId = computed(() => branch.value?.id)
+/**
+ * The table this tab scanned, when it's at the branch shown: one scanned at another branch or
+ * another cafe (one tab, one table; D141) isn't this menu's, as checkout also decides.
+ */
+const table = computed(() => (storedTable.value && storedTable.value.branchId === branchId.value ? storedTable.value : null))
 const closed = computed(() => !branch.value?.openNow)
 const closedNote = computed(() => (branch.value ? openingText(branch.value) : undefined))
 const loading = computed(() => menuQuery.loading.value)
@@ -171,7 +178,7 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
             />
             <div class="min-w-0 lg:flex lg:items-center lg:gap-4">
               <NuxtLink
-                to="/"
+                :to="tenantPath('/')"
                 class="block whitespace-nowrap font-semibold leading-tight text-highlighted lg:text-lg"
               >
                 NUK Cafe

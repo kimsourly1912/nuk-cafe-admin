@@ -6,9 +6,11 @@ import { isAdminPath } from '~/features/auth'
 const props = defineProps<{ error: NuxtError }>()
 
 const isNotFound = computed(() => props.error.statusCode === 404)
-// The admin workspace goes back to its dashboard, the customer site to the menu (D93).
+// The admin workspace goes back to its dashboard, the customer site to the menu (D93), in the cafe of
+// the address (the default cafe's on the platform's pages, D141).
 const inAdmin = isAdminPath(useRoute().path)
-const home = inAdmin ? { label: 'Back to dashboard', path: '/admin' } : { label: 'Back to the menu', path: '/' }
+const tenantPath = useTenantPath()
+const home = inAdmin ? { label: 'Back to dashboard', path: tenantPath('/admin') } : { label: 'Back to the menu', path: tenantPath('/') }
 const title = computed(() => (isNotFound.value ? 'Page not found' : 'Something went wrong'))
 // Rendered instead of app.vue, so it sets its own tab title.
 useHead({ title: () => `${title.value} · ${inAdmin ? 'NUK Cafe Admin' : 'NUK Cafe'}` })

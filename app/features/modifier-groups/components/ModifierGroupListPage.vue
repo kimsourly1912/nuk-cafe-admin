@@ -13,6 +13,8 @@ import { searchModifierGroup } from '../schemas/modifier-group-display'
 import ModifierGroupCard from './ModifierGroupCard.vue'
 import ModifierGroupCreateModal from './ModifierGroupCreateModal.vue'
 
+const tenantPath = useTenantPath()
+
 const TABS = [
   { label: 'Active', value: 'active' },
   { label: 'Archived', value: 'archived' },
@@ -43,7 +45,7 @@ const createModal = useOverlay().create(ModifierGroupCreateModal)
 async function create() {
   // A new group opens on its page, to refine its add-ons straight away.
   const created = await createModal.open().result
-  if (created) await navigateTo(`/admin/add-ons/${created.id}`)
+  if (created) await navigateTo(tenantPath(`/admin/add-ons/${created.id}`))
 }
 
 function actions(group: ModifierGroup): DropdownMenuItem[] {

@@ -58,12 +58,12 @@ async function mailLink(to: string, kind: 'identity.verify-email' | 'identity.re
 
 describe('signing in and out', () => {
   it('the menu offers "Sign in", which comes back to the menu signed in; the account menu shows the member code; sign out', async () => {
-    const { page, problems } = await open('/')
+    const { page, problems } = await open('/c/nuk')
     await page.getByRole('link', { name: 'Sign in' }).click()
     await page.waitForURL(/\/sign-in/)
     await heading(page, 'Sign in').waitFor()
     await signIn(page, seed.customers.verified)
-    await page.waitForURL(url('/'))
+    await page.waitForURL(url('/c/nuk'))
     await button(page, 'Account: Dara Sok').click()
     const menu = page.getByRole('dialog')
     await menu.getByText('Email verified').waitFor()
@@ -97,10 +97,10 @@ describe('signing in and out', () => {
   it('returns to the page it was sent from, never to another site or the admin', async () => {
     const { page } = await open('/sign-in?redirect=//evil.example')
     await signIn(page, seed.customers.verified)
-    await page.waitForURL(url('/'))
+    await page.waitForURL(url('/c/nuk'))
     // Already signed in: the sign-in page moves on by itself.
-    await page.goto(url('/sign-in?redirect=/admin'), { waitUntil: 'hydration' })
-    await page.waitForURL(url('/'))
+    await page.goto(url('/sign-in?redirect=/c/nuk/admin'), { waitUntil: 'hydration' })
+    await page.waitForURL(url('/c/nuk'))
   })
 
   it('the password can be shown', async () => {
@@ -117,7 +117,7 @@ describe('verifying the email', () => {
     const customer = seed.customers.unverified
     const { page } = await open('/sign-in')
     await signIn(page, customer)
-    await page.waitForURL(url('/'))
+    await page.waitForURL(url('/c/nuk'))
     const banner = page.getByText('Verify your email to place orders')
     await banner.waitFor()
     const sentAt = Date.now() - 1000
@@ -132,7 +132,7 @@ describe('verifying the email', () => {
     await heading(page, 'Email verified').waitFor()
     await page.getByText(`You're signed in as ${customer.name}.`).waitFor()
     await page.getByRole('link', { name: 'Back to the menu' }).last().click()
-    await page.waitForURL(url('/'))
+    await page.waitForURL(url('/c/nuk'))
     await button(page, `Account: ${customer.name}`).waitFor()
     expect(await banner.count()).toBe(0)
   })
@@ -242,7 +242,7 @@ describe('on a phone', () => {
     const submit = button(page, 'Sign in')
     const box = (await submit.boundingBox())!
     expect(box.y + box.height).toBeGreaterThan(844 - 120)
-    await page.goto(url('/'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: 'Account', exact: true }).click()
     await page.getByRole('link', { name: 'Create account' }).waitFor()
     await page.getByRole('link', { name: 'Sign in' }).click()

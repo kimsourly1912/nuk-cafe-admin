@@ -8,19 +8,24 @@ import type { CounterSession } from '#shared/contracts/identity'
  * session boundary clears the previous person's data (D29).
  */
 
-export const COUNTER_HOME_PATH = '/counter'
-export const COUNTER_SIGN_IN_PATH = '/counter/sign-in'
-export const COUNTER_CHANGE_PASSWORD_PATH = '/counter/change-password'
+/** A cafe's counter workspace: `/c/<slug>/counter/…` (D102, D141). */
+export const counterHomePath = (slug: string) => tenantUrl(slug, '/counter')
+export const counterSignInPath = (slug: string) => tenantUrl(slug, '/counter/sign-in')
+export const counterChangePasswordPath = (slug: string) => tenantUrl(slug, '/counter/change-password')
 
 export function isCounterPath(path: string): boolean {
-  return path === '/counter' || path.startsWith('/counter/')
+  const inCafe = splitTenantUrl(path)?.path.split(/[?#]/)[0]
+  return inCafe === '/counter' || !!inCafe?.startsWith('/counter/')
 }
 
-/** Where to go after signing in: the `?redirect=` target if it's a counter page, else the counter's home. */
-export function counterRedirectTarget(redirect: unknown): string {
-  if (typeof redirect !== 'string') return COUNTER_HOME_PATH
+/**
+ * Where to go after signing in: the `?redirect=` target if it's a counter page of this cafe (not its
+ * sign-in), else the counter's home.
+ */
+export function counterRedirectTarget(redirect: unknown, slug: string): string {
+  if (typeof redirect !== 'string' || splitTenantUrl(redirect)?.slug !== slug) return counterHomePath(slug)
   const path = redirect.split(/[?#]/)[0]!
-  return isCounterPath(path) && path !== COUNTER_SIGN_IN_PATH && !redirect.startsWith('//') ? redirect : COUNTER_HOME_PATH
+  return isCounterPath(path) && path !== counterSignInPath(slug) ? redirect : counterHomePath(slug)
 }
 
 const NO_COUNTER_ACCESS = 'This account doesn\'t work at any branch, so it can\'t use the counter.'
@@ -112,7 +117,7 @@ export function useCounterSession() {
       // Signed out here anyway; the cookie expires on its own.
     }
     finally {
-      await navigateTo(COUNTER_SIGN_IN_PATH)
+      await navigateTo(counterSignInPath(splitTenantUrl(nuxtApp.$router.currentRoute.value.path)?.slug ?? nuxtApp.$config.public.defaultTenant))
       setUser(null)
     }
   }

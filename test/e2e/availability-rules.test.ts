@@ -20,7 +20,7 @@ const OLD = ruleOf('rule-3', 'Old brunch', { status: 'archived', version: 4 })
 async function open(rules: AvailabilityRule[] = [BREAKFAST, LATE, OLD], extra: Parameters<typeof mockApi>[1] = {}) {
   const page = await createPage()
   const api = await mockApi(page, { 'GET /admin/menu/availability-rules': () => rules, ...extra })
-  await page.goto(url('/admin/availability'), { waitUntil: 'hydration' })
+  await page.goto(url('/c/nuk/admin/availability'), { waitUntil: 'hydration' })
   return { page, api }
 }
 
@@ -290,7 +290,7 @@ describe('availability agenda', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 390, height: 844 })
     await mockApi(page, { 'GET /admin/menu/availability-rules': () => [BREAKFAST, LATE] })
-    await page.goto(url('/admin/availability'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/availability'), { waitUntil: 'hydration' })
     await card(page, 'Breakfast').waitFor()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     const strip = (await card(page, 'Breakfast').getByRole('list', { name: 'Weekly schedule' }).boundingBox())!
@@ -306,7 +306,7 @@ describe('availability agenda', () => {
       const page = await createPage()
       await page.setViewportSize({ width, height: 900 })
       await mockApi(page, { 'GET /admin/menu/availability-rules': () => [BREAKFAST, LATE] })
-      await page.goto(url('/admin/availability'), { waitUntil: 'hydration' })
+      await page.goto(url('/c/nuk/admin/availability'), { waitUntil: 'hydration' })
       await card(page, 'Breakfast').waitFor()
       const heading = (await card(page, 'Breakfast').getByRole('heading', { name: 'Breakfast' }).boundingBox())!
       const strip = (await card(page, 'Breakfast').getByRole('list', { name: 'Weekly schedule' }).boundingBox())!

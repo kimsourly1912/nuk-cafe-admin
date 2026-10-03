@@ -10,6 +10,8 @@ import { useBranchOptions, useBranchSettings, useBranchTables } from '../composa
 import BranchSettingsTab from './BranchSettingsTab.vue'
 import BranchTablesTab from './BranchTablesTab.vue'
 
+const tenantPath = useTenantPath()
+
 const props = defineProps<{ id: string }>()
 
 const { data: settings, error, refresh } = useBranchSettings(props.id)
@@ -48,7 +50,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
             icon="i-lucide-arrow-left"
             color="neutral"
             variant="ghost"
-            to="/admin/branches"
+            :to="tenantPath('/admin/branches')"
             aria-label="All branches"
           />
         </template>

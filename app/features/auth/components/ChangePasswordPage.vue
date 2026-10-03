@@ -10,6 +10,7 @@ import { emptyPasswordForm, passwordFormSchema } from '../schemas/password-form'
 import type { PasswordForm } from '../schemas/password-form'
 
 const route = useRoute()
+const slug = useTenantSlug()
 const { user, mustChangePassword, changePassword, logout } = useAuth()
 const toast = useToast()
 
@@ -47,7 +48,7 @@ async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
   saving.value = false
   unsaved.markClean()
   toast.add({ title: 'Password changed', description: 'You were signed out on your other devices.', color: 'success', icon: 'i-lucide-circle-check' })
-  await navigateTo(loginRedirectTarget(route.query.redirect))
+  await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
 }
 
 const fields = [
@@ -142,7 +143,7 @@ const fields = [
           label="Back"
           color="neutral"
           variant="link"
-          :to="loginRedirectTarget(route.query.redirect)"
+          :to="loginRedirectTarget(route.query.redirect, slug)"
         />
       </div>
     </template>

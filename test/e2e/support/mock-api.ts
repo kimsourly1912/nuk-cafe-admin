@@ -303,11 +303,11 @@ export function beforeUnloadPrevented(page: Page) {
 }
 
 /**
- * Open the admin at `/admin` and click through the sidebar, so back/forward stay in-app (SPA history).
+ * Open the admin at `/c/nuk/admin` and click through the sidebar, so back/forward stay in-app (SPA history).
  * Returns once the router has committed the last navigation: every link adds its history entry.
  */
 export async function gotoViaSidebar(page: Page, links: (string | RegExp)[]) {
-  await page.goto(url('/admin'), { waitUntil: 'hydration' })
+  await page.goto(url('/c/nuk/admin'), { waitUntil: 'hydration' })
   for (const name of links) {
     const link = page.getByRole('link', { name }).first()
     const path = await link.getAttribute('href')
@@ -328,7 +328,7 @@ export function toast(page: Page, title: string | RegExp) {
 }
 
 /**
- * A category in the Categories tree (`/admin/categories`), by name. The tree loads
+ * A category in the Categories tree (`/c/nuk/admin/categories`), by name. The tree loads
  * `GET /admin/menu/categories`; the default handlers answer it with MENU_TEA and MENU_COFFEE.
  */
 export function categoryItem(page: Page, name: string) {

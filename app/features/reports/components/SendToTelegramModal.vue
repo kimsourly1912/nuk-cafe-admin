@@ -9,6 +9,8 @@ import type { RadioGroupItem } from '@nuxt/ui'
 import type { SendableReport } from '#shared/contracts/notifications'
 import { useReportDestinations, useSendReport, useTelegramPreview } from '../composables/useReports'
 
+const tenantPath = useTenantPath()
+
 const props = defineProps<{
   kind: SendableReport
   /** "Summary · Today (30 Sep)". */
@@ -87,7 +89,7 @@ async function submit() {
         icon="i-lucide-send"
         title="No Telegram chat is connected yet."
         description="Connect your private chat or a group first."
-        :actions="[{ label: 'Open Telegram settings', to: '/admin/telegram', color: 'neutral', variant: 'outline', onClick: () => emit('close', false) }]"
+        :actions="[{ label: 'Open Telegram settings', to: tenantPath('/admin/telegram'), color: 'neutral', variant: 'outline', onClick: () => emit('close', false) }]"
       />
       <template v-else>
         <URadioGroup

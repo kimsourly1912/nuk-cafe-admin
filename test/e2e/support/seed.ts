@@ -7,6 +7,7 @@ import { user } from '../../../server/db/tables'
 import { createTable, updateBranchSettings } from '../../../server/features/branches'
 import type { Actor } from '../../../server/features/identity'
 import { createStaff } from '../../../server/features/identity'
+import { createCategory, createItem, publishItem } from '../../../server/features/menu'
 import { loadSampleMenuStep } from '../../../server/features/sample-data'
 import { createTestAuth } from '../../../server/tests/support/auth'
 import { applyMigration, createAdmin, ensureTenant, insertBranch, migrationFiles, TEST_TENANT } from '../../../server/tests/support/db'
@@ -38,9 +39,14 @@ export interface ShopSeed {
    * files run in any order, so no other file may rely on its state (`apiUnverified` is
    * shop-orders-api's, since shop-account verifies `unverified`).
    */
-  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'tableGuest', SeedCustomer>
+  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'tableGuest' | 'cafeHopper', SeedCustomer>
   /** A second table at Riverside (T02), for tests that archive it. */
   spareTableToken: string
+  /**
+   * Another cafe (D141), `/c/brown-bean`: one branch open around the clock, one item and a table,
+   * for the tests that check each cafe's address shows only its own.
+   */
+  secondCafe: { slug: string, name: string, branchId: string, itemName: string, tableToken: string }
 }
 
 export interface SeedCustomer {
@@ -70,14 +76,34 @@ const CUSTOMERS: ShopSeed['customers'] = {
   followerC: { name: 'Visal Ung', email: 'visal@example.com', password: 'long-enough-password-16' },
   // The release check (10.5): signs in from a table's QR link and places a dine-in order.
   tableGuest: { name: 'Chanthy Nob', email: 'chanthy@example.com', password: 'long-enough-password-17' },
+  // Two cafes (D141): orders at Brown Bean, checked to stay out of NUK Cafe's.
+  cafeHopper: { name: 'Malis Prum', email: 'malis@example.com', password: 'long-enough-password-18' },
   // Not a customer: the counter's cashier (step 6.3), staff at Riverside.
   cashier: { name: 'Sophea Keo', email: 'sophea@example.com', password: 'long-enough-password-10' },
 }
 
-async function addBranch(db: Db, name: string) {
+async function addBranch(db: Db, name: string, tenantId = TEST_TENANT) {
   const id = crypto.randomUUID()
-  await insertBranch(db, { id, name, timezone: 'Asia/Phnom_Penh' })
+  await insertBranch(db, { id, name, timezone: 'Asia/Phnom_Penh', tenantId })
   return id
+}
+
+const ALL_DAY = [1, 2, 3, 4, 5, 6, 7].map(weekday => ({ weekday, startMinute: 0, endMinute: 1440 }))
+
+/** Brown Bean (D141): its own owner, branch, menu and table, nothing shared with NUK Cafe. */
+async function seedSecondCafe(db: Db, qr: { secret: string, baseUrl: string }): Promise<ShopSeed['secondCafe']> {
+  const cafe = { id: 'tenant-2', slug: 'brown-bean', name: 'Brown Bean' }
+  await ensureTenant(db, cafe.id, cafe.slug)
+  const owner = await createAdmin(db, 'owner@brown-bean.example', cafe.id)
+  const actor: Actor = { userId: owner.userId, tenantId: cafe.id, role: 'owner' }
+  const branchId = await addBranch(db, 'Bean Street', cafe.id)
+  await updateBranchSettings(db, actor, branchId, { version: 1, hours: ALL_DAY })
+  const category = await createCategory(db, actor, { name: 'Beans', description: '', parentId: null, availabilityRuleIds: [] })
+  const itemName = 'Brown Bean Latte'
+  const draft = await createItem(db, actor, { categoryId: category.id, name: itemName, description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
+  await publishItem(db, actor, draft.id, { version: draft.version })
+  const table = await createTable(db, actor, branchId, { label: 'B1', area: null }, qr)
+  return { slug: cafe.slug, name: cafe.name, branchId, itemName, tableToken: tokenOf(table.qrUrl) }
 }
 
 const tokenOf = (qrUrl: string | null) => qrUrl!.split('/').pop()!
@@ -100,8 +126,7 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
   const closedBranchId = await addBranch(db, 'Zeta Kiosk')
 
   // Open around the clock, so tests don't depend on the time they run at.
-  const allDay = [1, 2, 3, 4, 5, 6, 7].map(weekday => ({ weekday, startMinute: 0, endMinute: 1440 }))
-  await updateBranchSettings(db, actor, openBranchId, { version: 1, hours: allDay })
+  await updateBranchSettings(db, actor, openBranchId, { version: 1, hours: ALL_DAY })
 
   for (let steps = 0; ; steps++) {
     const state = await loadSampleMenuStep(db, actor, { size: 'standard' }, 'E2E')
@@ -113,11 +138,12 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
   const openTable = await createTable(db, actor, openBranchId, { label: 'T01', area: 'Main floor' }, qr)
   const closedTable = await createTable(db, actor, closedBranchId, { label: 'K01', area: null }, qr)
   const spareTable = await createTable(db, actor, openBranchId, { label: 'T02', area: 'Main floor' }, qr)
+  const secondCafe = await seedSecondCafe(db, qr)
   // Created as a visitor would (hashed password, customer profile, a queued verification email), but
   // without the breached-password lookup (an external API). Their queued emails carry test links.
   const auth = createTestAuth(db)
   for (const customer of Object.values(CUSTOMERS)) await auth.api.signUpEmail({ body: customer })
-  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.tableGuest, CUSTOMERS.cashier]) {
+  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.tableGuest, CUSTOMERS.cafeHopper, CUSTOMERS.cashier]) {
     await db.update(user).set({ emailVerified: true }).where(eq(user.email, customer.email))
   }
   // An existing account keeps its password when it's given branch access (D49).
@@ -125,5 +151,5 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
   await client.execute('delete from outbox_messages')
 
   client.close()
-  return { dbFile, customers: CUSTOMERS, spareTableToken: tokenOf(spareTable.qrUrl), openBranchId, closedBranchId, openTableToken: tokenOf(openTable.qrUrl), closedTableToken: tokenOf(closedTable.qrUrl) }
+  return { dbFile, customers: CUSTOMERS, secondCafe, spareTableToken: tokenOf(spareTable.qrUrl), openBranchId, closedBranchId, openTableToken: tokenOf(openTable.qrUrl), closedTableToken: tokenOf(closedTable.qrUrl) }
 }

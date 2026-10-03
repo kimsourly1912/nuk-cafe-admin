@@ -46,7 +46,7 @@ async function mockChat(page: Page, replies: ChatReply[]) {
   return requests
 }
 
-async function open(path = '/admin/staff', width = 1440) {
+async function open(path = '/c/nuk/admin/staff', width = 1440) {
   const page = await createPage()
   await page.setViewportSize({ width, height: 900 })
   await mockApi(page, {
@@ -72,7 +72,7 @@ describe('the help assistant', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 1440, height: 900 })
     const api = await mockApi(page)
-    await page.goto(url('/admin'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin'), { waitUntil: 'hydration' })
     await expect.poll(() => api.calls.includes('GET /admin/assistant')).toBe(true)
     await page.getByText('Welcome back').waitFor()
     expect(await askButton(page).count()).toBe(0)
@@ -83,7 +83,7 @@ describe('the help assistant', () => {
   })
 
   it('opens beside the page, suggests questions for it, streams an answer with a link that opens the page', async () => {
-    const page = await open('/admin/staff')
+    const page = await open('/c/nuk/admin/staff')
     const requests = await mockChat(page, [{ body: stream('1. Press **Add staff member**.\n2. Copy the password.', [{ title: 'Staff', path: '/admin/staff' }, { title: 'Branch', path: '/admin/branches' }]) }])
     await askButton(page).click()
     await panel(page).getByText('Answers from the NUK Cafe help guide').waitFor()
@@ -94,17 +94,18 @@ describe('the help assistant', () => {
     await panel(page).getByText('Add staff member', { exact: true }).waitFor()
     expect(await panel(page).locator('strong', { hasText: 'Add staff member' }).count()).toBe(1)
     expect(requests).toHaveLength(1)
+    // The page inside the cafe (D141): the help guide's page list names pages that way.
     expect(requests[0]!.page).toBe('/admin/staff')
     expect(requests[0]!.messages.map(m => [m.role, m.parts[0]?.text])).toEqual([['user', 'How do I add a cashier?']])
 
     await panel(page).getByRole('link', { name: 'Open Branch' }).click()
-    await page.waitForURL(address => address.pathname === '/admin/branches')
+    await page.waitForURL(address => address.pathname === '/c/nuk/admin/branches')
     // The panel stays open beside the next page, with the conversation.
     await panel(page).getByText('Copy the password.').waitFor()
   })
 
   it('sends the conversation so far with the next question, and Clear chat starts over', async () => {
-    const page = await open('/admin/categories')
+    const page = await open('/c/nuk/admin/categories')
     const requests = await mockChat(page, [{ body: stream('Use **Add subcategory**.') }, { body: stream('Press **Reorder**.') }])
     await askButton(page).click()
     const prompt = panel(page).getByRole('textbox', { name: 'Your question' })
@@ -122,7 +123,7 @@ describe('the help assistant', () => {
   })
 
   it('a failed answer offers Try again, which asks again', async () => {
-    const page = await open('/admin/payments')
+    const page = await open('/c/nuk/admin/payments')
     const requests = await mockChat(page, [{ body: failedStream }, { body: stream('Set it on **Payments**.') }])
     // Ctrl/⌘+/ opens it too, once the app knows it's on (the button shows).
     await askButton(page).waitFor()
@@ -137,7 +138,7 @@ describe('the help assistant', () => {
   })
 
   it('past today\'s limit, says so without Try again', async () => {
-    const page = await open('/admin')
+    const page = await open('/c/nuk/admin')
     await mockChat(page, [{ status: 429, json: { statusCode: 429, message: 'x', data: { code: 'AI_LIMIT_REACHED', message: 'You\'ve used today\'s 100 assistant requests. They reset at midnight.' } } }])
     await askButton(page).click()
     const prompt = panel(page).getByRole('textbox', { name: 'Your question' })
@@ -148,7 +149,7 @@ describe('the help assistant', () => {
   })
 
   it('on a phone: a full-width sheet; a link closes it and opens the page', async () => {
-    const page = await open('/admin/branches', 390)
+    const page = await open('/c/nuk/admin/branches', 390)
     await mockChat(page, [{ body: stream('Open **Branch**, then **Dining tables**.', [{ title: 'Branch', path: '/admin/branches' }, { title: 'Payments', path: '/admin/payments' }]) }])
     // On a phone the button is in the menu.
     await page.getByRole('button', { name: 'Open sidebar' }).click()
@@ -159,7 +160,7 @@ describe('the help assistant', () => {
     expect(box!.width).toBeGreaterThan(300)
     await sheet.getByRole('button', { name: 'How do I print a table\'s QR code?' }).click()
     await sheet.getByRole('link', { name: 'Open Payments' }).click()
-    await page.waitForURL(address => address.pathname === '/admin/payments')
+    await page.waitForURL(address => address.pathname === '/c/nuk/admin/payments')
     await sheet.waitFor({ state: 'hidden' })
   })
 })

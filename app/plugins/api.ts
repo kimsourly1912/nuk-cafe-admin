@@ -1,6 +1,6 @@
 import { ofetch } from 'ofetch'
-import { CHANGE_PASSWORD_PATH, isAdminPath, LOGIN_PATH, useAuth } from '~/features/auth'
-import { COUNTER_CHANGE_PASSWORD_PATH, COUNTER_SIGN_IN_PATH, isCounterPath, useCounterSession } from '~/features/counter'
+import { changePasswordPath, isAdminPath, loginPath, useAuth } from '~/features/auth'
+import { counterChangePasswordPath, counterSignInPath, isCounterPath, useCounterSession } from '~/features/counter'
 
 /**
  * Configures `apiFetch` for our own API (`/api`, same origin: the session cookie goes along)
@@ -15,8 +15,12 @@ export default defineNuxtPlugin({
     const auth = useAuth()
     // The counter workspace keeps its own session (D102); a lost session ends both.
     const counter = useCounterSession()
-    // The cafe whose API this app calls (D140): NUK Cafe's address until pages carry one (T1.5b).
-    const tenant = useRuntimeConfig().public.defaultTenant
+    // The cafe whose API this app calls (D140, D141): the one in the page's address. Read from the
+    // browser's address, not the router's: a route middleware calls the API before the router has
+    // moved (its first page included). Moving to another cafe is a full page load (D141). The
+    // platform's pages (no cafe) use NUK Cafe's until a cafe can be chosen (T2).
+    const defaultTenant = useRuntimeConfig().public.defaultTenant
+    const tenant = () => splitTenantUrl(window.location.pathname)?.slug ?? defaultTenant
 
     configureApi(createApiFetch({
       // Same engine as Nuxt's $fetch; created from ofetch directly for its types.
@@ -33,32 +37,37 @@ export default defineNuxtPlugin({
       },
       // Either workspace's identity changing discards responses to older requests.
       sessionGeneration: () => auth.generation.value + counter.generation.value,
-    }), () => tenant)
+    }), tenant)
+
+    // The cafe of the page on screen, for the redirects below (D141).
+    const slugOf = (path: string) => splitTenantUrl(path)?.slug ?? defaultTenant
 
     // A temporary password (at login, or reported by a route): only the change-password page. The
-    // customer site (outside /admin) never reads the admin session, so it's left alone (D93).
+    // customer site (outside the admin) never reads the admin session, so it's left alone (D93).
     watch(auth.mustChangePassword, (must) => {
       const path = router.currentRoute.value.path
-      if (must && isAdminPath(path) && path !== CHANGE_PASSWORD_PATH) nuxtApp.runWithContext(() => navigateTo(CHANGE_PASSWORD_PATH))
+      const target = changePasswordPath(slugOf(path))
+      if (must && isAdminPath(path) && path !== target) nuxtApp.runWithContext(() => navigateTo(target))
     })
 
     // Session lost mid-use (expired, signed out elsewhere, admin access removed): back to login.
     watch(auth.user, (user, previous) => {
       const route = router.currentRoute.value
       if (!user && previous && isAdminPath(route.path) && !route.meta.public) {
-        nuxtApp.runWithContext(() => navigateTo({ path: LOGIN_PATH, query: { redirect: route.fullPath } }))
+        nuxtApp.runWithContext(() => navigateTo({ path: loginPath(slugOf(route.path)), query: { redirect: route.fullPath } }))
       }
     })
 
     // The same for the counter workspace: a temporary password, or a session lost mid-use.
     watch(counter.mustChangePassword, (must) => {
       const path = router.currentRoute.value.path
-      if (must && isCounterPath(path) && path !== COUNTER_CHANGE_PASSWORD_PATH) nuxtApp.runWithContext(() => navigateTo(COUNTER_CHANGE_PASSWORD_PATH))
+      const target = counterChangePasswordPath(slugOf(path))
+      if (must && isCounterPath(path) && path !== target) nuxtApp.runWithContext(() => navigateTo(target))
     })
     watch(counter.user, (user, previous) => {
       const route = router.currentRoute.value
       if (!user && previous && isCounterPath(route.path) && !route.meta.public) {
-        nuxtApp.runWithContext(() => navigateTo({ path: COUNTER_SIGN_IN_PATH, query: { redirect: route.fullPath } }))
+        nuxtApp.runWithContext(() => navigateTo({ path: counterSignInPath(slugOf(route.path)), query: { redirect: route.fullPath } }))
       }
     })
   },

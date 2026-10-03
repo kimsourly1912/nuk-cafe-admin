@@ -16,6 +16,7 @@ const showPassword = ref(false)
 const error = ref<string>()
 
 const route = useRoute()
+const slug = useTenantSlug()
 const { login } = useAuth()
 
 // A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
@@ -32,7 +33,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   error.value = undefined
   try {
     await login(event.data)
-    await navigateTo(loginRedirectTarget(route.query.redirect))
+    await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
   }
   catch (e) {
     error.value = getErrorMessage(e)

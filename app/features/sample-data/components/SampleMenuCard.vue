@@ -9,6 +9,8 @@ import type { SampleDataState, SampleMenuSize } from '#shared/contracts/sample-d
 import { SAMPLE_MENU_ITEMS } from '#shared/contracts/sample-data'
 import { currentStage, itemCount, menuStatus, menuSummary, SIZE_OPTIONS } from '../utils/state'
 
+const tenantPath = useTenantPath()
+
 const props = defineProps<{
   state: SampleDataState
   /** This card's load is running. */
@@ -156,14 +158,14 @@ function stageIcon(key: string) {
       <div class="flex flex-wrap gap-x-4 gap-y-1">
         <UButton
           label="View menu items"
-          to="/admin/products"
+          :to="tenantPath('/admin/products')"
           variant="link"
           trailing-icon="i-lucide-chevron-right"
           class="px-0"
         />
         <UButton
           label="View the customer menu"
-          to="/"
+          :to="tenantPath('/')"
           target="_blank"
           variant="link"
           trailing-icon="i-lucide-external-link"

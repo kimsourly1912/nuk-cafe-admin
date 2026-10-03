@@ -1,4 +1,5 @@
 import { ApiError } from '~/utils/api-error'
+import { splitTenantUrl, tenantUrl } from '~/utils/tenant-path'
 
 /** The customer's account pages (step 5.2, D97). */
 export const ACCOUNT_PATHS = {
@@ -14,31 +15,49 @@ export const ACCOUNT_PATHS = {
 const NO_RETURN = new Set<string>([ACCOUNT_PATHS.signIn, ACCOUNT_PATHS.signUp, ACCOUNT_PATHS.forgotPassword, ACCOUNT_PATHS.resetPassword])
 
 /**
- * The admin workspace's paths (D93; the auth feature's `isAdminPath`, repeated: the account's
- * header building blocks may not import another feature).
+ * A cafe's workspaces (D93, D141: `/c/<slug>/admin/…`, `/c/<slug>/counter/…`; the auth and counter
+ * features' checks, repeated: the account's header building blocks may not import another feature).
  */
-const isAdminPath = (path: string) => path === '/admin' || path.startsWith('/admin/')
+function isWorkspacePath(path: string) {
+  const inCafe = splitTenantUrl(path)?.path
+  return !!inCafe && /^\/(?:admin|counter)(?:\/|$)/.test(inCafe)
+}
 
-/**
- * Where to go after signing in or creating an account: the `?redirect=` target when it's a page of
- * the customer site, else the menu. Never another site (`//evil.example`, `/\evil.example`), never
- * the admin (its own sign-in decides that), never back to a sign-in or password page.
- */
-export function accountRedirectTarget(redirect: unknown): string {
-  if (typeof redirect !== 'string' || !redirect.startsWith('/')) return '/'
-  if (redirect.startsWith('//') || redirect.includes('\\')) return '/'
+/** A page worth coming back to after signing in, else `null` (see `accountRedirectTarget`). */
+function returnAddress(redirect: unknown): string | null {
+  if (typeof redirect !== 'string' || !redirect.startsWith('/')) return null
+  if (redirect.startsWith('//') || redirect.includes('\\')) return null
   const path = redirect.split(/[?#]/)[0]!
-  if (isAdminPath(path) || NO_RETURN.has(path)) return '/'
+  if (path === '/' || isWorkspacePath(path) || NO_RETURN.has(path)) return null
   return redirect
 }
 
 /**
- * A link to an account page that brings the person back afterwards: `/sign-in?redirect=/table/…`.
- * Only a customer-site page is carried (the menu, the default, stays out of the URL).
+ * Where to go after signing in or creating an account: the `?redirect=` target when it's a page of
+ * a cafe's customer site (or a table's QR link), else `home` (the menu). Never another site
+ * (`//evil.example`, `/\evil.example`), never a workspace (its own sign-in decides that), never
+ * back to a sign-in or password page.
+ */
+export function accountRedirectTarget(redirect: unknown, home: string): string {
+  return returnAddress(redirect) ?? home
+}
+
+/**
+ * A link to an account page that brings the person back afterwards: `/sign-in?redirect=/c/nuk/checkout`.
+ * The page is always carried when it's one to come back to: it also says which cafe's menu "Back to
+ * the menu" means on the account pages, which have no cafe in their address (D141).
  */
 export function accountLink(path: string, from?: unknown) {
-  const target = accountRedirectTarget(from)
-  return target === '/' ? path : { path, query: { redirect: target } }
+  const target = returnAddress(from)
+  return target ? { path, query: { redirect: target } } : path
+}
+
+/**
+ * The menu the account pages go back to (D141): the cafe of the page to come back to, else
+ * `fallbackSlug`'s (the default cafe's).
+ */
+export function accountHome(redirect: unknown, fallbackSlug: string): string {
+  return tenantUrl((typeof redirect === 'string' && splitTenantUrl(redirect)?.slug) || fallbackSlug, '/')
 }
 
 /** "SC" for "Sokha Chan", "S" for "Sokha", the email's first letter without a name. */

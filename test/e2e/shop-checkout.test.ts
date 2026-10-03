@@ -34,7 +34,7 @@ const button = (page: Page, name: string | RegExp) => visible(page.getByRole('bu
 const heading = (page: Page, name: string) => page.getByRole('heading', { name, exact: true })
 const card = (page: Page, name: string) => page.getByRole('article', { name, exact: true })
 const at = (path: string) => (u: URL) => u.pathname === path
-const onOrderPage = (u: URL) => u.pathname.startsWith('/orders/')
+const onOrderPage = (u: URL) => u.pathname.startsWith('/c/nuk/orders/')
 
 async function addToOrder(page: Page, name: string) {
   await heading(page, 'Coffee').waitFor()
@@ -52,12 +52,12 @@ async function signIn(page: Page, customer: Pick<SeedCustomer, 'email' | 'passwo
 async function signedIn(customer: SeedCustomer, width = 1440) {
   const opened = await open('/sign-in', width)
   await signIn(opened.page, customer)
-  await opened.page.waitForURL(at('/'))
+  await opened.page.waitForURL(at('/c/nuk'))
   return opened
 }
 
 async function reviewOrder(page: Page) {
-  await page.goto(url('/checkout'), { waitUntil: 'hydration' })
+  await page.goto(url('/c/nuk/checkout'), { waitUntil: 'hydration' })
   await heading(page, 'Review order').waitFor()
 }
 
@@ -73,10 +73,10 @@ async function sql(statement: string, args: (string | number)[] = []) {
 
 describe('placing an order', () => {
   it('signed out: Review order asks to sign in, comes back, places the order with a note; the order page shows the number', async () => {
-    const { page, problems } = await open('/')
+    const { page, problems } = await open('/c/nuk')
     await addToOrder(page, 'Banana Bread')
     await page.getByRole('complementary', { name: 'Your order' }).getByRole('link', { name: 'Review order' }).click()
-    await page.waitForURL(at('/checkout'))
+    await page.waitForURL(at('/c/nuk/checkout'))
     await heading(page, 'Review order').waitFor()
     await page.getByText('Pickup at Riverside').waitFor()
 
@@ -86,7 +86,7 @@ describe('placing an order', () => {
     await gate.getByRole('link', { name: 'Sign in' }).click()
     await page.waitForURL(at('/sign-in'))
     await signIn(page, seed.customers.shopperA)
-    await page.waitForURL(at('/checkout'))
+    await page.waitForURL(at('/c/nuk/checkout'))
 
     // The order stayed on this device; add a note for the counter.
     await button(page, 'Add a note').click()
@@ -186,7 +186,7 @@ describe('dine-in', () => {
     await page.getByRole('dialog').getByRole('link', { name: 'Sign in' }).click()
     await page.waitForURL(at('/sign-in'))
     await signIn(page, seed.customers.tableGuest)
-    await page.waitForURL(at('/checkout'))
+    await page.waitForURL(at('/c/nuk/checkout'))
 
     // The table came back with the order: still dine-in at T01, never pickup instead.
     await page.getByText('Dine-in · Table T01').waitFor()
@@ -217,7 +217,7 @@ describe('dine-in', () => {
 
 describe('on a phone', () => {
   it('the total and the button are in the bottom bar; the sign-in gate is a bottom sheet', async () => {
-    const { page, problems } = await open('/', 1440)
+    const { page, problems } = await open('/c/nuk', 1440)
     await addToOrder(page, 'Banana Bread')
     await page.setViewportSize({ width: 390, height: 844 })
     await reviewOrder(page)

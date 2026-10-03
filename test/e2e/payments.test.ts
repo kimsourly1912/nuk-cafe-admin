@@ -42,7 +42,7 @@ async function open(start: ExchangeRates, khqr: KhqrSettings = KHQR_OFF, options
       return state
     },
   })
-  await page.goto(url('/admin/payments'), { waitUntil: 'hydration' })
+  await page.goto(url('/c/nuk/admin/payments'), { waitUntil: 'hydration' })
   await page.getByRole('heading', { name: 'Riel exchange rate' }).waitFor()
   return { page, posted, saved }
 }
@@ -137,6 +137,6 @@ describe('Payments', () => {
 
   it('is in the sidebar', async () => {
     const { page } = await open({ current: HISTORY[0]!, history: HISTORY })
-    expect(await page.getByRole('link', { name: 'Payments' }).getAttribute('href')).toBe('/admin/payments')
+    expect(await page.getByRole('link', { name: 'Payments' }).getAttribute('href')).toBe('/c/nuk/admin/payments')
   })
 })

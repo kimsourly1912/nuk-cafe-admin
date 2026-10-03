@@ -13,6 +13,8 @@ import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import { activeModifiers } from '../composables/useModifierGroups'
 import { formatDelta, ruleParts, usageLabel } from '../schemas/modifier-group-display'
 
+const tenantPath = useTenantPath()
+
 const props = defineProps<{
   group: ModifierGroup
   actions: DropdownMenuItem[]
@@ -150,7 +152,7 @@ const rowClass = (index: number) => (index < PHONE_ROWS ? 'flex' : index < WIDE_
         </p>
         <UButton
           :label="archived ? 'View' : 'Manage'"
-          :to="`/admin/add-ons/${group.id}`"
+          :to="tenantPath(`/admin/add-ons/${group.id}`)"
           color="neutral"
           variant="outline"
           trailing-icon="i-lucide-chevron-right"

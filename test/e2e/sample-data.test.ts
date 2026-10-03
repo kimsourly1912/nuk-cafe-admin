@@ -52,7 +52,7 @@ async function open(handlers: Record<string, MockHandler>, width = 1440) {
   const page = await createPage()
   await page.setViewportSize({ width, height: 900 })
   const api = await mockApi(page, handlers)
-  await page.goto(url('/admin/sample-data'), { waitUntil: 'hydration' })
+  await page.goto(url('/c/nuk/admin/sample-data'), { waitUntil: 'hydration' })
   await page.getByRole('heading', { name: 'Sample menu' }).waitFor()
   return { page, api }
 }
@@ -191,7 +191,7 @@ describe('sample data', () => {
       if (fail) throw failures.server()
       return stateOf()
     } })
-    await page.goto(url('/admin/sample-data'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/sample-data'), { waitUntil: 'hydration' })
     await page.getByText('Could not load the sample data state').waitFor()
     fail = false
     await page.getByRole('button', { name: 'Retry' }).click()
