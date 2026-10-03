@@ -238,8 +238,8 @@ describe('matching Bakong\'s transaction to the QR', () => {
 
 describe('whether the counter checks automatically', () => {
   it('the settings and the queue say so when this server has a token, with the token\'s expiry (D132)', async () => {
-    expect(await getKhqrSettings(db, { automaticCheck: true, tokenExpiresAt: new Date('2026-12-31T00:00:00.000Z') })).toMatchObject({ automaticCheck: true, tokenExpiresAt: '2026-12-31T00:00:00.000Z' })
-    expect(await getKhqrSettings(db)).toMatchObject({ automaticCheck: false, tokenExpiresAt: null })
+    expect(await getKhqrSettings(db, TEST_TENANT, { automaticCheck: true, tokenExpiresAt: new Date('2026-12-31T00:00:00.000Z') })).toMatchObject({ automaticCheck: true, tokenExpiresAt: '2026-12-31T00:00:00.000Z' })
+    expect(await getKhqrSettings(db, TEST_TENANT)).toMatchObject({ automaticCheck: false, tokenExpiresAt: null })
     expect((await listCounterQueue(db, cashier, NOON, true)).khqr).toEqual({ currencies: ['USD', 'KHR'], automaticCheck: true })
   })
 

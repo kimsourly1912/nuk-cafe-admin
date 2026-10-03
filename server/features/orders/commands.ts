@@ -54,7 +54,7 @@ export async function runOrderCommand(db: Db, command: OrderCommand, plan: (orde
       { actorId: actor.userId, operation: `orders.${command.operation}`, key: command.key },
       { orderId, ...command.request },
       async () => {
-        const order = await repo.findOrder(db, orderId)
+        const order = await repo.findOrder(db, actor.tenantId, orderId)
         if (!order || !command.owns(order)) throw orderNotFound()
         if (order.version !== command.version) throw command.changed(order)
         const step = await plan(order)
@@ -93,7 +93,7 @@ export async function runOrderCommand(db: Db, command: OrderCommand, plan: (orde
     // Another command changed the order between our read and our write (or paid it: the payment's
     // unique index, the last guard). Say what it is now.
     if (error instanceof OrderMovedOn || isStaleWrite(error) || isUniqueViolation(error)) {
-      const current = await repo.findOrder(db, orderId)
+      const current = await repo.findOrder(db, actor.tenantId, orderId)
       if (current) throw command.changed(current)
     }
     throw error

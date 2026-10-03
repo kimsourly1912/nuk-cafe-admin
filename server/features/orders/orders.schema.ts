@@ -164,7 +164,8 @@ export const counterPayments = sqliteTable('counter_payments', {
  * customers see before paying. One row (id `default`), versioned; absent until an admin saves it.
  */
 export const khqrSettings = sqliteTable('khqr_settings', {
-  id: text().primaryKey(),
+  // One row per tenant (D137): its Bakong account and what its customers see.
+  tenantId: tenantId().primaryKey(),
   enabled: integer({ mode: 'boolean' }).notNull(),
   accountId: text().notNull(),
   merchantName: text().notNull(),
@@ -175,7 +176,7 @@ export const khqrSettings = sqliteTable('khqr_settings', {
   updatedBy: text().notNull().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
   updatedAt: instant().notNull(),
 }, t => [
-  check('khqr_settings_check', sql`${t.id} = 'default' and ${t.currencies} in ('USD', 'KHR', 'USD,KHR')`),
+  check('khqr_settings_check', sql`${t.currencies} in ('USD', 'KHR', 'USD,KHR')`),
 ])
 
 /**
@@ -212,11 +213,13 @@ export const khqrCharges = sqliteTable('khqr_charges', {
 /** The riel rate an admin set, from `effectiveFrom` on (append-only; 6.3, D101). */
 export const exchangeRates = sqliteTable('exchange_rates', {
   id: text().primaryKey().$defaultFn(() => newId()),
+  // Each tenant sets its own riel rate (D137).
+  tenantId: tenantId(),
   currency: text().notNull().default('KHR'),
   perUsd: integer().notNull(),
   effectiveFrom: instant().notNull(),
   setBy: text().notNull().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
 }, t => [
   check('exchange_rates_check', sql`${t.currency} = 'KHR' and ${t.perUsd} between 1000 and 10000`),
-  index('exchange_rates_effective_idx').on(t.currency, t.effectiveFrom),
+  index('exchange_rates_effective_idx').on(t.tenantId, t.currency, t.effectiveFrom),
 ])

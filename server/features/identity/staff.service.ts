@@ -112,6 +112,8 @@ async function createStaffAs(db: Db, by: AuditActor, tenantId: string, input: Cr
       repo.bumpVersionStatement(db, existing.id, existing.updatedAt, nextVersion(existing.updatedAt, now)),
       requireOneChange(db),
       ...repo.replaceAccessStatements(db, tenantId, existing.id, tenantRole(input.admin), input.memberships, now),
+      // Their profile in this cafe (D137): they're a customer here too.
+      profileStatement(db, tenantId, existing.id),
       staffAudit(db, by, tenantId, 'staff.create', existing.id, { ...accessMetadata(input.admin, input.memberships), existingAccount: true }),
     ]
     await runAccessBatch(db, statements, existing.id, existing.updatedAt.getTime())
@@ -123,7 +125,7 @@ async function createStaffAs(db: Db, by: AuditActor, tenantId: string, input: Cr
   const statements: Statement[] = [
     ...repo.insertAccountStatements(db, { id: userId, name: input.name, email: input.email, passwordHash: await hashPassword(temporaryPassword), now }),
     // Better Auth's sign-up hook doesn't run for these writes (D49).
-    profileStatement(db, userId),
+    profileStatement(db, tenantId, userId),
     ...repo.replaceAccessStatements(db, tenantId, userId, tenantRole(input.admin), input.memberships, now),
     staffAudit(db, by, tenantId, 'staff.create', userId, { ...accessMetadata(input.admin, input.memberships), existingAccount: false }),
   ]

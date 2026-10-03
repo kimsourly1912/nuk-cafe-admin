@@ -6,8 +6,6 @@ import { khqrCharges, khqrSettings } from './orders.schema'
 
 /** All SQL of KHQR at the counter (step 10.15, D130). */
 
-const SETTINGS_ID = 'default'
-
 export interface KhqrSettingsRow {
   enabled: boolean
   accountId: string
@@ -19,7 +17,8 @@ export interface KhqrSettingsRow {
   updatedByName: string
 }
 
-export async function findSettings(db: Db): Promise<KhqrSettingsRow | undefined> {
+/** The tenant's settings (one row per tenant, D137). */
+export async function findSettings(db: Db, tenantId: string): Promise<KhqrSettingsRow | undefined> {
   const [row] = await db.select({
     enabled: khqrSettings.enabled,
     accountId: khqrSettings.accountId,
@@ -29,7 +28,7 @@ export async function findSettings(db: Db): Promise<KhqrSettingsRow | undefined>
     version: khqrSettings.version,
     updatedAt: khqrSettings.updatedAt,
     updatedByName: user.name,
-  }).from(khqrSettings).innerJoin(user, eq(user.id, khqrSettings.updatedBy)).where(eq(khqrSettings.id, SETTINGS_ID))
+  }).from(khqrSettings).innerJoin(user, eq(user.id, khqrSettings.updatedBy)).where(eq(khqrSettings.tenantId, tenantId))
   return row && { ...row, currencies: row.currencies.split(',') as KhqrCurrency[] }
 }
 
@@ -46,14 +45,14 @@ export interface SettingsValues {
 const columns = (values: SettingsValues) => ({ ...values, currencies: values.currencies.join(',') })
 
 /** The first save: inserts the row unless someone else just did (then nothing changes: the guard after it fails). */
-export function insertSettingsStatement(db: Db, values: SettingsValues): Statement {
-  return db.insert(khqrSettings).values({ id: SETTINGS_ID, ...columns(values), version: 1 }).onConflictDoNothing()
+export function insertSettingsStatement(db: Db, tenantId: string, values: SettingsValues): Statement {
+  return db.insert(khqrSettings).values({ tenantId, ...columns(values), version: 1 }).onConflictDoNothing()
 }
 
 /** A later save: only from the version the page read. */
-export function updateSettingsStatement(db: Db, version: number, values: SettingsValues): Statement {
+export function updateSettingsStatement(db: Db, tenantId: string, version: number, values: SettingsValues): Statement {
   return db.update(khqrSettings).set({ ...columns(values), version: version + 1 })
-    .where(and(eq(khqrSettings.id, SETTINGS_ID), eq(khqrSettings.version, version)))
+    .where(and(eq(khqrSettings.tenantId, tenantId), eq(khqrSettings.version, version)))
 }
 
 export interface ChargeRow {
@@ -96,8 +95,8 @@ export async function findOpenCharge(db: Db, orderId: string, currency: KhqrCurr
   return row
 }
 
-export async function findCharge(db: Db, id: string): Promise<ChargeRow | undefined> {
-  const [row] = await db.select(chargeColumns).from(khqrCharges).where(eq(khqrCharges.id, id))
+export async function findCharge(db: Db, tenantId: string, id: string): Promise<ChargeRow | undefined> {
+  const [row] = await db.select(chargeColumns).from(khqrCharges).where(and(eq(khqrCharges.tenantId, tenantId), eq(khqrCharges.id, id)))
   return row
 }
 

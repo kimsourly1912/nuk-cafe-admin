@@ -138,8 +138,8 @@ export async function orderHistory(db: Db, tenantId: string, query: OrderHistory
 
 /** One order as sold: its lines, payment, and every recorded step with who took it. */
 export async function orderHistoryDetail(db: Db, tenantId: string, id: string): Promise<OrderHistoryDetail> {
-  const order = await orderRepo.findOrder(db, id)
-  if (!order || order.tenantId !== tenantId) throw orderNotFound()
+  const order = await orderRepo.findOrder(db, tenantId, id)
+  if (!order) throw orderNotFound()
   const [branch, lines, [payment], events, returnedBy] = await Promise.all([
     repo.findReportBranch(db, tenantId, order.branchId),
     orderRepo.linesOf(db, id),
