@@ -63,10 +63,12 @@ const noBranch = computed(() => menuQuery.error.value?.kind === 'not_found')
 const loadError = computed(() => (noBranch.value ? undefined : menuQuery.error.value))
 const retry = () => menuQuery.refresh()
 
+// The cafe's own name (D143), read on the server with the menu.
+const { name: cafeName, logoUrl } = useCafe()
 useSeoMeta({
-  description: 'Browse the NUK Cafe menu and order coffee, tea and bakes for pickup or at your table.',
-  ogTitle: 'NUK Cafe menu',
-  ogDescription: 'Browse the NUK Cafe menu and order for pickup or at your table.',
+  description: () => `Browse the ${cafeName.value} menu and order for pickup or at your table.`,
+  ogTitle: () => `${cafeName.value} menu`,
+  ogDescription: () => `Browse the ${cafeName.value} menu and order for pickup or at your table.`,
 })
 
 /** "Table 12" (a label may already say "Table"), or "Pickup". */
@@ -172,16 +174,16 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
         </template>
         <template v-else>
           <div class="flex min-w-0 items-center gap-2 sm:gap-2.5">
-            <UIcon
-              name="i-lucide-coffee"
-              class="size-6 shrink-0 text-primary"
+            <CafeLogo
+              :url="logoUrl"
+              class="size-6"
             />
             <div class="min-w-0 lg:flex lg:items-center lg:gap-4">
               <NuxtLink
                 :to="tenantPath('/')"
                 class="block whitespace-nowrap font-semibold leading-tight text-highlighted lg:text-lg"
               >
-                NUK Cafe
+                {{ cafeName }}
               </NuxtLink>
               <p
                 v-if="branch"

@@ -1,6 +1,4 @@
 import type { Page } from '#shared/contracts/common'
-import type { MediaAsset } from '#shared/contracts/media'
-import { IMAGE_MAX_BYTES, IMAGE_TYPES } from '#shared/contracts/media'
 import type { CreateItemInput, ItemListQuery, ItemStatus, MenuItem, MenuItemSummary, UpdateItemInput } from '#shared/contracts/menu-items'
 import type { MutationOptions } from '~/utils/mutation'
 
@@ -12,11 +10,6 @@ const lockOf = (id: string) => `menu-item:${id}`
 
 /** Features whose data shows menu items: the libraries' "used by N items". */
 const AFFECTED = ['products', 'option-sets', 'modifier-groups', 'availability-rules']
-
-/** Images: the server's limits (shared contract), checked here first for a quick message. */
-export { IMAGE_MAX_BYTES, IMAGE_TYPES }
-/** Uploads get longer than the API's 30 s default: 5 MB on a slow connection. */
-const UPLOAD_TIMEOUT_MS = 120_000
 
 export type ItemListFilters = Partial<Pick<ItemListQuery, 'search' | 'categoryId' | 'modifierGroupId' | 'page' | 'pageSize'>> & { status?: ItemStatus }
 
@@ -139,25 +132,6 @@ export function useItemMutations() {
     },
   })
 
-  /**
-   * Uploads an image and returns the asset (`id` → `imageId`, `url` for the preview). Keyed by the
-   * form that started it, so each open form tracks its own upload. Nothing is saved on the item
-   * until the form is; an unused upload is deleted by the server after 24 hours.
-   */
-  const uploadImage = useMutation(
-    ({ file }: { file: File, form: string }) => {
-      const body = new FormData()
-      body.append('file', file)
-      return apiFetch<MediaAsset>('/admin/media', { method: 'POST', body, timeout: UPLOAD_TIMEOUT_MS })
-    },
-    {
-      id: 'products:upload',
-      key: ({ form }) => form,
-      successMessage: false,
-      errorMessage: ({ file }) => `Could not upload "${file.name}"`,
-    },
-  )
-
   return {
     create,
     update,
@@ -165,7 +139,6 @@ export function useItemMutations() {
     unpublish,
     archive,
     restore,
-    uploadImage,
     /** Any operation in flight for this item: its card shows a spinner instead of its actions. */
     isBusy: (id: string) => [update, publish, unpublish, archive, restore].some(m => m.isPending(id)),
   }

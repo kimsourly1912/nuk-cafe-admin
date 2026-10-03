@@ -13,6 +13,7 @@ import { periodLabel } from '../utils/period'
 const props = defineProps<{ title: string, report: ReportContext }>()
 
 const { user } = useAuth()
+const { name: cafeName } = useCafe()
 // Read when printing starts, not when the page opened.
 const printedAt = ref(new Date().toISOString())
 useEventListener('beforeprint', () => {
@@ -25,7 +26,7 @@ const zone = computed(() => props.report.branch.timeZone)
 <template>
   <header class="mb-4 hidden border-b border-default pb-3 print:block">
     <p class="text-lg font-semibold text-highlighted">
-      NUK Cafe · {{ report.branch.name }} · {{ title }}
+      {{ cafeName }} · {{ report.branch.name }} · {{ title }}
     </p>
     <p class="text-sm">
       {{ periodLabel(report.period) }} ({{ BUSINESS_DAY_TEXT }}, {{ zone }})

@@ -1,21 +1,30 @@
 <script setup lang="ts">
 /**
- * Menu item image: preview + Upload/Replace/Remove. The file is checked (type), made smaller in the
- * browser (at most 1600 px, WebP, D122), checked for size, and uploaded as soon as it's picked; the form then holds the upload's `url` and asset `id`. Remove clears
- * both: the item is saved without an image (`imageId: null`).
+ * An image for a record (a menu item's photo, the cafe's logo, D143): preview + Upload/Replace/
+ * Remove. The file is checked (type), made smaller in the browser (at most 1600 px, WebP, D122),
+ * checked for size, and uploaded as soon as it's picked; the form then holds the upload's `url` and
+ * asset `id`. Remove clears both: the record is saved without an image (`null`).
+ *
+ * @example
+ * <ImageInput v-model:image-url="state.imageUrl" v-model:image-id="state.imageId" v-model:uploading="uploading" alt="Menu item image" />
  */
 import { useFileDialog } from '@vueuse/core'
-import { IMAGE_MAX_BYTES, IMAGE_TYPES, useItemMutations } from '../composables/useItems'
-import { IMAGE_MAX_ORIGINAL_BYTES, shrinkImage } from '../utils/shrink-image'
+import { IMAGE_MAX_BYTES, IMAGE_TYPES } from '#shared/contracts/media'
 
-const props = defineProps<{ disabled?: boolean }>()
+const props = withDefaults(defineProps<{
+  /** The preview's text alternative: what the image is ("Menu item image", "Cafe logo"). */
+  alt: string
+  disabled?: boolean
+  /** The word on the buttons: "Upload image", "Replace logo". */
+  noun?: string
+}>(), { noun: 'image' })
 
 const imageUrl = defineModel<string | undefined>('imageUrl')
 const imageId = defineModel<string | undefined>('imageId')
 /** True while an upload runs, so the form can wait before saving. */
 const uploading = defineModel<boolean>('uploading', { default: false })
 
-const { uploadImage } = useItemMutations()
+const uploadImage = useImageUpload()
 const formKey = useId()
 const problem = ref<string>()
 /** Making the photo smaller (a moment for a big phone photo), before the upload starts. */
@@ -50,7 +59,7 @@ onChange(async (files) => {
     problem.value = `The image is still larger than ${maxMb} MB after making it smaller. Try another photo.`
     return
   }
-  const result = await uploadImage.execute({ file: upload, form: formKey })
+  const result = await uploadImage.execute({ file: upload, input: formKey })
   if (!result.ok) return
   imageUrl.value = result.data.url
   imageId.value = result.data.id
@@ -67,13 +76,13 @@ function removeImage() {
     <UAvatar
       :src="imageUrl"
       icon="i-lucide-image"
-      alt="Menu item image"
+      :alt="alt"
       class="size-20 rounded-md text-2xl"
     />
     <div class="space-y-1">
       <div class="flex gap-2">
         <UButton
-          :label="imageUrl ? 'Replace image' : 'Upload image'"
+          :label="imageUrl ? `Replace ${noun}` : `Upload ${noun}`"
           icon="i-lucide-upload"
           color="neutral"
           variant="outline"

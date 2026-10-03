@@ -1,6 +1,7 @@
 import type { BrowserContext, Page, Route } from 'playwright-core'
 import { getBrowser, setup, url, waitForHydration } from '@nuxt/test-utils/e2e'
 import { afterEach, expect, inject } from 'vitest'
+import type { CafeProfile } from '../../../shared/contracts/cafe'
 import type { Page as ApiPage } from '../../../shared/contracts/common'
 import type { AdminSession } from '../../../shared/contracts/identity'
 import type { MenuCategory } from '../../../shared/contracts/menu-categories'
@@ -121,6 +122,9 @@ export function pageOf<T>(items: T[], page = 1, pageSize = 20): ApiPage<T> {
   return { items, page, pageSize, total: items.length, totalPages: Math.max(1, Math.ceil(items.length / pageSize)) }
 }
 
+/** The default cafe's profile (`GET /api/cafes/nuk`, D143). */
+export const NUK_PROFILE: CafeProfile = { slug: 'nuk', name: 'NUK Cafe', logoUrl: null, status: 'active' }
+
 /** A signed-in admin with two categories. */
 export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   // Better Auth's client plugin reads the session once at startup; the app itself uses /admin/me.
@@ -133,6 +137,8 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /admin/menu/availability-rules': () => [],
   'GET /admin/menu/option-sets': () => [],
   'GET /admin/menu/modifier-groups': () => [],
+  // The cafe's name and logo (D143), for the sidebar, the sign-in pages and the tab title.
+  'GET /cafes/nuk': () => NUK_PROFILE,
   // The help assistant is off unless a test turns it on (no AI key: its routes answer 404, D109).
   'GET /admin/assistant': () => {
     throw failures.notFound('This page was not found.')
@@ -261,7 +267,7 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
     const requestUrl = new URL(request.url())
     // Keys name the route without `/api` and the cafe's address (`/api/c/<slug>`, D140): 'GET /admin/me',
     // 'GET /public/menu', 'POST /auth/sign-out', 'GET /tables/{id}'.
-    const path = requestUrl.pathname.replace(/^\/api(?:\/c\/[^/]+)?(?=\/(?:admin|public|shop|counter|auth|tables|platform)\b)/, '')
+    const path = requestUrl.pathname.replace(/^\/api(?:\/c\/[^/]+)?(?=\/(?:admin|public|shop|counter|auth|tables|platform|cafes)\b)/, '')
     const key = `${request.method()} ${path}`
     calls.push(key)
     // 'DELETE /admin/categories/cat-1' also matches a 'DELETE /admin/categories/{id}' handler.

@@ -12,7 +12,7 @@
 - [`<SearchInput>`](#searchinput)
 - [`<ListEmptyState>`](#listemptystate)
 - [Keyboard shortcuts: `usePageShortcuts`, `useSubmitShortcut`, `<ShortcutsHelp>`](#keyboard-shortcuts)
-- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127), [`useCenteredTab`](#usecenteredtab), [`<ListPagination>`](#listpagination), [`<QuantityStepper>`](#quantitystepper) (D128), [`<QrCode>`](#qrcode) (D130)
+- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127), [`useCenteredTab`](#usecenteredtab), [`<ListPagination>`](#listpagination), [`<QuantityStepper>`](#quantitystepper) (D128), [`<QrCode>`](#qrcode) (D130), [`<ImageInput>`](#imageinput), [`useCafe` and `<CafeLogo>`](#usecafe-and-cafelogo) (D143)
 
 ---
 
@@ -569,6 +569,53 @@ Source: `app/components/PhoneInput.vue`; the rules in `shared/contracts/phone.ts
 | `formatPhone(e164)` | `+855 12 345 678` for display |
 
 A form keeps `phone` and `phoneCountry` in its draft, validates them together (`v.forward(v.partialCheck(…), ['phone'])`, the Branch form), and sends `parsePhone(…).e164`.
+
+---
+
+## `<ImageInput>`
+
+An image for a record (a menu item's photo, the cafe's logo; D143): a preview with Upload / Replace / Remove. A picked file is checked (JPEG, PNG or WebP; at most `IMAGE_MAX_ORIGINAL_BYTES` before shrinking), made smaller in the browser (`shrinkImage`: the longest side at most 1600 px, WebP; D122), checked against `IMAGE_MAX_BYTES`, and uploaded at once through `useImageUpload()` (`POST /admin/media`, mutation `media:upload`, keyed per input). The form then holds the upload's `url` (the preview) and asset `id` (what the record saves); Remove clears both (saved as `null`). A form waits for `uploading` before saving.
+
+Source: `app/components/ImageInput.vue`, `app/composables/useImageUpload.ts`, `app/utils/shrink-image.ts` (all auto-imported).
+
+```vue
+<UFormField label="Logo" name="logoId">
+  <ImageInput v-model:image-url="state.logoUrl" v-model:image-id="state.logoId" v-model:uploading="uploading" alt="Cafe logo" noun="logo" />
+</UFormField>
+```
+
+| Prop / model | Description |
+|---|---|
+| `alt` | The preview's text alternative ("Menu item image", "Cafe logo"); required |
+| `noun` | The word on the buttons: "Upload logo", "Replace logo" (default `image`) |
+| `disabled` | While the form saves |
+| `v-model:image-url`, `v-model:image-id` | The upload's `url` and asset `id`; `undefined` for none |
+| `v-model:uploading` | True while the file is being shrunk or uploaded |
+
+The server attaches the asset when the record is saved and releases the one it replaced (the media feature); an upload never saved is purged after 24 hours.
+
+---
+
+## `useCafe` and `<CafeLogo>`
+
+A cafe's name and logo (D143), wherever the app names the cafe: `useCafe()` reads the cafe of the page's address (`useTenantSlug`); `useCafe(slug)` another one (the account pages name the cafe they came from). It is `useApiQuery` on `GET /api/cafes/{slug}` (key `cafe:profile:<slug>`, server-rendered on the menu; invalidated by `cafe`) plus `name` (`''` until loaded) and `logoUrl` (`null` without a logo). A paused cafe still answers (its paused page names it). `<CafeLogo :url>` is the logo, or the coffee icon without one; decorative, so the name is always beside it.
+
+Source: `app/composables/useCafe.ts`, `app/components/CafeLogo.vue`.
+
+```vue
+<script setup lang="ts">
+const { name, logoUrl } = useCafe()
+</script>
+
+<template>
+  <span class="flex items-center gap-2">
+    <CafeLogo :url="logoUrl" class="size-5" />
+    {{ name }} Admin
+  </span>
+</template>
+```
+
+Never write a cafe's name into a page: every cafe on the platform renders the same code.
 
 ---
 

@@ -26,6 +26,7 @@ import CheckoutGate from './CheckoutGate.vue'
 import CheckoutLine from './CheckoutLine.vue'
 
 const tenantPath = useTenantPath()
+const { name: cafeName, logoUrl } = useCafe()
 
 const mounted = useMounted()
 const checkout = useCheckout()
@@ -102,11 +103,11 @@ useSeoMeta({ robots: 'noindex' })
           :to="tenantPath('/')"
           class="flex items-center gap-2 font-semibold text-highlighted"
         >
-          <UIcon
-            name="i-lucide-coffee"
-            class="size-5 text-primary"
+          <CafeLogo
+            :url="logoUrl"
+            class="size-5"
           />
-          NUK Cafe
+          {{ cafeName }}
         </NuxtLink>
         <div class="ms-auto flex items-center gap-2">
           <UColorModeButton class="max-lg:hidden" />

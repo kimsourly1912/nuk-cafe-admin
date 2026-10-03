@@ -147,6 +147,9 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
               status: { type: 'string', required: false, defaultValue: 'active', input: false },
               // Why the platform paused it, for the platform team (D142); `null` while active.
               suspendedReason: { type: 'string', required: false, input: false },
+              // The cafe's logo, an upload in its media (D143). No foreign key: Better Auth's fields
+              // can't reference our tables (D134); the media feature attaches and releases it.
+              logoAssetId: { type: 'string', required: false, input: false },
               // The lock for the tenant's own settings (D41).
               version: { type: 'number', required: false, defaultValue: 1, input: false },
             },

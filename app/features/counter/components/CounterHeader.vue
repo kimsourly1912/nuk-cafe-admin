@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * The counter's header (D102, the owner's frames): NUK Cafe, the branch and whether it's open, the
+ * The counter's header (D102, the owner's frames): the cafe (D143), the branch and whether it's open, the
  * order search (on the queue), Sold out (the page that switches items off, 6.3c, D105), the color
  * mode and the user menu (the chime on or off, another branch, change password, sign out).
  */
@@ -19,6 +19,7 @@ const muted = defineModel<boolean>('muted', { required: true })
 
 const { user, signOut } = useCounterSession()
 const slug = useTenantSlug()
+const { name, logoUrl } = useCafe()
 const initials = computed(() => (user.value?.name || user.value?.email || '?').split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase())
 
 const menu = computed<DropdownMenuItem[][]>(() => [
@@ -37,11 +38,11 @@ const menu = computed<DropdownMenuItem[][]>(() => [
     <div class="flex h-16 items-center gap-3 px-4">
       <div class="min-w-0">
         <p class="flex items-center gap-2 font-semibold text-highlighted">
-          <UIcon
-            name="i-lucide-coffee"
-            class="size-5 shrink-0 text-primary"
+          <CafeLogo
+            :url="logoUrl"
+            class="size-5"
           />
-          <span class="max-sm:hidden">NUK Cafe</span>
+          <span class="max-sm:hidden">{{ name }}</span>
           <span class="text-muted max-sm:hidden">·</span>
           <span class="truncate">{{ branchName }}</span>
         </p>

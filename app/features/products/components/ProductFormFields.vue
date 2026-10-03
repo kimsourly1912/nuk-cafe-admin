@@ -15,7 +15,6 @@ import { buildGrid, formFieldOf, itemFormSchema, optionSetFromLibrary, sectionOf
 import type { FormOptionSet, ItemForm, ItemFormSection } from '../schemas/item-form'
 import ItemAddOnGroups from './ItemAddOnGroups.vue'
 import ItemPriceGrid from './ItemPriceGrid.vue'
-import ProductImageInput from './ProductImageInput.vue'
 
 const props = withDefaults(defineProps<{
   formId: string
@@ -103,10 +102,11 @@ defineExpose({ submit: () => form.value?.submit(), setServerErrors })
         label="Image"
         name="imageId"
       >
-        <ProductImageInput
+        <ImageInput
           v-model:image-url="state.imageUrl"
           v-model:image-id="state.imageId"
           v-model:uploading="uploading"
+          alt="Menu item image"
           :disabled="disabled"
         />
       </UFormField>

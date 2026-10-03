@@ -3,7 +3,7 @@ import { dirname } from 'node:path'
 import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { eq } from 'drizzle-orm'
-import { user } from '../../../server/db/tables'
+import { organization, user } from '../../../server/db/tables'
 import { createTable, updateBranchSettings } from '../../../server/features/branches'
 import type { Actor } from '../../../server/features/identity'
 import { createStaff } from '../../../server/features/identity'
@@ -94,6 +94,7 @@ const ALL_DAY = [1, 2, 3, 4, 5, 6, 7].map(weekday => ({ weekday, startMinute: 0,
 async function seedSecondCafe(db: Db, qr: { secret: string, baseUrl: string }): Promise<ShopSeed['secondCafe']> {
   const cafe = { id: 'tenant-2', slug: 'brown-bean', name: 'Brown Bean' }
   await ensureTenant(db, cafe.id, cafe.slug)
+  await db.update(organization).set({ name: cafe.name }).where(eq(organization.id, cafe.id))
   const owner = await createAdmin(db, 'owner@brown-bean.example', cafe.id)
   const actor: Actor = { userId: owner.userId, tenantId: cafe.id, role: 'owner' }
   const branchId = await addBranch(db, 'Bean Street', cafe.id)
@@ -120,6 +121,10 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
 
   // The cafe (a tenant, D134) at NUK Cafe's address, the one the app works in (`nuk`, D140), and its owner.
   await ensureTenant(db, TEST_TENANT, 'nuk')
+  await db.update(organization).set({ name: 'NUK Cafe' }).where(eq(organization.id, TEST_TENANT))
+  // A cafe the platform paused (D142): its pages say so, by name (D143).
+  await ensureTenant(db, 'tenant-3', 'quiet-corner')
+  await db.update(organization).set({ name: 'Quiet Corner', status: 'suspended', suspendedReason: 'Unpaid invoice' }).where(eq(organization.id, 'tenant-3'))
   const admin = await createAdmin(db, 'e2e-admin@example.com')
   const actor: Actor = { userId: admin.userId, tenantId: TEST_TENANT, role: 'owner' }
   const openBranchId = await addBranch(db, 'Riverside')

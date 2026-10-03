@@ -3,6 +3,7 @@
 import { AccountButton } from '~/features/account'
 
 const tenantPath = useTenantPath()
+const { name, logoUrl } = useCafe()
 </script>
 
 <template>
@@ -12,11 +13,11 @@ const tenantPath = useTenantPath()
         :to="tenantPath('/')"
         class="flex items-center gap-2 font-semibold text-highlighted"
       >
-        <UIcon
-          name="i-lucide-coffee"
-          class="size-5 text-primary"
+        <CafeLogo
+          :url="logoUrl"
+          class="size-5"
         />
-        NUK Cafe
+        {{ name }}
       </NuxtLink>
       <div class="ms-auto flex items-center gap-2">
         <UColorModeButton class="max-lg:hidden" />

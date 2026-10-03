@@ -13,6 +13,7 @@ export const ASSISTANT_PAGES = {
   'options': { title: 'Options', path: '/admin/options' },
   'add-ons': { title: 'Add-ons', path: '/admin/add-ons' },
   'availability': { title: 'Availability', path: '/admin/availability' },
+  'cafe-profile': { title: 'Cafe profile', path: '/admin/cafe' },
   'staff': { title: 'Staff', path: '/admin/staff' },
   'branch': { title: 'Branch', path: '/admin/branches' },
   'payments': { title: 'Payments', path: '/admin/payments' },

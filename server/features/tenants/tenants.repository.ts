@@ -17,6 +17,7 @@ export interface TenantRow {
   slug: string
   status: string | null
   suspendedReason: string | null
+  logoAssetId: string | null
   version: number | null
   createdAt: Date
 }
@@ -27,6 +28,7 @@ const tenantColumns = {
   slug: organization.slug,
   status: organization.status,
   suspendedReason: organization.suspendedReason,
+  logoAssetId: organization.logoAssetId,
   version: organization.version,
   createdAt: organization.createdAt,
 }
@@ -55,6 +57,12 @@ export async function listTenants(db: Db, query: TenantListQuery): Promise<{ row
 
 export async function findTenant(db: Db, id: string): Promise<TenantRow | undefined> {
   const rows: TenantRow[] = await db.select(tenantColumns).from(organization).where(eq(organization.id, id)).limit(1)
+  return rows[0]
+}
+
+/** The cafe with this current address (a former one isn't it: pages redirect from those). */
+export async function findTenantBySlug(db: Db, slug: string): Promise<TenantRow | undefined> {
+  const rows: TenantRow[] = await db.select(tenantColumns).from(organization).where(eq(organization.slug, slug)).limit(1)
   return rows[0]
 }
 
@@ -98,7 +106,7 @@ export function forgetOwnSlugStatement(db: Db, slug: string, tenantId: string): 
 }
 
 /** Changes the cafe only at the version read: no row changes when someone changed it meanwhile. */
-export function updateTenantStatement(db: Db, id: string, version: number, values: { status?: TenantStatus, suspendedReason?: string | null, slug?: string }): Statement {
+export function updateTenantStatement(db: Db, id: string, version: number, values: { status?: TenantStatus, suspendedReason?: string | null, slug?: string, name?: string, logoAssetId?: string | null }): Statement {
   return db.update(organization)
     .set({ ...values, version: version + 1 })
     .where(and(eq(organization.id, id), sql`coalesce(${organization.version}, 1) = ${version}`))

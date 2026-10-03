@@ -51,7 +51,7 @@ describe('public API rate limits (D121)', () => {
 
   it('the quote rule comes first, so it wins over the general prefix', () => {
     expect(RATE_LIMIT_RULES[0].prefix).toBe('/api/public/checkout/quote')
-    expect(RATE_LIMIT_RULES.every(rule => rule.prefix.startsWith('/api/public/') || rule.prefix === '/api/tables/')).toBe(true)
+    expect(RATE_LIMIT_RULES.every(rule => rule.prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/'].includes(rule.prefix))).toBe(true)
   })
 
   it('counts every cafe\'s public routes and the table scan by one address (D140)', async () => {

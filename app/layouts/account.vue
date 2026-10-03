@@ -6,6 +6,9 @@
 import { useAccountHome } from '~/features/account'
 
 const home = useAccountHome()
+// The cafe the person came from (D143): its name and logo above the form.
+const fallback = useRuntimeConfig().public.defaultTenant
+const { name, logoUrl } = useCafe(() => splitTenantUrl(home.value)?.slug ?? fallback)
 </script>
 
 <template>
@@ -16,11 +19,11 @@ const home = useAccountHome()
           :to="home"
           class="flex items-center gap-2 font-semibold text-highlighted"
         >
-          <UIcon
-            name="i-lucide-coffee"
-            class="size-5 text-primary"
+          <CafeLogo
+            :url="logoUrl"
+            class="size-5"
           />
-          NUK Cafe
+          {{ name }}
         </NuxtLink>
         <UColorModeButton />
       </div>

@@ -12,6 +12,7 @@ const tenantPath = useTenantPath()
 const sidebarItems = computed(() => withActiveItem(allItems, splitTenantUrl(route.path)?.path ?? route.path)
   .map(group => group.map(item => (typeof item.to === 'string' ? { ...item, to: tenantPath(item.to) } : item))))
 const open = ref(false)
+const cafe = useCafe()
 // The help assistant (D109): only where an AI key is set.
 const assistant = useAssistant()
 
@@ -47,11 +48,14 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
           :to="tenantPath('/admin')"
           class="flex items-center gap-2 font-semibold"
         >
-          <UIcon
-            name="i-lucide-coffee"
-            class="size-5 shrink-0 text-primary"
+          <CafeLogo
+            :url="cafe.logoUrl.value"
+            class="size-5"
           />
-          <span v-if="!collapsed">NUK Cafe Admin</span>
+          <span
+            v-if="!collapsed"
+            class="truncate"
+          >{{ cafe.name.value }} Admin</span>
         </NuxtLink>
       </template>
 

@@ -78,6 +78,41 @@ describe('each cafe at its own address', () => {
   })
 })
 
+describe('each cafe by its own name (D143)', () => {
+  it('names itself on its menu and in its profile', async () => {
+    const profile = async (slug: string) => (await fetch(url(`/api/cafes/${slug}`))).json()
+    expect(await profile('nuk')).toEqual({ slug: 'nuk', name: 'NUK Cafe', logoUrl: null, status: 'active' })
+    expect(await profile(cafe.slug)).toMatchObject({ slug: cafe.slug, name: 'Brown Bean' })
+    expect((await fetch(url('/api/cafes/nowhere'))).status).toBe(404)
+    // A paused cafe still has a profile: its pages name it.
+    expect(await profile('quiet-corner')).toMatchObject({ name: 'Quiet Corner', status: 'suspended' })
+
+    const brown = await (await fetch(url(`/c/${cafe.slug}`))).text()
+    expect(brown).toContain('<title>Menu · Brown Bean</title>')
+    expect(brown).not.toContain('NUK Cafe')
+  })
+
+  it('an address that names no cafe says so', async () => {
+    const page = await createPage()
+    for (const path of ['/c/nowhere', '/c/nowhere/admin']) {
+      await page.goto(url(path))
+      await page.getByRole('heading', { name: 'Cafe not found' }).waitFor()
+      expect(await page.getByRole('button', { name: /Back to/ }).count()).toBe(0)
+    }
+  })
+
+  it('a paused cafe says so, by name, to customers and to its staff', async () => {
+    const page = await createPage()
+    expect((await page.goto(url('/c/quiet-corner')))?.status()).toBe(403)
+    await page.getByRole('heading', { name: 'Ordering is paused' }).waitFor()
+    await page.getByText('Quiet Corner isn\'t taking orders at the moment.').waitFor()
+    await expect.poll(() => page.title()).toBe('Ordering is paused · Quiet Corner')
+    await page.goto(url('/c/quiet-corner/admin'))
+    await page.getByRole('heading', { name: 'This cafe is paused' }).waitFor()
+    await page.getByText(/Quiet Corner is paused by the platform team/).waitFor()
+  })
+})
+
 describe('one account, two cafes', () => {
   it('sees each cafe\'s own orders only', async () => {
     const cookie = await signIn(seed.customers.cafeHopper)
