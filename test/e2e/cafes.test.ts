@@ -3,7 +3,7 @@ import { describe, expect, inject, it } from 'vitest'
 import type { CheckoutQuote, CustomerOrders, Order } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
 import { setupE2e } from './support/mock-api'
-import { clientHeaders } from './support/client-address'
+import { asNewVisitor, clientHeaders } from './support/client-address'
 import { e2eDatabase } from './support/database'
 
 await setupE2e()
@@ -141,5 +141,30 @@ describe('one account, two cafes', () => {
     const elsewhere = await fetch(url(`/api/c/${cafe.slug}/counter/me`), { headers: { cookie } })
     expect([elsewhere.status, (await elsewhere.json()).data.code]).toEqual([403, 'NOT_STAFF'])
     expect((await fetch(url(`/api/c/${cafe.slug}/counter/${seed.openBranchId}/orders`), { headers: { cookie } })).status).toBe(404)
+  })
+})
+
+describe('your cafes (D144)', () => {
+  it('lists each account\'s own cafes and what it may open there', async () => {
+    const cafesOf = async (cookie: string) => (await (await fetch(url('/api/me/cafes'), { headers: { cookie } })).json() as { slug: string, workspaces: string[] }[])
+      .map(({ slug, workspaces }) => ({ slug, workspaces }))
+    expect((await fetch(url('/api/me/cafes'))).status).toBe(401)
+    expect(await cafesOf(await signIn(seed.customers.beanOwner))).toEqual([{ slug: cafe.slug, workspaces: ['admin', 'counter'] }])
+    expect(await cafesOf(await signIn(seed.customers.cashier))).toEqual([{ slug: 'nuk', workspaces: ['counter'] }])
+    expect(await cafesOf(await signIn(seed.customers.verified))).toEqual([])
+  })
+
+  it('an owner who signs in at another cafe\'s admin moves on to their own from Your cafes', async () => {
+    const page = await createPage()
+    await asNewVisitor(page)
+    await page.goto(url('/c/nuk/admin/login'), { waitUntil: 'hydration' })
+    await page.getByLabel('Email').fill(seed.customers.beanOwner.email)
+    await page.getByLabel('Password', { exact: true }).fill(seed.customers.beanOwner.password)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.getByText('This account doesn\'t manage this cafe.', { exact: false }).waitFor()
+    await page.getByRole('link', { name: 'Your cafes' }).click()
+    await page.getByRole('link', { name: 'Admin, Brown Bean' }).click()
+    await page.waitForURL(address => address.pathname === `/c/${cafe.slug}/admin`)
+    await page.getByRole('link', { name: 'Brown Bean Admin' }).waitFor()
   })
 })

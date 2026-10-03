@@ -12,7 +12,7 @@
 - [`<SearchInput>`](#searchinput)
 - [`<ListEmptyState>`](#listemptystate)
 - [Keyboard shortcuts: `usePageShortcuts`, `useSubmitShortcut`, `<ShortcutsHelp>`](#keyboard-shortcuts)
-- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127), [`useCenteredTab`](#usecenteredtab), [`<ListPagination>`](#listpagination), [`<QuantityStepper>`](#quantitystepper) (D128), [`<QrCode>`](#qrcode) (D130), [`<ImageInput>`](#imageinput), [`useCafe` and `<CafeLogo>`](#usecafe-and-cafelogo) (D143)
+- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127), [`useCenteredTab`](#usecenteredtab), [`<ListPagination>`](#listpagination), [`<QuantityStepper>`](#quantitystepper) (D128), [`<QrCode>`](#qrcode) (D130), [`<ImageInput>`](#imageinput), [`useCafe` and `<CafeLogo>`](#usecafe-and-cafelogo) (D143), [Your cafes and the switcher](#your-cafes-and-the-switcher) (D144)
 
 ---
 
@@ -616,6 +616,37 @@ const { name, logoUrl } = useCafe()
 ```
 
 Never write a cafe's name into a page: every cafe on the platform renders the same code.
+
+---
+
+## Your cafes and the switcher
+
+The cafes the signed-in account works in (D144), from `GET /api/me/cafes`: each cafe's profile and the workspaces it may open there (`admin` for an owner, `counter` for an owner or branch staff), paused cafes included. **Another cafe always opens as a full page load** (`external` on the link): sessions, query data and drafts belong to the cafe of the address (D141).
+
+Source: `app/utils/account-cafes.ts` (auto-imported); the cafe feature's `useAccountCafes()` (query `cafe:mine`) and `<CafeSwitcher>` (`~/features/cafe`).
+
+```vue
+<script setup lang="ts">
+import { useAccountCafes } from '~/features/cafe'
+
+const slug = useTenantSlug()
+const { data: cafes } = useAccountCafes()
+const others = computed(() => otherCafes(cafes.value, slug.value, 'counter'))
+</script>
+
+<template>
+  <UButton v-for="cafe in others" :key="cafe.slug" :label="cafe.name" :to="workspaceUrl(cafe.slug, 'counter')" external />
+</template>
+```
+
+| Piece | Description |
+|---|---|
+| `fetchAccountCafes()` | `AccountCafe[]` by name; throws `ApiError` (401 signed out) |
+| `otherCafes(cafes, slug, workspace)` | The active cafes other than `slug` whose `workspace` opens |
+| `workspaceUrl(slug, workspace)` | `/c/<slug>/admin` or `/c/<slug>/counter` |
+| `worksElsewhere(slug, workspace)` | Whether the account opens `workspace` at another active cafe (any failure: `false`); the sign-ins ask it after a 403 and keep the session with code `WORKS_ELSEWHERE` |
+| `CAFES_PATH` | `/cafes`, Your cafes |
+| `<CafeSwitcher workspace home collapsed>` | The cafe's logo and name with "Admin"/"Counter"; a menu of the other cafes and All your cafes when there are any, else a link to `home` |
 
 ---
 

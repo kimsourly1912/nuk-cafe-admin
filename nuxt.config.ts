@@ -210,6 +210,8 @@ export default defineNuxtConfig({
     // The platform console (D142): the platform team's session, no search engines.
     '/platform': { ssr: false },
     '/platform/**': { ssr: false },
+    // Your cafes (T2c, D144): the signed-in account's own list, read in the browser.
+    '/cafes': { ssr: false },
     // A cafe's menu (D122): the same page for everyone (the account is read in the browser), so
     // one render serves every visitor for a minute, refreshed in the background; cached per address,
     // so per cafe. Rendering it costs ~10× the menu data. Sold-out marks and the open state can lag
@@ -225,6 +227,8 @@ export default defineNuxtConfig({
     '/api/c/*/shop/**': { auth: 'user' },
     // The platform console's API (D142): super admins only, checked by requirePlatformPermission.
     '/api/platform/**': { auth: 'user' },
+    // The signed-in account's own cafes (T2c, D144): a session; the route lists only its own.
+    '/api/me/**': { auth: 'user' },
     // API responses are personal or change often; a public route opts in to caching explicitly.
     '/api/**': { headers: { 'cache-control': 'no-store' } },
   },

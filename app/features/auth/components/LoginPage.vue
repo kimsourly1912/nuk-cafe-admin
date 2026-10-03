@@ -14,6 +14,8 @@ const loading = ref(false)
 // Hidden by default: staff sign in at the counter, where customers can see the screen.
 const showPassword = ref(false)
 const error = ref<string>()
+/** Refused here, but the account works at another cafe (T2c, D144): the alert offers Your cafes. */
+const elsewhere = ref(false)
 
 const route = useRoute()
 const slug = useTenantSlug()
@@ -32,12 +34,14 @@ function focusFirstInvalid(event: FormErrorEvent) {
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
   error.value = undefined
+  elsewhere.value = false
   try {
     await login(event.data)
     await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
   }
   catch (e) {
     error.value = getErrorMessage(e)
+    elsewhere.value = ApiError.from(e).code === WORKS_ELSEWHERE
     await nextTick()
     errorAlert.value?.focus()
   }
@@ -80,6 +84,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
           variant="subtle"
           icon="i-lucide-circle-alert"
           :title="error"
+          :actions="elsewhere ? [{ label: 'Your cafes', icon: 'i-lucide-store', to: CAFES_PATH, color: 'error', variant: 'outline' }] : undefined"
         />
       </div>
 

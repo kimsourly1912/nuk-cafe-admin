@@ -3,7 +3,7 @@ import { dirname } from 'node:path'
 import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { eq } from 'drizzle-orm'
-import { organization, user } from '../../../server/db/tables'
+import { member, organization, user } from '../../../server/db/tables'
 import { createTable, updateBranchSettings } from '../../../server/features/branches'
 import type { Actor } from '../../../server/features/identity'
 import { createStaff } from '../../../server/features/identity'
@@ -39,7 +39,7 @@ export interface ShopSeed {
    * files run in any order, so no other file may rely on its state (`apiUnverified` is
    * shop-orders-api's, since shop-account verifies `unverified`).
    */
-  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'tableGuest' | 'cafeHopper', SeedCustomer>
+  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'tableGuest' | 'cafeHopper' | 'beanOwner', SeedCustomer>
   /** A second table at Riverside (T02), for tests that archive it. */
   spareTableToken: string
   /**
@@ -78,6 +78,8 @@ const CUSTOMERS: ShopSeed['customers'] = {
   tableGuest: { name: 'Chanthy Nob', email: 'chanthy@example.com', password: 'long-enough-password-17' },
   // Two cafes (D141): orders at Brown Bean, checked to stay out of NUK Cafe's.
   cafeHopper: { name: 'Malis Prum', email: 'malis@example.com', password: 'long-enough-password-18' },
+  // Not a customer: Brown Bean's second owner, who signs in at NUK Cafe's admin by mistake (T2c, D144).
+  beanOwner: { name: 'Bea Brown', email: 'bea@brown-bean.example', password: 'long-enough-password-19' },
   // Not a customer: the counter's cashier (step 6.3), staff at Riverside.
   cashier: { name: 'Sophea Keo', email: 'sophea@example.com', password: 'long-enough-password-10' },
 }
@@ -148,11 +150,14 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
   // without the breached-password lookup (an external API). Their queued emails carry test links.
   const auth = createTestAuth(db)
   for (const customer of Object.values(CUSTOMERS)) await auth.api.signUpEmail({ body: customer })
-  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.tableGuest, CUSTOMERS.cafeHopper, CUSTOMERS.cashier]) {
+  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.tableGuest, CUSTOMERS.cafeHopper, CUSTOMERS.cashier, CUSTOMERS.beanOwner]) {
     await db.update(user).set({ emailVerified: true }).where(eq(user.email, customer.email))
   }
   // An existing account keeps its password when it's given branch access (D49).
   await createStaff(db, actor, { name: CUSTOMERS.cashier.name, email: CUSTOMERS.cashier.email, admin: false, memberships: [{ branchId: openBranchId, role: 'staff' }] })
+  // Brown Bean's owner too (the platform console adds an existing account so, D142).
+  const [bea] = await db.select({ id: user.id }).from(user).where(eq(user.email, CUSTOMERS.beanOwner.email))
+  await db.insert(member).values({ id: crypto.randomUUID(), organizationId: 'tenant-2', userId: bea!.id, role: 'owner', createdAt: new Date() })
   await client.execute('delete from outbox_messages')
 
   client.close()

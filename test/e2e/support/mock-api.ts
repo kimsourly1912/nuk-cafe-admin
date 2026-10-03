@@ -139,6 +139,8 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /admin/menu/modifier-groups': () => [],
   // The cafe's name and logo (D143), for the sidebar, the sign-in pages and the tab title.
   'GET /cafes/nuk': () => NUK_PROFILE,
+  // The account's cafes (D144): only this one, so the sidebar shows no switcher.
+  'GET /me/cafes': () => [{ ...NUK_PROFILE, workspaces: ['admin', 'counter'] }],
   // The help assistant is off unless a test turns it on (no AI key: its routes answer 404, D109).
   'GET /admin/assistant': () => {
     throw failures.notFound('This page was not found.')
@@ -267,7 +269,7 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
     const requestUrl = new URL(request.url())
     // Keys name the route without `/api` and the cafe's address (`/api/c/<slug>`, D140): 'GET /admin/me',
     // 'GET /public/menu', 'POST /auth/sign-out', 'GET /tables/{id}'.
-    const path = requestUrl.pathname.replace(/^\/api(?:\/c\/[^/]+)?(?=\/(?:admin|public|shop|counter|auth|tables|platform|cafes)\b)/, '')
+    const path = requestUrl.pathname.replace(/^\/api(?:\/c\/[^/]+)?(?=\/(?:admin|public|shop|counter|auth|tables|platform|cafes|me)\b)/, '')
     const key = `${request.method()} ${path}`
     calls.push(key)
     // 'DELETE /admin/categories/cat-1' also matches a 'DELETE /admin/categories/{id}' handler.

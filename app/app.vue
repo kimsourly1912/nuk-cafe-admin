@@ -9,7 +9,8 @@ import { isPlatformPath } from '~/features/platform'
 const route = useRoute()
 const cafe = useCafe()
 const siteName = computed(() => {
-  if (isPlatformPath(route.path)) return 'NUK Platform'
+  // The platform console, and Your cafes, which spans cafes (D144).
+  if (isPlatformPath(route.path) || route.path === CAFES_PATH) return 'NUK Platform'
   const name = cafe.name.value
   if (isAdminPath(route.path)) return name ? `${name} Admin` : 'Admin'
   if (isCounterPath(route.path)) return name ? `${name} Counter` : 'Counter'

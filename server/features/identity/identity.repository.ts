@@ -80,3 +80,16 @@ export async function activeBranches(db: Db, tenantId: string): Promise<{ id: st
   return db.select({ id: branches.id, name: branches.name }).from(branches)
     .where(and(eq(branches.tenantId, tenantId), eq(branches.status, 'active'))).orderBy(asc(branches.name))
 }
+
+/** The tenants an account belongs to as a member, with its role there (`owner`, `member`). */
+export async function memberTenants(db: Db, userId: string): Promise<{ tenantId: string, role: string }[]> {
+  return db.select({ tenantId: member.organizationId, role: member.role }).from(member).where(eq(member.userId, userId))
+}
+
+/** The tenants where an account works at an active branch, with each role it has there. */
+export async function staffTenants(db: Db, userId: string): Promise<{ tenantId: string, role: string }[]> {
+  return db.selectDistinct({ tenantId: branchStaff.tenantId, role: branchStaff.role })
+    .from(branchStaff)
+    .innerJoin(branches, eq(branches.id, branchStaff.branchId))
+    .where(and(eq(branchStaff.userId, userId), eq(branches.status, 'active')))
+}
