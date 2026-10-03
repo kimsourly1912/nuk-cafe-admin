@@ -9,6 +9,7 @@ import type { AuditActor, AuditEntry, IdempotencyScope } from './platform.types'
 export function insertAuditStatement(db: Db, actor: AuditActor, entry: AuditEntry): Statement {
   return db.insert(auditEvents).values({
     id: newId(),
+    tenantId: actor.tenantId,
     actorId: actor.userId,
     action: entry.action,
     targetType: entry.targetType,
@@ -31,7 +32,7 @@ export async function findIdempotencyKey(db: Db, scope: IdempotencyScope): Promi
   const rows: StoredIdempotencyKey[] = await db
     .select({ requestHash: idempotencyKeys.requestHash, response: idempotencyKeys.response })
     .from(idempotencyKeys)
-    .where(and(eq(idempotencyKeys.actorId, scope.actorId), eq(idempotencyKeys.operation, scope.operation), eq(idempotencyKeys.key, scope.key)))
+    .where(and(eq(idempotencyKeys.tenantId, scope.tenantId), eq(idempotencyKeys.actorId, scope.actorId), eq(idempotencyKeys.operation, scope.operation), eq(idempotencyKeys.key, scope.key)))
     .limit(1)
   return rows[0]
 }

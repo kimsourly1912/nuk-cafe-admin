@@ -4,6 +4,8 @@ import type { Statement } from '#server/utils/batch'
 export interface AuditActor {
   /** `null`: the system (seed task, scheduled jobs). */
   userId: string | null
+  /** The tenant it happened in (the actor's); `null`: the platform's. D139. */
+  tenantId: string | null
   requestId?: string
 }
 
@@ -17,8 +19,10 @@ export interface AuditEntry {
   metadata?: Record<string, unknown>
 }
 
-/** An idempotent action's scope: one key per actor and operation. */
+/** An idempotent action's scope: one key per tenant, actor and operation (D139). */
 export interface IdempotencyScope {
+  /** The tenant the action runs in: the same key in another cafe is another action. */
+  tenantId: string
   actorId: string
   /** e.g. `orders.place`, `loyalty.exchange`. */
   operation: string

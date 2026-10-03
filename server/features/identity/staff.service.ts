@@ -244,5 +244,5 @@ export async function seedTenant(db: Db, input: { name: string, slug: string }):
  */
 export async function seedFirstOwner(db: Db, tenantId: string, input: { name: string, email: string }): Promise<CreatedStaff | null> {
   if (await repo.countOwners(db, tenantId) > 0) return null
-  return createStaffAs(db, { userId: null }, tenantId, { ...input, email: input.email.trim().toLowerCase(), admin: true, memberships: [] })
+  return createStaffAs(db, { userId: null, tenantId }, tenantId, { ...input, email: input.email.trim().toLowerCase(), admin: true, memberships: [] })
 }

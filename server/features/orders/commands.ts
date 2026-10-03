@@ -51,7 +51,7 @@ export async function runOrderCommand(db: Db, command: OrderCommand, plan: (orde
   try {
     await withIdempotency(
       db,
-      { actorId: actor.userId, operation: `orders.${command.operation}`, key: command.key },
+      { tenantId: actor.tenantId, actorId: actor.userId, operation: `orders.${command.operation}`, key: command.key },
       { orderId, ...command.request },
       async () => {
         const order = await repo.findOrder(db, actor.tenantId, orderId)

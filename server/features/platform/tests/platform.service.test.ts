@@ -15,13 +15,14 @@ let db: Db
 
 beforeEach(async () => {
   db = await createTestDb()
+  await ensureTenant(db)
 })
 
 /** A stand-in action: one audit row per run, so "ran once" is a row count. */
-const scope = { actorId: 'user-1', operation: 'test.action', key: '5a7e1b0c-2d1f-4f9a-9d8e-3c2b1a0f9e8d' }
+const scope = { tenantId: TEST_TENANT, actorId: 'user-1', operation: 'test.action', key: '5a7e1b0c-2d1f-4f9a-9d8e-3c2b1a0f9e8d' }
 function action(label: string) {
   return async () => ({
-    statements: [auditStatement(db, { userId: 'user-1' }, { action: 'test.action', targetType: 'thing', targetId: label })],
+    statements: [auditStatement(db, { userId: 'user-1', tenantId: TEST_TENANT }, { action: 'test.action', targetType: 'thing', targetId: label })],
     response: { label, id: newId() },
   })
 }
@@ -41,10 +42,10 @@ function meetingPoint(count: number) {
 const auditCount = async () => (await db.select({ n: count() }).from(auditEvents))[0]!.n
 
 describe('audit', () => {
-  it('records actor, request id, branch and metadata', async () => {
-    await db.batch([auditStatement(db, { userId: 'user-1', requestId: 'req-1' }, { action: 'menu.item.update', targetType: 'menu_item', targetId: 'item-1', branchId: 'branch-1', metadata: { fields: ['name'] } })])
+  it('records actor, tenant, request id, branch and metadata', async () => {
+    await db.batch([auditStatement(db, { userId: 'user-1', tenantId: TEST_TENANT, requestId: 'req-1' }, { action: 'menu.item.update', targetType: 'menu_item', targetId: 'item-1', branchId: 'branch-1', metadata: { fields: ['name'] } })])
     const [row] = await db.select().from(auditEvents)
-    expect(row).toMatchObject({ actorId: 'user-1', requestId: 'req-1', action: 'menu.item.update', targetType: 'menu_item', targetId: 'item-1', branchId: 'branch-1', metadata: { fields: ['name'] } })
+    expect(row).toMatchObject({ tenantId: TEST_TENANT, actorId: 'user-1', requestId: 'req-1', action: 'menu.item.update', targetType: 'menu_item', targetId: 'item-1', branchId: 'branch-1', metadata: { fields: ['name'] } })
     expect(row!.at).toBeInstanceOf(Date)
   })
 })
@@ -78,6 +79,19 @@ describe('idempotency', () => {
     await withIdempotency(db, scope, { amount: 5 }, action('a'))
     await withIdempotency(db, { ...scope, actorId: 'user-2' }, { amount: 5 }, action('b'))
     await withIdempotency(db, { ...scope, operation: 'test.other' }, { amount: 5 }, action('c'))
+    expect(await auditCount()).toBe(3)
+  })
+
+  it('keeps keys apart per tenant: the same account and key in another cafe is another action (D139)', async () => {
+    await ensureTenant(db, 'tenant-2')
+    const first = await withIdempotency(db, scope, { amount: 5 }, action('a'))
+    // The same request there runs (no replay of this cafe's answer)…
+    const elsewhere = await withIdempotency(db, { ...scope, tenantId: 'tenant-2' }, { amount: 5 }, action('b'))
+    expect(elsewhere).toMatchObject({ replayed: false, response: { label: 'b' } })
+    // …and a different one with the same key in a third cafe isn't a mismatch with either.
+    await ensureTenant(db, 'tenant-3')
+    await expect(withIdempotency(db, { ...scope, tenantId: 'tenant-3' }, { amount: 6 }, action('c'))).resolves.toMatchObject({ replayed: false })
+    expect(await withIdempotency(db, scope, { amount: 5 }, action('d'))).toEqual({ response: first.response, replayed: true })
     expect(await auditCount()).toBe(3)
   })
 

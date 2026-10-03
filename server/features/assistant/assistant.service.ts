@@ -28,12 +28,12 @@ const DAY_MS = 86_400_000
 export const PROVIDER_TIMEOUT_MS = 30_000
 
 /**
- * Takes one of the admin's slots for today, or refuses with 429 `AI_LIMIT_REACHED`. Returns the
- * usage row's id, to finish once the provider has answered.
+ * Takes one of the admin's slots for today in this cafe (D139), or refuses with 429
+ * `AI_LIMIT_REACHED`. Returns the usage row's id, to finish once the provider has answered.
  */
 export async function startUsage(db: Db, actor: Actor, settings: AssistantSettings, feature: AssistantFeature, now = new Date()): Promise<string> {
   const id = newId()
-  const usage: repo.NewUsage = { id, userId: actor.userId, day: localDate(now, ASSISTANT_TIME_ZONE), feature, provider: settings.provider, model: settings.model, at: now }
+  const usage: repo.NewUsage = { id, tenantId: actor.tenantId, userId: actor.userId, day: localDate(now, ASSISTANT_TIME_ZONE), feature, provider: settings.provider, model: settings.model, at: now }
   await runBatch(db, repo.reserveUsageStatements(db, usage, settings.dailyLimit), () => aiLimitReached(settings.dailyLimit))
   return id
 }
@@ -154,5 +154,5 @@ export async function chatWithAssistant(db: Db, actor: Actor, settings: Assistan
 
 /** `GET /api/admin/assistant`: the limit and how much of it the admin used today. */
 export async function assistantStatus(db: Db, actor: Actor, settings: AssistantSettings, now = new Date()): Promise<AssistantStatus> {
-  return { dailyLimit: settings.dailyLimit, usedToday: await repo.countUsage(db, actor.userId, localDate(now, ASSISTANT_TIME_ZONE)) }
+  return { dailyLimit: settings.dailyLimit, usedToday: await repo.countUsage(db, actor.tenantId, actor.userId, localDate(now, ASSISTANT_TIME_ZONE)) }
 }

@@ -61,7 +61,7 @@ function categoriesOfItems(categories: PublicMenuCategory[]): Map<string, { id: 
 export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, idempotencyKey: string, now = new Date()): Promise<{ orderId: string, replayed: boolean }> {
   const { response, replayed } = await withIdempotency(
     db,
-    { actorId: actor.userId, operation: 'orders.place', key: idempotencyKey },
+    { tenantId: actor.tenantId, actorId: actor.userId, operation: 'orders.place', key: idempotencyKey },
     input,
     async () => {
       const menu = await getPublicMenu(db, actor.tenantId, { branchId: input.branchId }, now)

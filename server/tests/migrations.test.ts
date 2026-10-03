@@ -339,3 +339,57 @@ describe('0027_telegram_tenants', () => {
     expect((await client.execute('select count(*) as n from organization')).rows[0]!.n).toBe(0)
   })
 })
+
+describe('0028_platform_tenants', () => {
+  const TENANT = '01a0fdb3-d860-7284-bc6b-2f8ab7a1d6cd'
+  const before = async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0028_platform_tenants.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    return { client, files, at }
+  }
+
+  it('gives idempotency keys, assistant usage, the sample-data run and audit events the tenant, and scopes keys and runs by it', async () => {
+    const { client, files, at } = await before()
+    await client.batch([
+      `insert into organization (id, name, slug, created_at, status, version) values ('${TENANT}', 'NUK Cafe', 'nuk', 1, 'active', 1)`,
+      `insert into user (id, name, email, role) values ('u1', 'Owner', 'owner@example.com', 'customer')`,
+      `insert into idempotency_keys (id, actor_id, operation, key, request_hash, response, expires_at) values ('k1', 'u1', 'orders.place', 'key-1', 'h', '{}', 10)`,
+      `insert into assistant_usage (id, user_id, day, feature, provider, model) values ('a1', 'u1', '2026-10-03', 'chat', 'openai', 'm')`,
+      `insert into sample_data_runs (id, size, started_by, started_at) values ('menu', 'small', 'u1', 1)`,
+      `insert into audit_events (id, actor_id, action, target_type) values ('e1', 'u1', 'menu.item.update', 'menu_item'), ('e2', null, 'orders.order.expire', 'order')`,
+    ], 'write')
+
+    await applyMigration(client, files[at]!)
+    const all = async (sql: string) => (await client.execute(sql)).rows.map(row => ({ ...row }))
+
+    for (const table of ['idempotency_keys', 'assistant_usage', 'sample_data_runs', 'audit_events']) {
+      expect(await all(`select distinct tenant_id from ${table}`), table).toEqual([{ tenant_id: TENANT }])
+    }
+    expect(await all('select id, key, response from idempotency_keys')).toEqual([{ id: 'k1', key: 'key-1', response: '{}' }])
+    expect(await all(`select name from sqlite_master where instr(sql, '__new_') > 0`)).toEqual([])
+    expect(await all('pragma foreign_key_check')).toEqual([])
+
+    // Another tenant may use the same key and its own sample-data run; the same tenant may not.
+    await client.execute(`insert into organization (id, name, slug, created_at) values ('t2', 'Other', 'other', 2)`)
+    await client.batch([
+      `insert into idempotency_keys (id, tenant_id, actor_id, operation, key, request_hash, expires_at) values ('k2', 't2', 'u1', 'orders.place', 'key-1', 'h', 10)`,
+      `insert into sample_data_runs (tenant_id, id, size, started_by, started_at) values ('t2', 'menu', 'large', 'u1', 2)`,
+    ], 'write')
+    await expect(client.execute(`insert into idempotency_keys (id, tenant_id, actor_id, operation, key, request_hash, expires_at) values ('k3', '${TENANT}', 'u1', 'orders.place', 'key-1', 'h', 10)`)).rejects.toThrow(/UNIQUE/)
+    await expect(client.execute(`insert into sample_data_runs (tenant_id, id, size, started_by, started_at) values ('${TENANT}', 'menu', 'large', 'u1', 2)`)).rejects.toThrow(/UNIQUE/)
+    await expect(client.execute(`insert into assistant_usage (id, tenant_id, user_id, day, feature, provider, model) values ('a2', 'nope', 'u1', '2026-10-03', 'chat', 'openai', 'm')`)).rejects.toThrow(/FOREIGN KEY/)
+    // Usage still goes with its account.
+    await client.execute(`delete from user where id = 'u1'`)
+    expect(await all('select count(*) as n from assistant_usage')).toEqual([{ n: 0 }])
+    for (const file of files.slice(at + 1)) await applyMigration(client, file)
+  })
+
+  it('leaves an empty database without a tenant', async () => {
+    const { client, files, at } = await before()
+    await applyMigration(client, files[at]!)
+    expect((await client.execute('select count(*) as n from organization')).rows[0]!.n).toBe(0)
+  })
+})

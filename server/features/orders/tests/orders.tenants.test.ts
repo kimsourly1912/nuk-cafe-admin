@@ -1,16 +1,20 @@
+import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { KhqrSettingsInput } from '#shared/contracts/orders'
+import { itemSalesQuerySchema, orderHistoryQuerySchema, reportPeriodQuerySchema } from '#shared/contracts/reports'
 import { updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { getExchangeRates, getCounterOrder, listCounterQueue, payOrder, setExchangeRate } from '#server/features/orders/counter.service'
 import { createKhqrCharge, getKhqrSettings, saveKhqrSettings } from '#server/features/orders/khqr.service'
 import { cancelMyOrder, getOrder, listMyOrders, placeOrder } from '#server/features/orders/orders.service'
-import { orderHistoryDetail } from '#server/features/orders/reports.service'
+import { itemSalesExport, itemSalesReport, orderHistory, orderHistoryDetail, orderHistoryExport, reportBranches, reportMessage, reportSummary, summaryExport } from '#server/features/orders/reports.service'
+import { auditEvents, idempotencyKeys } from '#server/features/platform/platform.schema'
 import { createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
+import { parseInput } from '#server/utils/validation'
 
 /**
  * Tenant isolation for orders, the riel rate and the KHQR settings (D137, multi-tenant plan →
@@ -37,7 +41,8 @@ async function cafe(tenantId: string) {
   const item = await publishItem(db, owner, draft.id, { version: draft.version })
   const cashier: BranchActor = { userId: (await createUser(db, `cashier@${tenantId}.example`, 'Cashier')).id, tenantId, role: 'member', branchId, branchRole: 'staff' }
   const customer: Actor = { userId: customerId, tenantId, role: 'customer' }
-  const place = async (at = NOON) => (await placeOrder(db, customer, { branchId, tableToken: null, lines: [{ itemId: item.id, variationId: item.variations[0]!.id, modifierIds: [], quantity: 1, note: null }], expectedTotalMinor: 875 }, crypto.randomUUID(), at)).orderId
+  const order = { branchId, tableToken: null, lines: [{ itemId: item.id, variationId: item.variations[0]!.id, modifierIds: [], quantity: 1, note: null }], expectedTotalMinor: 875 }
+  const place = async (at = NOON, key: string = crypto.randomUUID()) => (await placeOrder(db, customer, order, key, at)).orderId
   return { owner, branchId, cashier, customer, place }
 }
 
@@ -115,5 +120,51 @@ describe('orders tenants', () => {
     expect(charge.merchantName).toBe('NUK Cafe')
     // Our QR can't pay their order.
     await expectApiError(() => payOrder(db, theirs.cashier, theirOrder, { version: 1, method: 'khqr', chargeId: charge.id, reference: null }, crypto.randomUUID(), monday('12:05')), 409, 'KHQR_CHARGE_INVALID')
+  })
+
+  it('keeps reports to the cafe: its own branches and sales, another cafe\'s branch not found', async () => {
+    const order = await ours.place()
+    await payOrder(db, ours.cashier, order, { version: 1, method: 'cash_usd' }, crypto.randomUUID(), monday('12:05'))
+    const DAY = '2026-09-28'
+    const period = (branchId: string) => parseInput(reportPeriodQuerySchema, { branchId, from: DAY, to: DAY })
+    const items = (branchId: string) => parseInput(itemSalesQuerySchema, { branchId, from: DAY, to: DAY })
+    const history = (branchId: string) => parseInput(orderHistoryQuerySchema, { branchId, from: DAY, to: DAY })
+    const later = monday('13:00')
+
+    expect((await reportBranches(db, OTHER, later)).map(b => b.id)).toEqual([theirs.branchId])
+    expect((await reportSummary(db, TEST_TENANT, period(ours.branchId), later)).paid).toMatchObject({ salesMinor: 875, orders: 1 })
+    expect((await reportSummary(db, OTHER, period(theirs.branchId), later)).paid).toMatchObject({ salesMinor: 0, orders: 0 })
+    expect((await itemSalesReport(db, OTHER, items(theirs.branchId), later)).items).toEqual([])
+    expect((await orderHistory(db, OTHER, history(theirs.branchId), later)).orders).toEqual([])
+
+    // Our branch asked for in their cafe: not found, for every report, export and message.
+    await expectApiError(() => reportSummary(db, OTHER, period(ours.branchId), later), 404, 'NOT_FOUND')
+    await expectApiError(() => itemSalesReport(db, OTHER, items(ours.branchId), later), 404, 'NOT_FOUND')
+    await expectApiError(() => orderHistory(db, OTHER, history(ours.branchId), later), 404, 'NOT_FOUND')
+    await expectApiError(() => summaryExport(db, OTHER, period(ours.branchId), later), 404, 'NOT_FOUND')
+    await expectApiError(() => itemSalesExport(db, OTHER, items(ours.branchId), later), 404, 'NOT_FOUND')
+    await expectApiError(() => orderHistoryExport(db, OTHER, history(ours.branchId), later), 404, 'NOT_FOUND')
+    await expectApiError(() => reportMessage(db, OTHER, { kind: 'summary', query: { branchId: ours.branchId, from: DAY, to: DAY } }, { attachCsv: true }, later), 404, 'NOT_FOUND')
+  })
+
+  it('scopes an idempotency key to the cafe: the same key places an order at each (D139)', async () => {
+    const key = crypto.randomUUID()
+    const first = await ours.place(NOON, key)
+    const second = await theirs.place(NOON, key)
+    expect(second).not.toBe(first)
+    expect((await getOrder(db, theirs.customer, second)).id).toBe(second)
+    // A retry in our cafe still replays ours.
+    expect(await ours.place(NOON, key)).toBe(first)
+    expect((await db.select().from(idempotencyKeys)).map(k => k.tenantId).sort()).toEqual([TEST_TENANT, OTHER].sort())
+  })
+
+  it('records the cafe on every audit row an action writes (D139)', async () => {
+    await setExchangeRate(db, theirs.owner, { khrPerUsd: 4000 }, monday('09:00'))
+    await setExchangeRate(db, ours.owner, { khrPerUsd: 4100 }, monday('09:00'))
+    const order = await theirs.place()
+    await payOrder(db, theirs.cashier, order, { version: 1, method: 'cash_usd' }, crypto.randomUUID(), monday('12:05'))
+    const rates = await db.select().from(auditEvents).where(eq(auditEvents.action, 'orders.exchange_rate.set'))
+    expect(rates.map(r => [r.actorId, r.tenantId]).sort()).toEqual([[ours.owner.userId, TEST_TENANT], [theirs.owner.userId, OTHER]].sort())
+    expect((await db.select().from(auditEvents).where(eq(auditEvents.targetId, order))).map(r => r.tenantId)).toEqual([OTHER])
   })
 })

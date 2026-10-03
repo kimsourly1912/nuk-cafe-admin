@@ -1,4 +1,5 @@
 import { Api } from 'grammy'
+import { eq } from 'drizzle-orm'
 import type { Update } from 'grammy/types'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { updateBranchSettings } from '#server/features/branches'
@@ -7,6 +8,7 @@ import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { placeOrder } from '#server/features/orders'
 import { deliverySnapshot, listDeliveries, queueOrderAlert, queueServerErrorAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
 import { notificationDeliveries, telegramDestinations } from '#server/features/notifications/notifications.schema'
+import { auditEvents } from '#server/features/platform/platform.schema'
 import { cancelLink, confirmLink, createLink, disconnectDestination, getLink, handleUpdate, listDestinations, sendTestMessage, telegramOverview } from '#server/features/notifications/notifications.service'
 import type { TelegramSettings } from '#server/features/notifications/notifications.settings'
 import { createAdmin, createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
@@ -95,6 +97,15 @@ describe('telegram tenants', () => {
     await expectApiError(() => getLink(db, sameAccountElsewhere, link.id, now), 404, 'NOT_FOUND')
     await expectApiError(() => confirmLink(db, sameAccountElsewhere, link.id, now), 404, 'NOT_FOUND')
     expect((await getLink(db, ours, link.id, now)).status).toBe('waiting')
+  })
+
+  it('audits a chat connected from Telegram in the link\'s cafe (no session there, D139)', async () => {
+    const link = await createLink(db, theirs, SETTINGS, { kind: 'private' }, now)
+    const code = new URL(link.url).searchParams.get('start')
+    const chat = { id: 777, type: 'private' as const, first_name: 'Dara' }
+    await handleUpdate(db, telegram.api, SETTINGS, { update_id: updateId++, message: { message_id: updateId, date: 0, chat, from: { id: 777, is_bot: false, first_name: 'Dara' }, text: `/start ${code}` } } as Update, later(1))
+    const audit = await db.select().from(auditEvents).where(eq(auditEvents.action, 'notifications.telegram.connect'))
+    expect(audit.map(a => [a.actorId, a.tenantId])).toEqual([[theirs.userId, OTHER]])
   })
 
   it('lets one Telegram group follow two cafes, and leaves it only when neither uses it', async () => {

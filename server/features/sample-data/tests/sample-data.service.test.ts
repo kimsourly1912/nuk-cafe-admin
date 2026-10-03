@@ -7,10 +7,10 @@ import type { Actor } from '#server/features/identity'
 import { mediaAssets } from '#server/features/media/media.schema'
 import { createCategory, createItem, listCategories, listItems, listSoldOut } from '#server/features/menu'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { loadSampleBranch, loadSampleMenuStep, resetSampleMenu } from '#server/features/sample-data/sample-data.service'
+import { getSampleDataState, loadSampleBranch, loadSampleMenuStep, resetSampleMenu } from '#server/features/sample-data/sample-data.service'
 import { claimRun } from '#server/features/sample-data/sample-data.repository'
 import { itemsForSize, SAMPLE_TABLES } from '#server/features/sample-data/sample-data.catalog'
-import { createTestDb, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -108,10 +108,29 @@ describe('the sample menu', () => {
     expect(croissants[0]!.status).toBe('active')
   })
 
+  it('keeps each cafe\'s load to itself: another cafe starts, locks and resets its own (D139)', async () => {
+    await ensureTenant(db, 'tenant-2')
+    const theirs: Actor = { ...admin, userId: 'admin-2', tenantId: 'tenant-2' }
+    await loadSampleMenuStep(db, admin, { size: 'small' }, ENV)
+    // Our unfinished Small load neither blocks nor sizes theirs.
+    expect((await getSampleDataState(db, 'tenant-2', ENV)).menu.run).toBeNull()
+    const state = await loadSampleMenuStep(db, theirs, { size: 'standard' }, ENV)
+    expect(state.menu.run).toMatchObject({ size: 'standard', finished: false })
+    // Our step lock doesn't stop theirs.
+    const now = new Date()
+    expect(await claimRun(db, TEST_TENANT, now, new Date(now.getTime() + 60_000))).toBe(true)
+    await expect(loadSampleMenuStep(db, theirs, { size: 'standard' }, ENV, now)).resolves.toBeTruthy()
+    await expectApiError(() => loadSampleMenuStep(db, admin, { size: 'small' }, ENV, now), 409, 'SAMPLE_DATA_BUSY')
+    // Their reset forgets their load only.
+    await resetSampleMenu(db, theirs, { put: async () => {}, del: async () => {} }, ENV, now)
+    expect((await getSampleDataState(db, 'tenant-2', ENV)).menu.run).toBeNull()
+    expect((await getSampleDataState(db, TEST_TENANT, ENV)).menu.run).toMatchObject({ size: 'small', finished: false })
+  })
+
   it('runs one step at a time: a step while another holds the load is refused', async () => {
     await loadSampleMenuStep(db, admin, { size: 'small' }, ENV)
     const now = new Date()
-    expect(await claimRun(db, now, new Date(now.getTime() + 60_000))).toBe(true)
+    expect(await claimRun(db, TEST_TENANT, now, new Date(now.getTime() + 60_000))).toBe(true)
     await expectApiError(() => loadSampleMenuStep(db, admin, { size: 'small' }, ENV, now), 409, 'SAMPLE_DATA_BUSY')
     await expectApiError(() => resetSampleMenu(db, admin, { put: async () => {}, del: async () => {} }, ENV, now), 409, 'SAMPLE_DATA_BUSY')
     // A lock left by a crashed step frees itself.

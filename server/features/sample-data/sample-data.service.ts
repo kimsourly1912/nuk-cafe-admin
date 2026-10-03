@@ -129,7 +129,7 @@ const isEmpty = (counts: MenuDataCounts) =>
 // --- State ---
 
 export async function getSampleDataState(db: Db, tenantId: string, environment: string): Promise<SampleDataState> {
-  const [counts, photos, run, branches] = await Promise.all([countMenuData(db, tenantId), countUploads(db, tenantId), repo.findRun(db), listBranchOptions(db, tenantId)])
+  const [counts, photos, run, branches] = await Promise.all([countMenuData(db, tenantId), countUploads(db, tenantId), repo.findRun(db, tenantId), listBranchOptions(db, tenantId)])
   const summaries = await Promise.all(branches.map(async (branch) => {
     const [settings, labels] = await Promise.all([getBranchSettings(db, tenantId, branch.id), activeTableLabels(db, tenantId, branch.id)])
     return { id: branch.id, name: branch.name, hoursSet: settings.hours.length > 0, tables: labels.length }
@@ -153,23 +153,23 @@ export async function getSampleDataState(db: Db, tenantId: string, environment: 
  * state; `run.finished` says when to stop.
  */
 export async function loadSampleMenuStep(db: Db, actor: Actor, input: LoadSampleMenuInput, environment: string, now = new Date()): Promise<SampleDataState> {
-  let run = await repo.findRun(db)
+  let run = await repo.findRun(db, actor.tenantId)
   if (!run) {
     if (!isEmpty(await countMenuData(db, actor.tenantId))) throw menuNotEmpty()
-    await repo.insertRun(db, { size: input.size, startedBy: actor.userId, now })
-    run = await repo.findRun(db)
+    await repo.insertRun(db, actor.tenantId, { size: input.size, startedBy: actor.userId, now })
+    run = await repo.findRun(db, actor.tenantId)
     if (!run) throw sampleDataBusy()
   }
   if (run.finishedAt) throw menuAlreadyLoaded()
   if (run.size !== input.size) throw otherSizeRunning(run.size)
-  if (!await repo.claimRun(db, now, new Date(now.getTime() + LOCK_MS))) throw sampleDataBusy()
+  if (!await repo.claimRun(db, actor.tenantId, now, new Date(now.getTime() + LOCK_MS))) throw sampleDataBusy()
 
   let finished = false
   try {
     finished = await nextMenuStep(db, actor, run.size)
   }
   finally {
-    await repo.releaseRun(db, finished ? new Date() : undefined)
+    await repo.releaseRun(db, actor.tenantId, finished ? new Date() : undefined)
   }
   return getSampleDataState(db, actor.tenantId, environment)
 }
@@ -273,13 +273,13 @@ export async function loadSampleBranch(db: Db, actor: Actor, input: LoadSampleBr
  * is loading.
  */
 export async function resetSampleMenu(db: Db, actor: Actor, store: ObjectStore, environment: string, now = new Date()): Promise<SampleDataState> {
-  const run = await repo.findRun(db)
+  const run = await repo.findRun(db, actor.tenantId)
   if (run?.lockedUntil && run.lockedUntil > now) throw sampleDataBusy()
   const counts = await countMenuData(db, actor.tenantId)
   if (!isEmpty(counts) || run) {
     const statements: Statement[] = [
       ...deleteAllMenuStatements(db, actor.tenantId),
-      repo.deleteRunStatement(db),
+      repo.deleteRunStatement(db, actor.tenantId),
       auditStatement(db, actor, { action: 'sample-data.reset', targetType: 'menu', targetId: 'menu', metadata: { ...counts } }),
     ]
     await db.batch(statements as [Statement, ...Statement[]])

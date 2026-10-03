@@ -83,7 +83,7 @@ describe('expiring unpaid orders (D104)', () => {
 
     expect((await eventsOf(late)).at(-1)).toMatchObject({ toVersion: 2, actorId: null, fromStatus: 'awaiting_payment', toStatus: 'cancelled', reason: null, note: EXPIRY_NOTE })
     const [audit] = await db.select().from(auditEvents).where(eq(auditEvents.targetId, late))
-    expect(audit).toMatchObject({ action: 'orders.order.expire', actorId: null, branchId })
+    expect(audit).toMatchObject({ action: 'orders.order.expire', actorId: null, tenantId: TEST_TENANT, branchId })
     // The customer sees it cancelled.
     expect(await getOrder(db, sokha, late)).toMatchObject({ status: 'cancelled', cancelledAt: monday('11:40').toISOString() })
   })
