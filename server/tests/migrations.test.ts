@@ -432,3 +432,20 @@ describe('0029_nuk_address', () => {
     expect(await slugs(empty.client)).toEqual([])
   })
 })
+
+describe('0030_platform_console', () => {
+  it('puts every cafe\'s current address in the address history', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0030_platform_console.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    await client.execute(`insert into organization (id, name, slug, created_at) values ('t1', 'NUK Cafe', 'nuk', 1), ('t2', 'Brown Bean', 'brown-bean', 2)`)
+    await applyMigration(client, files[at]!)
+    const rows = (await client.execute('select slug, tenant_id from tenant_slugs order by slug')).rows.map(row => ({ ...row }))
+    expect(rows).toEqual([{ slug: 'brown-bean', tenant_id: 't2' }, { slug: 'nuk', tenant_id: 't1' }])
+    // The address is the key: a second cafe can't take it.
+    await expect(client.execute(`insert into tenant_slugs (slug, tenant_id) values ('nuk', 't2')`)).rejects.toThrow(/UNIQUE/)
+    for (const file of files.slice(at + 1)) await applyMigration(client, file)
+  })
+})

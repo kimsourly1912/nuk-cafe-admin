@@ -11,8 +11,12 @@ const ADMIN_HELPERS = ['requirePermission(', 'requireSampleData(', 'requireAssis
 // `requireTenant` or a helper that calls it. A route that skipped it would ignore the address.
 const TENANT_HELPERS = ['requireTenant(', 'requirePermission(', 'requireBranchPermission(', 'requireCustomer(', 'requireSignedIn(', 'requireSampleData(', 'requireAssistant(']
 
+// The platform console (D142): every route checks the platform role; none acts in a cafe.
+const PLATFORM_HELPERS = ['requirePlatformPermission(', 'platformSession(']
+
 const apiDir = fileURLToPath(new URL('../api', import.meta.url))
 const cafeDir = join(apiDir, 'c', '[slug]')
+const platformDir = join(apiDir, 'platform')
 const adminDir = join(cafeDir, 'admin')
 const routeFiles = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
   .flatMap(entry => entry.isDirectory() ? routeFiles(join(dir, entry.name)) : entry.name.endsWith('.ts') ? [join(dir, entry.name)] : [])
@@ -46,8 +50,21 @@ describe('cafe routes (D140)', () => {
   })
 
   it('routes outside a cafe\'s address never act in one', () => {
-    const global = routeFiles(apiDir).filter(file => !file.startsWith(cafeDir))
+    const global = routeFiles(apiDir).filter(file => !file.startsWith(cafeDir) && !file.startsWith(platformDir))
     expect(global.map(file => file.slice(apiDir.length + 1)).sort()).toEqual(['[...].ts', 'health.get.ts', 'tables/[token].get.ts', 'webhooks/telegram.post.ts'])
     expect(global.filter(file => calls(file, TENANT_HELPERS))).toEqual([])
+  })
+})
+
+describe('platform routes (D142)', () => {
+  const files = routeFiles(platformDir)
+
+  it('are found', () => {
+    expect(files.length).toBeGreaterThanOrEqual(7)
+  })
+
+  it.each(files.map(file => [file.slice(platformDir.length + 1), file]))('%s checks the platform role and acts in no cafe', (_name, file) => {
+    expect(calls(file, PLATFORM_HELPERS)).toBe(true)
+    expect(calls(file, TENANT_HELPERS)).toBe(false)
   })
 })

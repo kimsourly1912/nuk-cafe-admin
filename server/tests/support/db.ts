@@ -6,6 +6,7 @@ import { drizzle } from 'drizzle-orm/libsql'
 import type { Db } from '#server/utils/batch'
 import { and, eq } from 'drizzle-orm'
 import { branches, branchStaff, member, organization, user } from '#server/db/tables'
+import { tenantSlugs } from '#server/features/tenants/tenants.schema'
 
 const migrationsDir = fileURLToPath(new URL('../../../server/db/migrations/sqlite', import.meta.url))
 
@@ -85,6 +86,8 @@ export const TEST_TENANT = 'tenant-1'
 /** A tenant (a Better Auth organization), once per database. */
 export async function ensureTenant(db: Db, id = TEST_TENANT, slug = id) {
   await db.insert(organization).values({ id, name: `Cafe ${id}`, slug, status: 'active', createdAt: new Date() }).onConflictDoNothing()
+  // Its address in the address history, as the platform console keeps it (D142).
+  await db.insert(tenantSlugs).values({ slug, tenantId: id }).onConflictDoNothing()
   return id
 }
 

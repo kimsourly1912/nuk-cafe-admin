@@ -4,7 +4,7 @@ import type { BranchRoleName, StaffListQuery } from '#shared/contracts/staff'
 import type { Db, Statement } from '#server/utils/batch'
 import { insertPieces, readInChunks, requireCount } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
-import { account, branches, branchStaff, member, organization, session, user } from '#server/db/tables'
+import { account, branches, branchStaff, member, session, user } from '#server/db/tables'
 
 /**
  * Staff queries (D49, D134): a tenant's staff are its members (Better Auth's `member`, `owner` or
@@ -227,12 +227,22 @@ export async function countOwners(db: Db, tenantId: string): Promise<number> {
   return rows[0]?.total ?? 0
 }
 
-/** A tenant for the seed task (D134): an organization, when none exists. */
-export async function findAnyTenant(db: Db): Promise<{ id: string, name: string, slug: string } | undefined> {
-  const rows = await db.select({ id: organization.id, name: organization.name, slug: organization.slug }).from(organization).orderBy(asc(organization.createdAt)).limit(1)
-  return rows[0]
+/** People with access per tenant (owners and branch staff are all members), for the platform console (D142). */
+export async function memberCounts(db: Db, tenantIds: string[]): Promise<{ tenantId: string, total: number }[]> {
+  return readInChunks(tenantIds, ids => db.select({ tenantId: member.organizationId, total: count() }).from(member)
+    .where(inArray(member.organizationId, ids))
+    .groupBy(member.organizationId))
 }
 
-export function insertTenantStatement(db: Db, row: { id: string, name: string, slug: string, now: Date }): Statement {
-  return db.insert(organization).values({ id: row.id, name: row.name, slug: row.slug, status: 'active', version: 1, createdAt: row.now })
+/** A tenant's owners, by name (the platform console's cafe details, D142). */
+export async function ownersOf(db: Db, tenantId: string): Promise<{ id: string, name: string, email: string }[]> {
+  return db.select({ id: user.id, name: user.name, email: user.email }).from(member)
+    .innerJoin(user, eq(user.id, member.userId))
+    .where(and(eq(member.organizationId, tenantId), eq(member.role, 'owner')))
+    .orderBy(asc(user.name), asc(user.email))
+}
+
+/** Makes an account a super admin, unless it already is (the seed task, D142). */
+export function grantSuperadminStatement(db: Db, userId: string): Statement {
+  return db.update(user).set({ role: 'superadmin' }).where(and(eq(user.id, userId), sql`coalesce(${user.role}, 'customer') <> 'superadmin'`))
 }

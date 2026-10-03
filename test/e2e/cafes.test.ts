@@ -4,6 +4,7 @@ import type { CheckoutQuote, CustomerOrders, Order } from '#shared/contracts/ord
 import type { PublicMenu } from '#shared/contracts/public-menu'
 import { setupE2e } from './support/mock-api'
 import { clientHeaders } from './support/client-address'
+import { e2eDatabase } from './support/database'
 
 await setupE2e()
 
@@ -50,6 +51,21 @@ describe('each cafe at its own address', () => {
     expect(await moved('/admin/products?item=i1')).toBe('/c/nuk/admin/products?item=i1')
     expect(await moved(`/counter/${seed.openBranchId}?order=o1`)).toBe(`/c/nuk/counter/${seed.openBranchId}?order=o1`)
     expect(await moved('/checkout')).toBe('/c/nuk/checkout')
+  })
+
+  it('an address a cafe had before redirects to its current one (D142)', async () => {
+    const client = e2eDatabase(seed.dbFile)
+    try {
+      // As the platform console records a change of address: the old one stays the cafe's.
+      await client.execute({ sql: 'insert or ignore into tenant_slugs (slug, tenant_id) values (?, ?)', args: ['brown-bean-old', 'tenant-2'] })
+    }
+    finally {
+      client.close()
+    }
+    const moved = await fetch(url('/c/brown-bean-old/checkout?table=1'), { redirect: 'manual' })
+    expect([moved.status, moved.headers.get('location')]).toEqual([302, `/c/${cafe.slug}/checkout?table=1`])
+    // The platform console's API is the platform team's only.
+    expect((await fetch(url('/api/platform/me'))).status).toBe(401)
   })
 
   it('a table\'s QR code opens its own cafe\'s menu, at that table', async () => {

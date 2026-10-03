@@ -38,6 +38,23 @@ export async function seedDemoBranch(db: Db, tenantId: string, input: { timezone
   return { id: branch.id, name: branch.name }
 }
 
+/**
+ * A new cafe's first branch (the platform console, D142), as a statement for the caller's batch:
+ * the cafe and its branch are saved together. An unknown time zone is refused here, before anything
+ * is written.
+ */
+export function firstBranchStatement(db: Db, input: { tenantId: string, name: string, timezone: string, now: Date }): { id: string, statement: Statement } {
+  if (!isKnownTimeZone(input.timezone)) throw unknownTimezone(input.timezone)
+  const id = newId()
+  return { id, statement: repo.insertBranchStatement(db, { id, ...input }) }
+}
+
+/** Active branches per cafe, for the platform console's usage numbers (D142); 0 when none. */
+export async function activeBranchCounts(db: Db, tenantIds: string[]): Promise<Map<string, number>> {
+  const rows = await repo.activeBranchCounts(db, tenantIds)
+  return new Map(rows.map(row => [row.tenantId, row.total]))
+}
+
 /** Active branches (id and name), for pickers such as the staff form's. */
 export async function listBranchOptions(db: Db, tenantId: string): Promise<repo.BranchOptionRow[]> {
   return repo.listActiveBranches(db, tenantId)

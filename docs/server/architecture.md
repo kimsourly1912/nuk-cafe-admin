@@ -46,6 +46,7 @@ Routes are Nuxt file routes, **unversioned** (the apps deploy together with the 
 | `/api/auth/**` (platform) | anyone | Better Auth owns it | sign-up, sign-in, sign-out, verify email, reset password |
 | `/api/tables/{token}` (platform) | anyone | none; read-only | a scanned table QR: the table, branch and cafe (D140; a printed code names no cafe) |
 | `/api/health` (platform) | the deploy's smoke check | none | 200 when the database answers |
+| `/api/platform/**` (platform) | a super admin (`superadmin` on the user) | session + platform role (`requirePlatformPermission`) | the platform console (D142): `GET/POST …/platform/tenants`, `POST …/platform/tenants/{id}/suspend`, `/resume`, `/slug`; never a cafe's menu, orders or customers |
 | `/api/c/<slug>/public/**` | anyone | none; read-only | `GET …/public/menu`, `GET …/public/branches`, `POST …/public/checkout/quote` (a read: a POST only because the lines don't fit a query string, D98) |
 | `/api/c/<slug>/shop/**` | signed-in customer (verified email for writes) | session | `GET …/shop/me`, `POST …/shop/orders` (with `Idempotency-Key`), `GET …/shop/orders/{id}` (own orders only, D99); later `GET …/shop/points` |
 | `/api/c/<slug>/counter/{branchId}/**` | the cafe's branch `manager` / `staff`, or an owner | session + branch membership | `POST …/counter/{branchId}/orders/{orderId}/ready` |

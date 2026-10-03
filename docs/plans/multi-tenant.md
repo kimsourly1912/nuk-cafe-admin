@@ -139,10 +139,12 @@ the server), so the API paths can stay while the columns arrive feature by featu
 | T1.2 ✅ | Menu and media: `tenant_id`, composite keys (`branch_item_states` → its variation too), R2 key prefix (D136, migration `0025_menu_tenants`) | Isolation tests (guard removed → fail) |
 | T1.3 ✅ | Orders' reads scoped (their `tenant_id` exists since T1.1), customer profiles, KHQR settings, the riel rate (D137, migration `0026_tenant_settings`) | Isolation tests; race tests still pass |
 | T1.4a ✅ | Telegram and notifications, the outbox's tenant (D138, migration `0027_telegram_tenants`) | Isolation tests |
-| T1.4b | Reports (an isolation test), the assistant, sample data, audit, idempotency (D139, migration `0028_platform_tenants`) | Isolation tests |
-| T1.5a | The API under the cafe's address (D140): routes in `server/api/c/[slug]/`, `requireTenant` from the path (unknown 404, paused 403), `apiFetch` adds the prefix (`apiPath`; NUK Cafe's `nuk` until pages carry one), the table scan and health global (`/api/tables/{token}`, `/api/health`), rate limits per address across cafes | Server tests (the lookup, the scan, every cafe route resolves its cafe); the full suite; staging's API at `/api/c/nuk` |
-| T1.5b | Pages (D141): `/c/<slug>` pages, the prefix from the page's address, `tenantPath`, the lint rule, `/` and old paths redirect, `/table/<token>` to its cafe's menu, unknown or paused cafes' pages refused; server-built links (Telegram buttons; the assistant's pages get the address in the app); the menu cache per address, so per tenant. Browser storage stays as it is: the table, the branch and the cart are keyed or guarded by branch, and branch ids are unique across cafes | e2e on a seeded database with two cafes; the full suite; staging works at `/c/nuk` |
-| T2 | (mockup round first: [frame prompts](#ui-frames-for-t2)) The platform console, Choose a cafe and the switcher, Cafe profile, not-found and paused pages, each tenant's Bakong token encrypted in the database (AES-GCM, the key a Worker secret) with its reminders | e2e; staging: create a second cafe and use it end to end |
+| T1.4b ✅ | Reports (an isolation test), the assistant, sample data, audit, idempotency (D139, migration `0028_platform_tenants`) | Isolation tests |
+| T1.5a ✅ | The API under the cafe's address (D140): routes in `server/api/c/[slug]/`, `requireTenant` from the path (unknown 404, paused 403), `apiFetch` adds the prefix (`apiPath`; NUK Cafe's `nuk` until pages carry one), the table scan and health global (`/api/tables/{token}`, `/api/health`), rate limits per address across cafes | Server tests (the lookup, the scan, every cafe route resolves its cafe); the full suite; staging's API at `/api/c/nuk` |
+| T1.5b ✅ | Pages (D141): `/c/<slug>` pages, the prefix from the page's address, `tenantPath`, the lint rule, `/` and old paths redirect, `/table/<token>` to its cafe's menu, unknown or paused cafes' pages refused; server-built links (Telegram buttons; the assistant's pages get the address in the app); the menu cache per address, so per tenant. Browser storage stays as it is: the table, the branch and the cart are keyed or guarded by branch, and branch ids are unique across cafes | e2e on a seeded database with two cafes; the full suite; staging works at `/c/nuk` |
+| T2a | The platform console (D142; the owner skipped the mockup round, 2026-10-03): `/platform` with its own sign-in, Cafes (status, usage, search), New cafe with its first branch and owner, a cafe's page (change the address with the old one redirecting, pause with a reason, resume); `tenant_slugs` keeps every address a cafe has had | Server tests incl. races; e2e; staging: a super admin set by hand creates a second cafe |
+| T2b | Choose a cafe and the switcher, Cafe profile (name, logo), the cafe not-found and Ordering is paused pages | e2e |
+| T2c | Each cafe's own Bakong token, encrypted in the database (AES-GCM, the key a Worker secret), with its reminders | Server tests; staging |
 | T3 | After the commercial plan is confirmed: self sign-up and trial, plans and limits, manual billing, then the rest | Owner's go |
 
 After T1, the agreed customer features are built tenant-aware: **KHQR payment on the customer's
@@ -151,10 +153,9 @@ location and Directions** (maps step A).
 
 ## UI frames for T2
 
-The owner generates frames with ChatGPT from the prompts given on 2026-10-02 (shared context, then:
-Platform → Cafes; New cafe and its result; Cafe details with Suspend and Change web address; Choose a
-cafe and the switcher; Admin → Cafe profile; Cafe not found and Ordering is paused), then the review
-round of feature-standard.md. T1 has no new screens.
+The owner generated frames from the prompts given on 2026-10-02 and decided against them
+(2026-10-03: "they look bad; you decide the design"): T2's screens follow the UI standard's page
+patterns and Nuxt UI's defaults instead (D142), and the owner reviews them on staging.
 
 ## Choices made, and open questions
 

@@ -1,7 +1,8 @@
 import type { Workspace } from '#shared/contracts/account'
 import type { AdminSession, CounterSession } from '#shared/contracts/identity'
+import type { PlatformSession } from '#shared/contracts/tenants'
 import type { Db } from '#server/utils/batch'
-import { branchNotFound, emailNotVerified, forbidden, notAdmin, notStaff, passwordChangeRequired, tenantNotFound, tenantSuspended, unauthenticated } from './identity.errors'
+import { branchNotFound, emailNotVerified, forbidden, notAdmin, notPlatformAdmin, notStaff, passwordChangeRequired, tenantNotFound, tenantSuspended, unauthenticated } from './identity.errors'
 import { branchRoles, platformRoles, tenantRoles, tenantStatements } from './identity.permissions'
 import type { BranchPermission, BranchRole, PlatformPermission, PlatformRole, TenantPermission, TenantRole } from './identity.permissions'
 import * as repo from './identity.repository'
@@ -163,4 +164,15 @@ export async function workspacesOf(db: Db, user: SessionUser, tenantId: string):
   if (tenantRoleOf(await repo.findTenantRole(db, tenantId, user.id)) === 'owner') return ['admin', 'counter']
   const staff = await repo.staffBranches(db, tenantId, user.id)
   return staff.some(m => m.role in branchRoles) ? ['counter'] : []
+}
+
+/**
+ * The platform console's session check (`GET /api/platform/me`, D142): a super admin, **including
+ * one still on a temporary password** (the console then asks for a new one; every other platform
+ * route refuses). Not signed in or banned: 401. Signed in, not a super admin: 403 `NOT_PLATFORM_ADMIN`.
+ */
+export function platformSession(user: SessionUser | null | undefined): PlatformSession {
+  if (!user || user.banned) throw unauthenticated()
+  if (!platformRolesOf(user).includes('superadmin')) throw notPlatformAdmin()
+  return { userId: user.id, email: user.email ?? '', name: user.name ?? '', mustChangePassword: Boolean(user.mustChangePassword) }
 }

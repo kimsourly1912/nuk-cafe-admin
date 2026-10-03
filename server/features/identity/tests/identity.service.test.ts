@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { branches, member, organization } from '#server/db/tables'
 import { eq } from 'drizzle-orm'
 import { newId } from '#server/utils/ids'
-import { adminSession, authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, counterSession, currentTenant, tenantBySlug, workspacesOf } from '#server/features/identity/identity.service'
+import { adminSession, authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, counterSession, currentTenant, platformSession, tenantBySlug, workspacesOf } from '#server/features/identity/identity.service'
 import type { SessionUser } from '#server/features/identity/identity.types'
 import { addBranchStaff, createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
@@ -114,6 +114,16 @@ describe('platform surface (T2)', () => {
     expect(authorizePlatform(superadmin, { tenant: ['create'] })).toEqual({ userId: superadmin.id })
     await expectApiError(async () => authorizePlatform(await person('owner'), { tenant: ['read'] }), 403, 'FORBIDDEN')
     await expectApiError(async () => authorizePlatform(null, { tenant: ['read'] }), 401, 'UNAUTHENTICATED')
+  })
+
+  it('the console\'s session check: a super admin, also on a temporary password; nobody else (D142)', async () => {
+    const superadmin = { ...(await person()), role: 'superadmin' }
+    expect(platformSession(superadmin)).toEqual({ userId: superadmin.id, email: superadmin.email, name: 'Test User', mustChangePassword: false })
+    expect(platformSession({ ...superadmin, mustChangePassword: true }).mustChangePassword).toBe(true)
+    // An owner of a cafe is not on the platform team.
+    await expectApiError(async () => platformSession(await person('owner')), 403, 'NOT_PLATFORM_ADMIN')
+    await expectApiError(async () => platformSession({ ...superadmin, banned: true }), 401, 'UNAUTHENTICATED')
+    await expectApiError(async () => platformSession(null), 401, 'UNAUTHENTICATED')
   })
 })
 

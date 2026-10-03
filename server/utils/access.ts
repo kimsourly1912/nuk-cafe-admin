@@ -1,6 +1,7 @@
 import type { H3Event } from 'h3'
-import { authorizeBranch, authorizeCustomer, authorizeSignedIn, authorizeTenant, tenantBySlug } from '#server/features/identity'
-import type { Actor, BranchActor, BranchPermission, SessionUser, TenantPermission } from '#server/features/identity'
+import { authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, tenantBySlug } from '#server/features/identity'
+import type { Actor, BranchActor, BranchPermission, PlatformPermission, SessionUser, TenantPermission } from '#server/features/identity'
+import type { PlatformActor } from '#server/features/tenants'
 import { useDb } from './db'
 
 /**
@@ -62,4 +63,13 @@ export async function requirePermission(event: H3Event, permissions: TenantPermi
 export async function requireBranchPermission(event: H3Event, branchId: string, permissions: BranchPermission): Promise<BranchActor> {
   const tenant = await requireTenant(event)
   return { ...await authorizeBranch(useDb(), await sessionUser(event), tenant.id, branchId, permissions), requestId: requestIdOf(event) }
+}
+
+/**
+ * `/api/platform`: a super admin whose platform role grants the actions, e.g. `{ tenant: ['create'] }`
+ * (the platform console, D142). No tenant: the console acts on cafes by id, and never reads a
+ * cafe's menu, orders or customers.
+ */
+export async function requirePlatformPermission(event: H3Event, permissions: PlatformPermission): Promise<PlatformActor> {
+  return { ...authorizePlatform(await sessionUser(event), permissions), requestId: requestIdOf(event) }
 }

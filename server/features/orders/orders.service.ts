@@ -237,3 +237,13 @@ export async function cancelMyOrder(db: Db, actor: Actor, orderId: string, input
   })
   return getOrder(db, actor, orderId)
 }
+
+/**
+ * The platform console's usage numbers (D142): per cafe, orders placed in the last 30 days and when
+ * the last one was. Cafes without orders are absent from the map.
+ */
+export async function orderActivity(db: Db, tenantIds: string[], now = new Date()): Promise<Map<string, { recent: number, lastPlacedAt: Date | null }>> {
+  const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+  const rows = await repo.orderActivity(db, tenantIds, since)
+  return new Map(rows.map(({ tenantId, ...activity }) => [tenantId, activity]))
+}

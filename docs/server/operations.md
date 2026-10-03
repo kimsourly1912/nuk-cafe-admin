@@ -50,7 +50,15 @@ npx wrangler d1 execute nuk-cafe-staging --remote --command "INSERT INTO organiz
 npx wrangler d1 execute nuk-cafe-staging --remote --command "INSERT INTO member (id, organization_id, user_id, role, created_at) SELECT lower(hex(randomblob(16))), o.id, u.id, 'owner', unixepoch() * 1000 FROM organization o, user u WHERE o.slug = 'nuk' AND u.email = 'you@example.com'"
 ```
 
-Everyone else is added from the Staff page; branches come from the seed locally, or an insert into `branches` with the tenant's id. The global `admin` role is gone (D135): `superadmin` is the platform team's, set the same way on `user.role` when the platform console exists (T2).
+Everyone else is added from the Staff page; branches come from the seed locally, or an insert into `branches` with the tenant's id. The global `admin` role is gone (D135): `superadmin` is the platform team's (below). Since `0030` a cafe made by hand also needs its address in the history: `INSERT INTO tenant_slugs (slug, tenant_id) SELECT slug, id FROM organization WHERE slug = 'nuk'`. Any further cafe is made in the platform console, which does all of it.
+
+**Super admins (the platform console, `/platform`, D142):** an account on the platform team. Locally the seed task makes its first owner one. On staging (and later production) it's set by hand on an existing account, once, in the D1 console (Cloudflare dashboard → D1 → `nuk-cafe-staging` → Console) or with Wrangler:
+
+```bash
+npx wrangler d1 execute nuk-cafe-staging --remote --command "UPDATE user SET role = 'superadmin' WHERE email = 'you@example.com'"
+```
+
+Then sign in at `/platform/sign-in`. A super admin sees each cafe's usage numbers, never its menu, orders or customers. To take it away: `SET role = 'customer'`. Keep the team small: a super admin can create cafes with owners, pause any cafe and change its address.
 
 **Migration `0024_tenants` (D135)** rebuilds the branch and order tables. Before the deploy that carries it, note the time for a D1 Time Travel restore (Restore drill below); after it, admin sign-in, the menu, a dine-in order and the counter are checked by hand.
 
@@ -59,6 +67,8 @@ Everyone else is added from the Staff page; branches come from the seed locally,
 **Migration `0026_tenant_settings` (D137)** rebuilds `customer_profiles`, `khqr_settings` and `exchange_rates` with the tenant. Same routine; afterwards: the account menu's member code (unchanged), Payments (the riel rate and the KHQR settings as before), a riel cash payment and a KHQR at the counter.
 
 **Migration `0027_telegram_tenants` (D138)** rebuilds the Telegram tables with the tenant and names the tenant on the orders' outbox events. Same routine; afterwards: the Telegram page (chats, switches, delivery history as before), Send test, and an order placed and paid: its new-order and payment alerts arrive.
+
+**Migration `0030_platform_console` (D142)** adds `tenant_slugs` (every cafe's current address copied in), `organization.suspended_reason` and an index on orders by cafe and time. Nothing is rebuilt; afterwards `/c/nuk` and the admin work as before.
 
 **Migration `0028_platform_tenants` (D139)** rebuilds `idempotency_keys`, `assistant_usage` and `sample_data_runs` with the tenant and gives `audit_events` a tenant column (every existing event NUK Cafe's). Same routine; afterwards: an admin change (a menu item saved), the assistant (a question, "used today" as before), Sample data (the page's state as before), and an order placed and paid at the counter.
 

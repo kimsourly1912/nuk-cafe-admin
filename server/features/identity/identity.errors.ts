@@ -10,11 +10,17 @@ export const IdentityErrorCodes = {
   NOT_STAFF: 'NOT_STAFF',
   /** The cafe in the path is paused by the platform (D134, D140). */
   TENANT_SUSPENDED: 'TENANT_SUSPENDED',
+  /** Signed in, but not on the platform team: no platform console (D142). */
+  NOT_PLATFORM_ADMIN: 'NOT_PLATFORM_ADMIN',
 } as const
 
 /** Signed in, but not an owner of the cafe: the admin app is owners only for now (D52, D134). */
 export const notAdmin = () =>
   apiError(403, IdentityErrorCodes.NOT_ADMIN, 'This account doesn\'t have access to the admin app.')
+
+/** Signed in, but not a super admin: the platform console is the platform team's (D142). */
+export const notPlatformAdmin = () =>
+  apiError(403, IdentityErrorCodes.NOT_PLATFORM_ADMIN, 'This account doesn\'t have access to the platform console.')
 
 export const passwordChangeRequired = () =>
   apiError(403, ErrorCodes.PASSWORD_CHANGE_REQUIRED, 'Change your temporary password to continue.')

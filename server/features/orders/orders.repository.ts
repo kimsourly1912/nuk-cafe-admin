@@ -335,3 +335,15 @@ export async function unpaidCount(db: Db, tenantId: string, customerId: string, 
     .where(and(eq(orders.tenantId, tenantId), eq(orders.customerId, customerId), eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now)))
   return row?.count ?? 0
 }
+
+/**
+ * Per cafe: orders placed since `since`, and when the last one was placed (the platform console's
+ * usage numbers, D142). Counts only: a super admin never sees the orders themselves.
+ */
+export async function orderActivity(db: Db, tenantIds: string[], since: Date): Promise<{ tenantId: string, recent: number, lastPlacedAt: Date | null }[]> {
+  return readInChunks(tenantIds, ids => db.select({
+    tenantId: orders.tenantId,
+    recent: sql<number>`sum(case when ${orders.placedAt} >= ${since.getTime()} then 1 else 0 end)`.mapWith(Number),
+    lastPlacedAt: sql<Date | null>`max(${orders.placedAt})`.mapWith(orders.placedAt),
+  }).from(orders).where(inArray(orders.tenantId, ids)).groupBy(orders.tenantId))
+}
