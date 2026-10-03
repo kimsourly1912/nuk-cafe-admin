@@ -92,6 +92,7 @@ A tenant's `owner` has every branch permission in every branch of that tenant: *
 | `requireBranchPermission(event, branchId, { order: ['cancel'] })` | `/api/counter/{branchId}` | 401; 403 `PASSWORD_CHANGE_REQUIRED`; **404** for an unknown or archived branch, **another tenant's branch**, a branch the caller doesn't work at, or an unknown role; 403 `FORBIDDEN` for staff whose role lacks the action. The tenant's owners pass in every active branch of the tenant |
 | `requireCustomer(event)` | `/api/shop` writes | 401; 403 `PASSWORD_CHANGE_REQUIRED`; 403 `EMAIL_NOT_VERIFIED` |
 | `requireSignedIn(event)` | own-account reads | 401; 403 `PASSWORD_CHANGE_REQUIRED` |
+| `requirePlatformPermission(event, { tenant: ['create'] })` | `/api/platform` (D142) | 401; 403 `PASSWORD_CHANGE_REQUIRED`; 403 `FORBIDDEN` unless the account is a `superadmin` whose role grants the action. No tenant: the console acts on cafes by id and never reads their data. `GET /api/platform/me` uses `platformSession` (answers on a temporary password; 403 `NOT_PLATFORM_ADMIN` for everyone else) |
 
 - Each returns the **actor** (`{ userId, tenantId, role }`, plus `branchId` and `branchRole?` on the counter) that services receive: they scope every read and write to `actor.tenantId` and write it to the audit log.
 - The branch id comes from the path (`readIdParam(event, 'branchId', 'The branch')`), never from a body. Better Auth's tables use UUID v7 like ours (`advanced.database.generateId`), so `readIdParam` applies to users and tenants too.

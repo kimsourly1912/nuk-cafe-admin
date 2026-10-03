@@ -207,6 +207,9 @@ export default defineNuxtConfig({
     // The counter workspace, like the admin: the staff session, no search engines (D102).
     '/c/*/counter': { ssr: false },
     '/c/*/counter/**': { ssr: false },
+    // The platform console (D142): the platform team's session, no search engines.
+    '/platform': { ssr: false },
+    '/platform/**': { ssr: false },
     // A cafe's menu (D122): the same page for everyone (the account is read in the browser), so
     // one render serves every visitor for a minute, refreshed in the background; cached per address,
     // so per cafe. Rendering it costs ~10× the menu data. Sold-out marks and the open state can lag

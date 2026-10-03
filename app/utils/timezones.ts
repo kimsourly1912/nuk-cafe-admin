@@ -1,7 +1,7 @@
 /**
- * Time zones for the branch form, as people pick them: "(GMT+07:00) Phnom Penh", by offset, then
- * name. The browser's list (`Intl.supportedValuesOf`), plus the branch's current zone if the
- * browser doesn't list it.
+ * Time zones as people pick them: "(GMT+07:00) Phnom Penh", by offset, then name. The browser's
+ * list (`Intl.supportedValuesOf`), plus the current zone if the browser doesn't list it. Used by
+ * the branch form and a new cafe's first branch (D142).
  */
 
 export interface TimezoneOption {

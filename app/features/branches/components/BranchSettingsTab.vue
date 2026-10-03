@@ -11,7 +11,6 @@ import type { BranchSettings } from '#shared/contracts/branches'
 import { fetchBranchSettings, useBranchMutations } from '../composables/useBranches'
 import type { BranchForm } from '../schemas/branch-form'
 import { branchFormSchema, formFieldOf, isClosedAllWeek, toBranchForm, toUpdateBranchBody } from '../schemas/branch-form'
-import { cityOf, timezoneOptions, utcOffset } from '../utils/timezones'
 import BranchHoursEditor from './BranchHoursEditor.vue'
 
 const props = defineProps<{ settings: BranchSettings }>()
