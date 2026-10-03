@@ -23,7 +23,7 @@ async function openAdmin(cafes: AccountCafe[]) {
   return page
 }
 
-const switcher = (page: Page) => page.getByRole('button', { name: 'NUK Cafe Admin: switch cafe' })
+const switcher = (page: Page) => page.getByRole('button', { name: 'NUK Cafe Admin: cafe menu' })
 
 describe('the cafe switcher', () => {
   it('opens the admin of another cafe the account owns, as a full page load; Your cafes from there too', async () => {
@@ -38,14 +38,26 @@ describe('the cafe switcher', () => {
     // A full page load: the other cafe's admin starts from its own session, never this one's.
     await brown.click()
     await page.waitForURL(address => address.pathname === '/c/brown-bean/admin')
-    await page.getByRole('button', { name: 'Brown Bean Admin: switch cafe' }).waitFor()
+    await page.getByRole('button', { name: 'Brown Bean Admin: cafe menu' }).waitFor()
     expect(await page.evaluate(() => new URL((performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming).name).pathname)).toBe('/c/brown-bean/admin')
   })
 
-  it('is a plain link to the dashboard for an account with one cafe', async () => {
+  it('is a menu with one cafe too: the customer menu in a new tab and Your cafes, nothing to switch to', async () => {
     const page = await openAdmin([NUK])
-    await page.getByRole('link', { name: 'NUK Cafe Admin' }).waitFor()
-    expect(await switcher(page).count()).toBe(0)
+    await switcher(page).click()
+    const view = page.getByRole('menuitem', { name: /View menu/ })
+    expect([await view.getAttribute('href'), await view.getAttribute('target')]).toEqual(['/c/nuk', '_blank'])
+    expect(await page.getByRole('menuitem', { name: 'All your cafes' }).getAttribute('href')).toBe('/cafes')
+    expect(await page.getByText('Switch cafe').count()).toBe(0)
+  })
+
+  it('the sidebar opens the customer menu in a new tab', async () => {
+    const page = await openAdmin([NUK])
+    const view = page.getByRole('link', { name: 'View menu (opens in a new tab)' })
+    expect([await view.getAttribute('href'), await view.getAttribute('target')]).toEqual(['/c/nuk', '_blank'])
+    const [tab] = await Promise.all([page.context().waitForEvent('page'), view.click()])
+    await tab.waitForLoadState()
+    expect(new URL(tab.url()).pathname).toBe('/c/nuk')
   })
 })
 

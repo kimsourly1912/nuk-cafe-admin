@@ -13,6 +13,7 @@ import { useItemEditor } from '../composables/useItemEditor'
 import type { ItemForm } from '../schemas/item-form'
 import { ITEM_STATUS_LABELS } from '../utils/item-display'
 import ProductFormFields from './ProductFormFields.vue'
+import ViewOnMenuButton from './ViewOnMenuButton.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
 
 const props = defineProps<{
@@ -100,8 +101,17 @@ async function onSubmit() {
 
     <template #footer>
       <div class="flex w-full items-center justify-end gap-2">
+        <div
+          v-if="loaded && !saving && !uploading"
+          class="mr-auto"
+        >
+          <ViewOnMenuButton
+            :item-id="loaded.id"
+            :status="loaded.status"
+          />
+        </div>
         <span
-          v-if="saving || uploading"
+          v-else-if="saving || uploading"
           class="mr-auto text-xs text-muted"
         >
           {{ uploading ? 'Waiting for the image upload…' : 'You can close this; saving continues in the background.' }}

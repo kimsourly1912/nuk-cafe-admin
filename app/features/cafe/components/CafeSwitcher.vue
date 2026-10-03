@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * The cafe at the top of a workspace (T2c, D144): its logo and name (D143), and for an account that
- * runs more than one cafe, a menu to open the same workspace in another cafe, or Your cafes. Each
- * other cafe opens as a full page load (D141). With one cafe it's a plain link to `home`.
+ * The cafe at the top of a workspace (T2c, D144; always a menu since D145): its logo and name (D143)
+ * open a menu with the account's other cafes (the same workspace there), the cafe's customer menu
+ * in a new tab, and Your cafes. Each other cafe opens as a full page load (D141).
  *
  * @example
- * <CafeSwitcher workspace="admin" :home="tenantPath('/admin')" :collapsed="collapsed" />
+ * <CafeSwitcher workspace="admin" :collapsed="collapsed" />
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Workspace } from '#shared/contracts/account'
@@ -13,8 +13,6 @@ import { useAccountCafes } from '../composables/useAccountCafes'
 
 const props = defineProps<{
   workspace: Workspace
-  /** Where the cafe's name leads when there is no other cafe: the workspace's start page. */
-  home: string
   /** The sidebar is collapsed: the logo only. */
   collapsed?: boolean
 }>()
@@ -25,23 +23,29 @@ const { data: cafes } = useAccountCafes()
 const others = computed(() => otherCafes(cafes.value, slug.value, props.workspace))
 const suffix = computed(() => (props.workspace === 'admin' ? 'Admin' : 'Counter'))
 
+// The cafe's customer menu, opened in a new tab so the admin stays where it was (D145).
+const menuUrl = computed(() => tenantUrl(slug.value, '/'))
+
 const items = computed<DropdownMenuItem[][]>(() => [
-  [{ label: 'Switch cafe', type: 'label' }],
-  others.value.map(cafe => ({
-    label: cafe.name,
-    description: `/c/${cafe.slug}`,
-    avatar: cafe.logoUrl ? { src: cafe.logoUrl, alt: '' } : undefined,
-    icon: cafe.logoUrl ? undefined : 'i-lucide-coffee',
-    to: workspaceUrl(cafe.slug, props.workspace),
-    external: true,
-  })),
-  [{ label: 'All your cafes', icon: 'i-lucide-store', to: CAFES_PATH }],
+  ...(others.value.length
+    ? [[{ label: 'Switch cafe', type: 'label' as const }, ...others.value.map(cafe => ({
+        label: cafe.name,
+        description: `/c/${cafe.slug}`,
+        avatar: cafe.logoUrl ? { src: cafe.logoUrl, alt: '' } : undefined,
+        icon: cafe.logoUrl ? undefined : 'i-lucide-coffee',
+        to: workspaceUrl(cafe.slug, props.workspace),
+        external: true,
+      }))]]
+    : []),
+  [
+    { label: 'View menu', description: 'Opens in a new tab', icon: 'i-lucide-external-link', to: menuUrl.value, target: '_blank' },
+    { label: 'All your cafes', icon: 'i-lucide-store', to: CAFES_PATH },
+  ],
 ])
 </script>
 
 <template>
   <UDropdownMenu
-    v-if="others.length"
     :items="items"
     :content="{ align: 'start' }"
     :ui="{ content: 'min-w-60' }"
@@ -50,7 +54,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
       color="neutral"
       variant="ghost"
       :square="collapsed"
-      :aria-label="`${name} ${suffix}: switch cafe`"
+      :aria-label="`${name} ${suffix}: cafe menu`"
       class="min-w-0 font-semibold"
       :class="collapsed ? '' : 'w-full'"
     >
@@ -67,18 +71,4 @@ const items = computed<DropdownMenuItem[][]>(() => [
       </template>
     </UButton>
   </UDropdownMenu>
-  <NuxtLink
-    v-else
-    :to="home"
-    class="flex min-w-0 items-center gap-2 font-semibold"
-  >
-    <CafeLogo
-      :url="logoUrl"
-      class="size-5"
-    />
-    <span
-      v-if="!collapsed"
-      class="truncate"
-    >{{ name }} {{ suffix }}</span>
-  </NuxtLink>
 </template>

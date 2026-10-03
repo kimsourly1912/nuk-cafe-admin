@@ -646,7 +646,7 @@ const others = computed(() => otherCafes(cafes.value, slug.value, 'counter'))
 | `workspaceUrl(slug, workspace)` | `/c/<slug>/admin` or `/c/<slug>/counter` |
 | `worksElsewhere(slug, workspace)` | Whether the account opens `workspace` at another active cafe (any failure: `false`); the sign-ins ask it after a 403 and keep the session with code `WORKS_ELSEWHERE` |
 | `CAFES_PATH` | `/cafes`, Your cafes |
-| `<CafeSwitcher workspace home collapsed>` | The cafe's logo and name with "Admin"/"Counter"; a menu of the other cafes and All your cafes when there are any, else a link to `home` |
+| `<CafeSwitcher workspace collapsed>` | The cafe's logo and name with "Admin"/"Counter", always a menu (D145): the other cafes (when there are any), View menu (the customer menu in a new tab) and All your cafes |
 
 ---
 
