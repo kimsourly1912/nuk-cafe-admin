@@ -1,5 +1,5 @@
 import { useBroadcastChannel } from '@vueuse/core'
-import { isAdminPath, LOGIN_PATH, loginRedirectTarget, useAuth } from '~/features/auth'
+import { isAdminPath, loginPath, loginRedirectTarget, useAuth } from '~/features/auth'
 
 interface AuthMessage {
   event: 'login' | 'logout'
@@ -33,8 +33,9 @@ export default defineNuxtPlugin((nuxtApp) => {
     if (received?.event === 'login' && isAdminPath(router.currentRoute.value.path)) {
       await auth.fetchSession()
       const route = router.currentRoute.value
-      if (auth.isLoggedIn.value && route.path === LOGIN_PATH) {
-        await nuxtApp.runWithContext(() => navigateTo(loginRedirectTarget(route.query.redirect)))
+      const slug = splitTenantUrl(route.path)?.slug
+      if (slug && auth.isLoggedIn.value && route.path === loginPath(slug)) {
+        await nuxtApp.runWithContext(() => navigateTo(loginRedirectTarget(route.query.redirect, slug)))
       }
     }
   })

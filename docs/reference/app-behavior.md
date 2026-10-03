@@ -4,6 +4,31 @@
 
 Things the app shell does for every page, so features don't have to. Each section lists the cases it handles, and where they're tested. **If you change one of these, update the case table and its e2e test.**
 
+**Paths on this page are inside a cafe** (D141): `/admin/login` means `/c/<slug>/admin/login`, `/counter/…` means `/c/<slug>/counter/…`, the menu `/` means `/c/<slug>`.
+
+## Cafe addresses
+
+Every cafe's pages live under its address (D141, [plan](../plans/multi-tenant.md)): the menu `/c/<slug>`, `/c/<slug>/checkout`, `/c/<slug>/orders/…`, `/c/<slug>/admin/…`, `/c/<slug>/counter/…`. The platform's own pages have none: the account pages (`/sign-in`, `/sign-up`, `/verify-email`, `/email-verified`, `/forgot-password`, `/reset-password`) and a table's QR link (`/table/<token>`). Feature code names a page inside the cafe and turns it into an address with **`useTenantPath()`**:
+
+```ts
+const tenantPath = useTenantPath()
+await navigateTo(tenantPath(`/admin/add-ons/${group.id}`)) // /c/nuk/admin/add-ons/…
+```
+
+`useTenantSlug()` is the cafe of the page on screen; `tenantUrl(slug, path)` and `splitTenantUrl(url)` (`app/utils/tenant-path.ts`) are the pure versions. Features' sidebar entries (`navigation.ts`) stay inside the cafe; the layout gives them the address. A lint rule refuses a bare cafe page in a link (`to="/admin…"`, `navigateTo('/checkout')`, `{ to: '/orders' }`); API paths (`apiFetch('/admin/…')`) aren't links and get the cafe from `apiFetch` itself ([data fetching](./data-fetching.md#apifetch)).
+
+| Case | Handled | Test |
+|---|---|---|
+| A page of a cafe | Its API calls go to `/api/c/<slug>/…`: the browser reads the cafe from its own address (not the router's, which a route middleware runs ahead of), server rendering from the request's | e2e `cafes.test.ts` (both checked to fail with the default cafe instead) |
+| An address that names no cafe (`/c/nowhere`), or a paused cafe | 404 / 403 page, from the server before rendering (`server/middleware/31.cafe-pages.ts`); their own pages come in T2 | e2e `cafes.test.ts` |
+| An address from before (`/`, `/admin/…`, `/counter/…`, `/checkout`, `/orders/…`): bookmarks, Telegram messages already sent | 302 to NUK Cafe's (`NUXT_PUBLIC_DEFAULT_TENANT`), the query kept (`server/middleware/30.old-addresses.ts`) | server `old-addresses.test.ts`, e2e `cafes.test.ts` |
+| A table's QR code | `/table/<token>` asks `/api/tables/<token>`, which names the cafe; the tab keeps the table and opens that cafe's menu | e2e `cafes.test.ts` |
+| A table scanned at another cafe or branch, still in this tab | Shown and used only at its own branch (branch ids are unique across cafes); the menu shows Pickup elsewhere | e2e `shop-checkout.test.ts` |
+| The account pages (no cafe in their address) | Return to `?redirect=` when it's a cafe's customer page or a table link (never a workspace, another site or a sign-in page); "Back to the menu" is that page's cafe, else NUK Cafe's (`useAccountHome`) | unit `account.test.ts` |
+| Moving to another cafe | A full page load (the address changes before the app starts again); no in-app switch until T2 | — |
+| Telegram's buttons | Built on the server with the cafe's address (`cafeSiteUrl`) | server `notifications.delivery.test.ts` |
+
+- [Cafe addresses](#cafe-addresses): every cafe's pages under `/c/<slug>`
 - [Browser tab titles](#browser-tab-titles)
 - [Data freshness](#data-freshness): other tabs, returning to the tab, reconnect
 - [Offline banner](#offline-banner)
@@ -115,7 +140,7 @@ Every case is in [Forms: unsaved changes → Edge cases](./forms.md#edge-cases).
 | **Logged out in another tab** | This tab goes to `/admin/login?redirect=<current page>` at once. Unsaved input in this tab is lost without a dialog (the session is gone for every tab) |
 | **Logged in in another tab** | Tabs waiting on `/admin/login` continue to their `redirect` target. Logged-in tabs re-read the session (it may be a different staff member now) |
 | Session expires in one tab | Only that tab redirects. The others find out on their next request (not broadcast) |
-| After login | Back to the `redirect` page. Only admin paths: `/admin/x` is allowed; `//other-site.com`, `https://…`, a customer-site path and anything else go to `/admin` (`loginRedirectTarget`). Blocks open redirects through crafted login links |
+| After login | Back to the `redirect` page. Only this cafe's admin pages: `/c/<slug>/admin/x` is allowed; another cafe's, `//other-site.com`, `https://…`, a customer-site path and anything else go to this cafe's `/admin` (`loginRedirectTarget`). Blocks open redirects through crafted login links |
 | A customer-site tab (any path outside `/admin`, D93) | Never reads the admin session: no login redirect, no password-change redirect, and another tab's login or logout leaves it alone (`isAdminPath`; e2e `shop-menu.test.ts` checks `/admin/me` is never called) |
 
 Source: `app/utils/api-fetch.ts`, `app/plugins/api.ts`, `app/plugins/auth-sync.client.ts` (VueUse `useBroadcastChannel`, channel `nuk-cafe-admin:auth`, hook `app:auth-changed` fired by `useAuth().login/logout`), `app/plugins/session-boundary.client.ts`, `app/middleware/*.global.ts`. See [Auth](./auth.md). Tests: `test/unit/api-fetch.test.ts`; e2e `test/e2e/auth.test.ts`, `test/e2e/session.test.ts` (each checked to fail with its mechanism disabled).

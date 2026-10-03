@@ -7,6 +7,8 @@
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import { USAGE_PREVIEW, useModifierGroupItems } from '../composables/useModifierGroups'
 
+const tenantPath = useTenantPath()
+
 const props = defineProps<{ group: ModifierGroup }>()
 
 const { data, loading, error, refresh } = useModifierGroupItems(props.group.id)
@@ -48,7 +50,7 @@ const total = computed(() => data.value?.total ?? props.group.itemCount)
           :key="item.id"
         >
           <ULink
-            :to="`/admin/products?item=${item.id}`"
+            :to="tenantPath(`/admin/products?item=${item.id}`)"
             class="flex items-center gap-3 py-2.5 text-default hover:text-highlighted"
           >
             <span class="min-w-0 flex-1">
@@ -72,7 +74,7 @@ const total = computed(() => data.value?.total ?? props.group.itemCount)
       <UButton
         v-if="total > USAGE_PREVIEW || total > data.items.length"
         :label="`View all ${pluralize(total, ['menu item', 'menu items'])}`"
-        :to="`/admin/products?modifierGroupId=${group.id}`"
+        :to="tenantPath(`/admin/products?modifierGroupId=${group.id}`)"
         variant="link"
         trailing-icon="i-lucide-arrow-right"
         class="px-0"

@@ -16,19 +16,19 @@ describe('color mode', () => {
     await page.emulateMedia({ colorScheme: 'dark' })
     const problems: string[] = []
     page.on('console', message => message.type() === 'error' && problems.push(message.text()))
-    await page.goto(url('/'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
     await page.getByRole('heading', { name: 'Coffee', exact: true }).waitFor()
     expect(await isDark(page)).toBe(false)
 
     await page.locator('header').getByRole('button', { name: 'Switch to dark mode' }).click()
     await expect.poll(() => isDark(page)).toBe(true)
 
-    await page.goto(url('/'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
     expect(await isDark(page)).toBe(true)
     expect(problems).toEqual([])
 
     await mockApi(page, SIGNED_OUT)
-    await page.goto(url('/admin/login'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/login'), { waitUntil: 'hydration' })
     expect(await isDark(page)).toBe(true)
     await page.getByRole('button', { name: 'Switch to light mode' }).click()
     await expect.poll(() => isDark(page)).toBe(false)
@@ -38,7 +38,7 @@ describe('color mode', () => {
     const page = await createPage()
     await page.emulateMedia({ colorScheme: 'dark' })
     await mockApi(page, SIGNED_OUT)
-    await page.goto(url('/admin/login'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/login'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: 'Sign in' }).waitFor()
     expect(await isDark(page)).toBe(false)
   })

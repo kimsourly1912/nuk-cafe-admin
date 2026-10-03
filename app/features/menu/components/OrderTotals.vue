@@ -1,5 +1,7 @@
 <script setup lang="ts">
 /** The order's subtotal and "Review order" (`/checkout`, D100; not while closed or empty). */
+const tenantPath = useTenantPath()
+
 defineProps<{
   subtotalMinor: number
   count: number
@@ -16,7 +18,7 @@ defineProps<{
     </div>
     <UButton
       label="Review order"
-      to="/checkout"
+      :to="tenantPath('/checkout')"
       size="lg"
       block
       :disabled="closed || !count"

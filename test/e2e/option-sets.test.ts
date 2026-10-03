@@ -18,7 +18,7 @@ const TEMP = setOf('set-2', 'Temperature', [value('val-5', 'Hot', 1), value('val
 const OLD = setOf('set-3', 'Syrup (old)', [value('val-7', 'Vanilla', 1)], { status: 'archived', version: 3 })
 const MILK = setOf('set-5', 'Milk', ['Whole', 'Skim', 'Oat', 'Soy', 'Almond', 'Coconut', 'Oat barista'].map((name, i) => value(`milk-${i}`, name, i + 1)), { itemCount: 1 })
 
-async function open(sets: OptionSet[] = [SIZE, TEMP, OLD], extra: Parameters<typeof mockApi>[1] = {}, path = '/admin/options') {
+async function open(sets: OptionSet[] = [SIZE, TEMP, OLD], extra: Parameters<typeof mockApi>[1] = {}, path = '/c/nuk/admin/options') {
   const page = await createPage()
   const api = await mockApi(page, { 'GET /admin/menu/option-sets': () => sets, ...extra })
   await page.goto(url(path), { waitUntil: 'hydration' })
@@ -147,7 +147,7 @@ describe('options library', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 375, height: 812 })
     await mockApi(page, { 'GET /admin/menu/option-sets': () => [SIZE] })
-    await page.goto(url('/admin/options'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/options'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: 'New option set' }).waitFor()
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     await visible(page, 'Edit Size').click()
@@ -201,7 +201,7 @@ describe('new option set', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 375, height: 812 })
     await mockApi(page, { 'GET /admin/menu/option-sets': () => [] })
-    await page.goto(url('/admin/options'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/options'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: 'New option set' }).first().click()
     await expect.poll(async () => Math.round((await page.getByRole('dialog').boundingBox())!.width)).toBe(375)
   })
@@ -339,7 +339,7 @@ describe('option set editor', () => {
   })
 
   it('opens an archived set read-only, with Restore', async () => {
-    const { page } = await open([OLD], {}, '/admin/options?status=archived')
+    const { page } = await open([OLD], {}, '/c/nuk/admin/options?status=archived')
     const editor = await openEditor(page, 'Syrup (old)')
     await editor.getByText('Archived', { exact: true }).waitFor()
     await editor.getByRole('button', { name: 'Restore option set' }).waitFor()
@@ -492,7 +492,7 @@ describe('reordering values', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 375, height: 812 })
     await mockApi(page, { 'GET /admin/menu/option-sets': () => [SIZE], 'PUT /admin/menu/option-sets/{id}/values/order': order.handler })
-    await page.goto(url('/admin/options'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/options'), { waitUntil: 'hydration' })
     await visible(page, 'Edit Size').click()
     const editor = page.getByRole('dialog')
     await editor.getByRole('button', { name: 'Reorder' }).click()

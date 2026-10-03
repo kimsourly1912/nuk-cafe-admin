@@ -23,8 +23,8 @@ export function configureApi(fetch: ApiFetch, tenant: () => string) {
  * await apiFetch<MenuCategory>(`/admin/menu/categories/${id}`, { method: 'PATCH', body: { version, name } })
  */
 export function apiFetch<T>(path: string, options?: ApiFetchOptions): Promise<T> {
-  // Rendering on the server runs inside the page request's context, so its config is at hand.
-  if (import.meta.server) return serverFetch<T>(apiPath(path, useRuntimeConfig().public.defaultTenant), options)
+  // Rendering on the server runs inside the page request's context: its address names the cafe.
+  if (import.meta.server) return serverFetch<T>(apiPath(path, splitTenantUrl(useRequestURL().pathname)?.slug ?? useRuntimeConfig().public.defaultTenant), options)
   if (!client || !tenantOf) throw new Error('apiFetch was called before plugins/api.ts configured it.')
   return client<T>(apiPath(path, tenantOf()), options)
 }

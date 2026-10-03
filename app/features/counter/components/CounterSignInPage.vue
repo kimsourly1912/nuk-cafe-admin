@@ -20,6 +20,7 @@ const showPassword = ref(false)
 const error = ref<string>()
 
 const route = useRoute()
+const slug = useTenantSlug()
 const { signIn } = useCounterSession()
 
 // A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
@@ -36,7 +37,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   error.value = undefined
   try {
     await signIn(event.data)
-    await navigateTo(counterRedirectTarget(route.query.redirect))
+    await navigateTo(counterRedirectTarget(route.query.redirect, slug.value))
   }
   catch (e) {
     error.value = getErrorMessage(e)

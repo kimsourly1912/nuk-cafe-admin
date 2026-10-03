@@ -5,12 +5,14 @@
  */
 import { useBranchOptions } from '../composables/useBranches'
 
+const tenantPath = useTenantPath()
+
 const { data: branches, loading, error, refresh } = useBranchOptions()
 const route = useRoute()
 
 // One branch: its page is the Branch page (replace, so Back doesn't return here; `?tab=` is kept).
 watch(branches, (list) => {
-  if (list?.length === 1) navigateTo({ path: `/admin/branches/${list[0]!.id}`, query: route.query }, { replace: true })
+  if (list?.length === 1) navigateTo({ path: tenantPath(`/admin/branches/${list[0]!.id}`), query: route.query }, { replace: true })
 }, { immediate: true })
 </script>
 
@@ -51,7 +53,7 @@ watch(branches, (list) => {
           class="p-1"
         >
           <UButton
-            :to="`/admin/branches/${branch.id}`"
+            :to="tenantPath(`/admin/branches/${branch.id}`)"
             :label="branch.name"
             icon="i-lucide-map-pin"
             trailing-icon="i-lucide-chevron-right"

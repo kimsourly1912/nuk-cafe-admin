@@ -74,7 +74,7 @@ describe('following an order', () => {
   // Three real 10-second polls: longer than the default 30 s.
   it('shows waiting for payment with the time to pay, then follows the counter to picked up; Order again refills the order', { timeout: 90_000 }, async () => {
     const order = await placeOrder(seed.customers.followerA)
-    const { page, problems } = await signedIn(seed.customers.followerA, `/orders/${order.id}`)
+    const { page, problems } = await signedIn(seed.customers.followerA, `/c/nuk/orders/${order.id}`)
 
     await page.getByRole('heading', { name: `Your number ${number(order)}` }).waitFor()
     await expect.poll(() => page.getByText('Waiting for payment', { exact: true }).isVisible()).toBe(true)
@@ -99,7 +99,7 @@ describe('following an order', () => {
     await expect.poll(() => page.title()).toBe('Your order · NUK Cafe')
 
     await button(page, 'Order again').click()
-    await page.waitForURL(u => u.pathname === '/')
+    await page.waitForURL(u => u.pathname === '/c/nuk')
     await expect.poll(() => page.getByText('Added 2 items to your order').first().isVisible()).toBe(true)
     const panel = page.getByRole('complementary', { name: 'Your order' })
     await expect.poll(() => panel.getByText('Banana Bread', { exact: true }).isVisible()).toBe(true)
@@ -108,7 +108,7 @@ describe('following an order', () => {
 
   it('cancels while unpaid, from a bottom sheet on a phone; Your orders lists it under Past', async () => {
     const order = await placeOrder(seed.customers.followerB)
-    const { page } = await signedIn(seed.customers.followerB, `/orders/${order.id}`, 390)
+    const { page } = await signedIn(seed.customers.followerB, `/c/nuk/orders/${order.id}`, 390)
 
     await button(page, 'Cancel order').click()
     const sheet = page.getByRole('dialog', { name: `Cancel order ${number(order)}?` })
@@ -120,17 +120,17 @@ describe('following an order', () => {
     await expect.poll(() => page.getByText('Cancelled', { exact: true }).first().isVisible()).toBe(true)
     expect(await page.getByRole('list', { name: 'Progress' }).count()).toBe(0)
 
-    await page.goto(url('/orders'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/orders'), { waitUntil: 'hydration' })
     await page.getByRole('heading', { name: 'Past' }).waitFor()
     const row = page.getByRole('link', { name: `Order ${number(order)}, Cancelled` })
     await row.waitFor()
     await row.click()
-    await page.waitForURL(u => u.pathname === `/orders/${order.id}`)
+    await page.waitForURL(u => u.pathname === `/c/nuk/orders/${order.id}`)
   })
 
   it('a payment at the counter wins over the customer\'s cancel: the sheet says so and the page shows Preparing', async () => {
     const order = await placeOrder(seed.customers.followerB)
-    const { page } = await signedIn(seed.customers.followerB, `/orders/${order.id}`)
+    const { page } = await signedIn(seed.customers.followerB, `/c/nuk/orders/${order.id}`)
 
     await button(page, 'Cancel order').click()
     const dialog = page.getByRole('dialog', { name: `Cancel order ${number(order)}?` })
@@ -146,7 +146,7 @@ describe('following an order', () => {
 
   it('another customer\'s order is not found', async () => {
     const order = await placeOrder(seed.customers.followerA)
-    const { page } = await signedIn(seed.customers.followerC, `/orders/${order.id}`)
+    const { page } = await signedIn(seed.customers.followerC, `/c/nuk/orders/${order.id}`)
     await expect.poll(() => page.getByText('This order wasn\'t found').isVisible()).toBe(true)
   })
 })
@@ -154,7 +154,7 @@ describe('following an order', () => {
 describe('finding an order again', () => {
   it('the menu shows a bar for an order in progress, green when it\'s ready; the account menu opens Your orders', async () => {
     const order = await placeOrder(seed.customers.followerC)
-    const { page } = await signedIn(seed.customers.followerC, '/', 390)
+    const { page } = await signedIn(seed.customers.followerC, '/c/nuk', 390)
 
     const bar = page.getByRole('link', { name: new RegExp(`^Order ${number(order)} · Waiting for payment`) })
     await bar.waitFor()
@@ -163,12 +163,12 @@ describe('finding an order again', () => {
     const ready = page.getByRole('link', { name: new RegExp(`^Order ${number(order)} is ready`) })
     await ready.waitFor(POLL)
     await ready.click()
-    await page.waitForURL(u => u.pathname === `/orders/${order.id}`)
+    await page.waitForURL(u => u.pathname === `/c/nuk/orders/${order.id}`)
     await page.getByText('Ready for pickup').waitFor()
 
     await page.getByRole('button', { name: /^Account: / }).click()
     await page.getByRole('link', { name: 'Your orders' }).first().click()
-    await page.waitForURL(u => u.pathname === '/orders')
+    await page.waitForURL(u => u.pathname === '/c/nuk/orders')
     await page.getByRole('heading', { name: 'In progress' }).waitFor()
     await page.getByRole('link', { name: `Order ${number(order)}, Ready` }).waitFor()
     await counter(order, 'complete', 3)
@@ -181,7 +181,7 @@ describe('finding an order again', () => {
     page.on('request', (request) => {
       if (new URL(request.url()).pathname.startsWith('/api/c/nuk/shop/orders')) requests.push(request.url())
     })
-    await page.goto(url('/'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
     await page.getByRole('heading', { name: 'Coffee', exact: true }).waitFor()
     await page.getByRole('link', { name: 'Sign in' }).first().waitFor()
     expect(requests).toEqual([])

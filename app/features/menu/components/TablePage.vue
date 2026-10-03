@@ -8,6 +8,8 @@
 import type { ScannedTable } from '#shared/contracts/branches'
 import { useTableContext } from '../composables/useShopMenu'
 
+const tenantPath = useTenantPath()
+
 const route = useRoute()
 const { setTable } = useTableContext()
 const token = computed(() => String(route.params.token ?? ''))
@@ -16,7 +18,8 @@ const { data, error, refresh } = useApiQuery('menu:table', () => apiFetch<Scanne
 watch(data, (scanned) => {
   if (!scanned) return
   setTable(scanned, token.value)
-  navigateTo('/', { replace: true })
+  // The printed code found its cafe: on to that cafe's menu (D141).
+  navigateTo(tenantUrl(scanned.cafe.slug, '/'), { replace: true })
 }, { immediate: true })
 
 const notFound = computed(() => error.value?.kind === 'not_found')
@@ -37,7 +40,7 @@ const notFound = computed(() => error.value?.kind === 'not_found')
       </p>
       <UButton
         label="Order for pickup"
-        to="/"
+        :to="tenantPath('/')"
       />
     </template>
     <div

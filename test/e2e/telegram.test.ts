@@ -33,7 +33,7 @@ async function openTelegram(overview: TelegramOverview, handlers: Record<string,
   const page = await createPage()
   await page.setViewportSize({ width, height: 900 })
   const api = await mockApi(page, { 'GET /admin/telegram': () => overview, 'GET /admin/telegram/deliveries': () => ({ deliveries: [] }), ...handlers })
-  await page.goto(url('/admin/telegram'), { waitUntil: 'hydration' })
+  await page.goto(url('/c/nuk/admin/telegram'), { waitUntil: 'hydration' })
   return { page, api }
 }
 
@@ -43,7 +43,7 @@ describe('Telegram page', () => {
     await page.getByText('Telegram isn\'t set up for this app yet.').waitFor()
     expect(await page.getByRole('button', { name: 'Connect Telegram' }).isDisabled()).toBe(true)
     expect(await page.getByRole('button', { name: 'Connect a group' }).isDisabled()).toBe(true)
-    expect(await page.getByRole('link', { name: 'Telegram' }).getAttribute('href')).toBe('/admin/telegram')
+    expect(await page.getByRole('link', { name: 'Telegram' }).getAttribute('href')).toBe('/c/nuk/admin/telegram')
   })
 
   it('connects a private chat: the link opens Telegram, the page notices when it\'s done', async () => {
@@ -175,7 +175,7 @@ describe('Send to Telegram', () => {
         return { destination: { id: GROUP.id, title: GROUP.title }, sentAt: '2026-09-30T07:36:00.000Z' }
       },
     })
-    await page.goto(url('/admin/reports/summary'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/reports/summary'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: 'Send to Telegram' }).click()
     const dialog = page.getByRole('dialog')
     await dialog.getByText('Send Summary · Today (Wed 30 Sep 2026)').waitFor()
@@ -205,7 +205,7 @@ describe('Send to Telegram', () => {
       'GET /admin/reports/summary': () => summary,
       'GET /admin/reports/destinations': () => ({ enabled: false, destinations: [] }),
     })
-    await page.goto(url('/admin/reports/summary'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/reports/summary'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: 'Print' }).waitFor()
     expect(await page.getByRole('button', { name: 'Send to Telegram' }).count()).toBe(0)
   })

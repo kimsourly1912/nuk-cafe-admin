@@ -15,13 +15,17 @@ import AssistantText from './AssistantText.vue'
 const { status, open } = useAssistant()
 const route = useRoute()
 const { isExpanded } = useLayoutContext()
+const tenantPath = useTenantPath()
+// The page inside the cafe (`/admin/products`, D141): the help guide's page list and its links name
+// pages that way; the links get this cafe's address when shown.
+const page = computed(() => splitTenantUrl(route.path)?.path ?? route.path)
 
-const chat = useAssistantChat({ page: () => route.path, onFinish: () => void status.refresh() })
+const chat = useAssistantChat({ page: () => page.value, onFinish: () => void status.refresh() })
 const input = ref('')
 
 const messages = computed(() => chat.messages.value)
 const busy = computed(() => chat.status.value === 'submitted' || chat.status.value === 'streaming')
-const suggestions = computed(() => suggestionsFor(route.path))
+const suggestions = computed(() => suggestionsFor(page.value))
 
 /** What to say about a failed answer: the server's message, or a plain one; nothing when cancelled. */
 const failure = computed(() => {
@@ -139,7 +143,7 @@ const asMessage = (message: unknown) => message as AssistantMessage
           <UButton
             v-for="link in linksOf(asMessage(message))"
             :key="link.path"
-            :to="link.path"
+            :to="tenantPath(link.path)"
             :label="`Open ${link.title}`"
             trailing-icon="i-lucide-arrow-right"
             color="neutral"

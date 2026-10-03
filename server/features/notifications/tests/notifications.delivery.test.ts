@@ -22,7 +22,8 @@ import { newId } from '#server/utils/ids'
 // and a fake Telegram behind grammY's `Api` (its `fetch` replaced).
 
 const SETTINGS: TelegramSettings = { botToken: '123:test', botUsername: 'nuk_cafe_bot', webhookSecret: 's'.repeat(40) }
-const SITE = 'https://nuk-cafe-staging.example.workers.dev'
+// The cafe's address on the site: the buttons open its own pages (D141).
+const CAFE_URL = 'https://nuk-cafe-staging.example.workers.dev/c/nuk'
 
 type Answer = { ok: true, result: unknown } | { ok: false, error_code: number, description: string, parameters?: Record<string, unknown> }
 
@@ -124,23 +125,23 @@ describe('order events', () => {
 describe('alerts', () => {
   it('nothing is queued while no chat gets the notification', async () => {
     const orderId = await place(at(MON, '10:00'))
-    expect(await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:00'))).toEqual([])
+    expect(await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, CAFE_URL, at(MON, '10:00'))).toEqual([])
   })
 
   it('a new order goes to the chats that get it, once, with the lines, the note and Open order', async () => {
     await setNotificationRule(db, admin, { kind: 'new_order', destinationId: group, enabled: true, attachCsv: false })
     const orderId = await place(at(MON, '10:00'), 'less sugar')
-    const ids = await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:00'))
+    const ids = await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, CAFE_URL, at(MON, '10:00'))
     expect(ids).toHaveLength(1)
     // The outbox delivers at least once: a repeated event adds nothing.
-    expect(await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:01'))).toEqual([])
+    expect(await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, CAFE_URL, at(MON, '10:01'))).toEqual([])
 
     const report = await deliverDue(db, telegram.api, at(MON, '10:00'), { ids })
     expect(report).toEqual({ sent: 1, retried: 0, failed: 0 })
     const payload = telegram.sent()[0]!.payload!
     expect(payload.chat_id).toBe('-100200')
     expect(payload.text).toBe('🧾 <b>New order #001 · Riverside</b>\nPickup · Sokha\n\n2 × Iced Latte\n   ↳ <i>less sugar</i>\n\nTotal <b>$17.50</b>\n⏳ Waiting for payment. Preparation starts after payment.')
-    expect(payload.reply_markup).toEqual({ inline_keyboard: [[{ text: 'Open order', url: `${SITE}/counter/${branchId}?order=${orderId}` }]] })
+    expect(payload.reply_markup).toEqual({ inline_keyboard: [[{ text: 'Open order', url: `${CAFE_URL}/counter/${branchId}?order=${orderId}` }]] })
     expect(JSON.stringify(payload)).not.toContain('sokha@example.com')
     expect(await listDeliveries(db, TEST_TENANT)).toMatchObject([{ subject: 'New order #001', status: 'sent', destination: { title: 'NUK Riverside Staff' } }])
   })
@@ -149,8 +150,8 @@ describe('alerts', () => {
     await setNotificationRule(db, admin, { kind: 'new_order', destinationId: group, enabled: true, attachCsv: false })
     const orderId = await place(at(MON, '10:00'))
     // The second run saves its delivery after the first checked and before it writes.
-    const racing = interleaved(db, () => queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:00')))
-    await queueOrderAlert(racing, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:00'))
+    const racing = interleaved(db, () => queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, CAFE_URL, at(MON, '10:00')))
+    await queueOrderAlert(racing, TEST_TENANT, 'new_order', orderId, CAFE_URL, at(MON, '10:00'))
     expect(await deliveries()).toHaveLength(1)
   })
 
@@ -170,7 +171,7 @@ describe('delivery', () => {
   async function queued() {
     await setNotificationRule(db, admin, { kind: 'new_order', destinationId: group, enabled: true, attachCsv: false })
     const orderId = await place(at(MON, '10:00'))
-    const [id] = await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:00'))
+    const [id] = await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, CAFE_URL, at(MON, '10:00'))
     return id!
   }
   const row = async (id: string) => (await db.select().from(notificationDeliveries).where(eq(notificationDeliveries.id, id)))[0]!
@@ -228,30 +229,30 @@ describe('closing summary', () => {
   })
 
   it('is queued 30 minutes after closing, once, with the CSV as its own message', async () => {
-    expect(await queueClosingSummaries(db, TEST_TENANT, SITE, at(MON, '21:29'))).toEqual([])
-    const ids = await queueClosingSummaries(db, TEST_TENANT, SITE, at(MON, '21:30'))
+    expect(await queueClosingSummaries(db, TEST_TENANT, CAFE_URL, at(MON, '21:29'))).toEqual([])
+    const ids = await queueClosingSummaries(db, TEST_TENANT, CAFE_URL, at(MON, '21:30'))
     expect(ids).toHaveLength(2)
-    expect(await queueClosingSummaries(db, TEST_TENANT, SITE, at(MON, '21:31'))).toEqual([])
+    expect(await queueClosingSummaries(db, TEST_TENANT, CAFE_URL, at(MON, '21:31'))).toEqual([])
 
     await deliverDue(db, telegram.api, at(MON, '21:31'))
     const text = telegram.sent()[0]!.payload!
     expect(text.text).toContain('<b>Closing summary · Riverside</b>\nMon 28 Sep 2026')
     expect(text.text).toContain('Paid sales <b>$17.50</b> · 1 order')
-    expect(text.reply_markup).toEqual({ inline_keyboard: [[{ text: 'View full report', url: `${SITE}/admin/reports/summary?from=${MON}&to=${MON}` }]] })
+    expect(text.reply_markup).toEqual({ inline_keyboard: [[{ text: 'View full report', url: `${CAFE_URL}/admin/reports/summary?from=${MON}&to=${MON}` }]] })
     expect(telegram.sent('sendDocument')).toHaveLength(1)
     expect((await listDeliveries(db, TEST_TENANT)).map(d => d.subject).sort()).toEqual(['Closing summary · Mon 28 Sep 2026', 'Closing summary · Mon 28 Sep 2026 · CSV'])
   })
 
   it('isn\'t sent on a closed day, or late after downtime', async () => {
-    expect(await queueClosingSummaries(db, TEST_TENANT, SITE, at(TUE, '22:00'))).toEqual([])
+    expect(await queueClosingSummaries(db, TEST_TENANT, CAFE_URL, at(TUE, '22:00'))).toEqual([])
     // 12 hours after it was due: skipped rather than sent the next morning.
-    expect(await queueClosingSummaries(db, TEST_TENANT, SITE, at(TUE, '09:30'))).toEqual([])
+    expect(await queueClosingSummaries(db, TEST_TENANT, CAFE_URL, at(TUE, '09:30'))).toEqual([])
   })
 
   it('a chat added later still gets that day\'s summary; the others don\'t get it twice', async () => {
-    await queueClosingSummaries(db, TEST_TENANT, SITE, at(MON, '21:30'))
+    await queueClosingSummaries(db, TEST_TENANT, CAFE_URL, at(MON, '21:30'))
     await setNotificationRule(db, admin, { kind: 'closing_summary', destinationId: group, enabled: true, attachCsv: false })
-    const ids = await queueClosingSummaries(db, TEST_TENANT, SITE, at(MON, '21:40'))
+    const ids = await queueClosingSummaries(db, TEST_TENANT, CAFE_URL, at(MON, '21:40'))
     expect(ids).toHaveLength(1)
     expect((await deliveries()).filter(d => d.destinationId === group)).toHaveLength(1)
   })
@@ -340,28 +341,28 @@ describe('the Bakong token\'s reminders (step 10.16, D132)', () => {
   })
 
   it('goes once per stage to the chats that get server errors, with the date and what to do', async () => {
-    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(7))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, CAFE_URL, before(7))).toEqual([])
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
-    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(20))).toEqual([])
-    expect(await queueBakongTokenReminder(db, TEST_TENANT, null, SITE, before(7))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, CAFE_URL, before(20))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, null, CAFE_URL, before(7))).toEqual([])
 
-    const ids = await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(7))
+    const ids = await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, CAFE_URL, before(7))
     expect(ids).toHaveLength(1)
     // Every minute after that, nothing more until the next stage.
-    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(6, 23))).toEqual([])
-    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(4))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, CAFE_URL, before(6, 23))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, CAFE_URL, before(4))).toEqual([])
     const [row] = await deliveries()
     expect(row).toMatchObject({ kind: 'server_error', destinationId: owner, subject: 'Bakong token expires in 7 days' })
     expect(row!.message.html).toContain('<b>The Bakong token expires in 7 days</b> (21 Dec 2026)')
     expect(row!.message.html).toContain('NUXT_BAKONG_TOKEN')
-    expect(row!.message.button).toEqual({ text: 'Open Payments', url: `${SITE}/admin/payments` })
+    expect(row!.message.button).toEqual({ text: 'Open Payments', url: `${CAFE_URL}/admin/payments` })
 
     await deliverDue(db, telegram.api, before(7), { ids })
     expect(telegram.sent()).toHaveLength(1)
 
-    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(3))).toHaveLength(1)
-    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, EXPIRES)).toHaveLength(1)
-    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(-2))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, CAFE_URL, before(3))).toHaveLength(1)
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, CAFE_URL, EXPIRES)).toHaveLength(1)
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, CAFE_URL, before(-2))).toEqual([])
     expect((await deliveries()).map(d => d.subject)).toEqual(['Bakong token expires in 7 days', 'Bakong token expires in 3 days', 'Bakong token expired'])
     expect((await deliveries())[2]!.message.html).toContain('<b>The Bakong token has expired</b>')
   })
@@ -370,12 +371,12 @@ describe('the Bakong token\'s reminders (step 10.16, D132)', () => {
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: group, enabled: true, attachCsv: false })
     const [first, second] = await Promise.all([
-      queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(1)),
-      queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(1)),
+      queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, CAFE_URL, before(1)),
+      queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, CAFE_URL, before(1)),
     ])
     expect(first!.length + second!.length).toBe(2)
     const renewed = new Date(EXPIRES.getTime() + 90 * 24 * 3_600_000)
-    expect(await queueBakongTokenReminder(db, TEST_TENANT, renewed, SITE, new Date(renewed.getTime() - 24 * 3_600_000))).toHaveLength(2)
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, renewed, CAFE_URL, new Date(renewed.getTime() - 24 * 3_600_000))).toHaveLength(2)
     expect(await deliveries()).toHaveLength(4)
   })
 })

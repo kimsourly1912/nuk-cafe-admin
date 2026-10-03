@@ -25,6 +25,8 @@ import { openingText } from '../utils/opening'
 import CheckoutGate from './CheckoutGate.vue'
 import CheckoutLine from './CheckoutLine.vue'
 
+const tenantPath = useTenantPath()
+
 const mounted = useMounted()
 const checkout = useCheckout()
 const { cart, quote, change, placing, failure } = checkout
@@ -57,7 +59,7 @@ async function submit() {
   }
   const order = await checkout.place()
   if (order) {
-    await navigateTo(`/orders/${order.id}`, { replace: true })
+    await navigateTo(tenantPath(`/orders/${order.id}`), { replace: true })
     return
   }
   if (failure.value?.kind === 'signIn') gate.value = 'sign-in'
@@ -97,7 +99,7 @@ useSeoMeta({ robots: 'noindex' })
     <header class="border-b border-default bg-default">
       <div class="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4">
         <NuxtLink
-          to="/"
+          :to="tenantPath('/')"
           class="flex items-center gap-2 font-semibold text-highlighted"
         >
           <UIcon
@@ -115,7 +117,7 @@ useSeoMeta({ robots: 'noindex' })
 
     <main class="mx-auto max-w-5xl px-4 pt-4 pb-40 lg:pb-10">
       <UButton
-        to="/"
+        :to="tenantPath('/')"
         label="Back to the menu"
         icon="i-lucide-arrow-left"
         color="neutral"
@@ -148,7 +150,7 @@ useSeoMeta({ robots: 'noindex' })
           Your order is empty
         </p>
         <UButton
-          to="/"
+          :to="tenantPath('/')"
           label="Back to the menu"
         />
       </div>

@@ -2,34 +2,47 @@ import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '~/utils/api-error'
 import { signInSchema, signUpSchema } from '../schemas/account-form'
-import { accountFormError, accountLink, accountRedirectTarget, initialsOf, isDeadLink } from '../utils/account'
+import { accountFormError, accountHome, accountLink, accountRedirectTarget, initialsOf, isDeadLink } from '../utils/account'
 
-describe('accountRedirectTarget', () => {
-  it('returns to a page of the customer site, query and hash kept', () => {
-    expect(accountRedirectTarget('/table/abc?x=1#top')).toBe('/table/abc?x=1#top')
-    expect(accountRedirectTarget('/')).toBe('/')
+describe('accountRedirectTarget (D141)', () => {
+  const HOME = '/c/nuk'
+
+  it('returns to a page of a cafe\'s customer site or a table\'s QR link, query and hash kept', () => {
+    expect(accountRedirectTarget('/c/nuk/checkout?x=1#top', HOME)).toBe('/c/nuk/checkout?x=1#top')
+    expect(accountRedirectTarget('/c/brown-bean', HOME)).toBe('/c/brown-bean')
+    expect(accountRedirectTarget('/table/abc', HOME)).toBe('/table/abc')
+    expect(accountRedirectTarget('/', HOME)).toBe(HOME)
   })
 
   it('never leaves the site: other hosts, backslashes, non-paths', () => {
     for (const bad of ['//evil.example', '/\\evil.example', 'https://evil.example', 'evil', '', undefined, ['/'], 42]) {
-      expect(accountRedirectTarget(bad)).toBe('/')
+      expect(accountRedirectTarget(bad, HOME)).toBe(HOME)
     }
   })
 
-  it('never goes to the admin or back to a sign-in or password page', () => {
-    for (const bad of ['/admin', '/admin/products', '/sign-in', '/sign-up?redirect=/x', '/reset-password']) {
-      expect(accountRedirectTarget(bad)).toBe('/')
+  it('never goes to a cafe\'s workspace or back to a sign-in or password page', () => {
+    for (const bad of ['/c/nuk/admin', '/c/nuk/admin/products', '/c/other/counter/b1', '/sign-in', '/sign-up?redirect=/x', '/reset-password']) {
+      expect(accountRedirectTarget(bad, HOME)).toBe(HOME)
     }
-    expect(accountRedirectTarget('/administrator')).toBe('/administrator')
-    expect(accountRedirectTarget('/verify-email')).toBe('/verify-email')
+    expect(accountRedirectTarget('/c/nuk/administrator', HOME)).toBe('/c/nuk/administrator')
+    expect(accountRedirectTarget('/verify-email', HOME)).toBe('/verify-email')
   })
 })
 
 describe('accountLink', () => {
-  it('carries the page to come back to, but not the menu', () => {
+  it('carries the page to come back to, the cafe\'s menu too', () => {
     expect(accountLink('/sign-in', '/table/abc')).toEqual({ path: '/sign-in', query: { redirect: '/table/abc' } })
+    expect(accountLink('/sign-in', '/c/brown-bean')).toEqual({ path: '/sign-in', query: { redirect: '/c/brown-bean' } })
     expect(accountLink('/sign-in', '/')).toBe('/sign-in')
     expect(accountLink('/sign-up', '//evil.example')).toBe('/sign-up')
+  })
+})
+
+describe('accountHome (D141)', () => {
+  it('is the menu of the cafe to come back to, else the default cafe\'s', () => {
+    expect(accountHome('/c/brown-bean/checkout', 'nuk')).toBe('/c/brown-bean')
+    expect(accountHome('/table/abc', 'nuk')).toBe('/c/nuk')
+    expect(accountHome(undefined, 'nuk')).toBe('/c/nuk')
   })
 })
 

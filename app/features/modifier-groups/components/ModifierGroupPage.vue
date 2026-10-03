@@ -25,6 +25,8 @@ import AddOnRow from './AddOnRow.vue'
 import ModifierGroupSettings from './ModifierGroupSettings.vue'
 import ModifierGroupUsage from './ModifierGroupUsage.vue'
 
+const tenantPath = useTenantPath()
+
 const props = defineProps<{ id: string }>()
 
 const { data: group, loading, error, refresh } = useModifierGroup(props.id)
@@ -243,14 +245,14 @@ const headerActions = computed(() => archived.value
             icon="i-lucide-arrow-left"
             color="neutral"
             variant="ghost"
-            to="/admin/add-ons"
+            :to="tenantPath('/admin/add-ons')"
             aria-label="Back to Add-ons"
             class="lg:hidden"
           />
         </template>
         <template #title>
           <UBreadcrumb
-            :items="[{ label: 'Add-ons', to: '/admin/add-ons' }, { label: group?.name ?? 'Add-on group' }]"
+            :items="[{ label: 'Add-ons', to: tenantPath('/admin/add-ons') }, { label: group?.name ?? 'Add-on group' }]"
             class="hidden min-w-0 lg:flex"
           />
           <span class="truncate lg:hidden">{{ group?.name ?? 'Add-on group' }}</span>
@@ -300,7 +302,7 @@ const headerActions = computed(() => archived.value
         </p>
         <UButton
           label="Back to Add-ons"
-          to="/admin/add-ons"
+          :to="tenantPath('/admin/add-ons')"
           color="neutral"
           variant="outline"
           class="mt-2"

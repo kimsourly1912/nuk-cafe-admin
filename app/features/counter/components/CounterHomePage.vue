@@ -5,11 +5,13 @@
  */
 import { useCounterSession } from '../composables/useCounterSession'
 
+const tenantPath = useTenantPath()
+
 const { user, signOut } = useCounterSession()
 const branches = computed(() => user.value?.branches ?? [])
 
 watchEffect(() => {
-  if (branches.value.length === 1) void navigateTo(`/counter/${branches.value[0]!.id}`, { replace: true })
+  if (branches.value.length === 1) void navigateTo(tenantPath(`/counter/${branches.value[0]!.id}`), { replace: true })
 })
 </script>
 
@@ -35,7 +37,7 @@ watchEffect(() => {
         :key="branch.id"
       >
         <UButton
-          :to="`/counter/${branch.id}`"
+          :to="tenantPath(`/counter/${branch.id}`)"
           :label="branch.name"
           :trailing-icon="'i-lucide-chevron-right'"
           color="neutral"

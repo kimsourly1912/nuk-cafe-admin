@@ -15,7 +15,7 @@ const MANY = Array.from({ length: 45 }, (_, i) => item(i + 1, i === 0 ? 'Green t
 /** The status tabs ask the same endpoint for counts (`pageSize=1`): leave those out. */
 const isCount = (request: { url: URL }) => request.url.searchParams.get('pageSize') === '1'
 
-async function open(path = '/admin/products', rows = MANY) {
+async function open(path = '/c/nuk/admin/products', rows = MANY) {
   const page = await createPage()
   const api = await mockApi(page, { 'GET /admin/menu/items': paginatedHandler(rows) })
   await page.goto(url(path), { waitUntil: 'hydration' })
@@ -37,7 +37,7 @@ describe('list page: search', () => {
         return list(request)
       },
     })
-    await page.goto(url('/admin/products'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/products'), { waitUntil: 'hydration' })
     await card(page, 'Green tea').waitFor()
     const before = lists.length
 
@@ -61,7 +61,7 @@ describe('list page: search', () => {
 
 describe('list page: state in the URL', () => {
   it('restores search, filters and page from the URL (reload, shared link)', async () => {
-    const { page } = await open('/admin/products?status=active&page=2')
+    const { page } = await open('/c/nuk/admin/products?status=active&page=2')
     await card(page, 'Item 21').waitFor()
     await page.reload({ waitUntil: 'networkidle' })
     await card(page, 'Item 21').waitFor()
@@ -86,11 +86,11 @@ describe('list page: state in the URL', () => {
     await search(page).press('Enter')
     await expect.poll(() => query(page)).toEqual({ search: 'green' })
     await page.goBack()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/admin')
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin')
   })
 
   it('the sidebar link opens the bare list and resets the filters', async () => {
-    const { page } = await open('/admin/products?search=green')
+    const { page } = await open('/c/nuk/admin/products?search=green')
     await expect(search(page).inputValue()).resolves.toBe('green')
     await page.getByRole('link', { name: /Menu items/ }).first().click()
     await expect.poll(() => query(page)).toEqual({})
@@ -100,14 +100,14 @@ describe('list page: state in the URL', () => {
 
 describe('list page: empty states', () => {
   it('nothing yet: offers to create', async () => {
-    const { page } = await open('/admin/products', [])
+    const { page } = await open('/c/nuk/admin/products', [])
     await page.getByText('No menu items yet').waitFor()
     await page.getByRole('button', { name: 'New menu item' }).last().click()
     await page.getByRole('dialog', { name: 'New menu item' }).waitFor()
   })
 
   it('filters hide everything: offers to clear them', async () => {
-    const { page } = await open('/admin/products?search=zzz')
+    const { page } = await open('/c/nuk/admin/products?search=zzz')
     await page.getByText('No menu items match your filters').waitFor()
     await page.getByRole('button', { name: 'Clear filters' }).click()
     await card(page, 'Green tea').waitFor()
@@ -121,7 +121,7 @@ describe('list page: loading and out-of-order responses', () => {
     const list = paginatedHandler(MANY)
     const page = await createPage()
     await mockApi(page, { 'GET /admin/menu/items': request => (isCount(request) ? list(request) : first.handler(request)) })
-    await page.goto(url('/admin/products'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/products'), { waitUntil: 'hydration' })
     await page.getByRole('status', { name: 'Loading menu items…' }).waitFor()
     expect(await page.getByText('No menu items yet').count()).toBe(0)
     first.release(list({ url: new URL('http://x/api/admin/menu/items'), body: null }))
@@ -136,7 +136,7 @@ describe('list page: loading and out-of-order responses', () => {
       (!isCount(request) && request.url.searchParams.get('search') === 'green' ? slowGreen.handler(request) : list(request))
     const page = await createPage()
     await mockApi(page, { 'GET /admin/menu/items': handler })
-    await page.goto(url('/admin/products'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/products'), { waitUntil: 'hydration' })
     await card(page, 'Green tea').waitFor()
 
     await search(page).fill('green')
@@ -184,7 +184,7 @@ describe('list page: the pager (D128)', () => {
         return list(request)
       },
     })
-    await page.goto(url('/admin/products?page=2'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/products?page=2'), { waitUntil: 'hydration' })
     await card(page, 'Item 21').waitFor()
 
     await rowsPerPage(page).click()
@@ -204,7 +204,7 @@ describe('list page: the pager (D128)', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 390, height: 844 })
     await mockApi(page, { 'GET /admin/menu/items': paginatedHandler(MANY) })
-    await page.goto(url('/admin/products'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/products'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: 'Next page' }).waitFor()
     // The numbered pager is the desktop's
     expect(await page.getByRole('button', { name: 'Page 2' }).isVisible()).toBe(false)
@@ -245,7 +245,7 @@ describe('list page: status tabs that don\'t fit (D128)', () => {
   }
 
   it('shows every label in full; the row scrolls, not the page', async () => {
-    const page = await openAt('/admin/products')
+    const page = await openAt('/c/nuk/admin/products')
     const row = await tabRow(page)
     expect(row.cut).toEqual([])
     expect(row.scrolls).toBe(true)
@@ -253,7 +253,7 @@ describe('list page: status tabs that don\'t fit (D128)', () => {
   })
 
   it('brings a tapped tab, or the one in the URL, to the middle of the row', async () => {
-    const page = await openAt('/admin/products?status=archived')
+    const page = await openAt('/c/nuk/admin/products?status=archived')
     await expect.poll(async () => (await tabRow(page)).scrollLeft).toBeGreaterThan(0)
 
     await page.getByRole('group', { name: 'Status' }).getByRole('tab', { name: /^All/ }).click()

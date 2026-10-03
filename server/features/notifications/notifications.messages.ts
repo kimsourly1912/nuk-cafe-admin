@@ -70,7 +70,7 @@ export function bakongReminderStage(expiresAt: Date, now: Date): number | null {
 }
 
 /** "🔑 The Bakong token expires in 7 days (21 Dec 2026)", or "has expired", with what to do. */
-export function bakongTokenMessage(expiresAt: Date, now: Date, siteUrl?: string): StoredMessage {
+export function bakongTokenMessage(expiresAt: Date, now: Date, cafeUrl?: string): StoredMessage {
   const left = daysUntil(expiresAt, now)
   const date = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Phnom_Penh' }).format(expiresAt)
   const lines = left > 0
@@ -84,7 +84,7 @@ export function bakongTokenMessage(expiresAt: Date, now: Date, siteUrl?: string)
         '',
         'The counter can\'t check KHQR payments with Bakong: cashiers confirm them by hand. Get a new token from Bakong\'s developer portal and replace the server secret NUXT_BAKONG_TOKEN, then press Test connection on Payments.',
       ]
-  const button = siteUrl?.startsWith('https://') ? { text: 'Open Payments', url: new URL('/admin/payments', siteUrl).toString() } : undefined
+  const button = cafeUrl?.startsWith('https://') ? { text: 'Open Payments', url: `${cafeUrl}/admin/payments` } : undefined
   return { html: lines.join('\n'), button }
 }
 
@@ -92,11 +92,12 @@ export const orderNumber = (pickupNumber: number) => `#${String(pickupNumber).pa
 
 /**
  * Telegram only accepts buttons with a public https address: none on a local machine (R2's
- * "Open order" opens the order in the counter app).
+ * "Open order" opens the order in the counter app). `cafeUrl`: the cafe's address on the site
+ * (`https://…/c/<slug>`, D141).
  */
-export function openOrderButton(siteUrl: string | undefined, alert: Pick<OrderAlert, 'branch' | 'orderId'>): StoredMessage['button'] {
-  if (!siteUrl?.startsWith('https://')) return undefined
-  return { text: 'Open order', url: new URL(`/counter/${alert.branch.id}?order=${alert.orderId}`, siteUrl).toString() }
+export function openOrderButton(cafeUrl: string | undefined, alert: Pick<OrderAlert, 'branch' | 'orderId'>): StoredMessage['button'] {
+  if (!cafeUrl?.startsWith('https://')) return undefined
+  return { text: 'Open order', url: `${cafeUrl}/counter/${encodeURIComponent(alert.branch.id)}?order=${encodeURIComponent(alert.orderId)}` }
 }
 
 /** "Pickup · Sokha", "Dine-in · T4 · Sokha". */
@@ -106,7 +107,7 @@ function who(alert: OrderAlert) {
 }
 
 /** The new-order alert: the lines with their options, each note under its own line, the total. */
-export function newOrderMessage(alert: OrderAlert, siteUrl?: string): StoredMessage {
+export function newOrderMessage(alert: OrderAlert, cafeUrl?: string): StoredMessage {
   const lines = [
     `🧾 <b>New order ${orderNumber(alert.pickupNumber)} · ${escapeHtml(alert.branch.name)}</b>`,
     escapeHtml(who(alert)),
@@ -118,11 +119,11 @@ export function newOrderMessage(alert: OrderAlert, siteUrl?: string): StoredMess
     if (line.note) lines.push(`   ↳ <i>${escapeHtml(line.note)}</i>`)
   }
   lines.push('', `Total <b>${money(alert.totalMinor)}</b>`, '⏳ Waiting for payment. Preparation starts after payment.')
-  return { html: lines.join('\n'), button: openOrderButton(siteUrl, alert) }
+  return { html: lines.join('\n'), button: openOrderButton(cafeUrl, alert) }
 }
 
 /** The payment alert: who paid how much, how; preparation starts. */
-export function paymentMessage(alert: OrderAlert, siteUrl?: string): StoredMessage {
+export function paymentMessage(alert: OrderAlert, cafeUrl?: string): StoredMessage {
   const payment = alert.payment
   const paid = payment
     ? `${METHODS[payment.method]} ${payment.method === 'cash_khr' && payment.amountKhr !== null ? riel(payment.amountKhr) : money(payment.amountMinor)}`
@@ -133,7 +134,7 @@ export function paymentMessage(alert: OrderAlert, siteUrl?: string): StoredMessa
       `${escapeHtml(who(alert))} · ${paid}`,
       'Preparation can start.',
     ].join('\n'),
-    button: openOrderButton(siteUrl, alert),
+    button: openOrderButton(cafeUrl, alert),
   }
 }
 

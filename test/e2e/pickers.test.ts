@@ -15,7 +15,7 @@ const GREEN_UNDER_RETIRED = menuCategoryOf('cat-6', 'Green', { parentId: 'cat-7'
 
 async function editRow(page: Page, name: string, handlers: Record<string, MockHandler>) {
   const api = await mockApi(page, handlers)
-  await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
+  await page.goto(url('/c/nuk/admin/categories'), { waitUntil: 'hydration' })
   await page.getByRole('button', { name: `Actions for ${name}` }).click()
   await page.getByRole('menuitem', { name: 'Edit' }).click()
   const form = page.getByRole('dialog', { name: 'Edit category' })
@@ -33,7 +33,7 @@ describe('CategorySelect', () => {
         return [MENU_TEA]
       },
     })
-    await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/categories'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: 'New category' }).first().click()
     const form = page.getByRole('dialog', { name: 'New category' })
     await form.getByText('Could not load categories:').waitFor()

@@ -2,12 +2,15 @@
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { ShortcutsHelp } from '#components'
 import { AssistantPanel, useAssistant } from '~/features/assistant'
-import { CHANGE_PASSWORD_PATH, useAuth } from '~/features/auth'
+import { useAuth } from '~/features/auth'
 
 const { user, logout } = useAuth()
 const allItems = navigationItems({ sampleData: useRuntimeConfig().public.sampleData.enabled })
 const route = useRoute()
-const sidebarItems = computed(() => withActiveItem(allItems, route.path))
+const tenantPath = useTenantPath()
+// Features name their pages inside the cafe (`/admin/products`); the sidebar links to this cafe's (D141).
+const sidebarItems = computed(() => withActiveItem(allItems, splitTenantUrl(route.path)?.path ?? route.path)
+  .map(group => group.map(item => (typeof item.to === 'string' ? { ...item, to: tenantPath(item.to) } : item))))
 const open = ref(false)
 // The help assistant (D109): only where an AI key is set.
 const assistant = useAssistant()
@@ -21,7 +24,7 @@ defineShortcuts({ 'meta_/': { usingInput: true, handler: assistant.toggle } })
 const userMenu = computed<DropdownMenuItem[]>(() => [
   { label: user.value?.email, type: 'label' },
   { type: 'separator' },
-  { label: 'Change password', icon: 'i-lucide-key-round', to: CHANGE_PASSWORD_PATH },
+  { label: 'Change password', icon: 'i-lucide-key-round', to: tenantPath('/admin/change-password') },
   { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
   { label: 'Log out', icon: 'i-lucide-log-out', onSelect: () => logout() },
 ])
@@ -41,7 +44,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
     >
       <template #header="{ collapsed }">
         <NuxtLink
-          to="/admin"
+          :to="tenantPath('/admin')"
           class="flex items-center gap-2 font-semibold"
         >
           <UIcon

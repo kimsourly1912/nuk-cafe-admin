@@ -13,20 +13,30 @@ function identityOf(user: SessionUser | null): string | null {
   return user?.userId ?? null
 }
 
-/** The admin workspace lives under `/admin`; every other page is the customer site (D93). */
+/**
+ * A cafe's admin workspace lives under its address, `/c/<slug>/admin` (D93, D141); every other page
+ * is the customer site, the counter or the platform's.
+ */
 export function isAdminPath(path: string): boolean {
-  return path === '/admin' || path.startsWith('/admin/')
+  const inCafe = splitTenantUrl(path)?.path.split(/[?#]/)[0]
+  return inCafe === '/admin' || !!inCafe?.startsWith('/admin/')
 }
 
-/** Where to go after login: the `?redirect=` target if it's an admin page, else the dashboard. */
-export function loginRedirectTarget(redirect: unknown): string {
-  return typeof redirect === 'string' && isAdminPath(redirect.split(/[?#]/)[0]!) ? redirect : '/admin'
-}
+/** The cafe's dashboard. */
+export const adminHomePath = (slug: string) => tenantUrl(slug, '/admin')
 
-export const LOGIN_PATH = '/admin/login'
+export const loginPath = (slug: string) => tenantUrl(slug, '/admin/login')
 
 /** The page every signed-in admin is sent to while on a temporary password. */
-export const CHANGE_PASSWORD_PATH = '/admin/change-password'
+export const changePasswordPath = (slug: string) => tenantUrl(slug, '/admin/change-password')
+
+/**
+ * Where to go after login: the `?redirect=` target if it's an admin page of this cafe (never
+ * another cafe's or another site's), else the cafe's dashboard.
+ */
+export function loginRedirectTarget(redirect: unknown, slug: string): string {
+  return typeof redirect === 'string' && splitTenantUrl(redirect)?.slug === slug && isAdminPath(redirect) ? redirect : adminHomePath(slug)
+}
 
 const NO_ADMIN_ACCESS = 'This account doesn\'t have access to the admin app.'
 
@@ -151,7 +161,8 @@ export function useAuth() {
     }
     finally {
       // Navigate first so the session-lost watcher in plugins/api.ts doesn't also redirect.
-      await navigateTo(LOGIN_PATH)
+      const slug = splitTenantUrl(nuxtApp.$router.currentRoute.value.path)?.slug ?? nuxtApp.$config.public.defaultTenant
+      await navigateTo(loginPath(slug))
       clearSession()
       await nuxtApp.callHook('app:auth-changed', 'logout')
     }

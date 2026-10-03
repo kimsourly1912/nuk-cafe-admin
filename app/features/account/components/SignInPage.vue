@@ -10,12 +10,14 @@ import { signInSchema } from '../schemas/account-form'
 import { useAccountActions, useCustomerAccount } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
 import { ACCOUNT_PATHS, accountLink, accountRedirectTarget } from '../utils/account'
+import { useAccountHome } from '../composables/useAccountHome'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
 
 const route = useRoute()
-const target = computed(() => accountRedirectTarget(route.query.redirect))
+const home = useAccountHome()
+const target = computed(() => accountRedirectTarget(route.query.redirect, home.value))
 const afterReset = computed(() => route.query.reset === '1')
 
 const state = reactive({ email: '', password: '' })
@@ -43,7 +45,7 @@ async function onSubmit(event: FormSubmitEvent<SignInForm>) {
   <AccountFrame
     title="Sign in"
     description="Sign in to order ahead and collect points."
-    :back="{ label: 'Back to the menu', to: '/' }"
+    :back="{ label: 'Back to the menu', to: home }"
   >
     <UForm
       id="sign-in-form"

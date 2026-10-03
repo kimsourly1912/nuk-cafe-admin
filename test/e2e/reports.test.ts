@@ -124,7 +124,7 @@ async function choosePreset(page: Page, name: string) {
 
 describe('Reports: Summary', () => {
   it('shows today in the branch\'s zone: sales, payments, current orders, best sellers, cancelled', async () => {
-    const { page, requests } = await open('/admin/reports/summary')
+    const { page, requests } = await open('/c/nuk/admin/reports/summary')
     await page.getByText('$1,284.50').first().waitFor()
     expect(lastQuery(requests)).toEqual({ branchId: 'branch-1', from: TODAY, to: TODAY })
     await page.getByText('Riverside · Asia/Phnom_Penh · business day 4:00 AM – 4:00 AM · Updated 2:35 PM').waitFor()
@@ -142,7 +142,7 @@ describe('Reports: Summary', () => {
   })
 
   it('a preset changes the period in the URL, and the next report keeps it', async () => {
-    const { page, requests } = await open('/admin/reports/summary')
+    const { page, requests } = await open('/c/nuk/admin/reports/summary')
     await page.getByText('$1,284.50').first().waitFor()
     await choosePreset(page, 'Last 7 days')
     await expect.poll(() => lastQuery(requests).from).toBe('2026-09-24')
@@ -152,7 +152,7 @@ describe('Reports: Summary', () => {
     await page.getByText('vs the 7 days before').waitFor()
 
     // The sidebar's link has no dates: the period this tab last looked at is kept.
-    await page.locator('a[href="/admin/reports/items"]').click()
+    await page.locator('a[href="/c/nuk/admin/reports/items"]').click()
     await page.waitForURL(/\/admin\/reports\/items/)
     await page.getByText('Iced Latte').first().waitFor()
     expect(lastQuery(requests)).toMatchObject({ from: '2026-09-24', to: TODAY })
@@ -160,16 +160,16 @@ describe('Reports: Summary', () => {
   })
 
   it('a period in the URL is used; one no report can show falls back to today', async () => {
-    const { page, requests } = await open('/admin/reports/summary?from=2026-09-01&to=2026-09-30')
+    const { page, requests } = await open('/c/nuk/admin/reports/summary?from=2026-09-01&to=2026-09-30')
     await page.getByText('$1,284.50').first().waitFor()
     expect(lastQuery(requests)).toMatchObject({ from: '2026-09-01', to: TODAY })
-    await page.goto(url('/admin/reports/summary?from=2026-01-01&to=2026-09-30'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/admin/reports/summary?from=2026-01-01&to=2026-09-30'), { waitUntil: 'hydration' })
     await expect.poll(() => lastQuery(requests)).toMatchObject({ from: TODAY, to: TODAY })
   })
 
   it('an empty period says so; a failed load offers Try again', async () => {
     let fail = true
-    const { page } = await open('/admin/reports/summary', {
+    const { page } = await open('/c/nuk/admin/reports/summary', {
       'GET /admin/reports/summary': ({ url: u }) => {
         if (fail) throw failures.server()
         return summaryOf(params(u).get('from')!, params(u).get('to')!, { paid: { salesMinor: 0, orders: 0, averageMinor: null }, bestSellers: [] })
@@ -184,7 +184,7 @@ describe('Reports: Summary', () => {
 
   it('Download CSV saves the server\'s file with its byte-order mark and the page\'s period', async () => {
     const csvQueries: URLSearchParams[] = []
-    const { page } = await open('/admin/reports/summary', {
+    const { page } = await open('/c/nuk/admin/reports/summary', {
       'GET /admin/reports/summary.csv': ({ url: u }) => {
         csvQueries.push(params(u))
         return '﻿Section,Measure\r\nSales,Paid sales\r\n'
@@ -204,7 +204,7 @@ describe('Reports: Summary', () => {
   })
 
   it('a refused download shows the server\'s reason', async () => {
-    const { page } = await open('/admin/reports/orders', {
+    const { page } = await open('/c/nuk/admin/reports/orders', {
       'GET /admin/reports/orders.csv': () => {
         throw failures.validation('More than 20,000 orders match. Choose a shorter period or narrow the filters.')
       },
@@ -216,7 +216,7 @@ describe('Reports: Summary', () => {
   })
 
   it('prints only the report, with its print header', async () => {
-    const { page } = await open('/admin/reports/summary')
+    const { page } = await open('/c/nuk/admin/reports/summary')
     await page.getByText('$1,284.50').first().waitFor()
     expect(await page.getByText('NUK Cafe · Riverside · Summary').isVisible()).toBe(false)
     await page.emulateMedia({ media: 'print' })
@@ -228,15 +228,15 @@ describe('Reports: Summary', () => {
   })
 
   it('is in the sidebar under Reports', async () => {
-    const { page } = await open('/admin/reports')
+    const { page } = await open('/c/nuk/admin/reports')
     await page.waitForURL(/\/admin\/reports\/summary/)
-    expect(await page.getByRole('link', { name: 'Order history' }).getAttribute('href')).toBe('/admin/reports/orders')
+    expect(await page.getByRole('link', { name: 'Order history' }).getAttribute('href')).toBe('/c/nuk/admin/reports/orders')
   })
 })
 
 describe('Reports: Sales by item', () => {
   it('sorts on the server by a column, filters by category, and shows the totals row', async () => {
-    const { page, requests } = await open('/admin/reports/items')
+    const { page, requests } = await open('/c/nuk/admin/reports/items')
     await page.getByText('Totals for 2 items').waitFor()
     await page.getByText('−$4.50').first().waitFor()
     await page.getByRole('button', { name: 'Sort by paid sales' }).click()
@@ -254,7 +254,7 @@ describe('Reports: Sales by item', () => {
 
 describe('Reports: Order history', () => {
   it('filters, then opens an order with its payment and timeline; Back closes it', async () => {
-    const { page, requests } = await open('/admin/reports/orders')
+    const { page, requests } = await open('/c/nuk/admin/reports/orders')
     await page.getByRole('button', { name: 'Order #042' }).waitFor()
     await page.getByText('Paid · KHQR').waitFor()
     await page.getByText('Dine-in · T4').waitFor()
@@ -280,7 +280,7 @@ describe('Reports: Order history', () => {
   })
 
   it('`?order=` opens the order from a link; closing it keeps the list', async () => {
-    const { page } = await open('/admin/reports/orders?order=ord-1')
+    const { page } = await open('/c/nuk/admin/reports/orders?order=ord-1')
     await page.getByRole('dialog').getByText('Reference 8812').waitFor()
     await page.getByRole('dialog').getByRole('button', { name: 'Close' }).click()
     await expect.poll(() => page.url()).not.toContain('order=')
@@ -288,14 +288,14 @@ describe('Reports: Order history', () => {
   })
 
   it('ignores letters in the order number search', async () => {
-    const { page, requests } = await open('/admin/reports/orders')
+    const { page, requests } = await open('/c/nuk/admin/reports/orders')
     await page.getByRole('button', { name: 'Order #042' }).waitFor()
     await page.getByPlaceholder('Order number').fill('#42')
     await expect.poll(() => lastQuery(requests).search).toBe('42')
   })
 
   it('on a phone: filters in a sheet applied together, shown as removable chips, the order full screen', async () => {
-    const { page, requests } = await open('/admin/reports/orders', {}, 390)
+    const { page, requests } = await open('/c/nuk/admin/reports/orders', {}, 390)
     await page.getByRole('button', { name: 'Order #042' }).waitFor()
     const before = requests.length
     await page.getByRole('button', { name: 'Filters', exact: true }).click()
@@ -329,7 +329,7 @@ describe('Reports: choosing a period', () => {
   const day = (page: Page, name: string) => page.getByRole('button', { name }).and(page.locator(':not([data-outside-view])'))
 
   it('from sm: two months ending with today\'s; the hover lights the days from the first click to the pointer, the second click applies', async () => {
-    const { page, requests } = await open('/admin/reports/summary')
+    const { page, requests } = await open('/c/nuk/admin/reports/summary')
     await page.getByText('$1,284.50').first().waitFor()
     await page.getByRole('button', { name: /^Period:/ }).click()
     await page.getByText('August - September 2026').first().waitFor()
@@ -347,7 +347,7 @@ describe('Reports: choosing a period', () => {
   })
 
   it('on a phone: a sheet of presets; Custom range applies only on Apply', async () => {
-    const { page, requests } = await open('/admin/reports/summary', {}, 390)
+    const { page, requests } = await open('/c/nuk/admin/reports/summary', {}, 390)
     await page.getByText('$1,284.50').first().waitFor()
     await page.getByRole('button', { name: /^Period:/ }).click()
     const sheet = page.getByRole('dialog', { name: 'Period' })
@@ -369,7 +369,7 @@ describe('Reports: choosing a period', () => {
   })
 
   it('sheets have no drag handle and don\'t move when dragged; X closes them', async () => {
-    const { page } = await open('/admin/reports/orders', {}, 390)
+    const { page } = await open('/c/nuk/admin/reports/orders', {}, 390)
     await page.getByRole('button', { name: 'Order #042' }).waitFor()
     await page.getByRole('button', { name: 'Filters', exact: true }).click()
     const sheet = page.getByRole('dialog', { name: 'Filters' })

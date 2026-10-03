@@ -7,11 +7,13 @@
 import { useAccountActions, useCustomerAccount, useResendCooldown } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
 import { ACCOUNT_PATHS, accountLink, accountRedirectTarget } from '../utils/account'
+import { useAccountHome } from '../composables/useAccountHome'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 
 const route = useRoute()
-const target = computed(() => accountRedirectTarget(route.query.redirect))
+const home = useAccountHome()
+const target = computed(() => accountRedirectTarget(route.query.redirect, home.value))
 
 const { account, known } = useCustomerAccount()
 const { resendVerification } = useAccountActions()
@@ -53,7 +55,7 @@ async function resend() {
     title="Sign in to verify your email"
     description="Sign in to the account you created, then we can send a new link."
     icon="i-lucide-mail"
-    :back="{ label: 'Back to the menu', to: '/' }"
+    :back="{ label: 'Back to the menu', to: home }"
   >
     <template #footer>
       <UButton

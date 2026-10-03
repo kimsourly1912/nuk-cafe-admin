@@ -20,6 +20,8 @@ import CancelOrderSheet from './CancelOrderSheet.vue'
 import OrdersHeader from './OrdersHeader.vue'
 import OrderTracker from './OrderTracker.vue'
 
+const tenantPath = useTenantPath()
+
 const route = useRoute()
 const id = computed(() => String(route.params.id ?? ''))
 const query = useOrderTracking(id)
@@ -78,7 +80,7 @@ async function again(from: Order) {
     }
     const skipped = result.skipped.length ? ` ${previewList(result.skipped)} ${result.skipped.length === 1 ? 'isn\'t' : 'aren\'t'} available now.` : ''
     toast.add({ title: `Added ${pluralize(result.added, ['item', 'items'])} to your order`, description: skipped.trim() || undefined, color: result.skipped.length ? 'warning' : 'success', icon: 'i-lucide-shopping-bag' })
-    await navigateTo('/')
+    await navigateTo(tenantPath('/'))
   }
   catch (error) {
     notify.error('Couldn\'t load the menu', error)
@@ -140,7 +142,7 @@ async function again(from: Order) {
             />
             <UButton
               label="Back to the menu"
-              to="/"
+              :to="tenantPath('/')"
             />
           </div>
         </div>
@@ -330,14 +332,14 @@ async function again(from: Order) {
                 />
                 <UButton
                   label="Back to the menu"
-                  to="/"
+                  :to="tenantPath('/')"
                   block
                   :color="order.status === 'completed' ? 'neutral' : 'primary'"
                   :variant="order.status === 'completed' ? 'outline' : 'solid'"
                 />
                 <UButton
                   label="Your orders"
-                  to="/orders"
+                  :to="tenantPath('/orders')"
                   block
                   color="neutral"
                   variant="ghost"

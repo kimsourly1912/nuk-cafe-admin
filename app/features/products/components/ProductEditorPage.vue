@@ -17,6 +17,8 @@ import { ITEM_STATUS_LABELS } from '../utils/item-display'
 import ProductFormFields from './ProductFormFields.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
 
+const tenantPath = useTenantPath()
+
 const props = defineProps<{
   /** The item's id, or `new`. */
   id: string
@@ -47,8 +49,9 @@ const router = useRouter()
 /** Back to the list: to the entry it came from (search and filters kept), or the list itself. */
 function leave() {
   const back = window.history.state?.back
-  if (typeof back === 'string' && /^\/admin\/products(\?|$)/.test(back)) router.back()
-  else navigateTo('/admin/products')
+  const list = tenantPath('/admin/products')
+  if (typeof back === 'string' && (back === list || back.startsWith(`${list}?`))) router.back()
+  else navigateTo(list)
 }
 
 const fields = useTemplateRef('fields')

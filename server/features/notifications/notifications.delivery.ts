@@ -106,14 +106,14 @@ export async function deliverDue(db: Db, api: Api, now = new Date(), options: { 
  * An order's alert to every chat of its tenant that gets `kind`, saved as deliveries (a repeated
  * event adds nothing: one per chat and order). The tenant is the outbox message's (D138). Returns the new deliveries' ids, to send at once.
  */
-export async function queueOrderAlert(db: Db, tenantId: string, kind: Extract<NotificationKind, 'new_order' | 'payment'>, orderId: string, siteUrl?: string, now = new Date()): Promise<string[]> {
+export async function queueOrderAlert(db: Db, tenantId: string, kind: Extract<NotificationKind, 'new_order' | 'payment'>, orderId: string, cafeUrl?: string, now = new Date()): Promise<string[]> {
   const targets = await repo.targetsOf(db, tenantId, kind)
   if (!targets.length) return []
   const alert = await orderAlert(db, tenantId, orderId)
   if (!alert) return []
   const dedupeKey = `${kind}:${orderId}`
   const done = await repo.deliveredTo(db, dedupeKey, targets.map(t => t.destinationId))
-  const message = kind === 'new_order' ? newOrderMessage(alert, siteUrl) : paymentMessage(alert, siteUrl)
+  const message = kind === 'new_order' ? newOrderMessage(alert, cafeUrl) : paymentMessage(alert, cafeUrl)
   const deliveries = targets.filter(t => !done.has(t.destinationId)).map((target): repo.NewDelivery => ({
     id: newId(),
     tenantId,
@@ -170,7 +170,7 @@ export async function queueServerErrorAlert(db: Db, tenantId: string, info: Serv
  * read from the database while more than 14 days are left. Each reminder goes once per chat and
  * token: the dedupe key names the token's expiry and the stage, so a new token starts over.
  */
-export async function queueBakongTokenReminder(db: Db, tenantId: string, expiresAt: Date | null, siteUrl?: string, now = new Date()): Promise<string[]> {
+export async function queueBakongTokenReminder(db: Db, tenantId: string, expiresAt: Date | null, cafeUrl?: string, now = new Date()): Promise<string[]> {
   if (!expiresAt) return []
   const stage = bakongReminderStage(expiresAt, now)
   if (stage === null) return []
@@ -178,7 +178,7 @@ export async function queueBakongTokenReminder(db: Db, tenantId: string, expires
   if (!targets.length) return []
   const dedupeKey = `bakong_token:${expiresAt.getTime()}:${stage}`
   const done = await repo.deliveredTo(db, dedupeKey, targets.map(t => t.destinationId))
-  const message = bakongTokenMessage(expiresAt, now, siteUrl)
+  const message = bakongTokenMessage(expiresAt, now, cafeUrl)
   const deliveries = targets.filter(t => !done.has(t.destinationId)).map((target): repo.NewDelivery => ({
     id: newId(),
     tenantId,
@@ -206,7 +206,7 @@ export async function queueBakongTokenReminder(db: Db, tenantId: string, expires
  * dedupe key keeps it to one per branch, business date and chat. One tenant's branches to its own
  * chats; the task calls it for every active tenant (D138).
  */
-export async function queueClosingSummaries(db: Db, tenantId: string, siteUrl?: string, now = new Date()): Promise<string[]> {
+export async function queueClosingSummaries(db: Db, tenantId: string, cafeUrl?: string, now = new Date()): Promise<string[]> {
   const targets = await repo.targetsOf(db, tenantId, 'closing_summary')
   if (!targets.length) return []
   const queued: string[] = []
@@ -224,8 +224,8 @@ export async function queueClosingSummaries(db: Db, tenantId: string, siteUrl?: 
       if (!missing.length) continue
 
       const report = await reportMessage(db, tenantId, { kind: 'summary', query: { branchId: branch.id, from: date, to: date } }, { attachCsv: missing.some(t => t.attachCsv), title: 'Closing summary' }, now)
-      const button = siteUrl?.startsWith('https://')
-        ? { text: 'View full report', url: new URL(`/admin/reports/summary?from=${date}&to=${date}`, siteUrl).toString() }
+      const button = cafeUrl?.startsWith('https://')
+        ? { text: 'View full report', url: `${cafeUrl}/admin/reports/summary?from=${date}&to=${date}` }
         : undefined
       const deliveries: repo.NewDelivery[] = []
       for (const target of missing) {

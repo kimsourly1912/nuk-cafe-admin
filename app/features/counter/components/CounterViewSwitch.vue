@@ -3,6 +3,8 @@
  * Queue | Finished today (24) (step 10.2, D117, the owner's frames): two links, one per page, so
  * each view has its own address and Back works. The business day's start is noted beside it.
  */
+const tenantPath = useTenantPath()
+
 const props = defineProps<{
   branchId: string
   current: 'queue' | 'finished'
@@ -11,8 +13,8 @@ const props = defineProps<{
 }>()
 
 const views = computed(() => [
-  { id: 'queue', label: 'Queue', to: `/counter/${props.branchId}` },
-  { id: 'finished', label: props.finishedCount == null ? 'Finished today' : `Finished today (${props.finishedCount})`, to: `/counter/${props.branchId}/finished` },
+  { id: 'queue', label: 'Queue', to: tenantPath(`/counter/${props.branchId}`) },
+  { id: 'finished', label: props.finishedCount == null ? 'Finished today' : `Finished today (${props.finishedCount})`, to: tenantPath(`/counter/${props.branchId}/finished`) },
 ])
 </script>
 

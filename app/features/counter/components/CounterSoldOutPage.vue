@@ -16,6 +16,8 @@ import { filterSoldOutRows, rowName, soldOutCategories } from '../utils/sold-out
 import type { SoldOutRow } from '../utils/sold-out'
 import CounterHeader from './CounterHeader.vue'
 
+const tenantPath = useTenantPath()
+
 const route = useRoute()
 const branchId = computed(() => String(route.params.branchId ?? ''))
 const { user } = useCounterSession()
@@ -58,7 +60,7 @@ useSeoMeta({ robots: 'noindex' })
 
     <main class="mx-auto w-full max-w-5xl flex-1 space-y-4 p-4">
       <UButton
-        :to="`/counter/${branchId}`"
+        :to="tenantPath(`/counter/${branchId}`)"
         label="Back to queue"
         icon="i-lucide-arrow-left"
         color="neutral"

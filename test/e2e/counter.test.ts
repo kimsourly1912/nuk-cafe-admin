@@ -48,12 +48,12 @@ async function cashierAtCounter(width = 1180) {
   const problems: string[] = []
   page.on('pageerror', error => problems.push(error.message))
   await page.setViewportSize({ width, height: width < 640 ? 844 : 820 })
-  await page.goto(url('/counter'), { waitUntil: 'hydration' })
-  await page.waitForURL(u => u.pathname === '/counter/sign-in')
+  await page.goto(url('/c/nuk/counter'), { waitUntil: 'hydration' })
+  await page.waitForURL(u => u.pathname === '/c/nuk/counter/sign-in')
   await page.getByLabel('Email').fill(seed.customers.cashier.email)
   await page.getByLabel('Password', { exact: true }).fill(seed.customers.cashier.password)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await page.waitForURL(u => u.pathname === `/counter/${seed.openBranchId}`)
+  await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}`)
   return { page, problems }
 }
 
@@ -277,13 +277,13 @@ describe('the counter', () => {
     const order = await placeOrder(seed.customers.counterShopperA)
     try {
       const { page } = await cashierAtCounter()
-      await page.goto(url(`/counter/${seed.openBranchId}?order=${order.id}`), { waitUntil: 'hydration' })
+      await page.goto(url(`/c/nuk/counter/${seed.openBranchId}?order=${order.id}`), { waitUntil: 'hydration' })
       await panel(page).getByText('1 × Banana Bread').waitFor()
       await expect.poll(() => new URL(page.url()).search).toBe('')
       // Once it has left the queue, the link opens it on Finished today (step 10.2).
       await command(order, 'cancel', { version: 1, reason: 'customer_changed_mind', note: null, returnMethod: null })
-      await page.goto(url(`/counter/${seed.openBranchId}?order=${order.id}`), { waitUntil: 'hydration' })
-      await page.waitForURL(u => u.pathname === `/counter/${seed.openBranchId}/finished`)
+      await page.goto(url(`/c/nuk/counter/${seed.openBranchId}?order=${order.id}`), { waitUntil: 'hydration' })
+      await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}/finished`)
       await page.getByRole('heading', { name: `Order ${number(order)}` }).waitFor()
       await page.getByText('Cancelled by Sophea: customer changed their mind').waitFor()
       await expect.poll(() => new URL(page.url()).search).toBe('')
@@ -302,7 +302,7 @@ describe('the counter', () => {
     const { page, problems } = await cashierAtCounter()
 
     await page.getByRole('link', { name: /^Finished today \(\d+\)$/ }).click()
-    await page.waitForURL(u => u.pathname === `/counter/${seed.openBranchId}/finished`)
+    await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}/finished`)
     const row = page.getByRole('row').filter({ has: page.getByRole('button', { name: `Order ${number(order)}`, exact: true }) })
     await row.getByText('KHQR', { exact: true }).waitFor()
     await row.getByText('Completed').waitFor()
@@ -329,7 +329,7 @@ describe('the counter', () => {
     await command(order, 'ready', { version: 2 })
     await command(order, 'complete', { version: 3 })
     const { page } = await cashierAtCounter(390)
-    await page.goto(url(`/counter/${seed.openBranchId}/finished`), { waitUntil: 'hydration' })
+    await page.goto(url(`/c/nuk/counter/${seed.openBranchId}/finished`), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: `Order ${number(order)}, Completed` }).click()
     await panel(page).getByRole('heading', { name: `Order ${number(order)}` }).waitFor()
     await panel(page).getByText(/Cash USD \$2\.25 · by Sophea$/).waitFor()
@@ -351,12 +351,12 @@ describe('the counter', () => {
   it('refuses an account that works at no branch, on the sign-in page', async () => {
     const page = await createPage()
     await asNewVisitor(page)
-    await page.goto(url('/counter/sign-in'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk/counter/sign-in'), { waitUntil: 'hydration' })
     await page.getByLabel('Email').fill(seed.customers.verified.email)
     await page.getByLabel('Password', { exact: true }).fill(seed.customers.verified.password)
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
     await page.getByRole('alert').filter({ hasText: 'This account doesn\'t work at any branch, so it can\'t use the counter.' }).waitFor()
-    expect(new URL(page.url()).pathname).toBe('/counter/sign-in')
+    expect(new URL(page.url()).pathname).toBe('/c/nuk/counter/sign-in')
   })
 
   it('the customer site\'s account menu links staff to the counter, and only them (D124)', async () => {
@@ -365,13 +365,13 @@ describe('the counter', () => {
     expect(await me(seed.customers.verified)).toEqual([])
 
     const { page } = await cashierAtCounter(1440)
-    await page.goto(url('/'), { waitUntil: 'hydration' })
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
     await page.getByRole('button', { name: `Account: ${seed.customers.cashier.name}` }).click()
     const counter = page.getByRole('link', { name: 'Counter' })
-    expect(await counter.getAttribute('href')).toBe('/counter')
+    expect(await counter.getAttribute('href')).toBe('/c/nuk/counter')
     expect(await page.getByRole('link', { name: 'Admin workspace' }).count()).toBe(0)
     await counter.click()
-    await page.waitForURL(u => u.pathname === `/counter/${seed.openBranchId}`)
+    await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}`)
   })
 })
 
@@ -386,7 +386,7 @@ describe('sold out at the counter (D105)', () => {
   it('switches one version off from the queue\'s Sold out button; the customer menu shows it; "N sold out" lists it; switching back restores it', async () => {
     const { page, problems } = await cashierAtCounter()
     await page.getByRole('link', { name: 'Sold out' }).click()
-    await page.waitForURL(u => u.pathname === `/counter/${seed.openBranchId}/sold-out`)
+    await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}/sold-out`)
     await page.getByRole('heading', { name: 'Sold out', exact: true }).waitFor()
 
     await page.getByRole('textbox', { name: 'Find an item' }).fill('coconut')
@@ -422,7 +422,7 @@ describe('sold out at the counter (D105)', () => {
 
   it('on a phone: the category chips scroll, and each row keeps its switch', async () => {
     const { page } = await cashierAtCounter(390)
-    await page.goto(url(`/counter/${seed.openBranchId}/sold-out`), { waitUntil: 'hydration' })
+    await page.goto(url(`/c/nuk/counter/${seed.openBranchId}/sold-out`), { waitUntil: 'hydration' })
     await page.getByRole('navigation', { name: 'Categories' }).getByRole('button', { name: 'All' }).waitFor()
     const [first] = (await coconut()).variations
     const row = page.getByRole('listitem', { name: `Coconut Coffee · ${first!.label}`, exact: true })

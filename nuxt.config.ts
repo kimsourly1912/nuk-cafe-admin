@@ -192,25 +192,27 @@ export default defineNuxtConfig({
     },
   },
   routeRules: {
+    // A cafe's pages live under its address, `/c/<slug>/…` (D141); `*` is the cafe.
     // The admin workspace renders in the browser only: its pages need the staff session and never
     // need search engines (D95).
-    '/admin': { ssr: false },
-    '/admin/**': { ssr: false },
+    '/c/*/admin': { ssr: false },
+    '/c/*/admin/**': { ssr: false },
     // A table's QR link stores the table in this tab and moves on to the menu: browser work only.
     '/table/**': { ssr: false },
     // Checkout and a customer's order are theirs alone and read browser storage and the session:
     // browser work only, like a table's QR link (D100).
-    '/checkout': { ssr: false },
-    '/orders': { ssr: false },
-    '/orders/**': { ssr: false },
+    '/c/*/checkout': { ssr: false },
+    '/c/*/orders': { ssr: false },
+    '/c/*/orders/**': { ssr: false },
     // The counter workspace, like the admin: the staff session, no search engines (D102).
-    '/counter': { ssr: false },
-    '/counter/**': { ssr: false },
-    // The customer menu (D122): the same page for everyone (the account is read in the browser), so
-    // one render serves every visitor for a minute, refreshed in the background. Rendering it costs
-    // ~10× the menu data. Sold-out marks and the open state can lag up to a minute; checkout checks
-    // everything again. Off in the e2e build, whose tests change the menu and reload at once.
-    ...(process.env.E2E_HUB_DIR ? {} : { '/': { swr: MENU_PAGE_CACHE_SECONDS } }),
+    '/c/*/counter': { ssr: false },
+    '/c/*/counter/**': { ssr: false },
+    // A cafe's menu (D122): the same page for everyone (the account is read in the browser), so
+    // one render serves every visitor for a minute, refreshed in the background; cached per address,
+    // so per cafe. Rendering it costs ~10× the menu data. Sold-out marks and the open state can lag
+    // up to a minute; checkout checks everything again. Off in the e2e build, whose tests change the
+    // menu and reload at once.
+    ...(process.env.E2E_HUB_DIR ? {} : { '/c/*': { swr: MENU_PAGE_CACHE_SECONDS } }),
     // Session gate per surface (@nuxtjs/better-auth), a second line behind each route's own
     // requirePermission / requireBranchPermission / requireCustomer (docs/server/security.md). A
     // session only: who may use the admin is a role in the tenant (D135), which the gate can't see.

@@ -12,7 +12,7 @@ import type { TableColumn } from '@nuxt/ui'
 import type { PublicBranch } from '#shared/contracts/branches'
 import type { CounterOrder } from '#shared/contracts/orders'
 import { useCounterMuted } from '../composables/useCounterQueue'
-import { COUNTER_HOME_PATH, useCounterSession } from '../composables/useCounterSession'
+import { useCounterSession } from '../composables/useCounterSession'
 import { useFinishedToday, useOrderHistory } from '../composables/useFinishedToday'
 import { clockTime, firstName, matchesSearch, orderNumber, orderTypeText } from '../utils/counter'
 import type { FinishedFilter } from '../utils/finished'
@@ -20,6 +20,8 @@ import { filterFinished, finishedAt, itemSummary, paymentNote } from '../utils/f
 import CounterHeader from './CounterHeader.vue'
 import CounterHistoryPanel from './CounterHistoryPanel.vue'
 import CounterViewSwitch from './CounterViewSwitch.vue'
+
+const tenantPath = useTenantPath()
 
 const route = useRoute()
 const branchId = computed(() => String(route.params.branchId ?? ''))
@@ -90,7 +92,7 @@ useSeoMeta({ robots: 'noindex' })
       v-model:muted="muted"
       :branch-name="branch?.name ?? 'Branch'"
       :open-now="branchStatus ? branchStatus.openNow : null"
-      :sold-out-to="branch ? `/counter/${branch.id}/sold-out` : undefined"
+      :sold-out-to="branch ? tenantPath(`/counter/${branch.id}/sold-out`) : undefined"
     />
 
     <div
@@ -102,7 +104,7 @@ useSeoMeta({ robots: 'noindex' })
       </p>
       <UButton
         label="Choose a branch"
-        :to="COUNTER_HOME_PATH"
+        :to="tenantPath('/counter')"
       />
     </div>
 

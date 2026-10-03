@@ -7,6 +7,8 @@
  */
 import { ACCOUNT_PATHS, accountLink, useCustomerAccount, useResendVerification } from '~/features/account'
 
+const tenantPath = useTenantPath()
+
 const open = defineModel<'sign-in' | 'verify' | null>({ required: true })
 const emit = defineEmits<{ verified: [] }>()
 
@@ -109,12 +111,12 @@ async function checkVerified() {
           <div class="grid w-full gap-2">
             <UButton
               label="Sign in"
-              :to="accountLink(ACCOUNT_PATHS.signIn, '/checkout')"
+              :to="accountLink(ACCOUNT_PATHS.signIn, tenantPath('/checkout'))"
               block
             />
             <UButton
               label="Create account"
-              :to="accountLink(ACCOUNT_PATHS.signUp, '/checkout')"
+              :to="accountLink(ACCOUNT_PATHS.signUp, tenantPath('/checkout'))"
               color="neutral"
               variant="outline"
               block

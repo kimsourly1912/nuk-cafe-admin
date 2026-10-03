@@ -24,7 +24,7 @@ async function open(width: number, height = 812, colorScheme: 'light' | 'dark' =
   if (colorScheme === 'dark') await page.addInitScript(() => localStorage.setItem('nuxt-color-mode', 'dark'))
   await page.setViewportSize({ width, height })
   await mockApi(page, handlers)
-  await page.goto(url('/admin/categories'), { waitUntil: 'hydration' })
+  await page.goto(url('/c/nuk/admin/categories'), { waitUntil: 'hydration' })
   await page.getByRole('listitem', { name: 'Coffee', exact: true }).waitFor()
   return page
 }
