@@ -17,6 +17,6 @@ export default defineEventHandler(async (event): Promise<CustomerAccount> => {
     email: session!.user.email,
     emailVerified: session!.user.emailVerified,
     ...profile,
-    workspaces: await workspacesOf(db, session!.user as Parameters<typeof workspacesOf>[1]),
+    workspaces: await workspacesOf(db, session!.user as Parameters<typeof workspacesOf>[1], actor.tenantId),
   }
 })

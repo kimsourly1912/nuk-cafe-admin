@@ -101,7 +101,7 @@ export async function findCharge(db: Db, id: string): Promise<ChargeRow | undefi
   return row
 }
 
-export type NewCharge = Omit<ChargeRow, 'id'> & { createdBy: string }
+export type NewCharge = Omit<ChargeRow, 'id'> & { tenantId: string, createdBy: string }
 
 export async function insertCharge(db: Db, charge: NewCharge): Promise<ChargeRow> {
   const [row] = await db.insert(khqrCharges).values(charge).returning(chargeColumns)

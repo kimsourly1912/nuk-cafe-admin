@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { CreateItemInput, MenuItem } from '#shared/contracts/menu-items'
 import type { OptionSet } from '#shared/contracts/menu-options'
 import type { PublicMenu } from '#shared/contracts/public-menu'
-import { organization } from '#server/db/tables'
+import { branches } from '#server/db/tables'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { mediaAssets } from '#server/features/media/media.schema'
 import { archiveAvailabilityRule, createAvailabilityRule } from '#server/features/menu/availability.service'
@@ -12,13 +12,13 @@ import { archiveItem, createItem, publishItem, restoreItem, updateItem } from '#
 import { archiveModifier, archiveModifierGroup, createModifierGroup } from '#server/features/menu/modifiers.service'
 import { archiveOptionValue, createOptionSet } from '#server/features/menu/options.service'
 import { setSoldOut } from '#server/features/menu/soldout.service'
-import { createTestDb } from '#server/tests/support/db'
+import { createTestDb, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 
 let db: Db
-const admin: Actor = { userId: 'admin-1', role: 'admin' }
+const admin: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner' }
 let branchId: string
 let otherBranch: string
 let drinks: string
@@ -27,7 +27,7 @@ let size: OptionSet
 
 async function addBranch(status = 'active') {
   const id = newId()
-  await db.insert(organization).values({ id, name: `Branch ${id.slice(-4)}`, slug: id, timezone: 'Asia/Phnom_Penh', status, createdAt: new Date() })
+  await insertBranch(db, { id, name: `Branch ${id.slice(-4)}`, timezone: 'Asia/Phnom_Penh', status })
   return id
 }
 
@@ -64,10 +64,10 @@ const latte = () => published('Latte', {
 
 /** Monday 2026-09-28, local time in Phnom Penh (UTC+7). */
 const monday = (hhmm: string) => new Date(`2026-09-28T${hhmm}:00+07:00`)
-const menu = (at = monday('09:00'), branch = branchId) => getPublicMenu(db, { branchId: branch }, at)
+const menu = (at = monday('09:00'), branch = branchId) => getPublicMenu(db, TEST_TENANT, { branchId: branch }, at)
 const items = (m: PublicMenu) => m.categories.flatMap(c => [...c.items, ...c.categories.flatMap(s => s.items)])
 const names = (m: PublicMenu) => items(m).map(i => i.name)
-const staffAt = (id: string): BranchActor => ({ userId: 'staff-1', role: 'customer', branchId: id, branchRole: 'staff' })
+const staffAt = (id: string): BranchActor => ({ userId: 'staff-1', tenantId: TEST_TENANT, role: 'customer', branchId: id, branchRole: 'staff' })
 
 describe('the public menu', () => {
   it('lists active categories and items with their versions, option sets, add-ons and image', async () => {
@@ -195,8 +195,8 @@ describe('the public menu', () => {
   })
 
   it('reads the first active branch by name when none is named (D95)', async () => {
-    const result = await getPublicMenu(db, {}, monday('09:00'))
-    const names = await db.select().from(organization)
+    const result = await getPublicMenu(db, TEST_TENANT, {}, monday('09:00'))
+    const names = await db.select().from(branches)
     const first = names.filter(b => b.status === 'active').sort((a, b) => a.name.localeCompare(b.name))[0]!
     expect(result.branch.id).toBe(first.id)
   })

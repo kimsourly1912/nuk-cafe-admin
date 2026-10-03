@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
   const input = await readValidBody(event, sendReportSchema)
   const db = useDb()
   return sendReport(db, api, actor, key, input, async () => {
-    const message = await reportMessage(db, input.report, { attachCsv: input.attachCsv })
+    const message = await reportMessage(db, actor.tenantId, input.report, { attachCsv: input.attachCsv })
     return {
       subject: message.subject,
       html: message.html,

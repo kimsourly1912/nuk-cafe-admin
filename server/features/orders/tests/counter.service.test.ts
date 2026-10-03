@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { CancelOrderInput, PayOrderInput } from '#shared/contracts/orders'
 import { cancelOrderSchema, toRiel } from '#shared/contracts/orders'
-import { organization } from '#server/db/tables'
 import { updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
@@ -11,7 +10,7 @@ import { cancelOrderAtCounter, completeOrder, getCounterOrder, getCounterOrderHi
 import { expireUnpaidOrders } from '#server/features/orders/expiry.service'
 import { counterPayments, orderEvents, orders } from '#server/features/orders/orders.schema'
 import { cancelMyOrder, placeOrder } from '#server/features/orders/orders.service'
-import { createTestDb, createUser } from '#server/tests/support/db'
+import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -22,7 +21,7 @@ import { newId } from '#server/utils/ids'
 // migrations: the queue, each command, the riel rate, and what two cashiers (or a retry) can't do.
 
 let db: Db
-const admin: Actor = { userId: 'admin-1', role: 'admin' }
+const admin: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner' }
 let branchId: string
 let otherBranchId: string
 let itemId: string
@@ -40,7 +39,7 @@ const allWeek = [1, 2, 3, 4, 5, 6, 7].map(weekday => ({ weekday, startMinute: 42
 
 async function addBranch(name: string) {
   const id = newId()
-  await db.insert(organization).values({ id, name, slug: id, timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+  await insertBranch(db, { id, name, timezone: 'Asia/Phnom_Penh', status: 'active' })
   await updateBranchSettings(db, admin, id, { version: 1, hours: allWeek })
   return id
 }
@@ -101,11 +100,11 @@ beforeEach(async () => {
   const item = await publishItem(db, admin, draft.id, { version: draft.version })
   itemId = item.id
   variationId = item.variations[0]!.id
-  sokha = { userId: (await createUser(db, 'sokha@example.com', 'Sokha Chan')).id, role: 'customer' }
-  dara = { userId: (await createUser(db, 'dara@example.com', 'Dara Sok')).id, role: 'customer' }
-  cashier = { userId: (await createUser(db, 'sophea@example.com', 'Sophea')).id, role: 'customer', branchId, branchRole: 'staff' }
-  colleague = { userId: (await createUser(db, 'vanna@example.com', 'Vanna')).id, role: 'customer', branchId, branchRole: 'staff' }
-  rateSetter = { userId: (await createUser(db, 'kim@example.com', 'Kim')).id, role: 'admin' }
+  sokha = { userId: (await createUser(db, 'sokha@example.com', 'Sokha Chan')).id, tenantId: TEST_TENANT, role: 'customer' }
+  dara = { userId: (await createUser(db, 'dara@example.com', 'Dara Sok')).id, tenantId: TEST_TENANT, role: 'customer' }
+  cashier = { userId: (await createUser(db, 'sophea@example.com', 'Sophea')).id, tenantId: TEST_TENANT, role: 'customer', branchId, branchRole: 'staff' }
+  colleague = { userId: (await createUser(db, 'vanna@example.com', 'Vanna')).id, tenantId: TEST_TENANT, role: 'customer', branchId, branchRole: 'staff' }
+  rateSetter = { userId: (await createUser(db, 'kim@example.com', 'Kim')).id, tenantId: TEST_TENANT, role: 'owner' }
 })
 
 describe('the queue', () => {

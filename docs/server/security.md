@@ -30,7 +30,7 @@ Use these; don't rebuild them. Checked against better-auth 1.7.3, @nuxtjs/better
 | Rate limiting of auth routes | Better Auth `rateLimit` (database storage, `customRules`) |
 | Breached passwords | Better Auth **`haveIBeenPwned`** plugin |
 | Work on sign-up (create the loyalty account) | Better Auth `databaseHooks.user.create.after` |
-| Session required on route groups | `@nuxtjs/better-auth` `routeRules` `auth` in `nuxt.config.ts`: `/api/admin/**` needs a session with role `admin`, `/api/counter/**` and `/api/shop/**` a session. A second line only (see Checking) |
+| Session required on route groups | `@nuxtjs/better-auth` `routeRules` `auth` in `nuxt.config.ts`: `/api/admin/**`, `/api/counter/**` and `/api/shop/**` need a session. A second line only (see Checking): who may use the admin is a role in the tenant (D135), which the gate can't see, so `server/tests/admin-routes.test.ts` checks every admin route calls an access helper |
 | Upload size and type check | NuxtHub `ensureBlob(file, { maxSize, types })` (plus our magic-byte check: it trusts the claimed type) |
 | Rate limiting our API, bot protection | Workers rate-limit bindings on `/api/public/**` per client address (D121, no domain needed); Cloudflare WAF rate-limiting rules (edge, no code) once a domain exists |
 | Security headers | Nitro `routeRules` `headers` (production builds, `securityHeaders()` in `nuxt.config.ts`) |
@@ -41,21 +41,22 @@ Use these; don't rebuild them. Checked against better-auth 1.7.3, @nuxtjs/better
 ## Identity
 
 - **One account per person**, email + password, owned by Better Auth (`user`, `account`, `session`, `verification`).
-- An account by itself grants **nothing** beyond the shop: access comes from the platform role and branch memberships.
+- An account by itself grants **nothing** beyond the shop: access comes from its memberships in a tenant (a cafe business, D134, D135) and the branches it works at. **One account can belong to several tenants** (owner of one, staff at another, customer at a third); each tenant's access is separate.
 - The same person can be staff and a customer on one account. **Staff never act on their own customer records**: no redeeming their own voucher, adjusting their own points or completing their own order payment. The server checks `actor.userId !== customer.userId` for those actions.
 
 ## Roles and permissions
 
-Two layers, both Better Auth:
+Three layers (D134, D135):
 
 | Layer | Stored in | Roles |
 |---|---|---|
-| Platform | `user.role` (`admin` plugin) | `customer` (default for every sign-up), `admin` (owner/head office) |
-| Branch | `member.role` (`organization` plugin), one row per branch | `manager`, `staff` |
+| Platform | `user.role` (Better Auth `admin` plugin) | `customer` (default for every sign-up), `superadmin` (the platform team: tenants, never a tenant's data) |
+| Tenant | `member.role` (Better Auth `organization` plugin, an organization = a tenant), one row per tenant | `owner` (everything in the cafe; shown as "Admin" in the app), `member` (only their branches) |
+| Branch | `branch_staff.role` (our table), one row per branch | `manager`, `staff` |
 
 Permissions are **statements** (`resource: [actions]`) defined once in `server/features/identity/identity.permissions.ts` with `createAccessControl`, and granted to roles there. Agreed with the owner on 2026-09-27 (D45):
 
-| Resource | Action | admin | manager | staff |
+| Resource | Action | owner | manager | staff |
 |---|---|:-:|:-:|:-:|
 | menu | read | ✔ | ✔ | ✔ |
 | menu | write / publish | ✔ | | |
@@ -76,28 +77,29 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | report | read, export (the reports, their CSV and print, and sending them to Telegram; 8.1, D110) | ✔ | read, own branch (not used yet: managers have no admin portal, D52) | |
 | audit | read | ✔ | own branch | |
 | assistant | use the AI assistant (phase 9, D107, D108) | ✔ | | |
-| Better Auth `user` / `session` admin endpoints | create, list, set role, ban, set password, revoke sessions… | ✔ (no impersonation) | | |
 | Better Auth `organization` / `member` / `invitation` / `ac` endpoints | update, delete, add or remove members, invite | | | |
 
-The last two rows are Better Auth's own statements: branch roles get **none** of them, so managers can't add staff or change the branch through Better Auth's endpoints; staff changes go through our admin routes. `server/features/identity/tests/identity.permissions.test.ts` asserts this whole table, one row per grant.
+The platform role grants only `tenant` (create, read, update, suspend; the platform console, T2) and Better Auth's `user` / `session` admin endpoints (no impersonation) to `superadmin`, and **nothing inside a tenant**. The last row is Better Auth's own statements: no tenant role gets them, so nobody adds members or changes a tenant through Better Auth's endpoints; staff changes go through our admin routes. `server/features/identity/tests/identity.permissions.test.ts` asserts these tables, one row per grant.
 
-A platform `admin` has every branch permission in every branch: **our** `requireBranchPermission` grants that, because Better Auth only knows branch roles for members of that branch (spike, 2026-09-27).
+A tenant's `owner` has every branch permission in every branch of that tenant: **our** `requireBranchPermission` grants that.
 
 **Checking** (`server/utils/access.ts`, auto-imported in routes; the decisions are `authorize*` in `server/features/identity/identity.service.ts`):
 
 | Helper | Surface | Refuses with |
 |---|---|---|
-| `requirePermission(event, { menu: ['write'] })` | `/api/admin` | 401 no session / banned; 403 `PASSWORD_CHANGE_REQUIRED`; 403 `FORBIDDEN` when the platform role lacks **any** requested action |
-| `requireBranchPermission(event, branchId, { order: ['cancel'] })` | `/api/counter/{branchId}` | 401; 403 `PASSWORD_CHANGE_REQUIRED`; **404** for an unknown or archived branch, a branch the caller isn't a member of, or an unknown membership role; 403 `FORBIDDEN` for a member whose role lacks the action. A platform admin passes in every active branch without being a member |
+| `requireTenant(event)` | public routes; called by the others | 404 when there is no tenant or it's suspended. The tenant is the request's, never anything the client sends: until addresses name it (`/api/c/<slug>`, T1.5) it's the only tenant |
+| `requirePermission(event, { menu: ['write'] })` | `/api/admin` | 401 no session / banned; 403 `PASSWORD_CHANGE_REQUIRED`; 403 `FORBIDDEN` when the caller's role **in this tenant** lacks any requested action (a super admin, another tenant's owner and a `member` included) |
+| `requireBranchPermission(event, branchId, { order: ['cancel'] })` | `/api/counter/{branchId}` | 401; 403 `PASSWORD_CHANGE_REQUIRED`; **404** for an unknown or archived branch, **another tenant's branch**, a branch the caller doesn't work at, or an unknown role; 403 `FORBIDDEN` for staff whose role lacks the action. The tenant's owners pass in every active branch of the tenant |
 | `requireCustomer(event)` | `/api/shop` writes | 401; 403 `PASSWORD_CHANGE_REQUIRED`; 403 `EMAIL_NOT_VERIFIED` |
 | `requireSignedIn(event)` | own-account reads | 401; 403 `PASSWORD_CHANGE_REQUIRED` |
 
-- Each returns the **actor** (`{ userId, role }`, plus `branchId` and `branchRole?` on the counter) that services receive and write to the audit log.
-- The branch id comes from the path (`readIdParam(event, 'branchId', 'The branch')`), never from a body. Better Auth's tables use UUID v7 like ours (`advanced.database.generateId`), so `readIdParam` applies to users and branches too.
-- Deny by default: a route without a permission check is a bug. The `routeRules` session gate catches a forgotten check on the admin surface (401, or 403 for non-admins) but can't see branches, permissions, `mustChangePassword` or email verification.
+- Each returns the **actor** (`{ userId, tenantId, role }`, plus `branchId` and `branchRole?` on the counter) that services receive: they scope every read and write to `actor.tenantId` and write it to the audit log.
+- The branch id comes from the path (`readIdParam(event, 'branchId', 'The branch')`), never from a body. Better Auth's tables use UUID v7 like ours (`advanced.database.generateId`), so `readIdParam` applies to users and tenants too.
+- Deny by default: a route without a permission check is a bug. The `routeRules` session gate only asks for a session (401); it can't see tenants, roles, branches, `mustChangePassword` or email verification. `server/tests/admin-routes.test.ts` fails when an admin route calls no access helper.
 - Tests: `identity.service.test.ts` covers every refusal above (each guard checked to fail its test when removed). The route wiring was checked against a production build with temporary probe routes (D48); per-route tests come with the first real routes (step 1.4).
-- Only admins can create branches (`allowUserToCreateOrganization: user => user.role === 'admin'`). Better Auth always makes the creator a member; our config names that membership `manager` (`creatorRole`), since `owner` isn't one of our roles.
-- Branches are never deleted (`disableOrganizationDeletion`); they're archived through `organization.status`.
+- Only super admins can create tenants (`allowUserToCreateOrganization: user => user.role === 'superadmin'`); Better Auth makes the creator its `owner` (`creatorRole`). The seed task and the platform console (T2) create them directly.
+- Tenants are never deleted (`disableOrganizationDeletion`); they're suspended through `organization.status`. Branches are our own table, archived through `branches.status`.
+- **Every query on tenant-owned data names the tenant** (the plan's rules): a repository takes `tenantId`, and another tenant's record is the same 404 as a missing one. Each feature's tests seed two tenants and check this, with the filter removed to see them fail.
 - The whole configuration is `identityAuthOptions()` in `server/features/identity/identity.auth.ts`; `server/auth.config.ts` only passes it the site URL.
 
 ## Sessions
@@ -113,16 +115,17 @@ Built in step 1.4 (D49): `server/features/identity/staff.*`, routes under `/api/
 
 1. An admin creates the account with name, email and access: `admin` and/or one role per branch (several branches allowed). The server generates a **temporary password** (16 characters, e.g. `Hq7x-3mPa-kR9t-Wz2c`), returns it **once** for the admin to hand over, and stores only Better Auth's hash. The email is marked verified (the admin vouches for it).
 2. The account carries `mustChangePassword = true` (a Better Auth `user.additionalFields` field).
-3. While it's set, our access helpers answer **403 `PASSWORD_CHANGE_REQUIRED`** on every surface; Better Auth's `/api/auth/**` still works, and the app shows the change-password screen (step 1.7). (On `/api/admin` a non-admin gets 403 `FORBIDDEN` from the route-rule gate first.)
+3. While it's set, our access helpers answer **403 `PASSWORD_CHANGE_REQUIRED`** on every surface; Better Auth's `/api/auth/**` still works, and the app shows the change-password screen (step 1.7).
 4. Changing the password (Better Auth `/change-password`) clears the flag: an `after` hook in `identity.auth.ts`, only when the change succeeded. A reset link clears it too (the token's user is read in a `before` hook, since the token is gone afterwards). A password set by an admin stays temporary.
 5. **Reset by an admin** (step 10.1, D115): `POST /api/admin/staff/{userId}/reset-password` `{ version }` (`staff: ['reset-password']`, admins only) gives a staff member a new temporary password, returned **once**, sets `mustChangePassword`, and deletes every session of theirs, in one batch guarded by the account's version, with an audit entry (never the password). Not for one's own account (Change password) and not for customers (they reset by email).
-5. Changing someone's access replaces their admin role and memberships and **signs them out everywhere** (except an admin editing their own branches). Disabling = removing the admin role and every membership and signing them out. Their account keeps working as a customer, and can be given access again later.
-6. Every change writes an `audit_events` row (`staff.create`, `staff.access.update`, `staff.disable`) with the access given, never a password.
+6. Changing someone's access replaces their role in the tenant (`owner` = "Admin", or `member`) and their branches, and **signs them out everywhere** (except an owner editing their own branches). Disabling removes them from the tenant (membership and branches) and signs them out. Their account keeps working as a customer, **and keeps any other cafe's access** (D135); it can be given access again later.
+7. **Tenants (D135):** an owner manages the people of their own tenant only: another tenant's people are 404 to every staff route, and the list shows only members. The last-owner guard counts this tenant's owners. A password reset changes the account everywhere, so it's refused with 409 `STAFF_ELSEWHERE` for someone who also belongs to another tenant, or a super admin: they reset it themselves.
+8. Every change writes an `audit_events` row (`staff.create`, `staff.access.update`, `staff.disable`) with the access given, never a password.
 
 | Case | Result |
 |---|---|
-| The email already has a **customer** account | That account gets the access; its password, points and orders are untouched; no temporary password (`temporaryPassword: null`) |
-| The email already has **staff access** (or is an admin) | 409 `STAFF_ALREADY_EXISTS`: edit them instead |
+| The email already has a **customer** account, or works at **another cafe** | That account gets the access; its password, points, orders and other cafes' access are untouched; no temporary password (`temporaryPassword: null`) |
+| The email already has **staff access here** (or is an owner here) | 409 `STAFF_ALREADY_EXISTS`: edit them instead |
 | A membership names an unknown or archived branch | 400 `VALIDATION_FAILED`, `fieldErrors["memberships.N.branchId"]` |
 | No admin role and no membership | 400 (`fieldErrors.memberships`); taking all access away is "disable" |
 | An admin removes their own admin role, or disables themselves | 409 `OWN_ACCESS` |

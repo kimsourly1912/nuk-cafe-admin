@@ -3,13 +3,12 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { CreateItemInput, MenuItem } from '#shared/contracts/menu-items'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { OrderLineInput, PlaceOrderInput } from '#shared/contracts/orders'
-import { organization } from '#server/db/tables'
 import { archiveTable, createTable, updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { archiveItem, createCategory, createItem, createModifierGroup, createOptionSet, publishItem, setSoldOut, updateItem } from '#server/features/menu'
 import { orders } from '#server/features/orders/orders.schema'
 import { getOrder, placeOrder } from '#server/features/orders/orders.service'
-import { createTestDb, createUser } from '#server/tests/support/db'
+import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -18,7 +17,7 @@ import { newId } from '#server/utils/ids'
 // migrations: pickup numbers, idempotent retries, the unpaid limit, tables and snapshots.
 
 let db: Db
-const admin: Actor = { userId: 'admin-1', role: 'admin' }
+const admin: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner' }
 const qr = { secret: 'test-qr-secret-that-is-long-enough', baseUrl: 'https://cafe.example' }
 let branchId: string
 let otherBranch: string
@@ -35,7 +34,7 @@ const NOON = monday('12:00')
 
 async function addBranch(name: string, hours: { weekday: number, startMinute: number, endMinute: number }[]) {
   const id = newId()
-  await db.insert(organization).values({ id, name, slug: id, timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+  await insertBranch(db, { id, name, timezone: 'Asia/Phnom_Penh', status: 'active' })
   if (hours.length) await updateBranchSettings(db, admin, id, { version: 1, hours })
   return id
 }
@@ -103,8 +102,8 @@ beforeEach(async () => {
     modifierGroups: [{ groupId: milk.id, rules: null, prices: [] }],
   })
   bread = await published('Banana Bread')
-  sokha = { userId: (await createUser(db)).id, role: 'customer' }
-  dara = { userId: (await createUser(db)).id, role: 'customer' }
+  sokha = { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'customer' }
+  dara = { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'customer' }
 })
 
 describe('placing an order', () => {
@@ -159,7 +158,7 @@ describe('placing an order', () => {
   })
 
   it('refuses a line that can\'t be ordered now', async () => {
-    const staff: BranchActor = { userId: 'staff-1', role: 'customer', branchId, branchRole: 'staff' }
+    const staff: BranchActor = { userId: 'staff-1', tenantId: TEST_TENANT, role: 'customer', branchId, branchRole: 'staff' }
     await setSoldOut(db, staff, { variationIds: [bread.variations[0]!.id], soldOut: true })
     await expectApiError(() => place(sokha), 409, 'ORDER_NOT_ORDERABLE')
     expect(await orderCount()).toBe(0)
@@ -179,14 +178,14 @@ describe('pickup numbers (Q39)', () => {
     expect((await placed(dara, { branchId: otherBranch })).pickupNumber).toBe(1)
     // Open all night: 03:59 is still Monday's business day, 04:00 starts Tuesday's.
     const night = await addBranch('Night Owl', allWeek(0, 1440))
-    const lateSokha = { userId: (await createUser(db)).id, role: 'customer' as const }
-    const lateDara = { userId: (await createUser(db)).id, role: 'customer' as const }
+    const lateSokha = { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'customer' as const }
+    const lateDara = { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'customer' as const }
     expect(await placed(lateSokha, { branchId: night }, new Date('2026-09-29T03:59:00+07:00'))).toMatchObject({ pickupNumber: 1, businessDate: '2026-09-28' })
     expect(await placed(lateDara, { branchId: night }, new Date('2026-09-29T04:00:00+07:00'))).toMatchObject({ pickupNumber: 1, businessDate: '2026-09-29' })
   })
 
   it('never repeat when orders are placed at the same moment', async () => {
-    const customers = await Promise.all([1, 2, 3, 4].map(async () => ({ userId: (await createUser(db)).id, role: 'customer' as const })))
+    const customers = await Promise.all([1, 2, 3, 4].map(async () => ({ userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'customer' as const })))
     const on = racing(customers.length)
     const results = await Promise.all(customers.map(customer => place(customer, {}, NOON, crypto.randomUUID(), on)))
     const numbers = await Promise.all(results.map(async (r, i) => (await getOrder(db, customers[i]!, r.orderId)).pickupNumber))

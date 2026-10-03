@@ -93,14 +93,14 @@ export async function loadCatalog(db: Db): Promise<Catalog> {
 }
 
 /**
- * What the branch sells at `now`: available items (in the branch's time zone), their versions marked
+ * What the tenant's branch sells at `now`: available items (in the branch's time zone), their versions marked
  * sold out or not there, and whether the branch is open. Without `branchId`, the first active branch
  * (D95). Unknown and archived branches are 404, and so is no branch at all.
  */
-export async function getPublicMenu(db: Db, query: PublicMenuQuery, now = new Date()): Promise<PublicMenu> {
-  const branchId = query.branchId ?? (await listBranchOptions(db))[0]?.id
+export async function getPublicMenu(db: Db, tenantId: string, query: PublicMenuQuery, now = new Date()): Promise<PublicMenu> {
+  const branchId = query.branchId ?? (await listBranchOptions(db, tenantId))[0]?.id
   if (!branchId) throw notFound('This branch')
-  const branch = await getPublicBranch(db, branchId, now)
+  const branch = await getPublicBranch(db, tenantId, branchId, now)
   const [catalog, soldOut] = await Promise.all([loadCatalog(db), soldOutIds(db, branch.id)])
   return {
     branch,

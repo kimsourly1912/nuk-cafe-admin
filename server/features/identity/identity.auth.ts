@@ -6,7 +6,7 @@ import { newId } from '#server/utils/ids'
 import { log } from '#server/utils/log'
 import { outboxStatement } from '#server/features/platform'
 import { MAIL_KINDS } from './identity.mail'
-import { branchAc, branchRoles, platformAc, platformRoles } from './identity.permissions'
+import { platformAc, platformRoles, tenantAc, tenantRoles } from './identity.permissions'
 
 const MINUTE = 60
 const DAY = 24 * 60 * MINUTE
@@ -71,7 +71,7 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
         },
       },
     },
-    // UUID v7 like every other table, so Better Auth's ids (users, branches) pass readIdParam.
+    // UUID v7 like every other table, so Better Auth's ids (users, tenants) pass readIdParam.
     advanced: {
       database: { generateId: () => newId() },
       // Rate limits count per client address (D103). Cloudflare sets `cf-connecting-ip` itself (a
@@ -127,26 +127,22 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
         ac: platformAc,
         roles: platformRoles,
         defaultRole: 'customer',
-        adminRoles: ['admin'],
+        adminRoles: ['superadmin'],
       }),
       organization({
-        // A branch is an organization. Only platform admins create branches.
-        ac: branchAc,
-        roles: branchRoles,
-        allowUserToCreateOrganization: user => user.role === 'admin',
-        // Better Auth always makes the creator a member; `owner` is not one of our roles.
-        creatorRole: 'manager',
-        // Branches are archived (status), never deleted: orders and reports reference them.
+        // A tenant (a cafe business) is an organization (D134); its branches are our own table.
+        // Only super admins create tenants.
+        ac: tenantAc,
+        roles: tenantRoles,
+        allowUserToCreateOrganization: user => user.role === 'superadmin',
+        creatorRole: 'owner',
+        // Tenants are suspended (status), never deleted: orders and reports reference them.
         disableOrganizationDeletion: true,
         schema: {
           organization: {
             additionalFields: {
-              timezone: { type: 'string', required: true },
-              currency: { type: 'string', required: false, defaultValue: 'USD' },
-              address: { type: 'string', required: false },
-              phone: { type: 'string', required: false },
               status: { type: 'string', required: false, defaultValue: 'active', input: false },
-              // The lock for the branch's settings and hours (D41, D91): every save names it.
+              // The lock for the tenant's own settings (D41).
               version: { type: 'number', required: false, defaultValue: 1, input: false },
             },
           },

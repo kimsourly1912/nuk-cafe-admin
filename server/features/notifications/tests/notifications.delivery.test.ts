@@ -1,7 +1,6 @@
 import { Api } from 'grammy'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { organization } from '#server/db/tables'
 import { updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
@@ -13,7 +12,7 @@ import * as repo from '#server/features/notifications/notifications.repository'
 import { notificationDeliveries, telegramDestinations } from '#server/features/notifications/notifications.schema'
 import { sendReport, telegramOverview } from '#server/features/notifications/notifications.service'
 import type { TelegramSettings } from '#server/features/notifications/notifications.settings'
-import { createAdmin, createTestDb, createUser } from '#server/tests/support/db'
+import { createAdmin, createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -77,17 +76,17 @@ const deliveries = () => db.select().from(notificationDeliveries)
 beforeEach(async () => {
   db = await createTestDb()
   telegram = new FakeTelegram()
-  admin = { userId: (await createAdmin(db)).userId, role: 'admin' }
+  admin = { userId: (await createAdmin(db)).userId, tenantId: TEST_TENANT, role: 'owner' }
   branchId = newId()
-  await db.insert(organization).values({ id: branchId, name: 'Riverside', slug: branchId, timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+  await insertBranch(db, { id: branchId, name: 'Riverside', timezone: 'Asia/Phnom_Penh', status: 'active' })
   // Monday 07:00–21:00 only: Tuesday is a closed day.
   await updateBranchSettings(db, admin, branchId, { version: 1, hours: [{ weekday: 1, startMinute: 420, endMinute: 1260 }] })
   const coffee = await createCategory(db, admin, { name: 'Coffee', description: '', parentId: null, availabilityRuleIds: [] })
   const draft = await createItem(db, admin, { categoryId: coffee.id, name: 'Iced Latte', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 875, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
   const published = await publishItem(db, admin, draft.id, { version: draft.version })
   latte = { itemId: published.id, variationId: published.variations[0]!.id }
-  sokha = { userId: (await createUser(db, 'sokha@example.com', 'Sokha Chan')).id, role: 'customer' }
-  cashier = { userId: (await createUser(db, 'dara@example.com', 'Dara Sok')).id, role: 'customer', branchId, branchRole: 'staff' }
+  sokha = { userId: (await createUser(db, 'sokha@example.com', 'Sokha Chan')).id, tenantId: TEST_TENANT, role: 'customer' }
+  cashier = { userId: (await createUser(db, 'dara@example.com', 'Dara Sok')).id, tenantId: TEST_TENANT, role: 'customer', branchId, branchRole: 'staff' }
   group = await destination('NUK Riverside Staff', 'group', '-100200')
   owner = await destination('Kim', 'private', '555')
 })
@@ -229,10 +228,10 @@ describe('closing summary', () => {
   })
 
   it('is queued 30 minutes after closing, once, with the CSV as its own message', async () => {
-    expect(await queueClosingSummaries(db, SITE, at(MON, '21:29'))).toEqual([])
-    const ids = await queueClosingSummaries(db, SITE, at(MON, '21:30'))
+    expect(await queueClosingSummaries(db, TEST_TENANT, SITE, at(MON, '21:29'))).toEqual([])
+    const ids = await queueClosingSummaries(db, TEST_TENANT, SITE, at(MON, '21:30'))
     expect(ids).toHaveLength(2)
-    expect(await queueClosingSummaries(db, SITE, at(MON, '21:31'))).toEqual([])
+    expect(await queueClosingSummaries(db, TEST_TENANT, SITE, at(MON, '21:31'))).toEqual([])
 
     await deliverDue(db, telegram.api, at(MON, '21:31'))
     const text = telegram.sent()[0]!.payload!
@@ -244,15 +243,15 @@ describe('closing summary', () => {
   })
 
   it('isn\'t sent on a closed day, or late after downtime', async () => {
-    expect(await queueClosingSummaries(db, SITE, at(TUE, '22:00'))).toEqual([])
+    expect(await queueClosingSummaries(db, TEST_TENANT, SITE, at(TUE, '22:00'))).toEqual([])
     // 12 hours after it was due: skipped rather than sent the next morning.
-    expect(await queueClosingSummaries(db, SITE, at(TUE, '09:30'))).toEqual([])
+    expect(await queueClosingSummaries(db, TEST_TENANT, SITE, at(TUE, '09:30'))).toEqual([])
   })
 
   it('a chat added later still gets that day\'s summary; the others don\'t get it twice', async () => {
-    await queueClosingSummaries(db, SITE, at(MON, '21:30'))
+    await queueClosingSummaries(db, TEST_TENANT, SITE, at(MON, '21:30'))
     await setNotificationRule(db, admin, { kind: 'closing_summary', destinationId: group, enabled: true, attachCsv: false })
-    const ids = await queueClosingSummaries(db, SITE, at(MON, '21:40'))
+    const ids = await queueClosingSummaries(db, TEST_TENANT, SITE, at(MON, '21:40'))
     expect(ids).toHaveLength(1)
     expect((await deliveries()).filter(d => d.destinationId === group)).toHaveLength(1)
   })

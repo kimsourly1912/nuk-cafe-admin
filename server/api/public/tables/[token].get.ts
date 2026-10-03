@@ -5,5 +5,6 @@ import { resolveTableToken } from '#server/features/branches'
  * tokens, archived tables and archived branches are all 404 (D91).
  */
 export default defineEventHandler(async (event) => {
-  return resolveTableToken(useDb(), getRouterParam(event, 'token') ?? '')
+  const tenant = await requireTenant(event)
+  return resolveTableToken(useDb(), tenant.id, getRouterParam(event, 'token') ?? '')
 })

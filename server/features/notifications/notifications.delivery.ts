@@ -199,14 +199,15 @@ export async function queueBakongTokenReminder(db: Db, expiresAt: Date | null, s
  * Queues each branch's closing summary once it's due: 30 minutes after the business day's last
  * opening window ends, for 12 hours (not sent late after downtime), never on a closed day (R4).
  * The Summary is read once and saved: a retry resends the same figures. Checked every minute; the
- * dedupe key keeps it to one per branch, business date and chat.
+ * dedupe key keeps it to one per branch, business date and chat. One tenant's branches: until the
+ * chats belong to a tenant (T1.4, D134), the task passes the only one.
  */
-export async function queueClosingSummaries(db: Db, siteUrl?: string, now = new Date()): Promise<string[]> {
+export async function queueClosingSummaries(db: Db, tenantId: string, siteUrl?: string, now = new Date()): Promise<string[]> {
   const targets = await repo.targetsOf(db, 'closing_summary')
   if (!targets.length) return []
   const queued: string[] = []
-  for (const branch of await reportBranches(db, now)) {
-    const settings = await getBranchSettings(db, branch.id, now)
+  for (const branch of await reportBranches(db, tenantId, now)) {
+    const settings = await getBranchSettings(db, tenantId, branch.id, now)
     for (const date of [addDays(branch.today, -1), branch.today]) {
       const closing = closingInstant(settings.hours, date, branch.timeZone)
       if (!closing) continue
@@ -218,7 +219,7 @@ export async function queueClosingSummaries(db: Db, siteUrl?: string, now = new 
       const missing = targets.filter(t => !done.has(t.destinationId))
       if (!missing.length) continue
 
-      const report = await reportMessage(db, { kind: 'summary', query: { branchId: branch.id, from: date, to: date } }, { attachCsv: missing.some(t => t.attachCsv), title: 'Closing summary' }, now)
+      const report = await reportMessage(db, tenantId, { kind: 'summary', query: { branchId: branch.id, from: date, to: date } }, { attachCsv: missing.some(t => t.attachCsv), title: 'Closing summary' }, now)
       const button = siteUrl?.startsWith('https://')
         ? { text: 'View full report', url: new URL(`/admin/reports/summary?from=${date}&to=${date}`, siteUrl).toString() }
         : undefined

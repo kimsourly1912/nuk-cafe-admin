@@ -29,10 +29,10 @@ const MINUTE = 60_000
 export { businessDateAt }
 
 /** The table a QR token names, if it's an active table of this branch. */
-async function tableFor(db: Db, branchId: string, token: string | null) {
+async function tableFor(db: Db, tenantId: string, branchId: string, token: string | null) {
   if (!token) return null
   try {
-    const found = await resolveTableToken(db, token)
+    const found = await resolveTableToken(db, tenantId, token)
     if (found.branch.id === branchId) return found.table
   }
   catch {
@@ -64,16 +64,17 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
     { actorId: actor.userId, operation: 'orders.place', key: idempotencyKey },
     input,
     async () => {
-      const menu = await getPublicMenu(db, { branchId: input.branchId }, now)
+      const menu = await getPublicMenu(db, actor.tenantId, { branchId: input.branchId }, now)
       const quote = quoteOrder(menu, input.lines)
       if (quote.problems[0]) throw orderingClosed(quote.problems[0].message)
       if (!quote.orderable) throw orderNotOrderable()
       if (quote.totalMinor !== input.expectedTotalMinor) throw pricesChanged()
-      const table = await tableFor(db, menu.branch.id, input.tableToken)
+      const table = await tableFor(db, actor.tenantId, menu.branch.id, input.tableToken)
 
       const orderId = newId()
       const order: repo.NewOrder = {
         id: orderId,
+        tenantId: actor.tenantId,
         branchId: menu.branch.id,
         customerId: actor.userId,
         businessDate: businessDateAt(now, menu.branch.timezone),
@@ -103,8 +104,8 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
       return {
         statements: [
           repo.insertOrderStatement(db, order),
-          ...repo.insertLinesStatements(db, orderId, lines),
-          repo.eventStatement(db, { orderId, toVersion: 1, actorId: actor.userId, fromStatus: null, toStatus: 'awaiting_payment', at: now }),
+          ...repo.insertLinesStatements(db, actor.tenantId, orderId, lines),
+          repo.eventStatement(db, { tenantId: actor.tenantId, orderId, toVersion: 1, actorId: actor.userId, fromStatus: null, toStatus: 'awaiting_payment', at: now }),
           repo.unpaidAtMostStatement(db, actor.userId, now, MAX_UNPAID_ORDERS),
           // A neutral event for whoever listens (the Telegram alerts, D113): orders don't know them.
           outboxStatement(db, ORDER_EVENTS.placed, { orderId }),

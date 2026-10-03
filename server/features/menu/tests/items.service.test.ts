@@ -9,14 +9,14 @@ import { archiveCategory, createCategory, updateCategory } from '#server/feature
 import { archiveItem, createItem, getItem, listItems, publishItem, reorderItems, restoreItem, unpublishItem, updateItem } from '#server/features/menu/items.service'
 import { menuCategories, menuItemVariations, menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
 import { addOptionValue, archiveOptionSet, archiveOptionValue, createOptionSet, getOptionSet, restoreOptionValue } from '#server/features/menu/options.service'
-import { createTestDb } from '#server/tests/support/db'
+import { createTestDb, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 
 let db: Db
-const actor: Actor = { userId: 'admin-1', role: 'admin', requestId: 'req-1' }
+const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', requestId: 'req-1' }
 
 let drinks: string
 let hot: string

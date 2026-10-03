@@ -27,6 +27,6 @@ export function nextVersion(current: Date, now = new Date()): Date {
 }
 
 /** `user.role` may hold several comma-separated roles (Better Auth); ours only ever set one. */
-export function isPlatformAdmin(role: string | null | undefined): boolean {
-  return (role ?? '').split(',').map(r => r.trim()).includes('admin')
+export function isSuperadmin(role: string | null | undefined): boolean {
+  return (role ?? '').split(',').map(r => r.trim()).includes('superadmin')
 }

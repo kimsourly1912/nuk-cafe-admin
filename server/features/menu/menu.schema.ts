@@ -1,8 +1,8 @@
 import { sql } from 'drizzle-orm'
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
-import { check, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import { schema as authSchema } from '#auth/schema'
+import { check, foreignKey, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { newId } from '#server/utils/ids'
+import { branches, tenantId } from '#server/features/branches/branches.schema'
 
 /**
  * The menu (docs/server/data-model.md → Menu, D44): categories (3.1), options (3.3), add-ons (3.4),
@@ -284,14 +284,15 @@ export const menuCategoryAvailability = sqliteTable('menu_category_availability'
  * actor, so the record survives if the account is removed.
  */
 export const branchItemStates = sqliteTable('branch_item_states', {
-  // A branch is a Better Auth organization. '#auth/schema' declares only the core tables by name;
-  // its `schema` object holds every one (plugins included).
-  branchId: text().notNull().references(() => authSchema!.organization.id, { onDelete: 'cascade' }),
+  // The branch's tenant (D134). The menu itself gets its tenant in step T1.2.
+  tenantId: tenantId(),
+  branchId: text().notNull(),
   variationId: text().notNull().references(() => menuItemVariations.id, { onDelete: 'cascade' }),
   soldOut: integer({ mode: 'boolean' }).notNull().default(false),
   updatedBy: text().notNull(),
   updatedAt: instant().notNull().default(nowMs),
 }, t => [
   primaryKey({ columns: [t.branchId, t.variationId] }),
+  foreignKey({ name: 'branch_item_states_branch_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }).onDelete('cascade'),
   index('branch_item_states_variation_idx').on(t.variationId),
 ])

@@ -6,13 +6,13 @@ import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import { menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
 import { addOptionValue, archiveOptionSet, archiveOptionValue, createOptionSet, listOptionSets, renameOptionSet, renameOptionValue, reorderOptionValues, restoreOptionSet, restoreOptionValue } from '#server/features/menu/options.service'
-import { createTestDb } from '#server/tests/support/db'
+import { createTestDb, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
 
 let db: Db
-const actor: Actor = { userId: 'admin-1', role: 'admin', requestId: 'req-1' }
+const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', requestId: 'req-1' }
 
 beforeEach(async () => {
   db = await createTestDb()

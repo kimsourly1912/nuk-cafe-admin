@@ -10,24 +10,27 @@ import { profileStatement } from '#server/features/customers'
 import { auditStatement } from '#server/features/platform'
 import type { AuditActor } from '#server/features/platform'
 import type { Actor } from './identity.types'
-import { lastAdmin, ownAccess, staffAlreadyExists, staffChanged, staffNotFound, unknownBranches } from './staff.errors'
+import { lastAdmin, ownAccess, staffAlreadyExists, staffChanged, staffElsewhere, staffNotFound, unknownBranches } from './staff.errors'
 import * as repo from './staff.repository'
 import type { AccountRow, MembershipRow } from './staff.repository'
-import { generateTemporaryPassword, isPlatformAdmin, nextVersion } from './staff.rules'
+import { generateTemporaryPassword, isSuperadmin, nextVersion } from './staff.rules'
 
 /**
- * Staff management (docs/server/security.md → Staff onboarding, D49). Only platform admins reach
- * these (`staff:create|update|disable`); the actor is always an admin.
+ * Staff management (docs/server/security.md → Staff onboarding, D49, D134), in one tenant. Only its
+ * owners reach these (`staff:create|update|disable`). "Admin" in the contract and the screens is
+ * the tenant's `owner` role. Owners manage **memberships**: an account can belong to other
+ * tenants too, so changes to the account itself (a password) are limited to accounts of this tenant
+ * alone.
  */
 
 type Memberships = { branchId: string, role: BranchRoleName }[]
 
-function toStaffMember(row: AccountRow, memberships: MembershipRow[]): StaffMember {
+function toStaffMember(row: AccountRow, owners: Set<string>, memberships: MembershipRow[]): StaffMember {
   return {
     id: row.id,
     name: row.name,
     email: row.email,
-    admin: isPlatformAdmin(row.role),
+    admin: owners.has(row.id),
     memberships: memberships.filter(m => m.userId === row.id).map(m => ({ branchId: m.branchId, branchName: m.branchName, role: m.role as BranchRoleName })),
     mustChangePassword: Boolean(row.mustChangePassword),
     version: row.updatedAt.getTime(),
@@ -35,26 +38,29 @@ function toStaffMember(row: AccountRow, memberships: MembershipRow[]): StaffMemb
   }
 }
 
-async function loadStaffMember(db: Db, userId: string): Promise<StaffMember> {
+/** A member of the tenant, else 404: another tenant's people don't exist here. */
+async function loadStaffMember(db: Db, tenantId: string, userId: string): Promise<StaffMember> {
   const row = await repo.findAccount(db, userId)
-  if (!row) throw staffNotFound()
-  return toStaffMember(row, await repo.membershipsOf(db, [userId]))
+  if (!row || !await repo.tenantRoleOf(db, tenantId, userId)) throw staffNotFound()
+  return toStaffMember(row, await repo.ownersAmong(db, tenantId, [userId]), await repo.membershipsOf(db, tenantId, [userId]))
 }
 
-async function ensureActiveBranches(db: Db, memberships: Memberships) {
-  const active = await repo.activeBranchIds(db, memberships.map(m => m.branchId))
+async function ensureActiveBranches(db: Db, tenantId: string, memberships: Memberships) {
+  const active = await repo.activeBranchIds(db, tenantId, memberships.map(m => m.branchId))
   const missing = memberships.flatMap((m, i) => active.has(m.branchId) ? [] : [i])
   if (missing.length) throw unknownBranches(missing)
 }
 
-const staffAudit = (db: Db, by: AuditActor, action: string, userId: string, metadata: Record<string, unknown>) =>
-  auditStatement(db, by, { action, targetType: 'user', targetId: userId, metadata })
+const staffAudit = (db: Db, by: AuditActor, tenantId: string, action: string, userId: string, metadata: Record<string, unknown>) =>
+  auditStatement(db, by, { action, targetType: 'user', targetId: userId, metadata: { ...metadata, tenantId } })
+
+const tenantRole = (admin: boolean) => admin ? 'owner' as const : 'member' as const
 
 const accessMetadata = (admin: boolean, memberships: Memberships) => ({ admin, memberships })
 
 /**
  * Runs a batch that changes an account's access. A guard failure is either a stale version (someone
- * changed the account) or the last-admin guard; which one is told apart by reading the account again.
+ * changed the account) or the last-owner guard; which one is told apart by reading the account again.
  */
 async function runAccessBatch(db: Db, statements: Statement[], userId: string, expectedVersion: number) {
   try {
@@ -69,11 +75,12 @@ async function runAccessBatch(db: Db, statements: Statement[], userId: string, e
   }
 }
 
-export async function listStaff(db: Db, query: StaffListQuery): Promise<Page<StaffMember>> {
-  const { rows, total } = await repo.listStaff(db, query)
-  const memberships = await repo.membershipsOf(db, rows.map(r => r.id))
+export async function listStaff(db: Db, actor: Actor, query: StaffListQuery): Promise<Page<StaffMember>> {
+  const { rows, total } = await repo.listStaff(db, actor.tenantId, query)
+  const ids = rows.map(r => r.id)
+  const [owners, memberships] = await Promise.all([repo.ownersAmong(db, actor.tenantId, ids), repo.membershipsOf(db, actor.tenantId, ids)])
   return {
-    items: rows.map(row => toStaffMember(row, memberships)),
+    items: rows.map(row => toStaffMember(row, owners, memberships)),
     page: query.page,
     pageSize: query.pageSize,
     total,
@@ -81,45 +88,44 @@ export async function listStaff(db: Db, query: StaffListQuery): Promise<Page<Sta
   }
 }
 
-export async function getStaffMember(db: Db, userId: string): Promise<StaffMember> {
-  return loadStaffMember(db, userId)
+export async function getStaffMember(db: Db, actor: Actor, userId: string): Promise<StaffMember> {
+  return loadStaffMember(db, actor.tenantId, userId)
 }
 
 /**
  * Creates a staff account with a temporary password, or gives access to an existing account with
- * that email (a customer who also works at the cafe: they keep their password; D49).
+ * that email (a customer, or someone working at another cafe: they keep their password; D49).
  */
 export async function createStaff(db: Db, actor: Actor, input: CreateStaffInput): Promise<CreatedStaff> {
-  return createStaffAs(db, actor, input)
+  return createStaffAs(db, actor, actor.tenantId, input)
 }
 
 /** `userId: null`: the system (the seed task). */
-async function createStaffAs(db: Db, by: AuditActor, input: CreateStaffInput): Promise<CreatedStaff> {
-  await ensureActiveBranches(db, input.memberships)
+async function createStaffAs(db: Db, by: AuditActor, tenantId: string, input: CreateStaffInput): Promise<CreatedStaff> {
+  await ensureActiveBranches(db, tenantId, input.memberships)
   const existing = await repo.findAccountByEmail(db, input.email)
   const now = new Date()
 
   if (existing) {
-    const current = await repo.membershipsOf(db, [existing.id])
-    if (isPlatformAdmin(existing.role) || current.length) throw staffAlreadyExists()
+    if (await repo.tenantRoleOf(db, tenantId, existing.id)) throw staffAlreadyExists()
     const statements: Statement[] = [
-      repo.setPlatformRoleStatement(db, existing.id, input.admin, existing.updatedAt, nextVersion(existing.updatedAt, now)),
+      repo.bumpVersionStatement(db, existing.id, existing.updatedAt, nextVersion(existing.updatedAt, now)),
       requireOneChange(db),
-      ...repo.replaceMembershipsStatements(db, existing.id, input.memberships, now),
-      staffAudit(db, by, 'staff.create', existing.id, { ...accessMetadata(input.admin, input.memberships), existingAccount: true }),
+      ...repo.replaceAccessStatements(db, tenantId, existing.id, tenantRole(input.admin), input.memberships, now),
+      staffAudit(db, by, tenantId, 'staff.create', existing.id, { ...accessMetadata(input.admin, input.memberships), existingAccount: true }),
     ]
     await runAccessBatch(db, statements, existing.id, existing.updatedAt.getTime())
-    return { staff: await loadStaffMember(db, existing.id), temporaryPassword: null }
+    return { staff: await loadStaffMember(db, tenantId, existing.id), temporaryPassword: null }
   }
 
   const userId = newId()
   const temporaryPassword = generateTemporaryPassword()
   const statements: Statement[] = [
-    ...repo.insertAccountStatements(db, { id: userId, name: input.name, email: input.email, admin: input.admin, passwordHash: await hashPassword(temporaryPassword), now }),
+    ...repo.insertAccountStatements(db, { id: userId, name: input.name, email: input.email, passwordHash: await hashPassword(temporaryPassword), now }),
     // Better Auth's sign-up hook doesn't run for these writes (D49).
     profileStatement(db, userId),
-    ...repo.replaceMembershipsStatements(db, userId, input.memberships, now),
-    staffAudit(db, by, 'staff.create', userId, { ...accessMetadata(input.admin, input.memberships), existingAccount: false }),
+    ...repo.replaceAccessStatements(db, tenantId, userId, tenantRole(input.admin), input.memberships, now),
+    staffAudit(db, by, tenantId, 'staff.create', userId, { ...accessMetadata(input.admin, input.memberships), existingAccount: false }),
   ]
   try {
     await db.batch(statements as [Statement, ...Statement[]])
@@ -129,7 +135,7 @@ async function createStaffAs(db: Db, by: AuditActor, input: CreateStaffInput): P
     if (isUniqueViolation(error)) throw staffAlreadyExists()
     throw error
   }
-  return { staff: await loadStaffMember(db, userId), temporaryPassword }
+  return { staff: await loadStaffMember(db, tenantId, userId), temporaryPassword }
 }
 
 /**
@@ -137,43 +143,46 @@ async function createStaffAs(db: Db, by: AuditActor, input: CreateStaffInput): P
  * removed role can't linger; an admin editing their own branches stays signed in.
  */
 export async function updateStaffAccess(db: Db, actor: Actor, userId: string, input: UpdateStaffAccessInput): Promise<StaffMember> {
+  const { tenantId } = actor
   const target = await repo.findAccount(db, userId)
-  if (!target) throw staffNotFound()
+  if (!target || !await repo.tenantRoleOf(db, tenantId, userId)) throw staffNotFound()
   if (target.updatedAt.getTime() !== input.version) throw staffChanged()
   const self = actor.userId === userId
   if (self && !input.admin) throw ownAccess('remove admin')
-  await ensureActiveBranches(db, input.memberships)
+  await ensureActiveBranches(db, tenantId, input.memberships)
 
   const now = new Date()
   const statements: Statement[] = [
-    repo.setPlatformRoleStatement(db, userId, input.admin, target.updatedAt, nextVersion(target.updatedAt, now)),
+    repo.bumpVersionStatement(db, userId, target.updatedAt, nextVersion(target.updatedAt, now)),
     requireOneChange(db),
-    ...repo.replaceMembershipsStatements(db, userId, input.memberships, now),
-    repo.requireAnAdminStatement(db),
+    ...repo.replaceAccessStatements(db, tenantId, userId, tenantRole(input.admin), input.memberships, now),
+    repo.requireAnOwnerStatement(db, tenantId),
     ...(self ? [] : [repo.deleteSessionsStatement(db, userId)]),
-    staffAudit(db, actor, 'staff.access.update', userId, accessMetadata(input.admin, input.memberships)),
+    staffAudit(db, actor, tenantId, 'staff.access.update', userId, accessMetadata(input.admin, input.memberships)),
   ]
   await runAccessBatch(db, statements, userId, input.version)
-  return loadStaffMember(db, userId)
+  return loadStaffMember(db, tenantId, userId)
 }
 
 /**
- * Takes all staff access away: the admin role and every membership, and signs them out
- * everywhere. The account stays, as a customer account (security.md → Staff onboarding).
+ * Takes all staff access to this tenant away: the membership and every branch, and signs them out
+ * everywhere (a session can't be ended for one cafe only). The account stays, as a customer
+ * account, with any other cafe's access (security.md → Staff onboarding).
  */
 export async function disableStaff(db: Db, actor: Actor, userId: string, input: DisableStaffInput): Promise<void> {
+  const { tenantId } = actor
   if (actor.userId === userId) throw ownAccess('disable')
   const target = await repo.findAccount(db, userId)
-  if (!target) throw staffNotFound()
+  if (!target || !await repo.tenantRoleOf(db, tenantId, userId)) throw staffNotFound()
   if (target.updatedAt.getTime() !== input.version) throw staffChanged()
 
   const statements: Statement[] = [
-    repo.setPlatformRoleStatement(db, userId, false, target.updatedAt, nextVersion(target.updatedAt)),
+    repo.bumpVersionStatement(db, userId, target.updatedAt, nextVersion(target.updatedAt)),
     requireOneChange(db),
-    ...repo.replaceMembershipsStatements(db, userId, [], new Date()),
-    repo.requireAnAdminStatement(db),
+    ...repo.replaceAccessStatements(db, tenantId, userId, null, [], new Date()),
+    repo.requireAnOwnerStatement(db, tenantId),
     repo.deleteSessionsStatement(db, userId),
-    staffAudit(db, actor, 'staff.disable', userId, {}),
+    staffAudit(db, actor, tenantId, 'staff.disable', userId, {}),
   ]
   await runAccessBatch(db, statements, userId, input.version)
 }
@@ -183,14 +192,16 @@ export async function disableStaff(db: Db, actor: Actor, userId: string, input: 
  * can't reset it by email until the cafe has a sending domain (Q4), and an admin hands it over in
  * person anyway. They must choose their own at the next sign-in, and every session they had ends,
  * so the old password (or whoever knew it) is out at once. Only for staff (a customer resets by
- * email), never one's own (Change password), and audited without the password.
+ * email), never one's own (Change password), and audited without the password. The password opens
+ * every cafe the account belongs to, so only for an account of **this** cafe alone (D134): someone
+ * who also works elsewhere, or a super admin, resets their own by email.
  */
 export async function resetStaffPassword(db: Db, actor: Actor, userId: string, input: ResetStaffPasswordInput): Promise<StaffPasswordReset> {
+  const { tenantId } = actor
   if (actor.userId === userId) throw ownAccess('reset password')
   const target = await repo.findAccount(db, userId)
-  if (!target) throw staffNotFound()
-  const memberships = await repo.membershipsOf(db, [userId])
-  if (!isPlatformAdmin(target.role) && !memberships.length) throw staffNotFound()
+  if (!target || !await repo.tenantRoleOf(db, tenantId, userId)) throw staffNotFound()
+  if (isSuperadmin(target.role) || await repo.hasAccessElsewhere(db, tenantId, userId)) throw staffElsewhere()
   if (target.updatedAt.getTime() !== input.version) throw staffChanged()
 
   const temporaryPassword = generateTemporaryPassword()
@@ -200,7 +211,7 @@ export async function resetStaffPassword(db: Db, actor: Actor, userId: string, i
     requireOneChange(db),
     repo.setPasswordStatement(db, userId, await hashPassword(temporaryPassword), now, await repo.hasPasswordAccount(db, userId)),
     repo.deleteSessionsStatement(db, userId),
-    staffAudit(db, actor, 'staff.password.reset', userId, {}),
+    staffAudit(db, actor, tenantId, 'staff.password.reset', userId, {}),
   ]
   try {
     await db.batch(statements as [Statement, ...Statement[]])
@@ -210,14 +221,26 @@ export async function resetStaffPassword(db: Db, actor: Actor, userId: string, i
     if (isStaleWrite(error)) throw staffChanged()
     throw error
   }
-  return { staff: await loadStaffMember(db, userId), temporaryPassword }
+  return { staff: await loadStaffMember(db, tenantId, userId), temporaryPassword }
 }
 
 /**
- * The seed task: the first admin, with a temporary password printed once. Does nothing (returns
- * `null`) when an admin already exists, so it can run on every deploy of a disposable environment.
+ * The seed task's tenant (D134): the oldest one, or "NUK Cafe" (`nuk`) when none exists yet.
  */
-export async function seedFirstAdmin(db: Db, input: { name: string, email: string }): Promise<CreatedStaff | null> {
-  if (await repo.countAdmins(db) > 0) return null
-  return createStaffAs(db, { userId: null }, { ...input, email: input.email.trim().toLowerCase(), admin: true, memberships: [] })
+export async function seedTenant(db: Db, input: { name: string, slug: string }): Promise<{ id: string, name: string, slug: string, created: boolean }> {
+  const existing = await repo.findAnyTenant(db)
+  if (existing) return { ...existing, created: false }
+  const tenant = { id: newId(), name: input.name, slug: input.slug, now: new Date() }
+  await db.batch([repo.insertTenantStatement(db, tenant)])
+  return { id: tenant.id, name: tenant.name, slug: tenant.slug, created: true }
+}
+
+/**
+ * The seed task: the tenant's first owner, with a temporary password printed once. Does nothing
+ * (returns `null`) when the tenant has an owner, so it can run on every deploy of a disposable
+ * environment.
+ */
+export async function seedFirstOwner(db: Db, tenantId: string, input: { name: string, email: string }): Promise<CreatedStaff | null> {
+  if (await repo.countOwners(db, tenantId) > 0) return null
+  return createStaffAs(db, { userId: null }, tenantId, { ...input, email: input.email.trim().toLowerCase(), admin: true, memberships: [] })
 }

@@ -4,8 +4,8 @@ import { createClient } from '@libsql/client'
 import type { Client } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import type { Db } from '#server/utils/batch'
-import { eq } from 'drizzle-orm'
-import { user } from '#server/db/tables'
+import { and, eq } from 'drizzle-orm'
+import { branches, branchStaff, member, organization, user } from '#server/db/tables'
 
 const migrationsDir = fileURLToPath(new URL('../../../server/db/migrations/sqlite', import.meta.url))
 
@@ -79,9 +79,32 @@ export async function createUser(db: Db, email = `user${++users}@example.com`, n
   return rows[0]!
 }
 
-/** A platform admin (Better Auth's `user.role`). */
-export async function createAdmin(db: Db, email?: string) {
+/** The tenant tests act in (D134): `ensureTenant` creates it, actors name it. */
+export const TEST_TENANT = 'tenant-1'
+
+/** A tenant (a Better Auth organization), once per database. */
+export async function ensureTenant(db: Db, id = TEST_TENANT, slug = id) {
+  await db.insert(organization).values({ id, name: `Cafe ${id}`, slug, status: 'active', createdAt: new Date() }).onConflictDoNothing()
+  return id
+}
+
+/** A branch of a tenant (`TEST_TENANT` unless named), creating the tenant if needed. */
+export async function insertBranch(db: Db, values: { id: string, name: string, timezone: string, status?: string | null, tenantId?: string, address?: string | null, phone?: string | null }) {
+  const tenantId = await ensureTenant(db, values.tenantId)
+  await db.insert(branches).values({ ...values, tenantId, status: (values.status ?? 'active') as 'active' | 'archived', createdAt: new Date() })
+}
+
+/** An owner of the tenant (`TEST_TENANT` unless named): the admin app's user (D52, D134). */
+export async function createAdmin(db: Db, email?: string, tenantId = TEST_TENANT) {
   const row = await createUser(db, email, 'Admin')
-  await db.update(user).set({ role: 'admin' }).where(eq(user.id, row.id))
+  await ensureTenant(db, tenantId)
+  await db.insert(member).values({ id: crypto.randomUUID(), organizationId: tenantId, userId: row.id, role: 'owner', createdAt: new Date() })
   return { userId: row.id, email: row.email }
+}
+
+/** Someone working at a branch (`manager` or `staff`): a member of its tenant with a `branch_staff` row (D134). */
+export async function addBranchStaff(db: Db, branchId: string, userId: string, role: string, tenantId = TEST_TENANT) {
+  const [known] = await db.select({ id: member.id }).from(member).where(and(eq(member.organizationId, tenantId), eq(member.userId, userId)))
+  if (!known) await db.insert(member).values({ id: crypto.randomUUID(), organizationId: tenantId, userId, role: 'member', createdAt: new Date() })
+  await db.insert(branchStaff).values({ tenantId, branchId, userId, role: role as 'manager' | 'staff', createdAt: new Date() })
 }

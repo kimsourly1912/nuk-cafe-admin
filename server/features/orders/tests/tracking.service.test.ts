@@ -1,6 +1,5 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { organization } from '#server/db/tables'
 import { updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
@@ -9,7 +8,7 @@ import { cancelOrderAtCounter, completeOrder, markOrderReady, payOrder } from '#
 import { expireUnpaidOrders } from '#server/features/orders/expiry.service'
 import { orderEvents } from '#server/features/orders/orders.schema'
 import { cancelMyOrder, getOrder, listMyOrders, placeOrder } from '#server/features/orders/orders.service'
-import { createTestDb, createUser } from '#server/tests/support/db'
+import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -19,7 +18,7 @@ import { newId } from '#server/utils/ids'
 // and the migrations: what tracking reads, the list, and cancelling while unpaid.
 
 let db: Db
-const admin: Actor = { userId: 'admin-1', role: 'admin' }
+const admin: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner' }
 let branchId: string
 let itemId: string
 let variationId: string
@@ -47,7 +46,7 @@ const eventsOf = async (orderId: string) => db.select().from(orderEvents).where(
 beforeEach(async () => {
   db = await createTestDb()
   branchId = newId()
-  await db.insert(organization).values({ id: branchId, name: 'Riverside', slug: branchId, timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+  await insertBranch(db, { id: branchId, name: 'Riverside', timezone: 'Asia/Phnom_Penh', status: 'active' })
   await updateBranchSettings(db, admin, branchId, { version: 1, hours: [1, 2, 3, 4, 5, 6, 7].map(weekday => ({ weekday, startMinute: 420, endMinute: 1260 })) })
   const category = await createCategory(db, admin, { name: 'Coffee', description: '', parentId: null, availabilityRuleIds: [] })
   const draft = await createItem(db, admin, {
@@ -63,9 +62,9 @@ beforeEach(async () => {
   const item = await publishItem(db, admin, draft.id, { version: draft.version })
   itemId = item.id
   variationId = item.variations[0]!.id
-  sokha = { userId: (await createUser(db)).id, role: 'customer' }
-  dara = { userId: (await createUser(db)).id, role: 'customer' }
-  cashier = { userId: (await createUser(db)).id, role: 'customer', branchId, branchRole: 'staff' }
+  sokha = { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'customer' }
+  dara = { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'customer' }
+  cashier = { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'customer', branchId, branchRole: 'staff' }
 })
 
 describe('tracking an order (D106)', () => {
@@ -128,7 +127,7 @@ describe('the customer\'s orders (D106)', () => {
     const second = await listMyOrders(db, sokha, { page: 2, pageSize: 1 })
     expect(second.past.items.map(o => [o.id, o.status, o.itemCount, o.totalMinor])).toEqual([[completed, 'completed', 3, 2625]])
 
-    expect(await listMyOrders(db, { userId: (await createUser(db)).id, role: 'customer' }, { page: 1, pageSize: 20 }))
+    expect(await listMyOrders(db, { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'customer' }, { page: 1, pageSize: 20 }))
       .toEqual({ inProgress: [], past: { items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 } })
   })
 })

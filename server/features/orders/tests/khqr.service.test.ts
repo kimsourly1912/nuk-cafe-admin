@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { KhqrSettingsInput } from '#shared/contracts/orders'
 import { khqrSettingsSchema, toRiel } from '#shared/contracts/orders'
-import { organization } from '#server/db/tables'
 import { updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
@@ -11,7 +10,7 @@ import { listCounterQueue, payOrder, setExchangeRate } from '#server/features/or
 import { createKhqrCharge, getKhqrSettings, saveKhqrSettings } from '#server/features/orders/khqr.service'
 import { counterPayments, khqrCharges } from '#server/features/orders/orders.schema'
 import { placeOrder } from '#server/features/orders/orders.service'
-import { createTestDb, createUser } from '#server/tests/support/db'
+import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -21,7 +20,7 @@ import { parseInput } from '#server/utils/validation'
 // the migrations: the settings, the QR made for an order, and the payment that names it.
 
 let db: Db
-const admin: Actor = { userId: 'admin-1', role: 'admin' }
+const admin: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner' }
 let branchId: string
 let otherBranchId: string
 let itemId: string
@@ -41,7 +40,7 @@ const SETTINGS: KhqrSettingsInput = { version: 0, enabled: true, accountId: 'nuk
 
 async function addBranch(name: string) {
   const id = newId()
-  await db.insert(organization).values({ id, name, slug: id, timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+  await insertBranch(db, { id, name, timezone: 'Asia/Phnom_Penh', status: 'active' })
   await updateBranchSettings(db, admin, id, { version: 1, hours: allWeek })
   return id
 }
@@ -77,10 +76,10 @@ beforeEach(async () => {
   const item = await publishItem(db, admin, draft.id, { version: draft.version })
   itemId = item.id
   variationId = item.variations[0]!.id
-  customer = { userId: (await createUser(db, 'sokha@example.com', 'Sokha Chan')).id, role: 'customer' }
-  cashier = { userId: (await createUser(db, 'sophea@example.com', 'Sophea')).id, role: 'customer', branchId, branchRole: 'staff' }
-  elsewhere = { userId: (await createUser(db, 'vanna@example.com', 'Vanna')).id, role: 'customer', branchId: otherBranchId, branchRole: 'staff' }
-  owner = { userId: (await createUser(db, 'kim@example.com', 'Kim')).id, role: 'admin' }
+  customer = { userId: (await createUser(db, 'sokha@example.com', 'Sokha Chan')).id, tenantId: TEST_TENANT, role: 'customer' }
+  cashier = { userId: (await createUser(db, 'sophea@example.com', 'Sophea')).id, tenantId: TEST_TENANT, role: 'customer', branchId, branchRole: 'staff' }
+  elsewhere = { userId: (await createUser(db, 'vanna@example.com', 'Vanna')).id, tenantId: TEST_TENANT, role: 'customer', branchId: otherBranchId, branchRole: 'staff' }
+  owner = { userId: (await createUser(db, 'kim@example.com', 'Kim')).id, tenantId: TEST_TENANT, role: 'owner' }
 })
 
 describe('the KHQR settings', () => {

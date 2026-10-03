@@ -8,7 +8,7 @@ import { cancelLink, confirmLink, createLink, disconnectDestination, getLink, ha
 import { chatTitle, hashLinkCode, secretMatches, startCode } from '#server/features/notifications/notifications.rules'
 import type { TelegramSettings } from '#server/features/notifications/notifications.settings'
 import { telegramSettingsFrom } from '#server/features/notifications/notifications.settings'
-import { createAdmin, createTestDb } from '#server/tests/support/db'
+import { createAdmin, createTestDb, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -60,8 +60,8 @@ const codeOf = (url: string) => new URL(url).searchParams.get('start') ?? new UR
 beforeEach(async () => {
   db = await createTestDb()
   telegram = new FakeTelegram()
-  admin = { userId: (await createAdmin(db)).userId, role: 'admin' }
-  otherAdmin = { userId: (await createAdmin(db)).userId, role: 'admin' }
+  admin = { userId: (await createAdmin(db)).userId, tenantId: TEST_TENANT, role: 'owner' }
+  otherAdmin = { userId: (await createAdmin(db)).userId, tenantId: TEST_TENANT, role: 'owner' }
 })
 
 describe('settings and rules', () => {

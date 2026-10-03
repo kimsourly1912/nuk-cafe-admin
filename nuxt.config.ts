@@ -209,10 +209,9 @@ export default defineNuxtConfig({
     // everything again. Off in the e2e build, whose tests change the menu and reload at once.
     ...(process.env.E2E_HUB_DIR ? {} : { '/': { swr: MENU_PAGE_CACHE_SECONDS } }),
     // Session gate per surface (@nuxtjs/better-auth), a second line behind each route's own
-    // requirePermission / requireBranchPermission / requireCustomer (docs/server/security.md).
-    '/api/admin/**': { auth: { only: 'user', user: { role: 'admin' } } },
-    // The admin app's session check answers non-admins itself (403 NOT_ADMIN, a clearer message).
-    '/api/admin/me': { auth: 'user' },
+    // requirePermission / requireBranchPermission / requireCustomer (docs/server/security.md). A
+    // session only: who may use the admin is a role in the tenant (D135), which the gate can't see.
+    '/api/admin/**': { auth: 'user' },
     '/api/counter/**': { auth: 'user' },
     '/api/shop/**': { auth: 'user' },
     // API responses are personal or change often; a public route opts in to caching explicitly.

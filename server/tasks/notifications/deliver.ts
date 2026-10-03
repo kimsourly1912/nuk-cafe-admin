@@ -1,3 +1,4 @@
+import { currentTenant } from '#server/features/identity'
 import { deliverDue, queueBakongTokenReminder, queueClosingSummaries } from '#server/features/notifications'
 
 /**
@@ -12,8 +13,10 @@ export default defineTask({
     if (!settings) return { result: { off: true, queued: 0, sent: 0, retried: 0, failed: 0 } }
     const db = useDb()
     const siteUrl = useRuntimeConfig().public.siteUrl as string | undefined
+    // The only tenant until Telegram chats belong to one (T1.4, D134); none in an empty database.
+    const tenant = await currentTenant(db).catch(() => null)
     const queued = [
-      ...await queueClosingSummaries(db, siteUrl),
+      ...(tenant ? await queueClosingSummaries(db, tenant.id, siteUrl) : []),
       ...await queueBakongTokenReminder(db, bakongStatus().tokenExpiresAt, siteUrl),
     ]
     const report = await deliverDue(db, telegramApi(settings))

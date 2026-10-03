@@ -8,7 +8,7 @@ import { reportMessage } from '#server/features/orders'
  */
 export default defineEventHandler(async (event): Promise<ReportMessagePreview> => {
   requireTelegram(event)
-  await requirePermission(event, { report: ['export'] })
-  const { text } = await reportMessage(useDb(), await readValidBody(event, reportMessageSchema), { attachCsv: false })
+  const actor = await requirePermission(event, { report: ['export'] })
+  const { text } = await reportMessage(useDb(), actor.tenantId, await readValidBody(event, reportMessageSchema), { attachCsv: false })
   return { text }
 })

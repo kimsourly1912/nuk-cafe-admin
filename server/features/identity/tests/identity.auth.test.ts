@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as authSchema from '#auth/schema'
 import { identityAuthOptions } from '#server/features/identity/identity.auth'
-import { seedFirstAdmin } from '#server/features/identity/staff.service'
+import { seedFirstOwner, seedTenant } from '#server/features/identity/staff.service'
 import { createTestAuth, sessionHeaders, signIn, TEST_SITE as SITE } from '#server/tests/support/auth'
 import type { TestAuth as Auth } from '#server/tests/support/auth'
 import { createTestDb } from '#server/tests/support/db'
@@ -28,8 +28,8 @@ async function signUp(body: Record<string, unknown> = {}) {
   return { userId: response.user.id, headers: sessionHeaders(headers) }
 }
 
-async function makeAdmin(userId: string) {
-  await db.update(authSchema.user).set({ role: 'admin' }).where(eq(authSchema.user.id, userId))
+async function makeSuperadmin(userId: string) {
+  await db.update(authSchema.user).set({ role: 'superadmin' }).where(eq(authSchema.user.id, userId))
 }
 
 async function userRow(userId: string) {
@@ -82,7 +82,8 @@ describe('accounts', () => {
 
 describe('temporary password', () => {
   async function staffOnTemporaryPassword() {
-    const created = await seedFirstAdmin(db, { name: 'Owner', email: 'owner@example.com' })
+    const tenant = await seedTenant(db, { name: 'NUK Cafe', slug: 'nuk' })
+    const created = await seedFirstOwner(db, tenant.id, { name: 'Owner', email: 'owner@example.com' })
     const headers = await signIn(auth, 'owner@example.com', created!.temporaryPassword!)
     return { userId: created!.staff.id, password: created!.temporaryPassword!, headers }
   }
@@ -100,58 +101,56 @@ describe('temporary password', () => {
   })
 })
 
-describe('branches', () => {
-  const branch = { name: 'Riverside', slug: 'riverside', timezone: 'Asia/Phnom_Penh' }
+// A tenant (a cafe business) is a Better Auth organization (D134). Our routes manage memberships;
+// these check Better Auth's own endpoints can't be used to go around them.
+describe('tenants', () => {
+  const tenant = { name: 'NUK Cafe', slug: 'nuk' }
 
-  it('only lets platform admins create branches', async () => {
+  it('only lets super admins create a tenant, and makes the creator its owner', async () => {
     const customer = await signUp()
-    await expect(auth.api.createOrganization({ body: branch, headers: customer.headers })).rejects.toThrow()
+    await expect(auth.api.createOrganization({ body: tenant, headers: customer.headers })).rejects.toThrow()
 
-    const admin = await signUp()
-    await makeAdmin(admin.userId)
-    const created = await auth.api.createOrganization({ body: branch, headers: admin.headers })
-    expect(created).toMatchObject({ slug: 'riverside', timezone: 'Asia/Phnom_Penh', currency: 'USD', status: 'active' })
-    // Better Auth makes the creator a member, with one of our roles.
-    expect(created!.members[0]).toMatchObject({ userId: admin.userId, role: 'manager' })
+    const superadmin = await signUp()
+    await makeSuperadmin(superadmin.userId)
+    const created = await auth.api.createOrganization({ body: tenant, headers: superadmin.headers })
+    expect(created).toMatchObject({ slug: 'nuk', status: 'active' })
+    expect(created!.members[0]).toMatchObject({ userId: superadmin.userId, role: 'owner' })
   })
 
-  // Two guards: `disableOrganizationDeletion`, and no branch role holds `organization:delete`.
-  it('never deletes a branch', async () => {
-    const admin = await signUp()
-    await makeAdmin(admin.userId)
-    const created = await auth.api.createOrganization({ body: branch, headers: admin.headers })
-    await expect(auth.api.deleteOrganization({ body: { organizationId: created!.id }, headers: admin.headers })).rejects.toThrow()
+  // Two guards: `disableOrganizationDeletion`, and no tenant role holds `organization:delete`.
+  it('never deletes a tenant', async () => {
+    const superadmin = await signUp()
+    await makeSuperadmin(superadmin.userId)
+    const created = await auth.api.createOrganization({ body: tenant, headers: superadmin.headers })
+    await expect(auth.api.deleteOrganization({ body: { organizationId: created!.id }, headers: superadmin.headers })).rejects.toThrow()
   })
 
-  it('checks a member\'s branch role through Better Auth', async () => {
-    const admin = await signUp()
-    await makeAdmin(admin.userId)
-    const created = await auth.api.createOrganization({ body: branch, headers: admin.headers })
+  it('checks a member\'s tenant role through Better Auth: owners hold the cafe, members nothing, nobody the membership endpoints', async () => {
+    const superadmin = await signUp()
+    await makeSuperadmin(superadmin.userId)
+    const created = await auth.api.createOrganization({ body: tenant, headers: superadmin.headers })
     const staff = await signUp()
-    await auth.api.addMember({ body: { organizationId: created!.id, userId: staff.userId, role: 'staff' } })
+    await auth.api.addMember({ body: { organizationId: created!.id, userId: staff.userId, role: 'member' } })
 
-    const can = async (permissions: Record<string, string[]>) => {
-      const result = await auth.api.hasPermission({ body: { organizationId: created!.id, permissions }, headers: staff.headers })
-      return result.success
-    }
-    expect(await can({ order: ['cancel'] })).toBe(true)
-    expect(await can({ payment: ['collect'] })).toBe(true)
-    expect(await can({ payment: ['refund'] })).toBe(false)
-    expect(await can({ voucher: ['issue'] })).toBe(false)
-    expect(await can({ member: ['create'] })).toBe(false)
+    const can = async (headers: Headers, permissions: Record<string, string[]>) =>
+      (await auth.api.hasPermission({ body: { organizationId: created!.id, permissions }, headers })).success
+    expect(await can(superadmin.headers, { menu: ['write'], staff: ['create'] })).toBe(true)
+    expect(await can(superadmin.headers, { member: ['create'] })).toBe(false)
+    expect(await can(staff.headers, { menu: ['read'] })).toBe(false)
+    expect(await can(staff.headers, { invitation: ['create'] })).toBe(false)
   })
 })
 
 describe('platform permissions', () => {
   it('checks the platform role through Better Auth', async () => {
     const customer = await signUp()
-    const admin = await signUp()
-    await makeAdmin(admin.userId)
+    const superadmin = await signUp()
+    await makeSuperadmin(superadmin.userId)
     const can = async (userId: string, permissions: Record<string, string[]>) =>
       (await auth.api.userHasPermission({ body: { userId, permissions } })).success
 
-    expect(await can(admin.userId, { menu: ['write'] })).toBe(true)
-    expect(await can(admin.userId, { user: ['impersonate'] })).toBe(false)
-    expect(await can(customer.userId, { menu: ['read'] })).toBe(false)
+    expect(await can(superadmin.userId, { tenant: ['create'] })).toBe(true)
+    expect(await can(superadmin.userId, { user: ['impersonate'] })).toBe(false)
+    expect(await can(customer.userId, { tenant: ['read'] })).toBe(false)
   })
 })

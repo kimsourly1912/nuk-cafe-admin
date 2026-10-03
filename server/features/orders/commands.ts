@@ -64,6 +64,7 @@ export async function runOrderCommand(db: Db, command: OrderCommand, plan: (orde
             repo.transitionStatement(db, change),
             requireOneChange(db),
             repo.eventStatement(db, {
+              tenantId: order.tenantId,
               orderId,
               toVersion: order.version + 1,
               actorId: actor.userId,

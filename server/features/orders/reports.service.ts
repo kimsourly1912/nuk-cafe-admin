@@ -25,8 +25,8 @@ interface Context extends ReportContext {
   range: { branchId: string, start: Date, end: Date }
 }
 
-async function context(db: Db, query: ReportPeriodQuery, now: Date): Promise<Context> {
-  const branch = await repo.findReportBranch(db, query.branchId)
+async function context(db: Db, tenantId: string, query: ReportPeriodQuery, now: Date): Promise<Context> {
+  const branch = await repo.findReportBranch(db, tenantId, query.branchId)
   if (!branch) throw notFound('This branch')
   const { start, end } = periodInstants(query, branch.timeZone)
   return {
@@ -38,14 +38,14 @@ async function context(db: Db, query: ReportPeriodQuery, now: Date): Promise<Con
 }
 
 /** The branches reports can cover, each with today's business date in its own zone. */
-export async function reportBranches(db: Db, now = new Date()): Promise<ReportBranch[]> {
-  return (await repo.activeBranches(db)).map(branch => ({ ...branch, today: businessDateAt(now, branch.timeZone) }))
+export async function reportBranches(db: Db, tenantId: string, now = new Date()): Promise<ReportBranch[]> {
+  return (await repo.activeBranches(db, tenantId)).map(branch => ({ ...branch, today: businessDateAt(now, branch.timeZone) }))
 }
 
 const reportContext = ({ range: _, ...rest }: Context): ReportContext => rest
 
-export async function reportSummary(db: Db, query: ReportPeriodQuery, now = new Date()): Promise<ReportSummary> {
-  const ctx = await context(db, query, now)
+export async function reportSummary(db: Db, tenantId: string, query: ReportPeriodQuery, now = new Date()): Promise<ReportSummary> {
+  const ctx = await context(db, tenantId, query, now)
   const previous = periodInstants(previousPeriod(query), ctx.branch.timeZone)
   const today = businessDateAt(now, ctx.branch.timeZone)
   const includesToday = query.from <= today && today <= query.to
@@ -90,8 +90,8 @@ export async function reportSummary(db: Db, query: ReportPeriodQuery, now = new 
 }
 
 /** Sales by item: paid line totals and refunded ones per item, filtered, sorted, a page of them. */
-export async function itemSalesReport(db: Db, query: ItemSalesQuery, now = new Date()): Promise<ItemSalesReport> {
-  const ctx = await context(db, query, now)
+export async function itemSalesReport(db: Db, tenantId: string, query: ItemSalesQuery, now = new Date()): Promise<ItemSalesReport> {
+  const ctx = await context(db, tenantId, query, now)
   const [paid, refunded] = await Promise.all([
     repo.itemTotals(db, ctx.range, 'collected'),
     repo.itemTotals(db, ctx.range, 'returned'),
@@ -123,8 +123,8 @@ const historyRow = (row: repo.HistoryRow): OrderHistoryRow => ({
 })
 
 /** Orders placed in the business dates, with their payment and progress. */
-export async function orderHistory(db: Db, query: OrderHistoryQuery, now = new Date()): Promise<OrderHistory> {
-  const ctx = await context(db, query, now)
+export async function orderHistory(db: Db, tenantId: string, query: OrderHistoryQuery, now = new Date()): Promise<OrderHistory> {
+  const ctx = await context(db, tenantId, query, now)
   const { rows, total } = await repo.orderHistory(db, query)
   return {
     ...reportContext(ctx),
@@ -137,11 +137,11 @@ export async function orderHistory(db: Db, query: OrderHistoryQuery, now = new D
 }
 
 /** One order as sold: its lines, payment, and every recorded step with who took it. */
-export async function orderHistoryDetail(db: Db, id: string): Promise<OrderHistoryDetail> {
+export async function orderHistoryDetail(db: Db, tenantId: string, id: string): Promise<OrderHistoryDetail> {
   const order = await orderRepo.findOrder(db, id)
-  if (!order) throw orderNotFound()
+  if (!order || order.tenantId !== tenantId) throw orderNotFound()
   const [branch, lines, [payment], events, returnedBy] = await Promise.all([
-    repo.findReportBranch(db, order.branchId),
+    repo.findReportBranch(db, tenantId, order.branchId),
     orderRepo.linesOf(db, id),
     orderRepo.paymentsOf(db, [id]),
     repo.eventsOf(db, id),
@@ -203,20 +203,20 @@ export const ORDER_EXPORT_MAX = 20_000
 
 export interface CsvFile { filename: string, csv: string }
 
-export async function summaryExport(db: Db, query: ReportPeriodQuery, now = new Date()): Promise<CsvFile> {
-  const summary = await reportSummary(db, query, now)
+export async function summaryExport(db: Db, tenantId: string, query: ReportPeriodQuery, now = new Date()): Promise<CsvFile> {
+  const summary = await reportSummary(db, tenantId, query, now)
   return { filename: csvFilename(summary.branch.name, query, 'summary'), csv: summaryCsv(summary) }
 }
 
-export async function itemSalesExport(db: Db, query: ItemSalesQuery, now = new Date()): Promise<CsvFile> {
-  const ctx = await context(db, query, now)
+export async function itemSalesExport(db: Db, tenantId: string, query: ItemSalesQuery, now = new Date()): Promise<CsvFile> {
+  const ctx = await context(db, tenantId, query, now)
   const [paid, refunded] = await Promise.all([repo.itemTotals(db, ctx.range, 'collected'), repo.itemTotals(db, ctx.range, 'returned')])
   const { rows } = itemSalesTable(itemSalesRows(paid, refunded), query)
   return { filename: csvFilename(ctx.branch.name, query, 'items'), csv: itemsCsv(rows) }
 }
 
-export async function orderHistoryExport(db: Db, query: OrderHistoryQuery, now = new Date()): Promise<CsvFile> {
-  const ctx = await context(db, query, now)
+export async function orderHistoryExport(db: Db, tenantId: string, query: OrderHistoryQuery, now = new Date()): Promise<CsvFile> {
+  const ctx = await context(db, tenantId, query, now)
   const { rows, total } = await repo.orderHistory(db, { ...query, page: 1, pageSize: ORDER_EXPORT_MAX })
   if (total > ORDER_EXPORT_MAX) throw apiError(422, ErrorCodes.VALIDATION_FAILED, `More than ${ORDER_EXPORT_MAX.toLocaleString('en-US')} orders match. Choose a shorter period or narrow the filters.`)
   return { filename: csvFilename(ctx.branch.name, query, 'orders'), csv: ordersCsv(rows.map(historyRow), ctx.branch.timeZone) }
@@ -240,10 +240,10 @@ export interface ReportMessage {
  * The message for Send to Telegram, from the page's own query (checked by the report's schema
  * here, like the page's request): the Summary, or Sales by item in the page's filters and order.
  */
-export async function reportMessage(db: Db, input: ReportMessageInput, options: { attachCsv: boolean, title?: string }, now = new Date()): Promise<ReportMessage> {
+export async function reportMessage(db: Db, tenantId: string, input: ReportMessageInput, options: { attachCsv: boolean, title?: string }, now = new Date()): Promise<ReportMessage> {
   if (input.kind === 'summary') {
     const query = parseInput(reportPeriodQuerySchema, input.query)
-    const summary = await reportSummary(db, query, now)
+    const summary = await reportSummary(db, tenantId, query, now)
     const html = summaryMessage(summary, options.title)
     return {
       subject: `${options.title ?? 'Summary'} · ${periodText(query)}`,
@@ -254,7 +254,7 @@ export async function reportMessage(db: Db, input: ReportMessageInput, options: 
     }
   }
   const query = parseInput(itemSalesQuerySchema, input.query)
-  const ctx = await context(db, query, now)
+  const ctx = await context(db, tenantId, query, now)
   const [paid, refunded] = await Promise.all([repo.itemTotals(db, ctx.range, 'collected'), repo.itemTotals(db, ctx.range, 'returned')])
   const all = itemSalesRows(paid, refunded)
   const { rows } = itemSalesTable(all, query)

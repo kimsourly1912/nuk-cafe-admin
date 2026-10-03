@@ -7,5 +7,6 @@ import { getCheckoutQuote } from '#server/features/orders'
  * fit a query string. Placing the order (step 6.2) prices it again.
  */
 export default defineEventHandler(async (event) => {
-  return getCheckoutQuote(useDb(), await readValidBody(event, checkoutQuoteSchema))
+  const tenant = await requireTenant(event)
+  return getCheckoutQuote(useDb(), tenant.id, await readValidBody(event, checkoutQuoteSchema))
 })

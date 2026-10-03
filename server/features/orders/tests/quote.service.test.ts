@@ -2,12 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { CreateItemInput, MenuItem } from '#shared/contracts/menu-items'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { OrderLineInput } from '#shared/contracts/orders'
-import { organization } from '#server/db/tables'
 import { updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { archiveModifier, createAvailabilityRule, createCategory, createItem, createModifierGroup, createOptionSet, publishItem, setSoldOut, unpublishItem, updateItem } from '#server/features/menu'
 import { getCheckoutQuote } from '#server/features/orders/quote.service'
-import { createTestDb } from '#server/tests/support/db'
+import { createTestDb, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -16,7 +15,7 @@ import { newId } from '#server/utils/ids'
 // database as it is now, never from the request.
 
 let db: Db
-const admin: Actor = { userId: 'admin-1', role: 'admin' }
+const admin: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner' }
 let branchId: string
 let otherBranch: string
 let category: string
@@ -25,7 +24,7 @@ let latte: MenuItem
 
 async function addBranch(name: string, openAllDay: boolean) {
   const id = newId()
-  await db.insert(organization).values({ id, name, slug: id, timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() })
+  await insertBranch(db, { id, name, timezone: 'Asia/Phnom_Penh', status: 'active' })
   if (openAllDay) {
     await updateBranchSettings(db, admin, id, { version: 1, hours: [1, 2, 3, 4, 5, 6, 7].map(weekday => ({ weekday, startMinute: 0, endMinute: 1440 })) })
   }
@@ -51,7 +50,7 @@ async function published(name: string, overrides: Partial<CreateItemInput> = {})
 const monday = (hhmm: string) => new Date(`2026-09-28T${hhmm}:00+07:00`)
 const variation = (item: MenuItem, label: string) => item.variations.find(x => x.label === label)!.id
 const modifier = (name: string) => milk.modifiers.find(m => m.name === name)!.id
-const quote = (lines: OrderLineInput[], at = monday('09:00'), branch = branchId) => getCheckoutQuote(db, { branchId: branch, lines }, at)
+const quote = (lines: OrderLineInput[], at = monday('09:00'), branch = branchId) => getCheckoutQuote(db, TEST_TENANT, { branchId: branch, lines }, at)
 const line = (item: MenuItem, variationId: string, over: Partial<OrderLineInput> = {}): OrderLineInput =>
   ({ itemId: item.id, variationId, modifierIds: [], quantity: 1, note: null, ...over })
 
@@ -101,7 +100,7 @@ describe('the checkout quote', () => {
 
   it('sold out at this branch only', async () => {
     const large = variation(latte, 'Large')
-    const staff: BranchActor = { userId: 'staff-1', role: 'customer', branchId, branchRole: 'staff' }
+    const staff: BranchActor = { userId: 'staff-1', tenantId: TEST_TENANT, role: 'customer', branchId, branchRole: 'staff' }
     await setSoldOut(db, staff, { variationIds: [large], soldOut: true })
     const order = [line(latte, large, { modifierIds: [modifier('Whole milk')] })]
     expect((await quote(order)).lines[0]!.problem?.code).toBe('SOLD_OUT')

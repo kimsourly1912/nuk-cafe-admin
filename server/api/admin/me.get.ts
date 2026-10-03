@@ -6,6 +6,7 @@ import { adminSession } from '#server/features/identity'
  * is in place.
  */
 export default defineEventHandler(async (event) => {
+  const tenant = await requireTenant(event)
   const session = await getUserSession(event)
-  return adminSession(session?.user as Parameters<typeof adminSession>[0])
+  return adminSession(useDb(), session?.user as Parameters<typeof adminSession>[1], tenant.id)
 })

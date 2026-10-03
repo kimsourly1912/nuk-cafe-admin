@@ -4,14 +4,14 @@ import * as v from 'valibot'
 import { createStaffSchema, updateStaffAccessSchema } from '#shared/contracts/staff'
 import type { CreateStaffInput } from '#shared/contracts/staff'
 import { seedDemoBranch } from '#server/features/branches'
-import { auditEvents, organization, user } from '#server/db/tables'
+import { auditEvents, member, user } from '#server/db/tables'
 import { newId } from '#server/utils/ids'
 import type { Db } from '#server/utils/batch'
 import { createTestAuth, signIn } from '#server/tests/support/auth'
 import type { TestAuth } from '#server/tests/support/auth'
-import { createTestDb } from '#server/tests/support/db'
+import { addBranchStaff, createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError, failure } from '#server/tests/support/failure'
-import { createStaff, disableStaff, listStaff, resetStaffPassword, seedFirstAdmin, updateStaffAccess } from '#server/features/identity/staff.service'
+import { createStaff, disableStaff, getStaffMember, listStaff, resetStaffPassword, seedFirstOwner, seedTenant, updateStaffAccess } from '#server/features/identity/staff.service'
 import type { Actor } from '#server/features/identity/identity.types'
 
 let db: Db
@@ -22,7 +22,7 @@ let actor: Actor
 
 async function addBranch(name: string, status = 'active') {
   const id = newId()
-  await db.insert(organization).values({ id, name, slug: id, timezone: 'Asia/Phnom_Penh', status, createdAt: new Date() })
+  await insertBranch(db, { id, name, timezone: 'Asia/Phnom_Penh', status })
   return id
 }
 
@@ -42,8 +42,8 @@ beforeEach(async () => {
   auth = createTestAuth(db)
   branchId = await addBranch('Riverside')
   otherBranchId = await addBranch('Airport')
-  const seeded = await seedFirstAdmin(db, { name: 'Owner', email: 'owner@example.com' })
-  actor = { userId: seeded!.staff.id, role: 'admin' }
+  const seeded = await seedFirstOwner(db, await ensureTenant(db), { name: 'Owner', email: 'owner@example.com' })
+  actor = { userId: seeded!.staff.id, tenantId: TEST_TENANT, role: 'owner' }
 })
 
 describe('create', () => {
@@ -134,7 +134,7 @@ describe('update access', () => {
     const input = { version: created.staff.version, admin: false, memberships: [{ branchId, role: 'manager' as const }] }
     await updateStaffAccess(db, actor, created.staff.id, input)
     await expectApiError(() => updateStaffAccess(db, actor, created.staff.id, { ...input, memberships: [], admin: true }), 409, 'VERSION_CONFLICT')
-    const [current] = (await listStaff(db, { ...PAGE, search: 'sophea' })).items
+    const [current] = (await listStaff(db, actor, { ...PAGE, search: 'sophea' })).items
     expect(current).toMatchObject({ admin: false, memberships: [{ role: 'manager' }] })
   })
 
@@ -152,27 +152,27 @@ describe('update access', () => {
     const promoted = await updateStaffAccess(db, actor, created.staff.id, { version: created.staff.version, admin: true, memberships: [] })
     expect(promoted.admin).toBe(true)
 
-    const owner = (await listStaff(db, { ...PAGE, search: 'owner' })).items[0]!
+    const owner = (await listStaff(db, actor, { ...PAGE, search: 'owner' })).items[0]!
     await expectApiError(() => updateStaffAccess(db, actor, actor.userId, { version: owner.version, admin: false, memberships: [{ branchId, role: 'manager' }] }), 409, 'OWN_ACCESS')
   })
 
   it('keeps the admin\'s own session when they change their own branches', async () => {
     const created = await createStaff(db, actor, staffInput({ admin: true, memberships: [] }))
     const headers = await signIn(auth, 'sophea@example.com', created.temporaryPassword!)
-    const self: Actor = { userId: created.staff.id, role: 'admin' }
+    const self: Actor = { userId: created.staff.id, tenantId: TEST_TENANT, role: 'owner' }
     await updateStaffAccess(db, self, created.staff.id, { version: created.staff.version, admin: true, memberships: [{ branchId, role: 'manager' }] })
     expect(await auth.api.getSession({ headers })).not.toBeNull()
   })
 
   it('never leaves the cafe without an admin, even when two admins demote each other at once', async () => {
     const second = await createStaff(db, actor, staffInput({ admin: true, memberships: [] }))
-    const owner = (await listStaff(db, { ...PAGE, search: 'owner' })).items[0]!
+    const owner = (await listStaff(db, actor, { ...PAGE, search: 'owner' })).items[0]!
     // Both read each other's version, then both save: the owner demotes the second admin first…
     await updateStaffAccess(db, actor, second.staff.id, { version: second.staff.version, admin: false, memberships: [{ branchId, role: 'staff' }] })
     // …and the second admin's request, already past its permission check, demotes the owner.
-    const secondActor: Actor = { userId: second.staff.id, role: 'admin' }
+    const secondActor: Actor = { userId: second.staff.id, tenantId: TEST_TENANT, role: 'owner' }
     await expectApiError(() => updateStaffAccess(db, secondActor, actor.userId, { version: owner.version, admin: false, memberships: [{ branchId, role: 'staff' }] }), 409, 'LAST_ADMIN')
-    expect((await listStaff(db, { ...PAGE, role: 'admin' })).total).toBe(1)
+    expect((await listStaff(db, actor, { ...PAGE, role: 'admin' })).total).toBe(1)
   })
 })
 
@@ -184,7 +184,7 @@ describe('disable', () => {
     await disableStaff(db, actor, created.staff.id, { version: created.staff.version })
 
     expect(await auth.api.getSession({ headers })).toBeNull()
-    expect((await listStaff(db, PAGE)).items.map(s => s.email)).toEqual(['owner@example.com'])
+    expect((await listStaff(db, actor, PAGE)).items.map(s => s.email)).toEqual(['owner@example.com'])
     const [row] = await db.select({ role: user.role }).from(user).where(eq(user.id, created.staff.id))
     expect(row!.role).toBe('customer')
     // They can still sign in, as a customer.
@@ -192,7 +192,7 @@ describe('disable', () => {
   })
 
   it('refuses disabling oneself, and a stale version', async () => {
-    const owner = (await listStaff(db, { ...PAGE, search: 'owner' })).items[0]!
+    const owner = (await listStaff(db, actor, { ...PAGE, search: 'owner' })).items[0]!
     await expectApiError(() => disableStaff(db, actor, actor.userId, { version: owner.version }), 409, 'OWN_ACCESS')
 
     const created = await createStaff(db, actor, staffInput())
@@ -224,7 +224,7 @@ describe('reset password (step 10.1, D115)', () => {
   it('works for a person who had changed their password (must change again), and for another admin', async () => {
     const created = await createStaff(db, actor, staffInput({ admin: true, memberships: [] }))
     await db.update(user).set({ mustChangePassword: false }).where(eq(user.id, created.staff.id))
-    const [current] = (await listStaff(db, { ...PAGE, search: 'sophea' })).items
+    const [current] = (await listStaff(db, actor, { ...PAGE, search: 'sophea' })).items
     const reset = await resetStaffPassword(db, actor, created.staff.id, { version: current!.version })
     expect(reset.staff).toMatchObject({ admin: true, mustChangePassword: true })
   })
@@ -239,7 +239,7 @@ describe('reset password (step 10.1, D115)', () => {
   })
 
   it('refuses one\'s own password, a stale version, a customer and an unknown account', async () => {
-    const owner = (await listStaff(db, { ...PAGE, search: 'owner' })).items[0]!
+    const owner = (await listStaff(db, actor, { ...PAGE, search: 'owner' })).items[0]!
     await expectApiError(() => resetStaffPassword(db, actor, actor.userId, { version: owner.version }), 409, 'OWN_ACCESS')
 
     const created = await createStaff(db, actor, staffInput())
@@ -258,7 +258,7 @@ describe('reset password (step 10.1, D115)', () => {
   it('two admins resetting the same person at once: one wins, and only its password works', async () => {
     const created = await createStaff(db, actor, staffInput())
     const second = await createStaff(db, actor, staffInput({ name: 'Dara', email: 'dara@example.com', admin: true, memberships: [] }))
-    const secondActor: Actor = { userId: second.staff.id, role: 'admin' }
+    const secondActor: Actor = { userId: second.staff.id, tenantId: TEST_TENANT, role: 'owner' }
     const input = { version: created.staff.version }
     const results = await Promise.allSettled([resetStaffPassword(db, actor, created.staff.id, input), resetStaffPassword(db, secondActor, created.staff.id, input)])
 
@@ -278,35 +278,119 @@ describe('list', () => {
   })
 
   it('lists people with access only, by name, with their branches', async () => {
-    const page = await listStaff(db, PAGE)
+    const page = await listStaff(db, actor, PAGE)
     expect(page.items.map(s => s.name)).toEqual(['Owner', 'Sophea', 'Vanna'])
     expect(page.items[2]!.memberships.map(m => m.branchName)).toEqual(['Airport', 'Riverside'])
     expect(page).toMatchObject({ total: 3, totalPages: 1 })
   })
 
   it('filters by role, branch and search, and paginates', async () => {
-    expect((await listStaff(db, { ...PAGE, role: 'admin' })).items.map(s => s.name)).toEqual(['Owner'])
-    expect((await listStaff(db, { ...PAGE, role: 'manager' })).items.map(s => s.name)).toEqual(['Vanna'])
-    expect((await listStaff(db, { ...PAGE, branchId: otherBranchId })).items.map(s => s.name)).toEqual(['Vanna'])
-    expect((await listStaff(db, { ...PAGE, branchId, role: 'manager' })).items).toEqual([])
-    expect((await listStaff(db, { ...PAGE, search: 'VANNA@' })).items.map(s => s.name)).toEqual(['Vanna'])
-    expect((await listStaff(db, { ...PAGE, search: '%' })).items).toEqual([])
-    expect(await listStaff(db, { page: 2, pageSize: 2 })).toMatchObject({ items: [{ name: 'Vanna' }], total: 3, totalPages: 2 })
+    expect((await listStaff(db, actor, { ...PAGE, role: 'admin' })).items.map(s => s.name)).toEqual(['Owner'])
+    expect((await listStaff(db, actor, { ...PAGE, role: 'manager' })).items.map(s => s.name)).toEqual(['Vanna'])
+    expect((await listStaff(db, actor, { ...PAGE, branchId: otherBranchId })).items.map(s => s.name)).toEqual(['Vanna'])
+    expect((await listStaff(db, actor, { ...PAGE, branchId, role: 'manager' })).items).toEqual([])
+    expect((await listStaff(db, actor, { ...PAGE, search: 'VANNA@' })).items.map(s => s.name)).toEqual(['Vanna'])
+    expect((await listStaff(db, actor, { ...PAGE, search: '%' })).items).toEqual([])
+    expect(await listStaff(db, actor, { page: 2, pageSize: 2 })).toMatchObject({ items: [{ name: 'Vanna' }], total: 3, totalPages: 2 })
   })
 })
 
 describe('seed', () => {
-  it('creates the first admin once, then does nothing', async () => {
+  it('creates the cafe (a tenant) once, then finds it', async () => {
     const fresh = await createTestDb()
-    const first = await seedFirstAdmin(fresh, { name: 'Owner', email: ' Owner@Example.com ' })
-    expect(first).toMatchObject({ staff: { email: 'owner@example.com', admin: true, mustChangePassword: true } })
-    expect(first!.temporaryPassword).toBeTruthy()
-    expect(await seedFirstAdmin(fresh, { name: 'Other', email: 'other@example.com' })).toBeNull()
+    const tenant = await seedTenant(fresh, { name: 'NUK Cafe', slug: 'nuk' })
+    expect(tenant).toMatchObject({ name: 'NUK Cafe', slug: 'nuk', created: true })
+    expect(await seedTenant(fresh, { name: 'Other', slug: 'other' })).toEqual({ ...tenant, created: false })
   })
 
-  it('creates a demo branch only while there is none', async () => {
+  it('creates the cafe\'s first owner once, then does nothing', async () => {
     const fresh = await createTestDb()
-    expect(await seedDemoBranch(fresh, { timezone: 'Asia/Phnom_Penh' })).toMatchObject({ name: 'Main branch' })
-    expect(await seedDemoBranch(fresh, { timezone: 'Asia/Phnom_Penh' })).toBeNull()
+    const { id } = await seedTenant(fresh, { name: 'NUK Cafe', slug: 'nuk' })
+    const first = await seedFirstOwner(fresh, id, { name: 'Owner', email: ' Owner@Example.com ' })
+    expect(first).toMatchObject({ staff: { email: 'owner@example.com', admin: true, mustChangePassword: true } })
+    expect(first!.temporaryPassword).toBeTruthy()
+    expect(await seedFirstOwner(fresh, id, { name: 'Other', email: 'other@example.com' })).toBeNull()
+  })
+
+  it('creates a demo branch only while the cafe has none', async () => {
+    const fresh = await createTestDb()
+    const { id } = await seedTenant(fresh, { name: 'NUK Cafe', slug: 'nuk' })
+    expect(await seedDemoBranch(fresh, id, { timezone: 'Asia/Phnom_Penh' })).toMatchObject({ name: 'Main branch' })
+    expect(await seedDemoBranch(fresh, id, { timezone: 'Asia/Phnom_Penh' })).toBeNull()
+  })
+})
+
+// One account can belong to several cafes (D134): each cafe manages its own memberships, sees only
+// its own people, and can't change what the account means elsewhere.
+describe('tenants', () => {
+  const OTHER = 'tenant-2'
+  let theirs: Actor
+  let theirBranch: string
+
+  beforeEach(async () => {
+    await ensureTenant(db, OTHER)
+    theirBranch = newId()
+    await insertBranch(db, { id: theirBranch, name: 'Their branch', timezone: 'Asia/Phnom_Penh', tenantId: OTHER })
+    const owner = await seedFirstOwner(db, OTHER, { name: 'Their owner', email: 'their-owner@example.com' })
+    theirs = { userId: owner!.staff.id, tenantId: OTHER, role: 'owner' }
+  })
+
+  it('lists only the cafe\'s own people, and another cafe\'s person is 404 to every action', async () => {
+    const ours = await createStaff(db, actor, staffInput())
+    expect((await listStaff(db, theirs, PAGE)).items.map(s => s.email)).toEqual(['their-owner@example.com'])
+    expect(await failure(getStaffMember(db, theirs, ours.staff.id))).toEqual({ status: 404, code: 'NOT_FOUND' })
+    const version = { version: ours.staff.version }
+    expect(await failure(updateStaffAccess(db, theirs, ours.staff.id, { ...version, admin: false, memberships: [{ branchId: theirBranch, role: 'staff' }] }))).toEqual({ status: 404, code: 'NOT_FOUND' })
+    expect(await failure(disableStaff(db, theirs, ours.staff.id, version))).toEqual({ status: 404, code: 'NOT_FOUND' })
+    expect(await failure(resetStaffPassword(db, theirs, ours.staff.id, version))).toEqual({ status: 404, code: 'NOT_FOUND' })
+    // Nothing changed here.
+    expect(await getStaffMember(db, actor, ours.staff.id)).toEqual(ours.staff)
+  })
+
+  it('refuses another cafe\'s branch as an unknown one', async () => {
+    const error = await createStaff(db, actor, staffInput({ memberships: [{ branchId: theirBranch, role: 'staff' }] })).catch((e: { data: { fieldErrors: object } }) => e)
+    expect(Object.keys((error as { data: { fieldErrors: object } }).data.fieldErrors)).toEqual(['memberships.0.branchId'])
+  })
+
+  it('adds someone who works at another cafe, keeping their password and their other access', async () => {
+    const elsewhere = await createStaff(db, theirs, staffInput({ memberships: [{ branchId: theirBranch, role: 'manager' }] }))
+    const here = await createStaff(db, actor, staffInput())
+    expect(here.temporaryPassword).toBeNull()
+    expect(here.staff).toMatchObject({ id: elsewhere.staff.id, memberships: [{ branchId, role: 'staff' }] })
+    expect((await getStaffMember(db, theirs, elsewhere.staff.id)).memberships).toEqual([{ branchId: theirBranch, branchName: 'Their branch', role: 'manager' }])
+
+    // Disabling them here leaves the other cafe's access.
+    await disableStaff(db, actor, here.staff.id, { version: here.staff.version })
+    expect(await failure(getStaffMember(db, actor, here.staff.id))).toEqual({ status: 404, code: 'NOT_FOUND' })
+    expect((await getStaffMember(db, theirs, elsewhere.staff.id)).memberships).toHaveLength(1)
+  })
+
+  it('won\'t reset the password of someone with access to another cafe, or of a super admin: it opens every cafe', async () => {
+    const elsewhere = await createStaff(db, theirs, staffInput({ memberships: [{ branchId: theirBranch, role: 'staff' }] }))
+    const here = await createStaff(db, actor, staffInput())
+    await expectApiError(() => resetStaffPassword(db, actor, here.staff.id, { version: here.staff.version }), 409, 'STAFF_ELSEWHERE')
+    await expectApiError(() => resetStaffPassword(db, theirs, elsewhere.staff.id, { version: here.staff.version }), 409, 'STAFF_ELSEWHERE')
+
+    const platform = await createStaff(db, actor, staffInput({ name: 'Kim', email: 'kim@example.com' }))
+    await db.update(user).set({ role: 'superadmin' }).where(eq(user.id, platform.staff.id))
+    const [current] = (await listStaff(db, actor, { ...PAGE, search: 'kim' })).items
+    await expectApiError(() => resetStaffPassword(db, actor, platform.staff.id, { version: current!.version }), 409, 'STAFF_ELSEWHERE')
+  })
+
+  it('counts owners per cafe: another cafe\'s owner doesn\'t keep this one from losing its last', async () => {
+    const owner = (await listStaff(db, actor, { ...PAGE, search: 'owner@' })).items[0]!
+    // The other cafe's owner also works here, as an owner…
+    const second = await createStaff(db, actor, staffInput({ email: 'their-owner@example.com', admin: true, memberships: [] }))
+    // …demotes our first owner, then is demoted: refused, this cafe would have no owner left.
+    const secondActor: Actor = { userId: second.staff.id, tenantId: TEST_TENANT, role: 'owner' }
+    await updateStaffAccess(db, secondActor, actor.userId, { version: owner.version, admin: false, memberships: [{ branchId, role: 'staff' }] })
+    const [demoted] = (await listStaff(db, actor, { ...PAGE, search: 'their-owner' })).items
+    await expectApiError(() => updateStaffAccess(db, actor, second.staff.id, { version: demoted!.version, admin: false, memberships: [{ branchId, role: 'staff' }] }), 409, 'LAST_ADMIN')
+    expect((await db.select().from(member).where(eq(member.role, 'owner'))).length).toBe(2)
+  })
+
+  it('a branch staff row is the tenant\'s: the database refuses one for another cafe\'s branch', async () => {
+    const someone = await createStaff(db, actor, staffInput())
+    await expect(addBranchStaff(db, theirBranch, someone.staff.id, 'staff', TEST_TENANT)).rejects.toMatchObject({ cause: { message: expect.stringMatching(/FOREIGN KEY/) } })
   })
 })

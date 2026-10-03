@@ -8,7 +8,7 @@ import { quoteOrder } from './quote.rules'
  * it. Reads only, so it's public: prices are public already, and placing the order (step 6.2)
  * prices it again for the signed-in customer. An unknown or archived branch is 404.
  */
-export async function getCheckoutQuote(db: Db, input: CheckoutQuoteInput, now = new Date()): Promise<CheckoutQuote> {
-  const menu = await getPublicMenu(db, { branchId: input.branchId }, now)
+export async function getCheckoutQuote(db: Db, tenantId: string, input: CheckoutQuoteInput, now = new Date()): Promise<CheckoutQuote> {
+  const menu = await getPublicMenu(db, tenantId, { branchId: input.branchId }, now)
   return quoteOrder(menu, input.lines)
 }
