@@ -1,7 +1,7 @@
 // Public API of the orders feature (phase 6). Other features import only from here.
 export { getCheckoutQuote } from './quote.service'
 export { quoteOrder } from './quote.rules'
-export { cancelMyOrder, getOrder, listMyOrders, placeOrder } from './orders.service'
+export { cancelMyOrder, getOrder, listMyOrders, orderActivity, placeOrder } from './orders.service'
 export { cancelOrderAtCounter, completeOrder, getCounterOrder, getCounterOrderHistory, getExchangeRates, listCounterQueue, listFinishedToday, markOrderReady, payOrder, setExchangeRate } from './counter.service'
 export { createKhqrCharge, getKhqrSettings, saveKhqrSettings } from './khqr.service'
 export type { BakongStatus } from './khqr.service'

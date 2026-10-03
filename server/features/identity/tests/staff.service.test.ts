@@ -11,7 +11,8 @@ import { createTestAuth, signIn } from '#server/tests/support/auth'
 import type { TestAuth } from '#server/tests/support/auth'
 import { addBranchStaff, createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError, failure } from '#server/tests/support/failure'
-import { createStaff, disableStaff, getStaffMember, listStaff, resetStaffPassword, seedFirstOwner, seedTenant, updateStaffAccess } from '#server/features/identity/staff.service'
+import { createStaff, disableStaff, getStaffMember, listStaff, resetStaffPassword, seedFirstOwner, updateStaffAccess } from '#server/features/identity/staff.service'
+import { seedTenant } from '#server/features/tenants'
 import type { Actor } from '#server/features/identity/identity.types'
 
 let db: Db

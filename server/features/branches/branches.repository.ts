@@ -1,8 +1,8 @@
-import { and, asc, count, eq, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, sql } from 'drizzle-orm'
 import type { DiningTableStatus } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
-import { insertPieces } from '#server/utils/batch'
+import { insertPieces, readInChunks } from '#server/utils/batch'
 import { organization } from '#server/db/tables'
 import { branches, branchHours, diningTables } from './branches.schema'
 
@@ -183,4 +183,11 @@ export async function findTableByTokenHash(db: Db, hash: string): Promise<Scanne
     .where(eq(diningTables.qrTokenHash, hash))
     .limit(1)
   return rows[0]
+}
+
+/** Active branches per tenant, for the platform console's usage numbers (D142). */
+export async function activeBranchCounts(db: Db, tenantIds: string[]): Promise<{ tenantId: string, total: number }[]> {
+  return readInChunks(tenantIds, ids => db.select({ tenantId: branches.tenantId, total: count() }).from(branches)
+    .where(and(inArray(branches.tenantId, ids), eq(branches.status, 'active')))
+    .groupBy(branches.tenantId))
 }

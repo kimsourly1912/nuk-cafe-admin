@@ -65,6 +65,8 @@ export const orders = sqliteTable('orders', {
   index('orders_branch_date_idx').on(t.branchId, t.businessDate),
   // The expiry task's question every minute: unpaid orders past their time (6.6, D104).
   index('orders_status_due_idx').on(t.status, t.paymentDueAt),
+  // The platform console's usage numbers per cafe: orders in the last 30 days, the last one (D142).
+  index('orders_tenant_placed_idx').on(t.tenantId, t.placedAt),
 ])
 
 /** One line of an order, as it was priced when placed. */

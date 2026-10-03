@@ -145,6 +145,8 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
           organization: {
             additionalFields: {
               status: { type: 'string', required: false, defaultValue: 'active', input: false },
+              // Why the platform paused it, for the platform team (D142); `null` while active.
+              suspendedReason: { type: 'string', required: false, input: false },
               // The lock for the tenant's own settings (D41).
               version: { type: 'number', required: false, defaultValue: 1, input: false },
             },

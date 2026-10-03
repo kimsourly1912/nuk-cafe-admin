@@ -220,6 +220,8 @@ export default defineNuxtConfig({
     '/api/c/*/admin/**': { auth: 'user' },
     '/api/c/*/counter/**': { auth: 'user' },
     '/api/c/*/shop/**': { auth: 'user' },
+    // The platform console's API (D142): super admins only, checked by requirePlatformPermission.
+    '/api/platform/**': { auth: 'user' },
     // API responses are personal or change often; a public route opts in to caching explicitly.
     '/api/**': { headers: { 'cache-control': 'no-store' } },
   },

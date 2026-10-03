@@ -100,44 +100,74 @@ export async function createStaff(db: Db, actor: Actor, input: CreateStaffInput)
   return createStaffAs(db, actor, actor.tenantId, input)
 }
 
-/** `userId: null`: the system (the seed task). */
-async function createStaffAs(db: Db, by: AuditActor, tenantId: string, input: CreateStaffInput): Promise<CreatedStaff> {
-  await ensureActiveBranches(db, tenantId, input.memberships)
-  const existing = await repo.findAccountByEmail(db, input.email)
-  const now = new Date()
+/**
+ * The writes that create a staff member (or give an existing account access), for one batch: the
+ * caller adds its own statements around them (a new cafe's, D142). For an existing account, the
+ * first two statements guard its version: the batch fails as a stale write when it changed.
+ */
+export interface StaffCreatePlan {
+  userId: string
+  /** `null` for an existing account: it keeps its own password. */
+  temporaryPassword: string | null
+  /** The existing account's version read, to tell a stale write apart. */
+  existingVersion: number | null
+  statements: Statement[]
+}
 
+export async function planStaffCreate(db: Db, by: AuditActor, tenantId: string, input: CreateStaffInput, now = new Date()): Promise<StaffCreatePlan> {
+  const existing = await repo.findAccountByEmail(db, input.email)
   if (existing) {
-    if (await repo.tenantRoleOf(db, tenantId, existing.id)) throw staffAlreadyExists()
-    const statements: Statement[] = [
-      repo.bumpVersionStatement(db, existing.id, existing.updatedAt, nextVersion(existing.updatedAt, now)),
-      requireOneChange(db),
-      ...repo.replaceAccessStatements(db, tenantId, existing.id, tenantRole(input.admin), input.memberships, now),
-      // Their profile in this cafe (D137): they're a customer here too.
-      profileStatement(db, tenantId, existing.id),
-      staffAudit(db, by, tenantId, 'staff.create', existing.id, { ...accessMetadata(input.admin, input.memberships), existingAccount: true }),
-    ]
-    await runAccessBatch(db, statements, existing.id, existing.updatedAt.getTime())
-    return { staff: await loadStaffMember(db, tenantId, existing.id), temporaryPassword: null }
+    return {
+      userId: existing.id,
+      temporaryPassword: null,
+      existingVersion: existing.updatedAt.getTime(),
+      statements: [
+        repo.bumpVersionStatement(db, existing.id, existing.updatedAt, nextVersion(existing.updatedAt, now)),
+        requireOneChange(db),
+        ...repo.replaceAccessStatements(db, tenantId, existing.id, tenantRole(input.admin), input.memberships, now),
+        // Their profile in this cafe (D137): they're a customer here too.
+        profileStatement(db, tenantId, existing.id),
+        staffAudit(db, by, tenantId, 'staff.create', existing.id, { ...accessMetadata(input.admin, input.memberships), existingAccount: true }),
+      ],
+    }
   }
 
   const userId = newId()
   const temporaryPassword = generateTemporaryPassword()
-  const statements: Statement[] = [
-    ...repo.insertAccountStatements(db, { id: userId, name: input.name, email: input.email, passwordHash: await hashPassword(temporaryPassword), now }),
-    // Better Auth's sign-up hook doesn't run for these writes (D49).
-    profileStatement(db, tenantId, userId),
-    ...repo.replaceAccessStatements(db, tenantId, userId, tenantRole(input.admin), input.memberships, now),
-    staffAudit(db, by, tenantId, 'staff.create', userId, { ...accessMetadata(input.admin, input.memberships), existingAccount: false }),
-  ]
+  return {
+    userId,
+    temporaryPassword,
+    existingVersion: null,
+    statements: [
+      ...repo.insertAccountStatements(db, { id: userId, name: input.name, email: input.email, passwordHash: await hashPassword(temporaryPassword), now }),
+      // Better Auth's sign-up hook doesn't run for these writes (D49).
+      profileStatement(db, tenantId, userId),
+      ...repo.replaceAccessStatements(db, tenantId, userId, tenantRole(input.admin), input.memberships, now),
+      staffAudit(db, by, tenantId, 'staff.create', userId, { ...accessMetadata(input.admin, input.memberships), existingAccount: false }),
+    ],
+  }
+}
+
+/** `userId: null`: the system (the seed task). */
+async function createStaffAs(db: Db, by: AuditActor, tenantId: string, input: CreateStaffInput): Promise<CreatedStaff> {
+  await ensureActiveBranches(db, tenantId, input.memberships)
+  const existing = await repo.findAccountByEmail(db, input.email)
+  if (existing && await repo.tenantRoleOf(db, tenantId, existing.id)) throw staffAlreadyExists()
+
+  const plan = await planStaffCreate(db, by, tenantId, input)
+  if (plan.existingVersion !== null) {
+    await runAccessBatch(db, plan.statements, plan.userId, plan.existingVersion)
+    return { staff: await loadStaffMember(db, tenantId, plan.userId), temporaryPassword: null }
+  }
   try {
-    await db.batch(statements as [Statement, ...Statement[]])
+    await db.batch(plan.statements as [Statement, ...Statement[]])
   }
   catch (error) {
     // Someone created an account with this email meanwhile.
     if (isUniqueViolation(error)) throw staffAlreadyExists()
     throw error
   }
-  return { staff: await loadStaffMember(db, tenantId, userId), temporaryPassword }
+  return { staff: await loadStaffMember(db, tenantId, plan.userId), temporaryPassword: plan.temporaryPassword }
 }
 
 /**
@@ -227,17 +257,6 @@ export async function resetStaffPassword(db: Db, actor: Actor, userId: string, i
 }
 
 /**
- * The seed task's tenant (D134): the oldest one, or "NUK Cafe" (`nuk`) when none exists yet.
- */
-export async function seedTenant(db: Db, input: { name: string, slug: string }): Promise<{ id: string, name: string, slug: string, created: boolean }> {
-  const existing = await repo.findAnyTenant(db)
-  if (existing) return { ...existing, created: false }
-  const tenant = { id: newId(), name: input.name, slug: input.slug, now: new Date() }
-  await db.batch([repo.insertTenantStatement(db, tenant)])
-  return { id: tenant.id, name: tenant.name, slug: tenant.slug, created: true }
-}
-
-/**
  * The seed task: the tenant's first owner, with a temporary password printed once. Does nothing
  * (returns `null`) when the tenant has an owner, so it can run on every deploy of a disposable
  * environment.
@@ -245,4 +264,27 @@ export async function seedTenant(db: Db, input: { name: string, slug: string }):
 export async function seedFirstOwner(db: Db, tenantId: string, input: { name: string, email: string }): Promise<CreatedStaff | null> {
   if (await repo.countOwners(db, tenantId) > 0) return null
   return createStaffAs(db, { userId: null, tenantId }, tenantId, { ...input, email: input.email.trim().toLowerCase(), admin: true, memberships: [] })
+}
+
+/** People with access per cafe (owners and branch staff), for the platform console (D142); 0 when none. */
+export async function staffCounts(db: Db, tenantIds: string[]): Promise<Map<string, number>> {
+  const rows = await repo.memberCounts(db, tenantIds)
+  return new Map(rows.map(row => [row.tenantId, row.total]))
+}
+
+/** A cafe's owners (name and email), for the platform console's cafe details (D142). */
+export async function tenantOwners(db: Db, tenantId: string): Promise<{ id: string, name: string, email: string }[]> {
+  return repo.ownersOf(db, tenantId)
+}
+
+/**
+ * The seed task (local development and disposable environments, D142): the first owner is also on
+ * the platform team, so the platform console can be tried. Elsewhere a super admin is made by hand
+ * (docs/server/operations.md → Super admins).
+ */
+export async function seedSuperadmin(db: Db, userId: string): Promise<void> {
+  await db.batch([
+    repo.grantSuperadminStatement(db, userId),
+    auditStatement(db, { userId: null, tenantId: null }, { action: 'platform.superadmin.grant', targetType: 'user', targetId: userId, metadata: { by: 'seed' } }),
+  ])
 }

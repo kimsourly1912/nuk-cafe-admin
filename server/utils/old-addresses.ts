@@ -10,3 +10,11 @@ export function oldAddressTarget(path: string, slug: string): string | null {
   if (!OLD_CAFE_PAGE.test(path)) return null
   return path === '/' || path.startsWith('/?') || path.startsWith('/#') ? `/c/${slug}${path.slice(1)}` : `/c/${slug}${path}`
 }
+
+/**
+ * A cafe page at the cafe's former address, moved to its current one (D142):
+ * `/c/old/admin?x=1` → `/c/new/admin?x=1`. The rest of the path and the query stay.
+ */
+export function movedCafeTarget(path: string, slug: string): string {
+  return path.replace(/^\/c\/[^/?#]+/, `/c/${slug}`)
+}
