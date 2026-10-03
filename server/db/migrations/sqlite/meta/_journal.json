@@ -204,6 +204,13 @@
       "when": 1791001143254,
       "tag": "0028_platform_tenants",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1791011231653,
+      "tag": "0029_nuk_address",
+      "breakpoints": true
     }
   ]
 }
