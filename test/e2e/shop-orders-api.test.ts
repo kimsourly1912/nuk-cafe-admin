@@ -21,15 +21,15 @@ async function signIn(customer: { email: string, password: string }) {
 }
 
 async function anOrder() {
-  const menu = await (await fetch(url(`/api/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
+  const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
   const bread = menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(s => s.items)]).find(i => i.name === 'Banana Bread')!
   const lines = [{ itemId: bread.id, variationId: bread.variations[0]!.id, quantity: 2, note: 'Warm' }]
-  const quote = await (await fetch(url('/api/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ branchId: seed.openBranchId, lines }) })).json() as CheckoutQuote
+  const quote = await (await fetch(url('/api/c/nuk/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ branchId: seed.openBranchId, lines }) })).json() as CheckoutQuote
   return { branchId: seed.openBranchId, lines, expectedTotalMinor: quote.totalMinor }
 }
 
 const post = (body: unknown, headers: Record<string, string>) =>
-  fetch(url('/api/shop/orders'), { method: 'POST', headers: { 'content-type': 'application/json', origin, ...headers }, body: JSON.stringify(body) })
+  fetch(url('/api/c/nuk/shop/orders'), { method: 'POST', headers: { 'content-type': 'application/json', origin, ...headers }, body: JSON.stringify(body) })
 
 describe('placing an order over HTTP', () => {
   it('a verified customer places it (201); the same key again answers 200 with the same order', async () => {
@@ -47,7 +47,7 @@ describe('placing an order over HTTP', () => {
     expect(again.status).toBe(200)
     expect((await again.json() as Order).id).toBe(order.id)
 
-    const read = await fetch(url(`/api/shop/orders/${order.id}`), { headers: { cookie } })
+    const read = await fetch(url(`/api/c/nuk/shop/orders/${order.id}`), { headers: { cookie } })
     expect((await read.json() as Order).pickupNumber).toBe(order.pickupNumber)
   })
 
@@ -67,7 +67,7 @@ describe('placing an order over HTTP', () => {
     const owner = await signIn(seed.customers.reset)
     const order = await (await post(await anOrder(), { 'cookie': owner, 'idempotency-key': crypto.randomUUID() })).json() as Order
     const other = await signIn(seed.customers.verified)
-    expect((await fetch(url(`/api/shop/orders/${order.id}`), { headers: { cookie: other } })).status).toBe(404)
+    expect((await fetch(url(`/api/c/nuk/shop/orders/${order.id}`), { headers: { cookie: other } })).status).toBe(404)
   })
 })
 
@@ -75,17 +75,17 @@ describe('placing an order over HTTP', () => {
 // orders no other file touches).
 describe('the customer\'s orders over HTTP (D106)', () => {
   const cancel = (id: string, body: unknown, headers: Record<string, string>) =>
-    fetch(url(`/api/shop/orders/${id}/cancel`), { method: 'POST', headers: { 'content-type': 'application/json', origin, ...headers }, body: JSON.stringify(body) })
+    fetch(url(`/api/c/nuk/shop/orders/${id}/cancel`), { method: 'POST', headers: { 'content-type': 'application/json', origin, ...headers }, body: JSON.stringify(body) })
 
   it('lists them; cancels an unpaid one once (the same key answers the same); refuses signed out and someone else', async () => {
     const cookie = await signIn(seed.customers.tracker)
     const order = await (await post(await anOrder(), { 'cookie': cookie, 'idempotency-key': crypto.randomUUID() })).json() as Order
     expect(order.version).toBe(1)
 
-    const list = await (await fetch(url('/api/shop/orders?pageSize=5'), { headers: { cookie } })).json() as CustomerOrders
+    const list = await (await fetch(url('/api/c/nuk/shop/orders?pageSize=5'), { headers: { cookie } })).json() as CustomerOrders
     expect(list.inProgress.map(o => o.id)).toContain(order.id)
     expect(list.past.pageSize).toBe(5)
-    expect((await fetch(url('/api/shop/orders'))).status).toBe(401)
+    expect((await fetch(url('/api/c/nuk/shop/orders'))).status).toBe(401)
 
     const other = await signIn(seed.customers.verified)
     expect((await cancel(order.id, { version: 1 }, { 'cookie': other, 'idempotency-key': crypto.randomUUID() })).status).toBe(404)
@@ -100,7 +100,7 @@ describe('the customer\'s orders over HTTP (D106)', () => {
     const again = await cancel(order.id, { version: 2 }, { cookie, 'idempotency-key': crypto.randomUUID() })
     expect([again.status, (await again.json()).data.code]).toEqual([409, 'ORDER_CHANGED'])
 
-    const after = await (await fetch(url('/api/shop/orders'), { headers: { cookie } })).json() as CustomerOrders
+    const after = await (await fetch(url('/api/c/nuk/shop/orders'), { headers: { cookie } })).json() as CustomerOrders
     expect(after.inProgress.map(o => o.id)).not.toContain(order.id)
     expect(after.past.items[0]).toMatchObject({ id: order.id, status: 'cancelled', itemCount: 2 })
   })

@@ -37,7 +37,7 @@ type ChatReply = { body: string } | { status: number, json: unknown }
 /** Mocks the chat route; each request gets the next reply and is kept for checks. */
 async function mockChat(page: Page, replies: ChatReply[]) {
   const requests: { messages: { role: string, parts: { type: string, text?: string }[] }[], page: string }[] = []
-  await page.route(url('/api/admin/assistant/chat'), async (route: Route) => {
+  await page.route(url('/api/c/nuk/admin/assistant/chat'), async (route: Route) => {
     requests.push(route.request().postDataJSON())
     const reply = replies.shift() ?? { body: stream('…') }
     if ('body' in reply) await route.fulfill({ status: 200, contentType: 'text/event-stream', headers: { 'x-vercel-ai-ui-message-stream': 'v1' }, body: reply.body })
@@ -58,7 +58,7 @@ async function open(path = '/admin/staff', width = 1440) {
     'GET /admin/khqr': () => ({ version: 0, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: [], updatedAt: null, updatedBy: null, automaticCheck: false, tokenExpiresAt: null }),
   })
   // The Ask button and the shortcut work once the assistant's status has loaded.
-  const status = page.waitForResponse(response => response.url().endsWith('/api/admin/assistant'))
+  const status = page.waitForResponse(response => response.url().endsWith('/api/c/nuk/admin/assistant'))
   await page.goto(url(path), { waitUntil: 'hydration' })
   await status
   return page

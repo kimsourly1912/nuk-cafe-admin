@@ -13,10 +13,10 @@ const seed = inject('shopSeed')
 const origin = new URL(url('/')).origin
 
 const post = (body: unknown, headers: Record<string, string> = { origin }) =>
-  fetch(url('/api/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) })
+  fetch(url('/api/c/nuk/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) })
 
 async function menuItem(name: string): Promise<PublicMenuItem> {
-  const menu = await (await fetch(url(`/api/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
+  const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
   return menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(s => s.items)]).find(i => i.name === name)!
 }
 

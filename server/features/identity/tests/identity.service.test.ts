@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { branches, member, organization } from '#server/db/tables'
 import { eq } from 'drizzle-orm'
 import { newId } from '#server/utils/ids'
-import { adminSession, authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, counterSession, currentTenant, workspacesOf } from '#server/features/identity/identity.service'
+import { adminSession, authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, counterSession, currentTenant, tenantBySlug, workspacesOf } from '#server/features/identity/identity.service'
 import type { SessionUser } from '#server/features/identity/identity.types'
 import { addBranchStaff, createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
@@ -38,7 +38,19 @@ async function staffAt(branchId: string, role: string, tenantId = TEST_TENANT): 
   return user
 }
 
-describe('the tenant a request acts in (until addresses name it, T1.5)', () => {
+describe('the tenant a request acts in (D140)', () => {
+  it('is the one its address names; an unknown address is 404, a paused cafe 403', async () => {
+    expect(await tenantBySlug(db, OTHER)).toEqual({ id: OTHER, slug: OTHER, name: `Cafe ${OTHER}` })
+    expect((await tenantBySlug(db, TEST_TENANT)).id).toBe(TEST_TENANT)
+    await expectApiError(() => tenantBySlug(db, 'nowhere'), 404, 'NOT_FOUND')
+    await expectApiError(() => tenantBySlug(db, ''), 404, 'NOT_FOUND')
+    await db.update(organization).set({ status: 'suspended' }).where(eq(organization.id, OTHER))
+    await expectApiError(() => tenantBySlug(db, OTHER), 403, 'TENANT_SUSPENDED')
+    expect((await tenantBySlug(db, TEST_TENANT)).id).toBe(TEST_TENANT)
+  })
+})
+
+describe('the platform\'s first tenant (work without an address)', () => {
   it('is the oldest tenant; none, or a suspended one, is 404', async () => {
     expect((await currentTenant(db)).id).toBe(TEST_TENANT)
     await db.update(organization).set({ status: 'suspended' }).where(eq(organization.id, TEST_TENANT))

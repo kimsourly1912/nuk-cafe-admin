@@ -1,7 +1,7 @@
 import type { Workspace } from '#shared/contracts/account'
 import type { AdminSession, CounterSession } from '#shared/contracts/identity'
 import type { Db } from '#server/utils/batch'
-import { branchNotFound, emailNotVerified, forbidden, notAdmin, notStaff, passwordChangeRequired, tenantNotFound, unauthenticated } from './identity.errors'
+import { branchNotFound, emailNotVerified, forbidden, notAdmin, notStaff, passwordChangeRequired, tenantNotFound, tenantSuspended, unauthenticated } from './identity.errors'
 import { branchRoles, platformRoles, tenantRoles, tenantStatements } from './identity.permissions'
 import type { BranchPermission, BranchRole, PlatformPermission, PlatformRole, TenantPermission, TenantRole } from './identity.permissions'
 import * as repo from './identity.repository'
@@ -22,12 +22,25 @@ const tenantRoleOf = (role: string | undefined): TenantRole | undefined =>
   role && role in tenantRoles ? role as TenantRole : undefined
 
 /**
- * The tenant a request acts in, until addresses name one (T1.5): the only tenant. None (an empty
- * database) or a suspended one: 404.
+ * The platform's first tenant (the oldest; NUK Cafe), for work that has no request path naming one
+ * (D140): a sign-up's first customer profile, a server error outside `/api/c/<slug>/`, the Bakong
+ * token's reminders (until each cafe has its own token, T2). Requests take theirs from the path
+ * (`tenantBySlug`). None (an empty database) or a suspended one: 404.
  */
 export async function currentTenant(db: Db): Promise<{ id: string, slug: string, name: string }> {
   const tenant = await repo.findCurrentTenant(db)
   if (!tenant || (tenant.status ?? 'active') !== 'active') throw tenantNotFound()
+  return { id: tenant.id, slug: tenant.slug, name: tenant.name }
+}
+
+/**
+ * The tenant a request's path names (`/api/c/<slug>/…`, D140). Unknown: 404 (nothing says whether
+ * a cafe ever had that address); suspended: 403 `TENANT_SUSPENDED`.
+ */
+export async function tenantBySlug(db: Db, slug: string): Promise<{ id: string, slug: string, name: string }> {
+  const tenant = await repo.findTenantBySlug(db, slug)
+  if (!tenant) throw tenantNotFound()
+  if ((tenant.status ?? 'active') !== 'active') throw tenantSuspended()
   return { id: tenant.id, slug: tenant.slug, name: tenant.name }
 }
 

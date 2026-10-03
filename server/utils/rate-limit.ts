@@ -3,7 +3,8 @@ import { apiError, ErrorCodes } from '#server/utils/errors'
 import { log } from '#server/utils/log'
 
 /**
- * Rate limits for the public API (`/api/public/**`, D121), counted per client address with
+ * Rate limits for the public API (a cafe's `/api/c/<slug>/public/**` and the global table scan
+ * `/api/tables/**`, D121, D140), counted per client address with
  * Cloudflare's Workers rate-limit bindings. The first rule whose prefix matches applies. Limits are
  * generous on purpose: customers in the cafe share its Wi-Fi, so one address can be many people.
  * A rule's numbers live in the Worker's configuration (nuxt.config.ts → `ratelimits`).
@@ -15,7 +16,16 @@ export const RATE_LIMIT_RULES = [
   // Prices the whole order from the catalog: the costliest public call.
   { prefix: '/api/public/checkout/quote', binding: 'RATE_LIMIT_QUOTE' },
   { prefix: '/api/public/', binding: 'RATE_LIMIT_PUBLIC' },
+  { prefix: '/api/tables/', binding: 'RATE_LIMIT_PUBLIC' },
 ] as const
+
+/**
+ * A path as the rules name it: a cafe's prefix dropped (`/api/c/nuk/public/menu` → `/api/public/menu`),
+ * so every cafe shares one set of rules and each address's count covers them all.
+ */
+export function rateLimitPath(path: string): string {
+  return path.replace(/^\/api\/c\/[^/]+(?=\/)/, '/api')
+}
 
 export type RateLimitBinding = (typeof RATE_LIMIT_RULES)[number]['binding']
 
@@ -33,7 +43,8 @@ export interface RateLimitRequest {
 
 /** `limited` names the binding that refused; `checked` false when no rule, binding or address applied. */
 export async function checkRateLimit(request: RateLimitRequest): Promise<{ checked: boolean, limited: RateLimitBinding | null }> {
-  const rule = RATE_LIMIT_RULES.find(candidate => request.path.startsWith(candidate.prefix))
+  const path = rateLimitPath(request.path)
+  const rule = RATE_LIMIT_RULES.find(candidate => path.startsWith(candidate.prefix))
   const limiter = rule ? request.limiters[rule.binding] : undefined
   if (!rule || !limiter || !request.address) return { checked: false, limited: null }
   const { success } = await limiter.limit({ key: request.address })

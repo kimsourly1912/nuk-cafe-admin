@@ -1,17 +1,17 @@
 <script setup lang="ts">
 /**
- * `/table/<token>`: where a table's QR code leads (D91, D93). The token names the branch and the
- * table (`GET /api/public/tables/{token}`); this tab then orders for that table and goes to the
- * menu. A token that doesn't work (rotated, archived table or branch, mistyped) says so and offers
+ * `/table/<token>`: where a table's QR code leads (D91, D93). The token names the cafe, the branch
+ * and the table (`GET /api/tables/{token}`, global: D140); this tab then orders for that table and
+ * goes to the menu. A token that doesn't work (rotated, archived table or branch, mistyped) says so and offers
  * pickup instead: the reason is never told (the server answers 404 for all of them).
  */
-import type { PublicTable } from '#shared/contracts/branches'
+import type { ScannedTable } from '#shared/contracts/branches'
 import { useTableContext } from '../composables/useShopMenu'
 
 const route = useRoute()
 const { setTable } = useTableContext()
 const token = computed(() => String(route.params.token ?? ''))
-const { data, error, refresh } = useApiQuery('menu:table', () => apiFetch<PublicTable>(`/public/tables/${encodeURIComponent(token.value)}`))
+const { data, error, refresh } = useApiQuery('menu:table', () => apiFetch<ScannedTable>(`/tables/${encodeURIComponent(token.value)}`))
 
 watch(data, (scanned) => {
   if (!scanned) return

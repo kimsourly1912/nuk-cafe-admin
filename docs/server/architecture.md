@@ -39,23 +39,25 @@ Browser ──► Nuxt app (customer site · /admin · /counter)
 
 ## Surfaces and routes
 
-Routes are Nuxt file routes, **unversioned** (the apps deploy together with the server). The first path segment is the **surface**: who calls it and what they may do.
+Routes are Nuxt file routes, **unversioned** (the apps deploy together with the server). **A cafe's routes live under its address** (D140): `/api/c/<slug>/<surface>/…`, files in `server/api/c/[slug]/`. The path names the tenant; `requireTenant` (or an access helper, which calls it) loads it from the slug (unknown 404, paused 403 `TENANT_SUSPENDED`) and the helper checks the caller may act there. No route takes a tenant from a body or query. The segment after the address is the **surface**: who calls it and what they may do. Shorthand in these docs and the app: `/api/admin/…` means `/api/c/<slug>/admin/…` (`apiFetch` adds the address).
 
 | Surface | Caller | Auth | Examples |
 |---|---|---|---|
-| `/api/auth/**` | anyone | Better Auth owns it | sign-up, sign-in, sign-out, verify email, reset password |
-| `/api/public/**` | anyone | none; read-only | `GET /api/public/menu`, `GET /api/public/branches`, `GET /api/public/tables/{token}`, `POST /api/public/checkout/quote` (a read: a POST only because the lines don't fit a query string, D98) |
-| `/api/shop/**` | signed-in customer (verified email for writes) | session | `GET /api/shop/me`, `POST /api/shop/orders` (with `Idempotency-Key`), `GET /api/shop/orders/{id}` (own orders only, D99); later `GET /api/shop/points` |
-| `/api/counter/{branchId}/**` | branch `manager` / `staff` | session + branch membership | `POST /api/counter/{branchId}/orders/{orderId}/ready` |
-| `/api/admin/**` | platform `admin` | session + platform role | `PATCH /api/admin/menu/items/{itemId}` |
-| `/api/webhooks/**` | external services (later) | signature, no session | |
+| `/api/auth/**` (platform) | anyone | Better Auth owns it | sign-up, sign-in, sign-out, verify email, reset password |
+| `/api/tables/{token}` (platform) | anyone | none; read-only | a scanned table QR: the table, branch and cafe (D140; a printed code names no cafe) |
+| `/api/health` (platform) | the deploy's smoke check | none | 200 when the database answers |
+| `/api/c/<slug>/public/**` | anyone | none; read-only | `GET …/public/menu`, `GET …/public/branches`, `POST …/public/checkout/quote` (a read: a POST only because the lines don't fit a query string, D98) |
+| `/api/c/<slug>/shop/**` | signed-in customer (verified email for writes) | session | `GET …/shop/me`, `POST …/shop/orders` (with `Idempotency-Key`), `GET …/shop/orders/{id}` (own orders only, D99); later `GET …/shop/points` |
+| `/api/c/<slug>/counter/{branchId}/**` | the cafe's branch `manager` / `staff`, or an owner | session + branch membership | `POST …/counter/{branchId}/orders/{orderId}/ready` |
+| `/api/c/<slug>/admin/**` | the cafe's `owner` | session + tenant role | `PATCH …/admin/menu/items/{itemId}` |
+| `/api/webhooks/**` (platform) | external services | signature, no session | `POST /api/webhooks/telegram` |
 
 Rules:
 - **Resources are plural nouns, kebab-case:** `/api/admin/menu/items`, `/api/admin/voucher-templates`. Nest only for ownership (`/menu/items/{itemId}/variations`), at most two levels.
 - **CRUD maps to methods:** `GET` list/read, `POST` create, `PATCH` partial update, `DELETE` archive-or-delete (see [Archiving](#archiving)).
 - **Business actions are sub-resources with `POST`**, named with a verb: `/orders/{orderId}/ready`, `/complete`, `/cancel`, `/vouchers/{voucherId}/redeem`. Never change state through `PATCH status`.
 - The branch in `/api/counter/{branchId}` comes from the path and is checked against the caller's membership. It is never read from a body field or trusted from the session alone.
-- File layout mirrors the URL: `server/api/admin/menu/items/[itemId].patch.ts`.
+- File layout mirrors the URL: `server/api/c/[slug]/admin/menu/items/[itemId].patch.ts`. `server/tests/routes.test.ts` checks every route under `c/[slug]` resolves the cafe, every admin route checks access, and no route outside it acts in a cafe.
 
 ## Features
 

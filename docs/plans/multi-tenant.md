@@ -35,9 +35,10 @@ later now, sign-up and billing only once the commercial plan is confirmed._
 <host>/                             redirects to /c/nuk for now; later the platform's landing page
 ```
 
-- **The path names the tenant; the server decides access.** A Nitro middleware reads `<slug>` from
-  `/api/c/<slug>/…`, loads the tenant (unknown → 404; suspended → 403 `TENANT_SUSPENDED`) and puts it
-  on `event.context.tenant`. Access helpers then check the user's membership in **that** tenant. No
+- **The path names the tenant; the server decides access.** `requireTenant` (which every access
+  helper calls) reads `<slug>` from the route `/api/c/[slug]/…`, loads the tenant (unknown → 404;
+  suspended → 403 `TENANT_SUSPENDED`) and puts it on `event.context.tenant` (T1.5a, D140: the route
+  parameter rather than a middleware, so a test can check every cafe route calls it). Access helpers then check the user's membership in **that** tenant. No
   route takes a tenant id from a body or query.
 - **The app adds the prefix in one place:** `apiFetch` prefixes `/api/c/<slug>` for the tenant
   surfaces (`/admin`, `/counter`, `/public`, `/shop`), so feature code keeps calling
@@ -139,7 +140,8 @@ the server), so the API paths can stay while the columns arrive feature by featu
 | T1.3 ✅ | Orders' reads scoped (their `tenant_id` exists since T1.1), customer profiles, KHQR settings, the riel rate (D137, migration `0026_tenant_settings`) | Isolation tests; race tests still pass |
 | T1.4a ✅ | Telegram and notifications, the outbox's tenant (D138, migration `0027_telegram_tenants`) | Isolation tests |
 | T1.4b | Reports (an isolation test), the assistant, sample data, audit, idempotency (D139, migration `0028_platform_tenants`) | Isolation tests |
-| T1.5 | Addresses: `/c/<slug>` pages, `/api/c/<slug>` routes, the tenant middleware from the path, `apiFetch` prefix, `tenantPath`, the lint rule, browser storage keys per tenant, `/` and old paths redirect, `/table/<token>` global; the menu cache per tenant (test) | e2e on a seeded database with two cafes; the full suite; staging works at `/c/nuk` |
+| T1.5a | The API under the cafe's address (D140): routes in `server/api/c/[slug]/`, `requireTenant` from the path (unknown 404, paused 403), `apiFetch` adds the prefix (`apiPath`; NUK Cafe's `nuk` until pages carry one), the table scan and health global (`/api/tables/{token}`, `/api/health`), rate limits per address across cafes | Server tests (the lookup, the scan, every cafe route resolves its cafe); the full suite; staging's API at `/api/c/nuk` |
+| T1.5b | Pages: `/c/<slug>` pages, the prefix from the page's address, `tenantPath`, the lint rule, browser storage keys per tenant, `/` and old paths redirect, `/table/<token>` to its cafe's menu; server-built links (Telegram buttons, the assistant's pages); the menu cache per tenant (test) | e2e on a seeded database with two cafes; the full suite; staging works at `/c/nuk` |
 | T2 | (mockup round first: [frame prompts](#ui-frames-for-t2)) The platform console, Choose a cafe and the switcher, Cafe profile, not-found and paused pages, each tenant's Bakong token encrypted in the database (AES-GCM, the key a Worker secret) with its reminders | e2e; staging: create a second cafe and use it end to end |
 | T3 | After the commercial plan is confirmed: self sign-up and trial, plans and limits, manual billing, then the rest | Owner's go |
 

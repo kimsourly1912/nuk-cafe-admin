@@ -98,10 +98,18 @@ export type UpdateTableInput = v.InferOutput<typeof updateTableSchema>
 export const tableVersionSchema = v.strictObject({ version: versionSchema })
 export type TableVersionInput = v.InferOutput<typeof tableVersionSchema>
 
-/** `GET /api/public/tables/{token}`: the table a scanned QR code names. */
+/** A cafe's table as checkout resolves its QR token (`/api/c/<slug>/…`). */
 export interface PublicTable {
   branch: { id: string, name: string }
   table: { id: string, label: string }
+}
+
+/**
+ * `GET /api/tables/{token}`: the table a scanned QR code names, and its cafe (D140). Global: a
+ * printed code carries no cafe address, so the token finds the cafe.
+ */
+export interface ScannedTable extends PublicTable {
+  cafe: { slug: string, name: string }
 }
 
 /** When a closed branch opens next, on its own clock. */

@@ -555,7 +555,7 @@ describe('menu item form', () => {
     const { page } = await open()
     // The upload's raw bytes (the mock's handlers get text, which garbles binary).
     let uploaded: Buffer | undefined
-    await page.route('**/api/admin/media', async (route) => {
+    await page.route('**/api/c/nuk/admin/media', async (route) => {
       uploaded = route.request().postDataBuffer() ?? undefined
       await route.fulfill({ json: UPLOADED })
     })
