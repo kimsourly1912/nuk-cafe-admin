@@ -17,6 +17,7 @@ const error = ref<string>()
 
 const route = useRoute()
 const slug = useTenantSlug()
+const { name, logoUrl } = useCafe()
 const { login } = useAuth()
 
 // A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
@@ -50,12 +51,12 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   <TaskFrame>
     <template #header>
       <div class="flex items-center gap-2">
-        <UIcon
-          name="i-lucide-coffee"
-          class="size-6 text-primary"
+        <CafeLogo
+          :url="logoUrl"
+          class="size-6"
         />
         <h1 class="text-lg font-semibold">
-          NUK Cafe Admin
+          {{ name }} Admin
         </h1>
       </div>
     </template>

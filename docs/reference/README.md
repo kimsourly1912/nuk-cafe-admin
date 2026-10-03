@@ -57,6 +57,8 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<ListPagination>` | component | [UI helpers](./ui-helpers.md#listpagination) | "Page [3] of 10 · Rows per page" and the page numbers; every paginated list (D128) |
 | `<QuantityStepper>` | component | [UI helpers](./ui-helpers.md#quantitystepper) | − n + in a pill, no keyboard on touch screens (D128) |
 | `<QrCode>`, `qrImage`, `qrSvg` | component, util | [UI helpers](./ui-helpers.md#qrcode) | A QR code (a table's link, a KHQR), dark on light in both themes (D130) |
+| `<ImageInput>`, `useImageUpload`, `shrinkImage` | component, composable, util | [UI helpers](./ui-helpers.md#imageinput) | An image for a record: shrunk, uploaded on pick, Replace and Remove (D143) |
+| `useCafe`, `<CafeLogo>` | composable, component | [UI helpers](./ui-helpers.md#usecafe-and-cafelogo) | The cafe's name and logo, never written into a page (D143) |
 | `<PhoneInput>`, `parsePhone` | component, shared util | [UI helpers](./ui-helpers.md#phoneinput) | A phone number with its country; E.164 on the wire (D127) |
 | `<ListSkeleton>` | component | [UI helpers](./ui-helpers.md#listskeleton) | First-load placeholders |
 | `<SearchInput>` | component | [UI helpers](./ui-helpers.md#searchinput) | Search as you type (debounced) |

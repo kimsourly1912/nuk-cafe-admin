@@ -86,7 +86,7 @@ describe('the help assistant', () => {
     const page = await open('/c/nuk/admin/staff')
     const requests = await mockChat(page, [{ body: stream('1. Press **Add staff member**.\n2. Copy the password.', [{ title: 'Staff', path: '/admin/staff' }, { title: 'Branch', path: '/admin/branches' }]) }])
     await askButton(page).click()
-    await panel(page).getByText('Answers from the NUK Cafe help guide').waitFor()
+    await panel(page).getByText('Answers from the help guide').waitFor()
     // Docked: the page narrows instead of being covered.
     await expect.poll(() => panel(page).getAttribute('data-state')).toBe('expanded')
 

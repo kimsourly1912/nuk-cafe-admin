@@ -32,3 +32,12 @@ export const updateCafeSchema = v.object({
   logoAssetId: v.nullable(idSchema),
 })
 export type UpdateCafeInput = v.InferOutput<typeof updateCafeSchema>
+
+/**
+ * The error code of a cafe page whose address names no cafe (D143), so the error page says "Cafe not
+ * found" rather than "Page not found". Pages only: the API answers its usual `NOT_FOUND`.
+ */
+export const CAFE_NOT_FOUND = 'CAFE_NOT_FOUND'
+
+/** A paused cafe's code, on its pages and its API alike (D134, D140). */
+export const TENANT_SUSPENDED = 'TENANT_SUSPENDED'

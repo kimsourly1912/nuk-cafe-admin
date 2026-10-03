@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fitWithin, IMAGE_MAX_EDGE, pickSmaller } from '../utils/shrink-image'
+import { fitWithin, IMAGE_MAX_EDGE, pickSmaller } from '../../app/utils/shrink-image'
 
 describe('making photos smaller before upload (D122)', () => {
   it('fits the longest side within 1600 px, keeping the proportions', () => {

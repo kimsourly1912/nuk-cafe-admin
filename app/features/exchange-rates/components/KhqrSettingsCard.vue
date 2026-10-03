@@ -20,6 +20,7 @@ import { tokenExpiry } from '../utils/bakong-token'
 
 const { data, error, loading, refresh } = useKhqrSettings()
 const { save } = useKhqrSettingsMutations()
+const { name: cafeName } = useCafe()
 
 const empty = (): KhqrSettingsInput => ({ version: 0, enabled: true, accountId: '', merchantName: '', merchantCity: 'Phnom Penh', currencies: ['USD'] })
 const fromSettings = (settings: KhqrSettings): KhqrSettingsInput => settings.version
@@ -170,7 +171,7 @@ const currencyItems: { label: string, value: KhqrCurrency }[] = [
         >
           <UInput
             v-model="state.merchantName"
-            placeholder="NUK Cafe"
+            :placeholder="cafeName"
             class="w-full"
           />
         </UFormField>

@@ -43,14 +43,14 @@ Context that shapes these choices: the portal stays **open all day** on counter 
 
 ## Browser tab titles
 
-Every tab reads `<Page> · NUK Cafe Admin`, so staff with several tabs open can tell them apart.
+Every tab reads `<Page> · <cafe> Admin` (the counter `· <cafe> Counter`, the customer site `· <cafe>`, the platform console `· NUK Platform`), so staff with several tabs open can tell them apart. The cafe's name is its own (`useCafe()`, D143): never written into a page, and the tab follows a rename at once (the template is a computed, so unhead re-applies it).
 
-Source: `app/app.vue` (`useHead` + `titleTemplate`), `app/types/page-meta.d.ts`, `app/error.vue`. E2E: `test/e2e/app-shell.test.ts`.
+Source: `app/app.vue` (`useHead` + `titleTemplate`), `app/types/page-meta.d.ts`, `app/error.vue`. E2E: `test/e2e/app-shell.test.ts`, `cafe-profile.test.ts`, `cafes.test.ts`.
 
 **Every route file sets `title`:**
 
 ```ts
-// app/pages/categories/index.vue
+// app/pages/c/[slug]/admin/categories/index.vue
 definePageMeta({ title: 'Categories' })
 ```
 
@@ -58,7 +58,9 @@ definePageMeta({ title: 'Categories' })
 |---|---|
 | Route file with `title` | `Categories · NUK Cafe Admin` |
 | Route file without `title` | `NUK Cafe Admin` (add one) |
+| Before the cafe's name has loaded | `Categories · Admin` |
 | Unknown route / fatal error (`error.vue`, rendered instead of `app.vue`) | `Page not found · NUK Cafe Admin` / `Something went wrong · NUK Cafe Admin` |
+| An address that names no cafe / a paused cafe (D143) | `Cafe not found` / `Ordering is paused · Quiet Corner` |
 | Login | `Sign in · NUK Cafe Admin` |
 
 A detail page can override it with `useHead({ title: () => product.value?.name })` in its page component.

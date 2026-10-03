@@ -107,7 +107,7 @@ async function onSubmit(event: FormSubmitEvent<SignInForm>) {
         :loading="saving"
       />
       <p class="text-center text-sm text-muted">
-        New to NUK Cafe?
+        New here?
         <ULink
           :to="accountLink(ACCOUNT_PATHS.signUp, route.query.redirect)"
           class="font-medium text-primary"

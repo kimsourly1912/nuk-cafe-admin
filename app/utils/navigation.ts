@@ -1,6 +1,7 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 import { availabilityRulesNavigation } from '~/features/availability-rules'
 import { branchesNavigation } from '~/features/branches'
+import { cafeNavigation } from '~/features/cafe'
 import { categoriesNavigation } from '~/features/categories'
 import { exchangeRatesNavigation } from '~/features/exchange-rates'
 import { modifierGroupsNavigation } from '~/features/modifier-groups'
@@ -35,6 +36,7 @@ export function navigationItems(options: { sampleData: boolean }): NavigationMen
     ],
     [
       { label: 'Admin', type: 'label' },
+      cafeNavigation,
       staffNavigation,
       branchesNavigation,
       exchangeRatesNavigation,

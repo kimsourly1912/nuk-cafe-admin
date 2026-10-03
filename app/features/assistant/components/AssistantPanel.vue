@@ -78,7 +78,7 @@ const asMessage = (message: unknown) => message as AssistantMessage
     side="right"
     collapsible="offcanvas"
     title="Assistant"
-    description="Answers from the NUK Cafe help guide"
+    description="Answers from the help guide"
     close
     :style="{ '--sidebar-width': '26rem' }"
     :ui="{ body: 'p-0 gap-0', footer: 'flex-col items-stretch gap-2' }"
