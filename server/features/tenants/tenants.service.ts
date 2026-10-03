@@ -1,14 +1,14 @@
 import type { Page } from '#shared/contracts/common'
 import { totalPages } from '#shared/contracts/common'
-import type { CafeProfile, CafeSettings, UpdateCafeInput } from '#shared/contracts/cafe'
+import type { AccountCafe, CafeProfile, CafeSettings, UpdateCafeInput } from '#shared/contracts/cafe'
 import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, ResumeTenantInput, SuspendTenantInput, TenantDetail, TenantListQuery, TenantStatus, TenantSummary } from '#shared/contracts/tenants'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
 import { activeBranchCounts, firstBranchStatement } from '#server/features/branches'
-import { planStaffCreate, staffCounts, tenantOwners } from '#server/features/identity'
-import type { Actor } from '#server/features/identity'
+import { accountWorkspaces, planStaffCreate, staffCounts, tenantOwners } from '#server/features/identity'
+import type { Actor, SessionUser } from '#server/features/identity'
 import { assetUrls, attachStatements, mediaNotAvailable, releaseStatement } from '#server/features/media'
 import { orderActivity } from '#server/features/orders'
 import { auditStatement } from '#server/features/platform'
@@ -229,6 +229,23 @@ export async function getCafeProfile(db: Db, slug: string): Promise<CafeProfile>
   if (!row) throw tenantNotFound()
   const { logoAssetId: _, version: __, ...profile } = await profileOf(db, row)
   return profile
+}
+
+/**
+ * The cafes the signed-in account works in, by name, with the workspaces it may open in each
+ * (`GET /api/me/cafes`, T2c, D144): for Your cafes and the cafe switcher. Only links: each
+ * workspace checks access on its own routes. A paused cafe is listed with its status.
+ */
+export async function listAccountCafes(db: Db, user: SessionUser | null | undefined): Promise<AccountCafe[]> {
+  const entries = await accountWorkspaces(db, user)
+  // One read per cafe: an account works in a handful, and a list of ids would meet D1's parameter limit.
+  const cafes = await Promise.all(entries.map(async ({ tenantId, workspaces }) => {
+    const row = await repo.findTenant(db, tenantId)
+    if (!row) return null
+    const { logoAssetId: _, version: __, ...profile } = await profileOf(db, row)
+    return { ...profile, workspaces }
+  }))
+  return cafes.filter(cafe => cafe !== null).sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }) || a.slug.localeCompare(b.slug))
 }
 
 /** The owner's settings page (`GET /api/c/<slug>/admin/cafe`). */

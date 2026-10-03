@@ -46,6 +46,7 @@ Routes are Nuxt file routes, **unversioned** (the apps deploy together with the 
 | `/api/auth/**` (platform) | anyone | Better Auth owns it | sign-up, sign-in, sign-out, verify email, reset password |
 | `/api/tables/{token}` (platform) | anyone | none; read-only | a scanned table QR: the table, branch and cafe (D140; a printed code names no cafe) |
 | `/api/cafes/{slug}` (platform) | anyone | none; read-only | a cafe's name, logo and status, paused cafes too (D143): the account pages have no cafe in their address, and a paused cafe's page names it |
+| `/api/me/cafes` (platform) | a signed-in account | session; its own memberships only | the cafes the account works in and the workspaces it may open there (D144): Your cafes and the switcher |
 | `/api/health` (platform) | the deploy's smoke check | none | 200 when the database answers |
 | `/api/platform/**` (platform) | a super admin (`superadmin` on the user) | session + platform role (`requirePlatformPermission`) | the platform console (D142): `GET/POST …/platform/tenants`, `POST …/platform/tenants/{id}/suspend`, `/resume`, `/slug`; never a cafe's menu, orders or customers |
 | `/api/c/<slug>/public/**` | anyone | none; read-only | `GET …/public/menu`, `GET …/public/branches`, `POST …/public/checkout/quote` (a read: a POST only because the lines don't fit a query string, D98) |

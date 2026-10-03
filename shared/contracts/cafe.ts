@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { idSchema, nameSchema, versionSchema } from './common'
+import type { Workspace } from './account'
 
 /**
  * A cafe's profile (step T2b, D143): its name and logo, shown on its menu, admin and counter.
@@ -41,3 +42,12 @@ export const CAFE_NOT_FOUND = 'CAFE_NOT_FOUND'
 
 /** A paused cafe's code, on its pages and its API alike (D134, D140). */
 export const TENANT_SUSPENDED = 'TENANT_SUSPENDED'
+
+/**
+ * A cafe the signed-in account works in (`GET /api/me/cafes`, T2c, D144): its profile and the
+ * workspaces it may open there (`admin` for an owner, `counter` for an owner or branch staff). A
+ * paused cafe is listed too, so its people see why it's gone; its workspaces don't open.
+ */
+export interface AccountCafe extends CafeProfile {
+  workspaces: Workspace[]
+}

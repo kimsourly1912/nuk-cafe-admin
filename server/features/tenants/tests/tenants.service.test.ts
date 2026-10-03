@@ -5,10 +5,10 @@ import type { Db } from '#server/utils/batch'
 import { auditEvents, branches, member, organization, user } from '#server/db/tables'
 import { customerProfiles } from '#server/features/customers/customers.schema'
 import { orders } from '#server/features/orders/orders.schema'
-import { createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { addBranchStaff, createAdmin, createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
-import { changeTenantSlug, createTenant, currentSlugFor, getCafeProfile, getCafeSettings, getTenant, listTenants, resumeTenant, seedTenant, suspendTenant, updateCafeSettings } from '#server/features/tenants'
+import { changeTenantSlug, createTenant, currentSlugFor, getCafeProfile, getCafeSettings, getTenant, listAccountCafes, listTenants, resumeTenant, seedTenant, suspendTenant, updateCafeSettings } from '#server/features/tenants'
 import { mediaAssets } from '#server/features/media/media.schema'
 import { tenantSlugs } from '#server/features/tenants/tenants.schema'
 
@@ -288,5 +288,43 @@ describe('the cafe\'s profile', () => {
     const racing = interleaved(db, () => db.delete(mediaAssets).where(eq(mediaAssets.id, logo)))
     await expectApiError(() => updateCafeSettings(racing, owner, { version: 1, name: 'NUK Coffee', logoAssetId: logo }), 422, 'MEDIA_NOT_AVAILABLE', ['logoAssetId'])
     expect((await getCafeSettings(db, TEST_TENANT))).toMatchObject({ name: `Cafe ${TEST_TENANT}`, version: 1 })
+  })
+})
+
+// The account's own cafes (step T2c, D144): Your cafes and the cafe switcher.
+describe('the cafes an account works in', () => {
+  const sessionOf = (id: string, extra: Record<string, unknown> = {}) => ({ id, email: 'x@example.com', name: 'X', emailVerified: true, ...extra }) as Parameters<typeof listAccountCafes>[1]
+
+  it('lists owned cafes with the admin and the counter, branch staff with the counter, by name', async () => {
+    const { userId } = await createAdmin(db, 'owner@example.com')
+    await ensureTenant(db, 'tenant-2', 'brown-bean')
+    await db.update(organization).set({ name: 'Brown Bean' }).where(eq(organization.id, 'tenant-2'))
+    await insertBranch(db, { id: 'branch-b', name: 'Bean Street', timezone: 'Asia/Phnom_Penh', tenantId: 'tenant-2' })
+    await addBranchStaff(db, 'branch-b', userId, 'staff', 'tenant-2')
+    // A cafe the account has nothing to do with, and one where it's only a customer.
+    await ensureTenant(db, 'tenant-3', 'quiet-corner')
+
+    expect(await listAccountCafes(db, sessionOf(userId))).toEqual([
+      { slug: 'brown-bean', name: 'Brown Bean', logoUrl: null, status: 'active', workspaces: ['counter'] },
+      { slug: 'nuk', name: `Cafe ${TEST_TENANT}`, logoUrl: null, status: 'active', workspaces: ['admin', 'counter'] },
+    ])
+  })
+
+  it('leaves out archived branches and plain members; lists a paused cafe with its status', async () => {
+    const person = await createUser(db)
+    await insertBranch(db, { id: 'branch-old', name: 'Old', timezone: 'Asia/Phnom_Penh', status: 'archived' })
+    await addBranchStaff(db, 'branch-old', person.id, 'manager')
+    expect(await listAccountCafes(db, sessionOf(person.id))).toEqual([])
+
+    const { userId } = await createAdmin(db, 'paused@example.com')
+    await suspendTenant(db, admin, TEST_TENANT, { version: 1, reason: 'Unpaid' })
+    expect(await listAccountCafes(db, sessionOf(userId))).toMatchObject([{ slug: 'nuk', status: 'suspended', workspaces: ['admin', 'counter'] }])
+  })
+
+  it('answers a temporary password (only links); refuses no session or a banned account', async () => {
+    const { userId } = await createAdmin(db, 'new@example.com')
+    expect(await listAccountCafes(db, sessionOf(userId, { mustChangePassword: true }))).toHaveLength(1)
+    await expectApiError(() => listAccountCafes(db, null), 401, 'UNAUTHENTICATED')
+    await expectApiError(() => listAccountCafes(db, sessionOf(userId, { banned: true })), 401, 'UNAUTHENTICATED')
   })
 })

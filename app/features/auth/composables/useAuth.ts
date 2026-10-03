@@ -118,6 +118,10 @@ export function useAuth() {
     catch (error) {
       const apiError = ApiError.from(error)
       if (!isNoAccess(apiError)) throw apiError
+      // Works at another cafe (T2c, D144): stays signed in, and the page offers Your cafes.
+      if (await worksElsewhere(splitTenantUrl(window.location.pathname)?.slug ?? '', 'admin')) {
+        throw new ApiError('This account doesn\'t manage this cafe. Open your own cafe from Your cafes.', { kind: 'forbidden', status: 403, code: WORKS_ELSEWHERE, cause: error })
+      }
       await authFetch('/sign-out').catch(() => {})
       throw new ApiError(NO_ADMIN_ACCESS, { kind: 'forbidden', status: 403, code: apiError.code, cause: error })
     }

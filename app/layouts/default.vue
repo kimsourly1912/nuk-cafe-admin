@@ -3,6 +3,7 @@ import type { DropdownMenuItem } from '@nuxt/ui'
 import { ShortcutsHelp } from '#components'
 import { AssistantPanel, useAssistant } from '~/features/assistant'
 import { useAuth } from '~/features/auth'
+import { CafeSwitcher } from '~/features/cafe'
 
 const { user, logout } = useAuth()
 const allItems = navigationItems({ sampleData: useRuntimeConfig().public.sampleData.enabled })
@@ -12,7 +13,6 @@ const tenantPath = useTenantPath()
 const sidebarItems = computed(() => withActiveItem(allItems, splitTenantUrl(route.path)?.path ?? route.path)
   .map(group => group.map(item => (typeof item.to === 'string' ? { ...item, to: tenantPath(item.to) } : item))))
 const open = ref(false)
-const cafe = useCafe()
 // The help assistant (D109): only where an AI key is set.
 const assistant = useAssistant()
 
@@ -44,19 +44,11 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
       <template #header="{ collapsed }">
-        <NuxtLink
-          :to="tenantPath('/admin')"
-          class="flex items-center gap-2 font-semibold"
-        >
-          <CafeLogo
-            :url="cafe.logoUrl.value"
-            class="size-5"
-          />
-          <span
-            v-if="!collapsed"
-            class="truncate"
-          >{{ cafe.name.value }} Admin</span>
-        </NuxtLink>
+        <CafeSwitcher
+          workspace="admin"
+          :home="tenantPath('/admin')"
+          :collapsed="collapsed"
+        />
       </template>
 
       <template #default="{ collapsed }">

@@ -11,6 +11,8 @@ The admin portal is where admins set up their cafe (its profile, the menu, staff
 
 On a phone, open the sidebar with the menu button at the top left.
 
+If you run more than one cafe, the cafe's name at the top of the sidebar is a menu: choose another cafe to open its admin, or **All your cafes** for the list of every cafe you work at (**Your cafes**, with Admin and Counter for each). Each cafe opens fresh, as its own page.
+
 ## Saving your work
 
 - Forms save only when you press **Save** (or **Create**, **Save changes**). **Ctrl+Enter** (⌘+Enter on a Mac) saves the open form.

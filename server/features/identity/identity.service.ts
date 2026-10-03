@@ -167,6 +167,21 @@ export async function workspacesOf(db: Db, user: SessionUser, tenantId: string):
 }
 
 /**
+ * Every tenant an account works in, with the workspaces it may open there (`GET /api/me/cafes`,
+ * T2c, D144): the admin app and the counter where it's an owner, the counter where it works at an
+ * active branch (the same rules as `workspacesOf`, for all tenants at once). Signed in is enough,
+ * **a temporary password included** (like `platformSession`): it only lists links, and each
+ * workspace asks for a new password itself. Not signed in or banned: 401.
+ */
+export async function accountWorkspaces(db: Db, user: SessionUser | null | undefined): Promise<{ tenantId: string, workspaces: Workspace[] }[]> {
+  if (!user || user.banned) throw unauthenticated()
+  const [memberships, staff] = await Promise.all([repo.memberTenants(db, user.id), repo.staffTenants(db, user.id)])
+  const owned = new Set(memberships.filter(m => tenantRoleOf(m.role) === 'owner').map(m => m.tenantId))
+  const counter = new Set([...owned, ...staff.filter(s => s.role in branchRoles).map(s => s.tenantId)])
+  return [...counter].map(tenantId => ({ tenantId, workspaces: owned.has(tenantId) ? ['admin', 'counter'] : ['counter'] }))
+}
+
+/**
  * The platform console's session check (`GET /api/platform/me`, D142): a super admin, **including
  * one still on a temporary password** (the console then asks for a new one; every other platform
  * route refuses). Not signed in or banned: 401. Signed in, not a super admin: 403 `NOT_PLATFORM_ADMIN`.
