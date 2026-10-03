@@ -104,14 +104,14 @@ describe('Telegram page', () => {
     await dialog.getByText('(group, 8 members)').waitFor({ timeout: 10_000 })
     await dialog.getByText('Everyone in this group sees what\'s sent there.').waitFor({ timeout: 5000 })
     await dialog.getByRole('button', { name: 'Cancel' }).click({ timeout: 5000 })
-    await expect.poll(() => posted).toEqual(['/api/admin/telegram/links/link-1/cancel'])
+    await expect.poll(() => posted).toEqual(['/api/c/nuk/admin/telegram/links/link-1/cancel'])
     // Like a person: the dialog is gone before Connect a group is pressed again.
     await expect.poll(() => page.getByRole('dialog').count()).toBe(0)
 
     await page.getByRole('button', { name: 'Connect a group' }).click({ timeout: 10_000 })
     await page.getByRole('dialog').getByRole('button', { name: 'Connect' }).click({ timeout: 10_000 })
     await toast(page, 'NUK Riverside Staff is connected').waitFor({ timeout: 10_000 })
-    expect(posted.at(-1)).toBe('/api/admin/telegram/links/link-2/confirm')
+    expect(posted.at(-1)).toBe('/api/c/nuk/admin/telegram/links/link-2/confirm')
   })
 
   it('Send test, a blocked chat\'s Reconnect, and Disconnect asked first with the version', async () => {

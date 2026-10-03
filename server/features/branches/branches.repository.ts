@@ -3,6 +3,7 @@ import type { DiningTableStatus } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
 import { insertPieces } from '#server/utils/batch'
+import { organization } from '#server/db/tables'
 import { branches, branchHours, diningTables } from './branches.schema'
 
 /**
@@ -155,6 +156,9 @@ export interface ScannedTableRow {
   label: string
   tableStatus: DiningTableStatus
   tenantId: string
+  tenantSlug: string
+  tenantName: string
+  tenantStatus: string | null
   branchId: string
   branchName: string
   branchStatus: string | null
@@ -167,11 +171,15 @@ export async function findTableByTokenHash(db: Db, hash: string): Promise<Scanne
     label: diningTables.label,
     tableStatus: diningTables.status,
     tenantId: branches.tenantId,
+    tenantSlug: organization.slug,
+    tenantName: organization.name,
+    tenantStatus: organization.status,
     branchId: branches.id,
     branchName: branches.name,
     branchStatus: branches.status,
   }).from(diningTables)
     .innerJoin(branches, eq(branches.id, diningTables.branchId))
+    .innerJoin(organization, eq(organization.id, branches.tenantId))
     .where(eq(diningTables.qrTokenHash, hash))
     .limit(1)
   return rows[0]

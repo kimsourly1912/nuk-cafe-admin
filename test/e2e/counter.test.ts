@@ -28,11 +28,11 @@ async function signInOverHttp(account: { email: string, password: string }) {
 /** One Banana Bread ($2.25) at Riverside, placed by `customer`. */
 async function placeOrder(customer: SeedCustomer): Promise<Order> {
   const cookie = await signInOverHttp(customer)
-  const menu = await (await fetch(url(`/api/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
+  const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
   const bread = menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(s => s.items)]).find(i => i.name === 'Banana Bread')!
   const lines = [{ itemId: bread.id, variationId: bread.variations[0]!.id, quantity: 1, note: 'Warm it up' }]
-  const quote = await (await fetch(url('/api/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ branchId: seed.openBranchId, lines }) })).json() as CheckoutQuote
-  const response = await fetch(url('/api/shop/orders'), {
+  const quote = await (await fetch(url('/api/c/nuk/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ branchId: seed.openBranchId, lines }) })).json() as CheckoutQuote
+  const response = await fetch(url('/api/c/nuk/shop/orders'), {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin, cookie, 'idempotency-key': crypto.randomUUID() },
     body: JSON.stringify({ branchId: seed.openBranchId, lines, expectedTotalMinor: quote.totalMinor }),
@@ -60,7 +60,7 @@ async function cashierAtCounter(width = 1180) {
 /** A counter command over HTTP, as the cashier. */
 async function command(order: Order, action: 'pay' | 'ready' | 'complete' | 'cancel', body: Record<string, unknown>) {
   const cookie = await signInOverHttp(seed.customers.cashier)
-  const response = await fetch(url(`/api/counter/${seed.openBranchId}/orders/${order.id}/${action}`), {
+  const response = await fetch(url(`/api/c/nuk/counter/${seed.openBranchId}/orders/${order.id}/${action}`), {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin, cookie, 'idempotency-key': crypto.randomUUID() },
     body: JSON.stringify(body),
@@ -241,7 +241,7 @@ describe('the counter', () => {
 
     // Another cashier takes it at the same moment.
     const cookie = await signInOverHttp(seed.customers.cashier)
-    const paid = await fetch(url(`/api/counter/${seed.openBranchId}/orders/${order.id}/pay`), {
+    const paid = await fetch(url(`/api/c/nuk/counter/${seed.openBranchId}/orders/${order.id}/pay`), {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin, cookie, 'idempotency-key': crypto.randomUUID() },
       body: JSON.stringify({ version: 1, method: 'khqr' }),
@@ -360,7 +360,7 @@ describe('the counter', () => {
   })
 
   it('the customer site\'s account menu links staff to the counter, and only them (D124)', async () => {
-    const me = async (account: SeedCustomer) => (await (await fetch(url('/api/shop/me'), { headers: { cookie: await signInOverHttp(account) } })).json()).workspaces
+    const me = async (account: SeedCustomer) => (await (await fetch(url('/api/c/nuk/shop/me'), { headers: { cookie: await signInOverHttp(account) } })).json()).workspaces
     expect(await me(seed.customers.cashier)).toEqual(['counter'])
     expect(await me(seed.customers.verified)).toEqual([])
 
@@ -379,7 +379,7 @@ describe('the counter', () => {
 // here can't change another file's menu).
 describe('sold out at the counter (D105)', () => {
   const coconut = async () => {
-    const menu = await (await fetch(url(`/api/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
+    const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
     return menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(s => s.items)]).find(i => i.name === 'Coconut Coffee')!
   }
 

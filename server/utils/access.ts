@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import { authorizeBranch, authorizeCustomer, authorizeSignedIn, authorizeTenant, currentTenant } from '#server/features/identity'
+import { authorizeBranch, authorizeCustomer, authorizeSignedIn, authorizeTenant, tenantBySlug } from '#server/features/identity'
 import type { Actor, BranchActor, BranchPermission, SessionUser, TenantPermission } from '#server/features/identity'
 import { useDb } from './db'
 
@@ -21,14 +21,16 @@ async function sessionUser(event: H3Event): Promise<SessionUser | null> {
 export interface RequestTenant { id: string, slug: string, name: string }
 
 /**
- * The tenant this request acts in (D134), resolved once per request. Until addresses name it
- * (`/api/c/<slug>/…`, step T1.5) it's the only tenant; never anything the client sends.
- * Public routes call it directly; the helpers below call it for the others.
+ * The tenant this request acts in (D134, D140): the one its path names (`/api/c/<slug>/…`),
+ * resolved once per request; unknown 404, suspended 403 `TENANT_SUSPENDED`. The path only names
+ * it: whether the caller may act there is the helpers' check below. Public routes call it
+ * directly; the helpers below call it for the others. A route outside `/api/c/<slug>/` has no
+ * tenant: 404.
  */
 export async function requireTenant(event: H3Event): Promise<RequestTenant> {
   const known = event.context.tenant as RequestTenant | undefined
   if (known) return known
-  const tenant = await currentTenant(useDb())
+  const tenant = await tenantBySlug(useDb(), getRouterParam(event, 'slug') ?? '')
   event.context.tenant = tenant
   return tenant
 }

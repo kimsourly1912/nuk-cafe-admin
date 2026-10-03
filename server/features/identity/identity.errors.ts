@@ -8,6 +8,8 @@ export const IdentityErrorCodes = {
   NOT_ADMIN: 'NOT_ADMIN',
   /** Signed in, but not working at any branch: no counter app (D102). */
   NOT_STAFF: 'NOT_STAFF',
+  /** The cafe in the path is paused by the platform (D134, D140). */
+  TENANT_SUSPENDED: 'TENANT_SUSPENDED',
 } as const
 
 /** Signed in, but not an owner of the cafe: the admin app is owners only for now (D52, D134). */
@@ -26,5 +28,9 @@ export const branchNotFound = () => notFound('The branch')
 export const notStaff = () =>
   apiError(403, IdentityErrorCodes.NOT_STAFF, 'This account doesn\'t work at any branch, so it can\'t use the counter.')
 
-/** No tenant to act in (an empty database), or a suspended one (D134). */
+/** No tenant with that address (or, for the tasks' default, an empty database). D134, D140. */
 export const tenantNotFound = () => notFound('The cafe')
+
+/** A tenant the platform has paused: nothing in it answers until it's resumed (D134, D140). */
+export const tenantSuspended = () =>
+  apiError(403, IdentityErrorCodes.TENANT_SUSPENDED, 'This cafe is paused at the moment.')

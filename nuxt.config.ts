@@ -182,6 +182,9 @@ export default defineNuxtConfig({
     public: {
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',
+      // NUXT_PUBLIC_DEFAULT_TENANT: the cafe address (slug) the app works in until its pages carry
+      // one (`/c/<slug>/…`, T1.5b): NUK Cafe, `nuk` (D140). Its API is `/api/c/<slug>/…`.
+      defaultTenant: 'nuk',
       // The Sample data page (D94): on for the dev server and staging (NUXT_PUBLIC_SAMPLE_DATA_ENABLED,
       // NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT names the environment on the page). Off everywhere else:
       // production never gets it, and its routes answer 404.
@@ -211,9 +214,10 @@ export default defineNuxtConfig({
     // Session gate per surface (@nuxtjs/better-auth), a second line behind each route's own
     // requirePermission / requireBranchPermission / requireCustomer (docs/server/security.md). A
     // session only: who may use the admin is a role in the tenant (D135), which the gate can't see.
-    '/api/admin/**': { auth: 'user' },
-    '/api/counter/**': { auth: 'user' },
-    '/api/shop/**': { auth: 'user' },
+    // Each cafe's API lives under its address, `/api/c/<slug>/…` (D140).
+    '/api/c/*/admin/**': { auth: 'user' },
+    '/api/c/*/counter/**': { auth: 'user' },
+    '/api/c/*/shop/**': { auth: 'user' },
     // API responses are personal or change often; a public route opts in to caching explicitly.
     '/api/**': { headers: { 'cache-control': 'no-store' } },
   },

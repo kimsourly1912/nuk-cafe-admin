@@ -22,6 +22,16 @@ export async function findCurrentTenant(db: Db): Promise<TenantRow | undefined> 
   return rows[0]
 }
 
+/** The tenant a path names (`/api/c/<slug>/…`, D140); `undefined` when no tenant has that slug. */
+export async function findTenantBySlug(db: Db, slug: string): Promise<TenantRow | undefined> {
+  const rows: TenantRow[] = await db
+    .select({ id: organization.id, slug: organization.slug, name: organization.name, status: organization.status })
+    .from(organization)
+    .where(eq(organization.slug, slug))
+    .limit(1)
+  return rows[0]
+}
+
 /** Every active tenant, oldest first (platform tasks that work per tenant, D138). */
 export async function findActiveTenants(db: Db): Promise<{ id: string, slug: string, name: string }[]> {
   const rows: TenantRow[] = await db

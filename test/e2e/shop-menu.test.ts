@@ -36,7 +36,7 @@ const dialog = (page: Page) => page.getByRole('dialog')
 
 /** Opens the menu with 12 different lines already in the order (stored as the browser keeps it). */
 async function openWithLongOrder(width: number, height = width < 640 ? 844 : 900) {
-  const menu = await (await fetch(url(`/api/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
+  const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
   const items = menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(sub => sub.items)]).filter(item => !item.soldOut).slice(0, 12)
   expect(items).toHaveLength(12)
   const lines = items.map(item => ({ itemId: item.id, variationId: item.variations[0]!.id, modifierIds: [], quantity: 1, name: item.name }))

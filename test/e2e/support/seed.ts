@@ -9,7 +9,7 @@ import type { Actor } from '../../../server/features/identity'
 import { createStaff } from '../../../server/features/identity'
 import { loadSampleMenuStep } from '../../../server/features/sample-data'
 import { createTestAuth } from '../../../server/tests/support/auth'
-import { applyMigration, createAdmin, insertBranch, migrationFiles, TEST_TENANT } from '../../../server/tests/support/db'
+import { applyMigration, createAdmin, ensureTenant, insertBranch, migrationFiles, TEST_TENANT } from '../../../server/tests/support/db'
 import type { Db } from '../../../server/utils/batch'
 
 /**
@@ -92,8 +92,9 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
   for (const file of migrationFiles()) await applyMigration(client, file)
   const db: Db = drizzle({ client, casing: 'snake_case' })
 
+  // The cafe (a tenant, D134) at NUK Cafe's address, the one the app works in (`nuk`, D140), and its owner.
+  await ensureTenant(db, TEST_TENANT, 'nuk')
   const admin = await createAdmin(db, 'e2e-admin@example.com')
-  // The cafe (a tenant, D134) and its owner; until addresses name a tenant (T1.5) it's the only one.
   const actor: Actor = { userId: admin.userId, tenantId: TEST_TENANT, role: 'owner' }
   const openBranchId = await addBranch(db, 'Riverside')
   const closedBranchId = await addBranch(db, 'Zeta Kiosk')

@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 
 /**
- * `GET /api/public/health`: 200 when the Worker can reach its database, 503 when not; no details
+ * `GET /api/health`: 200 when the Worker can reach its database, 503 when not; no details
  * either way (docs/server/operations.md → Monitoring). The deploy's smoke check calls it.
  */
 export default defineEventHandler(async (event) => {

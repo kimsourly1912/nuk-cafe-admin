@@ -103,7 +103,7 @@ On push to `main` (a merged pull request, already checked there: D133), the `dep
 2. `pnpm db:migrate:staging` (migrations before the Worker: expand, then contract);
 3. `wrangler deploy`;
 4. re-sends `NUXT_MAIL_RESEND_API_KEY` from the environment's secret (skipped when unset);
-5. smoke check: `GET /api/public/health` is ok (the database answers), `/admin/login` has the CSP header, an unknown `/api` path is 404, `/api/admin/me` without a session is 401. Later: sign in, read the menu, place and complete a test order once orders exist.
+5. smoke check: `GET /api/health` is ok (the database answers), `/admin/login` has the CSP header, an unknown `/api` path is 404, NUK Cafe's `/api/c/nuk/admin/me` without a session is 401 (D140). Later: sign in, read the menu, place and complete a test order once orders exist.
 
 GitHub environment `staging` secrets: `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers" plus **Account → D1 → Edit**, this account only), `CLOUDFLARE_ACCOUNT_ID`, `NUXT_MAIL_RESEND_API_KEY`.
 
@@ -125,7 +125,7 @@ D1 Time Travel is Cloudflare's, always on, no code of ours: every change is kept
 2. **A minute later, make a change you can see:** on staging, Admin → Categories → add a category named **Restore drill**.
 3. **Restore, and time it:** Restore database → **Date** → the time from step 1 (a minute or two before the change) → **Restore database**. The page then shows the bookmark from just before the restore, **once**: copy it; **Undo** (or Bookmark → that id) puts the change back.
 4. **Check the app:**
-   - `https://nuk-cafe-staging.kimsur61.workers.dev/api/public/health` answers 200;
+   - `https://nuk-cafe-staging.kimsur61.workers.dev/api/health` answers 200;
    - the **Restore drill** category is gone;
    - you can sign in to the admin, the customer menu loads, and the counter queue opens.
 5. **Write it down** in `docs/progress.md` (step 10.4): the date, how long step 3 took, and anything that didn't work.
@@ -210,7 +210,7 @@ The counter shows a KHQR made for each order (D130), set up on **Admin → Payme
 ## Monitoring
 
 - **Workers Logs** for structured logs (see [security.md → Logging](./security.md#logging-and-privacy)); every error log has the request id.
-- `GET /api/public/health` answers 200 when the Worker can reach D1 (no details).
+- `GET /api/health` answers 200 when the Worker can reach D1 (no details).
 - **Server error alerts on Telegram** (step 10.4, D119): Admin → Telegram → Notifications → **Server errors**, per chat. Every unexpected failure (a 500 on `/api/**`) queues an alert with the route, the status and the request id (never the error's text: it stays in Workers Logs, found by the request id); at most one per route and chat every 15 minutes; sent by `notifications:deliver` within a minute. Not covered: a failure the Worker can't answer at all (it never reaches the handler), and scheduled tasks (their failures are logged).
 - Alerts (Cloudflare notifications) on a spike of 5xx responses and on Worker exceptions: set up with production (8.2).
 - [Open] Q24: who receives alerts, and during which hours.

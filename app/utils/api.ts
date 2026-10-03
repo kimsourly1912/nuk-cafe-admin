@@ -1,25 +1,32 @@
 import type { ApiFetch, ApiFetchOptions } from './api-fetch'
 import { ApiError } from './api-error'
+import { apiPath } from './api-path'
 
 let client: ApiFetch | undefined
+let tenantOf: (() => string) | undefined
 
-/** Set once by plugins/api.ts. */
-export function configureApi(fetch: ApiFetch) {
+/**
+ * Set once by plugins/api.ts: the fetch, and the cafe the app works in (D140; read there, inside
+ * Nuxt's context, since `apiFetch` also runs from click handlers outside it).
+ */
+export function configureApi(fetch: ApiFetch, tenant: () => string) {
   client = fetch
+  tenantOf = tenant
 }
 
 /**
- * Calls our API (`/api` + `path`). Resolves to the response body; throws `ApiError`.
- * Contracts (request and response types) are in `shared/contracts/`.
+ * Calls our API (`/api` + `path`; a cafe's surfaces under its address, `apiPath`). Resolves to the
+ * response body; throws `ApiError`. Contracts (request and response types) are in `shared/contracts/`.
  *
  * @example
  * const staff = await apiFetch<Page<StaffMember>>('/admin/staff', { query: { page: 1 } })
  * await apiFetch<MenuCategory>(`/admin/menu/categories/${id}`, { method: 'PATCH', body: { version, name } })
  */
 export function apiFetch<T>(path: string, options?: ApiFetchOptions): Promise<T> {
-  if (import.meta.server) return serverFetch<T>(path, options)
-  if (!client) throw new Error('apiFetch was called before plugins/api.ts configured it.')
-  return client<T>(path, options)
+  // Rendering on the server runs inside the page request's context, so its config is at hand.
+  if (import.meta.server) return serverFetch<T>(apiPath(path, useRuntimeConfig().public.defaultTenant), options)
+  if (!client || !tenantOf) throw new Error('apiFetch was called before plugins/api.ts configured it.')
+  return client<T>(apiPath(path, tenantOf()), options)
 }
 
 /**

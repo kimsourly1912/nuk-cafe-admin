@@ -34,11 +34,11 @@ const send = (path: string, cookie: string, body: unknown) =>
 /** Two Banana Breads at Riverside, with a note, placed as `customer`. */
 async function placeOrder(customer: SeedCustomer) {
   const cookie = await apiSignIn(customer)
-  const menu = await (await fetch(url(`/api/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
+  const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
   const bread = menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(s => s.items)]).find(i => i.name === 'Banana Bread')!
   const lines = [{ itemId: bread.id, variationId: bread.variations[0]!.id, quantity: 2, note: 'Warm please' }]
-  const quote = await (await fetch(url('/api/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ branchId: seed.openBranchId, lines }) })).json() as CheckoutQuote
-  const response = await send('/api/shop/orders', cookie, { branchId: seed.openBranchId, lines, expectedTotalMinor: quote.totalMinor })
+  const quote = await (await fetch(url('/api/c/nuk/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ branchId: seed.openBranchId, lines }) })).json() as CheckoutQuote
+  const response = await send('/api/c/nuk/shop/orders', cookie, { branchId: seed.openBranchId, lines, expectedTotalMinor: quote.totalMinor })
   expect(response.status).toBe(201)
   return await response.json() as Order
 }
@@ -47,7 +47,7 @@ async function placeOrder(customer: SeedCustomer) {
 async function counter(order: Order, action: 'pay' | 'ready' | 'complete', version: number) {
   const cashier = await apiSignIn(seed.customers.cashier)
   const body = action === 'pay' ? { version, method: 'cash_usd' } : { version }
-  const response = await send(`/api/counter/${seed.openBranchId}/orders/${order.id}/${action}`, cashier, body)
+  const response = await send(`/api/c/nuk/counter/${seed.openBranchId}/orders/${order.id}/${action}`, cashier, body)
   expect(response.status).toBe(200)
 }
 
@@ -179,7 +179,7 @@ describe('finding an order again', () => {
     await asNewVisitor(page)
     const requests: string[] = []
     page.on('request', (request) => {
-      if (new URL(request.url()).pathname.startsWith('/api/shop/orders')) requests.push(request.url())
+      if (new URL(request.url()).pathname.startsWith('/api/c/nuk/shop/orders')) requests.push(request.url())
     })
     await page.goto(url('/'), { waitUntil: 'hydration' })
     await page.getByRole('heading', { name: 'Coffee', exact: true }).waitFor()

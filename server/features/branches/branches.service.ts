@@ -1,4 +1,4 @@
-import type { BranchSettings, CreateTableInput, DiningTable, PublicBranch, PublicTable, TableListQuery, TableVersionInput, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
+import type { BranchSettings, CreateTableInput, DiningTable, PublicBranch, PublicTable, ScannedTable, TableListQuery, TableVersionInput, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
 import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
@@ -289,4 +289,15 @@ export async function resolveTableToken(db: Db, tenantId: string, token: string)
   const row = isTokenShaped(token) ? await repo.findTableByTokenHash(db, await tokenHash(token)) : undefined
   if (!row || row.tenantId !== tenantId || row.tableStatus !== 'active' || row.branchStatus !== 'active') throw tableNotFound()
   return { branch: { id: row.branchId, name: row.branchName }, table: { id: row.tableId, label: row.label } }
+}
+
+/**
+ * A scanned QR code anywhere (`GET /api/tables/{token}`, D140): the table, its branch and its cafe,
+ * so the page can open that cafe's menu. Unknown tokens, archived tables or branches and paused
+ * cafes are all 404.
+ */
+export async function scanTableToken(db: Db, token: string): Promise<ScannedTable> {
+  const row = isTokenShaped(token) ? await repo.findTableByTokenHash(db, await tokenHash(token)) : undefined
+  if (!row || row.tableStatus !== 'active' || row.branchStatus !== 'active' || (row.tenantStatus ?? 'active') !== 'active') throw tableNotFound()
+  return { cafe: { slug: row.tenantSlug, name: row.tenantName }, branch: { id: row.branchId, name: row.branchName }, table: { id: row.tableId, label: row.label } }
 }

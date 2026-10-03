@@ -2,10 +2,10 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
-import { branches } from '#server/db/tables'
+import { branches, organization } from '#server/db/tables'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { archiveTable, createTable, getBranchSettings, getPublicBranch, listPublicBranches, listTables, resolveTableToken, restoreTable, rotateTableQr, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
+import { archiveTable, createTable, getBranchSettings, getPublicBranch, listPublicBranches, listTables, resolveTableToken, restoreTable, rotateTableQr, scanTableToken, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
 import { diningTables } from '#server/features/branches/branches.schema'
 import type { QrConfig } from '#server/features/branches/branches.qr'
 import { qrConfigFrom, tableToken, tokenHash } from '#server/features/branches/branches.qr'
@@ -147,6 +147,18 @@ describe('dining tables', () => {
     const [listed] = await listTables(db, TEST_TENANT, branch, { status: 'active' }, qr)
     expect(listed!.qrUrl).toBe(table.qrUrl)
     expect(await resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl))).toEqual({ branch: { id: branch, name: `Branch ${branch}` }, table: { id: table.id, label: 'Table 1' } })
+  })
+
+  it('a scanned QR anywhere names its cafe; archived tables and paused cafes are 404 (D140)', async () => {
+    const table = await createTable(db, actor, branch, { label: 'Table 1', area: null }, qr)
+    const token = tokenOf(table.qrUrl)
+    expect(await scanTableToken(db, token)).toEqual({ cafe: { slug: TEST_TENANT, name: `Cafe ${TEST_TENANT}` }, branch: { id: branch, name: `Branch ${branch}` }, table: { id: table.id, label: 'Table 1' } })
+    await expectApiError(() => scanTableToken(db, 'not-a-token'), 404, 'NOT_FOUND')
+    await db.update(organization).set({ status: 'suspended' }).where(eq(organization.id, TEST_TENANT))
+    await expectApiError(() => scanTableToken(db, token), 404, 'NOT_FOUND')
+    await db.update(organization).set({ status: 'active' }).where(eq(organization.id, TEST_TENANT))
+    await archiveTable(db, actor, branch, table.id, { version: 1 }, qr)
+    await expectApiError(() => scanTableToken(db, token), 404, 'NOT_FOUND')
   })
 
   it('lists by label as people read them, per status', async () => {

@@ -15,6 +15,8 @@ export default defineNuxtPlugin({
     const auth = useAuth()
     // The counter workspace keeps its own session (D102); a lost session ends both.
     const counter = useCounterSession()
+    // The cafe whose API this app calls (D140): NUK Cafe's address until pages carry one (T1.5b).
+    const tenant = useRuntimeConfig().public.defaultTenant
 
     configureApi(createApiFetch({
       // Same engine as Nuxt's $fetch; created from ofetch directly for its types.
@@ -31,7 +33,7 @@ export default defineNuxtPlugin({
       },
       // Either workspace's identity changing discards responses to older requests.
       sessionGeneration: () => auth.generation.value + counter.generation.value,
-    }))
+    }), () => tenant)
 
     // A temporary password (at login, or reported by a route): only the change-password page. The
     // customer site (outside /admin) never reads the admin session, so it's left alone (D93).

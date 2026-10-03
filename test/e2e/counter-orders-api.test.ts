@@ -13,7 +13,7 @@ await setupE2e()
 
 const seed = inject('shopSeed')
 const origin = new URL(url('/')).origin
-const counter = (path = '') => url(`/api/counter/${seed.openBranchId}/orders${path}`)
+const counter = (path = '') => url(`/api/c/nuk/counter/${seed.openBranchId}/orders${path}`)
 
 /** Signs in through Better Auth; returns the session cookie. */
 async function signIn(account: { email: string, password: string }) {
@@ -27,11 +27,11 @@ const send = (path: string, cookie: string, body: unknown, key: string | null = 
 
 /** An order placed by the seeded counter customer (Banana Bread at Riverside). */
 async function placeOrder(cookie: string) {
-  const menu = await (await fetch(url(`/api/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
+  const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
   const bread = menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(s => s.items)]).find(i => i.name === 'Banana Bread')!
   const lines = [{ itemId: bread.id, variationId: bread.variations[0]!.id, quantity: 1, note: null }]
-  const quote = await (await fetch(url('/api/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ branchId: seed.openBranchId, lines }) })).json() as CheckoutQuote
-  const response = await send(url('/api/shop/orders'), cookie, { branchId: seed.openBranchId, lines, expectedTotalMinor: quote.totalMinor })
+  const quote = await (await fetch(url('/api/c/nuk/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ branchId: seed.openBranchId, lines }) })).json() as CheckoutQuote
+  const response = await send(url('/api/c/nuk/shop/orders'), cookie, { branchId: seed.openBranchId, lines, expectedTotalMinor: quote.totalMinor })
   expect(response.status).toBe(201)
   return await response.json() as Order
 }
@@ -66,7 +66,7 @@ describe('the counter over HTTP', () => {
     expect((await (await send(counter(`/${placed.id}/complete`), cashier, { version: 3 })).json()).status).toBe('completed')
 
     // The customer sees it too.
-    const mine = await (await fetch(url(`/api/shop/orders/${placed.id}`), { headers: { cookie: customer } })).json() as Order
+    const mine = await (await fetch(url(`/api/c/nuk/shop/orders/${placed.id}`), { headers: { cookie: customer } })).json() as Order
     expect(mine.status).toBe('completed')
     const single = await (await fetch(counter(`/${placed.id}`), { headers: { cookie: cashier } })).json() as CounterOrder
     expect(single.status).toBe('completed')
@@ -76,7 +76,7 @@ describe('the counter over HTTP', () => {
     const customer = await signIn(seed.customers.counterCustomer)
     expect((await fetch(counter(), { headers: { cookie: customer } })).status).toBe(404)
     const cashier = await signIn(seed.customers.cashier)
-    expect((await fetch(url(`/api/counter/${seed.closedBranchId}/orders`), { headers: { cookie: cashier } })).status).toBe(404)
+    expect((await fetch(url(`/api/c/nuk/counter/${seed.closedBranchId}/orders`), { headers: { cookie: cashier } })).status).toBe(404)
     expect((await fetch(counter())).status).toBe(401)
   })
 

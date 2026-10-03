@@ -26,6 +26,7 @@ const body: UpdateCategoryInput = { version: 3, name: 'Tea' }
 await apiFetch<MenuCategory>(`/admin/menu/categories/${id}`, { method: 'PATCH', body })
 ```
 
+- **the cafe's address is added for you** (D140, `apiPath` in `app/utils/api-path.ts`): `/admin/…`, `/counter/…`, `/public/…` and `/shop/…` go to `/api/c/<slug>/…`, the cafe the app works in (`NUXT_PUBLIC_DEFAULT_TENANT`, `nuk`, until pages carry their own in T1.5b); `/auth/…`, `/tables/{token}` and `/health` are the platform's and go as they are. Never write `/c/<slug>` in feature code;
 - same-origin cookie, 30 s timeout (pass `timeout` for uploads), **no retries**;
 - every failure throws [`ApiError`](./errors.md#apierror) (our error body and Better Auth's);
 - a 401 or 403 `NOT_ADMIN` clears the session (the app goes to login); a 403 `PASSWORD_CHANGE_REQUIRED` sends the app to the change-password page;
