@@ -13,7 +13,7 @@ import type { AssistantSettings } from '#server/features/assistant/assistant.set
 import { HELP_PAGES, helpGuide } from '#server/features/assistant/help'
 import { ASSISTANT_PAGES, pageAt } from '#server/features/assistant/pages'
 import { assistantSettingsFrom } from '#server/features/assistant/assistant.settings'
-import { createTestDb, createUser, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, createUser, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 
@@ -37,6 +37,7 @@ type Prompt = Parameters<DoStream>[0]['prompt']
 
 beforeEach(async () => {
   db = await createTestDb()
+  await ensureTenant(db)
   sokha = { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'owner' }
   dara = { userId: (await createUser(db)).id, tenantId: TEST_TENANT, role: 'owner' }
 })
@@ -99,6 +100,19 @@ describe('the daily limit (D108)', () => {
     ])
     expect(results.map(r => r.status).sort()).toEqual(['fulfilled', 'rejected'])
     expect(await rows()).toHaveLength(2)
+  })
+
+  it('counts per cafe: the same admin in another cafe has that cafe\'s own day (D139)', async () => {
+    await ensureTenant(db, 'tenant-2')
+    const elsewhere: Actor = { ...sokha, tenantId: 'tenant-2' }
+    await startUsage(db, sokha, settings, 'chat', at('09:00'))
+    await startUsage(db, sokha, settings, 'chat', at('09:01'))
+    await expectApiError(() => startUsage(db, sokha, settings, 'chat', at('09:02')), 429, 'AI_LIMIT_REACHED')
+    expect(await assistantStatus(db, elsewhere, settings, at('09:03'))).toEqual({ dailyLimit: 2, usedToday: 0 })
+    await startUsage(db, elsewhere, settings, 'chat', at('09:03'))
+    expect(await assistantStatus(db, elsewhere, settings, at('09:04'))).toEqual({ dailyLimit: 2, usedToday: 1 })
+    expect(await assistantStatus(db, sokha, settings, at('09:04'))).toEqual({ dailyLimit: 2, usedToday: 2 })
+    expect((await rows()).map(r => r.tenantId).sort()).toEqual([TEST_TENANT, TEST_TENANT, 'tenant-2'])
   })
 })
 

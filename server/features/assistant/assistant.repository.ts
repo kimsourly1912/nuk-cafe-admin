@@ -8,6 +8,7 @@ import { assistantUsage } from './assistant.schema'
 
 export interface NewUsage {
   id: string
+  tenantId: string
   userId: string
   day: string
   feature: AssistantFeature
@@ -17,14 +18,14 @@ export interface NewUsage {
 }
 
 /**
- * The request's usage row and a guard after it: the user's rows that day, this one included, at
- * most `limit`. Two requests racing for the last slot can't both pass (SQLite runs one batch at a
+ * The request's usage row and a guard after it: the user's rows that day in this cafe, this one
+ * included, at most `limit`. Two requests racing for the last slot can't both pass (SQLite runs one batch at a
  * time; the guard sees the other's row).
  */
 export function reserveUsageStatements(db: Db, usage: NewUsage, limit: number): Statement[] {
   return [
     db.insert(assistantUsage).values({ ...usage, outcome: 'pending' }),
-    requireAtMost(db, sql`select count(*) from ${assistantUsage} where ${assistantUsage.userId} = ${usage.userId} and ${assistantUsage.day} = ${usage.day}`, limit),
+    requireAtMost(db, sql`select count(*) from ${assistantUsage} where ${assistantUsage.tenantId} = ${usage.tenantId} and ${assistantUsage.userId} = ${usage.userId} and ${assistantUsage.day} = ${usage.day}`, limit),
   ]
 }
 
@@ -40,9 +41,9 @@ export async function finishUsage(db: Db, id: string, result: UsageResult): Prom
   await db.update(assistantUsage).set(result).where(and(eq(assistantUsage.id, id), eq(assistantUsage.outcome, 'pending')))
 }
 
-/** The user's requests on a local day (every outcome counts against the limit). */
-export async function countUsage(db: Db, userId: string, day: string): Promise<number> {
-  const [row] = await db.select({ count: count() }).from(assistantUsage).where(and(eq(assistantUsage.userId, userId), eq(assistantUsage.day, day)))
+/** The user's requests in a cafe on a local day (every outcome counts against the limit). */
+export async function countUsage(db: Db, tenantId: string, userId: string, day: string): Promise<number> {
+  const [row] = await db.select({ count: count() }).from(assistantUsage).where(and(eq(assistantUsage.tenantId, tenantId), eq(assistantUsage.userId, userId), eq(assistantUsage.day, day)))
   return row?.count ?? 0
 }
 

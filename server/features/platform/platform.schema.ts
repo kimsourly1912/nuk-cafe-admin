@@ -20,6 +20,8 @@ const id = () => text().primaryKey().$defaultFn(() => newId())
  */
 export const auditEvents = sqliteTable('audit_events', {
   id: id(),
+  /** The tenant it happened in; `null`: the platform's (no cafe's). D139. */
+  tenantId: text().references(() => authSchema!.organization.id, { onDelete: 'restrict' }),
   /** `null`: the system (seed task, scheduled jobs). */
   actorId: text(),
   action: text().notNull(),
@@ -33,14 +35,18 @@ export const auditEvents = sqliteTable('audit_events', {
   index('audit_events_target_idx').on(t.targetType, t.targetId),
   index('audit_events_at_idx').on(t.at),
   index('audit_events_actor_idx').on(t.actorId, t.at),
+  index('audit_events_tenant_idx').on(t.tenantId, t.at),
 ])
 
 /**
- * One row per (actor, operation, key): the stored result a retry gets back. Written in the same
- * batch as the action, so the action and its key commit together or not at all.
+ * One row per (tenant, actor, operation, key): the stored result a retry gets back. Written in the
+ * same batch as the action, so the action and its key commit together or not at all. The tenant is
+ * part of the scope (D139): one account acting in two cafes never replays one cafe's answer in the
+ * other.
  */
 export const idempotencyKeys = sqliteTable('idempotency_keys', {
   id: id(),
+  tenantId: text().notNull().references(() => authSchema!.organization.id, { onDelete: 'restrict' }),
   actorId: text().notNull(),
   operation: text().notNull(),
   key: text().notNull(),
@@ -49,7 +55,7 @@ export const idempotencyKeys = sqliteTable('idempotency_keys', {
   createdAt: instant().notNull().default(nowMs),
   expiresAt: instant().notNull(),
 }, t => [
-  uniqueIndex('idempotency_keys_scope_idx').on(t.actorId, t.operation, t.key),
+  uniqueIndex('idempotency_keys_scope_idx').on(t.tenantId, t.actorId, t.operation, t.key),
   index('idempotency_keys_expires_at_idx').on(t.expiresAt),
 ])
 

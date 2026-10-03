@@ -138,7 +138,7 @@ the server), so the API paths can stay while the columns arrive feature by featu
 | T1.2 ✅ | Menu and media: `tenant_id`, composite keys (`branch_item_states` → its variation too), R2 key prefix (D136, migration `0025_menu_tenants`) | Isolation tests (guard removed → fail) |
 | T1.3 ✅ | Orders' reads scoped (their `tenant_id` exists since T1.1), customer profiles, KHQR settings, the riel rate (D137, migration `0026_tenant_settings`) | Isolation tests; race tests still pass |
 | T1.4a ✅ | Telegram and notifications, the outbox's tenant (D138, migration `0027_telegram_tenants`) | Isolation tests |
-| T1.4b | Reports (an isolation test), the assistant, sample data, audit, idempotency | Isolation tests |
+| T1.4b | Reports (an isolation test), the assistant, sample data, audit, idempotency (D139, migration `0028_platform_tenants`) | Isolation tests |
 | T1.5 | Addresses: `/c/<slug>` pages, `/api/c/<slug>` routes, the tenant middleware from the path, `apiFetch` prefix, `tenantPath`, the lint rule, browser storage keys per tenant, `/` and old paths redirect, `/table/<token>` global; the menu cache per tenant (test) | e2e on a seeded database with two cafes; the full suite; staging works at `/c/nuk` |
 | T2 | (mockup round first: [frame prompts](#ui-frames-for-t2)) The platform console, Choose a cafe and the switcher, Cafe profile, not-found and paused pages, each tenant's Bakong token encrypted in the database (AES-GCM, the key a Worker secret) with its reminders | e2e; staging: create a second cafe and use it end to end |
 | T3 | After the commercial plan is confirmed: self sign-up and trial, plans and limits, manual billing, then the rest | Owner's go |

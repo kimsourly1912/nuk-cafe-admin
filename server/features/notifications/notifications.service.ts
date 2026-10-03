@@ -203,7 +203,7 @@ async function useCode(db: Db, api: Api, message: Message, code: string, now: Da
       repo.upsertDestinationStatement(db, destinationId, { tenantId: link.tenantId, chatId, kind: 'private', title: chatTitle(chat), connectedBy: link.createdBy, at: now }),
       repo.advanceLinkStatement(db, link.id, ['waiting'], { status: 'connected', chatId, chatTitle: chatTitle(chat), destinationId }, now),
       requireOneChange(db),
-      auditStatement(db, { userId: link.createdBy }, { action: 'notifications.telegram.connect', targetType: 'telegram_destination', targetId: destinationId, metadata: { kind: 'private' } }),
+      auditStatement(db, { userId: link.createdBy, tenantId: link.tenantId }, { action: 'notifications.telegram.connect', targetType: 'telegram_destination', targetId: destinationId, metadata: { kind: 'private' } }),
     ])
     if (!used) return
     await reply(api, chat.id, 'Connected. NUK Cafe will send messages here. You can disconnect on the Telegram page of the admin.')
@@ -298,7 +298,7 @@ export async function sendReport(
   build: () => Promise<OutgoingMessage & { audit: Record<string, unknown> }>,
   now = new Date(),
 ): Promise<ReportSent> {
-  const { response } = await withIdempotency(db, { actorId: actor.userId, operation: 'notifications.send-report', key }, request, async () => {
+  const { response } = await withIdempotency(db, { tenantId: actor.tenantId, actorId: actor.userId, operation: 'notifications.send-report', key }, request, async () => {
     const row = await connectedDestination(db, actor.tenantId, request.destinationId)
     const { audit, ...message } = await build()
     await deliver(db, api, row, message, now)

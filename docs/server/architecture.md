@@ -229,6 +229,7 @@ Actions where a retry must never apply twice (placing an order, recording a paym
 - Same key, same request: the stored result is returned (HTTP 200, same body).
 - Same key, different request: **422 `IDEMPOTENCY_MISMATCH`**.
 - Keys expire after 24 hours (a scheduled task removes them).
+- A key belongs to its tenant, actor and operation (`IdempotencyScope`, D139): the same key in another cafe is another action.
 
 How (the `platform` feature, D50):
 
