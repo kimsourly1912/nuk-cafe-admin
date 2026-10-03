@@ -22,7 +22,8 @@ export interface IdentityAuthSettings {
 
 /** Queues an account email (verification, reset); `platform:deliver-outbox` sends it. */
 async function queueMail(db: Db, kind: string, to: string, url: string) {
-  await db.batch([outboxStatement(db, kind, { to, url })])
+  // Account emails are the platform's, not a cafe's (D138).
+  await db.batch([outboxStatement(db, null, kind, { to, url })])
 }
 
 /**

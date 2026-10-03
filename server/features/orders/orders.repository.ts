@@ -117,15 +117,6 @@ export async function findOrder(db: Db, tenantId: string, id: string): Promise<O
 }
 
 /**
- * Any tenant's order, for platform tasks that got the id from our own outbox (the alerts); a
- * request's order is read with `findOrder`. The outbox names the tenant in T1.4.
- */
-export async function findOrderForTask(db: Db, id: string): Promise<OrderRow | undefined> {
-  const [row] = await selectOrders(db).where(eq(orders.id, id))
-  return row
-}
-
-/**
  * The branch's orders still in play, oldest first: waiting for payment and not past their time
  * (an expired one is the expiry task's, 6.6), preparing, ready.
  */

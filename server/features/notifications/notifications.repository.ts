@@ -12,6 +12,7 @@ export type LinkRow = typeof telegramLinks.$inferSelect
 
 const destinationColumns = {
   id: telegramDestinations.id,
+  tenantId: telegramDestinations.tenantId,
   chatId: telegramDestinations.chatId,
   kind: telegramDestinations.kind,
   title: telegramDestinations.title,
@@ -26,27 +27,39 @@ const destinationColumns = {
   connectedByName: user.name,
 }
 
-/** Connected and blocked chats, oldest first (disconnected ones are history only). */
-export async function listDestinations(db: Db): Promise<DestinationRow[]> {
+/** The tenant's connected and blocked chats, oldest first (disconnected ones are history only). */
+export async function listDestinations(db: Db, tenantId: string): Promise<DestinationRow[]> {
   return db.select(destinationColumns).from(telegramDestinations)
     .leftJoin(user, eq(user.id, telegramDestinations.connectedBy))
-    .where(ne(telegramDestinations.status, 'disconnected'))
+    .where(and(eq(telegramDestinations.tenantId, tenantId), ne(telegramDestinations.status, 'disconnected')))
     .orderBy(asc(telegramDestinations.connectedAt))
 }
 
-export async function findDestination(db: Db, id: string): Promise<DestinationRow | undefined> {
+export async function findDestination(db: Db, tenantId: string, id: string): Promise<DestinationRow | undefined> {
   const [row] = await db.select(destinationColumns).from(telegramDestinations)
     .leftJoin(user, eq(user.id, telegramDestinations.connectedBy))
-    .where(eq(telegramDestinations.id, id))
+    .where(and(eq(telegramDestinations.tenantId, tenantId), eq(telegramDestinations.id, id)))
   return row
 }
 
-export async function findDestinationByChat(db: Db, chatId: string) {
-  const [row] = await db.select().from(telegramDestinations).where(eq(telegramDestinations.chatId, chatId))
+/** The tenant's row for a chat (one chat can follow two cafes, D138). */
+export async function findDestinationByChat(db: Db, tenantId: string, chatId: string) {
+  const [row] = await db.select().from(telegramDestinations).where(and(eq(telegramDestinations.tenantId, tenantId), eq(telegramDestinations.chatId, chatId)))
   return row
+}
+
+/**
+ * Whether any tenant still has this chat connected (D138): the bot stays in a group while one cafe
+ * uses it, even after another disconnects it.
+ */
+export async function chatConnectedAnywhere(db: Db, chatId: string): Promise<boolean> {
+  const [row] = await db.select({ id: telegramDestinations.id }).from(telegramDestinations)
+    .where(and(eq(telegramDestinations.chatId, chatId), eq(telegramDestinations.status, 'connected'))).limit(1)
+  return !!row
 }
 
 export interface ConnectedChat {
+  tenantId: string
   chatId: string
   kind: DestinationKind
   title: string
@@ -56,11 +69,13 @@ export interface ConnectedChat {
 
 /**
  * Connects a chat: a new row, or the chat's existing one (reconnected after a disconnect or a
- * block) brought back with its new title and who connected it. One statement, keyed by the chat.
+ * block) brought back with its new title and who connected it. One statement, keyed by the tenant
+ * and the chat.
  */
 export function upsertDestinationStatement(db: Db, id: string, chat: ConnectedChat): Statement {
   return db.insert(telegramDestinations).values({
     id,
+    tenantId: chat.tenantId,
     chatId: chat.chatId,
     kind: chat.kind,
     title: chat.title,
@@ -70,7 +85,7 @@ export function upsertDestinationStatement(db: Db, id: string, chat: ConnectedCh
     createdAt: chat.at,
     updatedAt: chat.at,
   }).onConflictDoUpdate({
-    target: telegramDestinations.chatId,
+    target: [telegramDestinations.tenantId, telegramDestinations.chatId],
     set: {
       kind: chat.kind,
       title: chat.title,
@@ -85,13 +100,16 @@ export function upsertDestinationStatement(db: Db, id: string, chat: ConnectedCh
 }
 
 /** Disconnects a chat the admin saw at `version` (a guard follows). */
-export function disconnectStatement(db: Db, id: string, version: number, at: Date): Statement {
+export function disconnectStatement(db: Db, tenantId: string, id: string, version: number, at: Date): Statement {
   return db.update(telegramDestinations)
     .set({ status: 'disconnected', version: sql`${telegramDestinations.version} + 1`, updatedAt: at })
-    .where(and(eq(telegramDestinations.id, id), eq(telegramDestinations.version, version), ne(telegramDestinations.status, 'disconnected')))
+    .where(and(eq(telegramDestinations.tenantId, tenantId), eq(telegramDestinations.id, id), eq(telegramDestinations.version, version), ne(telegramDestinations.status, 'disconnected')))
 }
 
-/** Marks a connected chat blocked (the bot was removed or blocked there). Returns whether it changed. */
+/**
+ * Marks a connected chat blocked (the bot was removed or blocked there) in every tenant that has it:
+ * Telegram's chat is the same for all of them. Returns whether it changed.
+ */
 export async function markBlocked(db: Db, chatId: string, at: Date): Promise<boolean> {
   const changed = await db.update(telegramDestinations)
     .set({ status: 'blocked', blockedAt: at, version: sql`${telegramDestinations.version} + 1`, updatedAt: at })
@@ -100,7 +118,7 @@ export async function markBlocked(db: Db, chatId: string, at: Date): Promise<boo
   return changed.length > 0
 }
 
-/** A group became a supergroup: Telegram gave it a new id, and the old one stops working. */
+/** A group became a supergroup: Telegram gave it a new id, and the old one stops working (for every tenant). */
 export async function moveChat(db: Db, fromChatId: string, toChatId: string, at: Date): Promise<void> {
   await db.update(telegramDestinations)
     .set({ chatId: toChatId, version: sql`${telegramDestinations.version} + 1`, updatedAt: at })
@@ -113,15 +131,16 @@ export function sentStatement(db: Db, id: string, at: Date): Statement {
 
 // --- Links ---
 
-export function insertLinkStatement(db: Db, link: { id: string, codeHash: string, kind: DestinationKind, createdBy: string, expiresAt: Date, createdAt: Date }): Statement {
+export function insertLinkStatement(db: Db, link: { id: string, tenantId: string, codeHash: string, kind: DestinationKind, createdBy: string, expiresAt: Date, createdAt: Date }): Statement {
   return db.insert(telegramLinks).values(link)
 }
 
-export async function findLink(db: Db, id: string): Promise<LinkRow | undefined> {
-  const [row] = await db.select().from(telegramLinks).where(eq(telegramLinks.id, id))
+export async function findLink(db: Db, tenantId: string, id: string): Promise<LinkRow | undefined> {
+  const [row] = await db.select().from(telegramLinks).where(and(eq(telegramLinks.tenantId, tenantId), eq(telegramLinks.id, id)))
   return row
 }
 
+/** The link a code belongs to, in whichever tenant made it (the code is the only key Telegram sends). */
 export async function findLinkByCode(db: Db, codeHash: string): Promise<LinkRow | undefined> {
   const [row] = await db.select().from(telegramLinks).where(eq(telegramLinks.codeHash, codeHash))
   return row
@@ -151,22 +170,22 @@ export async function deleteOldLinks(db: Db, before: Date): Promise<void> {
 
 // --- Notification rules (8.1d, D113) ---
 
-export async function listRules(db: Db) {
+export async function listRules(db: Db, tenantId: string) {
   return db.select({ kind: notificationRules.kind, destinationId: notificationRules.destinationId, attachCsv: notificationRules.attachCsv })
     .from(notificationRules)
     .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationRules.destinationId))
-    .where(ne(telegramDestinations.status, 'disconnected'))
+    .where(and(eq(notificationRules.tenantId, tenantId), ne(telegramDestinations.status, 'disconnected')))
 }
 
-/** The connected chats a kind of notification goes to. */
-export async function targetsOf(db: Db, kind: NotificationKind) {
+/** The tenant's connected chats a kind of notification goes to. */
+export async function targetsOf(db: Db, tenantId: string, kind: NotificationKind) {
   return db.select({ destinationId: notificationRules.destinationId, attachCsv: notificationRules.attachCsv })
     .from(notificationRules)
     .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationRules.destinationId))
-    .where(and(eq(notificationRules.kind, kind), eq(telegramDestinations.status, 'connected')))
+    .where(and(eq(notificationRules.tenantId, tenantId), eq(notificationRules.kind, kind), eq(telegramDestinations.status, 'connected')))
 }
 
-export async function setRule(db: Db, rule: { kind: NotificationKind, destinationId: string, attachCsv: boolean, createdBy: string }): Promise<void> {
+export async function setRule(db: Db, rule: { tenantId: string, kind: NotificationKind, destinationId: string, attachCsv: boolean, createdBy: string }): Promise<void> {
   await db.insert(notificationRules).values(rule)
     .onConflictDoUpdate({ target: [notificationRules.kind, notificationRules.destinationId], set: { attachCsv: rule.attachCsv } })
 }
@@ -181,6 +200,7 @@ export type DeliveryRow = typeof notificationDeliveries.$inferSelect
 
 export interface NewDelivery {
   id: string
+  tenantId: string
   kind: DeliveryRow['kind']
   destinationId: string
   dedupeKey: string
@@ -256,18 +276,19 @@ export async function requeueFailed(db: Db, id: string, now: Date): Promise<bool
   return changed.length > 0
 }
 
-export async function findDelivery(db: Db, id: string) {
+export async function findDelivery(db: Db, tenantId: string, id: string) {
   const [row] = await db.select({ delivery: notificationDeliveries, title: telegramDestinations.title, destinationStatus: telegramDestinations.status })
     .from(notificationDeliveries)
     .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationDeliveries.destinationId))
-    .where(eq(notificationDeliveries.id, id))
+    .where(and(eq(notificationDeliveries.tenantId, tenantId), eq(notificationDeliveries.id, id)))
   return row
 }
 
-export async function recentDeliveries(db: Db, limit: number) {
+export async function recentDeliveries(db: Db, tenantId: string, limit: number) {
   return db.select({ delivery: notificationDeliveries, title: telegramDestinations.title })
     .from(notificationDeliveries)
     .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationDeliveries.destinationId))
+    .where(eq(notificationDeliveries.tenantId, tenantId))
     .orderBy(desc(notificationDeliveries.createdAt))
     .limit(limit)
 }

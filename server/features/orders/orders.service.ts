@@ -108,7 +108,7 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
           repo.eventStatement(db, { tenantId: actor.tenantId, orderId, toVersion: 1, actorId: actor.userId, fromStatus: null, toStatus: 'awaiting_payment', at: now }),
           repo.unpaidAtMostStatement(db, actor.tenantId, actor.userId, now, MAX_UNPAID_ORDERS),
           // A neutral event for whoever listens (the Telegram alerts, D113): orders don't know them.
-          outboxStatement(db, ORDER_EVENTS.placed, { orderId }),
+          outboxStatement(db, actor.tenantId, ORDER_EVENTS.placed, { orderId }),
         ],
         response: { orderId },
       }

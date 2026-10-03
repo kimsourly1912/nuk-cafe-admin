@@ -206,7 +206,7 @@ export async function payOrder(db: Db, actor: BranchActor, orderId: string, inpu
         khqrChargeId: charge?.id ?? null,
         collectedBy: actor.userId,
         collectedAt: now,
-      }), outboxStatement(db, ORDER_EVENTS.paid, { orderId })],
+      }), outboxStatement(db, actor.tenantId, ORDER_EVENTS.paid, { orderId })],
       metadata: { method: input.method, amountMinor: order.totalMinor, amountKhr, ...(charge && { khqrChargeId: charge.id, khqrCurrency: charge.currency, khqrAmount: charge.amount }) },
     }
   })
@@ -237,7 +237,7 @@ export async function recordCheckedKhqrPayment(db: Db, actor: BranchActor, order
         khqrChargeId: charge.id,
         collectedBy: actor.userId,
         collectedAt: now,
-      }), outboxStatement(db, ORDER_EVENTS.paid, { orderId: current.id })],
+      }), outboxStatement(db, actor.tenantId, ORDER_EVENTS.paid, { orderId: current.id })],
       metadata: { method: 'khqr', amountMinor: current.totalMinor, amountKhr: null, khqrChargeId: charge.id, khqrCurrency: charge.currency, khqrAmount: charge.amount, checkedWithBakong: true },
     }
   })

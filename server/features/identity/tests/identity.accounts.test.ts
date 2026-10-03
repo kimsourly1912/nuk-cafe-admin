@@ -181,7 +181,7 @@ describe('delivery', () => {
     const sent: MailMessage[] = []
     await accountMailHandlers(async (m) => {
       sent.push(m)
-    })[MAIL_KINDS.resetPassword]!({ id: 'm1', kind: MAIL_KINDS.resetPassword, attempt: 1, payload: { to: 'a@example.com', url: 'https://cafe.example/x?a=1&b="2"' } })
+    })[MAIL_KINDS.resetPassword]!({ id: 'm1', tenantId: null, kind: MAIL_KINDS.resetPassword, attempt: 1, payload: { to: 'a@example.com', url: 'https://cafe.example/x?a=1&b="2"' } })
     expect(sent[0]!.html).toContain('href="https://cafe.example/x?a=1&amp;b=&quot;2&quot;"')
   })
 

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import { schema as authSchema } from '#auth/schema'
 import { newId } from '#server/utils/ids'
 
 /**
@@ -62,6 +63,8 @@ export type OutboxStatus = typeof OUTBOX_STATUSES[number]
  */
 export const outboxMessages = sqliteTable('outbox_messages', {
   id: id(),
+  /** The tenant whose change caused it (an order's alert); `null`: the platform's (account emails). D138. */
+  tenantId: text().references(() => authSchema!.organization.id, { onDelete: 'restrict' }),
   kind: text().notNull(),
   payload: text({ mode: 'json' }).$type<Record<string, unknown>>().notNull(),
   status: text({ enum: OUTBOX_STATUSES }).notNull().default('pending'),

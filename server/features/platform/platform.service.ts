@@ -20,9 +20,11 @@ export function auditStatement(db: Db, actor: AuditActor, entry: AuditEntry): St
  * A must-not-lose side effect (an email, a notification), to put **in the same batch** as the
  * change that causes it. Delivered after the commit, at least once, by `platform:deliver-outbox`.
  * The payload holds ids and what the handler needs, never secrets it could look up instead.
+ * `tenantId`: the tenant whose change it is (its handler acts there), `null` for the platform's own
+ * (account emails). D138.
  */
-export function outboxStatement(db: Db, kind: string, payload: Record<string, unknown>): Statement {
-  return repo.insertOutboxStatement(db, kind, payload)
+export function outboxStatement(db: Db, tenantId: string | null, kind: string, payload: Record<string, unknown>): Statement {
+  return repo.insertOutboxStatement(db, tenantId, kind, payload)
 }
 
 /**
@@ -102,7 +104,7 @@ export async function deliverOutbox(
     try {
       const handler = handlers[message.kind]
       if (!handler) throw new Error(`No handler for outbox messages of kind "${message.kind}"`)
-      await handler({ id: message.id, kind: message.kind, payload: message.payload, attempt })
+      await handler({ id: message.id, tenantId: message.tenantId, kind: message.kind, payload: message.payload, attempt })
       await repo.markSent(db, message.id, new Date())
       report.sent++
     }

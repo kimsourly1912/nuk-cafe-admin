@@ -57,7 +57,7 @@ const TUE = '2026-09-29'
 
 async function destination(title: string, kind: 'private' | 'group', chatId: string) {
   const id = newId()
-  await db.insert(telegramDestinations).values({ id, chatId, kind, title, connectedBy: admin.userId })
+  await db.insert(telegramDestinations).values({ id, tenantId: TEST_TENANT, chatId, kind, title, connectedBy: admin.userId })
   return id
 }
 
@@ -124,16 +124,16 @@ describe('order events', () => {
 describe('alerts', () => {
   it('nothing is queued while no chat gets the notification', async () => {
     const orderId = await place(at(MON, '10:00'))
-    expect(await queueOrderAlert(db, 'new_order', orderId, SITE, at(MON, '10:00'))).toEqual([])
+    expect(await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:00'))).toEqual([])
   })
 
   it('a new order goes to the chats that get it, once, with the lines, the note and Open order', async () => {
     await setNotificationRule(db, admin, { kind: 'new_order', destinationId: group, enabled: true, attachCsv: false })
     const orderId = await place(at(MON, '10:00'), 'less sugar')
-    const ids = await queueOrderAlert(db, 'new_order', orderId, SITE, at(MON, '10:00'))
+    const ids = await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:00'))
     expect(ids).toHaveLength(1)
     // The outbox delivers at least once: a repeated event adds nothing.
-    expect(await queueOrderAlert(db, 'new_order', orderId, SITE, at(MON, '10:01'))).toEqual([])
+    expect(await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:01'))).toEqual([])
 
     const report = await deliverDue(db, telegram.api, at(MON, '10:00'), { ids })
     expect(report).toEqual({ sent: 1, retried: 0, failed: 0 })
@@ -142,15 +142,15 @@ describe('alerts', () => {
     expect(payload.text).toBe('🧾 <b>New order #001 · Riverside</b>\nPickup · Sokha\n\n2 × Iced Latte\n   ↳ <i>less sugar</i>\n\nTotal <b>$17.50</b>\n⏳ Waiting for payment. Preparation starts after payment.')
     expect(payload.reply_markup).toEqual({ inline_keyboard: [[{ text: 'Open order', url: `${SITE}/counter/${branchId}?order=${orderId}` }]] })
     expect(JSON.stringify(payload)).not.toContain('sokha@example.com')
-    expect(await listDeliveries(db)).toMatchObject([{ subject: 'New order #001', status: 'sent', destination: { title: 'NUK Riverside Staff' } }])
+    expect(await listDeliveries(db, TEST_TENANT)).toMatchObject([{ subject: 'New order #001', status: 'sent', destination: { title: 'NUK Riverside Staff' } }])
   })
 
   it('the same event handled twice at once still saves one delivery per chat (the dedupe index)', async () => {
     await setNotificationRule(db, admin, { kind: 'new_order', destinationId: group, enabled: true, attachCsv: false })
     const orderId = await place(at(MON, '10:00'))
     // The second run saves its delivery after the first checked and before it writes.
-    const racing = interleaved(db, () => queueOrderAlert(db, 'new_order', orderId, SITE, at(MON, '10:00')))
-    await queueOrderAlert(racing, 'new_order', orderId, SITE, at(MON, '10:00'))
+    const racing = interleaved(db, () => queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:00')))
+    await queueOrderAlert(racing, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:00'))
     expect(await deliveries()).toHaveLength(1)
   })
 
@@ -158,7 +158,7 @@ describe('alerts', () => {
     await setNotificationRule(db, admin, { kind: 'payment', destinationId: group, enabled: true, attachCsv: false })
     const orderId = await place(at(MON, '10:00'))
     await payOrder(db, cashier, orderId, { version: 1, method: 'khqr', reference: null }, crypto.randomUUID(), at(MON, '10:05'))
-    const ids = await queueOrderAlert(db, 'payment', orderId, 'http://localhost:3000', at(MON, '10:05'))
+    const ids = await queueOrderAlert(db, TEST_TENANT, 'payment', orderId, 'http://localhost:3000', at(MON, '10:05'))
     await deliverDue(db, telegram.api, at(MON, '10:05'), { ids })
     const payload = telegram.sent()[0]!.payload!
     expect(payload.text).toBe('✅ <b>Paid #001 · Riverside</b>\nPickup · Sokha · KHQR $17.50\nPreparation can start.')
@@ -170,7 +170,7 @@ describe('delivery', () => {
   async function queued() {
     await setNotificationRule(db, admin, { kind: 'new_order', destinationId: group, enabled: true, attachCsv: false })
     const orderId = await place(at(MON, '10:00'))
-    const [id] = await queueOrderAlert(db, 'new_order', orderId, SITE, at(MON, '10:00'))
+    const [id] = await queueOrderAlert(db, TEST_TENANT, 'new_order', orderId, SITE, at(MON, '10:00'))
     return id!
   }
   const row = async (id: string) => (await db.select().from(notificationDeliveries).where(eq(notificationDeliveries.id, id)))[0]!
@@ -206,7 +206,7 @@ describe('delivery', () => {
     telegram.answer = () => ({ ok: false, error_code: 403, description: 'Forbidden: bot was kicked from the supergroup chat' })
     expect(await deliverDue(db, telegram.api, at(MON, '10:00'))).toEqual({ sent: 0, retried: 0, failed: 1 })
     expect(await row(id)).toMatchObject({ status: 'failed', lastError: 'The bot was removed or blocked in this chat.' })
-    expect((await telegramOverview(db, SETTINGS)).destinations.find(d => d.id === group)?.status).toBe('blocked')
+    expect((await telegramOverview(db, TEST_TENANT, SETTINGS)).destinations.find(d => d.id === group)?.status).toBe('blocked')
     await expectApiError(() => retryDelivery(db, telegram.api, admin, id, at(MON, '10:05')), 409, 'TELEGRAM_BLOCKED')
   })
 
@@ -239,7 +239,7 @@ describe('closing summary', () => {
     expect(text.text).toContain('Paid sales <b>$17.50</b> · 1 order')
     expect(text.reply_markup).toEqual({ inline_keyboard: [[{ text: 'View full report', url: `${SITE}/admin/reports/summary?from=${MON}&to=${MON}` }]] })
     expect(telegram.sent('sendDocument')).toHaveLength(1)
-    expect((await listDeliveries(db)).map(d => d.subject).sort()).toEqual(['Closing summary · Mon 28 Sep 2026', 'Closing summary · Mon 28 Sep 2026 · CSV'])
+    expect((await listDeliveries(db, TEST_TENANT)).map(d => d.subject).sort()).toEqual(['Closing summary · Mon 28 Sep 2026', 'Closing summary · Mon 28 Sep 2026 · CSV'])
   })
 
   it('isn\'t sent on a closed day, or late after downtime', async () => {
@@ -273,7 +273,7 @@ describe('rules and history', () => {
 
   it('a report sent from the portal is in the history, as sent', async () => {
     await sendReport(db, telegram.api, admin, crypto.randomUUID(), { destinationId: owner, report: {}, attachCsv: false }, async () => ({ subject: 'Summary · Mon 28 Sep 2026', html: '<b>Summary</b>', audit: {} }), at(MON, '12:00'))
-    expect(await listDeliveries(db)).toMatchObject([{ kind: 'report', subject: 'Summary · Mon 28 Sep 2026', status: 'sent', destination: { title: 'Kim' } }])
+    expect(await listDeliveries(db, TEST_TENANT)).toMatchObject([{ kind: 'report', subject: 'Summary · Mon 28 Sep 2026', status: 'sent', destination: { title: 'Kim' } }])
   })
 })
 
@@ -286,9 +286,9 @@ describe('server errors (step 10.4, D119)', () => {
   })
 
   it('queues nothing without a chat that wants them; with one, the route, status and request id, never the error\'s text', async () => {
-    expect(await queueServerErrorAlert(db, failed('/api/shop/orders'), at(MON, '10:00'))).toEqual([])
+    expect(await queueServerErrorAlert(db, TEST_TENANT, failed('/api/shop/orders'), at(MON, '10:00'))).toEqual([])
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
-    const ids = await queueServerErrorAlert(db, failed('/api/shop/orders'), at(MON, '10:00'))
+    const ids = await queueServerErrorAlert(db, TEST_TENANT, failed('/api/shop/orders'), at(MON, '10:00'))
     expect(ids).toHaveLength(1)
     const [row] = await deliveries()
     expect(row).toMatchObject({ kind: 'server_error', destinationId: owner, subject: 'Server error · POST /api/shop/orders' })
@@ -304,21 +304,21 @@ describe('server errors (step 10.4, D119)', () => {
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: group, enabled: true, attachCsv: false })
     const [first, second] = await Promise.all([
-      queueServerErrorAlert(db, failed('/api/shop/orders/01a0f33c-3eb1-71c2-8deb-d67aee32e4c9/cancel', 'a'), at(MON, '10:01')),
-      queueServerErrorAlert(db, failed('/api/shop/orders/01a0f33c-3eb1-71c2-8deb-d67aee32e4c8/cancel', 'b'), at(MON, '10:02')),
+      queueServerErrorAlert(db, TEST_TENANT, failed('/api/shop/orders/01a0f33c-3eb1-71c2-8deb-d67aee32e4c9/cancel', 'a'), at(MON, '10:01')),
+      queueServerErrorAlert(db, TEST_TENANT, failed('/api/shop/orders/01a0f33c-3eb1-71c2-8deb-d67aee32e4c8/cancel', 'b'), at(MON, '10:02')),
     ])
     expect(first!.length + second!.length).toBe(2)
     expect(await deliveries()).toHaveLength(2)
     // Another route is its own alert; the same route in the next window alerts again.
-    expect(await queueServerErrorAlert(db, failed('/api/admin/staff'), at(MON, '10:03'))).toHaveLength(2)
-    expect(await queueServerErrorAlert(db, failed('/api/shop/orders/01a0f33c-3eb1-71c2-8deb-d67aee32e4c9/cancel'), at(MON, '10:16'))).toHaveLength(2)
+    expect(await queueServerErrorAlert(db, TEST_TENANT, failed('/api/admin/staff'), at(MON, '10:03'))).toHaveLength(2)
+    expect(await queueServerErrorAlert(db, TEST_TENANT, failed('/api/shop/orders/01a0f33c-3eb1-71c2-8deb-d67aee32e4c9/cancel'), at(MON, '10:16'))).toHaveLength(2)
     expect(await deliveries()).toHaveLength(6)
   })
 
   it('a blocked chat gets none', async () => {
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
     await db.update(telegramDestinations).set({ status: 'blocked' }).where(eq(telegramDestinations.id, owner))
-    expect(await queueServerErrorAlert(db, failed('/api/shop/orders'), at(MON, '10:00'))).toEqual([])
+    expect(await queueServerErrorAlert(db, TEST_TENANT, failed('/api/shop/orders'), at(MON, '10:00'))).toEqual([])
   })
 })
 
@@ -340,16 +340,16 @@ describe('the Bakong token\'s reminders (step 10.16, D132)', () => {
   })
 
   it('goes once per stage to the chats that get server errors, with the date and what to do', async () => {
-    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(7))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(7))).toEqual([])
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
-    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(20))).toEqual([])
-    expect(await queueBakongTokenReminder(db, null, SITE, before(7))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(20))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, null, SITE, before(7))).toEqual([])
 
-    const ids = await queueBakongTokenReminder(db, EXPIRES, SITE, before(7))
+    const ids = await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(7))
     expect(ids).toHaveLength(1)
     // Every minute after that, nothing more until the next stage.
-    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(6, 23))).toEqual([])
-    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(4))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(6, 23))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(4))).toEqual([])
     const [row] = await deliveries()
     expect(row).toMatchObject({ kind: 'server_error', destinationId: owner, subject: 'Bakong token expires in 7 days' })
     expect(row!.message.html).toContain('<b>The Bakong token expires in 7 days</b> (21 Dec 2026)')
@@ -359,9 +359,9 @@ describe('the Bakong token\'s reminders (step 10.16, D132)', () => {
     await deliverDue(db, telegram.api, before(7), { ids })
     expect(telegram.sent()).toHaveLength(1)
 
-    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(3))).toHaveLength(1)
-    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, EXPIRES)).toHaveLength(1)
-    expect(await queueBakongTokenReminder(db, EXPIRES, SITE, before(-2))).toEqual([])
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(3))).toHaveLength(1)
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, EXPIRES)).toHaveLength(1)
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(-2))).toEqual([])
     expect((await deliveries()).map(d => d.subject)).toEqual(['Bakong token expires in 7 days', 'Bakong token expires in 3 days', 'Bakong token expired'])
     expect((await deliveries())[2]!.message.html).toContain('<b>The Bakong token has expired</b>')
   })
@@ -370,12 +370,12 @@ describe('the Bakong token\'s reminders (step 10.16, D132)', () => {
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: group, enabled: true, attachCsv: false })
     const [first, second] = await Promise.all([
-      queueBakongTokenReminder(db, EXPIRES, SITE, before(1)),
-      queueBakongTokenReminder(db, EXPIRES, SITE, before(1)),
+      queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(1)),
+      queueBakongTokenReminder(db, TEST_TENANT, EXPIRES, SITE, before(1)),
     ])
     expect(first!.length + second!.length).toBe(2)
     const renewed = new Date(EXPIRES.getTime() + 90 * 24 * 3_600_000)
-    expect(await queueBakongTokenReminder(db, renewed, SITE, new Date(renewed.getTime() - 24 * 3_600_000))).toHaveLength(2)
+    expect(await queueBakongTokenReminder(db, TEST_TENANT, renewed, SITE, new Date(renewed.getTime() - 24 * 3_600_000))).toHaveLength(2)
     expect(await deliveries()).toHaveLength(4)
   })
 })

@@ -58,6 +58,8 @@ Everyone else is added from the Staff page; branches come from the seed locally,
 
 **Migration `0026_tenant_settings` (D137)** rebuilds `customer_profiles`, `khqr_settings` and `exchange_rates` with the tenant. Same routine; afterwards: the account menu's member code (unchanged), Payments (the riel rate and the KHQR settings as before), a riel cash payment and a KHQR at the counter.
 
+**Migration `0027_telegram_tenants` (D138)** rebuilds the Telegram tables with the tenant and names the tenant on the orders' outbox events. Same routine; afterwards: the Telegram page (chats, switches, delivery history as before), Send test, and an order placed and paid: its new-order and payment alerts arrive.
+
 ## Configuration
 
 Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudflare secrets, never committed. `.env.example` lists every name.

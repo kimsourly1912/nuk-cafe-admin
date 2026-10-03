@@ -31,6 +31,11 @@ export async function currentTenant(db: Db): Promise<{ id: string, slug: string,
   return { id: tenant.id, slug: tenant.slug, name: tenant.name }
 }
 
+/** Every active tenant, oldest first: the scheduled tasks that work per tenant go through them (D138). */
+export async function activeTenants(db: Db): Promise<{ id: string, slug: string, name: string }[]> {
+  return repo.findActiveTenants(db)
+}
+
 /**
  * Any signed-in account that may use the app: not banned, and not holding a temporary password
  * (Better Auth doesn't enforce `mustChangePassword`; we do, on every surface but /api/auth).
