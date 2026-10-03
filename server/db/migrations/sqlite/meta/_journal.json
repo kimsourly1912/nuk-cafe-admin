@@ -218,6 +218,13 @@
       "when": 1791013429703,
       "tag": "0030_platform_console",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1791028625202,
+      "tag": "0031_cafe_profile",
+      "breakpoints": true
     }
   ]
 }

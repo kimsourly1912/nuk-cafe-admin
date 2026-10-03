@@ -8,7 +8,8 @@ import { orders } from '#server/features/orders/orders.schema'
 import { createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
-import { changeTenantSlug, createTenant, currentSlugFor, getTenant, listTenants, resumeTenant, seedTenant, suspendTenant } from '#server/features/tenants'
+import { changeTenantSlug, createTenant, currentSlugFor, getCafeProfile, getCafeSettings, getTenant, listTenants, resumeTenant, seedTenant, suspendTenant, updateCafeSettings } from '#server/features/tenants'
+import { mediaAssets } from '#server/features/media/media.schema'
 import { tenantSlugs } from '#server/features/tenants/tenants.schema'
 
 // The platform console (step T2a, D142): cafes with their first branch and owner, pause and
@@ -230,5 +231,62 @@ describe('seed', () => {
     expect(tenant).toMatchObject({ name: 'NUK Cafe', slug: 'nuk', created: true })
     expect(await fresh.select({ slug: tenantSlugs.slug }).from(tenantSlugs)).toEqual([{ slug: 'nuk' }])
     expect(await seedTenant(fresh, { name: 'Other', slug: 'other' })).toEqual({ ...tenant, created: false })
+  })
+})
+
+// The cafe's own profile (step T2b, D143): its name and logo, set by its owners.
+describe('the cafe\'s profile', () => {
+  const owner = { userId: 'owner-1', tenantId: TEST_TENANT, role: 'owner' as const, requestId: 'req-2' }
+
+  async function upload(id: string, tenantId = TEST_TENANT) {
+    await db.insert(mediaAssets).values({ id, tenantId, objectKey: `t/${tenantId}/menu/${id}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x' })
+    return id
+  }
+  const stateOf = async (id: string) => (await db.select({ state: mediaAssets.state }).from(mediaAssets).where(eq(mediaAssets.id, id)))[0]?.state
+
+  it('reads by its address, paused too; an unknown or former address is not found', async () => {
+    expect(await getCafeProfile(db, 'nuk')).toEqual({ slug: 'nuk', name: `Cafe ${TEST_TENANT}`, logoUrl: null, status: 'active' })
+    await suspendTenant(db, admin, TEST_TENANT, { version: 1, reason: 'x' })
+    expect((await getCafeProfile(db, 'nuk')).status).toBe('suspended')
+    await expectApiError(() => getCafeProfile(db, 'nowhere'), 404, 'NOT_FOUND')
+    await changeTenantSlug(db, admin, TEST_TENANT, { version: 2, slug: 'nuk-coffee' })
+    await expectApiError(() => getCafeProfile(db, 'nuk'), 404, 'NOT_FOUND')
+  })
+
+  it('changes the name and logo; a new logo is attached, the old one released, the change audited', async () => {
+    const first = await upload('logo-1')
+    const saved = await updateCafeSettings(db, owner, { version: 1, name: 'NUK Coffee', logoAssetId: first })
+    expect(saved).toMatchObject({ name: 'NUK Coffee', logoAssetId: first, logoUrl: `/media/t/${TEST_TENANT}/menu/logo-1.png`, version: 2 })
+    expect(await stateOf(first)).toBe('attached')
+    expect((await getCafeProfile(db, 'nuk')).logoUrl).toBe(saved.logoUrl)
+
+    const second = await upload('logo-2')
+    await updateCafeSettings(db, owner, { version: 2, name: 'NUK Coffee', logoAssetId: second })
+    expect([await stateOf(first), await stateOf(second)]).toEqual(['temporary', 'attached'])
+    const removed = await updateCafeSettings(db, owner, { version: 3, name: 'NUK Coffee', logoAssetId: null })
+    expect([removed.logoUrl, await stateOf(second)]).toEqual([null, 'temporary'])
+    expect((await db.select({ action: auditEvents.action, actorId: auditEvents.actorId }).from(auditEvents).where(eq(auditEvents.tenantId, TEST_TENANT))))
+      .toEqual(Array.from({ length: 3 }, () => ({ action: 'tenant.profile.update', actorId: 'owner-1' })))
+  })
+
+  it('refuses another cafe\'s upload as its logo', async () => {
+    await ensureTenant(db, 'tenant-2', 'other')
+    const theirs = await upload('logo-9', 'tenant-2')
+    await expectApiError(() => updateCafeSettings(db, owner, { version: 1, name: 'NUK', logoAssetId: theirs }), 422, 'MEDIA_NOT_AVAILABLE', ['logoAssetId'])
+    expect(await stateOf(theirs)).toBe('temporary')
+  })
+
+  it('a stale version, or a change between the check and the write, is refused and saves nothing', async () => {
+    await expectApiError(() => updateCafeSettings(db, owner, { version: 9, name: 'X', logoAssetId: null }), 409, 'VERSION_CONFLICT')
+    const racing = interleaved(db, () => suspendTenant(db, admin, TEST_TENANT, { version: 1, reason: 'x' }))
+    await expectApiError(() => updateCafeSettings(racing, owner, { version: 1, name: 'X', logoAssetId: null }), 409, 'VERSION_CONFLICT')
+    expect((await getCafeSettings(db, TEST_TENANT)).name).toBe(`Cafe ${TEST_TENANT}`)
+  })
+
+  it('an upload cleaned up between the check and the write: the name isn\'t saved either', async () => {
+    const logo = await upload('logo-3')
+    const racing = interleaved(db, () => db.delete(mediaAssets).where(eq(mediaAssets.id, logo)))
+    await expectApiError(() => updateCafeSettings(racing, owner, { version: 1, name: 'NUK Coffee', logoAssetId: logo }), 422, 'MEDIA_NOT_AVAILABLE', ['logoAssetId'])
+    expect((await getCafeSettings(db, TEST_TENANT))).toMatchObject({ name: `Cafe ${TEST_TENANT}`, version: 1 })
   })
 })

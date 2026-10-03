@@ -1,5 +1,6 @@
 import type { Page } from '#shared/contracts/common'
 import { totalPages } from '#shared/contracts/common'
+import type { CafeProfile, CafeSettings, UpdateCafeInput } from '#shared/contracts/cafe'
 import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, ResumeTenantInput, SuspendTenantInput, TenantDetail, TenantListQuery, TenantStatus, TenantSummary } from '#shared/contracts/tenants'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
@@ -7,6 +8,8 @@ import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
 import { activeBranchCounts, firstBranchStatement } from '#server/features/branches'
 import { planStaffCreate, staffCounts, tenantOwners } from '#server/features/identity'
+import type { Actor } from '#server/features/identity'
+import { assetUrls, attachStatements, mediaNotAvailable, releaseStatement } from '#server/features/media'
 import { orderActivity } from '#server/features/orders'
 import { auditStatement } from '#server/features/platform'
 import type { AuditActor } from '#server/features/platform'
@@ -200,4 +203,75 @@ export async function seedTenant(db: Db, input: { name: string, slug: string }):
   const tenant = { id: newId(), name: input.name, slug: input.slug, now: new Date() }
   await db.batch([repo.insertTenantStatement(db, tenant), repo.insertSlugStatement(db, { slug: tenant.slug, tenantId: tenant.id, now: tenant.now })])
   return { id: tenant.id, name: tenant.name, slug: tenant.slug, created: true }
+}
+
+// --- The cafe's profile (step T2b, D143): its name and logo ---
+
+async function profileOf(db: Db, row: TenantRow): Promise<CafeSettings> {
+  const urls = row.logoAssetId ? await assetUrls(db, row.id, [row.logoAssetId]) : new Map<string, string>()
+  return {
+    slug: row.slug,
+    name: row.name,
+    logoUrl: (row.logoAssetId && urls.get(row.logoAssetId)) || null,
+    logoAssetId: row.logoAssetId ?? null,
+    status: statusOf(row),
+    version: versionOf(row),
+  }
+}
+
+/**
+ * A cafe's name and logo for its pages, by its address (`GET /api/cafes/{slug}`). Public: anyone
+ * may see a cafe's name. A paused cafe answers too (its pages say it's paused, by name); an
+ * unknown address is 404.
+ */
+export async function getCafeProfile(db: Db, slug: string): Promise<CafeProfile> {
+  const row = await repo.findTenantBySlug(db, slug)
+  if (!row) throw tenantNotFound()
+  const { logoAssetId: _, version: __, ...profile } = await profileOf(db, row)
+  return profile
+}
+
+/** The owner's settings page (`GET /api/c/<slug>/admin/cafe`). */
+export async function getCafeSettings(db: Db, tenantId: string): Promise<CafeSettings> {
+  const row = await repo.findTenant(db, tenantId)
+  if (!row) throw tenantNotFound()
+  return profileOf(db, row)
+}
+
+/**
+ * The owner changes the cafe's name and logo. The logo is an upload of this cafe's (attached
+ * here, the old one released), in the same batch as the change and its audit row. The address is
+ * the platform team's to change (`changeTenantSlug`).
+ */
+export async function updateCafeSettings(db: Db, actor: Actor, input: UpdateCafeInput): Promise<CafeSettings> {
+  const { tenantId } = actor
+  const row = await loadForChange(db, tenantId, input.version)
+  const logoChanged = (row.logoAssetId ?? null) !== input.logoAssetId
+  const logoStatements = logoChanged
+    ? [
+        ...(row.logoAssetId ? [releaseStatement(db, tenantId, row.logoAssetId)] : []),
+        ...(input.logoAssetId ? await attachStatements(db, tenantId, input.logoAssetId, 'logoAssetId') : []),
+      ]
+    : []
+  try {
+    await db.batch([
+      repo.updateTenantStatement(db, tenantId, input.version, { name: input.name, logoAssetId: input.logoAssetId }),
+      requireOneChange(db),
+      ...logoStatements,
+      auditStatement(db, { userId: actor.userId, tenantId, requestId: actor.requestId }, {
+        action: 'tenant.profile.update',
+        targetType: 'tenant',
+        targetId: tenantId,
+        metadata: { name: input.name, logoChanged },
+      }),
+    ])
+  }
+  catch (error) {
+    if (!isStaleWrite(error)) throw error
+    // Either someone changed the cafe, or the upload was cleaned up or used meanwhile.
+    const current = await repo.findTenant(db, tenantId)
+    if (versionOf(current ?? row) !== input.version) throw tenantChanged()
+    throw mediaNotAvailable('logoAssetId')
+  }
+  return getCafeSettings(db, tenantId)
 }
