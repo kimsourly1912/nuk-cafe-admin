@@ -4,7 +4,7 @@ import { requireOneChange } from '#server/utils/batch'
 import type { Db } from '#server/utils/batch'
 import { apiError } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
-import { createTestDb } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { auditEvents, idempotencyKeys, outboxMessages } from '#server/features/platform/platform.schema'
 import { auditStatement, deliverOutbox, expireIdempotencyKeys, outboxStatement, withIdempotency } from '#server/features/platform/platform.service'
@@ -125,7 +125,7 @@ describe('outbox', () => {
   const at = (ms: number) => new Date(T0.getTime() + ms)
 
   async function enqueue(kind = 'mail.test', payload: Record<string, unknown> = { to: 'user-1' }) {
-    await db.batch([outboxStatement(db, kind, payload)])
+    await db.batch([outboxStatement(db, null, kind, payload)])
     // Created "now" by SQLite; move it to T0 so the tests control time.
     await db.update(outboxMessages).set({ nextAttemptAt: T0 })
   }
@@ -143,6 +143,17 @@ describe('outbox', () => {
     expect(await message()).toMatchObject({ status: 'sent', attempts: 1, lockedUntil: null })
     expect(await deliverOutbox(db, handlers, { now: at(3600_000) })).toMatchObject({ sent: 0 })
     expect(seen).toHaveLength(1)
+  })
+
+  it('hands the handler the message\'s tenant, or null for the platform\'s own (D138)', async () => {
+    await ensureTenant(db)
+    await db.batch([outboxStatement(db, TEST_TENANT, 'mail.test', { orderId: 'o1' }), outboxStatement(db, null, 'mail.test', { to: 'a' })])
+    await db.update(outboxMessages).set({ nextAttemptAt: T0 })
+    const tenants: (string | null)[] = []
+    await deliverOutbox(db, mailTest(async (m) => {
+      tenants.push(m.tenantId)
+    }), { now: at(1000) })
+    expect(tenants.sort()).toEqual([TEST_TENANT, null].sort())
   })
 
   it('retries a failure with backoff, then succeeds', async () => {
@@ -218,7 +229,7 @@ describe('outbox', () => {
   })
 
   it('commits a message only with the change that caused it', async () => {
-    const statements = [outboxStatement(db, 'mail.test', {}), db.run('select json(\'broken\')')]
+    const statements = [outboxStatement(db, null, 'mail.test', {}), db.run('select json(\'broken\')')]
     await expect(db.batch(statements as [typeof statements[0], ...typeof statements])).rejects.toThrow()
     expect(await db.select().from(outboxMessages)).toEqual([])
   })

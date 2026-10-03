@@ -47,12 +47,13 @@ export async function deleteExpiredIdempotencyKeys(db: Db, now: Date): Promise<n
 
 // --- Outbox ---
 
-export function insertOutboxStatement(db: Db, kind: string, payload: Record<string, unknown>): Statement {
-  return db.insert(outboxMessages).values({ id: newId(), kind, payload })
+export function insertOutboxStatement(db: Db, tenantId: string | null, kind: string, payload: Record<string, unknown>): Statement {
+  return db.insert(outboxMessages).values({ id: newId(), tenantId, kind, payload })
 }
 
 export interface DueMessage {
   id: string
+  tenantId: string | null
   kind: string
   payload: Record<string, unknown>
   attempts: number
@@ -63,7 +64,7 @@ const unclaimed = (now: Date) => or(isNull(outboxMessages.lockedUntil), lte(outb
 /** Pending messages whose time has come and that no run holds, oldest first. */
 export async function findDueMessages(db: Db, now: Date, limit: number): Promise<DueMessage[]> {
   return db
-    .select({ id: outboxMessages.id, kind: outboxMessages.kind, payload: outboxMessages.payload, attempts: outboxMessages.attempts })
+    .select({ id: outboxMessages.id, tenantId: outboxMessages.tenantId, kind: outboxMessages.kind, payload: outboxMessages.payload, attempts: outboxMessages.attempts })
     .from(outboxMessages)
     .where(and(eq(outboxMessages.status, 'pending'), lte(outboxMessages.nextAttemptAt, now), unclaimed(now)))
     .orderBy(asc(outboxMessages.nextAttemptAt), asc(outboxMessages.id))

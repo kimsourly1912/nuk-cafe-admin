@@ -51,16 +51,16 @@ function linkOf(row: repo.LinkRow, now: Date): TelegramLink {
   }
 }
 
-/** The Telegram page: whether it's on, the bot's name, and the chats. */
-export async function telegramOverview(db: Db, settings: TelegramSettings | null): Promise<TelegramOverview> {
+/** The tenant's Telegram page: whether it's on, the bot's name, and the chats. */
+export async function telegramOverview(db: Db, tenantId: string, settings: TelegramSettings | null): Promise<TelegramOverview> {
   if (!settings) return { enabled: false, botUsername: null, destinations: [], rules: [] }
-  const [destinations, rules] = await Promise.all([repo.listDestinations(db), listRules(db)])
+  const [destinations, rules] = await Promise.all([repo.listDestinations(db, tenantId), listRules(db, tenantId)])
   return { enabled: true, botUsername: settings.botUsername, destinations: destinations.map(destinationOf), rules }
 }
 
 /** Only connected chats can be chosen to send to (the Send dialog shows blocked ones disabled). */
-export async function listDestinations(db: Db): Promise<TelegramDestination[]> {
-  return (await repo.listDestinations(db)).map(destinationOf)
+export async function listDestinations(db: Db, tenantId: string): Promise<TelegramDestination[]> {
+  return (await repo.listDestinations(db, tenantId)).map(destinationOf)
 }
 
 // --- Connecting ---
@@ -74,7 +74,7 @@ export async function createLink(db: Db, actor: Actor, settings: TelegramSetting
   const code = newLinkCode()
   const id = newId()
   const expiresAt = new Date(now.getTime() + TELEGRAM_LINK_MINUTES * MINUTE)
-  await db.batch([repo.insertLinkStatement(db, { id, codeHash: await hashLinkCode(code), kind: input.kind, createdBy: actor.userId, expiresAt, createdAt: now })])
+  await db.batch([repo.insertLinkStatement(db, { id, tenantId: actor.tenantId, codeHash: await hashLinkCode(code), kind: input.kind, createdBy: actor.userId, expiresAt, createdAt: now })])
   return {
     id,
     kind: input.kind,
@@ -88,38 +88,38 @@ export async function createLink(db: Db, actor: Actor, settings: TelegramSetting
 
 /** A link's progress, for the admin who made it (the portal asks every few seconds). */
 export async function getLink(db: Db, actor: Actor, id: string, now = new Date()): Promise<TelegramLink> {
-  const row = await repo.findLink(db, id)
+  const row = await repo.findLink(db, actor.tenantId, id)
   if (!row || row.createdBy !== actor.userId) throw linkNotFound()
   return linkOf(row, now)
 }
 
 /** The admin confirms the group a link brought: it's connected. */
 export async function confirmLink(db: Db, actor: Actor, id: string, now = new Date()): Promise<TelegramDestination> {
-  const row = await repo.findLink(db, id)
+  const row = await repo.findLink(db, actor.tenantId, id)
   if (!row || row.createdBy !== actor.userId) throw linkNotFound()
   if (row.status !== 'confirm' || !row.chatId || !row.chatTitle) throw linkUnusable()
-  const destinationId = (await repo.findDestinationByChat(db, row.chatId))?.id ?? newId()
+  const destinationId = (await repo.findDestinationByChat(db, actor.tenantId, row.chatId))?.id ?? newId()
   // The chat first (the link points at it), then the link, guarded: a used or expired link undoes both.
   await runBatch(db, [
-    repo.upsertDestinationStatement(db, destinationId, { chatId: row.chatId, kind: 'group', title: row.chatTitle, connectedBy: actor.userId, at: now }),
+    repo.upsertDestinationStatement(db, destinationId, { tenantId: actor.tenantId, chatId: row.chatId, kind: 'group', title: row.chatTitle, connectedBy: actor.userId, at: now }),
     repo.advanceLinkStatement(db, id, ['confirm'], { status: 'connected', destinationId }, now),
     requireOneChange(db),
     auditStatement(db, actor, { action: 'notifications.telegram.connect', targetType: 'telegram_destination', targetId: destinationId, metadata: { kind: 'group' } }),
   ], linkUnusable)
-  return destinationOf((await repo.findDestination(db, destinationId))!)
+  return destinationOf((await repo.findDestination(db, actor.tenantId, destinationId))!)
 }
 
 /** The admin doesn't want the group: the link ends, and the bot leaves that group. */
 export async function cancelLink(db: Db, api: Api, actor: Actor, id: string, now = new Date()): Promise<TelegramLink> {
-  const row = await repo.findLink(db, id)
+  const row = await repo.findLink(db, actor.tenantId, id)
   if (!row || row.createdBy !== actor.userId) throw linkNotFound()
   const cancelled = await repo.cancelLink(db, id)
-  // The bot was added to that group for this link: it leaves, unless the group is connected anyway.
-  if (cancelled && row.status === 'confirm' && row.chatId) {
-    const existing = await repo.findDestinationByChat(db, row.chatId)
-    if (!existing || existing.status === 'disconnected') await leaveQuietly(api, row.chatId)
+  // The bot was added to that group for this link: it leaves, unless the group is connected anyway
+  // (by this cafe or another, D138).
+  if (cancelled && row.status === 'confirm' && row.chatId && !await repo.chatConnectedAnywhere(db, row.chatId)) {
+    await leaveQuietly(api, row.chatId)
   }
-  return linkOf((await repo.findLink(db, id))!, now)
+  return linkOf((await repo.findLink(db, actor.tenantId, id))!, now)
 }
 
 async function leaveQuietly(api: Api, chatId: string) {
@@ -197,9 +197,10 @@ async function useCode(db: Db, api: Api, message: Message, code: string, now: Da
 
   if (!group) {
     const chatId = String(chat.id)
-    const destinationId = (await repo.findDestinationByChat(db, chatId))?.id ?? newId()
+    // The chat joins the tenant whose admin made the link.
+    const destinationId = (await repo.findDestinationByChat(db, link.tenantId, chatId))?.id ?? newId()
     const used = await runOnce(db, [
-      repo.upsertDestinationStatement(db, destinationId, { chatId, kind: 'private', title: chatTitle(chat), connectedBy: link.createdBy, at: now }),
+      repo.upsertDestinationStatement(db, destinationId, { tenantId: link.tenantId, chatId, kind: 'private', title: chatTitle(chat), connectedBy: link.createdBy, at: now }),
       repo.advanceLinkStatement(db, link.id, ['waiting'], { status: 'connected', chatId, chatTitle: chatTitle(chat), destinationId }, now),
       requireOneChange(db),
       auditStatement(db, { userId: link.createdBy }, { action: 'notifications.telegram.connect', targetType: 'telegram_destination', targetId: destinationId, metadata: { kind: 'private' } }),
@@ -227,8 +228,8 @@ async function useCode(db: Db, api: Api, message: Message, code: string, now: Da
 
 // --- Chats ---
 
-async function connectedDestination(db: Db, id: string) {
-  const row = await repo.findDestination(db, id)
+async function connectedDestination(db: Db, tenantId: string, id: string) {
+  const row = await repo.findDestination(db, tenantId, id)
   if (!row || row.status === 'disconnected') throw destinationNotFound()
   if (row.status === 'blocked') throw destinationBlocked(row.title)
   return row
@@ -260,25 +261,28 @@ async function deliver(db: Db, api: Api, row: repo.DestinationRow, message: Outg
 
 /** Send test: a short message, so the admin sees the chat works. */
 export async function sendTestMessage(db: Db, api: Api, actor: Actor, id: string, now = new Date()): Promise<TelegramDestination> {
-  const row = await connectedDestination(db, id)
+  const row = await connectedDestination(db, actor.tenantId, id)
   await deliver(db, api, row, { subject: 'Test', html: `✅ <b>Test from NUK Cafe</b>\nMessages for ${escapeHtml(row.title)} arrive here.` }, now)
   await db.batch([
     repo.sentStatement(db, id, now),
     auditStatement(db, actor, { action: 'notifications.telegram.test', targetType: 'telegram_destination', targetId: id }),
   ])
-  return destinationOf((await repo.findDestination(db, id))!)
+  return destinationOf((await repo.findDestination(db, actor.tenantId, id))!)
 }
 
-/** Disconnect: nothing more goes there; the bot leaves a group. The row stays for the history. */
+/**
+ * Disconnect: nothing more goes there; the bot leaves a group unless another cafe still uses it
+ * (D138). The row stays for the history.
+ */
 export async function disconnectDestination(db: Db, api: Api, actor: Actor, id: string, version: number, now = new Date()): Promise<void> {
-  const row = await repo.findDestination(db, id)
+  const row = await repo.findDestination(db, actor.tenantId, id)
   if (!row || row.status === 'disconnected') throw destinationNotFound()
   await runBatch(db, [
-    repo.disconnectStatement(db, id, version, now),
+    repo.disconnectStatement(db, actor.tenantId, id, version, now),
     requireOneChange(db),
     auditStatement(db, actor, { action: 'notifications.telegram.disconnect', targetType: 'telegram_destination', targetId: id, metadata: { kind: row.kind } }),
   ], () => versionConflict('This Telegram chat'))
-  if (row.kind === 'group' && row.status === 'connected') await leaveQuietly(api, row.chatId)
+  if (row.kind === 'group' && row.status === 'connected' && !await repo.chatConnectedAnywhere(db, row.chatId)) await leaveQuietly(api, row.chatId)
 }
 
 /**
@@ -295,14 +299,14 @@ export async function sendReport(
   now = new Date(),
 ): Promise<ReportSent> {
   const { response } = await withIdempotency(db, { actorId: actor.userId, operation: 'notifications.send-report', key }, request, async () => {
-    const row = await connectedDestination(db, request.destinationId)
+    const row = await connectedDestination(db, actor.tenantId, request.destinationId)
     const { audit, ...message } = await build()
     await deliver(db, api, row, message, now)
     return {
       statements: [
         repo.sentStatement(db, row.id, now),
         // In the delivery history with the alerts (8.1d, D113), as sent.
-        repo.insertDeliveryStatement(db, { id: newId(), kind: 'report', destinationId: row.id, dedupeKey: `report:${key}`, subject: message.subject, message: { html: message.html }, status: 'sent', attempts: 1, createdAt: now, nextAttemptAt: now, sentAt: now }),
+        repo.insertDeliveryStatement(db, { id: newId(), tenantId: actor.tenantId, kind: 'report', destinationId: row.id, dedupeKey: `report:${key}`, subject: message.subject, message: { html: message.html }, status: 'sent', attempts: 1, createdAt: now, nextAttemptAt: now, sentAt: now }),
         auditStatement(db, actor, { action: 'report.send', targetType: 'telegram_destination', targetId: row.id, metadata: { ...audit, attachCsv: request.attachCsv } }),
       ],
       response: { destination: { id: row.id, title: row.title }, sentAt: toIso(now) },

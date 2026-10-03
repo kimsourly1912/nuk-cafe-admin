@@ -282,3 +282,60 @@ describe('0026_tenant_settings', () => {
     expect((await client.execute('select count(*) as n from organization')).rows[0]!.n).toBe(0)
   })
 })
+
+describe('0027_telegram_tenants', () => {
+  const TENANT = '01a0fdb3-d860-7284-bc6b-2f8ab7a1d6cd'
+  const before = async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0027_telegram_tenants.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    return { client, files, at }
+  }
+
+  it('gives chats, links, rules and deliveries the tenant, keeps their links, and names the tenant on the orders\' outbox events', async () => {
+    const { client, files, at } = await before()
+    await client.batch([
+      `insert into organization (id, name, slug, created_at, status, version) values ('${TENANT}', 'NUK Cafe', 'nuk', 1, 'active', 1)`,
+      `insert into user (id, name, email, role) values ('u1', 'Owner', 'owner@example.com', 'customer')`,
+      `insert into telegram_destinations (id, chat_id, kind, title, status, connected_by) values ('d1', '-100', 'group', 'Staff', 'connected', 'u1')`,
+      `insert into telegram_links (id, code_hash, kind, status, created_by, expires_at, chat_id, destination_id) values ('l1', 'h1', 'group', 'connected', 'u1', 10, '-100', 'd1')`,
+      `insert into notification_rules (kind, destination_id, attach_csv) values ('new_order', 'd1', 0)`,
+      `insert into notification_deliveries (id, kind, destination_id, dedupe_key, subject, message, status) values ('n1', 'new_order', 'd1', 'new_order:o1', 'New order', '{"html":"x"}', 'sent')`,
+      `insert into outbox_messages (id, kind, payload) values ('m1', 'orders.placed', '{"orderId":"o1"}'), ('m2', 'mail.verify-email', '{"to":"a@example.com"}')`,
+    ], 'write')
+
+    await applyMigration(client, files[at]!)
+    const all = async (sql: string) => (await client.execute(sql)).rows.map(row => ({ ...row }))
+
+    for (const table of ['telegram_destinations', 'telegram_links', 'notification_rules', 'notification_deliveries']) {
+      expect(await all(`select distinct tenant_id from ${table}`), table).toEqual([{ tenant_id: TENANT }])
+    }
+    expect(await all('select destination_id from telegram_links')).toEqual([{ destination_id: 'd1' }])
+    expect(await all('select id, tenant_id from outbox_messages order by id')).toEqual([{ id: 'm1', tenant_id: TENANT }, { id: 'm2', tenant_id: null }])
+    expect(await all(`select name from sqlite_master where instr(sql, '__new_') > 0`)).toEqual([])
+    expect(await all('pragma foreign_key_check')).toEqual([])
+
+    // Another tenant can connect the same chat, and can't point at our chat.
+    await client.batch([
+      `insert into organization (id, name, slug, created_at) values ('t2', 'Other', 'other', 2)`,
+      `insert into telegram_destinations (id, tenant_id, chat_id, kind, title) values ('d2', 't2', '-100', 'group', 'Staff')`,
+    ], 'write')
+    await expect(client.execute(`insert into notification_rules (tenant_id, kind, destination_id) values ('t2', 'payment', 'd1')`)).rejects.toThrow(/FOREIGN KEY/)
+    await expect(client.execute(`insert into notification_deliveries (id, tenant_id, kind, destination_id, dedupe_key, subject, message) values ('n2', 't2', 'payment', 'd1', 'k', 's', '{}')`)).rejects.toThrow(/FOREIGN KEY/)
+    await expect(client.execute(`insert into telegram_destinations (id, tenant_id, chat_id, kind, title) values ('d3', 't2', '-100', 'group', 'Again')`)).rejects.toThrow(/UNIQUE/)
+    // A chat's rules still go with it.
+    await client.execute(`delete from notification_deliveries`)
+    await client.execute(`update telegram_links set destination_id = null`)
+    await client.execute(`delete from telegram_destinations where id = 'd1'`)
+    expect(await all('select count(*) as n from notification_rules')).toEqual([{ n: 0 }])
+    for (const file of files.slice(at + 1)) await applyMigration(client, file)
+  })
+
+  it('leaves an empty database without a tenant', async () => {
+    const { client, files, at } = await before()
+    await applyMigration(client, files[at]!)
+    expect((await client.execute('select count(*) as n from organization')).rows[0]!.n).toBe(0)
+  })
+})

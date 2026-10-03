@@ -31,9 +31,9 @@ export interface OrderAlert {
   payment: { method: PaymentMethod, amountMinor: number, amountKhr: number | null } | null
 }
 
-/** `null` when the order doesn't exist (an event for a deleted test order). */
-export async function orderAlert(db: Db, orderId: string): Promise<OrderAlert | null> {
-  const row = await repo.findOrderForTask(db, orderId)
+/** The tenant's order, as an alert; `null` when it doesn't exist (an event for a deleted test order). */
+export async function orderAlert(db: Db, tenantId: string, orderId: string): Promise<OrderAlert | null> {
+  const row = await repo.findOrder(db, tenantId, orderId)
   if (!row) return null
   const [lines, [payment]] = await Promise.all([repo.linesOf(db, orderId), repo.paymentsOf(db, [orderId])])
   return {

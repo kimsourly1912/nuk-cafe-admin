@@ -33,7 +33,8 @@ export interface IdempotentWork<T> {
 }
 
 /** Delivers one outbox message. Throwing schedules a retry. Must tolerate a repeat (at-least-once). */
-export type OutboxHandler = (message: { id: string, kind: string, payload: Record<string, unknown>, attempt: number }) => Promise<void>
+/** `tenantId`: the tenant the message belongs to (`null`: the platform's, D138). */
+export type OutboxHandler = (message: { id: string, tenantId: string | null, kind: string, payload: Record<string, unknown>, attempt: number }) => Promise<void>
 
 export interface DeliveryReport {
   sent: number

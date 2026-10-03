@@ -22,6 +22,15 @@ export async function findCurrentTenant(db: Db): Promise<TenantRow | undefined> 
   return rows[0]
 }
 
+/** Every active tenant, oldest first (platform tasks that work per tenant, D138). */
+export async function findActiveTenants(db: Db): Promise<{ id: string, slug: string, name: string }[]> {
+  const rows: TenantRow[] = await db
+    .select({ id: organization.id, slug: organization.slug, name: organization.name, status: organization.status })
+    .from(organization)
+    .orderBy(asc(organization.createdAt), asc(organization.id))
+  return rows.filter(row => (row.status ?? 'active') === 'active').map(({ status: _, ...tenant }) => tenant)
+}
+
 /** The user's role in the tenant (`owner`, `member`), `undefined` when not a member. */
 export async function findTenantRole(db: Db, tenantId: string, userId: string): Promise<string | undefined> {
   const rows = await db.select({ role: member.role }).from(member)

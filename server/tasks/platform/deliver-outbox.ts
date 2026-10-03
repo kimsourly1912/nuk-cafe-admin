@@ -29,20 +29,21 @@ function handlers(): Record<string, OutboxHandler> {
   const send: MailSender = (message, key) => mailSender()(message, key)
   return {
     ...accountMailHandlers(send),
-    [ORDER_EVENTS.placed]: message => orderAlert('new_order', message.payload.orderId),
-    [ORDER_EVENTS.paid]: message => orderAlert('payment', message.payload.orderId),
+    [ORDER_EVENTS.placed]: message => orderAlert(message.tenantId, 'new_order', message.payload.orderId),
+    [ORDER_EVENTS.paid]: message => orderAlert(message.tenantId, 'payment', message.payload.orderId),
   }
 }
 
 /**
- * The Telegram alerts for an order event (D113): saved as deliveries, then sent at once (what fails
- * is retried by `notifications:deliver`). Without a bot there's nothing to do, and the event is done.
+ * The Telegram alerts for an order event (D113), to the chats of the order's tenant (the message's,
+ * D138): saved as deliveries, then sent at once (what fails is retried by `notifications:deliver`).
+ * Without a bot there's nothing to do, and the event is done.
  */
-async function orderAlert(kind: 'new_order' | 'payment', orderId: unknown) {
+async function orderAlert(tenantId: string | null, kind: 'new_order' | 'payment', orderId: unknown) {
   const settings = useTelegram()
-  if (!settings || typeof orderId !== 'string') return
+  if (!settings || !tenantId || typeof orderId !== 'string') return
   const db = useDb()
-  const ids = await queueOrderAlert(db, kind, orderId, useRuntimeConfig().public.siteUrl as string | undefined)
+  const ids = await queueOrderAlert(db, tenantId, kind, orderId, useRuntimeConfig().public.siteUrl as string | undefined)
   await deliverDue(db, telegramApi(settings), new Date(), { ids })
 }
 

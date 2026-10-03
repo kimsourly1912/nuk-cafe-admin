@@ -70,7 +70,7 @@ describe('settings and rules', () => {
     expect(telegramSettingsFrom({ botToken: '1:x', botUsername: '@NukCafeBot', webhookSecret: 'a'.repeat(32) })).toEqual({ botToken: '1:x', botUsername: 'NukCafeBot', webhookSecret: 'a'.repeat(32) })
     await expectApiError(() => telegramSettingsFrom({ botToken: '1:x', webhookSecret: 'a'.repeat(32) }), 500, 'TELEGRAM_NOT_CONFIGURED')
     await expectApiError(() => telegramSettingsFrom({ botToken: '1:x', botUsername: 'NukCafeBot', webhookSecret: 'short' }), 500, 'TELEGRAM_NOT_CONFIGURED')
-    expect(await telegramOverview(db, null)).toEqual({ enabled: false, botUsername: null, destinations: [], rules: [] })
+    expect(await telegramOverview(db, TEST_TENANT, null)).toEqual({ enabled: false, botUsername: null, destinations: [], rules: [] })
   })
 
   it('reads start codes and compares the webhook secret', () => {
@@ -100,7 +100,7 @@ describe('connecting a private chat', () => {
     expect(telegram.lastText()).toMatch(/^Connected/)
     const connected = await getLink(db, admin, link.id, later(1))
     expect(connected.status).toBe('connected')
-    const overview = await telegramOverview(db, SETTINGS)
+    const overview = await telegramOverview(db, TEST_TENANT, SETTINGS)
     expect(overview.destinations).toMatchObject([{ kind: 'private', title: 'Sokha Chan', status: 'connected', connectedBy: 'Admin' }])
 
     // Telegram resends the update, or someone reuses the link: nothing new is connected.
@@ -190,7 +190,7 @@ describe('chats', () => {
       update_id: updateId++,
       my_chat_member: { chat: { id: -100999, type: 'supergroup', title: 'NUK Riverside Staff' }, from: person, date: 0, old_chat_member: { status: 'member', user: person }, new_chat_member: { status: 'kicked', user: person, until_date: 0 } },
     } as Update, later(4))
-    const overview = await telegramOverview(db, SETTINGS)
+    const overview = await telegramOverview(db, TEST_TENANT, SETTINGS)
     expect(overview.destinations).toMatchObject([{ id: destination.id, status: 'blocked' }])
     await expectApiError(() => sendTestMessage(db, telegram.api, admin, destination.id, later(5)), 409, 'TELEGRAM_BLOCKED')
   })
@@ -205,7 +205,7 @@ describe('chats', () => {
     await expectApiError(() => sendTestMessage(db, telegram.api, admin, destination.id, later(4)), 429, 'TELEGRAM_RATE_LIMITED', undefined, 'Telegram asks to wait 7 seconds. Try again then.')
     telegram.answers.sendMessage = () => ({ ok: false, error_code: 403, description: 'Forbidden: bot was kicked from the supergroup chat' })
     await expectApiError(() => sendTestMessage(db, telegram.api, admin, destination.id, later(5)), 409, 'TELEGRAM_BLOCKED')
-    expect((await telegramOverview(db, SETTINGS)).destinations[0]!.status).toBe('blocked')
+    expect((await telegramOverview(db, TEST_TENANT, SETTINGS)).destinations[0]!.status).toBe('blocked')
   })
 
   it('disconnects with the version it saw; the bot leaves a group; reconnecting brings the chat back', async () => {
@@ -213,7 +213,7 @@ describe('chats', () => {
     await expectApiError(() => disconnectDestination(db, telegram.api, admin, destination.id, destination.version + 1, later(3)), 409, 'VERSION_CONFLICT')
     await disconnectDestination(db, telegram.api, admin, destination.id, destination.version, later(3))
     expect(telegram.sent('leaveChat')).toHaveLength(1)
-    expect((await telegramOverview(db, SETTINGS)).destinations).toEqual([])
+    expect((await telegramOverview(db, TEST_TENANT, SETTINGS)).destinations).toEqual([])
 
     const again = await connectedGroup()
     expect(again.id).toBe(destination.id)

@@ -6,7 +6,7 @@ import { listDestinations } from '#server/features/notifications'
  * the Telegram page's settings permission). Telegram off: `enabled: false`, no chats.
  */
 export default defineEventHandler(async (event): Promise<{ enabled: boolean, destinations: TelegramDestination[] }> => {
-  await requirePermission(event, { report: ['export'] })
+  const actor = await requirePermission(event, { report: ['export'] })
   if (!useTelegram(event)) return { enabled: false, destinations: [] }
-  return { enabled: true, destinations: await listDestinations(useDb()) }
+  return { enabled: true, destinations: await listDestinations(useDb(), actor.tenantId) }
 })
