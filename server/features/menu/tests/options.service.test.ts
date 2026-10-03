@@ -6,7 +6,7 @@ import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import { menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
 import { addOptionValue, archiveOptionSet, archiveOptionValue, createOptionSet, listOptionSets, renameOptionSet, renameOptionValue, reorderOptionValues, restoreOptionSet, restoreOptionValue } from '#server/features/menu/options.service'
-import { createTestDb, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -16,6 +16,7 @@ const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', 
 
 beforeEach(async () => {
   db = await createTestDb()
+  await ensureTenant(db)
 })
 
 const size = () => createOptionSet(db, actor, { name: 'Size', values: ['Small', 'Regular', 'Large'] })
@@ -36,9 +37,9 @@ describe('option sets', () => {
     await createOptionSet(db, actor, { name: 'milk type', values: ['Whole'] })
     await createOptionSet(db, actor, { name: 'Temperature', values: ['Hot', 'Iced'] })
     await archiveOptionSet(db, actor, s.id, { version: s.version })
-    expect((await listOptionSets(db, { status: 'active' })).map(x => x.name)).toEqual(['milk type', 'Temperature'])
-    expect((await listOptionSets(db, { status: 'archived' })).map(x => x.name)).toEqual(['Size'])
-    expect(await listOptionSets(db, { status: 'all' })).toHaveLength(3)
+    expect((await listOptionSets(db, TEST_TENANT, { status: 'active' })).map(x => x.name)).toEqual(['milk type', 'Temperature'])
+    expect((await listOptionSets(db, TEST_TENANT, { status: 'archived' })).map(x => x.name)).toEqual(['Size'])
+    expect(await listOptionSets(db, TEST_TENANT, { status: 'all' })).toHaveLength(3)
   })
 
   it('keeps active set names unique, ignoring case, even when two creates race', async () => {
@@ -64,7 +65,7 @@ describe('option sets', () => {
     const set = await size()
     const racing = interleaved(db, () => db.update(menuOptionSets).set({ version: 2 }).where(eq(menuOptionSets.id, set.id)))
     await expectApiError(() => renameOptionSet(racing, actor, set.id, { version: 1, name: 'Cup size' }), 409, 'VERSION_CONFLICT')
-    expect((await listOptionSets(db, { status: 'active' }))[0]!.name).toBe('Size')
+    expect((await listOptionSets(db, TEST_TENANT, { status: 'active' }))[0]!.name).toBe('Size')
   })
 
   it('archives and restores; an archived set can\'t be edited; a restored name must be free', async () => {
@@ -133,7 +134,7 @@ describe('option values', () => {
     await expectApiError(() => addOptionValue(db, actor, set.id, { version: 1, name: 'One more' }), 422, 'TOO_MANY_OPTION_VALUES')
     // A value added between the check and the write still can't push it over.
     const archived = await archiveOptionValue(db, actor, set.id, set.values[0]!.id, { version: 1 })
-    const racing = interleaved(db, () => db.insert(menuOptionValues).values({ setId: set.id, name: 'Sneaked in', sortOrder: 99 }))
+    const racing = interleaved(db, () => db.insert(menuOptionValues).values({ tenantId: TEST_TENANT, setId: set.id, name: 'Sneaked in', sortOrder: 99 }))
     await expectApiError(() => addOptionValue(racing, actor, set.id, { version: archived.version, name: 'One more' }), 422, 'TOO_MANY_OPTION_VALUES')
   })
 

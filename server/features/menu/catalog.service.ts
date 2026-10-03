@@ -23,23 +23,23 @@ const groupBy = <T, K>(rows: T[], key: (row: T) => K) => {
   return map
 }
 
-/** Everything the customer menu could show: active categories and items, sellable versions. */
-export async function loadCatalog(db: Db): Promise<Catalog> {
+/** Everything the tenant's customer menu could show: active categories and items, sellable versions. */
+export async function loadCatalog(db: Db, tenantId: string): Promise<Catalog> {
   const [categories, categoryLinks, items, itemLinks, variations, itemSets, values, itemGroups, modifiers, ownPrices, rules, windows] = await Promise.all([
-    repo.activeCategories(db),
-    repo.categoryRuleLinks(db),
-    repo.activeItems(db),
-    repo.itemRuleLinks(db),
-    repo.sellableVariations(db),
-    repo.itemOptionSets(db),
-    repo.activeOptionValues(db),
-    repo.itemModifierGroups(db),
-    repo.activeModifiers(db),
-    repo.itemModifierPrices(db),
-    repo.allRules(db),
-    repo.allWindows(db),
+    repo.activeCategories(db, tenantId),
+    repo.categoryRuleLinks(db, tenantId),
+    repo.activeItems(db, tenantId),
+    repo.itemRuleLinks(db, tenantId),
+    repo.sellableVariations(db, tenantId),
+    repo.itemOptionSets(db, tenantId),
+    repo.activeOptionValues(db, tenantId),
+    repo.itemModifierGroups(db, tenantId),
+    repo.activeModifiers(db, tenantId),
+    repo.itemModifierPrices(db, tenantId),
+    repo.allRules(db, tenantId),
+    repo.allWindows(db, tenantId),
   ])
-  const images = await assetUrls(db, items.flatMap(i => i.imageAssetId ? [i.imageAssetId] : []))
+  const images = await assetUrls(db, tenantId, items.flatMap(i => i.imageAssetId ? [i.imageAssetId] : []))
 
   const categoryRules = groupBy(categoryLinks, l => l.categoryId)
   const itemRules = groupBy(itemLinks, l => l.itemId)
@@ -101,7 +101,7 @@ export async function getPublicMenu(db: Db, tenantId: string, query: PublicMenuQ
   const branchId = query.branchId ?? (await listBranchOptions(db, tenantId))[0]?.id
   if (!branchId) throw notFound('This branch')
   const branch = await getPublicBranch(db, tenantId, branchId, now)
-  const [catalog, soldOut] = await Promise.all([loadCatalog(db), soldOutIds(db, branch.id)])
+  const [catalog, soldOut] = await Promise.all([loadCatalog(db, tenantId), soldOutIds(db, branch.id)])
   return {
     branch,
     currency: 'USD',

@@ -6,7 +6,7 @@ import type { Actor } from '#server/features/identity'
 import { menuCategories } from '#server/features/menu/menu.schema'
 import { archiveCategory, createCategory, listCategories, reorderCategories, restoreCategory, updateCategory } from '#server/features/menu/categories.service'
 import { archiveItem, createItem } from '#server/features/menu/items.service'
-import { createTestDb, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -16,6 +16,7 @@ const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', 
 
 beforeEach(async () => {
   db = await createTestDb()
+  await ensureTenant(db)
 })
 
 const create = (name: string, parentId: string | null = null) => createCategory(db, actor, { name, description: '', parentId, availabilityRuleIds: [] })
@@ -29,8 +30,8 @@ describe('creating', () => {
     await create('Espresso drinks', coffee.id)
     await create('Filter', coffee.id)
     expect([coffee.sortOrder, tea.sortOrder]).toEqual([1, 2])
-    expect(names(await listCategories(db, { status: 'active' }))).toEqual(['Coffee', '  Espresso drinks', '  Filter', 'Tea'])
-    expect((await listCategories(db, { status: 'active' }))[0]).toMatchObject({ name: 'Coffee', childCount: 2, status: 'active', version: 1 })
+    expect(names(await listCategories(db, TEST_TENANT, { status: 'active' }))).toEqual(['Coffee', '  Espresso drinks', '  Filter', 'Tea'])
+    expect((await listCategories(db, TEST_TENANT, { status: 'active' }))[0]).toMatchObject({ name: 'Coffee', childCount: 2, status: 'active', version: 1 })
   })
 
   it('refuses a third level', async () => {
@@ -68,7 +69,7 @@ describe('creating', () => {
     const coffee = await create('Coffee')
     const racing = interleaved(db, () => db.update(menuCategories).set({ status: 'archived' }).where(eq(menuCategories.id, coffee.id)))
     await expectApiError(() => createCategory(racing, actor, { name: 'Filter', description: '', parentId: coffee.id, availabilityRuleIds: [] }), 422, 'PARENT_NOT_AVAILABLE')
-    expect(await listCategories(db, { status: 'all' })).toHaveLength(1)
+    expect(await listCategories(db, TEST_TENANT, { status: 'all' })).toHaveLength(1)
   })
 
   it('writes an audit row with who and which request', async () => {
@@ -106,7 +107,7 @@ describe('updating', () => {
     await create('Green', tea.id)
     const moved = await updateCategory(db, actor, iced.id, { version: iced.version, parentId: tea.id })
     expect(moved).toMatchObject({ parentId: tea.id, sortOrder: 2 })
-    expect(names(await listCategories(db, { status: 'active' }))).toEqual(['Coffee', 'Tea', '  Green', '  Iced'])
+    expect(names(await listCategories(db, TEST_TENANT, { status: 'active' }))).toEqual(['Coffee', 'Tea', '  Green', '  Iced'])
   })
 
   it('moves a sub-category up to the top level, and a childless top-level category down', async () => {
@@ -131,7 +132,7 @@ describe('updating', () => {
     const tea = await create('Tea')
     const racing = interleaved(db, () => create('Green', tea.id))
     await expectApiError(() => updateCategory(racing, actor, tea.id, { version: tea.version, parentId: coffee.id }), 422, 'CATEGORY_DEPTH')
-    expect((await listCategories(db, { status: 'active' })).find(c => c.id === tea.id)?.parentId).toBeNull()
+    expect((await listCategories(db, TEST_TENANT, { status: 'active' })).find(c => c.id === tea.id)?.parentId).toBeNull()
   })
 
   it('refuses a name taken at the new level', async () => {
@@ -150,8 +151,8 @@ describe('archiving and restoring', () => {
     await create('Hot', coffee.id)
     const archived = await archiveCategory(db, actor, coffee.id, { version: coffee.version })
     expect(archived).toMatchObject({ status: 'archived', childCount: 0 })
-    expect(await listCategories(db, { status: 'active' })).toEqual([])
-    expect(names(await listCategories(db, { status: 'archived' }))).toEqual(['Coffee', '  Iced', '  Hot'])
+    expect(await listCategories(db, TEST_TENANT, { status: 'active' })).toEqual([])
+    expect(names(await listCategories(db, TEST_TENANT, { status: 'archived' }))).toEqual(['Coffee', '  Iced', '  Hot'])
   })
 
   it('refuses archiving twice, and a stale version', async () => {
@@ -170,8 +171,8 @@ describe('archiving and restoring', () => {
     const restored = await restoreCategory(db, actor, coffee.id, { version: archived.version })
     // After Tea (2): positions keep their gaps; only the relative order matters.
     expect(restored).toMatchObject({ status: 'active', sortOrder: 3 })
-    expect(names(await listCategories(db, { status: 'active' }))).toEqual(['Tea', 'Coffee'])
-    const archivedIced = (await listCategories(db, { status: 'archived' })).find(c => c.id === iced.id)!
+    expect(names(await listCategories(db, TEST_TENANT, { status: 'active' }))).toEqual(['Tea', 'Coffee'])
+    const archivedIced = (await listCategories(db, TEST_TENANT, { status: 'archived' })).find(c => c.id === iced.id)!
     await expect(restoreCategory(db, actor, iced.id, { version: archivedIced.version })).resolves.toMatchObject({ status: 'active' })
   })
 
@@ -179,10 +180,10 @@ describe('archiving and restoring', () => {
     const coffee = await create('Coffee')
     const iced = await create('Iced', coffee.id)
     await archiveCategory(db, actor, coffee.id, { version: coffee.version })
-    const archivedIced = (await listCategories(db, { status: 'archived' })).find(c => c.id === iced.id)!
+    const archivedIced = (await listCategories(db, TEST_TENANT, { status: 'archived' })).find(c => c.id === iced.id)!
     await expectApiError(() => restoreCategory(db, actor, iced.id, { version: archivedIced.version }), 409, 'PARENT_ARCHIVED')
 
-    const archivedCoffee = (await listCategories(db, { status: 'archived' })).find(c => c.id === coffee.id)!
+    const archivedCoffee = (await listCategories(db, TEST_TENANT, { status: 'archived' })).find(c => c.id === coffee.id)!
     await create('Coffee')
     await expectApiError(() => restoreCategory(db, actor, coffee.id, { version: archivedCoffee.version }), 409, 'CATEGORY_NAME_TAKEN')
   })
@@ -194,7 +195,7 @@ describe('archiving and restoring', () => {
     const archived = await archiveCategory(db, actor, coffee.id, { version: coffee.version })
     const restored = await restoreCategory(db, actor, coffee.id, { version: archived.version, withSubcategories: true })
     expect(restored).toMatchObject({ status: 'active', childCount: 2 })
-    expect(names(await listCategories(db, { status: 'active' }))).toEqual(['Coffee', '  Iced', '  Hot'])
+    expect(names(await listCategories(db, TEST_TENANT, { status: 'active' }))).toEqual(['Coffee', '  Iced', '  Hot'])
     const [event] = await db.select().from(auditEvents).where(eq(auditEvents.action, 'menu.category.restore'))
     expect(event?.metadata).toEqual({ subCategories: 2 })
   })
@@ -204,7 +205,7 @@ describe('archiving and restoring', () => {
     await create('Iced', coffee.id)
     await archiveCategory(db, actor, coffee.id, { version: coffee.version })
     await expectApiError(() => restoreCategory(db, actor, coffee.id, { version: coffee.version, withSubcategories: true }), 409, 'VERSION_CONFLICT')
-    expect(await listCategories(db, { status: 'active' })).toEqual([])
+    expect(await listCategories(db, TEST_TENANT, { status: 'active' })).toEqual([])
   })
 
   it('refuses restoring what isn\'t archived', async () => {
@@ -221,7 +222,7 @@ describe('item counts', () => {
     await item('Latte')
     const old = await item('Mocha')
     await archiveItem(db, actor, old.id, { version: old.version })
-    const counts = Object.fromEntries((await listCategories(db, { status: 'active' })).map(c => [c.name, c.itemCount]))
+    const counts = Object.fromEntries((await listCategories(db, TEST_TENANT, { status: 'active' })).map(c => [c.name, c.itemCount]))
     expect(counts).toEqual({ Drinks: 1, Food: 0 })
     // The single-category answers (a write's result) count the same way.
     const renamed = await updateCategory(db, actor, drinks.id, { version: drinks.version, name: 'Beverages' })
@@ -240,7 +241,7 @@ describe('reordering', () => {
     const [coffee, tea, food] = await threeTopLevel()
     const result = await reorderCategories(db, actor, { parentId: null, items: [food!, coffee!, tea!].map(c => ({ id: c.id, version: c.version })) })
     expect(result.map(c => [c.name, c.sortOrder])).toEqual([['Food', 1], ['Coffee', 2], ['Tea', 3]])
-    expect(names(await listCategories(db, { status: 'active' }))).toEqual(['Food', 'Coffee', 'Tea'])
+    expect(names(await listCategories(db, TEST_TENANT, { status: 'active' }))).toEqual(['Food', 'Coffee', 'Tea'])
   })
 
   it('needs every sibling with the version read', async () => {
@@ -253,7 +254,7 @@ describe('reordering', () => {
     const list = await threeTopLevel()
     const racing = interleaved(db, () => create('Drinks'))
     await expectApiError(() => reorderCategories(racing, actor, { parentId: null, items: [...list].reverse().map(c => ({ id: c.id, version: c.version })) }), 409, 'VERSION_CONFLICT')
-    expect(names(await listCategories(db, { status: 'active' }))).toEqual(['Coffee', 'Tea', 'Food', 'Drinks'])
+    expect(names(await listCategories(db, TEST_TENANT, { status: 'active' }))).toEqual(['Coffee', 'Tea', 'Food', 'Drinks'])
   })
 
   it('reorders the sub-categories of one parent', async () => {
@@ -261,6 +262,6 @@ describe('reordering', () => {
     const hot = await create('Hot', coffee.id)
     const iced = await create('Iced', coffee.id)
     await reorderCategories(db, actor, { parentId: coffee.id, items: [iced, hot].map(c => ({ id: c.id, version: c.version })) })
-    expect(names(await listCategories(db, { status: 'active' }))).toEqual(['Coffee', '  Iced', '  Hot'])
+    expect(names(await listCategories(db, TEST_TENANT, { status: 'active' }))).toEqual(['Coffee', '  Iced', '  Hot'])
   })
 })

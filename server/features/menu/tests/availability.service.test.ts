@@ -8,7 +8,7 @@ import { archiveAvailabilityRule, createAvailabilityRule, getAvailabilityRule, l
 import { archiveCategory, createCategory, listCategories, updateCategory } from '#server/features/menu/categories.service'
 import { archiveItem, createItem, getItem, restoreItem, updateItem } from '#server/features/menu/items.service'
 import { menuAvailabilityRules } from '#server/features/menu/menu.schema'
-import { createTestDb, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -20,6 +20,7 @@ let hot: string
 
 beforeEach(async () => {
   db = await createTestDb()
+  await ensureTenant(db)
   drinks = (await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })).id
   hot = (await createCategory(db, actor, { name: 'Hot drinks', description: '', parentId: drinks, availabilityRuleIds: [] })).id
 })
@@ -67,9 +68,9 @@ describe('availability rules', () => {
     await lateNight()
     await createAvailabilityRule(db, actor, { name: 'afternoon', windows: [w(1, 840, 1020)] })
     await archiveAvailabilityRule(db, actor, b.id, { version: 1 })
-    expect((await listAvailabilityRules(db, { status: 'active' })).map(r => r.name)).toEqual(['afternoon', 'Late night'])
-    expect((await listAvailabilityRules(db, { status: 'archived' })).map(r => r.name)).toEqual(['Breakfast'])
-    expect(await listAvailabilityRules(db, { status: 'all' })).toHaveLength(3)
+    expect((await listAvailabilityRules(db, TEST_TENANT, { status: 'active' })).map(r => r.name)).toEqual(['afternoon', 'Late night'])
+    expect((await listAvailabilityRules(db, TEST_TENANT, { status: 'archived' })).map(r => r.name)).toEqual(['Breakfast'])
+    expect(await listAvailabilityRules(db, TEST_TENANT, { status: 'all' })).toHaveLength(3)
   })
 
   it('keeps active rule names unique, ignoring case, even when two creates race', async () => {
@@ -80,7 +81,7 @@ describe('availability rules', () => {
       createAvailabilityRule(db, actor, { name: 'lunch', windows: [w(2, 660, 840)] }),
     ])
     expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1)
-    expect(await listAvailabilityRules(db, { status: 'all' })).toHaveLength(2)
+    expect(await listAvailabilityRules(db, TEST_TENANT, { status: 'all' })).toHaveLength(2)
   })
 
   it('renames and replaces the windows, moving the version on; absent fields keep', async () => {
@@ -99,7 +100,7 @@ describe('availability rules', () => {
     await expectApiError(() => updateAvailabilityRule(db, actor, rule.id, { version: 1, windows: [w(1, 0, 60)] }), 409, 'VERSION_CONFLICT')
     const racing = interleaved(db, () => db.update(menuAvailabilityRules).set({ version: 3 }).where(eq(menuAvailabilityRules.id, rule.id)))
     await expectApiError(() => updateAvailabilityRule(racing, actor, rule.id, { version: 2, windows: [w(1, 0, 60)] }), 409, 'VERSION_CONFLICT')
-    expect((await getAvailabilityRule(db, rule.id)).windows).toEqual(rule.windows)
+    expect((await getAvailabilityRule(db, TEST_TENANT, rule.id)).windows).toEqual(rule.windows)
   })
 
   it('archives and restores; an archived rule can\'t be edited; a restored name must be free', async () => {
@@ -117,7 +118,7 @@ describe('availability rules', () => {
   })
 
   it('is not found when it doesn\'t exist', async () => {
-    await expectApiError(() => getAvailabilityRule(db, '0192f7a0-0000-7000-8000-000000000000'), 404, 'NOT_FOUND')
+    await expectApiError(() => getAvailabilityRule(db, TEST_TENANT, '0192f7a0-0000-7000-8000-000000000000'), 404, 'NOT_FOUND')
   })
 })
 
@@ -127,11 +128,11 @@ describe('rules in use', () => {
     const item = await latte([rule.id])
     await latte([rule.id], db, { name: 'Mocha' })
     await updateCategory(db, actor, drinks, { version: 1, availabilityRuleIds: [rule.id] })
-    expect(await getAvailabilityRule(db, rule.id)).toMatchObject({ itemCount: 2, categoryCount: 1 })
+    expect(await getAvailabilityRule(db, TEST_TENANT, rule.id)).toMatchObject({ itemCount: 2, categoryCount: 1 })
 
     await archiveItem(db, actor, item.id, { version: item.version })
     await archiveCategory(db, actor, drinks, { version: 2 })
-    expect(await getAvailabilityRule(db, rule.id)).toMatchObject({ itemCount: 1, categoryCount: 0 })
+    expect(await getAvailabilityRule(db, TEST_TENANT, rule.id)).toMatchObject({ itemCount: 1, categoryCount: 0 })
   })
 
   it('can\'t be archived while an item or category uses it', async () => {
@@ -150,7 +151,7 @@ describe('rules in use', () => {
     const rule = await breakfast()
     const racing = interleaved(db, () => latte([rule.id]))
     await expectApiError(() => archiveAvailabilityRule(racing, actor, rule.id, { version: 1 }), 409, 'AVAILABILITY_RULE_IN_USE')
-    expect((await getAvailabilityRule(db, rule.id)).status).toBe('active')
+    expect((await getAvailabilityRule(db, TEST_TENANT, rule.id)).status).toBe('active')
   })
 
   it('can\'t be archived when a category starts using it between the check and the write', async () => {
@@ -195,7 +196,7 @@ describe('rules on items', () => {
     const item = await latte([])
     const racing = interleaved(db, () => db.update(menuAvailabilityRules).set({ status: 'archived' }).where(eq(menuAvailabilityRules.id, n.id)))
     await expectApiError(() => updateItem(racing, actor, item.id, { version: item.version, availabilityRuleIds: [n.id] }), 422, 'AVAILABILITY_RULE_NOT_AVAILABLE', ['availabilityRuleIds.0'])
-    expect((await getItem(db, item.id)).availabilityRules).toEqual([])
+    expect((await getItem(db, TEST_TENANT, item.id)).availabilityRules).toEqual([])
   })
 
   it('keeps an archived rule the item already uses, so the form can send it back', async () => {
@@ -216,7 +217,7 @@ describe('rules on categories', () => {
     const b = await breakfast()
     const food = await createCategory(db, actor, { name: 'Food', description: '', parentId: null, availabilityRuleIds: [b.id] })
     expect(ruleNames(food)).toEqual(['Breakfast'])
-    const tree = await listCategories(db, { status: 'active' })
+    const tree = await listCategories(db, TEST_TENANT, { status: 'active' })
     expect(tree.map(c => [c.name, ruleNames(c)])).toEqual([['Drinks', []], ['Hot drinks', []], ['Food', ['Breakfast']]])
     const renamed = await updateCategory(db, actor, food.id, { version: food.version, name: 'Kitchen' })
     expect(ruleNames(renamed)).toEqual(['Breakfast'])
@@ -232,7 +233,7 @@ describe('rules on categories', () => {
 
     const racingCreate = interleaved(db, () => archiveDirectly(b))
     await expectApiError(() => createCategory(racingCreate, actor, { name: 'Food', description: '', parentId: null, availabilityRuleIds: [b.id] }), 422, 'AVAILABILITY_RULE_NOT_AVAILABLE', ['availabilityRuleIds.0'])
-    expect((await listCategories(db, { status: 'all' })).map(c => c.name)).toEqual(['Drinks', 'Hot drinks'])
+    expect((await listCategories(db, TEST_TENANT, { status: 'all' })).map(c => c.name)).toEqual(['Drinks', 'Hot drinks'])
 
     const c = await createAvailabilityRule(db, actor, { name: 'Lunch', windows: [w(1, 660, 840)] })
     const racingUpdate = interleaved(db, () => db.update(menuAvailabilityRules).set({ status: 'archived' }).where(eq(menuAvailabilityRules.id, c.id)))

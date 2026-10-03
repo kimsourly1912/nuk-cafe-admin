@@ -142,3 +142,89 @@ describe('0024_tenants', () => {
     expect((await taken.client.execute('select slug from organization')).rows.map(r => r.slug)).toEqual(['nuk-cafe'])
   })
 })
+
+describe('0025_menu_tenants', () => {
+  const TENANT = '01a0fdb3-d860-7284-bc6b-2f8ab7a1d6cd'
+  const MENU_TABLES = ['menu_categories', 'menu_option_sets', 'menu_option_values', 'menu_modifier_groups', 'menu_modifiers', 'menu_items', 'menu_item_option_sets',
+    'menu_item_variations', 'menu_variation_option_values', 'menu_item_modifier_groups', 'menu_item_modifier_prices', 'menu_availability_rules',
+    'menu_availability_windows', 'menu_item_availability', 'menu_category_availability', 'branch_item_states', 'media_assets']
+  const before = async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0025_menu_tenants.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    return { client, files, at }
+  }
+
+  it('gives every menu row and upload the tenant, keeps every link, and refuses links into another tenant', async () => {
+    const { client, files, at } = await before()
+    await client.batch([
+      `insert into organization (id, name, slug, created_at, status, version) values ('${TENANT}', 'NUK Cafe', 'nuk', 1, 'active', 1)`,
+      `insert into branches (id, tenant_id, name, timezone) values ('b1', '${TENANT}', 'Riverside', 'Asia/Phnom_Penh')`,
+      `insert into media_assets (id, object_key, mime_type, byte_size, sha256, state) values ('a1', 'menu/a1.webp', 'image/webp', 10, 'sha', 'attached')`,
+      `insert into menu_option_sets (id, name) values ('s1', 'Size')`,
+      `insert into menu_option_values (id, set_id, name) values ('ov1', 's1', 'Large')`,
+      `insert into menu_modifier_groups (id, name) values ('g1', 'Milk')`,
+      `insert into menu_modifiers (id, group_id, name, price_delta_minor) values ('m1', 'g1', 'Oat', 50)`,
+      `insert into menu_availability_rules (id, name) values ('r1', 'Breakfast')`,
+      `insert into menu_availability_windows (rule_id, weekday, start_minute, end_minute) values ('r1', 1, 420, 660)`,
+      // A sub-category before its parent in table order: the copy puts the parent first.
+      `insert into menu_categories (id, parent_id, name, sort_order) values ('c1', null, 'Drinks', 1)`,
+      `insert into menu_categories (id, parent_id, name, sort_order) values ('c2', 'c1', 'Coffee', 1)`,
+      `insert into menu_category_availability (category_id, rule_id) values ('c2', 'r1')`,
+      `insert into menu_items (id, category_id, name, image_asset_id, status) values ('i1', 'c2', 'Latte', 'a1', 'active')`,
+      `insert into menu_item_option_sets (item_id, set_id, sort_order) values ('i1', 's1', 1)`,
+      `insert into menu_item_variations (id, item_id, combination_key, price_minor, status) values ('v1', 'i1', 'ov1', 350, 'active')`,
+      `insert into menu_variation_option_values (variation_id, value_id) values ('v1', 'ov1')`,
+      `insert into menu_item_modifier_groups (item_id, group_id, sort_order) values ('i1', 'g1', 1)`,
+      `insert into menu_item_modifier_prices (item_id, modifier_id, price_delta_minor) values ('i1', 'm1', 75)`,
+      `insert into menu_item_availability (item_id, rule_id) values ('i1', 'r1')`,
+      `insert into branch_item_states (tenant_id, branch_id, variation_id, sold_out, updated_by) values ('${TENANT}', 'b1', 'v1', 1, 'u1')`,
+    ], 'write')
+
+    await applyMigration(client, files[at]!)
+    const all = async (sql: string) => (await client.execute(sql)).rows.map(row => ({ ...row }))
+
+    for (const table of MENU_TABLES) {
+      expect(await all(`select distinct tenant_id from ${table}`), table).toEqual([{ tenant_id: TENANT }])
+    }
+    expect(await all('select id, parent_id from menu_categories order by id')).toEqual([{ id: 'c1', parent_id: null }, { id: 'c2', parent_id: 'c1' }])
+    expect(await all('select id, image_asset_id, category_id from menu_items')).toEqual([{ id: 'i1', image_asset_id: 'a1', category_id: 'c2' }])
+    expect(await all('select object_key, state from media_assets')).toEqual([{ object_key: 'menu/a1.webp', state: 'attached' }])
+    expect(await all('select item_id, modifier_id, price_delta_minor from menu_item_modifier_prices')).toEqual([{ item_id: 'i1', modifier_id: 'm1', price_delta_minor: 75 }])
+    expect(await all(`select name from sqlite_master where instr(sql, '__new_') > 0`)).toEqual([])
+    expect(await all('pragma foreign_key_check')).toEqual([])
+
+    // Another tenant can't link to this menu, and its names don't clash with this one's.
+    await client.batch([
+      `insert into organization (id, name, slug, created_at) values ('t2', 'Other', 'other', 2)`,
+      `insert into menu_option_sets (id, tenant_id, name) values ('s2', 't2', 'Size')`,
+      `insert into menu_categories (id, tenant_id, name) values ('c9', 't2', 'Drinks')`,
+      `insert into branches (id, tenant_id, name, timezone) values ('b9', 't2', 'Other branch', 'Asia/Phnom_Penh')`,
+    ], 'write')
+    for (const sql of [
+      `insert into menu_categories (id, tenant_id, parent_id, name) values ('c8', 't2', 'c1', 'Tea')`,
+      `insert into menu_items (id, tenant_id, category_id, name) values ('i9', 't2', 'c2', 'Tea')`,
+      `insert into menu_option_values (id, tenant_id, set_id, name) values ('ov9', 't2', 's1', 'Small')`,
+      `insert into menu_item_option_sets (tenant_id, item_id, set_id, sort_order) values ('t2', 'i1', 's2', 2)`,
+      `insert into menu_item_option_sets (tenant_id, item_id, set_id, sort_order) values ('${TENANT}', 'i1', 's2', 2)`,
+      `insert into branch_item_states (tenant_id, branch_id, variation_id, sold_out, updated_by) values ('t2', 'b9', 'v1', 1, 'u1')`,
+    ]) await expect(client.execute(sql), sql).rejects.toThrow(/FOREIGN KEY/)
+    // The same name in one tenant still clashes.
+    await expect(client.execute(`insert into menu_option_sets (id, tenant_id, name) values ('s3', '${TENANT}', 'size')`)).rejects.toThrow(/UNIQUE/)
+
+    // An item's links and versions still go with it, and a version's sold-out rows with the version.
+    await client.execute(`delete from menu_items where id = 'i1'`)
+    for (const table of ['menu_item_option_sets', 'menu_item_variations', 'menu_variation_option_values', 'menu_item_modifier_groups', 'menu_item_modifier_prices', 'menu_item_availability', 'branch_item_states']) {
+      expect(await all(`select count(*) as n from ${table}`), table).toEqual([{ n: 0 }])
+    }
+    for (const file of files.slice(at + 1)) await applyMigration(client, file)
+  })
+
+  it('leaves an empty database without a tenant', async () => {
+    const { client, files, at } = await before()
+    await applyMigration(client, files[at]!)
+    expect((await client.execute('select count(*) as n from organization')).rows[0]!.n).toBe(0)
+  })
+})

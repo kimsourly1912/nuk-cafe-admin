@@ -26,8 +26,12 @@ export function sniffImageType(head: Uint8Array): ImageType | undefined {
 
 export const isImageType = (type: string): type is ImageType => (IMAGE_TYPES as readonly string[]).includes(type)
 
-/** The server picks the key; the client's file name is never used (security.md → Uploads). */
-export const objectKeyFor = (type: ImageType) => `menu/${newId()}.${EXTENSIONS[type]}`
+/**
+ * The server picks the key; the client's file name is never used (security.md → Uploads). Under
+ * the tenant's prefix (D136), so one tenant's objects can be listed, exported or removed together.
+ * Keys stored before T1.2 stay `menu/<id>.<ext>`.
+ */
+export const objectKeyFor = (tenantId: string, type: ImageType) => `t/${tenantId}/menu/${newId()}.${EXTENSIONS[type]}`
 
 export async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes)

@@ -1,4 +1,4 @@
-import { count, isNotNull, sql } from 'drizzle-orm'
+import { and, count, eq, isNotNull } from 'drizzle-orm'
 import type { Db, Statement } from '#server/utils/batch'
 import {
   branchItemStates,
@@ -19,7 +19,7 @@ import {
   menuVariationOptionValues,
 } from './menu.schema'
 
-/** Every menu record, archived ones included, by kind. */
+/** The tenant's menu records, archived ones included, by kind. */
 export interface MenuDataCounts {
   categories: number
   optionSets: number
@@ -28,13 +28,13 @@ export interface MenuDataCounts {
   items: { draft: number, active: number, archived: number }
 }
 
-export async function countMenuData(db: Db): Promise<MenuDataCounts> {
+export async function countMenuData(db: Db, tenantId: string): Promise<MenuDataCounts> {
   const [categories, optionSets, modifierGroups, rules, items] = await Promise.all([
-    db.select({ n: count() }).from(menuCategories),
-    db.select({ n: count() }).from(menuOptionSets),
-    db.select({ n: count() }).from(menuModifierGroups),
-    db.select({ n: count() }).from(menuAvailabilityRules),
-    db.select({ status: menuItems.status, n: count() }).from(menuItems).groupBy(menuItems.status),
+    db.select({ n: count() }).from(menuCategories).where(eq(menuCategories.tenantId, tenantId)),
+    db.select({ n: count() }).from(menuOptionSets).where(eq(menuOptionSets.tenantId, tenantId)),
+    db.select({ n: count() }).from(menuModifierGroups).where(eq(menuModifierGroups.tenantId, tenantId)),
+    db.select({ n: count() }).from(menuAvailabilityRules).where(eq(menuAvailabilityRules.tenantId, tenantId)),
+    db.select({ status: menuItems.status, n: count() }).from(menuItems).where(eq(menuItems.tenantId, tenantId)).groupBy(menuItems.status),
   ])
   const byStatus = new Map(items.map(row => [row.status, row.n]))
   return {
@@ -47,28 +47,28 @@ export async function countMenuData(db: Db): Promise<MenuDataCounts> {
 }
 
 /**
- * Deletes every menu row, children first (D1 checks each foreign key as rows go, `restrict` ones
- * included): links and states, versions, items, sub-categories, categories, then the libraries.
- * No parameters, so D1's limit doesn't apply.
+ * Deletes the tenant's menu rows, children first (D1 checks each foreign key as rows go, `restrict`
+ * ones included): links and states, versions, items, sub-categories, categories, then the
+ * libraries. One parameter each (the tenant), so D1's limit doesn't apply.
  */
-export function deleteAllMenuStatements(db: Db): Statement[] {
+export function deleteAllMenuStatements(db: Db, tenantId: string): Statement[] {
   return [
-    db.delete(branchItemStates),
-    db.delete(menuItemAvailability),
-    db.delete(menuCategoryAvailability),
-    db.delete(menuItemModifierPrices),
-    db.delete(menuItemModifierGroups),
-    db.delete(menuVariationOptionValues),
-    db.delete(menuItemVariations),
-    db.delete(menuItemOptionSets),
-    db.delete(menuItems),
-    db.delete(menuCategories).where(isNotNull(menuCategories.parentId)),
-    db.delete(menuCategories).where(sql`1 = 1`),
-    db.delete(menuAvailabilityWindows),
-    db.delete(menuAvailabilityRules),
-    db.delete(menuModifiers),
-    db.delete(menuModifierGroups),
-    db.delete(menuOptionValues),
-    db.delete(menuOptionSets),
+    db.delete(branchItemStates).where(eq(branchItemStates.tenantId, tenantId)),
+    db.delete(menuItemAvailability).where(eq(menuItemAvailability.tenantId, tenantId)),
+    db.delete(menuCategoryAvailability).where(eq(menuCategoryAvailability.tenantId, tenantId)),
+    db.delete(menuItemModifierPrices).where(eq(menuItemModifierPrices.tenantId, tenantId)),
+    db.delete(menuItemModifierGroups).where(eq(menuItemModifierGroups.tenantId, tenantId)),
+    db.delete(menuVariationOptionValues).where(eq(menuVariationOptionValues.tenantId, tenantId)),
+    db.delete(menuItemVariations).where(eq(menuItemVariations.tenantId, tenantId)),
+    db.delete(menuItemOptionSets).where(eq(menuItemOptionSets.tenantId, tenantId)),
+    db.delete(menuItems).where(eq(menuItems.tenantId, tenantId)),
+    db.delete(menuCategories).where(and(eq(menuCategories.tenantId, tenantId), isNotNull(menuCategories.parentId))),
+    db.delete(menuCategories).where(eq(menuCategories.tenantId, tenantId)),
+    db.delete(menuAvailabilityWindows).where(eq(menuAvailabilityWindows.tenantId, tenantId)),
+    db.delete(menuAvailabilityRules).where(eq(menuAvailabilityRules.tenantId, tenantId)),
+    db.delete(menuModifiers).where(eq(menuModifiers.tenantId, tenantId)),
+    db.delete(menuModifierGroups).where(eq(menuModifierGroups.tenantId, tenantId)),
+    db.delete(menuOptionValues).where(eq(menuOptionValues.tenantId, tenantId)),
+    db.delete(menuOptionSets).where(eq(menuOptionSets.tenantId, tenantId)),
   ]
 }

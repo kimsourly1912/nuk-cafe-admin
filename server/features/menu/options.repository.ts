@@ -38,14 +38,14 @@ const valueColumns = {
   status: menuOptionValues.status,
 }
 
-export async function findSet(db: Db, id: string): Promise<OptionSetRow | undefined> {
-  const rows: OptionSetRow[] = await db.select(setColumns).from(menuOptionSets).where(eq(menuOptionSets.id, id)).limit(1)
+export async function findSet(db: Db, tenantId: string, id: string): Promise<OptionSetRow | undefined> {
+  const rows: OptionSetRow[] = await db.select(setColumns).from(menuOptionSets).where(and(eq(menuOptionSets.tenantId, tenantId), eq(menuOptionSets.id, id))).limit(1)
   return rows[0]
 }
 
-export async function listSets(db: Db, status: OptionStatus | 'all'): Promise<OptionSetRow[]> {
-  const query = db.select(setColumns).from(menuOptionSets)
-  return (status === 'all' ? query : query.where(eq(menuOptionSets.status, status))).orderBy(asc(sql`lower(${menuOptionSets.name})`))
+export async function listSets(db: Db, tenantId: string, status: OptionStatus | 'all'): Promise<OptionSetRow[]> {
+  return db.select(setColumns).from(menuOptionSets)
+    .where(and(eq(menuOptionSets.tenantId, tenantId), status === 'all' ? undefined : eq(menuOptionSets.status, status))).orderBy(asc(sql`lower(${menuOptionSets.name})`))
 }
 
 /** The values of these sets, in order. */
@@ -75,17 +75,17 @@ export async function nextValueOrder(db: Db, setId: string): Promise<number> {
  * `anyStatus`), optionally changing it. Every change to a set or its values starts with this plus
  * `requireOneChange`: the set's version is the lock for all of it.
  */
-export function touchSetStatement(db: Db, id: string, version: number, now: Date, changes: Partial<Pick<OptionSetRow, 'name' | 'status'>> = {}, anyStatus = false): Statement {
+export function touchSetStatement(db: Db, tenantId: string, id: string, version: number, now: Date, changes: Partial<Pick<OptionSetRow, 'name' | 'status'>> = {}, anyStatus = false): Statement {
   return db.update(menuOptionSets)
     .set({ ...changes, version: sql`${menuOptionSets.version} + 1`, updatedAt: now })
-    .where(and(eq(menuOptionSets.id, id), eq(menuOptionSets.version, version), anyStatus ? undefined : eq(menuOptionSets.status, 'active')))
+    .where(and(eq(menuOptionSets.tenantId, tenantId), eq(menuOptionSets.id, id), eq(menuOptionSets.version, version), anyStatus ? undefined : eq(menuOptionSets.status, 'active')))
 }
 
-export function insertSetStatement(db: Db, row: { id: string, name: string, now: Date }): Statement {
-  return db.insert(menuOptionSets).values({ id: row.id, name: row.name, createdAt: row.now, updatedAt: row.now })
+export function insertSetStatement(db: Db, row: { id: string, tenantId: string, name: string, now: Date }): Statement {
+  return db.insert(menuOptionSets).values({ id: row.id, tenantId: row.tenantId, name: row.name, createdAt: row.now, updatedAt: row.now })
 }
 
-export function insertValuesStatements(db: Db, values: { id: string, setId: string, name: string, sortOrder: number }[], now: Date): Statement[] {
+export function insertValuesStatements(db: Db, values: { id: string, tenantId: string, setId: string, name: string, sortOrder: number }[], now: Date): Statement[] {
   return insertPieces(menuOptionValues, values).map(piece => db.insert(menuOptionValues).values(piece.map(value => ({ ...value, createdAt: now, updatedAt: now }))))
 }
 

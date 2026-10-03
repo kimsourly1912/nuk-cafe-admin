@@ -39,7 +39,7 @@ export async function listSoldOut(db: Db, actor: BranchActor): Promise<SoldOutLi
  * returns.
  */
 export async function setSoldOut(db: Db, actor: BranchActor, input: SetSoldOutInput): Promise<SoldOutList> {
-  const found = new Map((await repo.findVariations(db, input.variationIds)).map(v => [v.id, v]))
+  const found = new Map((await repo.findVariations(db, actor.tenantId, input.variationIds)).map(v => [v.id, v]))
   input.variationIds.forEach((id, i) => {
     const variation = found.get(id)
     if (!variation || variation.variationStatus === 'retired' || variation.itemStatus === 'archived') throw variationNotAvailable(i)

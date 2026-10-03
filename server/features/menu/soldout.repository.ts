@@ -20,12 +20,12 @@ export interface SoldOutRow {
   updatedByName: string | null
 }
 
-/** These variations with their own and their item's status (unknown ids are left out). */
-export async function findVariations(db: Db, ids: string[]): Promise<SellableVersionRow[]> {
+/** These variations of the tenant with their own and their item's status (unknown and other tenants' ids are left out). */
+export async function findVariations(db: Db, tenantId: string, ids: string[]): Promise<SellableVersionRow[]> {
   return readInChunks(ids, piece => db.select({ id: menuItemVariations.id, itemStatus: menuItems.status, variationStatus: menuItemVariations.status })
     .from(menuItemVariations)
     .innerJoin(menuItems, eq(menuItems.id, menuItemVariations.itemId))
-    .where(inArray(menuItemVariations.id, piece)))
+    .where(and(eq(menuItemVariations.tenantId, tenantId), inArray(menuItemVariations.id, piece))))
 }
 
 /**

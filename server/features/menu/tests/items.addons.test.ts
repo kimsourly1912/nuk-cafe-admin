@@ -9,7 +9,7 @@ import { createCategory } from '#server/features/menu/categories.service'
 import { archiveItem, createItem, getItem, listItems, updateItem } from '#server/features/menu/items.service'
 import { menuModifierGroups, menuModifiers } from '#server/features/menu/menu.schema'
 import { archiveModifier, archiveModifierGroup, createModifierGroup, getModifierGroup, listModifierGroups, restoreModifier, updateModifier } from '#server/features/menu/modifiers.service'
-import { createTestDb, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -23,6 +23,7 @@ let extras: ModifierGroup
 
 beforeEach(async () => {
   db = await createTestDb()
+  await ensureTenant(db)
   const drinks = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
   hot = (await createCategory(db, actor, { name: 'Hot drinks', description: '', parentId: drinks.id, availabilityRuleIds: [] })).id
   // Milk: choose exactly one, Whole pre-selected.
@@ -71,7 +72,7 @@ describe('offering add-on groups', () => {
       ['Oat', 50, false, false],
       ['Soy', 50, false, false],
     ])
-    expect((await getItem(db, item.id)).modifierGroups).toEqual(item.modifierGroups)
+    expect((await getItem(db, TEST_TENANT, item.id)).modifierGroups).toEqual(item.modifierGroups)
   })
 
   it('keeps the item\'s own rules and prices, and shows the library\'s default next to them', async () => {
@@ -86,9 +87,9 @@ describe('offering add-on groups', () => {
   it('follows library changes where the item has no price of its own', async () => {
     const item = await latte([{ groupId: extras.id, rules: null, prices: [{ modifierId: m(extras, 'Extra shot'), priceDeltaMinor: 100 }] }])
     await updateModifier(db, actor, extras.id, m(extras, 'Syrup'), { version: extras.version, priceDeltaMinor: 60 })
-    const group = await getModifierGroup(db, extras.id)
+    const group = await getModifierGroup(db, TEST_TENANT, extras.id)
     await updateModifier(db, actor, extras.id, m(extras, 'Extra shot'), { version: group.version, priceDeltaMinor: 90 })
-    const now = await getItem(db, item.id)
+    const now = await getItem(db, TEST_TENANT, item.id)
     expect(priceOf(now, 'Extras', 'Syrup')?.priceDeltaMinor).toBe(60)
     expect(priceOf(now, 'Extras', 'Extra shot')).toMatchObject({ priceDeltaMinor: 100, defaultPriceDeltaMinor: 90 })
   })
@@ -141,7 +142,7 @@ describe('changing an item\'s add-ons', () => {
   it('keeps a group archived in the library on the items that offer it, but won\'t add it anywhere new', async () => {
     const item = await latte([plain(milk.id)])
     await archiveModifierGroup(db, actor, milk.id, { version: milk.version })
-    const kept = await getItem(db, item.id)
+    const kept = await getItem(db, TEST_TENANT, item.id)
     expect(groupOf(kept, 'Milk').status).toBe('archived')
     // The form sends back what it read.
     await expect(updateItem(db, actor, item.id, { version: kept.version, modifierGroups: [plain(milk.id), plain(extras.id)] })).resolves.toMatchObject({ version: 2 })
@@ -153,13 +154,13 @@ describe('changing an item\'s add-ons', () => {
     const item = await latte([{ groupId: milk.id, rules: null, prices: [{ modifierId: m(milk, 'Oat'), priceDeltaMinor: 70 }] }])
     const archived = await archiveModifier(db, actor, milk.id, m(milk, 'Oat'), { version: milk.version })
     await archiveModifier(db, actor, milk.id, m(milk, 'Soy'), { version: archived.version })
-    const now = await getItem(db, item.id)
+    const now = await getItem(db, TEST_TENANT, item.id)
     // Soy (archived, no price of its own) is gone; Oat (archived, priced) stays last.
     expect(groupOf(now, 'Milk').modifiers.map(x => [x.name, x.status])).toEqual([['Whole', 'active'], ['Oat', 'archived']])
     await expect(updateItem(db, actor, item.id, { version: now.version, modifierGroups: [{ groupId: milk.id, rules: null, prices: [{ modifierId: m(milk, 'Oat'), priceDeltaMinor: 80 }] }] })).resolves.toMatchObject({ version: 2 })
-    const group = await getModifierGroup(db, milk.id)
+    const group = await getModifierGroup(db, TEST_TENANT, milk.id)
     await restoreModifier(db, actor, milk.id, m(milk, 'Oat'), { version: group.version })
-    expect(priceOf(await getItem(db, item.id), 'Milk', 'Oat')).toMatchObject({ status: 'active', priceDeltaMinor: 80 })
+    expect(priceOf(await getItem(db, TEST_TENANT, item.id), 'Milk', 'Oat')).toMatchObject({ status: 'active', priceDeltaMinor: 80 })
   })
 
   it('refuses a stale version', async () => {
@@ -176,7 +177,7 @@ describe('races with the library', () => {
     await db.update(menuModifierGroups).set({ status: 'active' }).where(eq(menuModifierGroups.id, extras.id))
     const item = await latte([plain(milk.id)])
     await expectApiError(() => updateItem(interleaved(db, archiving), actor, item.id, { version: 1, modifierGroups: [plain(milk.id), plain(extras.id)] }), 422, 'MODIFIER_GROUP_NOT_AVAILABLE')
-    expect((await getItem(db, item.id)).modifierGroups.map(g => g.name)).toEqual(['Milk'])
+    expect((await getItem(db, TEST_TENANT, item.id)).modifierGroups.map(g => g.name)).toEqual(['Milk'])
   })
 
   it('refuses a new price for an add-on archived between the check and the write', async () => {
@@ -194,21 +195,21 @@ describe('"used by N items" in the library', () => {
   it('counts drafts and active items that offer the group, not archived ones', async () => {
     const item = await latte([plain(milk.id)])
     await createItem(db, actor, { categoryId: hot, name: 'Mocha', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [plain(milk.id), plain(extras.id)], availabilityRuleIds: [] })
-    expect((await getModifierGroup(db, milk.id)).itemCount).toBe(2)
+    expect((await getModifierGroup(db, TEST_TENANT, milk.id)).itemCount).toBe(2)
     await archiveItem(db, actor, item.id, { version: item.version })
-    const listed = await listModifierGroups(db, { status: 'active' })
+    const listed = await listModifierGroups(db, TEST_TENANT, { status: 'active' })
     expect(listed.map(g => [g.name, g.itemCount])).toEqual([['Extras', 1], ['Milk', 1]])
   })
 
   it('lists the items that offer a group, archived ones only when asked', async () => {
     const item = await latte([plain(milk.id)])
     await createItem(db, actor, { categoryId: hot, name: 'Mocha', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [plain(extras.id)], availabilityRuleIds: [] })
-    const names = async (query: Partial<Parameters<typeof listItems>[1]>) => (await listItems(db, { page: 1, pageSize: 20, ...query })).items.map(i => i.name)
+    const names = async (query: Partial<Parameters<typeof listItems>[2]>) => (await listItems(db, TEST_TENANT, { page: 1, pageSize: 20, ...query })).items.map(i => i.name)
     expect(await names({ modifierGroupId: milk.id })).toEqual(['Latte'])
     expect(await names({ modifierGroupId: extras.id })).toEqual(['Mocha'])
     await archiveItem(db, actor, item.id, { version: item.version })
     expect(await names({ modifierGroupId: milk.id })).toEqual([])
     expect(await names({ modifierGroupId: milk.id, status: 'all' })).toEqual(['Latte'])
-    expect((await listItems(db, { page: 1, pageSize: 1, modifierGroupId: extras.id })).total).toBe(1)
+    expect((await listItems(db, TEST_TENANT, { page: 1, pageSize: 1, modifierGroupId: extras.id })).total).toBe(1)
   })
 })

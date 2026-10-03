@@ -69,8 +69,8 @@ export const sellable = sql`${menuItemVariations.status} = 'active' and ${menuIt
   select 1 from ${menuVariationOptionValues} join ${menuOptionValues} on ${menuOptionValues.id} = ${menuVariationOptionValues.valueId}
   where ${menuVariationOptionValues.variationId} = ${menuItemVariations.id} and ${menuOptionValues.status} = 'archived')`
 
-export async function findItem(db: Db, id: string): Promise<ItemRow | undefined> {
-  const rows: ItemRow[] = await db.select(itemColumns).from(menuItems).where(eq(menuItems.id, id)).limit(1)
+export async function findItem(db: Db, tenantId: string, id: string): Promise<ItemRow | undefined> {
+  const rows: ItemRow[] = await db.select(itemColumns).from(menuItems).where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, id))).limit(1)
   return rows[0]
 }
 
@@ -81,8 +81,8 @@ export interface ItemSummaryRow extends ItemRow {
 }
 
 /** Items by category order, then position, with their category's name and sellable price range. */
-export async function listItems(db: Db, query: ItemListQuery): Promise<{ rows: ItemSummaryRow[], total: number }> {
-  const conditions: SQL[] = []
+export async function listItems(db: Db, tenantId: string, query: ItemListQuery): Promise<{ rows: ItemSummaryRow[], total: number }> {
+  const conditions: SQL[] = [eq(menuItems.tenantId, tenantId)]
   if (query.status && query.status !== 'all') conditions.push(eq(menuItems.status, query.status))
   else if (!query.status) conditions.push(ne(menuItems.status, 'archived'))
   if (query.categoryId) conditions.push(eq(menuItems.categoryId, query.categoryId))
@@ -90,7 +90,7 @@ export async function listItems(db: Db, query: ItemListQuery): Promise<{ rows: I
     conditions.push(sql`exists (select 1 from ${menuItemModifierGroups} where ${menuItemModifierGroups.itemId} = ${menuItems.id} and ${menuItemModifierGroups.groupId} = ${query.modifierGroupId})`)
   }
   if (query.search) conditions.push(sql`${menuItems.name} like ${`%${query.search.replace(/[\\%_]/g, c => `\\${c}`)}%`} escape '\\'`)
-  const where = conditions.length ? and(...conditions) : undefined
+  const where = and(...conditions)
 
   const prices = db.select({
     itemId: menuItemVariations.itemId,
@@ -119,14 +119,14 @@ export async function itemSetIds(db: Db, itemId: string): Promise<string[]> {
   return rows.map(r => r.setId)
 }
 
-/** These option sets with all their values, in the order of `ids`. */
-export async function setsWithValues(db: Db, ids: string[]): Promise<SetWithValues[]> {
+/** These option sets of the tenant with all their values, in the order of `ids` (others left out). */
+export async function setsWithValues(db: Db, tenantId: string, ids: string[]): Promise<SetWithValues[]> {
   if (!ids.length) return []
   const sets: { id: string, name: string, status: 'active' | 'archived' }[] = await db.select({ id: menuOptionSets.id, name: menuOptionSets.name, status: menuOptionSets.status })
-    .from(menuOptionSets).where(inArray(menuOptionSets.id, ids))
+    .from(menuOptionSets).where(and(eq(menuOptionSets.tenantId, tenantId), inArray(menuOptionSets.id, ids)))
   const values: { id: string, setId: string, name: string, status: 'active' | 'archived' }[] = await db
     .select({ id: menuOptionValues.id, setId: menuOptionValues.setId, name: menuOptionValues.name, status: menuOptionValues.status })
-    .from(menuOptionValues).where(inArray(menuOptionValues.setId, ids)).orderBy(asc(menuOptionValues.sortOrder), asc(menuOptionValues.name))
+    .from(menuOptionValues).where(and(eq(menuOptionValues.tenantId, tenantId), inArray(menuOptionValues.setId, ids))).orderBy(asc(menuOptionValues.sortOrder), asc(menuOptionValues.name))
   return ids.flatMap((id) => {
     const set = sets.find(s => s.id === id)
     return set ? [{ ...set, values: values.filter(v => v.setId === id).map(({ setId: _, ...value }) => value) }] : []
@@ -138,9 +138,9 @@ export async function variationsOf(db: Db, itemId: string): Promise<VariationRow
     .from(menuItemVariations).where(eq(menuItemVariations.itemId, itemId)).orderBy(asc(menuItemVariations.sortOrder))
 }
 
-export async function findCategory(db: Db, id: string) {
+export async function findCategory(db: Db, tenantId: string, id: string) {
   const rows: { id: string, status: string, parentId: string | null }[] = await db.select({ id: menuCategories.id, status: menuCategories.status, parentId: menuCategories.parentId })
-    .from(menuCategories).where(eq(menuCategories.id, id)).limit(1)
+    .from(menuCategories).where(and(eq(menuCategories.tenantId, tenantId), eq(menuCategories.id, id))).limit(1)
   return rows[0]
 }
 
@@ -150,9 +150,9 @@ export async function countChildCategories(db: Db, categoryId: string): Promise<
 }
 
 /** Drafts and active items of a category, in order (what a reorder must list). */
-export async function listedItems(db: Db, categoryId: string): Promise<{ id: string, version: number }[]> {
+export async function listedItems(db: Db, tenantId: string, categoryId: string): Promise<{ id: string, version: number }[]> {
   return db.select({ id: menuItems.id, version: menuItems.version }).from(menuItems)
-    .where(and(eq(menuItems.categoryId, categoryId), ne(menuItems.status, 'archived')))
+    .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.categoryId, categoryId), ne(menuItems.status, 'archived')))
     .orderBy(asc(menuItems.sortOrder), asc(menuItems.name))
 }
 
@@ -189,15 +189,15 @@ export async function itemModifierPrices(db: Db, itemId: string): Promise<Map<st
   return new Map(rows.map(r => [r.modifierId, r.priceDeltaMinor]))
 }
 
-/** These add-on groups with all their add-ons, in the order of `ids`. */
-export async function groupsWithModifiers(db: Db, ids: string[]): Promise<GroupWithModifiers[]> {
+/** These add-on groups of the tenant with all their add-ons, in the order of `ids` (others left out). */
+export async function groupsWithModifiers(db: Db, tenantId: string, ids: string[]): Promise<GroupWithModifiers[]> {
   if (!ids.length) return []
   // At most 10 groups per item (the contract), so one IN list each.
   const groups: Omit<GroupWithModifiers, 'modifiers'>[] = await db.select({ id: menuModifierGroups.id, name: menuModifierGroups.name, minSelect: menuModifierGroups.minSelect, maxSelect: menuModifierGroups.maxSelect, status: menuModifierGroups.status })
-    .from(menuModifierGroups).where(inArray(menuModifierGroups.id, ids))
+    .from(menuModifierGroups).where(and(eq(menuModifierGroups.tenantId, tenantId), inArray(menuModifierGroups.id, ids)))
   const modifiers: (GroupWithModifiers['modifiers'][number] & { groupId: string })[] = await db
     .select({ id: menuModifiers.id, groupId: menuModifiers.groupId, name: menuModifiers.name, priceDeltaMinor: menuModifiers.priceDeltaMinor, isDefault: menuModifiers.isDefault, status: menuModifiers.status })
-    .from(menuModifiers).where(inArray(menuModifiers.groupId, ids)).orderBy(asc(menuModifiers.sortOrder), asc(menuModifiers.name))
+    .from(menuModifiers).where(and(eq(menuModifiers.tenantId, tenantId), inArray(menuModifiers.groupId, ids))).orderBy(asc(menuModifiers.sortOrder), asc(menuModifiers.name))
   return ids.flatMap((id) => {
     const group = groups.find(g => g.id === id)
     return group ? [{ ...group, modifiers: modifiers.filter(m => m.groupId === id).map(({ groupId: _, ...modifier }) => modifier) }] : []
@@ -217,29 +217,29 @@ export async function itemCountsByGroup(db: Db, groupIds: string[]): Promise<Map
 // --- Guards (checked again inside the batch) ---
 
 /** Aborts unless the category is still active and has no sub-categories (items go in leaves). */
-export function requireLeafCategory(db: Db, categoryId: string): Statement {
-  return requireCount(db, sql`select count(*) from ${menuCategories} c where c.id = ${categoryId} and c.status = 'active'
+export function requireLeafCategory(db: Db, tenantId: string, categoryId: string): Statement {
+  return requireCount(db, sql`select count(*) from ${menuCategories} c where c.tenant_id = ${tenantId} and c.id = ${categoryId} and c.status = 'active'
     and not exists (select 1 from ${menuCategories} s where s.parent_id = c.id)`, 1)
 }
 
-/** Aborts unless every one of these option sets is still active. */
-export function requireActiveSets(db: Db, setIds: string[]): Statement {
-  return requireCount(db, sql`select count(*) from ${menuOptionSets} where ${inArray(menuOptionSets.id, setIds)} and ${menuOptionSets.status} = 'active'`, setIds.length)
+/** Aborts unless every one of these option sets is still the tenant's and active. */
+export function requireActiveSets(db: Db, tenantId: string, setIds: string[]): Statement {
+  return requireCount(db, sql`select count(*) from ${menuOptionSets} where ${menuOptionSets.tenantId} = ${tenantId} and ${inArray(menuOptionSets.id, setIds)} and ${menuOptionSets.status} = 'active'`, setIds.length)
 }
 
-/** Aborts unless every one of these option values is still active. */
-export function requireActiveValues(db: Db, valueIds: string[]): Statement {
-  return requireCount(db, sql`select count(*) from ${menuOptionValues} where ${inArray(menuOptionValues.id, valueIds)} and ${menuOptionValues.status} = 'active'`, valueIds.length)
+/** Aborts unless every one of these option values is still the tenant's and active. */
+export function requireActiveValues(db: Db, tenantId: string, valueIds: string[]): Statement {
+  return requireCount(db, sql`select count(*) from ${menuOptionValues} where ${menuOptionValues.tenantId} = ${tenantId} and ${inArray(menuOptionValues.id, valueIds)} and ${menuOptionValues.status} = 'active'`, valueIds.length)
 }
 
-/** Aborts unless every one of these add-on groups is still active. */
-export function requireActiveGroups(db: Db, groupIds: string[]): Statement {
-  return requireCount(db, sql`select count(*) from ${menuModifierGroups} where ${inArray(menuModifierGroups.id, groupIds)} and ${menuModifierGroups.status} = 'active'`, groupIds.length)
+/** Aborts unless every one of these add-on groups is still the tenant's and active. */
+export function requireActiveGroups(db: Db, tenantId: string, groupIds: string[]): Statement {
+  return requireCount(db, sql`select count(*) from ${menuModifierGroups} where ${menuModifierGroups.tenantId} = ${tenantId} and ${inArray(menuModifierGroups.id, groupIds)} and ${menuModifierGroups.status} = 'active'`, groupIds.length)
 }
 
-/** Abort unless every one of these add-ons is still active (one guard per piece of the list). */
-export function requireActiveModifiers(db: Db, modifierIds: string[]): Statement[] {
-  return chunk(modifierIds).map(ids => requireCount(db, sql`select count(*) from ${menuModifiers} where ${inArray(menuModifiers.id, ids)} and ${menuModifiers.status} = 'active'`, ids.length))
+/** Abort unless every one of these add-ons is still the tenant's and active (one guard per piece of the list). */
+export function requireActiveModifiers(db: Db, tenantId: string, modifierIds: string[]): Statement[] {
+  return chunk(modifierIds).map(ids => requireCount(db, sql`select count(*) from ${menuModifiers} where ${menuModifiers.tenantId} = ${tenantId} and ${inArray(menuModifiers.id, ids)} and ${menuModifiers.status} = 'active'`, ids.length))
 }
 
 /** Aborts unless the item has at least one sellable variation. */
@@ -248,13 +248,13 @@ export function requireSellable(db: Db, itemId: string): Statement {
 }
 
 /** Aborts unless the category has exactly `n` drafts and active items. */
-export function requireListedCount(db: Db, categoryId: string, n: number): Statement {
-  return requireCount(db, sql`select count(*) from ${menuItems} where ${menuItems.categoryId} = ${categoryId} and ${menuItems.status} <> 'archived'`, n)
+export function requireListedCount(db: Db, tenantId: string, categoryId: string, n: number): Statement {
+  return requireCount(db, sql`select count(*) from ${menuItems} where ${menuItems.tenantId} = ${tenantId} and ${menuItems.categoryId} = ${categoryId} and ${menuItems.status} <> 'archived'`, n)
 }
 
 // --- Writes: statements for the service's batch ---
 
-export function insertItemStatement(db: Db, row: Pick<ItemRow, 'id' | 'categoryId' | 'name' | 'description' | 'imageAssetId' | 'sortOrder'>, now: Date): Statement {
+export function insertItemStatement(db: Db, row: { tenantId: string } & Pick<ItemRow, 'id' | 'categoryId' | 'name' | 'description' | 'imageAssetId' | 'sortOrder'>, now: Date): Statement {
   return db.insert(menuItems).values({ ...row, status: 'draft', createdAt: now, updatedAt: now })
 }
 
@@ -262,26 +262,27 @@ export function insertItemStatement(db: Db, row: Pick<ItemRow, 'id' | 'categoryI
  * Moves the item to the next version if it's still at `version` (and, with `from`, in one of those
  * states), applying `changes`. Follow it with `requireOneChange`.
  */
-export function touchItemStatement(db: Db, id: string, version: number, now: Date, changes: Partial<Pick<ItemRow, 'categoryId' | 'name' | 'description' | 'imageAssetId' | 'status' | 'sortOrder'>> = {}, from?: ItemStatus[]): Statement {
+export function touchItemStatement(db: Db, tenantId: string, id: string, version: number, now: Date, changes: Partial<Pick<ItemRow, 'categoryId' | 'name' | 'description' | 'imageAssetId' | 'status' | 'sortOrder'>> = {}, from?: ItemStatus[]): Statement {
   return db.update(menuItems)
     .set({ ...changes, version: sql`${menuItems.version} + 1`, updatedAt: now })
-    .where(and(eq(menuItems.id, id), eq(menuItems.version, version), from ? inArray(menuItems.status, from) : undefined))
+    .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, id), eq(menuItems.version, version), from ? inArray(menuItems.status, from) : undefined))
 }
 
-export function replaceOptionSetsStatements(db: Db, itemId: string, setIds: string[]): Statement[] {
+export function replaceOptionSetsStatements(db: Db, tenantId: string, itemId: string, setIds: string[]): Statement[] {
   return [
     db.delete(menuItemOptionSets).where(eq(menuItemOptionSets.itemId, itemId)),
-    ...(setIds.length ? [db.insert(menuItemOptionSets).values(setIds.map((setId, i) => ({ itemId, setId, sortOrder: i + 1 })))] : []),
+    ...(setIds.length ? [db.insert(menuItemOptionSets).values(setIds.map((setId, i) => ({ tenantId, itemId, setId, sortOrder: i + 1 })))] : []),
   ]
 }
 
 /** Replaces the item's add-on groups and its own add-on prices. */
-export function replaceModifierGroupsStatements(db: Db, itemId: string, groups: { groupId: string, rules: { minSelect: number, maxSelect: number | null } | null }[], prices: { modifierId: string, priceDeltaMinor: number }[]): Statement[] {
+export function replaceModifierGroupsStatements(db: Db, tenantId: string, itemId: string, groups: { groupId: string, rules: { minSelect: number, maxSelect: number | null } | null }[], prices: { modifierId: string, priceDeltaMinor: number }[]): Statement[] {
   return [
     db.delete(menuItemModifierPrices).where(eq(menuItemModifierPrices.itemId, itemId)),
     db.delete(menuItemModifierGroups).where(eq(menuItemModifierGroups.itemId, itemId)),
     ...(groups.length
       ? [db.insert(menuItemModifierGroups).values(groups.map((group, i) => ({
+          tenantId,
           itemId,
           groupId: group.groupId,
           sortOrder: i + 1,
@@ -290,14 +291,14 @@ export function replaceModifierGroupsStatements(db: Db, itemId: string, groups: 
           maxSelect: group.rules?.maxSelect ?? null,
         })))]
       : []),
-    ...insertPieces(menuItemModifierPrices, prices).map(piece => db.insert(menuItemModifierPrices).values(piece.map(price => ({ itemId, ...price })))),
+    ...insertPieces(menuItemModifierPrices, prices).map(piece => db.insert(menuItemModifierPrices).values(piece.map(price => ({ tenantId, itemId, ...price })))),
   ]
 }
 
-export function insertVariationStatements(db: Db, itemId: string, cell: { id: string, key: string, valueIds: string[], priceMinor: number | null, status: 'active' | 'disabled', sortOrder: number }, now: Date): Statement[] {
+export function insertVariationStatements(db: Db, tenantId: string, itemId: string, cell: { id: string, key: string, valueIds: string[], priceMinor: number | null, status: 'active' | 'disabled', sortOrder: number }, now: Date): Statement[] {
   return [
-    db.insert(menuItemVariations).values({ id: cell.id, itemId, combinationKey: cell.key, priceMinor: cell.priceMinor, status: cell.status, sortOrder: cell.sortOrder, createdAt: now, updatedAt: now }),
-    ...(cell.valueIds.length ? [db.insert(menuVariationOptionValues).values(cell.valueIds.map(valueId => ({ variationId: cell.id, valueId })))] : []),
+    db.insert(menuItemVariations).values({ id: cell.id, tenantId, itemId, combinationKey: cell.key, priceMinor: cell.priceMinor, status: cell.status, sortOrder: cell.sortOrder, createdAt: now, updatedAt: now }),
+    ...(cell.valueIds.length ? [db.insert(menuVariationOptionValues).values(cell.valueIds.map(valueId => ({ tenantId, variationId: cell.id, valueId })))] : []),
   ]
 }
 
@@ -311,7 +312,7 @@ export function retireVariationsStatements(db: Db, itemId: string, variationIds:
     .where(and(eq(menuItemVariations.itemId, itemId), inArray(menuItemVariations.id, ids))))
 }
 
-export function positionItemStatement(db: Db, categoryId: string, id: string, version: number, sortOrder: number, now: Date): Statement {
+export function positionItemStatement(db: Db, tenantId: string, categoryId: string, id: string, version: number, sortOrder: number, now: Date): Statement {
   return db.update(menuItems).set({ sortOrder, version: sql`${menuItems.version} + 1`, updatedAt: now })
-    .where(and(eq(menuItems.id, id), eq(menuItems.version, version), eq(menuItems.categoryId, categoryId), ne(menuItems.status, 'archived')))
+    .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, id), eq(menuItems.version, version), eq(menuItems.categoryId, categoryId), ne(menuItems.status, 'archived')))
 }

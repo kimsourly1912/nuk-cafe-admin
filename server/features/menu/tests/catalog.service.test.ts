@@ -72,7 +72,7 @@ const staffAt = (id: string): BranchActor => ({ userId: 'staff-1', tenantId: TES
 describe('the public menu', () => {
   it('lists active categories and items with their versions, option sets, add-ons and image', async () => {
     const image = newId()
-    await db.insert(mediaAssets).values({ id: image, objectKey: `menu/${image}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x' })
+    await db.insert(mediaAssets).values({ id: image, tenantId: TEST_TENANT, objectKey: `menu/${image}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x' })
     const milk = await createModifierGroup(db, admin, { name: 'Milk', minSelect: 0, maxSelect: 1, modifiers: [{ name: 'Whole', priceDeltaMinor: 0, isDefault: true }, { name: 'Oat', priceDeltaMinor: 50, isDefault: false }] })
     const oat = milk.modifiers.find(m => m.name === 'Oat')!.id
     await published('Latte', {

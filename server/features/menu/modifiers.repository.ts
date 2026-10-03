@@ -47,14 +47,14 @@ const modifierColumns = {
   status: menuModifiers.status,
 }
 
-export async function findGroup(db: Db, id: string): Promise<ModifierGroupRow | undefined> {
-  const rows: ModifierGroupRow[] = await db.select(groupColumns).from(menuModifierGroups).where(eq(menuModifierGroups.id, id)).limit(1)
+export async function findGroup(db: Db, tenantId: string, id: string): Promise<ModifierGroupRow | undefined> {
+  const rows: ModifierGroupRow[] = await db.select(groupColumns).from(menuModifierGroups).where(and(eq(menuModifierGroups.tenantId, tenantId), eq(menuModifierGroups.id, id))).limit(1)
   return rows[0]
 }
 
-export async function listGroups(db: Db, status: ModifierStatus | 'all'): Promise<ModifierGroupRow[]> {
-  const query = db.select(groupColumns).from(menuModifierGroups)
-  return (status === 'all' ? query : query.where(eq(menuModifierGroups.status, status))).orderBy(asc(sql`lower(${menuModifierGroups.name})`))
+export async function listGroups(db: Db, tenantId: string, status: ModifierStatus | 'all'): Promise<ModifierGroupRow[]> {
+  return db.select(groupColumns).from(menuModifierGroups)
+    .where(and(eq(menuModifierGroups.tenantId, tenantId), status === 'all' ? undefined : eq(menuModifierGroups.status, status))).orderBy(asc(sql`lower(${menuModifierGroups.name})`))
 }
 
 export async function modifiersOf(db: Db, groupIds: string[]): Promise<ModifierRow[]> {
@@ -83,17 +83,17 @@ export async function nextModifierOrder(db: Db, groupId: string): Promise<number
  * `anyStatus`), optionally changing it. Every change to a group or its add-ons starts with this plus
  * `requireOneChange`: the group's version is the lock for all of it.
  */
-export function touchGroupStatement(db: Db, id: string, version: number, now: Date, changes: Partial<Pick<ModifierGroupRow, 'name' | 'status' | 'minSelect' | 'maxSelect'>> = {}, anyStatus = false): Statement {
+export function touchGroupStatement(db: Db, tenantId: string, id: string, version: number, now: Date, changes: Partial<Pick<ModifierGroupRow, 'name' | 'status' | 'minSelect' | 'maxSelect'>> = {}, anyStatus = false): Statement {
   return db.update(menuModifierGroups)
     .set({ ...changes, version: sql`${menuModifierGroups.version} + 1`, updatedAt: now })
-    .where(and(eq(menuModifierGroups.id, id), eq(menuModifierGroups.version, version), anyStatus ? undefined : eq(menuModifierGroups.status, 'active')))
+    .where(and(eq(menuModifierGroups.tenantId, tenantId), eq(menuModifierGroups.id, id), eq(menuModifierGroups.version, version), anyStatus ? undefined : eq(menuModifierGroups.status, 'active')))
 }
 
-export function insertGroupStatement(db: Db, row: { id: string, name: string, minSelect: number, maxSelect: number | null, now: Date }): Statement {
-  return db.insert(menuModifierGroups).values({ id: row.id, name: row.name, minSelect: row.minSelect, maxSelect: row.maxSelect, createdAt: row.now, updatedAt: row.now })
+export function insertGroupStatement(db: Db, row: { id: string, tenantId: string, name: string, minSelect: number, maxSelect: number | null, now: Date }): Statement {
+  return db.insert(menuModifierGroups).values({ id: row.id, tenantId: row.tenantId, name: row.name, minSelect: row.minSelect, maxSelect: row.maxSelect, createdAt: row.now, updatedAt: row.now })
 }
 
-export function insertModifiersStatements(db: Db, rows: { id: string, groupId: string, name: string, priceDeltaMinor: number, isDefault: boolean, sortOrder: number }[], now: Date): Statement[] {
+export function insertModifiersStatements(db: Db, rows: { id: string, tenantId: string, groupId: string, name: string, priceDeltaMinor: number, isDefault: boolean, sortOrder: number }[], now: Date): Statement[] {
   return insertPieces(menuModifiers, rows).map(piece => db.insert(menuModifiers).values(piece.map(row => ({ ...row, createdAt: now, updatedAt: now }))))
 }
 

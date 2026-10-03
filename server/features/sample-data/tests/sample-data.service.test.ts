@@ -40,8 +40,8 @@ async function loadAll(size: SampleMenuSize) {
 }
 
 async function itemNames() {
-  const page = await listItems(db, { page: 1, pageSize: 100, status: 'all' })
-  const rest = page.totalPages > 1 ? (await listItems(db, { page: 2, pageSize: 100, status: 'all' })).items : []
+  const page = await listItems(db, TEST_TENANT, { page: 1, pageSize: 100, status: 'all' })
+  const rest = page.totalPages > 1 ? (await listItems(db, TEST_TENANT, { page: 2, pageSize: 100, status: 'all' })).items : []
   return [...page.items, ...rest].map(i => i.name)
 }
 
@@ -90,7 +90,7 @@ describe('the sample menu', () => {
     do state = await loadSampleMenuStep(db, admin, { size: 'small' }, ENV)
     while (state.menu.run!.stages.slice(0, 4).some(stage => stage.done < stage.total))
     const croissant = itemsForSize('small').at(-1)!
-    const categories = await listCategories(db, { status: 'active' })
+    const categories = await listCategories(db, TEST_TENANT, { status: 'active' })
     await createItem(db, admin, {
       categoryId: categories.find(c => c.name === 'Bakery')!.id,
       name: croissant.name,
@@ -102,7 +102,7 @@ describe('the sample menu', () => {
       availabilityRuleIds: [],
     })
     await loadAll('small')
-    const page = await listItems(db, { page: 1, pageSize: 100, status: 'all' })
+    const page = await listItems(db, TEST_TENANT, { page: 1, pageSize: 100, status: 'all' })
     const croissants = page.items.filter(i => i.name === croissant.name)
     expect(croissants).toHaveLength(1)
     expect(croissants[0]!.status).toBe('active')
@@ -124,7 +124,7 @@ describe('reset', () => {
   it('deletes every menu record and upload, forgets the load, and audits it', async () => {
     await loadAll('small')
     for (const n of [1, 2, 3]) {
-      await db.insert(mediaAssets).values({ objectKey: `menu/photo-${n}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x', state: 'attached' })
+      await db.insert(mediaAssets).values({ tenantId: TEST_TENANT, objectKey: `menu/photo-${n}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x', state: 'attached' })
     }
     const deleted: string[] = []
     const state = await resetSampleMenu(db, admin, { put: async () => {}, del: async (key: string) => deleted.push(key) }, ENV)
