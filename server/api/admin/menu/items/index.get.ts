@@ -3,6 +3,6 @@ import { listItems } from '#server/features/menu'
 
 /** Menu items, paginated, by category then position (`?search&categoryId&status&page&pageSize`). */
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, { menu: ['read'] })
-  return listItems(useDb(), readValidQuery(event, itemListQuerySchema))
+  const actor = await requirePermission(event, { menu: ['read'] })
+  return listItems(useDb(), actor.tenantId, readValidQuery(event, itemListQuerySchema))
 })

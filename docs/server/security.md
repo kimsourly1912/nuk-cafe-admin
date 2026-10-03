@@ -187,7 +187,7 @@ Built in step 1.6 (D51).
 ## Uploads
 
 - Only `media:upload` holders. Images only: JPEG, PNG, WebP (no SVG: it can carry script). The file's **first bytes** must be one of those and match the type the browser claimed; the size is checked from `Content-Length` before the body is read and again after. (NuxtHub's `ensureBlob` checks only the claimed type and the size, with a generic 400; our checks cover both with 413/415 and add the bytes, D57.)
-- The server picks the key (`menu/<uuid v7>.<ext>`) and the content type; the client's file name is never used.
+- The server picks the key (`t/<tenantId>/menu/<uuid v7>.<ext>`, D136; keys from before stay `menu/<uuid v7>.<ext>`) and the content type; the client's file name is never used.
 - Served with `X-Content-Type-Options: nosniff` and a long cache (keys never change).
 - An upload is `temporary` until a record references it; a scheduled task deletes temporary objects older than 24 hours.
 

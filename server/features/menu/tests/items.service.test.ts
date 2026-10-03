@@ -9,7 +9,7 @@ import { archiveCategory, createCategory, updateCategory } from '#server/feature
 import { archiveItem, createItem, getItem, listItems, publishItem, reorderItems, restoreItem, unpublishItem, updateItem } from '#server/features/menu/items.service'
 import { menuCategories, menuItemVariations, menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
 import { addOptionValue, archiveOptionSet, archiveOptionValue, createOptionSet, getOptionSet, restoreOptionValue } from '#server/features/menu/options.service'
-import { createTestDb, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -25,6 +25,7 @@ let temp: OptionSet
 
 beforeEach(async () => {
   db = await createTestDb()
+  await ensureTenant(db)
   const top = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
   drinks = top.id
   hot = (await createCategory(db, actor, { name: 'Hot drinks', description: '', parentId: drinks, availabilityRuleIds: [] })).id
@@ -55,7 +56,7 @@ const croissant = () => createItem(db, actor, { categoryId: hot, name: 'Croissan
 
 async function upload() {
   const id = newId()
-  await db.insert(mediaAssets).values({ id, objectKey: `menu/${id}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x' })
+  await db.insert(mediaAssets).values({ id, tenantId: TEST_TENANT, objectKey: `menu/${id}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x' })
   return id
 }
 const assetState = async (id: string) => (await db.select().from(mediaAssets).where(eq(mediaAssets.id, id)))[0]?.state
@@ -95,7 +96,7 @@ describe('creating', () => {
 
   it('refuses a create when the category gets a sub-category between the check and the write', async () => {
     // Written straight to the table: the API wouldn't nest three levels, but the guard mustn't rely on that.
-    const racing = interleaved(db, () => db.insert(menuCategories).values({ name: 'Espresso', parentId: hot }))
+    const racing = interleaved(db, () => db.insert(menuCategories).values({ tenantId: TEST_TENANT, name: 'Espresso', parentId: hot }))
     await expectApiError(() => createItem(racing, actor, { categoryId: hot, name: 'Latte', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] }), 422, 'CATEGORY_NOT_A_LEAF')
   })
 
@@ -119,7 +120,7 @@ describe('creating', () => {
     await expectApiError(() => createItem(racing, actor, { categoryId: hot, name: 'Latte', description: '', imageId: image, optionSetIds: [size.id], variations: grid([size]), modifierGroups: [], availabilityRuleIds: [] }), 422, 'PRICE_GRID')
     // The batch was all or nothing: the image is still temporary, which the purge deletes after 24 hours (media tests).
     expect(await assetState(image)).toBe('temporary')
-    expect((await listItems(db, { categoryId: hot, page: 1, pageSize: 50 })).items.map(item => item.name)).not.toContain('Latte')
+    expect((await listItems(db, TEST_TENANT, { categoryId: hot, page: 1, pageSize: 50 })).items.map(item => item.name)).not.toContain('Latte')
     expect((await croissantWith(image)).image?.id).toBe(image)
   })
 })
@@ -170,13 +171,13 @@ describe('updating', () => {
   it('hides versions that use an archived value, and shows them again when it\'s restored', async () => {
     const item = await latte()
     const archived = await archiveOptionValue(db, actor, size.id, v(size, 'Large'), { version: size.version })
-    const hidden = await getItem(db, item.id)
+    const hidden = await getItem(db, TEST_TENANT, item.id)
     expect(hidden.variations.map(x => [x.label, x.sellable])).toEqual([['Small, Hot', true], ['Small, Iced', true], ['Large, Hot', false], ['Large, Iced', false]])
     // Saving the grid without the archived value keeps those versions for later.
     const saved = await updateItem(db, actor, item.id, { version: 1, variations: grid([{ ...size, values: size.values.filter(x => x.name !== 'Large') }, temp], 700) })
     expect(saved.variations).toHaveLength(4)
     await restoreOptionValue(db, actor, size.id, v(size, 'Large'), { version: archived.version })
-    expect((await getItem(db, item.id)).variations.every(x => x.sellable)).toBe(true)
+    expect((await getItem(db, TEST_TENANT, item.id)).variations.every(x => x.sellable)).toBe(true)
   })
 
   it('shows a value added to a set as missing from the grid until it\'s priced or switched off', async () => {
@@ -263,23 +264,23 @@ describe('listing and ordering', () => {
     const item = await latte()
     const plain = await croissant()
     await archiveItem(db, actor, plain.id, { version: 1 })
-    const page = await listItems(db, { page: 1, pageSize: 20 })
+    const page = await listItems(db, TEST_TENANT, { page: 1, pageSize: 20 })
     expect(page.items).toEqual([expect.objectContaining({ id: item.id, categoryName: 'Hot drinks', priceMinMinor: 300, priceMaxMinor: 450, status: 'draft' })])
-    expect((await listItems(db, { page: 1, pageSize: 20, status: 'archived' })).items.map(i => i.name)).toEqual(['Croissant'])
-    expect((await listItems(db, { page: 1, pageSize: 20, status: 'all', search: 'LAT' })).items.map(i => i.name)).toEqual(['Latte'])
+    expect((await listItems(db, TEST_TENANT, { page: 1, pageSize: 20, status: 'archived' })).items.map(i => i.name)).toEqual(['Croissant'])
+    expect((await listItems(db, TEST_TENANT, { page: 1, pageSize: 20, status: 'all', search: 'LAT' })).items.map(i => i.name)).toEqual(['Latte'])
   })
 
   it('reorders a category\'s items; the list must be exactly them', async () => {
     const a = await latte()
     const b = await croissant()
     await reorderItems(db, actor, { categoryId: hot, items: [b, a].map(x => ({ id: x.id, version: x.version })) })
-    expect((await listItems(db, { page: 1, pageSize: 20, categoryId: hot })).items.map(i => i.name)).toEqual(['Croissant', 'Latte'])
+    expect((await listItems(db, TEST_TENANT, { page: 1, pageSize: 20, categoryId: hot })).items.map(i => i.name)).toEqual(['Croissant', 'Latte'])
     await expectApiError(() => reorderItems(db, actor, { categoryId: hot, items: [{ id: a.id, version: a.version }] }), 409, 'VERSION_CONFLICT')
   })
 
   it('counts the items that use an option set', async () => {
     await latte()
-    expect((await getOptionSet(db, size.id)).itemCount).toBe(1)
+    expect((await getOptionSet(db, TEST_TENANT, size.id)).itemCount).toBe(1)
   })
 })
 

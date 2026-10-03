@@ -6,7 +6,7 @@ import { auditEvents } from '#server/features/platform/platform.schema'
 import { menuModifierGroups, menuModifiers } from '#server/features/menu/menu.schema'
 import { addModifier, archiveModifier, archiveModifierGroup, createModifierGroup, listModifierGroups, reorderModifiers, restoreModifier, restoreModifierGroup, updateModifier, updateModifierGroup } from '#server/features/menu/modifiers.service'
 import { selectionProblem } from '#server/features/menu/modifiers.rules'
-import { createTestDb, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -16,6 +16,7 @@ const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', 
 
 beforeEach(async () => {
   db = await createTestDb()
+  await ensureTenant(db)
 })
 
 /** Milk: choose exactly one, Whole pre-selected. */
@@ -94,8 +95,8 @@ describe('groups', () => {
     const group = await milk()
     await extras()
     await archiveModifierGroup(db, actor, group.id, { version: 1 })
-    expect((await listModifierGroups(db, { status: 'active' })).map(g => g.name)).toEqual(['Extras'])
-    expect((await listModifierGroups(db, { status: 'archived' })).map(g => g.name)).toEqual(['Milk'])
+    expect((await listModifierGroups(db, TEST_TENANT, { status: 'active' })).map(g => g.name)).toEqual(['Extras'])
+    expect((await listModifierGroups(db, TEST_TENANT, { status: 'archived' })).map(g => g.name)).toEqual(['Milk'])
   })
 })
 

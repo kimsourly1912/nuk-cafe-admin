@@ -1,6 +1,6 @@
 import { getOptionSet } from '#server/features/menu'
 
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, { menu: ['read'] })
-  return getOptionSet(useDb(), readIdParam(event, 'setId', 'This option set'))
+  const actor = await requirePermission(event, { menu: ['read'] })
+  return getOptionSet(useDb(), actor.tenantId, readIdParam(event, 'setId', 'This option set'))
 })

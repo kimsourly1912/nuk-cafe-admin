@@ -25,14 +25,14 @@ const ruleColumns = {
 const refColumns = { id: menuAvailabilityRules.id, name: menuAvailabilityRules.name, status: menuAvailabilityRules.status }
 const byName = asc(sql`lower(${menuAvailabilityRules.name})`)
 
-export async function findRule(db: Db, id: string): Promise<RuleRow | undefined> {
-  const rows: RuleRow[] = await db.select(ruleColumns).from(menuAvailabilityRules).where(eq(menuAvailabilityRules.id, id)).limit(1)
+export async function findRule(db: Db, tenantId: string, id: string): Promise<RuleRow | undefined> {
+  const rows: RuleRow[] = await db.select(ruleColumns).from(menuAvailabilityRules).where(and(eq(menuAvailabilityRules.tenantId, tenantId), eq(menuAvailabilityRules.id, id))).limit(1)
   return rows[0]
 }
 
-export async function listRules(db: Db, status: AvailabilityStatus | 'all'): Promise<RuleRow[]> {
-  const query = db.select(ruleColumns).from(menuAvailabilityRules)
-  return (status === 'all' ? query : query.where(eq(menuAvailabilityRules.status, status))).orderBy(byName)
+export async function listRules(db: Db, tenantId: string, status: AvailabilityStatus | 'all'): Promise<RuleRow[]> {
+  return db.select(ruleColumns).from(menuAvailabilityRules)
+    .where(and(eq(menuAvailabilityRules.tenantId, tenantId), status === 'all' ? undefined : eq(menuAvailabilityRules.status, status))).orderBy(byName)
 }
 
 /** The windows of these rules, by rule id (each list by weekday, then start). */
@@ -63,10 +63,10 @@ export async function usageCounts(db: Db, ruleIds: string[]): Promise<{ items: M
   return { items: new Map(items.map(r => [r.ruleId, r.n])), categories: new Map(categories.map(r => [r.ruleId, r.n])) }
 }
 
-/** These rules, by name (unknown ids are left out). */
-export async function findRefs(db: Db, ids: string[]): Promise<AvailabilityRuleRef[]> {
+/** These rules of the tenant, by name (unknown ids and other tenants' are left out). */
+export async function findRefs(db: Db, tenantId: string, ids: string[]): Promise<AvailabilityRuleRef[]> {
   if (!ids.length) return []
-  const rows: AvailabilityRuleRef[] = await readInChunks(ids, piece => db.select(refColumns).from(menuAvailabilityRules).where(inArray(menuAvailabilityRules.id, piece)))
+  const rows: AvailabilityRuleRef[] = await readInChunks(ids, piece => db.select(refColumns).from(menuAvailabilityRules).where(and(eq(menuAvailabilityRules.tenantId, tenantId), inArray(menuAvailabilityRules.id, piece))))
   return rows.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
 }
 
@@ -92,9 +92,9 @@ export async function categoryRules(db: Db, categoryIds: string[]): Promise<Map<
 
 // --- Guards (checked again inside the batch) ---
 
-/** Aborts unless every one of these rules is still active. */
-export function requireActiveRules(db: Db, ruleIds: string[]): Statement[] {
-  return chunk(ruleIds).map(ids => requireCount(db, sql`select count(*) from ${menuAvailabilityRules} where ${inArray(menuAvailabilityRules.id, ids)} and ${menuAvailabilityRules.status} = 'active'`, ids.length))
+/** Aborts unless every one of these rules is still the tenant's and active. */
+export function requireActiveRules(db: Db, tenantId: string, ruleIds: string[]): Statement[] {
+  return chunk(ruleIds).map(ids => requireCount(db, sql`select count(*) from ${menuAvailabilityRules} where ${menuAvailabilityRules.tenantId} = ${tenantId} and ${inArray(menuAvailabilityRules.id, ids)} and ${menuAvailabilityRules.status} = 'active'`, ids.length))
 }
 
 /** Aborts if a draft or active item, or an active category, uses the rule. */
@@ -105,37 +105,37 @@ export function requireRuleUnused(db: Db, ruleId: string): Statement {
 
 // --- Writes: statements for the service's batch ---
 
-export function insertRuleStatement(db: Db, row: { id: string, name: string, now: Date }): Statement {
-  return db.insert(menuAvailabilityRules).values({ id: row.id, name: row.name, createdAt: row.now, updatedAt: row.now })
+export function insertRuleStatement(db: Db, row: { id: string, tenantId: string, name: string, now: Date }): Statement {
+  return db.insert(menuAvailabilityRules).values({ id: row.id, tenantId: row.tenantId, name: row.name, createdAt: row.now, updatedAt: row.now })
 }
 
 /**
  * Moves the rule to the next version if it's still at `version` (and still active, unless
  * `anyStatus`), applying `changes`. Follow it with `requireOneChange`.
  */
-export function touchRuleStatement(db: Db, id: string, version: number, now: Date, changes: Partial<Pick<RuleRow, 'name' | 'status'>> = {}, anyStatus = false): Statement {
+export function touchRuleStatement(db: Db, tenantId: string, id: string, version: number, now: Date, changes: Partial<Pick<RuleRow, 'name' | 'status'>> = {}, anyStatus = false): Statement {
   return db.update(menuAvailabilityRules)
     .set({ ...changes, version: sql`${menuAvailabilityRules.version} + 1`, updatedAt: now })
-    .where(and(eq(menuAvailabilityRules.id, id), eq(menuAvailabilityRules.version, version), anyStatus ? undefined : eq(menuAvailabilityRules.status, 'active')))
+    .where(and(eq(menuAvailabilityRules.tenantId, tenantId), eq(menuAvailabilityRules.id, id), eq(menuAvailabilityRules.version, version), anyStatus ? undefined : eq(menuAvailabilityRules.status, 'active')))
 }
 
-export function replaceWindowsStatements(db: Db, ruleId: string, windows: AvailabilityWindow[]): Statement[] {
+export function replaceWindowsStatements(db: Db, tenantId: string, ruleId: string, windows: AvailabilityWindow[]): Statement[] {
   return [
     db.delete(menuAvailabilityWindows).where(eq(menuAvailabilityWindows.ruleId, ruleId)),
-    ...insertPieces(menuAvailabilityWindows, windows).map(piece => db.insert(menuAvailabilityWindows).values(piece.map(window => ({ ruleId, ...window })))),
+    ...insertPieces(menuAvailabilityWindows, windows).map(piece => db.insert(menuAvailabilityWindows).values(piece.map(window => ({ tenantId, ruleId, ...window })))),
   ]
 }
 
-export function replaceItemRulesStatements(db: Db, itemId: string, ruleIds: string[]): Statement[] {
+export function replaceItemRulesStatements(db: Db, tenantId: string, itemId: string, ruleIds: string[]): Statement[] {
   return [
     db.delete(menuItemAvailability).where(eq(menuItemAvailability.itemId, itemId)),
-    ...insertPieces(menuItemAvailability, ruleIds).map(ids => db.insert(menuItemAvailability).values(ids.map(ruleId => ({ itemId, ruleId })))),
+    ...insertPieces(menuItemAvailability, ruleIds).map(ids => db.insert(menuItemAvailability).values(ids.map(ruleId => ({ tenantId, itemId, ruleId })))),
   ]
 }
 
-export function replaceCategoryRulesStatements(db: Db, categoryId: string, ruleIds: string[]): Statement[] {
+export function replaceCategoryRulesStatements(db: Db, tenantId: string, categoryId: string, ruleIds: string[]): Statement[] {
   return [
     db.delete(menuCategoryAvailability).where(eq(menuCategoryAvailability.categoryId, categoryId)),
-    ...insertPieces(menuCategoryAvailability, ruleIds).map(ids => db.insert(menuCategoryAvailability).values(ids.map(ruleId => ({ categoryId, ruleId })))),
+    ...insertPieces(menuCategoryAvailability, ruleIds).map(ids => db.insert(menuCategoryAvailability).values(ids.map(ruleId => ({ tenantId, categoryId, ruleId })))),
   ]
 }

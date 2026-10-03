@@ -21,18 +21,19 @@ const columns = {
   stateChangedAt: mediaAssets.stateChangedAt,
 }
 
-export async function findAsset(db: Db, id: string): Promise<MediaRow | undefined> {
-  const rows: MediaRow[] = await db.select(columns).from(mediaAssets).where(eq(mediaAssets.id, id)).limit(1)
+export async function findAsset(db: Db, tenantId: string, id: string): Promise<MediaRow | undefined> {
+  const rows: MediaRow[] = await db.select(columns).from(mediaAssets).where(and(eq(mediaAssets.tenantId, tenantId), eq(mediaAssets.id, id))).limit(1)
   return rows[0]
 }
 
-export async function findAssets(db: Db, ids: string[]): Promise<MediaRow[]> {
-  return readInChunks(ids, piece => db.select(columns).from(mediaAssets).where(inArray(mediaAssets.id, piece)))
+export async function findAssets(db: Db, tenantId: string, ids: string[]): Promise<MediaRow[]> {
+  return readInChunks(ids, piece => db.select(columns).from(mediaAssets).where(and(eq(mediaAssets.tenantId, tenantId), inArray(mediaAssets.id, piece))))
 }
 
-export function insertAssetStatement(db: Db, row: { id: string, objectKey: string, mimeType: string, byteSize: number, sha256: string, uploadedBy: string, now: Date }): Statement {
+export function insertAssetStatement(db: Db, row: { id: string, tenantId: string, objectKey: string, mimeType: string, byteSize: number, sha256: string, uploadedBy: string, now: Date }): Statement {
   return db.insert(mediaAssets).values({
     id: row.id,
+    tenantId: row.tenantId,
     objectKey: row.objectKey,
     mimeType: row.mimeType,
     byteSize: row.byteSize,
@@ -43,16 +44,16 @@ export function insertAssetStatement(db: Db, row: { id: string, objectKey: strin
   })
 }
 
-/** temporary → attached; changes nothing (follow with `requireOneChange`) if it isn't temporary or is gone. */
-export function attachStatement(db: Db, id: string, now: Date): Statement {
+/** temporary → attached; changes nothing (follow with `requireOneChange`) if it isn't temporary, is gone or is another tenant's. */
+export function attachStatement(db: Db, tenantId: string, id: string, now: Date): Statement {
   return db.update(mediaAssets).set({ state: 'attached', stateChangedAt: now })
-    .where(and(eq(mediaAssets.id, id), eq(mediaAssets.state, 'temporary')))
+    .where(and(eq(mediaAssets.tenantId, tenantId), eq(mediaAssets.id, id), eq(mediaAssets.state, 'temporary')))
 }
 
 /** attached → temporary: its 24 hours start now. Changes nothing if it isn't attached. */
-export function releaseStatement(db: Db, id: string, now: Date): Statement {
+export function releaseStatement(db: Db, tenantId: string, id: string, now: Date): Statement {
   return db.update(mediaAssets).set({ state: 'temporary', stateChangedAt: now })
-    .where(and(eq(mediaAssets.id, id), eq(mediaAssets.state, 'attached')))
+    .where(and(eq(mediaAssets.tenantId, tenantId), eq(mediaAssets.id, id), eq(mediaAssets.state, 'attached')))
 }
 
 /** Temporary assets whose state is older than `before`, oldest first. */
@@ -74,15 +75,15 @@ export async function deleteIfStillExpired(db: Db, id: string, before: Date): Pr
   return rows.length === 1
 }
 
-/** Every upload, attached or not (test data resets only, D94). */
-export async function countAssets(db: Db): Promise<number> {
-  const rows = await db.select({ n: count() }).from(mediaAssets)
+/** The tenant's uploads, attached or not (test data resets only, D94). */
+export async function countAssets(db: Db, tenantId: string): Promise<number> {
+  const rows = await db.select({ n: count() }).from(mediaAssets).where(eq(mediaAssets.tenantId, tenantId))
   return rows[0]?.n ?? 0
 }
 
-/** The next uploads to delete, oldest first. */
-export async function firstAssets(db: Db, limit: number): Promise<{ id: string, objectKey: string }[]> {
-  return db.select({ id: mediaAssets.id, objectKey: mediaAssets.objectKey }).from(mediaAssets).orderBy(asc(mediaAssets.createdAt)).limit(limit)
+/** The tenant's next uploads to delete, oldest first. */
+export async function firstAssets(db: Db, tenantId: string, limit: number): Promise<{ id: string, objectKey: string }[]> {
+  return db.select({ id: mediaAssets.id, objectKey: mediaAssets.objectKey }).from(mediaAssets).where(eq(mediaAssets.tenantId, tenantId)).orderBy(asc(mediaAssets.createdAt)).limit(limit)
 }
 
 export async function deleteAsset(db: Db, id: string): Promise<void> {

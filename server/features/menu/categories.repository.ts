@@ -29,36 +29,37 @@ const columns = {
   updatedAt: menuCategories.updatedAt,
 }
 
-const parentIs = (parentId: string | null) => parentId === null ? isNull(menuCategories.parentId) : eq(menuCategories.parentId, parentId)
+/** The tenant's top level for `null`, else the parent's children (a parent belongs to one tenant). */
+const parentIs = (tenantId: string, parentId: string | null) => and(eq(menuCategories.tenantId, tenantId), parentId === null ? isNull(menuCategories.parentId) : eq(menuCategories.parentId, parentId))
 
-export async function findCategory(db: Db, id: string): Promise<CategoryRow | undefined> {
-  const rows: CategoryRow[] = await db.select(columns).from(menuCategories).where(eq(menuCategories.id, id)).limit(1)
+export async function findCategory(db: Db, tenantId: string, id: string): Promise<CategoryRow | undefined> {
+  const rows: CategoryRow[] = await db.select(columns).from(menuCategories).where(and(eq(menuCategories.tenantId, tenantId), eq(menuCategories.id, id))).limit(1)
   return rows[0]
 }
 
 /** Every category with the given status (or all), ordered by position, then name. */
-export async function listCategories(db: Db, status: CategoryStatus | 'all'): Promise<CategoryRow[]> {
-  const query = db.select(columns).from(menuCategories)
-  return (status === 'all' ? query : query.where(eq(menuCategories.status, status)))
+export async function listCategories(db: Db, tenantId: string, status: CategoryStatus | 'all'): Promise<CategoryRow[]> {
+  return db.select(columns).from(menuCategories)
+    .where(and(eq(menuCategories.tenantId, tenantId), status === 'all' ? undefined : eq(menuCategories.status, status)))
     .orderBy(asc(menuCategories.sortOrder), asc(menuCategories.name))
 }
 
 /** Active children per parent id. */
-export async function activeChildCounts(db: Db): Promise<Map<string, number>> {
+export async function activeChildCounts(db: Db, tenantId: string): Promise<Map<string, number>> {
   const rows: { parentId: string | null, n: number }[] = await db
     .select({ parentId: menuCategories.parentId, n: count() })
     .from(menuCategories)
-    .where(and(sql`${menuCategories.parentId} is not null`, eq(menuCategories.status, 'active')))
+    .where(and(eq(menuCategories.tenantId, tenantId), sql`${menuCategories.parentId} is not null`, eq(menuCategories.status, 'active')))
     .groupBy(menuCategories.parentId)
   return new Map(rows.map(r => [r.parentId!, r.n]))
 }
 
 /** Menu items that aren't archived, per category id (categories without any are left out). */
-export async function listedItemCounts(db: Db): Promise<Map<string, number>> {
+export async function listedItemCounts(db: Db, tenantId: string): Promise<Map<string, number>> {
   const rows: { categoryId: string, n: number }[] = await db
     .select({ categoryId: menuItems.categoryId, n: count() })
     .from(menuItems)
-    .where(sql`${menuItems.status} <> 'archived'`)
+    .where(and(eq(menuItems.tenantId, tenantId), sql`${menuItems.status} <> 'archived'`))
     .groupBy(menuItems.categoryId)
   return new Map(rows.map(r => [r.categoryId, r.n]))
 }
@@ -70,24 +71,24 @@ export async function countChildren(db: Db, id: string, status?: CategoryStatus)
 }
 
 /** The active children of one parent (the top level for `null`), in order. */
-export async function activeSiblings(db: Db, parentId: string | null): Promise<{ id: string, version: number }[]> {
+export async function activeSiblings(db: Db, tenantId: string, parentId: string | null): Promise<{ id: string, version: number }[]> {
   return db.select({ id: menuCategories.id, version: menuCategories.version }).from(menuCategories)
-    .where(and(parentIs(parentId), eq(menuCategories.status, 'active')))
+    .where(and(parentIs(tenantId, parentId), eq(menuCategories.status, 'active')))
     .orderBy(asc(menuCategories.sortOrder), asc(menuCategories.name))
 }
 
 /** The next position under a parent: after every active sibling. */
-export async function nextSortOrder(db: Db, parentId: string | null): Promise<number> {
+export async function nextSortOrder(db: Db, tenantId: string, parentId: string | null): Promise<number> {
   const rows: { top: number | null }[] = await db.select({ top: max(menuCategories.sortOrder) }).from(menuCategories)
-    .where(and(parentIs(parentId), eq(menuCategories.status, 'active')))
+    .where(and(parentIs(tenantId, parentId), eq(menuCategories.status, 'active')))
   return (rows[0]?.top ?? 0) + 1
 }
 
 // --- Guards (checked again inside the batch: things may change between the read and the write) ---
 
 /** Aborts unless `parentId` is still an active top-level category. */
-export function requireActiveTopLevel(db: Db, parentId: string): Statement {
-  return requireCount(db, sql`select count(*) from ${menuCategories} where ${menuCategories.id} = ${parentId} and ${menuCategories.parentId} is null and ${menuCategories.status} = 'active'`, 1)
+export function requireActiveTopLevel(db: Db, tenantId: string, parentId: string): Statement {
+  return requireCount(db, sql`select count(*) from ${menuCategories} where ${menuCategories.tenantId} = ${tenantId} and ${menuCategories.id} = ${parentId} and ${menuCategories.parentId} is null and ${menuCategories.status} = 'active'`, 1)
 }
 
 /** Drafts and active menu items in a category (archived ones don't hold it). */
@@ -108,16 +109,17 @@ export function requireNoChildren(db: Db, id: string): Statement {
 }
 
 /** Aborts unless the parent has exactly `n` active children (a reorder must name all of them). */
-export function requireActiveSiblingCount(db: Db, parentId: string | null, n: number): Statement {
+export function requireActiveSiblingCount(db: Db, tenantId: string, parentId: string | null, n: number): Statement {
   const parent: SQL = parentId === null ? sql`${menuCategories.parentId} is null` : sql`${menuCategories.parentId} = ${parentId}`
-  return requireCount(db, sql`select count(*) from ${menuCategories} where ${parent} and ${menuCategories.status} = 'active'`, n)
+  return requireCount(db, sql`select count(*) from ${menuCategories} where ${menuCategories.tenantId} = ${tenantId} and ${parent} and ${menuCategories.status} = 'active'`, n)
 }
 
 // --- Writes: statements for the service's batch ---
 
-export function insertCategoryStatement(db: Db, row: { id: string, parentId: string | null, name: string, description: string, sortOrder: number, now: Date }): Statement {
+export function insertCategoryStatement(db: Db, row: { id: string, tenantId: string, parentId: string | null, name: string, description: string, sortOrder: number, now: Date }): Statement {
   return db.insert(menuCategories).values({
     id: row.id,
+    tenantId: row.tenantId,
     parentId: row.parentId,
     name: row.name,
     description: row.description,
@@ -128,10 +130,10 @@ export function insertCategoryStatement(db: Db, row: { id: string, parentId: str
 }
 
 /** Changes one category if it's still at `version`; follow it with `requireOneChange`. */
-export function updateCategoryStatement(db: Db, id: string, version: number, changes: Partial<Pick<CategoryRow, 'parentId' | 'name' | 'description' | 'sortOrder' | 'status'>>, now: Date): Statement {
+export function updateCategoryStatement(db: Db, tenantId: string, id: string, version: number, changes: Partial<Pick<CategoryRow, 'parentId' | 'name' | 'description' | 'sortOrder' | 'status'>>, now: Date): Statement {
   return db.update(menuCategories)
     .set({ ...changes, version: sql`${menuCategories.version} + 1`, updatedAt: now })
-    .where(and(eq(menuCategories.id, id), eq(menuCategories.version, version)))
+    .where(and(eq(menuCategories.tenantId, tenantId), eq(menuCategories.id, id), eq(menuCategories.version, version)))
 }
 
 /** Archives the active children of a parent (archiving a parent archives its sub-categories). */
@@ -149,13 +151,13 @@ export function restoreChildrenStatement(db: Db, parentId: string, now: Date): S
 }
 
 /** Moves one sibling to `sortOrder` if it's still active under `parentId` at `version`. */
-export function positionStatement(db: Db, parentId: string | null, id: string, version: number, sortOrder: number, now: Date): Statement {
+export function positionStatement(db: Db, tenantId: string, parentId: string | null, id: string, version: number, sortOrder: number, now: Date): Statement {
   return db.update(menuCategories)
     .set({ sortOrder, version: sql`${menuCategories.version} + 1`, updatedAt: now })
-    .where(and(eq(menuCategories.id, id), eq(menuCategories.version, version), parentIs(parentId), eq(menuCategories.status, 'active')))
+    .where(and(eq(menuCategories.id, id), eq(menuCategories.version, version), parentIs(tenantId, parentId), eq(menuCategories.status, 'active')))
 }
 
-export async function findCategoriesByIds(db: Db, ids: string[]): Promise<CategoryRow[]> {
+export async function findCategoriesByIds(db: Db, tenantId: string, ids: string[]): Promise<CategoryRow[]> {
   if (!ids.length) return []
-  return readInChunks(ids, piece => db.select(columns).from(menuCategories).where(inArray(menuCategories.id, piece)))
+  return readInChunks(ids, piece => db.select(columns).from(menuCategories).where(and(eq(menuCategories.tenantId, tenantId), inArray(menuCategories.id, piece))))
 }

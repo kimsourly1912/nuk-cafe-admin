@@ -20,7 +20,7 @@ import { getPublicMenu } from '#server/features/menu/catalog.service'
 import { mediaAssets } from '#server/features/media/media.schema'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
-import { addBranchStaff, createAdmin, createTestDb, createUser, D1_MAX_PARAMS, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { addBranchStaff, createAdmin, createTestDb, createUser, D1_MAX_PARAMS, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 
 /**
  * D1 refuses a statement with more than 100 bound parameters (D62); the test database does too.
@@ -32,6 +32,7 @@ const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', 
 
 beforeEach(async () => {
   db = await createTestDb()
+  await ensureTenant(db)
 })
 
 const names = (n: number, prefix: string) => Array.from({ length: n }, (_, i) => `${prefix} ${String(i + 1).padStart(3, '0')}`)
@@ -55,10 +56,10 @@ describe('menu at its limits', () => {
       await createOptionSet(db, actor, { name, values: ['A'] })
       await createModifierGroup(db, actor, { name, minSelect: 0, maxSelect: null, modifiers: [{ name: 'A', priceDeltaMinor: 0, isDefault: false }] })
     }
-    const sets = await listOptionSets(db, { status: 'active' })
+    const sets = await listOptionSets(db, TEST_TENANT, { status: 'active' })
     expect(sets).toHaveLength(120)
     expect(sets.every(s => s.values.length === 1)).toBe(true)
-    const groups = await listModifierGroups(db, { status: 'active' })
+    const groups = await listModifierGroups(db, TEST_TENANT, { status: 'active' })
     expect(groups).toHaveLength(120)
     expect(groups.every(g => g.modifiers.length === 1)).toBe(true)
   })
@@ -68,7 +69,7 @@ describe('menu at its limits', () => {
     for (const name of names(MAX_SIBLINGS, 'Category')) created.push(await createCategory(db, actor, { name, description: '', parentId: null, availabilityRuleIds: [] }))
     const reordered = await reorderCategories(db, actor, { parentId: null, items: [...created].reverse().map(c => ({ id: c.id, version: c.version })) })
     expect(reordered.map(c => c.id)).toEqual([...created].reverse().map(c => c.id))
-    expect(await listCategories(db, { status: 'active' })).toHaveLength(MAX_SIBLINGS)
+    expect(await listCategories(db, TEST_TENANT, { status: 'active' })).toHaveLength(MAX_SIBLINGS)
   })
 
   it('writes and retires the largest price grid (20 × 20 versions)', async () => {
@@ -119,7 +120,7 @@ describe('the public menu at its limits', () => {
     const drinks = await createCategory(db, actor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
     for (const name of names(120, 'Item')) {
       const imageId = newId()
-      await db.insert(mediaAssets).values({ id: imageId, objectKey: `menu/${imageId}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x' })
+      await db.insert(mediaAssets).values({ id: imageId, tenantId: TEST_TENANT, objectKey: `menu/${imageId}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x' })
       const item = await createItem(db, actor, { categoryId: drinks.id, name, description: '', imageId, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
       await publishItem(db, actor, item.id, { version: item.version })
     }
@@ -143,7 +144,7 @@ describe('availability rules at their limits', () => {
 
   it('lists more rules than fit in one statement', async () => {
     for (const name of names(120, 'Rule')) await createAvailabilityRule(db, actor, { name, windows: [{ weekday: 1, startMinute: 0, endMinute: 60 }] })
-    const rules = await listAvailabilityRules(db, { status: 'active' })
+    const rules = await listAvailabilityRules(db, TEST_TENANT, { status: 'active' })
     expect(rules).toHaveLength(120)
     expect(rules.every(r => r.windows.length === 1)).toBe(true)
   })

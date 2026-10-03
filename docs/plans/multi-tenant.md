@@ -135,7 +135,7 @@ the server), so the API paths can stay while the columns arrive feature by featu
 |---|---|---|
 | T0 ✅ | This plan, D134, the spike, the frame prompts for T2 | Owner's review |
 | T1.1 ✅ | Tenancy core (D135): organization = tenant (`status`, `version`), `branches`, `branch_staff`, the migration, `superadmin`, the access helpers, `requireTenant` (the only tenant for now), identity, branches and staff on it; **and `tenant_id` on every table that points at a branch, with the orders family** (they had to be rebuilt anyway: their foreign key moved from `organization` to `branches`). `tenant_slugs` waits for slug renames (T2) | Server tests incl. the migration over linked rows and two-tenant isolation for branches and staff; e2e unchanged |
-| T1.2 | Menu and media: `tenant_id`, composite keys (`branch_item_states` → its variation too), R2 key prefix | Isolation tests (guard removed → fail) |
+| T1.2 ✅ | Menu and media: `tenant_id`, composite keys (`branch_item_states` → its variation too), R2 key prefix (D136, migration `0025_menu_tenants`) | Isolation tests (guard removed → fail) |
 | T1.3 | Orders' reads scoped (their `tenant_id` exists since T1.1), customer profiles, KHQR settings, the riel rate | Isolation tests; race tests still pass |
 | T1.4 | Telegram and notifications, reports, the assistant, sample data, audit, outbox, idempotency | Isolation tests |
 | T1.5 | Addresses: `/c/<slug>` pages, `/api/c/<slug>` routes, the tenant middleware from the path, `apiFetch` prefix, `tenantPath`, the lint rule, browser storage keys per tenant, `/` and old paths redirect, `/table/<token>` global; the menu cache per tenant (test) | e2e on a seeded database with two cafes; the full suite; staging works at `/c/nuk` |

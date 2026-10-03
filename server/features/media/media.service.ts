@@ -44,8 +44,8 @@ export async function uploadImage(db: Db, store: ObjectStore, actor: Actor, file
   const mimeType = checkImage(file)
   const data = file!.data
   const id = newId()
-  const objectKey = objectKeyFor(mimeType)
-  const row = { id, objectKey, mimeType, byteSize: data.length, sha256: await sha256Hex(data), uploadedBy: actor.userId, now: new Date() }
+  const objectKey = objectKeyFor(actor.tenantId, mimeType)
+  const row = { id, tenantId: actor.tenantId, objectKey, mimeType, byteSize: data.length, sha256: await sha256Hex(data), uploadedBy: actor.userId, now: new Date() }
 
   await store.put(objectKey, data, { contentType: mimeType })
   try {
@@ -63,30 +63,30 @@ export async function uploadImage(db: Db, store: ObjectStore, actor: Actor, file
 
 /**
  * For a feature that references an upload (a menu item's image): checks it can be used now
- * (exists and temporary) and returns the statements that attach it **in that feature's batch**,
+ * (the tenant's, exists and temporary) and returns the statements that attach it **in that feature's batch**,
  * including the guard for an asset cleaned up or attached elsewhere in between. Map a stale batch
  * to `mediaNotAvailable(field)`.
  */
-export async function attachStatements(db: Db, assetId: string, field = 'imageId'): Promise<Statement[]> {
-  const asset = await repo.findAsset(db, assetId)
+export async function attachStatements(db: Db, tenantId: string, assetId: string, field = 'imageId'): Promise<Statement[]> {
+  const asset = await repo.findAsset(db, tenantId, assetId)
   if (asset?.state !== 'temporary') throw mediaNotAvailable(field)
-  return [repo.attachStatement(db, assetId, new Date()), requireOneChange(db)]
+  return [repo.attachStatement(db, tenantId, assetId, new Date()), requireOneChange(db)]
 }
 
 /** The statement that releases an upload a record no longer uses; its 24 hours start now. */
-export function releaseStatement(db: Db, assetId: string): Statement {
-  return repo.releaseStatement(db, assetId, new Date())
+export function releaseStatement(db: Db, tenantId: string, assetId: string): Statement {
+  return repo.releaseStatement(db, tenantId, assetId, new Date())
 }
 
-export async function getAsset(db: Db, id: string): Promise<MediaAsset | undefined> {
-  const row = await repo.findAsset(db, id)
+export async function getAsset(db: Db, tenantId: string, id: string): Promise<MediaAsset | undefined> {
+  const row = await repo.findAsset(db, tenantId, id)
   return row && toAsset(row)
 }
 
 /** The public URL of each of these assets that exists, by id (for lists of records with images). */
-export async function assetUrls(db: Db, ids: string[]): Promise<Map<string, string>> {
+export async function assetUrls(db: Db, tenantId: string, ids: string[]): Promise<Map<string, string>> {
   if (!ids.length) return new Map()
-  const rows = await repo.findAssets(db, [...new Set(ids)])
+  const rows = await repo.findAssets(db, tenantId, [...new Set(ids)])
   return new Map(rows.map(row => [row.id, mediaUrl(row.objectKey)]))
 }
 
@@ -99,7 +99,8 @@ export interface PurgeReport {
 }
 
 /**
- * `media:purge-temporary`: deletes temporary assets whose state is older than 24 hours. The row goes
+ * `media:purge-temporary`: deletes temporary assets whose state is older than 24 hours, every
+ * tenant's (a platform task: the row says whose it is). The row goes
  * first, with a conditional delete (an attach in between keeps it), then the object. So a
  * record never points at a missing object; at worst an object outlives its row. Safe to run twice.
  */
@@ -122,20 +123,20 @@ export async function purgeExpiredUploads(db: Db, store: ObjectStore, options: {
   return report
 }
 
-/** How many uploads exist (the sample-data reset's confirmation, D94). */
-export async function countUploads(db: Db): Promise<number> {
-  return repo.countAssets(db)
+/** How many uploads the tenant has (the sample-data reset's confirmation, D94). */
+export async function countUploads(db: Db, tenantId: string): Promise<number> {
+  return repo.countAssets(db, tenantId)
 }
 
 /**
- * Deletes up to `limit` uploads, row and object, oldest first: test data resets only (the sample-data
+ * Deletes up to `limit` of the tenant's uploads, row and object, oldest first: test data resets only (the sample-data
  * feature, D94), after the records that used them are gone. Call again until none are left (a
  * Worker request may only make so many queries). Row first, like the purge: a missing object is
  * harmless, an object without a row would never be cleaned up.
  */
-export async function deleteUploads(db: Db, store: ObjectStore, limit: number): Promise<PurgeReport> {
+export async function deleteUploads(db: Db, tenantId: string, store: ObjectStore, limit: number): Promise<PurgeReport> {
   const report: PurgeReport = { deleted: 0, kept: 0, objectErrors: [] }
-  for (const asset of await repo.firstAssets(db, limit)) {
+  for (const asset of await repo.firstAssets(db, tenantId, limit)) {
     await repo.deleteAsset(db, asset.id)
     report.deleted++
     try {

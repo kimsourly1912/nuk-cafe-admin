@@ -60,9 +60,9 @@ function toItemGroups({ rows, groups, prices }: AddOns): ItemModifierGroup[] {
   })
 }
 
-async function loadAddOns(db: Db, itemId: string): Promise<AddOns> {
+async function loadAddOns(db: Db, tenantId: string, itemId: string): Promise<AddOns> {
   const [rows, prices] = await Promise.all([repo.itemGroups(db, itemId), repo.itemModifierPrices(db, itemId)])
-  return { rows, prices, groups: await repo.groupsWithModifiers(db, rows.map(r => r.groupId)) }
+  return { rows, prices, groups: await repo.groupsWithModifiers(db, tenantId, rows.map(r => r.groupId)) }
 }
 
 function toItem(row: ItemRow, sets: SetWithValues[], variations: VariationRow[], addOns: AddOns, rules: AvailabilityRuleRef[], imageUrl: string | null): MenuItem {
@@ -114,22 +114,22 @@ function toItem(row: ItemRow, sets: SetWithValues[], variations: VariationRow[],
   }
 }
 
-async function loadItem(db: Db, id: string): Promise<MenuItem> {
-  const row = await repo.findItem(db, id)
+async function loadItem(db: Db, tenantId: string, id: string): Promise<MenuItem> {
+  const row = await repo.findItem(db, tenantId, id)
   if (!row) throw itemNotFound()
   const [sets, variations, addOns, rules, image] = await Promise.all([
-    repo.itemSetIds(db, id).then(ids => repo.setsWithValues(db, ids)),
+    repo.itemSetIds(db, id).then(ids => repo.setsWithValues(db, tenantId, ids)),
     repo.variationsOf(db, id),
-    loadAddOns(db, id),
+    loadAddOns(db, tenantId, id),
     availabilityRepo.itemRules(db, id),
-    row.imageAssetId ? getAsset(db, row.imageAssetId) : undefined,
+    row.imageAssetId ? getAsset(db, tenantId, row.imageAssetId) : undefined,
   ])
   return toItem(row, sets, variations, addOns, rules, image?.url ?? null)
 }
 
-export async function listItems(db: Db, query: ItemListQuery): Promise<Page<MenuItemSummary>> {
-  const { rows, total } = await repo.listItems(db, query)
-  const images = await Promise.all(rows.map(row => row.imageAssetId ? getAsset(db, row.imageAssetId) : undefined))
+export async function listItems(db: Db, tenantId: string, query: ItemListQuery): Promise<Page<MenuItemSummary>> {
+  const { rows, total } = await repo.listItems(db, tenantId, query)
+  const images = await Promise.all(rows.map(row => row.imageAssetId ? getAsset(db, tenantId, row.imageAssetId) : undefined))
   return {
     items: rows.map((row, i) => ({
       id: row.id,
@@ -151,21 +151,21 @@ export async function listItems(db: Db, query: ItemListQuery): Promise<Page<Menu
   }
 }
 
-export async function getItem(db: Db, id: string): Promise<MenuItem> {
-  return loadItem(db, id)
+export async function getItem(db: Db, tenantId: string, id: string): Promise<MenuItem> {
+  return loadItem(db, tenantId, id)
 }
 
 // --- Checks shared by the writes ---
 
-async function ensureLeafCategory(db: Db, categoryId: string) {
-  const category = await repo.findCategory(db, categoryId)
+async function ensureLeafCategory(db: Db, tenantId: string, categoryId: string) {
+  const category = await repo.findCategory(db, tenantId, categoryId)
   if (!category || category.status !== 'active') throw categoryNotAvailable()
   if (await repo.countChildCategories(db, categoryId) > 0) throw categoryNotALeaf()
 }
 
 /** The chosen option sets with their values; newly chosen ones must be active. */
-async function loadSets(db: Db, setIds: string[], alreadyOnItem: string[] = []): Promise<SetWithValues[]> {
-  const sets = await repo.setsWithValues(db, setIds)
+async function loadSets(db: Db, tenantId: string, setIds: string[], alreadyOnItem: string[] = []): Promise<SetWithValues[]> {
+  const sets = await repo.setsWithValues(db, tenantId, setIds)
   setIds.forEach((id, i) => {
     const set = sets.find(s => s.id === id)
     if (!set || (set.status !== 'active' && !alreadyOnItem.includes(id))) throw optionSetNotAvailable(i)
@@ -184,11 +184,11 @@ function plan(sets: SetWithValues[], existing: VariationRow[], entries: GridEntr
 }
 
 /** The statements that write a planned grid: update or create each cell, retire what left the grid. */
-function gridStatements(db: Db, itemId: string, grid: GridPlan, now: Date): Statement[] {
+function gridStatements(db: Db, tenantId: string, itemId: string, grid: GridPlan, now: Date): Statement[] {
   return [
     ...grid.cells.flatMap(cell => cell.id
       ? [repo.updateVariationStatement(db, itemId, cell.id, { priceMinor: cell.priceMinor, status: cell.status, sortOrder: cell.sortOrder }, now)]
-      : repo.insertVariationStatements(db, itemId, { ...cell, id: newId() }, now)),
+      : repo.insertVariationStatements(db, tenantId, itemId, { ...cell, id: newId() }, now)),
     ...repo.retireVariationsStatements(db, itemId, grid.retire, now),
   ]
 }
@@ -210,9 +210,9 @@ interface AddOnPlan {
  * add-ons and defaults. Its own prices are for add-ons of that group: active ones, or archived ones
  * it already had a price for (so the form can send back what it read).
  */
-async function planAddOns(db: Db, input: ItemModifierGroupsInput, current?: AddOns): Promise<AddOnPlan> {
+async function planAddOns(db: Db, tenantId: string, input: ItemModifierGroupsInput, current?: AddOns): Promise<AddOnPlan> {
   const currentIds = current?.rows.map(r => r.groupId) ?? []
-  const groups = await repo.groupsWithModifiers(db, input.map(g => g.groupId))
+  const groups = await repo.groupsWithModifiers(db, tenantId, input.map(g => g.groupId))
   const plan: AddOnPlan = { groups: [], prices: [], newGroupIds: [], newPricedIds: [] }
   input.forEach((entry, i) => {
     const group = groups.find(g => g.id === entry.groupId)
@@ -242,9 +242,9 @@ async function planAddOns(db: Db, input: ItemModifierGroupsInput, current?: AddO
 }
 
 /** The guards for a planned add-on list: whatever it newly uses is still active. */
-const addOnGuards = (db: Db, plan: AddOnPlan | undefined): Statement[] => [
-  ...(plan?.newGroupIds.length ? [repo.requireActiveGroups(db, plan.newGroupIds)] : []),
-  ...(plan ? repo.requireActiveModifiers(db, plan.newPricedIds) : []),
+const addOnGuards = (db: Db, tenantId: string, plan: AddOnPlan | undefined): Statement[] => [
+  ...(plan?.newGroupIds.length ? [repo.requireActiveGroups(db, tenantId, plan.newGroupIds)] : []),
+  ...(plan ? repo.requireActiveModifiers(db, tenantId, plan.newPricedIds) : []),
 ]
 
 const audit = (db: Db, actor: Actor, action: string, itemId: string, metadata: Record<string, unknown>) =>
@@ -255,20 +255,20 @@ const audit = (db: Db, actor: Actor, action: string, itemId: string, metadata: R
  * the target one) is no longer an active leaf, an option set or value, add-on group or add-on, or
  * newly chosen availability rule was archived, or the image expired.
  */
-async function runItemBatch(db: Db, statements: Statement[], check: { itemId?: string, version?: number, categoryId?: string, setIds?: string[], valueIds?: string[], addOns?: { input: ItemModifierGroupsInput, plan: AddOnPlan }, rules?: { ids: string[], added: string[] }, imageId?: string | null }) {
+async function runItemBatch(db: Db, tenantId: string, statements: Statement[], check: { itemId?: string, version?: number, categoryId?: string, setIds?: string[], valueIds?: string[], addOns?: { input: ItemModifierGroupsInput, plan: AddOnPlan }, rules?: { ids: string[], added: string[] }, imageId?: string | null }) {
   try {
     await db.batch(statements as [Statement, ...Statement[]])
   }
   catch (error) {
     if (!isStaleWrite(error)) throw error
     if (check.itemId !== undefined) {
-      const item = await repo.findItem(db, check.itemId)
+      const item = await repo.findItem(db, tenantId, check.itemId)
       if (!item) throw itemNotFound()
       if (item.version !== check.version) throw itemChanged()
     }
-    if (check.categoryId) await ensureLeafCategory(db, check.categoryId)
+    if (check.categoryId) await ensureLeafCategory(db, tenantId, check.categoryId)
     if (check.setIds?.length) {
-      const sets = await repo.setsWithValues(db, check.setIds)
+      const sets = await repo.setsWithValues(db, tenantId, check.setIds)
       const archivedSet = check.setIds.findIndex(id => sets.find(s => s.id === id)?.status !== 'active')
       if (archivedSet >= 0) throw optionSetNotAvailable(archivedSet)
       const activeValues = new Set(sets.flatMap(s => s.values.filter(v => v.status === 'active').map(v => v.id)))
@@ -276,7 +276,7 @@ async function runItemBatch(db: Db, statements: Statement[], check: { itemId?: s
     }
     if (check.addOns) {
       const { input, plan } = check.addOns
-      const groups = await repo.groupsWithModifiers(db, input.map(g => g.groupId))
+      const groups = await repo.groupsWithModifiers(db, tenantId, input.map(g => g.groupId))
       const isActive = (groupId: string) => groups.find(g => g.id === groupId)?.status === 'active'
       const archivedGroup = input.findIndex(g => plan.newGroupIds.includes(g.groupId) && !isActive(g.groupId))
       if (archivedGroup >= 0) throw modifierGroupNotAvailable(archivedGroup)
@@ -286,7 +286,7 @@ async function runItemBatch(db: Db, statements: Statement[], check: { itemId?: s
         if (j >= 0) throw modifierNotAvailable(`modifierGroups.${i}.prices.${j}.modifierId`)
       }
     }
-    const ruleError = check.rules && await ruleLinksFailure(db, check.rules.ids, check.rules.added)
+    const ruleError = check.rules && await ruleLinksFailure(db, tenantId, check.rules.ids, check.rules.added)
     if (ruleError) throw ruleError
     if (check.imageId) throw mediaNotAvailable('imageId')
     throw itemChanged()
@@ -297,31 +297,32 @@ async function runItemBatch(db: Db, statements: Statement[], check: { itemId?: s
 
 /** A new item, as a draft at the end of its category. */
 export async function createItem(db: Db, actor: Actor, input: CreateItemInput): Promise<MenuItem> {
-  await ensureLeafCategory(db, input.categoryId)
-  const sets = await loadSets(db, input.optionSetIds)
+  const { tenantId } = actor
+  await ensureLeafCategory(db, tenantId, input.categoryId)
+  const sets = await loadSets(db, tenantId, input.optionSetIds)
   const grid = plan(sets, [], input.variations)
-  const addOns = await planAddOns(db, input.modifierGroups)
-  const addedRules = await planRuleLinks(db, input.availabilityRuleIds)
-  const imageStatements = input.imageId ? await attachStatements(db, input.imageId, 'imageId') : []
+  const addOns = await planAddOns(db, tenantId, input.modifierGroups)
+  const addedRules = await planRuleLinks(db, tenantId, input.availabilityRuleIds)
+  const imageStatements = input.imageId ? await attachStatements(db, tenantId, input.imageId, 'imageId') : []
 
   const id = newId()
   const now = new Date()
   const valueIds = gridValueIds(grid)
-  await runItemBatch(db, [
-    repo.requireLeafCategory(db, input.categoryId),
-    ...(input.optionSetIds.length ? [repo.requireActiveSets(db, input.optionSetIds)] : []),
-    ...(valueIds.length ? [repo.requireActiveValues(db, valueIds)] : []),
-    ...addOnGuards(db, addOns),
-    ...availabilityRepo.requireActiveRules(db, addedRules),
-    repo.insertItemStatement(db, { id, categoryId: input.categoryId, name: input.name, description: input.description, imageAssetId: input.imageId, sortOrder: await repo.nextItemOrder(db, input.categoryId) }, now),
-    ...repo.replaceOptionSetsStatements(db, id, input.optionSetIds),
-    ...gridStatements(db, id, grid, now),
-    ...repo.replaceModifierGroupsStatements(db, id, addOns.groups, addOns.prices),
-    ...availabilityRepo.replaceItemRulesStatements(db, id, input.availabilityRuleIds),
+  await runItemBatch(db, tenantId, [
+    repo.requireLeafCategory(db, tenantId, input.categoryId),
+    ...(input.optionSetIds.length ? [repo.requireActiveSets(db, tenantId, input.optionSetIds)] : []),
+    ...(valueIds.length ? [repo.requireActiveValues(db, tenantId, valueIds)] : []),
+    ...addOnGuards(db, tenantId, addOns),
+    ...availabilityRepo.requireActiveRules(db, tenantId, addedRules),
+    repo.insertItemStatement(db, { id, tenantId, categoryId: input.categoryId, name: input.name, description: input.description, imageAssetId: input.imageId, sortOrder: await repo.nextItemOrder(db, input.categoryId) }, now),
+    ...repo.replaceOptionSetsStatements(db, tenantId, id, input.optionSetIds),
+    ...gridStatements(db, tenantId, id, grid, now),
+    ...repo.replaceModifierGroupsStatements(db, tenantId, id, addOns.groups, addOns.prices),
+    ...availabilityRepo.replaceItemRulesStatements(db, tenantId, id, input.availabilityRuleIds),
     ...imageStatements,
     audit(db, actor, 'create', id, { categoryId: input.categoryId, optionSets: input.optionSetIds.length, versions: grid.cells.length, addOnGroups: addOns.groups.length, availabilityRules: input.availabilityRuleIds }),
   ], { categoryId: input.categoryId, setIds: input.optionSetIds, valueIds, addOns: { input: input.modifierGroups, plan: addOns }, rules: { ids: input.availabilityRuleIds, added: addedRules }, imageId: input.imageId })
-  return loadItem(db, id)
+  return loadItem(db, tenantId, id)
 }
 
 /**
@@ -330,13 +331,14 @@ export async function createItem(db: Db, actor: Actor, input: CreateItemInput): 
  * one's prices and switches. An active item must keep something to sell.
  */
 export async function updateItem(db: Db, actor: Actor, id: string, input: UpdateItemInput): Promise<MenuItem> {
-  const item = await repo.findItem(db, id)
+  const { tenantId } = actor
+  const item = await repo.findItem(db, tenantId, id)
   if (!item) throw itemNotFound()
   if (item.version !== input.version) throw itemChanged()
   if (item.status === 'archived') throw itemInWrongState('This menu item is archived. Restore it first.')
 
   const moving = input.categoryId !== undefined && input.categoryId !== item.categoryId
-  if (moving) await ensureLeafCategory(db, input.categoryId!)
+  if (moving) await ensureLeafCategory(db, tenantId, input.categoryId!)
 
   const currentSetIds = await repo.itemSetIds(db, id)
   const setIds = input.optionSetIds ?? currentSetIds
@@ -344,16 +346,16 @@ export async function updateItem(db: Db, actor: Actor, id: string, input: Update
   const newSetIds = setIds.filter(setId => !currentSetIds.includes(setId))
   let grid: GridPlan | undefined
   if (input.variations) {
-    const sets = await loadSets(db, setIds, currentSetIds)
+    const sets = await loadSets(db, tenantId, setIds, currentSetIds)
     grid = plan(sets, await repo.variationsOf(db, id), input.variations)
   }
-  const addOns = input.modifierGroups ? await planAddOns(db, input.modifierGroups, await loadAddOns(db, id)) : undefined
+  const addOns = input.modifierGroups ? await planAddOns(db, tenantId, input.modifierGroups, await loadAddOns(db, tenantId, id)) : undefined
   const ruleIds = input.availabilityRuleIds
-  const addedRules = ruleIds ? await planRuleLinks(db, ruleIds, (await availabilityRepo.itemRules(db, id)).map(r => r.id)) : []
+  const addedRules = ruleIds ? await planRuleLinks(db, tenantId, ruleIds, (await availabilityRepo.itemRules(db, id)).map(r => r.id)) : []
 
   const imageChanging = input.imageId !== undefined && input.imageId !== item.imageAssetId
   const imageStatements = imageChanging
-    ? [...(item.imageAssetId ? [releaseStatement(db, item.imageAssetId)] : []), ...(input.imageId ? await attachStatements(db, input.imageId, 'imageId') : [])]
+    ? [...(item.imageAssetId ? [releaseStatement(db, tenantId, item.imageAssetId)] : []), ...(input.imageId ? await attachStatements(db, tenantId, input.imageId, 'imageId') : [])]
     : []
 
   const now = new Date()
@@ -364,18 +366,18 @@ export async function updateItem(db: Db, actor: Actor, id: string, input: Update
     ...(imageChanging && { imageAssetId: input.imageId }),
   }
   const valueIds = grid ? gridValueIds(grid) : []
-  await runItemBatch(db, [
-    repo.touchItemStatement(db, id, input.version, now, changes, ['draft', 'active']),
+  await runItemBatch(db, tenantId, [
+    repo.touchItemStatement(db, tenantId, id, input.version, now, changes, ['draft', 'active']),
     requireOneChange(db),
-    ...(moving ? [repo.requireLeafCategory(db, input.categoryId!)] : []),
-    ...(newSetIds.length ? [repo.requireActiveSets(db, newSetIds)] : []),
-    ...(valueIds.length ? [repo.requireActiveValues(db, valueIds)] : []),
-    ...addOnGuards(db, addOns),
-    ...availabilityRepo.requireActiveRules(db, addedRules),
-    ...(setsChanged ? repo.replaceOptionSetsStatements(db, id, setIds) : []),
-    ...(grid ? gridStatements(db, id, grid, now) : []),
-    ...(addOns ? repo.replaceModifierGroupsStatements(db, id, addOns.groups, addOns.prices) : []),
-    ...(ruleIds ? availabilityRepo.replaceItemRulesStatements(db, id, ruleIds) : []),
+    ...(moving ? [repo.requireLeafCategory(db, tenantId, input.categoryId!)] : []),
+    ...(newSetIds.length ? [repo.requireActiveSets(db, tenantId, newSetIds)] : []),
+    ...(valueIds.length ? [repo.requireActiveValues(db, tenantId, valueIds)] : []),
+    ...addOnGuards(db, tenantId, addOns),
+    ...availabilityRepo.requireActiveRules(db, tenantId, addedRules),
+    ...(setsChanged ? repo.replaceOptionSetsStatements(db, tenantId, id, setIds) : []),
+    ...(grid ? gridStatements(db, tenantId, id, grid, now) : []),
+    ...(addOns ? repo.replaceModifierGroupsStatements(db, tenantId, id, addOns.groups, addOns.prices) : []),
+    ...(ruleIds ? availabilityRepo.replaceItemRulesStatements(db, tenantId, id, ruleIds) : []),
     ...imageStatements,
     ...(item.status === 'active' ? [repo.requireSellable(db, id)] : []),
     audit(db, actor, moving ? 'move' : 'update', id, {
@@ -383,61 +385,65 @@ export async function updateItem(db: Db, actor: Actor, id: string, input: Update
       ...(moving && { from: item.categoryId, to: input.categoryId }),
     }),
   ], { itemId: id, version: input.version, categoryId: moving ? input.categoryId : undefined, setIds: newSetIds, valueIds, addOns: addOns && { input: input.modifierGroups!, plan: addOns }, rules: ruleIds && { ids: ruleIds, added: addedRules }, imageId: imageChanging ? input.imageId : undefined })
-  return loadItem(db, id)
+  return loadItem(db, tenantId, id)
 }
 
 /** draft → active: customers see it (when its category is active). Needs something to sell. */
 export async function publishItem(db: Db, actor: Actor, id: string, input: ItemVersionInput): Promise<MenuItem> {
-  const item = await openForAction(db, id, input.version, ['draft'], 'Only a draft can be published.')
-  await ensureLeafCategory(db, item.categoryId)
+  const { tenantId } = actor
+  const item = await openForAction(db, tenantId, id, input.version, ['draft'], 'Only a draft can be published.')
+  await ensureLeafCategory(db, tenantId, item.categoryId)
   if (await repo.countSellable(db, id) === 0) throw nothingToSell()
-  await runItemBatch(db, [
-    repo.touchItemStatement(db, id, input.version, new Date(), { status: 'active' }, ['draft']),
+  await runItemBatch(db, tenantId, [
+    repo.touchItemStatement(db, tenantId, id, input.version, new Date(), { status: 'active' }, ['draft']),
     requireOneChange(db),
-    repo.requireLeafCategory(db, item.categoryId),
+    repo.requireLeafCategory(db, tenantId, item.categoryId),
     repo.requireSellable(db, id),
     audit(db, actor, 'publish', id, {}),
   ], { itemId: id, version: input.version, categoryId: item.categoryId })
-  return loadItem(db, id)
+  return loadItem(db, tenantId, id)
 }
 
 /** active → draft: hidden from customers, still editable. */
 export async function unpublishItem(db: Db, actor: Actor, id: string, input: ItemVersionInput): Promise<MenuItem> {
-  await openForAction(db, id, input.version, ['active'], 'Only a published item can be unpublished.')
-  await runItemBatch(db, [
-    repo.touchItemStatement(db, id, input.version, new Date(), { status: 'draft' }, ['active']),
+  const { tenantId } = actor
+  await openForAction(db, tenantId, id, input.version, ['active'], 'Only a published item can be unpublished.')
+  await runItemBatch(db, tenantId, [
+    repo.touchItemStatement(db, tenantId, id, input.version, new Date(), { status: 'draft' }, ['active']),
     requireOneChange(db),
     audit(db, actor, 'unpublish', id, {}),
   ], { itemId: id, version: input.version })
-  return loadItem(db, id)
+  return loadItem(db, tenantId, id)
 }
 
 /** Archives a draft or active item. It keeps its image, versions and ids (orders refer to them). */
 export async function archiveItem(db: Db, actor: Actor, id: string, input: ItemVersionInput): Promise<MenuItem> {
-  await openForAction(db, id, input.version, ['draft', 'active'], 'This menu item is already archived.')
-  await runItemBatch(db, [
-    repo.touchItemStatement(db, id, input.version, new Date(), { status: 'archived' }, ['draft', 'active']),
+  const { tenantId } = actor
+  await openForAction(db, tenantId, id, input.version, ['draft', 'active'], 'This menu item is already archived.')
+  await runItemBatch(db, tenantId, [
+    repo.touchItemStatement(db, tenantId, id, input.version, new Date(), { status: 'archived' }, ['draft', 'active']),
     requireOneChange(db),
     audit(db, actor, 'archive', id, {}),
   ], { itemId: id, version: input.version })
-  return loadItem(db, id)
+  return loadItem(db, tenantId, id)
 }
 
 /** archived → draft, at the end of its category (which must still be an active leaf). */
 export async function restoreItem(db: Db, actor: Actor, id: string, input: ItemVersionInput): Promise<MenuItem> {
-  const item = await openForAction(db, id, input.version, ['archived'], 'This menu item isn\'t archived.')
-  await ensureLeafCategory(db, item.categoryId)
-  await runItemBatch(db, [
-    repo.touchItemStatement(db, id, input.version, new Date(), { status: 'draft', sortOrder: await repo.nextItemOrder(db, item.categoryId) }, ['archived']),
+  const { tenantId } = actor
+  const item = await openForAction(db, tenantId, id, input.version, ['archived'], 'This menu item isn\'t archived.')
+  await ensureLeafCategory(db, tenantId, item.categoryId)
+  await runItemBatch(db, tenantId, [
+    repo.touchItemStatement(db, tenantId, id, input.version, new Date(), { status: 'draft', sortOrder: await repo.nextItemOrder(db, item.categoryId) }, ['archived']),
     requireOneChange(db),
-    repo.requireLeafCategory(db, item.categoryId),
+    repo.requireLeafCategory(db, tenantId, item.categoryId),
     audit(db, actor, 'restore', id, {}),
   ], { itemId: id, version: input.version, categoryId: item.categoryId })
-  return loadItem(db, id)
+  return loadItem(db, tenantId, id)
 }
 
-async function openForAction(db: Db, id: string, version: number, from: ItemRow['status'][], wrongState: string): Promise<ItemRow> {
-  const item = await repo.findItem(db, id)
+async function openForAction(db: Db, tenantId: string, id: string, version: number, from: ItemRow['status'][], wrongState: string): Promise<ItemRow> {
+  const item = await repo.findItem(db, tenantId, id)
   if (!item) throw itemNotFound()
   if (item.version !== version) throw itemChanged()
   if (!from.includes(item.status)) throw itemInWrongState(wrongState)
@@ -446,14 +452,15 @@ async function openForAction(db: Db, id: string, version: number, from: ItemRow[
 
 /** Puts a category's drafts and active items in the given order; the list must be exactly them. */
 export async function reorderItems(db: Db, actor: Actor, input: ReorderItemsInput): Promise<void> {
-  const listed = await repo.listedItems(db, input.categoryId)
+  const { tenantId } = actor
+  const listed = await repo.listedItems(db, tenantId, input.categoryId)
   const known = new Map(listed.map(i => [i.id, i.version]))
   if (listed.length !== input.items.length || input.items.some(i => known.get(i.id) !== i.version)) throw itemsChanged()
   const now = new Date()
   try {
     await db.batch([
-      repo.requireListedCount(db, input.categoryId, input.items.length),
-      ...input.items.flatMap((item, i) => [repo.positionItemStatement(db, input.categoryId, item.id, item.version, i + 1, now), requireOneChange(db)]),
+      repo.requireListedCount(db, tenantId, input.categoryId, input.items.length),
+      ...input.items.flatMap((item, i) => [repo.positionItemStatement(db, tenantId, input.categoryId, item.id, item.version, i + 1, now), requireOneChange(db)]),
       audit(db, actor, 'reorder', input.categoryId, { categoryId: input.categoryId, order: input.items.map(i => i.id) }),
     ] as [Statement, ...Statement[]])
   }

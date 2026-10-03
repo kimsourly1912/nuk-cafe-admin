@@ -54,6 +54,8 @@ Everyone else is added from the Staff page; branches come from the seed locally,
 
 **Migration `0024_tenants` (D135)** rebuilds the branch and order tables. Before the deploy that carries it, note the time for a D1 Time Travel restore (Restore drill below); after it, admin sign-in, the menu, a dine-in order and the counter are checked by hand.
 
+**Migration `0025_menu_tenants` (D136)** rebuilds the menu tables and `media_assets` the same way. Same routine: note the time before the deploy; after it, the admin menu screens, an item's photo, a new upload (its URL under `/media/t/…`), sold out at the counter and a checkout are checked by hand.
+
 ## Configuration
 
 Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudflare secrets, never committed. `.env.example` lists every name.

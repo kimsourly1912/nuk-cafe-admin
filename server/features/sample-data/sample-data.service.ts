@@ -77,22 +77,22 @@ interface MenuSnapshot {
   items: Map<string, MenuItemSummary>
 }
 
-async function allItems(db: Db): Promise<MenuItemSummary[]> {
+async function allItems(db: Db, tenantId: string): Promise<MenuItemSummary[]> {
   const items: MenuItemSummary[] = []
   for (let page = 1; ; page++) {
-    const result = await listItems(db, { page, pageSize: 100, status: 'all' })
+    const result = await listItems(db, tenantId, { page, pageSize: 100, status: 'all' })
     items.push(...result.items)
     if (page >= result.totalPages) return items
   }
 }
 
-async function snapshot(db: Db): Promise<MenuSnapshot> {
+async function snapshot(db: Db, tenantId: string): Promise<MenuSnapshot> {
   const [categories, optionSets, modifierGroups, rules, items] = await Promise.all([
-    listCategories(db, { status: 'active' }),
-    listOptionSets(db, { status: 'active' }),
-    listModifierGroups(db, { status: 'active' }),
-    listAvailabilityRules(db, { status: 'active' }),
-    allItems(db),
+    listCategories(db, tenantId, { status: 'active' }),
+    listOptionSets(db, tenantId, { status: 'active' }),
+    listModifierGroups(db, tenantId, { status: 'active' }),
+    listAvailabilityRules(db, tenantId, { status: 'active' }),
+    allItems(db, tenantId),
   ])
   const names = new Map(categories.map(c => [c.id, c.name]))
   return {
@@ -129,7 +129,7 @@ const isEmpty = (counts: MenuDataCounts) =>
 // --- State ---
 
 export async function getSampleDataState(db: Db, tenantId: string, environment: string): Promise<SampleDataState> {
-  const [counts, photos, run, branches] = await Promise.all([countMenuData(db), countUploads(db), repo.findRun(db), listBranchOptions(db, tenantId)])
+  const [counts, photos, run, branches] = await Promise.all([countMenuData(db, tenantId), countUploads(db, tenantId), repo.findRun(db), listBranchOptions(db, tenantId)])
   const summaries = await Promise.all(branches.map(async (branch) => {
     const [settings, labels] = await Promise.all([getBranchSettings(db, tenantId, branch.id), activeTableLabels(db, tenantId, branch.id)])
     return { id: branch.id, name: branch.name, hoursSet: settings.hours.length > 0, tables: labels.length }
@@ -138,7 +138,7 @@ export async function getSampleDataState(db: Db, tenantId: string, environment: 
     environment,
     menu: {
       counts: { ...counts, photos },
-      run: run ? { size: run.size, finished: !!run.finishedAt, stages: stagesOf(await snapshot(db), run.size) } : null,
+      run: run ? { size: run.size, finished: !!run.finishedAt, stages: stagesOf(await snapshot(db, tenantId), run.size) } : null,
     },
     branches: summaries,
   }
@@ -155,7 +155,7 @@ export async function getSampleDataState(db: Db, tenantId: string, environment: 
 export async function loadSampleMenuStep(db: Db, actor: Actor, input: LoadSampleMenuInput, environment: string, now = new Date()): Promise<SampleDataState> {
   let run = await repo.findRun(db)
   if (!run) {
-    if (!isEmpty(await countMenuData(db))) throw menuNotEmpty()
+    if (!isEmpty(await countMenuData(db, actor.tenantId))) throw menuNotEmpty()
     await repo.insertRun(db, { size: input.size, startedBy: actor.userId, now })
     run = await repo.findRun(db)
     if (!run) throw sampleDataBusy()
@@ -176,7 +176,7 @@ export async function loadSampleMenuStep(db: Db, actor: Actor, input: LoadSample
 
 /** Creates the next records; `true` once nothing is left to create. */
 async function nextMenuStep(db: Db, actor: Actor, size: SampleMenuSize): Promise<boolean> {
-  const menu = await snapshot(db)
+  const menu = await snapshot(db, actor.tenantId)
   let budget = RECORDS_PER_STEP
 
   for (const entry of SAMPLE_CATEGORIES) {
@@ -207,7 +207,7 @@ async function nextMenuStep(db: Db, actor: Actor, size: SampleMenuSize): Promise
     // An item created by a step that failed before it was published or archived is finished here.
     if (existing && !needsSettling(existing, item)) continue
     if (!budget--) return false
-    const created = existing ? await getItem(db, existing.id) : await createSampleItem(db, actor, menu, item)
+    const created = existing ? await getItem(db, actor.tenantId, existing.id) : await createSampleItem(db, actor, menu, item)
     await settleItem(db, actor, created, item)
   }
   return true
@@ -275,15 +275,15 @@ export async function loadSampleBranch(db: Db, actor: Actor, input: LoadSampleBr
 export async function resetSampleMenu(db: Db, actor: Actor, store: ObjectStore, environment: string, now = new Date()): Promise<SampleDataState> {
   const run = await repo.findRun(db)
   if (run?.lockedUntil && run.lockedUntil > now) throw sampleDataBusy()
-  const counts = await countMenuData(db)
+  const counts = await countMenuData(db, actor.tenantId)
   if (!isEmpty(counts) || run) {
     const statements: Statement[] = [
-      ...deleteAllMenuStatements(db),
+      ...deleteAllMenuStatements(db, actor.tenantId),
       repo.deleteRunStatement(db),
       auditStatement(db, actor, { action: 'sample-data.reset', targetType: 'menu', targetId: 'menu', metadata: { ...counts } }),
     ]
     await db.batch(statements as [Statement, ...Statement[]])
   }
-  await deleteUploads(db, store, PHOTOS_PER_STEP)
+  await deleteUploads(db, actor.tenantId, store, PHOTOS_PER_STEP)
   return getSampleDataState(db, actor.tenantId, environment)
 }
