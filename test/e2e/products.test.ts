@@ -700,6 +700,36 @@ describe('publishing from the form (D125)', () => {
   })
 })
 
+// View on menu (D145): a published item opens on the customer menu, in a new tab, with its detail open.
+describe('View on menu', () => {
+  it('opens a published item on the customer menu in a new tab, from its form and its row', async () => {
+    const { page } = await open()
+    const form = await openEdit(page, 'Latte')
+    const view = form.getByRole('link', { name: 'View on menu (opens in a new tab)' })
+    expect([await view.getAttribute('href'), await view.getAttribute('target')]).toEqual(['/c/nuk?item=item-1', '_blank'])
+    await form.locator('[data-slot="footer"]').getByRole('button', { name: 'Cancel' }).click()
+    await form.waitFor({ state: 'hidden' })
+
+    await page.getByRole('button', { name: 'Actions for Latte' }).click()
+    const row = page.getByRole('menuitem', { name: 'View on menu' })
+    expect([await row.getAttribute('href'), await row.getAttribute('target')]).toEqual(['/c/nuk?item=item-1', '_blank'])
+  })
+
+  it('a draft isn\'t on the menu: the button is disabled and says why, the row offers nothing', async () => {
+    const { page } = await open()
+    const form = await openEdit(page, 'Matcha')
+    const view = form.getByRole('button', { name: 'View on menu: Publish it to see it on the menu' })
+    expect(await view.isDisabled()).toBe(true)
+    expect(await form.getByRole('link', { name: /View on menu/ }).count()).toBe(0)
+    await form.locator('[data-slot="footer"]').getByRole('button', { name: 'Cancel' }).click()
+    await form.waitFor({ state: 'hidden' })
+
+    await page.getByRole('button', { name: 'Actions for Matcha' }).click()
+    await page.getByRole('menuitem', { name: 'Publish' }).waitFor()
+    expect(await page.getByRole('menuitem', { name: 'View on menu' }).count()).toBe(0)
+  })
+})
+
 describe('menu item editor URLs (D90, decision 4)', () => {
   const params = (page: Page) => new URL(page.url()).searchParams
 

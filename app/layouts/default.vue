@@ -46,7 +46,6 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
       <template #header="{ collapsed }">
         <CafeSwitcher
           workspace="admin"
-          :home="tenantPath('/admin')"
           :collapsed="collapsed"
         />
       </template>
@@ -62,6 +61,19 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
 
       <template #footer="{ collapsed }">
         <div class="flex w-full flex-col gap-1">
+          <!-- The cafe's customer menu in a new tab, to check a change as customers see it (D145). -->
+          <UButton
+            :label="collapsed ? undefined : 'View menu'"
+            aria-label="View menu (opens in a new tab)"
+            icon="i-lucide-external-link"
+            color="neutral"
+            variant="ghost"
+            block
+            :square="collapsed"
+            class="justify-start"
+            :to="tenantPath('/')"
+            target="_blank"
+          />
           <UButton
             v-if="assistant.enabled.value"
             :label="collapsed ? undefined : 'Assistant'"

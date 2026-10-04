@@ -45,6 +45,10 @@ From the item's **⋮** menu in the list:
 
 To mark something out of stock for today, don't unpublish it: staff use **Sold out** in the counter app.
 
+## See an item as customers do
+
+A published item has **View on menu** in its form (and in its row's ⋮ menu): it opens your customer menu in a new tab with that item open. A draft or an archived item isn't on the menu, so the button is greyed out until you publish it. The menu can take up to a minute to show a change you just saved.
+
 ## Change the order of items in a category
 
 Customers see a category's items in the order you set here, for example best sellers first.

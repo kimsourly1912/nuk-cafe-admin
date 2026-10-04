@@ -15,6 +15,7 @@
  *   it, opening the order in a drawer (from the right on tablets, a bottom sheet on phones). The
  *   title and the totals stay in view; only the lines scroll. "Clear order" asks first (D124).
  * - **Closed**: one warning banner with when it opens; browsing works, adding doesn't.
+ * - **An item's address** (`?item=<id>`, D145): opens that item's detail once the menu is shown.
  *
  * Server-rendered (D95): what differs by width is CSS, never `useLayoutContext`, so the server's page
  * and the browser's first render agree. The menu is the server's first branch until the browser's
@@ -147,6 +148,31 @@ function addFromDetail(line: { variationId: string, modifierIds: string[], quant
   if (!detailItem.value) return
   cartStore.add({ ...line, itemId: detailItem.value.id, name: detailItem.value.name })
 }
+
+// --- An item's own address (`?item=<id>`, D145): the admin's View on menu, or a shared link ---
+// Opened in the browser only, once the menu of the branch this browser shows has loaded (a stored
+// branch choice is read after mounting and may load another branch's menu first).
+const route = useRoute()
+const router = useRouter()
+const toast = useToast()
+const linkedItemId = () => (typeof route.query.item === 'string' ? route.query.item : undefined)
+/** True a tick after mounting: by then a stored branch choice has asked for its own menu. */
+const settled = ref(false)
+onMounted(() => nextTick(() => {
+  settled.value = true
+}))
+let linkHandled = false
+watch([settled, menu, () => menuQuery.pending.value], ([ready, current, pending]) => {
+  if (linkHandled || !ready || !current || pending || !linkedItemId()) return
+  linkHandled = true
+  const item = allItems.value.find(candidate => candidate.id === linkedItemId())
+  if (item) openItem(item)
+  else toast.add({ title: 'This item isn\'t on the menu right now', description: 'It may be a draft, archived, or outside its available hours.', color: 'warning', icon: 'i-lucide-circle-alert' })
+})
+// Closing the item leaves its address, so a reload shows the menu.
+watch(detailOpen, (open) => {
+  if (!open && linkedItemId()) void router.replace({ query: { ...route.query, item: undefined } })
+})
 </script>
 
 <template>

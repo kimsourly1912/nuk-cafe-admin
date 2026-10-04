@@ -165,6 +165,6 @@ describe('your cafes (D144)', () => {
     await page.getByRole('link', { name: 'Your cafes' }).click()
     await page.getByRole('link', { name: 'Admin, Brown Bean' }).click()
     await page.waitForURL(address => address.pathname === `/c/${cafe.slug}/admin`)
-    await page.getByRole('link', { name: 'Brown Bean Admin' }).waitFor()
+    await page.getByRole('button', { name: 'Brown Bean Admin: cafe menu' }).waitFor()
   })
 })

@@ -10,3 +10,8 @@ export function priceRange(item: Pick<MenuItemSummary, 'priceMinMinor' | 'priceM
   if (item.priceMaxMinor === null || item.priceMaxMinor === item.priceMinMinor) return formatMinor(item.priceMinMinor)
   return `${formatMinor(item.priceMinMinor)}–${formatMinor(item.priceMaxMinor)}`
 }
+
+/** An item's address on the customer menu (`/c/<slug>?item=<id>`, D145): the menu opens its detail. */
+export function itemOnMenuPath(menuPath: string, itemId: string) {
+  return `${menuPath}?item=${encodeURIComponent(itemId)}`
+}

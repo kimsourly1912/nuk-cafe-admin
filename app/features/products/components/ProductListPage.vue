@@ -19,7 +19,7 @@ import type { ItemStatus, MenuItemSummary } from '#shared/contracts/menu-items'
 import { useEventListener, useLocalStorage } from '@vueuse/core'
 import { CategorySelect } from '~/features/categories'
 import { useItemList, useItemMutations, useItemStatusCounts } from '../composables/useItems'
-import { ITEM_STATUS_LABELS, priceRange } from '../utils/item-display'
+import { itemOnMenuPath, ITEM_STATUS_LABELS, priceRange } from '../utils/item-display'
 import ProductCard from './ProductCard.vue'
 import ProductGroupFilter from './ProductGroupFilter.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
@@ -138,6 +138,8 @@ function rowActions(item: MenuItemSummary): DropdownMenuItem[] {
     item.status === 'draft'
       ? { label: 'Publish', icon: 'i-lucide-send', onSelect: () => publish.execute(item) }
       : { label: 'Unpublish', icon: 'i-lucide-eye-off', onSelect: () => unpublish.execute(item) },
+    // Published items are on the menu: open it there, in a new tab (D145).
+    ...(item.status === 'active' ? [{ label: 'View on menu', icon: 'i-lucide-external-link', to: itemOnMenuPath(tenantPath('/'), item.id), target: '_blank' }] : []),
     { label: 'Archive', icon: 'i-lucide-archive', color: 'error', onSelect: () => archive.execute(item) },
   ]
 }

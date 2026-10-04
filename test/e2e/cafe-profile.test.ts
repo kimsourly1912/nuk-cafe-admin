@@ -40,7 +40,7 @@ async function open(options: { width?: number, conflictOnce?: boolean } = {}) {
   return { page, saved }
 }
 
-const sidebarName = (page: Page) => page.getByRole('link', { name: /Admin$/ }).first()
+const sidebarName = (page: Page) => page.getByRole('button', { name: /Admin: cafe menu$/ })
 
 describe('Cafe profile', () => {
   it('saves a new name and logo; the sidebar and the tab title follow', async () => {
