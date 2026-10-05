@@ -285,3 +285,8 @@ Refetches loaded API queries (`<feature>:<name>` keys) in this tab. With `olderT
 ### Availability-dependent reads (Nuxt 4.5.2, D155)
 
 `enabled: computedRefOrGetter` gates `useAsyncData` execution. Changing it from false to true does **not** itself start a request in Nuxt 4.5.2. When availability arrives asynchronously, also pass `watch: [enabled]` to `useApiQuery`; the shared wrapper refreshes with cancel deduplication and the enabled guard prevents execution while off. Reactive parameter keys still handle parameter changes. The import source/review queries use this supported combination; direct-resume browser tests verify that they load after availability resolves. [Official versioned implementation](https://github.com/nuxt/nuxt/blob/v4.5.2/packages/nuxt/src/app/composables/asyncData.ts).
+
+
+### Private PDF preparation query (D156)
+
+The assistant's private PDF read uses `apiFetch<Blob>` with ofetch's binary content detection, retaining the common auth/error lifecycle. `useApiQuery` stores page count only; the feature transfers bytes to an owned browser worker and keeps one canvas outside query payloads. Clear metadata and dispose the worker/canvas on source, expiry, availability, route or session boundaries. Safe parser errors use `ApiError`; cancellation settles independently of a terminated parser's promises. `assistant-pdf-ui.test.ts` covers explicit loading, source retry, late-read cancellation, expiry/availability and logout; pure PDF tests cover pre-abort and error redaction. No binary content is persisted in browser storage.

@@ -283,3 +283,8 @@ Sources: [NuxtHub database](https://hub.nuxt.com/docs/database), [NuxtHub migrat
 The Cloudflare connector was authenticated and returned 200 for account, Worker settings, Gemma catalog and bucket-domain reads. At inspection, `nuk-cafe-staging` had no AI binding and remained on `openai` / `gpt-5.4-mini`; import settings were absent. The local staging build has the new `AI` binding but it has not been deployed. `nuk-cafe-staging-media` had r2.dev disabled and no custom domains; recheck before activation. No storage objects, remote settings, deployed code or billing state were changed.
 
 Gemma 4's catalog vision/function support is verified; inference/adapter quality, Worker CPU/neurons, actual private R2 upload/read/discard and PDF behavior remain unverified. A connector session does not provide OAuth credentials to the shell's Wrangler proxy evaluator. Finish these gates independently before enabling imports or switching help.
+
+
+### PDF preparation assets (D156)
+
+PDF.js 6.4.299 is now a pinned browser-feature dependency. Its parser and matching module worker load lazily on PDF preview; the Worker must not import the PDF parser, optional native canvas package or evaluation modules. The leaf uses Nuxt `ClientOnly` and an `import.meta.client` parser-import guard: a utility's `.client.ts` suffix alone did not exclude its dynamic import from the server build. Inspect emitted files and imports, not just source names. Preparation adds no AI calls, conversion/billing, server routes, migrations, flags or provider changes. `pdfProcessing` stays false; default import flag/model stay off/unset. Before release, verify server page processing, actual phones and unusual fonts/codecs/decoded-image memory, then complete live model/CPU/neurons/private R2 gates.

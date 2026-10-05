@@ -187,6 +187,9 @@ importers:
       ofetch:
         specifier: ^1.5.1
         version: 1.5.1
+      pdfjs-dist:
+        specifier: 6.4.299
+        version: 6.4.299
       sortablejs:
         specifier: ^1.15.7
         version: 1.15.7
@@ -209,9 +212,6 @@ importers:
         specifier: ^5.3.1
         version: 5.3.1(@vue/compiler-sfc@3.5.43)(esbuild@0.28.2)(rolldown@1.2.11)(rollup@4.63.5)(vite@8.3.1(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.43(typescript@6.0.3))
     devDependencies:
-      pdfjs-dist:
-        specifier: 6.4.299
-        version: 6.4.299
       '@iconify-json/circle-flags':
         specifier: ^1.2.12
         version: 1.2.12

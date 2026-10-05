@@ -5,6 +5,8 @@ import { importDraftProblem, importFileProblem } from '../utils/import'
 import ImportRowEditor from './ImportRowEditor.vue'
 import ImportDraftSummary from './ImportDraftSummary.vue'
 
+const ImportPdfPages = defineAsyncComponent(() => import('./ImportPdfPages.vue'))
+
 const flow = useAssistantImport()
 const { status, sources, reviewQuery, review, sourceId, expired, leaseBusy, busy } = flow
 const route = useRoute()
@@ -282,7 +284,7 @@ async function retry(row: AssistantImportReviewRow) {
           class="space-y-6"
         >
           <div class="flex flex-wrap items-center gap-2">
-            <p class="min-w-0 flex-1 break-words text-sm font-medium">
+            <p class="min-w-0 basis-full break-words text-sm font-medium sm:basis-auto sm:flex-1">
               {{ review.source.fileName }}
             </p>
             <UButton
@@ -329,12 +331,19 @@ async function retry(row: AssistantImportReviewRow) {
           <p class="text-xs text-muted">
             Private to you · expires {{ new Date(review.source.expiresAt).toLocaleString() }}
           </p>
-          <UAlert
-            v-if="isPdf"
-            title="PDF extraction is coming next"
-            description="Your PDF is stored privately. Upload an image to extract menu items now."
-            color="warning"
-          />
+          <template v-if="isPdf">
+            <UAlert
+              title="PDF extraction is coming next"
+              description="Your PDF is stored privately. Upload an image to extract menu items now."
+              color="warning"
+            />
+            <ClientOnly v-if="!expired">
+              <ImportPdfPages
+                :key="sourceId"
+                :source="review.source"
+              />
+            </ClientOnly>
+          </template>
           <template v-else-if="review.state !== 'ready'">
             <div class="space-y-4">
               <img

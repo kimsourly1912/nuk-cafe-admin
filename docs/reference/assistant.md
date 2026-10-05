@@ -138,7 +138,16 @@ The thin `/c/<slug>/admin/products/import` route renders private `AssistantImpor
 | Unsaved correction / stale version | Shared leave dialog; keep input on failure, explicit reload asks before replacing it. Browser correction/conflict tests. |
 | A row succeeds while another fails or needs duplicate confirmation | Persisted receipts remain locked; retry only failed rows with current saved corrections. Browser partial-success/duplicate tests and coordination unit tests. |
 | Source expires, image preview fails, load fails or extraction stops | Disable writes, explain expiry; preview/load retry and safe extraction error/lease states remain visible. Browser expiry/load/cancel tests; API lease/privacy tests. |
-| PDF source | Upload/resume/private download/discard only, with “PDF extraction is coming next”; no extraction action or page-selection claim. Browser/API tests. |
+| PDF source | Upload/resume/private download/discard; D156 adds bounded preview/page selection while “PDF extraction is coming next” remains. No extraction action. Browser/API tests. |
 | Compact width / wide desktop | Focused correction route and source modal on compact screens; desktop source and review beside each other. Flat price rows, standard component sizes and `page-narrow` editor/upload cap. Responsive browser checks and saved screenshots. |
 
 No deployment, model change, inference activation or PDF processing is included. [Implemented screen evidence and accepted adaptations](../plans/ai-assistant-frames.md#implemented-screens-d155).
+
+
+## Private PDF preparation (D156)
+
+`ImportPdfPages` and `useAssistantPdf` are private feature implementation. They read the existing protected source endpoint only on Preview PDF pages; `assistant-import:pdf:<id>` holds page count only. A lazy same-origin PDF.js 6.4.299 worker handles the bytes; one source canvas is retained at a time (1,400 px/side / 2 million pixels). Five-page/5 MB limits are browser preparation bounds. Password-protected, malformed and over-page-cap documents return safe errors with Retry and the existing private download/image alternative.
+
+`?source=<id>&pages=1,2` resumes page choices; absent means all document pages, invalid/duplicate/out-of-range values mean none. Source switches clear page choices. Selection is URL metadata, never PDF text or bytes; changing it saves no review/menu data. Source expiry, feature availability, route disposal and session changes release parser/worker/canvas and clear query data. API reads retain standard session handling; old responses cannot revive a disposed source.
+
+PDF extraction remains unavailable (`pdfProcessing: false`). There is no server page manifest/payload validation, page evidence/retry/billing or OCR in this slice. Complete 9.C3b and live document/model/Worker/resource gates before activation. Unusual PDF fonts/codecs and real phone performance remain unverified. [Plan](../plans/ai-assistant-cloudflare.md#pdf-preparation-slice-d156-9c3a).

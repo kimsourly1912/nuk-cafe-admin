@@ -49,3 +49,10 @@ The owner-approved D148 layouts are implemented using the repository's Nuxt UI d
 Accepted slice adaptations: source cap is 5 MB (not an illustrative generated value); no menu-source-as-photo action; existing libraries only; PDF upload/resume/download/discard with an honest pending notice, rather than unimplemented page selection. Imports remain hidden by default and live model quality remains unverified.
 
 Actual browser screenshots are saved in [assets/ai-assistant/d155/](assets/ai-assistant/d155/): upload, review and correction at 320, 390, 768, 1024, 1440, 1920 and landscape 844×390, plus dark review at 390. These are browser-mock UI evidence, not live model or staging evidence.
+
+
+## PDF preparation adaptation (D156)
+
+The approved upload/page-selection frame now has page controls and a single source preview. Controls sit beside the source from `sm`, above on phones; retaining one bounded canvas limits phone memory. Filename takes its own compact toolbar row. Page choices are addressable through `pages` query metadata; the source is still private/24-hour. PDF extraction stays visibly pending. No active Extract menu/page-retry/model controls are implied before the server slice exists.
+
+Actual synthetic-source screenshots: [assets/ai-assistant/d156/](assets/ai-assistant/d156/) at 320, 390, 768, 1024, 1440, 1920 and 844×390 plus dark 390. Browser checks also use keyboard selection and 200% text. These show PDF preparation under the current CSP; they do not validate OCR/model quality or actual phone performance.
