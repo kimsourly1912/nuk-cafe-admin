@@ -142,6 +142,7 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   // The account's cafes (D144): only this one, so the sidebar shows no switcher.
   'GET /me/cafes': () => [{ ...NUK_PROFILE, workspaces: ['admin', 'counter'] }],
   // The help assistant is off unless a test turns it on (no AI key: its routes answer 404, D109).
+  'GET /admin/assistant/import-status': () => ({ enabled: false, pdfProcessing: false }),
   'GET /admin/assistant': () => {
     throw failures.notFound('This page was not found.')
   },

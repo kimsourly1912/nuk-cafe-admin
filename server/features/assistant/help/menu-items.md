@@ -72,3 +72,17 @@ Click the item's name (or **⋮ → Edit**), change it, then **Save**. Changes t
 - **"This menu item is archived. Restore it from the list to edit it."**: archived items are read-only; **Restore** first.
 - **An option set can't be added**: the item already has 2, or the set is archived.
 - **The item doesn't show on the customer menu**: see "When does a customer see an item?" in the menu overview.
+
+## Import an English menu (when available)
+
+If **Import menu** appears beside New menu item, you can upload a menu without asking a chat question. If it is absent, use New menu item; import has not been enabled for this cafe.
+
+1. Choose an English JPEG, PNG or WebP menu image, up to 5 MB, then **Upload source**. Sources and reviews are private to the uploading owner and expire 24 hours after upload. You can resume a saved import after reloading.
+2. Press **Extract menu**, then check the source against **Review items**. Check every name, category and price; missing or uncertain information needs correction.
+3. **Correct item** opens a focused editor. Choose an existing category and, when needed, existing options/add-ons/availability. New size combinations have no suggested price until you enter one. **Apply to review** saves only your private correction. Back warns before losing unsaved input.
+4. Untick rows you do not want. Correct or exclude incomplete rows, then **Create drafts** and confirm. Items are created separately as unpublished drafts. Created rows show **Open draft**; failed rows stay available to correct and retry. A duplicate name needs explicit confirmation before creating another item.
+5. Open each draft through Menu items to check it and publish it using the normal workflow. Import never publishes automatically and the menu source is not attached as an item photo.
+
+**View source** shows the image on a phone. **Reload review** gets the current saved version; a conflict keeps your input until you choose to reload. **Stop extraction** prevents its result being saved, but work already started may still count toward today's usage. Retry may wait for the previous extraction to finish.
+
+PDFs up to 5 MB can be stored, resumed and downloaded privately, but **PDF extraction is coming next**. Upload an image to extract now. **Discard import** deletes the private source and review; menu drafts already created stay in Menu items. Expired sources require a new upload.

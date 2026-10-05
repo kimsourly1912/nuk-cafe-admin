@@ -34,7 +34,7 @@ function configuredModel(binding: CloudflareAiBinding) {
 
 `startUsage`, `finishUsage`, `assistantStatus` and `purgeAssistantUsage` retain per-owner/per-cafe accounting and 90-day metadata-only cleanup. Migration `0032_assistant_cloudflare` adds the provider without relabelling old rows. The app's request counter is separate from Cloudflare's account-wide inference allocation.
 
-At D149, image/PDF import APIs, private source storage and persisted reviews were unbuilt. D152 adds the disabled private-source backend; D153 adds bounded image extraction and editable review persistence. D154 adds explicit reviewed draft creation below; screens and PDF extraction remain pending. D148 confirms their English-only scope and 24-hour retention; do not infer that they exist from the model's image/structured-output compatibility tests.
+At D149, image/PDF import APIs, private source storage and persisted reviews were unbuilt. D152 adds the disabled private-source backend; D153 adds bounded image extraction and editable review persistence. D154 adds explicit reviewed draft creation below; D155 adds the approved review/Create drafts UI below; PDF extraction and live activation remain pending. D148 confirms their English-only scope and 24-hour retention; do not infer that they exist from the model's image/structured-output compatibility tests.
 
 ## Evaluation tooling (D151)
 
@@ -42,7 +42,7 @@ At D149, image/PDF import APIs, private source storage and persisted reviews wer
 
 ## Private import sources (D152)
 
-D152 source foundation, extended by D153 reviews and D154 explicit creation below; source endpoints write no menu data and there is no import UI. Default `NUXT_AI_IMPORT_ENABLED=false` hides every route. It is separate from help/model enablement. With it enabled, every route requires `assistant:use`, the cafe from the route, and the upload creator. Another cafe or another owner of this cafe sees 404 for a source id.
+D152 source foundation, extended by D153 reviews and D154 explicit creation below; source endpoints write no menu data. D155 adds the UI below. Default `NUXT_AI_IMPORT_ENABLED=false` hides the source/review/write routes; the authenticated availability endpoint remains readable. It is separate from help/model enablement. With it enabled, every route requires `assistant:use`, the cafe from the route, and the upload creator. Another cafe or another owner of this cafe sees 404 for a source id.
 
 | Route beneath `/api/c/<slug>/admin/assistant/imports` | Input | Result |
 |---|---|---|
@@ -56,7 +56,7 @@ Contracts: `shared/contracts/assistant-import.ts`. Sources are at most 5 MB, MIM
 
 Public service exports: `uploadImportSource(db, store, actor, file)`, `listImportSources(db, actor)`, `getImportSource(db, actor, id)`, `readImportSource(db, store, actor, id)`, `discardImportSource(db, store, actor, id, version)`, `purgeImportSources(db, store, options?)` and `assertPrivateImportStorage(store)`; injected `ImportObjectStore` uses NuxtHub FS/private R2 `put/get/del`. Service results expose no object key/public media URL. The task accepts a clock/bounded batch size for testing and logs only deletion/pending counts.
 
-Apply migration `0033_assistant_import_sources` before enabling. [Operations/storage privacy](../server/operations.md#private-import-source-foundation-d152) and [data lifecycle](../server/data-model.md#private-import-sources-d152) explain the durable operational ledger and physical-cleanup delay. No live R2 configuration or model validation has been performed here.
+Apply migration `0033_assistant_import_sources` before enabling. [Operations/storage privacy](../server/operations.md#private-import-source-foundation-d152) and [data lifecycle](../server/data-model.md#private-import-sources-d152) explain the durable operational ledger and physical-cleanup delay. D155 read-only account inspection confirms r2.dev disabled/no custom domains for the staging bucket at inspection time; real R2 CRUD and live model validation remain pending.
 
 | Source edge case | Handling and coverage |
 |---|---|
@@ -67,7 +67,7 @@ Apply migration `0033_assistant_import_sources` before enabling. [Operations/sto
 
 ## Image extraction and editable reviews (D153)
 
-D153 review backend, extended by the explicit D154 draft command below, behind the same disabled `NUXT_AI_IMPORT_ENABLED` switch. No UI or PDF extraction. All routes below use the cafe and creator checks above. Apply `0034_assistant_import_review` after 0033. `NUXT_AI_IMPORT_MODEL` has no default and must be a Cloudflare model id; inference uses only the request's AI binding. Help provider/model/key/enablement settings remain independent. A lazy model factory resolves settings/binding after source access/admission, so wrong-cafe sources remain 404 and PDFs report their own unsupported-processing response even without a model. Missing extraction configuration throws before leases/usage; its HTTP 500 is masked as `INTERNAL` by the existing API standard.
+D153 review backend, extended by the explicit D154 draft command below, behind the same disabled `NUXT_AI_IMPORT_ENABLED` switch. D155 adds the review UI; PDF extraction remains unbuilt. All routes below use the cafe and creator checks above. Apply `0034_assistant_import_review` after 0033. `NUXT_AI_IMPORT_MODEL` has no default and must be a Cloudflare model id; inference uses only the request's AI binding. Help provider/model/key/enablement settings remain independent. A lazy model factory resolves settings/binding after source access/admission, so wrong-cafe sources remain 404 and PDFs report their own unsupported-processing response even without a model. Missing extraction configuration throws before leases/usage; its HTTP 500 is masked as `INTERNAL` by the existing API standard.
 
 | Route beneath `/api/c/<slug>/admin/assistant/imports` | Input | Result |
 |---|---|---|
@@ -94,11 +94,11 @@ Public exports: `importSettingsFrom(raw)`, `extractImportSource(db, store, actor
 | Provider/schema/SQL failure contains source text | SDK telemetry and request/response inclusion disabled; only safe failure codes persist/return. No raw provider or review-write errors are logged. Unit adapter capacity/invalid-output checks. |
 | PDF upload is requested for extraction | 422 `AI_IMPORT_PDF_PENDING` before model setup, usage or a call; its protected storage/resume/discard still works. Unit and built-app API checks. |
 
-The real-API review tests seed extraction state in the throwaway SQLite DB. They validate actual permissions, parsing, resume, edits, cancellation and lifecycle, not live AI output. Production model quality, R2 bucket privacy, Worker cancellation/CPU/neurons and the final model choice remain unverified; keep imports disabled.
+The real-API review tests seed extraction state in the throwaway SQLite DB. They validate actual permissions, parsing, resume, edits, cancellation and lifecycle, not live AI output. Production model quality, actual R2 CRUD, Worker cancellation/CPU/neurons and the final model choice remain unverified; D155 separately checks current bucket domain privacy; keep imports disabled.
 
 ## Explicit reviewed draft creation (D154)
 
-Backend command only; the approved **Create drafts** button/review screens are unbuilt. `POST /api/c/<slug>/admin/assistant/imports/{id}/review/{rowId}/create-draft` takes strict `{ version, confirmDuplicate?: boolean }` plus a UUID `Idempotency-Key`. Requires imports enabled, both `assistant:use` and `menu:write`, the cafe and upload creator, an unexpired ready review and a selected row. It creates from the **saved correction**, never a client-supplied item, model command or source evidence. Save corrections first. Publishing and using the uploaded menu as an item photo are unavailable through this command.
+D154 introduced the backend command; D155 wires it to the approved **Create drafts** button/review screens below. `POST /api/c/<slug>/admin/assistant/imports/{id}/review/{rowId}/create-draft` takes strict `{ version, confirmDuplicate?: boolean }` plus a UUID `Idempotency-Key`. Requires imports enabled, both `assistant:use` and `menu:write`, the cafe and upload creator, an unexpired ready review and a selected row. It creates from the **saved correction**, never a client-supplied item, model command or source evidence. Save corrections first. Publishing and using the uploaded menu as an item photo are unavailable through this command.
 
 Returns `CreateAssistantImportDraftResult`: `{ sourceId, rowId, itemId, version, alreadyCreated, replayed }`, HTTP 200. `version` is the recorded response's snapshot, so resume GET after a replay before the next edit/create. Existing keys with changed source/row/version/confirmation give 422 `IDEMPOTENCY_MISMATCH`. Failed actions store no key: after correcting a failed row, its key may be retried with the corrected version. New keys on a created row return its original item id with `alreadyCreated: true`, even after key cleanup; no second menu write. `createdItemId?: string` on each review row is the private creation receipt; absent means unsaved and supports older stored reviews without a migration. Created rows reject further corrections with 409 `AI_IMPORT_ROW_CREATED`; edit the resulting draft through Menu items.
 
@@ -106,7 +106,7 @@ Public `createImportDraft(db, actor, sourceId, rowId, input, key)` composes the 
 
 The command applies `createItemSchema` and all menu rules: active leaf category in this cafe, active option values/full grid, active versions priced, permitted add-on rules/prices and active availability. No libraries or prices are invented. An English exact-name match (trimmed, ASCII case-insensitive) anywhere in this cafe, including drafts and archived items, returns 409 `ITEM_NAME_EXISTS`; confirmation explicitly allows another item. Both the warning and its in-batch guard are tenant-scoped. This is a possible-duplicate warning, not fuzzy/content-based deduplication.
 
-One row per request; the future UI uses the existing `useMutation.executeMany` with concurrency 1 and the latest returned source version. Success locks only that row; failed/unstarted/excluded rows and corrections remain available. Retry failed rows only. At most 20 planned menu statements (24 including key/receipt guard/import audit), leaving D1 Free headroom for authorization, planning and race diagnostics; more complex candidates return 422 `AI_IMPORT_DRAFT_TOO_COMPLEX` before any write. Use fewer variations/add-on overrides or the normal menu editor. Review JSON including receipts stays within 64 KB. These are engineering bounds, not live Worker performance evidence.
+One row per request; the D155 UI uses the existing `useMutation.executeMany` with concurrency 1 and the latest returned source version. Success locks only that row; failed/unstarted/excluded rows and corrections remain available. Retry failed rows only. At most 20 planned menu statements (24 including key/receipt guard/import audit), leaving D1 Free headroom for authorization, planning and race diagnostics; more complex candidates return 422 `AI_IMPORT_DRAFT_TOO_COMPLEX` before any write. Use fewer variations/add-on overrides or the normal menu editor. Review JSON including receipts stays within 64 KB. These are engineering bounds, not live Worker performance evidence.
 
 | Creation edge case | Handling and coverage |
 |---|---|
@@ -118,4 +118,27 @@ One row per request; the future UI uses the existing `useMutation.executeMany` w
 | Source expires/discards after creation, or is discarded during replay lookup | Replays still require current source access and recheck it after lookup; no resurrection. Already-created cafe-owned menu drafts remain for the normal menu workflow. Unit + built-app lifecycle tests. |
 | Driver error contains review text / receipt would overflow the review cap | Safe 503 error only (HTTP 5xx masked as `INTERNAL`), no raw parameters/cause logged; byte-cap rejection performs no write. Unit private-error/size checks. |
 
-Draft creation performs no inference or AI quota reservation. No config, dependency or SQL migration change; imports stay disabled/model unset. Live validation, review UI and PDF processing remain pending.
+Draft creation performs no inference or AI quota reservation. No config, dependency or SQL migration change; imports stay disabled/model unset. Live validation and PDF processing remain pending; D155 adds the review UI below.
+
+## Upload, review and Create drafts UI (D155)
+
+The public `~/features/assistant` API now exports **`AssistantImportButton`**, a building block used by Menu items alongside New menu item. It imports only its own feature and renders when the separate import availability query says enabled. The existing help chat and its status/model settings do not govern this entry.
+
+`GET /api/c/<slug>/admin/assistant/import-status` remains accessible to the cafe owner even when imports are off. `assistantImportStatus(event)` requires both `assistant:use` and `menu:write`, returning only `AssistantImportStatus { enabled: boolean, pdfProcessing: boolean }`. Enabled requires the server flag to be boolean true; PDF processing is currently false. No binding/model/settings resolution or source data is exposed. Source and command routes still retain their own permission/access guards.
+
+The thin `/c/<slug>/admin/products/import` route renders private `AssistantImportPage`. `?source=<id>` resumes the protected server review; `&row=<id>` pushes a focused correction editor. `useAssistantImport` uses `useApiQuery` for reads and the shared mutation engine for upload, correction, extraction, cancel, discard and creation. Source-conflicting writes share `assistant-import:<sourceId>`; cancellation intentionally can run during extraction. Batch creation uses concurrency 1. Selected incomplete rows must be corrected or excluded before creation; current library relationships are validated by the server.
+
+`ImportRowEditor` keeps local unsaved input and the version it opened, uses shared leave guards and library pickers, and **Apply to review** writes only the private saved candidate. Changing options preserves prices only for identical combinations; new combinations remain unpriced. Add-ons use existing defaults, with normal Menu items available for overrides after creation. Source evidence stays immutable; the review list shows saved category/price range separately from source prices. Created rows are locked and link to their normal menu draft editor.
+
+`importDraftCommands` refreshes before a row action and after a response/replay. A tab-local map retains only source/row ids, UUID keys and version/confirmation metadata for uncertain retries; it never caches source bytes or private text in browser storage. Definitive 4xx failures clear the action; an uncertain response reuses its identical key/body. A persisted receipt prevents another POST after resume/reload. Session/source changes abort coordination and suppress late private results.
+
+| UI edge case | Handling and coverage |
+|---|---|
+| Availability arrives after a direct resume page mounts | Nuxt 4.5.2 `enabled` permits fetching but does not initiate it when changed to true; `watch: [enabled]` on the source/review queries triggers the supported cancel-deduped refresh. Direct-resume browser tests cover this. |
+| Unsaved correction / stale version | Shared leave dialog; keep input on failure, explicit reload asks before replacing it. Browser correction/conflict tests. |
+| A row succeeds while another fails or needs duplicate confirmation | Persisted receipts remain locked; retry only failed rows with current saved corrections. Browser partial-success/duplicate tests and coordination unit tests. |
+| Source expires, image preview fails, load fails or extraction stops | Disable writes, explain expiry; preview/load retry and safe extraction error/lease states remain visible. Browser expiry/load/cancel tests; API lease/privacy tests. |
+| PDF source | Upload/resume/private download/discard only, with “PDF extraction is coming next”; no extraction action or page-selection claim. Browser/API tests. |
+| Compact width / wide desktop | Focused correction route and source modal on compact screens; desktop source and review beside each other. Flat price rows, standard component sizes and `page-narrow` editor/upload cap. Responsive browser checks and saved screenshots. |
+
+No deployment, model change, inference activation or PDF processing is included. [Implemented screen evidence and accepted adaptations](../plans/ai-assistant-frames.md#implemented-screens-d155).

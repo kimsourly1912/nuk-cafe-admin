@@ -2,6 +2,7 @@ import type { H3Event } from 'h3'
 import { getHeader, getRequestWebStream, setHeader } from 'h3'
 import type * as v from 'valibot'
 import { assistantOff, importSettingsFrom, languageModel } from '#server/features/assistant'
+import type { AssistantImportStatus } from '#shared/contracts/assistant-import'
 import { ASSISTANT_IMPORT_MAX_BYTES, ASSISTANT_IMPORT_TYPES } from '#shared/contracts/assistant-import'
 import { apiError } from './errors'
 import { parseInput } from './validation'
@@ -11,6 +12,12 @@ export async function requireAssistantImport(event: H3Event, options: { menuWrit
   const enabled = useRuntimeConfig(event).ai.importEnabled
   if (enabled !== true) throw assistantOff()
   return requirePermission(event, options.menuWrite ? { assistant: ['use'], menu: ['write'] } : { assistant: ['use'] })
+}
+
+/** Owner availability check remains accessible when imports are off; never resolves AI settings. */
+export async function assistantImportStatus(event: H3Event): Promise<AssistantImportStatus> {
+  await requirePermission(event, { assistant: ['use'], menu: ['write'] })
+  return { enabled: useRuntimeConfig(event).ai.importEnabled === true, pdfProcessing: false }
 }
 
 /** Raw file body via H3 1's supported stream API, bounded even without Content-Length. */

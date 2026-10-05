@@ -41,3 +41,11 @@ Additional required states for implementation: extraction progress with Stop; in
 The owner confirmed generated frames displayed directly in chat as the project's design delivery workflow (D147). The owner approved these desktop/phone layouts in D148. Implement with the existing Nuxt UI standards and the generation-artifact corrections above; normal implementation checks still apply. Record corrections and accepted composition in the active plan/decisions before building the new screens.
 
 Generation prompts are stored with the assets so the next agent can reproduce the proposed copy and composition. Keep follow-up frames consistent with the active plan and existing components; generated mockups are not a second design system.
+
+## Implemented screens (D155)
+
+The owner-approved D148 layouts are implemented using the repository's Nuxt UI defaults. Entry is Import menu on Menu items; compact widths use a source modal and a separate correction route. Desktop review keeps source and rows together; upload/correction use the standard `page-narrow` cap. Prices are flat editable rows to avoid sideways scrolling. Saved categories/prices are shown separately from immutable source prices. Apply to review saves privately; Create drafts confirms an explicit serial batch, locks successful rows and exposes correction/retry/duplicate confirmation for failures.
+
+Accepted slice adaptations: source cap is 5 MB (not an illustrative generated value); no menu-source-as-photo action; existing libraries only; PDF upload/resume/download/discard with an honest pending notice, rather than unimplemented page selection. Imports remain hidden by default and live model quality remains unverified.
+
+Actual browser screenshots are saved in [assets/ai-assistant/d155/](assets/ai-assistant/d155/): upload, review and correction at 320, 390, 768, 1024, 1440, 1920 and landscape 844×390, plus dark review at 390. These are browser-mock UI evidence, not live model or staging evidence.

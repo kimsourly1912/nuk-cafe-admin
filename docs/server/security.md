@@ -242,3 +242,9 @@ Never in the repo, never logged, never in error messages. `.env` is git-ignored;
 - [ ] Errors use shared codes or the feature's `*.errors.ts` factories, with user-safe messages; nothing internal leaks.
 - [ ] The response is mapped (no raw rows) and contains nothing the caller shouldn't see.
 - [ ] Tests cover the permission cases, each error code, and the race/replay case.
+
+### Import availability and UI (D155)
+
+`GET /api/c/<slug>/admin/assistant/import-status` requires both `assistant:use` and `menu:write` even while the import switch is off. It returns only strict-boolean availability and `pdfProcessing: false`; it resolves no AI binding/settings and reads no sources. This deliberate exception lets Menu items hide the entry without exposing private content. All source/review/write routes retain the disabled/access/creator checks.
+
+The UI displays source images only through the existing authenticated protected source endpoint, never `/media` or a public storage URL. Saved candidates/receipts come from server reviews; private content is not copied into localStorage/sessionStorage. Tab-local uncertain-command state is metadata only. Apply saves a private correction; explicit Create drafts is the only menu creation action and publishing stays in Menu items. Discard/expiry keeps already-created cafe menu drafts.

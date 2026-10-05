@@ -6,10 +6,10 @@ import { describe, expect, it } from 'vitest'
 // Deny by default (docs/server/security.md → Checking). The route rules only ask for a session on
 // a cafe's `admin/**`: who may use the admin is a role in the tenant, which they can't see (D135).
 // So every admin route must call an access helper that checks it; this finds one that forgot.
-const ADMIN_HELPERS = ['requirePermission(', 'requireSampleData(', 'requireAssistant(', 'requireAssistantImport(', 'adminSession(']
+const ADMIN_HELPERS = ['requirePermission(', 'requireSampleData(', 'requireAssistant(', 'requireAssistantImport(', 'assistantImportStatus(', 'adminSession(']
 // A cafe's address names its tenant (D140): every route under `/api/c/<slug>/` resolves it through
 // `requireTenant` or a helper that calls it. A route that skipped it would ignore the address.
-const TENANT_HELPERS = ['requireTenant(', 'requirePermission(', 'requireBranchPermission(', 'requireCustomer(', 'requireSignedIn(', 'requireSampleData(', 'requireAssistant(', 'requireAssistantImport(']
+const TENANT_HELPERS = ['requireTenant(', 'requirePermission(', 'requireBranchPermission(', 'requireCustomer(', 'requireSignedIn(', 'requireSampleData(', 'requireAssistant(', 'requireAssistantImport(', 'assistantImportStatus(']
 
 // The platform console (D142): every route checks the platform role; none acts in a cafe.
 const PLATFORM_HELPERS = ['requirePlatformPermission(', 'platformSession(']

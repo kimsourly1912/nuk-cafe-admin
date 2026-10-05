@@ -39,6 +39,12 @@ beforeAll(async () => {
 })
 
 describe('private-source routes against the built app', () => {
+  it('exposes owner import availability independently of the unconfigured help/extraction model', async () => {
+    expect(await (await api('/api/c/nuk/admin/assistant/import-status')).json()).toEqual({ enabled: true, pdfProcessing: false })
+    expect((await api('/api/c/nuk/admin/assistant/import-status', {}, '')).status).toBe(401)
+    expect((await api('/api/c/nuk/admin/assistant/import-status', {}, customerCookie)).status).toBe(403)
+  })
+
   it('requires a session, a cafe owner and the normal origin protection', async () => {
     expect((await api(base, {}, '')).status).toBe(401)
     expect((await api(base, {}, customerCookie)).status).toBe(403)

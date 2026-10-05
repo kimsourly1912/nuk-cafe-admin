@@ -281,3 +281,7 @@ function invalidateAll(options?: { olderThanMs?: number }): Promise<void>
 ```
 
 Refetches loaded API queries (`<feature>:<name>` keys) in this tab. With `olderThanMs`, only the queries whose last successful load (recorded per key by `useApiQuery`) is at least that old. The freshness plugin calls `invalidateAll({ olderThanMs: 5000 })` when the user returns to the tab, and `invalidateAll()` on reconnect. Features don't need it.
+
+### Availability-dependent reads (Nuxt 4.5.2, D155)
+
+`enabled: computedRefOrGetter` gates `useAsyncData` execution. Changing it from false to true does **not** itself start a request in Nuxt 4.5.2. When availability arrives asynchronously, also pass `watch: [enabled]` to `useApiQuery`; the shared wrapper refreshes with cancel deduplication and the enabled guard prevents execution while off. Reactive parameter keys still handle parameter changes. The import source/review queries use this supported combination; direct-resume browser tests verify that they load after availability resolves. [Official versioned implementation](https://github.com/nuxt/nuxt/blob/v4.5.2/packages/nuxt/src/app/composables/asyncData.ts).

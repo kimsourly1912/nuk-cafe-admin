@@ -18,6 +18,7 @@ import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { ItemStatus, MenuItemSummary } from '#shared/contracts/menu-items'
 import { useEventListener, useLocalStorage } from '@vueuse/core'
 import { CategorySelect } from '~/features/categories'
+import { AssistantImportButton } from '~/features/assistant'
 import { useItemList, useItemMutations, useItemStatusCounts } from '../composables/useItems'
 import { itemOnMenuPath, ITEM_STATUS_LABELS, priceRange } from '../utils/item-display'
 import ProductCard from './ProductCard.vue'
@@ -225,6 +226,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
+          <AssistantImportButton />
           <UTooltip
             text="New menu item"
             :kbds="['n']"

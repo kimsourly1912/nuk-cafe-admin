@@ -3,7 +3,7 @@ import { Socket } from 'node:net'
 import { createEvent } from 'h3'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ASSISTANT_IMPORT_MAX_BYTES, extractAssistantImportSchema } from '#shared/contracts/assistant-import'
-import { assistantImportModel, readAssistantImportFile, readAssistantReviewBody, requireAssistantImport } from '#server/utils/assistant-import'
+import { assistantImportStatus, assistantImportModel, readAssistantImportFile, readAssistantReviewBody, requireAssistantImport } from '#server/utils/assistant-import'
 
 function request(body?: ReadableStream<Uint8Array>, headers: Record<string, string | undefined> = {}) {
   const req = new IncomingMessage(new Socket())
@@ -119,5 +119,23 @@ describe('bounded raw source body', () => {
     const body = new ReadableStream<Uint8Array>({ pull }, { highWaterMark: 0 })
     await expect(readAssistantImportFile(request(body, headers))).rejects.toMatchObject({ statusCode: expect.any(Number) })
     expect(pull).not.toHaveBeenCalled()
+  })
+})
+
+describe('import entry availability', () => {
+  it('requires both permissions even when disabled and returns no settings or source data', async () => {
+    const event = request()
+    expect(await assistantImportStatus(event)).toEqual({ enabled: false, pdfProcessing: false })
+    expect(permission).toHaveBeenCalledWith(event, { assistant: ['use'], menu: ['write'] })
+  })
+  it('is independent of help enablement and requires an actual boolean switch', async () => {
+    vi.stubGlobal('useRuntimeConfig', () => ({ ai: { importEnabled: true } }))
+    expect(await assistantImportStatus(request())).toEqual({ enabled: true, pdfProcessing: false })
+    vi.stubGlobal('useRuntimeConfig', () => ({ ai: { importEnabled: 'true' } }))
+    expect((await assistantImportStatus(request())).enabled).toBe(false)
+  })
+  it('does not reveal availability to a caller without permission', async () => {
+    permission.mockRejectedValue(new Error('Forbidden'))
+    await expect(assistantImportStatus(request())).rejects.toThrow('Forbidden')
   })
 })

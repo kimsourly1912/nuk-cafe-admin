@@ -112,3 +112,9 @@ export interface CreateAssistantImportDraftResult {
   alreadyCreated: boolean
   replayed: boolean
 }
+
+/** Availability for the import entry; independent of the help provider and its key. */
+export interface AssistantImportStatus {
+  enabled: boolean
+  pdfProcessing: boolean
+}
