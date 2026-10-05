@@ -9,6 +9,8 @@ How every new feature (Rewards, Vouchers, Orders, …) is planned, built and ver
 - [docs/decisions.md](decisions.md): why things are built this way.
 - [docs/progress.md](progress.md): what's done and how it was verified.
 
+**[Required] Before implementation:** follow [AGENTS.md → Official documentation before implementation](../AGENTS.md#what-this-is) (D150). Consult official docs for affected dependencies, verify the installed versions and migration/deprecation guidance, and record source links and checks with the step. This applies to fixes as well as new features and to both app and server code.
+
 Every statement here is labelled:
 
 | Label | Meaning |

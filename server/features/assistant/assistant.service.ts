@@ -146,8 +146,8 @@ export async function chatWithAssistant(db: Db, actor: Actor, settings: Assistan
     abortSignal: context.abortSignal
       ? AbortSignal.any([context.abortSignal, AbortSignal.timeout(CHAT_TIMEOUT_MS)])
       : AbortSignal.timeout(CHAT_TIMEOUT_MS),
-    onFinish: ({ totalUsage }) => {
-      context.waitUntil(finishUsage(db, usageId, usageResult('ok', totalUsage)))
+    onEnd: ({ usage }) => {
+      context.waitUntil(finishUsage(db, usageId, usageResult('ok', usage)))
     },
     onError: ({ error }) => {
       context.onProviderError(error)

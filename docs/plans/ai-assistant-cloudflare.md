@@ -106,6 +106,8 @@ Remaining gate: this environment has no Cloudflare account credentials. Live bin
 
 ## Build order and verification
 
+**Review correction (D150):** official Nuxt/Nitro/NuxtHub/Cloudflare documentation checked against the lockfile. Nitro 2's event binding access is supported; the inline cast is replaced by a shared H3 declaration. AI SDK 7 usage callbacks/evaluator and stream responses use the current APIs. [Reference and regression coverage](../reference/assistant.md#existing-help-and-usage). This does not satisfy the remaining live-model/PDF gate or implement imports.
+
 Each step gets its own reviewable change with progress and decisions updated. This planning task does not authorize deploying or changing the current model.
 
 | Step | Work | Done when |

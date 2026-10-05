@@ -78,7 +78,7 @@ describe.skipIf(!settings)('help quality check (spends a little)', () => {
       messages: [{ id: 'q', role: 'user', parts: [{ type: 'text', text: c.question }] }],
       page: c.page ?? '/admin',
     }, { sampleData: false, waitUntil: () => {}, onProviderError: (error) => { throw error } })
-    const [text, steps, usage] = await Promise.all([result.text, result.steps, result.totalUsage])
+    const [text, steps, usage] = await Promise.all([result.text, result.steps, result.usage])
     const links = steps.flatMap(step => step.toolResults).map(r => (r.output as { path: string }).path)
     totals.input += usage.inputTokens ?? 0
     totals.output += usage.outputTokens ?? 0

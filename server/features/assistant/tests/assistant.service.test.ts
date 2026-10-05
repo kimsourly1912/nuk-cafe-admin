@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { eq } from 'drizzle-orm'
-import { simulateReadableStream } from 'ai'
+import { createUIMessageStreamResponse, simulateReadableStream, toUIMessageStream } from 'ai'
 import { MockLanguageModelV4 } from 'ai/test'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Actor } from '#server/features/identity'
@@ -13,6 +13,7 @@ import type { AssistantSettings } from '#server/features/assistant/assistant.set
 import { HELP_PAGES, helpGuide } from '#server/features/assistant/help'
 import { ASSISTANT_PAGES, pageAt } from '#server/features/assistant/pages'
 import { assistantSettingsFrom } from '#server/features/assistant/assistant.settings'
+import { providerFailureMessage } from '#server/features/assistant/assistant.errors'
 import { createTestDb, createUser, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
@@ -166,7 +167,7 @@ describe('the help chat (9.1, D109)', () => {
   /** The UI message stream the browser reads, as its parts. */
   async function streamed(result: Awaited<ReturnType<typeof chatWithAssistant>>) {
     const parts: Record<string, unknown>[] = []
-    for await (const part of result.toUIMessageStream()) parts.push(part as Record<string, unknown>)
+    for await (const part of toUIMessageStream({ stream: result.stream })) parts.push(part as Record<string, unknown>)
     return parts
   }
 
@@ -212,9 +213,44 @@ describe('the help chat (9.1, D109)', () => {
       [...text('Add them on the Staff page.'), linkCall('staff'), finish('tool-calls')],
       [...text(' Then give them the password.'), finish('stop')],
     )
-    const parts = await streamed(await chatWithAssistant(db, sokha, settings, model, ask('Where do I add staff?'), context().context, at('10:00')))
+    const { pending, context: c } = context()
+    const parts = await streamed(await chatWithAssistant(db, sokha, settings, model, ask('Where do I add staff?'), c, at('10:00')))
     expect(parts).toContainEqual(expect.objectContaining({ type: 'tool-output-available', toolCallId: 'call-staff', output: { title: 'Staff', path: '/admin/staff' } }))
     expect(prompts).toHaveLength(2)
+    await Promise.all(pending)
+    expect(await rows()).toMatchObject([{ outcome: 'ok', inputTokens: 24, outputTokens: 10, cachedInputTokens: 16 }])
+  })
+
+  it('serves text and navigation tools as SSE through the standalone response helpers', async () => {
+    const { model } = answering([linkCall('staff'), finish('tool-calls')], [...text('Open Staff.'), finish('stop')])
+    const { pending, context: c } = context()
+    const result = await chatWithAssistant(db, sokha, settings, model, ask('Where is Staff?'), c, at('10:00'))
+    const response = createUIMessageStreamResponse({ stream: toUIMessageStream({ stream: result.stream }) })
+    expect(response.headers.get('content-type')).toBe('text/event-stream')
+    expect(response.headers.get('x-vercel-ai-ui-message-stream')).toBe('v1')
+    const body = await response.text()
+    expect(body).toContain('"type":"tool-output-available"')
+    expect(body).toContain('"path":"/admin/staff"')
+    expect(body).toContain('Open Staff.')
+    expect(body).toContain('data: [DONE]')
+    await Promise.all(pending)
+    expect(await rows()).toMatchObject([{ outcome: 'ok', inputTokens: 24, outputTokens: 10 }])
+  })
+
+  it('the standalone response masks provider errors and finishes failed usage', async () => {
+    const { model } = answering([{ type: 'error', error: { statusCode: 429, message: 'private provider detail' } }])
+    const { pending, errors, context: c } = context()
+    const result = await chatWithAssistant(db, sokha, { ...settings, provider: 'cloudflare' }, model, ask('Help?'), c, at('10:00'))
+    const response = createUIMessageStreamResponse({
+      stream: toUIMessageStream({ stream: result.stream, onError: error => providerFailureMessage('cloudflare', error) }),
+    })
+    const body = await response.text()
+    expect(body).toContain('"type":"error"')
+    expect(body).toContain('00:00 UTC')
+    expect(body).not.toContain('private provider detail')
+    expect(errors).toHaveLength(1)
+    await Promise.all(pending)
+    expect(await rows()).toMatchObject([{ outcome: 'error', inputTokens: null, outputTokens: null }])
   })
 
   it('an invented page is refused and never shown as a link', async () => {

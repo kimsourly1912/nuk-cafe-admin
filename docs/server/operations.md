@@ -98,6 +98,8 @@ Bindings (D1, R2, KV) are configured per environment in `nuxt.config.ts` (`$env.
 
 **AI revision (2026-10-05, D146/D148/D149; import not implemented, adapter not deployed):** the owner chose Workers AI through an `AI` binding rather than an external provider key. [Revision plan](../plans/ai-assistant-cloudflare.md) covers AI SDK 7 compatibility, model evaluation, image/PDF import and quota handling. The adapter setup above describes the local change; staging OpenAI settings still describe the deployed behavior. Workers AI's free allocation is 10,000 neurons per Cloudflare account per day, resetting at 00:00 UTC (07:00 Bangkok/Phnom Penh); this is distinct from the app's current per-owner/per-cafe counter resetting at local midnight. On Workers Paid, excess inference can incur charges. PDF conversion is not documented as OCR of scanned PDFs; verify the page-to-image path before promising scan import. Activate only after live binding checks; no deployment or secret changes were made in this task. Sources: [pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/), [conversion](https://developers.cloudflare.com/workers-ai/features/markdown-conversion/how-it-works/).
 
+Assistant binding access follows the installed Nitro 2 request API, `event.context.cloudflare.env.AI`, typed in `server/types/cloudflare.d.ts` (D150). NuxtHub 0.10 has no `hubAI()` helper. [Assistant integration/version reference](../reference/assistant.md#existing-help-and-usage) records official sources and the AI SDK 7 streaming replacements.
+
 ## Migrations
 
 1. Change the feature's `*.schema.ts`.

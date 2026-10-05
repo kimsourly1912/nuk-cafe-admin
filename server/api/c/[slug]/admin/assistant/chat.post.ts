@@ -1,3 +1,4 @@
+import { createUIMessageStreamResponse, toUIMessageStream } from 'ai'
 import { assistantChatSchema } from '#shared/contracts/assistant'
 import { chatWithAssistant, providerFailureMessage } from '#server/features/assistant'
 
@@ -15,5 +16,10 @@ export default defineEventHandler(async (event) => {
     waitUntil: promise => event.waitUntil(promise),
     onProviderError: error => log('error', 'AI provider failed', { provider: settings.provider, model: settings.model, error: String(error) }, event),
   })
-  return result.toUIMessageStreamResponse({ onError: error => providerFailureMessage(settings.provider, error) })
+  return createUIMessageStreamResponse({
+    stream: toUIMessageStream({
+      stream: result.stream,
+      onError: error => providerFailureMessage(settings.provider, error),
+    }),
+  })
 })
