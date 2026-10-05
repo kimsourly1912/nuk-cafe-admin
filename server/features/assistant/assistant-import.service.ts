@@ -19,7 +19,7 @@ export interface ImportObjectStore {
 }
 
 const extensions: Record<AssistantImportType, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' }
-const toSource = (row: repo.ImportRow): AssistantImportSource => ({
+export const toImportSource = (row: repo.ImportRow): AssistantImportSource => ({
   id: row.id, fileName: row.fileName, mimeType: row.mimeType, byteSize: row.byteSize,
   version: row.version, createdAt: row.createdAt.toISOString(), expiresAt: row.expiresAt.toISOString(),
 })
@@ -58,7 +58,7 @@ export async function uploadImportSource(db: Db, store: ImportObjectStore, actor
     await store.put(objectKey, file.data, { contentType: mimeType })
     const row = await repo.finishUpload(db, actor, id, new Date())
     if (!row) throw importNotFound()
-    return toSource(row)
+    return toImportSource(row)
   }
   catch (error) {
     // Keep the ledger even if compensation fails; expiry/orphan cleanup can retry.
@@ -72,13 +72,13 @@ export async function uploadImportSource(db: Db, store: ImportObjectStore, actor
 }
 
 export async function listImportSources(db: Db, actor: Actor): Promise<AssistantImportSource[]> {
-  return (await repo.listSources(db, actor, new Date())).map(toSource)
+  return (await repo.listSources(db, actor, new Date())).map(toImportSource)
 }
 
 export async function getImportSource(db: Db, actor: Actor, id: string): Promise<AssistantImportSource> {
   const row = await repo.findSource(db, actor, id, new Date())
   if (!row) throw importNotFound()
-  return toSource(row)
+  return toImportSource(row)
 }
 
 export async function readImportSource(db: Db, store: ImportObjectStore, actor: Actor, id: string) {

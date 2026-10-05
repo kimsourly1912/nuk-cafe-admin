@@ -1,8 +1,9 @@
 import { sql } from 'drizzle-orm'
-import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { check, index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
 import { AI_PROVIDERS, ASSISTANT_FEATURES, ASSISTANT_OUTCOMES } from '#shared/contracts/assistant'
-import { ASSISTANT_IMPORT_TYPES } from '#shared/contracts/assistant-import'
+import { ASSISTANT_IMPORT_FAILURES, ASSISTANT_IMPORT_REVIEW_STATES, ASSISTANT_IMPORT_TYPES } from '#shared/contracts/assistant-import'
+import type { AssistantImportReviewRow } from '#shared/contracts/assistant-import'
 import { tenantId } from '#server/features/branches/branches.schema'
 import { newId } from '#server/utils/ids'
 
@@ -33,7 +34,7 @@ export const assistantUsage = sqliteTable('assistant_usage', {
   outcome: text({ enum: ASSISTANT_OUTCOMES }).notNull().default('pending'),
   at: instant().notNull().default(nowMs),
 }, t => [
-  check('assistant_usage_feature_check', sql`${t.feature} in ('ping', 'chat', 'menu_item_draft', 'rewrite')`),
+  check('assistant_usage_feature_check', sql`${t.feature} in ('ping', 'chat', 'menu_item_draft', 'rewrite', 'menu_import')`),
   check('assistant_usage_provider_check', sql`${t.provider} in ('anthropic', 'openai', 'google', 'openai-compatible', 'cloudflare')`),
   check('assistant_usage_outcome_check', sql`${t.outcome} in ('pending', 'ok', 'error')`),
   index('assistant_usage_user_day_idx').on(t.tenantId, t.userId, t.day),
@@ -50,6 +51,12 @@ export const assistantImports = sqliteTable('assistant_imports', {
   mimeType: text({ enum: ASSISTANT_IMPORT_TYPES }).notNull(),
   byteSize: integer().notNull(),
   state: text({ enum: ['uploading', 'uploaded'] }).notNull().default('uploading'),
+  reviewState: text({ enum: ASSISTANT_IMPORT_REVIEW_STATES }).notNull().default('none'),
+  extractionId: text(),
+  extractionDeadline: instant(),
+  extractionError: text({ enum: ASSISTANT_IMPORT_FAILURES }),
+  /** Private review/evidence, erased with the source. Never put this JSON in logs or audits. */
+  reviewRows: text({ mode: 'json' }).$type<AssistantImportReviewRow[]>(),
   version: integer().notNull().default(1),
   createdAt: instant().notNull(),
   expiresAt: instant().notNull(),
@@ -58,7 +65,9 @@ export const assistantImports = sqliteTable('assistant_imports', {
   check('assistant_imports_size_check', sql`${t.byteSize} > 0 and ${t.byteSize} <= 5242880`),
   check('assistant_imports_state_check', sql`${t.state} in ('uploading', 'uploaded')`),
   check('assistant_imports_version_check', sql`${t.version} >= 1`),
+  check('assistant_imports_review_state_check', sql`${t.reviewState} in ('none', 'processing', 'ready', 'failed')`),
   index('assistant_imports_owner_idx').on(t.tenantId, t.userId, t.expiresAt),
+  index('assistant_imports_processing_idx').on(t.tenantId, t.userId, t.reviewState, t.extractionDeadline),
 ])
 
 /**
@@ -74,3 +83,11 @@ export const assistantImportObjects = sqliteTable('assistant_import_objects', {
 }, t => [
   index('assistant_import_objects_expiry_idx').on(t.expiresAt),
 ])
+
+/** Short processing leases survive source discard so it cannot unlock a second remote call. */
+export const assistantImportLeases = sqliteTable('assistant_import_leases', {
+  tenantId: tenantId(),
+  userId: text().notNull().references(() => authSchema!.user.id, { onDelete: 'cascade' }),
+  extractionId: text().notNull(),
+  deadline: instant().notNull(),
+}, t => [primaryKey({ columns: [t.tenantId, t.userId] })])

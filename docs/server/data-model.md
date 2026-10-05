@@ -448,17 +448,17 @@ Feature: `platform`.
 
 ## AI assistant (phase 9, D107, D108)
 
-Feature: `assistant` ([plan](../plans/ai-assistant.md)). The AI only suggests: no model writes menu data. D152 adds private source metadata separately from usage. The provider is chosen by settings (`assistant.model.ts` is the only file that names providers).
+Feature: `assistant` ([plan](../plans/ai-assistant.md)). The AI only suggests: no model writes menu data. D152 adds private source metadata separately from usage; D153 adds private image reviews and short processing leases. The provider is chosen by settings (`assistant.model.ts` is the only file that names providers).
 
 | Table | Columns | Notes |
 |---|---|---|
-| `assistant_usage` | `tenant_id` (D139), `user_id` → user (cascade: an admin's usage goes with the account), `day` (`YYYY-MM-DD` in Asia/Phnom_Penh), `feature` (`ping` \| `chat` \| `menu_item_draft` \| `rewrite`), `provider`, `model`, `input_tokens`, `output_tokens`, `cached_input_tokens` (`null` while pending or when the provider doesn't say), `outcome` (`pending` \| `ok` \| `error`), `at` | One row per request to the provider, **never the question or the answer**. Inserted before the call with a guard in the same batch (the admin's rows that day **in this cafe**, this one included, at most `NUXT_AI_DAILY_LIMIT`), so two requests can't both take the last slot: 429 `AI_LIMIT_REACHED`. A failed call still counts. Indexes (`tenant_id`, `user_id`, `day`) and `at`; removed after 90 days by `assistant:purge-usage` |
+| `assistant_usage` | `tenant_id` (D139), `user_id` → user (cascade: an admin's usage goes with the account), `day` (`YYYY-MM-DD` in Asia/Phnom_Penh), `feature` (`ping` \| `chat` \| `menu_item_draft` \| `rewrite` \| `menu_import`), `provider`, `model`, `input_tokens`, `output_tokens`, `cached_input_tokens` (`null` while pending or when the provider doesn't say), `outcome` (`pending` \| `ok` \| `error`), `at` | One row per request to the provider, **never the question or the answer**. Inserted before the call with a guard in the same batch (the admin's rows that day **in this cafe**, this one included, at most `NUXT_AI_DAILY_LIMIT`), so two requests can't both take the last slot: 429 `AI_LIMIT_REACHED`. A failed call still counts. Indexes (`tenant_id`, `user_id`, `day`) and `at`; removed after 90 days by `assistant:purge-usage` |
 
-Routes (`/api/admin/assistant`, `assistant: ['use']`, 404 when no key is set): `GET /api/admin/assistant` (the daily limit and today's use; the app shows the assistant only when it answers) and `POST …/chat` (step 9.1, D109: the help assistant's streamed answer from the help guide in `server/features/assistant/help/*.md`, with `link_to_page` buttons limited to `pages.ts`). The 9.0 `ping` was removed in 9.1. The draft and wording routes come with 9.2–9.3.
+Help routes (`/api/c/<slug>/admin/assistant`, `assistant: ['use']`, 404 when disabled; Cloudflare binding or legacy key per settings): `GET /api/admin/assistant` (the daily limit and today's use; the app shows the assistant only when it answers) and `POST …/chat` (step 9.1, D109: the help assistant's streamed answer from the help guide in `server/features/assistant/help/*.md`, with `link_to_page` buttons limited to `pages.ts`). The 9.0 `ping` was removed in 9.1. The draft and wording routes come with 9.2–9.3.
 
 ### Private import sources (D152)
 
-Migration `0033_assistant_import_sources`; these source-only routes default off and perform no inference/menu writes. Extracted review rows and save tracking remain later work.
+Migration `0033_assistant_import_sources` adds source-only persistence; `0034_assistant_import_review` extends it with image review JSON and leases. All import routes default off; no menu writes exist. Save tracking comes with explicit draft creation later.
 
 | Table | Data | Lifecycle |
 |---|---|---|
@@ -466,6 +466,14 @@ Migration `0033_assistant_import_sources`; these source-only routes default off 
 | `assistant_import_objects` | server object key (PK), created/expiry timestamps, delete_requested | Operational deletion ledger with **no identity/content FK**, preserving cleanup after user cascade or tenant-content erasure. No filename/document/review. Inserted before object write, removed only after storage confirms deletion; expired/discarded/orphan objects are retried by the task. |
 
 The operational table is a deliberate exception to tenant-content FKs: it records work to erase bytes, not content available to another cafe. Its server key retains the tenant prefix; only source-service compensation and the platform-wide cleanup task query it. No public API lists its rows. Tenant-owned source metadata follows the standard's FK/scope rules. Access stops at expiry immediately; physical deletion occurs on the bounded scheduled pass or a later successful retry during an outage.
+
+### Private image reviews (D153)
+
+`assistant_imports` now includes `review_state` (`none` | `processing` | `ready` | `failed`), `extraction_id`, `extraction_deadline`, a safe `extraction_error` code and bounded `review_rows` JSON. Review rows contain immutable extracted evidence plus selected/edited draft candidates. They inherit the source's tenant/creator visibility and immutable expiry, and are erased with it. One shared source `version` advances on extraction transitions/corrections/discard checks. These candidates are not menu records; ids in corrections are unresolved references validated by the later menu command.
+
+`assistant_import_leases` has `(tenant_id, user_id)` as its primary key, tenant FK restrict, user FK cascade, attempt id and UTC deadline. It contains no source id/filename/content and intentionally has no source FK: discarding a source cannot release a running inference's capacity lock. Claim by conditional upsert in a guarded batch; release only by that attempt id. A crashed worker's expired row is inert and reused on the next attempt. No cross-tenant content links are introduced.
+
+0034 preserves every existing usage/source row and initializes review fields to defaults. Drizzle Kit 0.31.11 generated a rebuild copy selecting newly added columns from the old source table (verified `no such column: review_state`). The new, unapplied migration is corrected to copy only existing columns and retain new defaults; foreign keys stay enabled. The historical-data migration test checks old usage/source/cleanup rows, new usage admission and foreign keys. Snapshots/journal reflect the final schema; applied historical SQL is unchanged.
 
 ## Telegram (step 8.1c, D112)
 

@@ -198,6 +198,14 @@ Separate disabled source routes require `assistant:use`, the path's cafe and the
 
 Protected source bytes use attachment, `private, no-store`, nosniff and sandbox headers; source access is checked again after storage I/O. Every list/read checks fixed 24-hour expiry. Discard removes accessible metadata immediately in an audited versioned batch. A durable operational object ledger retains byte deletion after storage failures or account/content erasure; physical cleanup retries every five minutes even with the switch off. The source key prefix is excluded by `/media`'s matcher. Audit/task logs never contain filenames/document bodies or review text; deletion failures report counts without storage error bodies.
 
+### Private image extraction/reviews (D153)
+
+The same disabled import switch and cafe/creator permission boundary covers extraction, resume, correction and cancellation. Model/binding setup is lazy after source access/admission. No client model, file URL, tenant id, tool or menu command is accepted. Untrusted image instructions cannot add tools or publish/write menu data. Current supported path is an English menu image; PDFs get a safe processing-unavailable response before usage/inference. Local schema/adapter tests do not establish accuracy or live deployment readiness.
+
+Source bytes/type and header dimensions are checked before the call; metadata scanning uses only the first 64 KB. Pixel/side caps do not prove full decoding/readability. Structured output has strict bounded fields/counts and server evidence checks; truncated/non-stop/empty/invalid outputs fail. SDK telemetry/input/output recording and step request/response inclusion are explicitly disabled. Persist safe error codes; never pass raw provider output or review-write SQL errors to logging. Usage/audits retain ids/counts/tokens only. Private review JSON inherits source expiry/deletion; corrected fields cannot rewrite source evidence.
+
+One conditional tenant/creator lease plus a guarded source update reserves processing atomically, before the daily-slot reservation/call. The lease survives source discard/cancel and prevents a second call until release or 90-second crash recovery. Late result/failure/release require the attempt token; every review edit/cancel/discard uses the shared version and rechecks source visibility in its batch. HTTP abort and a 60-second SDK deadline apply, but explicit cancel only guarantees revoked persistence, not stopping billed remote work. JSON command streams are capped at 64 KB including chunked requests, and stored review JSON is capped separately. No model retries; invalid/cancelled calls still count. Library mapping/full price-grid validation belongs to the later explicit menu command; saving incomplete review corrections does not approve them for menu creation.
+
 ## Secrets
 
 | Secret | Where |

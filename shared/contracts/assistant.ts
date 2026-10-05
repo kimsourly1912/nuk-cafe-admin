@@ -10,7 +10,7 @@ export const AI_PROVIDERS = ['anthropic', 'openai', 'google', 'openai-compatible
 export type AiProvider = typeof AI_PROVIDERS[number]
 
 /** What a usage row was for. `ping` is 9.0's staging check. */
-export const ASSISTANT_FEATURES = ['ping', 'chat', 'menu_item_draft', 'rewrite'] as const
+export const ASSISTANT_FEATURES = ['ping', 'chat', 'menu_item_draft', 'rewrite', 'menu_import'] as const
 export type AssistantFeature = typeof ASSISTANT_FEATURES[number]
 
 /** `pending` while the provider answers; then `ok` or `error`. */

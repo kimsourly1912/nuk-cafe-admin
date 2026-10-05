@@ -2,8 +2,8 @@ import { IncomingMessage, ServerResponse } from 'node:http'
 import { Socket } from 'node:net'
 import { createEvent } from 'h3'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ASSISTANT_IMPORT_MAX_BYTES } from '#shared/contracts/assistant-import'
-import { readAssistantImportFile, requireAssistantImport } from '#server/utils/assistant-import'
+import { ASSISTANT_IMPORT_MAX_BYTES, extractAssistantImportSchema } from '#shared/contracts/assistant-import'
+import { assistantImportModel, readAssistantImportFile, readAssistantReviewBody, requireAssistantImport } from '#server/utils/assistant-import'
 
 function request(body?: ReadableStream<Uint8Array>, headers: Record<string, string | undefined> = {}) {
   const req = new IncomingMessage(new Socket())
@@ -19,6 +19,43 @@ beforeEach(() => {
   permission.mockReset().mockResolvedValue({ userId: 'owner', tenantId: 'cafe', role: 'owner' })
   vi.stubGlobal('useRuntimeConfig', () => ({ ai: { importEnabled: false } }))
   vi.stubGlobal('requirePermission', permission)
+})
+
+describe('review commands and binding glue', () => {
+  it('uses the import model independently from the help model/provider/key', () => {
+    const event = request()
+    const run = vi.fn()
+    event.context.cloudflare = { env: { AI: { run } as never } }
+    vi.stubGlobal('useRuntimeConfig', () => ({ ai: { importModel: '@cf/google/gemma-4-26b-a4b-it', dailyLimit: 2, provider: 'openai', model: 'legacy', apiKey: 'legacy-key' } }))
+    expect(assistantImportModel(event).settings).toMatchObject({ provider: 'cloudflare', model: '@cf/google/gemma-4-26b-a4b-it', apiKey: '', dailyLimit: 2 })
+    expect(run).not.toHaveBeenCalled()
+  })
+  it('refuses missing binding/configuration without a model call', () => {
+    vi.stubGlobal('useRuntimeConfig', () => ({ ai: { importModel: '@cf/google/gemma-4-26b-a4b-it' } }))
+    expect(() => assistantImportModel(request())).toThrow()
+  })
+  it('reads strict JSON commands with no Content-Length', async () => {
+    const stream = new ReadableStream<Uint8Array>({ start(c) {
+      c.enqueue(new TextEncoder().encode('{"version":3}'))
+      c.close()
+    } })
+    expect(await readAssistantReviewBody(request(stream), extractAssistantImportSchema)).toEqual({ version: 3 })
+  })
+  it('rejects an actual over-limit chunked JSON command and cancels its stream', async () => {
+    const cancel = vi.fn()
+    const stream = new ReadableStream<Uint8Array>({ start(c) {
+      c.enqueue(new Uint8Array(64 * 1024 + 1))
+    }, cancel })
+    await expect(readAssistantReviewBody(request(stream), extractAssistantImportSchema)).rejects.toMatchObject({ statusCode: 413 })
+    expect(cancel).toHaveBeenCalledOnce()
+  })
+  it.each(['not JSON', '{"version":1,"tenantId":"foreign"}', '{"version":0}'])('refuses invalid/unknown fields (%s)', async (body) => {
+    const stream = new ReadableStream<Uint8Array>({ start(c) {
+      c.enqueue(new TextEncoder().encode(body))
+      c.close()
+    } })
+    await expect(readAssistantReviewBody(request(stream), extractAssistantImportSchema)).rejects.toMatchObject({ statusCode: 400 })
+  })
 })
 afterEach(() => vi.unstubAllGlobals())
 

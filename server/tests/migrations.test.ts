@@ -475,3 +475,28 @@ describe('0032_assistant_cloudflare', () => {
     for (const file of files.slice(index + 1)) await applyMigration(client, file)
   })
 })
+
+describe('0034 private reviews and import usage', () => {
+  it('preserves historical usage/source rows with foreign keys enabled and initializes reviews', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const index = files.findIndex(f => f.startsWith('0034_'))
+    expect(index).toBeGreaterThan(0)
+    for (const file of files.slice(0, index)) await applyMigration(client, file)
+    await client.execute('insert into user (id, name, email) values (\'review-owner\', \'Owner\', \'review@example.com\')')
+    await client.execute('insert into organization (id, name, slug, created_at) values (\'review-cafe\', \'Cafe\', \'review\', 1)')
+    await client.execute('insert into assistant_usage (id, tenant_id, user_id, day, feature, provider, model, input_tokens, output_tokens, cached_input_tokens, outcome, at) values (\'history\', \'review-cafe\', \'review-owner\', \'2026-10-04\', \'chat\', \'openai\', \'historic\', 23, 5, 10, \'ok\', 1)')
+    await client.execute('insert into assistant_imports (id, tenant_id, user_id, object_key, file_name, mime_type, byte_size, created_at, expires_at) values (\'source\', \'review-cafe\', \'review-owner\', \'private-key\', \'private.png\', \'image/png\', 4, 1, 86400001)')
+    await client.execute('insert into assistant_import_objects (object_key, created_at, expires_at) values (\'private-key\', 1, 86400001)')
+    const before = (await client.execute('select * from assistant_usage')).rows
+    await applyMigration(client, files[index]!)
+    expect((await client.execute('pragma foreign_keys')).rows[0]!.foreign_keys).toBe(1)
+    expect((await client.execute('pragma foreign_key_check')).rows).toEqual([])
+    expect((await client.execute('select * from assistant_usage')).rows).toEqual(before)
+    expect((await client.execute('select file_name, created_at, expires_at, version, review_state, review_rows from assistant_imports')).rows[0]).toMatchObject({ file_name: 'private.png', created_at: 1, expires_at: 86400001, version: 1, review_state: 'none', review_rows: null })
+    expect((await client.execute('select * from assistant_import_objects')).rows).toHaveLength(1)
+    await client.execute('insert into assistant_usage (id, tenant_id, user_id, day, feature, provider, model, at) values (\'import\', \'review-cafe\', \'review-owner\', \'2026-10-05\', \'menu_import\', \'cloudflare\', \'@cf/vendor/model\', 2)')
+    await expect(client.execute('insert into assistant_import_leases (tenant_id, user_id, extraction_id, deadline) values (\'another-cafe\', \'review-owner\', \'attempt\', 100)')).rejects.toThrow()
+    client.close()
+  })
+})

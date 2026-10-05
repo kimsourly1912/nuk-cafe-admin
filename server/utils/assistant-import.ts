@@ -1,8 +1,10 @@
 import type { H3Event } from 'h3'
 import { getHeader, getRequestWebStream, setHeader } from 'h3'
-import { assistantOff } from '#server/features/assistant'
+import type * as v from 'valibot'
+import { assistantOff, importSettingsFrom, languageModel } from '#server/features/assistant'
 import { ASSISTANT_IMPORT_MAX_BYTES, ASSISTANT_IMPORT_TYPES } from '#shared/contracts/assistant-import'
 import { apiError } from './errors'
+import { parseInput } from './validation'
 
 /** Separate from help enablement/model settings: no inference or API key is needed for sources. */
 export async function requireAssistantImport(event: H3Event) {
@@ -23,6 +25,13 @@ export async function readAssistantImportFile(event: H3Event) {
     fileName = decodeURIComponent(getHeader(event, 'x-file-name') ?? '')
   }
   catch { throw apiError(400, 'VALIDATION_FAILED', 'The file name is invalid.') }
+  return { type, fileName, data: await readBoundedBody(event, ASSISTANT_IMPORT_MAX_BYTES, 'Choose a file no larger than 5 MB.') }
+}
+
+/** Shared byte cap for raw sources and JSON review commands, including chunked requests. */
+async function readBoundedBody(event: H3Event, maxBytes: number, message: string) {
+  const length = getHeader(event, 'content-length')
+  if (length !== undefined && Number(length) > maxBytes) throw apiError(413, 'PAYLOAD_TOO_LARGE', message)
   const stream = getRequestWebStream(event)
   if (!stream) throw apiError(400, 'VALIDATION_FAILED', 'Choose a file to upload.')
   const reader = stream.getReader()
@@ -34,7 +43,7 @@ export async function readAssistantImportFile(event: H3Event) {
       if (done) break
       const chunk = new Uint8Array(value)
       size += chunk.byteLength
-      if (size > ASSISTANT_IMPORT_MAX_BYTES) {
+      if (size > maxBytes) {
         if (!event.web && !event._requestBody) {
           // H3 1's Node bridge has no upstream cancel handler: cancelling its reader while
           // data is still arriving makes the bridge enqueue into a closed controller.
@@ -44,7 +53,7 @@ export async function readAssistantImportFile(event: H3Event) {
           event.node.res.once('finish', () => event.node.req.destroy())
         }
         else { await reader.cancel().catch(() => {}) }
-        throw apiError(413, 'PAYLOAD_TOO_LARGE', 'Choose a file no larger than 5 MB.')
+        throw apiError(413, 'PAYLOAD_TOO_LARGE', message)
       }
       chunks.push(chunk)
     }
@@ -56,5 +65,21 @@ export async function readAssistantImportFile(event: H3Event) {
     data.set(chunk, offset)
     offset += chunk.length
   }
-  return { type, fileName, data }
+  return data
+}
+
+/** Current binding path for Nitro 2; callers must already have passed requireAssistantImport. */
+export function assistantImportModel(event: H3Event) {
+  const settings = importSettingsFrom(useRuntimeConfig(event).ai)
+  return { settings, model: languageModel(settings, event.context.cloudflare?.env?.AI) }
+}
+
+export async function readAssistantReviewBody<T extends v.GenericSchema>(event: H3Event, schema: T): Promise<v.InferOutput<T>> {
+  const bytes = await readBoundedBody(event, 64 * 1024, 'The review command is too large.')
+  let body: unknown
+  try {
+    body = JSON.parse(new TextDecoder().decode(bytes))
+  }
+  catch { throw apiError(400, 'VALIDATION_FAILED', 'The request body is not valid JSON.') }
+  return parseInput(schema, body)
 }

@@ -76,8 +76,9 @@ export default async function ({ provide }: TestProject) {
       // Better Auth needs the site's address and a secret in a production build (its routes answer
       // 500 without them). Test values: this server only ever serves the test browser.
       NUXT_PUBLIC_SITE_URL: host,
-      // Private-source routes only: no extraction/model calls. Production defaults remain off.
+      // Private import API tests: no configured extraction model or remote binding/inference.
       NUXT_AI_IMPORT_ENABLED: 'true',
+      NUXT_AI_IMPORT_MODEL: '',
       NUXT_BETTER_AUTH_SECRET: 'e2e-better-auth-secret-at-least-32-characters',
       NUXT_BAKONG_API_URL: bakong.url,
       NUXT_BAKONG_TOKEN: FAKE_BAKONG_TOKEN },

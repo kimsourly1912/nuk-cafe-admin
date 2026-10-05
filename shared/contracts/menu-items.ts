@@ -111,7 +111,8 @@ export interface MenuItem {
 
 const priceMinor = v.nullable(v.pipe(v.number(), v.integer('Must be whole cents'), v.minValue(0, 'Can\'t be negative'), v.maxValue(MAX_VARIATION_PRICE_MINOR, `At most $${MAX_VARIATION_PRICE_MINOR / 100}`)))
 
-const variationSchema = v.strictObject({
+/** Shared with import review corrections; menu commands still require a complete price grid. */
+export const itemVariationSchema = v.strictObject({
   /** One value id per chosen option set, in any order. */
   valueIds: v.pipe(v.array(idSchema), v.maxLength(MAX_ITEM_OPTION_SETS)),
   priceMinor,
@@ -148,7 +149,7 @@ const optionSetIds = v.pipe(
   v.maxLength(MAX_ITEM_OPTION_SETS, `At most ${MAX_ITEM_OPTION_SETS} option sets`),
   v.check(ids => new Set(ids).size === ids.length, 'Each option set can be chosen once'),
 )
-const variations = v.pipe(v.array(variationSchema), v.minLength(1), v.maxLength(400))
+const variations = v.pipe(v.array(itemVariationSchema), v.minLength(1), v.maxLength(400))
 
 export const itemListQuerySchema = v.object({
   ...pageQuerySchema,
