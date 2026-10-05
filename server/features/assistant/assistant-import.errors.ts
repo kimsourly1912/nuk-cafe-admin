@@ -15,3 +15,12 @@ export const importExtractionFailed = () => apiError(502, 'AI_IMPORT_EXTRACTION_
 export const importCancelled = () => apiError(409, 'AI_IMPORT_CANCELLED', 'Processing was cancelled. Your source is saved.')
 export const importCapacityReached = () => apiError(429, 'AI_CAPACITY_REACHED', 'Cloudflare AI capacity or the account allocation has been reached. Try again later.')
 export const importReviewUnavailable = () => apiError(500, 'AI_IMPORT_REVIEW_UNAVAILABLE', 'The review could not be saved. Reload it before trying again.')
+
+export const importPdfRequired = () => apiError(422, 'AI_IMPORT_PDF_REQUIRED', 'Choose a private PDF source for page processing.')
+export const importPdfSelectionFixed = () => apiError(409, 'AI_IMPORT_PDF_SELECTION_FIXED', 'Page selection is already saved. Upload another source to choose different pages.')
+export const importPdfPageNotSelected = () => apiError(422, 'AI_IMPORT_PDF_PAGE_NOT_SELECTED', 'Save this source’s page selection before processing the page.')
+export const importPdfPageLimit = () => apiError(429, 'AI_IMPORT_PDF_PAGE_LIMIT', 'This page has reached its three-attempt limit. Review completed pages or upload a clearer source.')
+export const importPdfNotConfigured = () => apiError(500, 'AI_IMPORT_NOT_CONFIGURED', 'Menu extraction requires the Cloudflare AI binding.')
+export const importPdfNotPrepared = () => apiError(409, 'INVALID_STATE', 'Save the PDF page selection first.')
+export const importPdfEmpty = () => apiError(409, 'AI_IMPORT_PDF_EMPTY', 'Process at least one page with menu items before reviewing successful pages.')
+export const importPdfPageInvalid = () => apiError(422, 'AI_IMPORT_PDF_PAGE_INVALID', 'Use a PNG page image no larger than 2 MB, 1,400 pixels on a side and 2 million pixels in total.')

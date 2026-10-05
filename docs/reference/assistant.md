@@ -34,6 +34,8 @@ function configuredModel(binding: CloudflareAiBinding) {
 
 `startUsage`, `finishUsage`, `assistantStatus` and `purgeAssistantUsage` retain per-owner/per-cafe accounting and 90-day metadata-only cleanup. Migration `0032_assistant_cloudflare` adds the provider without relabelling old rows. The app's request counter is separate from Cloudflare's account-wide inference allocation.
 
+D157 extends internal `startUsage(db, actor, settings, feature, now?, importPage?)` with optional `{ sourceId, pageNumber }` attribution for an already-authorized supplied PDF page. Ordinary calls omit it. Nullable usage columns preserve old records; page attribution is metadata, never proof of original-PDF provenance or an account-wide neurons balance.
+
 At D149, image/PDF import APIs, private source storage and persisted reviews were unbuilt. D152 adds the disabled private-source backend; D153 adds bounded image extraction and editable review persistence. D154 adds explicit reviewed draft creation below; D155 adds the approved review/Create drafts UI below; PDF extraction and live activation remain pending. D148 confirms their English-only scope and 24-hour retention; do not infer that they exist from the model's image/structured-output compatibility tests.
 
 ## Evaluation tooling (D151)
@@ -150,4 +152,20 @@ No deployment, model change, inference activation or PDF processing is included.
 
 `?source=<id>&pages=1,2` resumes page choices; absent means all document pages, invalid/duplicate/out-of-range values mean none. Source switches clear page choices. Selection is URL metadata, never PDF text or bytes; changing it saves no review/menu data. Source expiry, feature availability, route disposal and session changes release parser/worker/canvas and clear query data. API reads retain standard session handling; old responses cannot revive a disposed source.
 
-PDF extraction remains unavailable (`pdfProcessing: false`). There is no server page manifest/payload validation, page evidence/retry/billing or OCR in this slice. Complete 9.C3b and live document/model/Worker/resource gates before activation. Unusual PDF fonts/codecs and real phone performance remain unverified. [Plan](../plans/ai-assistant-cloudflare.md#pdf-preparation-slice-d156-9c3a).
+The UI still reports `pdfProcessing: false`. D156 provides preparation only; D157 adds the separate page backend below. Wire the page flow and complete live document/model/Worker/resource gates before activation. Unusual PDF fonts/codecs and real phone performance remain unverified. [Plan](../plans/ai-assistant-cloudflare.md#pdf-preparation-slice-d156-9c3a).
+
+## Selected PDF page backend (D157)
+
+Backend slice behind the same disabled import switch. `pdfProcessing` remains false pending UI wiring. Prefix below is `/api/c/<slug>/admin/assistant/imports/{id}`; every route requires existing creator/cafe access, an unexpired PDF source and `assistant:use`. No route accepts a client tenant/model/tool/menu command.
+
+| Route | Request | Result |
+|---|---|---|
+| `POST /pdf-pages` | Strict JSON `{ version, pageNumbers: number[] }`; 1–5 unique labels, each 1–5 | Protected review with fixed sorted manifest; version advances once. Same manifest/current version is a no-op; a different selection requires another source. |
+| `POST /pdf-pages/{pageNumber}/extract` | Raw `image/png`; integer `X-Source-Version`; at most 2 MB, 1,400 px/side, 2 million pixels | One metered vision call then updated review. Successful page replay returns the latest review without setup/inference even with the original version. Unfinished pages require current version and the creator/cafe lease. |
+| `POST /pdf-pages/finish` | Strict JSON `{ version, confirmPartial: true }` | Explicitly finalizes nonempty successful rows, skipping unresolved pages. Refuses an active source attempt; ready-result replay is a no-op. |
+
+`AssistantImportReview.pdf.pages` has page number, pending/processing/ready/failed/skipped state, attempt count, item count and safe failure code. Private digest/usage linkage is omitted. Successful rows gain immutable `sourcePageNumber`; corrections/receipts retain it. Partial results persist across failures/reload, but row editing/draft creation require ready state. All pages successful makes the source ready automatically; partial finalization requires explicit confirmation. Never rerun a successful page or silently omit a failed page. At most three call attempts per page, 50 combined rows and 64 KB including page metadata; quota refusal before inference preserves the attempt count. Cancelled/interrupted attempts expose safe projected status; a stale worker cannot erase newer progress or unlock its lease.
+
+Supplied page pixels/numbers are **untrusted client input**. Server metadata/transport/ownership checks do not attest original-PDF validity, actual page count or pixel correspondence, or fully decode PNGs. The owner compares the review against the stored original. Derived images remain request-local; no new source objects/public URLs or extended TTL. Per-page usage attribution follows the existing metadata-only 90-day policy; source erasure still removes private reviews/status/digests and original bytes through the deletion ledger.
+
+The existing source `/extract` command remains image-only; PDFs use these separate page routes when the UI is wired. Rendered-page vision covers selected text/scanned/mixed pages in this backend; full-document `toMarkdown` remains an evaluation comparison. Live exact-name/price/association, CPU/neurons/budget and real-phone checks remain pending. [Decision](../decisions.md#d157-extract-supplied-pdf-page-images-with-resumable-private-results-and-per-page-accounting-2026-10-05).

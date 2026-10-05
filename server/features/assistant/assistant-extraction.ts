@@ -3,7 +3,7 @@ import { valibotSchema } from '@ai-sdk/valibot'
 import { generateText, Output } from 'ai'
 import type { LanguageModel } from 'ai'
 import { imageMeta } from 'image-meta'
-import type { AssistantImportReviewRow, ExtractedMenu, ExtractedMenuItem } from '#shared/contracts/assistant-import'
+import type { AssistantImportReviewRow, AssistantPdfReview, ExtractedMenu, ExtractedMenuItem } from '#shared/contracts/assistant-import'
 import { ASSISTANT_IMPORT_MAX_BYTES, ASSISTANT_IMPORT_MAX_IMAGE_PIXELS, ASSISTANT_IMPORT_MAX_IMAGE_SIDE, ASSISTANT_IMPORT_REVIEW_MAX_BYTES, extractedMenuSchema } from '#shared/contracts/assistant-import'
 import { MAX_VARIATION_PRICE_MINOR } from '#shared/contracts/menu-items'
 import { newId } from '#server/utils/ids'
@@ -35,6 +35,7 @@ export function checkExtractionImage(bytes: Uint8Array<ArrayBuffer>, mimeType: s
       || !Number.isInteger(width) || !Number.isInteger(height) || !width || !height
       || width < 1 || height < 1 || width > ASSISTANT_IMPORT_MAX_IMAGE_SIDE || height > ASSISTANT_IMPORT_MAX_IMAGE_SIDE
       || width * height > ASSISTANT_IMPORT_MAX_IMAGE_PIXELS) throw importImageInvalid()
+    return { width, height }
   }
   catch { throw importImageInvalid() }
 }
@@ -89,6 +90,9 @@ export function toReviewRows(output: unknown): AssistantImportReviewRow[] {
   assertReviewSize(rows)
   return rows
 }
-export function assertReviewSize(rows: AssistantImportReviewRow[]) {
-  if (new TextEncoder().encode(JSON.stringify(rows)).byteLength > ASSISTANT_IMPORT_REVIEW_MAX_BYTES) throw importResultInvalid()
+export function reviewByteSize(rows: AssistantImportReviewRow[], pdf?: AssistantPdfReview | null) {
+  return new TextEncoder().encode(JSON.stringify(pdf ? { rows, pdf } : rows)).byteLength
+}
+export function assertReviewSize(rows: AssistantImportReviewRow[], pdf?: AssistantPdfReview | null) {
+  if (reviewByteSize(rows, pdf) > ASSISTANT_IMPORT_REVIEW_MAX_BYTES) throw importResultInvalid()
 }

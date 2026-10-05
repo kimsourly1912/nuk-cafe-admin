@@ -4,6 +4,7 @@ import type { PreparedItemCreation } from '#server/features/menu'
 import { prepareItemCreation } from '#server/features/menu'
 import { auditStatement, withIdempotency } from '#server/features/platform'
 import type { Db } from '#server/utils/batch'
+import { reviewByteSize } from './assistant-extraction'
 import { isStaleWrite, requireOneChange } from '#server/utils/batch'
 import { apiError, versionConflict } from '#server/utils/errors'
 import { parseInput } from '#server/utils/validation'
@@ -61,7 +62,7 @@ export async function createImportDraft(db: Db, actor: Actor, id: string, rowId:
       prepared = await prepareItemCreation(db, actor, item, { rejectDuplicateName: !command.confirmDuplicate })
       if (prepared.statements.length > IMPORT_DRAFT_MAX_STATEMENTS) throw apiError(422, 'AI_IMPORT_DRAFT_TOO_COMPLEX', 'Reduce this item’s variations or add-on price overrides before importing it, or create it through Menu items.')
       const rows = source.reviewRows!.map(r => r.id === rowId ? { ...r, createdItemId: prepared!.id } : r)
-      if (new TextEncoder().encode(JSON.stringify(rows)).byteLength > ASSISTANT_IMPORT_REVIEW_MAX_BYTES) throw apiError(413, 'PAYLOAD_TOO_LARGE', 'This review is too large to save a draft receipt. Reduce the corrections first.')
+      if (reviewByteSize(rows, source.pdfReview) > ASSISTANT_IMPORT_REVIEW_MAX_BYTES) throw apiError(413, 'PAYLOAD_TOO_LARGE', 'This review is too large to save a draft receipt. Reduce the corrections first.')
       return { statements: [
         reviewRepo.updateRowsStatement(db, actor, id, command.version, rows, new Date()), requireOneChange(db),
         ...prepared.statements,

@@ -142,4 +142,4 @@ All `POST`, admin surface, `assistant: ['use']`; 404 when the assistant is off. 
 - **Q43** (owner): the AI provider account and key for staging and production, and a monthly spending cap on that account. Blocks 9.0's staging check. Default: any supported provider; the cap set on the provider's side.
 
 
-D156 adds the approved bounded browser PDF preview/page-selection preparation. Server selected-page text/scanned/mixed extraction and live validation remain in [the active revision plan](ai-assistant-cloudflare.md#pdf-preparation-slice-d156-9c3a); `pdfProcessing` stays false and imports stay disabled.
+D156 adds the approved bounded browser PDF preview/page-selection preparation. D157 adds the disabled supplied-page vision backend, saved partial results/retries and per-page usage. PDF processing UI wiring and live validation remain in [the active revision plan](ai-assistant-cloudflare.md#selected-page-extraction-backend-slice-d157-9c3b1); `pdfProcessing` stays false and imports stay disabled.

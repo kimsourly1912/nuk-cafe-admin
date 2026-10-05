@@ -500,3 +500,33 @@ describe('0034 private reviews and import usage', () => {
     client.close()
   })
 })
+
+describe('0035 supplied PDF page metadata', () => {
+  it('preserves historical usage, private reviews/receipts, expiry and deletion ledger with foreign keys enabled', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const index = files.findIndex(f => f.startsWith('0035_'))
+    expect(index).toBeGreaterThan(0)
+    for (const file of files.slice(0, index)) await applyMigration(client, file)
+    const receipt = JSON.stringify([{ id: 'row', createdItemId: 'existing-draft', source: { name: 'Private item' } }])
+    await client.batch([
+      `insert into user (id, name, email) values ('pdf-owner', 'Owner', 'pdf@example.com')`,
+      `insert into organization (id, name, slug, created_at) values ('pdf-cafe', 'Cafe', 'pdf', 1)`,
+      `insert into assistant_usage (id, tenant_id, user_id, day, feature, provider, model, input_tokens, output_tokens, outcome, at) values ('history', 'pdf-cafe', 'pdf-owner', '2026-10-04', 'chat', 'openai', 'historic', 23, 5, 'ok', 1)`,
+      { sql: `insert into assistant_imports (id, tenant_id, user_id, object_key, file_name, mime_type, byte_size, created_at, expires_at, version, review_state, review_rows) values ('source', 'pdf-cafe', 'pdf-owner', 'private-pdf-key', 'private.pdf', 'application/pdf', 4, 1, 86400001, 9, 'ready', ?)`, args: [receipt] },
+      `insert into assistant_import_objects (object_key, created_at, expires_at) values ('private-pdf-key', 1, 86400001)`,
+    ])
+    const before = (await client.execute('select * from assistant_imports')).rows[0]!
+    await applyMigration(client, files[index]!)
+    expect((await client.execute('pragma foreign_keys')).rows[0]!.foreign_keys).toBe(1)
+    expect((await client.execute('pragma foreign_key_check')).rows).toEqual([])
+    expect((await client.execute('select * from assistant_imports')).rows[0]).toEqual({ ...before, pdf_review: null })
+    expect((await client.execute('select * from assistant_usage')).rows[0]).toMatchObject({ provider: 'openai', model: 'historic', input_tokens: 23, output_tokens: 5, import_source_id: null, source_page_number: null })
+    await client.execute({ sql: 'update assistant_imports set pdf_review = ? where id = ?', args: [JSON.stringify({ pages: [{ pageNumber: 1, state: 'ready' }] }), 'source'] })
+    await client.execute(`delete from user where id = 'pdf-owner'`)
+    expect((await client.execute('select * from assistant_imports')).rows).toEqual([])
+    expect((await client.execute('select * from assistant_import_objects')).rows).toHaveLength(1)
+    for (const file of files.slice(index + 1)) await applyMigration(client, file)
+    client.close()
+  })
+})

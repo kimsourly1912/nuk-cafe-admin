@@ -481,6 +481,12 @@ The operational table is a deliberate exception to tenant-content FKs: it record
 
 Each stored review row may have `createdItemId`, appended with its explicitly created menu draft in one guarded/idempotent batch. Missing receipt remains valid on older reviews; no SQL migration. The source's version advances once per successful creation and its fixed expiry is unchanged. Receipts lock those review rows against further edits; source erasure deletes receipts/evidence/corrections, while already-created menu drafts remain cafe-owned data for the normal menu lifecycle. No FK from receipts to menu items: a removed item must not make a source row creatable again. Idempotency responses contain ids/version/boolean flags only, never candidates or evidence; they cannot bypass source access/expiry. [Command and edge cases](../reference/assistant.md#explicit-reviewed-draft-creation-d154).
 
+### Supplied PDF page progress (D157)
+
+Migration `0035_assistant_pdf_pages` adds nullable `assistant_imports.pdf_review` JSON, holding immutable supplied page labels, status, attempt/item counts, safe error and private digest/last usage linkage. Successful review rows add `sourcePageNumber`; no new content table or stored derived-image objects. Combined review/page metadata is capped at 64 KB and 50 rows. Creator/cafe/expiry scope and shared source version remain; discard/cascade/expiry erase PDF progress with the source while the operational deletion ledger survives.
+
+Nullable `assistant_usage.import_source_id` and `source_page_number` attribute each page reservation, including failed/cancelled attempts, under the existing 90-day metadata-only policy. They are server-assigned labels, not original-PDF provenance. No source-content FK: deleting a source must retain its metered quota history; usage still follows tenant/user scope and account deletion. Historical usage stays unchanged apart from null defaults. The migration uses three additive columns and preserves historical receipts/expiry/foreign keys.
+
 ## Telegram (step 8.1c, D112)
 
 Feature: `notifications` (the Telegram page is "Telegram"). The bot's token and webhook secret are Worker secrets; the tables hold chats and one-time links, never a working code.

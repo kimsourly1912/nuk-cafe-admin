@@ -3,7 +3,7 @@ import { getHeader, getRequestWebStream, setHeader } from 'h3'
 import type * as v from 'valibot'
 import { assistantOff, importSettingsFrom, languageModel } from '#server/features/assistant'
 import type { AssistantImportStatus } from '#shared/contracts/assistant-import'
-import { ASSISTANT_IMPORT_MAX_BYTES, ASSISTANT_IMPORT_TYPES } from '#shared/contracts/assistant-import'
+import { ASSISTANT_IMPORT_MAX_BYTES, ASSISTANT_IMPORT_TYPES, ASSISTANT_PDF_PAGE_MAX_BYTES } from '#shared/contracts/assistant-import'
 import { apiError } from './errors'
 import { parseInput } from './validation'
 
@@ -89,4 +89,15 @@ export async function readAssistantReviewBody<T extends v.GenericSchema>(event: 
   }
   catch { throw apiError(400, 'VALIDATION_FAILED', 'The request body is not valid JSON.') }
   return parseInput(schema, body)
+}
+
+/** One supplied page raster; no multipart/base64 expansion or private bytes in JSON commands. */
+export async function readAssistantPdfPage(event: H3Event) {
+  if (getHeader(event, 'content-type') !== 'image/png') throw apiError(415, 'UNSUPPORTED_MEDIA', 'Send a PNG page image.')
+  const rawVersion = getHeader(event, 'x-source-version') ?? ''
+  const version = Number(rawVersion)
+  if (!/^[1-9]\d*$/.test(rawVersion) || !Number.isSafeInteger(version)) throw apiError(400, 'VALIDATION_FAILED', 'Send the latest source version.')
+  const length = getHeader(event, 'content-length')
+  if (length !== undefined && !/^\d+$/.test(length)) throw apiError(400, 'VALIDATION_FAILED', 'The page length is invalid.')
+  return { version, bytes: await readBoundedBody(event, ASSISTANT_PDF_PAGE_MAX_BYTES, 'Choose a page image no larger than 2 MB.') }
 }

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { beforeAll, describe, expect, inject, it } from 'vitest'
-import type { AssistantImportDraft, AssistantImportSource } from '#shared/contracts/assistant-import'
+import type { AssistantImportDraft, AssistantImportReview, AssistantImportSource } from '#shared/contracts/assistant-import'
 import { ASSISTANT_IMPORT_MAX_BYTES } from '#shared/contracts/assistant-import'
 import { e2eDatabase } from './support/database'
 import { clientHeaders } from './support/client-address'
@@ -390,5 +390,125 @@ describe('explicit reviewed draft creation against the built app, without infere
     finally { db.close() }
     expect((await createDraft(image.id, row.id, 4, key)).status).toBe(404)
     expect((await api(`/api/c/nuk/admin/menu/items/${created.itemId}`)).status).toBe(200)
+  })
+})
+
+describe('supplied PDF page routes against the built app, without inference', () => {
+  const pdfSource = async () => {
+    const response = await upload('application/pdf', pdf)
+    expect(response.status).toBe(201)
+    return await response.json() as AssistantImportSource
+  }
+  const prepare = (id: string, version = 1, pageNumbers = [1, 2], session = cookie) => api(`${base}/${id}/pdf-pages`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ version, pageNumbers }) }, session)
+  const pageCall = (id: string, pageNumber = '1', version = '2', init: RequestInit = {}, session = cookie) => api(`${base}/${id}/pdf-pages/${pageNumber}/extract`, { method: 'POST', headers: { 'content-type': 'image/png', 'x-source-version': version }, body: png, ...init }, session)
+  const finish = (id: string, body: unknown, session = cookie) => api(`${base}/${id}/pdf-pages/finish`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }, session)
+
+  it('saves and resumes a fixed strict manifest with unchanged expiry and no extraction configuration', async () => {
+    const source = await pdfSource()
+    for (const pages of [[], [1, 1], [0], [6], [1.5]]) expect((await prepare(source.id, 1, pages)).status).toBe(400)
+    const response = await prepare(source.id, 1, [2, 1])
+    expect(response.status).toBe(200)
+    const review = await response.json() as AssistantImportReview
+    expect(review).toMatchObject({ state: 'none', source: { version: 2, expiresAt: source.expiresAt }, pdf: { pages: [{ pageNumber: 1, state: 'pending' }, { pageNumber: 2, state: 'pending' }] }, rows: [] })
+    expect(await (await api(`${base}/${source.id}/review`)).json()).toEqual(review)
+    expect((await prepare(source.id, 1)).status).toBe(409)
+    expect((await prepare(source.id, 2, [1])).status).toBe(409)
+    expect(await (await prepare(source.id, 2)).json()).toEqual(review)
+    await discard(source.id, 2)
+  })
+
+  it('protects all page actions by creator/cafe, session, role and origin before inference', async () => {
+    const source = await pdfSource()
+    expect((await prepare(source.id, 1, [1], '')).status).toBe(401)
+    expect((await prepare(source.id, 1, [1], customerCookie)).status).toBe(403)
+    expect((await prepare(source.id, 1, [1], otherCookie)).status).toBe(404)
+    expect((await api(`${base}/${source.id}/pdf-pages`, { method: 'POST', headers: { 'origin': 'https://foreign.example', 'content-type': 'application/json' }, body: JSON.stringify({ version: 1, pageNumbers: [1] }) })).status).toBe(403)
+    await prepare(source.id)
+    expect((await pageCall(source.id, '1', '2', {}, '')).status).toBe(401)
+    expect((await pageCall(source.id, '1', '2', {}, otherCookie)).status).toBe(404)
+    expect((await finish(source.id, { version: 2, confirmPartial: true }, otherCookie)).status).toBe(404)
+    const foreign = `/api/c/${seed.secondCafe.slug}/admin/assistant/imports/${source.id}`
+    for (const tail of ['pdf-pages', 'pdf-pages/1/extract', 'pdf-pages/finish']) {
+      const body = tail === 'pdf-pages' ? { version: 2, pageNumbers: [1] } : { version: 2, confirmPartial: true }
+      const response = await api(`${foreign}/${tail}`, { method: 'POST', headers: { 'content-type': tail.endsWith('extract') ? 'image/png' : 'application/json', 'x-source-version': '2' }, body: tail.endsWith('extract') ? png : JSON.stringify(body) })
+      expect(response.status).toBe(404)
+    }
+    await discard(source.id, 2)
+  })
+
+  it('refuses invalid/unselected/stale rasters before the missing model and preserves the source state', async () => {
+    const source = await pdfSource()
+    await prepare(source.id, 1, [1])
+    expect((await pageCall(source.id, '01')).status).toBe(400)
+    expect((await pageCall(source.id, '6')).status).toBe(400)
+    expect((await pageCall(source.id, '1', '1e2')).status).toBe(400)
+    expect((await pageCall(source.id, '2')).status).toBe(422)
+    expect((await pageCall(source.id, '1', '1')).status).toBe(409)
+    expect((await pageCall(source.id, '1', '2', { body: pdf })).status).toBe(422)
+    const large = png.slice()
+    new DataView(large.buffer).setUint32(16, 1401)
+    expect((await pageCall(source.id, '1', '2', { body: large })).status).toBe(422)
+    const configured = await pageCall(source.id)
+    expect(configured.status).toBe(500)
+    expect(await configured.json()).toMatchObject({ data: { code: 'INTERNAL' } })
+    expect(await (await api(`${base}/${source.id}/review`)).json()).toMatchObject({ state: 'none', source: { version: 2 }, pdf: { pages: [{ attempts: 0 }] } })
+    await discard(source.id, 2)
+  })
+
+  it('bounds a paced raw page body at two MB and keeps the server healthy after 413', async () => {
+    const source = await pdfSource()
+    await prepare(source.id, 1, [1])
+    let chunk = 0
+    const body = new ReadableStream<Uint8Array<ArrayBuffer>>({ async pull(c) {
+      await new Promise(resolve => setTimeout(resolve, 5))
+      if (!chunk++) c.enqueue(png)
+      else if (chunk < 7) c.enqueue(new Uint8Array(512 * 1024))
+      else c.close()
+    } })
+    const init: RequestInit & { duplex: 'half' } = { body, duplex: 'half' }
+    expect((await pageCall(source.id, '1', '2', init)).status).toBe(413)
+    expect((await fetch(`${host}/api/health`)).status).toBe(200)
+    expect((await (await api(`${base}/${source.id}/review`)).json()).source.version).toBe(2)
+    await discard(source.id, 2)
+  })
+
+  it('requires a nonempty result and explicit partial confirmation, then resumes and replays completed evidence without inference', async () => {
+    const source = await pdfSource()
+    await prepare(source.id)
+    expect((await finish(source.id, { version: 2, confirmPartial: true })).status).toBe(409)
+    const row = { ...reviewRow(), sourcePageNumber: 1 }
+    const db = e2eDatabase(seed.dbFile)
+    try {
+      const pdfReview = { pages: [{ pageNumber: 1, state: 'ready', attempts: 1, itemCount: 1, error: null, usageId: 'private-link', imageDigest: 'private-digest' }, { pageNumber: 2, state: 'failed', attempts: 1, itemCount: 0, error: 'AI_IMPORT_EXTRACTION_FAILED' }] }
+      await db.execute({ sql: `update assistant_imports set review_state = 'failed', extraction_error = 'AI_IMPORT_EXTRACTION_FAILED', review_rows = ?, pdf_review = ?, version = 4 where id = ?`, args: [JSON.stringify([row]), JSON.stringify(pdfReview), source.id] })
+    }
+    finally { db.close() }
+    const partial = await (await api(`${base}/${source.id}/review`)).json()
+    expect(partial).toMatchObject({ state: 'failed', rows: [row], pdf: { pages: [{ state: 'ready' }, { state: 'failed' }] } })
+    expect(partial.pdf.pages[0]).not.toHaveProperty('usageId')
+    expect(partial.pdf.pages[0]).not.toHaveProperty('imageDigest')
+    expect((await jsonCommand(`${base}/${source.id}/review/${row.id}`, 'PATCH', { version: 4, selected: false })).status).toBe(409)
+    expect((await createDraft(source.id, row.id, 4)).status).toBe(409)
+    expect((await finish(source.id, { version: 4 })).status).toBe(400)
+    const response = await finish(source.id, { version: 4, confirmPartial: true })
+    expect(response.status).toBe(200)
+    const ready = await response.json()
+    expect(ready).toMatchObject({ state: 'ready', source: { version: 5, expiresAt: source.expiresAt }, rows: [row], pdf: { pages: [{ state: 'ready' }, { state: 'skipped' }] } })
+    expect(await (await pageCall(source.id, '1', '2')).json()).toEqual(ready)
+    expect((await pageCall(source.id, '2', '5')).status).toBe(409)
+    expect(await (await finish(source.id, { version: 4, confirmPartial: true })).json()).toEqual(ready)
+    await discard(source.id, 5)
+    expect((await pageCall(source.id, '1', '5')).status).toBe(404)
+  })
+
+  it('refuses page preparation for an image source and empty finalization without charging', async () => {
+    const image = await source()
+    expect((await prepare(image.id, 1, [1])).status).toBe(422)
+    await discard(image.id)
+    const db = e2eDatabase(seed.dbFile)
+    try {
+      expect(Number((await db.execute(`select count(*) as n from assistant_usage where feature = 'menu_import'`)).rows[0]!.n)).toBe(0)
+    }
+    finally { db.close() }
   })
 })

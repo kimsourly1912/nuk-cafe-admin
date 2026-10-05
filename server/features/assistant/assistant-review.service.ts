@@ -16,7 +16,8 @@ import { finishUsage, startUsage, usageResult } from './assistant.service'
 import { importAlreadyReviewed, importBusy, importCancelled, importCapacityReached, importExtractionFailed, importNotFound, importPdfPending, importResultInvalid, importReviewUnavailable } from './assistant-import.errors'
 import type { ImportObjectStore } from './assistant-import.service'
 import { readImportSource, toImportSource } from './assistant-import.service'
-import { checkExtractionImage, extractMenuImage, IMPORT_INFERENCE_TIMEOUT_MS, IMPORT_LEASE_MS, toReviewRows } from './assistant-extraction'
+import { checkExtractionImage, extractMenuImage, IMPORT_INFERENCE_TIMEOUT_MS, IMPORT_LEASE_MS, reviewByteSize, toReviewRows } from './assistant-extraction'
+import { pdfReviewFor } from './assistant-pdf'
 import * as sourceRepo from './assistant-import.repository'
 import * as repo from './assistant-review.repository'
 
@@ -33,10 +34,11 @@ export async function getImportReview(db: Db, actor: Actor, id: string): Promise
   const lease = row.reviewState === 'processing' || row.extractionError === 'AI_IMPORT_CANCELLED' ? await repo.activeLease(db, actor, now) : undefined
   return { source: toImportSource(row), state: interrupted ? 'failed' : row.reviewState,
     error: interrupted ? 'AI_IMPORT_INTERRUPTED' : row.extractionError,
-    retryAt: lease?.deadline.toISOString() ?? null, rows: row.reviewState === 'ready' ? row.reviewRows ?? [] : [] }
+    retryAt: lease?.deadline.toISOString() ?? null, rows: row.reviewState === 'ready' || row.pdfReview ? row.reviewRows ?? [] : [],
+    ...(row.pdfReview ? { pdf: pdfReviewFor(row.pdfReview, row.reviewState === 'processing' && !interrupted, interrupted ? 'AI_IMPORT_INTERRUPTED' : row.extractionError) } : {}) }
 }
 
-function failure(error: unknown, signal: AbortSignal): { code: AssistantImportFailure, error: Error } {
+export function extractionFailure(error: unknown, signal: AbortSignal): { code: AssistantImportFailure, error: Error } {
   if (signal.aborted) return { code: 'AI_IMPORT_CANCELLED', error: importCancelled() }
   if (NoObjectGeneratedError.isInstance(error)) return { code: 'AI_IMPORT_RESULT_INVALID', error: importResultInvalid() }
   const status = error && typeof error === 'object' && 'statusCode' in error ? error.statusCode : undefined
@@ -96,7 +98,7 @@ export async function extractImportSource(db: Db, store: ImportObjectStore, acto
     if (NoObjectGeneratedError.isInstance(error)) tokens = error.usage
     const dailyLimit = !usageId && error && typeof error === 'object' && 'data' in error
       && error.data && typeof error.data === 'object' && 'code' in error.data && error.data.code === 'AI_LIMIT_REACHED'
-    const mapped = dailyLimit ? { code: 'AI_LIMIT_REACHED' as const, error: aiLimitReached(settings.dailyLimit) } : failure(error, abort)
+    const mapped = dailyLimit ? { code: 'AI_LIMIT_REACHED' as const, error: aiLimitReached(settings.dailyLimit) } : extractionFailure(error, abort)
     // Storage/SQL/provider errors can contain document text. Persist/return safe codes only.
     await repo.failExtraction(db, actor, id, extractionId, mapped.code).catch(() => {})
     throw mapped.error
@@ -120,7 +122,7 @@ export async function updateImportReviewRow(db: Db, actor: Actor, id: string, ro
   if (!row.reviewRows?.some(r => r.id === rowId)) throw importNotFound()
   if (row.reviewRows.find(r => r.id === rowId)?.createdItemId) throw apiError(409, 'AI_IMPORT_ROW_CREATED', 'This row already created a draft. Edit the item through Menu items.')
   const rows = row.reviewRows.map(r => r.id === rowId ? { ...r, selected: input.selected ?? r.selected, draft: parsed.output.draft ?? r.draft } : r)
-  if (new TextEncoder().encode(JSON.stringify(rows)).byteLength > ASSISTANT_IMPORT_REVIEW_MAX_BYTES) throw apiError(413, 'PAYLOAD_TOO_LARGE', 'This review is too large. Reduce the number of variations in the correction.')
+  if (reviewByteSize(rows, row.pdfReview) > ASSISTANT_IMPORT_REVIEW_MAX_BYTES) throw apiError(413, 'PAYLOAD_TOO_LARGE', 'This review is too large. Reduce the number of variations in the correction.')
   try {
     await runBatch(db, [repo.updateRowsStatement(db, actor, id, input.version, rows, new Date()), requireOneChange(db),
       auditStatement(db, actor, { action: 'assistant.import.review.updated', targetType: 'assistant_import', targetId: id, metadata: { rowId } })], () => versionConflict('This import'))

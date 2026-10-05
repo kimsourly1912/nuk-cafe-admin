@@ -79,6 +79,32 @@ export interface AssistantImportReviewRow {
   draft: AssistantImportDraft
   /** Receipt after explicit creation; absent on unsaved/older reviews. Never create this row again. */
   createdItemId?: string
+  /** Supplied browser raster's page label, not server-attested original-PDF provenance. */
+  sourcePageNumber?: number
+}
+export const ASSISTANT_PDF_MAX_PAGES = 5
+export const ASSISTANT_PDF_PAGE_MAX_BYTES = 2 * 1024 * 1024
+export const ASSISTANT_PDF_PAGE_MAX_SIDE = 1400
+export const ASSISTANT_PDF_PAGE_MAX_PIXELS = 2_000_000
+export const ASSISTANT_PDF_MAX_PAGE_ATTEMPTS = 3
+export const assistantPdfPageNumberSchema = v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(ASSISTANT_PDF_MAX_PAGES))
+export const prepareAssistantPdfSchema = v.strictObject({
+  version: versionSchema,
+  pageNumbers: v.pipe(v.array(assistantPdfPageNumberSchema), v.minLength(1), v.maxLength(ASSISTANT_PDF_MAX_PAGES),
+    v.check(pages => new Set(pages).size === pages.length, 'Choose each page only once.')),
+})
+export type PrepareAssistantPdfInput = v.InferOutput<typeof prepareAssistantPdfSchema>
+export const finishAssistantPdfSchema = v.strictObject({ version: versionSchema, confirmPartial: v.literal(true) })
+export type FinishAssistantPdfInput = v.InferOutput<typeof finishAssistantPdfSchema>
+export interface AssistantPdfPage {
+  pageNumber: number
+  state: 'pending' | 'processing' | 'ready' | 'failed' | 'skipped'
+  attempts: number
+  itemCount: number
+  error: AssistantImportFailure | null
+}
+export interface AssistantPdfReview {
+  pages: AssistantPdfPage[]
 }
 export interface AssistantImportReview {
   source: AssistantImportSource
@@ -87,6 +113,8 @@ export interface AssistantImportReview {
   /** An active processing/cancelled lease blocks retry until this time or the worker exits. */
   retryAt: string | null
   rows: AssistantImportReviewRow[]
+  /** Present only after the PDF's supplied page labels have been fixed. */
+  pdf?: AssistantPdfReview
 }
 export const extractAssistantImportSchema = v.strictObject({ version: versionSchema })
 export type ExtractAssistantImportInput = v.InferOutput<typeof extractAssistantImportSchema>

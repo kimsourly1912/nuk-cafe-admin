@@ -14,6 +14,8 @@ export interface NewUsage {
   feature: AssistantFeature
   provider: AiProvider
   model: string
+  importSourceId?: string
+  sourcePageNumber?: number
   at: Date
 }
 

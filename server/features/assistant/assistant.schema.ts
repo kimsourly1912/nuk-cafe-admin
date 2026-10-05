@@ -4,6 +4,7 @@ import { schema as authSchema } from '#auth/schema'
 import { AI_PROVIDERS, ASSISTANT_FEATURES, ASSISTANT_OUTCOMES } from '#shared/contracts/assistant'
 import { ASSISTANT_IMPORT_FAILURES, ASSISTANT_IMPORT_REVIEW_STATES, ASSISTANT_IMPORT_TYPES } from '#shared/contracts/assistant-import'
 import type { AssistantImportReviewRow } from '#shared/contracts/assistant-import'
+import type { AssistantPdfData } from './assistant-pdf'
 import { tenantId } from '#server/features/branches/branches.schema'
 import { newId } from '#server/utils/ids'
 
@@ -27,6 +28,9 @@ export const assistantUsage = sqliteTable('assistant_usage', {
   feature: text({ enum: ASSISTANT_FEATURES }).notNull(),
   provider: text({ enum: AI_PROVIDERS }).notNull(),
   model: text().notNull(),
+  /** Metadata-only attribution for a supplied PDF page call; no content or original-PDF attestation. */
+  importSourceId: text(),
+  sourcePageNumber: integer(),
   /** Filled in when the provider answers; `null` while pending, or when a provider doesn't say. */
   inputTokens: integer(),
   outputTokens: integer(),
@@ -57,6 +61,8 @@ export const assistantImports = sqliteTable('assistant_imports', {
   extractionError: text({ enum: ASSISTANT_IMPORT_FAILURES }),
   /** Private review/evidence, erased with the source. Never put this JSON in logs or audits. */
   reviewRows: text({ mode: 'json' }).$type<AssistantImportReviewRow[]>(),
+  /** Selected supplied page labels/progress; erased with private review data. */
+  pdfReview: text({ mode: 'json' }).$type<AssistantPdfData>(),
   version: integer().notNull().default(1),
   createdAt: instant().notNull(),
   expiresAt: instant().notNull(),

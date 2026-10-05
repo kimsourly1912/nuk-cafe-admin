@@ -1,9 +1,9 @@
-import { ASSISTANT_IMPORT_MAX_BYTES } from '#shared/contracts/assistant-import'
+import { ASSISTANT_IMPORT_MAX_BYTES, ASSISTANT_PDF_MAX_PAGES, ASSISTANT_PDF_PAGE_MAX_PIXELS, ASSISTANT_PDF_PAGE_MAX_SIDE } from '#shared/contracts/assistant-import'
 
 /** Preparation limits, not server PDF validation or proof that a page has readable menu text. */
-export const PDF_MAX_PAGES = 5
-export const PDF_MAX_SIDE = 1400
-export const PDF_MAX_PIXELS = 2_000_000
+export const PDF_MAX_PAGES = ASSISTANT_PDF_MAX_PAGES
+export const PDF_MAX_SIDE = ASSISTANT_PDF_PAGE_MAX_SIDE
+export const PDF_MAX_PIXELS = ASSISTANT_PDF_PAGE_MAX_PIXELS
 export const PDF_PREPARATION_TIMEOUT_MS = 30_000
 export class PdfPreparationError extends Error {}
 

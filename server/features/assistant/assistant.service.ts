@@ -31,9 +31,10 @@ export const PROVIDER_TIMEOUT_MS = 30_000
  * Takes one of the admin's slots for today in this cafe (D139), or refuses with 429
  * `AI_LIMIT_REACHED`. Returns the usage row's id, to finish once the provider has answered.
  */
-export async function startUsage(db: Db, actor: Actor, settings: AssistantSettings, feature: AssistantFeature, now = new Date()): Promise<string> {
+export async function startUsage(db: Db, actor: Actor, settings: AssistantSettings, feature: AssistantFeature, now = new Date(), importPage?: { sourceId: string, pageNumber: number }): Promise<string> {
   const id = newId()
-  const usage: repo.NewUsage = { id, tenantId: actor.tenantId, userId: actor.userId, day: localDate(now, ASSISTANT_TIME_ZONE), feature, provider: settings.provider, model: settings.model, at: now }
+  const usage: repo.NewUsage = { id, tenantId: actor.tenantId, userId: actor.userId, day: localDate(now, ASSISTANT_TIME_ZONE), feature, provider: settings.provider, model: settings.model, at: now,
+    ...(importPage ? { importSourceId: importPage.sourceId, sourcePageNumber: importPage.pageNumber } : {}) }
   await runBatch(db, repo.reserveUsageStatements(db, usage, settings.dailyLimit), () => aiLimitReached(settings.dailyLimit))
   return id
 }

@@ -3,7 +3,7 @@ import { Socket } from 'node:net'
 import { createEvent } from 'h3'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ASSISTANT_IMPORT_MAX_BYTES, extractAssistantImportSchema } from '#shared/contracts/assistant-import'
-import { assistantImportStatus, assistantImportModel, readAssistantImportFile, readAssistantReviewBody, requireAssistantImport } from '#server/utils/assistant-import'
+import { assistantImportStatus, assistantImportModel, readAssistantImportFile, readAssistantPdfPage, readAssistantReviewBody, requireAssistantImport } from '#server/utils/assistant-import'
 
 function request(body?: ReadableStream<Uint8Array>, headers: Record<string, string | undefined> = {}) {
   const req = new IncomingMessage(new Socket())
@@ -19,6 +19,33 @@ beforeEach(() => {
   permission.mockReset().mockResolvedValue({ userId: 'owner', tenantId: 'cafe', role: 'owner' })
   vi.stubGlobal('useRuntimeConfig', () => ({ ai: { importEnabled: false } }))
   vi.stubGlobal('requirePermission', permission)
+})
+
+describe('bounded raw PDF page body', () => {
+  it('reads one raw PNG and source version with no Content-Length', async () => {
+    const body = new ReadableStream<Uint8Array>({ start(c) {
+      c.enqueue(new Uint8Array([1, 2]))
+      c.close()
+    } })
+    expect(await readAssistantPdfPage(request(body, { 'x-source-version': '3' }))).toEqual({ version: 3, bytes: new Uint8Array([1, 2]) })
+  })
+  it.each([{ 'x-source-version': '' }, { 'x-source-version': '0' }, { 'x-source-version': '01' }, { 'x-source-version': '1e2' }, { 'x-source-version': '9007199254740993' }, { 'content-type': 'image/jpeg', 'x-source-version': '1' }, { 'content-length': 'invalid', 'x-source-version': '1' }])('refuses invalid headers before reading the page (%j)', async (headers) => {
+    const pull = vi.fn()
+    const body = new ReadableStream<Uint8Array>({ pull }, { highWaterMark: 0 })
+    await expect(readAssistantPdfPage(request(body, headers))).rejects.toMatchObject({ statusCode: expect.any(Number) })
+    expect(pull).not.toHaveBeenCalled()
+  })
+  it('rejects oversized length before reading and over-limit chunked bytes with cancellation', async () => {
+    const pull = vi.fn()
+    await expect(readAssistantPdfPage(request(new ReadableStream({ pull }, { highWaterMark: 0 }), { 'x-source-version': '1', 'content-length': String(2 * 1024 * 1024 + 1) }))).rejects.toMatchObject({ statusCode: 413 })
+    expect(pull).not.toHaveBeenCalled()
+    const cancel = vi.fn()
+    const body = new ReadableStream<Uint8Array>({ start(c) {
+      c.enqueue(new Uint8Array(2 * 1024 * 1024 + 1))
+    }, cancel })
+    await expect(readAssistantPdfPage(request(body, { 'x-source-version': '1' }))).rejects.toMatchObject({ statusCode: 413 })
+    expect(cancel).toHaveBeenCalledOnce()
+  })
 })
 
 describe('review commands and binding glue', () => {
