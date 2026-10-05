@@ -60,6 +60,7 @@ const SCHEDULED_TASKS: Record<string, string[]> = {
   '* * * * *': ['platform:deliver-outbox', 'orders:expire-unpaid', 'notifications:deliver'],
   '15 3 * * *': ['platform:expire-idempotency-keys', 'assistant:purge-usage', 'notifications:purge-deliveries'],
   '5 * * * *': ['media:purge-temporary'],
+  '*/5 * * * *': ['assistant:purge-imports'],
 }
 
 /**
@@ -173,7 +174,7 @@ export default defineNuxtConfig({
     // NUXT_AI_PROVIDER (cloudflare or a legacy provider), NUXT_AI_MODEL,
     // NUXT_AI_ENABLED (required true for Cloudflare), NUXT_AI_DAILY_LIMIT, legacy key/base URL.
     // Disabled means 404. Cloudflare needs the AI binding, not a key (D149).
-    ai: { enabled: '', provider: '', model: '', apiKey: '', baseUrl: '', dailyLimit: 100 },
+    ai: { enabled: '', importEnabled: false, provider: '', model: '', apiKey: '', baseUrl: '', dailyLimit: 100 },
     // Telegram (step 8.1c, D112; docs/server/operations.md → Telegram): NUXT_TELEGRAM_BOT_TOKEN (a
     // secret, from @BotFather), NUXT_TELEGRAM_BOT_USERNAME (without @), NUXT_TELEGRAM_WEBHOOK_SECRET
     // (a secret, 32+ letters/digits). Without a token Telegram is off: its routes answer 404.

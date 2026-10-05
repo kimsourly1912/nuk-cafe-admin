@@ -156,16 +156,25 @@ D1 Time Travel is Cloudflare's, always on, no code of ours: every change is kept
 For production (8.2): note the bookmark before every migration (see Deploys); a restore there loses real orders written after the bookmark, so it's the last resort after redeploying the previous Worker.
 - [Open] Q24: acceptable data loss and downtime (RPO/RTO) and the Cloudflare plan (Time Travel window).
 
+## Private import-source foundation (D152)
+
+`NUXT_AI_IMPORT_ENABLED=false` by default. Do not enable on staging/production as part of this foundation review: live model/R2/bucket checks remain pending and no import screen or extraction exists. This flag is server-only and independent of `NUXT_AI_ENABLED`/provider/model. For local source/API verification, `NUXT_AI_IMPORT_ENABLED=true` is automatically parsed to boolean true by Nuxt; a quoted string is not accepted. The e2e server enables only these source routes for tests, with no inference.
+
+Apply additive migration `0033_assistant_import_sources` first. Storage admission permits only the existing local FS and Cloudflare R2 drivers, refusing public Vercel Blob and unverified S3 configuration. R2 **must have public `r2.dev` and custom-domain access disabled** for this bucket; using a private prefix does not override bucket publicity. The app serves public menu images through its narrow `/media` route; private keys use `t/<tenantId>/assistant-import/<id>.<ext>` and are fetched only through owner/creator-protected API routes. A R2 `access: private` put option is ignored by NuxtHub's R2 driver and is not used as a privacy control.
+
+Expiry is exactly 24 hours from the reservation; access ends then even if cleanup has not run. `assistant:purge-imports` runs every five minutes (UTC), at most 10 objects per invocation, independent of the flag. Discard first removes accessible metadata and queues deletion, then tries R2; `{ cleanupPending: true }` means bytes are inaccessible through the app but physical deletion is retrying. During storage/DB outages, physical erasure can be delayed; keep the operational ledger until byte deletion is confirmed. It survives account deletion and explicit tenant-content erasure; tenant FKs remain restrict. Upload reservations interrupted before completion remain hidden and expire, and orphan ledgers are eligible after ten minutes. No document body, original filename or generated review text goes in task/audit logs.
+
 ## Scheduled jobs
 
 Nitro tasks in `server/tasks/`, scheduled in `nuxt.config.ts` (`nitro.scheduledTasks`, cron in UTC): Cloudflare cron triggers in deployed environments; the dev server runs them itself. Every task is **idempotent** (safe to run twice) and logs what it did. Locally a task runs on demand with `curl http://localhost:3000/_nitro/tasks/<name>` (dev only).
 
-Built so far: `platform:deliver-outbox`, `orders:expire-unpaid` and `notifications:deliver` (every minute), `platform:expire-idempotency-keys`, `assistant:purge-usage` and `notifications:purge-deliveries` (daily at 03:15 UTC) and `media:purge-temporary` (hourly at :05).
+Built so far: `platform:deliver-outbox`, `orders:expire-unpaid` and `notifications:deliver` (every minute), `platform:expire-idempotency-keys`, `assistant:purge-usage` and `notifications:purge-deliveries` (daily at 03:15 UTC) and `media:purge-temporary` (hourly at :05), plus `assistant:purge-imports` (every five minutes, even with imports disabled).
 
 | Task | Schedule | Does |
 |---|---|---|
 | `media:purge-temporary` | hourly | Deletes temporary assets older than 24 h and their R2 objects |
 | `platform:expire-idempotency-keys` | daily | Removes expired idempotency keys |
+| `assistant:purge-imports` | every five minutes | Removes expired/discarded private sources; retries byte deletion using the durable ledger even with the feature off |
 | `assistant:purge-usage` | daily | Removes AI assistant usage rows older than 90 days (D108) |
 | `platform:deliver-outbox` | every minute | Sends pending outbox messages with retries and backoff |
 | `notifications:deliver` | every minute | Queues the closing summaries that are due and sends due Telegram deliveries, with retries (D113) |

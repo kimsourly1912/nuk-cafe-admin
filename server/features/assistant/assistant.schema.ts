@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm'
 import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
 import { AI_PROVIDERS, ASSISTANT_FEATURES, ASSISTANT_OUTCOMES } from '#shared/contracts/assistant'
+import { ASSISTANT_IMPORT_TYPES } from '#shared/contracts/assistant-import'
 import { tenantId } from '#server/features/branches/branches.schema'
 import { newId } from '#server/utils/ids'
 
@@ -37,4 +38,39 @@ export const assistantUsage = sqliteTable('assistant_usage', {
   check('assistant_usage_outcome_check', sql`${t.outcome} in ('pending', 'ok', 'error')`),
   index('assistant_usage_user_day_idx').on(t.tenantId, t.userId, t.day),
   index('assistant_usage_at_idx').on(t.at),
+])
+
+/** Private, creator-owned source sessions; content/review data is never usage/audit metadata. */
+export const assistantImports = sqliteTable('assistant_imports', {
+  id: text().primaryKey(),
+  tenantId: tenantId(),
+  userId: text().notNull().references(() => authSchema!.user.id, { onDelete: 'cascade' }),
+  objectKey: text().notNull().unique(),
+  fileName: text().notNull(),
+  mimeType: text({ enum: ASSISTANT_IMPORT_TYPES }).notNull(),
+  byteSize: integer().notNull(),
+  state: text({ enum: ['uploading', 'uploaded'] }).notNull().default('uploading'),
+  version: integer().notNull().default(1),
+  createdAt: instant().notNull(),
+  expiresAt: instant().notNull(),
+}, t => [
+  check('assistant_imports_type_check', sql`${t.mimeType} in ('image/jpeg', 'image/png', 'image/webp', 'application/pdf')`),
+  check('assistant_imports_size_check', sql`${t.byteSize} > 0 and ${t.byteSize} <= 5242880`),
+  check('assistant_imports_state_check', sql`${t.state} in ('uploading', 'uploaded')`),
+  check('assistant_imports_version_check', sql`${t.version} >= 1`),
+  index('assistant_imports_owner_idx').on(t.tenantId, t.userId, t.expiresAt),
+])
+
+/**
+ * Operational object-deletion ledger, not a tenant content table. Deliberately no identity FK:
+ * its server-generated key must survive cascades until R2 confirms byte deletion (D152).
+ * Contains no filename, document body or review; expiresAt never extends after upload.
+ */
+export const assistantImportObjects = sqliteTable('assistant_import_objects', {
+  objectKey: text().primaryKey(),
+  createdAt: instant().notNull(),
+  expiresAt: instant().notNull(),
+  deleteRequested: integer({ mode: 'boolean' }).notNull().default(false),
+}, t => [
+  index('assistant_import_objects_expiry_idx').on(t.expiresAt),
 ])

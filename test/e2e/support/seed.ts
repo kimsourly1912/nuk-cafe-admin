@@ -39,7 +39,7 @@ export interface ShopSeed {
    * files run in any order, so no other file may rely on its state (`apiUnverified` is
    * shop-orders-api's, since shop-account verifies `unverified`).
    */
-  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'tableGuest' | 'cafeHopper' | 'beanOwner', SeedCustomer>
+  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'tableGuest' | 'cafeHopper' | 'beanOwner' | 'importOwner' | 'importOtherOwner', SeedCustomer>
   /** A second table at Riverside (T02), for tests that archive it. */
   spareTableToken: string
   /**
@@ -80,6 +80,9 @@ const CUSTOMERS: ShopSeed['customers'] = {
   cafeHopper: { name: 'Malis Prum', email: 'malis@example.com', password: 'long-enough-password-18' },
   // Not a customer: Brown Bean's second owner, who signs in at NUK Cafe's admin by mistake (T2c, D144).
   beanOwner: { name: 'Bea Brown', email: 'bea@brown-bean.example', password: 'long-enough-password-19' },
+  // Private-source API tests own these accounts; no other suite changes their permissions.
+  importOwner: { name: 'Import Owner', email: 'import-owner@example.com', password: 'long-enough-password-20' },
+  importOtherOwner: { name: 'Second Import Owner', email: 'import-other-owner@example.com', password: 'long-enough-password-21' },
   // Not a customer: the counter's cashier (step 6.3), staff at Riverside.
   cashier: { name: 'Sophea Keo', email: 'sophea@example.com', password: 'long-enough-password-10' },
 }
@@ -158,6 +161,12 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
   // Brown Bean's owner too (the platform console adds an existing account so, D142).
   const [bea] = await db.select({ id: user.id }).from(user).where(eq(user.email, CUSTOMERS.beanOwner.email))
   await db.insert(member).values({ id: crypto.randomUUID(), organizationId: 'tenant-2', userId: bea!.id, role: 'owner', createdAt: new Date() })
+  for (const customer of [CUSTOMERS.importOwner, CUSTOMERS.importOtherOwner]) {
+    const [owner] = await db.select({ id: user.id }).from(user).where(eq(user.email, customer.email))
+    await db.update(user).set({ emailVerified: true }).where(eq(user.id, owner!.id))
+    const cafes = customer === CUSTOMERS.importOwner ? [TEST_TENANT, 'tenant-2'] : [TEST_TENANT]
+    for (const tenantId of cafes) await db.insert(member).values({ id: crypto.randomUUID(), organizationId: tenantId, userId: owner!.id, role: 'owner', createdAt: new Date() })
+  }
   await client.execute('delete from outbox_messages')
 
   client.close()

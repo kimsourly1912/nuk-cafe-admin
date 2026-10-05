@@ -448,13 +448,24 @@ Feature: `platform`.
 
 ## AI assistant (phase 9, D107, D108)
 
-Feature: `assistant` ([plan](../plans/ai-assistant.md)). The AI only suggests: the feature writes no app data. The provider is chosen by settings (`assistant.model.ts` is the only file that names providers).
+Feature: `assistant` ([plan](../plans/ai-assistant.md)). The AI only suggests: no model writes menu data. D152 adds private source metadata separately from usage. The provider is chosen by settings (`assistant.model.ts` is the only file that names providers).
 
 | Table | Columns | Notes |
 |---|---|---|
 | `assistant_usage` | `tenant_id` (D139), `user_id` → user (cascade: an admin's usage goes with the account), `day` (`YYYY-MM-DD` in Asia/Phnom_Penh), `feature` (`ping` \| `chat` \| `menu_item_draft` \| `rewrite`), `provider`, `model`, `input_tokens`, `output_tokens`, `cached_input_tokens` (`null` while pending or when the provider doesn't say), `outcome` (`pending` \| `ok` \| `error`), `at` | One row per request to the provider, **never the question or the answer**. Inserted before the call with a guard in the same batch (the admin's rows that day **in this cafe**, this one included, at most `NUXT_AI_DAILY_LIMIT`), so two requests can't both take the last slot: 429 `AI_LIMIT_REACHED`. A failed call still counts. Indexes (`tenant_id`, `user_id`, `day`) and `at`; removed after 90 days by `assistant:purge-usage` |
 
 Routes (`/api/admin/assistant`, `assistant: ['use']`, 404 when no key is set): `GET /api/admin/assistant` (the daily limit and today's use; the app shows the assistant only when it answers) and `POST …/chat` (step 9.1, D109: the help assistant's streamed answer from the help guide in `server/features/assistant/help/*.md`, with `link_to_page` buttons limited to `pages.ts`). The 9.0 `ping` was removed in 9.1. The draft and wording routes come with 9.2–9.3.
+
+### Private import sources (D152)
+
+Migration `0033_assistant_import_sources`; these source-only routes default off and perform no inference/menu writes. Extracted review rows and save tracking remain later work.
+
+| Table | Data | Lifecycle |
+|---|---|---|
+| `assistant_imports` | id, tenant FK (restrict), creator user FK (cascade), server object key, private display filename, admitted MIME/size, uploading/uploaded state, version, created/expiry timestamps | Every user-facing query filters tenant + creator + uploaded + unexpired. Fixed 24-hour expiry; a failed upload is hidden. Discard is an audited version-guarded delete. |
+| `assistant_import_objects` | server object key (PK), created/expiry timestamps, delete_requested | Operational deletion ledger with **no identity/content FK**, preserving cleanup after user cascade or tenant-content erasure. No filename/document/review. Inserted before object write, removed only after storage confirms deletion; expired/discarded/orphan objects are retried by the task. |
+
+The operational table is a deliberate exception to tenant-content FKs: it records work to erase bytes, not content available to another cafe. Its server key retains the tenant prefix; only source-service compensation and the platform-wide cleanup task query it. No public API lists its rows. Tenant-owned source metadata follows the standard's FK/scope rules. Access stops at expiry immediately; physical deletion occurs on the bounded scheduled pass or a later successful retry during an outage.
 
 ## Telegram (step 8.1c, D112)
 

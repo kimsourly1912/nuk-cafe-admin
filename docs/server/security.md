@@ -192,6 +192,12 @@ Built in step 1.6 (D51).
 - Served with `X-Content-Type-Options: nosniff` and a long cache (keys never change).
 - An upload is `temporary` until a record references it; a scheduled task deletes temporary objects older than 24 hours.
 
+### Private menu-import sources (D152)
+
+Separate disabled source routes require `assistant:use`, the path's cafe and the creator; there is no public media URL. Raw file transport is bounded to 5 MB even without Content-Length, MIME signatures match the exact claimed type, display names are bounded and never used in storage keys. Image/PDF full decoding, dimensions and PDF page/format checks remain processing work; admission does not establish a document is safe/readable for extraction. Only FS/private R2 is supported; deployment must verify the R2 bucket exposes neither `r2.dev` nor a public custom domain.
+
+Protected source bytes use attachment, `private, no-store`, nosniff and sandbox headers; source access is checked again after storage I/O. Every list/read checks fixed 24-hour expiry. Discard removes accessible metadata immediately in an audited versioned batch. A durable operational object ledger retains byte deletion after storage failures or account/content erasure; physical cleanup retries every five minutes even with the switch off. The source key prefix is excluded by `/media`'s matcher. Audit/task logs never contain filenames/document bodies or review text; deletion failures report counts without storage error bodies.
+
 ## Secrets
 
 | Secret | Where |
