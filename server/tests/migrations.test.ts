@@ -449,3 +449,29 @@ describe('0030_platform_console', () => {
     for (const file of files.slice(at + 1)) await applyMigration(client, file)
   })
 })
+
+// The deployed provider's history must survive adding the keyless provider.
+describe('0032_assistant_cloudflare', () => {
+  it('preserves every old usage provider and enforces the widened enum and foreign keys', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const index = files.indexOf('0032_assistant_cloudflare.sql')
+    expect(index).toBeGreaterThan(0)
+    for (const file of files.slice(0, index)) await applyMigration(client, file)
+    await client.batch([
+      `insert into organization (id, name, slug, created_at) values ('cloudflare-tenant', 'Cafe', 'cloudflare-test', 1)`,
+      `insert into user (id, name, email, role) values ('cloudflare-owner', 'Owner', 'cloudflare@example.com', 'customer')`,
+      ...['openai', 'anthropic', 'google', 'openai-compatible'].map(provider => `insert into assistant_usage (id, tenant_id, user_id, day, feature, provider, model, input_tokens, output_tokens, cached_input_tokens, outcome, at) values ('${provider}', 'cloudflare-tenant', 'cloudflare-owner', '2026-10-05', 'chat', '${provider}', 'historical-model', 12, 5, 2, 'ok', 123)`),
+    ], 'write')
+    const before = (await client.execute('select * from assistant_usage order by id')).rows
+    await applyMigration(client, files[index]!)
+    expect((await client.execute('select * from assistant_usage order by id')).rows).toEqual(before)
+    const insert = (provider: string, tenant = 'cloudflare-tenant') => client.execute({ sql: `insert into assistant_usage (id, tenant_id, user_id, day, feature, provider, model) values (?, ?, 'cloudflare-owner', '2026-10-05', 'chat', ?, '@cf/a/b')`, args: [crypto.randomUUID(), tenant, provider] })
+    await expect(insert('cloudflare')).resolves.toBeDefined()
+    await expect(insert('unknown')).rejects.toThrow(/CHECK/)
+    await expect(insert('cloudflare', 'missing-cafe')).rejects.toThrow(/FOREIGN KEY/)
+    await client.execute(`delete from user where id = 'cloudflare-owner'`)
+    expect((await client.execute('select count(*) as n from assistant_usage')).rows[0]?.n).toBe(0)
+    for (const file of files.slice(index + 1)) await applyMigration(client, file)
+  })
+})

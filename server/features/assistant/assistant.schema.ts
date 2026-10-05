@@ -33,7 +33,7 @@ export const assistantUsage = sqliteTable('assistant_usage', {
   at: instant().notNull().default(nowMs),
 }, t => [
   check('assistant_usage_feature_check', sql`${t.feature} in ('ping', 'chat', 'menu_item_draft', 'rewrite')`),
-  check('assistant_usage_provider_check', sql`${t.provider} in ('anthropic', 'openai', 'google', 'openai-compatible')`),
+  check('assistant_usage_provider_check', sql`${t.provider} in ('anthropic', 'openai', 'google', 'openai-compatible', 'cloudflare')`),
   check('assistant_usage_outcome_check', sql`${t.outcome} in ('pending', 'ok', 'error')`),
   index('assistant_usage_user_day_idx').on(t.tenantId, t.userId, t.day),
   index('assistant_usage_at_idx').on(t.at),

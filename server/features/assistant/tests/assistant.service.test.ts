@@ -281,6 +281,31 @@ describe('the help chat (9.1, D109)', () => {
     expect(await rows()).toMatchObject([{ outcome: 'error', inputTokens: null, outputTokens: null }])
   })
 
+  it('cancellation finishes a Cloudflare usage reservation as an error', async () => {
+    const controller = new AbortController()
+    let entered!: () => void
+    const started = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    const model = new MockLanguageModelV4({
+      doStream: async ({ abortSignal }) => ({ stream: new ReadableStream<StreamPart>({
+        start(stream) {
+          abortSignal!.addEventListener('abort', () => stream.error(abortSignal!.reason), { once: true })
+          entered()
+        },
+      }) }),
+    })
+    const { pending, context: c } = context()
+    const cloudflare = { ...settings, provider: 'cloudflare' as const, apiKey: '', model: '@cf/a/b' }
+    const result = await chatWithAssistant(db, sokha, cloudflare, model, ask('Hello?'), { ...c, abortSignal: controller.signal }, at('10:00'))
+    const consumed = result.consumeStream()
+    await started
+    controller.abort()
+    await consumed
+    await Promise.all(pending)
+    expect(await rows()).toMatchObject([{ provider: 'cloudflare', outcome: 'error' }])
+  })
+
   it('past the limit, the provider is never called', async () => {
     const { model, prompts } = answering()
     await startUsage(db, sokha, settings, 'chat', at('09:00'))

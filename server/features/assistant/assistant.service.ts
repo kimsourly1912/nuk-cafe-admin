@@ -58,6 +58,8 @@ export async function purgeAssistantUsage(db: Db, now = new Date()): Promise<num
 }
 
 export interface StreamHooks {
+  /** Optional request cancellation; the provider deadline still applies. */
+  abortSignal?: AbortSignal
   /** Keeps the Worker alive until the usage row is written (`event.waitUntil`). */
   waitUntil: (promise: Promise<unknown>) => void
   /** Where a provider failure is logged (its cause never reaches the screen). */
@@ -140,13 +142,18 @@ export async function chatWithAssistant(db: Db, actor: Actor, settings: Assistan
     tools,
     stopWhen: isStepCount(CHAT_MAX_STEPS),
     maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
-    maxRetries: 1,
-    abortSignal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
+    maxRetries: settings.provider === 'cloudflare' ? 0 : 1,
+    abortSignal: context.abortSignal
+      ? AbortSignal.any([context.abortSignal, AbortSignal.timeout(CHAT_TIMEOUT_MS)])
+      : AbortSignal.timeout(CHAT_TIMEOUT_MS),
     onFinish: ({ totalUsage }) => {
       context.waitUntil(finishUsage(db, usageId, usageResult('ok', totalUsage)))
     },
     onError: ({ error }) => {
       context.onProviderError(error)
+      context.waitUntil(finishUsage(db, usageId, usageResult('error')))
+    },
+    onAbort: () => {
       context.waitUntil(finishUsage(db, usageId, usageResult('error')))
     },
   })

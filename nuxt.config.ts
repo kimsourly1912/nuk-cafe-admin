@@ -104,6 +104,9 @@ export default defineNuxtConfig({
         cloudflare: {
           wrangler: {
             name: STAGING.worker,
+            // D149: keyless Workers AI adapter. Activation waits for binding-backed quality checks;
+            // the staging provider below remains the verified OpenAI deployment for now.
+            ai: { binding: 'AI' },
             // Workers Logs: the structured logs (docs/server/operations.md → Monitoring).
             observability: { enabled: true },
             // Public, not secret: Better Auth's base URL and the only trusted origin.
@@ -167,10 +170,10 @@ export default defineNuxtConfig({
     // serve table QRs without it; the dev server uses a local one.
     qrSecret: '',
     // The AI assistant (phase 9, D107, D108; docs/server/operations.md → Configuration):
-    // NUXT_AI_PROVIDER (anthropic | openai | google | openai-compatible), NUXT_AI_MODEL,
-    // NUXT_AI_API_KEY (a secret), NUXT_AI_BASE_URL (openai-compatible only), NUXT_AI_DAILY_LIMIT.
-    // Without a key the assistant is off: its routes answer 404.
-    ai: { provider: '', model: '', apiKey: '', baseUrl: '', dailyLimit: 100 },
+    // NUXT_AI_PROVIDER (cloudflare or a legacy provider), NUXT_AI_MODEL,
+    // NUXT_AI_ENABLED (required true for Cloudflare), NUXT_AI_DAILY_LIMIT, legacy key/base URL.
+    // Disabled means 404. Cloudflare needs the AI binding, not a key (D149).
+    ai: { enabled: '', provider: '', model: '', apiKey: '', baseUrl: '', dailyLimit: 100 },
     // Telegram (step 8.1c, D112; docs/server/operations.md → Telegram): NUXT_TELEGRAM_BOT_TOKEN (a
     // secret, from @BotFather), NUXT_TELEGRAM_BOT_USERNAME (without @), NUXT_TELEGRAM_WEBHOOK_SECRET
     // (a secret, 32+ letters/digits). Without a token Telegram is off: its routes answer 404.

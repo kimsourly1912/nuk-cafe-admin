@@ -1,0 +1,38 @@
+digraph AssistantWorkflow {
+  graph [rankdir=TB, bgcolor="#fafaf9", pad="0.35", nodesep="0.35", ranksep="0.42", fontname="DejaVu Sans", label="Proposed AI assistant workflow", labelloc=t, fontsize=22];
+  node [shape=box, style="rounded,filled", fillcolor="#ffffff", color="#d6d3d1", fontcolor="#292524", fontname="DejaVu Sans", fontsize=13, margin="0.20,0.14"];
+  edge [color="#78716c", arrowsize=0.7, fontname="DejaVu Sans", fontsize=11, fontcolor="#57534e"];
+  owner [label="Cafe owner\nAuthenticated in the selected cafe"];
+  question [label="Ask a question\nExisting help chat"];
+  help [label="Workers AI through AI binding\nHelp guide and approved navigation links"];
+  answer [label="Stream an answer\nNo menu writes"];
+  upload [label="Import menu\nUpload an image or PDF; choose pages"];
+  access [label="Check access, file and usage limits\nKeep all data scoped to this cafe"];
+  image [label="Image\nVision extraction"];
+  pdf [label="Text PDF\nExtract text"];
+  scan [label="Scanned PDF\nRender bounded pages, then vision"];
+  extract [label="Workers AI through AI binding\nPropose structured menu items"];
+  validate [label="Validate against menu rules\nFlag unclear prices, categories and duplicates"];
+  review [label="Review before saving\nCompare source, correct fields, exclude rows", fillcolor="#fef3c7", color="#b45309", penwidth=1.5];
+  create [label="Owner clicks Create drafts\nOnly the selected valid rows", fillcolor="#fef3c7", color="#b45309", penwidth=1.5];
+  save [label="Existing menu service\nPermissions, validation, audit and duplicate-safe retries"];
+  result [label="Report created and failed rows\nPreserve failed rows for retry"];
+  drafts [label="Unpublished menu drafts\nOpen in the existing item editor", fillcolor="#dcfce7", color="#15803d"];
+  publish [label="Separate owner action\nPublish through the existing menu workflow"];
+  owner -> question;
+  question -> help -> answer;
+  owner -> upload;
+  upload -> access;
+  access -> image;
+  access -> pdf;
+  access -> scan;
+  image -> extract;
+  pdf -> extract;
+  scan -> extract;
+  extract -> validate -> review -> create -> save -> result -> drafts;
+  result -> save [label="Retry failed rows only", style=dashed, constraint=false];
+  drafts -> publish [style=dashed];
+  {rank=same; question; upload;}
+  {rank=same; help; access;}
+  {rank=same; image; pdf; scan;}
+}

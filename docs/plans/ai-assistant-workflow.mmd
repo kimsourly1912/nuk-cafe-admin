@@ -1,0 +1,28 @@
+flowchart LR
+ owner["Cafe owner in selected cafe"] --> question["Ask a question"]
+ question --> help["Workers AI: help guide and approved links"]
+ help --> answer["Stream answer; no menu writes"]
+ owner --> upload
+    upload["Upload image or PDF"] --> access["Check cafe access and limits"]
+    access --> sourceType{"Source type?"}
+    sourceType -->|"Image"| vision["Read menu image"]
+    sourceType -->|"Text PDF"| convert["Extract PDF text"]
+    sourceType -->|"Scanned PDF"| render["Render selected pages"]
+    render --> vision
+    vision --> extract["Workers AI: propose items"]
+    convert --> extract
+    extract --> check["Validate fields and flag uncertainty"]
+    check --> review["Owner reviews and edits"]
+    review --> ready{"Selected rows valid?"}
+    ready -->|"Needs correction"| correct["Correct fields or exclude rows"]
+    correct --> review
+    ready -->|"Yes"| confirm["Owner clicks Create drafts"]
+    confirm --> menu["Existing menu rules and audit"]
+    menu --> result["Show created and failed rows"]
+    result -->|"Failed rows only"| retry["Retry without duplicates"]
+    retry --> menu
+    result --> drafts["Open unpublished drafts"]
+    drafts -.->|"Separate owner action"| publish["Publish through menu workflow"]
+    style review fill:#FFECBD,stroke:#FFC943
+    style confirm fill:#FFECBD,stroke:#FFC943
+    style drafts fill:#CDF4D3,stroke:#66D575

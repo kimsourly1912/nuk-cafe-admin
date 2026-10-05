@@ -225,6 +225,13 @@
       "when": 1791028625202,
       "tag": "0031_cafe_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1791183073389,
+      "tag": "0032_assistant_cloudflare",
+      "breakpoints": true
     }
   ]
 }

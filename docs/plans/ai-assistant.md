@@ -1,5 +1,7 @@
 # AI assistant plan (phase 9)
 
+**Revision planning (2026-10-05, D146):** the owner chose Cloudflare Workers AI through an `AI` binding and image/PDF menu import with an editable review followed by **Create drafts**. The active proposal, model research, open decisions and build order are in [ai-assistant-cloudflare.md](ai-assistant-cloudflare.md). The code still implements the external-provider help chat below; the binding migration and import are not built. Keep this original plan as the record of phases 9.0/9.1 and the separate, unfinished text-draft/rewrite scope. Current access is cafe **owners** (D135), and all cafe APIs carry `/api/c/<slug>/…` (D140).
+
 _2026-09-30. Owner decisions (this session, "use your defaults"): an assistant for **admins** in the admin portal first; it answers questions about the portal and guides through existing workflows, drafts menu items from a description, and improves menu wording; translation later. **Any AI provider** with the owner's own API key; **the AI suggests, a person saves**; the panel is Nuxt UI's `USidebar` (owner's choice over a slide-over). Built before 6.5b at the owner's request. Decision record: D107. Options decided against for now, and what would bring them back: [ai-later.md](ai-later.md)._
 
 Four steps, each its own PR: **9.0** groundwork, **9.1** the help assistant, **9.2** menu drafts from a description, **9.3** improve wording. 9.1–9.3 have screens, so each starts with the mockup round ([feature-standard.md](../feature-standard.md#designing-a-ui-step-with-mockups-the-owners-workflow)).

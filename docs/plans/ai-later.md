@@ -72,6 +72,7 @@ Each entry: **What**, **Why not now**, **What it takes**, **Build it when**.
 - **Build it when:** single-item Improve is used a lot.
 
 ### Draft from a photo of a paper menu
+- **Planning update (2026-10-05, D146):** the owner requested image **and PDF** menu import and confirmed review before creating drafts. This is now actively planned in [ai-assistant-cloudflare.md](ai-assistant-cloudflare.md), not implemented. Source retention and the PDF processing spike remain unresolved.
 - **What:** upload a photo of an old menu; the assistant proposes drafts for every item.
 - **What it takes:** image input (most supported models read images), a review list of drafts, and the same mapping to existing categories and add-ons.
 - **Build it when:** a new branch or a menu rebuild needs many items entered at once.
@@ -93,6 +94,7 @@ Each entry: **What**, **Why not now**, **What it takes**, **Build it when**.
 - **Build it when:** more than one AI feature is live, or the owner wants to see costs in one dashboard.
 
 ### Several models by task
+- **Planning update (2026-10-05, D146):** the Workers AI revision evaluates Gemma for both tasks, with GLM as an optional text-only comparison. Separate help/extraction model settings are proposed; no model has been selected by live evaluation yet. See [the revision plan](ai-assistant-cloudflare.md).
 - **What:** a cheaper model for simple help questions, a stronger one for drafts.
 - **Why not now:** one model is simpler, and one cache namespace (caches are per model).
 - **What it takes:** a model setting per feature; the quality check run for each.

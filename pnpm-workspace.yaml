@@ -1,6 +1,7 @@
 allowBuilds:
+  core-js-pure: false
   esbuild: true
-  unrs-resolver: true  
+  unrs-resolver: true
   vue-demi: true
   workerd: true
 minimumReleaseAgeExclude:

@@ -1,5 +1,5 @@
 import { assistantChatSchema } from '#shared/contracts/assistant'
-import { AI_UNAVAILABLE_MESSAGE, chatWithAssistant } from '#server/features/assistant'
+import { chatWithAssistant, providerFailureMessage } from '#server/features/assistant'
 
 /**
  * `POST /api/admin/assistant/chat` (step 9.1, D109): the help assistant's answer to the latest
@@ -10,9 +10,10 @@ export default defineEventHandler(async (event) => {
   const { actor, settings, model } = await requireAssistant(event)
   const input = await readValidBody(event, assistantChatSchema)
   const result = await chatWithAssistant(useDb(), actor, settings, model, input, {
+    abortSignal: event.web?.request?.signal,
     sampleData: useRuntimeConfig(event).public.sampleData.enabled,
     waitUntil: promise => event.waitUntil(promise),
     onProviderError: error => log('error', 'AI provider failed', { provider: settings.provider, model: settings.model, error: String(error) }, event),
   })
-  return result.toUIMessageStreamResponse({ onError: () => AI_UNAVAILABLE_MESSAGE })
+  return result.toUIMessageStreamResponse({ onError: error => providerFailureMessage(settings.provider, error) })
 })

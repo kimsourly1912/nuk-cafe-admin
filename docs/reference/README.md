@@ -22,6 +22,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | [Forms: unsaved changes](./forms.md) | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard`, `isSameFormValue` |
 | [Auth](./auth.md) | `useAuth`, public pages |
 | [Feature public APIs](./features.md) | What each feature exports for other features (`CategorySelect`, `useCategoryOptions`, …) |
+| [Assistant server API](./assistant.md) | Keyless Cloudflare settings/model binding, safe stream errors, existing help/usage API and implementation status |
 
 ## All APIs at a glance
 

@@ -6,7 +6,7 @@ import * as v from 'valibot'
  */
 
 /** Providers the assistant supports (covered by the plan's quality check). */
-export const AI_PROVIDERS = ['anthropic', 'openai', 'google', 'openai-compatible'] as const
+export const AI_PROVIDERS = ['anthropic', 'openai', 'google', 'openai-compatible', 'cloudflare'] as const
 export type AiProvider = typeof AI_PROVIDERS[number]
 
 /** What a usage row was for. `ping` is 9.0's staging check. */

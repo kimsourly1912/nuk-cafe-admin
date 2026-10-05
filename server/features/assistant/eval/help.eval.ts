@@ -3,7 +3,7 @@ import type { Actor } from '#server/features/identity'
 import { chatWithAssistant } from '#server/features/assistant/assistant.service'
 import { languageModel } from '#server/features/assistant/assistant.model'
 import { assistantSettingsFrom } from '#server/features/assistant/assistant.settings'
-import { createTestDb, createUser } from '#server/tests/support/db'
+import { createTestDb, createUser, ensureTenant } from '#server/tests/support/db'
 
 /**
  * The help assistant's quality check (step 9.1, D107, D109): real questions against the configured
@@ -59,6 +59,7 @@ const CASES: Case[] = [
 ]
 
 const settings = assistantSettingsFrom({
+  enabled: process.env.NUXT_AI_ENABLED,
   provider: process.env.NUXT_AI_PROVIDER,
   model: process.env.NUXT_AI_MODEL,
   apiKey: process.env.NUXT_AI_API_KEY,
@@ -71,6 +72,7 @@ describe.skipIf(!settings)('help quality check (spends a little)', () => {
 
   it.each(CASES)('$question', { timeout: 90_000 }, async (c) => {
     const db = await createTestDb()
+    await ensureTenant(db, 'eval-tenant')
     const actor: Actor = { userId: (await createUser(db)).id, tenantId: 'eval-tenant', role: 'owner' }
     const result = await chatWithAssistant(db, actor, settings!, languageModel(settings!), {
       messages: [{ id: 'q', role: 'user', parts: [{ type: 'text', text: c.question }] }],
