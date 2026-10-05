@@ -1,6 +1,7 @@
 import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const ItemErrorCodes = {
+  ITEM_NAME_EXISTS: 'ITEM_NAME_EXISTS',
   CATEGORY_NOT_A_LEAF: 'CATEGORY_NOT_A_LEAF',
   CATEGORY_NOT_AVAILABLE: 'CATEGORY_NOT_AVAILABLE',
   OPTION_SET_NOT_AVAILABLE: 'OPTION_SET_NOT_AVAILABLE',
@@ -10,6 +11,8 @@ export const ItemErrorCodes = {
   MODIFIER_NOT_AVAILABLE: 'MODIFIER_NOT_AVAILABLE',
   ITEM_SELECTION_RULES: 'ITEM_SELECTION_RULES',
 } as const
+
+export const itemNameExists = () => apiError(409, ItemErrorCodes.ITEM_NAME_EXISTS, 'A menu item with this name already exists. Confirm the duplicate before creating another draft.', { fieldErrors: { name: ['Review the possible duplicate.'] } })
 
 export const itemNotFound = () => notFound('This menu item')
 

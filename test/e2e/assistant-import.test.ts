@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { beforeAll, describe, expect, inject, it } from 'vitest'
-import type { AssistantImportSource } from '#shared/contracts/assistant-import'
+import type { AssistantImportDraft, AssistantImportSource } from '#shared/contracts/assistant-import'
 import { ASSISTANT_IMPORT_MAX_BYTES } from '#shared/contracts/assistant-import'
 import { e2eDatabase } from './support/database'
 import { clientHeaders } from './support/client-address'
@@ -245,5 +245,144 @@ describe('private-review routes against the built app, with seeded extraction st
     expect((await api(`${base}/${image.id}/review`)).status).toBe(404)
     expect((await jsonCommand(`${base}/${image.id}/review/${row.id}`, 'PATCH', { version: 3, selected: false })).status).toBe(404)
     expect((await fetch(`${host}/api/health`)).status).toBe(200)
+  })
+})
+
+const draftPath = (sourceId: string, rowId: string) => `${base}/${sourceId}/review/${rowId}/create-draft`
+const createDraft = (sourceId: string, rowId: string, version: number, key = crypto.randomUUID(), confirmDuplicate = false, session = cookie) => api(draftPath(sourceId, rowId), {
+  method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify({ version, confirmDuplicate }),
+}, session)
+
+async function correctedSource(name = `Imported coffee ${crypto.randomUUID().slice(0, 8)}`) {
+  const { image, row } = await readySource()
+  const db = e2eDatabase(seed.dbFile)
+  let categoryId: string
+  try {
+    const categories = await db.execute({ sql: 'select c.id from menu_categories c where c.status = \'active\' and c.tenant_id = (select tenant_id from assistant_imports where id = ?) and not exists (select 1 from menu_categories child where child.parent_id = c.id) limit 1', args: [image.id] })
+    categoryId = String(categories.rows[0]!.id)
+  }
+  finally { db.close() }
+  const draft: AssistantImportDraft = { ...row.draft, name, categoryId }
+  const edited = await jsonCommand(`${base}/${image.id}/review/${row.id}`, 'PATCH', { version: 3, draft })
+  expect(edited.status).toBe(200)
+  return { image, row: { ...row, draft }, version: 4 }
+}
+
+describe('explicit reviewed draft creation against the built app, without inference', () => {
+  it('creates a draft from saved corrections, replays safely and resumes its receipt', async () => {
+    const { image, row } = await correctedSource()
+    const key = crypto.randomUUID()
+    const response = await createDraft(image.id, row.id, 4, key)
+    expect(response.status, await response.clone().text()).toBe(200)
+    const result = await response.json()
+    expect(result).toMatchObject({ version: 5, alreadyCreated: false, replayed: false })
+    const item = await api(`/api/c/nuk/admin/menu/items/${result.itemId}`)
+    expect(await item.json()).toMatchObject({ name: row.draft.name, categoryId: row.draft.categoryId, image: null, status: 'draft' })
+    expect(await (await createDraft(image.id, row.id, 4, key)).json()).toEqual({ ...result, replayed: true })
+    expect(await (await createDraft(image.id, row.id, 5, crypto.randomUUID(), true)).json()).toMatchObject({ itemId: result.itemId, alreadyCreated: true })
+    const resumed = await (await api(`${base}/${image.id}/review`)).json()
+    expect(resumed).toMatchObject({ source: { version: 5, expiresAt: image.expiresAt }, rows: [{ source: row.source, createdItemId: result.itemId }] })
+    expect((await jsonCommand(`${base}/${image.id}/review/${row.id}`, 'PATCH', { version: 5, selected: false })).status).toBe(409)
+    await discard(image.id, 5)
+    expect((await api(`/api/c/nuk/admin/menu/items/${result.itemId}`)).status).toBe(200)
+    expect((await createDraft(image.id, row.id, 4, key)).status).toBe(404)
+  })
+
+  it('requires both normal owner access and creator/cafe isolation before creating or replaying', async () => {
+    const { image, row } = await correctedSource()
+    expect((await createDraft(image.id, row.id, 4, crypto.randomUUID(), false, '')).status).toBe(401)
+    expect((await createDraft(image.id, row.id, 4, crypto.randomUUID(), false, customerCookie)).status).toBe(403)
+    expect((await createDraft(image.id, row.id, 4, crypto.randomUUID(), false, otherCookie)).status).toBe(404)
+    const foreign = draftPath(image.id, row.id).replace('/c/nuk/', `/c/${seed.secondCafe.slug}/`)
+    expect((await jsonCommand(foreign, 'POST', { version: 4 })).status).toBe(400)
+    expect((await api(foreign, { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify({ version: 4 }) })).status).toBe(404)
+    await discard(image.id, 4)
+  })
+
+  it('validates the action key, bounded strict body and normal origin policy', async () => {
+    const { image, row } = await correctedSource()
+    const path = draftPath(image.id, row.id)
+    expect((await jsonCommand(path, 'POST', { version: 4 })).status).toBe(400)
+    expect((await createDraft(image.id, row.id, 4, 'invalid-key')).status).toBe(400)
+    for (const extra of [{ name: 'Fresh request data' }, { publish: true }, { tenantId: 'foreign' }, { createdItemId: crypto.randomUUID() }]) {
+      expect((await api(path, { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify({ version: 4, ...extra }) })).status).toBe(400)
+    }
+    expect((await api(path, { method: 'POST', headers: { 'origin': 'https://foreign.example', 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify({ version: 4 }) })).status).toBe(403)
+    const stream = new ReadableStream<Uint8Array>({ start(c) {
+      c.enqueue(new Uint8Array(64 * 1024 + 1))
+      c.close()
+    } })
+    const init: RequestInit & { duplex: 'half' } = { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() }, body: stream, duplex: 'half' }
+    expect((await api(path, init)).status).toBe(413)
+    expect((await fetch(`${host}/api/health`)).status).toBe(200)
+    await discard(image.id, 4)
+  })
+
+  it('rejects stale/unselected/incomplete rows and leaves corrections available for retry', async () => {
+    const { image, row } = await correctedSource()
+    expect((await createDraft(image.id, row.id, 3)).status).toBe(409)
+    expect((await createDraft(image.id, crypto.randomUUID(), 4)).status).toBe(404)
+    await jsonCommand(`${base}/${image.id}/review/${row.id}`, 'PATCH', { version: 4, selected: false })
+    expect((await createDraft(image.id, row.id, 5)).status).toBe(409)
+    await jsonCommand(`${base}/${image.id}/review/${row.id}`, 'PATCH', { version: 5, selected: true, draft: { ...row.draft, categoryId: null } })
+    const key = crypto.randomUUID()
+    expect((await createDraft(image.id, row.id, 6, key)).status).toBe(400)
+    expect(await (await api(`${base}/${image.id}/review`)).json()).toMatchObject({ source: { version: 6 }, rows: [{ draft: { categoryId: null } }] })
+    await jsonCommand(`${base}/${image.id}/review/${row.id}`, 'PATCH', { version: 6, draft: row.draft })
+    expect((await createDraft(image.id, row.id, 7, key)).status).toBe(200)
+    await discard(image.id, 8)
+  })
+
+  it('warns about an existing matching name and requires explicit confirmation', async () => {
+    const first = await correctedSource()
+    const created = await (await createDraft(first.image.id, first.row.id, 4)).json()
+    await discard(first.image.id, 5)
+    const second = await correctedSource(first.row.draft.name.toUpperCase())
+    const key = crypto.randomUUID()
+    const duplicate = await createDraft(second.image.id, second.row.id, 4, key)
+    expect(duplicate.status).toBe(409)
+    expect(await duplicate.json()).toMatchObject({ data: { code: 'ITEM_NAME_EXISTS' } })
+    const confirmed = await (await createDraft(second.image.id, second.row.id, 4, key, true)).json()
+    expect(confirmed.itemId).not.toBe(created.itemId)
+    expect((await createDraft(second.image.id, second.row.id, 4, key)).status).toBe(422)
+    await discard(second.image.id, 5)
+  })
+
+  it('keeps partial successes and saves only corrected failed rows on retry', async () => {
+    const { image, row } = await correctedSource()
+    const invalid = reviewRow()
+    invalid.draft.name = `Imported second ${crypto.randomUUID().slice(0, 8)}`
+    const db = e2eDatabase(seed.dbFile)
+    try {
+      await db.execute({ sql: 'update assistant_imports set review_rows = ? where id = ?', args: [JSON.stringify([row, invalid]), image.id] })
+    }
+    finally { db.close() }
+    const first = await (await createDraft(image.id, row.id, 4)).json()
+    const key = crypto.randomUUID()
+    expect((await createDraft(image.id, invalid.id, 5, key)).status).toBe(400)
+    const resumed = await (await api(`${base}/${image.id}/review`)).json()
+    expect(resumed.rows[0].createdItemId).toBe(first.itemId)
+    expect(resumed.rows[1].createdItemId).toBeUndefined()
+    await jsonCommand(`${base}/${image.id}/review/${invalid.id}`, 'PATCH', { version: 5, draft: { ...invalid.draft, categoryId: row.draft.categoryId } })
+    const second = await (await createDraft(image.id, invalid.id, 6, key)).json()
+    expect(second.itemId).not.toBe(first.itemId)
+    await discard(image.id, 7)
+  })
+
+  it('refuses incomplete processing and expired replay access without reserving AI usage', async () => {
+    const untouched = await source()
+    expect((await createDraft(untouched.id, crypto.randomUUID(), 1)).status).toBe(409)
+    await discard(untouched.id)
+    const { image, row } = await correctedSource()
+    const key = crypto.randomUUID()
+    const created = await (await createDraft(image.id, row.id, 4, key)).json()
+    const db = e2eDatabase(seed.dbFile)
+    try {
+      await db.execute({ sql: 'update assistant_imports set expires_at = 0 where id = ?', args: [image.id] })
+      expect(Number((await db.execute('select count(*) as n from assistant_usage where feature = \'menu_import\'')).rows[0]!.n)).toBe(0)
+    }
+    finally { db.close() }
+    expect((await createDraft(image.id, row.id, 4, key)).status).toBe(404)
+    expect((await api(`/api/c/nuk/admin/menu/items/${created.itemId}`)).status).toBe(200)
   })
 })

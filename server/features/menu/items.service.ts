@@ -11,7 +11,7 @@ import { attachStatements, getAsset, mediaNotAvailable, releaseStatement } from 
 import { auditStatement } from '#server/features/platform'
 import * as availabilityRepo from './availability.repository'
 import { planRuleLinks, ruleLinksFailure } from './availability.service'
-import { categoryNotALeaf, categoryNotAvailable, itemChanged, itemInWrongState, itemNotFound, itemSelectionRules, itemsChanged, modifierGroupNotAvailable, modifierNotAvailable, nothingToSell, optionSetNotAvailable, priceGrid } from './items.errors'
+import { categoryNotALeaf, categoryNotAvailable, itemChanged, itemInWrongState, itemNameExists, itemNotFound, itemSelectionRules, itemsChanged, modifierGroupNotAvailable, modifierNotAvailable, nothingToSell, optionSetNotAvailable, priceGrid } from './items.errors'
 import * as repo from './items.repository'
 import type { GroupWithModifiers, ItemGroupRow, ItemRow, SetWithValues, VariationRow } from './items.repository'
 import type { GridEntry, GridPlan } from './items.rules'
@@ -255,49 +255,63 @@ const audit = (db: Db, actor: Actor, action: string, itemId: string, metadata: R
  * the target one) is no longer an active leaf, an option set or value, add-on group or add-on, or
  * newly chosen availability rule was archived, or the image expired.
  */
-async function runItemBatch(db: Db, tenantId: string, statements: Statement[], check: { itemId?: string, version?: number, categoryId?: string, setIds?: string[], valueIds?: string[], addOns?: { input: ItemModifierGroupsInput, plan: AddOnPlan }, rules?: { ids: string[], added: string[] }, imageId?: string | null }) {
+interface ItemBatchCheck { rejectDuplicateName?: string, itemId?: string, version?: number, categoryId?: string, setIds?: string[], valueIds?: string[], addOns?: { input: ItemModifierGroupsInput, plan: AddOnPlan }, rules?: { ids: string[], added: string[] }, imageId?: string | null }
+
+async function runItemBatch(db: Db, tenantId: string, statements: Statement[], check: ItemBatchCheck) {
   try {
     await db.batch(statements as [Statement, ...Statement[]])
   }
-  catch (error) {
-    if (!isStaleWrite(error)) throw error
-    if (check.itemId !== undefined) {
-      const item = await repo.findItem(db, tenantId, check.itemId)
-      if (!item) throw itemNotFound()
-      if (item.version !== check.version) throw itemChanged()
-    }
-    if (check.categoryId) await ensureLeafCategory(db, tenantId, check.categoryId)
-    if (check.setIds?.length) {
-      const sets = await repo.setsWithValues(db, tenantId, check.setIds)
-      const archivedSet = check.setIds.findIndex(id => sets.find(s => s.id === id)?.status !== 'active')
-      if (archivedSet >= 0) throw optionSetNotAvailable(archivedSet)
-      const activeValues = new Set(sets.flatMap(s => s.values.filter(v => v.status === 'active').map(v => v.id)))
-      if (check.valueIds?.some(id => !activeValues.has(id))) throw priceGrid({ field: 'variations', message: 'An option value was archived while saving. Reload the item and try again.' })
-    }
-    if (check.addOns) {
-      const { input, plan } = check.addOns
-      const groups = await repo.groupsWithModifiers(db, tenantId, input.map(g => g.groupId))
-      const isActive = (groupId: string) => groups.find(g => g.id === groupId)?.status === 'active'
-      const archivedGroup = input.findIndex(g => plan.newGroupIds.includes(g.groupId) && !isActive(g.groupId))
-      if (archivedGroup >= 0) throw modifierGroupNotAvailable(archivedGroup)
-      const activeModifiers = new Set(groups.flatMap(g => g.modifiers.filter(m => m.status === 'active').map(m => m.id)))
-      for (const [i, group] of input.entries()) {
-        const j = group.prices.findIndex(p => plan.newPricedIds.includes(p.modifierId) && !activeModifiers.has(p.modifierId))
-        if (j >= 0) throw modifierNotAvailable(`modifierGroups.${i}.prices.${j}.modifierId`)
-      }
-    }
-    const ruleError = check.rules && await ruleLinksFailure(db, tenantId, check.rules.ids, check.rules.added)
-    if (ruleError) throw ruleError
-    if (check.imageId) throw mediaNotAvailable('imageId')
-    throw itemChanged()
+  catch (error) { await itemBatchFailure(db, tenantId, check, error) }
+}
+
+async function itemBatchFailure(db: Db, tenantId: string, check: ItemBatchCheck, error: unknown): Promise<never> {
+  if (!isStaleWrite(error)) throw error
+  if (check.rejectDuplicateName && await repo.itemNameExists(db, tenantId, check.rejectDuplicateName)) throw itemNameExists()
+  if (check.itemId !== undefined) {
+    const item = await repo.findItem(db, tenantId, check.itemId)
+    if (!item) throw itemNotFound()
+    if (item.version !== check.version) throw itemChanged()
   }
+  if (check.categoryId) await ensureLeafCategory(db, tenantId, check.categoryId)
+  if (check.setIds?.length) {
+    const sets = await repo.setsWithValues(db, tenantId, check.setIds)
+    const archivedSet = check.setIds.findIndex(id => sets.find(s => s.id === id)?.status !== 'active')
+    if (archivedSet >= 0) throw optionSetNotAvailable(archivedSet)
+    const activeValues = new Set(sets.flatMap(s => s.values.filter(v => v.status === 'active').map(v => v.id)))
+    if (check.valueIds?.some(id => !activeValues.has(id))) throw priceGrid({ field: 'variations', message: 'An option value was archived while saving. Reload the item and try again.' })
+  }
+  if (check.addOns) {
+    const { input, plan } = check.addOns
+    const groups = await repo.groupsWithModifiers(db, tenantId, input.map(g => g.groupId))
+    const isActive = (groupId: string) => groups.find(g => g.id === groupId)?.status === 'active'
+    const archivedGroup = input.findIndex(g => plan.newGroupIds.includes(g.groupId) && !isActive(g.groupId))
+    if (archivedGroup >= 0) throw modifierGroupNotAvailable(archivedGroup)
+    const activeModifiers = new Set(groups.flatMap(g => g.modifiers.filter(m => m.status === 'active').map(m => m.id)))
+    for (const [i, group] of input.entries()) {
+      const j = group.prices.findIndex(p => plan.newPricedIds.includes(p.modifierId) && !activeModifiers.has(p.modifierId))
+      if (j >= 0) throw modifierNotAvailable(`modifierGroups.${i}.prices.${j}.modifierId`)
+    }
+  }
+  const ruleError = check.rules && await ruleLinksFailure(db, tenantId, check.rules.ids, check.rules.added)
+  if (ruleError) throw ruleError
+  if (check.imageId) throw mediaNotAvailable('imageId')
+  throw itemChanged()
 }
 
 // --- Writes ---
 
-/** A new item, as a draft at the end of its category. */
-export async function createItem(db: Db, actor: Actor, input: CreateItemInput): Promise<MenuItem> {
+/** A write plan for another feature's atomic batch; contains no writes until committed. */
+export interface PreparedItemCreation {
+  id: string
+  statements: Statement[]
+  /** Maps a failed batch to the existing menu validation errors; always throws. */
+  handleError: (error: unknown) => Promise<never>
+}
+
+/** Reuses all menu rules/guards; optional name warning is for reviewed imports only. */
+export async function prepareItemCreation(db: Db, actor: Actor, input: CreateItemInput, options: { rejectDuplicateName?: boolean } = {}): Promise<PreparedItemCreation> {
   const { tenantId } = actor
+  if (options.rejectDuplicateName && await repo.itemNameExists(db, tenantId, input.name)) throw itemNameExists()
   await ensureLeafCategory(db, tenantId, input.categoryId)
   const sets = await loadSets(db, tenantId, input.optionSetIds)
   const grid = plan(sets, [], input.variations)
@@ -308,7 +322,8 @@ export async function createItem(db: Db, actor: Actor, input: CreateItemInput): 
   const id = newId()
   const now = new Date()
   const valueIds = gridValueIds(grid)
-  await runItemBatch(db, tenantId, [
+  const statements: Statement[] = [
+    ...(options.rejectDuplicateName ? [repo.requireUnusedItemName(db, tenantId, input.name)] : []),
     repo.requireLeafCategory(db, tenantId, input.categoryId),
     ...(input.optionSetIds.length ? [repo.requireActiveSets(db, tenantId, input.optionSetIds)] : []),
     ...(valueIds.length ? [repo.requireActiveValues(db, tenantId, valueIds)] : []),
@@ -321,8 +336,19 @@ export async function createItem(db: Db, actor: Actor, input: CreateItemInput): 
     ...availabilityRepo.replaceItemRulesStatements(db, tenantId, id, input.availabilityRuleIds),
     ...imageStatements,
     audit(db, actor, 'create', id, { categoryId: input.categoryId, optionSets: input.optionSetIds.length, versions: grid.cells.length, addOnGroups: addOns.groups.length, availabilityRules: input.availabilityRuleIds }),
-  ], { categoryId: input.categoryId, setIds: input.optionSetIds, valueIds, addOns: { input: input.modifierGroups, plan: addOns }, rules: { ids: input.availabilityRuleIds, added: addedRules }, imageId: input.imageId })
-  return loadItem(db, tenantId, id)
+  ]
+  const check: ItemBatchCheck = { categoryId: input.categoryId, setIds: input.optionSetIds, valueIds, addOns: { input: input.modifierGroups, plan: addOns }, rules: { ids: input.availabilityRuleIds, added: addedRules }, imageId: input.imageId, rejectDuplicateName: options.rejectDuplicateName ? input.name : undefined }
+  return { id, statements, handleError: error => itemBatchFailure(db, tenantId, check, error) }
+}
+
+/** A new item, as a draft at the end of its category. */
+export async function createItem(db: Db, actor: Actor, input: CreateItemInput): Promise<MenuItem> {
+  const prepared = await prepareItemCreation(db, actor, input)
+  try {
+    await db.batch(prepared.statements as [Statement, ...Statement[]])
+  }
+  catch (error) { await prepared.handleError(error) }
+  return loadItem(db, actor.tenantId, prepared.id)
 }
 
 /**

@@ -2,7 +2,7 @@ import * as v from 'valibot'
 import { idSchema, versionSchema } from './common'
 import { createItemSchema, itemVariationSchema } from './menu-items'
 
-/** Private sources (D152) and image extraction/review (D153); menu writes come later. */
+/** Private sources, image reviews and explicit reviewed draft creation (D152–D154). */
 export const ASSISTANT_IMPORT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const
 export type AssistantImportType = typeof ASSISTANT_IMPORT_TYPES[number]
 /** Align with the existing server upload limit; the earlier 10 MB proposal is not adopted. */
@@ -77,6 +77,8 @@ export interface AssistantImportReviewRow {
   source: ExtractedMenuItem
   selected: boolean
   draft: AssistantImportDraft
+  /** Receipt after explicit creation; absent on unsaved/older reviews. Never create this row again. */
+  createdItemId?: string
 }
 export interface AssistantImportReview {
   source: AssistantImportSource
@@ -94,3 +96,19 @@ export const updateAssistantImportRowSchema = v.pipe(v.strictObject({
   draft: v.optional(assistantImportDraftSchema),
 }), v.check(input => input.selected !== undefined || input.draft !== undefined, 'Send a correction or selection.'))
 export type UpdateAssistantImportRowInput = v.InferOutput<typeof updateAssistantImportRowSchema>
+
+/** One selected row per action; save corrections first. No item data or publishing command. */
+export const createAssistantImportDraftSchema = v.strictObject({
+  version: versionSchema,
+  confirmDuplicate: v.optional(v.boolean(), false),
+})
+export type CreateAssistantImportDraftInput = v.InferOutput<typeof createAssistantImportDraftSchema>
+export interface CreateAssistantImportDraftResult {
+  sourceId: string
+  rowId: string
+  itemId: string
+  /** Snapshot version: resume the review after a replay before the next edit/save. */
+  version: number
+  alreadyCreated: boolean
+  replayed: boolean
+}

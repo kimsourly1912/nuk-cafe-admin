@@ -216,6 +216,17 @@ export async function itemCountsByGroup(db: Db, groupIds: string[]): Promise<Map
 
 // --- Guards (checked again inside the batch) ---
 
+/** English exact-name duplicate warning, including drafts/archived items, scoped to the cafe. */
+const sameName = (tenantId: string, name: string) => and(eq(menuItems.tenantId, tenantId), sql`lower(trim(${menuItems.name})) = lower(trim(${name}))`)
+
+export async function itemNameExists(db: Db, tenantId: string, name: string): Promise<boolean> {
+  return (await db.select({ id: menuItems.id }).from(menuItems).where(sameName(tenantId, name)).limit(1)).length > 0
+}
+
+export function requireUnusedItemName(db: Db, tenantId: string, name: string): Statement {
+  return requireCount(db, sql`select count(*) from ${menuItems} where ${sameName(tenantId, name)}`, 0)
+}
+
 /** Aborts unless the category is still active and has no sub-categories (items go in leaves). */
 export function requireLeafCategory(db: Db, tenantId: string, categoryId: string): Statement {
   return requireCount(db, sql`select count(*) from ${menuCategories} c where c.tenant_id = ${tenantId} and c.id = ${categoryId} and c.status = 'active'

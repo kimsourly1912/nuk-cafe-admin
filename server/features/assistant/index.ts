@@ -9,3 +9,4 @@ export { assistantStatus, chatWithAssistant, finishUsage, purgeAssistantUsage, s
 export { assertPrivateImportStorage, discardImportSource, getImportSource, listImportSources, purgeImportSources, readImportSource, uploadImportSource } from './assistant-import.service'
 export type { ImportObjectStore } from './assistant-import.service'
 export { cancelImportExtraction, extractImportSource, getImportReview, importSettingsFrom, updateImportReviewRow } from './assistant-review.service'
+export { createImportDraft } from './assistant-drafts.service'

@@ -7,10 +7,10 @@ import { apiError } from './errors'
 import { parseInput } from './validation'
 
 /** Separate from help enablement/model settings: no inference or API key is needed for sources. */
-export async function requireAssistantImport(event: H3Event) {
+export async function requireAssistantImport(event: H3Event, options: { menuWrite?: boolean } = {}) {
   const enabled = useRuntimeConfig(event).ai.importEnabled
   if (enabled !== true) throw assistantOff()
-  return requirePermission(event, { assistant: ['use'] })
+  return requirePermission(event, options.menuWrite ? { assistant: ['use'], menu: ['write'] } : { assistant: ['use'] })
 }
 
 /** Raw file body via H3 1's supported stream API, bounded even without Content-Length. */

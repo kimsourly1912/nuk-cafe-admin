@@ -76,6 +76,16 @@ describe('disabled import request gate', () => {
     permission.mockRejectedValueOnce(new Error('Permission refused'))
     await expect(requireAssistantImport(request())).rejects.toThrow('Permission refused')
   })
+  it('requires both assistant use and menu write for the explicit draft command', async () => {
+    vi.stubGlobal('useRuntimeConfig', () => ({ ai: { importEnabled: true } }))
+    const event = request()
+    await requireAssistantImport(event, { menuWrite: true })
+    expect(permission).toHaveBeenCalledWith(event, { assistant: ['use'], menu: ['write'] })
+  })
+  it('keeps draft creation hidden before checking its permissions when imports are disabled', async () => {
+    await expect(requireAssistantImport(request(), { menuWrite: true })).rejects.toMatchObject({ statusCode: 404 })
+    expect(permission).not.toHaveBeenCalled()
+  })
 })
 
 describe('bounded raw source body', () => {

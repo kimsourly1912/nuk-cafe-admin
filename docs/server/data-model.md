@@ -218,6 +218,8 @@ Same feature (`modifiers.*`), contract `shared/contracts/menu-modifiers.ts`. The
 
 ### Menu items API (step 3.5a, D60)
 
+D154 exports `prepareItemCreation` to compose the same validation/guards/audit in a caller’s atomic batch; `createItem` reuses it. Optional exact-name duplicate rejection is used only by reviewed imports, with explicit confirmation; the ordinary item API still permits duplicate names. [Planner and command contract](../reference/assistant.md#explicit-reviewed-draft-creation-d154).
+
 Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/contracts/menu-items.ts`. The item's `version` covers the item, its option sets, its variations and its add-on groups. Audited as `menu.item.<action>`.
 
 | Route | Permission | Does |
@@ -448,7 +450,7 @@ Feature: `platform`.
 
 ## AI assistant (phase 9, D107, D108)
 
-Feature: `assistant` ([plan](../plans/ai-assistant.md)). The AI only suggests: no model writes menu data. D152 adds private source metadata separately from usage; D153 adds private image reviews and short processing leases. The provider is chosen by settings (`assistant.model.ts` is the only file that names providers).
+Feature: `assistant` ([plan](../plans/ai-assistant.md)). The AI only suggests: no model writes menu data. D152 adds private source metadata separately from usage; D153 adds private image reviews and short processing leases; D154 adds explicit reviewed draft creation, with receipts on those reviews. The provider is chosen by settings (`assistant.model.ts` is the only file that names providers).
 
 | Table | Columns | Notes |
 |---|---|---|
@@ -474,6 +476,10 @@ The operational table is a deliberate exception to tenant-content FKs: it record
 `assistant_import_leases` has `(tenant_id, user_id)` as its primary key, tenant FK restrict, user FK cascade, attempt id and UTC deadline. It contains no source id/filename/content and intentionally has no source FK: discarding a source cannot release a running inference's capacity lock. Claim by conditional upsert in a guarded batch; release only by that attempt id. A crashed worker's expired row is inert and reused on the next attempt. No cross-tenant content links are introduced.
 
 0034 preserves every existing usage/source row and initializes review fields to defaults. Drizzle Kit 0.31.11 generated a rebuild copy selecting newly added columns from the old source table (verified `no such column: review_state`). The new, unapplied migration is corrected to copy only existing columns and retain new defaults; foreign keys stay enabled. The historical-data migration test checks old usage/source/cleanup rows, new usage admission and foreign keys. Snapshots/journal reflect the final schema; applied historical SQL is unchanged.
+
+### Private review creation receipts (D154)
+
+Each stored review row may have `createdItemId`, appended with its explicitly created menu draft in one guarded/idempotent batch. Missing receipt remains valid on older reviews; no SQL migration. The source's version advances once per successful creation and its fixed expiry is unchanged. Receipts lock those review rows against further edits; source erasure deletes receipts/evidence/corrections, while already-created menu drafts remain cafe-owned data for the normal menu lifecycle. No FK from receipts to menu items: a removed item must not make a source row creatable again. Idempotency responses contain ids/version/boolean flags only, never candidates or evidence; they cannot bypass source access/expiry. [Command and edge cases](../reference/assistant.md#explicit-reviewed-draft-creation-d154).
 
 ## Telegram (step 8.1c, D112)
 

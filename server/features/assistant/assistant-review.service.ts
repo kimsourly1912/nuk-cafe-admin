@@ -118,6 +118,7 @@ export async function updateImportReviewRow(db: Db, actor: Actor, id: string, ro
   if (row.version !== input.version) throw versionConflict('This import')
   if (row.reviewState !== 'ready') throw apiError(409, 'INVALID_STATE', 'Wait for a review before editing it.')
   if (!row.reviewRows?.some(r => r.id === rowId)) throw importNotFound()
+  if (row.reviewRows.find(r => r.id === rowId)?.createdItemId) throw apiError(409, 'AI_IMPORT_ROW_CREATED', 'This row already created a draft. Edit the item through Menu items.')
   const rows = row.reviewRows.map(r => r.id === rowId ? { ...r, selected: input.selected ?? r.selected, draft: parsed.output.draft ?? r.draft } : r)
   if (new TextEncoder().encode(JSON.stringify(rows)).byteLength > ASSISTANT_IMPORT_REVIEW_MAX_BYTES) throw apiError(413, 'PAYLOAD_TOO_LARGE', 'This review is too large. Reduce the number of variations in the correction.')
   try {
