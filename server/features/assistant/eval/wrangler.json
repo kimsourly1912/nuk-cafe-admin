@@ -1,0 +1,7 @@
+{
+  "$schema": "../../../../node_modules/wrangler/config-schema.json",
+  "name": "nuk-cafe-assistant-eval",
+  "compatibility_date": "2025-07-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "ai": { "binding": "AI", "remote": true }
+}

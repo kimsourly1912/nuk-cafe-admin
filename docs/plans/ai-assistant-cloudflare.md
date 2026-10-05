@@ -110,6 +110,8 @@ Remaining gate: this environment has no Cloudflare account credentials. Live bin
 
 Each step gets its own reviewable change with progress and decisions updated. This planning task does not authorize deploying or changing the current model.
 
+**9.C0 tooling (D151):** [evaluation runner, synthetic dataset and results](../../server/features/assistant/eval/README.md) now separate offline checks from live binding-backed help/image/text-PDF/scanned/mixed-PDF cases. The local PDF.js browser spike renders text and image-only sources, validates page selection and bounds page count/canvas size. Model transcription, Cloudflare conversion and consumption remain unmeasured. Browser rendering is a locally tested candidate for the future scanned-PDF path, not yet an app/mobile implementation. No production API contracts, source/review storage or import screens are added by the spike.
+
 | Step | Work | Done when |
 |---|---|---|
 | 9.C0 | Binding/AI SDK 7 and document-processing spike; repair eval harness; compare model candidates | Real binding can stream text, call an approved link tool and return schema-checked menu rows; text and scanned PDF strategies measured; English import results and help-language behavior, neurons/latency recorded. No default model declared proven from documentation alone. |

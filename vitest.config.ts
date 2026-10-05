@@ -71,11 +71,18 @@ export default defineConfig({
       },
       // The assistant's quality check calls the real AI provider (spends a little): only on request
       // (`ASSISTANT_EVAL=1 … pnpm vitest run --project eval`), never in CI (D109).
-      ...(process.env.ASSISTANT_EVAL
+      ...(process.env.ASSISTANT_EVAL === '1' && !process.env.CI
         ? [{
             resolve: { alias },
             plugins: [markdownAsText],
             test: { name: 'eval', include: ['server/features/*/eval/**/*.eval.ts'], environment: 'node', maxConcurrency: 1, fileParallelism: false },
+          }]
+        : []),
+      // Local PDF/browser experiment, explicitly separate from metered evaluation and CI.
+      ...(process.env.ASSISTANT_SPIKE === '1'
+        ? [{
+            resolve: { alias },
+            test: { name: 'spike', include: ['server/features/assistant/eval/*.spike.test.ts'], environment: 'node', fileParallelism: false },
           }]
         : []),
       // Loading Nuxt for this project runs NuxtHub's module setup, which rewrites .data/db/migrations
