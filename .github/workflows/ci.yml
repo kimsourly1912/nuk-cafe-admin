@@ -74,6 +74,60 @@ jobs:
       - name: E2E tests
         run: pnpm test:e2e --shard=${{ matrix.shard }}/3
 
+  assistant-preview:
+    # Temporary same-repository PR94 preview only. No fork code receives deployment credentials.
+    # These fixed resources are separate from staging; never activate the staging import flag.
+    if: github.event_name == 'pull_request' && github.event.repository.private && github.event.pull_request.number == 94 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/cloudflare-assistant-foundation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: staging
+    concurrency:
+      group: assistant-preview
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install pnpm, Node.js and dependencies
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        with:
+          runtime: node@24
+          cache: true
+      - name: Build and prepare isolated preview
+        run: |
+          pnpm build:staging
+          node scripts/assistant-preview/prepare.mjs
+      - name: Migrate and seed only the preview database
+        run: |
+          pnpm exec wrangler d1 migrations apply DB --remote --config .output/server/wrangler.json
+          pnpm exec wrangler d1 execute DB --remote --config .output/server/wrangler.json --file .data/assistant-preview/seed.sql
+      - name: Deploy private application and protected gateway
+        run: |
+          pnpm exec wrangler deploy --config .output/server/wrangler.json --secrets-file .data/assistant-preview/app-secrets.json
+          pnpm exec wrangler deploy --config .data/assistant-preview/gateway.json --secrets-file .data/assistant-preview/gateway-secrets.json
+      - name: Verify authenticated preview flow
+        run: node scripts/assistant-preview/check.mjs
+      - name: Save sanitized preview results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: assistant-preview-results
+          path: .data/assistant-preview/results.json
+          retention-days: 7
+          include-hidden-files: true
+      - name: Save temporary preview access for repository reviewers
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: assistant-preview-access
+          path: .data/assistant-preview/access.json
+          retention-days: 1
+          include-hidden-files: true
+
   deploy-staging:
     # Only a push to main (a merged pull request, checked there: D133); pull requests and runs by
     # hand never deploy. The smoke check below still guards the deploy.

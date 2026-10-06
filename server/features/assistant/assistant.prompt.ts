@@ -26,12 +26,13 @@ Rules:
  * broke the whole build (static files looked up in the wrong folder, D109). A dynamic import keeps
  * the guide in a chunk of its own.
  */
-export async function stableInstructions(options: PageOptions): Promise<string> {
+export async function stableInstructions(options: PageOptions, structured = false): Promise<string> {
   const { helpGuide } = await import('./help')
   const pages = pageKeys(options).map(key => `- ${key}: ${ASSISTANT_PAGES[key].title} (${ASSISTANT_PAGES[key].path})`).join('\n')
-  return `${RULES}
+  const rules = structured ? RULES.replace('- To point to a page the steps use, call link_to_page with its key from the page list, once per page, then finish your answer. Don\'t link a page the answer doesn\'t send the admin to. Never write paths or web addresses yourself.', '- Return a JSON object with answer (your complete brief answer) and pages (up to three page keys from the list). Include each page your steps send the admin to, once per page. Never invent keys or put paths, web addresses or tool syntax in answer. For an unrelated question, pages is empty.') : RULES
+  return `${rules}
 
-Pages you can link to with link_to_page:
+Pages you can ${structured ? 'include in pages' : 'link to with link_to_page'}:
 ${pages}
 
 <help-guide>

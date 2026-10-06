@@ -1,5 +1,5 @@
 import type { LanguageModel, LanguageModelUsage, SystemModelMessage, UIMessage } from 'ai'
-import { convertToModelMessages, isStepCount, jsonSchema, safeValidateUIMessages, streamText, tool } from 'ai'
+import { convertToModelMessages, createUIMessageStream, generateText, isStepCount, jsonSchema, Output, safeValidateUIMessages, streamText, tool } from 'ai'
 import type { AssistantChatInput, AssistantFeature, AssistantPageLink, AssistantStatus } from '#shared/contracts/assistant'
 import { ASSISTANT_QUESTION_MAX, ASSISTANT_TIME_ZONE, ASSISTANT_USAGE_RETENTION_DAYS } from '#shared/contracts/assistant'
 import type { Db } from '#server/utils/batch'
@@ -8,7 +8,7 @@ import { apiError, ErrorCodes } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
 import { localDate } from '#server/utils/weekly-windows'
 import type { Actor } from '#server/features/identity'
-import { aiLimitReached } from './assistant.errors'
+import { aiLimitReached, providerFailureMessage } from './assistant.errors'
 import { pageContext, stableInstructions } from './assistant.prompt'
 import type { UsageResult } from './assistant.repository'
 import * as repo from './assistant.repository'
@@ -158,6 +158,81 @@ export async function chatWithAssistant(db: Db, actor: Actor, settings: Assistan
       context.waitUntil(finishUsage(db, usageId, usageResult('error')))
     },
   })
+}
+
+/**
+ * Workers AI: one validated structured answer, then server-owned navigation buttons (D161).
+ * No native tool rounds, partial JSON or provider-created paths reach the browser.
+ */
+export async function chatWithCloudflareAssistant(db: Db, actor: Actor, settings: AssistantSettings, model: LanguageModel, input: AssistantChatInput, context: PageOptions & StreamHooks, now = new Date()) {
+  const conversation = await checkConversation(input.messages, chatTools(context))
+  const instructions = `${await stableInstructions(context, true)}\n\n${pageContext(input.page)}`
+  const usageId = await startUsage(db, actor, settings, 'chat', now)
+  const keys = pageKeys(context)
+  const allowed = new Set<string>(keys)
+  type Answer = { answer: string, pages: AssistantPageKey[] }
+  const schema = jsonSchema<Answer>({
+    type: 'object', additionalProperties: false, required: ['answer', 'pages'],
+    properties: { answer: { type: 'string', minLength: 1, maxLength: 6000 }, pages: { type: 'array', maxItems: 3, items: { type: 'string', enum: keys } } },
+  }, {
+    validate(value) {
+      const data = value as Partial<Answer> | null
+      return data && typeof data === 'object' && Object.keys(data).length === 2
+        && typeof data.answer === 'string' && !!data.answer.trim() && data.answer.length <= 6000
+        && Array.isArray(data.pages) && data.pages.length <= 3 && data.pages.every(page => typeof page === 'string' && allowed.has(page))
+        ? { success: true, value: { answer: data.answer, pages: [...new Set(data.pages)] } }
+        : { success: false, error: new Error('Invalid help answer') }
+    },
+  })
+  const answer = (async () => {
+    let usage: LanguageModelUsage | undefined
+    let outcome: UsageResult['outcome'] = 'error'
+    try {
+      context.abortSignal?.throwIfAborted()
+      const result = await generateText({
+        model, instructions,
+        // Previous server-generated buttons are UI state, not new instructions/tool rounds.
+        messages: conversation.map(message => ({ role: message.role as 'user' | 'assistant', content: message.parts.filter(part => part.type === 'text').map(part => part.text).join('') })),
+        output: Output.object({ name: 'portal_help', schema }),
+        maxOutputTokens: 1500, maxRetries: 0,
+        abortSignal: context.abortSignal ? AbortSignal.any([context.abortSignal, AbortSignal.timeout(CHAT_TIMEOUT_MS)]) : AbortSignal.timeout(CHAT_TIMEOUT_MS),
+        telemetry: { isEnabled: false, recordInputs: false, recordOutputs: false },
+        include: { requestBody: false, requestMessages: false, responseBody: false },
+      })
+      usage = result.usage
+      if (result.finishReason !== 'stop') throw new Error('Incomplete help answer')
+      const output = result.output
+      context.abortSignal?.throwIfAborted()
+      outcome = 'ok'
+      return { text: output.answer, pages: output.pages, links: output.pages.map(page => ({ ...ASSISTANT_PAGES[page] })), usage }
+    }
+    catch (error) {
+      context.onProviderError(error)
+      throw error
+    }
+    finally { context.waitUntil(finishUsage(db, usageId, usageResult(outcome, usage))) }
+  })()
+  // The UI stream observes failures; eval callers may consume answer instead of the stream.
+  void answer.catch(() => {})
+  const stream = createUIMessageStream({
+    onError: error => providerFailureMessage(settings.provider, error),
+    async execute({ writer }) {
+      const result = await answer
+      writer.write({ type: 'start', messageId: newId() })
+      writer.write({ type: 'start-step' })
+      writer.write({ type: 'text-start', id: 'answer' })
+      writer.write({ type: 'text-delta', id: 'answer', delta: result.text })
+      writer.write({ type: 'text-end', id: 'answer' })
+      for (const page of result.pages) {
+        const toolCallId = newId()
+        writer.write({ type: 'tool-input-available', toolCallId, toolName: 'link_to_page', input: { page } })
+        writer.write({ type: 'tool-output-available', toolCallId, output: { ...ASSISTANT_PAGES[page] } })
+      }
+      writer.write({ type: 'finish-step' })
+      writer.write({ type: 'finish', finishReason: 'stop' })
+    },
+  })
+  return { stream, answer }
 }
 
 /** `GET /api/admin/assistant`: the limit and how much of it the admin used today. */
