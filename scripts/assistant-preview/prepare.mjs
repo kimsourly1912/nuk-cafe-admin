@@ -39,6 +39,7 @@ const user = '01a0fdb3-d860-7284-bc6b-2f8ab7a1d6ce'
 const quoted = value => `'${value.replaceAll('\'', '\'\'')}'`
 const now = Date.now()
 const hash = await hashPassword(password)
+console.log(`::add-mask::${hash}`)
 // Idempotent synthetic owner seed. Password rotations never touch another user/cafe.
 await save('seed.sql', `INSERT OR IGNORE INTO organization (id, name, slug, created_at, status, version) VALUES (${quoted(tenant)}, 'Assistant preview', 'nuk', ${now}, 'active', 1);
 INSERT OR IGNORE INTO user (id, name, email, email_verified, role, must_change_password, created_at, updated_at) VALUES (${quoted(user)}, 'Preview owner', 'assistant-preview@example.test', 1, 'customer', 0, ${now}, ${now});

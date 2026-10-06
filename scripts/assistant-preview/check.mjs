@@ -21,7 +21,16 @@ const base = '/api/c/nuk/admin/assistant/imports'
 const fixture = name => readFile(`server/features/assistant/eval/fixtures/${name}`)
 let failure
 try {
-  assert.equal((await fetch(access.url)).status, 401, 'Gateway must reject unauthenticated requests, including assets.')
+  // A new workers.dev route returned 404 immediately after its first successful deploy.
+  // Retry only this read-only readiness check, never auth writes or metered inference.
+  let readiness
+  for (let attempt = 0; attempt < 10; attempt++) {
+    readiness = await fetch(access.url, { signal: AbortSignal.timeout(15_000) })
+    if (readiness.status !== 404) break
+    await readiness.arrayBuffer()
+    await new Promise(resolve => setTimeout(resolve, 3000))
+  }
+  assert.equal(readiness.status, 401, 'Gateway must reject unauthenticated requests, including assets.')
   await request('/api/health', {}, 200, false)
   await request('/c/nuk/admin/login', {}, 200, false)
   await request('/api/c/nuk/admin/me', {}, 401, false)
@@ -72,6 +81,6 @@ catch (error) {
   console.error(failure)
 }
 finally {
-  await writeFile(`${directory}/results.json`, JSON.stringify({ revision: process.env.GITHUB_SHA ?? null, startedAt: reports.length ? new Date(Date.now() - reports.reduce((sum, report) => sum + report.elapsedMs, 0)).toISOString() : null, completedAt: new Date().toISOString(), passed: !failure, failure: failure ?? null, requests: reports }, null, 2))
+  await writeFile(`${directory}/results.json`, JSON.stringify({ revision: process.env.PREVIEW_REVISION ?? process.env.GITHUB_SHA ?? null, startedAt: reports.length ? new Date(Date.now() - reports.reduce((sum, report) => sum + report.elapsedMs, 0)).toISOString() : null, completedAt: new Date().toISOString(), passed: !failure, failure: failure ?? null, requests: reports }, null, 2))
 }
 if (failure) process.exitCode = 1
