@@ -1,10 +1,10 @@
-import type { AssistantImportSource } from '#shared/contracts/assistant-import'
-import { checkPdfBytes, PDF_PREPARATION_TIMEOUT_MS, PdfPreparationError, pdfErrorMessage, pdfSelection } from '../utils/pdf'
+import type { AssistantImportSource, AssistantPdfReview } from '#shared/contracts/assistant-import'
+import { checkPdfBytes, PDF_PREPARATION_TIMEOUT_MS, PdfPreparationError, pdfCanvasBlob, pdfErrorMessage, pdfSelection } from '../utils/pdf'
 import { IMPORT_BASE } from '../utils/import'
 import type { openImportPdf } from '../utils/pdf-document.client'
 
 /** The query stores page count only. Source bytes and the PDF worker are owned by this scope. */
-export function useAssistantPdf(source: AssistantImportSource) {
+export function useAssistantPdf(source: AssistantImportSource, manifest: () => AssistantPdfReview | undefined = () => undefined) {
   const route = useRoute()
   const router = useRouter()
   let live = true
@@ -69,8 +69,9 @@ export function useAssistantPdf(source: AssistantImportSource) {
     finally { clearTimeout(timeout) }
   }, { server: false, immediate: false, deep: false })
   const pages = computed(() => Array.from({ length: query.data.value?.totalPages ?? 0 }, (_, i) => i + 1))
-  const selected = computed(() => query.data.value ? pdfSelection(route.query.pages, query.data.value.totalPages) : [])
+  const selected = computed(() => manifest()?.pages.map(p => p.pageNumber) ?? (query.data.value ? pdfSelection(route.query.pages, query.data.value.totalPages) : []))
   async function select(number: number, value: boolean) {
+    if (manifest() || previewBusy.value) return
     const next = selected.value.filter(n => n !== number)
     if (value) next.push(number)
     await router.replace({ query: { ...route.query, pages: next.sort((a, b) => a - b).join(',') } })
@@ -89,10 +90,13 @@ export function useAssistantPdf(source: AssistantImportSource) {
         dispose()
       }, PDF_PREPARATION_TIMEOUT_MS)
       try {
-        await document.render(number, canvas)
+        await document.render(number, canvas, current.signal)
       }
       finally { clearTimeout(timeout) }
-      if (!live || current.signal.aborted) return
+      if (!live || current.signal.aborted) {
+        canvas.width = canvas.height = 0
+        return
+      }
       preview.value = canvas
     }
     catch {
@@ -102,6 +106,38 @@ export function useAssistantPdf(source: AssistantImportSource) {
       else if (live && current.signal.aborted) previewError.value = 'Page preview took too long. Reload the PDF or upload a smaller image.'
     }
     finally { if (previewController === current) previewBusy.value = false }
+  }
+  async function pageBlob(number: number, signal: AbortSignal) {
+    signal.throwIfAborted()
+    if (!live || !document || previewBusy.value) throw new ApiError('Preview the PDF pages before extracting them.', { kind: 'validation', status: 422 })
+    clearPreview()
+    page.value = number
+    previewBusy.value = true
+    const current = new AbortController()
+    previewController = current
+    const combined = AbortSignal.any([signal, current.signal])
+    const canvas = window.document.createElement('canvas')
+    const timeout = setTimeout(() => {
+      current.abort()
+      dispose()
+    }, PDF_PREPARATION_TIMEOUT_MS)
+    try {
+      await document.render(number, canvas, combined)
+      const blob = await pdfCanvasBlob(canvas, combined)
+      combined.throwIfAborted()
+      if (!live) throw new DOMException('PDF preparation cancelled.', 'AbortError')
+      preview.value = canvas
+      return blob
+    }
+    catch (error) {
+      canvas.width = canvas.height = 0
+      if (signal.aborted || !live) throw new ApiError('The request was cancelled.', { kind: 'aborted', status: 0 })
+      throw new ApiError(error instanceof PdfPreparationError ? error.message : 'This PDF page could not be prepared. Reload the PDF or use a clearer menu image.', { kind: combined.aborted ? 'timeout' : 'validation', status: 422 })
+    }
+    finally {
+      clearTimeout(timeout)
+      if (previewController === current) previewBusy.value = false
+    }
   }
   const nuxtApp = useNuxtApp()
   const unhook = nuxtApp.hook('app:session-changed', () => {
@@ -115,5 +151,5 @@ export function useAssistantPdf(source: AssistantImportSource) {
     query.clear()
     unhook()
   })
-  return { query, pages, selected, select, page, preview, previewBusy, previewError, show }
+  return { query, pages, selected, select, page, preview, previewBusy, previewError, show, pageBlob }
 }

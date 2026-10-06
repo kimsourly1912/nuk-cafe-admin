@@ -10,6 +10,7 @@ const ImportPdfPages = defineAsyncComponent(() => import('./ImportPdfPages.vue')
 const flow = useAssistantImport()
 const { status, sources, reviewQuery, review, sourceId, expired, leaseBusy, busy } = flow
 const route = useRoute()
+const { isExpanded } = useLayoutContext()
 const tenantPath = useTenantPath()
 const basePath = tenantPath('/admin/products/import')
 const file = ref<File | null>(null)
@@ -18,7 +19,7 @@ const sourceOpen = ref(false)
 const previewFailed = ref(false)
 const editorKey = ref(0)
 const rowId = computed(() => typeof route.query.row === 'string' ? route.query.row : '')
-const editing = computed(() => review.value?.rows.find(r => r.id === rowId.value && !r.createdItemId))
+const editing = computed(() => review.value?.state === 'ready' ? review.value.rows.find(r => r.id === rowId.value && !r.createdItemId) : undefined)
 const candidates = computed(() => review.value?.rows.filter(r => r.selected && !r.createdItemId) ?? [])
 const incomplete = computed(() => candidates.value.filter(r => importDraftProblem(r.draft)))
 const saved = computed(() => review.value?.rows.filter(r => r.createdItemId) ?? [])
@@ -63,7 +64,7 @@ async function discard() {
   if (result.ok) await newSource()
 }
 async function edit(row: AssistantImportReviewRow) {
-  if (busy.value || expired.value || row.createdItemId) return
+  if (review.value?.state !== 'ready' || busy.value || expired.value || row.createdItemId) return
   flow.update.reset(keyOf(row))
   await navigateTo({ path: basePath, query: { source: sourceId.value, row: row.id } })
 }
@@ -71,7 +72,7 @@ async function closeEditor() {
   await navigateTo({ path: basePath, query: { source: sourceId.value } })
 }
 async function apply(draft: AssistantImportDraft, version: number) {
-  if (!editing.value || expired.value || busy.value) return false
+  if (review.value?.state !== 'ready' || !editing.value || expired.value || busy.value) return false
   const result = await flow.update.execute({ sourceId: sourceId.value, rowId: editing.value.id, version, draft })
   return result.ok
 }
@@ -80,7 +81,7 @@ async function reloadEditor() {
   if (!reviewQuery.error.value) editorKey.value++
 }
 async function select(row: AssistantImportReviewRow, selected: boolean) {
-  if (busy.value || expired.value || row.createdItemId || !review.value) return
+  if (busy.value || expired.value || row.createdItemId || review.value?.state !== 'ready') return
   await flow.update.execute({ sourceId: sourceId.value, rowId: row.id, version: review.value.source.version, selected })
 }
 async function createDrafts() {
@@ -148,7 +149,7 @@ async function retry(row: AssistantImportReviewRow) {
       <template v-else-if="!sourceId">
         <div class="space-y-6">
           <p class="text-sm text-muted">
-            Upload an English menu image to extract items, review them, then create unpublished drafts.
+            Upload an English menu image or PDF to extract items, review them, then create unpublished drafts.
           </p>
           <UCard>
             <template #header>
@@ -172,7 +173,7 @@ async function retry(row: AssistantImportReviewRow) {
                 :title="fileProblem"
               />
               <UAlert
-                v-if="file?.type === 'application/pdf'"
+                v-if="file?.type === 'application/pdf' && !status.data.value?.pdfProcessing"
                 color="warning"
                 title="PDF extraction is coming next"
                 description="You can store a private PDF now. Choose an image to extract menu items."
@@ -297,7 +298,15 @@ async function retry(row: AssistantImportReviewRow) {
               :disabled="expired"
             />
             <UButton
-              v-else
+              v-if="isPdf && review.state === 'ready' && !isExpanded"
+              label="View source pages"
+              color="neutral"
+              variant="outline"
+              :disabled="expired"
+              @click="sourceOpen = true"
+            />
+            <UButton
+              v-if="!isPdf"
               label="View source"
               color="neutral"
               variant="outline"
@@ -331,8 +340,9 @@ async function retry(row: AssistantImportReviewRow) {
           <p class="text-xs text-muted">
             Private to you · expires {{ new Date(review.source.expiresAt).toLocaleString() }}
           </p>
-          <template v-if="isPdf">
+          <template v-if="isPdf && review.state !== 'ready'">
             <UAlert
+              v-if="!status.data.value?.pdfProcessing"
               title="PDF extraction is coming next"
               description="Your PDF is stored privately. Upload an image to extract menu items now."
               color="warning"
@@ -341,10 +351,12 @@ async function retry(row: AssistantImportReviewRow) {
               <ImportPdfPages
                 :key="sourceId"
                 :source="review.source"
+                :review="review"
+                :flow="flow"
               />
             </ClientOnly>
           </template>
-          <template v-else-if="review.state !== 'ready'">
+          <template v-if="!isPdf && review.state !== 'ready'">
             <div class="space-y-4">
               <img
                 v-if="!previewFailed && !expired"
@@ -399,22 +411,29 @@ async function retry(row: AssistantImportReviewRow) {
             </div>
           </template>
           <div
-            v-else
+            v-else-if="review.state === 'ready'"
             class="grid min-w-0 gap-6 lg:grid-cols-2"
           >
             <section class="hidden min-w-0 space-y-3 lg:block">
               <h2 class="font-semibold text-highlighted">
                 Source menu
               </h2>
+              <ClientOnly v-if="isPdf && !expired && isExpanded">
+                <ImportPdfPages
+                  :key="sourceId"
+                  :source="review.source"
+                  :review="review"
+                />
+              </ClientOnly>
               <img
-                v-if="!previewFailed && !expired"
+                v-else-if="!isPdf && !previewFailed && !expired"
                 :src="sourceUrl"
                 alt="Uploaded menu source"
                 class="max-h-screen w-full object-contain"
                 @error="previewFailed = true"
               >
               <p
-                v-if="previewFailed"
+                v-if="!isPdf && previewFailed"
                 class="text-sm text-warning"
               >
                 The source preview could not be loaded. Use View source to try again.
@@ -471,7 +490,9 @@ async function retry(row: AssistantImportReviewRow) {
                       </p>
                       <ImportDraftSummary :draft="row.draft" />
                       <p class="break-words text-xs text-muted">
-                        Source: {{ row.source.name }}<template v-if="row.source.category">
+                        <template v-if="row.sourcePageNumber">
+                          Source page {{ row.sourcePageNumber }} ·
+                        </template>Source: {{ row.source.name }}<template v-if="row.source.category">
                           · {{ row.source.category }}
                         </template>
                       </p>
@@ -574,8 +595,15 @@ async function retry(row: AssistantImportReviewRow) {
         :description="review?.source.fileName"
       >
         <template #body>
+          <ClientOnly v-if="sourceOpen && isPdf && review && !expired">
+            <ImportPdfPages
+              :key="sourceId"
+              :source="review.source"
+              :review="review"
+            />
+          </ClientOnly>
           <img
-            v-if="sourceOpen && !expired"
+            v-else-if="sourceOpen && !isPdf && !expired"
             :src="sourceUrl"
             alt="Uploaded menu source"
             class="w-full object-contain"

@@ -36,23 +36,25 @@ export async function openImportPdf(bytes: Uint8Array<ArrayBuffer>, signal: Abor
     return {
       totalPages,
       dispose,
-      async render(pageNumber: number, canvas: HTMLCanvasElement) {
-        signal.throwIfAborted()
+      async render(pageNumber: number, canvas: HTMLCanvasElement, pageSignal?: AbortSignal) {
+        const renderSignal = pageSignal ? AbortSignal.any([signal, pageSignal]) : signal
+        renderSignal.throwIfAborted()
         if (disposed || !document || !Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > totalPages) throw new Error('Invalid PDF page.')
-        const page = await abortablePdf(document.getPage(pageNumber), signal)
+        const page = await abortablePdf(document.getPage(pageNumber), renderSignal)
         try {
+          renderSignal.throwIfAborted()
           const original = page.getViewport({ scale: 1 })
           const bounded = pdfViewport(original.width, original.height)
           canvas.width = bounded.width
           canvas.height = bounded.height
           const task = page.render({ canvas, viewport: page.getViewport({ scale: bounded.scale }) })
           const cancel = () => task.cancel()
-          signal.addEventListener('abort', cancel, { once: true })
+          renderSignal.addEventListener('abort', cancel, { once: true })
           try {
-            await abortablePdf(task.promise, signal)
-            signal.throwIfAborted()
+            await abortablePdf(task.promise, renderSignal)
+            renderSignal.throwIfAborted()
           }
-          finally { signal.removeEventListener('abort', cancel) }
+          finally { renderSignal.removeEventListener('abort', cancel) }
         }
         finally { page.cleanup() }
       },

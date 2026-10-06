@@ -17,7 +17,8 @@ export async function requireAssistantImport(event: H3Event, options: { menuWrit
 /** Owner availability check remains accessible when imports are off; never resolves AI settings. */
 export async function assistantImportStatus(event: H3Event): Promise<AssistantImportStatus> {
   await requirePermission(event, { assistant: ['use'], menu: ['write'] })
-  return { enabled: useRuntimeConfig(event).ai.importEnabled === true, pdfProcessing: false }
+  const enabled = useRuntimeConfig(event).ai.importEnabled === true
+  return { enabled, pdfProcessing: enabled }
 }
 
 /** Raw file body via H3 1's supported stream API, bounded even without Content-Length. */

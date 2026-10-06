@@ -210,3 +210,5 @@ Pure helpers behind the composables (`app/utils/form-value.ts`, unit-tested in `
 - `cloneFormValue(value)`: a deep copy of plain objects and arrays (unwrapping proxies). Files, blobs and dates are kept by reference.
 
 Known limits: `1` and `'1'` are different (use numeric inputs for numbers), and multi-selects whose order can change without meaning anything should keep their array sorted.
+
+D158 PDF corrections use the existing focused editor, shortcuts and unsaved guards only after all selected pages succeed or the owner confirms nonempty partial review. Source-page labels/evidence are immutable. Direct correction links cannot edit partial rows; created rows stay locked and creation remains explicit.

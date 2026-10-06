@@ -1,4 +1,5 @@
-import { ASSISTANT_IMPORT_MAX_BYTES, ASSISTANT_PDF_MAX_PAGES, ASSISTANT_PDF_PAGE_MAX_PIXELS, ASSISTANT_PDF_PAGE_MAX_SIDE } from '#shared/contracts/assistant-import'
+import type { AssistantImportReview } from '#shared/contracts/assistant-import'
+import { ASSISTANT_IMPORT_MAX_BYTES, ASSISTANT_PDF_MAX_PAGES, ASSISTANT_PDF_MAX_PAGE_ATTEMPTS, ASSISTANT_PDF_PAGE_MAX_BYTES, ASSISTANT_PDF_PAGE_MAX_PIXELS, ASSISTANT_PDF_PAGE_MAX_SIDE } from '#shared/contracts/assistant-import'
 
 /** Preparation limits, not server PDF validation or proof that a page has readable menu text. */
 export const PDF_MAX_PAGES = ASSISTANT_PDF_MAX_PAGES
@@ -19,6 +20,23 @@ export function pdfSelection(value: unknown, count: number): number[] {
   if (typeof value !== 'string' || !/^[1-5](?:,[1-5])*$/.test(value)) return []
   const pages = value.split(',').map(Number)
   return new Set(pages).size === pages.length && pages.every(n => n <= count) ? pages.sort((a, b) => a - b) : []
+}
+/** Successful/skipped evidence is immutable; a retry processes only eligible unfinished pages. */
+export function pdfUnfinishedPages(review: AssistantImportReview) {
+  if (review.state === 'ready') return []
+  return review.pdf?.pages.filter(p => (p.state === 'pending' || p.state === 'failed') && p.attempts < ASSISTANT_PDF_MAX_PAGE_ATTEMPTS).map(p => p.pageNumber) ?? []
+}
+export function checkPdfPageBlob(blob: Blob | null): asserts blob is Blob {
+  if (!blob || blob.type !== 'image/png' || blob.size < 1 || blob.size > ASSISTANT_PDF_PAGE_MAX_BYTES) throw new PdfPreparationError('This page image could not be prepared within 2 MB. Use a smaller or clearer menu image.')
+}
+/** Request-local PNG only; never use a data URL or put these bytes in query state. */
+export async function pdfCanvasBlob(canvas: HTMLCanvasElement, signal: AbortSignal) {
+  signal.throwIfAborted()
+  if (!canvas.width || !canvas.height || canvas.width > PDF_MAX_SIDE || canvas.height > PDF_MAX_SIDE || canvas.width * canvas.height > PDF_MAX_PIXELS) throw new PdfPreparationError('This page image is too large. Use a smaller menu image.')
+  const blob = await abortablePdf(new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png')), signal)
+  signal.throwIfAborted()
+  checkPdfPageBlob(blob)
+  return blob
 }
 export function pdfViewport(width: number, height: number) {
   if (![width, height].every(n => Number.isFinite(n) && n > 0)) throw new PdfPreparationError('This PDF page has invalid dimensions. Upload a readable copy or an image.')

@@ -78,6 +78,12 @@ async function requestReload() {
       <h2 class="font-semibold text-highlighted">
         From the source
       </h2>
+      <p
+        v-if="row.sourcePageNumber"
+        class="text-xs text-muted"
+      >
+        Source page {{ row.sourcePageNumber }}
+      </p>
       <p class="break-words text-sm">
         {{ row.source.name }}<template v-if="row.source.category">
           · {{ row.source.category }}

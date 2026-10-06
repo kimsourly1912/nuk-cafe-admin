@@ -157,7 +157,7 @@ describe('import entry availability', () => {
   })
   it('is independent of help enablement and requires an actual boolean switch', async () => {
     vi.stubGlobal('useRuntimeConfig', () => ({ ai: { importEnabled: true } }))
-    expect(await assistantImportStatus(request())).toEqual({ enabled: true, pdfProcessing: false })
+    expect(await assistantImportStatus(request())).toEqual({ enabled: true, pdfProcessing: true })
     vi.stubGlobal('useRuntimeConfig', () => ({ ai: { importEnabled: 'true' } }))
     expect((await assistantImportStatus(request())).enabled).toBe(false)
   })

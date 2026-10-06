@@ -36,7 +36,7 @@ function configuredModel(binding: CloudflareAiBinding) {
 
 D157 extends internal `startUsage(db, actor, settings, feature, now?, importPage?)` with optional `{ sourceId, pageNumber }` attribution for an already-authorized supplied PDF page. Ordinary calls omit it. Nullable usage columns preserve old records; page attribution is metadata, never proof of original-PDF provenance or an account-wide neurons balance.
 
-At D149, image/PDF import APIs, private source storage and persisted reviews were unbuilt. D152 adds the disabled private-source backend; D153 adds bounded image extraction and editable review persistence. D154 adds explicit reviewed draft creation below; D155 adds the approved review/Create drafts UI below; PDF extraction and live activation remain pending. D148 confirms their English-only scope and 24-hour retention; do not infer that they exist from the model's image/structured-output compatibility tests.
+At D149, image/PDF import APIs, private source storage and persisted reviews were unbuilt. D152 adds the disabled private-source backend; D153 adds bounded image extraction and editable review persistence. D154 adds explicit reviewed draft creation below; D155 adds the approved review/Create drafts UI below; D157–D158 add PDF backend/UI; live validation and activation remain pending. D148 confirms their English-only scope and 24-hour retention; do not infer that they exist from the model's image/structured-output compatibility tests.
 
 ## Evaluation tooling (D151)
 
@@ -126,7 +126,7 @@ Draft creation performs no inference or AI quota reservation. No config, depende
 
 The public `~/features/assistant` API now exports **`AssistantImportButton`**, a building block used by Menu items alongside New menu item. It imports only its own feature and renders when the separate import availability query says enabled. The existing help chat and its status/model settings do not govern this entry.
 
-`GET /api/c/<slug>/admin/assistant/import-status` remains accessible to the cafe owner even when imports are off. `assistantImportStatus(event)` requires both `assistant:use` and `menu:write`, returning only `AssistantImportStatus { enabled: boolean, pdfProcessing: boolean }`. Enabled requires the server flag to be boolean true; PDF processing is currently false. No binding/model/settings resolution or source data is exposed. Source and command routes still retain their own permission/access guards.
+`GET /api/c/<slug>/admin/assistant/import-status` remains accessible to the cafe owner even when imports are off. `assistantImportStatus(event)` requires both `assistant:use` and `menu:write`, returning only `AssistantImportStatus { enabled: boolean, pdfProcessing: boolean }`. Enabled requires the server flag to be boolean true; D158 reports PDF processing with that same explicitly enabled flag. Both capabilities are false by default. No binding/model/settings resolution or source data is exposed. Source and command routes still retain their own permission/access guards.
 
 The thin `/c/<slug>/admin/products/import` route renders private `AssistantImportPage`. `?source=<id>` resumes the protected server review; `&row=<id>` pushes a focused correction editor. `useAssistantImport` uses `useApiQuery` for reads and the shared mutation engine for upload, correction, extraction, cancel, discard and creation. Source-conflicting writes share `assistant-import:<sourceId>`; cancellation intentionally can run during extraction. Batch creation uses concurrency 1. Selected incomplete rows must be corrected or excluded before creation; current library relationships are validated by the server.
 
@@ -152,11 +152,11 @@ No deployment, model change, inference activation or PDF processing is included.
 
 `?source=<id>&pages=1,2` resumes page choices; absent means all document pages, invalid/duplicate/out-of-range values mean none. Source switches clear page choices. Selection is URL metadata, never PDF text or bytes; changing it saves no review/menu data. Source expiry, feature availability, route disposal and session changes release parser/worker/canvas and clear query data. API reads retain standard session handling; old responses cannot revive a disposed source.
 
-The UI still reports `pdfProcessing: false`. D156 provides preparation only; D157 adds the separate page backend below. Wire the page flow and complete live document/model/Worker/resource gates before activation. Unusual PDF fonts/codecs and real phone performance remain unverified. [Plan](../plans/ai-assistant-cloudflare.md#pdf-preparation-slice-d156-9c3a).
+D156 provides preparation; D157 adds the separate page backend below and D158 wires the processing UI. Complete live document/model/Worker/resource gates before activation; default imports/model remain off/unset. Unusual PDF fonts/codecs and real phone performance remain unverified. [Plan](../plans/ai-assistant-cloudflare.md#pdf-preparation-slice-d156-9c3a).
 
 ## Selected PDF page backend (D157)
 
-Backend slice behind the same disabled import switch. `pdfProcessing` remains false pending UI wiring. Prefix below is `/api/c/<slug>/admin/assistant/imports/{id}`; every route requires existing creator/cafe access, an unexpired PDF source and `assistant:use`. No route accepts a client tenant/model/tool/menu command.
+Backend slice behind the same disabled import switch. D158 wires its UI; the capability is true only with the explicitly enabled import flag. Prefix below is `/api/c/<slug>/admin/assistant/imports/{id}`; every route requires existing creator/cafe access, an unexpired PDF source and `assistant:use`. No route accepts a client tenant/model/tool/menu command.
 
 | Route | Request | Result |
 |---|---|---|
@@ -169,3 +169,11 @@ Backend slice behind the same disabled import switch. `pdfProcessing` remains fa
 Supplied page pixels/numbers are **untrusted client input**. Server metadata/transport/ownership checks do not attest original-PDF validity, actual page count or pixel correspondence, or fully decode PNGs. The owner compares the review against the stored original. Derived images remain request-local; no new source objects/public URLs or extended TTL. Per-page usage attribution follows the existing metadata-only 90-day policy; source erasure still removes private reviews/status/digests and original bytes through the deletion ledger.
 
 The existing source `/extract` command remains image-only; PDFs use these separate page routes when the UI is wired. Rendered-page vision covers selected text/scanned/mixed pages in this backend; full-document `toMarkdown` remains an evaluation comparison. Live exact-name/price/association, CPU/neurons/budget and real-phone checks remain pending. [Decision](../decisions.md#d157-extract-supplied-pdf-page-images-with-resumable-private-results-and-per-page-accounting-2026-10-05).
+
+## PDF processing UI (D158)
+
+`ImportPdfPages` uses the existing availability, private review query, lazy owned PDF worker and shared mutation engine. Initial URL page choices are validated against the document; saved manifest labels override them after preparation. Each unfinished eligible page fetches the latest source version, renders/encodes one bounded PNG, and posts raw image bytes serially. Successful/skipped/attempt-capped pages are excluded, with successful source evidence, row ids and receipts preserved. Progress and failures survive reload; a normal explicit Retry failed toast uses a fresh controller, while stopped/expired/replaced/disposed runs cannot revive stale queued inputs.
+
+Workspace Stop beside progress aborts raster/PNG preparation and active transport, and cancels the server source only when it is processing. The normal batch toast Stop stops queued pages after its active call. Held capacity remains visible; partial acceptance can proceed independently when successful rows exist. Review successful pages requires confirmation, skips unresolved pages permanently in that source and refuses empty acceptance. Partial rows and direct correction links stay read-only; ready PDFs reuse the existing correction/draft workflow, with immutable page labels and expanded comparison/compact source modal.
+
+The availability endpoint now reports `pdfProcessing: enabled`; the strict import flag is still false and import model unset by default. Local browser mocks and bounds tests do not validate live model quality, actual phone resource use or private R2 behavior. See [D158 plan and evidence](../plans/ai-assistant-cloudflare.md#pdf-processing-ui-slice-d158-9c3b2).
