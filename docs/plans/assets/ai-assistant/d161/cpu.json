@@ -1,0 +1,221 @@
+{
+  "status": 200,
+  "count": 22,
+  "events": [
+    {
+      "timestamp": 1791268449243,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/discard",
+      "status": 200,
+      "cpuMs": 10,
+      "wallMs": 2049,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268447172,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/pdf-pages/1/extract",
+      "status": 200,
+      "cpuMs": 47,
+      "wallMs": 17137,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268430000,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/pdf-pages",
+      "status": 200,
+      "cpuMs": 20,
+      "wallMs": 1724,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268428270,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports",
+      "status": 201,
+      "cpuMs": 15,
+      "wallMs": 2388,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268425837,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/source",
+      "status": 404,
+      "cpuMs": 42,
+      "wallMs": 1248,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268424193,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/discard",
+      "status": 200,
+      "cpuMs": 18,
+      "wallMs": 2187,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268421977,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/menu/items/REDACTED",
+      "status": 200,
+      "cpuMs": 14,
+      "wallMs": 1462,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268420505,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/review/REDACTED/create-draft",
+      "status": 200,
+      "cpuMs": 13,
+      "wallMs": 1727,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268418756,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/review/REDACTED/create-draft",
+      "status": 200,
+      "cpuMs": 24,
+      "wallMs": 3027,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268415696,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/review/REDACTED",
+      "status": 200,
+      "cpuMs": 54,
+      "wallMs": 1956,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268413278,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/extract",
+      "status": 200,
+      "cpuMs": 91,
+      "wallMs": 19433,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268393434,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports",
+      "status": 201,
+      "cpuMs": 27,
+      "wallMs": 2875,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268390535,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/import-status",
+      "status": 200,
+      "cpuMs": 11,
+      "wallMs": 988,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268389526,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/me",
+      "status": 200,
+      "cpuMs": 13,
+      "wallMs": 1077,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268388373,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/auth/sign-in/email",
+      "status": 200,
+      "cpuMs": 118,
+      "wallMs": 1252,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268387108,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/me",
+      "status": 401,
+      "cpuMs": 27,
+      "wallMs": 28,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268387052,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/c/nuk/admin/login",
+      "status": 200,
+      "cpuMs": 36,
+      "wallMs": 329,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268386730,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/health",
+      "status": 200,
+      "cpuMs": 10,
+      "wallMs": 337,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791268236374,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "scheduled",
+      "cpuMs": 4,
+      "wallMs": 258,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791267925669,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "scheduled",
+      "cpuMs": 2,
+      "wallMs": 256,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791267629639,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "scheduled",
+      "cpuMs": 20,
+      "wallMs": 234,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1791267600953,
+      "version": "56eca321-3897-48e6-9f19-f540c4ba579a",
+      "type": "fetch",
+      "path": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/health",
+      "status": 200,
+      "cpuMs": 13,
+      "wallMs": 224,
+      "outcome": "ok"
+    }
+  ],
+  "errors": []
+}

@@ -53,7 +53,7 @@ it.each([
   expect(JSON.stringify(chunks)).not.toContain('Foreign path')
   await Promise.all(result.pending)
   expect(result.run).toHaveBeenCalledOnce()
-  expect(await db.select().from(assistantUsage)).toMatchObject([{ outcome: 'error' }])
+  expect(await db.select().from(assistantUsage)).toMatchObject([{ outcome: 'error', inputTokens: 12, outputTokens: 5 }])
 })
 
 it('rejects a truncated answer and accounts for the attempt once', async () => {

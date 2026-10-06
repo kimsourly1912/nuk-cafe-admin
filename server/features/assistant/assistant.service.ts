@@ -1,5 +1,5 @@
 import type { LanguageModel, LanguageModelUsage, SystemModelMessage, UIMessage } from 'ai'
-import { convertToModelMessages, createUIMessageStream, generateText, isStepCount, jsonSchema, Output, safeValidateUIMessages, streamText, tool } from 'ai'
+import { convertToModelMessages, createUIMessageStream, generateText, isStepCount, jsonSchema, NoObjectGeneratedError, Output, safeValidateUIMessages, streamText, tool } from 'ai'
 import type { AssistantChatInput, AssistantFeature, AssistantPageLink, AssistantStatus } from '#shared/contracts/assistant'
 import { ASSISTANT_QUESTION_MAX, ASSISTANT_TIME_ZONE, ASSISTANT_USAGE_RETENTION_DAYS } from '#shared/contracts/assistant'
 import type { Db } from '#server/utils/batch'
@@ -207,6 +207,7 @@ export async function chatWithCloudflareAssistant(db: Db, actor: Actor, settings
       return { text: output.answer, pages: output.pages, links: output.pages.map(page => ({ ...ASSISTANT_PAGES[page] })), usage }
     }
     catch (error) {
+      if (NoObjectGeneratedError.isInstance(error)) usage = error.usage
       context.onProviderError(error)
       throw error
     }

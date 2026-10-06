@@ -77,7 +77,9 @@ jobs:
   assistant-preview:
     # Temporary same-repository PR94 preview only. No fork code receives deployment credentials.
     # These fixed resources are separate from staging; never activate the staging import flag.
-    if: github.event_name == 'pull_request' && github.event.repository.private && github.event.pull_request.number == 94 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/cloudflare-assistant-foundation'
+    # Live Free CPU failed D161's release gate. Further deployments/metered checks are opt-in;
+    # skipping this job does not certify the outstanding live quality or activation gates.
+    if: vars.ASSISTANT_PREVIEW_LIVE == 'true' && github.event_name == 'pull_request' && github.event.repository.private && github.event.pull_request.number == 94 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/cloudflare-assistant-foundation'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

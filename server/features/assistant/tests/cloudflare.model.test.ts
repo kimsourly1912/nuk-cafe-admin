@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { generateText, jsonSchema, Output, streamText, tool } from 'ai'
+import { APICallError, generateText, jsonSchema, NoObjectGeneratedError, Output, streamText, tool } from 'ai'
 import type { CloudflareAiBinding } from '#server/features/assistant/assistant.model'
 import { languageModel } from '#server/features/assistant/assistant.model'
 import { assistantSettingsFrom } from '#server/features/assistant/assistant.settings'
-import { AI_UNAVAILABLE_MESSAGE, providerFailureMessage } from '#server/features/assistant/assistant.errors'
+import { AI_UNAVAILABLE_MESSAGE, providerFailureDetails, providerFailureMessage } from '#server/features/assistant/assistant.errors'
 import { expectApiError } from '#server/tests/support/failure'
 import { extractMenuImage, toReviewRows } from '#server/features/assistant/assistant-extraction'
 
@@ -21,6 +21,14 @@ function bound(reply: (input: Record<string, unknown>, options: Record<string, u
 }
 
 describe('keyless Cloudflare settings', () => {
+  it('logs fixed failure metadata without provider bodies, generated text or nested causes', () => {
+    const error = new APICallError({ message: 'private question', url: 'https://private.test', requestBodyValues: { document: 'private source' }, statusCode: 503, responseBody: 'private response' })
+    expect(providerFailureDetails(error)).toEqual({ failureKind: 'provider-request', statusCode: 503 })
+    const structured = new NoObjectGeneratedError({ text: 'private generated text', response: { id: 'test', timestamp: new Date(), modelId: 'm' }, usage: { inputTokens: 12, outputTokens: 5, totalTokens: 17, inputTokenDetails: { noCacheTokens: 12, cacheReadTokens: undefined, cacheWriteTokens: undefined }, outputTokenDetails: { textTokens: 5, reasoningTokens: undefined } }, finishReason: 'length', cause: error })
+    expect(providerFailureDetails(structured)).toEqual({ failureKind: 'structured-output', finishReason: 'length' })
+    expect(providerFailureDetails(new Error('private source'))).toEqual({ failureKind: 'unknown' })
+    expect(providerFailureDetails(new DOMException('private source', 'TimeoutError'))).toEqual({ failureKind: 'cancelled-or-timed-out' })
+  })
   it('uses safe capacity/allocation copy separate from the per-owner limit', () => {
     expect(providerFailureMessage('cloudflare', { statusCode: 429, message: 'private provider body' })).toContain('00:00 UTC')
     expect(providerFailureMessage('cloudflare', { statusCode: 429 })).not.toContain('midnight')

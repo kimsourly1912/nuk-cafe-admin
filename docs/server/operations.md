@@ -312,3 +312,5 @@ Real private R2 binding CRUD/deletion and bucket domain privacy were checked on 
 ## Assistant review preview (D161)
 
 PR94's temporary scoped CI preview uses separate Workers/D1/R2, an expiring password gateway and a synthetic owner. It does not deploy staging or approve activation/paid billing. Preview access is a private one-day repository artifact, never a source/log/PR value; preview resources require explicit cleanup after review. [Exact resources, preparation, authenticated checks, CPU evidence and cleanup](../../scripts/assistant-preview/README.md). Only actual complete-app invocation evidence can pass the owner's Workers Free gate; the gateway's timing is not the application's CPU.
+
+D161 measured the complete app and failed Free CPU (sign-in118ms, image91ms, PDF47ms); keep staging imports disabled. Eight help cases pass, later provider failure/full suite unresolved. Live preview CI now requires repository variable `ASSISTANT_PREVIEW_LIVE=true`; unset/false spends no further inference or deployment credentials. Normal checks remain automatic. A skipped live job is not activation evidence. [Recorded gate](../plans/assets/ai-assistant/d161/README.md).

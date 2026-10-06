@@ -1,6 +1,6 @@
 import { createUIMessageStreamResponse, toUIMessageStream } from 'ai'
 import { assistantChatSchema } from '#shared/contracts/assistant'
-import { chatWithAssistant, chatWithCloudflareAssistant, providerFailureMessage } from '#server/features/assistant'
+import { chatWithAssistant, chatWithCloudflareAssistant, providerFailureDetails, providerFailureMessage } from '#server/features/assistant'
 
 /**
  * `POST /api/admin/assistant/chat` (step 9.1, D109): the help assistant's answer to the latest
@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     abortSignal: event.web?.request?.signal,
     sampleData: useRuntimeConfig(event).public.sampleData.enabled,
     waitUntil: (promise: Promise<unknown>) => event.waitUntil(promise),
-    onProviderError: (_error: unknown) => log('error', 'AI provider failed', { provider: settings.provider, model: settings.model }, event),
+    onProviderError: (error: unknown) => log('error', 'AI provider failed', { provider: settings.provider, model: settings.model, ...providerFailureDetails(error) }, event),
   }
   if (settings.provider === 'cloudflare') {
     const result = await chatWithCloudflareAssistant(useDb(), actor, settings, model, input, context)

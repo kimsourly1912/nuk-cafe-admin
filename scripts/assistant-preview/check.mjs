@@ -48,7 +48,7 @@ try {
   assert.equal(review.state, 'ready')
   assert.ok(review.rows.some(row => row.source.name === 'Americano'))
   const row = review.rows.find(row => row.source.name === 'Americano')
-  review = await command(`${base}/${image.id}/review/${row.id}`, 'PATCH', { version: review.source.version, draft: { ...row.draft, categoryId: '01a0fdb3-d860-7284-bc6b-2f8ab7a1d6cf' } })
+  review = await command(`${base}/${image.id}/review/${row.id}`, 'PATCH', { version: review.source.version, draft: { ...row.draft, name: `Preview Americano ${crypto.randomUUID()}`, categoryId: '01a0fdb3-d860-7284-bc6b-2f8ab7a1d6cf' } })
   const draftHeaders = { 'idempotency-key': crypto.randomUUID() }
   const draft = await command(`${base}/${image.id}/review/${row.id}/create-draft`, 'POST', { version: review.source.version }, draftHeaders)
   assert.ok(draft.itemId)

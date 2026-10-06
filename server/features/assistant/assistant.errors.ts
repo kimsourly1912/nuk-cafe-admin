@@ -1,4 +1,18 @@
+import { APICallError, NoObjectGeneratedError } from 'ai'
 import { apiError, notFound } from '#server/utils/errors'
+
+/** Fixed diagnostic values only: never serialize an SDK error or its private text/body/cause. */
+export function providerFailureDetails(error: unknown): Record<string, string | number> {
+  if (NoObjectGeneratedError.isInstance(error)) {
+    const reason = error.finishReason
+    return { failureKind: 'structured-output', ...(reason && ['stop', 'length', 'content-filter', 'tool-calls', 'error', 'other', 'unknown'].includes(reason) ? { finishReason: reason } : {}) }
+  }
+  if (APICallError.isInstance(error)) {
+    const status = error.statusCode
+    return { failureKind: 'provider-request', ...(Number.isInteger(status) && status! >= 100 && status! <= 599 ? { statusCode: status! } : {}) }
+  }
+  return { failureKind: error instanceof DOMException && ['AbortError', 'TimeoutError'].includes(error.name) ? 'cancelled-or-timed-out' : 'unknown' }
+}
 
 /** Error codes of the AI assistant (phase 9, D107, D108). */
 export const AssistantErrorCodes = {

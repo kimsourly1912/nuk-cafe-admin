@@ -1,0 +1,355 @@
+{
+  "revision": "045f5b9f258dd896f5bc7488984d52de8bc5d588",
+  "startedAt": "2026-10-06T06:33:05.978Z",
+  "completedAt": "2026-10-06T06:35:24.572Z",
+  "passed": false,
+  "failure": "Help quality case failed.\n+ actual - expected\n\n+ [\n+   'missing At least',\n+   'missing add-on group|Add-on group|group',\n+   'provider error'\n+ ]\n- []\n",
+  "requests": [
+    {
+      "path": "/api/health",
+      "method": "GET",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/health",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 777,
+      "ray": "a462a1f47f8a7137-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/c/nuk/admin/login",
+      "method": "GET",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/c/nuk/admin/login",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 351,
+      "ray": "a462a1f93d8ee144-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/me",
+      "method": "GET",
+      "status": 401,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/me",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 44,
+      "ray": "a462a1fb6b78e144-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/auth/sign-in/email",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/auth/sign-in/email",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 1303,
+      "ray": "a462a1fbab477137-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/me",
+      "method": "GET",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/me",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 1094,
+      "ray": "a462a203d94ce144-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/import-status",
+      "method": "GET",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/import-status",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 1006,
+      "ray": "a462a20aac2ce144-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/imports",
+      "method": "POST",
+      "status": 201,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 2898,
+      "ray": "a462a210fcaae144-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/imports/REDACTED/extract",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/extract",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 19848,
+      "ray": "a462a2233bd732a5-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/imports/REDACTED/review/REDACTED",
+      "method": "PATCH",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/review/REDACTED",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 2433,
+      "ray": "a462a29f3d29d635-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/imports/REDACTED/review/REDACTED/create-draft",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/review/REDACTED/create-draft",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 3050,
+      "ray": "a462a2ae5ad4d635-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/imports/REDACTED/review/REDACTED/create-draft",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/review/REDACTED/create-draft",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 1747,
+      "ray": "a462a2c16f61d635-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/menu/items/REDACTED",
+      "method": "GET",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/menu/items/REDACTED",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 1481,
+      "ray": "a462a2cc4d36d635-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/imports/REDACTED/discard",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/discard",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 2206,
+      "ray": "a462a2d5880dd635-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/imports/REDACTED/source",
+      "method": "GET",
+      "status": 404,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/source",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 1661,
+      "ray": "a462a2e37c9e32a5-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/imports",
+      "method": "POST",
+      "status": 201,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 2411,
+      "ray": "a462a2edc839d635-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/imports/REDACTED/pdf-pages",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/pdf-pages",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 1743,
+      "ray": "a462a2fccaa432a5-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/imports/REDACTED/pdf-pages/1/extract",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/pdf-pages/1/extract",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 17162,
+      "ray": "a462a307b894d635-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/imports/REDACTED/discard",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/imports/REDACTED/discard",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 2069,
+      "ray": "a462a372fa16d635-IAD",
+      "cpuLimitExceeded": false
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/chat",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/chat",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 6771,
+      "ray": "a462a37ffb0a32a5-IAD",
+      "cpuLimitExceeded": false,
+      "quality": {
+        "question": "How do I add a new menu item?",
+        "passed": true,
+        "problems": []
+      }
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/chat",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/chat",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 7273,
+      "ray": "a462a3aa59e3f7a8-IAD",
+      "cpuLimitExceeded": false,
+      "quality": {
+        "question": "Why can't customers see my menu item?",
+        "passed": true,
+        "problems": []
+      }
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/chat",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/chat",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 7149,
+      "ray": "a462a3d7cdf138c8-IAD",
+      "cpuLimitExceeded": false,
+      "quality": {
+        "question": "How do versions and prices work?",
+        "passed": true,
+        "problems": []
+      }
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/chat",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/chat",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 4127,
+      "ray": "a462a4047801d635-IAD",
+      "cpuLimitExceeded": false,
+      "quality": {
+        "question": "I get \"Switch on and price at least one version before publishing.\" What do I do?",
+        "passed": true,
+        "problems": []
+      }
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/chat",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/chat",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 4264,
+      "ray": "a462a41e389332a5-IAD",
+      "cpuLimitExceeded": false,
+      "quality": {
+        "question": "How do I add a subcategory?",
+        "passed": true,
+        "problems": []
+      }
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/chat",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/chat",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 7697,
+      "ray": "a462a438ef909393-IAD",
+      "cpuLimitExceeded": false,
+      "quality": {
+        "question": "Why can't I add a subcategory to Coffee? It has items.",
+        "passed": true,
+        "problems": []
+      }
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/chat",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/chat",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 4674,
+      "ray": "a462a469080538c8-IAD",
+      "cpuLimitExceeded": false,
+      "quality": {
+        "question": "How do I change the order of categories?",
+        "passed": true,
+        "problems": []
+      }
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/chat",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/chat",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 3961,
+      "ray": "a462a4863b0d32a5-IAD",
+      "cpuLimitExceeded": false,
+      "quality": {
+        "question": "I added \"Extra large\" to Size but customers can't choose it. Why?",
+        "passed": true,
+        "problems": []
+      }
+    },
+    {
+      "path": "/api/c/nuk/admin/assistant/chat",
+      "method": "POST",
+      "status": 200,
+      "finalUrl": "https://nuk-cafe-assistant-preview.kimsur61.workers.dev/api/c/nuk/admin/assistant/chat",
+      "redirected": false,
+      "gatewayDenied": false,
+      "elapsedMs": 29394,
+      "ray": "a462a49edf5038c8-IAD",
+      "cpuLimitExceeded": false,
+      "quality": {
+        "question": "How do I make customers choose a milk?",
+        "passed": false,
+        "problems": [
+          "missing At least",
+          "missing add-on group|Add-on group|group",
+          "provider error"
+        ]
+      }
+    }
+  ]
+}
