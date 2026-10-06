@@ -247,6 +247,8 @@ describe('Reports: Sales by item', () => {
     await page.getByRole('button', { name: 'Category', exact: true }).click()
     await page.getByRole('option', { name: 'Coffee' }).click()
     await expect.poll(() => lastQuery(requests).categoryId).toBe('cat-2')
+    // The data request can precede the asynchronously synchronized route query.
+    await page.waitForURL(location => location.searchParams.get('categoryId') === 'cat-2')
     expect(page.url()).toContain('categoryId=cat-2')
     await page.getByText('The CSV includes all matching items.', { exact: false }).waitFor()
   })

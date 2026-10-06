@@ -80,6 +80,9 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.repository.private && github.event.pull_request.number == 94 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'codex/cloudflare-assistant-foundation'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
     environment: staging
     concurrency:
       group: assistant-preview
@@ -93,24 +96,45 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
       - name: Install pnpm, Node.js and dependencies
         uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
         with:
           runtime: node@24
           cache: true
+      - name: Reuse the unchanged private preview while debugging checks
+        id: preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Every application/build input must match the deployed revision. Docs/check changes
+          # can reuse it, avoiding redundant builds, password rotations and model calls.
+          if git diff --quiet 045f5b9f258dd896f5bc7488984d52de8bc5d588 HEAD -- app shared server public nuxt.config.ts app.config.ts package.json pnpm-lock.yaml pnpm-workspace.yaml patches scripts/assistant-preview/gateway.mjs scripts/assistant-preview/prepare.mjs && gh run download 37422895593 --repo "$GITHUB_REPOSITORY" --name assistant-preview-access --dir .data/assistant-preview && node --input-type=module -e "import {readFileSync} from 'node:fs'; process.exit(Date.parse(JSON.parse(readFileSync('.data/assistant-preview/access.json')).expiresAt) > Date.now() ? 0 : 1)"; then
+            chmod 600 .data/assistant-preview/access.json
+            echo 'reuse=true' >> "$GITHUB_OUTPUT"
+            echo 'deployed_revision=045f5b9f258dd896f5bc7488984d52de8bc5d588' >> "$GITHUB_OUTPUT"
+          else
+            echo 'reuse=false' >> "$GITHUB_OUTPUT"
+            echo "deployed_revision=$PREVIEW_REVISION" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build and prepare isolated preview
+        if: steps.preview.outputs.reuse != 'true'
         run: |
           pnpm build:staging
           node scripts/assistant-preview/prepare.mjs
       - name: Migrate and seed only the preview database
+        if: steps.preview.outputs.reuse != 'true'
         run: |
           pnpm exec wrangler d1 migrations apply DB --remote --config .output/server/wrangler.json
           pnpm exec wrangler d1 execute DB --remote --config .output/server/wrangler.json --file .data/assistant-preview/seed.sql
       - name: Deploy private application and protected gateway
+        if: steps.preview.outputs.reuse != 'true'
         run: |
           pnpm exec wrangler deploy --config .output/server/wrangler.json --secrets-file .data/assistant-preview/app-secrets.json
           pnpm exec wrangler deploy --config .data/assistant-preview/gateway.json --secrets-file .data/assistant-preview/gateway-secrets.json
       - name: Verify authenticated preview flow
+        env:
+          PREVIEW_REVISION: ${{ steps.preview.outputs.deployed_revision }}
         run: node scripts/assistant-preview/check.mjs
       - name: Save sanitized preview results
         if: always()

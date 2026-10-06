@@ -7,13 +7,16 @@ const access = JSON.parse(await readFile(`${directory}/access.json`, 'utf8'))
 const reports = []
 let cookie = ''
 const authorization = `Basic ${Buffer.from(`${access.gatewayUser}:${access.gatewayPassword}`).toString('base64')}`
+if (process.env.GITHUB_ACTIONS) {
+  for (const value of [access.gatewayPassword, access.password, authorization]) console.log(`::add-mask::${value}`)
+}
 async function request(path, init = {}, expected = 200, authenticated = true) {
   const started = Date.now()
   const response = await fetch(`${access.url}${path}`, { ...init, signal: AbortSignal.timeout(75_000), headers: { authorization, origin: access.url, ...(authenticated ? { cookie } : {}), ...init.headers } })
   const text = await response.text()
-  reports.push({ path, method: init.method ?? 'GET', status: response.status, elapsedMs: Date.now() - started, ray: response.headers.get('cf-ray'), cpuLimitExceeded: text.includes('Error 1102') || text.includes('exceeded resource limits') })
+  reports.push({ path, method: init.method ?? 'GET', status: response.status, finalUrl: response.url, redirected: response.redirected, gatewayDenied: text === 'Preview access required.', elapsedMs: Date.now() - started, ray: response.headers.get('cf-ray'), cpuLimitExceeded: text.includes('Error 1102') || text.includes('exceeded resource limits') })
   // Never print credentials, original documents, provider bodies or private review content.
-  assert.equal(response.status, expected, `${init.method ?? 'GET'} ${path} status ${response.status}`)
+  if (expected !== null) assert.equal(response.status, expected, `${init.method ?? 'GET'} ${path} status ${response.status}`)
   return { response, text, json: () => JSON.parse(text) }
 }
 const command = async (path, method, body, extraHeaders = {}) => (await request(path, { method, headers: { 'content-type': 'application/json', ...extraHeaders }, body: JSON.stringify(body) })).json()
@@ -32,7 +35,8 @@ try {
   }
   assert.equal(readiness.status, 401, 'Gateway must reject unauthenticated requests, including assets.')
   await request('/api/health', {}, 200, false)
-  await request('/c/nuk/admin/login', {}, 200, false)
+  // Preserve a page-routing failure while still measuring the authenticated API separately.
+  await request('/c/nuk/admin/login', {}, null, false)
   await request('/api/c/nuk/admin/me', {}, 401, false)
   const signedIn = await request('/api/auth/sign-in/email', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: access.email, password: access.password }) }, 200, false)
   cookie = signedIn.response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ')
@@ -75,6 +79,7 @@ try {
     // Stop on quality failure, preserving the daily free allocation for a focused fix.
     assert.deepEqual(problems, [], 'Help quality case failed.')
   }
+  assert.equal(reports.find(report => report.path === '/c/nuk/admin/login').status, 200, 'The review login page must load.')
 }
 catch (error) {
   failure = error instanceof Error ? error.message : 'Preview check failed.'
