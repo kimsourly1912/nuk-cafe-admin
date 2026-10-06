@@ -5,6 +5,7 @@ import { languageModel } from '#server/features/assistant/assistant.model'
 import { assistantSettingsFrom } from '#server/features/assistant/assistant.settings'
 import { AI_UNAVAILABLE_MESSAGE, providerFailureMessage } from '#server/features/assistant/assistant.errors'
 import { expectApiError } from '#server/tests/support/failure'
+import { extractMenuImage, toReviewRows } from '#server/features/assistant/assistant-extraction'
 
 // Exercise the installed Cloudflare provider and AI SDK together, without metered inference.
 const configured = () => assistantSettingsFrom({ enabled: true, provider: 'cloudflare', model: '@cf/google/gemma-4-26b-a4b-it' })!
@@ -61,6 +62,18 @@ describe('AI SDK 7 through the installed Cloudflare binding provider', () => {
     expect(run.mock.calls[0]?.[2]).toMatchObject({ returnRawResponse: true })
   })
 
+  it('keeps Gemma thinking from exhausting the answer token budget', async () => {
+    const { model, run } = bound(input => input.chat_template_kwargs
+      && (input.chat_template_kwargs as { enable_thinking?: boolean }).enable_thinking === false
+      ? completion('READY.')
+      : Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '' }, finish_reason: 'length' }],
+          usage: { prompt_tokens: 21, completion_tokens: 64, total_tokens: 85 } }))
+    const result = await generateText({ model, prompt: 'Reply with exactly READY.', maxOutputTokens: 64, maxRetries: 0 })
+    expect(result.text).toBe('READY.')
+    expect(result.finishReason).toBe('stop')
+    expect(run).toHaveBeenCalledOnce()
+  })
+
   it('streams the chat-completions wire format into the existing AI SDK stream', async () => {
     const events = [
       { choices: [{ index: 0, delta: { role: 'assistant', content: 'Hello ' }, finish_reason: null }] },
@@ -73,6 +86,18 @@ describe('AI SDK 7 through the installed Cloudflare binding provider', () => {
     expect(await result.text).toBe('Hello owner')
     expect(await result.usage).toMatchObject({ inputTokens: 12, outputTokens: 5 })
     expect(run.mock.calls[0]?.[1]).toMatchObject({ stream: true })
+  })
+
+  it('transcribes full names without sending the one-character constrained name pattern', async () => {
+    const { model } = bound((input) => {
+      const format = input.response_format as { json_schema: { schema: { properties: { items: { items: { properties: { name: { pattern?: string } } } } } } } }
+      const name = format.json_schema.schema.properties.items.items.properties.name.pattern ? '%' : 'Americano'
+      return completion(JSON.stringify({ items: [{ name, description: null, category: 'Coffee',
+        prices: [{ label: null, amount: '2.50', currency: 'USD', evidence: '$2.50' }], flags: [] }], truncated: false }))
+    })
+    const result = await extractMenuImage(model, new Uint8Array([137, 80, 78, 71]), 'image/png', new AbortController().signal)
+    expect(toReviewRows(result.output)[0]?.source.name).toBe('Americano')
+    expect(() => toReviewRows({ ...result.output, items: [{ ...result.output.items[0]!, name: ' \t' }] })).toThrow()
   })
 
   it('carries the approved navigation tool and executes its validated result', async () => {

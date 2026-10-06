@@ -5,7 +5,7 @@ The server feature exports through `#server/features/assistant`. Routes use `req
 ## Settings and model
 
 - `assistantSettingsFrom(raw: RawAssistantSettings): AssistantSettings | null`: `null` means disabled. `cloudflare` requires `enabled: true` or `'true'`, a complete `@cf/vendor/model` id and no base URL. It does not use an API key. Legacy providers preserve key-based enablement when `enabled` is empty; explicit false disables any provider. Enabled incomplete settings throw internal 500 `AI_NOT_CONFIGURED`; the HTTP error handler masks every 5xx as `INTERNAL`.
-- `languageModel(settings: AssistantSettings, binding?: CloudflareAiBinding): LanguageModel`: builds the selected SDK model. Cloudflare requires the request's `env.AI` and uses `agents/models/ai-sdk`; missing or malformed binding throws `AI_NOT_CONFIGURED`. It does not make a network call until inference starts. Other providers keep their existing adapters.
+- `languageModel(settings: AssistantSettings, binding?: CloudflareAiBinding): LanguageModel`: builds the selected SDK model. Cloudflare requires the request's `env.AI` and uses `agents/models/ai-sdk`; missing or malformed binding throws `AI_NOT_CONFIGURED`. It does not make a network call until inference starts. Cloudflare model construction sets documented `reasoningEffort: null` (Agents 0.26.0) so supported models return answers within the existing output/deadline budget. This is exercised through the installed adapter; other providers keep their existing adapters.
 - `CloudflareAiBinding` is the installed provider's `AISettings['binding']` type. It is an injected dependency for tests, never returned to the browser.
 - `providerFailureMessage(provider: string, error: unknown): string`: safe stream-error copy. Cloudflare status 429 names capacity/allocation and the UTC reset; other failures use the generic unavailable message. Raw provider bodies are not returned.
 
@@ -17,7 +17,7 @@ function configuredModel(binding: CloudflareAiBinding) {
   const settings = assistantSettingsFrom({
     enabled: true,
     provider: 'cloudflare',
-    model: '@cf/google/gemma-4-26b-a4b-it', // Evaluation candidate; live quality is still unverified.
+    model: '@cf/google/gemma-4-26b-a4b-it', // Evaluation candidate; D159 live checks failed the release gate.
   })
   if (!settings) throw new Error('Assistant disabled')
   return languageModel(settings, binding)
@@ -177,3 +177,9 @@ The existing source `/extract` command remains image-only; PDFs use these separa
 Workspace Stop beside progress aborts raster/PNG preparation and active transport, and cancels the server source only when it is processing. The normal batch toast Stop stops queued pages after its active call. Held capacity remains visible; partial acceptance can proceed independently when successful rows exist. Review successful pages requires confirmation, skips unresolved pages permanently in that source and refuses empty acceptance. Partial rows and direct correction links stay read-only; ready PDFs reuse the existing correction/draft workflow, with immutable page labels and expanded comparison/compact source modal.
 
 The availability endpoint now reports `pdfProcessing: enabled`; the strict import flag is still false and import model unset by default. Local browser mocks and bounds tests do not validate live model quality, actual phone resource use or private R2 behavior. See [D158 plan and evidence](../plans/ai-assistant-cloudflare.md#pdf-processing-ui-slice-d158-9c3b2).
+
+## Live provider validation (D159)
+
+Image/PDF extraction sends the shared item schema with a bounded 1–80 character name in place of the unanchored nonblank regex, which collapsed names in live Gemma constrained output. `toReviewRows` still applies the original strict nonblank-name contract, truncation rejection, evidence checks and review-size cap before persistence; no API or menu-write validation is relaxed. Image evaluation reuses both production helpers. Reasoning is disabled with the provider's documented option, not by replacing the direct binding.
+
+See [live results](../plans/assets/ai-assistant/d159/README.md) before changing activation settings. A successful isolated inference/storage check is not proof of authenticated staging routes or model accuracy.

@@ -33,6 +33,14 @@ describe('menu quality check through Workers AI (metered)', () => {
       console.log(JSON.stringify({ fixture: c.id, path: 'text-pdf', model: settings.model, conversionMs: conversion.latencyMs, estimatedTextTokens: conversion.estimatedTextTokens, latencyMs: result.latencyMs, usage: result.usage, problems }))
       expect(problems).toEqual([])
     })
+    it(`${c.id}: text PDF page rendering and production vision extraction`, { timeout: 120_000 }, async () => {
+      const rendered = await renderEvaluationPdf(await fixture(`${c.id}-text.pdf`), { executablePath: process.env.ASSISTANT_EVAL_CHROMIUM })
+      expect(rendered.pages).toHaveLength(1)
+      const result = await extractEvaluationMenu(evaluation.model, { kind: 'image', bytes: rendered.pages[0]!.bytes })
+      const problems = scoreEvaluationMenu(c.expected, result.output)
+      console.log(JSON.stringify({ fixture: c.id, path: 'text-pdf-rendered', model: settings.model, renderMs: rendered.latencyMs, latencyMs: result.latencyMs, usage: result.usage, problems }))
+      expect(problems).toEqual([])
+    })
     it(`${c.id}: scanned PDF page rendering and vision extraction`, { timeout: 120_000 }, async () => {
       const rendered = await renderEvaluationPdf(await fixture(`${c.id}-scan.pdf`), { executablePath: process.env.ASSISTANT_EVAL_CHROMIUM })
       expect(rendered.pages).toHaveLength(1)

@@ -21,7 +21,9 @@ export function languageModel(settings: AssistantSettings, binding?: CloudflareA
     case 'cloudflare':
       if (typeof binding?.run !== 'function') throw aiNotConfigured('The Cloudflare AI binding is missing. Configure ai.binding = AI on this Worker.')
       // assistantSettingsFrom validates the complete @cf/vendor/model id before route glue calls us.
-      return createAI({ binding })(model as `@cf/${string}`)
+      // Help and literal transcription need the answer within the existing output/deadline caps.
+      // The provider disables thinking only on models that support this documented option.
+      return createAI({ binding })(model as `@cf/${string}`, { reasoningEffort: null })
     case 'anthropic':
       return createAnthropic({ apiKey, baseURL })(model)
     case 'openai':

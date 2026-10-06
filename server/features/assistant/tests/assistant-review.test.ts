@@ -93,6 +93,7 @@ it.each([['2.505', null], ['02.5000', 250], ['0.00', 0], ['1001', null]])('prefi
 
 it.each([
   { items: [], truncated: false }, { ...output(), publish: true }, { ...output(), truncated: true },
+  { items: [{ ...evidence, name: ' \t\n' }], truncated: false },
   { items: [{ ...evidence, prices: [{ ...evidence.prices[0], amount: '-1' }] }], truncated: false },
   { items: [{ ...evidence, prices: [{ ...evidence.prices[0], evidence: null }] }], truncated: false },
   { items: Array.from({ length: 51 }, () => evidence), truncated: false },

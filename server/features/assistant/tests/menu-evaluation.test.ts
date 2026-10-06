@@ -40,8 +40,17 @@ describe('schema-checked menu evaluation through AI SDK 7', () => {
   })
   it('sends inline PNG data through the canonical file part, without a URL fetch', async () => {
     const bytes = new Uint8Array([137, 80, 78, 71])
+    doGenerate.mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ items: expected, truncated: false }) }], finishReason: { unified: 'stop', raw: 'stop' }, usage, warnings: [] })
     await extractEvaluationMenu(model(), { kind: 'image', bytes })
     expect(doGenerate.mock.calls[0]![0].prompt.at(-1)!.content).toContainEqual(expect.objectContaining({ type: 'file', mediaType: 'image/png', data: { type: 'data', data: bytes } }))
+  })
+  it.each([
+    { items: expected, truncated: true },
+    { items: [{ ...expected[0]!, name: ' \t' }], truncated: false },
+    { items: [{ ...expected[0]!, prices: [{ ...expected[0]!.prices[0]!, evidence: null }] }], truncated: false },
+  ])('image evaluation applies production review rejection (%j)', async (invalid) => {
+    doGenerate.mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify(invalid) }], finishReason: { unified: 'stop', raw: 'stop' }, usage, warnings: [] })
+    await expect(extractEvaluationMenu(model(), { kind: 'image', bytes: new Uint8Array([137, 80, 78, 71]) })).rejects.toThrow()
   })
   it.each([{ items: [] }, { items: [{ ...expected[0], unexpected: 'field' }] }, { items: [{ ...expected[0], prices: [{ ...expected[0]!.prices[0], amount: '-1' }] }] }])('rejects empty/invalid provider output rather than treating it as success', async ({ items }) => {
     doGenerate.mockResolvedValueOnce({ content: [{ type: 'text', text: JSON.stringify({ items }) }], finishReason: { unified: 'stop', raw: 'stop' }, usage, warnings: [] })

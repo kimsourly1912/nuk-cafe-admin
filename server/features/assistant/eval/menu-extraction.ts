@@ -3,6 +3,7 @@ import { valibotSchema } from '@ai-sdk/valibot'
 import { generateText, Output } from 'ai'
 import type { LanguageModel } from 'ai'
 import type { CloudflareAiBinding } from '#server/features/assistant/assistant.model'
+import { extractMenuImage, toReviewRows } from '#server/features/assistant/assistant-extraction'
 
 /** Spike DTO, deliberately separate from API contracts and menu write inputs. */
 const boundedText = (max: number) => v.pipe(v.string(), v.maxLength(max))
@@ -41,12 +42,16 @@ export async function extractEvaluationMenu(model: LanguageModel, source: Evalua
   if (source.kind === 'image' && (!source.bytes.length || source.bytes.length > 5 * 1024 * 1024)) throw new Error('Evaluation image must be between 1 byte and 5 MB.')
   if (source.kind === 'text' && (!source.text.trim() || source.text.length > 40_000)) throw new Error('Evaluation text must be nonempty and at most 40,000 characters.')
   const started = performance.now()
+  if (source.kind === 'image') {
+    const deadline = signal ? AbortSignal.any([signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000)
+    const result = await extractMenuImage(model, source.bytes, 'image/png', deadline)
+    const rows = toReviewRows(result.output)
+    return { output: { items: rows.map(row => row.source) }, usage: result.usage, latencyMs: Math.round(performance.now() - started) }
+  }
   const result = await generateText({
     model,
     instructions: INSTRUCTIONS,
-    messages: [{ role: 'user', content: source.kind === 'image'
-      ? [{ type: 'file', mediaType: 'image/png', data: source.bytes }]
-      : [{ type: 'text', text: source.text }] }],
+    messages: [{ role: 'user', content: [{ type: 'text', text: source.text }] }],
     output: Output.object({ name: 'menu_transcription', schema: valibotSchema(menuEvaluationSchema) }),
     maxRetries: 0,
     maxOutputTokens: 4096,
