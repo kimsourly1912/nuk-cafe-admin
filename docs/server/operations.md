@@ -117,6 +117,8 @@ Rules:
 
 CI on every pull request and on demand (`.github/workflows/ci.yml`, Actions → CI → Run workflow), as parallel jobs: `check` (lint, typecheck, `pnpm audit --audit-level high`, unit + server tests) and `e2e (1/3)` to `e2e (3/3)` (`vitest --shard`, each builds the app once). Lower advisories are reviewed with dependency updates.
 
+**Dependency security maintenance (D160):** install with pinned pnpm 12.3.4 and `--frozen-lockfile`. `pnpm-workspace.yaml` pairs the parent-scoped simple-git 4.0.2 pin with an exact DevTools 3.4.2 import patch; keep/remove that pair together after checking upstream's named export and Git calls. tinypool 2.1.2 and source-map-js 1.2.2 pins address current high/critical advisories. Recheck frozen installation, audit, DevTools startup/Git reads, lint/typecheck, unit/browser suites and Worker build after changing these. No added audit exceptions; [rationale and removal conditions](../decisions.md#d160-repair-ci-security-advisories-with-scoped-pins-and-a-devtools-import-patch-2026-10-06).
+
 On push to `main` (a merged pull request, already checked there: D133), the `deploy-staging` job runs straight away (GitHub environment `staging`, one deploy at a time, never cancelled halfway):
 1. `pnpm build:staging`;
 2. `pnpm db:migrate:staging` (migrations before the Worker: expand, then contract);

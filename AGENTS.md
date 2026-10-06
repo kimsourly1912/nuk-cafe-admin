@@ -41,6 +41,8 @@ The code is **organized by feature** under `app/features/`. `app/features/catego
 
 Package manager is **pnpm**.
 
+**Security overrides and DevTools patch (D160):** use the pinned `pnpm@12.3.4`. `pnpm-workspace.yaml` pairs a parent-scoped `simple-git@4.0.2` override with the exact `@nuxt/devtools@3.4.2` patch under `patches/`: v4 removed the default export. Keep that pair together; recheck the upstream Git import/calls before upgrading DevTools, then remove both once upstream is patched. Also keep `tinypool@2.1.2` and `source-map-js@1.2.2` security pins until upstream resolves patched versions. Do not add audit exceptions for these advisories. See [D160](docs/decisions.md#d160-repair-ci-security-advisories-with-scoped-pins-and-a-devtools-import-patch-2026-10-06).
+
 ```bash
 pnpm dev                                  # http://localhost:3000; /api is local Nitro/Better Auth
 pnpm nuxt db generate                     # create a migration after changing the server schema
