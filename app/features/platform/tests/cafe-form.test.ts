@@ -1,21 +1,54 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
-import { cafeFormSchema, emptyCafeForm, lastOrderText, usageLine } from '../schemas/cafe-form'
+import type { PlatformOwner } from '#shared/contracts/tenants'
+import { cafeFormSchema, emptyCafeForm, lastOrderText, nowOwnsLine, ownedCafesLine, usageLine } from '../schemas/cafe-form'
 
-// The New cafe form and the console's usage lines (D142).
+// The New cafe form (D142, D146) and the console's usage lines.
+
+const filled = () => ({ ...emptyCafeForm(), name: 'Brown Bean', slug: 'Brown-Bean' })
 
 describe('the New cafe form', () => {
-  it('starts with a main branch in Phnom Penh time and refuses empty fields', () => {
+  it('starts with a main branch in Phnom Penh time and a new person, and refuses empty fields', () => {
     const empty = emptyCafeForm()
-    expect(empty).toMatchObject({ branchName: 'Main branch', timezone: 'Asia/Phnom_Penh' })
+    expect(empty).toMatchObject({ branchName: 'Main branch', timezone: 'Asia/Phnom_Penh', owner: { kind: 'new' } })
     const result = v.safeParse(cafeFormSchema, empty)
     expect(result.success).toBe(false)
-    expect(Object.keys(v.flatten(result.issues!).nested ?? {}).sort()).toEqual(['name', 'ownerEmail', 'ownerName', 'slug'])
+    expect(Object.keys(v.flatten(result.issues!).nested ?? {}).sort()).toEqual(['name', 'owner.email', 'owner.name', 'slug'])
   })
 
-  it('accepts a filled form, with the address and email lowercased', () => {
-    const result = v.parse(cafeFormSchema, { ...emptyCafeForm(), name: 'Brown Bean', slug: 'Brown-Bean', ownerName: 'Bea', ownerEmail: 'Bea@Example.com' })
-    expect(result).toMatchObject({ slug: 'brown-bean', ownerEmail: 'bea@example.com' })
+  it('sends a new person with the address and email lowercased', () => {
+    const form = filled()
+    form.owner = { ...form.owner, name: 'Bea', email: 'Bea@Example.com', userId: 'left-over' }
+    expect(v.parse(cafeFormSchema, form)).toEqual({
+      name: 'Brown Bean', slug: 'brown-bean', branchName: 'Main branch', timezone: 'Asia/Phnom_Penh',
+      owner: { kind: 'new', name: 'Bea', email: 'bea@example.com' },
+    })
+  })
+
+  it('sends only the chosen existing owner, and needs one chosen', () => {
+    const form = filled()
+    form.owner = { kind: 'existing', userId: '', name: 'typed before', email: 'x@example.com' }
+    const result = v.safeParse(cafeFormSchema, form)
+    expect(Object.keys(v.flatten(result.issues!).nested ?? {})).toEqual(['owner.userId'])
+    form.owner.userId = 'u-1'
+    expect(v.parse(cafeFormSchema, form).owner).toEqual({ kind: 'existing', userId: 'u-1' })
+  })
+
+  it('opens with the owner of a cafe\'s page chosen', () => {
+    expect(emptyCafeForm({ owner: { id: 'u-1', name: 'Bea', email: 'bea@example.com' } }).owner).toMatchObject({ kind: 'existing', userId: 'u-1' })
+  })
+})
+
+describe('an owner\'s cafes', () => {
+  const owner = (...names: string[]): PlatformOwner => ({ id: 'u-1', name: 'Bea Brown', email: 'bea@example.com', cafes: names.map((name, i) => ({ id: `c${i}`, name, slug: `c${i}` })) })
+
+  it('reads as a sentence', () => {
+    expect(ownedCafesLine(owner())).toBe('Owns no cafe yet')
+    expect(ownedCafesLine(owner('NUK Cafe'))).toBe('Owns NUK Cafe')
+    expect(ownedCafesLine(owner('NUK Cafe', 'Brown Bean', 'Tea Kiosk'))).toBe('Owns NUK Cafe, Brown Bean and Tea Kiosk')
+    expect(nowOwnsLine(owner('Brown Bean'))).toBe('Bea Brown owns this cafe.')
+    expect(nowOwnsLine(owner('Brown Bean', 'NUK Cafe'))).toBe('Bea Brown now owns 2 cafes: Brown Bean and NUK Cafe.')
+    expect(nowOwnsLine(owner('A', 'B', 'C', 'D', 'E'))).toBe('Bea Brown now owns 5 cafes: A, B, C and 2 more.')
   })
 })
 

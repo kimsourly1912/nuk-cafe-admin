@@ -58,7 +58,7 @@ Everyone else is added from the Staff page; branches come from the seed locally,
 npx wrangler d1 execute nuk-cafe-staging --remote --command "UPDATE user SET role = 'superadmin' WHERE email = 'you@example.com'"
 ```
 
-Then sign in at `/platform/sign-in`. A super admin sees each cafe's usage numbers, never its menu, orders or customers. To take it away: `SET role = 'customer'`. Keep the team small: a super admin can create cafes with owners, pause any cafe and change its address.
+Then sign in at `/platform/sign-in`. A super admin sees each cafe's usage numbers, never its menu, orders or customers. To take it away: `SET role = 'customer'`. Keep the team small: a super admin can create cafes with owners, pause any cafe and change its address. To give an owner another cafe, use **New cafe for this owner** on one of their cafes' pages, or New cafe → **An existing owner** (D146): they keep their own account and find the cafe under Your cafes.
 
 **Migration `0024_tenants` (D135)** rebuilds the branch and order tables. Before the deploy that carries it, note the time for a D1 Time Travel restore (Restore drill below); after it, admin sign-in, the menu, a dine-in order and the counter are checked by hand.
 

@@ -8,6 +8,7 @@
 import { useCafe, useCafeMutations } from '../composables/useCafes'
 import { timeAgo } from '../schemas/cafe-form'
 import CafeAddressModal from './CafeAddressModal.vue'
+import CafeFormModal from './CafeFormModal.vue'
 import CafeSuspendModal from './CafeSuspendModal.vue'
 
 const props = defineProps<{ id: string }>()
@@ -21,6 +22,7 @@ const paused = computed(() => cafe.value?.status === 'suspended')
 const overlay = useOverlay()
 const addressModal = overlay.create(CafeAddressModal)
 const suspendModal = overlay.create(CafeSuspendModal)
+const formModal = overlay.create(CafeFormModal)
 
 const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))
 </script>
@@ -195,10 +197,22 @@ const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLo
             <li
               v-for="owner in cafe.owners"
               :key="owner.id"
-              class="flex flex-col py-2 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:gap-2"
+              class="flex flex-wrap items-center gap-x-3 gap-y-2 py-2 first:pt-0 last:pb-0"
             >
-              <span class="font-medium text-highlighted">{{ owner.name }}</span>
-              <span class="truncate text-sm text-muted">{{ owner.email }}</span>
+              <div class="flex min-w-0 flex-1 basis-56 flex-col sm:flex-row sm:items-center sm:gap-2">
+                <span class="font-medium text-highlighted">{{ owner.name }}</span>
+                <span class="truncate text-sm text-muted">{{ owner.email }}</span>
+              </div>
+              <UButton
+                label="New cafe for this owner"
+                icon="i-lucide-plus"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                class="shrink-0"
+                :aria-label="`New cafe for this owner: ${owner.name}`"
+                @click="formModal.open({ owner })"
+              />
             </li>
           </ul>
           <p

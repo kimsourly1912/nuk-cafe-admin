@@ -48,6 +48,26 @@ export type TenantStatus = typeof TENANT_STATUSES[number]
 
 const emailSchema = v.pipe(v.string(), v.trim(), v.toLowerCase(), v.email('Must be a valid email address'), v.maxLength(254))
 
+export const OWNER_KINDS = ['existing', 'new'] as const
+export type OwnerKind = typeof OWNER_KINDS[number]
+
+/**
+ * The first owner (D146): someone who already owns a cafe (they keep their account and password),
+ * or a new person, who gets an account with a temporary password.
+ */
+export const newCafeOwnerSchema = v.variant('kind', [
+  v.object({
+    kind: v.literal('existing'),
+    userId: v.pipe(v.string('Choose an owner'), v.trim(), v.minLength(1, 'Choose an owner'), v.maxLength(64)),
+  }),
+  v.object({
+    kind: v.literal('new'),
+    name: nameSchema(100),
+    email: emailSchema,
+  }),
+])
+export type NewCafeOwner = v.InferOutput<typeof newCafeOwnerSchema>
+
 /** `POST /api/platform/tenants`: the cafe, its first branch and its first owner, in one save. */
 export const createTenantSchema = v.object({
   name: nameSchema(80),
@@ -55,8 +75,7 @@ export const createTenantSchema = v.object({
   branchName: nameSchema(100),
   /** An IANA zone (`Asia/Phnom_Penh`); the server checks it's known. */
   timezone: v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(64)),
-  ownerName: nameSchema(100),
-  ownerEmail: emailSchema,
+  owner: newCafeOwnerSchema,
 })
 export type CreateTenantInput = v.InferOutput<typeof createTenantSchema>
 
@@ -118,13 +137,33 @@ export interface TenantDetail extends TenantSummary {
   formerSlugs: string[]
 }
 
+/** A cafe as the console names it in a list (an owner's cafes). */
+export interface CafeRef {
+  id: string
+  name: string
+  slug: string
+}
+
+/**
+ * `GET /api/platform/owners` (D146): everyone who owns a cafe, by name, with their cafes; for New
+ * cafe's "An existing owner". Customers and branch staff aren't in it, nor disabled accounts.
+ */
+export interface PlatformOwner {
+  id: string
+  name: string
+  email: string
+  cafes: CafeRef[]
+}
+
 export interface CreatedTenant {
   tenant: TenantDetail
   /**
-   * The first owner's temporary password, shown once; `null` when the email already had an
+   * The first owner's temporary password, shown once; `null` when the owner already had an
    * account (they sign in with their own password).
    */
   temporaryPassword: string | null
+  /** The first owner with every cafe they own now, the new one included (D146). */
+  owner: PlatformOwner
 }
 
 /** `GET /api/platform/me`: the signed-in super admin, for the platform console. */

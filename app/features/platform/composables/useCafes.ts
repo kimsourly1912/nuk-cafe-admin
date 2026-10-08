@@ -1,5 +1,5 @@
 import type { Page } from '#shared/contracts/common'
-import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, SuspendTenantInput, TenantDetail, TenantListQuery, TenantSummary } from '#shared/contracts/tenants'
+import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, PlatformOwner, SuspendTenantInput, TenantDetail, TenantListQuery, TenantSummary } from '#shared/contracts/tenants'
 
 /** Pausing, resuming and moving one cafe must never overlap: all take this record lock. */
 const lockOf = (id: string) => `cafe:${id}`
@@ -14,6 +14,11 @@ export function useCafeList(query: MaybeRefOrGetter<Partial<TenantListQuery>>) {
 /** One cafe: its usage, owners and former addresses. */
 export function useCafe(id: MaybeRefOrGetter<string>) {
   return useApiQuery(`platform:cafe:${toValue(id)}`, () => apiFetch<TenantDetail>(`/platform/tenants/${toValue(id)}`))
+}
+
+/** Everyone who owns a cafe, with their cafes: New cafe's "An existing owner" (D146). */
+export function useCafeOwners() {
+  return useApiQuery('platform:owners', () => apiFetch<PlatformOwner[]>('/platform/owners'))
 }
 
 /**

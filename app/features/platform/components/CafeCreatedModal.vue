@@ -1,17 +1,19 @@
 <script setup lang="ts">
 /**
- * A new cafe's result (D142): where it lives and how its owner gets in. The owner's temporary
- * password is shown once: it isn't stored anywhere it can be read again, and they choose their own
- * at their first sign-in. An owner who already had an account signs in with their own password.
+ * A new cafe's result (D142, D146): where it lives, every cafe its owner has now, and how they get
+ * in. A new owner's temporary password is shown once: it isn't stored anywhere it can be read
+ * again, and they choose their own at their first sign-in. An owner who already had an account
+ * signs in with their own password and finds the new cafe under Your cafes.
  */
 import { useClipboard } from '@vueuse/core'
 import type { CreatedTenant } from '#shared/contracts/tenants'
+import { nowOwnsLine } from '../schemas/cafe-form'
 
 const props = defineProps<{ created: CreatedTenant }>()
 const emit = defineEmits<{ close: [] }>()
 
 const cafe = computed(() => props.created.tenant)
-const owner = computed(() => cafe.value.owners[0])
+const owner = computed(() => props.created.owner)
 const origin = import.meta.client ? window.location.origin : ''
 const adminUrl = computed(() => `${origin}${tenantUrl(cafe.value.slug, '/admin/login')}`)
 
@@ -61,7 +63,7 @@ async function openCafe() {
 
         <template v-if="created.temporaryPassword">
           <p>
-            Give this temporary password to <span class="font-medium">{{ owner?.name }}</span> ({{ owner?.email }}).
+            Give this temporary password to <span class="font-medium">{{ owner.name }}</span> ({{ owner.email }}).
             They choose their own at their first sign-in.
           </p>
           <div class="flex items-center gap-2">
@@ -87,8 +89,14 @@ async function openCafe() {
           />
         </template>
         <p v-else>
-          <span class="font-medium">{{ owner?.name }}</span> ({{ owner?.email }}) already had an account:
-          they sign in with their own password.
+          <span class="font-medium">{{ owner.name }}</span> ({{ owner.email }}) already had an account:
+          they sign in with their own password, and find this cafe under Your cafes.
+        </p>
+        <p
+          class="rounded-md bg-elevated px-3 py-2"
+          data-testid="owner-cafes"
+        >
+          {{ nowOwnsLine(owner) }}
         </p>
       </div>
     </template>

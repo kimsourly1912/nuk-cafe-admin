@@ -8,7 +8,7 @@ import { orders } from '#server/features/orders/orders.schema'
 import { addBranchStaff, createAdmin, createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
-import { changeTenantSlug, createTenant, currentSlugFor, getCafeProfile, getCafeSettings, getTenant, listAccountCafes, listTenants, resumeTenant, seedTenant, suspendTenant, updateCafeSettings } from '#server/features/tenants'
+import { changeTenantSlug, createTenant, currentSlugFor, getCafeProfile, getCafeSettings, getTenant, listAccountCafes, listOwners, listTenants, resumeTenant, seedTenant, suspendTenant, updateCafeSettings } from '#server/features/tenants'
 import { mediaAssets } from '#server/features/media/media.schema'
 import { tenantSlugs } from '#server/features/tenants/tenants.schema'
 
@@ -18,15 +18,20 @@ import { tenantSlugs } from '#server/features/tenants/tenants.schema'
 let db: Db
 const admin = { userId: 'superadmin-1', requestId: 'req-1' }
 
-const input = (overrides: Partial<CreateTenantInput> = {}): CreateTenantInput => ({
-  name: 'Brown Bean',
-  slug: 'brown-bean',
-  branchName: 'Bean Street',
-  timezone: 'Asia/Phnom_Penh',
-  ownerName: 'Bea Brown',
-  ownerEmail: 'bea@example.com',
-  ...overrides,
-})
+type InputOverrides = Partial<Omit<CreateTenantInput, 'owner'>> & { ownerName?: string, ownerEmail?: string, owner?: CreateTenantInput['owner'] }
+
+/** A new cafe; its owner a new person unless `owner` names someone else (D146). */
+const input = (overrides: InputOverrides = {}): CreateTenantInput => {
+  const { ownerName = 'Bea Brown', ownerEmail = 'bea@example.com', owner, ...cafe } = overrides
+  return {
+    name: 'Brown Bean',
+    slug: 'brown-bean',
+    branchName: 'Bean Street',
+    timezone: 'Asia/Phnom_Penh',
+    owner: owner ?? { kind: 'new', name: ownerName, email: ownerEmail },
+    ...cafe,
+  }
+}
 
 const query = (overrides: Record<string, unknown> = {}) => ({ page: 1, pageSize: 20, ...overrides })
 const tenantCount = async () => (await db.select({ n: count() }).from(organization))[0]!.n
@@ -72,6 +77,11 @@ describe('creating a cafe', () => {
     expect(tenant.owners).toEqual([{ id: existing.id, name: 'Bea', email: 'bea@example.com' }])
   })
 
+  it('answers with every cafe the owner has now', async () => {
+    const { owner } = await createTenant(db, admin, input())
+    expect(owner).toMatchObject({ name: 'Bea Brown', email: 'bea@example.com', cafes: [{ name: 'Brown Bean', slug: 'brown-bean' }] })
+  })
+
   it('refuses an address a cafe has now or had before, and saves nothing', async () => {
     await expectApiError(() => createTenant(db, admin, input({ slug: 'nuk' })), 409, 'SLUG_TAKEN', ['slug'])
     const { tenant } = await createTenant(db, admin, input())
@@ -110,6 +120,77 @@ describe('creating a cafe', () => {
     const racing = interleaved(db, () => createUser(db, 'bea@example.com', 'Bea'))
     await expectApiError(() => createTenant(racing, admin, input()), 409, 'VERSION_CONFLICT')
     expect(await tenantCount()).toBe(1)
+  })
+})
+
+describe('a new cafe for an existing owner (D146)', () => {
+  const nameTenant = (id: string, name: string) => db.update(organization).set({ name }).where(eq(organization.id, id))
+  const existing = (userId: string): CreateTenantInput['owner'] => ({ kind: 'existing', userId })
+
+  it('lists cafe owners with their cafes, by name; never customers, branch staff or disabled accounts', async () => {
+    const zoe = await createAdmin(db, 'zoe@example.com')
+    await db.update(user).set({ name: 'Zoe' }).where(eq(user.id, zoe.userId))
+    await nameTenant(TEST_TENANT, 'NUK Cafe')
+    const { owner: bea } = await createTenant(db, admin, input())
+    await createTenant(db, admin, input({ name: 'Apple Tea', slug: 'apple-tea', owner: existing(bea.id) }))
+    // A customer, someone at a branch, and an owner whose account is disabled.
+    await createUser(db, 'customer@example.com', 'Carl')
+    const staff = await createUser(db, 'staff@example.com', 'Sam')
+    await insertBranch(db, { id: 'branch-1', name: 'Main', timezone: 'Asia/Phnom_Penh' })
+    await addBranchStaff(db, 'branch-1', staff.id, 'manager')
+    const banned = await createAdmin(db, 'banned@example.com')
+    await db.update(user).set({ banned: true }).where(eq(user.id, banned.userId))
+
+    expect(await listOwners(db)).toEqual([
+      { id: bea.id, name: 'Bea Brown', email: 'bea@example.com', cafes: [
+        { id: expect.any(String), name: 'Apple Tea', slug: 'apple-tea' },
+        { id: expect.any(String), name: 'Brown Bean', slug: 'brown-bean' },
+      ] },
+      { id: zoe.userId, name: 'Zoe', email: 'zoe@example.com', cafes: [{ id: TEST_TENANT, name: 'NUK Cafe', slug: 'nuk' }] },
+    ])
+  })
+
+  it('makes an existing owner the new cafe\'s owner: their own account and password, both cafes in the answer', async () => {
+    const { userId } = await createAdmin(db, 'zoe@example.com')
+    await nameTenant(TEST_TENANT, 'NUK Cafe')
+    const [before] = await db.select({ mustChangePassword: user.mustChangePassword }).from(user).where(eq(user.id, userId))
+    const { tenant, temporaryPassword, owner } = await createTenant(db, admin, input({ owner: existing(userId) }))
+
+    expect(temporaryPassword).toBeNull()
+    expect(tenant.owners).toEqual([{ id: userId, name: 'Admin', email: 'zoe@example.com' }])
+    expect(owner.cafes.map(cafe => cafe.name)).toEqual(['Brown Bean', 'NUK Cafe'])
+    expect(await db.select({ mustChangePassword: user.mustChangePassword }).from(user).where(eq(user.id, userId))).toEqual([before])
+    expect(await db.select({ n: count() }).from(user)).toEqual([{ n: 1 }])
+    const [row] = await db.select({ metadata: auditEvents.metadata }).from(auditEvents).where(and(eq(auditEvents.action, 'tenant.create'), eq(auditEvents.tenantId, tenant.id)))
+    expect(row!.metadata).toMatchObject({ ownerId: userId, ownerKind: 'existing', existingAccount: true })
+  })
+
+  it('refuses someone who owns no cafe, a disabled owner and an unknown id; nothing is saved', async () => {
+    const customer = await createUser(db, 'customer@example.com', 'Carl')
+    const staff = await createUser(db, 'staff@example.com', 'Sam')
+    await insertBranch(db, { id: 'branch-1', name: 'Main', timezone: 'Asia/Phnom_Penh' })
+    await addBranchStaff(db, 'branch-1', staff.id, 'manager')
+    const banned = await createAdmin(db, 'banned@example.com')
+    await db.update(user).set({ banned: true }).where(eq(user.id, banned.userId))
+
+    for (const userId of [customer.id, staff.id, banned.userId, 'nobody']) {
+      await expectApiError(() => createTenant(db, admin, input({ owner: existing(userId) })), 422, 'VALIDATION_FAILED', ['owner.userId'])
+    }
+    expect(await tenantCount()).toBe(1)
+  })
+
+  it('a new person with an existing owner\'s email is refused: they\'re chosen from the list instead', async () => {
+    await createAdmin(db, 'zoe@example.com')
+    await expectApiError(() => createTenant(db, admin, input({ ownerEmail: 'zoe@example.com' })), 409, 'OWNER_EXISTS', ['owner.email'])
+    expect(await tenantCount()).toBe(1)
+  })
+
+  it('the chosen owner\'s account changed meanwhile: nothing is saved, try again', async () => {
+    const { userId } = await createAdmin(db, 'zoe@example.com')
+    const racing = interleaved(db, () => db.update(user).set({ updatedAt: new Date(Date.now() + 60_000) }).where(eq(user.id, userId)))
+    await expectApiError(() => createTenant(racing, admin, input({ owner: existing(userId) })), 409, 'VERSION_CONFLICT')
+    expect(await tenantCount()).toBe(1)
+    expect(await db.select({ n: count() }).from(member).where(eq(member.userId, userId))).toEqual([{ n: 1 }])
   })
 })
 
