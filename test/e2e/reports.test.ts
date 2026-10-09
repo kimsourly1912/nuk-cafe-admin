@@ -138,7 +138,7 @@ describe('Reports: Summary', () => {
     await page.getByText('Expired unpaid').waitFor()
     // The hour chart is trimmed to the hours with sales (7 AM, 8 AM), as the screen-reader table says.
     expect(await page.locator('table.sr-only tbody tr').count()).toBe(2)
-    expect(page.url()).toContain(`from=${TODAY}&to=${TODAY}`)
+    await expect.poll(() => page.url()).toContain(`from=${TODAY}&to=${TODAY}`)
   })
 
   it('a preset changes the period in the URL, and the next report keeps it', async () => {
@@ -247,7 +247,7 @@ describe('Reports: Sales by item', () => {
     await page.getByRole('button', { name: 'Category', exact: true }).click()
     await page.getByRole('option', { name: 'Coffee' }).click()
     await expect.poll(() => lastQuery(requests).categoryId).toBe('cat-2')
-    expect(page.url()).toContain('categoryId=cat-2')
+    await expect.poll(() => page.url()).toContain('categoryId=cat-2')
     await page.getByText('The CSV includes all matching items.', { exact: false }).waitFor()
   })
 })
@@ -271,12 +271,12 @@ describe('Reports: Order history', () => {
     await panel.getByText('Reference 8812').waitFor()
     await panel.getByText('By Vanna').waitFor()
     await panel.getByText('By the customer').waitFor()
-    expect(page.url()).toContain('order=ord-1')
+    await expect.poll(() => page.url()).toContain('order=ord-1')
 
     await page.goBack()
     await expect.poll(() => page.getByRole('dialog').count()).toBe(0)
-    expect(page.url()).not.toContain('order=')
-    expect(page.url()).toContain('payment=refunded')
+    await expect.poll(() => page.url()).not.toContain('order=')
+    await expect.poll(() => page.url()).toContain('payment=refunded')
   })
 
   it('`?order=` opens the order from a link; closing it keeps the list', async () => {
