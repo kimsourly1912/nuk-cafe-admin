@@ -182,6 +182,22 @@ export const khqrSettings = sqliteTable('khqr_settings', {
 ])
 
 /**
+ * Each cafe's Bakong token (step T2d, D148): sealed with the server's key (`bakong-token.ts`), never
+ * stored or answered in clear. Its expiry, read from the token when saved, is kept beside it so the
+ * Payments page and the reminders don't need the key.
+ */
+export const bakongTokens = sqliteTable('bakong_tokens', {
+  tenantId: tenantId().primaryKey(),
+  /** `v1.<iv>.<ciphertext>`: AES-256-GCM under NUXT_BAKONG_ENCRYPTION_KEY, the tenant as additional data. */
+  sealed: text().notNull(),
+  /** From the token's `exp`; null when it carries none. */
+  expiresAt: instant(),
+  version: integer().notNull().default(1),
+  updatedBy: text().notNull().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
+  updatedAt: instant().notNull(),
+})
+
+/**
  * A KHQR made for one order (step 10.15, D130): its text (what the QR code draws) and that text's
  * MD5, which Bakong looks payments up by (10.15b). Kept after payment: the payment points at it.
  */

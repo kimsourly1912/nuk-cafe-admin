@@ -2,7 +2,7 @@ import { and, desc, eq, gt } from 'drizzle-orm'
 import type { KhqrCurrency } from '#shared/contracts/orders'
 import { user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
-import { khqrCharges, khqrSettings } from './orders.schema'
+import { bakongTokens, khqrCharges, khqrSettings } from './orders.schema'
 
 /** All SQL of KHQR at the counter (step 10.15, D130). */
 
@@ -53,6 +53,55 @@ export function insertSettingsStatement(db: Db, tenantId: string, values: Settin
 export function updateSettingsStatement(db: Db, tenantId: string, version: number, values: SettingsValues): Statement {
   return db.update(khqrSettings).set({ ...columns(values), version: version + 1 })
     .where(and(eq(khqrSettings.tenantId, tenantId), eq(khqrSettings.version, version)))
+}
+
+// --- The cafe's Bakong token (T2d, D148): sealed, never read in clear here ---
+
+export interface BakongTokenRow {
+  sealed: string
+  expiresAt: Date | null
+  version: number
+  updatedAt: Date
+  updatedByName: string
+}
+
+export async function findBakongToken(db: Db, tenantId: string): Promise<BakongTokenRow | undefined> {
+  const [row] = await db.select({
+    sealed: bakongTokens.sealed,
+    expiresAt: bakongTokens.expiresAt,
+    version: bakongTokens.version,
+    updatedAt: bakongTokens.updatedAt,
+    updatedByName: user.name,
+  }).from(bakongTokens).innerJoin(user, eq(user.id, bakongTokens.updatedBy)).where(eq(bakongTokens.tenantId, tenantId))
+  return row
+}
+
+/** Every cafe's token expiry, for the reminders (no sealed tokens read). */
+export async function bakongTokenExpiries(db: Db): Promise<{ tenantId: string, expiresAt: Date | null }[]> {
+  return db.select({ tenantId: bakongTokens.tenantId, expiresAt: bakongTokens.expiresAt }).from(bakongTokens)
+}
+
+export interface BakongTokenValues {
+  sealed: string
+  expiresAt: Date | null
+  updatedBy: string
+  updatedAt: Date
+}
+
+/** The first token: inserted unless someone else just saved one (then the guard after it fails). */
+export function insertBakongTokenStatement(db: Db, tenantId: string, values: BakongTokenValues): Statement {
+  return db.insert(bakongTokens).values({ tenantId, ...values, version: 1 }).onConflictDoNothing()
+}
+
+/** A replacement: only at the version the page read. */
+export function updateBakongTokenStatement(db: Db, tenantId: string, version: number, values: BakongTokenValues): Statement {
+  return db.update(bakongTokens).set({ ...values, version: version + 1 })
+    .where(and(eq(bakongTokens.tenantId, tenantId), eq(bakongTokens.version, version)))
+}
+
+/** Removal: only at the version the page read. */
+export function deleteBakongTokenStatement(db: Db, tenantId: string, version: number): Statement {
+  return db.delete(bakongTokens).where(and(eq(bakongTokens.tenantId, tenantId), eq(bakongTokens.version, version)))
 }
 
 export interface ChargeRow {

@@ -175,10 +175,11 @@ export default defineNuxtConfig({
     // secret, from @BotFather), NUXT_TELEGRAM_BOT_USERNAME (without @), NUXT_TELEGRAM_WEBHOOK_SECRET
     // (a secret, 32+ letters/digits). Without a token Telegram is off: its routes answer 404.
     telegram: { botToken: '', botUsername: '', webhookSecret: '' },
-    // Checking counter KHQRs with Bakong (step 10.15b, D131; docs/server/operations.md → KHQR):
-    // NUXT_BAKONG_TOKEN (a secret, from Bakong's developer portal, 90 days), NUXT_BAKONG_API_URL
-    // (Bakong's own unless a relay stands in front of it). Without a token the cashier confirms by hand.
-    bakong: { token: '', apiUrl: 'https://api-bakong.nbc.gov.kh' },
+    // Checking counter KHQRs with Bakong (step 10.15b, D131; docs/server/operations.md → KHQR): each
+    // cafe saves its own token on Payments, sealed with NUXT_BAKONG_ENCRYPTION_KEY (a secret: 32
+    // random bytes, base64; T2d, D148). Without the key no token can be saved and cashiers confirm by
+    // hand. NUXT_BAKONG_API_URL: Bakong's own unless a relay stands in front of it.
+    bakong: { encryptionKey: '', apiUrl: 'https://api-bakong.nbc.gov.kh' },
     public: {
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',

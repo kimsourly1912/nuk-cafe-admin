@@ -1,4 +1,4 @@
-import type { BakongConnectionTest, ExchangeRates, KhqrSettings, KhqrSettingsInput, SetExchangeRateInput } from '#shared/contracts/orders'
+import type { BakongConnectionTest, BakongTokenInput, ExchangeRates, KhqrSettings, KhqrSettingsInput, RemoveBakongTokenInput, SetExchangeRateInput } from '#shared/contracts/orders'
 
 /** The riel rate in force and its history (`/api/admin/exchange-rates`, D101). */
 export function useExchangeRates() {
@@ -37,10 +37,38 @@ export function useKhqrSettingsMutations() {
       invalidate: ['exchange-rates', 'counter'],
     },
   )
-  return { save }
+  // The cafe's Bakong token (T2d, D148): sent once, never answered back.
+  const saveToken = useMutation(
+    (input: BakongTokenInput) => apiFetch<KhqrSettings>('/admin/khqr/token', { method: 'PUT', body: input }),
+    {
+      id: 'exchange-rates:bakong-token',
+      lock: () => 'bakong-token',
+      successMessage: (_, input) => (input.version ? 'Bakong token replaced' : 'Bakong token saved: the counter checks KHQR payments with Bakong'),
+      errorMessage: 'Could not save the Bakong token',
+      // The counter's queue says whether its check is on.
+      invalidate: ['exchange-rates', 'counter'],
+    },
+  )
+  const removeToken = useMutation(
+    (input: RemoveBakongTokenInput) => apiFetch<KhqrSettings>('/admin/khqr/token', { method: 'DELETE', body: input }),
+    {
+      id: 'exchange-rates:bakong-token-remove',
+      lock: () => 'bakong-token',
+      confirm: () => ({
+        title: 'Remove the Bakong token?',
+        description: 'The counter stops checking KHQR payments with Bakong: cashiers confirm each one by hand until a token is saved again.',
+        confirmLabel: 'Remove token',
+        danger: true,
+      }),
+      successMessage: 'Bakong token removed: cashiers confirm KHQR payments by hand',
+      errorMessage: 'Could not remove the Bakong token',
+      invalidate: ['exchange-rates', 'counter'],
+    },
+  )
+  return { save, saveToken, removeToken }
 }
 
-/** Whether this server can ask Bakong with its token (10.15b, D131). Changes nothing. */
+/** Whether this cafe's token gets an answer from Bakong (10.15b D131, D148). Changes nothing. */
 export function testBakongConnection() {
   return apiFetch<BakongConnectionTest>('/admin/khqr/test', { method: 'POST' })
 }

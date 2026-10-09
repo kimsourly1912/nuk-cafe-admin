@@ -77,12 +77,12 @@ export function bakongTokenMessage(expiresAt: Date, now: Date, cafeUrl?: string)
     ? [
         `🔑 <b>The Bakong token expires in ${left} ${left === 1 ? 'day' : 'days'}</b> (${date})`,
         '',
-        'After that the counter can\'t check KHQR payments with Bakong; cashiers confirm them by hand. Get a new token from Bakong\'s developer portal and replace the server secret NUXT_BAKONG_TOKEN, then press Test connection on Payments.',
+        'After that the counter can\'t check KHQR payments with Bakong; cashiers confirm them by hand. Get a new token from Bakong\'s developer portal and replace it on Payments, then press Test connection.',
       ]
     : [
         `🔑 <b>The Bakong token has expired</b> (${date})`,
         '',
-        'The counter can\'t check KHQR payments with Bakong: cashiers confirm them by hand. Get a new token from Bakong\'s developer portal and replace the server secret NUXT_BAKONG_TOKEN, then press Test connection on Payments.',
+        'The counter can\'t check KHQR payments with Bakong: cashiers confirm them by hand. Get a new token from Bakong\'s developer portal and replace it on Payments, then press Test connection.',
       ]
   const button = cafeUrl?.startsWith('https://') ? { text: 'Open Payments', url: `${cafeUrl}/admin/payments` } : undefined
   return { html: lines.join('\n'), button }

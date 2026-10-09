@@ -30,6 +30,8 @@ const BUILD_INPUTS = ['app', 'server', 'shared', 'public', 'nuxt.config.ts', '.n
 const E2E_HUB_DIR = '.data/e2e'
 /** Signs the seeded tables' QR tokens (the server gets the same secret). */
 const E2E_QR_SECRET = 'e2e-qr-secret'
+/** The e2e server's key for the cafes' Bakong tokens (D148): 32 bytes, base64. */
+const E2E_BAKONG_KEY = Buffer.alloc(32, 7).toString('base64')
 /** Written next to the build; any other `nuxt build` (staging, dev) cleans `.output` and removes it. */
 const FINGERPRINT_FILE = join(rootDir, '.output', '.e2e-build-fingerprint')
 
@@ -60,7 +62,7 @@ export default async function ({ provide }: TestProject) {
   }
 
   // A fresh database for every run: the customer site's tests read it (the admin's use mocks).
-  const shopSeed = await seedShop(join(rootDir, E2E_HUB_DIR, 'db', 'sqlite.db'), E2E_QR_SECRET)
+  const shopSeed = await seedShop(join(rootDir, E2E_HUB_DIR, 'db', 'sqlite.db'), E2E_QR_SECRET, { encryptionKey: E2E_BAKONG_KEY, token: FAKE_BAKONG_TOKEN })
   provide('shopSeed', shopSeed)
 
   // The counter's automatic KHQR check (D131) asks this stand-in instead of Bakong.
@@ -78,7 +80,7 @@ export default async function ({ provide }: TestProject) {
       NUXT_PUBLIC_SITE_URL: host,
       NUXT_BETTER_AUTH_SECRET: 'e2e-better-auth-secret-at-least-32-characters',
       NUXT_BAKONG_API_URL: bakong.url,
-      NUXT_BAKONG_TOKEN: FAKE_BAKONG_TOKEN },
+      NUXT_BAKONG_ENCRYPTION_KEY: E2E_BAKONG_KEY },
     stdio: 'ignore',
   })
   await waitUntilUp(host)

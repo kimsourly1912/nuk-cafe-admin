@@ -8,6 +8,7 @@ import { createTable, updateBranchSettings } from '../../../server/features/bran
 import type { Actor } from '../../../server/features/identity'
 import { createStaff } from '../../../server/features/identity'
 import { createCategory, createItem, publishItem } from '../../../server/features/menu'
+import { saveBakongToken } from '../../../server/features/orders'
 import { loadSampleMenuStep } from '../../../server/features/sample-data'
 import { createTestAuth } from '../../../server/tests/support/auth'
 import { applyMigration, createAdmin, ensureTenant, insertBranch, migrationFiles, TEST_TENANT } from '../../../server/tests/support/db'
@@ -111,7 +112,7 @@ async function seedSecondCafe(db: Db, qr: { secret: string, baseUrl: string }): 
 
 const tokenOf = (qrUrl: string | null) => qrUrl!.split('/').pop()!
 
-export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSeed> {
+export async function seedShop(dbFile: string, qrSecret: string, bakong: { encryptionKey: string, token: string }): Promise<ShopSeed> {
   for (const file of [dbFile, `${dbFile}-wal`, `${dbFile}-shm`]) {
     if (existsSync(file)) rmSync(file)
   }
@@ -146,6 +147,9 @@ export async function seedShop(dbFile: string, qrSecret: string): Promise<ShopSe
   const closedTable = await createTable(db, actor, closedBranchId, { label: 'K01', area: null }, qr)
   const spareTable = await createTable(db, actor, openBranchId, { label: 'T02', area: 'Main floor' }, qr)
   const secondCafe = await seedSecondCafe(db, qr)
+  // NUK Cafe's own Bakong token (T2d, D148), sealed with the e2e server's key: its counter checks
+  // KHQRs with the stand-in for Bakong. Brown Bean has none.
+  await saveBakongToken(db, actor, { version: 0, token: bakong.token }, { apiUrl: '', encryptionKey: bakong.encryptionKey })
   // Created as a visitor would (hashed password, customer profile, a queued verification email), but
   // without the breached-password lookup (an external API). Their queued emails carry test links.
   const auth = createTestAuth(db)

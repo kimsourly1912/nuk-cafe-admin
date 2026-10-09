@@ -24,6 +24,8 @@ export const OrderErrorCodes = {
   EXCHANGE_RATE_CHANGED: 'EXCHANGE_RATE_CHANGED',
   /** KHQR at the counter (10.15, D130): an admin hasn't set it up, it's off, or not in that currency. */
   KHQR_NOT_SET_UP: 'KHQR_NOT_SET_UP',
+  /** The server can't store a Bakong token: no NUXT_BAKONG_ENCRYPTION_KEY (D148). */
+  BAKONG_KEY_MISSING: 'BAKONG_KEY_MISSING',
   /** A payment named a QR made for another order. */
   KHQR_CHARGE_INVALID: 'KHQR_CHARGE_INVALID',
 } as const
@@ -79,6 +81,19 @@ export const khqrChargeInvalid = () =>
 
 /** The KHQR settings were saved by someone else since the page read them. */
 export const khqrSettingsChanged = () => versionConflict('The KHQR settings')
+
+/** The cafe's Bakong token was replaced or removed meanwhile (T2d, D148). */
+export const bakongTokenChanged = () => versionConflict('The Bakong token')
+
+/** This server has no `NUXT_BAKONG_ENCRYPTION_KEY`, so it can't store a token (D148). */
+export const bakongKeyMissing = () =>
+  apiError(503, OrderErrorCodes.BAKONG_KEY_MISSING, 'This server can\'t store Bakong tokens yet: the platform team sets its encryption key first.')
+
+/** A token that stopped working already: saving it would only turn the automatic check off. */
+export const bakongTokenExpired = (expiresAt: Date) =>
+  apiError(422, ErrorCodes.VALIDATION_FAILED, 'This Bakong token has expired. Get a new one from Bakong\'s developer portal.', {
+    fieldErrors: { token: [`Expired on ${expiresAt.toISOString().slice(0, 10)}`] },
+  })
 
 /** A paid order's cancellation must say how the money went back; an unpaid one has none. */
 export const returnMethodInvalid = (paid: boolean) =>

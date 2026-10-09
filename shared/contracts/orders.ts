@@ -498,11 +498,42 @@ export interface KhqrSettings {
   currencies: KhqrCurrency[]
   updatedAt: string | null
   updatedBy: { name: string } | null
-  /** Whether `NUXT_BAKONG_TOKEN` is set: the counter then records a QR's payment by itself (10.15b, D131). */
+  /** Whether this cafe has a Bakong token: the counter then records a QR's payment by itself (10.15b D131, T2d D148). */
   automaticCheck: boolean
-  /** When that token stops working (read from it, 10.16, D132); `null` without one or when it carries no date. */
-  tokenExpiresAt: string | null
+  /** The cafe's token, never itself (T2d, D148); `null` without one. */
+  token: BakongTokenInfo | null
+  /** Whether this server can store a token (its `NUXT_BAKONG_ENCRYPTION_KEY` is set). */
+  tokenStorage: boolean
 }
+
+/** What Payments shows of a cafe's Bakong token: never the token (T2d, D148). */
+export interface BakongTokenInfo {
+  /** Send it back to replace or remove the token (409 when someone changed it meanwhile). */
+  version: number
+  /** When it stops working (read from it, 10.16, D132); `null` when it carries no date. */
+  expiresAt: string | null
+  setAt: string
+  setBy: { name: string }
+}
+
+export const BAKONG_TOKEN_MAX = 4096
+
+/** `PUT /api/admin/khqr/token`: the cafe's Bakong token, from Bakong's developer portal (T2d, D148). Version 0 for the first. */
+export const bakongTokenSchema = v.strictObject({
+  version: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  token: v.pipe(
+    v.string(),
+    v.trim(),
+    v.nonEmpty('Paste the token from Bakong\'s developer portal'),
+    v.maxLength(BAKONG_TOKEN_MAX, `At most ${BAKONG_TOKEN_MAX} characters`),
+    v.regex(/^[\w.~+/=-]+$/, 'A Bakong token is one line of letters, numbers and dots, without spaces'),
+  ),
+})
+export type BakongTokenInput = v.InferOutput<typeof bakongTokenSchema>
+
+/** `DELETE /api/admin/khqr/token`: removes the token at the version read. */
+export const removeBakongTokenSchema = v.strictObject({ version: v.pipe(v.number(), v.integer(), v.minValue(1)) })
+export type RemoveBakongTokenInput = v.InferOutput<typeof removeBakongTokenSchema>
 
 /** `POST /api/counter/{branchId}/orders/{id}/khqr`: the QR for this order in a currency. */
 export const createKhqrSchema = v.strictObject({ currency: v.picklist(KHQR_CURRENCIES) })
@@ -532,8 +563,8 @@ export interface KhqrCharge {
 /** From this many days before the Bakong token stops working, Payments warns and Telegram reminds (10.16, D132). */
 export const BAKONG_TOKEN_WARNING_DAYS = 14
 
-/** Why the automatic check can't say: no token, Bakong refused the token or this server, or anything else. */
-export type KhqrCheckProblem = 'not_set_up' | 'token' | 'refused' | 'error'
+/** Why the automatic check can't say: no token, Bakong refused the token or this server, the saved token can't be read with this server's key (D148), or anything else. */
+export type KhqrCheckProblem = 'not_set_up' | 'token' | 'key' | 'refused' | 'error'
 
 /** What Bakong says arrived on a QR, in the currency's units (dollars or riel). */
 export interface KhqrReceived {

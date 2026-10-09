@@ -354,7 +354,7 @@ describe('the Bakong token\'s reminders (step 10.16, D132)', () => {
     const [row] = await deliveries()
     expect(row).toMatchObject({ kind: 'server_error', destinationId: owner, subject: 'Bakong token expires in 7 days' })
     expect(row!.message.html).toContain('<b>The Bakong token expires in 7 days</b> (21 Dec 2026)')
-    expect(row!.message.html).toContain('NUXT_BAKONG_TOKEN')
+    expect(row!.message.html).toContain('replace it on Payments')
     expect(row!.message.button).toEqual({ text: 'Open Payments', url: `${CAFE_URL}/admin/payments` })
 
     await deliverDue(db, telegram.api, before(7), { ids })
