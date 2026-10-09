@@ -3,6 +3,8 @@ import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/e
 export const TenantErrorCodes = {
   /** The address is a cafe's, now or before (old addresses keep redirecting to their cafe). */
   SLUG_TAKEN: 'SLUG_TAKEN',
+  /** The new owner's email is an existing owner's: choose them from the list (D146). */
+  OWNER_EXISTS: 'OWNER_EXISTS',
 } as const
 
 export const tenantNotFound = () => notFound('The cafe')
@@ -26,3 +28,15 @@ export const notSuspended = () => apiError(409, ErrorCodes.INVALID_STATE, 'This 
 /** The owner's email got an account, or that account changed, while the cafe was being saved. */
 export const ownerAccountChanged = () =>
   apiError(409, ErrorCodes.VERSION_CONFLICT, 'The owner\'s account changed while the cafe was being created. Nothing was saved: try again.')
+
+/** "An existing owner" names someone who doesn't own a cafe (or whose account is disabled). */
+export const notAnOwner = () =>
+  apiError(422, ErrorCodes.VALIDATION_FAILED, 'Choose someone who owns a cafe.', {
+    fieldErrors: { 'owner.userId': ['This person doesn\'t own a cafe'] },
+  })
+
+/** "A new person" with the email of someone who already owns a cafe: they're chosen from the list instead (D146). */
+export const ownerExists = (name: string) =>
+  apiError(409, TenantErrorCodes.OWNER_EXISTS, `${name} already owns a cafe. Choose them under An existing owner.`, {
+    fieldErrors: { 'owner.email': [`${name} already owns a cafe: choose An existing owner`] },
+  })

@@ -1,15 +1,19 @@
 <script setup lang="ts">
 /**
  * New cafe (the platform console, D142): the cafe and its web address, its first branch and its
- * first owner, saved together. The address follows the name until it's edited by hand. The server
- * refuses an address any cafe has or had, and an unknown time zone, on their fields. Afterwards the
- * result shows the owner's temporary password once (`CafeCreatedModal`). Like the other forms, it
- * stays open while saving but can be closed: the save continues, and a failure offers "Reopen".
+ * first owner, saved together. The address follows the name until it's edited by hand. The owner
+ * is **an existing owner** (chosen from everyone who owns a cafe: they keep their account) or **a
+ * new person** (D146); a cafe's page opens it with its owner already chosen. The server refuses an
+ * address any cafe has or had, an unknown time zone, and a new person's email that is an owner's,
+ * on their fields. Afterwards the result shows the owner's cafes and a new person's temporary
+ * password once (`CafeCreatedModal`). Like the other forms, it stays open while saving but can be
+ * closed: the save continues, and a failure offers "Reopen".
  */
-import type { FormSubmitEvent } from '@nuxt/ui'
+import type { FormSubmitEvent, RadioGroupItem } from '@nuxt/ui'
+import type { CreateTenantInput, TenantOwner } from '#shared/contracts/tenants'
 import { slugFromName } from '#shared/contracts/tenants'
-import { useCafeMutations } from '../composables/useCafes'
-import { cafeFormSchema, emptyCafeForm } from '../schemas/cafe-form'
+import { useCafeMutations, useCafeOwners } from '../composables/useCafes'
+import { cafeFormSchema, emptyCafeForm, ownedCafesLine, ownerLabel } from '../schemas/cafe-form'
 import type { CafeForm } from '../schemas/cafe-form'
 import CafeCreatedModal from './CafeCreatedModal.vue'
 import CafeFormModal from './CafeFormModal.vue'
@@ -17,11 +21,13 @@ import CafeFormModal from './CafeFormModal.vue'
 const props = defineProps<{
   /** Restores unsaved input (used by "Reopen" after a failed background save). */
   draft?: CafeForm
+  /** New cafe for this owner (a cafe's page): chosen already. */
+  owner?: TenantOwner
 }>()
 const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: boolean] }>()
 
 const { isCompact } = useLayoutContext()
-const initial = emptyCafeForm()
+const initial = emptyCafeForm({ owner: props.owner })
 const state = reactive<CafeForm>(structuredClone(toRaw(props.draft) ?? initial))
 
 // The address follows the name until someone types their own.
@@ -31,6 +37,21 @@ watch(() => state.name, (name) => {
 })
 
 const zones = timezoneOptions(state.timezone)
+
+// --- The first owner (D146) ---
+
+const OWNER_CHOICES: RadioGroupItem[] = [
+  { label: 'A new person', description: 'They get an account with a temporary password.', value: 'new' },
+  { label: 'An existing owner', description: 'Someone who owns a cafe: they use their own account.', value: 'existing' },
+]
+const owners = useCafeOwners()
+const ownerItems = computed(() => {
+  const items = (owners.data.value ?? []).map(owner => ({ label: ownerLabel(owner), value: owner.id }))
+  // The owner a cafe's page chose, until the list arrives.
+  if (props.owner && !items.some(item => item.value === props.owner!.id)) items.unshift({ label: ownerLabel(props.owner), value: props.owner.id })
+  return items
+})
+const chosenOwner = computed(() => owners.data.value?.find(owner => owner.id === state.owner.userId))
 const origin = import.meta.client ? window.location.origin : ''
 
 const { create } = useCafeMutations()
@@ -53,10 +74,11 @@ const overlay = useOverlay()
 const createdModal = overlay.create(CafeCreatedModal)
 function reopenActions(draft: CafeForm) {
   if (!closed) return []
-  return [{ label: 'Reopen', onClick: () => overlay.create(CafeFormModal, { destroyOnClose: true }).open({ draft }) }]
+  return [{ label: 'Reopen', onClick: () => overlay.create(CafeFormModal, { destroyOnClose: true }).open({ draft, owner: props.owner }) }]
 }
 
-async function onSubmit({ data }: FormSubmitEvent<CafeForm>) {
+// The schema's output: trimmed, lowercased, and only the chosen owner's fields.
+async function onSubmit({ data }: FormSubmitEvent<CreateTenantInput>) {
   const draft = structuredClone(toRaw(state))
   saving.value = true
   const result = await create.execute(data, { errorActions: () => reopenActions(draft) })
@@ -183,28 +205,63 @@ async function onSubmit({ data }: FormSubmitEvent<CafeForm>) {
           >
             First owner
           </h3>
-          <UFormField
-            label="Name"
-            name="ownerName"
-            required
-          >
-            <UInput
-              v-model="state.ownerName"
-              class="w-full"
+          <URadioGroup
+            v-model="state.owner.kind"
+            :items="OWNER_CHOICES"
+            variant="card"
+            orientation="horizontal"
+            legend="Who owns it"
+            :ui="{ legend: 'sr-only', fieldset: 'max-sm:flex-col', item: 'flex-1' }"
+          />
+          <template v-if="state.owner.kind === 'existing'">
+            <ApiErrorAlert
+              v-if="owners.error.value"
+              :error="owners.error.value"
+              title="Could not load the owners"
+              @retry="owners.refresh()"
             />
-          </UFormField>
-          <UFormField
-            label="Email"
-            name="ownerEmail"
-            help="They get a temporary password. If this email already has an account, it gets access and keeps its password."
-            required
-          >
-            <UInput
-              v-model="state.ownerEmail"
-              type="email"
-              class="w-full"
-            />
-          </UFormField>
+            <UFormField
+              v-else
+              label="Owner"
+              name="owner.userId"
+              :help="chosenOwner ? ownedCafesLine(chosenOwner) : 'Everyone who owns a cafe, by name. Search by name or email.'"
+              required
+            >
+              <RecordSelect
+                v-model="state.owner.userId"
+                :items="ownerItems"
+                noun="owners"
+                :loading="owners.loading.value"
+                placeholder="Choose an owner"
+                aria-label="Owner"
+                class="w-full"
+              />
+            </UFormField>
+          </template>
+          <template v-else>
+            <UFormField
+              label="Name"
+              name="owner.name"
+              required
+            >
+              <UInput
+                v-model="state.owner.name"
+                class="w-full"
+              />
+            </UFormField>
+            <UFormField
+              label="Email"
+              name="owner.email"
+              help="They get a temporary password, shown once. If this email already has an account (a customer), it gets access and keeps its password."
+              required
+            >
+              <UInput
+                v-model="state.owner.email"
+                type="email"
+                class="w-full"
+              />
+            </UFormField>
+          </template>
         </section>
       </UForm>
     </template>

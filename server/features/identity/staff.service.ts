@@ -277,6 +277,29 @@ export async function tenantOwners(db: Db, tenantId: string): Promise<{ id: stri
   return repo.ownersOf(db, tenantId)
 }
 
+/** An account that owns cafes, with the ids of the cafes it owns (D146). */
+export interface OwnerAccount {
+  id: string
+  name: string
+  email: string
+  tenantIds: string[]
+}
+
+/**
+ * Everyone who owns a cafe and isn't disabled, by name, with the cafes they own (the platform
+ * console's owner list, D146). Narrowed to one account by id or email when given. Customers and
+ * branch staff aren't owners, so they're never in it.
+ */
+export async function ownerAccounts(db: Db, filter: { userId?: string, email?: string } = {}): Promise<OwnerAccount[]> {
+  const owners = new Map<string, OwnerAccount>()
+  for (const row of await repo.ownerRows(db, filter)) {
+    const owner = owners.get(row.id) ?? { id: row.id, name: row.name, email: row.email, tenantIds: [] }
+    owner.tenantIds.push(row.tenantId)
+    owners.set(row.id, owner)
+  }
+  return [...owners.values()]
+}
+
 /**
  * The seed task (local development and disposable environments, D142): the first owner is also on
  * the platform team, so the platform console can be tried. Elsewhere a super admin is made by hand

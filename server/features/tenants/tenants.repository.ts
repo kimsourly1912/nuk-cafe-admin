@@ -111,3 +111,9 @@ export function updateTenantStatement(db: Db, id: string, version: number, value
     .set({ ...values, version: version + 1 })
     .where(and(eq(organization.id, id), sql`coalesce(${organization.version}, 1) = ${version}`))
 }
+
+/** Every cafe's id, name and address (the platform console names an owner's cafes, D146). */
+export async function tenantRefs(db: Db): Promise<{ id: string, name: string, slug: string }[]> {
+  return db.select({ id: organization.id, name: organization.name, slug: organization.slug }).from(organization)
+    .orderBy(sql`${organization.name} collate nocase`, asc(organization.id))
+}

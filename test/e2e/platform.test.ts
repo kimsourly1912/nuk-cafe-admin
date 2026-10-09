@@ -1,7 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import type { CreatedTenant, PlatformSession, TenantDetail, TenantSummary } from '../../shared/contracts/tenants'
+import type { CreatedTenant, PlatformOwner, PlatformSession, TenantDetail, TenantSummary } from '../../shared/contracts/tenants'
 import type { MockHandler } from './support/mock-api'
 import { failures, MockFailure, mockApi, paginatedHandler, setupE2e, toast } from './support/mock-api'
 
@@ -31,6 +31,11 @@ function cafeOf(id: string, name: string, slug: string, overrides: Partial<Tenan
 
 const NUK = cafeOf('cafe-1', 'NUK Cafe', 'nuk')
 const PAUSED = cafeOf('cafe-2', 'Old Mill', 'old-mill', { status: 'suspended', suspendedReason: 'Unpaid invoice', usage: { branches: 2, staff: 5, ordersLast30Days: 0, lastOrderAt: null } })
+/** Everyone who owns a cafe (D146): NUK Cafe's owner, and Zoe with two cafes. */
+const OWNERS: PlatformOwner[] = [
+  { ...NUK.owners[0]!, cafes: [{ id: NUK.id, name: NUK.name, slug: NUK.slug }] },
+  { id: 'u-zoe', name: 'Zoe Tran', email: 'zoe@example.com', cafes: [{ id: 'cafe-8', name: 'Tea Kiosk', slug: 'tea-kiosk' }, { id: PAUSED.id, name: PAUSED.name, slug: PAUSED.slug }] },
+]
 const summary = ({ owners: _o, formerSlugs: _f, ...cafe }: TenantDetail): TenantSummary => cafe
 
 const signedIn = (session: PlatformSession = SUPERADMIN): Record<string, MockHandler> => ({ 'GET /platform/me': () => session })
@@ -52,6 +57,7 @@ async function open(path: string, handlers: Record<string, MockHandler> = {}, wi
   const api = await mockApi(page, {
     ...signedIn(),
     'GET /platform/tenants': cafesHandler(() => [NUK, PAUSED]),
+    'GET /platform/owners': () => OWNERS,
     ...handlers,
   })
   await page.goto(url(path), { waitUntil: 'hydration' })
@@ -157,7 +163,7 @@ describe('a new cafe', () => {
     const { page, api } = await open('/platform', {
       'POST /platform/tenants': ({ body }) => {
         sent = body
-        return { tenant: created, temporaryPassword: 'tmp-Pass-1234' } satisfies CreatedTenant
+        return { tenant: created, temporaryPassword: 'tmp-Pass-1234', owner: { ...created.owners[0]!, cafes: [{ id: created.id, name: created.name, slug: created.slug }] } } satisfies CreatedTenant
       },
       'GET /platform/tenants/{id}': () => created,
     })
@@ -177,7 +183,8 @@ describe('a new cafe', () => {
     const result = page.getByRole('dialog', { name: 'Brown Bean is ready' })
     await result.getByTestId('temporary-password').getByText('tmp-Pass-1234').waitFor()
     await result.getByText(/\/c\/brown-bean\/admin\/login$/).waitFor()
-    expect(sent).toEqual({ name: 'Brown Bean', slug: 'brown-bean', branchName: 'Bean Street', timezone: 'Asia/Phnom_Penh', ownerName: 'Bea Brown', ownerEmail: 'bea@example.com' })
+    await result.getByTestId('owner-cafes').getByText('Bea Brown owns this cafe.').waitFor()
+    expect(sent).toEqual({ name: 'Brown Bean', slug: 'brown-bean', branchName: 'Bean Street', timezone: 'Asia/Phnom_Penh', owner: { kind: 'new', name: 'Bea Brown', email: 'bea@example.com' } })
     await toast(page, 'Brown Bean created').waitFor()
 
     await result.getByRole('button', { name: 'Open cafe' }).click()
@@ -199,6 +206,86 @@ describe('a new cafe', () => {
     await form.getByRole('button', { name: 'Create cafe' }).click()
     await form.getByText('Already used by a cafe, now or before').waitFor()
     await toast(page, 'Could not create NUK').waitFor()
+  })
+})
+
+describe('a new cafe for an existing owner (D146)', () => {
+  /** Saves like the server: the chosen owner, now with the new cafe too. */
+  function creates(sent: unknown[]): MockHandler {
+    return ({ body }) => {
+      sent.push(body)
+      const input = body as { name: string, slug: string, owner: { kind: string, userId: string } }
+      const owner = OWNERS.find(o => o.id === input.owner.userId)!
+      const tenant = cafeOf('cafe-9', input.name, input.slug, { owners: [{ id: owner.id, name: owner.name, email: owner.email }] })
+      return { tenant, temporaryPassword: null, owner: { ...owner, cafes: [...owner.cafes, { id: tenant.id, name: tenant.name, slug: tenant.slug }] } } satisfies CreatedTenant
+    }
+  }
+
+  async function chooseOwner(page: Page, name: RegExp) {
+    const form = dialog(page)
+    await form.getByRole('radio', { name: /An existing owner/ }).check()
+    await form.getByRole('button', { name: 'Owner', exact: true }).click()
+    await page.getByRole('option', { name }).click()
+    await page.getByRole('listbox').waitFor({ state: 'hidden' })
+  }
+
+  it('picks someone who owns a cafe from the list; the result names all their cafes, no password', async () => {
+    const sent: unknown[] = []
+    const { page } = await open('/platform', { 'POST /platform/tenants': creates(sent) })
+    await page.getByRole('button', { name: 'New cafe' }).click()
+    const form = dialog(page)
+    await form.getByRole('region', { name: 'Cafe', exact: true }).getByLabel('Name').fill('Zoe Corner')
+    await chooseOwner(page, /zoe@example\.com/)
+    await form.getByText('Owns Tea Kiosk and Old Mill').waitFor()
+    await form.getByRole('button', { name: 'Create cafe' }).click()
+
+    const result = page.getByRole('dialog', { name: 'Zoe Corner is ready' })
+    await result.getByText('Zoe Tran now owns 3 cafes: Tea Kiosk, Old Mill and Zoe Corner.').waitFor()
+    await result.getByText(/already had an account/).waitFor()
+    expect(await result.getByTestId('temporary-password').count()).toBe(0)
+    expect(sent).toEqual([{ name: 'Zoe Corner', slug: 'zoe-corner', branchName: 'Main branch', timezone: 'Asia/Phnom_Penh', owner: { kind: 'existing', userId: 'u-zoe' } }])
+  })
+
+  it('needs an owner chosen; switching back to a new person keeps what was typed', async () => {
+    const { page, api } = await open('/platform')
+    await page.getByRole('button', { name: 'New cafe' }).click()
+    const form = dialog(page)
+    await form.getByRole('region', { name: 'Cafe', exact: true }).getByLabel('Name').fill('Zoe Corner')
+    await form.getByRole('region', { name: 'First owner' }).getByLabel('Name').fill('Bea Brown')
+    await form.getByRole('radio', { name: /An existing owner/ }).check()
+    await form.getByRole('button', { name: 'Create cafe' }).click()
+    await form.getByText('Choose an owner').first().waitFor()
+    expect(writes(api.calls)).toEqual([])
+    await form.getByRole('radio', { name: /A new person/ }).check()
+    expect(await form.getByRole('region', { name: 'First owner' }).getByLabel('Name').inputValue()).toBe('Bea Brown')
+  })
+
+  it('a new person with an owner\'s email is told to choose them from the list', async () => {
+    const { page } = await open('/platform', {
+      'POST /platform/tenants': () => {
+        throw new MockFailure(409, 'OWNER_EXISTS', 'Zoe Tran already owns a cafe. Choose them under An existing owner.', { 'owner.email': ['Zoe Tran already owns a cafe: choose An existing owner'] })
+      },
+    })
+    await page.getByRole('button', { name: 'New cafe' }).click()
+    const form = dialog(page)
+    await form.getByRole('region', { name: 'Cafe', exact: true }).getByLabel('Name').fill('Zoe Corner')
+    await form.getByRole('region', { name: 'First owner' }).getByLabel('Name').fill('Zoe')
+    await form.getByLabel('Email').fill('zoe@example.com')
+    await form.getByRole('button', { name: 'Create cafe' }).click()
+    await form.getByText('Zoe Tran already owns a cafe: choose An existing owner').waitFor()
+  })
+
+  it('a cafe\'s page opens New cafe with its owner chosen', async () => {
+    const sent: unknown[] = []
+    const { page } = await open('/platform/cafes/cafe-1', { 'GET /platform/tenants/{id}': () => NUK, 'POST /platform/tenants': creates(sent) }, 390)
+    await page.getByRole('button', { name: 'New cafe for this owner: NUK Cafe Owner' }).click()
+    const form = dialog(page)
+    expect(await form.getByRole('radio', { name: /An existing owner/ }).isChecked()).toBe(true)
+    await form.getByText('Owns NUK Cafe').waitFor()
+    await form.getByRole('region', { name: 'Cafe', exact: true }).getByLabel('Name').fill('NUK Riverside')
+    await form.getByRole('button', { name: 'Create cafe' }).click()
+    await page.getByRole('dialog', { name: 'NUK Riverside is ready' }).getByText('NUK Cafe Owner now owns 2 cafes: NUK Cafe and NUK Riverside.').waitFor()
+    expect(sent).toMatchObject([{ slug: 'nuk-riverside', owner: { kind: 'existing', userId: 'cafe-1-owner' } }])
   })
 })
 

@@ -1,19 +1,19 @@
 import type { Page } from '#shared/contracts/common'
 import { totalPages } from '#shared/contracts/common'
 import type { AccountCafe, CafeProfile, CafeSettings, UpdateCafeInput } from '#shared/contracts/cafe'
-import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, ResumeTenantInput, SuspendTenantInput, TenantDetail, TenantListQuery, TenantStatus, TenantSummary } from '#shared/contracts/tenants'
+import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, PlatformOwner, ResumeTenantInput, SuspendTenantInput, TenantDetail, TenantListQuery, TenantStatus, TenantSummary } from '#shared/contracts/tenants'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
 import { activeBranchCounts, firstBranchStatement } from '#server/features/branches'
-import { accountWorkspaces, planStaffCreate, staffCounts, tenantOwners } from '#server/features/identity'
-import type { Actor, SessionUser } from '#server/features/identity'
+import { accountWorkspaces, ownerAccounts, planStaffCreate, staffCounts, tenantOwners } from '#server/features/identity'
+import type { Actor, OwnerAccount, SessionUser } from '#server/features/identity'
 import { assetUrls, attachStatements, mediaNotAvailable, releaseStatement } from '#server/features/media'
 import { orderActivity } from '#server/features/orders'
 import { auditStatement } from '#server/features/platform'
 import type { AuditActor } from '#server/features/platform'
-import { alreadySuspended, notSuspended, ownerAccountChanged, sameSlug, slugTaken, tenantChanged, tenantNotFound } from './tenants.errors'
+import { alreadySuspended, notAnOwner, notSuspended, ownerAccountChanged, ownerExists, sameSlug, slugTaken, tenantChanged, tenantNotFound } from './tenants.errors'
 import * as repo from './tenants.repository'
 import type { TenantRow } from './tenants.repository'
 
@@ -78,28 +78,64 @@ export async function getTenant(db: Db, id: string): Promise<TenantDetail> {
   return { ...summary!, owners, formerSlugs }
 }
 
+/** Owners with their cafes by name (D146). */
+async function withCafes(db: Db, owners: OwnerAccount[]): Promise<PlatformOwner[]> {
+  if (!owners.length) return []
+  const refs = await repo.tenantRefs(db)
+  return owners.map(({ tenantIds, ...owner }) => ({ ...owner, cafes: refs.filter(ref => tenantIds.includes(ref.id)) }))
+}
+
 /**
- * A new cafe with its first branch and its first owner, in one batch: all of it or nothing. The
- * owner gets a temporary password shown once, or keeps their own when the email already has an
- * account (a customer, or someone working at another cafe).
+ * Everyone who owns a cafe, by name, with their cafes (`GET /api/platform/owners`, D146): New
+ * cafe's "An existing owner". One row per cafe owned, so the list grows with the platform's cafes;
+ * a search parameter comes when there are thousands.
+ */
+export async function listOwners(db: Db): Promise<PlatformOwner[]> {
+  return withCafes(db, await ownerAccounts(db))
+}
+
+/**
+ * The first owner's account: an existing owner by id (they must own a cafe and not be disabled), or
+ * a new person by name and email. A new person's email may already have an account (a customer, or
+ * branch staff elsewhere): it gets access and keeps its password. An existing owner's email is
+ * refused there, so that adding someone who owns a cafe is always the explicit choice (D146).
+ */
+async function resolveOwner(db: Db, owner: CreateTenantInput['owner']): Promise<{ name: string, email: string, userId?: string }> {
+  if (owner.kind === 'existing') {
+    const [account] = await ownerAccounts(db, { userId: owner.userId })
+    if (!account) throw notAnOwner()
+    return { name: account.name, email: account.email, userId: account.id }
+  }
+  const [existing] = await ownerAccounts(db, { email: owner.email })
+  if (existing) throw ownerExists(existing.name)
+  return { name: owner.name, email: owner.email }
+}
+
+/**
+ * A new cafe with its first branch and its first owner, in one batch: all of it or nothing. A new
+ * owner gets a temporary password shown once; an existing account keeps its own. The answer names
+ * every cafe the owner has now, the new one included.
  */
 export async function createTenant(db: Db, actor: PlatformActor, input: CreateTenantInput, now = new Date()): Promise<CreatedTenant> {
   if (await repo.slugOwner(db, input.slug)) throw slugTaken()
+  const ownerInput = await resolveOwner(db, input.owner)
 
   const tenantId = newId()
   const branch = firstBranchStatement(db, { tenantId, name: input.branchName, timezone: input.timezone, now })
   const owner = await planStaffCreate(db, { userId: actor.userId, tenantId, requestId: actor.requestId }, tenantId, {
-    name: input.ownerName,
-    email: input.ownerEmail,
+    name: ownerInput.name,
+    email: ownerInput.email,
     admin: true,
     memberships: [],
   }, now)
+  // The chosen owner's email now belongs to another account: they changed it meanwhile.
+  if (ownerInput.userId && owner.userId !== ownerInput.userId) throw ownerAccountChanged()
   const statements: Statement[] = [
     repo.insertTenantStatement(db, { id: tenantId, name: input.name, slug: input.slug, now }),
     repo.insertSlugStatement(db, { slug: input.slug, tenantId, now }),
     branch.statement,
     ...owner.statements,
-    audit(db, actor, tenantId, 'tenant.create', { slug: input.slug, branchId: branch.id, ownerId: owner.userId, existingAccount: owner.temporaryPassword === null }),
+    audit(db, actor, tenantId, 'tenant.create', { slug: input.slug, branchId: branch.id, ownerId: owner.userId, ownerKind: input.owner.kind, existingAccount: owner.temporaryPassword === null }),
   ]
   try {
     await db.batch(statements as [Statement, ...Statement[]])
@@ -110,7 +146,10 @@ export async function createTenant(db: Db, actor: PlatformActor, input: CreateTe
     if (isUniqueViolation(error) || isStaleWrite(error)) throw ownerAccountChanged()
     throw error
   }
-  return { tenant: await getTenant(db, tenantId), temporaryPassword: owner.temporaryPassword }
+  const [tenant, [ownerCafes]] = await Promise.all([getTenant(db, tenantId), withCafes(db, await ownerAccounts(db, { userId: owner.userId }))])
+  // A disabled account isn't in the owner list; the answer still names the cafe it was given.
+  const fallback = { id: owner.userId, name: ownerInput.name, email: ownerInput.email, cafes: [{ id: tenant.id, name: tenant.name, slug: tenant.slug }] }
+  return { tenant, temporaryPassword: owner.temporaryPassword, owner: ownerCafes ?? fallback }
 }
 
 /** Runs a change guarded by the cafe's version; a stale write is someone else's change. */

@@ -246,3 +246,17 @@ export async function ownersOf(db: Db, tenantId: string): Promise<{ id: string, 
 export function grantSuperadminStatement(db: Db, userId: string): Statement {
   return db.update(user).set({ role: 'superadmin' }).where(and(eq(user.id, userId), sql`coalesce(${user.role}, 'customer') <> 'superadmin'`))
 }
+
+/**
+ * Accounts that own a cafe and aren't disabled, a row per cafe owned, by name (the platform
+ * console's owner list, D146). Narrowed to one account by id or email when given.
+ */
+export async function ownerRows(db: Db, filter: { userId?: string, email?: string } = {}): Promise<{ id: string, name: string, email: string, tenantId: string }[]> {
+  const conditions: SQL[] = [eq(member.role, 'owner'), sql`coalesce(${user.banned}, 0) = 0`]
+  if (filter.userId) conditions.push(eq(user.id, filter.userId))
+  if (filter.email) conditions.push(eq(user.email, filter.email))
+  return db.select({ id: user.id, name: user.name, email: user.email, tenantId: member.organizationId }).from(member)
+    .innerJoin(user, eq(user.id, member.userId))
+    .where(and(...conditions))
+    .orderBy(sql`${user.name} collate nocase`, asc(user.email), asc(user.id))
+}

@@ -9,13 +9,25 @@ minimumReleaseAgeExclude:
 # Remove once wrangler ships a miniflare on a patched undici.
 overrides:
   undici@7: ^7.29.1
+  tinypool@2: ^2.1.2
+  sharp@0.35: ^0.35.5
 # node-forge GHSA-86w9-cpqp-85rv (high, no patched version): only through listhen, the dev server's
 # HTTPS listener (nuxt > @nuxt/cli, nitropack > listhen); not in the Worker build. Remove once
 # node-forge ships a fix (D54).
 # braces GHSA-vfj7-8cjw-p6xm (high, stack exhaustion on deeply nested patterns; no patched version):
 # only through the build's file globbing (nitropack > globby > fast-glob > micromatch), fed our own
 # patterns; not in the built server. Remove once braces ships a fix (D54).
+# tinypool (oxfmt, lint) and sharp (wrangler > miniflare, local Workers only): patch versions forced
+# for GHSA-5gmw-xhrv-c9v3, GHSA-85c8-ppgw-ccpr and GHSA-wq5f-xc86-pv6w, which their parents pin (2026-10-08).
+# simple-git GHSA-x6jw-m9v5-85vh, GHSA-g4wm-2vf7-vfgr, GHSA-858h-whjf-mvg5 and @simple-git/argv-parser
+# GHSA-v5rq-49vh-5v5c: only through @nuxt/devtools 3, which runs under `nuxt dev` only; the patched
+# simple-git 4 breaks devtools 3 ("no export named 'default'"). Remove once a stable devtools uses
+# simple-git 4 (owner, 2026-10-08, D54).
 auditConfig:
   ignoreGhsas:
+    - GHSA-x6jw-m9v5-85vh
+    - GHSA-g4wm-2vf7-vfgr
+    - GHSA-858h-whjf-mvg5
+    - GHSA-v5rq-49vh-5v5c
     - GHSA-86w9-cpqp-85rv
     - GHSA-vfj7-8cjw-p6xm
