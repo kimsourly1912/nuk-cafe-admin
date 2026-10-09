@@ -18,15 +18,12 @@ import * as reportsRepo from './reports.repository'
  * money goes straight from the customer's bank to that account: nothing here holds or moves it.
  */
 
-/** What this server knows about its Bakong token (10.15b D131, 10.16 D132): set or not, and when it stops working. */
-export interface BakongStatus {
-  automaticCheck: boolean
-  tokenExpiresAt: Date | null
-}
-const NO_TOKEN: BakongStatus = { automaticCheck: false, tokenExpiresAt: null }
+const tokenInfo = (row: khqrRepo.BakongTokenRow | undefined) => row
+  ? { version: row.version, expiresAt: row.expiresAt ? toIso(row.expiresAt) : null, setAt: toIso(row.updatedAt), setBy: { name: row.updatedByName } }
+  : null
 
-const toSettings = (row: khqrRepo.KhqrSettingsRow | undefined, bakong: BakongStatus): KhqrSettings => {
-  const check = { automaticCheck: bakong.automaticCheck, tokenExpiresAt: bakong.tokenExpiresAt ? toIso(bakong.tokenExpiresAt) : null }
+const toSettings = (row: khqrRepo.KhqrSettingsRow | undefined, token: khqrRepo.BakongTokenRow | undefined, tokenStorage: boolean): KhqrSettings => {
+  const check = { automaticCheck: Boolean(token), token: tokenInfo(token), tokenStorage }
   return row
     ? {
         version: row.version,
@@ -42,13 +39,17 @@ const toSettings = (row: khqrRepo.KhqrSettingsRow | undefined, bakong: BakongSta
     : { version: 0, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: [], updatedAt: null, updatedBy: null, ...check }
 }
 
-/** The settings, with what this server knows about its Bakong token (`bakong`). */
-export async function getKhqrSettings(db: Db, tenantId: string, bakong: BakongStatus = NO_TOKEN): Promise<KhqrSettings> {
-  return toSettings(await khqrRepo.findSettings(db, tenantId), bakong)
+/**
+ * The settings, with the cafe's Bakong token as Payments shows it (never the token, D148).
+ * `tokenStorage`: whether this server can store one (its encryption key is set).
+ */
+export async function getKhqrSettings(db: Db, tenantId: string, tokenStorage = false): Promise<KhqrSettings> {
+  const [settings, token] = await Promise.all([khqrRepo.findSettings(db, tenantId), khqrRepo.findBakongToken(db, tenantId)])
+  return toSettings(settings, token, tokenStorage)
 }
 
 /** Saves the account and what customers see (`settings: ['manage']`), from the version the page read; audited. */
-export async function saveKhqrSettings(db: Db, actor: Actor, input: KhqrSettingsInput, now = new Date(), bakong: BakongStatus = NO_TOKEN): Promise<KhqrSettings> {
+export async function saveKhqrSettings(db: Db, actor: Actor, input: KhqrSettingsInput, now = new Date(), tokenStorage = false): Promise<KhqrSettings> {
   const before = await khqrRepo.findSettings(db, actor.tenantId)
   if ((before?.version ?? 0) !== input.version) throw khqrSettingsChanged()
   const { version, ...rest } = input
@@ -62,7 +63,7 @@ export async function saveKhqrSettings(db: Db, actor: Actor, input: KhqrSettings
       metadata: { from: before ? { enabled: before.enabled, accountId: before.accountId, merchantName: before.merchantName, merchantCity: before.merchantCity, currencies: before.currencies } : null, to: rest },
     }),
   ], khqrSettingsChanged)
-  return getKhqrSettings(db, actor.tenantId, bakong)
+  return getKhqrSettings(db, actor.tenantId, tokenStorage)
 }
 
 /** What the counter needs to know: the currencies offered and whether it's checked with Bakong, or `null` while KHQR isn't on. */

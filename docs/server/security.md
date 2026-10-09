@@ -199,6 +199,8 @@ Built in step 1.6 (D51).
 | `NUXT_BETTER_AUTH_SECRET` | Per environment, ≥ 32 random characters. Rotation: Better Auth `secrets` (new first, old kept until sessions expire) |
 | `NUXT_RESEND_API_KEY` | Per environment; staging uses a restricted key |
 | Cloudflare API token (CI) | GitHub Actions secret, scoped to the one account and the resources deployed |
+| `NUXT_BAKONG_ENCRYPTION_KEY` | Per environment, 32 random bytes (base64); seals each cafe's Bakong token in the database (AES-256-GCM, the cafe's id bound in as additional data, D148). Changing it makes the saved tokens unreadable (each cafe saves its token again); no rotation is built until there is a need |
+| Each cafe's Bakong token | Pasted by the cafe's owner on Payments, sealed before it's stored, never answered, logged or audited (only its expiry) |
 
 Never in the repo, never logged, never in error messages. `.env` is git-ignored; `.env.example` lists names only.
 

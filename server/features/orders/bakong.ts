@@ -15,7 +15,7 @@
 export interface BakongClientOptions {
   /** `NUXT_BAKONG_API_URL`, `https://api-bakong.nbc.gov.kh` unless a relay stands in front of it. */
   apiUrl: string
-  /** `NUXT_BAKONG_TOKEN`, a Worker secret. */
+  /** The cafe's own token, opened from its sealed row for this request (T2d, D148). */
   token: string
   fetch?: typeof fetch
   /** How long to wait for Bakong (ms). */
@@ -33,8 +33,8 @@ export interface BakongTransaction {
   createdAt: Date | null
 }
 
-/** Why Bakong couldn't say: the token, Bakong refusing this server, or anything else. */
-export type BakongProblem = 'token' | 'refused' | 'error'
+/** Why Bakong couldn't say: the token, a saved token this server's key can't open (D148), Bakong refusing this server, or anything else. */
+export type BakongProblem = 'token' | 'key' | 'refused' | 'error'
 
 export type BakongAnswer
   = | { kind: 'paid', transaction: BakongTransaction }

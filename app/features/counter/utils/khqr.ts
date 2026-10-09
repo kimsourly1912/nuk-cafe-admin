@@ -37,6 +37,7 @@ export function khqrReceivedText(received: KhqrReceived): string {
 /** Why the counter can't check by itself: the cashier confirms by hand meanwhile. */
 export function khqrCheckProblemText(problem: KhqrCheckProblem): string {
   if (problem === 'token') return 'Bakong didn\'t accept the cafe\'s token (it may have expired): ask an admin.'
+  if (problem === 'key') return 'The cafe\'s Bakong token needs saving again: ask an admin.'
   if (problem === 'refused') return 'Bakong doesn\'t answer this server.'
   if (problem === 'not_set_up') return 'Automatic check is off.'
   return 'Bakong didn\'t answer just now.'

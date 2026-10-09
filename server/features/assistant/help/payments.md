@@ -17,9 +17,11 @@ Turned off (or not filled in), the counter asks customers to scan its printed KH
 
 Under the KHQR settings, **Automatic check with Bakong** says **On** or **Off**. On, the counter records a KHQR payment by itself as soon as Bakong confirms it was paid to the cafe's account, in the right amount: the cashier doesn't have to press Confirm. Cashiers can still confirm by hand.
 
-- It's turned on by the owner, who sets the Bakong token (from Bakong's developer portal) as a server secret. It isn't entered on this page.
+- To turn it on, press **Add token** and paste the cafe's Bakong token from Bakong's developer portal (api-bakong.nbc.gov.kh). It's stored encrypted and never shown again; the page shows when it expires and who saved it. **Replace token** puts in a new one; **Remove token** turns the check off.
+- "Tokens can't be saved on this server yet": the platform team sets up the server's encryption key first.
 - **Test connection** asks Bakong once and says whether it answered.
-- Bakong's token lasts 90 days. The page shows when it expires ("Token expires 21 Dec 2026 · 80 days left"), in amber from 14 days before and red once expired, and Telegram reminds the chats with **Server errors and reminders** on 14, 7, 3 and 1 days before and on the day. Before then, the owner gets a new token from Bakong's developer portal and replaces the secret. Once expired, cashiers confirm by hand until a new one is set.
+- Bakong's token lasts 90 days. The page shows when it expires ("Token expires 21 Dec 2026 · 80 days left"), in amber from 14 days before and red once expired, and Telegram reminds the chats with **Server errors and reminders** on 14, 7, 3 and 1 days before and on the day. Before then, get a new token from Bakong's developer portal and press **Replace token**. Once expired, cashiers confirm by hand until a new one is set.
+- **"The saved token can't be read on this server any more"**: press **Replace token** and paste the token again.
 - **"Bakong refused this server"**: Bakong may answer only servers in Cambodia. Cashiers confirm by hand until that's solved.
 
 ## Set or change the rate

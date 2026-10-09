@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net'
 
 /**
  * A stand-in for the Bakong Open API for the e2e server (step 10.15b, D131): the server is started
- * with `NUXT_BAKONG_API_URL` pointing here and `NUXT_BAKONG_TOKEN` = `FAKE_BAKONG_TOKEN`, so the
+ * with `NUXT_BAKONG_API_URL` pointing here, and NUK Cafe's saved token is `FAKE_BAKONG_TOKEN` (D148), so the
  * counter's automatic check runs through the real server and its real Bakong client.
  *
  * - `POST /v1/check_transaction_by_md5` `{ md5 }`: 401 without the token; the transaction a test

@@ -9,5 +9,5 @@ export default defineEventHandler(async (event) => {
   const actor = await requireBranchPermission(event, readIdParam(event, 'branchId', 'The branch'), { payment: ['collect'] })
   const orderId = readIdParam(event, 'orderId', 'This order')
   const chargeId = readIdParam(event, 'chargeId', 'This QR')
-  return checkKhqrCharge(useDb(), actor, orderId, chargeId, useBakong(event))
+  return checkKhqrCharge(useDb(), actor, orderId, chargeId, await useBakong(event, actor.tenantId))
 })
