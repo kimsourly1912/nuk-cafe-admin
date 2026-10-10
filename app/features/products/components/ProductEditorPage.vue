@@ -34,7 +34,7 @@ const editor = useItemEditor({
 })
 const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError } = editor
 
-const unsaved = useUnsavedChanges(state, { initial: editor.initial, paused: saving })
+const unsaved = useUnsavedChanges(state, { initial: editor.initial, paused: saving, draft: editor.keptDraft })
 
 const title = computed(() => loaded.value?.name ?? (isEdit ? 'Menu item' : 'New menu item'))
 
@@ -71,7 +71,7 @@ async function onSubmit() {
     fields.value?.setServerErrors(result.error?.fieldErrors)
     return
   }
-  unsaved.markClean()
+  unsaved.markSaved()
   leave()
 }
 </script>
@@ -155,6 +155,10 @@ async function onSubmit() {
           variant="row"
         />
         <template v-else>
+          <FormDraftAlert
+            :draft="unsaved.draft"
+            record="menu item"
+          />
           <UTabs
             v-if="isCompact"
             ref="tabsRow"

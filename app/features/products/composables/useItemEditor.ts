@@ -1,5 +1,6 @@
 import type { MenuItem } from '#shared/contracts/menu-items'
 import type { ApiError } from '~/utils/api-error'
+import { useAuth } from '~/features/auth'
 import { useModifierGroupOptions } from '~/features/modifier-groups'
 import { toCreateItemBody, toItemForm, toUpdateItemBody } from '../schemas/item-form'
 import type { ItemForm } from '../schemas/item-form'
@@ -103,5 +104,20 @@ export function useItemEditor(options: ItemEditorOptions) {
     return { ok: false, error: result.error }
   }
 
-  return { isEdit, itemQuery, loaded, ready, archived, canPublish, initial, state, saving, uploading, lastError, save }
+  const auth = useAuth()
+  /**
+   * The input kept in this browser (D151), for both surfaces' unsaved-changes guard: one draft per
+   * person and item (or one new item), so a crash in the slide-over is offered back on the page too.
+   * None for an archived item (read-only) or before the item has loaded.
+   */
+  const keptDraft = {
+    key: () => {
+      const owner = auth.user.value?.userId
+      if (!owner || archived.value || (isEdit && !loaded.value)) return null
+      return { owner, form: 'menu-item', record: loaded.value?.id ?? 'new' }
+    },
+    version: () => loaded.value?.version,
+  }
+
+  return { isEdit, itemQuery, loaded, ready, archived, canPublish, initial, state, saving, uploading, lastError, keptDraft, save }
 }

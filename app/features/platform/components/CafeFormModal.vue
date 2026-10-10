@@ -111,7 +111,7 @@ async function onSubmit({ data }: FormSubmitEvent<CreateTenantInput>) {
         ref="form"
         :schema="cafeFormSchema"
         :state="state"
-        :validate-on="['input', 'change']"
+        :validate-on="['blur', 'change']"
         :disabled="saving"
         class="space-y-6"
         @submit="onSubmit"

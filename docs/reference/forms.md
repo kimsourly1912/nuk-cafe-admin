@@ -6,6 +6,7 @@ Warn the user before input they haven't saved is lost.
 - [`useModalUnsavedChanges`](#usemodalunsavedchanges): forms in `UModal` / `USlideover` / `AppDrawer`
 - [`useLeaveGuard`](#useleaveguard): the app-wide check
 - [`isSameFormValue` and `cloneFormValue`](#issameformvalue-and-cloneformvalue)
+- [Drafts kept in the browser](#drafts-kept-in-the-browser): the `draft` option and `<FormDraftAlert>` (D151)
 
 Source: `app/composables/useUnsavedChanges.ts`, `app/utils/form-value.ts`, `app/middleware/unsaved-changes.global.ts`, `app/plugins/leave-guard.client.ts`. Decision: [D19](../decisions.md).
 
@@ -19,7 +20,8 @@ Every form that uses one of these composables registers itself app-wide while it
 | Changes route: sidebar link, `navigateTo`, back/forward, same page with other params | The same dialog (global middleware). On **Discard** every open form is discarded and modals close |
 | Logs out | The same dialog, **before** the backend logout (`useAuth().logout`) |
 | Reloads, closes the tab, types a URL | The browser's own "Leave site?" dialog (text can't be customized) |
-| Loses the session (redirect to login) | Nothing: the redirect is forced |
+| Loses the session (redirect to login) | Nothing: the redirect is forced. A form keeping drafts keeps what was typed (D151) |
+| Crashes, loses the tab, reloads (a form keeping drafts) | Next time the form opens: "Unsaved changes from 10:42 AM" with **Restore** / **Discard** (D151) |
 
 However many forms are open (a modal over a page form, back pressed twice), the user sees **one** dialog.
 
@@ -66,12 +68,18 @@ Every case below is handled. **Keep this table and the tests in sync when changi
 | 20 | Removing the last row of a list that needs one (variant options) | The "Add at least one option" message appears on the next save, not at once: validation runs per edited field | UForm `validate-on` input/change | e2e |
 | 21 | An unsaved list order on a page (the categories tree) and a filter change | Filters are **locked** until the order is saved or discarded: a filter change is a route change the guard could only cancel after the filters had changed | `:disabled` on the filter inputs while dirty | e2e (`categories-sort.test.ts`) |
 | 22 | A modal closed with **Discard** whose closing changes the URL (the Menu items slide-over removes `?item=`, D90) | **One** dialog: the route guard doesn't ask again | `requestClose` calls `markClean()` before `close`: the form stays registered until the overlay unmounts | e2e (`products.test.ts` "asks only once", checked to fail without it) |
+| 23 | Browser crash, dead battery, a phone dropping the tab, force reload (a form with `draft`) | Offered back the next time the form opens | Written to `localStorage` 0.5 s after typing settles, and at once on `visibilitychange` hidden / `pagehide` (D151) | e2e (`form-drafts.test.ts`) |
+| 24 | Session expires while editing (a form with `draft`) | The form is discarded, its input kept for the **same person**, offered after signing in again | `discard('session')` writes before `markClean`; the key is fixed once known, so the input never lands under another account's key | e2e (checked to fail when the session drops the draft) |
+| 25 | Voluntary sign-out | Every draft on the browser is removed (a shared tablet keeps nothing) | `plugins/form-drafts.client.ts` on `app:auth-changed` logout | e2e (checked to fail without it) |
+| 26 | Another person signs in on the same browser | Never offered someone else's draft | The key holds the user id | e2e, unit |
+| 27 | The record was saved by someone after the draft | Amber alert: restoring puts the draft's values over theirs | The draft keeps the version it was typed on | e2e |
+| 28 | Storage blocked or full | Nothing kept; the form works as before | Every storage call guarded | unit |
 
 Implementation traps (each one broke something once, see [D19](../decisions.md)):
 - `isSameFormValue` must read **through** reactive proxies. `toRaw` makes the `computed` stop tracking, so `isDirty` never changes. A unit test guards this.
 - The modal component **must declare the `update:open` emit**. Otherwise the overlay's own `v-model:open` listener closes the modal before we can ask.
 - `useConfirm` creates one overlay per question with `destroyOnClose`. Calling it from middleware must not accumulate overlay entries.
-- **A server's field error can be wiped by the form's own check** (D149). `UForm` re-checks a field about 300 ms after it's typed into (`validate-on` `input`); when the save is pressed sooner (a pasted token saved at once) and the server answers first, that delayed check finds the field valid and removes the error `setErrors` just put there: the dialog stays open with no message. A form whose field is usually pasted and submitted at once checks it on `blur` and `change` only (`BakongTokenModal`); found by `payments.test.ts` under CPU load (2 in 12 runs, none after).
+- **A server's field error can be wiped by the form's own check** (D149). `UForm` re-checks a field about 300 ms after it's typed into (`validate-on` `input`); when the save is pressed sooner (a pasted token saved at once) and the server answers first, that delayed check finds the field valid and removes the error `setErrors` just put there: the dialog stays open with no message. A form whose field is usually pasted and submitted at once checks it on `blur` and `change` only (`BakongTokenModal`); found by `payments.test.ts` under CPU load (2 in 12 runs, none after). The New cafe form (`CafeFormModal`) had the same race on a new owner's email (`OWNER_EXISTS`), seen on CI (PR 100): `platform.test.ts` now submits with Enter right after typing and checks the error is still there 600 ms later (6 in 6 runs failed before the fix, none after).
 - E2E: reach the page **through the sidebar**, not `page.goto`, before testing back/forward. `goto` loads a new document, so Back would leave the SPA (a full page load), not change the route.
 
 ---
@@ -84,12 +92,13 @@ For forms that live on a page. Route changes, logout and tab close are covered b
 function useUnsavedChanges<T extends object>(
   state: MaybeRefOrGetter<T>,
   options?: UnsavedChangesOptions<T>,
-): { isDirty: ComputedRef<boolean>, markClean: () => void }
+): { isDirty: ComputedRef<boolean>, markClean: () => void, markSaved: () => void, draft: FormDraftOffer }
 
 interface UnsavedChangesOptions<T> {
   initial?: T                          // what counts as saved; default: `state` when called
   paused?: MaybeRefOrGetter<boolean>   // treat as saved while true (e.g. while saving)
   onDiscard?: () => void               // user discarded from outside the form (route change, logout)
+  draft?: UnsavedDraftOptions          // keep the input in this browser (long forms only, D151)
 }
 ```
 
@@ -99,6 +108,8 @@ interface UnsavedChangesOptions<T> {
 |---|---|
 | `isDirty` | `true` while the values differ from the baseline (and not `paused`) |
 | `markClean()` | Makes the current values the new baseline. Call it after a save when the form stays open, or **before redirecting away after a save** |
+| `markSaved()` | `markClean()` and the kept draft removed. A form with `draft` calls it after a successful save |
+| `draft` | The offered draft, for `<FormDraftAlert>` (inert without the `draft` option) |
 
 ### Example
 
@@ -202,6 +213,49 @@ async function switchTab(tab: string) {
 Concurrent calls share one dialog and one answer.
 
 ---
+
+## Drafts kept in the browser
+
+D151. The guard above only helps while the page is alive. A **long** form (minutes of input: the menu item editor, branch settings) also keeps its unsaved input in `localStorage`, and offers it back the next time it opens: after a crash, a dead battery, a phone dropping the tab, a force reload or an expired session.
+
+```ts
+interface UnsavedDraftOptions {
+  /** Who, which form, which record (the cafe is added); null while unknown or read-only. Fixed once known. */
+  key: MaybeRefOrGetter<{ owner: string, form: string, record: string } | null>
+  /** The record's version the form opened at: the alert says when someone saved since. */
+  version?: MaybeRefOrGetter<number | undefined>
+}
+```
+
+```vue
+<script setup lang="ts">
+import { useAuth } from '~/features/auth'
+
+const auth = useAuth()
+const unsaved = useUnsavedChanges(state, {
+  paused: saving,
+  draft: {
+    key: () => (auth.user.value ? { owner: auth.user.value.userId, form: 'branch-settings', record: saved.value.id } : null),
+    version: () => saved.value.version,
+  },
+})
+
+async function onSubmit() {
+  // …save…
+  unsaved.markSaved() // clean, and the kept draft removed
+}
+</script>
+
+<template>
+  <FormDraftAlert :draft="unsaved.draft" record="branch" />
+</template>
+```
+
+- **Written** 0.5 s after typing settles and at once when the tab is hidden (`pagehide`, `visibilitychange`); removed when the input matches what's saved again.
+- **Offered, never applied on its own:** `<FormDraftAlert>` ("Unsaved changes from 10:42 AM", **Restore** / **Discard**). Restore fills the form, still unsaved; Save goes through the version check. A stored draft equal to the form is dropped silently. While the offer is unanswered, new typing is still written (the offer stays in memory).
+- **Removed:** `markSaved()`, Discard in the alert, Discard in "Discard unsaved changes?" (route change, a modal's Cancel, voluntary sign-out); **every** draft on a voluntary sign-out; after 7 days.
+- **Kept:** when the session ends on its own (`discard('session')`), for the same person.
+- **Only for long forms and never for secrets** (passwords, the Bakong token). Source: `app/utils/form-draft.ts` (the store, unit-tested), `useUnsavedChanges.ts` (`useStoredDraft`), `components/FormDraftAlert.vue`, `plugins/form-drafts.client.ts`.
 
 ## `isSameFormValue` and `cloneFormValue`
 

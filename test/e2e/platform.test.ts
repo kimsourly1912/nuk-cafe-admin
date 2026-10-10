@@ -271,8 +271,11 @@ describe('a new cafe for an existing owner (D146)', () => {
     await form.getByRole('region', { name: 'Cafe', exact: true }).getByLabel('Name').fill('Zoe Corner')
     await form.getByRole('region', { name: 'First owner' }).getByLabel('Name').fill('Zoe')
     await form.getByLabel('Email').fill('zoe@example.com')
-    await form.getByRole('button', { name: 'Create cafe' }).click()
-    await form.getByText('Zoe Tran already owns a cafe: choose An existing owner').waitFor()
+    // Submitted at once: the server's field error must outlive the form's own delayed check (forms.md traps).
+    await form.getByLabel('Email').press('Enter')
+    await form.getByText('Zoe Tran already owns a cafe: choose An existing owner').waitFor({ timeout: 3000 })
+    await page.waitForTimeout(600)
+    expect(await form.getByText('Zoe Tran already owns a cafe: choose An existing owner').count()).toBe(1)
   })
 
   it('a cafe\'s page opens New cafe with its owner chosen', async () => {
