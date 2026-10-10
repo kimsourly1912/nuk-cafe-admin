@@ -69,7 +69,6 @@ describe('a refused order', () => {
   it('a table, the unpaid limit, the gates, and a lost answer', () => {
     expect(placeFailure(refused(409, 'TABLE_UNAVAILABLE')).kind).toBe('table')
     expect(placeFailure(refused(409, 'TOO_MANY_UNPAID_ORDERS')).kind).toBe('stop')
-    expect(placeFailure(refused(403, 'EMAIL_NOT_VERIFIED')).kind).toBe('verify')
     expect(placeFailure(ApiError.fromResponse(401, {})).kind).toBe('signIn')
     expect(placeFailure(new TypeError('Failed to fetch'))).toEqual({ kind: 'retry', message: 'We couldn\'t confirm your order. Try again: you won\'t get a second order.' })
     expect(placeFailure(ApiError.fromResponse(500, {})).kind).toBe('retry')

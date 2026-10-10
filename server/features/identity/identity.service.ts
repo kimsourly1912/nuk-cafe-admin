@@ -2,7 +2,7 @@ import type { Workspace } from '#shared/contracts/account'
 import type { AdminSession, CounterSession } from '#shared/contracts/identity'
 import type { PlatformSession } from '#shared/contracts/tenants'
 import type { Db } from '#server/utils/batch'
-import { branchNotFound, emailNotVerified, forbidden, notAdmin, notPlatformAdmin, notStaff, passwordChangeRequired, tenantNotFound, tenantSuspended, unauthenticated } from './identity.errors'
+import { branchNotFound, forbidden, notAdmin, notPlatformAdmin, notStaff, passwordChangeRequired, tenantNotFound, tenantSuspended, unauthenticated } from './identity.errors'
 import { branchRoles, platformRoles, tenantRoles, tenantStatements } from './identity.permissions'
 import type { BranchPermission, BranchRole, PlatformPermission, PlatformRole, TenantPermission, TenantRole } from './identity.permissions'
 import * as repo from './identity.repository'
@@ -60,17 +60,23 @@ function signedIn(user: SessionUser | null | undefined): SessionUser {
   return user
 }
 
-/** Any signed-in account, acting in the tenant (its role there, or `customer`). */
+/**
+ * Any signed-in account, acting in the tenant (its role there, or `customer`). A guest (D156) is a
+ * customer whatever the tenant: never a member, so never more.
+ */
 export async function authorizeSignedIn(db: Db, user: SessionUser | null | undefined, tenantId: string): Promise<Actor> {
-  const { id } = signedIn(user)
+  const { id, isAnonymous } = signedIn(user)
+  if (isAnonymous) return { userId: id, tenantId, role: 'customer', guest: true }
   return { userId: id, tenantId, role: tenantRoleOf(await repo.findTenantRole(db, tenantId, id)) ?? 'customer' }
 }
 
-/** Shop writes: a signed-in customer with a verified email (D45). */
+/**
+ * Shop writes (placing and cancelling one's own orders): any signed-in customer, a guest included.
+ * A verified email is no longer asked for (D156, replacing D45's rule): customers pay at the counter
+ * before anything is made, so an order proves nothing an email would.
+ */
 export async function authorizeCustomer(db: Db, user: SessionUser | null | undefined, tenantId: string): Promise<Actor> {
-  const actor = await authorizeSignedIn(db, user, tenantId)
-  if (!user!.emailVerified) throw emailNotVerified()
-  return actor
+  return authorizeSignedIn(db, user, tenantId)
 }
 
 /** The admin surface: the user's role in the tenant must grant every requested action. */
@@ -190,4 +196,12 @@ export function platformSession(user: SessionUser | null | undefined): PlatformS
   if (!user || user.banned) throw unauthenticated()
   if (!platformRolesOf(user).includes('superadmin')) throw notPlatformAdmin()
   return { userId: user.id, email: user.email ?? '', name: user.name ?? '', mustChangePassword: Boolean(user.mustChangePassword) }
+}
+
+/**
+ * The statement naming a guest for the counter (D156), for the order's own batch: the name and the
+ * order are stored together or not at all. Does nothing for an account.
+ */
+export function guestNameStatement(db: Db, userId: string, name: string, now: Date) {
+  return repo.guestNameStatement(db, userId, name, now)
 }

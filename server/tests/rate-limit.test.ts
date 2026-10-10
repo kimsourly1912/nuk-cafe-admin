@@ -49,9 +49,21 @@ describe('public API rate limits (D121)', () => {
     expect(general.keys).toEqual([])
   })
 
-  it('the quote rule comes first, so it wins over the general prefix', () => {
-    expect(RATE_LIMIT_RULES[0].prefix).toBe('/api/public/checkout/quote')
-    expect(RATE_LIMIT_RULES.every(rule => rule.prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/', '/api/client-errors'].includes(rule.prefix))).toBe(true)
+  it('the quote rule comes before the general prefix, so it wins over it', () => {
+    const prefixes = RATE_LIMIT_RULES.map(rule => rule.prefix)
+    expect(prefixes.indexOf('/api/public/checkout/quote')).toBeLessThan(prefixes.indexOf('/api/public/'))
+    expect(prefixes.every(prefix => prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/', '/api/client-errors', '/api/shop/orders'].includes(prefix))).toBe(true)
+  })
+
+  it('placing an order has its own limit (D156); the order page polling its order never counts', async () => {
+    const orders = fakeLimiter(1)
+    const limiters = { RATE_LIMIT_ORDERS: orders.limiter }
+    const place = () => checkRateLimit({ path: '/api/c/nuk/shop/orders', method: 'POST', address: '203.0.113.7', limiters })
+    expect(await place()).toEqual({ checked: true, limited: null })
+    expect(await place()).toEqual({ checked: true, limited: 'RATE_LIMIT_ORDERS' })
+    expect(await checkRateLimit({ path: '/api/c/nuk/shop/orders/0191', method: 'GET', address: '203.0.113.7', limiters })).toEqual({ checked: false, limited: null })
+    expect(await checkRateLimit({ path: '/api/c/nuk/shop/orders', method: 'GET', address: '203.0.113.7', limiters })).toEqual({ checked: false, limited: null })
+    expect(orders.keys).toHaveLength(2)
   })
 
   it('counts every cafe\'s public routes and the table scan by one address (D140)', async () => {

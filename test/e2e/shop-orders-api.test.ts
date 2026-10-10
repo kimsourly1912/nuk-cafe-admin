@@ -8,7 +8,7 @@ import { clientHeaders } from './support/client-address'
 await setupE2e()
 
 // `POST /api/shop/orders` and `GET /api/shop/orders/{id}` (step 6.2, D99) on the built server and
-// its seeded database: real sessions, the verified-email rule, idempotency keys and HTTP codes.
+// its seeded database: real sessions, guests (D156), idempotency keys and HTTP codes.
 
 const seed = inject('shopSeed')
 const origin = new URL(url('/')).origin
@@ -51,16 +51,35 @@ describe('placing an order over HTTP', () => {
     expect((await read.json() as Order).pickupNumber).toBe(order.pickupNumber)
   })
 
-  it('refuses: signed out 401, email not verified 403, no key 400, a changed total 409', async () => {
+  it('refuses: signed out 401, no key 400, a changed total 409; an unverified email orders (D156)', async () => {
     const body = await anOrder()
     expect((await post(body, { 'idempotency-key': crypto.randomUUID() })).status).toBe(401)
     const unverified = await signIn(seed.customers.apiUnverified)
-    const refused = await post(body, { 'cookie': unverified, 'idempotency-key': crypto.randomUUID() })
-    expect([refused.status, (await refused.json()).data.code]).toEqual([403, 'EMAIL_NOT_VERIFIED'])
+    expect((await post(body, { 'cookie': unverified, 'idempotency-key': crypto.randomUUID() })).status).toBe(201)
     const cookie = await signIn(seed.customers.reset)
     expect((await post(body, { cookie })).status).toBe(400)
     const changed = await post({ ...body, expectedTotalMinor: body.expectedTotalMinor + 1 }, { 'cookie': cookie, 'idempotency-key': crypto.randomUUID() })
     expect([changed.status, (await changed.json()).data.code]).toEqual([409, 'PRICES_CHANGED'])
+  })
+
+  it('a guest (Better Auth\'s anonymous sign-in) orders with a name, sees it, and is no one else (D156)', async () => {
+    const signedIn = await fetch(url('/api/auth/sign-in/anonymous'), { method: 'POST', headers: { 'content-type': 'application/json', origin, ...clientHeaders() }, body: '{}' })
+    expect(signedIn.status).toBe(200)
+    const guest = signedIn.headers.getSetCookie().map(c => c.split(';')[0]).join('; ')
+
+    const body = await anOrder()
+    const nameless = await post(body, { 'cookie': guest, 'idempotency-key': crypto.randomUUID() })
+    expect([nameless.status, (await nameless.json()).data.fieldErrors]).toEqual([400, { guestName: ['Enter your name'] }])
+    const placed = await post({ ...body, guestName: 'Srey Neang' }, { 'cookie': guest, 'idempotency-key': crypto.randomUUID() })
+    expect(placed.status).toBe(201)
+    const order = await placed.json() as Order
+
+    expect(await (await fetch(url('/api/c/nuk/shop/me'), { headers: { cookie: guest } })).json()).toEqual({ guest: true, name: 'Srey Neang' })
+    expect((await fetch(url(`/api/c/nuk/shop/orders/${order.id}`), { headers: { cookie: guest } })).status).toBe(200)
+    const other = await signIn(seed.customers.verified)
+    expect((await fetch(url(`/api/c/nuk/shop/orders/${order.id}`), { headers: { cookie: other } })).status).toBe(404)
+    // A guest is never staff.
+    expect((await fetch(url('/api/c/nuk/admin/me'), { headers: { cookie: guest } })).status).toBe(403)
   })
 
   it('someone else\'s order is 404', async () => {

@@ -273,8 +273,11 @@ Tests: e2e `shop-account.test.ts`; unit `app/features/account/tests/account.test
 | A quantity changed or a line removed | Priced again (the running request is cancelled, D30). Typing a note doesn't ask again: notes never change a price |
 | A line that can't be ordered (sold out, gone) | Marked on the line with Remove; the button is off with "Remove the unavailable items to continue." |
 | The cafe closed, or last orders passed (15 minutes before closing) | A warning with the next opening; the button is off with "Available when the cafe is open." The menu's Review order button is off while closed |
-| Signed out, pressing the button ("Sign in to place order") | The sign-in gate (a dialog, a bottom sheet on phones): Sign in or Create account, then back to `/checkout` with the order still there |
-| Signed in, email not verified | The verify gate: Resend (the shared 60 s wait) and "I've verified, continue", which reads the account again and places the order when it is verified |
+| Signed out, or a guest (D156) | "Your name" above the order (filled in from a guest's earlier order) and "Have an account? Sign in" (back to `/checkout` with the order still there). Place order without a name: "Enter your name" on the field, which takes the focus; nothing is sent |
+| Place order with no account and no guest yet | The browser becomes a guest (`/api/auth/sign-in/anonymous`), then the order is placed with the name. Later orders on this browser are the same guest's |
+| An account, verified or not | Places under its own name: no name field (D156: verification no longer gates ordering) |
+| The session ended while placing (401) | "Your session ended. Place your order again."; the account is read again, so placing again starts a new guest |
+| A guest signs in or creates an account on this browser | Their orders move to the account (D156) |
 | A price changed since the page showed it | The server refuses (409 `PRICES_CHANGED`); the page asks again and shows "Prices have changed" with the old unit price struck through and the new total on the button: pressing it again accepts them. Nothing is placed at a price the customer didn't see |
 | The quote is more than 10 minutes old at "Place order" | Asked again first; if prices moved, shown as above instead of placing |
 | A table QR that stopped working (archived, new QR) | Refused with the reason and "Switch to pickup"; never switched to pickup silently (Q42) |

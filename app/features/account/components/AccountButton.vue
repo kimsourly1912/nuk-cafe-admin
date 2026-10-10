@@ -3,6 +3,7 @@
  * The account in the customer site's header (step 5.2, D97; revised in D124).
  * - Signed out: from `lg`, "Sign in", coming back to this page afterwards; below `lg` an icon
  *   opening Sign in, Create account and Appearance (the header has no light/dark button there).
+ *   A guest (D156, signed in by Place order) is signed out here, with **Your orders** added.
  * - Signed in: the initials, opening the account: name, email, whether it's verified (with
  *   "Resend email" if not), the member code to copy, Your orders, the staff workspaces the server
  *   says this account may open (the admin app, the counter), Appearance below `lg`, and Sign out.
@@ -18,7 +19,7 @@ import { ACCOUNT_PATHS, accountLink, initialsOf } from '../utils/account'
 import AppearanceChoice from './AppearanceChoice.vue'
 
 const route = useRoute()
-const { account, known } = useCustomerAccount()
+const { account, guest, known } = useCustomerAccount()
 const { signOut } = useAccountActions()
 const verification = useResendVerification()
 const notify = useNotify()
@@ -59,6 +60,16 @@ async function signOutNow() {
   />
 
   <template v-else-if="!account">
+    <!-- A guest (D156) has orders on this device: they stay reachable without an account -->
+    <UButton
+      v-if="guest"
+      :to="tenantPath('/orders')"
+      icon="i-lucide-receipt"
+      label="Your orders"
+      color="neutral"
+      variant="ghost"
+      class="shrink-0 max-lg:hidden"
+    />
     <UButton
       :to="accountLink(ACCOUNT_PATHS.signIn, route.fullPath)"
       icon="i-lucide-circle-user"
@@ -80,6 +91,17 @@ async function signOutNow() {
       />
       <template #content>
         <div class="w-60 space-y-1 p-2">
+          <UButton
+            v-if="guest"
+            label="Your orders"
+            icon="i-lucide-receipt"
+            :to="tenantPath('/orders')"
+            color="neutral"
+            variant="ghost"
+            block
+            class="justify-start"
+            @click="guestOpen = false"
+          />
           <UButton
             label="Sign in"
             icon="i-lucide-log-in"
@@ -144,7 +166,7 @@ async function signOutNow() {
           class="space-y-2"
         >
           <p class="text-sm text-muted">
-            Verify your email before placing an order.
+            Verify your email so you can always get back into your account.
           </p>
           <UButton
             :label="verification.label.value"

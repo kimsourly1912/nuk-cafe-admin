@@ -347,3 +347,8 @@ export async function orderActivity(db: Db, tenantIds: string[], since: Date): P
     lastPlacedAt: sql<Date | null>`max(${orders.placedAt})`.mapWith(orders.placedAt),
   }).from(orders).where(inArray(orders.tenantId, ids)).groupBy(orders.tenantId))
 }
+
+/** Every order of one customer handed to another (a guest's to their account, D156), across cafes. */
+export function moveOrdersStatement(db: Db, fromCustomerId: string, toCustomerId: string): Statement {
+  return db.update(orders).set({ customerId: toCustomerId }).where(eq(orders.customerId, fromCustomerId))
+}

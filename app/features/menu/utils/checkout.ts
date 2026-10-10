@@ -53,11 +53,11 @@ export function priceChange(seen: CheckoutQuote | null | undefined, next: Checko
  * What a refused order means for the page:
  * - `requote`: prices, items or the branch changed; the page asks for a new quote and shows it;
  * - `table`: the table QR stopped working; offer pickup;
- * - `signIn` / `verify`: the gates;
+ * - `signIn`: the session ended meanwhile; placing again starts a new one (a guest's, D156);
  * - `stop`: nothing to do here but read the message (too many unpaid orders);
  * - `retry`: no answer, or the server failed: try again with the same key (never a second order).
  */
-export type PlaceFailure = 'requote' | 'table' | 'signIn' | 'verify' | 'stop' | 'retry'
+export type PlaceFailure = 'requote' | 'table' | 'signIn' | 'stop' | 'retry'
 
 export function placeFailure(error: unknown): { kind: PlaceFailure, message: string } {
   const apiError = ApiError.from(error)
@@ -70,9 +70,7 @@ export function placeFailure(error: unknown): { kind: PlaceFailure, message: str
       return { kind: 'table', message: apiError.message }
     case 'TOO_MANY_UNPAID_ORDERS':
       return { kind: 'stop', message: apiError.message }
-    case 'EMAIL_NOT_VERIFIED':
-      return { kind: 'verify', message: 'Verify your email to place orders.' }
   }
-  if (apiError.kind === 'unauthorized') return { kind: 'signIn', message: 'Sign in again to place your order.' }
+  if (apiError.kind === 'unauthorized') return { kind: 'signIn', message: 'Your session ended. Place your order again.' }
   return { kind: 'retry', message: 'We couldn\'t confirm your order. Try again: you won\'t get a second order.' }
 }

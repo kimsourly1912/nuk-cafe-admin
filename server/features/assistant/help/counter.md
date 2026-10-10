@@ -4,7 +4,7 @@ Branch staff, managers and admins use the **counter app** at `/counter` (its own
 
 ## An order's journey
 
-1. A customer orders on the cafe's website: **pickup**, or **dine-in** by scanning a table's QR code. They need an account with a verified email. Each order gets a 3-digit number for the day.
+1. A customer orders on the cafe's website: **pickup**, or **dine-in** by scanning a table's QR code. No account is needed: a customer without one gives a first name, shown on the order (an account shows its own name). Each order gets a 3-digit number for the day.
 2. The order waits in **To pay**. The customer pays at the counter within **30 minutes**, or the order is cancelled automatically. A customer can have at most 2 unpaid orders at a time, and can cancel their own order while it's unpaid.
 3. The cashier takes payment, and the order moves to **Preparing**.
 4. When it's made, **Mark ready**: it moves to **Ready**.

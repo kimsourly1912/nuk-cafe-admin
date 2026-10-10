@@ -41,7 +41,7 @@ import OrderTotals from './OrderTotals.vue'
 const tenantPath = useTenantPath()
 
 // The bar for an order in progress: only for a signed-in customer (read in the browser, D97).
-const { account } = useCustomerAccount()
+const { account, guest } = useCustomerAccount()
 
 // --- Branch, table and menu ---
 const { branches, requestedBranchId, choose } = useShopBranch()
@@ -325,7 +325,7 @@ watch(detailOpen, (open) => {
     <main class="mx-auto max-w-7xl px-4 pt-4 pb-10 lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-8">
       <div class="min-w-0 space-y-8">
         <VerifyEmailBanner />
-        <ActiveOrdersBar v-if="account" />
+        <ActiveOrdersBar v-if="account || guest" />
         <UAlert
           v-if="branch && closed"
           color="warning"

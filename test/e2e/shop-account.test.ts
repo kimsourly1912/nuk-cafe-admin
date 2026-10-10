@@ -69,7 +69,7 @@ describe('signing in and out', () => {
     await menu.getByText('Email verified').waitFor()
     expect(await menu.getByText(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/).isVisible()).toBe(true)
     // Signed in and verified: no banner.
-    expect(await page.getByText('Verify your email to place orders').count()).toBe(0)
+    expect(await page.getByText('Verify your email address').count()).toBe(0)
     await menu.getByRole('button', { name: 'Sign out' }).click()
     await page.getByRole('link', { name: 'Sign in' }).waitFor()
     expect(problems).toEqual([])
@@ -118,7 +118,7 @@ describe('verifying the email', () => {
     const { page } = await open('/sign-in')
     await signIn(page, customer)
     await page.waitForURL(url('/c/nuk'))
-    const banner = page.getByText('Verify your email to place orders')
+    const banner = page.getByText('Verify your email address')
     await banner.waitFor()
     const sentAt = Date.now() - 1000
     await button(page, 'Resend email').click()

@@ -3,7 +3,7 @@ import { apiError, ErrorCodes } from '#server/utils/errors'
 import { log } from '#server/utils/log'
 
 /**
- * Rate limits for the public API (a cafe's `/api/c/<slug>/public/**`, the global table scan
+ * Rate limits for the public API and placing orders (a cafe's `/api/c/<slug>/public/**`, the global table scan
  * `/api/tables/**`, a cafe's profile `/api/cafes/**` and browser error reports `/api/client-errors`, D121, D140, D143, D149), counted per client address with
  * Cloudflare's Workers rate-limit bindings. The first rule whose prefix matches applies. Limits are
  * generous on purpose: customers in the cafe share its Wi-Fi, so one address can be many people.
@@ -13,6 +13,8 @@ import { log } from '#server/utils/log'
  * counts per location and lets a few requests past a limit: this bounds abuse, it isn't a quota.
  */
 export const RATE_LIMIT_RULES = [
+  // Placing an order, now that a guest can (D156): only the POST, never the order page's polling.
+  { prefix: '/api/shop/orders', method: 'POST', binding: 'RATE_LIMIT_ORDERS' },
   // Prices the whole order from the catalog: the costliest public call.
   { prefix: '/api/public/checkout/quote', binding: 'RATE_LIMIT_QUOTE' },
   { prefix: '/api/public/', binding: 'RATE_LIMIT_PUBLIC' },
@@ -21,7 +23,13 @@ export const RATE_LIMIT_RULES = [
   { prefix: '/api/cafes/', binding: 'RATE_LIMIT_PUBLIC' },
   // Browser error reports (D149): anyone can send them, so they share the public limit.
   { prefix: '/api/client-errors', binding: 'RATE_LIMIT_PUBLIC' },
-] as const
+] as const satisfies readonly { prefix: string, method?: string, binding: string }[]
+
+/** The rule for a request: the first whose prefix (and method, when it names one) matches. */
+export function rateLimitRule(path: string, method: string) {
+  const named = rateLimitPath(path)
+  return RATE_LIMIT_RULES.find(rule => named.startsWith(rule.prefix) && (!('method' in rule) || rule.method === method))
+}
 
 /**
  * A path as the rules name it: a cafe's prefix dropped (`/api/c/nuk/public/menu` → `/api/public/menu`),
@@ -40,6 +48,7 @@ export interface RateLimiter {
 
 export interface RateLimitRequest {
   path: string
+  method?: string
   /** `cf-connecting-ip`: set by Cloudflare, a client can't forge it. */
   address: string | undefined
   limiters: Partial<Record<RateLimitBinding, RateLimiter>>
@@ -47,8 +56,7 @@ export interface RateLimitRequest {
 
 /** `limited` names the binding that refused; `checked` false when no rule, binding or address applied. */
 export async function checkRateLimit(request: RateLimitRequest): Promise<{ checked: boolean, limited: RateLimitBinding | null }> {
-  const path = rateLimitPath(request.path)
-  const rule = RATE_LIMIT_RULES.find(candidate => path.startsWith(candidate.prefix))
+  const rule = rateLimitRule(request.path, request.method ?? 'GET')
   const limiter = rule ? request.limiters[rule.binding] : undefined
   if (!rule || !limiter || !request.address) return { checked: false, limited: null }
   const { success } = await limiter.limit({ key: request.address })
@@ -64,7 +72,7 @@ export async function enforceRateLimit(event: H3Event) {
   if (!env) return
   let outcome: Awaited<ReturnType<typeof checkRateLimit>>
   try {
-    outcome = await checkRateLimit({ path: event.path, address: getHeader(event, 'cf-connecting-ip'), limiters: env })
+    outcome = await checkRateLimit({ path: event.path, method: event.method, address: getHeader(event, 'cf-connecting-ip'), limiters: env })
   }
   catch (error) {
     log('warn', 'Rate limiter unavailable; request allowed', { error: String(error) }, event)
