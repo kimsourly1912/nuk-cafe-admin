@@ -4,9 +4,11 @@ import { totalPages } from '#shared/contracts/common'
 import { MAX_UNPAID_ORDERS, PAYMENT_WINDOW_MINUTES } from '#shared/contracts/orders'
 import { ORDER_EVENTS } from './orders.events'
 import type { Db } from '#server/utils/batch'
+import { apiError, ErrorCodes } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
 import { resolveTableToken } from '#server/features/branches'
+import { guestNameStatement } from '#server/features/identity'
 import type { Actor } from '#server/features/identity'
 import { getPublicMenu } from '#server/features/menu'
 import { outboxStatement, withIdempotency } from '#server/features/platform'
@@ -64,6 +66,10 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
     { tenantId: actor.tenantId, actorId: actor.userId, operation: 'orders.place', key: idempotencyKey },
     input,
     async () => {
+      // A guest names themselves for the counter (D156); an account has its name.
+      if (actor.guest && !input.guestName?.trim()) {
+        throw apiError(400, ErrorCodes.VALIDATION_FAILED, 'Some of the submitted data is invalid.', { fieldErrors: { guestName: ['Enter your name'] } })
+      }
       const menu = await getPublicMenu(db, actor.tenantId, { branchId: input.branchId }, now)
       const quote = quoteOrder(menu, input.lines)
       if (quote.problems[0]) throw orderingClosed(quote.problems[0].message)
@@ -103,6 +109,8 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
       }))
       return {
         statements: [
+          // Ignored for an account (the statement only renames a guest).
+          ...(actor.guest && input.guestName ? [guestNameStatement(db, actor.userId, input.guestName.trim(), now)] : []),
           repo.insertOrderStatement(db, order),
           ...repo.insertLinesStatements(db, actor.tenantId, orderId, lines),
           repo.eventStatement(db, { tenantId: actor.tenantId, orderId, toVersion: 1, actorId: actor.userId, fromStatus: null, toStatus: 'awaiting_payment', at: now }),
@@ -246,4 +254,13 @@ export async function orderActivity(db: Db, tenantIds: string[], now = new Date(
   const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
   const rows = await repo.orderActivity(db, tenantIds, since)
   return new Map(rows.map(({ tenantId, ...activity }) => [tenantId, activity]))
+}
+
+/**
+ * A guest signed in or signed up on the device they ordered from (D156, the anonymous plugin's
+ * link): their orders, in every cafe, now belong to that account. The guest stays, with nothing.
+ */
+export async function moveGuestOrders(db: Db, guestId: string, accountId: string): Promise<void> {
+  if (guestId === accountId) return
+  await db.batch([repo.moveOrdersStatement(db, guestId, accountId)])
 }

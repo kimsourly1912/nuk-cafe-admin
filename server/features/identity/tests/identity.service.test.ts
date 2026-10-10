@@ -81,10 +81,17 @@ describe('signed in', () => {
 })
 
 describe('shop', () => {
-  it('needs a verified email', async () => {
+  it('any signed-in account orders, verified or not (D156)', async () => {
     const customer = await person()
-    await expectApiError(async () => authorizeCustomer(db, { ...customer, emailVerified: false }, TEST_TENANT), 403, 'EMAIL_NOT_VERIFIED')
+    expect(await authorizeCustomer(db, { ...customer, emailVerified: false }, TEST_TENANT)).toEqual({ userId: customer.id, tenantId: TEST_TENANT, role: 'customer' })
     expect(await authorizeCustomer(db, customer, TEST_TENANT)).toEqual({ userId: customer.id, tenantId: TEST_TENANT, role: 'customer' })
+  })
+
+  it('a guest is a customer everywhere, never a member, even if a membership row named them (D156)', async () => {
+    const owner = await person('owner')
+    const asGuest = await authorizeSignedIn(db, { ...owner, isAnonymous: true }, TEST_TENANT)
+    expect(asGuest).toEqual({ userId: owner.id, tenantId: TEST_TENANT, role: 'customer', guest: true })
+    await expectApiError(async () => authorizeTenant(db, { ...owner, isAnonymous: true }, TEST_TENANT, { menu: ['read'] }), 403, 'FORBIDDEN')
   })
 })
 

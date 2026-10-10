@@ -1,8 +1,7 @@
-import { enforceRateLimit, RATE_LIMIT_RULES, rateLimitPath } from '#server/utils/rate-limit'
+import { enforceRateLimit, rateLimitRule } from '#server/utils/rate-limit'
 
-/** Per-address limits on the public API (D121, D140): see server/utils/rate-limit.ts. */
+/** Per-address limits on the public API and placing orders (D121, D140, D156): see server/utils/rate-limit.ts. */
 export default defineEventHandler(async (event) => {
-  const path = rateLimitPath(event.path)
-  if (!RATE_LIMIT_RULES.some(rule => path.startsWith(rule.prefix))) return
+  if (!rateLimitRule(event.path, event.method)) return
   await enforceRateLimit(event)
 })

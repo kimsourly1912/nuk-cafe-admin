@@ -136,17 +136,23 @@ export interface CheckoutQuote {
   orderable: boolean
 }
 
+/** A guest's name, as the counter shows it (D156). */
+export const GUEST_NAME_MAX = 40
+
 /**
- * `POST /api/shop/orders` (header `Idempotency-Key`): places the order for the signed-in, verified
- * customer. The lines are priced again; `expectedTotalMinor` is the total the page showed, and a
- * different one is refused (`PRICES_CHANGED`), so a price is never charged unseen. `tableToken`: the
- * table's QR token for dine-in; without it, pickup.
+ * `POST /api/shop/orders` (header `Idempotency-Key`): places the order for the signed-in customer:
+ * an account, or a guest naming themselves (`guestName`, D156). The lines are priced again;
+ * `expectedTotalMinor` is the total the page showed, and a different one is refused
+ * (`PRICES_CHANGED`), so a price is never charged unseen. `tableToken`: the table's QR token for
+ * dine-in; without it, pickup.
  */
 export const placeOrderSchema = v.strictObject({
   branchId: idSchema,
   tableToken: v.optional(v.nullable(v.pipe(v.string(), v.maxLength(100))), null),
   lines: checkoutQuoteSchema.entries.lines,
   expectedTotalMinor: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  /** A guest's name for the counter to call (D156); required from a guest, ignored from an account. */
+  guestName: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1, 'Enter your name'), v.maxLength(GUEST_NAME_MAX, `At most ${GUEST_NAME_MAX} characters`))),
 })
 export type PlaceOrderInput = v.InferOutput<typeof placeOrderSchema>
 

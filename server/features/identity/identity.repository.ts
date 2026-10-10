@@ -1,6 +1,6 @@
 import { and, asc, eq } from 'drizzle-orm'
-import type { Db } from '#server/utils/batch'
-import { branches, branchStaff, member, organization } from '#server/db/tables'
+import type { Db, Statement } from '#server/utils/batch'
+import { branches, branchStaff, member, organization, user } from '#server/db/tables'
 
 export interface TenantRow {
   id: string
@@ -92,4 +92,14 @@ export async function staffTenants(db: Db, userId: string): Promise<{ tenantId: 
     .from(branchStaff)
     .innerJoin(branches, eq(branches.id, branchStaff.branchId))
     .where(and(eq(branchStaff.userId, userId), eq(branches.status, 'active')))
+}
+
+/**
+ * A guest's name for the counter (D156): only a guest's (`is_anonymous`), never an account's, so a
+ * request can't rename a real person.
+ */
+export function guestNameStatement(db: Db, userId: string, name: string, now: Date): Statement {
+  return db.update(user)
+    .set({ name, updatedAt: now })
+    .where(and(eq(user.id, userId), eq(user.isAnonymous, true)))
 }

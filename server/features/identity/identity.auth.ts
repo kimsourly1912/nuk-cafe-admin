@@ -1,5 +1,5 @@
 import { createAuthMiddleware, isAPIError } from 'better-auth/api'
-import { admin, haveIBeenPwned, organization } from 'better-auth/plugins'
+import { admin, anonymous, haveIBeenPwned, organization } from 'better-auth/plugins'
 import type { ServerAuthConfig } from '@nuxtjs/better-auth/config'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -62,6 +62,8 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
           // creates the profile on first use. Loaded lazily: the module loads this file at build
           // time, before the schemas' imports exist.
           after: async (user) => {
+            // A guest (D156) is not a member: no profile or member code until they make an account.
+            if ((user as { isAnonymous?: boolean | null }).isAnonymous) return
             try {
               const [{ ensureProfile }, { currentTenant }] = await Promise.all([import('#server/features/customers'), import('./identity.service')])
               const tenant = await currentTenant(db).catch(() => null)
@@ -123,6 +125,9 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
         '/reset-password': { window: 10 * MINUTE, max: 5 },
         '/send-verification-email': { window: 10 * MINUTE, max: 3 },
         '/change-password': { window: MINUTE, max: 5 },
+        // A guest is made only when Place order is pressed signed out (D156). Generous: the cafe's
+        // customers share its Wi-Fi, so one address is many people.
+        '/sign-in/anonymous': { window: 10 * MINUTE, max: 30 },
       },
     },
     plugins: [
@@ -157,6 +162,18 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
         },
       }),
       haveIBeenPwned({ enabled: checkBreachedPasswords }),
+      // Guests (D156): Place order without an account signs the browser in as a guest, a user with
+      // no email or password. Orders keep their owner, so "only your own orders" holds as before.
+      anonymous({
+        generateName: () => 'Guest',
+        // Never deleted: their orders point at them (orders.customer_id is `restrict`).
+        disableDeleteAnonymousUser: true,
+        // The guest signs in or signs up on this device: their orders move to that account.
+        onLinkAccount: async ({ anonymousUser, newUser }) => {
+          const { moveGuestOrders } = await import('#server/features/orders')
+          await moveGuestOrders(db, anonymousUser.user.id, newUser.user.id)
+        },
+      }),
     ] as const,
   } satisfies ServerAuthConfig
 }

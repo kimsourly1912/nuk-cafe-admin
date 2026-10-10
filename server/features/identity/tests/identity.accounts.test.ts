@@ -14,7 +14,6 @@ import { createStaff, seedFirstOwner } from '#server/features/identity/staff.ser
 import { createTestAuth, sessionHeaders, signIn } from '#server/tests/support/auth'
 import type { TestAuth } from '#server/tests/support/auth'
 import { createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
-import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 
@@ -61,11 +60,11 @@ describe('sign-up', () => {
     expect(profile!.tenantId).toBe(TEST_TENANT)
   })
 
-  it('lets an unverified customer sign in, but not order', async () => {
+  it('lets an unverified customer sign in and order (D156: verification no longer gates ordering)', async () => {
     const { headers } = await signUp()
     const user = await sessionUser(headers)
     expect(user).toMatchObject({ emailVerified: false })
-    await expectApiError(() => authorizeCustomer(db, user, TEST_TENANT), 403, 'EMAIL_NOT_VERIFIED')
+    expect(await authorizeCustomer(db, user, TEST_TENANT)).toMatchObject({ role: 'customer' })
   })
 
   it('verifies the email from the link', async () => {

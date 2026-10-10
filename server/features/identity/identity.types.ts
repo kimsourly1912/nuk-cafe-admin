@@ -10,6 +10,8 @@ export interface SessionUser {
   role?: string | null
   banned?: boolean | null
   mustChangePassword?: boolean | null
+  /** A guest (D156): signed in by Place order, with no email or password. */
+  isAnonymous?: boolean | null
 }
 
 /**
@@ -24,6 +26,8 @@ export interface Actor {
   role: TenantRole | 'customer'
   /** The request this actor made, for the audit trail (set by the access helpers). */
   requestId?: string
+  /** A guest (D156): orders as a customer, never a member of any tenant. */
+  guest?: boolean
 }
 
 /** An actor on the counter surface: acting in one branch of the tenant. */

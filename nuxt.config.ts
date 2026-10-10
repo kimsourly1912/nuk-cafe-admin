@@ -83,6 +83,8 @@ const STAGING = {
 const RATE_LIMITS = [
   { name: 'RATE_LIMIT_QUOTE', namespace_id: '1001', simple: { limit: 120, period: 60 as const } },
   { name: 'RATE_LIMIT_PUBLIC', namespace_id: '1002', simple: { limit: 600, period: 60 as const } },
+  // Placing orders (D156): a busy cafe's Wi-Fi places a few a minute; a script, hundreds.
+  { name: 'RATE_LIMIT_ORDERS', namespace_id: '1003', simple: { limit: 20, period: 60 as const } },
 ]
 
 /** How long one render of the customer menu page is reused (D122). */
