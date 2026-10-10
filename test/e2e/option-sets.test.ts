@@ -2,7 +2,7 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { OptionSet, OptionValue } from '../../shared/contracts/menu-options'
-import { deferred, failures, MockFailure, mockApi, setupE2e, toast } from './support/mock-api'
+import { deferred, failures, MockFailure, mockApi, setupE2e, toast, toastAction } from './support/mock-api'
 
 await setupE2e()
 
@@ -119,20 +119,23 @@ describe('options library', () => {
     await expect.poll(() => chips(page, 'Milk')).toEqual(['Whole', 'Skim', 'Oat', 'Soy', 'Almond'])
   })
 
-  it('offers only Archive (or Restore) in the card menu, never Delete', async () => {
+  it('offers only Archive (or Restore) in the card menu, never Delete; Archive offers Undo instead of asking (D152)', async () => {
     const archive = answering(SIZE, () => ({ status: 'archived' }))
     const restore = answering(OLD, () => ({ status: 'active' }))
+    const undo = answering({ ...SIZE, status: 'archived', version: 2 }, () => ({ status: 'active' }))
     const { page } = await open(undefined, {
       'POST /admin/menu/option-sets/{id}/archive': archive.handler,
-      'POST /admin/menu/option-sets/{id}/restore': restore.handler,
+      'POST /admin/menu/option-sets/{id}/restore': request => (request.url.pathname.includes(SIZE.id) ? undo.handler(request) : restore.handler(request)),
     })
     await page.getByRole('button', { name: 'Actions for Size' }).click()
     expect(await page.getByRole('menuitem').allInnerTexts()).toEqual(['Archive'])
     await page.getByRole('menuitem', { name: 'Archive' }).click()
-    await page.getByText('4 menu items use this set and will keep it, but it cannot be added to other items until restored.').waitFor()
-    await page.getByRole('button', { name: 'Archive option set' }).click()
-    await toast(page, 'Option set "Size" archived').waitFor()
+    await toastAction(page, 'Option set "Size" archived', 'Undo').click()
+    await toast(page, 'Option set "Size" restored').waitFor()
+    expect(await page.getByRole('alertdialog').count()).toBe(0)
     expect(archive.bodies).toEqual([{ version: 1 }])
+    // Undo restores from the version the archive answered.
+    expect(undo.bodies).toEqual([{ version: 2 }])
 
     await page.getByRole('tab', { name: /Archived/ }).click()
     await page.getByRole('button', { name: 'Actions for Syrup (old)' }).click()

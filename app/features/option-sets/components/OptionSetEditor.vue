@@ -23,7 +23,7 @@ import { MAX_OPTION_VALUES } from '#shared/contracts/menu-options'
 import { insertNodeAt, removeNode, useSortable } from '@vueuse/integrations/useSortable'
 import * as v from 'valibot'
 import { activeValues, archivedValues, fetchOptionSet, useOptionSetMutations } from '../composables/useOptionSets'
-import { moveEntry, usageLabel } from '../schemas/option-set-display'
+import { archiveSetDescription, moveEntry, usageLabel } from '../schemas/option-set-display'
 import { setNameSchema, valueNameSchema } from '../schemas/option-set-form'
 import { createOrderAutosave } from '../utils/order-autosave'
 import OptionInlineEdit from './OptionInlineEdit.vue'
@@ -171,7 +171,11 @@ async function restoreValue(value: OptionValue) {
 }
 
 async function archiveSet() {
-  const result = checked(await mutations.archive.execute({ set: current.value }))
+  const set = current.value
+  const result = checked(await mutations.archive.execute({ set }, {
+    confirm: { title: `Archive “${set.name}”?`, description: archiveSetDescription(set.itemCount), confirmLabel: 'Archive option set' },
+    undo: false,
+  }))
   if (!result.ok) return
   current.value = result.data
   stopEdit()

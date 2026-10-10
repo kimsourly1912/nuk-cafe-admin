@@ -1,7 +1,7 @@
 import type { Page } from '#shared/contracts/common'
 import { totalPages } from '#shared/contracts/common'
 import type { AvailabilityRuleRef } from '#shared/contracts/menu-availability'
-import type { CreateItemInput, ItemListQuery, ItemModifierGroup, ItemModifierGroupsInput, ItemVersionInput, MenuItem, MenuItemSummary, ReorderItemsInput, UpdateItemInput } from '#shared/contracts/menu-items'
+import type { CreateItemInput, ItemListQuery, ItemModifierGroup, ItemModifierGroupsInput, ItemVersionInput, MenuItem, MenuItemSummary, ReorderItemsInput, RestoreItemInput, UpdateItemInput } from '#shared/contracts/menu-items'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, requireOneChange } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -428,16 +428,25 @@ export async function archiveItem(db: Db, actor: Actor, id: string, input: ItemV
   return loadItem(db, tenantId, id)
 }
 
-/** archived → draft, at the end of its category (which must still be an active leaf). */
-export async function restoreItem(db: Db, actor: Actor, id: string, input: ItemVersionInput): Promise<MenuItem> {
+/**
+ * archived → draft, at the end of its category (which must still be an active leaf). An undo (D152)
+ * puts it back where it was instead (its place was kept while archived), in the status it had:
+ * back to published passes Publish's checks, so it never shows customers an item with nothing to sell.
+ */
+export async function restoreItem(db: Db, actor: Actor, id: string, input: RestoreItemInput): Promise<MenuItem> {
   const { tenantId } = actor
   const item = await openForAction(db, tenantId, id, input.version, ['archived'], 'This menu item isn\'t archived.')
   await ensureLeafCategory(db, tenantId, item.categoryId)
+  const status = input.undo?.status ?? 'draft'
+  const publishing = status === 'active'
+  if (publishing && await repo.countSellable(db, id) === 0) throw nothingToSell()
+  const changes = input.undo ? { status } : { status, sortOrder: await repo.nextItemOrder(db, item.categoryId) }
   await runItemBatch(db, tenantId, [
-    repo.touchItemStatement(db, tenantId, id, input.version, new Date(), { status: 'draft', sortOrder: await repo.nextItemOrder(db, item.categoryId) }, ['archived']),
+    repo.touchItemStatement(db, tenantId, id, input.version, new Date(), changes, ['archived']),
     requireOneChange(db),
     repo.requireLeafCategory(db, tenantId, item.categoryId),
-    audit(db, actor, 'restore', id, {}),
+    ...(publishing ? [repo.requireSellable(db, id)] : []),
+    audit(db, actor, 'restore', id, input.undo ? { undo: true, status } : {}),
   ], { itemId: id, version: input.version, categoryId: item.categoryId })
   return loadItem(db, tenantId, id)
 }

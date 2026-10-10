@@ -88,12 +88,9 @@ export function useTableMutations() {
       id: 'branches:table-archive',
       key: tableLock,
       lock: tableLock,
-      confirm: input => ({
-        title: `Archive "${input.table.label}"?`,
-        description: 'Its QR code stops working until you restore the table.',
-        confirmLabel: 'Archive',
-      }),
-      successMessage: (_, input) => `Table "${input.table.label}" archived`,
+      // Undo instead of asking (D152): the same QR code works again.
+      undo: ([done]) => void (done && restore.execute({ ...done.input, table: done.data })),
+      successMessage: (_, input) => `Table "${input.table.label}" archived · its QR code stops working until it's restored`,
       errorMessage: input => `Could not archive "${input.table.label}"`,
       invalidate: ['branches'],
     },

@@ -335,6 +335,11 @@ export function toast(page: Page, title: string | RegExp) {
   return page.locator('[data-slot="title"]', { hasText: title })
 }
 
+/** A button on the toast with this title ('Undo', 'Retry failed', D152). */
+export function toastAction(page: Page, title: string | RegExp, label: string) {
+  return page.locator('li', { has: toast(page, title) }).getByRole('button', { name: label, exact: true })
+}
+
 /**
  * A category in the Categories tree (`/c/nuk/admin/categories`), by name. The tree loads
  * `GET /admin/menu/categories`; the default handlers answer it with MENU_TEA and MENU_COFFEE.

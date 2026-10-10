@@ -50,6 +50,8 @@ interface ItemRef {
   version: number
   /** Published right after the form saved it (D125): a refusal says the save itself went through. */
   afterSave?: boolean
+  /** Its status before an archive, for Undo (D152). */
+  status?: ItemStatus
 }
 
 /** A state change: publish, unpublish, archive or restore, from the version read. */
@@ -111,25 +113,35 @@ export function useItemMutations() {
       }),
     },
   })
-  const unpublish = action('unpublish', 'unpublished')
-  const restore = action('restore', 'restored as a draft')
-  const archive = action('archive', 'archived', {
-    confirm: item => ({
-      title: `Archive "${item.name}"?`,
-      description: 'Customers won\'t see it, and it can\'t be edited until it\'s restored. Past orders keep it.',
-      confirmLabel: 'Archive',
-      danger: true,
-    }),
-    batch: {
-      noun: NOUN,
-      verb: ['Archiving', 'archived'],
-      confirm: items => ({
-        title: `Archive ${pluralize(items.length, NOUN)}?`,
-        description: `${previewList(items.map(i => i.name))}. Customers won't see them, and they can't be edited until they're restored.`,
-        confirmLabel: 'Archive',
-        danger: true,
-      }),
+  /**
+   * Restore: a draft at the end of its category; Undo right after an archive (D152) puts it back
+   * where it was, in the status it had.
+   */
+  const restore = useMutation(
+    (item: ItemRef & { undo?: { status: 'draft' | 'active' } }) =>
+      apiFetch<MenuItem>(`${BASE}/${item.id}/restore`, { method: 'POST', body: { version: item.version, ...(item.undo && { undo: item.undo }) } }),
+    {
+      id: 'products:restore',
+      key: item => item.id,
+      lock: item => lockOf(item.id),
+      successMessage: (_, item) => (item.undo ? `Menu item "${item.name}" is back` : `Menu item "${item.name}" restored as a draft`),
+      errorMessage: item => (item.undo ? `Could not undo: "${item.name}" stays archived` : `Could not restore "${item.name}"`),
+      invalidate: AFFECTED,
+      batch: { noun: NOUN, verb: ['Restoring', 'back'] },
     },
+  )
+  /** Undo instead of asking (D152): each archived item back where it was, in its status. */
+  function undoArchive(done: { input: ItemRef, data: MenuItem }[]) {
+    const inputs = done.map(({ input, data }) => ({ id: data.id, name: data.name, version: data.version, undo: { status: input.status === 'active' ? 'active' as const : 'draft' as const } }))
+    if (inputs.length === 1) void restore.execute(inputs[0]!)
+    else void restore.executeMany(inputs)
+  }
+  const unpublish = action('unpublish', 'unpublished', {
+    undo: ([done]) => void (done && publish.execute({ id: done.data.id, name: done.data.name, version: done.data.version })),
+  })
+  const archive = action('archive', 'archived', {
+    undo: undoArchive,
+    batch: { noun: NOUN, verb: ['Archiving', 'archived'] },
   })
 
   return {

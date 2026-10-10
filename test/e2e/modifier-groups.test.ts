@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { MenuItemSummary } from '../../shared/contracts/menu-items'
 import type { Modifier, ModifierGroup } from '../../shared/contracts/menu-modifiers'
 import type { MockHandler } from './support/mock-api'
-import { failures, MockFailure, menuItemOf, menuItemSummaryOf, mockApi, pageOf, setupE2e, toast } from './support/mock-api'
+import { failures, MockFailure, menuItemOf, menuItemSummaryOf, mockApi, pageOf, setupE2e, toast, toastAction } from './support/mock-api'
 
 await setupE2e()
 
@@ -138,20 +138,21 @@ describe('add-ons library', () => {
     await card(page, 'Syrups').getByText('+2 more').waitFor()
   })
 
-  it('offers only Archive (or Restore) in the card menu, saying what archiving does, never Delete', async () => {
+  it('offers only Archive (or Restore) in the card menu, never Delete; Archive offers Undo instead of asking (D152)', async () => {
     const archive = answering(MILK, () => ({ status: 'archived' }))
     const restore = answering(OLD, () => ({ status: 'active' }))
+    const undo = answering({ ...MILK, status: 'archived', version: 2 }, () => ({ status: 'active' }))
     const { page } = await open(backend(undefined, {
       'POST /admin/menu/modifier-groups/{id}/archive': archive.handler,
-      'POST /admin/menu/modifier-groups/{id}/restore': restore.handler,
+      'POST /admin/menu/modifier-groups/{id}/restore': request => (request.url.pathname.includes(MILK.id) ? undo.handler(request) : restore.handler(request)),
     }))
     await page.getByRole('button', { name: 'Actions for Milk choices' }).click()
     expect(await page.getByRole('menuitem').allInnerTexts()).toEqual(['Archive'])
     await page.getByRole('menuitem', { name: 'Archive' }).click()
-    await page.getByText('18 menu items offer this group and will keep offering it, but it can\'t be added to other items until restored.').waitFor()
-    await page.getByRole('button', { name: 'Archive group' }).click()
-    await toast(page, 'Add-on group "Milk choices" archived').waitFor()
+    await toastAction(page, 'Add-on group "Milk choices" archived', 'Undo').click()
+    await toast(page, 'Add-on group "Milk choices" restored').waitFor()
     expect(archive.bodies).toEqual([{ version: 1 }])
+    expect(undo.bodies).toEqual([{ version: 2 }])
 
     await page.getByRole('tab', { name: /Archived/ }).click()
     await page.getByRole('button', { name: 'Actions for Seasonal extras' }).click()

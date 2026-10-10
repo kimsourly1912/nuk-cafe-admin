@@ -64,11 +64,8 @@ export function useAvailabilityRuleMutations() {
       id: 'availability-rules:archive',
       key: rule => rule.id,
       lock: rule => lockOf(rule.id),
-      confirm: rule => ({
-        title: `Archive "${rule.name}"?`,
-        description: 'It can\'t be chosen for categories or menu items any more. You can restore it later.',
-        confirmLabel: 'Archive',
-      }),
+      // Undo instead of asking (D152).
+      undo: ([done]) => void (done && restore.execute(done.data)),
       successMessage: (_, rule) => `Rule "${rule.name}" archived`,
       errorMessage: rule => `Could not archive "${rule.name}"`,
       invalidate: AFFECTED,

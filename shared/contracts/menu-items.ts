@@ -204,6 +204,16 @@ export type UpdateItemInput = v.InferOutput<typeof updateItemSchema>
 export const itemVersionSchema = v.strictObject({ version: versionSchema })
 export type ItemVersionInput = v.InferOutput<typeof itemVersionSchema>
 
+/**
+ * Restore an archived item. Plain: a draft at the end of its category. With `undo` (D152, the Undo
+ * right after an archive): back where it was, in the status it had; `active` passes Publish's checks.
+ */
+export const restoreItemSchema = v.strictObject({
+  version: versionSchema,
+  undo: v.optional(v.strictObject({ status: v.picklist(['draft', 'active']) })),
+})
+export type RestoreItemInput = v.InferOutput<typeof restoreItemSchema>
+
 /** The new order of a category's items (drafts and active ones), each with the version read. */
 export const reorderItemsSchema = v.strictObject({
   categoryId: idSchema,
