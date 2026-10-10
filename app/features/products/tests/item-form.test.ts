@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest'
 import type { MenuItem } from '#shared/contracts/menu-items'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { OptionSet } from '#shared/contracts/menu-options'
-import { addOnGroupFromLibrary, buildGrid, formFieldOf, itemFormSchema, optionSetFromLibrary, sectionOf, toCreateItemBody, toItemForm, toUpdateItemBody } from '../schemas/item-form'
+import { mergeFormChanges } from '~/utils/form-value'
+import { addOnGroupFromLibrary, buildGrid, formFieldOf, ITEM_FORM_PARTS, itemFormSchema, optionSetFromLibrary, sectionOf, toCreateItemBody, toItemForm, toUpdateItemBody } from '../schemas/item-form'
 import type { FormOptionSet, ItemForm } from '../schemas/item-form'
 
 const STAMP = '2026-09-28T00:00:00.000Z'
@@ -191,3 +192,31 @@ describe('where an error is shown', () => {
     expect(sectionOf('availabilityRuleIds')).toBe('availability')
   })
 })
+
+describe('someone else saved first (D153)', () => {
+  const base = toItemForm(LATTE, [MILK])
+
+  it('takes their prices and keeps my new name', () => {
+    const mine = { ...cloneForm(base), name: 'Caffè Latte' }
+    const theirs = toItemForm({ ...LATTE, version: 8, variations: LATTE.variations.map(v => (v.id === 'v1' ? { ...v, priceMinor: 400 } : v)) }, [MILK])
+    const { merged, overlap } = mergeFormChanges({ base, mine, theirs, parts: ITEM_FORM_PARTS })
+    expect(merged.name).toBe('Caffè Latte')
+    expect(merged.grid.find(cell => cell.label === 'Small, Hot')?.price).toBe(4)
+    expect(overlap).toEqual([])
+  })
+
+  it('keeps my option sets with my grid, and names Prices when both changed them', () => {
+    const mine = cloneForm(base)
+    mine.optionSets = [mine.optionSets[0]!]
+    mine.grid = buildGrid(mine.optionSets, mine.grid, true)
+    const theirs = toItemForm({ ...LATTE, version: 8, variations: LATTE.variations.map(v => ({ ...v, priceMinor: (v.priceMinor ?? 0) + 25 })) }, [MILK])
+    const { merged, overlap } = mergeFormChanges({ base, mine, theirs, parts: ITEM_FORM_PARTS })
+    expect(merged.optionSets.map(set => set.id)).toEqual(['size'])
+    expect(merged.grid.map(cell => cell.label)).toEqual(mine.grid.map(cell => cell.label))
+    expect(overlap).toEqual(['Prices'])
+  })
+})
+
+function cloneForm(form: ItemForm): ItemForm {
+  return structuredClone(form)
+}

@@ -29,10 +29,11 @@ const overlay = useOverlay()
 const editor = useItemEditor({
   itemId: props.id === 'new' ? undefined : props.id,
   onLoaded: () => unsaved.markClean(),
+  onReloaded: saved => unsaved.markClean(saved),
   // The page may be gone by then: reopen the input in the slide-over, which works on any page.
   reopen: (item, draft) => overlay.create(ProductFormSlideover, { destroyOnClose: true }).open({ item, draft }),
 })
-const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError } = editor
+const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError, conflict, reloading, reloaded } = editor
 
 const unsaved = useUnsavedChanges(state, { initial: editor.initial, paused: saving, draft: editor.keptDraft })
 
@@ -177,7 +178,11 @@ async function onSubmit() {
             :disabled="saving || archived"
             :archived="archived"
             :last-error="lastError"
+            :conflict="conflict"
+            :reloading="reloading"
+            :reloaded="reloaded"
             @submit="onSubmit"
+            @reload="editor.reload"
             @invalid="next => section = next"
           />
         </template>

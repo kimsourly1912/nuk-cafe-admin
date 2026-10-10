@@ -4,6 +4,7 @@ import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import { MAX_MODIFIER_PRICE_MINOR, MAX_MODIFIERS, selectionProblem } from '#shared/contracts/menu-modifiers'
 import type { OptionSet } from '#shared/contracts/menu-options'
 import * as v from 'valibot'
+import type { FormPart } from '~/utils/form-value'
 import { fromMinor, toMinor } from '~/utils/money'
 
 /**
@@ -294,6 +295,21 @@ export function formFieldOf(serverField: string): string {
     .replace(/^variations$/, 'grid')
     .replace(/^modifierGroups\.(\d+)\.rules\.(minSelect|maxSelect)$/, 'addOnGroups.$1.$2')
 }
+
+/**
+ * The form's parts as they change together, named as the editor shows them: when someone else saved
+ * first, Reload takes their version part by part and keeps the parts this person changed (D153).
+ */
+export const ITEM_FORM_PARTS: readonly FormPart<ItemForm>[] = [
+  { label: 'Name', keys: ['name'] },
+  { label: 'Description', keys: ['description'] },
+  { label: 'Category', keys: ['categoryId'] },
+  { label: 'Image', keys: ['imageId', 'imageUrl'] },
+  // The grid is built from the option sets: one without the other would leave versions that don't exist.
+  { label: 'Prices', keys: ['optionSets', 'grid'] },
+  { label: 'Add-ons', keys: ['addOnGroups'] },
+  { label: 'Availability', keys: ['availabilityRuleIds'] },
+]
 
 /** The editor's sections: on phones the route shows one at a time (D90). */
 export const ITEM_FORM_SECTIONS = [

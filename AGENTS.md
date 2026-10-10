@@ -192,6 +192,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `ApiError`, `getErrorMessage` | `utils/api-error.ts` | One error type for every failure (our API's and Better Auth's formats); `kind`, `code`, `fieldErrors`, a user-safe `message` |
 | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard` | `composables/`, `utils/form-value.ts` | "Discard unsaved changes?" for page and modal forms; the route middleware and tab-close plugin use them |
 | `draft` option, `<FormDraftAlert>`, `createFormDraftStore` | `useUnsavedChanges`, `components/`, `utils/form-draft.ts` | A long form keeps unsaved input in the browser per cafe, person and record, offered back with Restore after a crash or lost session; `markSaved()` after saving (D151) |
+| `mergeFormChanges` | `utils/form-value.ts` | Reload after someone else saved first (409): their version with this input on top, part by part, naming the parts both changed (D153) |
 | `<SearchInput>`, `<ListEmptyState>` | `components/` | List toolbar search (as you type) and empty states ("nothing yet" vs "filters hide everything") |
 | `invalidateAll()`, `invalidateInThisTab()` | `utils/invalidate.ts` | Refetch loaded or only stale queries / invalidate without telling other tabs (used by the freshness plugin) |
 | `usePageShortcuts`, `useSubmitShortcut`, `SHORTCUTS`, `<ShortcutsHelp>` | `composables/useShortcuts.ts`, `components/` | Keyboard shortcuts (skipped behind dialogs/menus), Ctrl/⌘+Enter to save, the `?` list |

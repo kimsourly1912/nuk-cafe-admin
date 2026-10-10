@@ -41,4 +41,5 @@ The library's prices and rules are defaults. On a menu item you can set a differ
 - **"There is already an add-on group named …"** / **"This group already has an add-on named …"**: names must be unique.
 - **"This add-on group is archived. Restore it first."**
 - **"The add-ons of this group changed. Reload it and try again."**: someone else edited it; press **Reload**.
+- **"Someone else changed this add-on group"**: press **Reload**. Their changes come in; settings you typed stay (if you both changed the name or the rule, yours are kept and the message says so). Then **Save changes** again.
 - **The rule looks wrong on one item**: that item may have its own rules; open the item's Add-ons section.

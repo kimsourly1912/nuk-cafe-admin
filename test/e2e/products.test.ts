@@ -505,8 +505,88 @@ describe('menu item form', () => {
     const form = await openEdit(page, 'Latte')
     await form.getByLabel('Name', { exact: true }).fill('Latte 2')
     await form.getByRole('button', { name: 'Save', exact: true }).click()
-    await form.getByText('Someone else changed this menu item.', { exact: false }).waitFor()
+    await form.getByText('Someone else saved this menu item').waitFor()
     expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte 2')
+  })
+
+  it('someone else saved first: Reload takes their version and keeps my changes on top, then Save names their version (D153)', async () => {
+    let saved = LATTE
+    const bodies: Record<string, unknown>[] = []
+    const { page } = await open({
+      ...backend(),
+      'GET /admin/menu/items/{id}': () => saved,
+      'PATCH /admin/menu/items/{id}': (request) => {
+        const body = request.body as Record<string, unknown>
+        bodies.push(body)
+        if (body.version !== saved.version) throw failures.conflict('VERSION_CONFLICT', 'This menu item was changed by someone else.')
+        saved = { ...saved, name: String(body.name), version: saved.version + 1 }
+        return saved
+      },
+    })
+    const form = await openEdit(page, 'Latte')
+    await form.getByLabel('Name', { exact: true }).fill('Caffè Latte')
+    await typePrice(form.getByRole('spinbutton', { name: 'Price of Large, Hot' }), '4.5')
+    // Meanwhile, someone else: a new description and other prices.
+    saved = {
+      ...LATTE,
+      description: 'Double shot and steamed milk',
+      variations: LATTE.variations.map(variation => ({ ...variation, priceMinor: (variation.priceMinor ?? 0) + 25 })),
+      version: 4,
+    }
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
+    const conflict = form.getByText('Someone else saved this menu item')
+    await conflict.waitFor()
+
+    await form.getByRole('button', { name: 'Reload' }).click()
+    await form.getByText('Loaded the latest version').waitFor()
+    await form.getByText('You both changed the prices: yours are kept. Check them, then save.').waitFor()
+    expect(await conflict.count()).toBe(0)
+    // Mine on top (the name, and the prices I edited), theirs where I changed nothing (the description).
+    expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Caffè Latte')
+    expect(await form.getByLabel('Description').inputValue()).toBe('Double shot and steamed milk')
+    expect(await form.getByRole('spinbutton', { name: 'Price of Large, Hot' }).inputValue()).toBe('$4.50')
+
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
+    await toast(page, 'Menu item "Caffè Latte" updated').waitFor()
+    expect(bodies.at(-1)).toMatchObject({ version: 4, name: 'Caffè Latte', description: 'Double shot and steamed milk' })
+  })
+
+  it('Reload with nothing changed by both says their changes are in, and the form still asks before closing', async () => {
+    let saved = LATTE
+    const { page } = await open({
+      ...backend(),
+      'GET /admin/menu/items/{id}': () => saved,
+      'PATCH /admin/menu/items/{id}': () => {
+        throw failures.conflict('VERSION_CONFLICT', 'This menu item was changed by someone else.')
+      },
+    })
+    const form = await openEdit(page, 'Latte')
+    await form.getByLabel('Name', { exact: true }).fill('Caffè Latte')
+    saved = { ...LATTE, description: 'Double shot and steamed milk', version: 4 }
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
+    await form.getByRole('button', { name: 'Reload' }).click()
+    await form.getByText('Their changes are in the form, with yours kept. Save to keep both.').waitFor()
+    // Still unsaved: my name over their version.
+    await form.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByText('Discard unsaved changes?').waitFor()
+  })
+
+  it('Reload when someone archived the item meanwhile: says so and keeps the input', async () => {
+    let saved = LATTE
+    const { page } = await open({
+      ...backend(),
+      'GET /admin/menu/items/{id}': () => saved,
+      'PATCH /admin/menu/items/{id}': () => {
+        throw failures.conflict('VERSION_CONFLICT', 'This menu item was changed by someone else.')
+      },
+    })
+    const form = await openEdit(page, 'Latte')
+    await form.getByLabel('Name', { exact: true }).fill('Caffè Latte')
+    saved = { ...LATTE, status: 'archived', version: 4 }
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
+    await form.getByRole('button', { name: 'Reload' }).click()
+    await form.getByText('Someone archived this menu item meanwhile.', { exact: false }).waitFor()
+    expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Caffè Latte')
   })
 
   it('maps a server error on a version\'s price to its cell', async () => {

@@ -35,9 +35,10 @@ const editor = useItemEditor({
   item: props.item,
   draft: props.draft,
   onLoaded: () => unsaved.markClean(),
+  onReloaded: saved => unsaved.markClean(saved),
   reopen: (item, draft) => overlay.create(ProductFormSlideover, { destroyOnClose: true }).open({ item, draft }),
 })
-const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError } = editor
+const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError, conflict, reloading, reloaded } = editor
 
 const unsaved = useModalUnsavedChanges(state, {
   initial: editor.initial,
@@ -100,8 +101,12 @@ async function onSubmit() {
           :disabled="saving || archived"
           :archived="archived"
           :last-error="lastError"
+          :conflict="conflict"
+          :reloading="reloading"
+          :reloaded="reloaded"
           autofocus
           @submit="onSubmit"
+          @reload="editor.reload"
         />
       </template>
     </template>
