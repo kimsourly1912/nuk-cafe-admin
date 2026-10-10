@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CounterOrder } from '#shared/contracts/orders'
 import { ApiError } from '~/utils/api-error'
-import { changeDue, commandFailure, firstName, formatRiel, itemCount, itemNames, matchesSearch, orderTypeText, payBySoon, rielQuickAmounts, timeAgo, usdQuickAmounts } from '../utils/counter'
+import { changeDue, commandFailure, firstName, formatRiel, itemCount, itemNames, lastUpdatedText, matchesSearch, orderTypeText, payBySoon, queueTitle, rielQuickAmounts, timeAgo, usdQuickAmounts } from '../utils/counter'
 
 const order = (over: Partial<CounterOrder> = {}): CounterOrder => ({
   id: 'o1', version: 1, pickupNumber: 42, businessDate: '2026-09-29', status: 'awaiting_payment', orderType: 'pickup', table: null,
@@ -67,5 +67,18 @@ describe('a refused command', () => {
     expect(commandFailure(new TypeError('fetch failed'), 'payment')).toEqual({ kind: 'retry', message: 'We couldn\'t confirm the payment. Try again: it won\'t be recorded twice.' })
     expect(commandFailure(refused('INTERNAL', 500), 'cancellation').kind).toBe('retry')
     expect(commandFailure(refused('VALIDATION_FAILED', 400), 'cancellation').kind).toBe('other')
+  })
+})
+
+describe('the queue when it can\'t refresh, and its tab (D149)', () => {
+  it('says when it last loaded', () => {
+    expect(lastUpdatedText('2026-09-29T03:00:00.000Z', at('03:00'))).toMatch(/^Last updated \d{1,2}:00 [AP]M \(just now\)$/)
+    expect(lastUpdatedText('2026-09-29T03:00:00.000Z', at('03:04'))).toMatch(/\(4 min ago\)$/)
+  })
+
+  it('counts the orders to pay in the tab title', () => {
+    expect(queueTitle([])).toBe('Queue')
+    expect(queueTitle([order({ status: 'preparing' })])).toBe('Queue')
+    expect(queueTitle([order(), order({ id: 'o2' }), order({ status: 'ready' })])).toBe('(2) Queue')
   })
 })

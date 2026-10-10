@@ -269,7 +269,7 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
     const requestUrl = new URL(request.url())
     // Keys name the route without `/api` and the cafe's address (`/api/c/<slug>`, D140): 'GET /admin/me',
     // 'GET /public/menu', 'POST /auth/sign-out', 'GET /tables/{id}'.
-    const path = requestUrl.pathname.replace(/^\/api(?:\/c\/[^/]+)?(?=\/(?:admin|public|shop|counter|auth|tables|platform|cafes|me)\b)/, '')
+    const path = requestUrl.pathname.replace(/^\/api(?:\/c\/[^/]+)?(?=\/(?:admin|public|shop|counter|auth|tables|platform|cafes|me|client-errors)\b)/, '')
     const key = `${request.method()} ${path}`
     calls.push(key)
     // 'DELETE /admin/categories/cat-1' also matches a 'DELETE /admin/categories/{id}' handler.

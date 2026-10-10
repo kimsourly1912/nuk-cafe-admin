@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useOnline } from '@vueuse/core'
 
-/** Shown while the browser is offline. Mounted once in app.vue. Data refreshes on reconnect (plugins/data-freshness). */
+/** Shown while the browser is offline. Mounted once in app.vue, which places it at the bottom. Data refreshes on reconnect (plugins/data-freshness). */
 const online = useOnline()
 </script>
 
@@ -9,7 +9,7 @@ const online = useOnline()
   <div
     v-if="!online"
     role="status"
-    class="fixed inset-x-0 bottom-4 z-50 mx-auto w-fit max-w-[calc(100%-2rem)]"
+    class="pointer-events-auto w-fit max-w-full"
   >
     <UAlert
       color="warning"

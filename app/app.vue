@@ -16,6 +16,10 @@ const siteName = computed(() => {
   if (isCounterPath(route.path)) return name ? `${name} Counter` : 'Counter'
   return name
 })
+// The workspaces' tabs stay open all day: they're offered a new build when one is deployed (D149).
+// The customer site just loads it on the next page change.
+const isWorkspace = computed(() => isAdminPath(route.path) || isCounterPath(route.path) || isPlatformPath(route.path))
+
 // The whole input is a computed: unhead calls a template function only when a title changes, so a
 // new one (on a rename, D143) must arrive as a new head input.
 useHead(computed(() => {
@@ -32,6 +36,10 @@ useHead(computed(() => {
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
-    <OfflineBanner />
+    <!-- Bottom center, stacked: the update notice in the workspaces (D149), the offline notice everywhere. -->
+    <div class="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4">
+      <NewVersionBanner v-if="isWorkspace" />
+      <OfflineBanner />
+    </div>
   </UApp>
 </template>

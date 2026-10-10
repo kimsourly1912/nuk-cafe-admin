@@ -6,6 +6,8 @@
  * payment (opens the order), Mark ready, Complete. Search by number or name. Queue | Finished today
  * (N) switches to today's finished orders (step 10.2, D117). New orders are marked
  * for a minute, with a chime (mute it in the user menu). A closed branch says when it opens.
+ * While refreshing fails, the queue says when it last loaded; the tab's title counts the orders to
+ * pay (D149).
  *
  * Browser-only (`routeRules`), so the width can choose what renders (`useLayoutContext`).
  */
@@ -16,7 +18,7 @@ import { useCounterActions } from '../composables/useCounterActions'
 import { useCounterQueue } from '../composables/useCounterQueue'
 import { useCounterSession } from '../composables/useCounterSession'
 import type { ColumnId } from '../utils/counter'
-import { COLUMNS, matchesSearch } from '../utils/counter'
+import { COLUMNS, lastUpdatedText, matchesSearch, queueTitle } from '../utils/counter'
 import CounterCancelModal from './CounterCancelModal.vue'
 import CounterHeader from './CounterHeader.vue'
 import CounterOrderCard from './CounterOrderCard.vue'
@@ -30,7 +32,9 @@ const branchId = computed(() => String(route.params.branchId ?? ''))
 const { user } = useCounterSession()
 const branch = computed(() => user.value?.branches.find(b => b.id === branchId.value) ?? null)
 
-const { query, queue, now, serverOffset, isNew, muted } = useCounterQueue(branchId)
+const { query, queue, now, serverOffset, updatedAt, localNow, isNew, muted } = useCounterQueue(branchId)
+// The tab says how many orders wait for payment, so a background tab still shows them (D149).
+useHead({ title: () => queueTitle(queue.value?.orders ?? []) })
 const status = useApiQuery('counter:branch-status', () => apiFetch<PublicBranch[]>('/public/branches'), { server: false })
 const branchStatus = computed(() => status.data.value?.find(b => b.id === branchId.value) ?? null)
 const closedNote = computed(() => (branchStatus.value ? openingText(branchStatus.value) : undefined))
@@ -145,7 +149,8 @@ useSeoMeta({ robots: 'noindex' })
           color="warning"
           variant="subtle"
           icon="i-lucide-wifi-off"
-          title="Couldn't refresh the queue. Showing it as it was; trying again."
+          title="The queue may be out of date"
+          :description="`${updatedAt ? `${lastUpdatedText(updatedAt, localNow)}. ` : ''}New orders show up once it can refresh again; it keeps trying every 10 seconds.`"
         />
       </div>
 

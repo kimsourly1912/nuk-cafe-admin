@@ -71,6 +71,7 @@ Implementation traps (each one broke something once, see [D19](../decisions.md))
 - `isSameFormValue` must read **through** reactive proxies. `toRaw` makes the `computed` stop tracking, so `isDirty` never changes. A unit test guards this.
 - The modal component **must declare the `update:open` emit**. Otherwise the overlay's own `v-model:open` listener closes the modal before we can ask.
 - `useConfirm` creates one overlay per question with `destroyOnClose`. Calling it from middleware must not accumulate overlay entries.
+- **A server's field error can be wiped by the form's own check** (D149). `UForm` re-checks a field about 300 ms after it's typed into (`validate-on` `input`); when the save is pressed sooner (a pasted token saved at once) and the server answers first, that delayed check finds the field valid and removes the error `setErrors` just put there: the dialog stays open with no message. A form whose field is usually pasted and submitted at once checks it on `blur` and `change` only (`BakongTokenModal`); found by `payments.test.ts` under CPU load (2 in 12 runs, none after).
 - E2E: reach the page **through the sidebar**, not `page.goto`, before testing back/forward. `goto` loads a new document, so Back would leave the SPA (a full page load), not change the route.
 
 ---

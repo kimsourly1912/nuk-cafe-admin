@@ -18,6 +18,10 @@ Branch staff, managers and admins use the **counter app** at `/counter` (its own
 - Someone who works at more than one cafe finds **Another cafe** in the user menu: it opens **Your cafes**, where each cafe's counter (and admin, for an owner) opens fresh.
 - Search by order number or name.
 - Click a card to open the order and its one next action.
+- The browser tab shows how many orders wait for payment, for example **(2) Queue**, so you see them while another tab is open.
+- The screen stays on while the counter is open, so the tablet doesn't go dark between customers. (A tablet in battery saver may still turn it off.)
+- If the connection drops, the cards stay and a notice says **The queue may be out of date** with the time it last loaded. New orders appear again once the connection is back; it keeps trying every 10 seconds.
+- After the app is updated, a notice says **A new version of the app is ready**. Press **Reload** when you have a moment, or **Later**: it updates by itself the next time you open another page.
 
 ## Take payment
 

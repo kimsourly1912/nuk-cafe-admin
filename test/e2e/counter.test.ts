@@ -42,9 +42,10 @@ async function placeOrder(customer: SeedCustomer): Promise<Order> {
 }
 
 /** Signs the cashier in at /counter; with one branch, the queue opens. */
-async function cashierAtCounter(width = 1180) {
+async function cashierAtCounter(width = 1180, prepare?: (page: Page) => Promise<void>) {
   const page = await createPage()
   await asNewVisitor(page)
+  await prepare?.(page)
   const problems: string[] = []
   page.on('pageerror', error => problems.push(error.message))
   await page.setViewportSize({ width, height: width < 640 ? 844 : 820 })
@@ -83,6 +84,47 @@ async function sql(statement: string, args: (string | number)[] = []) {
 }
 
 describe('the counter', () => {
+  it('keeps the screen on, counts the orders to pay in the tab, and says when the queue last loaded while it can\'t refresh (D149)', async () => {
+    const order = await placeOrder(seed.customers.counterShopperA)
+    const { page, problems } = await cashierAtCounter(1180, async (page) => {
+      await page.clock.install()
+      // Headless Chrome refuses wake locks: record what the page asks for instead.
+      await page.addInitScript(() => {
+        const requested: string[] = []
+        Object.assign(window, { e2eWakeLocks: requested })
+        Object.defineProperty(navigator, 'wakeLock', {
+          configurable: true,
+          value: {
+            request: async (type: string) => {
+              requested.push(type)
+              return Object.assign(new EventTarget(), { type, released: false, release: async () => {} })
+            },
+          },
+        })
+      })
+    })
+    await card(page, order).waitFor({ timeout: 8000 })
+    await expect.poll(() => page.evaluate(() => (window as unknown as { e2eWakeLocks: string[] }).e2eWakeLocks)).toEqual(['screen'])
+    await expect.poll(() => page.title()).toMatch(/^\(\d+\) Queue · /)
+
+    // The connection to the queue drops: the cards stay, and the queue says since when.
+    const queueUrl = `${origin}/api/c/nuk/counter/${seed.openBranchId}/orders`
+    await page.route(queueUrl, route => route.abort())
+    await page.clock.runFor('00:11')
+    const alert = page.getByText('The queue may be out of date')
+    await alert.waitFor({ timeout: 8000 })
+    await page.getByText(/Last updated \d{1,2}:\d{2} [AP]M \(just now\)/).waitFor({ timeout: 2000 })
+    await page.clock.runFor('03:00')
+    await page.getByText(/Last updated \d{1,2}:\d{2} [AP]M \(3 min ago\)/).waitFor({ timeout: 8000 })
+    expect(await card(page, order).count()).toBe(1)
+
+    // Back: the next refresh clears it.
+    await page.unroute(queueUrl)
+    await page.clock.runFor('00:11')
+    await alert.waitFor({ state: 'hidden', timeout: 8000 })
+    expect(problems).toEqual([])
+  })
+
   it('signs in, takes a cash payment with change, marks the order ready and completes it', async () => {
     const order = await placeOrder(seed.customers.counterShopperA)
     const { page, problems } = await cashierAtCounter()

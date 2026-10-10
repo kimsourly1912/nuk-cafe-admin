@@ -1,5 +1,18 @@
 <script setup lang="ts">
-/** The counter workspace's shell (D102): no sidebar; each page brings its header. */
+import { useWakeLock } from '@vueuse/core'
+
+/**
+ * The counter workspace's shell (D102): no sidebar; each page brings its header.
+ *
+ * The screen stays on while a counter page is open (D149): a tablet that dims or locks between
+ * customers misses the new-order chime and badge. The browser drops the lock when the tab is
+ * hidden and VueUse asks again when it's visible. Refused (battery saver, an older browser):
+ * nothing changes.
+ */
+const wakeLock = useWakeLock()
+onMounted(() => {
+  if (wakeLock.isSupported.value) wakeLock.request('screen').catch(() => {})
+})
 </script>
 
 <template>

@@ -229,6 +229,8 @@ The counter shows a KHQR made for each order (D130), set up on **Admin → Payme
 
 - **Workers Logs** for structured logs (see [security.md → Logging](./security.md#logging-and-privacy)); every error log has the request id.
 - `GET /api/health` answers 200 when the Worker can reach D1 (no details).
+- **Browser errors** (D149): an error nobody caught in a customer's, cashier's or admin's browser is posted to `/api/client-errors` and logged as **"Browser error"** with the page (no query), the build id, the message and stack and the browser. Search Workers Logs for that message; the build id tells whether it started with a deploy. Not sent to Telegram (the text comes from the browser).
+- **After a deploy**, open tabs of the admin, the counter and the platform console say "A new version of the app is ready" within about 5 minutes (D149); to check it on staging, keep a tab open across a deploy.
 - **Server error alerts on Telegram** (step 10.4, D119): Admin → Telegram → Notifications → **Server errors**, per chat. Every unexpected failure (a 500 on `/api/**`) queues an alert with the route, the status and the request id (never the error's text: it stays in Workers Logs, found by the request id); at most one per route and chat every 15 minutes; sent by `notifications:deliver` within a minute. Not covered: a failure the Worker can't answer at all (it never reaches the handler), and scheduled tasks (their failures are logged).
 - Alerts (Cloudflare notifications) on a spike of 5xx responses and on Worker exceptions: set up with production (8.2).
 - [Open] Q24: who receives alerts, and during which hours.
