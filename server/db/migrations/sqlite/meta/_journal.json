@@ -246,6 +246,13 @@
       "when": 1791643370878,
       "tag": "0034_order_ready_alerts",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1791665203020,
+      "tag": "0035_menu_photos",
+      "breakpoints": true
     }
   ]
 }

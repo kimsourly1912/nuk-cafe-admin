@@ -74,7 +74,7 @@ export function menuCategoryOf(id: string, name: string, overrides: Partial<Menu
 
 /** A menu item as the list shows it (`GET /api/admin/menu/items`): a draft in Tea at $3.50. */
 export function menuItemSummaryOf(id: string, name: string, overrides: Partial<MenuItemSummary> = {}): MenuItemSummary {
-  return { id, name, categoryId: 'cat-1', categoryName: 'Tea', status: 'draft', imageUrl: null, priceMinMinor: 350, priceMaxMinor: 350, sortOrder: 1, version: 1, updatedAt: STAMP, ...overrides }
+  return { id, name, categoryId: 'cat-1', categoryName: 'Tea', status: 'draft', imageUrl: null, image: null, priceMinMinor: 350, priceMaxMinor: 350, sortOrder: 1, version: 1, updatedAt: STAMP, ...overrides }
 }
 
 /** A whole menu item (`GET /api/admin/menu/items/{id}`): one version at $3.50, no option sets or add-ons. */

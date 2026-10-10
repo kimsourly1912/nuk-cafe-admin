@@ -1,5 +1,6 @@
 import * as v from 'valibot'
 import { idSchema, nameSchema, optionalParam, pageQuerySchema, textSchema, versionSchema } from './common'
+import type { MenuImage } from './media'
 import type { AvailabilityRuleRef } from './menu-availability'
 import { availabilityRuleIdsSchema } from './menu-availability'
 import { MAX_MODIFIER_PRICE_MINOR, MAX_MODIFIERS } from './menu-modifiers'
@@ -32,7 +33,9 @@ export interface MenuItemSummary {
   categoryId: string
   categoryName: string
   status: ItemStatus
+  /** The photo's card file (`image.card`), kept for older callers. */
   imageUrl: string | null
+  image: MenuImage | null
   /** Cheapest and dearest sellable version; `null` when none is sellable. */
   priceMinMinor: number | null
   priceMaxMinor: number | null
@@ -91,7 +94,8 @@ export interface MenuItem {
   categoryId: string
   name: string
   description: string
-  image: { id: string, url: string } | null
+  /** The photo (`id` for `imageId`, `url` its card file) and how the menu shows it (D158). */
+  image: { id: string, url: string, display: MenuImage } | null
   status: ItemStatus
   sortOrder: number
   optionSets: ItemOptionSet[]

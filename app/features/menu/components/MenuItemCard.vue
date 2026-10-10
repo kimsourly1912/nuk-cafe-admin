@@ -36,21 +36,13 @@ const inOrder = computed(() => (hasChoices(props.item) && props.quantity > 0 ? `
     :aria-label="item.name"
   >
     <div class="flex min-w-0 flex-1 gap-3 max-sm:flex-row-reverse sm:gap-4">
-      <div class="flex size-22 shrink-0 items-center justify-center overflow-hidden rounded-md bg-elevated sm:size-24">
-        <img
-          v-if="item.imageUrl"
-          :src="item.imageUrl"
-          alt=""
-          loading="lazy"
-          class="size-full object-cover"
-          :class="{ 'opacity-50 grayscale': item.soldOut }"
-        >
-        <UIcon
-          v-else
-          name="i-lucide-coffee"
-          class="size-8 text-dimmed"
-        />
-      </div>
+      <MenuItemImage
+        :image="item.image"
+        :src="item.imageUrl"
+        usage="card"
+        :muted="item.soldOut"
+        class="size-22 rounded-md sm:size-24"
+      />
       <div class="flex min-w-0 flex-1 flex-col gap-1">
         <h3 class="font-medium text-highlighted">
           <button

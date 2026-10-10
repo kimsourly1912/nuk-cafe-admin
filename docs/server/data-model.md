@@ -338,7 +338,7 @@ Feature: `media`.
 
 | Table | Columns | Invariants |
 |---|---|---|
-| `media_assets` | `tenant_id` (D136), `object_key` (unique; `t/<tenantId>/menu/<id>.<ext>`, `menu/<id>.<ext>` before D136), `mime_type`, `byte_size` (> 0), `sha256`, `state` (`temporary` \| `attached`), `uploaded_by`, `created_at`, `state_changed_at` | Temporary assets whose state is older than 24 h are deleted with their R2 object (every tenant's, by the platform task). An asset is attached to **one** record at a time, of its own tenant |
+| `media_assets` | `tenant_id` (D136), `object_key` (unique; `t/<tenantId>/menu/<id>.<ext>`, `menu/<id>.<ext>` before D136; a photo's source `t/<tenantId>/source/<id>.<ext>`, D158), `mime_type`, `byte_size` (> 0), `sha256`, `state` (`temporary` \| `attached`), `uploaded_by`, `created_at`, `state_changed_at`; for menu photos (D158, migration `0035_menu_photos`): `parent_id` → the photo's source (cascade), `variant` (`card` \| `detail` \| `detailSmall`), `width`, `height`, `placeholder` (a data URL), `edit` (JSON: the focus point and both views) | Temporary assets whose state is older than 24 h are deleted with their R2 object (every tenant's, by the platform task). An asset is attached to **one** record at a time, of its own tenant. A menu photo is its **source** row (private: `/media/…` never serves `source/`) with three file rows pointing at it: only the source's `state` counts (attached, released and purged with its files), and a file is never attached on its own |
 
 Built in step 3.2 (D57): `server/features/media/`, contract `shared/contracts/media.ts`.
 
@@ -346,6 +346,8 @@ Built in step 3.2 (D57): `server/features/media/`, contract `shared/contracts/me
 |---|---|
 | Upload | `POST /api/admin/media` (multipart, field `file`, permission `media:upload`) → 201 `{ id, url, mimeType, byteSize }`; audited as `media.asset.upload` |
 | Serve | `GET /media/<key>` (public, `nosniff`, cached for a year: keys never change) |
+| A menu photo (D158) | `POST /api/admin/media/photos` (multipart: `source` at most 2400 px, `card` 480 × 480, `detail` 1200 × 900, `detailSmall` 600 × 450, `edit` JSON, `placeholder`; sizes read from the headers, never decoded) → 201 `{ id, image }`; `GET /api/admin/media/photos/{id}` (`{ id, edit, image }`, `edit` `null` for a single image from before D158); `GET …/{id}/source` (the private source, `private, no-store`). All `media:upload`. A menu item attaches the photo's id as its `imageId` |
+| Read for the menu | `media.imageSets(db, tenantId, ids)` → `MenuImage` per id (`card`, `detail`, `detailSmall`, `placeholder`; a single image is every file), two queries for any number of ids |
 | A record starts using an upload | `media.attachStatements(db, assetId, field)` in the record's batch: checks it now (422 `MEDIA_NOT_AVAILABLE` on `field`) and guards it in the batch (map a stale batch to `mediaNotAvailable(field)`) |
 | A record drops or replaces it | `media.releaseStatement(db, assetId)` in the same batch; its 24 hours start then |
 | Cleanup | `media:purge-temporary`, hourly at :05 |

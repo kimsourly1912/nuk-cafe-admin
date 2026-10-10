@@ -29,7 +29,7 @@ const KHMER_V = id(14)
 const BRANCH = id(15)
 
 const item = (over: Partial<PublicMenuItem> & Pick<PublicMenuItem, 'id' | 'name' | 'variations'>): PublicMenuItem =>
-  ({ description: '', imageUrl: null, optionSets: [], soldOut: false, modifierGroups: [], ...over })
+  ({ description: '', imageUrl: null, image: null, optionSets: [], soldOut: false, modifierGroups: [], ...over })
 
 function menu(options: { open?: boolean, closesInMinutes?: number, largeSoldOut?: boolean } = {}): PublicMenu {
   const open = options.open ?? true

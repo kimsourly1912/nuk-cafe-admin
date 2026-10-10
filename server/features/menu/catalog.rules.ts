@@ -1,3 +1,4 @@
+import type { MenuImage } from '#shared/contracts/media'
 import type { PublicMenuCategory, PublicMenuItem, PublicMenuModifierGroup, PublicMenuVariation } from '#shared/contracts/public-menu'
 import type { LocalTime, RuleForCheck } from './availability.rules'
 import { isAvailableAt } from './availability.rules'
@@ -21,7 +22,8 @@ export interface CatalogItem {
   categoryId: string
   name: string
   description: string
-  imageUrl: string | null
+  /** The photo's files (D158). */
+  image: MenuImage | null
   ruleIds: string[]
   /** The item's option sets in grid order, with their active values in order. */
   optionSets: { id: string, name: string, values: { id: string, name: string }[] }[]
@@ -55,7 +57,8 @@ function itemAt(item: CatalogItem, levels: string[][], rules: Catalog['rules'], 
     id: item.id,
     name: item.name,
     description: item.description,
-    imageUrl: item.imageUrl,
+    imageUrl: item.image?.card ?? null,
+    image: item.image,
     // Only the values some version uses (a value with no sellable version isn't offered at all).
     optionSets: item.optionSets.map(set => ({ ...set, values: set.values.filter(value => item.variations.some(v => v.valueIds.includes(value.id))) })),
     variations,

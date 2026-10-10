@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * An image for a record (a menu item's photo, the cafe's logo, D143): preview + Upload/Replace/
+ * An image for a record (the cafe's logo, D143; menu photos use the photo editor, D158): preview + Upload/Replace/
  * Remove. The file is checked (type), made smaller in the browser (at most 1600 px, WebP, D122),
  * checked for size, and uploaded as soon as it's picked; the form then holds the upload's `url` and
  * asset `id`. Remove clears both: the record is saved without an image (`null`).

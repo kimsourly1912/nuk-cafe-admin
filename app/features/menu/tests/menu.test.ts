@@ -11,6 +11,7 @@ function item(id: string, overrides: Partial<PublicMenuItem> = {}): PublicMenuIt
     name: id,
     description: '',
     imageUrl: null,
+    image: null,
     optionSets: [],
     variations: [{ id: `${id}-v`, valueIds: [], label: '', priceMinor: 300, soldOut: false }],
     soldOut: false,

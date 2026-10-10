@@ -59,22 +59,12 @@ function setNote(key: string, note: string) {
         :ui="{ body: 'p-3 sm:p-3' }"
       >
         <div class="flex gap-3">
-          <img
-            v-if="line.imageUrl"
+          <MenuItemImage
+            :image="line.image"
             :src="line.imageUrl"
-            alt=""
-            loading="lazy"
-            class="size-14 shrink-0 rounded-md bg-elevated object-cover"
-          >
-          <div
-            v-else
-            class="flex size-14 shrink-0 items-center justify-center rounded-md bg-elevated"
-          >
-            <UIcon
-              name="i-lucide-coffee"
-              class="size-6 text-dimmed"
-            />
-          </div>
+            usage="card"
+            class="size-14 rounded-md"
+          />
           <div class="min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
               <p

@@ -92,6 +92,7 @@ describe('the public menu', () => {
       name: 'Latte',
       description: '',
       imageUrl: `/media/menu/${image}.png`,
+      image: { card: `/media/menu/${image}.png`, detail: `/media/menu/${image}.png`, detailSmall: null, placeholder: null },
       optionSets: [{ id: size.id, name: 'Size', values: [{ id: v(size, 'Small'), name: 'Small' }, { id: v(size, 'Large'), name: 'Large' }] }],
       variations: [
         { id: expect.any(String), valueIds: [v(size, 'Small')], label: 'Small', priceMinor: 300, soldOut: false },

@@ -24,11 +24,12 @@ export function pickSmaller(original: File, shrunk: Blob | null): File {
   return new File([shrunk], `${base}.${extension}`, { type: shrunk.type })
 }
 
-async function encode(canvas: HTMLCanvasElement): Promise<Blob | null> {
-  const webp = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', IMAGE_QUALITY))
+/** WebP at `quality`, or JPEG where the browser can't write WebP (Safari). */
+export async function encodeImage(canvas: HTMLCanvasElement, quality = IMAGE_QUALITY): Promise<Blob | null> {
+  const webp = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/webp', quality))
   // A browser that can't write WebP gives PNG instead: JPEG is smaller for photos.
   if (webp?.type === 'image/webp') return webp
-  return new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', IMAGE_QUALITY))
+  return new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', quality))
 }
 
 /** The file to upload: `file` made smaller when possible, else `file` itself. */
@@ -44,7 +45,7 @@ export async function shrinkImage(file: File): Promise<File> {
     if (!context) return file
     context.drawImage(bitmap, 0, 0, width, height)
     bitmap.close()
-    return pickSmaller(file, await encode(canvas))
+    return pickSmaller(file, await encodeImage(canvas))
   }
   catch {
     return file

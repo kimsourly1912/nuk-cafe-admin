@@ -54,7 +54,7 @@ const MILK: ModifierGroup = {
 const LATTE: MenuItem = menuItemOf('item-1', 'Latte', {
   categoryId: ESPRESSO.id,
   description: 'Espresso and milk',
-  image: { id: 'asset-latte', url: '/media/menu/latte.png' },
+  image: { id: 'asset-latte', url: '/media/menu/latte.png', display: { card: '/media/menu/latte.png', detail: '/media/menu/latte.png', detailSmall: null, placeholder: null } },
   status: 'active',
   optionSets: [
     { id: SIZE.id, name: 'Size', status: 'active', values: SIZE.values.map(({ id, name, status }) => ({ id, name, status })) },
@@ -93,7 +93,8 @@ const LATTE_ROW = summaryOf(LATTE, { priceMinMinor: 350, priceMaxMinor: 425 })
 const MATCHA = menuItemOf('item-2', 'Matcha', { variations: [{ id: 'var-9', valueIds: [], label: '', priceMinor: null, status: 'disabled', sellable: false }] })
 const MATCHA_ROW = summaryOf(MATCHA, { priceMinMinor: null, priceMaxMinor: null })
 
-const UPLOADED = { id: 'asset-new', url: '/media/menu/new.png', mimeType: 'image/png', byteSize: 8 }
+/** What `POST /admin/media/photos` answers (D158). */
+const UPLOADED_PHOTO = { id: 'asset-new', image: { card: '/media/t/1/menu/new-card.webp', detail: '/media/t/1/menu/new-detail.webp', detailSmall: '/media/t/1/menu/new-small.webp', placeholder: null } }
 
 function backend(rows: MenuItemSummary[] = [LATTE_ROW, MATCHA_ROW], items: MenuItem[] = [LATTE, MATCHA]) {
   const handlers: Record<string, MockHandler> = {
@@ -132,16 +133,68 @@ async function openNew(page: Page) {
   return form
 }
 
-/** Picks a file through the Upload/Replace button (the file dialog VueUse opens). */
-async function chooseImage(form: Locator, file: { name: string, mimeType: string, buffer: Buffer }) {
+interface TestFile { name: string, mimeType: string, buffer: Buffer }
+
+/** A real photo-like PNG of `width` × `height`, drawn in the page: a warm background and a round dish. */
+async function photoFile(page: Page, width: number, height: number, name = 'dish.png'): Promise<TestFile> {
+  const bytes = await page.evaluate(async ([w, h]) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = w!
+    canvas.height = h!
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#e9dcc9'
+    context.fillRect(0, 0, w!, h!)
+    context.fillStyle = '#7a4b2a'
+    context.beginPath()
+    context.arc(w! / 2, h! / 2, Math.min(w!, h!) / 3, 0, Math.PI * 2)
+    context.fill()
+    const blob = await new Promise<Blob>(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+    return [...new Uint8Array(await blob.arrayBuffer())]
+  }, [width, height])
+  return { name, mimeType: 'image/png', buffer: Buffer.from(bytes) }
+}
+
+/** Opens the photo editor from the form (Add photo / Edit photo). */
+async function openPhotoEditor(form: Locator, button = 'Add photo') {
+  await form.getByRole('button', { name: button }).click()
+  const editor = form.page().getByRole('dialog', { name: /Add photo|Edit photo/ })
+  await editor.waitFor()
+  return editor
+}
+
+/** Chooses a file in the photo editor (the file dialog VueUse opens). */
+async function choosePhoto(editor: Locator, file: TestFile, button = 'Choose photo') {
   const [chooser] = await Promise.all([
-    form.page().waitForEvent('filechooser'),
-    form.getByRole('button', { name: /Upload image|Replace image/ }).click(),
+    editor.page().waitForEvent('filechooser'),
+    editor.getByRole('button', { name: button }).click(),
   ])
   await chooser.setFiles(file)
 }
 
-const PNG = { name: 'photo.png', mimeType: 'image/png', buffer: Buffer.from('89504e470d0a1a0a', 'hex') }
+/** The photo editor's upload, its raw bytes kept (the mock's handlers get text, which garbles binary). */
+async function capturePhotoUpload(page: Page, answer: unknown = UPLOADED_PHOTO) {
+  const uploads: Buffer[] = []
+  await page.route('**/api/c/nuk/admin/media/photos', async (route) => {
+    uploads.push(route.request().postDataBuffer()!)
+    await route.fulfill({ status: 201, json: answer })
+  })
+  return uploads
+}
+
+/** One part of a multipart body: its text, or for a file the image's size, read back in the page. */
+function partOf(body: Buffer, name: string): Buffer {
+  const marker = `name="${name}"`
+  const start = body.indexOf(marker)
+  const data = body.indexOf('\r\n\r\n', start) + 4
+  const end = body.indexOf('\r\n--', data)
+  return body.subarray(data, end)
+}
+async function imageSizeOf(page: Page, bytes: Buffer) {
+  return page.evaluate(async (data) => {
+    const bitmap = await createImageBitmap(new Blob([new Uint8Array(data)]))
+    return [bitmap.width, bitmap.height]
+  }, [...bytes])
+}
 
 /** `UInputNumber` updates its model on blur. */
 /** Picks a searchable dropdown's option (RecordSelect) and waits for its list to close: it hands focus back to its button as it closes. */
@@ -356,15 +409,10 @@ describe('menu item states', () => {
 
 describe('menu item form', () => {
   it('creates a draft with an uploaded image, a leaf category, a price in cents and a rule', async () => {
-    let uploaded: unknown
     let body: unknown
     const { page } = await open({
       ...backend(),
       'GET /admin/menu/availability-rules': () => [{ id: 'rule-1', name: 'Breakfast', status: 'active', windows: [], itemCount: 0, categoryCount: 0, version: 1, createdAt: STAMP, updatedAt: STAMP }],
-      'POST /admin/media': (request) => {
-        uploaded = request.body
-        return UPLOADED
-      },
       'POST /admin/menu/items': (request) => {
         body = request.body
         return menuItemOf('item-9', 'Mocha')
@@ -377,8 +425,13 @@ describe('menu item form', () => {
     await form.getByText('Category is required').waitFor()
     await form.getByText('Set a price, or switch it off').waitFor()
 
-    await chooseImage(form, PNG)
-    await expect.poll(() => form.locator('img').getAttribute('src')).toBe(UPLOADED.url)
+    const uploads = await capturePhotoUpload(page)
+    const editor = await openPhotoEditor(form)
+    await choosePhoto(editor, await photoFile(page, 1600, 1200))
+    await editor.getByRole('button', { name: 'Use photo' }).click()
+    await editor.waitFor({ state: 'hidden' })
+    await expect.poll(() => form.getByRole('img', { name: 'Menu item photo' }).getAttribute('src')).toBe(UPLOADED_PHOTO.image.card)
+    expect(uploads).toHaveLength(1)
     await form.getByLabel('Name', { exact: true }).fill('Mocha')
     // Only leaves are offered: Drinks has a sub-category.
     await form.getByRole('combobox', { name: 'Category', exact: true }).click()
@@ -392,13 +445,11 @@ describe('menu item form', () => {
     await form.getByRole('button', { name: 'Create', exact: true }).click()
 
     await toast(page, 'Menu item "Mocha" created as a draft').waitFor()
-    // Multipart with the chosen file.
-    expect(uploaded).toContain('filename="photo.png"')
     expect(body).toEqual({
       categoryId: ESPRESSO.id,
       name: 'Mocha',
       description: '',
-      imageId: UPLOADED.id,
+      imageId: UPLOADED_PHOTO.id,
       optionSetIds: [],
       variations: [{ valueIds: [], priceMinor: 420, status: 'active' }],
       modifierGroups: [],
@@ -618,77 +669,114 @@ describe('menu item form', () => {
     await expect.poll(() => body?.imageId).toBeNull()
   })
 
-  it('rejects the wrong file type, a file over 25 MB, or one still over 5 MB after shrinking, without uploading', async () => {
+  it('the photo editor refuses a file that isn\'t a photo, one over 25 MB, or one it can\'t open, without uploading (D158)', async () => {
     const { page, api } = await open()
     const form = await openNew(page)
-    await chooseImage(form, { name: 'notes.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF') })
-    await form.getByText('Use a JPEG, PNG or WebP image.').waitFor()
-    await chooseImage(form, { name: 'enormous.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(25 * 1024 * 1024 + 1) })
-    await form.getByText('The image is larger than 25 MB.').waitFor()
-    // Not a real image: it can't be made smaller, so the 5 MB limit applies to it as it is.
-    await chooseImage(form, { name: 'huge.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(5 * 1024 * 1024 + 1) })
-    await form.getByText('The image is still larger than 5 MB after making it smaller. Try another photo.').waitFor()
+    const editor = await openPhotoEditor(form)
+    await choosePhoto(editor, { name: 'notes.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF') })
+    await editor.getByText('Use a JPEG, PNG or WebP photo.').waitFor()
+    await choosePhoto(editor, { name: 'enormous.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(25 * 1024 * 1024 + 1) })
+    await editor.getByText('This photo is larger than 25 MB. Choose a smaller one.').waitFor()
+    await choosePhoto(editor, { name: 'broken.png', mimeType: 'image/png', buffer: Buffer.from('89504e470d0a1a0a', 'hex') })
+    await editor.getByText('This photo can\'t be opened here. Save it as a JPEG or PNG, or choose another one.').waitFor()
+    expect(await editor.getByRole('button', { name: 'Use photo' }).isDisabled()).toBe(true)
     expect(api.calls.filter(c => c.includes('media'))).toEqual([])
   })
 
-  it('a big photo is made smaller in the browser before upload: WebP, at most 1600 px (D122)', async () => {
+  it('makes the photo\'s files in the browser at their sizes, from the point clicked as the middle of the dish (D158)', async () => {
     const { page } = await open()
-    // The upload's raw bytes (the mock's handlers get text, which garbles binary).
-    let uploaded: Buffer | undefined
-    await page.route('**/api/c/nuk/admin/media', async (route) => {
-      uploaded = route.request().postDataBuffer() ?? undefined
-      await route.fulfill({ json: UPLOADED })
-    })
-    // A real 3200 × 2400 photo-like PNG, drawn in the page (noise compresses badly, like a photo).
-    const photo = Buffer.from(await page.evaluate(async () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = 3200
-      canvas.height = 2400
-      const context = canvas.getContext('2d')!
-      const pixels = context.createImageData(3200, 2400)
-      for (let i = 0; i < pixels.data.length; i += 4) {
-        pixels.data[i] = (i * 7) % 256
-        pixels.data[i + 1] = (i * 13) % 256
-        pixels.data[i + 2] = (i * 3) % 256
-        pixels.data[i + 3] = 255
-      }
-      context.putImageData(pixels, 0, 0)
-      const blob = await new Promise<Blob>(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
-      return [...new Uint8Array(await blob.arrayBuffer())]
-    }))
+    const uploads = await capturePhotoUpload(page)
     const form = await openNew(page)
-    await chooseImage(form, { name: 'IMG_2041.png', mimeType: 'image/png', buffer: photo })
-    await expect.poll(() => form.locator('img').getAttribute('src')).toBe(UPLOADED.url)
+    await form.getByLabel('Name', { exact: true }).fill('Mocha')
+    const editor = await openPhotoEditor(form)
+    // A 3200 × 2400 photo: the source is kept at 2400 px at most.
+    await choosePhoto(editor, await photoFile(page, 3200, 2400))
+    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
+    // Both previews, with the item's name.
+    for (const view of ['card', 'detail']) await expect.poll(() => editor.getByTestId(`photo-preview-${view}`).getByText('Mocha').isVisible()).toBe(true)
+    // The middle of the dish is a quarter in from the left.
+    const stage = editor.getByTestId('photo-stage')
+    const box = (await stage.boundingBox())!
+    await stage.click({ position: { x: box.width * 0.25, y: box.height * 0.5 } })
+    await editor.getByRole('button', { name: 'Use photo' }).click()
+    await editor.waitFor({ state: 'hidden' })
 
-    const multipart = uploaded!.toString('latin1')
-    expect(multipart).toContain('filename="IMG_2041.webp"')
-    expect(multipart).toContain('Content-Type: image/webp')
-    expect(uploaded!.length).toBeLessThan(photo.length / 2)
-    // The uploaded image is 1600 × 1200: cut the WebP out (its RIFF header holds its length) and
-    // read its size back in the page.
-    const start = uploaded!.indexOf('RIFF')
-    const webp = uploaded!.subarray(start, start + 8 + uploaded!.readUInt32LE(start + 4))
-    const size = await page.evaluate(async (bytes) => {
-      const bitmap = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type: 'image/webp' }))
-      return [bitmap.width, bitmap.height]
-    }, [...webp])
-    expect(size).toEqual([1600, 1200])
+    const body = uploads[0]!
+    expect(await imageSizeOf(page, partOf(body, 'source'))).toEqual([2400, 1800])
+    expect(await imageSizeOf(page, partOf(body, 'card'))).toEqual([480, 480])
+    expect(await imageSizeOf(page, partOf(body, 'detail'))).toEqual([1200, 900])
+    expect(await imageSizeOf(page, partOf(body, 'detailSmall'))).toEqual([600, 450])
+    expect(body.toString('latin1')).toContain('Content-Type: image/webp')
+    const edit = JSON.parse(partOf(body, 'edit').toString())
+    expect(edit.focus.x).toBeCloseTo(0.25, 1)
+    // The square follows the point (as far as the photo allows); the 4:3 photo fills the item page.
+    expect(edit.card).toMatchObject({ zoom: 1, adjusted: false })
+    expect(edit.card.x).toBeCloseTo(0.375, 2)
+    expect(edit.detail).toMatchObject({ zoom: 1, adjusted: false })
+    expect(partOf(body, 'placeholder').toString()).toMatch(/^data:image\/(webp|jpeg);base64,/)
   }, 60_000)
 
-  it('cannot save while the image is uploading, and keeps the old image when the upload fails', async () => {
-    const upload = deferred()
-    const { page, api } = await open({ ...backend(), 'POST /admin/media': upload.handler })
-    const form = await openEdit(page, 'Latte')
-    await chooseImage(form, PNG)
-    await upload.started()
-    await form.getByText('Waiting for the image upload…').waitFor()
-    expect(await form.getByRole('button', { name: 'Save', exact: true }).isDisabled()).toBe(true)
+  it('Adjust moves one view with the keyboard and zoom; Rotate turns the photo; a small photo is warned about (D158)', async () => {
+    const { page } = await open()
+    const uploads = await capturePhotoUpload(page)
+    const form = await openNew(page)
+    const editor = await openPhotoEditor(form)
+    // 800 × 600: under 900 px on its short side.
+    await choosePhoto(editor, await photoFile(page, 800, 600))
+    await editor.getByText('This photo is small').waitFor()
+    await editor.getByRole('button', { name: 'Rotate right' }).click()
+    await expect.poll(async () => {
+      const box = (await editor.getByTestId('photo-stage').boundingBox())!
+      return box.height > box.width
+    }).toBe(true)
 
-    upload.fail(failures.validation('Use a JPEG, PNG or WebP image.'))
-    await expect.poll(() => form.getByRole('button', { name: 'Save', exact: true }).isDisabled()).toBe(false)
-    expect(await form.locator('img').getAttribute('src')).toBe('/media/menu/latte.png')
+    await editor.getByRole('button', { name: 'Adjust the menu card' }).click()
+    const frame = editor.getByTestId('photo-frame')
+    await frame.focus()
+    await page.keyboard.press('+')
+    await page.keyboard.press('+')
+    await page.keyboard.press('ArrowLeft')
+    await editor.getByRole('button', { name: 'Done' }).click()
+    await editor.getByRole('button', { name: 'Use photo' }).click()
+    await editor.waitFor({ state: 'hidden' })
+
+    const body = uploads[0]!
+    expect(await imageSizeOf(page, partOf(body, 'source'))).toEqual([600, 800])
+    const edit = JSON.parse(partOf(body, 'edit').toString())
+    expect(edit.card.adjusted).toBe(true)
+    expect(edit.card.zoom).toBeCloseTo(1.2)
+    expect(edit.detail.adjusted).toBe(false)
+    // A tall photo stays whole on the item page: zoomed out to fit, the fill colour around it.
+    expect(edit.detail.zoom).toBeLessThan(1)
+  }, 60_000)
+
+  it('Edit photo opens the saved photo with how it was made; a failed upload keeps the editor and the old photo (D158)', async () => {
+    const { page, api } = await open()
+    const saved = { focus: { x: 0.5, y: 0.5 }, card: { zoom: 2, x: 0.5, y: 0.5, adjusted: true }, detail: { zoom: 1, x: 0.5, y: 0.5, adjusted: false }, fill: '#e9dcc9' }
+    const source = await photoFile(page, 1200, 900)
+    await page.route('**/api/c/nuk/admin/media/photos/asset-latte', route => route.fulfill({ json: { id: 'asset-latte', edit: saved, image: LATTE.image!.display } }))
+    await page.route('**/api/c/nuk/admin/media/photos/asset-latte/source', route => route.fulfill({ contentType: 'image/png', body: source.buffer }))
+    await page.route('**/api/c/nuk/admin/media/photos', (route) => {
+      const message = 'This photo couldn\'t be saved. Try again, or choose another photo.'
+      return route.fulfill({ status: 400, json: { error: true, statusCode: 400, message, data: { code: 'VALIDATION_FAILED', message } } })
+    })
+    const form = await openEdit(page, 'Latte')
+    const editor = await openPhotoEditor(form, 'Edit photo')
+    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
+    // Opened as saved: Adjust shows the card at its zoom.
+    await editor.getByRole('button', { name: 'Adjust the menu card' }).click()
+    await expect.poll(() => editor.getByRole('slider', { name: 'Zoom' }).getAttribute('aria-valuenow')).toBe('2')
+    await editor.getByRole('button', { name: 'Done' }).click()
+
+    await editor.getByRole('button', { name: 'Use photo' }).click()
+    await editor.getByText('This photo couldn\'t be saved. Try again, or choose another photo.').first().waitFor()
+    // Still open, with the photo; nothing was changed, so Cancel closes it.
+    expect(await editor.getByRole('button', { name: 'Use photo' }).isDisabled()).toBe(false)
+    await editor.getByRole('button', { name: 'Cancel' }).click()
+    await editor.waitFor({ state: 'hidden' })
+    expect(await form.getByRole('img', { name: 'Menu item photo' }).getAttribute('src')).toBe('/media/menu/latte.png')
     expect(api.calls.filter(c => c.startsWith('PATCH'))).toEqual([])
-  })
+  }, 60_000)
 
   it('a changed price counts as unsaved: closing asks first', async () => {
     const { page } = await open()

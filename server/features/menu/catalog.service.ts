@@ -3,7 +3,7 @@ import type { Db } from '#server/utils/batch'
 import { toIso } from '#server/utils/time'
 import { getPublicBranch, listBranchOptions } from '#server/features/branches'
 import { notFound } from '#server/utils/errors'
-import { assetUrls } from '#server/features/media'
+import { imageSets } from '#server/features/media'
 import type { RuleForCheck } from './availability.rules'
 import { localTime } from './availability.rules'
 import * as repo from './catalog.repository'
@@ -39,7 +39,7 @@ export async function loadCatalog(db: Db, tenantId: string): Promise<Catalog> {
     repo.allRules(db, tenantId),
     repo.allWindows(db, tenantId),
   ])
-  const images = await assetUrls(db, tenantId, items.flatMap(i => i.imageAssetId ? [i.imageAssetId] : []))
+  const images = await imageSets(db, tenantId, items.flatMap(i => i.imageAssetId ? [i.imageAssetId] : []))
 
   const categoryRules = groupBy(categoryLinks, l => l.categoryId)
   const itemRules = groupBy(itemLinks, l => l.itemId)
@@ -75,7 +75,7 @@ export async function loadCatalog(db: Db, tenantId: string): Promise<Catalog> {
         categoryId: item.categoryId,
         name: item.name,
         description: item.description,
-        imageUrl: item.imageAssetId ? images.get(item.imageAssetId) ?? null : null,
+        image: item.imageAssetId ? images.get(item.imageAssetId) ?? null : null,
         ruleIds: (itemRules.get(item.id) ?? []).map(l => l.ruleId),
         optionSets: sets.map(s => ({ id: s.setId, name: s.name, values: (valuesOf.get(s.setId) ?? []).map(v => ({ id: v.id, name: v.name })) })),
         variations: sellable,

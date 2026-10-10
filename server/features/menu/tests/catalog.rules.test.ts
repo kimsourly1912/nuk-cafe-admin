@@ -12,7 +12,7 @@ const item = (id: string, categoryId: string, overrides: Partial<CatalogItem> = 
   categoryId,
   name: id,
   description: '',
-  imageUrl: null,
+  image: null,
   ruleIds: [],
   optionSets: [],
   variations: [{ id: `${id}-v`, valueIds: [], label: '', priceMinor: 300 }],

@@ -4,7 +4,7 @@ import type { PublicMenu, PublicMenuItem } from '#shared/contracts/public-menu'
 import { filterSoldOutRows, rowName, soldOutCategories, soldOutRows } from '../utils/sold-out'
 
 const item = (id: string, name: string, versions: [string, string, boolean][]): PublicMenuItem => ({
-  id, name, description: '', imageUrl: null, optionSets: [], modifierGroups: [],
+  id, name, description: '', imageUrl: null, image: null, optionSets: [], modifierGroups: [],
   variations: versions.map(([vid, label, soldOut]) => ({ id: vid, valueIds: [], label, priceMinor: 300, soldOut })),
   soldOut: versions.every(v => v[2]),
 })

@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import type { PublicBranch } from './branches'
 import { idSchema } from './common'
+import type { MenuImage } from './media'
 
 /**
  * The customer menu (`GET /api/public/menu?branchId=…`, D65): what a branch sells **right now**.
@@ -45,7 +46,10 @@ export interface PublicMenuItem {
   id: string
   name: string
   description: string
+  /** The photo's card file (`image.card`), kept for older callers. */
   imageUrl: string | null
+  /** The photo's files and placeholder (D158). */
+  image: MenuImage | null
   /** Only the values some listed version uses. */
   optionSets: { id: string, name: string, values: { id: string, name: string }[] }[]
   /** At least one, in the grid's order. */

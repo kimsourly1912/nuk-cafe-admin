@@ -41,23 +41,17 @@ function onName() {
     :aria-busy="busy || undefined"
   >
     <div class="relative aspect-4/3 bg-elevated">
-      <img
-        v-if="item.imageUrl"
+      <!-- The item page's 4:3 photo: the grid's cards are that shape (D158). -->
+      <MenuItemImage
+        :image="item.image"
         :src="item.imageUrl"
+        usage="detail"
+        sizes="(min-width: 1024px) 20rem, 50vw"
         :alt="item.name"
-        loading="lazy"
-        class="size-full object-cover"
+        icon="i-lucide-image"
+        class="size-full"
         :class="item.status === 'archived' && 'grayscale'"
-      >
-      <div
-        v-else
-        class="flex size-full items-center justify-center text-dimmed"
-      >
-        <UIcon
-          name="i-lucide-image"
-          class="size-10"
-        />
-      </div>
+      />
 
       <UBadge
         v-if="muted"

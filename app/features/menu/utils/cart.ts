@@ -1,3 +1,4 @@
+import type { MenuImage } from '#shared/contracts/media'
 import { LINE_MAX_QUANTITY, LINE_NOTE_MAX, ORDER_MAX_LINES } from '#shared/contracts/orders'
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
 
@@ -64,6 +65,8 @@ export interface ResolvedLine extends CartLine {
   detail: string
   unitPriceMinor: number
   imageUrl: string | null
+  /** The photo's files and placeholder (D158). */
+  image: MenuImage | null
   /** Still on the menu, its version not sold out, its add-ons still offered. */
   available: boolean
 }
@@ -85,7 +88,7 @@ export function resolveCart(lines: CartLine[], items: PublicMenuItem[]): Resolve
     const offered = new Map(item?.modifierGroups.flatMap(g => g.modifiers).map(m => [m.id, m]) ?? [])
     const modifiers = line.modifierIds.map(id => offered.get(id))
     if (!item || !version || modifiers.some(m => !m)) {
-      return { ...line, detail: '', unitPriceMinor: 0, imageUrl: null, available: false }
+      return { ...line, detail: '', unitPriceMinor: 0, imageUrl: null, image: null, available: false }
     }
     const chosen = modifiers.filter(m => m !== undefined)
     return {
@@ -94,6 +97,7 @@ export function resolveCart(lines: CartLine[], items: PublicMenuItem[]): Resolve
       detail: [version.label, chosen.map(m => m.name).join(', ')].filter(Boolean).join(' · '),
       unitPriceMinor: version.priceMinor + chosen.reduce((sum, m) => sum + m.priceDeltaMinor, 0),
       imageUrl: item.imageUrl,
+      image: item.image,
       available: !version.soldOut,
     }
   })

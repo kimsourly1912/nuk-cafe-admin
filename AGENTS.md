@@ -213,7 +213,8 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](d
 | `QrCode`, `qrImage`, `qrSvg` | `components/`, `utils/qr-code.ts` | A QR code drawn as SVG, dark on light in both themes: a table's link, an order's KHQR (D130) |
 | `fetchAccountCafes`, `otherCafes`, `workspaceUrl`, `worksElsewhere`, `CAFES_PATH` | `utils/account-cafes.ts` | The signed-in account's cafes (`GET /api/me/cafes`) for Your cafes, the switcher and a sign-in refused at the wrong cafe; another cafe always opens as a full page load (D141, D144) |
 | `useCafe()`, `CafeLogo` | `composables/`, `components/` | The cafe's name and logo (`GET /api/cafes/{slug}`): **never write a cafe's name into a page** (D143) |
-| `ImageInput`, `useImageUpload`, `shrinkImage` | `components/`, `composables/`, `utils/` | An image for a record (a menu item's photo, the cafe's logo): shrunk in the browser, uploaded on pick through `POST /admin/media` (D122, D143) |
+| `ImageInput`, `useImageUpload`, `shrinkImage` | `components/`, `composables/`, `utils/` | An image for a record (the cafe's logo): shrunk in the browser, uploaded on pick through `POST /admin/media` (D122, D143) |
+| `MenuItemImage` | `components/` | **Every menu item photo** (D158): `usage="card"` (square) or `"detail"` (4:3, two sizes), blurred placeholder, lazy, fade-in; never a bare `<img>` for a menu photo. Photos are made by the products feature's photo editor (`POST /admin/media/photos`) |
 | `PhoneInput`, `parsePhone` / `phoneSchema` | `components/`, `shared/contracts/phone.ts` | Every phone number: a country (flag, dial code) and the number; stored and sent as E.164, checked by libphonenumber on both sides (D127) |
 
 
