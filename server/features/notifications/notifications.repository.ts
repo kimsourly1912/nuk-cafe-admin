@@ -1,9 +1,9 @@
-import { and, asc, desc, eq, inArray, lt, lte, ne, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, isNull, lt, lte, ne, sql } from 'drizzle-orm'
 import type { DestinationKind, NotificationKind, TelegramLinkStatus } from '#shared/contracts/notifications'
 import { user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
 import type { StoredMessage } from './notifications.schema'
-import { notificationDeliveries, notificationRules, telegramDestinations, telegramLinks } from './notifications.schema'
+import { notificationDeliveries, notificationRules, orderReadyAlerts, telegramDestinations, telegramLinks } from './notifications.schema'
 
 /** All SQL of Telegram (docs/server/architecture.md → Repository). */
 
@@ -296,5 +296,51 @@ export async function recentDeliveries(db: Db, tenantId: string, limit: number) 
 /** Deliveries from before `cutoff` (history kept 90 days). */
 export async function deleteDeliveriesBefore(db: Db, cutoff: Date): Promise<number> {
   const removed = await db.delete(notificationDeliveries).where(lt(notificationDeliveries.createdAt, cutoff)).returning({ id: notificationDeliveries.id })
+  return removed.length
+}
+
+// --- "Your order is ready" for customers (D157) ---
+
+export type OrderReadyAlertRow = typeof orderReadyAlerts.$inferSelect
+
+export async function findOrderReadyAlert(db: Db, tenantId: string, orderId: string): Promise<OrderReadyAlertRow | undefined> {
+  const [row] = await db.select().from(orderReadyAlerts).where(and(eq(orderReadyAlerts.tenantId, tenantId), eq(orderReadyAlerts.orderId, orderId)))
+  return row
+}
+
+/** The order's alert a code belongs to, in whichever tenant (the code is the only key Telegram sends). */
+export async function findOrderReadyAlertByCode(db: Db, codeHash: string): Promise<OrderReadyAlertRow | undefined> {
+  const [row] = await db.select().from(orderReadyAlerts).where(eq(orderReadyAlerts.codeHash, codeHash))
+  return row
+}
+
+/**
+ * A new link for the order: a new code and expiry. A chat that already asked stays until a new one
+ * uses the new code; a message already sent stays sent.
+ */
+export async function saveOrderReadyLink(db: Db, link: { tenantId: string, orderId: string, codeHash: string, linkExpiresAt: Date, createdAt: Date }): Promise<void> {
+  await db.insert(orderReadyAlerts).values(link)
+    .onConflictDoUpdate({ target: orderReadyAlerts.orderId, set: { codeHash: link.codeHash, linkExpiresAt: link.linkExpiresAt } })
+}
+
+/**
+ * A chat used the code: it gets the message. Only the code it was given, unexpired, once (the code
+ * is cleared; a guard follows it in the batch).
+ */
+export function subscribeOrderReadyAlertStatement(db: Db, orderId: string, codeHash: string, chatId: string, now: Date): Statement {
+  return db.update(orderReadyAlerts)
+    .set({ chatId, codeHash: null, subscribedAt: now })
+    .where(and(eq(orderReadyAlerts.orderId, orderId), eq(orderReadyAlerts.codeHash, codeHash), sql`${orderReadyAlerts.linkExpiresAt} > ${now.getTime()}`))
+}
+
+/** Sent (or given up on): the chat is forgotten. Only while that chat is still the one asked. */
+export async function markOrderReadyNotified(db: Db, tenantId: string, orderId: string, chatId: string, at: Date): Promise<void> {
+  await db.update(orderReadyAlerts).set({ chatId: null, notifiedAt: at })
+    .where(and(eq(orderReadyAlerts.tenantId, tenantId), eq(orderReadyAlerts.orderId, orderId), eq(orderReadyAlerts.chatId, chatId), isNull(orderReadyAlerts.notifiedAt)))
+}
+
+/** Rows from before `cutoff`: their orders are long finished. */
+export async function deleteOrderReadyAlertsBefore(db: Db, cutoff: Date): Promise<number> {
+  const removed = await db.delete(orderReadyAlerts).where(lt(orderReadyAlerts.createdAt, cutoff)).returning({ orderId: orderReadyAlerts.orderId })
   return removed.length
 }

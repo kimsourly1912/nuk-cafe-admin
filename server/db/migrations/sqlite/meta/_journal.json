@@ -239,6 +239,13 @@
       "when": 1791639897119,
       "tag": "0033_guests",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1791643370878,
+      "tag": "0034_order_ready_alerts",
+      "breakpoints": true
     }
   ]
 }

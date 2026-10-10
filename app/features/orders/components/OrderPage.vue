@@ -17,6 +17,7 @@ import { useOrderAgain } from '~/features/menu'
 import { useOrderTracking } from '../composables/useOrders'
 import { cancellationText, clockTime, countdown, formatPickupNumber, isInProgress, nextStep, orderTypeText, paymentText, statusBadge } from '../utils/order'
 import CancelOrderSheet from './CancelOrderSheet.vue'
+import OrderReadyTelegram from './OrderReadyTelegram.vue'
 import OrdersHeader from './OrdersHeader.vue'
 import OrderTracker from './OrderTracker.vue'
 
@@ -229,6 +230,7 @@ async function again(from: Order) {
               />
               {{ paid }}
             </p>
+            <OrderReadyTelegram :order="order" />
             <UAlert
               v-if="order.status === 'completed' && order.completedAt"
               color="success"

@@ -4,6 +4,7 @@ import { schema as authSchema } from '#auth/schema'
 import { DELIVERY_STATUSES, DESTINATION_KINDS, DESTINATION_STATUSES, NOTIFICATION_KINDS, TELEGRAM_LINK_STATUSES } from '#shared/contracts/notifications'
 import { newId } from '#server/utils/ids'
 import { tenantId } from '#server/features/branches/branches.schema'
+import { orders } from '#server/features/orders/orders.schema'
 
 /**
  * Telegram (step 8.1c, D112): the chats the cafe's messages go to, and the one-time links that
@@ -128,3 +129,25 @@ export interface StoredMessage {
   button?: { text: string, url: string }
   document?: { filename: string, content: string }
 }
+
+/**
+ * A customer's "message me on Telegram when it's ready" for one order (D157): one row per order.
+ * The one-time code's hash is cleared when a chat uses it (so it works once); the chat is cleared
+ * once the message was sent (nothing personal is kept longer than needed). Purged after 2 days.
+ */
+export const orderReadyAlerts = sqliteTable('order_ready_alerts', {
+  orderId: text().primaryKey(),
+  tenantId: tenantId(),
+  /** The link's code, hashed; `null` once used. */
+  codeHash: text(),
+  linkExpiresAt: instant().notNull(),
+  /** The customer's private chat with the bot, from `/start o_<code>`; `null` until then and once sent. */
+  chatId: text(),
+  subscribedAt: instant(),
+  notifiedAt: instant(),
+  createdAt: instant().notNull().default(nowMs),
+}, t => [
+  foreignKey({ name: 'order_ready_alerts_order_fk', columns: [t.tenantId, t.orderId], foreignColumns: [orders.tenantId, orders.id] }).onDelete('cascade'),
+  uniqueIndex('order_ready_alerts_code_idx').on(t.codeHash),
+  index('order_ready_alerts_created_idx').on(t.createdAt),
+])

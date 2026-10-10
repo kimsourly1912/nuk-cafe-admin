@@ -1,4 +1,5 @@
 import { useDocumentVisibility, useIntervalFn } from '@vueuse/core'
+import type { OrderReadyAlert, OrderReadyLink } from '#shared/contracts/notifications'
 import type { CustomerOrders, Order } from '#shared/contracts/orders'
 import { isInProgress } from '../utils/order'
 
@@ -81,4 +82,30 @@ export async function cancelOrder(order: Pick<Order, 'id' | 'version'>, key: str
   })
   await invalidate('orders')
   return cancelled
+}
+
+/** How often a link made but not used yet is checked, to show "We'll message you" once Start was tapped. */
+export const READY_ALERT_WAITING_MS = 3_000
+
+/**
+ * "Message me on Telegram when it's ready" for one order (D157): whether the customer asked
+ * (`GET /api/shop/orders/{id}/telegram`), read again every 3 seconds while a link waits for its
+ * Start in Telegram and the tab is visible, and the mutation that makes a link.
+ */
+export function useOrderReadyAlert(id: MaybeRefOrGetter<string>) {
+  const query = useApiQuery(
+    () => `orders:telegram:${toValue(id)}`,
+    () => apiFetch<OrderReadyAlert>(`/shop/orders/${encodeURIComponent(toValue(id))}/telegram`),
+    { server: false },
+  )
+  const visibility = useDocumentVisibility()
+  useIntervalFn(() => {
+    if (visibility.value === 'visible' && query.data.value?.status === 'waiting' && !query.pending.value) void query.refresh()
+  }, READY_ALERT_WAITING_MS)
+
+  const createLink = useMutation(
+    (orderId: string) => apiFetch<OrderReadyLink>(`/shop/orders/${encodeURIComponent(orderId)}/telegram`, { method: 'POST' }),
+    { id: 'orders:telegram-link', key: orderId => orderId, successMessage: false, errorMessage: 'Couldn\'t make the Telegram link' },
+  )
+  return { query, createLink }
 }
