@@ -2,7 +2,8 @@ import type { MenuItem } from '#shared/contracts/menu-items'
 import type { ApiError } from '~/utils/api-error'
 import { useAuth } from '~/features/auth'
 import { useModifierGroupOptions } from '~/features/modifier-groups'
-import { ITEM_FORM_PARTS, toCreateItemBody, toItemForm, toUpdateItemBody } from '../schemas/item-form'
+import { ITEM_STATUS_LABELS } from '../utils/item-display'
+import { ITEM_FORM_PARTS, toCreateItemBody, toItemCopyForm, toItemForm, toUpdateItemBody } from '../schemas/item-form'
 import type { ItemForm } from '../schemas/item-form'
 import { fetchItem, useItem, useItemMutations } from './useItems'
 
@@ -13,6 +14,8 @@ export interface ItemEditorOptions {
   item?: MenuItem
   /** Restores unsaved input (used by "Reopen"). */
   draft?: ItemForm
+  /** Duplicate (D154): a new item, filled from this item once it's loaded (no photo, "… (copy)"). */
+  copyOf?: string
   /** The form arrived: the owner's unsaved-changes guard takes it as saved. */
   onLoaded: () => void
   /** Reload took someone else's newer version: what's saved now, for the unsaved-changes guard. */
@@ -31,6 +34,9 @@ export interface ItemEditorOptions {
  * refused save is also kept in `lastError`, shown inside the editor (a toast can't be reached while a
  * slide-over is open, D67). An archived item is read-only.
  *
+ * Duplicate (`copyOf`, D154) opens a new item filled from another one (`toItemCopyForm`): unsaved
+ * from the start, so closing it asks first.
+ *
  * Someone else saved the item first (409, D41): `conflict`, and `reload()` takes their version
  * with this input on top, part by part (`ITEM_FORM_PARTS`, D153). `reloaded.overlap` names the parts
  * both changed, where this input won: the editor says so, and the next Save overwrites with it.
@@ -41,13 +47,17 @@ export interface ItemEditorOptions {
  * closes; the toast says it was saved but not published, and why.
  */
 export function useItemEditor(options: ItemEditorOptions) {
-  const { itemId, item, draft, onLoaded, onReloaded, reopen } = options
+  const { itemId, item, draft, copyOf, onLoaded, onReloaded, reopen } = options
 
   const isEdit = itemId !== undefined || item !== undefined
-  const itemQuery = itemId && !item ? useItem(itemId) : undefined
+  const copying = !isEdit && copyOf !== undefined && !draft
+  /** The item being loaded: the one edited, or the one a copy is made from. */
+  const itemQuery = itemId && !item ? useItem(itemId) : copying && copyOf ? useItem(copyOf) : undefined
   /** The item as loaded when the editor opened: its `version` is what the save names. */
   const loaded = shallowRef<MenuItem | undefined>(item)
-  const ready = computed(() => !isEdit || loaded.value !== undefined)
+  /** The item a copy was filled from (Duplicate). */
+  const copiedFrom = shallowRef<MenuItem>()
+  const ready = computed(() => (isEdit ? loaded.value !== undefined : !copying || copiedFrom.value !== undefined))
   const archived = computed(() => loaded.value?.status === 'archived')
 
   const { data: addOnLibrary } = useModifierGroupOptions()
@@ -56,6 +66,14 @@ export function useItemEditor(options: ItemEditorOptions) {
   const state = reactive<ItemForm>(cloneFormValue(draft ?? initial))
   /** `loaded` as a form: what this person's changes are measured from when someone else saved first. */
   let loadedForm = initial
+
+  /** The line under the editor's title, on both surfaces. */
+  const summary = computed(() => {
+    if (loaded.value) return `Status: ${ITEM_STATUS_LABELS[loaded.value.status]}`
+    if (!ready.value) return 'Loading…'
+    const create = 'Create saves a draft; Create and publish also puts it on the menu.'
+    return copiedFrom.value ? `A copy of "${copiedFrom.value.name}", without its photo. ${create}` : create
+  })
 
   const { create, update, publish } = useItemMutations()
   /** A new item or a draft can be published from the form. */
@@ -72,7 +90,15 @@ export function useItemEditor(options: ItemEditorOptions) {
 
   // Editing: fill the form once, when the item arrives. Later refetches don't touch it: the form
   // keeps the version it was opened with (a stale one is refused with 409).
-  if (itemQuery) {
+  if (itemQuery && copying) {
+    // A copy fills the form once; it stays unsaved (measured against an empty new item).
+    watch(() => itemQuery.data.value, (next) => {
+      if (!next || copiedFrom.value) return
+      copiedFrom.value = next
+      Object.assign(state, cloneFormValue(toItemCopyForm(next, addOnLibrary.value)))
+    }, { immediate: true })
+  }
+  else if (itemQuery) {
     watch(() => itemQuery.data.value, (next) => {
       if (!next || loaded.value) return
       loaded.value = next
@@ -159,11 +185,12 @@ export function useItemEditor(options: ItemEditorOptions) {
   const keptDraft = {
     key: () => {
       const owner = auth.user.value?.userId
-      if (!owner || archived.value || (isEdit && !loaded.value)) return null
-      return { owner, form: 'menu-item', record: loaded.value?.id ?? 'new' }
+      if (!owner || archived.value || !ready.value) return null
+      // A copy keeps its own draft: a "New menu item" draft isn't offered over it.
+      return { owner, form: 'menu-item', record: loaded.value?.id ?? (copying ? `copy-${copyOf}` : 'new') }
     },
     version: () => loaded.value?.version,
   }
 
-  return { isEdit, itemQuery, loaded, ready, archived, canPublish, initial, state, saving, uploading, lastError, conflict, reloading, reloaded, reload, keptDraft, save }
+  return { isEdit, itemQuery, loaded, copiedFrom, summary, ready, archived, canPublish, initial, state, saving, uploading, lastError, conflict, reloading, reloaded, reload, keptDraft, save }
 }

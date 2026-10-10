@@ -11,7 +11,6 @@
 import type { MenuItem } from '#shared/contracts/menu-items'
 import { useItemEditor } from '../composables/useItemEditor'
 import type { ItemForm } from '../schemas/item-form'
-import { ITEM_STATUS_LABELS } from '../utils/item-display'
 import ProductFormFields from './ProductFormFields.vue'
 import ViewOnMenuButton from './ViewOnMenuButton.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
@@ -23,6 +22,8 @@ const props = defineProps<{
   item?: MenuItem
   /** Restores unsaved input (used by "Reopen"). */
   draft?: ItemForm
+  /** Duplicate (D154): a new item filled from this one. */
+  copyOf?: string
 }>()
 
 // `update:open` is declared so closing (X, Esc, outside click) goes through `unsaved` instead of
@@ -34,6 +35,7 @@ const editor = useItemEditor({
   itemId: props.itemId,
   item: props.item,
   draft: props.draft,
+  copyOf: props.copyOf,
   onLoaded: () => unsaved.markClean(),
   onReloaded: saved => unsaved.markClean(saved),
   reopen: (item, draft) => overlay.create(ProductFormSlideover, { destroyOnClose: true }).open({ item, draft }),
@@ -71,7 +73,7 @@ async function onSubmit() {
 <template>
   <USlideover
     :title="isEdit ? (archived ? 'Archived menu item' : 'Edit menu item') : 'New menu item'"
-    :description="loaded ? `Status: ${ITEM_STATUS_LABELS[loaded.status]}` : 'Create saves a draft; Create and publish also puts it on the menu.'"
+    :description="editor.summary.value"
     :ui="{ content: 'max-w-2xl' }"
     @update:open="unsaved.onOpenChange"
   >

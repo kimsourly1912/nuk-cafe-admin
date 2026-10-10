@@ -4,7 +4,8 @@ import type { MenuItem } from '#shared/contracts/menu-items'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { OptionSet } from '#shared/contracts/menu-options'
 import { mergeFormChanges } from '~/utils/form-value'
-import { addOnGroupFromLibrary, buildGrid, formFieldOf, ITEM_FORM_PARTS, itemFormSchema, optionSetFromLibrary, sectionOf, toCreateItemBody, toItemForm, toUpdateItemBody } from '../schemas/item-form'
+import { ITEM_NAME_MAX } from '#shared/contracts/menu-items'
+import { addOnGroupFromLibrary, buildGrid, copyName, formFieldOf, ITEM_FORM_PARTS, itemFormSchema, optionSetFromLibrary, sectionOf, toCreateItemBody, toItemCopyForm, toItemForm, toUpdateItemBody } from '../schemas/item-form'
 import type { FormOptionSet, ItemForm } from '../schemas/item-form'
 
 const STAMP = '2026-09-28T00:00:00.000Z'
@@ -220,3 +221,35 @@ describe('someone else saved first (D153)', () => {
 function cloneForm(form: ItemForm): ItemForm {
   return structuredClone(form)
 }
+
+describe('Duplicate (D154)', () => {
+  it('copies everything but the photo, named "… (copy)"', () => {
+    const copy = toItemCopyForm(LATTE, [MILK])
+    const original = toItemForm(LATTE, [MILK])
+    expect(copy).toMatchObject({ name: 'Latte (copy)', description: original.description, categoryId: 'cat-1', imageId: undefined, imageUrl: undefined })
+    expect(copy.grid).toEqual(original.grid)
+    expect(copy.availabilityRuleIds).toEqual(['rule-1'])
+    // An archived add-on isn't copied (a new item can't take one).
+    expect(copy.addOnGroups[0]!.addOns.map(addOn => addOn.id)).toEqual(['oat'])
+    expect(toCreateItemBody(copy).modifierGroups).toEqual([{ groupId: 'milk', rules: { minSelect: 1, maxSelect: 1 }, prices: [{ modifierId: 'oat', priceDeltaMinor: 60 }] }])
+  })
+
+  it('leaves out archived option sets, add-on groups and rules; the grid rebuilt from the rest', () => {
+    const item: MenuItem = {
+      ...LATTE,
+      optionSets: [LATTE.optionSets[0]!, { ...LATTE.optionSets[1]!, status: 'archived' }],
+      modifierGroups: [{ ...LATTE.modifierGroups[0]!, status: 'archived' }],
+      availabilityRules: [{ id: 'rule-1', name: 'Breakfast', status: 'archived' }],
+    }
+    const copy = toItemCopyForm(item, [MILK])
+    expect(copy.optionSets.map(set => set.id)).toEqual(['size'])
+    expect(copy.grid.map(cell => cell.label)).toEqual(['Small', 'Large'])
+    expect(copy.addOnGroups).toEqual([])
+    expect(copy.availabilityRuleIds).toEqual([])
+  })
+
+  it('keeps a long name within the limit', () => {
+    expect(copyName('x'.repeat(200)).length).toBeLessThanOrEqual(ITEM_NAME_MAX)
+    expect(copyName('x'.repeat(200)).endsWith(' (copy)')).toBe(true)
+  })
+})

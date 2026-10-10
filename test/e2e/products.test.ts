@@ -1080,3 +1080,63 @@ describe('the toolbar and Select mode at every width (D129)', () => {
     })
   }
 })
+
+// Duplicate (D154): a new item filled from another one, without its photo, created as a draft.
+describe('Duplicate', () => {
+  it('opens a new item filled from the row\'s item, named "… (copy)" without the photo, and creates it as a draft', async () => {
+    let body: Record<string, unknown> | undefined
+    const { page } = await open({
+      ...backend(),
+      'POST /admin/menu/items': (request) => {
+        body = request.body as Record<string, unknown>
+        return menuItemOf('item-9', 'Latte (copy)')
+      },
+    })
+    await page.getByRole('button', { name: 'Actions for Latte' }).click()
+    await page.getByRole('menuitem', { name: 'Duplicate' }).click()
+    const form = page.getByRole('dialog', { name: 'New menu item' })
+    await expect.poll(() => form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte (copy)')
+    await form.getByText('A copy of "Latte", without its photo.', { exact: false }).first().waitFor()
+    expect(await form.locator('img').count()).toBe(0)
+    expect(await form.getByRole('spinbutton', { name: 'Price of Large, Hot' }).inputValue()).toBe('$4.25')
+
+    await form.getByRole('button', { name: 'Create', exact: true }).click()
+    await toast(page, 'Menu item "Latte (copy)" created as a draft').waitFor()
+    expect(body).toEqual({
+      categoryId: ESPRESSO.id,
+      name: 'Latte (copy)',
+      description: 'Espresso and milk',
+      imageId: null,
+      optionSetIds: [SIZE.id, TEMP.id],
+      variations: [
+        { valueIds: ['val-s', 'val-hot'], priceMinor: 350, status: 'active' },
+        { valueIds: ['val-s', 'val-iced'], priceMinor: 375, status: 'active' },
+        { valueIds: ['val-l', 'val-hot'], priceMinor: 425, status: 'active' },
+        { valueIds: ['val-l', 'val-iced'], priceMinor: 450, status: 'disabled' },
+      ],
+      modifierGroups: [{ groupId: MILK.id, rules: null, prices: [{ modifierId: 'mod-soy', priceDeltaMinor: 60 }] }],
+      availabilityRuleIds: [],
+    })
+  })
+
+  it('a copy counts as unsaved: closing it asks first', async () => {
+    const { page } = await open()
+    await page.getByRole('button', { name: 'Actions for Latte' }).click()
+    await page.getByRole('menuitem', { name: 'Duplicate' }).click()
+    const form = page.getByRole('dialog', { name: 'New menu item' })
+    await expect.poll(() => form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte (copy)')
+    await form.locator('[data-slot="footer"]').getByRole('button', { name: 'Cancel' }).click()
+    await page.getByText('Discard unsaved changes?').waitFor()
+  })
+
+  it('on phones it opens /products/new?copy=<id>', async () => {
+    const page = await createPage()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await mockApi(page, backend())
+    await page.goto(url('/c/nuk/admin/products'), { waitUntil: 'hydration' })
+    await page.getByRole('button', { name: 'Actions for Latte' }).click()
+    await page.getByRole('menuitem', { name: 'Duplicate' }).click()
+    await expect.poll(() => `${new URL(page.url()).pathname}${new URL(page.url()).search}`).toBe('/c/nuk/admin/products/new?copy=item-1')
+    await expect.poll(() => page.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte (copy)')
+  })
+})

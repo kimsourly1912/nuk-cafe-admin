@@ -176,6 +176,36 @@ export function toItemForm(item?: MenuItem, library: readonly ModifierGroup[] = 
   }
 }
 
+/** A copy's name: "Latte (copy)", cut so it still fits. */
+export function copyName(name: string) {
+  const suffix = ' (copy)'
+  return `${name.slice(0, ITEM_NAME_MAX - suffix.length).trimEnd()}${suffix}`
+}
+
+/**
+ * A new item's form copied from an item (Duplicate, D154): everything but the photo (an upload
+ * belongs to one record), named "… (copy)". What a new item can't have is left out: archived option
+ * sets (the grid rebuilt from the others, keeping the prices of the same combinations), archived
+ * add-on groups and add-ons, and archived availability rules.
+ */
+export function toItemCopyForm(item: MenuItem, library: readonly ModifierGroup[] = []): ItemForm {
+  const form = toItemForm(item, library)
+  const optionSets = form.optionSets.filter(set => set.status === 'active')
+  const archivedRules = new Set(item.availabilityRules.filter(rule => rule.status !== 'active').map(rule => rule.id))
+  return {
+    ...form,
+    name: copyName(item.name),
+    imageId: undefined,
+    imageUrl: undefined,
+    optionSets,
+    grid: optionSets.length === form.optionSets.length ? form.grid : buildGrid(optionSets, form.grid, true),
+    addOnGroups: form.addOnGroups
+      .filter(group => group.status === 'active')
+      .map(group => ({ ...group, addOns: group.addOns.filter(addOn => addOn.status === 'active') })),
+    availabilityRuleIds: form.availabilityRuleIds.filter(id => !archivedRules.has(id)),
+  }
+}
+
 // --- Rules (the server checks the same; these give the message before sending) ---
 
 const MAX_PRICE = fromMinor(MAX_VARIATION_PRICE_MINOR)
