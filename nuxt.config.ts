@@ -233,6 +233,10 @@ export default defineNuxtConfig({
     // API responses are personal or change often; a public route opts in to caching explicitly.
     '/api/**': { headers: { 'cache-control': 'no-store' } },
   },
+  // Every open tab asks every 5 minutes whether a newer build was deployed (Nuxt's `builds/latest.json`,
+  // default: hourly). Counter tablets stay open all day; `plugins/new-version.client.ts` offers the
+  // reload and takes it on the next page change (D149).
+  experimental: { checkOutdatedBuildInterval: 5 * 60_000 },
   compatibilityDate: '2025-07-15',
   nitro: {
     // Scheduled jobs and the seed task (docs/server/operations.md).

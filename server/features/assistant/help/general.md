@@ -44,6 +44,7 @@ Press **?** to see them all. The main ones: **/** search, **N** new item on list
 ## Other things you may see
 
 - **You're offline**: a banner shows when the connection drops. Wait for it to come back before saving.
+- **A new version of the app is ready**: the app was updated while your tab was open. Press **Reload** (it asks first if you have unsaved changes), or **Later**: it updates by itself the next time you open another page.
 - **Another tab**: signing in or out in one tab applies to every open tab. Saving in one tab refreshes the same lists in your other tabs.
 - **Light and dark mode**: the sun/moon button in the sidebar.
 - **Change password**: from the user menu at the bottom of the sidebar. A new staff account must change its temporary password at the first sign-in.

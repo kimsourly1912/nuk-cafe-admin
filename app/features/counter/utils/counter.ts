@@ -62,6 +62,15 @@ export const payBySoon = (order: Pick<CounterOrder, 'paymentDueAt'>, now: number
 /** "10:42 AM" on this device's clock. */
 export const clockTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 
+/** "Last updated 10:42 AM (4 min ago)": when the queue last loaded, while refreshing fails (D149). */
+export const lastUpdatedText = (iso: string, now: number) => `Last updated ${clockTime(iso)} (${timeAgo(iso, now).toLowerCase()})`
+
+/** The tab's title (D149): the orders waiting for payment, the cashier's next job, as Gmail counts unread mail. */
+export function queueTitle(orders: Pick<CounterOrder, 'status'>[]): string {
+  const toPay = orders.filter(order => order.status === 'awaiting_payment').length
+  return toPay ? `(${toPay}) Queue` : 'Queue'
+}
+
 /** Orders shown as new: arrived in the last minute (after the screen's first load). */
 export const NEW_FOR_MS = 60_000
 

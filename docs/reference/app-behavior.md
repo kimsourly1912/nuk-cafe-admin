@@ -32,6 +32,8 @@ await navigateTo(tenantPath(`/admin/add-ons/${group.id}`)) // /c/nuk/admin/add-o
 - [Browser tab titles](#browser-tab-titles)
 - [Data freshness](#data-freshness): other tabs, returning to the tab, reconnect
 - [Offline banner](#offline-banner)
+- [A new version deployed](#a-new-version-deployed): Reload offered, the next page loads it (D149)
+- [Browser errors reported](#browser-errors-reported): into Workers Logs (D149)
 - [Leaving with unsaved or in-flight work](#leaving-with-unsaved-or-in-flight-work)
 - [Session loss](#session-loss): including login/logout across tabs
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -106,7 +108,7 @@ Source: `app/plugins/data-freshness.client.ts` (VueUse `useBroadcastChannel`, `u
 
 While the browser reports no connection, a banner at the bottom reads "You're offline: changes can't be saved until the connection is back".
 
-Source: `app/components/OfflineBanner.vue` (mounted in `app/app.vue`, so it shows on login too). E2E: `test/e2e/freshness.test.ts`.
+Source: `app/components/OfflineBanner.vue` (mounted in `app/app.vue`, so it shows on login too; stacked under the new-version notice, D149). E2E: `test/e2e/freshness.test.ts`.
 
 | Case | Behavior |
 |---|---|
@@ -114,6 +116,43 @@ Source: `app/components/OfflineBanner.vue` (mounted in `app/app.vue`, so it show
 | Connection back | Banner hides, data refetches |
 | Save while offline | Not blocked: it fails with the network-error toast ("Can't reach the server…"). The banner explains why |
 | "Online" but the API is down | No banner (the browser only knows about the network). Load errors show `ApiErrorAlert` with Retry |
+
+---
+
+## A new version deployed
+
+Tabs stay open all day while new builds are deployed (D149). Every tab asks every 5 minutes whether the deployed build is newer than its own (Nuxt's `builds/latest.json`, `experimental.checkOutdatedBuildInterval` in `nuxt.config.ts`).
+
+Source: `app/plugins/new-version.client.ts` (records Nuxt's `app:manifest:update` in `useNewVersion()`), `app/components/NewVersionBanner.vue` (mounted in `app/app.vue`), Nuxt's own chunk-reload plugin. E2E: `test/e2e/reliability.test.ts`.
+
+| Case | Behavior |
+|---|---|
+| A newer build deployed, in the admin, the counter or the platform console | "A new version of the app is ready" at the bottom, with **Reload** and **Later** (`role="status"`) |
+| Reload with unsaved input | The browser's "Leave site?" first (the leave guard) |
+| Later | Hidden for this page load |
+| The next move to another page (any route change, a filter in the URL too) | A full page load at that address (Nuxt's chunk-reload plugin, after the route guards: a dirty form is asked about first). A save still in flight gets the browser's "Leave site?" |
+| The customer site | Nothing shown: the next page loads the new build |
+| No newer build | Nothing; route changes stay in the app |
+| Offline at the same time | Both notices, stacked |
+| A test build | Nuxt's check is compiled out (`import.meta.test`); the e2e tests call `app:manifest:update` as the check would |
+
+---
+
+## Browser errors reported
+
+An error nobody caught in the browser is sent to `POST /api/client-errors` and written to Workers Logs as "Browser error" (D149): the page's path (never its query or hash), the build, the message and stack, the browser. Find them in the Worker's logs by that message.
+
+Source: `app/plugins/errors.ts` (still toasts "Unexpected error" as before), `app/utils/client-errors.ts`, `server/api/client-errors.post.ts`. Tests: unit `test/unit/client-errors.test.ts`, e2e `test/e2e/reliability.test.ts`.
+
+| Case | Behavior |
+|---|---|
+| Vue's error handler, an uncaught script error, an unhandled rejection | Reported (`kind`: `vue`, `error`, `rejection`) |
+| Our API's failure (`ApiError`) | Not reported: the server logged it (and alerts on a 5xx, D119) |
+| A cancelled request (`AbortError`), an image that fails to load, another site's "Script error." | Not reported |
+| The same message again | Once per page load; at most 10 reports per page load |
+| The report fails (offline, rate limited) | Dropped silently |
+| Someone posts reports by hand | Same-origin only (the origin check), rate limited per address like the public API, sizes capped; written to the logs only, never shown or sent to Telegram |
+| In an e2e test with `mockApi` | An unexpected browser error shows up as an unmocked `POST /client-errors`, failing the test |
 
 ---
 
@@ -276,7 +315,10 @@ Tests: e2e `shop-tracking.test.ts` (on the seeded database: the counter moves th
 | A customer (no branch) signs in at the counter | "This account doesn't work at any branch, so it can't use the counter."; signed out again |
 | Staff on a temporary password | Every counter page goes to `/counter/change-password` first |
 | One branch / several (or an admin) | Straight to its queue / "Choose a branch" |
-| The queue | Refreshes every 10 seconds while the tab is visible, and on return to the tab; a failed refresh keeps the last queue with a warning |
+| The queue | Refreshes every 10 seconds while the tab is visible, and on return to the tab |
+| A refresh fails (Wi-Fi drop, server down) | The board keeps the branch's last queue (Nuxt would empty it, D149) under "The queue may be out of date · Last updated 10:42 AM (3 min ago)…"; the next refresh that works clears it. No queue loaded yet, or a refusal (access removed, 403/404): "Couldn't load the queue" with the reason and Retry |
+| The tab's title | "(2) Queue · NUK Cafe Counter": the orders waiting for payment, so a background tab still shows them (D149); "Queue" when there are none |
+| The screen | Kept on while a counter page is open (Screen Wake Lock, `layouts/counter.vue`, D149): asked for again when the tab is visible again; a browser that refuses (battery saver) changes nothing |
 | A new order arrives | Its card is outlined with "New" for a minute and a short chime plays (unless muted in the user menu, kept in this browser; a browser may block sound until the first tap) |
 | "Pay by" | From the server's clock (the queue carries it); amber in the last 5 minutes; past it, the order leaves the queue (the server refuses its payment) |
 | Take payment: amount received less than the total | "Short by $x"; Confirm waits. Nothing typed means exact |
@@ -295,7 +337,7 @@ Tests: e2e `shop-tracking.test.ts` (on the seeded database: the counter moves th
 | The badge and "Since … by" disagree while the page refreshes | Can't: both come from the sold-out list (the menu only until the list loads) |
 | A customer's open menu | Shows the change on its next load (no push); the Review order page re-checks every line anyway (D100) |
 
-Tests: e2e `counter.test.ts` (the real seeded server: sign-in, cash with change and short, riel and cancelling a paid order, a payment recorded meanwhile → Reload, phone tabs, a customer refused, sold out switched off and back with the customer menu following, the Sold out page on a phone), `counter-orders-api.test.ts`; unit `app/features/counter/tests/counter.test.ts`, `sold-out.test.ts`.
+Tests: e2e `counter.test.ts` (the real seeded server: the screen kept on, the tab's count and a failing refresh (D149), sign-in, cash with change and short, riel and cancelling a paid order, a payment recorded meanwhile → Reload, phone tabs, a customer refused, sold out switched off and back with the customer menu following, the Sold out page on a phone), `counter-orders-api.test.ts`; unit `app/features/counter/tests/counter.test.ts`, `sold-out.test.ts`.
 
 ## Keyboard shortcuts
 

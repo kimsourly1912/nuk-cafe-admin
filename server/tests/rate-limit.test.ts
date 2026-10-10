@@ -51,7 +51,7 @@ describe('public API rate limits (D121)', () => {
 
   it('the quote rule comes first, so it wins over the general prefix', () => {
     expect(RATE_LIMIT_RULES[0].prefix).toBe('/api/public/checkout/quote')
-    expect(RATE_LIMIT_RULES.every(rule => rule.prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/'].includes(rule.prefix))).toBe(true)
+    expect(RATE_LIMIT_RULES.every(rule => rule.prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/', '/api/client-errors'].includes(rule.prefix))).toBe(true)
   })
 
   it('counts every cafe\'s public routes and the table scan by one address (D140)', async () => {
@@ -66,6 +66,13 @@ describe('public API rate limits (D121)', () => {
     expect((await request('/api/tables/abc')).limited).toBeNull()
     // A second cafe's address doesn't start a fresh count.
     expect((await request('/api/c/other/public/menu')).limited).toBe('RATE_LIMIT_PUBLIC')
+  })
+
+  it('browser error reports share the public limit (D149)', async () => {
+    const general = fakeLimiter(1)
+    const limiters = { RATE_LIMIT_PUBLIC: general.limiter }
+    expect((await checkRateLimit({ path: '/api/client-errors', address: '203.0.113.7', limiters })).limited).toBeNull()
+    expect((await checkRateLimit({ path: '/api/client-errors', address: '203.0.113.7', limiters })).limited).toBe('RATE_LIMIT_PUBLIC')
   })
 
   it('refuses with 429 RATE_LIMITED and a message safe to show', () => {

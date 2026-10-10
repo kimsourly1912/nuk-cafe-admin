@@ -4,7 +4,7 @@ import { log } from '#server/utils/log'
 
 /**
  * Rate limits for the public API (a cafe's `/api/c/<slug>/public/**`, the global table scan
- * `/api/tables/**` and a cafe's profile `/api/cafes/**`, D121, D140, D143), counted per client address with
+ * `/api/tables/**`, a cafe's profile `/api/cafes/**` and browser error reports `/api/client-errors`, D121, D140, D143, D149), counted per client address with
  * Cloudflare's Workers rate-limit bindings. The first rule whose prefix matches applies. Limits are
  * generous on purpose: customers in the cafe share its Wi-Fi, so one address can be many people.
  * A rule's numbers live in the Worker's configuration (nuxt.config.ts → `ratelimits`).
@@ -19,6 +19,8 @@ export const RATE_LIMIT_RULES = [
   { prefix: '/api/tables/', binding: 'RATE_LIMIT_PUBLIC' },
   // A cafe's name and logo (D143): public like the menu.
   { prefix: '/api/cafes/', binding: 'RATE_LIMIT_PUBLIC' },
+  // Browser error reports (D149): anyone can send them, so they share the public limit.
+  { prefix: '/api/client-errors', binding: 'RATE_LIMIT_PUBLIC' },
 ] as const
 
 /**

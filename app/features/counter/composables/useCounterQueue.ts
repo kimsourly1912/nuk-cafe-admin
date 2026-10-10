@@ -35,6 +35,16 @@ export function useCounterQueue(branchId: MaybeRefOrGetter<string>) {
   }, 15_000)
   const now = computed(() => tick.value + offset.value)
 
+  // --- The last queue loaded, and when (D149) ---
+  // Nuxt's `useAsyncData` resets `data` when a refresh fails, which emptied the board on every Wi-Fi
+  // drop. The queue keeps the branch's last answer instead and says how old it is.
+  const lastQueue = shallowRef<CounterQueue | null>(null)
+  const updatedAt = ref<string | null>(null)
+  watch(() => toValue(branchId), () => {
+    lastQueue.value = null
+    updatedAt.value = null
+  })
+
   // --- New orders ---
   const muted = useCounterMuted()
   const firstSeen = ref(new Map<string, number>())
@@ -43,6 +53,8 @@ export function useCounterQueue(branchId: MaybeRefOrGetter<string>) {
     if (!queue) return
     offset.value = Date.parse(queue.serverTime) - Date.now()
     tick.value = Date.now()
+    lastQueue.value = queue
+    updatedAt.value = new Date().toISOString()
     let arrived = false
     for (const order of queue.orders) {
       if (firstSeen.value.has(order.id)) continue
@@ -61,10 +73,17 @@ export function useCounterQueue(branchId: MaybeRefOrGetter<string>) {
 
   return {
     query,
-    queue: computed(() => query.data.value ?? null),
+    /**
+     * The queue as last loaded: kept while a refresh fails for the connection or the server
+     * (`query.error` says so). A refusal (access removed, the branch gone) shows the error instead.
+     */
+    queue: computed(() => query.data.value ?? (query.error.value?.retryable === false ? null : lastQueue.value)),
     now,
     /** The server's clock minus this tablet's, for countdowns by the second (the KHQR's). */
     serverOffset: readonly(offset),
+    /** When the queue last loaded, on this tablet's clock (`localNow`). */
+    updatedAt: readonly(updatedAt),
+    localNow: computed(() => tick.value),
     isNew,
     muted,
   }
