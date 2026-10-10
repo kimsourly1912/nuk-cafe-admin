@@ -3,6 +3,8 @@
  * Payments → Automatic check → Add or Replace token (T2d, D148): the cafe's own Bakong token,
  * pasted from Bakong's developer portal. It's sent once and stored encrypted; nothing shows it
  * again, only when it expires. The server refuses one that has already expired, on its field.
+ * The field isn't checked as it's typed: a token is pasted and saved at once, and that check,
+ * run 300 ms after the paste, came after the server's answer and wiped its error (D149).
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import * as v from 'valibot'
@@ -57,6 +59,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
         :schema="schema"
         :state="state"
         :disabled="saving"
+        :validate-on="['blur', 'change']"
         @submit="onSubmit"
       >
         <UFormField

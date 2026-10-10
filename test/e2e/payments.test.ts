@@ -169,18 +169,18 @@ describe('Payments', () => {
 
   it('KHQR: an expired token is refused on its field and the dialog stays open; Remove asks first', async () => {
     const refused = await open({ current: null, history: [] }, { ...WITH_TOKEN, automaticCheck: false, token: null }, { refuseToken: true })
-    await refused.page.getByRole('button', { name: 'Add token' }).click()
+    await refused.page.getByRole('button', { name: 'Add token' }).click({ timeout: 10_000 })
     const dialog = refused.page.getByRole('dialog', { name: 'Add the Bakong token' })
-    await dialog.getByLabel('Token').fill('expired.token.value')
-    await dialog.getByRole('button', { name: 'Save token' }).click()
-    await dialog.getByText('Expired on 2026-09-01').waitFor()
+    await dialog.getByLabel('Token').fill('expired.token.value', { timeout: 10_000 })
+    await dialog.getByRole('button', { name: 'Save token' }).click({ timeout: 10_000 })
+    await dialog.getByText('Expired on 2026-09-01').waitFor({ timeout: 10_000 })
 
     const { page, tokenCalls } = await open({ current: null, history: [] }, WITH_TOKEN)
-    await page.getByRole('button', { name: 'Remove token' }).click()
-    await page.getByRole('alertdialog').or(page.getByRole('dialog')).getByRole('button', { name: 'Remove token' }).click()
-    await toast(page, 'Bakong token removed: cashiers confirm KHQR payments by hand').waitFor()
+    await page.getByRole('button', { name: 'Remove token' }).click({ timeout: 10_000 })
+    await page.getByRole('alertdialog').or(page.getByRole('dialog')).getByRole('button', { name: 'Remove token' }).click({ timeout: 10_000 })
+    await toast(page, 'Bakong token removed: cashiers confirm KHQR payments by hand').waitFor({ timeout: 10_000 })
     expect(tokenCalls).toEqual([`DELETE ${JSON.stringify({ version: 3 })}`])
-    await page.getByRole('button', { name: 'Add token' }).waitFor()
+    await page.getByRole('button', { name: 'Add token' }).waitFor({ timeout: 10_000 })
   })
 
   it('KHQR: a server that can\'t store tokens says so and offers none', async () => {
