@@ -247,7 +247,7 @@ export async function recordCheckedKhqrPayment(db: Db, actor: BranchActor, order
 export async function markOrderReady(db: Db, actor: BranchActor, orderId: string, input: CounterCommandInput, key: string, now = new Date()): Promise<CounterOrder> {
   return runCommand(db, actor, orderId, key, { operation: 'ready', input, request: input, now }, (order) => {
     requireStatus(order, ['preparing'])
-    return { to: 'ready' }
+    return { to: 'ready', statements: [outboxStatement(db, actor.tenantId, ORDER_EVENTS.ready, { orderId })] }
   })
 }
 

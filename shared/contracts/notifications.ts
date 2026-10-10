@@ -179,3 +179,27 @@ export interface DeliverySnapshot {
   text: string
   attachment: string | null
 }
+
+// --- "Your order is ready" on Telegram, for customers (D157) ---
+
+/** How long the customer's one-time link to the bot works. */
+export const ORDER_READY_LINK_MINUTES = 15
+
+/**
+ * The customer's "message me when it's ready" for one order: `off` (nothing asked, or the link
+ * expired unused), `waiting` (a link was made, Telegram not opened yet), `on` (a chat will get the
+ * message), `sent`.
+ */
+export const ORDER_READY_ALERT_STATUSES = ['off', 'waiting', 'on', 'sent'] as const
+export type OrderReadyAlertStatus = typeof ORDER_READY_ALERT_STATUSES[number]
+
+export interface OrderReadyAlert {
+  /** `false` when this server has no Telegram bot: the order page shows nothing. */
+  available: boolean
+  status: OrderReadyAlertStatus
+}
+
+/** A new link: `t.me/<bot>?start=o_<code>`, only in this answer. */
+export interface OrderReadyLink extends OrderReadyAlert {
+  url: string
+}

@@ -13,6 +13,7 @@ import { toIso } from '#server/utils/time'
 import { destinationBlocked, destinationNotFound, linkNotFound, linkUnusable } from './notifications.errors'
 import * as repo from './notifications.repository'
 import { listRules, sendStored } from './notifications.delivery'
+import { ORDER_CODE_PREFIX, useOrderReadyCode } from './notifications.customers'
 import { chatTitle, escapeHtml, hashLinkCode, isBlockedError, isGroup, linkUrl, newLinkCode, sendFailure, startCode } from './notifications.rules'
 import type { TelegramSettings } from './notifications.settings'
 
@@ -167,7 +168,10 @@ export async function handleUpdate(db: Db, api: Api, settings: TelegramSettings,
     return
   }
   const code = startCode(message.text, settings.botUsername)
-  if (code) await useCode(db, api, message, code, now)
+  if (!code) return
+  // A customer's "message me when it's ready" (D157); a staff link's random code can start the same way.
+  if (code.startsWith(ORDER_CODE_PREFIX) && await useOrderReadyCode(db, api, message, code, now)) return
+  await useCode(db, api, message, code, now)
 }
 
 /**

@@ -190,3 +190,27 @@ export function closingInstant(windows: WeeklyWindow[], date: string, timeZone: 
 export const CLOSING_SUMMARY_DELAY_MINUTES = 30
 /** A summary not sent within this long of its time (the server was down) isn't sent late. */
 export const CLOSING_SUMMARY_WINDOW_HOURS = 12
+
+// --- For customers (D157) ---
+
+/** "042", as the customer's order page shows it. */
+const customerNumber = (pickupNumber: number) => String(pickupNumber).padStart(3, '0')
+
+/** The bot's answer when a customer's link worked: what they'll get, and from whom. */
+export function orderReadySubscribedText(cafeName: string, pickupNumber: number): string {
+  return `Done. ${cafeName} will message you here when order ${customerNumber(pickupNumber)} is ready.`
+}
+
+/**
+ * "Your order 042 is ready": to the customer's own chat, so only what they need: the number, where
+ * to collect it, and a button back to the order (only with a public https address).
+ */
+export function orderReadyMessage(cafeName: string, alert: Pick<OrderAlert, 'orderId' | 'pickupNumber' | 'branch'>, cafeUrl?: string): StoredMessage {
+  return {
+    html: [
+      `✅ <b>Your order ${customerNumber(alert.pickupNumber)} is ready</b>`,
+      `Collect it at the counter · ${escapeHtml(cafeName)}, ${escapeHtml(alert.branch.name)}`,
+    ].join('\n'),
+    button: cafeUrl?.startsWith('https://') ? { text: 'View order', url: `${cafeUrl}/orders/${encodeURIComponent(alert.orderId)}` } : undefined,
+  }
+}

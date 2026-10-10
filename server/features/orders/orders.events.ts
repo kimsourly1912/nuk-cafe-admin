@@ -12,6 +12,8 @@ export const ORDER_EVENTS = {
   placed: 'orders.placed',
   /** The counter took its payment: `{ orderId }`. */
   paid: 'orders.paid',
+  /** The counter marked it ready: `{ orderId }` (the customer's Telegram message, D157). */
+  ready: 'orders.ready',
 } as const
 
 /**

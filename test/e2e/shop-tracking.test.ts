@@ -56,9 +56,10 @@ const visible = (locator: ReturnType<Page['getByRole']>) => locator.filter({ vis
 const button = (page: Page, name: string) => visible(page.getByRole('button', { name, exact: true }))
 
 /** A page signed in as `customer` (through the sign-in page), at `path`. */
-async function signedIn(customer: SeedCustomer, path: string, width = 1440) {
+async function signedIn(customer: SeedCustomer, path: string, width = 1440, prepare?: (page: Page) => Promise<void>) {
   const page = await createPage()
   await asNewVisitor(page)
+  await prepare?.(page)
   const problems: string[] = []
   page.on('pageerror', error => problems.push(error.message))
   await page.setViewportSize({ width, height: width < 640 ? 844 : 900 })
@@ -168,6 +169,52 @@ describe('following an order', () => {
     const order = await placeOrder(seed.customers.followerA)
     const { page } = await signedIn(seed.customers.followerC, `/c/nuk/orders/${order.id}`)
     await expect.poll(() => page.getByText('This order wasn\'t found').isVisible()).toBe(true)
+  })
+})
+
+describe('a Telegram message when it\'s ready (D157)', () => {
+  it('without a bot on the server, the order page offers nothing and a link is refused', async () => {
+    const order = await placeOrder(seed.customers.followerB)
+    const cookie = await apiSignIn(seed.customers.followerB)
+    const status = await fetch(url(`/api/c/nuk/shop/orders/${order.id}/telegram`), { headers: { cookie } })
+    expect(await status.json()).toEqual({ available: false, status: 'off' })
+    expect((await send(`/api/c/nuk/shop/orders/${order.id}/telegram`, cookie, {})).status).toBe(404)
+
+    const { page } = await signedIn(seed.customers.followerB, `/c/nuk/orders/${order.id}`)
+    await page.getByRole('heading', { name: `Your number ${number(order)}` }).waitFor()
+    await page.getByText('Waiting for payment', { exact: true }).waitFor()
+    expect(await page.getByText('Get a message when it\'s ready').count()).toBe(0)
+  })
+
+  it('with a bot: Message me on Telegram, Open Telegram, and the page says so once Start was tapped', async () => {
+    const order = await placeOrder(seed.customers.followerB)
+    // The e2e server has no bot: the browser's two requests are answered here, as a server with one would.
+    let state: 'off' | 'waiting' | 'on' = 'off'
+    const botUrl = 'https://t.me/nuk_cafe_bot?start=o_test-code'
+    const { page, problems } = await signedIn(seed.customers.followerB, `/c/nuk/orders/${order.id}`, 390, async (page) => {
+      await page.route(`**/api/c/nuk/shop/orders/${order.id}/telegram`, async (route) => {
+        if (route.request().method() === 'POST') {
+          state = 'waiting'
+          await route.fulfill({ json: { available: true, status: 'waiting', url: botUrl } })
+          return
+        }
+        await route.fulfill({ json: { available: true, status: state } })
+      })
+    })
+
+    await page.getByText('Get a message when it\'s ready').waitFor()
+    await button(page, 'Message me on Telegram').click()
+    const open = page.getByRole('link', { name: 'Open Telegram' })
+    await open.waitFor()
+    expect(await open.getAttribute('href')).toBe(botUrl)
+    expect(await open.getAttribute('target')).toBe('_blank')
+    await page.getByText('Open Telegram, then tap Start').waitFor()
+
+    // The customer taps Start in Telegram: the page reads it within a few seconds.
+    state = 'on'
+    await page.getByText('We\'ll message you on Telegram when it\'s ready.').waitFor({ timeout: 10_000 })
+    expect(await open.count()).toBe(0)
+    expect(problems).toEqual([])
   })
 })
 
