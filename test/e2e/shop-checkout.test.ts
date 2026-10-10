@@ -72,64 +72,108 @@ async function sql(statement: string, args: (string | number)[] = []) {
 }
 
 describe('placing an order', () => {
-  it('signed out: Review order asks to sign in, comes back, places the order with a note; the order page shows the number', async () => {
+  it('signed out: Review order asks only for a name; Place order places it as a guest with a note, and the order page shows the number (D156)', async () => {
     const { page, problems } = await open('/c/nuk')
     await addToOrder(page, 'Banana Bread')
     await page.getByRole('complementary', { name: 'Your order' }).getByRole('link', { name: 'Review order' }).click()
     await page.waitForURL(at('/c/nuk/checkout'))
-    await heading(page, 'Review order').waitFor()
-    await page.getByText('Pickup at Riverside').waitFor()
+    await heading(page, 'Review order').waitFor({ timeout: 8000 })
+    await page.getByText('Pickup at Riverside').waitFor({ timeout: 8000 })
+    await page.getByText('No account needed.').waitFor({ timeout: 8000 })
 
-    await button(page, 'Sign in to place order').click()
-    const gate = page.getByRole('dialog')
-    await gate.getByRole('heading', { name: 'Sign in to place your order' }).waitFor()
-    await gate.getByRole('link', { name: 'Sign in' }).click()
-    await page.waitForURL(at('/sign-in'))
-    await signIn(page, seed.customers.shopperA)
-    await page.waitForURL(at('/c/nuk/checkout'))
+    // Nothing is sent without a name.
+    await button(page, 'Place order · $2.25').click()
+    await page.getByText('Enter your name').waitFor({ timeout: 8000 })
+    expect(page.url()).toMatch(/\/checkout$/)
 
-    // The order stayed on this device; add a note for the counter.
+    await page.getByLabel('Your name').fill('Srey Neang')
     await button(page, 'Add a note').click()
     await page.getByLabel('Note for Banana Bread').fill('Warm it up, please')
-    await page.getByText('18/140').waitFor()
+    await page.getByText('18/140').waitFor({ timeout: 8000 })
     await button(page, 'Place order · $2.25').click()
 
     await page.waitForURL(onOrderPage)
-    await page.getByRole('heading', { name: /^Your number \d{3}$/ }).waitFor()
-    await page.getByText('Waiting for payment').waitFor()
-    await page.getByText('Pay at the counter to start your order. Show this number to the cashier.').waitFor()
+    const orderPath = new URL(page.url()).pathname
+    await page.getByRole('heading', { name: /^Your number \d{3}$/ }).waitFor({ timeout: 8000 })
+    await page.getByText('Waiting for payment').waitFor({ timeout: 8000 })
+    await page.getByText('Pay at the counter to start your order. Show this number to the cashier.').waitFor({ timeout: 8000 })
     // Tracking (6.5b, D114): the time to pay and the minutes left.
-    await page.getByText(/^Pay at the counter by \d{1,2}:\d{2}\s[AP]M$/).waitFor()
-    await page.getByText(/^(29|30) min left\. Unpaid orders are cancelled after 30 minutes\.$/).waitFor()
+    await page.getByText(/^Pay at the counter by \d{1,2}:\d{2}\s[AP]M$/).waitFor({ timeout: 8000 })
+    await page.getByText(/^(29|30) min left\. Unpaid orders are cancelled after 30 minutes\.$/).waitFor({ timeout: 8000 })
     const summary = page.getByRole('list', { name: 'Order summary' })
-    await summary.getByText('1 × Banana Bread').waitFor()
-    await summary.getByText('Warm it up, please').waitFor()
-    await page.getByText('Riverside · Pickup').waitFor()
+    await summary.getByText('1 × Banana Bread').waitFor({ timeout: 8000 })
+    await summary.getByText('Warm it up, please').waitFor({ timeout: 8000 })
+    await page.getByText('Riverside · Pickup').waitFor({ timeout: 8000 })
 
     // The order was sent: nothing is left to review, even after a reload of the order page.
     await page.goto(page.url(), { waitUntil: 'hydration' })
-    await page.getByText('Waiting for payment').waitFor()
+    await page.getByText('Waiting for payment').waitFor({ timeout: 8000 })
     await reviewOrder(page)
-    await page.getByText('Your order is empty').waitFor()
+    await page.getByText('Your order is empty').waitFor({ timeout: 8000 })
+
+    // The guest's orders are theirs on this device, said so on Your orders.
+    await page.goto(url('/c/nuk/orders'), { waitUntil: 'hydration' })
+    await page.getByText('Your orders are kept on this device').waitFor({ timeout: 8000 })
+    await page.locator(`a[href="${orderPath}"]`).first().waitFor({ timeout: 8000 })
     expect(problems).toEqual([])
   })
 
-  it('an unverified email opens the verify gate; once verified, "I\'ve verified, continue" places the order', async () => {
+  it('a guest is asked for their name once: the next order fills it in', async () => {
+    const { page } = await open('/c/nuk')
+    await addToOrder(page, 'Banana Bread')
+    await reviewOrder(page)
+    await page.getByLabel('Your name').fill('Dina')
+    await button(page, 'Place order · $2.25').click()
+    await page.waitForURL(onOrderPage)
+
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
+    await addToOrder(page, 'Banana Bread')
+    await reviewOrder(page)
+    await expect.poll(() => page.getByLabel('Your name').inputValue()).toBe('Dina')
+  })
+
+  it('an account: "Have an account? Sign in" comes back to Review order, which then asks no name', async () => {
+    const { page, problems } = await open('/c/nuk')
+    await addToOrder(page, 'Banana Bread')
+    await reviewOrder(page)
+    await page.getByRole('link', { name: 'Have an account? Sign in' }).click()
+    await page.waitForURL(at('/sign-in'))
+    await signIn(page, seed.customers.shopperA)
+    await page.waitForURL(at('/c/nuk/checkout'))
+    await button(page, 'Place order · $2.25').waitFor()
+    expect(await page.getByLabel('Your name').count()).toBe(0)
+    await button(page, 'Place order · $2.25').click()
+    await page.waitForURL(onOrderPage)
+    await page.getByText('Waiting for payment').waitFor()
+    expect(problems).toEqual([])
+  })
+
+  it('an account whose email isn\'t verified orders straight away (D156)', async () => {
     const { page } = await signedIn(seed.customers.shopperUnverified)
     await addToOrder(page, 'Banana Bread')
     await reviewOrder(page)
     await button(page, 'Place order · $2.25').click()
-    const gate = page.getByRole('dialog')
-    await gate.getByRole('heading', { name: 'Verify your email to place orders' }).waitFor()
-    await gate.getByText(seed.customers.shopperUnverified.email).waitFor()
-
-    await button(page, 'I\'ve verified, continue').click()
-    await gate.getByText('Not verified yet. Open the link in the email first.').waitFor()
-
-    await sql('update user set email_verified = 1 where email = ?', [seed.customers.shopperUnverified.email])
-    await button(page, 'I\'ve verified, continue').click()
     await page.waitForURL(onOrderPage)
     await page.getByText('Waiting for payment').waitFor()
+  })
+
+  it('a guest who signs in afterwards finds their order in the account (D156)', async () => {
+    const { page } = await open('/c/nuk')
+    await addToOrder(page, 'Banana Bread')
+    await reviewOrder(page)
+    await page.getByLabel('Your name').fill('Dalin')
+    await button(page, 'Place order · $2.25').click()
+    await page.waitForURL(onOrderPage)
+    const orderPath = new URL(page.url()).pathname
+
+    await page.goto(url('/sign-in'), { waitUntil: 'hydration' })
+    await signIn(page, seed.customers.guestLinker)
+    await page.waitForURL(at('/c/nuk'), { timeout: 8000 })
+    await page.goto(url(orderPath), { waitUntil: 'hydration' })
+    await page.getByText('Waiting for payment').waitFor({ timeout: 8000 })
+    await page.goto(url('/c/nuk/orders'), { waitUntil: 'hydration' })
+    await page.locator(`a[href="${orderPath}"]`).first().waitFor({ timeout: 8000 })
+    expect(await page.getByText('Your orders are kept on this device').count()).toBe(0)
   })
 
   it('a price changed since the quote: the order is refused, the new price is shown next to the old one, and placing again accepts it', async () => {
@@ -176,14 +220,13 @@ describe('dine-in', () => {
     await page.getByText('Riverside · Table T01').waitFor()
   })
 
-  it('signed out at a table: ordering asks to sign in, and the table is still there after signing in (release check 10.5)', async () => {
+  it('signed out at a table: signing in from Review order keeps the table (release check 10.5)', async () => {
     const { page, problems } = await open(`/table/${seed.openTableToken}`)
     await addToOrder(page, 'Banana Bread')
     await reviewOrder(page)
     await page.getByText('Dine-in · Table T01').waitFor()
 
-    await button(page, 'Sign in to place order').click()
-    await page.getByRole('dialog').getByRole('link', { name: 'Sign in' }).click()
+    await page.getByRole('link', { name: 'Have an account? Sign in' }).click()
     await page.waitForURL(at('/sign-in'))
     await signIn(page, seed.customers.tableGuest)
     await page.waitForURL(at('/c/nuk/checkout'))
@@ -216,23 +259,22 @@ describe('dine-in', () => {
 })
 
 describe('on a phone', () => {
-  it('the total and the button are in the bottom bar; the sign-in gate is a bottom sheet', async () => {
+  it('the total and the button are in the bottom bar; the name is asked above the order, its error shown there', async () => {
     const { page, problems } = await open('/c/nuk', 1440)
     await addToOrder(page, 'Banana Bread')
     await page.setViewportSize({ width: 390, height: 844 })
     await reviewOrder(page)
     const bar = page.getByRole('toolbar', { name: 'Place your order' })
-    await bar.getByText('$2.25').waitFor()
+    await bar.getByText('$2.25', { exact: true }).waitFor()
     expect(await page.getByRole('complementary', { name: 'Order summary' }).isVisible()).toBe(false)
     const box = (await bar.boundingBox())!
     expect(Math.round(box.y + box.height)).toBe(844)
 
-    await bar.getByRole('button', { name: 'Sign in to place order' }).click()
-    const sheet = page.getByRole('dialog')
-    await sheet.getByRole('heading', { name: 'Sign in to place your order' }).waitFor()
-    await sheet.getByRole('link', { name: 'Create account' }).waitFor()
-    // A sheet: it sits at the bottom of the screen.
-    await expect.poll(async () => Math.round(((await sheet.boundingBox())!).y + ((await sheet.boundingBox())!).height)).toBe(844)
+    await bar.getByRole('button', { name: 'Place order · $2.25' }).click()
+    await page.getByText('Enter your name').waitFor()
+    // The field takes the focus, so the keyboard opens on it.
+    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('autocomplete'))).toBe('given-name')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
     expect(problems).toEqual([])
   })
 })

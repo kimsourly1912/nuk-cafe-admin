@@ -1,5 +1,5 @@
 import { useIntervalFn, useNow } from '@vueuse/core'
-import type { CustomerAccount } from '#shared/contracts/account'
+import type { CustomerAccount, GuestCustomer, ShopMe } from '#shared/contracts/account'
 import type { ForgotPasswordForm, SignInForm, SignUpForm } from '../schemas/account-form'
 import { ACCOUNT_PATHS } from '../utils/account'
 
@@ -10,30 +10,35 @@ import { ACCOUNT_PATHS } from '../utils/account'
  *
  * Read in the browser only (`server: false`): server-rendered pages are the same for everyone, and
  * the header shows a placeholder until the browser knows (D97). Signed out is `null`, not an error.
+ *
+ * `account` is a real account; a guest (D156: signed in by Place order, no email or password) is
+ * `guest` instead, so everything account-shaped (the initials, the member code, the verify banner)
+ * treats a guest as signed out.
  */
 export function useCustomerAccount() {
   const query = useApiQuery('account:me', loadAccount, { server: false, default: () => null })
-  const account = computed(() => query.data.value)
+  const account = computed<CustomerAccount | null>(() => (query.data.value && !query.data.value.guest ? query.data.value : null))
+  const guest = computed<GuestCustomer | null>(() => (query.data.value?.guest ? query.data.value : null))
   /** The first answer arrived (signed in or not); stays true while it's refetched. */
   const known = useState('account:known', () => false)
   watch(query.status, (status) => {
     if (status === 'success' || status === 'error') known.value = true
   }, { immediate: true })
-  return { account, known, error: query.error, refresh: query.refresh }
+  return { account, guest, known, error: query.error, refresh: query.refresh }
 }
 
 /**
  * Signed out is Better Auth's `get-session` answering `null` (no failed request in the console on
  * every visit); only a session reads the account itself.
  */
-async function loadAccount(): Promise<CustomerAccount | null> {
+async function loadAccount(): Promise<ShopMe | null> {
   const session = await $fetch<{ user: unknown } | null>('/api/auth/get-session', { retry: 0, timeout: 30_000 })
     .catch((error: unknown) => {
       throw ApiError.from(error)
     })
   if (!session?.user) return null
   try {
-    return await apiFetch<CustomerAccount>('/shop/me')
+    return await apiFetch<ShopMe>('/shop/me')
   }
   catch (error) {
     // Signed out between the two requests.
@@ -70,6 +75,15 @@ export function useAccountActions() {
     await accountChanged()
   }
 
+  /**
+   * Signs this browser in as a guest (D156), for Place order without an account. The orders it
+   * places are the guest's; signing in or up later moves them to the account.
+   */
+  async function signInAsGuest() {
+    await authFetch('/sign-in/anonymous')
+    await accountChanged()
+  }
+
   async function signOut() {
     try {
       await authFetch('/sign-out')
@@ -94,7 +108,7 @@ export function useAccountActions() {
     await accountChanged()
   }
 
-  return { signIn, signUp, signOut, resendVerification, requestPasswordReset, resetPassword }
+  return { signIn, signUp, signInAsGuest, signOut, resendVerification, requestPasswordReset, resetPassword }
 }
 
 /** Seconds between two emails of the same kind (the server allows about 3 per 10 minutes). */

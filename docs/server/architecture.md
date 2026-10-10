@@ -51,7 +51,7 @@ Routes are Nuxt file routes, **unversioned** (the apps deploy together with the 
 | `/api/client-errors` (platform) | any page of the app | none; same-origin (origin check), rate limited like the public API | `POST` a browser error nobody caught: one "Browser error" line in Workers Logs, nothing stored (D149) |
 | `/api/platform/**` (platform) | a super admin (`superadmin` on the user) | session + platform role (`requirePlatformPermission`) | the platform console (D142): `GET/POST …/platform/tenants`, `POST …/platform/tenants/{id}/suspend`, `/resume`, `/slug`, `GET …/platform/owners` (the cafe owners for New cafe, D146); never a cafe's menu, orders or customers |
 | `/api/c/<slug>/public/**` | anyone | none; read-only | `GET …/public/menu`, `GET …/public/branches`, `POST …/public/checkout/quote` (a read: a POST only because the lines don't fit a query string, D98) |
-| `/api/c/<slug>/shop/**` | signed-in customer (verified email for writes) | session | `GET …/shop/me`, `POST …/shop/orders` (with `Idempotency-Key`), `GET …/shop/orders/{id}` (own orders only, D99); later `GET …/shop/points` |
+| `/api/c/<slug>/shop/**` | signed-in customer or guest (D156) | session | `GET …/shop/me`, `POST …/shop/orders` (with `Idempotency-Key`), `GET …/shop/orders/{id}` (own orders only, D99); later `GET …/shop/points` |
 | `/api/c/<slug>/counter/{branchId}/**` | the cafe's branch `manager` / `staff`, or an owner | session + branch membership | `POST …/counter/{branchId}/orders/{orderId}/ready` |
 | `/api/c/<slug>/admin/**` | the cafe's `owner` | session + tenant role | `PATCH …/admin/menu/items/{itemId}` |
 | `/api/webhooks/**` (platform) | external services | signature, no session | `POST /api/webhooks/telegram` |
@@ -286,7 +286,7 @@ HTTP 409
 |---|---|---|
 | 400 | Invalid input | `VALIDATION_FAILED` |
 | 401 | No session | `UNAUTHENTICATED` |
-| 403 | Signed in, not allowed; email not verified; write from another origin | `FORBIDDEN`, `EMAIL_NOT_VERIFIED`, `PASSWORD_CHANGE_REQUIRED` |
+| 403 | Signed in, not allowed; write from another origin | `FORBIDDEN`, `PASSWORD_CHANGE_REQUIRED` |
 | 404 | Not found, or not visible to this caller | `NOT_FOUND` |
 | 409 | Stale version, wrong state, still in use | `VERSION_CONFLICT`, `INVALID_STATE`, feature codes |
 | 413 / 415 | Upload too large / wrong type | `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA` |

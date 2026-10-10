@@ -1,4 +1,5 @@
 import type { CheckoutQuote, Order } from '#shared/contracts/orders'
+import { useAccountActions, useCustomerAccount } from '~/features/account'
 import type { PlaceFailure, PriceChange } from '../utils/checkout'
 import { orderLines, placeFailure, priceChange } from '../utils/checkout'
 import { useCart, useShopBranch, useTableContext } from './useShopMenu'
@@ -14,6 +15,8 @@ import { useCart, useShopBranch, useTableContext } from './useShopMenu'
  *   until the order is placed, so the page can show the old prices struck through.
  * - **Placing** sends the total the page shows and an `Idempotency-Key` that stays the same until
  *   the order changes: a retry after a lost answer returns the order already placed.
+ * - **Without an account** (D156): placing signs this browser in as a guest first and sends the
+ *   name the customer gave; an account sends none (it has its name).
  *
  * Placing keeps its own `placing` state, like the account forms (D97): its failures are shown on
  * the page, next to the order, never as a toast.
@@ -65,9 +68,11 @@ export function useCheckout() {
 
   const placing = ref(false)
   const failure = ref<{ kind: PlaceFailure, message: string } | null>(null)
+  const { account, guest } = useCustomerAccount()
+  const { signInAsGuest } = useAccountActions()
 
-  /** Places the order; resolves to it, or `null` with `failure` set. */
-  async function place(): Promise<Order | null> {
+  /** Places the order; resolves to it, or `null` with `failure` set. `guestName`: without an account. */
+  async function place(options: { guestName?: string } = {}): Promise<Order | null> {
     if (placing.value) return null
     failure.value = null
     const current = quote.data.value
@@ -81,13 +86,18 @@ export function useCheckout() {
     if (!body || !quote.data.value?.orderable) return null
     placing.value = true
     try {
-      const order = await apiFetch<Order>('/shop/orders', { method: 'POST', body, headers: { 'Idempotency-Key': idempotencyKey.value } })
+      // No account and no guest yet: this browser becomes a guest (one per browser, kept for its orders).
+      if (!account.value && !guest.value) await signInAsGuest()
+      const named = account.value ? body : { ...body, guestName: options.guestName }
+      const order = await apiFetch<Order>('/shop/orders', { method: 'POST', body: named, headers: { 'Idempotency-Key': idempotencyKey.value } })
       cart.clear()
       return order
     }
     catch (error) {
       failure.value = placeFailure(error)
       if (failure.value.kind === 'requote') await quote.refresh()
+      // The session ended: read it again, so placing again starts a new one.
+      if (failure.value.kind === 'signIn') await invalidate('account')
       return null
     }
     finally {

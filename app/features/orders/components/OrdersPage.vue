@@ -3,9 +3,10 @@
  * `/orders`, "Your orders" (step 6.5b, D114, the owner's frame): orders in progress as cards, then
  * past ones as rows (number, when, status, total), 20 more with Load more. Opened from the account
  * menu and the menu's order bar. Browser-only, like the order page; signed out, it asks to sign in.
+ * A guest (D156) is told their orders are kept on this device, with Create account to keep them.
  */
 import type { CustomerOrders, OrderSummary } from '#shared/contracts/orders'
-import { accountLink, ACCOUNT_PATHS } from '~/features/account'
+import { accountLink, ACCOUNT_PATHS, useCustomerAccount } from '~/features/account'
 import { useCustomerOrders } from '../composables/useOrders'
 import { formatPickupNumber, itemsText, orderTypeText, placedText, statusBadge } from '../utils/order'
 import OrdersHeader from './OrdersHeader.vue'
@@ -13,6 +14,7 @@ import OrdersHeader from './OrdersHeader.vue'
 const tenantPath = useTenantPath()
 
 const route = useRoute()
+const { guest } = useCustomerAccount()
 const pages = ref(1)
 const query = useCustomerOrders({ pages })
 // "Load more" asks for one more page under a new key: the list shown stays until it arrives.
@@ -38,6 +40,15 @@ useSeoMeta({ robots: 'noindex' })
       <h1 class="text-2xl font-semibold text-highlighted">
         Your orders
       </h1>
+      <UAlert
+        v-if="guest"
+        color="neutral"
+        variant="subtle"
+        icon="i-lucide-smartphone"
+        title="Your orders are kept on this device"
+        description="Create an account to see them anywhere: your orders move to it."
+        :actions="[{ label: 'Create account', color: 'neutral', variant: 'outline', to: accountLink(ACCOUNT_PATHS.signUp, route.fullPath) }]"
+      />
 
       <div
         v-if="!list && query.loading.value"
