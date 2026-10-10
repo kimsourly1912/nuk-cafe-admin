@@ -4,8 +4,10 @@ import { purgeAssistantUsage } from '#server/features/assistant'
 export default defineTask({
   meta: { name: 'assistant:purge-usage', description: 'Remove assistant usage older than 90 days' },
   async run() {
-    const removed = await purgeAssistantUsage(useDb())
-    if (removed) log('info', 'Old assistant usage removed', { removed })
-    return { result: { removed } }
+    return runJob('assistant:purge-usage', async () => {
+      const removed = await purgeAssistantUsage(useDb())
+      if (removed) log('info', 'Old assistant usage removed', { removed })
+      return { result: { removed } }
+    })
   },
 })

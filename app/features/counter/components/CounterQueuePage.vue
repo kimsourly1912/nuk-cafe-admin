@@ -7,7 +7,8 @@
  * (N) switches to today's finished orders (step 10.2, D117). New orders are marked
  * for a minute, with a chime (mute it in the user menu). A closed branch says when it opens.
  * While refreshing fails, the queue says when it last loaded; the tab's title counts the orders to
- * pay (D149).
+ * pay (D149). After 2 minutes of that, it warns louder; a browser that holds the chime back until a
+ * tap says so (D150).
  *
  * Browser-only (`routeRules`), so the width can choose what renders (`useLayoutContext`).
  */
@@ -18,7 +19,7 @@ import { useCounterActions } from '../composables/useCounterActions'
 import { useCounterQueue } from '../composables/useCounterQueue'
 import { useCounterSession } from '../composables/useCounterSession'
 import type { ColumnId } from '../utils/counter'
-import { COLUMNS, lastUpdatedText, matchesSearch, queueTitle } from '../utils/counter'
+import { COLUMNS, lastUpdatedText, matchesSearch, queueLongStale, queueTitle } from '../utils/counter'
 import CounterCancelModal from './CounterCancelModal.vue'
 import CounterHeader from './CounterHeader.vue'
 import CounterOrderCard from './CounterOrderCard.vue'
@@ -32,9 +33,15 @@ const branchId = computed(() => String(route.params.branchId ?? ''))
 const { user } = useCounterSession()
 const branch = computed(() => user.value?.branches.find(b => b.id === branchId.value) ?? null)
 
-const { query, queue, now, serverOffset, updatedAt, localNow, isNew, muted } = useCounterQueue(branchId)
+const { query, queue, now, serverOffset, updatedAt, localNow, isNew, muted, sound } = useCounterQueue(branchId)
+// Two minutes without an update while refreshing fails: a red alert, "⚠" in the tab and a warning
+// sound once, for a cashier who isn't looking at the screen (D150).
+const longStale = computed(() => queueLongStale(Boolean(query.error.value), updatedAt.value, localNow.value))
+watch(longStale, (stale) => {
+  if (stale && !muted.value) sound.warning()
+})
 // The tab says how many orders wait for payment, so a background tab still shows them (D149).
-useHead({ title: () => queueTitle(queue.value?.orders ?? []) })
+useHead({ title: () => queueTitle(queue.value?.orders ?? [], longStale.value) })
 const status = useApiQuery('counter:branch-status', () => apiFetch<PublicBranch[]>('/public/branches'), { server: false })
 const branchStatus = computed(() => status.data.value?.find(b => b.id === branchId.value) ?? null)
 const closedNote = computed(() => (branchStatus.value ? openingText(branchStatus.value) : undefined))
@@ -142,14 +149,28 @@ useSeoMeta({ robots: 'noindex' })
         />
       </div>
       <div
+        v-if="sound.blocked.value && !muted"
+        class="px-4 pt-3"
+      >
+        <UAlert
+          color="info"
+          variant="subtle"
+          icon="i-lucide-volume-x"
+          title="Sound is off until you tap the screen"
+          description="The browser holds back the new-order chime after the page loads."
+          orientation="horizontal"
+          :actions="[{ label: 'Turn on sound', color: 'info', variant: 'solid', onClick: () => sound.unlock() }]"
+        />
+      </div>
+      <div
         v-if="query.error.value && queue"
         class="px-4 pt-3"
       >
         <UAlert
-          color="warning"
+          :color="longStale ? 'error' : 'warning'"
           variant="subtle"
           icon="i-lucide-wifi-off"
-          title="The queue may be out of date"
+          :title="longStale ? 'The queue isn\'t updating: check the connection' : 'The queue may be out of date'"
           :description="`${updatedAt ? `${lastUpdatedText(updatedAt, localNow)}. ` : ''}New orders show up once it can refresh again; it keeps trying every 10 seconds.`"
         />
       </div>

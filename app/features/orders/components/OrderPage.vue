@@ -40,7 +40,9 @@ const updatedText = computed(() => {
   const at = query.updatedAt.value
   if (!at) return ''
   const minutes = Math.floor((now.value - at) / 60_000)
-  return minutes < 1 ? 'Updated just now' : `Updated ${minutes} min ago`
+  const updated = minutes < 1 ? 'Updated just now' : `Updated ${minutes} min ago`
+  // A refresh that failed keeps the order on screen (D150); say why it may be old.
+  return query.error.value ? `Can't reach the cafe right now, trying again · ${updated}` : updated
 })
 const cancelled = computed(() => (order.value?.status === 'cancelled' ? cancellationText(order.value) : null))
 const paid = computed(() => (order.value ? paymentText(order.value) : null))

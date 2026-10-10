@@ -20,7 +20,9 @@ Branch staff, managers and admins use the **counter app** at `/counter` (its own
 - Click a card to open the order and its one next action.
 - The browser tab shows how many orders wait for payment, for example **(2) Queue**, so you see them while another tab is open.
 - The screen stays on while the counter is open, so the tablet doesn't go dark between customers. (A tablet in battery saver may still turn it off.)
-- If the connection drops, the cards stay and a notice says **The queue may be out of date** with the time it last loaded. New orders appear again once the connection is back; it keeps trying every 10 seconds.
+- If the connection drops, the cards stay and a notice says **The queue may be out of date** with the time it last loaded. New orders appear again once the connection is back; it keeps trying every 10 seconds. After 2 minutes the notice turns red (**The queue isn't updating: check the connection**), the tab shows ⚠ and a warning sound plays once.
+- After the page loads, the browser keeps sound off until someone taps the screen. The counter says **Sound is off until you tap the screen**: press **Turn on sound** (or tap anywhere) so the new-order chime plays.
+- Swiping down or sideways doesn't reload or leave the counter.
 - After the app is updated, a notice says **A new version of the app is ready**. Press **Reload** when you have a moment, or **Later**: it updates by itself the next time you open another page.
 
 ## Take payment

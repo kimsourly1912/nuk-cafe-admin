@@ -133,6 +133,20 @@ A key can also be a getter for a parameterized query (``() => `products:list:${t
 
 ---
 
+### A failed refresh keeps the data (D150)
+
+Nuxt's `useAsyncData` resets `data` to its default whenever a request fails. `useApiQuery` puts the last data back, in the same tick, so watchers of `data` never see the gap. `error` is still set, so a screen can say the data may be old.
+
+| Case | `data` | `error` |
+|---|---|---|
+| A refresh fails for the connection or the server (`error.retryable`: network, timeout, 5xx) | The last data for **this key** | Set |
+| A refresh is refused (401, 403, 404, 409, 422…) | Nuxt's default (`undefined`) | Set |
+| The key changed (another branch, another order) | Not the previous key's | As Nuxt |
+| `clear()`, or the session boundary's `clearNuxtData` (sign-in, sign-out, another person) | Cleared, and the kept copy forgotten: never put back | Cleared |
+| The next refresh works | The new data | Cleared |
+
+Show the kept data with a note when it matters (the counter's queue, the customer's order page); a page that renders `v-if="error"` before its list still shows the error with Retry. Tests: e2e `shop-tracking.test.ts`, `counter.test.ts`, `session.test.ts` (nothing kept reaches the next person).
+
 ## `usePaginatedQuery`
 
 Filter and pagination state for list pages, **kept in the URL** (`/products?search=tea&status=active&page=2&pageSize=50`). Pages are 1-based both in [`<ListPagination>`](./ui-helpers.md#listpagination) and in the API (`page`, `pageSize`).

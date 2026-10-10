@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CounterOrder } from '#shared/contracts/orders'
 import { ApiError } from '~/utils/api-error'
-import { changeDue, commandFailure, firstName, formatRiel, itemCount, itemNames, lastUpdatedText, matchesSearch, orderTypeText, payBySoon, queueTitle, rielQuickAmounts, timeAgo, usdQuickAmounts } from '../utils/counter'
+import { changeDue, commandFailure, firstName, formatRiel, itemCount, itemNames, lastUpdatedText, matchesSearch, orderTypeText, payBySoon, queueLongStale, queueTitle, rielQuickAmounts, timeAgo, usdQuickAmounts } from '../utils/counter'
 
 const order = (over: Partial<CounterOrder> = {}): CounterOrder => ({
   id: 'o1', version: 1, pickupNumber: 42, businessDate: '2026-09-29', status: 'awaiting_payment', orderType: 'pickup', table: null,
@@ -80,5 +80,14 @@ describe('the queue when it can\'t refresh, and its tab (D149)', () => {
     expect(queueTitle([])).toBe('Queue')
     expect(queueTitle([order({ status: 'preparing' })])).toBe('Queue')
     expect(queueTitle([order(), order({ id: 'o2' }), order({ status: 'ready' })])).toBe('(2) Queue')
+    expect(queueTitle([order()], true)).toBe('⚠ (1) Queue')
+  })
+
+  it('warns louder after 2 minutes without an update, only while refreshing fails (D150)', () => {
+    const updated = '2026-09-29T03:00:00.000Z'
+    expect(queueLongStale(true, updated, at('03:01'))).toBe(false)
+    expect(queueLongStale(true, updated, at('03:02'))).toBe(true)
+    expect(queueLongStale(false, updated, at('03:10'))).toBe(false)
+    expect(queueLongStale(true, null, at('03:10'))).toBe(false)
   })
 })

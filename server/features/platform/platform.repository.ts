@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lt, lte, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'
 import type { Db, Statement } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import { auditEvents, idempotencyKeys, outboxMessages } from './platform.schema'
@@ -63,11 +63,11 @@ export interface DueMessage {
 const unclaimed = (now: Date) => or(isNull(outboxMessages.lockedUntil), lte(outboxMessages.lockedUntil, now))
 
 /** Pending messages whose time has come and that no run holds, oldest first. */
-export async function findDueMessages(db: Db, now: Date, limit: number): Promise<DueMessage[]> {
+export async function findDueMessages(db: Db, now: Date, limit: number, kinds?: string[]): Promise<DueMessage[]> {
   return db
     .select({ id: outboxMessages.id, tenantId: outboxMessages.tenantId, kind: outboxMessages.kind, payload: outboxMessages.payload, attempts: outboxMessages.attempts })
     .from(outboxMessages)
-    .where(and(eq(outboxMessages.status, 'pending'), lte(outboxMessages.nextAttemptAt, now), unclaimed(now)))
+    .where(and(eq(outboxMessages.status, 'pending'), lte(outboxMessages.nextAttemptAt, now), unclaimed(now), kinds ? inArray(outboxMessages.kind, kinds) : undefined))
     .orderBy(asc(outboxMessages.nextAttemptAt), asc(outboxMessages.id))
     .limit(limit)
 }

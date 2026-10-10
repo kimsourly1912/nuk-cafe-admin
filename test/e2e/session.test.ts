@@ -161,6 +161,92 @@ describe('switching users in the same browser', () => {
     expect(await page.getByText('Alice-only draft').count()).toBe(0)
   })
 
+  it('a list kept after a failed refresh is never shown to the next person (D150)', async () => {
+    const page = await createPage()
+    let aliceSignedIn = true
+    let failing = false
+    const bobList = deferred()
+    const api = await mockApi(page, {
+      'GET /admin/me': () => (aliceSignedIn ? ALICE : BOB),
+      [LIST]: (request) => {
+        if (!aliceSignedIn) return bobList.handler(request)
+        if (failing) throw failures.server()
+        return listOf(MENU_TEA, ALICE_ONLY)
+      },
+      'POST /auth/sign-in/email': () => ({ token: 't' }),
+    })
+    await page.goto(url('/c/nuk/admin/categories'), { waitUntil: 'hydration' })
+    await categoryItem(page, 'Alice-only draft').waitFor()
+
+    // The server fails from now on; the connection coming back refetches, and that refresh fails:
+    // Alice's list is kept for her.
+    failing = true
+    const loads = api.calls.filter(c => c === LIST).length
+    await page.context().setOffline(true)
+    await page.context().setOffline(false)
+    await expect.poll(() => api.calls.filter(c => c === LIST).length).toBeGreaterThan(loads)
+    await page.waitForTimeout(300)
+
+    await logout(page, 'alice')
+    await expect.poll(() => path(page)).toBe('/c/nuk/admin/login')
+    aliceSignedIn = false
+    await login(page, 'bob')
+    await expect.poll(() => path(page)).toBe('/c/nuk/admin')
+    await page.getByRole('link', { name: /Categories/ }).first().click()
+    // While Bob's own list is still loading, nothing of Alice's shows; nor once it fails.
+    await bobList.started()
+    await page.waitForTimeout(500)
+    expect(await page.getByText('Alice-only draft').count()).toBe(0)
+    bobList.fail(failures.server())
+    await page.getByText('Something went wrong on the server').first().waitFor({ timeout: 10_000 })
+    expect(await page.getByText('Alice-only draft').count()).toBe(0)
+  })
+
+  it('an open page whose refresh failed shows nothing of the previous person when another signs in elsewhere (D150)', async () => {
+    const [aliceTab, bobTab] = await openTabs(2)
+    let who: 'alice' | 'bob' = 'alice'
+    let failing = false
+    const bobList = deferred()
+    const api = await mockApi(aliceTab!, {
+      'GET /admin/me': () => (who === 'alice' ? ALICE : BOB),
+      [LIST]: (request) => {
+        if (who === 'bob') return bobList.handler(request)
+        if (failing) throw failures.server()
+        return listOf(MENU_TEA, ALICE_ONLY)
+      },
+    })
+    await mockApi(bobTab!, {
+      'GET /admin/me': () => {
+        if (who === 'alice') throw failures.unauthorized()
+        return BOB
+      },
+      'POST /auth/sign-in/email': () => {
+        who = 'bob'
+        return { token: 't' }
+      },
+    })
+    await gotoHydrated(aliceTab!, '/c/nuk/admin/categories')
+    await categoryItem(aliceTab!, 'Alice-only draft').waitFor()
+    await gotoHydrated(bobTab!, '/c/nuk/admin/login')
+
+    // Alice's refresh fails (the server, on the connection coming back): her list is kept for her.
+    failing = true
+    const loads = api.calls.filter(c => c === LIST).length
+    await aliceTab!.context().setOffline(true)
+    await aliceTab!.context().setOffline(false)
+    await expect.poll(() => api.calls.filter(c => c === LIST).length).toBeGreaterThan(loads)
+    await aliceTab!.waitForTimeout(300)
+
+    // Bob signs in in the other tab: Alice's tab stays on Categories and reloads it for Bob.
+    await login(bobTab!, 'bob')
+    await bobList.started()
+    await aliceTab!.waitForTimeout(500)
+    expect(await aliceTab!.getByText('Alice-only draft').count()).toBe(0)
+    bobList.release(listOf(BOB_ONLY))
+    await categoryItem(aliceTab!, 'Bob-only menu').waitFor({ timeout: 10_000 })
+    expect(await aliceTab!.getByText('Alice-only draft').count()).toBe(0)
+  })
+
   it('a list response for the previous user that arrives late never shows', async () => {
     const page = await createPage()
     const aliceList = deferred()

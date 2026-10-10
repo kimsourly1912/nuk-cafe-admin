@@ -31,12 +31,14 @@ Each chat shows **Connected** or **Blocked**, and when something was last sent.
 Under **Notifications**, choose which chats get each message; a switch saves at once.
 
 - **New orders**: when a customer places an order, before it's paid: the items with their options, notes and the total, with an **Open order** button that opens it in the counter app.
-- **Payment confirmed**: when the counter takes the payment.
+- **Payment confirmed**: when the counter takes the payment (or the automatic KHQR check records it).
+
+New-order and payment messages arrive within a few seconds. If Telegram is unreachable for a moment, the app tries again every minute.
 - **Closing summary**: the day's figures (paid sales, orders, average, refunds, payments, top items), **30 minutes after closing time**, for that business day. Nothing is sent on a day the branch is closed. **Attach CSV** adds the day's file as a second message. Sent to a group, everyone there sees the sales.
 
 ### Server errors and reminders
 
-**Server errors and reminders** sends a short alert when the app fails unexpectedly (a customer or staff member sees "Something went wrong on our side"). It says which page failed and a request id: give that id to whoever maintains the app, who finds the details in the server logs. The same page failing again within 15 minutes isn't sent again. Turn it on for your private chat rather than the staff group. The same switch sends reminders before the Bakong token expires (14, 7, 3 and 1 days before, and on the day), with an **Open Payments** button.
+**Server errors and reminders** sends a short alert when the app fails unexpectedly (a customer or staff member sees "Something went wrong on our side"). It says which page failed and a request id: give that id to whoever maintains the app, who finds the details in the server logs. The same page failing again within 15 minutes isn't sent again. It also says when a background job fails (for example the one that cancels orders not paid within 30 minutes), or when an order alert or account email couldn't be sent after its last try. Turn it on for your private chat rather than the staff group. The same switch sends reminders before the Bakong token expires (14, 7, 3 and 1 days before, and on the day), with an **Open Payments** button.
 
 ## Delivery history
 

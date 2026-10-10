@@ -65,10 +65,21 @@ export const clockTime = (iso: string) => new Date(iso).toLocaleTimeString('en-U
 /** "Last updated 10:42 AM (4 min ago)": when the queue last loaded, while refreshing fails (D149). */
 export const lastUpdatedText = (iso: string, now: number) => `Last updated ${clockTime(iso)} (${timeAgo(iso, now).toLowerCase()})`
 
-/** The tab's title (D149): the orders waiting for payment, the cashier's next job, as Gmail counts unread mail. */
-export function queueTitle(orders: Pick<CounterOrder, 'status'>[]): string {
+/** After this long without an update while refreshing fails, the queue warns louder (D150). */
+export const QUEUE_STALE_ALERT_MS = 2 * MINUTE
+
+/** Whether the queue has failed to refresh for `QUEUE_STALE_ALERT_MS` or more. */
+export const queueLongStale = (failing: boolean, updatedAt: string | null, now: number) =>
+  failing && updatedAt !== null && now - Date.parse(updatedAt) >= QUEUE_STALE_ALERT_MS
+
+/**
+ * The tab's title (D149): the orders waiting for payment, the cashier's next job, as Gmail counts
+ * unread mail; "⚠" first once the queue has been out of date for 2 minutes (D150).
+ */
+export function queueTitle(orders: Pick<CounterOrder, 'status'>[], longStale = false): string {
   const toPay = orders.filter(order => order.status === 'awaiting_payment').length
-  return toPay ? `(${toPay}) Queue` : 'Queue'
+  const title = toPay ? `(${toPay}) Queue` : 'Queue'
+  return longStale ? `⚠ ${title}` : title
 }
 
 /** Orders shown as new: arrived in the last minute (after the screen's first load). */

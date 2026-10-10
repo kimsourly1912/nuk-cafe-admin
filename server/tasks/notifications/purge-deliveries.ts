@@ -4,8 +4,10 @@ import { purgeDeliveries } from '#server/features/notifications'
 export default defineTask({
   meta: { name: 'notifications:purge-deliveries', description: 'Remove Telegram deliveries older than 90 days' },
   async run() {
-    const removed = await purgeDeliveries(useDb())
-    if (removed) log('info', 'Old Telegram deliveries removed', { removed })
-    return { result: { removed } }
+    return runJob('notifications:purge-deliveries', async () => {
+      const removed = await purgeDeliveries(useDb())
+      if (removed) log('info', 'Old Telegram deliveries removed', { removed })
+      return { result: { removed } }
+    })
   },
 })
