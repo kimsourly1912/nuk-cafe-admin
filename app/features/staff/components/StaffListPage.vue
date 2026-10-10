@@ -182,7 +182,7 @@ usePageShortcuts({ n: () => openForm() })
                 color="neutral"
                 variant="link"
                 :disabled="isBusy(member.id)"
-                class="p-0 text-left font-medium text-highlighted after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-primary"
+                class="min-h-6 p-0 text-left font-medium text-highlighted after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-primary"
                 @click="openForm(member)"
               >
                 {{ member.name }}
@@ -241,7 +241,7 @@ usePageShortcuts({ n: () => openForm() })
               <UButton
                 color="neutral"
                 variant="link"
-                class="p-0 text-left font-medium text-highlighted after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-primary"
+                class="min-h-6 p-0 text-left font-medium text-highlighted after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-primary"
                 @click="openForm(row.original)"
               >
                 {{ row.original.name }}

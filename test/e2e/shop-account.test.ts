@@ -64,7 +64,7 @@ describe('signing in and out', () => {
     await heading(page, 'Sign in').waitFor()
     await signIn(page, seed.customers.verified)
     await page.waitForURL(url('/c/nuk'))
-    await button(page, 'Account: Dara Sok').click()
+    await button(page, 'DS, account: Dara Sok').click()
     const menu = page.getByRole('dialog')
     await menu.getByText('Email verified').waitFor()
     expect(await menu.getByText(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/).isVisible()).toBe(true)
@@ -133,7 +133,7 @@ describe('verifying the email', () => {
     await page.getByText(`You're signed in as ${customer.name}.`).waitFor()
     await page.getByRole('link', { name: 'Back to the menu' }).last().click()
     await page.waitForURL(url('/c/nuk'))
-    await button(page, `Account: ${customer.name}`).waitFor()
+    await page.getByRole('button', { name: new RegExp(`, account: ${customer.name}$`) }).waitFor()
     expect(await banner.count()).toBe(0)
   })
 

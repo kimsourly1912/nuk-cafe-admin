@@ -171,7 +171,7 @@ function onName() {
             color="neutral"
             variant="link"
             :tabindex="nameAction === 'select' ? -1 : undefined"
-            class="p-0 text-left after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-primary"
+            class="min-h-6 p-0 text-left after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-primary"
             :class="isMain ? 'text-base font-semibold text-highlighted' : 'font-normal text-default'"
             @click="onName"
           >

@@ -186,7 +186,7 @@ describe('finding an order again', () => {
     await page.waitForURL(u => u.pathname === `/c/nuk/orders/${order.id}`)
     await page.getByText('Ready for pickup').waitFor()
 
-    await page.getByRole('button', { name: /^Account: / }).click()
+    await page.getByRole('button', { name: /, account: / }).click()
     await page.getByRole('link', { name: 'Your orders' }).first().click()
     await page.waitForURL(u => u.pathname === '/c/nuk/orders')
     await page.getByRole('heading', { name: 'In progress' }).waitFor()
