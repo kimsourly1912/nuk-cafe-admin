@@ -25,7 +25,7 @@ const branch = computed(() => user.value?.branches.find(b => b.id === branchId.v
 const status = useApiQuery('counter:branch-status', () => apiFetch<PublicBranch[]>('/public/branches'), { server: false })
 const branchStatus = computed(() => status.data.value?.find(b => b.id === branchId.value) ?? null)
 
-const { rows, set, error, refresh } = useSoldOut(branchId)
+const { rows, set, toggle, error, refresh } = useSoldOut(branchId)
 
 const search = ref('')
 const category = ref('all')
@@ -42,7 +42,7 @@ const soldOutCount = computed(() => (rows.value ?? []).filter(row => row.soldOut
 // The queue's new-order chime setting, kept in this browser (useCounterQueue).
 function setAvailable(row: SoldOutRow, available: boolean) {
   if (available && onlySoldOut.value) keep.value = new Set([...keep.value, row.variationId])
-  set.execute({ row, soldOut: !available })
+  void toggle(row, !available)
 }
 
 const muted = useLocalStorage('counter:muted', false, { initOnMounted: true })
