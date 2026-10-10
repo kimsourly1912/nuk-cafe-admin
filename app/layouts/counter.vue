@@ -9,6 +9,10 @@ import { useWakeLock } from '@vueuse/core'
  * hidden and VueUse asks again when it's visible. Refused (battery saver, an older browser):
  * nothing changes.
  */
+// A swipe can't reload the page or go back mid-payment on a tablet: pull-to-refresh and swipe
+// navigation come from overscrolling the page, which the counter turns off (D150).
+useHead({ htmlAttrs: { class: 'overscroll-none' }, bodyAttrs: { class: 'overscroll-none' } })
+
 const wakeLock = useWakeLock()
 onMounted(() => {
   if (wakeLock.isSupported.value) wakeLock.request('screen').catch(() => {})

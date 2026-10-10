@@ -1,6 +1,7 @@
 import { useDocumentVisibility, useIntervalFn, useLocalStorage } from '@vueuse/core'
 import type { CounterOrder, CounterQueue } from '#shared/contracts/orders'
 import { NEW_FOR_MS } from '../utils/counter'
+import { useCounterSound } from './useCounterSound'
 
 /** The new-order sound, on or off in this browser (the header's user menu, on every counter page). */
 export const useCounterMuted = () => useLocalStorage('counter:muted', false, { initOnMounted: true })
@@ -11,7 +12,7 @@ export const QUEUE_REFRESH_MS = 10_000
 /**
  * The branch's queue (`GET /api/counter/{branchId}/orders`, D101), refreshed every 10 seconds while
  * the tab is visible (and on return, by the data-freshness plugin). Orders that appear after the
- * first load are marked new for a minute and play a short chime, unless muted in this browser.
+ * first load are marked new for a minute and play a short chime (`useCounterSound`), unless muted in this browser.
  * `now` follows the server's clock (the answer carries it), so "Pay by" doesn't depend on the
  * tablet's.
  */
@@ -35,25 +36,22 @@ export function useCounterQueue(branchId: MaybeRefOrGetter<string>) {
   }, 15_000)
   const now = computed(() => tick.value + offset.value)
 
-  // --- The last queue loaded, and when (D149) ---
-  // Nuxt's `useAsyncData` resets `data` when a refresh fails, which emptied the board on every Wi-Fi
-  // drop. The queue keeps the branch's last answer instead and says how old it is.
-  const lastQueue = shallowRef<CounterQueue | null>(null)
+  // --- When the queue last loaded (D149) ---
+  // A failed refresh keeps the board (`useApiQuery`, D150); this says how old it is.
   const updatedAt = ref<string | null>(null)
   watch(() => toValue(branchId), () => {
-    lastQueue.value = null
     updatedAt.value = null
   })
 
   // --- New orders ---
   const muted = useCounterMuted()
+  const sound = useCounterSound()
   const firstSeen = ref(new Map<string, number>())
   let loaded = false
   watch(() => query.data.value, (queue) => {
     if (!queue) return
     offset.value = Date.parse(queue.serverTime) - Date.now()
     tick.value = Date.now()
-    lastQueue.value = queue
     updatedAt.value = new Date().toISOString()
     let arrived = false
     for (const order of queue.orders) {
@@ -63,7 +61,7 @@ export function useCounterQueue(branchId: MaybeRefOrGetter<string>) {
       if (loaded && order.status === 'awaiting_payment') arrived = true
     }
     loaded = true
-    if (arrived && !muted.value) chime()
+    if (arrived && !muted.value) sound.chime()
   }, { immediate: true })
 
   const isNew = (order: CounterOrder) => {
@@ -73,11 +71,8 @@ export function useCounterQueue(branchId: MaybeRefOrGetter<string>) {
 
   return {
     query,
-    /**
-     * The queue as last loaded: kept while a refresh fails for the connection or the server
-     * (`query.error` says so). A refusal (access removed, the branch gone) shows the error instead.
-     */
-    queue: computed(() => query.data.value ?? (query.error.value?.retryable === false ? null : lastQueue.value)),
+    /** The queue as last loaded: kept while a refresh fails (`query.error` says so, D150). */
+    queue: computed(() => query.data.value ?? null),
     now,
     /** The server's clock minus this tablet's, for countdowns by the second (the KHQR's). */
     serverOffset: readonly(offset),
@@ -86,28 +81,7 @@ export function useCounterQueue(branchId: MaybeRefOrGetter<string>) {
     localNow: computed(() => tick.value),
     isNew,
     muted,
-  }
-}
-
-/** A short two-note chime (Web Audio: no file to load). Browsers may refuse before a tap: then silence. */
-function chime() {
-  try {
-    const context = new AudioContext()
-    for (const [index, frequency] of [880, 1320].entries()) {
-      const oscillator = context.createOscillator()
-      const gain = context.createGain()
-      oscillator.frequency.value = frequency
-      const start = context.currentTime + index * 0.18
-      gain.gain.setValueAtTime(0.0001, start)
-      gain.gain.exponentialRampToValueAtTime(0.2, start + 0.02)
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.3)
-      oscillator.connect(gain).connect(context.destination)
-      oscillator.start(start)
-      oscillator.stop(start + 0.32)
-    }
-    setTimeout(() => void context.close(), 1000)
-  }
-  catch {
-    // No audio here: the "New" badge still shows.
+    /** The chime and the stale-queue warning; `blocked` until someone taps the page (D150). */
+    sound,
   }
 }

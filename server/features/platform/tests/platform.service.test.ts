@@ -210,6 +210,28 @@ describe('outbox', () => {
     expect(one.skipped + two.skipped).toBe(1)
   })
 
+  it('a run for some kinds sends only those; the request\'s run and the scheduled one send each once (D150)', async () => {
+    await db.batch([outboxStatement(db, null, 'order.placed', { orderId: 'o1' }), outboxStatement(db, null, 'mail.test', { to: 'a' })])
+    await db.update(outboxMessages).set({ nextAttemptAt: T0 })
+    const sent: string[] = []
+    const handlers = {
+      'order.placed': async (m: { kind: string }) => void sent.push(m.kind),
+      'mail.test': async (m: { kind: string }) => void sent.push(m.kind),
+    }
+    // The order's own request and the minute's run at the same moment.
+    const [request, scheduled] = await Promise.all([
+      deliverOutbox(db, handlers, { now: T0, kinds: ['order.placed'] }),
+      deliverOutbox(db, handlers, { now: T0 }),
+    ])
+    expect(sent.sort()).toEqual(['mail.test', 'order.placed'])
+    expect(request.sent + scheduled.sent).toBe(2)
+    // A run for order events alone leaves the mail for the scheduled run.
+    await db.update(outboxMessages).set({ status: 'pending', nextAttemptAt: T0, lockedUntil: null })
+    sent.length = 0
+    expect(await deliverOutbox(db, handlers, { now: at(1000), kinds: ['order.placed'] })).toMatchObject({ sent: 1 })
+    expect(sent).toEqual(['order.placed'])
+  })
+
   it('never lets a run send a message another run holds', async () => {
     await enqueue()
     let sends = 0

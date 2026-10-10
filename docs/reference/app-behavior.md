@@ -292,6 +292,7 @@ Tests: e2e `shop-checkout.test.ts` (on the seeded database: the gates, a note, a
 | Case | Behavior |
 |---|---|
 | The counter takes payment, marks it ready or completes it | The page reads the order again every 10 s while it's in progress and the tab is visible (and on return to the tab, D22): the badge, the four steps, "Paid $9.75 · Cash · 10:21 AM", "Updated just now". It stops once the order is completed or cancelled |
+| The connection drops while following (a refresh fails) | The order stays on screen with "Can't reach the cafe right now, trying again · Updated 3 min ago"; polling goes on, and the next read that works follows the order again (`useApiQuery`, D150). Before, the page showed "Couldn't load this order" and stopped polling |
 | Ready | A success panel with "Ready for pickup" and the number; the tab title becomes "Ready: 042" |
 | The time to pay runs out on this device's clock | The last 5 minutes in red; at 0 "Time's up: this order will be cancelled" until the expiry task (D104) cancels it within a minute (the server decides, not the device) |
 | Cancel order (only while unpaid) | A confirm sheet (a dialog from `sm`), Keep order as the main button. Cancelled: "You cancelled this order", no steps |
@@ -303,7 +304,7 @@ Tests: e2e `shop-checkout.test.ts` (on the seeded database: the gates, a note, a
 | The menu, signed in, an order in progress | A bar above the first section: "Order 042 · Preparing · View" (green "Order 042 is ready"); several: "2 orders in progress", to Your orders. Read every 10 s only while an order is in progress |
 | The menu, signed out | No bar and no request for orders |
 
-Tests: e2e `shop-tracking.test.ts` (on the seeded database: the counter moves the order and the page follows, Order again, cancel on a phone, the race with a payment, another's order, the bar and Your orders, no request signed out); unit `app/features/orders/tests/order.test.ts`, `app/features/menu/tests/menu.test.ts` (Order again).
+Tests: e2e `shop-tracking.test.ts` (on the seeded database: the counter moves the order and the page follows, a dropped connection (D150), Order again, cancel on a phone, the race with a payment, another's order, the bar and Your orders, no request signed out); unit `app/features/orders/tests/order.test.ts`, `app/features/menu/tests/menu.test.ts` (Order again).
 
 ## The counter workspace (D102)
 
@@ -316,7 +317,10 @@ Tests: e2e `shop-tracking.test.ts` (on the seeded database: the counter moves th
 | Staff on a temporary password | Every counter page goes to `/counter/change-password` first |
 | One branch / several (or an admin) | Straight to its queue / "Choose a branch" |
 | The queue | Refreshes every 10 seconds while the tab is visible, and on return to the tab |
-| A refresh fails (Wi-Fi drop, server down) | The board keeps the branch's last queue (Nuxt would empty it, D149) under "The queue may be out of date · Last updated 10:42 AM (3 min ago)…"; the next refresh that works clears it. No queue loaded yet, or a refusal (access removed, 403/404): "Couldn't load the queue" with the reason and Retry |
+| A refresh fails (Wi-Fi drop, server down) | The board keeps the branch's last queue (`useApiQuery`, D150) under "The queue may be out of date · Last updated 10:42 AM (3 min ago)…"; the next refresh that works clears it. No queue loaded yet, or a refusal (access removed, 403/404): "Couldn't load the queue" with the reason and Retry |
+| Still failing after 2 minutes | Red: "The queue isn't updating: check the connection", "⚠ (2) Queue" in the tab, and a warning sound once (three low notes; not when muted) (D150) |
+| Sound held back by the browser (after a load or reload, before any tap) | "Sound is off until you tap the screen" with **Turn on sound**; the first tap anywhere turns it on (`useCounterSound`, D150) |
+| Pull-to-refresh, swipe-back | Off on counter pages (`overscroll-behavior: none`, D150) |
 | The tab's title | "(2) Queue · NUK Cafe Counter": the orders waiting for payment, so a background tab still shows them (D149); "Queue" when there are none |
 | The screen | Kept on while a counter page is open (Screen Wake Lock, `layouts/counter.vue`, D149): asked for again when the tab is visible again; a browser that refuses (battery saver) changes nothing |
 | A new order arrives | Its card is outlined with "New" for a minute and a short chime plays (unless muted in the user menu, kept in this browser; a browser may block sound until the first tap) |
@@ -337,7 +341,7 @@ Tests: e2e `shop-tracking.test.ts` (on the seeded database: the counter moves th
 | The badge and "Since … by" disagree while the page refreshes | Can't: both come from the sold-out list (the menu only until the list loads) |
 | A customer's open menu | Shows the change on its next load (no push); the Review order page re-checks every line anyway (D100) |
 
-Tests: e2e `counter.test.ts` (the real seeded server: the screen kept on, the tab's count and a failing refresh (D149), sign-in, cash with change and short, riel and cancelling a paid order, a payment recorded meanwhile → Reload, phone tabs, a customer refused, sold out switched off and back with the customer menu following, the Sold out page on a phone), `counter-orders-api.test.ts`; unit `app/features/counter/tests/counter.test.ts`, `sold-out.test.ts`.
+Tests: e2e `counter.test.ts` (the real seeded server: the screen kept on, the tab's count and a failing refresh (D149), the sound notice, the louder alert after 2 minutes and overscroll (D150), sign-in, cash with change and short, riel and cancelling a paid order, a payment recorded meanwhile → Reload, phone tabs, a customer refused, sold out switched off and back with the customer menu following, the Sold out page on a phone), `counter-orders-api.test.ts`; unit `app/features/counter/tests/counter.test.ts`, `sold-out.test.ts`.
 
 ## Keyboard shortcuts
 

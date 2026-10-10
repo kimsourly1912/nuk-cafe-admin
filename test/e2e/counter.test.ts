@@ -84,7 +84,7 @@ async function sql(statement: string, args: (string | number)[] = []) {
 }
 
 describe('the counter', () => {
-  it('keeps the screen on, counts the orders to pay in the tab, and says when the queue last loaded while it can\'t refresh (D149)', async () => {
+  it('keeps the screen on, counts the orders to pay in the tab, and says when the queue last loaded while it can\'t refresh (D149); asks for a tap to turn sound on and warns louder after 2 minutes (D150)', async () => {
     const order = await placeOrder(seed.customers.counterShopperA)
     const { page, problems } = await cashierAtCounter(1180, async (page) => {
       await page.clock.install()
@@ -101,11 +101,41 @@ describe('the counter', () => {
             },
           },
         })
+        // A browser that holds sound back until a tap: record the tones the page plays.
+        const tones: number[] = []
+        class HeldAudio extends EventTarget {
+          state = 'suspended'
+          currentTime = 0
+          destination = {}
+          async resume() {
+            this.state = 'running'
+            this.dispatchEvent(new Event('statechange'))
+          }
+
+          async close() {}
+          createOscillator() {
+            const oscillator = { frequency: { value: 0 }, connect: (next: unknown) => next, start: () => void tones.push(oscillator.frequency.value), stop: () => {} }
+            return oscillator
+          }
+
+          createGain() {
+            return { gain: { setValueAtTime: () => {}, exponentialRampToValueAtTime: () => {} }, connect: (next: unknown) => next }
+          }
+        }
+        Object.assign(window, { AudioContext: HeldAudio, e2eTones: tones })
       })
     })
     await card(page, order).waitFor({ timeout: 8000 })
     await expect.poll(() => page.evaluate(() => (window as unknown as { e2eWakeLocks: string[] }).e2eWakeLocks)).toEqual(['screen'])
     await expect.poll(() => page.title()).toMatch(/^\(\d+\) Queue · /)
+    // No pull-to-refresh or swipe-back on the counter's tablet.
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).overscrollBehaviorY)).toBe('none')
+
+    // Sound is held back until a tap: the counter says so, and Turn on sound unlocks it.
+    const soundOff = page.getByText('Sound is off until you tap the screen')
+    await soundOff.waitFor({ timeout: 8000 })
+    await page.getByRole('button', { name: 'Turn on sound' }).click()
+    await soundOff.waitFor({ state: 'hidden', timeout: 8000 })
 
     // The connection to the queue drops: the cards stay, and the queue says since when.
     const queueUrl = `${origin}/api/c/nuk/counter/${seed.openBranchId}/orders`
@@ -117,11 +147,17 @@ describe('the counter', () => {
     await page.clock.runFor('03:00')
     await page.getByText(/Last updated \d{1,2}:\d{2} [AP]M \(3 min ago\)/).waitFor({ timeout: 8000 })
     expect(await card(page, order).count()).toBe(1)
+    // Past 2 minutes: louder, in the tab, and a warning sound (three low notes, not the chime).
+    await page.getByText('The queue isn\'t updating: check the connection').waitFor({ timeout: 8000 })
+    await expect.poll(() => page.title()).toMatch(/^⚠ \(\d+\) Queue · /)
+    await expect.poll(() => page.evaluate(() => (window as unknown as { e2eTones: number[] }).e2eTones.join(','))).toContain('440,330,440')
 
     // Back: the next refresh clears it.
     await page.unroute(queueUrl)
     await page.clock.runFor('00:11')
-    await alert.waitFor({ state: 'hidden', timeout: 8000 })
+    await page.getByText('The queue isn\'t updating: check the connection').waitFor({ state: 'hidden', timeout: 8000 })
+    expect(await alert.count()).toBe(0)
+    await expect.poll(() => page.title()).toMatch(/^\(\d+\) Queue · /)
     expect(problems).toEqual([])
   })
 

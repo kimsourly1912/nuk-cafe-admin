@@ -85,17 +85,18 @@ export async function expireIdempotencyKeys(db: Db, now = new Date()): Promise<n
  * with backoff (1, 2, 4 … minutes, at most 6 h) and, after `OUTBOX_MAX_ATTEMPTS`, marks it
  * `failed`. A run that dies mid-send leaves the claim to expire, and the message is sent again:
  * delivery is **at least once**, so handlers must tolerate a repeat (e.g. pass the message id as
- * the mail provider's idempotency key).
+ * the mail provider's idempotency key). `kinds` limits a run to those kinds: a request that just
+ * wrote an order event delivers it at once (D150), leaving the rest to the scheduled run.
  */
 export async function deliverOutbox(
   db: Db,
   handlers: Record<string, OutboxHandler>,
-  options: { now?: Date, limit?: number } = {},
+  options: { now?: Date, limit?: number, kinds?: string[] } = {},
 ): Promise<DeliveryReport & { failures: { id: string, kind: string, attempt: number, error: string, final: boolean }[] }> {
   const now = options.now ?? new Date()
   const report = { sent: 0, retried: 0, failed: 0, skipped: 0, failures: [] as { id: string, kind: string, attempt: number, error: string, final: boolean }[] }
 
-  for (const message of await repo.findDueMessages(db, now, options.limit ?? 25)) {
+  for (const message of await repo.findDueMessages(db, now, options.limit ?? 25, options.kinds)) {
     if (!await repo.claimMessage(db, message.id, now, new Date(now.getTime() + OUTBOX_CLAIM_MS))) {
       report.skipped++
       continue

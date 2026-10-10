@@ -4,8 +4,10 @@ import { expireUnpaidOrders } from '#server/features/orders'
 export default defineTask({
   meta: { name: 'orders:expire-unpaid', description: 'Cancel orders unpaid after 30 minutes' },
   async run() {
-    const report = await expireUnpaidOrders(useDb())
-    if (report.expired || report.skipped) log('info', 'Unpaid orders expired', { ...report })
-    return { result: report }
+    return runJob('orders:expire-unpaid', async () => {
+      const report = await expireUnpaidOrders(useDb())
+      if (report.expired || report.skipped) log('info', 'Unpaid orders expired', { ...report })
+      return { result: report }
+    })
   },
 })

@@ -149,7 +149,7 @@ For production (8.2): note the bookmark before every migration (see Deploys); a 
 
 ## Scheduled jobs
 
-Nitro tasks in `server/tasks/`, scheduled in `nuxt.config.ts` (`nitro.scheduledTasks`, cron in UTC): Cloudflare cron triggers in deployed environments; the dev server runs them itself. Every task is **idempotent** (safe to run twice) and logs what it did. Locally a task runs on demand with `curl http://localhost:3000/_nitro/tasks/<name>` (dev only).
+Nitro tasks in `server/tasks/`, scheduled in `nuxt.config.ts` (`nitro.scheduledTasks`, cron in UTC): Cloudflare cron triggers in deployed environments; the dev server runs them itself. Every task is **idempotent** (safe to run twice) and logs what it did. Every scheduled task runs its work through `runJob` (`server/utils/jobs.ts`, D150): a failure is logged with its stack and alerted on Telegram ("Scheduled job failed · <task>", to the default cafe's chats with **Server errors and reminders** on, at most once per task every 15 minutes, never the error's text), then thrown again. Locally a task runs on demand with `curl http://localhost:3000/_nitro/tasks/<name>` (dev only).
 
 Built so far: `platform:deliver-outbox`, `orders:expire-unpaid` and `notifications:deliver` (every minute), `platform:expire-idempotency-keys`, `assistant:purge-usage` and `notifications:purge-deliveries` (daily at 03:15 UTC) and `media:purge-temporary` (hourly at :05).
 
@@ -158,7 +158,7 @@ Built so far: `platform:deliver-outbox`, `orders:expire-unpaid` and `notificatio
 | `media:purge-temporary` | hourly | Deletes temporary assets older than 24 h and their R2 objects |
 | `platform:expire-idempotency-keys` | daily | Removes expired idempotency keys |
 | `assistant:purge-usage` | daily | Removes AI assistant usage rows older than 90 days (D108) |
-| `platform:deliver-outbox` | every minute | Sends pending outbox messages with retries and backoff |
+| `platform:deliver-outbox` | every minute | Sends pending outbox messages with retries and backoff. An order's own request already sends its new-order and payment alerts right after answering (D150); this run sends the rest and retries. A message given up on after its last try is alerted |
 | `notifications:deliver` | every minute | Queues the closing summaries that are due and sends due Telegram deliveries, with retries (D113) |
 | `notifications:purge-deliveries` | daily | Removes Telegram deliveries older than 90 days |
 | `loyalty:expire-vouchers` | daily | Marks vouchers past `expires_at` as expired |
@@ -227,11 +227,12 @@ The counter shows a KHQR made for each order (D130), set up on **Admin → Payme
 
 ## Monitoring
 
+- **Scheduled job failures** (D150): alerted on Telegram (see [Scheduled jobs](#scheduled-jobs)); the stack is in Workers Logs under "Scheduled job failed".
 - **Workers Logs** for structured logs (see [security.md → Logging](./security.md#logging-and-privacy)); every error log has the request id.
 - `GET /api/health` answers 200 when the Worker can reach D1 (no details).
 - **Browser errors** (D149): an error nobody caught in a customer's, cashier's or admin's browser is posted to `/api/client-errors` and logged as **"Browser error"** with the page (no query), the build id, the message and stack and the browser. Search Workers Logs for that message; the build id tells whether it started with a deploy. Not sent to Telegram (the text comes from the browser).
 - **After a deploy**, open tabs of the admin, the counter and the platform console say "A new version of the app is ready" within about 5 minutes (D149); to check it on staging, keep a tab open across a deploy.
-- **Server error alerts on Telegram** (step 10.4, D119): Admin → Telegram → Notifications → **Server errors**, per chat. Every unexpected failure (a 500 on `/api/**`) queues an alert with the route, the status and the request id (never the error's text: it stays in Workers Logs, found by the request id); at most one per route and chat every 15 minutes; sent by `notifications:deliver` within a minute. Not covered: a failure the Worker can't answer at all (it never reaches the handler), and scheduled tasks (their failures are logged).
+- **Server error alerts on Telegram** (step 10.4, D119): Admin → Telegram → Notifications → **Server errors**, per chat. Every unexpected failure (a 500 on `/api/**`) queues an alert with the route, the status and the request id (never the error's text: it stays in Workers Logs, found by the request id); at most one per route and chat every 15 minutes; sent by `notifications:deliver` within a minute. Not covered: a failure the Worker can't answer at all (it never reaches the handler). Scheduled tasks have their own alert since D150.
 - Alerts (Cloudflare notifications) on a spike of 5xx responses and on Worker exceptions: set up with production (8.2).
 - [Open] Q24: who receives alerts, and during which hours.
 

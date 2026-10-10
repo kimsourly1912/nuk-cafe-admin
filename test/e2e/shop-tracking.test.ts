@@ -106,6 +106,26 @@ describe('following an order', () => {
     expect(problems).toEqual([])
   })
 
+  it('keeps the order on screen while the connection drops, says so, and follows again once it\'s back (D150)', { timeout: 60_000 }, async () => {
+    const order = await placeOrder(seed.customers.followerD)
+    const { page, problems } = await signedIn(seed.customers.followerD, `/c/nuk/orders/${order.id}`)
+    await page.getByRole('heading', { name: `Your number ${number(order)}` }).waitFor()
+
+    // The next reads fail as on a dropped Wi-Fi: the order stays, with why it may be old.
+    const orderUrl = `${origin}/api/c/nuk/shop/orders/${order.id}`
+    await page.route(orderUrl, route => route.abort())
+    await expect.poll(() => page.getByText(/^Can't reach the cafe right now, trying again · Updated /).isVisible(), POLL).toBe(true)
+    expect(await page.getByRole('heading', { name: `Your number ${number(order)}` }).isVisible()).toBe(true)
+    expect(await page.getByText('Couldn\'t load this order').count()).toBe(0)
+
+    // Back: polling never stopped, so the payment shows up by itself.
+    await page.unroute(orderUrl)
+    await counter(order, 'pay', 1)
+    await expect.poll(() => page.getByText(PREPARING).isVisible(), POLL).toBe(true)
+    expect(await page.getByText(/^Can't reach the cafe/).count()).toBe(0)
+    expect(problems).toEqual([])
+  })
+
   it('cancels while unpaid, from a bottom sheet on a phone; Your orders lists it under Past', async () => {
     const order = await placeOrder(seed.customers.followerB)
     const { page } = await signedIn(seed.customers.followerB, `/c/nuk/orders/${order.id}`, 390)

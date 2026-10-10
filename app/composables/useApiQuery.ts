@@ -38,6 +38,34 @@ export function useApiQuery<T, DefaultT = undefined>(
   const { data, status, error: rawError, refresh, execute, clear } = asyncData
   if (watchSources) watch(watchSources, () => refresh({ dedupe: 'cancel' }))
 
+  // Keep what was shown when a refresh fails for the connection or the server (D150). Nuxt resets
+  // `data` to its default on any error, which emptied the counter's board and the customer's order
+  // page on a Wi-Fi drop (and stopped the order page's polling). Nuxt's failure path sets a new
+  // error and then resets `data` in the same tick; only that reset is undone, synchronously, so
+  // watchers of `data` never see the gap. Every other reset (`clear()`, the session boundary's
+  // `clearNuxtData`) forgets the kept copy: another person's data is never put back. (Nuxt 4.5's
+  // clear also drops the error first; this check doesn't rely on that order.) Never for another
+  // key, nor after a refusal (401, 403, 404…).
+  let last: { key: string, value: T } | null = null
+  let justFailed = false
+  watch(rawError, (value) => {
+    justFailed = Boolean(value)
+  }, { flush: 'sync' })
+  watch(data, (value) => {
+    if (value != null) {
+      last = { key: toValue(key), value: value as T }
+      justFailed = false
+      return
+    }
+    const keep = justFailed && last?.key === toValue(key) && rawError.value != null && ApiError.from(rawError.value).retryable
+    justFailed = false
+    if (!keep || !last) {
+      last = null
+      return
+    }
+    ;(data as Ref<unknown>).value = last.value
+  }, { flush: 'sync' })
+
   const pending = computed(() => status.value === 'pending')
   return {
     data,
