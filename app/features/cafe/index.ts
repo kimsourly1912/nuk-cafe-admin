@@ -5,3 +5,4 @@
 export { cafeNavigation } from './navigation'
 export { default as CafeSwitcher } from './components/CafeSwitcher.vue'
 export { useAccountCafes } from './composables/useAccountCafes'
+export { cafeSetup } from './setup'

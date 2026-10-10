@@ -8,7 +8,7 @@
 - [`<BottomActionBar>`](#bottomactionbar)
 - [`<BulkActionsBar>`](#bulkactionsbar)
 - [`useLayoutContext`](#uselayoutcontext)
-- [`previewList` and `pluralize`](#previewlist-and-pluralize)
+- [`previewList` and `pluralize`](#previewlist-and-pluralize) (and `changeText`)
 - [`<SearchInput>`](#searchinput)
 - [`<ListEmptyState>`](#listemptystate)
 - [Keyboard shortcuts: `usePageShortcuts`, `useSubmitShortcut`, `<ShortcutsHelp>`](#keyboard-shortcuts)
@@ -263,6 +263,8 @@ confirm: categories => ({
 ```
 
 ---
+
+`changeText(current, previous)` is the change against a previous number for a `<StatCard>`: `{ text: '+12%', up: true }`, `{ text: '−8%', up: false }`, or `null` when there's nothing to compare with (previous 0). Reports' Summary and the home page use it.
 
 ## `<SearchInput>`
 

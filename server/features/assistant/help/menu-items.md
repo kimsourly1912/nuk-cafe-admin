@@ -75,6 +75,10 @@ If the browser closes, the tablet runs out of battery or you are signed out befo
 
 If someone saved the item after you typed (an amber message), restoring puts your changes over theirs: check every section before saving.
 
+## Duplicate an item
+
+To add a similar item (an Iced Latte after the Latte), open the item's **⋮** menu and choose **Duplicate**. **New menu item** opens with everything filled in from it (options and prices, add-ons, availability), named "Latte (copy)". The photo isn't copied: add one. Change what differs, then **Create** (a draft) or **Create and publish**. Nothing is saved until you do.
+
 ## Someone else saved the same item
 
 If someone saves the item while you have it open, your **Save** is refused: "Someone else saved this menu item". Nothing you typed is lost. Press **Reload**: their changes come into the form, and yours stay on top. If you both changed the same part (for example the prices), yours are kept and the message names it: check that part, then **Save**. If they archived the item meanwhile, restore it from the list and open it again: your changes are offered back. Your changes are kept only in this browser, for 7 days, and only you see them. **Log out** removes them all.
