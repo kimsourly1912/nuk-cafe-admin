@@ -224,7 +224,7 @@ describe('a new cafe for an existing owner (D146)', () => {
   async function chooseOwner(page: Page, name: RegExp) {
     const form = dialog(page)
     await form.getByRole('radio', { name: /An existing owner/ }).check()
-    await form.getByRole('button', { name: 'Owner', exact: true }).click()
+    await form.getByRole('combobox', { name: 'Owner', exact: true }).click()
     await page.getByRole('option', { name }).click()
     await page.getByRole('listbox').waitFor({ state: 'hidden' })
   }

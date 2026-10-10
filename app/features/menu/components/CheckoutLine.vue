@@ -38,7 +38,8 @@ const noteOpen = ref(Boolean(props.line.note))
         v-if="quoted?.imageUrl"
         :src="quoted.imageUrl"
         alt=""
-        class="size-14 shrink-0 rounded-md object-cover"
+        loading="lazy"
+        class="size-14 shrink-0 rounded-md bg-elevated object-cover"
       >
       <div class="min-w-0 flex-1">
         <div class="flex items-start justify-between gap-3">

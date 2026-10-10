@@ -88,7 +88,7 @@ const menu = computed<DropdownMenuItem[][]>(() => [
           color="neutral"
           variant="soft"
           class="rounded-full"
-          :aria-label="`Account: ${user?.name || user?.email}`"
+          :aria-label="`${initials}, account: ${user?.name || user?.email}`"
         />
       </UDropdownMenu>
     </div>

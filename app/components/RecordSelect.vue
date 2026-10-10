@@ -7,6 +7,8 @@
  * are never filtered out. A fixed set the code defines (status, role, sort) stays a `USelect`.
  *
  * Attributes (`aria-label`, `placeholder`, `loading`, `disabled`, `multiple`, `size`, …) go to the select.
+ * Its trigger is a combobox, like `USelect`'s (D152): `aria-label` names it and the text on it is its
+ * value. As a plain button, the shown value had to be part of its name (axe: label-content-name-mismatch).
  *
  * @example
  * <RecordSelect v-model="filters.branchId" :items="branchItems" noun="branches" :pinned="[ANY]" aria-label="Branch" />
@@ -48,6 +50,7 @@ const shown = computed<SelectMenuItem[]>(() => {
     v-bind="$attrs"
     v-model="model"
     v-model:search-term="searchTerm"
+    role="combobox"
     :items="shown"
     value-key="value"
     ignore-filter

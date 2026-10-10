@@ -161,33 +161,33 @@ function onName() {
       </div>
 
       <!-- The record target: a button when the name does something, plain text otherwise -->
-      <UButton
+      <!-- The name is the button, stretched over the block (D152): its name is the text on it -->
+      <div
         v-if="nameAction"
-        color="neutral"
-        variant="ghost"
-        :aria-label="name"
-        :tabindex="nameAction === 'select' ? -1 : undefined"
-        class="min-w-0 flex-1 text-left"
-        @click="onName"
+        class="relative flex min-w-0 flex-1 flex-col items-start rounded-md px-2.5 py-1.5 text-sm hover:bg-elevated/50"
       >
-        <span class="flex min-w-0 flex-col items-start">
-          <span class="flex max-w-full flex-wrap items-center gap-x-2">
-            <span
-              class="line-clamp-2 break-words"
-              :class="isMain ? 'text-base font-semibold text-highlighted' : 'font-normal text-default'"
-            >{{ name }}</span>
-            <UBadge
-              v-if="showStatus"
-              v-bind="statusBadge"
-            />
-          </span>
-          <span
-            v-if="category.description"
-            class="line-clamp-2 max-w-full font-normal text-muted @2xl:line-clamp-1"
-          >{{ category.description }}</span>
-          <span class="max-w-full truncate font-normal text-muted @2xl:hidden">{{ meta }}</span>
+        <span class="flex max-w-full flex-wrap items-center gap-x-2">
+          <UButton
+            color="neutral"
+            variant="link"
+            :tabindex="nameAction === 'select' ? -1 : undefined"
+            class="p-0 text-left after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-primary"
+            :class="isMain ? 'text-base font-semibold text-highlighted' : 'font-normal text-default'"
+            @click="onName"
+          >
+            <span class="line-clamp-2 break-words">{{ name }}</span>
+          </UButton>
+          <UBadge
+            v-if="showStatus"
+            v-bind="statusBadge"
+          />
         </span>
-      </UButton>
+        <span
+          v-if="category.description"
+          class="line-clamp-2 max-w-full text-muted @2xl:line-clamp-1"
+        >{{ category.description }}</span>
+        <span class="max-w-full truncate text-muted @2xl:hidden">{{ meta }}</span>
+      </div>
       <!-- px-2.5: lined up with the names that are buttons (Nuxt UI's button padding) -->
       <div
         v-else

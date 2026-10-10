@@ -63,7 +63,8 @@ function setNote(key: string, note: string) {
             v-if="line.imageUrl"
             :src="line.imageUrl"
             alt=""
-            class="size-14 shrink-0 rounded-md object-cover"
+            loading="lazy"
+            class="size-14 shrink-0 rounded-md bg-elevated object-cover"
           >
           <div
             v-else

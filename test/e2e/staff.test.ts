@@ -2,7 +2,7 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { StaffMember } from '../../shared/contracts/staff'
-import { ADMIN, AIRPORT, mockApi, paginatedHandler, RIVERSIDE, setupE2e, staffOf, toast } from './support/mock-api'
+import { ADMIN, AIRPORT, mockApi, paginatedHandler, RIVERSIDE, setupE2e, staffOf, stretchedTarget, toast } from './support/mock-api'
 
 await setupE2e()
 
@@ -234,8 +234,9 @@ describe('staff on a phone', () => {
     const target = page.getByRole('button', { name: 'Sophea', exact: true })
     const actions = page.getByRole('button', { name: 'Actions for Sophea', exact: true })
     expect(await actions.evaluate(el => el.parentElement?.closest('button, a') === null)).toBe(true)
-    const [targetBox, actionsBox] = [(await target.boundingBox())!, (await actions.boundingBox())!]
+    const [targetBox, actionsBox] = [await stretchedTarget(target), (await actions.boundingBox())!]
     expect(targetBox.height).toBeGreaterThanOrEqual(44)
+    expect(targetBox.reaches).toBe(true)
     expect(actionsBox.width).toBeGreaterThanOrEqual(24)
     expect(actionsBox.x).toBeGreaterThanOrEqual(targetBox.x + targetBox.width)
 
