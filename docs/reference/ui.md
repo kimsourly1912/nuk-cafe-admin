@@ -196,7 +196,7 @@ Pick by **where the items come from**, not by how many there are today:
 | Items | Component |
 |---|---|
 | A fixed set the code defines that never grows: status, role, sort, order type, payment method | `USelect` |
-| **The cafe's own records**, which grow with use: categories, branches, availability rules, add-on groups, staff | [`<RecordSelect>`](./ui-helpers.md#recordselect): `USelectMenu` with a search box and virtual scroll |
+| **The cafe's own records**, which grow with use: categories, branches, availability rules, add-on groups, staff | [`<RecordSelect>`](./ui-helpers.md#recordselect): `USelectMenu` with a search box and virtual scroll; a combobox like `USelect` (its `aria-label` names it, the text on it is its value, D152) |
 | A long fixed list: time zones, countries | `USelectMenu` with `virtualize` and a search box (the Branch time zone) |
 | Records that can reach thousands: menu items, customers, orders | `USelectMenu` searched on the server (typing asks the API, results in pages). None yet |
 

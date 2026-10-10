@@ -43,6 +43,8 @@ From the item's **⋮** menu in the list:
 - **Publish several at once**: **Select**, tick the items, **Publish selected** (only drafts are published; the button says how many). Items that can't be published stay ticked, and the message says why.
 - **Restore** (on an archived item): back to draft, editable again.
 
+**Undo:** Archive and Unpublish happen at once, without a question. The message that appears has **Undo** for a few seconds: it puts the item back exactly as it was (published or draft, in the same place in its category). Missed it? Restore the item from the **Archived** tab (it comes back as a draft).
+
 To mark something out of stock for today, don't unpublish it: staff use **Sold out** in the counter app.
 
 ## See an item as customers do

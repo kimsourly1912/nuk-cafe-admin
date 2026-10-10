@@ -349,6 +349,8 @@ Tests: e2e `counter.test.ts` (the real seeded server: the screen kept on, the ta
 
 For staff who use the portal all day. Press **`?`** (or user menu → Keyboard shortcuts) for the list.
 
+**Ctrl/⌘+K** (or the sidebar's Search button) opens the admin's search (D152): two characters or more ask every source at once (menu items by the server's search, categories, option sets, add-on groups), the pages and a few actions are always listed; a source that fails says so in its group. Source: `components/AdminSearch.vue`, `utils/admin-search.ts`, each feature's `search.ts`. E2E: `admin-search.test.ts`.
+
 | Keys | Where | Action |
 |---|---|---|
 | `/` | Any page with a `<SearchInput>` | Focus the search (hint `/` shown in the box while empty) |

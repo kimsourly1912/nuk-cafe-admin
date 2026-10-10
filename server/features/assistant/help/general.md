@@ -35,11 +35,15 @@ Where there's no Reload button, close the form, open it again and redo the chang
 - **Tabs** such as All, Active, Archived filter by status and show counts. On a narrow screen, swipe the tabs sideways to see them all.
 - **Pages**: long lists (Staff, Menu items, Sales by item, Order history) show 20 rows a page. Below the list, type a page number and press Enter, or use the arrows and page numbers; **Rows per page** shows 10, 20, 50 or 100 at a time.
 - **Select**: a button in the toolbar starts selecting several rows for a bulk action (for example **Archive selected**). The same button, now **Cancel**, stops selecting (or press Escape). On a phone, Select and Reorder are in the **⋯** menu next to the filters.
-- **Archive** hides something from customers without deleting it; **Restore** brings it back. Nothing on the menu is deleted, so past orders keep their details.
+- **Archive** hides something from customers without deleting it; **Restore** brings it back. Nothing on the menu is deleted, so past orders keep their details. Archiving a menu item, an option set, an add-on group, a time rule or a table happens at once: the message offers **Undo** for a few seconds. Categories, and anything involving money or people, still ask first.
+
+## Search everything
+
+Press **Ctrl+K** (on a Mac **⌘K**), or **Search** at the top of the sidebar, and type: menu items, categories, options, add-on groups and pages show up as you type. Pick one to open it. It also has **New menu item** and **View menu**.
 
 ## Keyboard shortcuts
 
-Press **?** to see them all. The main ones: **/** search, **N** new item on list pages, **Ctrl+Enter** save, **Escape** close a dialog.
+Press **?** to see them all. The main ones: **Ctrl+K** search everything, **/** search the list, **N** new item on list pages, **Ctrl+Enter** save, **Escape** close a dialog.
 
 ## Other things you may see
 

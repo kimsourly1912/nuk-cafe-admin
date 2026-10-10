@@ -57,7 +57,7 @@ Switch from **Queue** to **Finished today (24)** at the top to see today's order
 
 ## Sold out
 
-The counter's **Sold out** page (`/counter/<branch>/sold-out`) switches individual versions sold out at this branch, for example "Iced Latte · Large". Customers see "Sold out" and can't order it. It stays sold out until staff switch it back. Each row says since when and who marked it. To remove an item from the menu for good, an admin unpublishes or archives it in **Menu items** instead.
+The counter's **Sold out** page (`/counter/<branch>/sold-out`) switches individual versions sold out at this branch, for example "Iced Latte · Large". Customers see "Sold out" and can't order it. It stays sold out until staff switch it back. Each row says since when and who marked it. The switch moves as soon as you tap it; if the change can't be saved (the connection dropped), it moves back and a message says why. To remove an item from the menu for good, an admin unpublishes or archives it in **Menu items** instead.
 
 ## Common problems at the counter
 
