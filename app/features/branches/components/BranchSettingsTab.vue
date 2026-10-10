@@ -8,6 +8,7 @@
  */
 import type { FormErrorEvent } from '@nuxt/ui'
 import type { BranchSettings } from '#shared/contracts/branches'
+import { useAuth } from '~/features/auth'
 import { fetchBranchSettings, useBranchMutations } from '../composables/useBranches'
 import type { BranchForm } from '../schemas/branch-form'
 import { branchFormSchema, formFieldOf, isClosedAllWeek, toBranchForm, toUpdateBranchBody } from '../schemas/branch-form'
@@ -20,7 +21,15 @@ const emit = defineEmits<{ saved: [settings: BranchSettings] }>()
 const saved = shallowRef(props.settings)
 const state = reactive<BranchForm>(toBranchForm(props.settings))
 const saving = ref(false)
-const unsaved = useUnsavedChanges(state, { paused: saving })
+const auth = useAuth()
+const unsaved = useUnsavedChanges(state, {
+  paused: saving,
+  // Hours take a while to enter: kept in this browser until saved (D151).
+  draft: {
+    key: () => (auth.user.value ? { owner: auth.user.value.userId, form: 'branch-settings', record: saved.value.id } : null),
+    version: () => saved.value.version,
+  },
+})
 
 const { update } = useBranchMutations()
 const form = useTemplateRef('form')
@@ -53,7 +62,7 @@ async function onSubmit() {
   if (result.ok) {
     saved.value = result.data
     Object.assign(state, toBranchForm(result.data))
-    unsaved.markClean()
+    unsaved.markSaved()
     emit('saved', result.data)
     return
   }
@@ -149,6 +158,10 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
       </div>
     </dl>
 
+    <FormDraftAlert
+      :draft="unsaved.draft"
+      record="branch"
+    />
     <UAlert
       v-if="conflict"
       color="warning"

@@ -64,6 +64,15 @@ If someone changed one of these items at the same moment, nothing is moved: pres
 
 Click the item's name (or **⋮ → Edit**), change it, then **Save**. Changes to a published item show on the customer menu at once.
 
+## Unsaved changes kept in this browser
+
+If the browser closes, the tablet runs out of battery or you are signed out before saving, what you typed isn't lost. The next time you open the same item (or **New menu item**) in this browser, it says **Unsaved changes from** a time:
+
+- **Restore** puts your changes back in the form. They aren't saved yet: check them and press **Save**.
+- **Discard** throws them away.
+
+If someone saved the item after you typed (an amber message), restoring puts your changes over theirs: check every section before saving. Your changes are kept only in this browser, for 7 days, and only you see them. **Log out** removes them all.
+
 ## Common problems
 
 - **"Switch on and price at least one version before publishing."**: open the item, switch on a version in Options and prices and give it a price, save, then publish.

@@ -18,6 +18,8 @@ At the top: whether the branch is open now, its time zone and today's hours.
 4. **Copy Monday to weekdays** and **Copy Saturday to weekend** fill the other days.
 5. Press **Save changes**. All settings on this tab save together.
 
+If the browser closes or you are signed out before saving, the page offers your changes back next time (**Unsaved changes from** a time): **Restore** puts them back, unsaved; **Discard** throws them away.
+
 Orders close 15 minutes before closing time ("last orders"). The business day runs from 4:00 AM to 4:00 AM, so a night past midnight counts as the day before.
 
 ## Dining tables

@@ -42,6 +42,7 @@ const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, u
 const unsaved = useModalUnsavedChanges(state, {
   initial: editor.initial,
   paused: saving,
+  draft: editor.keptDraft,
   close: () => emit('close', false),
 })
 
@@ -61,7 +62,7 @@ async function onSubmit() {
     fields.value?.setServerErrors(result.error?.fieldErrors)
     return
   }
-  unsaved.markClean()
+  unsaved.markSaved()
   emit('close', true)
 }
 </script>
@@ -85,18 +86,24 @@ async function onSubmit() {
         label="Loading the menu item…"
         variant="row"
       />
-      <ProductFormFields
-        v-else
-        ref="fields"
-        v-model:uploading="uploading"
-        :state="state"
-        form-id="product-form"
-        :disabled="saving || archived"
-        :archived="archived"
-        :last-error="lastError"
-        autofocus
-        @submit="onSubmit"
-      />
+      <template v-else>
+        <FormDraftAlert
+          :draft="unsaved.draft"
+          record="menu item"
+          class="mb-4"
+        />
+        <ProductFormFields
+          ref="fields"
+          v-model:uploading="uploading"
+          :state="state"
+          form-id="product-form"
+          :disabled="saving || archived"
+          :archived="archived"
+          :last-error="lastError"
+          autofocus
+          @submit="onSubmit"
+        />
+      </template>
     </template>
 
     <template #footer>

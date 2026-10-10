@@ -165,6 +165,8 @@ Two checks share one `beforeunload` listener (`app/plugins/leave-guard.client.ts
 
 Every case is in [Forms: unsaved changes → Edge cases](./forms.md#edge-cases).
 
+When leaving happens anyway (a crash, a dropped tab, an expired session), the **long forms** (the menu item editor, branch settings) keep what was typed in the browser and offer it back the next time they open, per cafe and person; a voluntary log out removes every draft ([Drafts kept in the browser](./forms.md#drafts-kept-in-the-browser), D151).
+
 ---
 
 ## Session loss
@@ -195,7 +197,7 @@ Any identity change (login, logout, expiry, a different staff member via another
 | Responses to requests still in flight | Discarded (silent `aborted`): no data, no toast, no invalidation | `createApiFetch` (`apiFetch`) compares the generation at start and end |
 | Query data (`<feature>:` keys) | Cleared; refetched only if someone is signed in | `clearNuxtData` + `refreshNuxtData` |
 | Superseded/unmounted query responses | Ignored | Nuxt (promise identity), independent of the above |
-| Unsaved forms | Discarded **without** a dialog | `useLeaveGuard().discardAll()` |
+| Unsaved forms | Discarded **without** a dialog; a form keeping drafts keeps the input for the same person (D151) | `useLeaveGuard().discardAll()` → `discard('session')` |
 | Voluntary logout with unsaved input | Asks first; only "Discard" continues | `useAuth().logout` → `confirmLeave` |
 | Open overlays (form modals, confirmations) | Closed | `useOverlay().closeAll()` |
 | Toasts ("Reopen" drafts, "Retry failed") | Cleared | `useToast().clear()` |
