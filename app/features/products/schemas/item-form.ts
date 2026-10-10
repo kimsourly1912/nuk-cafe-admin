@@ -4,6 +4,7 @@ import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import { MAX_MODIFIER_PRICE_MINOR, MAX_MODIFIERS, selectionProblem } from '#shared/contracts/menu-modifiers'
 import type { OptionSet } from '#shared/contracts/menu-options'
 import * as v from 'valibot'
+import type { FormPart } from '~/utils/form-value'
 import { fromMinor, toMinor } from '~/utils/money'
 
 /**
@@ -175,6 +176,36 @@ export function toItemForm(item?: MenuItem, library: readonly ModifierGroup[] = 
   }
 }
 
+/** A copy's name: "Latte (copy)", cut so it still fits. */
+export function copyName(name: string) {
+  const suffix = ' (copy)'
+  return `${name.slice(0, ITEM_NAME_MAX - suffix.length).trimEnd()}${suffix}`
+}
+
+/**
+ * A new item's form copied from an item (Duplicate, D154): everything but the photo (an upload
+ * belongs to one record), named "… (copy)". What a new item can't have is left out: archived option
+ * sets (the grid rebuilt from the others, keeping the prices of the same combinations), archived
+ * add-on groups and add-ons, and archived availability rules.
+ */
+export function toItemCopyForm(item: MenuItem, library: readonly ModifierGroup[] = []): ItemForm {
+  const form = toItemForm(item, library)
+  const optionSets = form.optionSets.filter(set => set.status === 'active')
+  const archivedRules = new Set(item.availabilityRules.filter(rule => rule.status !== 'active').map(rule => rule.id))
+  return {
+    ...form,
+    name: copyName(item.name),
+    imageId: undefined,
+    imageUrl: undefined,
+    optionSets,
+    grid: optionSets.length === form.optionSets.length ? form.grid : buildGrid(optionSets, form.grid, true),
+    addOnGroups: form.addOnGroups
+      .filter(group => group.status === 'active')
+      .map(group => ({ ...group, addOns: group.addOns.filter(addOn => addOn.status === 'active') })),
+    availabilityRuleIds: form.availabilityRuleIds.filter(id => !archivedRules.has(id)),
+  }
+}
+
 // --- Rules (the server checks the same; these give the message before sending) ---
 
 const MAX_PRICE = fromMinor(MAX_VARIATION_PRICE_MINOR)
@@ -294,6 +325,21 @@ export function formFieldOf(serverField: string): string {
     .replace(/^variations$/, 'grid')
     .replace(/^modifierGroups\.(\d+)\.rules\.(minSelect|maxSelect)$/, 'addOnGroups.$1.$2')
 }
+
+/**
+ * The form's parts as they change together, named as the editor shows them: when someone else saved
+ * first, Reload takes their version part by part and keeps the parts this person changed (D153).
+ */
+export const ITEM_FORM_PARTS: readonly FormPart<ItemForm>[] = [
+  { label: 'Name', keys: ['name'] },
+  { label: 'Description', keys: ['description'] },
+  { label: 'Category', keys: ['categoryId'] },
+  { label: 'Image', keys: ['imageId', 'imageUrl'] },
+  // The grid is built from the option sets: one without the other would leave versions that don't exist.
+  { label: 'Prices', keys: ['optionSets', 'grid'] },
+  { label: 'Add-ons', keys: ['addOnGroups'] },
+  { label: 'Availability', keys: ['availabilityRuleIds'] },
+]
 
 /** The editor's sections: on phones the route shows one at a time (D90). */
 export const ITEM_FORM_SECTIONS = [

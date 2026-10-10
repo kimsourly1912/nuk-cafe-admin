@@ -23,6 +23,11 @@ const props = withDefaults(defineProps<{
   archived?: boolean
   /** The last refused save, shown at the top. */
   lastError?: string
+  /** Someone else saved first (D153): offers Reload. */
+  conflict?: boolean
+  reloading?: boolean
+  /** After Reload: the parts both changed, where this input was kept. */
+  reloaded?: { overlap: string[] } | null
   section?: ItemFormSection | 'all'
   /** Focus the name when it opens (the slide-over; not on phones, where it'd open the keyboard). */
   autofocus?: boolean
@@ -30,7 +35,14 @@ const props = withDefaults(defineProps<{
 
 const state = defineModel<ItemForm>('state', { required: true })
 const uploading = defineModel<boolean>('uploading', { default: false })
-const emit = defineEmits<{ submit: [], invalid: [section: ItemFormSection] }>()
+const emit = defineEmits<{ submit: [], invalid: [section: ItemFormSection], reload: [] }>()
+
+const reloadedText = computed(() => {
+  const overlap = props.reloaded?.overlap ?? []
+  if (!overlap.length) return 'Their changes are in the form, with yours kept. Save to keep both.'
+  const parts = previewList(overlap.map(part => part.toLowerCase()), overlap.length)
+  return `You both changed the ${parts}: yours are kept. Check them, then save.`
+})
 
 const shows = (section: ItemFormSection) => props.section === 'all' || props.section === section
 
@@ -84,6 +96,23 @@ defineExpose({ submit: () => form.value?.submit(), setServerErrors })
       variant="subtle"
       icon="i-lucide-archive"
       title="This menu item is archived. Restore it from the list to edit it."
+    />
+    <UAlert
+      v-if="conflict"
+      color="warning"
+      variant="subtle"
+      icon="i-lucide-refresh-cw"
+      title="Someone else saved this menu item"
+      description="Nothing was saved. Reload to get their changes: what you typed stays in the form."
+      :actions="[{ label: 'Reload', color: 'neutral', variant: 'outline', loading: reloading, onClick: () => emit('reload') }]"
+    />
+    <UAlert
+      v-if="reloaded"
+      :color="reloaded.overlap.length ? 'warning' : 'info'"
+      variant="subtle"
+      icon="i-lucide-git-merge"
+      title="Loaded the latest version"
+      :description="reloadedText"
     />
     <UAlert
       v-if="lastError"

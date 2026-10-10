@@ -135,6 +135,7 @@ function rowActions(item: MenuItemSummary): DropdownMenuItem[] {
   }
   return [
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openForm(item) },
+    { label: 'Duplicate', icon: 'i-lucide-copy', onSelect: () => duplicate(item) },
     item.status === 'draft'
       ? { label: 'Publish', icon: 'i-lucide-send', onSelect: () => publish.execute(item) }
       : { label: 'Unpublish', icon: 'i-lucide-eye-off', onSelect: () => unpublish.execute(item) },
@@ -159,6 +160,12 @@ function openForm(item?: MenuItemSummary) {
     pushedFor = item.id
     router.push({ query: { ...route.query, item: item.id } })
   }
+}
+
+/** Duplicate (D154): a new item filled from this one, no photo, "… (copy)"; created as a draft. */
+function duplicate(item: MenuItemSummary) {
+  if (isCompact.value) router.push(tenantPath(`/admin/products/new?copy=${encodeURIComponent(item.id)}`))
+  else formPanel.open({ copyOf: item.id })
 }
 
 /** The item the slide-over shows, and the one this list pushed `?item=` for (Back then closes it). */

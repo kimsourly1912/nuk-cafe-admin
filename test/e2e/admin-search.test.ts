@@ -16,7 +16,8 @@ async function open(handlers: Record<string, MockHandler> = {}) {
   await mockApi(page, {
     'GET /admin/menu/items': ({ url: address }) => {
       const term = address.searchParams.get('search') ?? ''
-      searches.push(term)
+      // The dashboard's setup check (D155) reads the list without a search: not a search.
+      if (address.searchParams.has('search')) searches.push(term)
       return pageOf('latte'.includes(term.toLowerCase()) ? [LATTE] : [])
     },
     'GET /admin/menu/items/{id}': () => menuItemOf('item-1', 'Latte'),

@@ -420,18 +420,50 @@ describe('group settings', () => {
     expect(await page.getByLabel('Group name').inputValue()).toBe('Syrups')
   })
 
-  it('won\'t overwrite settings someone else changed while the draft was open', async () => {
-    // Someone renamed the group meanwhile: the next answer (a pre-selection) carries their name.
+  /** Someone renamed the group meanwhile: the next answer (a pre-selection) carries their name. */
+  async function renamedMeanwhile() {
     const toggle = answering(SYRUPS, (group, body) => ({ name: 'Flavours', modifiers: group.modifiers.map(m => (m.id === 'syr-1' ? { ...m, isDefault: Boolean(body.isDefault) } : m)) }))
-    const { page, api } = await openGroup(backend(undefined, { 'PATCH /admin/menu/modifier-groups/{id}/modifiers/{id}': toggle.handler }), 'grp-2')
+    const save = answering(SYRUPS, (_, body) => ({ name: String(body.name ?? 'Flavours'), maxSelect: (body.maxSelect ?? 3) as number | null }))
+    const opened = await openGroup(backend(undefined, {
+      'PATCH /admin/menu/modifier-groups/{id}/modifiers/{id}': toggle.handler,
+      'PATCH /admin/menu/modifier-groups/{id}': save.handler,
+    }), 'grp-2')
+    return { ...opened, save, preselect: () => row(opened.page, 'Caramel').getByRole('checkbox').click() }
+  }
+
+  async function setMaximum(page: Page, value: string) {
+    await page.getByRole('spinbutton', { name: 'Maximum selections' }).fill(value)
+    await page.getByRole('spinbutton', { name: 'Maximum selections' }).blur()
+  }
+
+  it('won\'t overwrite settings someone else changed while the draft was open; Reload keeps mine where we both changed them (D153)', async () => {
+    const { page, api, preselect } = await renamedMeanwhile()
     await page.getByLabel('Group name').fill('Sweeteners')
-    await row(page, 'Caramel').getByRole('checkbox').click()
+    await setMaximum(page, '2')
+    await preselect()
     await page.getByRole('heading', { level: 2, name: 'Flavours' }).waitFor()
     await page.getByRole('button', { name: 'Save changes' }).click()
     await page.getByText('Someone else changed this add-on group').waitFor()
     expect(api.calls.filter(c => c === 'PATCH /admin/menu/modifier-groups/grp-2')).toEqual([])
     await page.getByRole('button', { name: 'Reload' }).click()
-    await expect.poll(() => page.getByLabel('Group name').inputValue()).toBe('Flavours')
+    await page.getByText('You both changed the name: your settings are kept. Check them, then save.').waitFor()
+    expect(await page.getByLabel('Group name').inputValue()).toBe('Sweeteners')
+    expect(await page.getByRole('spinbutton', { name: 'Maximum selections' }).inputValue()).toBe('2')
+  })
+
+  it('Reload takes their name when only the rule was mine, and Save names their version (D153)', async () => {
+    const { page, preselect, save } = await renamedMeanwhile()
+    await setMaximum(page, '2')
+    await preselect()
+    await page.getByRole('heading', { level: 2, name: 'Flavours' }).waitFor()
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await page.getByRole('button', { name: 'Reload' }).click()
+    await page.getByText('Their changes are here, with your settings kept. Save to keep both.').waitFor()
+    expect(await page.getByLabel('Group name').inputValue()).toBe('Flavours')
+    expect(await page.getByRole('spinbutton', { name: 'Maximum selections' }).inputValue()).toBe('2')
+    await page.getByRole('button', { name: 'Save changes' }).click()
+    await toast(page, '"Flavours" saved').waitFor()
+    expect(save.bodies).toEqual([{ version: 2, maxSelect: 2 }])
   })
 
   it('asks before leaving with unsaved settings', async () => {

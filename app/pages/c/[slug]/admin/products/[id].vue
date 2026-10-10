@@ -5,11 +5,14 @@ definePageMeta({ title: 'Menu item' })
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))
+// Duplicate on phones: /products/new?copy=<id> (D154).
+const copyOf = computed(() => (typeof route.query.copy === 'string' ? route.query.copy : undefined))
 </script>
 
 <template>
   <ProductEditorPage
     :id="id"
-    :key="id"
+    :key="`${id}:${copyOf ?? ''}`"
+    :copy-of="copyOf"
   />
 </template>

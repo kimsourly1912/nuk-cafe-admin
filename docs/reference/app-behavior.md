@@ -349,6 +349,8 @@ Tests: e2e `counter.test.ts` (the real seeded server: the screen kept on, the ta
 
 For staff who use the portal all day. Press **`?`** (or user menu → Keyboard shortcuts) for the list.
 
+**The home page** (`/admin`, D155): today in each branch (the Reports summary) and **Set up your cafe**: each feature exports an `AdminSetupStep` from its `index.ts` (`setup.ts`), `utils/admin-setup.ts` lists them; the checks re-run each time the page opens, a failed one says so. Required steps left: the checklist comes first and can't be hidden; only optional ones left: below today, **Hide** kept in this browser per cafe and person. E2E: `dashboard.test.ts`.
+
 **Ctrl/⌘+K** (or the sidebar's Search button) opens the admin's search (D152): two characters or more ask every source at once (menu items by the server's search, categories, option sets, add-on groups), the pages and a few actions are always listed; a source that fails says so in its group. Source: `components/AdminSearch.vue`, `utils/admin-search.ts`, each feature's `search.ts`. E2E: `admin-search.test.ts`.
 
 | Keys | Where | Action |

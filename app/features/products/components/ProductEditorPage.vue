@@ -13,7 +13,6 @@
 import { useItemEditor } from '../composables/useItemEditor'
 import { ITEM_FORM_SECTIONS } from '../schemas/item-form'
 import type { ItemFormSection } from '../schemas/item-form'
-import { ITEM_STATUS_LABELS } from '../utils/item-display'
 import ProductFormFields from './ProductFormFields.vue'
 import ProductFormSlideover from './ProductFormSlideover.vue'
 import ViewOnMenuButton from './ViewOnMenuButton.vue'
@@ -23,16 +22,20 @@ const tenantPath = useTenantPath()
 const props = defineProps<{
   /** The item's id, or `new`. */
   id: string
+  /** With `new`: Duplicate (D154), a new item filled from this one (`?copy=<id>`). */
+  copyOf?: string
 }>()
 
 const overlay = useOverlay()
 const editor = useItemEditor({
   itemId: props.id === 'new' ? undefined : props.id,
+  copyOf: props.id === 'new' ? props.copyOf : undefined,
   onLoaded: () => unsaved.markClean(),
+  onReloaded: saved => unsaved.markClean(saved),
   // The page may be gone by then: reopen the input in the slide-over, which works on any page.
   reopen: (item, draft) => overlay.create(ProductFormSlideover, { destroyOnClose: true }).open({ item, draft }),
 })
-const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError } = editor
+const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError, conflict, reloading, reloaded } = editor
 
 const unsaved = useUnsavedChanges(state, { initial: editor.initial, paused: saving, draft: editor.keptDraft })
 
@@ -140,7 +143,7 @@ async function onSubmit() {
     <template #body>
       <div class="space-y-4">
         <p class="text-sm text-muted">
-          {{ loaded ? `Status: ${ITEM_STATUS_LABELS[loaded.status]}` : isEdit ? 'Loading…' : 'Create saves a draft; Create and publish also puts it on the menu.' }}
+          {{ editor.summary.value }}
         </p>
 
         <ApiErrorAlert
@@ -177,7 +180,11 @@ async function onSubmit() {
             :disabled="saving || archived"
             :archived="archived"
             :last-error="lastError"
+            :conflict="conflict"
+            :reloading="reloading"
+            :reloaded="reloaded"
             @submit="onSubmit"
+            @reload="editor.reload"
             @invalid="next => section = next"
           />
         </template>

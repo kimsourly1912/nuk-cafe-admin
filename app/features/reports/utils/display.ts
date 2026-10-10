@@ -97,13 +97,6 @@ export function eventReason(event: Pick<OrderHistoryEvent, 'reason' | 'note'>): 
 
 export const returnLabel = (method: ReturnMethod) => RETURN_LABELS[method]
 
-/** "+12%", "−8%", or nothing when there's nothing to compare with. */
-export function changeText(current: number, previous: number): { text: string, up: boolean } | null {
-  if (previous <= 0) return null
-  const percent = Math.round(((current - previous) / previous) * 100)
-  return { text: `${percent > 0 ? '+' : percent < 0 ? '−' : ''}${Math.abs(percent)}%`, up: percent >= 0 }
-}
-
 /** "−$14.00": a refund shown as money going out; "—" for none. */
 export const negativeMinor = (minor: number) => (minor === 0 ? '—' : `−${formatMinor(minor)}`)
 

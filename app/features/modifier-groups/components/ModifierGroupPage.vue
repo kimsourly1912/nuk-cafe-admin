@@ -13,6 +13,7 @@
  * Unsaved settings or a pending order are guarded when leaving the page.
  */
 import type { Modifier, ModifierGroup } from '#shared/contracts/menu-modifiers'
+import type { FormPart } from '~/utils/form-value'
 import { MAX_MODIFIERS } from '#shared/contracts/menu-modifiers'
 import type { AddOnAction } from './AddOnActions.vue'
 import { activeModifiers, archiveGroupConfirm, archivedModifiers, useModifierGroup, useModifierGroupMutations } from '../composables/useModifierGroups'
@@ -51,10 +52,28 @@ function checked<T extends { ok: boolean, status?: string, error?: { code?: stri
   return result
 }
 
+/** The settings' parts as they change together (a rule is its three fields). */
+const SETTINGS_PARTS: FormPart<GroupSettingsForm>[] = [
+  { label: 'Name', keys: ['name'] },
+  { label: 'Selection rule', keys: ['required', 'minSelect', 'maxSelect'] },
+]
+/** After Reload kept edited settings: the parts both changed, where this input was kept (D153). */
+const settingsOverlap = ref<string[] | null>(null)
+
+/** Takes the latest group; edited settings stay on top of it, part by part (D153). */
 async function reload() {
+  const current = group.value
+  const mine = settingsDirty.value ? cloneFormValue(settings.value) : undefined
+  const base = current && settingsBase.value ? toSettingsForm({ ...current, ...settingsBase.value }) : undefined
   await refresh()
   lastError.value = null
   resetSettings()
+  settingsOverlap.value = null
+  if (mine && base) {
+    const { merged, overlap } = mergeFormChanges({ base, mine, theirs: settings.value, parts: SETTINGS_PARTS })
+    settings.value = merged
+    settingsOverlap.value = overlap
+  }
   if (mode.value === 'reorder') order.value = active.value.map(m => m.id)
 }
 
@@ -104,6 +123,7 @@ async function saveSettings() {
   if (result.ok) {
     take(result.data)
     resetSettings()
+    settingsOverlap.value = null
   }
   else if (result.status === 'error') {
     const fields = result.error.fieldErrors ?? {}
@@ -362,8 +382,18 @@ const headerActions = computed(() => archived.value
           variant="subtle"
           icon="i-lucide-circle-alert"
           :title="lastError.conflict ? 'Someone else changed this add-on group' : 'That change wasn\'t saved'"
-          :description="lastError.conflict ? 'Reload it to see their changes, then try again.' : lastError.message"
+          :description="lastError.conflict ? 'Reload to get their changes: settings you typed stay. Then try again.' : lastError.message"
           :actions="lastError.conflict ? [{ label: 'Reload', icon: 'i-lucide-refresh-cw', color: 'neutral', variant: 'outline', onClick: reload }] : []"
+        />
+        <UAlert
+          v-if="settingsOverlap && settingsDirty"
+          :color="settingsOverlap.length ? 'warning' : 'info'"
+          variant="subtle"
+          icon="i-lucide-git-merge"
+          title="Loaded the latest version"
+          :description="settingsOverlap.length
+            ? `You both changed the ${settingsOverlap.map(part => part.toLowerCase()).join(' and ')}: your settings are kept. Check them, then save.`
+            : 'Their changes are here, with your settings kept. Save to keep both.'"
         />
 
         <UTabs

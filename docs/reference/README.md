@@ -64,7 +64,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<ListSkeleton>` | component | [UI helpers](./ui-helpers.md#listskeleton) | First-load placeholders |
 | `<SearchInput>` | component | [UI helpers](./ui-helpers.md#searchinput) | Search as you type (debounced) |
 | `<ListEmptyState>` | component | [UI helpers](./ui-helpers.md#listemptystate) | "No X yet" vs "No X match your filters" |
-| `previewList`, `pluralize` | util | [UI helpers](./ui-helpers.md#previewlist-and-pluralize) | "Coffee, Tea and 3 more", "3 categories" |
+| `previewList`, `pluralize`, `changeText` | util | [UI helpers](./ui-helpers.md#previewlist-and-pluralize) | "Coffee, Tea and 3 more", "3 categories", "+12%" |
 | `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT` | util | [UI helpers](./ui-helpers.md#money-tominor-fromminor-formatminor-formatprice-price_format) | Cents ↔ dollars, "$4.20" |
 | `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute` | util | [UI helpers](./ui-helpers.md#times-of-day-formatclock-timerange-isovernight-minutetotime-timetominute) | Minutes after midnight ↔ "7:30 AM" and `UInputTime` |
 | `useUnsavedChanges` | composable | [Forms](./forms.md#useunsavedchanges) | Warn before a page form's input is lost |

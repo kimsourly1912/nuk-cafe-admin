@@ -7,6 +7,7 @@ Warn the user before input they haven't saved is lost.
 - [`useLeaveGuard`](#useleaveguard): the app-wide check
 - [`isSameFormValue` and `cloneFormValue`](#issameformvalue-and-cloneformvalue)
 - [Drafts kept in the browser](#drafts-kept-in-the-browser): the `draft` option and `<FormDraftAlert>` (D151)
+- [`mergeFormChanges`](#mergeformchanges): Reload after someone else saved first, keeping this input on top (D153)
 
 Source: `app/composables/useUnsavedChanges.ts`, `app/utils/form-value.ts`, `app/middleware/unsaved-changes.global.ts`, `app/plugins/leave-guard.client.ts`. Decision: [D19](../decisions.md).
 
@@ -74,6 +75,7 @@ Every case below is handled. **Keep this table and the tests in sync when changi
 | 26 | Another person signs in on the same browser | Never offered someone else's draft | The key holds the user id | e2e, unit |
 | 27 | The record was saved by someone after the draft | Amber alert: restoring puts the draft's values over theirs | The draft keeps the version it was typed on | e2e |
 | 28 | Storage blocked or full | Nothing kept; the form works as before | Every storage call guarded | unit |
+| 29 | Someone else saved first (409), then **Reload** (the menu item editor, the add-on group's settings) | Their version, with this person's changed parts on top; the parts both changed named; still unsaved, against their version | `mergeFormChanges` + `markClean(theirs)` (D153) | unit, e2e (`products.test.ts`, checked to fail when Reload takes theirs) |
 
 Implementation traps (each one broke something once, see [D19](../decisions.md)):
 - `isSameFormValue` must read **through** reactive proxies. `toRaw` makes the `computed` stop tracking, so `isDirty` never changes. A unit test guards this.
@@ -107,7 +109,7 @@ interface UnsavedChangesOptions<T> {
 | Field | Meaning |
 |---|---|
 | `isDirty` | `true` while the values differ from the baseline (and not `paused`) |
-| `markClean()` | Makes the current values the new baseline. Call it after a save when the form stays open, or **before redirecting away after a save** |
+| `markClean(saved?)` | Makes the current values (or `saved`) the new baseline. Call it after a save when the form stays open, or **before redirecting away after a save**; with `saved` after Reload took a newer version (D153) |
 | `markSaved()` | `markClean()` and the kept draft removed. A form with `draft` calls it after a successful save |
 | `draft` | The offered draft, for `<FormDraftAlert>` (inert without the `draft` option) |
 
@@ -265,3 +267,27 @@ Pure helpers behind the composables (`app/utils/form-value.ts`, unit-tested in `
 - `cloneFormValue(value)`: a deep copy of plain objects and arrays (unwrapping proxies). Files, blobs and dates are kept by reference.
 
 Known limits: `1` and `'1'` are different (use numeric inputs for numbers), and multi-selects whose order can change without meaning anything should keep their array sorted.
+
+## `mergeFormChanges`
+
+Someone else saved the record while this form was open (409, D41). **Reload** fetches their version and puts this person's changes back on top, part by part (D153). Pure, in `app/utils/form-value.ts` (auto-imported; import it from `~/utils/form-value` in Node-tested code).
+
+```ts
+const { merged, overlap } = mergeFormChanges({
+  base: loadedForm, // what the form opened with
+  mine: cloneFormValue(state), // what's typed now
+  theirs: toItemForm(latest), // the newer version
+  parts: ITEM_FORM_PARTS, // fields that change as one, with the name the screen uses
+})
+unsaved.markClean(theirs) // still unsaved: measured against their version
+Object.assign(state, merged)
+// overlap: ['Prices'] → "You both changed the prices: yours are kept. Check them, then save."
+```
+
+| Option | Meaning |
+|---|---|
+| `base` | The form as it was opened (the version the save named) |
+| `mine` / `theirs` | This input / the newer version, as forms |
+| `parts` | `{ label, keys }`: fields taken together (an image's id and its preview; option sets and their grid). Keys in no part are compared one by one, named by the key |
+
+A part this person changed keeps `mine`; every other part takes `theirs`. `overlap` names the parts both changed **differently** (the same change by both isn't named). Values are copies. Used by the menu item editor (`useItemEditor().reload`) and the add-on group page's settings.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { chartPoints, niceScale } from '../utils/chart'
-import { changeText, eventBy, eventTitle, hourLabel, orderTypeText, paymentBadge } from '../utils/display'
+import { changeText } from '~/utils/text'
+import { eventBy, eventTitle, hourLabel, orderTypeText, paymentBadge } from '../utils/display'
 import { addDays, beyondRangeLimit, periodButtonLabel, periodLabel, presetOf, presetPeriod, previousLabel, validPeriod } from '../utils/period'
 
 describe('report periods', () => {

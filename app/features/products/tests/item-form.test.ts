@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import type { MenuItem } from '#shared/contracts/menu-items'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { OptionSet } from '#shared/contracts/menu-options'
-import { addOnGroupFromLibrary, buildGrid, formFieldOf, itemFormSchema, optionSetFromLibrary, sectionOf, toCreateItemBody, toItemForm, toUpdateItemBody } from '../schemas/item-form'
+import { mergeFormChanges } from '~/utils/form-value'
+import { ITEM_NAME_MAX } from '#shared/contracts/menu-items'
+import { addOnGroupFromLibrary, buildGrid, copyName, formFieldOf, ITEM_FORM_PARTS, itemFormSchema, optionSetFromLibrary, sectionOf, toCreateItemBody, toItemCopyForm, toItemForm, toUpdateItemBody } from '../schemas/item-form'
 import type { FormOptionSet, ItemForm } from '../schemas/item-form'
 
 const STAMP = '2026-09-28T00:00:00.000Z'
@@ -189,5 +191,65 @@ describe('where an error is shown', () => {
     expect(['optionSets', 'grid', 'grid.0.price'].map(sectionOf)).toEqual(['prices', 'prices', 'prices'])
     expect(sectionOf('addOnGroups.0.minSelect')).toBe('add-ons')
     expect(sectionOf('availabilityRuleIds')).toBe('availability')
+  })
+})
+
+describe('someone else saved first (D153)', () => {
+  const base = toItemForm(LATTE, [MILK])
+
+  it('takes their prices and keeps my new name', () => {
+    const mine = { ...cloneForm(base), name: 'Caffè Latte' }
+    const theirs = toItemForm({ ...LATTE, version: 8, variations: LATTE.variations.map(v => (v.id === 'v1' ? { ...v, priceMinor: 400 } : v)) }, [MILK])
+    const { merged, overlap } = mergeFormChanges({ base, mine, theirs, parts: ITEM_FORM_PARTS })
+    expect(merged.name).toBe('Caffè Latte')
+    expect(merged.grid.find(cell => cell.label === 'Small, Hot')?.price).toBe(4)
+    expect(overlap).toEqual([])
+  })
+
+  it('keeps my option sets with my grid, and names Prices when both changed them', () => {
+    const mine = cloneForm(base)
+    mine.optionSets = [mine.optionSets[0]!]
+    mine.grid = buildGrid(mine.optionSets, mine.grid, true)
+    const theirs = toItemForm({ ...LATTE, version: 8, variations: LATTE.variations.map(v => ({ ...v, priceMinor: (v.priceMinor ?? 0) + 25 })) }, [MILK])
+    const { merged, overlap } = mergeFormChanges({ base, mine, theirs, parts: ITEM_FORM_PARTS })
+    expect(merged.optionSets.map(set => set.id)).toEqual(['size'])
+    expect(merged.grid.map(cell => cell.label)).toEqual(mine.grid.map(cell => cell.label))
+    expect(overlap).toEqual(['Prices'])
+  })
+})
+
+function cloneForm(form: ItemForm): ItemForm {
+  return structuredClone(form)
+}
+
+describe('Duplicate (D154)', () => {
+  it('copies everything but the photo, named "… (copy)"', () => {
+    const copy = toItemCopyForm(LATTE, [MILK])
+    const original = toItemForm(LATTE, [MILK])
+    expect(copy).toMatchObject({ name: 'Latte (copy)', description: original.description, categoryId: 'cat-1', imageId: undefined, imageUrl: undefined })
+    expect(copy.grid).toEqual(original.grid)
+    expect(copy.availabilityRuleIds).toEqual(['rule-1'])
+    // An archived add-on isn't copied (a new item can't take one).
+    expect(copy.addOnGroups[0]!.addOns.map(addOn => addOn.id)).toEqual(['oat'])
+    expect(toCreateItemBody(copy).modifierGroups).toEqual([{ groupId: 'milk', rules: { minSelect: 1, maxSelect: 1 }, prices: [{ modifierId: 'oat', priceDeltaMinor: 60 }] }])
+  })
+
+  it('leaves out archived option sets, add-on groups and rules; the grid rebuilt from the rest', () => {
+    const item: MenuItem = {
+      ...LATTE,
+      optionSets: [LATTE.optionSets[0]!, { ...LATTE.optionSets[1]!, status: 'archived' }],
+      modifierGroups: [{ ...LATTE.modifierGroups[0]!, status: 'archived' }],
+      availabilityRules: [{ id: 'rule-1', name: 'Breakfast', status: 'archived' }],
+    }
+    const copy = toItemCopyForm(item, [MILK])
+    expect(copy.optionSets.map(set => set.id)).toEqual(['size'])
+    expect(copy.grid.map(cell => cell.label)).toEqual(['Small', 'Large'])
+    expect(copy.addOnGroups).toEqual([])
+    expect(copy.availabilityRuleIds).toEqual([])
+  })
+
+  it('keeps a long name within the limit', () => {
+    expect(copyName('x'.repeat(200)).length).toBeLessThanOrEqual(ITEM_NAME_MAX)
+    expect(copyName('x'.repeat(200)).endsWith(' (copy)')).toBe(true)
   })
 })

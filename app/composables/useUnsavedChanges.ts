@@ -86,8 +86,9 @@ const DRAFT_WRITE_DELAY_MS = 500
  */
 export function useUnsavedChanges<T extends object>(state: MaybeRefOrGetter<T>, options: UnsavedChangesOptions<T> = {}) {
   const baseline = shallowRef(cloneFormValue(options.initial ?? toValue(state)))
-  const markClean = () => {
-    baseline.value = cloneFormValue(toValue(state))
+  /** What is saved now: the input as it is, or `saved` (someone else's newer version, with this input on top). */
+  const markClean = (saved?: T) => {
+    baseline.value = cloneFormValue(saved ?? toValue(state))
   }
   const isDirty = computed(() => !toValue(options.paused) && !isSameFormValue(toValue(state), baseline.value))
   const draft = useStoredDraft(state, baseline, options.draft)

@@ -505,8 +505,88 @@ describe('menu item form', () => {
     const form = await openEdit(page, 'Latte')
     await form.getByLabel('Name', { exact: true }).fill('Latte 2')
     await form.getByRole('button', { name: 'Save', exact: true }).click()
-    await form.getByText('Someone else changed this menu item.', { exact: false }).waitFor()
+    await form.getByText('Someone else saved this menu item').waitFor()
     expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte 2')
+  })
+
+  it('someone else saved first: Reload takes their version and keeps my changes on top, then Save names their version (D153)', async () => {
+    let saved = LATTE
+    const bodies: Record<string, unknown>[] = []
+    const { page } = await open({
+      ...backend(),
+      'GET /admin/menu/items/{id}': () => saved,
+      'PATCH /admin/menu/items/{id}': (request) => {
+        const body = request.body as Record<string, unknown>
+        bodies.push(body)
+        if (body.version !== saved.version) throw failures.conflict('VERSION_CONFLICT', 'This menu item was changed by someone else.')
+        saved = { ...saved, name: String(body.name), version: saved.version + 1 }
+        return saved
+      },
+    })
+    const form = await openEdit(page, 'Latte')
+    await form.getByLabel('Name', { exact: true }).fill('Caffè Latte')
+    await typePrice(form.getByRole('spinbutton', { name: 'Price of Large, Hot' }), '4.5')
+    // Meanwhile, someone else: a new description and other prices.
+    saved = {
+      ...LATTE,
+      description: 'Double shot and steamed milk',
+      variations: LATTE.variations.map(variation => ({ ...variation, priceMinor: (variation.priceMinor ?? 0) + 25 })),
+      version: 4,
+    }
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
+    const conflict = form.getByText('Someone else saved this menu item')
+    await conflict.waitFor()
+
+    await form.getByRole('button', { name: 'Reload' }).click()
+    await form.getByText('Loaded the latest version').waitFor()
+    await form.getByText('You both changed the prices: yours are kept. Check them, then save.').waitFor()
+    expect(await conflict.count()).toBe(0)
+    // Mine on top (the name, and the prices I edited), theirs where I changed nothing (the description).
+    expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Caffè Latte')
+    expect(await form.getByLabel('Description').inputValue()).toBe('Double shot and steamed milk')
+    expect(await form.getByRole('spinbutton', { name: 'Price of Large, Hot' }).inputValue()).toBe('$4.50')
+
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
+    await toast(page, 'Menu item "Caffè Latte" updated').waitFor()
+    expect(bodies.at(-1)).toMatchObject({ version: 4, name: 'Caffè Latte', description: 'Double shot and steamed milk' })
+  })
+
+  it('Reload with nothing changed by both says their changes are in, and the form still asks before closing', async () => {
+    let saved = LATTE
+    const { page } = await open({
+      ...backend(),
+      'GET /admin/menu/items/{id}': () => saved,
+      'PATCH /admin/menu/items/{id}': () => {
+        throw failures.conflict('VERSION_CONFLICT', 'This menu item was changed by someone else.')
+      },
+    })
+    const form = await openEdit(page, 'Latte')
+    await form.getByLabel('Name', { exact: true }).fill('Caffè Latte')
+    saved = { ...LATTE, description: 'Double shot and steamed milk', version: 4 }
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
+    await form.getByRole('button', { name: 'Reload' }).click()
+    await form.getByText('Their changes are in the form, with yours kept. Save to keep both.').waitFor()
+    // Still unsaved: my name over their version.
+    await form.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByText('Discard unsaved changes?').waitFor()
+  })
+
+  it('Reload when someone archived the item meanwhile: says so and keeps the input', async () => {
+    let saved = LATTE
+    const { page } = await open({
+      ...backend(),
+      'GET /admin/menu/items/{id}': () => saved,
+      'PATCH /admin/menu/items/{id}': () => {
+        throw failures.conflict('VERSION_CONFLICT', 'This menu item was changed by someone else.')
+      },
+    })
+    const form = await openEdit(page, 'Latte')
+    await form.getByLabel('Name', { exact: true }).fill('Caffè Latte')
+    saved = { ...LATTE, status: 'archived', version: 4 }
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
+    await form.getByRole('button', { name: 'Reload' }).click()
+    await form.getByText('Someone archived this menu item meanwhile.', { exact: false }).waitFor()
+    expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Caffè Latte')
   })
 
   it('maps a server error on a version\'s price to its cell', async () => {
@@ -999,4 +1079,64 @@ describe('the toolbar and Select mode at every width (D129)', () => {
       expect(await layout(page)).toMatchObject({ pageSideways: false, toolbarSideways: false, barSideways: false, countLines: 1 })
     })
   }
+})
+
+// Duplicate (D154): a new item filled from another one, without its photo, created as a draft.
+describe('Duplicate', () => {
+  it('opens a new item filled from the row\'s item, named "… (copy)" without the photo, and creates it as a draft', async () => {
+    let body: Record<string, unknown> | undefined
+    const { page } = await open({
+      ...backend(),
+      'POST /admin/menu/items': (request) => {
+        body = request.body as Record<string, unknown>
+        return menuItemOf('item-9', 'Latte (copy)')
+      },
+    })
+    await page.getByRole('button', { name: 'Actions for Latte' }).click()
+    await page.getByRole('menuitem', { name: 'Duplicate' }).click()
+    const form = page.getByRole('dialog', { name: 'New menu item' })
+    await expect.poll(() => form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte (copy)')
+    await form.getByText('A copy of "Latte", without its photo.', { exact: false }).first().waitFor()
+    expect(await form.locator('img').count()).toBe(0)
+    expect(await form.getByRole('spinbutton', { name: 'Price of Large, Hot' }).inputValue()).toBe('$4.25')
+
+    await form.getByRole('button', { name: 'Create', exact: true }).click()
+    await toast(page, 'Menu item "Latte (copy)" created as a draft').waitFor()
+    expect(body).toEqual({
+      categoryId: ESPRESSO.id,
+      name: 'Latte (copy)',
+      description: 'Espresso and milk',
+      imageId: null,
+      optionSetIds: [SIZE.id, TEMP.id],
+      variations: [
+        { valueIds: ['val-s', 'val-hot'], priceMinor: 350, status: 'active' },
+        { valueIds: ['val-s', 'val-iced'], priceMinor: 375, status: 'active' },
+        { valueIds: ['val-l', 'val-hot'], priceMinor: 425, status: 'active' },
+        { valueIds: ['val-l', 'val-iced'], priceMinor: 450, status: 'disabled' },
+      ],
+      modifierGroups: [{ groupId: MILK.id, rules: null, prices: [{ modifierId: 'mod-soy', priceDeltaMinor: 60 }] }],
+      availabilityRuleIds: [],
+    })
+  })
+
+  it('a copy counts as unsaved: closing it asks first', async () => {
+    const { page } = await open()
+    await page.getByRole('button', { name: 'Actions for Latte' }).click()
+    await page.getByRole('menuitem', { name: 'Duplicate' }).click()
+    const form = page.getByRole('dialog', { name: 'New menu item' })
+    await expect.poll(() => form.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte (copy)')
+    await form.locator('[data-slot="footer"]').getByRole('button', { name: 'Cancel' }).click()
+    await page.getByText('Discard unsaved changes?').waitFor()
+  })
+
+  it('on phones it opens /products/new?copy=<id>', async () => {
+    const page = await createPage()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await mockApi(page, backend())
+    await page.goto(url('/c/nuk/admin/products'), { waitUntil: 'hydration' })
+    await page.getByRole('button', { name: 'Actions for Latte' }).click()
+    await page.getByRole('menuitem', { name: 'Duplicate' }).click()
+    await expect.poll(() => `${new URL(page.url()).pathname}${new URL(page.url()).search}`).toBe('/c/nuk/admin/products/new?copy=item-1')
+    await expect.poll(() => page.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte (copy)')
+  })
 })

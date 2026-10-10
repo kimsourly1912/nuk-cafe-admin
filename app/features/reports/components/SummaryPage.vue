@@ -8,7 +8,7 @@
  */
 import type { ReportSummary } from '#shared/contracts/reports'
 import { queryText, useReportDestinations, useReportDownload, useReportScope, useReportSummary } from '../composables/useReports'
-import { changeText, formatRiel, METHOD_LABELS, negativeMinor } from '../utils/display'
+import { formatRiel, METHOD_LABELS, negativeMinor } from '../utils/display'
 import { periodButtonLabel, periodLabel, previousLabel } from '../utils/period'
 import ReportDefinitions from './ReportDefinitions.vue'
 import SendToTelegramModal from './SendToTelegramModal.vue'

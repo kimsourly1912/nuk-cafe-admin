@@ -74,7 +74,7 @@ describe('the help assistant', () => {
     const api = await mockApi(page)
     await page.goto(url('/c/nuk/admin'), { waitUntil: 'hydration' })
     await expect.poll(() => api.calls.includes('GET /admin/assistant')).toBe(true)
-    await page.getByText('Welcome back').waitFor()
+    await page.getByRole('heading', { name: 'Shortcuts' }).waitFor()
     expect(await askButton(page).count()).toBe(0)
     // Its shortcut does nothing either: the panel stays closed.
     await page.keyboard.press('Control+/')

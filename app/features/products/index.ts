@@ -3,3 +3,4 @@
 // A ProductSelect comes with its first consumer (docs/plans/products.md → Relationships).
 export { productsNavigation } from './navigation'
 export { menuItemsSearch } from './search'
+export { menuItemsSetup } from './setup'
