@@ -3,3 +3,4 @@
 export { useModifierGroupOptions } from './composables/useModifierGroupOptions'
 export { describeRules, formatDelta } from './schemas/modifier-group-display'
 export { modifierGroupsNavigation } from './navigation'
+export { modifierGroupsSearch } from './search'

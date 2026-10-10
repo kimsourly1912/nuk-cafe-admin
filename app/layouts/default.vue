@@ -13,6 +13,10 @@ const tenantPath = useTenantPath()
 const sidebarItems = computed(() => withActiveItem(allItems, splitTenantUrl(route.path)?.path ?? route.path)
   .map(group => group.map(item => (typeof item.to === 'string' ? { ...item, to: tenantPath(item.to) } : item))))
 const open = ref(false)
+/** Every page in the sidebar, for the search (Ctrl/⌘+K, D152). */
+const searchPages = computed(() => sidebarItems.value.flat()
+  .filter((item): item is typeof item & { label: string, to: string } => typeof item.to === 'string' && typeof item.label === 'string')
+  .map(item => ({ label: item.label, icon: typeof item.icon === 'string' ? item.icon : undefined, to: item.to })))
 // The help assistant (D109): only where an AI key is set.
 const assistant = useAssistant()
 
@@ -51,6 +55,11 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
       </template>
 
       <template #default="{ collapsed }">
+        <UDashboardSearchButton
+          :collapsed="collapsed"
+          label="Search"
+          class="bg-transparent ring-default"
+        />
         <UNavigationMenu
           :collapsed="collapsed"
           :items="sidebarItems"
@@ -127,5 +136,9 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
     <!-- Mounted with the shell, closed: only the Ask button or Ctrl/⌘+/ opens it, where it's on.
          Mounting it at the moment it opens would let USidebar close it again on phones. -->
     <AssistantPanel class="print:hidden" />
+    <AdminSearch
+      :pages="searchPages"
+      @shortcuts="showShortcuts"
+    />
   </UDashboardGroup>
 </template>

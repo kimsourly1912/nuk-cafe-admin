@@ -2,3 +2,4 @@
 // use. Never export pages or forms from here. Route files import those directly.
 // A ProductSelect comes with its first consumer (docs/plans/products.md → Relationships).
 export { productsNavigation } from './navigation'
+export { menuItemsSearch } from './search'

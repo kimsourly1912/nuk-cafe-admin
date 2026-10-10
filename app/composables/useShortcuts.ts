@@ -6,6 +6,7 @@
 
 /** Every shortcut in the app, for the help dialog. Keep it in sync when adding one. */
 export const SHORTCUTS = [
+  { kbds: ['meta', 'k'], label: 'Search menu items, categories and pages' },
   { kbds: ['/'], label: 'Search the list' },
   { kbds: ['n'], label: 'New item (on list pages)' },
   { kbds: ['s'], label: 'Select categories (Categories)' },
