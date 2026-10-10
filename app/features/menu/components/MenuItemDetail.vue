@@ -106,7 +106,8 @@ function submit() {
           v-if="item.imageUrl"
           :src="item.imageUrl"
           alt=""
-          class="h-44 w-full rounded-lg object-cover sm:h-56"
+          decoding="async"
+          class="h-44 w-full rounded-lg bg-elevated object-cover sm:h-56"
         >
         <p class="font-semibold text-highlighted">
           {{ formatMinor(unitPriceOf(item, selection)) }}

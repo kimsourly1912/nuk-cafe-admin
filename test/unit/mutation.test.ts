@@ -435,3 +435,38 @@ describe('record locks across mutations', () => {
     expect(result.succeeded.map(s => s.input)).toEqual([b])
   })
 })
+
+describe('undo instead of asking first (D152)', () => {
+  it('offers Undo on the success toast, reversing what this call did', async () => {
+    const undo = vi.fn()
+    const { mutation, deps } = setup(async item => ({ archived: item.id }), { undo })
+    await mutation.execute(a)
+    expect(deps.confirm).not.toHaveBeenCalled()
+    const actions = deps.success.mock.calls[0]![2] as { label: string, onClick: () => void }[]
+    expect(actions.map(x => x.label)).toEqual(['Undo'])
+    actions[0]!.onClick()
+    expect(undo).toHaveBeenCalledWith([{ input: a, data: { archived: 1 } }])
+  })
+
+  it('a batch offers one Undo for every success; a partial failure offers it beside Retry failed', async () => {
+    const undo = vi.fn()
+    const { mutation, deps } = setup(async (item) => {
+      if (item.id === 2) throw notFound()
+      return item.id
+    }, { undo })
+    await mutation.executeMany([a, b, c])
+    const actions = deps.failure.mock.calls[0]![2] as { label: string, onClick: () => void }[]
+    expect(actions.map(x => x.label)).toEqual(['Retry failed', 'Undo'])
+    actions[1]!.onClick()
+    expect(undo).toHaveBeenCalledWith(expect.arrayContaining([{ input: a, data: 1 }, { input: c, data: 3 }]))
+    expect(undo.mock.calls[0]![0]).toHaveLength(2)
+  })
+
+  it('nothing succeeded: no Undo', async () => {
+    const { mutation, deps } = setup(async () => {
+      throw notFound()
+    }, { undo: vi.fn() })
+    await mutation.execute(a)
+    expect(deps.failure.mock.calls[0]![2]).toBeUndefined()
+  })
+})

@@ -1,6 +1,5 @@
 import type { ConfirmOptions } from '~/utils/mutation'
 import type { CreateOptionSetInput, OptionSet, OptionValue } from '#shared/contracts/menu-options'
-import { archiveSetDescription } from '../schemas/option-set-display'
 
 const BASE = '/admin/menu/option-sets'
 
@@ -75,11 +74,8 @@ export function useOptionSetMutations() {
       id: 'option-sets:archive',
       key: ({ set }) => setKey(set.id),
       lock: ({ set }) => setKey(set.id),
-      confirm: ({ set }) => ({
-        title: `Archive “${set.name}”?`,
-        description: archiveSetDescription(set.itemCount),
-        confirmLabel: 'Archive option set',
-      }),
+      // Undo instead of asking (D152); the editor asks, its toast can't be reached while it's open.
+      undo: ([done]) => void (done && restore.execute({ set: done.data })),
       successMessage: (_, { set }) => `Option set "${set.name}" archived`,
       errorMessage: ({ set }) => `Could not archive "${set.name}"`,
       invalidate: AFFECTED,

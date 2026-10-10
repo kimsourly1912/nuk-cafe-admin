@@ -76,6 +76,12 @@ export interface MutationOptions<TInput, TResult> {
   invalidate?: string[]
   /** Success removes the item: `isRemoved(key)` is true until the refreshed data arrives. */
   removes?: boolean
+  /**
+   * Reverses what succeeded, offered as **Undo** on the success toast instead of asking first (D152).
+   * Only for actions the reverse puts back exactly (archive, unpublish); anything else confirms.
+   * Called with one call's result, or every success of a batch.
+   */
+  undo?: (done: { input: TInput, data: TResult }[]) => void
   onSuccess?: (data: TResult, input: TInput) => void
   onError?: (error: ApiError, input: TInput) => void
   batch?: {
@@ -100,6 +106,11 @@ export interface ExecuteOverrides<TInput> {
   confirm?: ConfirmOptions | false
   /** Extra actions on the error toast, decided when the error happens (e.g. "Reopen"). */
   errorActions?: (error: ApiError, input: TInput) => ToastAction[]
+  /**
+   * `false`: no Undo on this call's toast. For a call made inside a modal or slide-over, whose toast
+   * can't be reached while it's open (it asks first instead, through `confirm`).
+   */
+  undo?: false
 }
 
 /** Reactive state shared by every component using the same mutation id. */
@@ -151,7 +162,7 @@ export interface MutationDeps<TInput, TResult> {
   /** Record locks shared by every mutation in the app (`createRecord()`, reactive). Required for `lock`. */
   locks?: Record<string, true>
   confirm: (options: ConfirmOptions) => Promise<boolean>
-  success: (title: string, description?: string) => void
+  success: (title: string, description?: string, actions?: ToastAction[]) => void
   failure: (title: string, description?: string, actions?: ToastAction[]) => void
   progress: (title: string, onStop: () => void) => ProgressHandle
   invalidate: (features: string[]) => Promise<void>
@@ -164,6 +175,11 @@ const SINGLE = '__single__'
 /** Removes a key from a (reactive) record; Vue tracks `deleteProperty`. */
 function forget(record: Record<string, unknown>, key: string) {
   Reflect.deleteProperty(record, key)
+}
+
+/** The toast action that reverses what succeeded (D152). */
+function undoActions<TInput, TResult>(undo: MutationOptions<TInput, TResult>['undo'], done: { input: TInput, data: TResult }[]): ToastAction[] | undefined {
+  return undo && done.length ? [{ label: 'Undo', onClick: () => undo(done) }] : undefined
 }
 
 /** Shown when a single action is refused because another action holds the record. */
@@ -225,7 +241,11 @@ export function createMutation<TInput, TResult>(
       if (options.removes) state.removed[key] = true
       if (notify) {
         const title = options.successMessage === false ? undefined : resolve(options.successMessage, data, input)
-        if (title) deps.success(title)
+        const actions = overrides.undo === false ? undefined : undoActions(options.undo, [{ input, data }])
+        if (title) {
+          if (actions) deps.success(title, undefined, actions)
+          else deps.success(title)
+        }
       }
       options.onSuccess?.(data, input)
       return { ok: true, status: 'success', data }
@@ -345,11 +365,13 @@ export function createMutation<TInput, TResult>(
       deps.failure(
         `${ok} ${noun(ok)} ${done}, ${result.failed.length} failed`,
         description,
-        [{ label: 'Retry failed', onClick: () => void executeMany(failedInputs, { confirm: false }) }],
+        [{ label: 'Retry failed', onClick: () => void executeMany(failedInputs, { confirm: false }) }, ...(undoActions(options.undo, result.succeeded) ?? [])],
       )
     }
     else if (ok || extras.length) {
-      deps.success(`${ok} ${noun(ok)} ${done}`, extras.join(' · ') || undefined)
+      const actions = undoActions(options.undo, result.succeeded)
+      if (actions) deps.success(`${ok} ${noun(ok)} ${done}`, extras.join(' · ') || undefined, actions)
+      else deps.success(`${ok} ${noun(ok)} ${done}`, extras.join(' · ') || undefined)
     }
 
     if (ok) refreshAfter(options.removes ? result.succeeded.map(s => keyOf(s.input)) : [])

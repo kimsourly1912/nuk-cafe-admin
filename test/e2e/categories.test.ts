@@ -3,7 +3,7 @@ import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { MenuCategory } from '../../shared/contracts/menu-categories'
 import type { MockHandler } from './support/mock-api'
-import { failures, menuCategoryOf, mockApi, setupE2e, toast } from './support/mock-api'
+import { failures, menuCategoryOf, mockApi, setupE2e, stretchedTarget, toast } from './support/mock-api'
 
 // Categories as a tree (D37) on the new menu API (D55), redesigned in D72: top-level categories as
 // groups with their subcategories, loaded whole, filtered and counted on the client; browse,
@@ -145,10 +145,10 @@ describe('categories tree', () => {
     }))
     await page.getByRole('button', { name: 'Add subcategory to Food' }).click()
     const form = page.getByRole('dialog', { name: 'New subcategory' })
-    await expect.poll(() => form.getByRole('button', { name: 'Parent category', exact: true }).textContent()).toContain('Food')
+    await expect.poll(() => form.getByRole('combobox', { name: 'Parent category', exact: true }).textContent()).toContain('Food')
     await form.getByLabel('Name').fill('Sandwiches')
     await form.getByLabel('Description').fill('Toasted to order')
-    await form.getByRole('button', { name: 'Availability', exact: true }).click()
+    await form.getByRole('combobox', { name: 'Availability', exact: true }).click()
     await page.getByRole('option', { name: 'Breakfast' }).click()
     await page.keyboard.press('Escape')
     await form.getByRole('button', { name: 'Create' }).click()
@@ -161,7 +161,7 @@ describe('categories tree', () => {
     await item(page, 'Drinks').getByRole('button', { name: 'Drinks', exact: true }).click()
     const form = page.getByRole('dialog', { name: 'Edit category' })
     await form.getByText('It has subcategories, so it stays a top-level category.').waitFor()
-    expect(await form.getByRole('button', { name: 'Parent category', exact: true }).isDisabled()).toBe(true)
+    expect(await form.getByRole('combobox', { name: 'Parent category', exact: true }).isDisabled()).toBe(true)
   })
 
   it('a save refused because someone else saved first keeps the input; Reload takes the latest version', async () => {
@@ -267,7 +267,7 @@ describe('category contents and follow-ups', () => {
     await page.keyboard.press('Escape')
 
     await page.getByRole('button', { name: 'New category' }).first().click()
-    await page.getByRole('dialog', { name: 'New category' }).getByRole('button', { name: 'Parent category', exact: true }).click()
+    await page.getByRole('dialog', { name: 'New category' }).getByRole('combobox', { name: 'Parent category', exact: true }).click()
     await page.getByRole('option', { name: 'Drinks' }).waitFor()
     expect(await page.getByRole('option', { name: /Snacks/ }).count()).toBe(0)
   })
@@ -594,7 +594,9 @@ describe('categories on the UI standard (D85)', () => {
     const target = item(page, 'Coffee').getByRole('button', { name: 'Coffee', exact: true })
     const actions = item(page, 'Coffee').getByRole('button', { name: 'Actions for Coffee' })
     expect(await actions.evaluate(el => el.parentElement?.closest('button, a') === null)).toBe(true)
-    expect((await target.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    const area = await stretchedTarget(target)
+    expect(area.height).toBeGreaterThanOrEqual(44)
+    expect(area.reaches).toBe(true)
     await target.click()
     await page.getByRole('dialog', { name: 'Edit category' }).waitFor()
   })

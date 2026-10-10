@@ -3,3 +3,4 @@
 export { default as CategorySelect } from './components/CategorySelect.vue'
 export { useCategoryOptions } from './composables/useCategoryOptions'
 export { categoriesNavigation } from './navigation'
+export { categoriesSearch } from './search'

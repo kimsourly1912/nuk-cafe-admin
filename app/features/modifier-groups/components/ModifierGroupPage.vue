@@ -15,7 +15,7 @@
 import type { Modifier, ModifierGroup } from '#shared/contracts/menu-modifiers'
 import { MAX_MODIFIERS } from '#shared/contracts/menu-modifiers'
 import type { AddOnAction } from './AddOnActions.vue'
-import { activeModifiers, archivedModifiers, useModifierGroup, useModifierGroupMutations } from '../composables/useModifierGroups'
+import { activeModifiers, archiveGroupConfirm, archivedModifiers, useModifierGroup, useModifierGroupMutations } from '../composables/useModifierGroups'
 import { describeRules } from '../schemas/modifier-group-display'
 import type { GroupSettingsForm, SettingsIssues } from '../schemas/modifier-group-form'
 import { archiveAddOnProblem, preselectProblem, settingsIssues, toSettingsChanges, toSettingsForm } from '../schemas/modifier-group-form'
@@ -144,7 +144,7 @@ async function restoreAddOn(modifier: Modifier) {
 
 async function archiveGroup() {
   if (!group.value) return
-  const result = checked(await mutations.archive.execute({ group: group.value }))
+  const result = checked(await mutations.archive.execute({ group: group.value }, { confirm: archiveGroupConfirm(group.value), undo: false }))
   if (result.ok) take(result.data)
 }
 

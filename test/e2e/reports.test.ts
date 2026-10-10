@@ -244,7 +244,7 @@ describe('Reports: Sales by item', () => {
     await page.getByRole('button', { name: 'Paid sales, sorted descending' }).click()
     await expect.poll(() => lastQuery(requests)).toMatchObject({ sort: 'sales', direction: 'asc' })
 
-    await page.getByRole('button', { name: 'Category', exact: true }).click()
+    await page.getByRole('combobox', { name: 'Category', exact: true }).click()
     await page.getByRole('option', { name: 'Coffee' }).click()
     await expect.poll(() => lastQuery(requests).categoryId).toBe('cat-2')
     await expect.poll(() => page.url()).toContain('categoryId=cat-2')

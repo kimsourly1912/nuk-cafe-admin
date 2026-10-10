@@ -34,13 +34,15 @@ const action = computed(() => {
     :aria-label="`Order ${orderNumber(order)}`"
     :aria-busy="busy"
   >
-    <button
-      type="button"
-      class="-m-1 flex w-[calc(100%+0.5rem)] items-start gap-3 rounded-md p-1 text-start focus-visible:outline-2 focus-visible:outline-primary"
-      :aria-label="`Open order ${orderNumber(order)}`"
-      @click="emit('open')"
-    >
-      <span class="text-3xl font-bold tabular-nums text-highlighted">{{ orderNumber(order) }}</span>
+    <!-- The number is the button, stretched over the header (D152): "Open order 042" holds the 042 it shows -->
+    <div class="relative -m-1 flex w-[calc(100%+0.5rem)] items-start gap-3 rounded-md p-1">
+      <button
+        type="button"
+        class="text-start text-3xl font-bold tabular-nums text-highlighted after:absolute after:inset-0 after:rounded-md focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-primary"
+        @click="emit('open')"
+      >
+        <span class="sr-only">Open order </span>{{ orderNumber(order) }}
+      </button>
       <span class="min-w-0 flex-1">
         <span class="flex flex-wrap items-center gap-x-2 text-sm">
           <span class="font-medium text-highlighted">{{ orderTypeText(order) }}</span>
@@ -54,7 +56,7 @@ const action = computed(() => {
         </span>
         <span class="block truncate text-sm text-muted">{{ firstName(order.customer.name) }}</span>
       </span>
-    </button>
+    </div>
 
     <p class="mt-2 truncate text-sm">
       <span class="font-medium text-highlighted">{{ itemCount(order) }}</span>

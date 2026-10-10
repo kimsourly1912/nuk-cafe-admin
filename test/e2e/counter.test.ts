@@ -498,6 +498,39 @@ describe('sold out at the counter (D105)', () => {
     expect(problems).toEqual([])
   })
 
+  it('a switch moves at once, and goes back with the reason when the server refuses (D152)', async () => {
+    const { page, problems } = await cashierAtCounter()
+    await page.goto(url(`/c/nuk/counter/${seed.openBranchId}/sold-out`), { waitUntil: 'hydration' })
+    await page.getByRole('textbox', { name: 'Find an item' }).fill('coconut')
+    const [first] = (await coconut()).variations
+    const name = `Coconut Coffee · ${first!.label}`
+    const row = page.getByRole('listitem', { name, exact: true })
+    const available = row.getByRole('switch', { name: `${name}: available` })
+    await expect.poll(() => available.isChecked()).toBe(true)
+
+    // The server holds its answer, then refuses.
+    let answer!: () => void
+    const held = new Promise<void>((resolve) => {
+      answer = resolve
+    })
+    await page.route('**/api/c/nuk/counter/*/sold-out', async (route) => {
+      if (route.request().method() !== 'PUT') return route.continue()
+      await held
+      await route.fulfill({ status: 500, json: { error: true, statusCode: 500, message: 'Server error', data: { code: 'INTERNAL', message: 'Something went wrong on our side.' } } })
+    })
+    await available.click()
+    // Moved before any answer.
+    await row.getByText('Sold out', { exact: true }).first().waitFor({ timeout: 2000 })
+    expect(await available.isChecked()).toBe(false)
+    answer()
+    await toast(page, `Couldn't mark ${name} sold out`).waitFor()
+    await expect.poll(() => available.isChecked()).toBe(true)
+    expect(await row.getByText('Sold out', { exact: true }).count()).toBe(0)
+    // Nothing changed on the server.
+    expect((await coconut()).variations.find(v => v.id === first!.id)!.soldOut).toBe(false)
+    expect(problems.filter(p => !p.includes('500'))).toEqual([])
+  })
+
   it('on a phone: the category chips scroll, and each row keeps its switch', async () => {
     const { page } = await cashierAtCounter(390)
     await page.goto(url(`/c/nuk/counter/${seed.openBranchId}/sold-out`), { waitUntil: 'hydration' })

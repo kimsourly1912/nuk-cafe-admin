@@ -51,15 +51,23 @@ export function useMutation<TInput, TResult>(
   useMutationIds().value[options.id] = true
   const pendingCount = usePendingMutationCount()
   const toast = useToast()
-  const needsConfirm = Boolean(options.confirm || options.batch?.confirm)
-  const confirm = needsConfirm ? useConfirm() : async () => true
+  // Always: a call can ask even when the mutation doesn't (`execute(input, { confirm })`, D152).
+  const confirm = useConfirm()
 
   const mutation = createMutation(fn, options, {
     state: state.value,
     locks: useMutationLocks().value,
     confirm,
-    success: (title, description) =>
-      toast.add({ title, description, color: 'success', icon: 'i-lucide-circle-check' }),
+    success: (title, description, actions) =>
+      toast.add({
+        title,
+        description,
+        color: 'success',
+        icon: 'i-lucide-circle-check',
+        actions: actions?.map(a => ({ label: a.label, onClick: a.onClick, color: 'neutral', variant: 'outline' })),
+        // Undo (D152) stays long enough to be reached; hovering pauses it.
+        duration: actions?.length ? 10_000 : undefined,
+      }),
     failure: (title, description, actions) =>
       toast.add({
         title,

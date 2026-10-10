@@ -479,7 +479,7 @@ Source: `app/components/StatCard.vue`
 
 A dropdown of the cafe's records (ui.md §14, D126): `USelectMenu` with a search box and virtual scroll. Search matches anywhere in the label; `pinned` values stay first and are never filtered out; no match says "No {noun} match “…”" (a row of its own when pinned rows remain). Attributes (`aria-label`, `placeholder`, `loading`, `disabled`, `multiple`, …) go to the select. Its trigger is a button (`aria-haspopup="listbox"`): in e2e, `getByRole('button', { name, exact: true })`, and wait for the `listbox` to close after picking before typing elsewhere (it hands focus back to its button as it closes).
 
-Source: `app/components/RecordSelect.vue`. Used by `CategorySelect`, `AvailabilityRuleSelect`, and the branch and category filters.
+Source: `app/components/RecordSelect.vue`. Used by `CategorySelect`, `AvailabilityRuleSelect`, and the branch and category filters. Its trigger has `role="combobox"` (D152): find it in tests with `getByRole('combobox', { name })`.
 
 ```vue
 <RecordSelect v-model="filters.branchId" :items="branchItems" noun="branches" :pinned="[ANY]" aria-label="Branch" />

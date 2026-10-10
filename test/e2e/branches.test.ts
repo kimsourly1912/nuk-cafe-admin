@@ -3,7 +3,7 @@ import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { BranchSettings, DiningTable } from '../../shared/contracts/branches'
 import type { MockHandler } from './support/mock-api'
-import { AIRPORT, failures, gotoViaSidebar, MockFailure, mockApi, RIVERSIDE, setupE2e, toast } from './support/mock-api'
+import { AIRPORT, failures, gotoViaSidebar, MockFailure, mockApi, RIVERSIDE, setupE2e, toast, toastAction } from './support/mock-api'
 
 await setupE2e()
 
@@ -272,27 +272,27 @@ describe('dining tables', () => {
     expect(bodies).toEqual([{ version: 1 }])
   })
 
-  it('archives from the menu (asking first) and restores from the card, each from the version read', async () => {
-    const bodies: Record<string, unknown> = {}
+  it('archives from the menu at once with Undo (D152) and restores from the card, each from the version read', async () => {
+    const bodies: Record<string, unknown[]> = { archive: [], restore: [] }
     const { page } = await openTables({
       'POST /admin/branches/{id}/tables/{id}/archive': ({ body }) => {
-        bodies.archive = body
+        bodies.archive!.push(body)
         return { ...T2, status: 'archived', qrUrl: null, version: 2 }
       },
-      'POST /admin/branches/{id}/tables/{id}/restore': ({ body }) => {
-        bodies.restore = body
-        return { ...OLD, status: 'active', qrUrl: T1.qrUrl, version: 3 }
+      'POST /admin/branches/{id}/tables/{id}/restore': ({ body, url }) => {
+        bodies.restore!.push(body)
+        return url.pathname.includes(T2.id) ? { ...T2, version: 3 } : { ...OLD, status: 'active', qrUrl: T1.qrUrl, version: 3 }
       },
     })
     await page.getByRole('button', { name: 'Actions for Patio 01' }).click()
     await page.getByRole('menuitem', { name: 'Archive' }).click()
-    await page.getByText('Its QR code stops working until you restore the table.').waitFor()
-    await page.getByRole('button', { name: 'Archive' }).last().click()
-    await toast(page, 'Table "Patio 01" archived').waitFor()
+    await toast(page, 'its QR code stops working until it\'s restored').waitFor()
+    await toastAction(page, 'Table "Patio 01" archived', 'Undo').click()
+    await toast(page, 'Table "Patio 01" restored').waitFor()
     await page.getByRole('tab', { name: /Archived/ }).click()
     await card(page, 'Old bar').getByRole('button', { name: 'Restore Old bar' }).click()
     await toast(page, 'Table "Old bar" restored').waitFor()
-    expect(bodies).toEqual({ archive: { version: 1 }, restore: { version: 2 } })
+    expect(bodies).toEqual({ archive: [{ version: 1 }], restore: [{ version: 2 }, { version: 2 }] })
   })
 
   it('on phones: cards fit the screen, New table stays in reach', async () => {

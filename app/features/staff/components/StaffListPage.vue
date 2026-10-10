@@ -175,35 +175,35 @@ usePageShortcuts({ n: () => openForm() })
           class="flex items-center gap-1 p-1"
           :class="isBusy(member.id) && 'opacity-50'"
         >
-          <UButton
-            color="neutral"
-            variant="ghost"
-            :aria-label="member.name"
-            :disabled="isBusy(member.id)"
-            class="min-w-0 flex-1 text-left"
-            @click="openForm(member)"
-          >
-            <span class="flex min-w-0 flex-col items-start gap-0.5">
-              <span class="max-w-full break-words font-medium text-highlighted">
-                {{ member.name }}
-                <span
-                  v-if="isSelf(member)"
-                  class="font-normal text-muted"
-                >(you)</span>
-              </span>
-              <span class="max-w-full truncate font-normal text-muted">{{ member.email }}</span>
-              <span class="max-w-full font-normal text-muted">{{ accessLine(member) }}</span>
-              <UBadge
-                v-if="member.mustChangePassword"
-                color="warning"
-                variant="outline"
-                icon="i-lucide-key-round"
-                class="mt-1"
+          <!-- The name is the button, stretched over the row (D152): its name is the text on it -->
+          <div class="relative flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-elevated/50">
+            <span class="max-w-full break-words">
+              <UButton
+                color="neutral"
+                variant="link"
+                :disabled="isBusy(member.id)"
+                class="min-h-6 p-0 text-left font-medium text-highlighted after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-primary"
+                @click="openForm(member)"
               >
-                Temporary password
-              </UBadge>
+                {{ member.name }}
+              </UButton>
+              <span
+                v-if="isSelf(member)"
+                class="text-muted"
+              > (you)</span>
             </span>
-          </UButton>
+            <span class="max-w-full truncate text-muted">{{ member.email }}</span>
+            <span class="max-w-full text-muted">{{ accessLine(member) }}</span>
+            <UBadge
+              v-if="member.mustChangePassword"
+              color="warning"
+              variant="outline"
+              icon="i-lucide-key-round"
+              class="mt-1"
+            >
+              Temporary password
+            </UBadge>
+          </div>
           <UIcon
             v-if="isBusy(member.id)"
             name="i-lucide-loader-circle"
@@ -233,28 +233,28 @@ usePageShortcuts({ n: () => openForm() })
         class="shrink-0"
         :meta="{ class: { tr: row => (isBusy(row.original.id) ? 'opacity-50 pointer-events-none' : '') } }"
       >
-        <!-- The name opens the person: the record's one target, beside (not around) its actions -->
+        <!-- The name opens the person: the record's one target, beside (not around) its actions; the
+             button holds only the name and stretches over the cell (D152) -->
         <template #name-cell="{ row }">
-          <UButton
-            color="neutral"
-            variant="ghost"
-            :aria-label="row.original.name"
-            class="-mx-2.5 -my-1.5 max-w-full text-left"
-            @click="openForm(row.original)"
-          >
-            <span class="flex min-w-0 flex-col">
-              <span class="font-medium text-highlighted">
+          <div class="relative -mx-2.5 -my-1.5 flex max-w-full min-w-0 flex-col rounded-md px-2.5 py-1.5 hover:bg-elevated/50">
+            <span>
+              <UButton
+                color="neutral"
+                variant="link"
+                class="min-h-6 p-0 text-left font-medium text-highlighted after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-md focus-visible:after:ring-2 focus-visible:after:ring-primary"
+                @click="openForm(row.original)"
+              >
                 {{ row.original.name }}
-                <span
-                  v-if="isSelf(row.original)"
-                  class="font-normal text-muted"
-                >(you)</span>
-              </span>
-              <span class="truncate font-normal text-muted">
-                {{ row.original.email }}
-              </span>
+              </UButton>
+              <span
+                v-if="isSelf(row.original)"
+                class="text-muted"
+              > (you)</span>
             </span>
-          </UButton>
+            <span class="truncate text-muted">
+              {{ row.original.email }}
+            </span>
+          </div>
         </template>
 
         <template #access-cell="{ row }">

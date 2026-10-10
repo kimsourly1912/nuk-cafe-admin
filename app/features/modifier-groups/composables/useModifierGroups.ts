@@ -41,6 +41,17 @@ export function useModifierGroupItems(id: string) {
 export const activeModifiers = (group: ModifierGroup) => group.modifiers.filter(m => m.status === 'active')
 export const archivedModifiers = (group: ModifierGroup) => group.modifiers.filter(m => m.status === 'archived')
 
+/** The group's own page asks before archiving; the library offers Undo instead (D152). */
+export function archiveGroupConfirm(group: ModifierGroup): ConfirmOptions {
+  return {
+    title: `Archive “${group.name}”?`,
+    description: group.itemCount
+      ? `${pluralize(group.itemCount, ['menu item offers', 'menu items offer'])} this group and will keep offering it, but it can't be added to other items until restored.`
+      : 'This group can\'t be added to menu items until restored.',
+    confirmLabel: 'Archive group',
+  }
+}
+
 interface GroupChange {
   group: ModifierGroup
 }
@@ -91,13 +102,8 @@ export function useModifierGroupMutations() {
       id: 'modifier-groups:archive',
       key: ({ group }) => groupKey(group.id),
       lock: ({ group }) => groupKey(group.id),
-      confirm: ({ group }) => ({
-        title: `Archive “${group.name}”?`,
-        description: group.itemCount
-          ? `${pluralize(group.itemCount, ['menu item offers', 'menu items offer'])} this group and will keep offering it, but it can't be added to other items until restored.`
-          : 'This group can\'t be added to menu items until restored.',
-        confirmLabel: 'Archive group',
-      }),
+      // Undo instead of asking (D152); the group's own page asks (`archiveGroupConfirm`).
+      undo: ([done]) => void (done && restore.execute({ group: done.data })),
       successMessage: (_, { group }) => `Add-on group "${group.name}" archived`,
       errorMessage: ({ group }) => `Could not archive "${group.name}"`,
       invalidate: AFFECTED,

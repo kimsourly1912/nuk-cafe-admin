@@ -250,7 +250,7 @@ describe('menu items list', () => {
     await page.getByPlaceholder('Search menu items…').fill('lat')
     await expect.poll(() => seen.at(-1)?.get('search')).toBe('lat')
 
-    await page.getByRole('button', { name: 'Category', exact: true }).click()
+    await page.getByRole('combobox', { name: 'Category', exact: true }).click()
     await page.getByRole('option', { name: 'Drinks › Espresso' }).click()
     await expect.poll(() => seen.at(-1)?.get('categoryId')).toBe(ESPRESSO.id)
     await expect.poll(() => new URL(page.url()).searchParams.get('categoryId')).toBe(ESPRESSO.id)
@@ -258,7 +258,7 @@ describe('menu items list', () => {
 
   it('the category filter is searchable: matches anywhere in the path, All categories stays, and no match says so (D126)', async () => {
     const { page } = await open(backend())
-    await page.getByRole('button', { name: 'Category', exact: true }).click()
+    await page.getByRole('combobox', { name: 'Category', exact: true }).click()
     const search = page.getByPlaceholder('Search categories…')
     await search.fill('esp')
     await expect.poll(() => page.getByRole('option').allTextContents()).toEqual(['All categories', 'Drinks › Espresso'])
@@ -381,12 +381,12 @@ describe('menu item form', () => {
     await expect.poll(() => form.locator('img').getAttribute('src')).toBe(UPLOADED.url)
     await form.getByLabel('Name', { exact: true }).fill('Mocha')
     // Only leaves are offered: Drinks has a sub-category.
-    await form.getByRole('button', { name: 'Category', exact: true }).click()
+    await form.getByRole('combobox', { name: 'Category', exact: true }).click()
     await page.getByRole('option', { name: 'Drinks › Espresso' }).waitFor()
     expect(await page.getByRole('option', { name: 'Drinks', exact: true }).count()).toBe(0)
     await chooseOption(page, 'Drinks › Espresso')
     await typePrice(form.getByRole('spinbutton', { name: 'Price' }), '4.2')
-    await form.getByRole('button', { name: 'Availability', exact: true }).click()
+    await form.getByRole('combobox', { name: 'Availability', exact: true }).click()
     await page.getByRole('option', { name: 'Breakfast' }).click()
     await page.keyboard.press('Escape') // close the multi-select list
     await form.getByRole('button', { name: 'Create', exact: true }).click()
@@ -417,7 +417,7 @@ describe('menu item form', () => {
     })
     const form = await openNew(page)
     await form.getByLabel('Name', { exact: true }).fill('Flat white')
-    await form.getByRole('button', { name: 'Category', exact: true }).click()
+    await form.getByRole('combobox', { name: 'Category', exact: true }).click()
     await chooseOption(page, 'Tea')
 
     await addFromMenu(form, 'Add option set', 'Size')
@@ -653,7 +653,7 @@ describe('publishing from the form (D125)', () => {
     })
     const form = await openNew(page)
     await form.getByLabel('Name', { exact: true }).fill('Mocha')
-    await form.getByRole('button', { name: 'Category', exact: true }).click()
+    await form.getByRole('combobox', { name: 'Category', exact: true }).click()
     await chooseOption(page, 'Tea')
     await typePrice(form.getByRole('spinbutton', { name: 'Price' }), '4.2')
     await form.getByRole('button', { name: 'Create and publish' }).click()
@@ -853,7 +853,7 @@ describe('reordering a category\'s items (step 10.3, D118)', () => {
   async function openReorder(page: Page) {
     await page.getByRole('button', { name: 'Reorder' }).click()
     const dialog = page.getByRole('dialog', { name: 'Reorder menu items' })
-    await dialog.getByRole('button', { name: 'Category', exact: true }).click()
+    await dialog.getByRole('combobox', { name: 'Category', exact: true }).click()
     await chooseOption(page, 'Tea')
     await dialog.getByRole('list', { name: 'Menu items in order' }).waitFor()
     return dialog
@@ -960,7 +960,7 @@ describe('the toolbar and Select mode at every width (D129)', () => {
   it('on a phone: search on its own line, Reorder and Select behind ⋯, Cancel in its place while selecting; the bar on two lines', async () => {
     const page = await openAt(390)
     const search = await page.getByRole('searchbox', { name: 'Search menu items…' }).boundingBox()
-    const category = await page.getByRole('button', { name: 'Category', exact: true }).boundingBox()
+    const category = await page.getByRole('combobox', { name: 'Category', exact: true }).boundingBox()
     expect(category!.y).toBeGreaterThan(search!.y + search!.height - 1)
     expect(search!.width).toBeGreaterThan(300)
     expect(await page.getByRole('button', { name: 'Select', exact: true }).count()).toBe(0)

@@ -1,4 +1,4 @@
-import type { BrowserContext, Page, Route } from 'playwright-core'
+import type { BrowserContext, Locator, Page, Route } from 'playwright-core'
 import { getBrowser, setup, url, waitForHydration } from '@nuxt/test-utils/e2e'
 import { afterEach, expect, inject } from 'vitest'
 import type { CafeProfile } from '../../../shared/contracts/cafe'
@@ -335,6 +335,11 @@ export function toast(page: Page, title: string | RegExp) {
   return page.locator('[data-slot="title"]', { hasText: title })
 }
 
+/** A button on the toast with this title ('Undo', 'Retry failed', D152). */
+export function toastAction(page: Page, title: string | RegExp, label: string) {
+  return page.locator('li', { has: toast(page, title) }).getByRole('button', { name: label, exact: true })
+}
+
 /**
  * A category in the Categories tree (`/c/nuk/admin/categories`), by name. The tree loads
  * `GET /admin/menu/categories`; the default handlers answer it with MENU_TEA and MENU_COFFEE.
@@ -354,4 +359,16 @@ export async function openTabs(count: number) {
 export async function gotoHydrated(page: Page, path: string) {
   await page.goto(url(path))
   await waitForHydration(page, url(path), 'hydration')
+}
+
+/**
+ * The click area of a name stretched over its row (D152): the box it covers, and whether a point
+ * near its bottom, away from the name, still lands on the name's button.
+ */
+export async function stretchedTarget(target: Locator) {
+  return target.evaluate((button) => {
+    const area = button.closest('.relative')!.getBoundingClientRect()
+    const hit = document.elementFromPoint(area.left + area.width / 2, area.bottom - 4)
+    return { x: area.x, width: area.width, height: area.height, reaches: hit === button || button.contains(hit) }
+  })
 }

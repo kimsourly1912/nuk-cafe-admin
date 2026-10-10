@@ -3,7 +3,7 @@ import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { MenuItemSummary } from '../../shared/contracts/menu-items'
 import type { MockHandler } from './support/mock-api'
-import { deferred, failures, menuItemOf, menuItemSummaryOf, mockApi, paginatedHandler, setupE2e, toast } from './support/mock-api'
+import { deferred, failures, menuItemOf, menuItemSummaryOf, mockApi, MockFailure, paginatedHandler, setupE2e, toast, toastAction } from './support/mock-api'
 
 // Shared list behaviors on a paginated list (the Menu items grid): a busy item vs a bulk action,
 // Stop, Retry failed, the last-page step-back and selection reset. They used to run on the
@@ -48,8 +48,8 @@ async function selectAll(page: Page) {
 }
 
 async function bulkArchive(page: Page) {
+  // No question first: the summary offers Undo (D152).
   await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Archive selected' }).click()
-  await page.getByRole('alertdialog').or(page.getByRole('dialog')).getByRole('button', { name: 'Archive' }).click()
 }
 
 describe('bulk archive vs an edit in progress', () => {
@@ -165,6 +165,69 @@ describe('bulk publish (D125)', () => {
   })
 })
 
+describe('Undo instead of asking first (D152)', () => {
+  /** Restore answers: what each undo sent. */
+  function restoring(bodies: Record<string, unknown>[], refuse?: string) {
+    return (request: { url: URL, body: unknown }) => {
+      const id = idOf(request)
+      if (id === refuse) throw new MockFailure(409, 'VERSION_CONFLICT', 'This menu item was changed by someone else. Reload it and try again.')
+      bodies.push({ id, ...(request.body as Record<string, unknown>) })
+      return menuItemOf(id, id, { status: 'active' })
+    }
+  }
+
+  it('archives a published item at once; Undo puts it back published, from the version the archive answered', async () => {
+    const live = { ...rowsOf(1)[0]!, status: 'active' as const }
+    const server = backend([live])
+    const bodies: Record<string, unknown>[] = []
+    const { page, api } = await open({
+      'GET /admin/menu/items': server.list,
+      'POST /admin/menu/items/{id}/archive': server.archive(),
+      'POST /admin/menu/items/{id}/restore': restoring(bodies),
+    })
+    await page.getByRole('button', { name: 'Actions for Item 1' }).click()
+    await page.getByRole('menuitem', { name: 'Archive' }).click()
+    expect(await page.getByRole('alertdialog').count()).toBe(0)
+    await toastAction(page, 'Menu item "Item 1" archived', 'Undo').click()
+    await toast(page, 'Menu item "item-1" is back').waitFor()
+    expect(archives(api.calls)).toHaveLength(1)
+    // menuItemOf answers version 1 for the archived item.
+    expect(bodies).toEqual([{ id: 'item-1', version: 1, undo: { status: 'active' } }])
+  })
+
+  it('a bulk archive offers one Undo for all of them, each back in its own status', async () => {
+    const [one, two] = rowsOf(2)
+    const server = backend([{ ...one!, status: 'active' }, two!])
+    const bodies: Record<string, unknown>[] = []
+    const { page } = await open({
+      'GET /admin/menu/items': server.list,
+      'POST /admin/menu/items/{id}/archive': server.archive(),
+      'POST /admin/menu/items/{id}/restore': restoring(bodies),
+    })
+    await selectAll(page)
+    await bulkArchive(page)
+    await toastAction(page, '2 menu items archived', 'Undo').click()
+    await toast(page, '2 menu items back').waitFor()
+    expect(bodies.sort((a, b) => String(a.id).localeCompare(String(b.id)))).toEqual([
+      { id: 'item-1', version: 1, undo: { status: 'active' } },
+      { id: 'item-2', version: 1, undo: { status: 'draft' } },
+    ])
+  })
+
+  it('an Undo refused because someone changed it says the item stays archived', async () => {
+    const server = backend(rowsOf(1))
+    const { page } = await open({
+      'GET /admin/menu/items': server.list,
+      'POST /admin/menu/items/{id}/archive': server.archive(),
+      'POST /admin/menu/items/{id}/restore': restoring([], 'item-1'),
+    })
+    await page.getByRole('button', { name: 'Actions for Item 1' }).click()
+    await page.getByRole('menuitem', { name: 'Archive' }).click()
+    await toastAction(page, 'Menu item "Item 1" archived', 'Undo').click()
+    await toast(page, 'Could not undo: "item-1" stays archived').waitFor()
+  })
+})
+
 describe('list state after archiving and navigation', () => {
   it('archiving the only draft of the last page steps back to the previous page', async () => {
     const server = backend(rowsOf(21))
@@ -175,7 +238,6 @@ describe('list state after archiving and navigation', () => {
 
     await page.getByRole('button', { name: 'Actions for Item 21' }).click()
     await page.getByRole('menuitem', { name: 'Archive' }).click()
-    await page.getByRole('button', { name: 'Archive' }).last().click()
 
     await card(page, 'Item 1').waitFor()
     expect(new URL(page.url()).searchParams.get('page')).toBeNull()

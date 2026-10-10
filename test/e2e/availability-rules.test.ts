@@ -2,7 +2,7 @@ import type { Locator, Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { AvailabilityRule, AvailabilityWindow } from '../../shared/contracts/menu-availability'
-import { failures, MockFailure, mockApi, setupE2e, toast } from './support/mock-api'
+import { failures, MockFailure, mockApi, setupE2e, toast, toastAction } from './support/mock-api'
 
 await setupE2e()
 
@@ -71,7 +71,7 @@ describe('availability rules list', () => {
     await item.getByText('In use by 3 menu items and 1 category').waitFor()
   })
 
-  it('archives an unused rule after confirming, and restores an archived one', async () => {
+  it('archives an unused rule at once with Undo (D152), and restores an archived one', async () => {
     const archived: unknown[] = []
     const restored: unknown[] = []
     const { page, api } = await open(undefined, {
@@ -85,8 +85,8 @@ describe('availability rules list', () => {
       },
     })
     await (await cardAction(page, 'Late night', 'Archive')).click()
-    await page.getByRole('button', { name: 'Archive' }).last().click()
-    await toast(page, 'Rule "Late night" archived').waitFor()
+    await toastAction(page, 'Rule "Late night" archived', 'Undo').waitFor()
+    expect(await page.getByRole('alertdialog').count()).toBe(0)
     expect(archived).toEqual([{ version: 1 }])
 
     await page.getByRole('tab', { name: /Archived/ }).click()

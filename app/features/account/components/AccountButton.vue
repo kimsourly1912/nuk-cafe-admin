@@ -116,7 +116,7 @@ async function signOutNow() {
       color="neutral"
       variant="ghost"
       class="shrink-0 rounded-full p-0.5"
-      :aria-label="`Account: ${account.name}`"
+      :aria-label="`${initials}, account: ${account.name}`"
     >
       <UAvatar
         :text="initials"

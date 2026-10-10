@@ -250,6 +250,29 @@ describe('publishing and archiving', () => {
     expect(restored).toMatchObject({ status: 'draft', sortOrder: 3 })
   })
 
+  it('an undo puts it back where it was, in the status it had (D152)', async () => {
+    const item = await latte()
+    await croissant()
+    const published = await publishItem(db, actor, item.id, { version: 1 })
+    const archived = await archiveItem(db, actor, item.id, { version: published.version })
+    const back = await restoreItem(db, actor, item.id, { version: archived.version, undo: { status: 'active' } })
+    expect(back).toMatchObject({ status: 'active', sortOrder: item.sortOrder })
+    const again = await archiveItem(db, actor, item.id, { version: back.version })
+    expect(await restoreItem(db, actor, item.id, { version: again.version, undo: { status: 'draft' } })).toMatchObject({ status: 'draft', sortOrder: item.sortOrder })
+  })
+
+  it('an undo to published passes Publish\'s checks, and names the version read', async () => {
+    // Its only priced version's option value is archived while the item is: nothing left to sell.
+    const plain = await createItem(db, actor, { categoryId: hot, name: 'Tea', description: '', imageId: null, optionSetIds: [size.id], variations: [{ valueIds: [v(size, 'Small')], priceMinor: 200, status: 'active' }, { valueIds: [v(size, 'Large')], priceMinor: null, status: 'disabled' }], modifierGroups: [], availabilityRuleIds: [] })
+    const live = await publishItem(db, actor, plain.id, { version: plain.version })
+    const archived = await archiveItem(db, actor, plain.id, { version: live.version })
+    await archiveOptionValue(db, actor, size.id, v(size, 'Small'), { version: size.version })
+    await expectApiError(() => restoreItem(db, actor, plain.id, { version: archived.version - 1, undo: { status: 'draft' } }), 409, 'VERSION_CONFLICT')
+    // An undo can't put it back on the menu with nothing to sell.
+    await expectApiError(() => restoreItem(db, actor, plain.id, { version: archived.version, undo: { status: 'active' } }), 422, 'NOTHING_TO_SELL')
+    expect((await getItem(db, TEST_TENANT, plain.id)).status).toBe('archived')
+  })
+
   it('won\'t restore into a category that has since got sub-categories', async () => {
     // A top-level category holding items directly is a leaf too.
     const food = await topLevelWithToast()

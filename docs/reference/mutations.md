@@ -82,6 +82,7 @@ function useMutation<TInput, TResult>(
 | `key` | `(input) => string \| number` | none (single slot) | Identifies the item a call acts on. **Calls with different keys run in parallel.** A call whose key is already in flight resolves to `skipped` (no double submit). Without `key`, only one call runs at a time. Any string works as a key, including `constructor` or `__proto__` (state records have no prototype). |
 | `lock` | `(input) => string \| number` | none | **Record lock shared across mutations**: calls whose lock is held by *any* mutation are skipped with reason `locked` and an explaining toast. Give conflicting operations on one record the same lock (Categories: `category:<id>` on update and remove). Checked and reserved when the request starts (after confirmation, per batch item). Omit when calls can't conflict (create). |
 | `confirm` | `ConfirmOptions \| (input) => ConfirmOptions` | none | Ask before running. See [`useConfirm`](./ui-helpers.md#useconfirm). The dialog closes as soon as the user answers. |
+| `undo` | `(done: { input, data }[]) => void` | none | **Instead of asking** (D152): the call runs at once and its success toast offers **Undo** (10 s, paused while hovered); a batch's summary offers one Undo for every success, beside Retry failed. The function reverses what succeeded, usually through the feature's restore mutation from the version the action answered. Only where the reverse puts everything back the same (archive, unpublish); deletes, money and people keep `confirm`. |
 | `successMessage` | `string \| (data, input) => string \| false` | none | Success toast title. **No toast unless you set it.** Name the item: `` `Category "${c.name}" deleted` ``. A function returning `false` skips the toast for that call (a save followed by a publish that toasts instead, D125). |
 | `errorMessage` | `string \| (input) => string` | `'Something went wrong'` | Error toast **title**. The description is always the error's user-safe `message`. |
 | `invalidate` | `string[]` | none | Features whose cached data refreshes after success, e.g. `['categories', 'products']`. See [`invalidate`](./data-fetching.md#invalidate). |
@@ -125,6 +126,7 @@ All of these are shared by `id`. A list row and a modal using the same mutation 
 execute(input: TInput, overrides?: {
   confirm?: ConfirmOptions | false                               // override or skip the confirmation
   errorActions?: (error: ApiError, input: TInput) => ToastAction[] // extra buttons on the error toast
+  undo?: false                                                   // no Undo on this call's toast (inside a modal: ask with `confirm` instead, D152)
 }): Promise<MutationResult<TResult>>
 ```
 

@@ -8,6 +8,9 @@ import type { SoldOutRow } from '../utils/sold-out'
  * item and version it lists, each marked sold out or not, `GET /api/public/menu`), and who switched
  * each one off and when (`GET /api/counter/{branchId}/sold-out`). The switch sets a state (D64):
  * two people at once, or a retry, end in the state asked for, so it needs no version.
+ *
+ * A switch moves at once (D152): `toggle` shows the state asked for until the server answers, then
+ * takes the server's list from the answer; a refusal puts the switch back and says why (a toast).
  */
 export function useSoldOut(branchId: MaybeRefOrGetter<string>) {
   const menu = useApiQuery(
@@ -20,7 +23,14 @@ export function useSoldOut(branchId: MaybeRefOrGetter<string>) {
     () => apiFetch<SoldOutList>(`/counter/${encodeURIComponent(toValue(branchId))}/sold-out`),
     { server: false },
   )
-  const rows = computed<SoldOutRow[] | null>(() => (menu.data.value ? soldOutRows(menu.data.value, list.data.value ?? null) : null))
+  /** Asked for and not answered yet, by version: shown at once. */
+  const asked = ref<Record<string, boolean>>({})
+  const rows = computed<SoldOutRow[] | null>(() => {
+    if (!menu.data.value) return null
+    return soldOutRows(menu.data.value, list.data.value ?? null).map(row => (row.variationId in asked.value
+      ? { ...row, soldOut: asked.value[row.variationId]!, since: asked.value[row.variationId] ? row.since : null, by: asked.value[row.variationId] ? row.by : null }
+      : row))
+  })
 
   const set = useMutation(
     (input: { row: SoldOutRow, soldOut: boolean }) => apiFetch<SoldOutList>(`/counter/${encodeURIComponent(toValue(branchId))}/sold-out`, {
@@ -38,5 +48,12 @@ export function useSoldOut(branchId: MaybeRefOrGetter<string>) {
     },
   )
 
-  return { menu, list, rows, set, error: computed(() => menu.error.value ?? list.error.value), refresh: () => Promise.all([menu.refresh(), list.refresh()]) }
+  async function toggle(row: SoldOutRow, soldOut: boolean) {
+    asked.value = { ...asked.value, [row.variationId]: soldOut }
+    const result = await set.execute({ row, soldOut })
+    if (result.ok) list.data.value = result.data
+    asked.value = Object.fromEntries(Object.entries(asked.value).filter(([id]) => id !== row.variationId))
+  }
+
+  return { menu, list, rows, set, toggle, error: computed(() => menu.error.value ?? list.error.value), refresh: () => Promise.all([menu.refresh(), list.refresh()]) }
 }
