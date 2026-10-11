@@ -31,3 +31,4 @@ Click a promotion's name. It shows the **Results** (orders paid at its price, it
 - **Publish**: a draft.
 - **End now** (⋮ menu): stops a live or scheduled promotion; prices go back at once. An ended promotion can't be restarted: use **Run again** for a new one with the same settings.
 - **Delete draft** (⋮ menu): only drafts; customers never saw them.
+- **Post to channels** (in **Posts**): post it to the cafe's Telegram channel now or at a time, with the poster and an **Order now** button. See the Channels page of this guide.

@@ -4,6 +4,7 @@ import { branchesNavigation } from '~/features/branches'
 import { cafeNavigation } from '~/features/cafe'
 import { categoriesNavigation } from '~/features/categories'
 import { exchangeRatesNavigation } from '~/features/exchange-rates'
+import { marketingNavigation } from '~/features/marketing'
 import { modifierGroupsNavigation } from '~/features/modifier-groups'
 import { notificationsNavigation } from '~/features/notifications'
 import { optionSetsNavigation } from '~/features/option-sets'
@@ -34,6 +35,7 @@ export function navigationItems(options: { sampleData: boolean }): NavigationMen
     [
       { label: 'Marketing', type: 'label' },
       promotionsNavigation,
+      marketingNavigation,
     ],
     [
       { label: 'Reports', type: 'label' },

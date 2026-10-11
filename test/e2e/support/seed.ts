@@ -47,7 +47,7 @@ export interface ShopSeed {
    * Another cafe (D141), `/c/brown-bean`: one branch open around the clock, one item and a table,
    * for the tests that check each cafe's address shows only its own.
    */
-  secondCafe: { slug: string, name: string, branchId: string, itemName: string, tableToken: string }
+  secondCafe: { slug: string, name: string, branchId: string, itemName: string, tableToken: string, promotionId: string }
 }
 
 export interface SeedCustomer {
@@ -114,9 +114,9 @@ async function seedSecondCafe(db: Db, qr: { secret: string, baseUrl: string }): 
   await publishItem(db, actor, draft.id, { version: draft.version })
   // A promotion running all year on its whole menu (M1, D163): $3.00 → $2.40 for the customer's
   // promotion tests; Brown Bean's other tests read prices from the quote, never write them down.
-  await createPromotion(db, actor, { name: 'Bean week', description: 'Every drink 20% off.', discount: { kind: 'percent', percent: 20 }, scope: 'menu', itemIds: [], categoryIds: [], branchIds: [], startsOn: '2026-01-01', endsOn: null, posterId: null, publish: true })
+  const promotion = await createPromotion(db, actor, { name: 'Bean week', description: 'Every drink 20% off.', discount: { kind: 'percent', percent: 20 }, scope: 'menu', itemIds: [], categoryIds: [], branchIds: [], startsOn: '2026-01-01', endsOn: null, posterId: null, publish: true })
   const table = await createTable(db, actor, branchId, { label: 'B1', area: null }, qr)
-  return { slug: cafe.slug, name: cafe.name, branchId, itemName, tableToken: tokenOf(table.qrUrl) }
+  return { slug: cafe.slug, name: cafe.name, branchId, itemName, tableToken: tokenOf(table.qrUrl), promotionId: promotion.id }
 }
 
 const tokenOf = (qrUrl: string | null) => qrUrl!.split('/').pop()!

@@ -27,6 +27,7 @@ import { ActiveOrdersBar } from '~/features/orders'
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
 import { usePublicMenu, useCart, useShopBranch, useTableContext } from '../composables/useShopMenu'
 import { useScrollSpy } from '../composables/useScrollSpy'
+import { useOrderSource } from '../composables/useOrderSource'
 import { lineKey, quantityOfItem, resolveCart } from '../utils/cart'
 import { menuItems, menuSections, searchMenu } from '../utils/menu'
 import { openingText } from '../utils/opening'
@@ -173,6 +174,25 @@ watch([settled, menu, () => menuQuery.pending.value], ([ready, current, pending]
   if (item) openItem(item)
   else toast.add({ title: 'This item isn\'t on the menu right now', description: 'It may be a draft, archived, or outside its available hours.', color: 'warning', icon: 'i-lucide-circle-alert' })
 })
+// --- A channel post's link (`?promo=<id>&src=telegram`, M2a, D164) ---
+// The source is remembered for the order placed next (24 hours); the offer opens once the menu has
+// loaded. Both leave the address, so a reload or a shared link doesn't count or open them again.
+const offersPanel = ref<InstanceType<typeof MenuOffers>>()
+const orderSource = useOrderSource()
+let promoHandled = false
+watch([settled, menu, () => menuQuery.pending.value], async ([ready, current, pending]) => {
+  if (promoHandled || !ready || !current || pending) return
+  const promo = typeof route.query.promo === 'string' ? route.query.promo : undefined
+  const src = route.query.src
+  if (!promo && src === undefined) return
+  promoHandled = true
+  orderSource.remember(src)
+  void router.replace({ query: { ...route.query, promo: undefined, src: undefined } })
+  if (!promo) return
+  await nextTick()
+  if (!offersPanel.value?.showById(promo)) toast.add({ title: 'This offer isn\'t on right now', description: 'It may have ended. Here is the menu.', color: 'warning', icon: 'i-lucide-circle-alert' })
+})
+
 // Closing the item leaves its address, so a reload shows the menu.
 watch(detailOpen, (open) => {
   if (!open && linkedItemId()) void router.replace({ query: { ...route.query, item: undefined } })
@@ -416,6 +436,7 @@ watch(detailOpen, (open) => {
         <template v-else-if="menu">
           <MenuOffers
             v-if="offers.length"
+            ref="offersPanel"
             :promotions="offers"
             :items="itemsById"
             @open-item="openItem"

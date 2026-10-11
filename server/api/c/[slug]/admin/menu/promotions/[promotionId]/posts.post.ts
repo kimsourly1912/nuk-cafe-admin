@@ -7,8 +7,8 @@ import { createPosts, deliverDuePosts, listPosts } from '#server/features/market
  * with `at`, the scheduled task sends them then (M2a, D164).
  */
 export default defineEventHandler(async (event) => {
-  const { api } = requireTelegram(event)
   const actor = await requirePermission(event, { menu: ['write'] })
+  const { api } = requireTelegram(event)
   const promotionId = readIdParam(event, 'promotionId', 'This promotion')
   const key = readIdempotencyKey(event)
   const input = await readValidBody(event, createPostsSchema)
