@@ -160,6 +160,8 @@ export const itemListQuerySchema = v.object({
   categoryId: optionalParam(idSchema),
   /** Items that offer this add-on group (the Add-ons page's "Used by" list). */
   modifierGroupId: optionalParam(idSchema),
+  /** `missing`: only items without a photo (D160). */
+  photo: optionalParam(v.picklist(['missing'])),
   /** Default: everything but archived. */
   status: optionalParam(v.picklist([...ITEM_STATUSES, 'all'])),
 })

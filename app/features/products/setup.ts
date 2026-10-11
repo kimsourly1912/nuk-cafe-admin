@@ -13,3 +13,22 @@ export const menuItemsSetup: AdminSetupStep = {
     return page.total > 0
   },
 }
+
+/**
+ * Photos on the menu (D160): done once every published item has one. Optional: a cafe takes orders
+ * without photos, but customers choose items with one more often.
+ */
+export const menuPhotosSetup: AdminSetupStep = {
+  id: 'menu-photos',
+  label: 'Add a photo to each published item',
+  description: 'Customers choose items with a photo more often.',
+  page: '/admin/products?status=active&photo=missing',
+  optional: true,
+  async check() {
+    const [published, missing] = await Promise.all([
+      apiFetch<Page<MenuItemSummary>>('/admin/menu/items', { query: { status: 'active', pageSize: 1 } }),
+      apiFetch<Page<MenuItemSummary>>('/admin/menu/items', { query: { status: 'active', photo: 'missing', pageSize: 1 } }),
+    ])
+    return published.total > 0 && missing.total === 0
+  },
+}

@@ -24,6 +24,8 @@ const props = defineProps<{
   draft?: ItemForm
   /** Duplicate (D154): a new item filled from this one. */
   copyOf?: string
+  /** Menu items' "No photo" filter (D160): Save says it opens the next item (the list does that). */
+  saveAndNext?: boolean
 }>()
 
 // `update:open` is declared so closing (X, Esc, outside click) goes through `unsaved` instead of
@@ -40,14 +42,18 @@ const editor = useItemEditor({
   onReloaded: saved => unsaved.markClean(saved),
   reopen: (item, draft) => overlay.create(ProductFormSlideover, { destroyOnClose: true }).open({ item, draft }),
 })
-const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError, conflict, reloading, reloaded } = editor
+const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, photoPending, photoWait, lastError, conflict, reloading, reloaded } = editor
 
 const unsaved = useModalUnsavedChanges(state, {
   initial: editor.initial,
   paused: saving,
+  pending: photoPending,
   draft: editor.keptDraft,
   close: () => emit('close', false),
 })
+
+/** Save, Create, or Save and next (D160). */
+const saveLabel = computed(() => (!isEdit ? 'Create' : props.saveAndNext ? 'Save and next' : 'Save'))
 
 const fields = useTemplateRef('fields')
 /** Which button submitted the form: "Save and publish" sets it (D125); Save and Ctrl/⌘+Enter clear it. */
@@ -98,6 +104,7 @@ async function onSubmit() {
         <ProductFormFields
           ref="fields"
           v-model:uploading="uploading"
+          v-model:photo-pending="photoPending"
           :state="state"
           form-id="product-form"
           :disabled="saving || archived"
@@ -116,7 +123,7 @@ async function onSubmit() {
     <template #footer>
       <div class="flex w-full items-center justify-end gap-2">
         <div
-          v-if="loaded && !saving && !uploading"
+          v-if="loaded && !saving && !photoPending"
           class="mr-auto"
         >
           <ViewOnMenuButton
@@ -125,10 +132,10 @@ async function onSubmit() {
           />
         </div>
         <span
-          v-else-if="saving || uploading"
+          v-else-if="saving || photoPending"
           class="mr-auto text-xs text-muted"
         >
-          {{ uploading ? 'Waiting for the photo upload…' : 'You can close this; saving continues in the background.' }}
+          {{ photoWait || 'You can close this; saving continues in the background.' }}
         </span>
         <UButton
           :label="saving || archived ? 'Close' : 'Cancel'"
@@ -142,20 +149,20 @@ async function onSubmit() {
           color="neutral"
           variant="outline"
           :loading="saving && publishNext"
-          :disabled="uploading || !ready || saving"
+          :disabled="photoPending || !ready || saving"
           @click="submit(true)"
         />
         <UTooltip
           v-if="!archived"
-          :text="isEdit ? 'Save' : 'Create'"
+          :text="saveLabel"
           :kbds="['meta', 'enter']"
         >
           <UButton
             type="submit"
             form="product-form"
-            :label="isEdit ? 'Save' : 'Create'"
+            :label="saveLabel"
             :loading="saving && !publishNext"
-            :disabled="uploading || !ready || (saving && publishNext)"
+            :disabled="photoPending || !ready || (saving && publishNext)"
             @click="publishNext = false"
           />
         </UTooltip>

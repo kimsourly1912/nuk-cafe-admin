@@ -301,6 +301,17 @@ describe('listing and ordering', () => {
     await expectApiError(() => reorderItems(db, actor, { categoryId: hot, items: [{ id: a.id, version: a.version }] }), 409, 'VERSION_CONFLICT')
   })
 
+  it('lists only the items without a photo, with the other filters (D160)', async () => {
+    const pictured = await latte({ imageId: await upload() })
+    await croissant()
+    const names = async (query: Partial<Parameters<typeof listItems>[2]>) => (await listItems(db, TEST_TENANT, { page: 1, pageSize: 20, ...query })).items.map(i => i.name)
+    expect(await names({ photo: 'missing' })).toEqual(['Croissant'])
+    expect(await names({ photo: 'missing', search: 'lat' })).toEqual([])
+    await updateItem(db, actor, pictured.id, { version: pictured.version, imageId: null })
+    expect(await names({ photo: 'missing' })).toEqual(['Latte', 'Croissant'])
+    expect((await listItems(db, TEST_TENANT, { page: 1, pageSize: 1, photo: 'missing' })).total).toBe(2)
+  })
+
   it('counts the items that use an option set', async () => {
     await latte()
     expect((await getOptionSet(db, TEST_TENANT, size.id)).itemCount).toBe(1)

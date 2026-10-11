@@ -37,6 +37,8 @@ const props = withDefaults(defineProps<{
 const state = defineModel<ItemForm>('state', { required: true })
 /** True while the photo uploads: the form waits for it before saving (D158). */
 const uploading = defineModel<boolean>('uploading', { default: false })
+/** A photo uploading or failed to upload: unsaved, though not in `state` yet (D160). */
+const photoPending = defineModel<boolean>('photoPending', { default: false })
 const emit = defineEmits<{ submit: [], invalid: [section: ItemFormSection], reload: [] }>()
 
 const reloadedText = computed(() => {
@@ -137,6 +139,7 @@ defineExpose({ submit: () => form.value?.submit(), setServerErrors })
           v-model:image-url="state.imageUrl"
           v-model:image-id="state.imageId"
           v-model:uploading="uploading"
+          v-model:pending="photoPending"
           :name="state.name"
           :disabled="disabled"
         />

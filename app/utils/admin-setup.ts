@@ -2,7 +2,7 @@ import { branchesSetup } from '~/features/branches'
 import { cafeSetup } from '~/features/cafe'
 import { khqrSetup, rielRateSetup } from '~/features/exchange-rates'
 import { telegramSetup } from '~/features/notifications'
-import { menuItemsSetup } from '~/features/products'
+import { menuItemsSetup, menuPhotosSetup } from '~/features/products'
 import { staffSetup } from '~/features/staff'
 import type { AdminSetupStep } from '~/types/admin-setup'
 
@@ -11,5 +11,5 @@ import type { AdminSetupStep } from '~/types/admin-setup'
  * exports its own step from its index.ts; this file only decides which and in what order.
  */
 export function adminSetupSteps(): AdminSetupStep[] {
-  return [branchesSetup, menuItemsSetup, rielRateSetup, khqrSetup, telegramSetup, staffSetup, cafeSetup]
+  return [branchesSetup, menuItemsSetup, rielRateSetup, khqrSetup, menuPhotosSetup, telegramSetup, staffSetup, cafeSetup]
 }

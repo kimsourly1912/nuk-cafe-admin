@@ -60,6 +60,7 @@ Every case below is handled. **Keep this table and the tests in sync when changi
 | 11 | Reopened draft (after a failed background save) | Unsaved at once (compared to the original record) | `initial: toXForm(record)` | Not in e2e |
 | 12 | Typed then undone; `''` vs `undefined`; `[]` vs missing | Not unsaved | `isSameFormValue` | unit + e2e |
 | 13 | List refetches while an edit form is open (invalidate, tab focus) | Input untouched; baseline unchanged | The form keeps its own copy (`reactive({...})`), the baseline is a snapshot | By design |
+| 14 | Input not in the values yet: a menu item's photo uploading or failed to upload (D160) | Unsaved: closing or leaving asks; Save waits for the photo (or its Cancel) | `pending: photoPending` | e2e (`products.test.ts`, checked to fail without it) |
 | 14 | Several forms (modal over a page form); back pressed twice | **One** dialog; Discard discards all | One registry, one in-flight `confirmLeave` promise | e2e (double back) |
 | 15 | Esc / outside click on the discard dialog itself | Nothing (it's "Keep editing" only by button). Never discards by accident | `ConfirmDialog` is `dismissible: false` | By design |
 | 16 | Successful save then redirect (page forms) | No dialog | Call `markClean()` before `navigateTo` | e2e (`products.test.ts`: the Menu item page saves and returns to the list, D90) |
@@ -99,6 +100,7 @@ function useUnsavedChanges<T extends object>(
 interface UnsavedChangesOptions<T> {
   initial?: T                          // what counts as saved; default: `state` when called
   paused?: MaybeRefOrGetter<boolean>   // treat as saved while true (e.g. while saving)
+  pending?: MaybeRefOrGetter<boolean>  // unsaved while true, whatever the values: input not in them yet (a photo uploading or failed, D160)
   onDiscard?: () => void               // user discarded from outside the form (route change, logout)
   draft?: UnsavedDraftOptions          // keep the input in this browser (long forms only, D151)
 }
@@ -108,7 +110,7 @@ interface UnsavedChangesOptions<T> {
 
 | Field | Meaning |
 |---|---|
-| `isDirty` | `true` while the values differ from the baseline (and not `paused`) |
+| `isDirty` | `true` while the values differ from the baseline or `pending` is true (and not `paused`) |
 | `markClean(saved?)` | Makes the current values (or `saved`) the new baseline. Call it after a save when the form stays open, or **before redirecting away after a save**; with `saved` after Reload took a newer version (D153) |
 | `markSaved()` | `markClean()` and the kept draft removed. A form with `draft` calls it after a successful save |
 | `draft` | The offered draft, for `<FormDraftAlert>` (inert without the `draft` option) |

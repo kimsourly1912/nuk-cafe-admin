@@ -80,6 +80,13 @@ export function useItemEditor(options: ItemEditorOptions) {
   const canPublish = computed(() => !archived.value && (!isEdit || loaded.value?.status === 'draft'))
   const saving = ref(false)
   const uploading = ref(false)
+  /** A photo uploading or failed to upload: unsaved until it's in the form, and Save waits (D160). */
+  const photoPending = ref(false)
+  /** Why Save waits for the photo, beside the Save button; empty when it doesn't. */
+  const photoWait = computed(() => {
+    if (uploading.value) return 'Waiting for the photo upload…'
+    return photoPending.value ? 'The photo didn\'t upload: Try again, or Cancel it, before saving.' : ''
+  })
   /** The last refused save, shown inside the editor. */
   const lastError = ref<string>()
   /** Someone else saved since this version was read: Save is refused until `reload()`. */
@@ -120,7 +127,7 @@ export function useItemEditor(options: ItemEditorOptions) {
    */
   async function save(options: { publish?: boolean } = {}): Promise<{ ok: true } | { ok: false, error?: ApiError }> {
     const publishing = Boolean(options.publish && canPublish.value)
-    if (uploading.value || archived.value) return { ok: false }
+    if (photoPending.value || archived.value) return { ok: false }
     const input = cloneFormValue(state)
     const overrides = { errorActions: () => (closed ? [{ label: 'Reopen', onClick: () => reopen(loaded.value, input) }] : []) }
 
@@ -192,5 +199,5 @@ export function useItemEditor(options: ItemEditorOptions) {
     version: () => loaded.value?.version,
   }
 
-  return { isEdit, itemQuery, loaded, copiedFrom, summary, ready, archived, canPublish, initial, state, saving, uploading, lastError, conflict, reloading, reloaded, reload, keptDraft, save }
+  return { isEdit, itemQuery, loaded, copiedFrom, summary, ready, archived, canPublish, initial, state, saving, uploading, photoPending, photoWait, lastError, conflict, reloading, reloaded, reload, keptDraft, save }
 }
