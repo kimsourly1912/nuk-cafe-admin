@@ -18,6 +18,7 @@ import {
   menuOptionValues,
   menuVariationOptionValues,
 } from './menu.schema'
+import { deleteAllPromotionsStatements } from './promotions.repository'
 
 /** The tenant's menu records, archived ones included, by kind. */
 export interface MenuDataCounts {
@@ -53,6 +54,8 @@ export async function countMenuData(db: Db, tenantId: string): Promise<MenuDataC
  */
 export function deleteAllMenuStatements(db: Db, tenantId: string): Statement[] {
   return [
+    // Promotions first: their links point at items and categories (M1, D163).
+    ...deleteAllPromotionsStatements(db, tenantId),
     db.delete(branchItemStates).where(eq(branchItemStates.tenantId, tenantId)),
     db.delete(menuItemAvailability).where(eq(menuItemAvailability.tenantId, tenantId)),
     db.delete(menuCategoryAvailability).where(eq(menuCategoryAvailability.tenantId, tenantId)),

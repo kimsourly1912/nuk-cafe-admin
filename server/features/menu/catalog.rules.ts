@@ -28,7 +28,7 @@ export interface CatalogItem {
   /** The item's option sets in grid order, with their active values in order. */
   optionSets: { id: string, name: string, values: { id: string, name: string }[] }[]
   /** Sellable versions only (active, priced, no archived value), in grid order. */
-  variations: Omit<PublicMenuVariation, 'soldOut'>[]
+  variations: Omit<PublicMenuVariation, 'soldOut' | 'regularPriceMinor' | 'promotion'>[]
   /** Active groups, with active add-ons and the rules and prices that apply on this item. */
   modifierGroups: PublicMenuModifierGroup[]
 }
@@ -52,7 +52,7 @@ const NEVER: RuleForCheck = { status: 'archived', windows: [] }
  */
 function itemAt(item: CatalogItem, levels: string[][], rules: Catalog['rules'], at: LocalTime, soldOut: ReadonlySet<string>): PublicMenuItem | null {
   if (!isAvailableAt(levels.map(ids => ids.map(id => rules[id] ?? NEVER)), at)) return null
-  const variations = item.variations.map(v => ({ ...v, soldOut: soldOut.has(v.id) }))
+  const variations = item.variations.map(v => ({ ...v, soldOut: soldOut.has(v.id), regularPriceMinor: null, promotion: null }))
   return {
     id: item.id,
     name: item.name,
@@ -64,6 +64,7 @@ function itemAt(item: CatalogItem, levels: string[][], rules: Catalog['rules'], 
     variations,
     soldOut: variations.every(v => v.soldOut),
     modifierGroups: item.modifierGroups,
+    promotion: null,
   }
 }
 

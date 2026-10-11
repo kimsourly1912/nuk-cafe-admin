@@ -14,3 +14,5 @@ export { getPublicMenu } from './catalog.service'
 // Test data only (the sample-data feature, D94): every menu record, counted and deleted.
 export { countMenuData, deleteAllMenuStatements } from './reset.repository'
 export type { MenuDataCounts } from './reset.repository'
+export { createPromotion, deletePromotion, endPromotion, getPromotion, listPromotions, publishPromotion, updatePromotion } from './promotions.service'
+export { PromotionErrorCodes } from './promotions.errors'

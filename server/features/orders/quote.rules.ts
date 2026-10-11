@@ -1,5 +1,5 @@
 import type { CheckoutQuote, OrderLineInput, QuoteLine, QuoteLineProblem } from '#shared/contracts/orders'
-import { LAST_ORDERS_MINUTES, QUOTE_TTL_MINUTES } from '#shared/contracts/orders'
+import { LAST_ORDERS_MINUTES, QUOTE_TTL_MINUTES, savingsOf } from '#shared/contracts/orders'
 import type { PublicMenu, PublicMenuItem } from '#shared/contracts/public-menu'
 
 /**
@@ -39,7 +39,7 @@ function choiceProblem(item: PublicMenuItem, modifierIds: string[]): QuoteLinePr
 export function quoteLine(items: ReadonlyMap<string, PublicMenuItem>, line: OrderLineInput): QuoteLine {
   const base = { itemId: line.itemId, variationId: line.variationId, modifierIds: line.modifierIds, quantity: line.quantity, note: line.note }
   const unpriced = (problem: QuoteLineProblem, item?: PublicMenuItem, detail = '', modifiers: QuoteLine['modifiers'] = []): QuoteLine =>
-    ({ ...base, name: item?.name ?? null, detail, modifiers, imageUrl: item?.imageUrl ?? null, unitPriceMinor: null, totalMinor: null, problem })
+    ({ ...base, name: item?.name ?? null, detail, modifiers, imageUrl: item?.imageUrl ?? null, unitPriceMinor: null, regularUnitPriceMinor: null, promotion: null, totalMinor: null, problem })
 
   const item = items.get(line.itemId)
   if (!item) return unpriced({ code: 'ITEM_UNAVAILABLE', message: 'This item isn\'t on the menu right now.' })
@@ -54,8 +54,11 @@ export function quoteLine(items: ReadonlyMap<string, PublicMenuItem>, line: Orde
   if (problem) return unpriced(problem, item, detail, chosen)
   if (version.soldOut) return unpriced({ code: 'SOLD_OUT', message: 'Sold out.' }, item, detail, chosen)
 
-  const unitPriceMinor = version.priceMinor + chosen.reduce((sum, m) => sum + m.priceDeltaMinor, 0)
-  return { ...base, name: item.name, detail, modifiers: chosen, imageUrl: item.imageUrl, unitPriceMinor, totalMinor: unitPriceMinor * line.quantity, problem: null }
+  // The version's price is after its promotion, if any (M1, D163); add-ons keep their price.
+  const addOnsMinor = chosen.reduce((sum, m) => sum + m.priceDeltaMinor, 0)
+  const unitPriceMinor = version.priceMinor + addOnsMinor
+  const regularUnitPriceMinor = version.regularPriceMinor === null ? null : version.regularPriceMinor + addOnsMinor
+  return { ...base, name: item.name, detail, modifiers: chosen, imageUrl: item.imageUrl, unitPriceMinor, regularUnitPriceMinor, promotion: version.promotion, totalMinor: unitPriceMinor * line.quantity, problem: null }
 }
 
 /**
@@ -84,6 +87,7 @@ export function quoteOrder(menu: PublicMenu, lines: OrderLineInput[]): CheckoutQ
     lines: quoted,
     subtotalMinor,
     totalMinor: subtotalMinor,
+    savingsMinor: savingsOf(quoted),
     problems,
     orderable: !problems.length && quoted.every(line => !line.problem),
   }

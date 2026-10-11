@@ -55,6 +55,14 @@ const noteOpen = ref(Boolean(props.line.note))
             >
               {{ quoted.detail }}
             </p>
+            <UBadge
+              v-if="quoted?.promotion"
+              :label="`${quoted.promotion.label} · ${quoted.promotion.name}`"
+              color="error"
+              variant="subtle"
+              size="sm"
+              class="mt-1"
+            />
           </div>
           <div
             v-if="quoted && quoted.totalMinor !== null"
@@ -63,6 +71,10 @@ const noteOpen = ref(Boolean(props.line.note))
             <p class="font-medium text-highlighted">
               {{ formatMinor(quoted.totalMinor) }}
             </p>
+            <s
+              v-if="quoted.regularUnitPriceMinor !== null"
+              class="block text-xs text-muted"
+            ><span class="sr-only">was </span>{{ formatMinor(quoted.regularUnitPriceMinor * line.quantity) }}</s>
             <p
               v-if="line.quantity > 1 || previousUnitPriceMinor !== undefined"
               class="text-xs text-muted"

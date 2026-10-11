@@ -44,11 +44,12 @@ export const menuItems = (sections: MenuSection[]) =>
 export const hasChoices = (item: PublicMenuItem) => item.variations.length > 1 || item.modifierGroups.length > 0
 
 /** The lowest price among what can be ordered (every version when all are sold out), and whether others cost more. */
-export function priceOf(item: PublicMenuItem): { minor: number, from: boolean } {
+export function priceOf(item: PublicMenuItem): { minor: number, from: boolean, regularMinor: number | null } {
   const orderable = item.variations.filter(v => !v.soldOut)
-  const prices = (orderable.length ? orderable : item.variations).map(v => v.priceMinor)
-  const minor = Math.min(...prices)
-  return { minor, from: prices.some(price => price !== minor) }
+  const versions = orderable.length ? orderable : item.variations
+  const cheapest = versions.reduce((min, v) => (v.priceMinor < min.priceMinor ? v : min))
+  // A promotion's lower price shows with the price before it, struck through (M1, D163).
+  return { minor: cheapest.priceMinor, from: versions.some(v => v.priceMinor !== cheapest.priceMinor), regularMinor: cheapest.regularPriceMinor }
 }
 
 // --- Search ---

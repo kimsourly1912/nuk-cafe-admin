@@ -22,7 +22,7 @@
  * in the release check on staging, 10.5).
  */
 import type { CounterOrder, ExchangeRate, KhqrCharge, KhqrCheck, KhqrCurrency, OrderStatus, PaymentMethod, PayOrderInput } from '#shared/contracts/orders'
-import { toRiel } from '#shared/contracts/orders'
+import { savingsOf, toRiel } from '#shared/contracts/orders'
 import { useCounterActions } from '../composables/useCounterActions'
 import type { Change, CommandFailure } from '../utils/counter'
 import { khqrAmountText, khqrReceivedText } from '../utils/khqr'
@@ -264,6 +264,7 @@ const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
                 >
                   {{ line.detail }}
                 </p>
+                <OrderLinePromotion :line="line" />
                 <p
                   v-if="line.note"
                   class="text-sm text-warning"
@@ -278,6 +279,12 @@ const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
             <span class="font-semibold text-highlighted">Total</span>
             <span class="text-xl font-semibold text-highlighted">{{ formatMinor(order.totalMinor) }}</span>
           </div>
+          <p
+            v-if="savingsOf(order.lines)"
+            class="-mt-2 text-end text-sm text-muted"
+          >
+            Includes {{ formatMinor(savingsOf(order.lines)) }} off from promotions
+          </p>
         </section>
 
         <section

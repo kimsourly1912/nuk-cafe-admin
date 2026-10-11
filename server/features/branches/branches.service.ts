@@ -6,7 +6,7 @@ import { isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils
 import { newId } from '#server/utils/ids'
 import { notFound } from '#server/utils/errors'
 import { toIso } from '#server/utils/time'
-import { isInWindow, isKnownTimeZone, localTime, minutesUntilClosed, nextStart, sortWindows, windowsProblem } from '#server/utils/weekly-windows'
+import { isInWindow, isKnownTimeZone, localDate, localTime, minutesUntilClosed, nextStart, sortWindows, windowsProblem } from '#server/utils/weekly-windows'
 import type { Actor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
 import { branchArchived, branchChanged, branchHoursProblem, branchNotFound, tableArchived, tableChanged, tableLabelTaken, tableLimit, tableNotArchived, tableNotFound, unknownTimezone } from './branches.errors'
@@ -317,4 +317,14 @@ export async function scanTableToken(db: Db, token: string): Promise<ScannedTabl
   const row = isTokenShaped(token) ? await repo.findTableByTokenHash(db, await tokenHash(token)) : undefined
   if (!row || row.tableStatus !== 'active' || row.branchStatus !== 'active' || (row.tenantStatus ?? 'active') !== 'active') throw tableNotFound()
   return { cafe: { slug: row.tenantSlug, name: row.tenantName }, branch: { id: row.branchId, name: row.branchName }, table: { id: row.tableId, label: row.label } }
+}
+
+/**
+ * Today's date (`YYYY-MM-DD`) for the cafe as a whole: in its first active branch's time zone
+ * (each branch's own day where it matters, like a promotion's prices). `fallback` without a branch.
+ */
+export async function cafeToday(db: Db, tenantId: string, now = new Date(), fallback = 'Asia/Phnom_Penh'): Promise<string> {
+  const first = (await repo.listActiveBranches(db, tenantId))[0]
+  const branch = first && await repo.findBranch(db, tenantId, first.id)
+  return localDate(now, branch?.timezone ?? fallback)
 }

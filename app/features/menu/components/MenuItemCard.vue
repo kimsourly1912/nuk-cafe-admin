@@ -25,6 +25,8 @@ const emit = defineEmits<{ 'open': [], 'add': [], 'set-quantity': [quantity: num
 
 const price = computed(() => priceOf(props.item))
 const nameParts = computed(() => highlightParts(props.item.name, props.highlight ?? ''))
+/** A promotion lowers the price shown (M1, D163): the price before it is struck through. */
+const discounted = computed(() => price.value.regularMinor !== null && !props.item.soldOut)
 const priceText = computed(() => (price.value.from ? `from ${formatMinor(price.value.minor)}` : formatMinor(price.value.minor)))
 /** Lines of an item with choices aren't shown on the card, only how many are in the order. */
 const inOrder = computed(() => (hasChoices(props.item) && props.quantity > 0 ? `${props.quantity} in order` : undefined))
@@ -36,13 +38,23 @@ const inOrder = computed(() => (hasChoices(props.item) && props.quantity > 0 ? `
     :aria-label="item.name"
   >
     <div class="flex min-w-0 flex-1 gap-3 max-sm:flex-row-reverse sm:gap-4">
-      <MenuItemImage
-        :image="item.image"
-        :src="item.imageUrl"
-        usage="card"
-        :muted="item.soldOut"
-        class="size-22 rounded-md sm:size-24"
-      />
+      <div class="relative shrink-0 self-start">
+        <MenuItemImage
+          :image="item.image"
+          :src="item.imageUrl"
+          usage="card"
+          :muted="item.soldOut"
+          class="size-22 rounded-md sm:size-24"
+        />
+        <UBadge
+          v-if="item.promotion && !item.soldOut"
+          :label="item.promotion.label"
+          color="error"
+          variant="solid"
+          size="sm"
+          class="absolute top-1.5 left-1.5 shadow-sm"
+        />
+      </div>
       <div class="flex min-w-0 flex-1 flex-col gap-1">
         <h3 class="font-medium text-highlighted">
           <button
@@ -74,8 +86,12 @@ const inOrder = computed(() => (hasChoices(props.item) && props.quantity > 0 ? `
         <div class="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 sm:hidden">
           <span
             class="text-sm font-semibold"
-            :class="item.soldOut ? 'text-muted' : 'text-highlighted'"
+            :class="item.soldOut ? 'text-muted' : discounted ? 'text-error' : 'text-highlighted'"
           >{{ priceText }}</span>
+          <s
+            v-if="discounted"
+            class="text-sm text-muted"
+          ><span class="sr-only">was </span>{{ formatMinor(price.regularMinor) }}</s>
           <span
             v-if="inOrder"
             class="text-sm text-muted"
@@ -102,11 +118,15 @@ const inOrder = computed(() => (hasChoices(props.item) && props.quantity > 0 ? `
         >
           {{ inOrder }}
         </p>
-        <p
-          class="font-semibold"
-          :class="item.soldOut ? 'text-muted' : 'text-highlighted'"
-        >
-          {{ priceText }}
+        <p class="flex flex-wrap items-baseline gap-x-2">
+          <span
+            class="font-semibold"
+            :class="item.soldOut ? 'text-muted' : discounted ? 'text-error' : 'text-highlighted'"
+          >{{ priceText }}</span>
+          <s
+            v-if="discounted"
+            class="text-sm text-muted"
+          ><span class="sr-only">was </span>{{ formatMinor(price.regularMinor) }}</s>
         </p>
       </div>
       <MenuAddControl

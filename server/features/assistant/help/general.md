@@ -6,6 +6,7 @@ The admin portal is where admins set up their cafe (its profile, the menu, staff
 
 - **Dashboard**: the start page (see below).
 - **Menu**: Menu items, Categories, Options, Add-ons, Availability.
+- **Marketing**: Promotions.
 - **Reports**: Summary, Sales by item, Order history.
 - **Admin**: Cafe profile, Staff, Branch, Payments, Telegram, and Sample data (test environments only).
 

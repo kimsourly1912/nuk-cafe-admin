@@ -35,6 +35,10 @@ export interface NewOrderLine {
   quantity: number
   totalMinor: number
   note: string | null
+  regularUnitPriceMinor: number | null
+  promotionId: string | null
+  promotionName: string | null
+  promotionLabel: string | null
 }
 
 /**

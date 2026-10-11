@@ -75,8 +75,14 @@ function setNote(key: string, note: string) {
               </p>
               <span
                 v-if="line.available"
-                class="shrink-0 font-semibold text-highlighted tabular-nums"
-              >{{ formatMinor(line.unitPriceMinor * line.quantity) }}</span>
+                class="flex shrink-0 flex-col items-end tabular-nums"
+              >
+                <span class="font-semibold text-highlighted">{{ formatMinor(line.unitPriceMinor * line.quantity) }}</span>
+                <s
+                  v-if="line.regularUnitPriceMinor !== null"
+                  class="text-xs text-muted"
+                ><span class="sr-only">was </span>{{ formatMinor(line.regularUnitPriceMinor * line.quantity) }}</s>
+              </span>
             </div>
             <p
               v-if="line.detail"

@@ -53,6 +53,7 @@ const emit = defineEmits<{ 'set-quantity': [key: string, quantity: number], 'set
     <div class="border-t border-default p-4">
       <OrderTotals
         :subtotal-minor="cart.subtotalMinor"
+        :savings-minor="cart.savingsMinor"
         :count="cart.count"
         :closed="closed"
         :closed-note="closedNote"

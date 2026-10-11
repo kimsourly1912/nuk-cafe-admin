@@ -95,14 +95,15 @@ describe('the public menu', () => {
       image: { card: `/media/menu/${image}.png`, detail: `/media/menu/${image}.png`, detailSmall: null, placeholder: null },
       optionSets: [{ id: size.id, name: 'Size', values: [{ id: v(size, 'Small'), name: 'Small' }, { id: v(size, 'Large'), name: 'Large' }] }],
       variations: [
-        { id: expect.any(String), valueIds: [v(size, 'Small')], label: 'Small', priceMinor: 300, soldOut: false },
-        { id: expect.any(String), valueIds: [v(size, 'Large')], label: 'Large', priceMinor: 400, soldOut: false },
+        { id: expect.any(String), valueIds: [v(size, 'Small')], label: 'Small', priceMinor: 300, soldOut: false, regularPriceMinor: null, promotion: null },
+        { id: expect.any(String), valueIds: [v(size, 'Large')], label: 'Large', priceMinor: 400, soldOut: false, regularPriceMinor: null, promotion: null },
       ],
       soldOut: false,
       modifierGroups: [{ id: milk.id, name: 'Milk', minSelect: 1, maxSelect: 1, modifiers: [
         { id: expect.any(String), name: 'Whole', priceDeltaMinor: 0, isDefault: true },
         { id: oat, name: 'Oat', priceDeltaMinor: 75, isDefault: false },
       ] }],
+      promotion: null,
     })
   })
 

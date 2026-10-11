@@ -119,8 +119,8 @@ describe('placing an order', () => {
       orderType: 'pickup',
       table: null,
       lines: [
-        { itemId: latte.id, variationId: latte.variations[1]!.id, itemName: 'Iced Latte', detail: 'Large · Oat milk', modifiers: [{ id: oat(), name: 'Oat milk', priceDeltaMinor: 50 }], unitPriceMinor: 375, quantity: 2, totalMinor: 750, note: 'Less ice' },
-        { itemId: bread.id, variationId: bread.variations[0]!.id, itemName: 'Banana Bread', detail: '', modifiers: [], unitPriceMinor: 250, quantity: 1, totalMinor: 250, note: null },
+        { itemId: latte.id, variationId: latte.variations[1]!.id, itemName: 'Iced Latte', detail: 'Large · Oat milk', modifiers: [{ id: oat(), name: 'Oat milk', priceDeltaMinor: 50 }], unitPriceMinor: 375, quantity: 2, totalMinor: 750, note: 'Less ice', regularUnitPriceMinor: null, promotion: null },
+        { itemId: bread.id, variationId: bread.variations[0]!.id, itemName: 'Banana Bread', detail: '', modifiers: [], unitPriceMinor: 250, quantity: 1, totalMinor: 250, note: null, regularUnitPriceMinor: null, promotion: null },
       ],
       subtotalMinor: 1000,
       totalMinor: 1000,

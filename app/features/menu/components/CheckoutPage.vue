@@ -301,6 +301,13 @@ useSeoMeta({ robots: 'noindex' })
                   />
                   <span v-else>{{ formatMinor(quoted.subtotalMinor) }}</span>
                 </div>
+                <div
+                  v-if="quoted?.savingsMinor"
+                  class="flex justify-between text-error"
+                >
+                  <span>Promotions saved you</span>
+                  <span class="font-medium">{{ formatMinor(quoted.savingsMinor) }}</span>
+                </div>
                 <div class="flex items-baseline justify-between border-t border-default pt-2">
                   <span class="font-semibold text-highlighted">Total</span>
                   <USkeleton

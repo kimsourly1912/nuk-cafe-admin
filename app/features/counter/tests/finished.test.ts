@@ -12,7 +12,7 @@ const payment = (over: Partial<CounterPayment> = {}): CounterPayment => ({
 const order = (over: Partial<CounterOrder> = {}): CounterOrder => ({
   id: 'o1', version: 3, pickupNumber: 51, businessDate: '2026-09-30', status: 'cancelled', orderType: 'pickup', table: null,
   customer: { name: 'Bopha Lim' },
-  lines: [{ itemId: 'i', variationId: 'v', itemName: 'Iced Latte', detail: 'Large · Oat milk', modifiers: [], unitPriceMinor: 450, quantity: 1, totalMinor: 450, note: null }],
+  lines: [{ itemId: 'i', variationId: 'v', itemName: 'Iced Latte', detail: 'Large · Oat milk', modifiers: [], unitPriceMinor: 450, quantity: 1, totalMinor: 450, note: null, regularUnitPriceMinor: null, promotion: null }],
   totalMinor: 450, placedAt: at('10:45'), paymentDueAt: at('11:15'), paidAt: at('10:47'), readyAt: null, completedAt: null, cancelledAt: at('11:00'),
   payment: payment(), ...over,
 })

@@ -49,6 +49,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `useLayoutContext` | composable | [UI helpers](./ui-helpers.md#uselayoutcontext) | `isCompact` / `isExpanded` for choices CSS can't make |
 | `<StatusTabs>` | component | [UI helpers](./ui-helpers.md#statustabs) | "All 3 · Active 2 · Archived 1" |
 | `<StatCard>` | component | [UI helpers](./ui-helpers.md#statcard) | One number on a page, in a soft card |
+| `<OrderLinePromotion>` | component | [UI helpers](./ui-helpers.md#orderlinepromotion) | An order line's promotion as sold: "20% off · Coffee week · was $7.00" (D163) |
 | `<RecordSelect>` | component | [UI helpers](./ui-helpers.md#recordselect) | A searchable, virtualized dropdown of records |
 | `<AppDrawer>` | component | [UI helpers](./ui-helpers.md#appdrawer) | `UDrawer` without dragging: every drawer and bottom sheet |
 | `<ToolbarTabs>` | component | [UI helpers](./ui-helpers.md#toolbartabs) | Tabs on a toolbar's line |

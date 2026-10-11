@@ -12,6 +12,7 @@
  */
 import { useIntervalFn } from '@vueuse/core'
 import type { Order } from '#shared/contracts/orders'
+import { savingsOf } from '#shared/contracts/orders'
 import { accountLink, ACCOUNT_PATHS } from '~/features/account'
 import { useOrderAgain } from '~/features/menu'
 import { useOrderTracking } from '../composables/useOrders'
@@ -309,6 +310,7 @@ async function again(from: Order) {
                   >
                     {{ line.detail }}
                   </p>
+                  <OrderLinePromotion :line="line" />
                   <p
                     v-if="line.note"
                     class="text-muted italic"
@@ -323,6 +325,12 @@ async function again(from: Order) {
               <span class="font-semibold text-highlighted">Total</span>
               <span class="text-lg font-semibold text-highlighted">{{ formatMinor(order.totalMinor) }}</span>
             </div>
+            <p
+              v-if="savingsOf(order.lines)"
+              class="mt-1 text-end text-sm text-error"
+            >
+              You saved {{ formatMinor(savingsOf(order.lines)) }}
+            </p>
 
             <template #footer>
               <div class="flex flex-col gap-2">

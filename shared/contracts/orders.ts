@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import type { PublicBranch } from './branches'
 import type { Page } from './common'
 import { idSchema, pageQuerySchema } from './common'
+import type { PromotionTag } from './menu-promotions'
 
 /**
  * Orders (phase 6). Step 6.3 (D101): the counter (below). Step 6.2 (D99): placing an order,
@@ -105,8 +106,15 @@ export interface QuoteLine {
   /** The chosen add-ons still offered, in menu order, with their prices on this item. */
   modifiers: QuotedModifier[]
   imageUrl: string | null
-  /** The version's price plus the add-ons', in cents; `null` when the line has a problem. */
+  /**
+   * The version's price plus the add-ons', in cents, after a promotion if one applies; `null` when
+   * the line has a problem.
+   */
   unitPriceMinor: number | null
+  /** The unit price before the promotion (M1, D163); `null` without one. */
+  regularUnitPriceMinor: number | null
+  /** The promotion that lowered the version's price; add-ons keep theirs. */
+  promotion: PromotionTag | null
   totalMinor: number | null
   problem: QuoteLineProblem | null
 }
@@ -131,6 +139,8 @@ export interface CheckoutQuote {
   subtotalMinor: number
   /** Equal to the subtotal: no tax, service charge or vouchers yet (vouchers: step 7.5). */
   totalMinor: number
+  /** What promotions took off the lines without a problem (already out of the subtotal; M1, D163). */
+  savingsMinor: number
   problems: { code: QuoteProblemCode, message: string }[]
   /** No problem on the order or any line: it can be placed as quoted. */
   orderable: boolean
@@ -163,10 +173,20 @@ export interface OrderLine {
   itemName: string
   detail: string
   modifiers: QuotedModifier[]
+  /** What one cost, after the promotion if one applied. */
   unitPriceMinor: number
   quantity: number
   totalMinor: number
   note: string | null
+  /** The unit price before the promotion (M1, D163); `null` without one. */
+  regularUnitPriceMinor: number | null
+  /** The promotion as it was when ordered ("Coffee week", "20% off"). */
+  promotion: { name: string, label: string } | null
+}
+
+/** What promotions took off these lines, in cents (M1, D163). */
+export function savingsOf(lines: { regularUnitPriceMinor: number | null, unitPriceMinor: number | null, quantity: number }[]): number {
+  return lines.reduce((sum, line) => sum + (line.regularUnitPriceMinor !== null && line.unitPriceMinor !== null ? (line.regularUnitPriceMinor - line.unitPriceMinor) * line.quantity : 0), 0)
 }
 
 /** Who cancelled an order, as its customer is told (step 6.5, D106). */

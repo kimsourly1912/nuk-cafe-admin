@@ -17,6 +17,7 @@ import { cannotCancelNow, orderingClosed, orderNotFound, orderNotOrderable, pric
 import * as repo from './orders.repository'
 import { quoteOrder } from './quote.rules'
 import { businessDateAt } from './reports.rules'
+import { toOrderLine } from './order-lines'
 
 /**
  * Placing and reading orders (docs/server/data-model.md → Orders, step 6.2, D99). The lines are
@@ -106,6 +107,11 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
         quantity: line.quantity,
         totalMinor: line.totalMinor!,
         note: line.note,
+        // The promotion as it was (M1, D163): its results, and the receipt's "was" price.
+        regularUnitPriceMinor: line.regularUnitPriceMinor,
+        promotionId: line.promotion?.id ?? null,
+        promotionName: line.promotion?.name ?? null,
+        promotionLabel: line.promotion?.label ?? null,
       }))
       return {
         statements: [
@@ -156,17 +162,7 @@ export async function getOrder(db: Db, actor: Actor, id: string): Promise<Order>
     status: row.status,
     orderType: row.orderType,
     table: row.tableLabel ? { label: row.tableLabel } : null,
-    lines: lines.map(line => ({
-      itemId: line.itemId,
-      variationId: line.variationId,
-      itemName: line.itemName,
-      detail: line.detail,
-      modifiers: line.modifiers,
-      unitPriceMinor: line.unitPriceMinor,
-      quantity: line.quantity,
-      totalMinor: line.totalMinor,
-      note: line.note,
-    })),
+    lines: lines.map(toOrderLine),
     subtotalMinor: row.subtotalMinor,
     totalMinor: row.totalMinor,
     currency: 'USD',

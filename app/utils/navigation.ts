@@ -8,6 +8,7 @@ import { modifierGroupsNavigation } from '~/features/modifier-groups'
 import { notificationsNavigation } from '~/features/notifications'
 import { optionSetsNavigation } from '~/features/option-sets'
 import { productsNavigation } from '~/features/products'
+import { promotionsNavigation } from '~/features/promotions'
 import { reportsNavigation } from '~/features/reports'
 import { sampleDataNavigation } from '~/features/sample-data'
 import { staffNavigation } from '~/features/staff'
@@ -29,6 +30,10 @@ export function navigationItems(options: { sampleData: boolean }): NavigationMen
       optionSetsNavigation,
       modifierGroupsNavigation,
       availabilityRulesNavigation,
+    ],
+    [
+      { label: 'Marketing', type: 'label' },
+      promotionsNavigation,
     ],
     [
       { label: 'Reports', type: 'label' },

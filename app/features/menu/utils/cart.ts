@@ -64,6 +64,8 @@ export interface ResolvedLine extends CartLine {
   /** "Large, Iced · Oat milk, Extra shot"; empty for an item with nothing chosen. */
   detail: string
   unitPriceMinor: number
+  /** The unit price before a promotion (M1, D163); `null` without one. */
+  regularUnitPriceMinor: number | null
   imageUrl: string | null
   /** The photo's files and placeholder (D158). */
   image: MenuImage | null
@@ -77,6 +79,8 @@ export interface ResolvedCart {
   count: number
   /** Of the available lines, in cents. */
   subtotalMinor: number
+  /** What promotions take off the available lines (already out of the subtotal). */
+  savingsMinor: number
 }
 
 /** The lines as the current menu prices and names them; unavailable ones don't count. */
@@ -88,14 +92,16 @@ export function resolveCart(lines: CartLine[], items: PublicMenuItem[]): Resolve
     const offered = new Map(item?.modifierGroups.flatMap(g => g.modifiers).map(m => [m.id, m]) ?? [])
     const modifiers = line.modifierIds.map(id => offered.get(id))
     if (!item || !version || modifiers.some(m => !m)) {
-      return { ...line, detail: '', unitPriceMinor: 0, imageUrl: null, image: null, available: false }
+      return { ...line, detail: '', unitPriceMinor: 0, regularUnitPriceMinor: null, imageUrl: null, image: null, available: false }
     }
     const chosen = modifiers.filter(m => m !== undefined)
+    const addOnsMinor = chosen.reduce((sum, m) => sum + m.priceDeltaMinor, 0)
     return {
       ...line,
       name: item.name,
       detail: [version.label, chosen.map(m => m.name).join(', ')].filter(Boolean).join(' · '),
-      unitPriceMinor: version.priceMinor + chosen.reduce((sum, m) => sum + m.priceDeltaMinor, 0),
+      unitPriceMinor: version.priceMinor + addOnsMinor,
+      regularUnitPriceMinor: version.regularPriceMinor === null ? null : version.regularPriceMinor + addOnsMinor,
       imageUrl: item.imageUrl,
       image: item.image,
       available: !version.soldOut,
@@ -106,6 +112,7 @@ export function resolveCart(lines: CartLine[], items: PublicMenuItem[]): Resolve
     lines: resolved,
     count: counted.reduce((sum, line) => sum + line.quantity, 0),
     subtotalMinor: counted.reduce((sum, line) => sum + line.quantity * line.unitPriceMinor, 0),
+    savingsMinor: counted.reduce((sum, line) => sum + (line.regularUnitPriceMinor === null ? 0 : line.quantity * (line.regularUnitPriceMinor - line.unitPriceMinor)), 0),
   }
 }
 

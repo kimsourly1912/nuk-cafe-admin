@@ -257,7 +257,7 @@ describe('order history (D110)', () => {
       ['cancelled', 'staff', 'Sophea Meas', 'item_unavailable'],
     ])
     const a = await orderHistoryDetail(db, TEST_TENANT, o.a.orderId)
-    expect(a.lines).toEqual([{ itemName: 'Iced Latte', categoryName: 'Coffee', detail: '', modifiers: [], unitPriceMinor: 875, quantity: 1, totalMinor: 875, note: 'Less ice' }])
+    expect(a.lines).toEqual([{ itemName: 'Iced Latte', categoryName: 'Coffee', detail: '', modifiers: [], unitPriceMinor: 875, quantity: 1, totalMinor: 875, note: 'Less ice', regularUnitPriceMinor: null, promotion: null }])
     const c = await orderHistoryDetail(db, TEST_TENANT, o.c.orderId)
     expect(c.payment).toMatchObject({ method: 'cash_khr', amountKhr: 35_900, khrPerUsd: RATE })
     const e = await orderHistoryDetail(db, TEST_TENANT, o.e.orderId)

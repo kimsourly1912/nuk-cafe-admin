@@ -29,7 +29,7 @@ const KHMER_V = id(14)
 const BRANCH = id(15)
 
 const item = (over: Partial<PublicMenuItem> & Pick<PublicMenuItem, 'id' | 'name' | 'variations'>): PublicMenuItem =>
-  ({ description: '', imageUrl: null, image: null, optionSets: [], soldOut: false, modifierGroups: [], ...over })
+  ({ description: '', imageUrl: null, image: null, optionSets: [], soldOut: false, modifierGroups: [], promotion: null, ...over })
 
 function menu(options: { open?: boolean, closesInMinutes?: number, largeSoldOut?: boolean } = {}): PublicMenu {
   const open = options.open ?? true
@@ -37,6 +37,7 @@ function menu(options: { open?: boolean, closesInMinutes?: number, largeSoldOut?
     branch: { id: BRANCH, name: 'Riverside', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: open, closesInMinutes: open ? options.closesInMinutes ?? 600 : null, nextOpening: null },
     currency: 'USD',
     at: '2026-09-29T03:00:00.000Z',
+    promotions: [],
     categories: [{
       id: id(20),
       name: 'Coffee',
@@ -46,8 +47,8 @@ function menu(options: { open?: boolean, closesInMinutes?: number, largeSoldOut?
           id: ICED_LATTE,
           name: 'Iced Latte',
           variations: [
-            { id: REGULAR, valueIds: [], label: 'Regular', priceMinor: 300, soldOut: false },
-            { id: LARGE, valueIds: [], label: 'Large', priceMinor: 325, soldOut: options.largeSoldOut ?? false },
+            { id: REGULAR, valueIds: [], label: 'Regular', priceMinor: 300, soldOut: false, regularPriceMinor: null, promotion: null },
+            { id: LARGE, valueIds: [], label: 'Large', priceMinor: 325, soldOut: options.largeSoldOut ?? false, regularPriceMinor: null, promotion: null },
           ],
           modifierGroups: [
             { id: MILK, name: 'Milk', minSelect: 1, maxSelect: 1, modifiers: [{ id: WHOLE, name: 'Whole milk', priceDeltaMinor: 0, isDefault: true }, { id: OAT, name: 'Oat milk', priceDeltaMinor: 50, isDefault: false }] },
@@ -61,8 +62,8 @@ function menu(options: { open?: boolean, closesInMinutes?: number, largeSoldOut?
         description: '',
         categories: [],
         items: [
-          item({ id: CROISSANT, name: 'Butter Croissant', variations: [{ id: CROISSANT_V, valueIds: [], label: '', priceMinor: 250, soldOut: false }] }),
-          item({ id: KHMER, name: 'Khmer Iced Coffee', variations: [{ id: KHMER_V, valueIds: [], label: 'Regular', priceMinor: 275, soldOut: false }] }),
+          item({ id: CROISSANT, name: 'Butter Croissant', variations: [{ id: CROISSANT_V, valueIds: [], label: '', priceMinor: 250, soldOut: false, regularPriceMinor: null, promotion: null }] }),
+          item({ id: KHMER, name: 'Khmer Iced Coffee', variations: [{ id: KHMER_V, valueIds: [], label: 'Regular', priceMinor: 275, soldOut: false, regularPriceMinor: null, promotion: null }] }),
         ],
       }],
     }],

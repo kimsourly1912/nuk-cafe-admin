@@ -7,7 +7,7 @@ import { member, organization, user } from '../../../server/db/tables'
 import { createTable, updateBranchSettings } from '../../../server/features/branches'
 import type { Actor } from '../../../server/features/identity'
 import { createStaff } from '../../../server/features/identity'
-import { createCategory, createItem, publishItem } from '../../../server/features/menu'
+import { createCategory, createItem, createPromotion, publishItem } from '../../../server/features/menu'
 import { saveBakongToken } from '../../../server/features/orders'
 import { loadSampleMenuStep } from '../../../server/features/sample-data'
 import { createTestAuth } from '../../../server/tests/support/auth'
@@ -112,6 +112,9 @@ async function seedSecondCafe(db: Db, qr: { secret: string, baseUrl: string }): 
   const itemName = 'Brown Bean Latte'
   const draft = await createItem(db, actor, { categoryId: category.id, name: itemName, description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
   await publishItem(db, actor, draft.id, { version: draft.version })
+  // A promotion running all year on its whole menu (M1, D163): $3.00 → $2.40 for the customer's
+  // promotion tests; Brown Bean's other tests read prices from the quote, never write them down.
+  await createPromotion(db, actor, { name: 'Bean week', description: 'Every drink 20% off.', discount: { kind: 'percent', percent: 20 }, scope: 'menu', itemIds: [], categoryIds: [], branchIds: [], startsOn: '2026-01-01', endsOn: null, posterId: null, publish: true })
   const table = await createTable(db, actor, branchId, { label: 'B1', area: null }, qr)
   return { slug: cafe.slug, name: cafe.name, branchId, itemName, tableToken: tokenOf(table.qrUrl) }
 }

@@ -211,6 +211,9 @@ export interface OrderHistoryDetail {
     quantity: number
     totalMinor: number
     note: string | null
+    /** The unit price before a promotion (M1, D163); `null` without one. */
+    regularUnitPriceMinor: number | null
+    promotion: { name: string, label: string } | null
   }[]
   payment: {
     state: PaymentState

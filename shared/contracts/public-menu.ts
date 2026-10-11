@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import type { PublicBranch } from './branches'
 import { idSchema } from './common'
 import type { MenuImage } from './media'
+import type { PromotionTag, PublicPromotion } from './menu-promotions'
 
 /**
  * The customer menu (`GET /api/public/menu?branchId=…`, D65): what a branch sells **right now**.
@@ -37,7 +38,12 @@ export interface PublicMenuVariation {
   valueIds: string[]
   /** "Large, Iced" (`''` without option sets). */
   label: string
+  /** What the customer pays: after a live promotion, if one applies (M1, D163). */
   priceMinor: number
+  /** The price before the promotion; `null` without one. */
+  regularPriceMinor: number | null
+  /** The promotion lowering this version's price (the bigger discount wins). */
+  promotion: PromotionTag | null
   /** Switched off at this branch (D64): shown, not orderable. */
   soldOut: boolean
 }
@@ -57,6 +63,8 @@ export interface PublicMenuItem {
   /** Every version is sold out at this branch. */
   soldOut: boolean
   modifierGroups: PublicMenuModifierGroup[]
+  /** The badge: the promotion with the biggest discount on any of its versions. */
+  promotion: PromotionTag | null
 }
 
 export interface PublicMenuCategory {
@@ -75,6 +83,8 @@ export interface PublicMenu {
   /** The moment the menu was computed for (ISO 8601 UTC). */
   at: string
   categories: PublicMenuCategory[]
+  /** Live promotions at this branch that lower a price on this menu now (M1, D163). */
+  promotions: PublicPromotion[]
 }
 
 export const publicMenuQuerySchema = v.object({

@@ -80,6 +80,7 @@ const steps = computed(() => (props.history ? timelineItems(props.history) : [])
                 >
                   {{ line.detail }}
                 </p>
+                <OrderLinePromotion :line="line" />
                 <p
                   v-if="line.note"
                   class="text-muted italic"

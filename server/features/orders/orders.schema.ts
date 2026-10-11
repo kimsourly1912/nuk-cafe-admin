@@ -89,16 +89,28 @@ export const orderLines = sqliteTable('order_lines', {
   detail: text().notNull(),
   /** The add-ons as priced: `[{ id, name, priceDeltaMinor }]`. */
   modifiers: text({ mode: 'json' }).$type<{ id: string, name: string, priceDeltaMinor: number }[]>().notNull(),
+  /** What the customer paid for one: after the promotion, if one applied. */
   unitPriceMinor: integer().notNull(),
   quantity: integer().notNull(),
   totalMinor: integer().notNull(),
   note: text(),
+  /**
+   * The promotion that lowered the price (M1, D163), kept as it was: the unit price before it, and
+   * the promotion's id (for its results; no foreign key, like the menu ids), name and badge.
+   * All null without one.
+   */
+  regularUnitPriceMinor: integer(),
+  promotionId: text(),
+  promotionName: text(),
+  promotionLabel: text(),
 }, t => [
   foreignKey({ name: 'order_lines_order_fk', columns: [t.tenantId, t.orderId], foreignColumns: [orders.tenantId, orders.id] }).onDelete('cascade'),
   check('order_lines_amounts_check', sql`${t.quantity} between 1 and 20 and ${t.unitPriceMinor} >= 0 and ${t.totalMinor} = ${t.unitPriceMinor} * ${t.quantity}`),
   uniqueIndex('order_lines_position_idx').on(t.orderId, t.position),
   // Sales by item groups the lines of paid orders by item (8.1, D110).
   index('order_lines_item_idx').on(t.itemId),
+  // A promotion's results (M1, D163).
+  index('order_lines_promotion_idx').on(t.promotionId).where(sql`${t.promotionId} is not null`),
 ])
 
 /**

@@ -40,6 +40,13 @@ watch([open, () => props.item], ([isOpen]) => {
 const problems = computed(() => selectionProblems(props.item, selection.value))
 const problemOf = (target: string) => (revealed.value ? problems.value.find(p => p.target === target)?.message : undefined)
 const total = computed(() => unitPriceOf(props.item, selection.value) * quantity.value)
+/** The chosen version's promotion (M1, D163), and the unit price before it. */
+const shownVersion = computed(() => variationOf(props.item, selection.value) ?? props.item.variations[0])
+const regularUnit = computed(() => {
+  const version = shownVersion.value
+  if (!version || version.regularPriceMinor === null) return null
+  return unitPriceOf(props.item, selection.value) + version.regularPriceMinor - version.priceMinor
+})
 
 const buttonLabel = computed(() => {
   if (props.item.soldOut) return 'Sold out'
@@ -59,7 +66,7 @@ function valueItems(setIndex: number) {
       label: value.name,
       value: value.id,
       disabled: !orderable,
-      description: !orderable && single ? 'Sold out' : version ? formatMinor(version.priceMinor) : undefined,
+      description: !orderable && single ? 'Sold out' : version ? (version.regularPriceMinor === null ? formatMinor(version.priceMinor) : `${formatMinor(version.priceMinor)} (was ${formatMinor(version.regularPriceMinor)})`) : undefined,
     }
   })
 }
@@ -111,9 +118,24 @@ function submit() {
           eager
           class="aspect-4/3 w-full rounded-lg"
         />
-        <p class="font-semibold text-highlighted">
-          {{ formatMinor(unitPriceOf(item, selection)) }}
-        </p>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <p
+            class="font-semibold"
+            :class="regularUnit === null ? 'text-highlighted' : 'text-error'"
+          >
+            {{ formatMinor(unitPriceOf(item, selection)) }}
+          </p>
+          <template v-if="regularUnit !== null && shownVersion?.promotion">
+            <s class="text-sm text-muted"><span class="sr-only">was </span>{{ formatMinor(regularUnit) }}</s>
+            <UBadge
+              :label="shownVersion.promotion.label"
+              color="error"
+              variant="subtle"
+              size="sm"
+            />
+            <span class="text-sm text-muted">{{ shownVersion.promotion.name }}</span>
+          </template>
+        </div>
 
         <p
           v-if="problemOf('version')"

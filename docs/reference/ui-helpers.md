@@ -452,9 +452,25 @@ Weekly windows (availability rules, branch hours) are minutes after midnight in 
 
 ---
 
+## `<OrderLinePromotion>`
+
+An order line's promotion as it was sold (D163): "20% off · Coffee week · was $7.00", in the error colour with a badge icon; nothing without one. The customer's order page, the counter's order panel and Finished today, and Order history put it under the line's detail.
+
+Source: `app/components/OrderLinePromotion.vue`
+
+```vue
+<OrderLinePromotion :line="line" />
+```
+
+| Prop | Description |
+|---|---|
+| `line` | `{ quantity, regularUnitPriceMinor, promotion: { name, label } \| null }`: an `OrderLine` or a report's line |
+
+---
+
 ## `<StatCard>`
 
-One number on a page (ui.md §8, D126): Nuxt UI's `subtle` card (`bg-elevated/50` with a light ring), a muted label, the value large, an optional change and icon. It renders `dt`/`dd`, so place it in a `<dl>`.
+One number on a page (ui.md §8, D126): the look of Nuxt UI's `subtle` card (`bg-elevated/50` with a light ring), a muted label, the value large, an optional change and icon. It renders one `div` holding its `dt`/`dd` (since D163: a `UCard` nested them too deep for a `<dl>`, an axe finding), so place it in a `<dl>`; the default slot may hold only `dd`s.
 
 Source: `app/components/StatCard.vue`
 
@@ -473,7 +489,7 @@ Source: `app/components/StatCard.vue`
 | `icon` | Optional, beside the label |
 | `change`, `changeLabel` | `{ text, up }`: green when up, red when down; "vs yesterday" in muted text |
 | `#value` | Added after the value (a count in brackets) |
-| default slot | Below, for a note |
+| default slot | Below, for a note (`dd` elements) |
 
 ---
 
