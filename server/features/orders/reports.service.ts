@@ -1,3 +1,4 @@
+import type { PromotionResults } from '#shared/contracts/menu-promotions'
 import type { PaymentMethod } from '#shared/contracts/orders'
 import { PAYMENT_METHODS } from '#shared/contracts/orders'
 import type { ReportMessageInput } from '#shared/contracts/notifications'
@@ -167,6 +168,8 @@ export async function orderHistoryDetail(db: Db, tenantId: string, id: string): 
       quantity: line.quantity,
       totalMinor: line.totalMinor,
       note: line.note,
+      regularUnitPriceMinor: line.regularUnitPriceMinor,
+      promotion: line.promotionName && line.promotionLabel ? { name: line.promotionName, label: line.promotionLabel } : null,
     })),
     payment: {
       state: paymentState(order.status, payment ?? null),
@@ -267,4 +270,12 @@ export async function reportMessage(db: Db, tenantId: string, input: ReportMessa
     csv: options.attachCsv ? { filename: csvFilename(ctx.branch.name, query, 'items'), csv: itemsCsv(rows) } : null,
     audit: { report: 'items', branchId: query.branchId, from: query.from, to: query.to },
   }
+}
+
+/**
+ * How a promotion did (M1, D163). The caller checks the promotion is the tenant's first (the menu
+ * feature owns it); this reads only the tenant's own order lines.
+ */
+export function promotionResults(db: Db, tenantId: string, promotionId: string): Promise<PromotionResults> {
+  return repo.promotionTotals(db, tenantId, promotionId)
 }

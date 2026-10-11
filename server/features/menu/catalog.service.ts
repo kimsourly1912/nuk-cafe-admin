@@ -1,6 +1,7 @@
 import type { PublicMenu, PublicMenuQuery } from '#shared/contracts/public-menu'
 import type { Db } from '#server/utils/batch'
 import { toIso } from '#server/utils/time'
+import { localDate } from '#server/utils/weekly-windows'
 import { getPublicBranch, listBranchOptions } from '#server/features/branches'
 import { notFound } from '#server/utils/errors'
 import { imageSets } from '#server/features/media'
@@ -10,6 +11,8 @@ import * as repo from './catalog.repository'
 import type { Catalog } from './catalog.rules'
 import { groupOnItem, menuAt } from './catalog.rules'
 import { soldOutIds } from './soldout.repository'
+import { applyPromotions } from './promotions.rules'
+import { runningAt } from './promotions.service'
 
 /**
  * The customer menu (docs/server/data-model.md → Menu, D65): the catalog (what could be sold,
@@ -101,11 +104,18 @@ export async function getPublicMenu(db: Db, tenantId: string, query: PublicMenuQ
   const branchId = query.branchId ?? (await listBranchOptions(db, tenantId))[0]?.id
   if (!branchId) throw notFound('This branch')
   const branch = await getPublicBranch(db, tenantId, branchId, now)
-  const [catalog, soldOut] = await Promise.all([loadCatalog(db, tenantId), soldOutIds(db, branch.id)])
+  const [catalog, soldOut, promotions] = await Promise.all([
+    loadCatalog(db, tenantId),
+    soldOutIds(db, branch.id),
+    runningAt(db, tenantId, branch.id, localDate(now, branch.timezone)),
+  ])
+  // Prices after the promotions running at this branch today (M1, D163): the bigger discount wins.
+  const priced = applyPromotions(menuAt(catalog, localTime(now, branch.timezone), soldOut), promotions)
   return {
     branch,
     currency: 'USD',
     at: toIso(now),
-    categories: menuAt(catalog, localTime(now, branch.timezone), soldOut),
+    categories: priced.categories,
+    promotions: priced.promotions,
   }
 }

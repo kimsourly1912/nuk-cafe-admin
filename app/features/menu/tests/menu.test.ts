@@ -13,9 +13,10 @@ function item(id: string, overrides: Partial<PublicMenuItem> = {}): PublicMenuIt
     imageUrl: null,
     image: null,
     optionSets: [],
-    variations: [{ id: `${id}-v`, valueIds: [], label: '', priceMinor: 300, soldOut: false }],
+    variations: [{ id: `${id}-v`, valueIds: [], label: '', priceMinor: 300, soldOut: false, regularPriceMinor: null, promotion: null }],
     soldOut: false,
     modifierGroups: [],
+    promotion: null,
     ...overrides,
   }
 }
@@ -36,9 +37,9 @@ const latte = item('latte', {
     { id: 'temp', name: 'Temperature', values: [{ id: 'hot', name: 'Hot' }, { id: 'iced', name: 'Iced' }] },
   ],
   variations: [
-    { id: 's-hot', valueIds: ['s', 'hot'], label: 'Small, Hot', priceMinor: 400, soldOut: false },
-    { id: 'l-hot', valueIds: ['l', 'hot'], label: 'Large, Hot', priceMinor: 500, soldOut: false },
-    { id: 'l-iced', valueIds: ['l', 'iced'], label: 'Large, Iced', priceMinor: 550, soldOut: true },
+    { id: 's-hot', valueIds: ['s', 'hot'], label: 'Small, Hot', priceMinor: 400, soldOut: false, regularPriceMinor: null, promotion: null },
+    { id: 'l-hot', valueIds: ['l', 'hot'], label: 'Large, Hot', priceMinor: 500, soldOut: false, regularPriceMinor: null, promotion: null },
+    { id: 'l-iced', valueIds: ['l', 'iced'], label: 'Large, Iced', priceMinor: 550, soldOut: true, regularPriceMinor: null, promotion: null },
   ],
   modifierGroups: [group('Milk', 1, 1, ['Whole', 'Oat'], ['Whole']), group('Extras', 0, 2, ['Shot', 'Vanilla', 'Cream'])],
 })
@@ -47,6 +48,7 @@ const menu: PublicMenu = {
   branch: { id: 'b', name: 'Main', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: true, closesInMinutes: 600, nextOpening: null },
   currency: 'USD',
   at: '2026-09-29T00:00:00.000Z',
+  promotions: [],
   categories: [
     { id: 'coffee', name: 'Coffee', description: '', items: [], categories: [
       { id: 'hot', name: 'Hot', description: '', categories: [], items: [latte, item('americano', { name: 'Americano' })] },
@@ -85,7 +87,7 @@ describe('menu sections and search', () => {
   it('prices from the cheapest orderable version, "from" only when prices differ', () => {
     expect(priceOf(latte)).toEqual({ minor: 400, from: true })
     expect(priceOf(item('tea'))).toEqual({ minor: 300, from: false })
-    const allOut = item('x', { variations: [{ id: 'a', valueIds: [], label: '', priceMinor: 200, soldOut: true }] })
+    const allOut = item('x', { variations: [{ id: 'a', valueIds: [], label: '', priceMinor: 200, soldOut: true, regularPriceMinor: null, promotion: null }] })
     expect(priceOf(allOut)).toEqual({ minor: 200, from: false })
   })
 
@@ -120,8 +122,8 @@ describe('choices in the item detail', () => {
         { id: 'temp', name: 'Temperature', values: [{ id: 'hot', name: 'Hot' }, { id: 'iced', name: 'Iced' }] },
       ],
       variations: [
-        { id: 's-hot', valueIds: ['s', 'hot'], label: 'Small, Hot', priceMinor: 300, soldOut: false },
-        { id: 'l-iced', valueIds: ['l', 'iced'], label: 'Large, Iced', priceMinor: 450, soldOut: false },
+        { id: 's-hot', valueIds: ['s', 'hot'], label: 'Small, Hot', priceMinor: 300, soldOut: false, regularPriceMinor: null, promotion: null },
+        { id: 'l-iced', valueIds: ['l', 'iced'], label: 'Large, Iced', priceMinor: 450, soldOut: false, regularPriceMinor: null, promotion: null },
       ],
     })
     const moved = chooseValue(allSizes, defaultSelection(allSizes), 1, 'iced')

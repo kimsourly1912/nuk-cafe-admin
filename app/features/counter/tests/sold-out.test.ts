@@ -5,14 +5,16 @@ import { filterSoldOutRows, rowName, soldOutCategories, soldOutRows } from '../u
 
 const item = (id: string, name: string, versions: [string, string, boolean][]): PublicMenuItem => ({
   id, name, description: '', imageUrl: null, image: null, optionSets: [], modifierGroups: [],
-  variations: versions.map(([vid, label, soldOut]) => ({ id: vid, valueIds: [], label, priceMinor: 300, soldOut })),
+  variations: versions.map(([vid, label, soldOut]) => ({ id: vid, valueIds: [], label, priceMinor: 300, soldOut, regularPriceMinor: null, promotion: null })),
   soldOut: versions.every(v => v[2]),
+  promotion: null,
 })
 
 const menu: PublicMenu = {
   branch: { id: 'b', name: 'Riverside', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: true, closesInMinutes: 600, nextOpening: null },
   currency: 'USD',
   at: '2026-09-30T03:00:00.000Z',
+  promotions: [],
   categories: [
     { id: 'coffee', name: 'Coffee', description: '', items: [], categories: [
       { id: 'iced', name: 'Iced', description: '', categories: [], items: [item('latte', 'Iced Latte', [['v1', 'Small', false], ['v2', 'Large', true]])] },

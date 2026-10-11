@@ -253,6 +253,13 @@
       "when": 1791665203020,
       "tag": "0035_menu_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1791716055017,
+      "tag": "0036_promotions",
+      "breakpoints": true
     }
   ]
 }

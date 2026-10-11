@@ -12,6 +12,7 @@ import { ORDER_EVENTS } from './orders.events'
 import * as repo from './orders.repository'
 import * as reportsRepo from './reports.repository'
 import { businessDateAt, firstName } from './reports.rules'
+import { toOrderLine } from './order-lines'
 
 /**
  * The counter (docs/server/data-model.md → Orders & payment, step 6.3, D101): the branch's queue
@@ -39,17 +40,7 @@ const toCounterOrder = (row: repo.OrderRow, lines: Awaited<ReturnType<typeof rep
   orderType: row.orderType,
   table: row.tableLabel ? { label: row.tableLabel } : null,
   customer: { name: row.customerName },
-  lines: lines.map(line => ({
-    itemId: line.itemId,
-    variationId: line.variationId,
-    itemName: line.itemName,
-    detail: line.detail,
-    modifiers: line.modifiers,
-    unitPriceMinor: line.unitPriceMinor,
-    quantity: line.quantity,
-    totalMinor: line.totalMinor,
-    note: line.note,
-  })),
+  lines: lines.map(toOrderLine),
   totalMinor: row.totalMinor,
   placedAt: toIso(row.placedAt),
   paymentDueAt: toIso(row.paymentDueAt),

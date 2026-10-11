@@ -187,3 +187,20 @@ export async function returnedByName(db: Db, orderId: string): Promise<string | 
   const [row] = await db.select({ name: user.name }).from(counterPayments).innerJoin(user, eq(user.id, counterPayments.returnedBy)).where(eq(counterPayments.orderId, orderId))
   return row?.name ?? null
 }
+
+/**
+ * A promotion's results (M1, D163): the lines sold at its price on orders paid and not cancelled
+ * (preparing, ready or completed). Discount = (price before − price paid) × quantity, per line.
+ */
+export async function promotionTotals(db: Db, tenantId: string, promotionId: string): Promise<{ orders: number, units: number, discountMinor: number, salesMinor: number }> {
+  const [row] = await db.select({
+    orders: sql<number>`count(distinct ${orderLines.orderId})`,
+    units: sql<number>`coalesce(sum(${orderLines.quantity}), 0)`,
+    discountMinor: sql<number>`coalesce(sum((${orderLines.regularUnitPriceMinor} - ${orderLines.unitPriceMinor}) * ${orderLines.quantity}), 0)`,
+    salesMinor: sql<number>`coalesce(sum(${orderLines.totalMinor}), 0)`,
+  })
+    .from(orderLines)
+    .innerJoin(orders, and(eq(orders.tenantId, orderLines.tenantId), eq(orders.id, orderLines.orderId)))
+    .where(and(eq(orderLines.tenantId, tenantId), eq(orderLines.promotionId, promotionId), sql`${orders.status} in ('preparing', 'ready', 'completed')`))
+  return { orders: row?.orders ?? 0, units: row?.units ?? 0, discountMinor: row?.discountMinor ?? 0, salesMinor: row?.salesMinor ?? 0 }
+}

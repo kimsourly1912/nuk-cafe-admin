@@ -343,3 +343,81 @@ export const branchItemStates = sqliteTable('branch_item_states', {
   foreignKey({ name: 'branch_item_states_variation_fk', columns: [t.tenantId, t.variationId], foreignColumns: [menuItemVariations.tenantId, menuItemVariations.id] }).onDelete('cascade'),
   index('branch_item_states_variation_idx').on(t.variationId),
 ])
+
+export const PROMOTION_STATUSES = ['draft', 'published', 'ended'] as const
+
+/**
+ * A promotion (step M1, D163): a percent or an amount off part of the menu, or all of it, from
+ * `startsOn` to `endsOn` (calendar days in each branch's time zone; `endsOn` null: until ended).
+ * `version` covers the promotion **and its links** (items, categories, branches): the form saves
+ * them together. Drafts can be deleted; a published one is ended, never deleted, since orders name it.
+ */
+export const menuPromotions = sqliteTable('menu_promotions', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  tenantId: tenantId(),
+  name: text().notNull(),
+  description: text().notNull().default(''),
+  status: text({ enum: PROMOTION_STATUSES }).notNull().default('draft'),
+  discountKind: text({ enum: ['percent', 'amount'] }).notNull(),
+  /** 1–100, for `percent`. */
+  percent: integer(),
+  /** Cents, for `amount`. */
+  amountMinor: integer(),
+  /** `menu`: every item; `selected`: the linked items and categories. */
+  scope: text({ enum: ['menu', 'selected'] }).notNull(),
+  startsOn: text().notNull(),
+  endsOn: text(),
+  /**
+   * A `media_assets` id of the same tenant: the poster, made elsewhere and uploaded finished
+   * (attached while the promotion uses it, like a menu item's image).
+   */
+  posterAssetId: text(),
+  endedAt: instant(),
+  version: integer().notNull().default(1),
+  createdAt: instant().notNull().default(nowMs),
+  updatedAt: instant().notNull().default(nowMs),
+}, t => [
+  check('menu_promotions_status_check', sql`${t.status} in ('draft', 'published', 'ended') and (${t.status} = 'ended') = (${t.endedAt} is not null)`),
+  check('menu_promotions_discount_check', sql`(${t.discountKind} = 'percent' and ${t.percent} between 1 and 100 and ${t.amountMinor} is null) or (${t.discountKind} = 'amount' and ${t.amountMinor} between 1 and 100000 and ${t.percent} is null)`),
+  check('menu_promotions_scope_check', sql`${t.scope} in ('menu', 'selected')`),
+  check('menu_promotions_dates_check', sql`${t.endsOn} is null or ${t.endsOn} >= ${t.startsOn}`),
+  unique('menu_promotions_tenant_id_unique').on(t.tenantId, t.id),
+  // The menu's question on every read: the tenant's published promotions.
+  index('menu_promotions_tenant_status_idx').on(t.tenantId, t.status),
+])
+
+/** The items a `selected` promotion names. */
+export const menuPromotionItems = sqliteTable('menu_promotion_items', {
+  tenantId: tenantId(),
+  promotionId: text().notNull(),
+  itemId: text().notNull(),
+}, t => [
+  primaryKey({ columns: [t.promotionId, t.itemId] }),
+  foreignKey({ name: 'menu_promotion_items_promotion_fk', columns: [t.tenantId, t.promotionId], foreignColumns: [menuPromotions.tenantId, menuPromotions.id] }).onDelete('cascade'),
+  // Items are archived, not deleted; only a sample-data reset deletes them, and the link goes too.
+  foreignKey({ name: 'menu_promotion_items_item_fk', columns: [t.tenantId, t.itemId], foreignColumns: [menuItems.tenantId, menuItems.id] }).onDelete('cascade'),
+  index('menu_promotion_items_item_idx').on(t.itemId),
+])
+
+/** The categories a `selected` promotion names (a main category includes its sub-categories). */
+export const menuPromotionCategories = sqliteTable('menu_promotion_categories', {
+  tenantId: tenantId(),
+  promotionId: text().notNull(),
+  categoryId: text().notNull(),
+}, t => [
+  primaryKey({ columns: [t.promotionId, t.categoryId] }),
+  foreignKey({ name: 'menu_promotion_categories_promotion_fk', columns: [t.tenantId, t.promotionId], foreignColumns: [menuPromotions.tenantId, menuPromotions.id] }).onDelete('cascade'),
+  foreignKey({ name: 'menu_promotion_categories_category_fk', columns: [t.tenantId, t.categoryId], foreignColumns: [menuCategories.tenantId, menuCategories.id] }).onDelete('cascade'),
+  index('menu_promotion_categories_category_idx').on(t.categoryId),
+])
+
+/** The branches a promotion runs at; none: every branch. */
+export const menuPromotionBranches = sqliteTable('menu_promotion_branches', {
+  tenantId: tenantId(),
+  promotionId: text().notNull(),
+  branchId: text().notNull(),
+}, t => [
+  primaryKey({ columns: [t.promotionId, t.branchId] }),
+  foreignKey({ name: 'menu_promotion_branches_promotion_fk', columns: [t.tenantId, t.promotionId], foreignColumns: [menuPromotions.tenantId, menuPromotions.id] }).onDelete('cascade'),
+  foreignKey({ name: 'menu_promotion_branches_branch_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }).onDelete('restrict'),
+])
