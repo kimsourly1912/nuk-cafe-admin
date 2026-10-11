@@ -9,6 +9,7 @@ import menuItems from './menu-items.md'
 import menu from './menu.md'
 import options from './options.md'
 import payments from './payments.md'
+import promotions from './promotions.md'
 import reports from './reports.md'
 import sampleData from './sample-data.md'
 import staff from './staff.md'
@@ -28,6 +29,7 @@ export const HELP_PAGES = [
   { name: 'options', text: options },
   { name: 'add-ons', text: addOns },
   { name: 'availability', text: availability },
+  { name: 'promotions', text: promotions },
   { name: 'cafe-profile', text: cafeProfile },
   { name: 'staff', text: staff },
   { name: 'branch', text: branch },

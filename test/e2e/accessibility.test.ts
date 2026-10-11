@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
+import type { Promotion } from '#shared/contracts/menu-promotions'
 import type { CheckoutQuote, Order } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
 import { asNewVisitor, clientHeaders } from './support/client-address'
@@ -59,12 +60,25 @@ const ADMIN_PAGES: { path: string, ready: (page: Page) => Promise<unknown> }[] =
   // The small libraries, empty: their empty states.
   { path: '/c/nuk/admin/options', ready: page => page.getByRole('button', { name: 'New option set' }).first().waitFor() },
   { path: '/c/nuk/admin/add-ons', ready: page => page.getByRole('button', { name: 'New add-on group' }).first().waitFor() },
+  // Promotions (D163): the library, the editor and a promotion's page.
+  { path: '/c/nuk/admin/promotions', ready: page => page.getByRole('link', { name: 'Coffee week' }).waitFor() },
+  { path: '/c/nuk/admin/promotions/new', ready: page => page.getByRole('heading', { name: 'How customers see it' }).waitFor() },
+  { path: '/c/nuk/admin/promotions/promo-1', ready: page => page.getByText('$21.00').waitFor() },
 ]
+
+const COFFEE_WEEK: Promotion = {
+  id: 'promo-1', name: 'Coffee week', description: 'Every coffee 20% off.', status: 'published', phase: 'live', discount: { kind: 'percent', percent: 20 }, label: '20% off',
+  scope: 'selected', items: [], categories: [{ id: 'cat-2', name: 'Coffee', status: 'active' }], branches: [], startsOn: '2026-10-01', endsOn: null,
+  poster: null, endedAt: null, version: 1, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
+}
 
 const ADMIN_MOCKS = {
   'GET /admin/menu/items': () => pageOf([menuItemSummaryOf('item-1', 'Latte', { status: 'active', categoryName: 'Coffee' })]),
   'GET /admin/staff': () => pageOf([staffOf(ADMIN.userId, 'alice', { email: ADMIN.email, admin: true, memberships: [] }), staffOf('staff-2', 'Sophea')]),
   'GET /admin/branches/options': () => [RIVERSIDE],
+  'GET /admin/menu/promotions': () => [COFFEE_WEEK],
+  'GET /admin/menu/promotions/{id}': () => COFFEE_WEEK,
+  'GET /admin/menu/promotions/{id}/results': () => ({ orders: 12, units: 30, discountMinor: 2100, salesMinor: 8400 }),
 }
 
 describe('accessibility (axe, WCAG 2.1 AA)', () => {

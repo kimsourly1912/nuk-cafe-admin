@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * One number on a page (ui.md → Surfaces): a soft card (Nuxt UI's `subtle` card, `bg-elevated/50`
- * with a light ring), a muted label, the value large, an optional change ("+12% vs last week") and
+ * One number on a page (ui.md → Surfaces): a soft card (Nuxt UI's `subtle` card's look, `bg-elevated/50`
+ * with a light ring, drawn as one `div` so the `dl` around it stays valid), a muted label, the value large, an optional change ("+12% vs last week") and
  * icon. Place it inside a `<dl>` (it renders `dt`/`dd`); a grid of them is the usual layout.
  * A record (with actions) is an outline card instead; a number is never styled by hand.
  *
@@ -23,34 +23,33 @@ defineProps<{
 </script>
 
 <template>
-  <UCard
-    variant="subtle"
-    :ui="{ body: 'flex items-start gap-3 p-4 sm:p-4' }"
+  <!-- Nuxt UI's subtle card, drawn here: a `dl` may hold only `dt`/`dd` and one `div` around them (axe). -->
+  <div
+    class="relative rounded-lg bg-elevated/50 p-4 ring ring-default"
+    :class="icon && 'ps-12'"
   >
-    <UIcon
-      v-if="icon"
-      :name="icon"
-      class="mt-0.5 size-5 shrink-0 text-muted"
-    />
-    <div class="min-w-0 flex-1">
-      <dt class="text-sm text-muted">
-        {{ label }}
-      </dt>
-      <dd class="mt-1 text-2xl font-semibold text-highlighted tabular-nums">
-        {{ value }}
-        <slot name="value" />
-      </dd>
-      <dd
-        v-if="change"
-        class="mt-1 text-xs"
-        :class="change.up ? 'text-success' : 'text-error'"
-      >
-        {{ change.text }} <span
-          v-if="changeLabel"
-          class="text-muted"
-        >{{ changeLabel }}</span>
-      </dd>
-      <slot />
-    </div>
-  </UCard>
+    <dt class="text-sm text-muted">
+      <UIcon
+        v-if="icon"
+        :name="icon"
+        class="absolute start-4 top-4.5 size-5 text-muted"
+      />
+      {{ label }}
+    </dt>
+    <dd class="mt-1 text-2xl font-semibold text-highlighted tabular-nums">
+      {{ value }}
+      <slot name="value" />
+    </dd>
+    <dd
+      v-if="change"
+      class="mt-1 text-xs"
+      :class="change.up ? 'text-success' : 'text-error'"
+    >
+      {{ change.text }} <span
+        v-if="changeLabel"
+        class="text-muted"
+      >{{ changeLabel }}</span>
+    </dd>
+    <slot />
+  </div>
 </template>

@@ -85,10 +85,10 @@ describe('menu sections and search', () => {
   })
 
   it('prices from the cheapest orderable version, "from" only when prices differ', () => {
-    expect(priceOf(latte)).toEqual({ minor: 400, from: true })
-    expect(priceOf(item('tea'))).toEqual({ minor: 300, from: false })
+    expect(priceOf(latte)).toEqual({ minor: 400, from: true, regularMinor: null })
+    expect(priceOf(item('tea'))).toEqual({ minor: 300, from: false, regularMinor: null })
     const allOut = item('x', { variations: [{ id: 'a', valueIds: [], label: '', priceMinor: 200, soldOut: true, regularPriceMinor: null, promotion: null }] })
-    expect(priceOf(allOut)).toEqual({ minor: 200, from: false })
+    expect(priceOf(allOut)).toEqual({ minor: 200, from: false, regularMinor: null })
   })
 
   it('opens the detail for anything to choose: versions or add-on groups', () => {

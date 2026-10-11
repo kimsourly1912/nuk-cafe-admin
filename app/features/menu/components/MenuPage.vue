@@ -33,6 +33,7 @@ import { openingText } from '../utils/opening'
 import MenuCategoryBar from './MenuCategoryBar.vue'
 import MenuItemDetail from './MenuItemDetail.vue'
 import MenuItemList from './MenuItemList.vue'
+import MenuOffers from './MenuOffers.vue'
 import OrderActions from './OrderActions.vue'
 import OrderLines from './OrderLines.vue'
 import OrderPanel from './OrderPanel.vue'
@@ -81,6 +82,9 @@ const orderType = computed(() => {
 
 const sections = computed(() => menuSections(menu.value))
 const allItems = computed(() => menuItems(sections.value))
+const itemsById = computed(() => new Map(allItems.value.map(item => [item.id, item])))
+/** Live promotions at this branch (M1, D163): the offers above the menu. */
+const offers = computed(() => menu.value?.promotions ?? [])
 
 // --- Search ---
 const search = ref('')
@@ -410,6 +414,12 @@ watch(detailOpen, (open) => {
         </template>
 
         <template v-else-if="menu">
+          <MenuOffers
+            v-if="offers.length"
+            :promotions="offers"
+            :items="itemsById"
+            @open-item="openItem"
+          />
           <div
             v-if="!sections.length"
             class="py-16 text-center text-muted"
@@ -543,6 +553,7 @@ watch(detailOpen, (open) => {
       <template #footer>
         <OrderTotals
           :subtotal-minor="cart.subtotalMinor"
+          :savings-minor="cart.savingsMinor"
           :count="cart.count"
           :closed="closed"
           :closed-note="closedNote"

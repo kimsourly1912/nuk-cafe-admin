@@ -108,6 +108,7 @@ const timeline = computed(() => (order.value?.timeline ?? []).map((event, index)
                 >
                   {{ modifierText(line) }}
                 </p>
+                <OrderLinePromotion :line="line" />
                 <p
                   v-if="line.quantity > 1"
                   class="text-xs text-muted"
