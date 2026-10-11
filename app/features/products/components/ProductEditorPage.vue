@@ -35,7 +35,7 @@ const editor = useItemEditor({
   // The page may be gone by then: reopen the input in the slide-over, which works on any page.
   reopen: (item, draft) => overlay.create(ProductFormSlideover, { destroyOnClose: true }).open({ item, draft }),
 })
-const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError, conflict, reloading, reloaded } = editor
+const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, lastError, conflict, reloading, reloaded } = editor
 
 const unsaved = useUnsavedChanges(state, { initial: editor.initial, paused: saving, draft: editor.keptDraft })
 
@@ -117,7 +117,7 @@ async function onSubmit() {
             variant="outline"
             class="hidden lg:inline-flex"
             :loading="saving && publishNext"
-            :disabled="uploading || !ready || saving"
+            :disabled="!ready || saving"
             @click="submit(true)"
           />
           <UTooltip
@@ -132,7 +132,7 @@ async function onSubmit() {
               icon="i-lucide-save"
               class="hidden lg:inline-flex"
               :loading="saving && !publishNext"
-              :disabled="uploading || !ready || (saving && publishNext)"
+              :disabled="!ready || (saving && publishNext)"
               @click="publishNext = false"
             />
           </UTooltip>
@@ -173,7 +173,6 @@ async function onSubmit() {
           />
           <ProductFormFields
             ref="fields"
-            v-model:uploading="uploading"
             :state="state"
             form-id="product-page-form"
             :section="isCompact ? section : 'all'"
@@ -196,7 +195,7 @@ async function onSubmit() {
           expanded="hidden"
         >
           <p class="min-w-0 flex-1 text-sm text-muted">
-            {{ uploading ? 'Waiting for the image upload…' : saving ? 'Saving continues if you leave.' : '' }}
+            {{ saving ? 'Saving continues if you leave.' : '' }}
           </p>
           <UButton
             v-if="canPublish"
@@ -204,7 +203,7 @@ async function onSubmit() {
             color="neutral"
             variant="outline"
             :loading="saving && publishNext"
-            :disabled="uploading || saving"
+            :disabled="saving"
             @click="submit(true)"
           />
           <UButton
@@ -213,7 +212,7 @@ async function onSubmit() {
             :label="isEdit ? 'Save' : 'Create'"
             icon="i-lucide-save"
             :loading="saving && !publishNext"
-            :disabled="uploading || (saving && publishNext)"
+            :disabled="saving && publishNext"
             @click="publishNext = false"
           />
         </BottomActionBar>

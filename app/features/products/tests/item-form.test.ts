@@ -35,7 +35,7 @@ const LATTE: MenuItem = {
   categoryId: 'cat-1',
   name: 'Latte',
   description: 'Espresso and milk',
-  image: { id: 'img-1', url: '/media/a.png' },
+  image: { id: 'img-1', url: '/media/a.png', display: { card: '/media/a.png', detail: '/media/a.png', detailSmall: null, placeholder: null } },
   status: 'active',
   sortOrder: 1,
   optionSets: [

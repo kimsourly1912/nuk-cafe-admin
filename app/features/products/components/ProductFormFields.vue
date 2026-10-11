@@ -15,6 +15,7 @@ import { buildGrid, formFieldOf, itemFormSchema, optionSetFromLibrary, sectionOf
 import type { FormOptionSet, ItemForm, ItemFormSection } from '../schemas/item-form'
 import ItemAddOnGroups from './ItemAddOnGroups.vue'
 import ItemPriceGrid from './ItemPriceGrid.vue'
+import MenuPhotoField from './MenuPhotoField.vue'
 
 const props = withDefaults(defineProps<{
   formId: string
@@ -34,7 +35,6 @@ const props = withDefaults(defineProps<{
 }>(), { section: 'all' })
 
 const state = defineModel<ItemForm>('state', { required: true })
-const uploading = defineModel<boolean>('uploading', { default: false })
 const emit = defineEmits<{ submit: [], invalid: [section: ItemFormSection], reload: [] }>()
 
 const reloadedText = computed(() => {
@@ -128,14 +128,13 @@ defineExpose({ submit: () => form.value?.submit(), setServerErrors })
       class="space-y-6"
     >
       <UFormField
-        label="Image"
+        label="Photo"
         name="imageId"
       >
-        <ImageInput
+        <MenuPhotoField
           v-model:image-url="state.imageUrl"
           v-model:image-id="state.imageId"
-          v-model:uploading="uploading"
-          alt="Menu item image"
+          :name="state.name"
           :disabled="disabled"
         />
       </UFormField>

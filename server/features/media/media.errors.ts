@@ -1,5 +1,5 @@
 import { IMAGE_MAX_BYTES } from '#shared/contracts/media'
-import { apiError, ErrorCodes } from '#server/utils/errors'
+import { apiError, ErrorCodes, notFound } from '#server/utils/errors'
 
 export const MediaErrorCodes = {
   MEDIA_NOT_AVAILABLE: 'MEDIA_NOT_AVAILABLE',
@@ -20,3 +20,9 @@ export const noFile = () =>
  */
 export const mediaNotAvailable = (field = 'imageId') =>
   apiError(422, MediaErrorCodes.MEDIA_NOT_AVAILABLE, 'This image is no longer available. Upload it again.', { fieldErrors: { [field]: ['Upload the image again'] } })
+
+/** The photo editor's upload (D158) has a missing or wrong file: the app made it wrong, so say which. */
+export const photoRefused = (part: string, problem: string) =>
+  apiError(400, ErrorCodes.VALIDATION_FAILED, 'This photo couldn\'t be saved. Try again, or choose another photo.', { fieldErrors: { [part]: [problem] } })
+
+export const photoNotFound = () => notFound('This photo')

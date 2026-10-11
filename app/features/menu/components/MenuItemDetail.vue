@@ -102,13 +102,15 @@ function submit() {
   >
     <template #body>
       <div class="space-y-6">
-        <img
-          v-if="item.imageUrl"
+        <!-- 4:3, the photo's own shape (D158): the whole dish, not a strip of it. -->
+        <MenuItemImage
+          v-if="item.image || item.imageUrl"
+          :image="item.image"
           :src="item.imageUrl"
-          alt=""
-          decoding="async"
-          class="h-44 w-full rounded-lg bg-elevated object-cover sm:h-56"
-        >
+          usage="detail"
+          eager
+          class="aspect-4/3 w-full rounded-lg"
+        />
         <p class="font-semibold text-highlighted">
           {{ formatMinor(unitPriceOf(item, selection)) }}
         </p>

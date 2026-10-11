@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm'
+import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core'
 import { check, index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import type { PhotoEdit } from '#shared/contracts/media'
 import { newId } from '#server/utils/ids'
 import { tenantId } from '#server/features/branches/branches.schema'
 
@@ -13,6 +15,8 @@ const nowMs = sql`(cast(unixepoch('subsecond') * 1000 as integer))`
 const instant = () => integer({ mode: 'timestamp_ms' })
 
 export const MEDIA_STATES = ['temporary', 'attached'] as const
+/** A menu photo's files made from its source (D158). */
+export const MEDIA_VARIANTS = ['card', 'detail', 'detailSmall'] as const
 
 /**
  * An upload is `temporary` until a record references it (`attached`); releasing it (the record
@@ -33,9 +37,23 @@ export const mediaAssets = sqliteTable('media_assets', {
   createdAt: instant().notNull().default(nowMs),
   /** When `state` last changed: the 24 hours of a temporary asset count from here. */
   stateChangedAt: instant().notNull().default(nowMs),
+  /**
+   * A menu photo (D158) is its private source (this row, `edit` set) and the files made from it,
+   * each pointing at it with `parent_id` and naming its `variant`. Only the source's `state` counts:
+   * attaching, releasing and purging act on it, and its files go with it.
+   */
+  parentId: text().references((): AnySQLiteColumn => mediaAssets.id, { onDelete: 'cascade' }),
+  variant: text({ enum: MEDIA_VARIANTS }),
+  width: integer(),
+  height: integer(),
+  /** The source's tiny blurred preview (a data URL), shown while the files load. */
+  placeholder: text(),
+  /** How the editor made the files from the source, to edit it again. */
+  edit: text({ mode: 'json' }).$type<PhotoEdit>(),
 }, t => [
   check('media_assets_state_check', sql`${t.state} in ('temporary', 'attached')`),
   check('media_assets_size_check', sql`${t.byteSize} > 0`),
   index('media_assets_purge_idx').on(t.state, t.stateChangedAt),
   index('media_assets_tenant_idx').on(t.tenantId, t.createdAt),
+  index('media_assets_parent_idx').on(t.parentId),
 ])

@@ -108,7 +108,7 @@ describe('creating', () => {
   it('attaches the image, and refuses one that\'s gone or already used', async () => {
     const image = await upload()
     const item = await latte({ imageId: image })
-    expect(item.image).toEqual({ id: image, url: expect.stringMatching(/^\/media\/menu\//) })
+    expect(item.image).toEqual({ id: image, url: expect.stringMatching(/^\/media\/menu\//), display: { card: item.image!.url, detail: item.image!.url, detailSmall: null, placeholder: null } })
     expect(await assetState(image)).toBe('attached')
     await expectApiError(() => croissantWith(image), 422, 'MEDIA_NOT_AVAILABLE')
     await expectApiError(() => croissantWith(newId()), 422, 'MEDIA_NOT_AVAILABLE')

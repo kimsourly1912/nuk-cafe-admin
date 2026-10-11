@@ -7,7 +7,7 @@ const UPLOAD_TIMEOUT_MS = 120_000
  * Uploads an image to the cafe's media (`POST /api/admin/media`, D57) and returns the asset (`id`
  * for the record, `url` for the preview). Keyed by the input that started it, so each open form
  * tracks its own upload. Nothing is saved until the form is; an unused upload is deleted by the
- * server after 24 hours. Used by `<ImageInput>` (a menu item's photo, the cafe's logo).
+ * server after 24 hours. Used by `<ImageInput>` (the cafe's logo).
  */
 export function useImageUpload() {
   return useMutation(

@@ -79,7 +79,6 @@ export function useItemEditor(options: ItemEditorOptions) {
   /** A new item or a draft can be published from the form. */
   const canPublish = computed(() => !archived.value && (!isEdit || loaded.value?.status === 'draft'))
   const saving = ref(false)
-  const uploading = ref(false)
   /** The last refused save, shown inside the editor. */
   const lastError = ref<string>()
   /** Someone else saved since this version was read: Save is refused until `reload()`. */
@@ -120,7 +119,7 @@ export function useItemEditor(options: ItemEditorOptions) {
    */
   async function save(options: { publish?: boolean } = {}): Promise<{ ok: true } | { ok: false, error?: ApiError }> {
     const publishing = Boolean(options.publish && canPublish.value)
-    if (uploading.value || archived.value) return { ok: false }
+    if (archived.value) return { ok: false }
     const input = cloneFormValue(state)
     const overrides = { errorActions: () => (closed ? [{ label: 'Reopen', onClick: () => reopen(loaded.value, input) }] : []) }
 
@@ -192,5 +191,5 @@ export function useItemEditor(options: ItemEditorOptions) {
     version: () => loaded.value?.version,
   }
 
-  return { isEdit, itemQuery, loaded, copiedFrom, summary, ready, archived, canPublish, initial, state, saving, uploading, lastError, conflict, reloading, reloaded, reload, keptDraft, save }
+  return { isEdit, itemQuery, loaded, copiedFrom, summary, ready, archived, canPublish, initial, state, saving, lastError, conflict, reloading, reloaded, reload, keptDraft, save }
 }

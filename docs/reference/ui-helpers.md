@@ -12,7 +12,7 @@
 - [`<SearchInput>`](#searchinput)
 - [`<ListEmptyState>`](#listemptystate)
 - [Keyboard shortcuts: `usePageShortcuts`, `useSubmitShortcut`, `<ShortcutsHelp>`](#keyboard-shortcuts)
-- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127), [`useCenteredTab`](#usecenteredtab), [`<ListPagination>`](#listpagination), [`<QuantityStepper>`](#quantitystepper) (D128), [`<QrCode>`](#qrcode) (D130), [`<ImageInput>`](#imageinput), [`useCafe` and `<CafeLogo>`](#usecafe-and-cafelogo) (D143), [Your cafes and the switcher](#your-cafes-and-the-switcher) (D144)
+- [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127), [`useCenteredTab`](#usecenteredtab), [`<ListPagination>`](#listpagination), [`<QuantityStepper>`](#quantitystepper) (D128), [`<QrCode>`](#qrcode) (D130), [`<ImageInput>`](#imageinput), [`<MenuItemImage>`](#menuitemimage) (D158), [`useCafe` and `<CafeLogo>`](#usecafe-and-cafelogo) (D143), [Your cafes and the switcher](#your-cafes-and-the-switcher) (D144)
 
 ---
 
@@ -576,7 +576,7 @@ A form keeps `phone` and `phoneCountry` in its draft, validates them together (`
 
 ## `<ImageInput>`
 
-An image for a record (a menu item's photo, the cafe's logo; D143): a preview with Upload / Replace / Remove. A picked file is checked (JPEG, PNG or WebP; at most `IMAGE_MAX_ORIGINAL_BYTES` before shrinking), made smaller in the browser (`shrinkImage`: the longest side at most 1600 px, WebP; D122), checked against `IMAGE_MAX_BYTES`, and uploaded at once through `useImageUpload()` (`POST /admin/media`, mutation `media:upload`, keyed per input). The form then holds the upload's `url` (the preview) and asset `id` (what the record saves); Remove clears both (saved as `null`). A form waits for `uploading` before saving.
+An image for a record (the cafe's logo, D143; a menu item's photo has its own editor since D158, `PhotoEditorModal` in the products feature): a preview with Upload / Replace / Remove. A picked file is checked (JPEG, PNG or WebP; at most `IMAGE_MAX_ORIGINAL_BYTES` before shrinking), made smaller in the browser (`shrinkImage`: the longest side at most 1600 px, WebP; D122), checked against `IMAGE_MAX_BYTES`, and uploaded at once through `useImageUpload()` (`POST /admin/media`, mutation `media:upload`, keyed per input). The form then holds the upload's `url` (the preview) and asset `id` (what the record saves); Remove clears both (saved as `null`). A form waits for `uploading` before saving.
 
 Source: `app/components/ImageInput.vue`, `app/composables/useImageUpload.ts`, `app/utils/shrink-image.ts` (all auto-imported).
 
@@ -595,6 +595,28 @@ Source: `app/components/ImageInput.vue`, `app/composables/useImageUpload.ts`, `a
 | `v-model:uploading` | True while the file is being shrunk or uploaded |
 
 The server attaches the asset when the record is saved and releases the one it replaced (the media feature); an upload never saved is purged after 24 hours.
+
+---
+
+## `<MenuItemImage>`
+
+A menu item's photo wherever it's shown (D158), chosen by **where it's used**, not by the screen: `usage="card"` (the 480 px square: menu cards, checkout, orders, the form's preview) or `usage="detail"` (the 4:3 photo: the item's page, the admin grid; `srcset` with the 600 px and 1200 px files and `sizes`). While it loads, the photo's tiny blurred placeholder fills the box and the photo fades in (no fade with reduced motion; the server-rendered page shows it as soon as it arrives, so hydration matches). Lazy unless `eager` (the one photo that must show at once: the item page). No photo, or one that fails to load: `icon`. The parent gives the box its size and shape; the photo covers it.
+
+Source: `app/components/MenuItemImage.vue` (auto-imported).
+
+```vue
+<MenuItemImage :image="item.image" :src="item.imageUrl" usage="detail" eager class="aspect-4/3 w-full rounded-lg" />
+<MenuItemImage :src="line.imageUrl" usage="card" class="size-14 rounded-md" />
+```
+
+| Prop | Description |
+|---|---|
+| `image` | `MenuImage` (`card`, `detail`, `detailSmall`, `placeholder`) from the API's `image` |
+| `src` | Only a URL (a checkout line): used as every size, no placeholder |
+| `usage` | `card` or `detail` |
+| `sizes` | The detail photo's width on screen (default `(min-width: 640px) 32rem, 100vw`) |
+| `eager` | Load at once with high priority (else `loading="lazy"`) |
+| `alt`, `icon`, `muted` | Text alternative (default `''`: decorative beside the name), the fallback icon, greyed out (sold out, archived) |
 
 ---
 

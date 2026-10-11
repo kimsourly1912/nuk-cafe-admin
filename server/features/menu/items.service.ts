@@ -1,13 +1,14 @@
 import type { Page } from '#shared/contracts/common'
 import { totalPages } from '#shared/contracts/common'
 import type { AvailabilityRuleRef } from '#shared/contracts/menu-availability'
+import type { MenuImage } from '#shared/contracts/media'
 import type { CreateItemInput, ItemListQuery, ItemModifierGroup, ItemModifierGroupsInput, ItemVersionInput, MenuItem, MenuItemSummary, ReorderItemsInput, RestoreItemInput, UpdateItemInput } from '#shared/contracts/menu-items'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, requireOneChange } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
 import type { Actor } from '#server/features/identity'
-import { attachStatements, getAsset, mediaNotAvailable, releaseStatement } from '#server/features/media'
+import { attachStatements, imageSets, mediaNotAvailable, releaseStatement } from '#server/features/media'
 import { auditStatement } from '#server/features/platform'
 import * as availabilityRepo from './availability.repository'
 import { planRuleLinks, ruleLinksFailure } from './availability.service'
@@ -65,7 +66,7 @@ async function loadAddOns(db: Db, tenantId: string, itemId: string): Promise<Add
   return { rows, prices, groups: await repo.groupsWithModifiers(db, tenantId, rows.map(r => r.groupId)) }
 }
 
-function toItem(row: ItemRow, sets: SetWithValues[], variations: VariationRow[], addOns: AddOns, rules: AvailabilityRuleRef[], imageUrl: string | null): MenuItem {
+function toItem(row: ItemRow, sets: SetWithValues[], variations: VariationRow[], addOns: AddOns, rules: AvailabilityRuleRef[], image: MenuImage | undefined): MenuItem {
   const setIndex = new Map<string, number>()
   const valueName = new Map<string, string>()
   const archived = new Set<string>()
@@ -96,7 +97,7 @@ function toItem(row: ItemRow, sets: SetWithValues[], variations: VariationRow[],
     categoryId: row.categoryId,
     name: row.name,
     description: row.description,
-    image: row.imageAssetId && imageUrl ? { id: row.imageAssetId, url: imageUrl } : null,
+    image: row.imageAssetId && image ? { id: row.imageAssetId, url: image.card, display: image } : null,
     status: row.status,
     sortOrder: row.sortOrder,
     optionSets: sets.map(set => ({
@@ -122,22 +123,23 @@ async function loadItem(db: Db, tenantId: string, id: string): Promise<MenuItem>
     repo.variationsOf(db, id),
     loadAddOns(db, tenantId, id),
     availabilityRepo.itemRules(db, id),
-    row.imageAssetId ? getAsset(db, tenantId, row.imageAssetId) : undefined,
+    row.imageAssetId ? imageSets(db, tenantId, [row.imageAssetId]).then(found => found.get(row.imageAssetId!)) : undefined,
   ])
-  return toItem(row, sets, variations, addOns, rules, image?.url ?? null)
+  return toItem(row, sets, variations, addOns, rules, image)
 }
 
 export async function listItems(db: Db, tenantId: string, query: ItemListQuery): Promise<Page<MenuItemSummary>> {
   const { rows, total } = await repo.listItems(db, tenantId, query)
-  const images = await Promise.all(rows.map(row => row.imageAssetId ? getAsset(db, tenantId, row.imageAssetId) : undefined))
+  const images = await imageSets(db, tenantId, rows.flatMap(row => row.imageAssetId ? [row.imageAssetId] : []))
   return {
-    items: rows.map((row, i) => ({
+    items: rows.map(row => ({
       id: row.id,
       name: row.name,
       categoryId: row.categoryId,
       categoryName: row.categoryName,
       status: row.status,
-      imageUrl: images[i]?.url ?? null,
+      imageUrl: row.imageAssetId ? images.get(row.imageAssetId)?.card ?? null : null,
+      image: row.imageAssetId ? images.get(row.imageAssetId) ?? null : null,
       priceMinMinor: row.priceMin,
       priceMaxMinor: row.priceMax,
       sortOrder: row.sortOrder,

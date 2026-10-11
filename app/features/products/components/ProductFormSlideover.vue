@@ -40,7 +40,7 @@ const editor = useItemEditor({
   onReloaded: saved => unsaved.markClean(saved),
   reopen: (item, draft) => overlay.create(ProductFormSlideover, { destroyOnClose: true }).open({ item, draft }),
 })
-const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, uploading, lastError, conflict, reloading, reloaded } = editor
+const { isEdit, itemQuery, loaded, ready, archived, canPublish, state, saving, lastError, conflict, reloading, reloaded } = editor
 
 const unsaved = useModalUnsavedChanges(state, {
   initial: editor.initial,
@@ -97,7 +97,6 @@ async function onSubmit() {
         />
         <ProductFormFields
           ref="fields"
-          v-model:uploading="uploading"
           :state="state"
           form-id="product-form"
           :disabled="saving || archived"
@@ -116,7 +115,7 @@ async function onSubmit() {
     <template #footer>
       <div class="flex w-full items-center justify-end gap-2">
         <div
-          v-if="loaded && !saving && !uploading"
+          v-if="loaded && !saving"
           class="mr-auto"
         >
           <ViewOnMenuButton
@@ -125,10 +124,10 @@ async function onSubmit() {
           />
         </div>
         <span
-          v-else-if="saving || uploading"
+          v-else-if="saving"
           class="mr-auto text-xs text-muted"
         >
-          {{ uploading ? 'Waiting for the image upload…' : 'You can close this; saving continues in the background.' }}
+          You can close this; saving continues in the background.
         </span>
         <UButton
           :label="saving || archived ? 'Close' : 'Cancel'"
@@ -142,7 +141,7 @@ async function onSubmit() {
           color="neutral"
           variant="outline"
           :loading="saving && publishNext"
-          :disabled="uploading || !ready || saving"
+          :disabled="!ready || saving"
           @click="submit(true)"
         />
         <UTooltip
@@ -155,7 +154,7 @@ async function onSubmit() {
             form="product-form"
             :label="isEdit ? 'Save' : 'Create'"
             :loading="saving && !publishNext"
-            :disabled="uploading || !ready || (saving && publishNext)"
+            :disabled="!ready || (saving && publishNext)"
             @click="publishNext = false"
           />
         </UTooltip>

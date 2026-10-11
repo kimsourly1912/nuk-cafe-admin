@@ -34,13 +34,12 @@ const noteOpen = ref(Boolean(props.line.note))
     :aria-label="name"
   >
     <div class="flex gap-3">
-      <img
+      <MenuItemImage
         v-if="quoted?.imageUrl"
         :src="quoted.imageUrl"
-        alt=""
-        loading="lazy"
-        class="size-14 shrink-0 rounded-md bg-elevated object-cover"
-      >
+        usage="card"
+        class="size-14 rounded-md"
+      />
       <div class="min-w-0 flex-1">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
