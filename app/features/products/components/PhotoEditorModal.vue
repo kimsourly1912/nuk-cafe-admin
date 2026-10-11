@@ -5,28 +5,32 @@
  * **Menu card** and the 4:3 **Item page**, both suggested from that point (the item page keeps
  * the whole photo unless filling 4:3 cuts very little). **Adjust** on a preview moves and zooms
  * that one view (drag, the slider, arrow keys, + and −); **Reset** suggests it again. **Rotate**
- * turns a sideways photo. **Use photo** makes the files in the browser, uploads them and closes
- * with the photo: the menu item's own Save publishes it.
+ * turns a sideways photo. **Use photo** makes the files in the browser and closes at once with
+ * them: the form's photo field uploads them, showing it on the preview (`MenuPhotoField`), and the
+ * menu item's own Save publishes it.
  *
- * Opened with `useOverlay`: `await overlay.create(PhotoEditorModal).open({ name, photoId }).result`
- * is the uploaded photo, or `null` when closed without one.
+ * Opened with `useOverlay`, a new instance each time (`destroyOnClose`):
+ * `await overlay.create(PhotoEditorModal, { destroyOnClose: true }).open({ name, photoId }).result`
+ * is the prepared photo, or `null` when closed without one.
  */
 import { useEventListener, useFileDialog } from '@vueuse/core'
-import type { PhotoEdit, UploadedPhoto } from '#shared/contracts/media'
+import type { PhotoEdit } from '#shared/contracts/media'
 import { IMAGE_TYPES } from '#shared/contracts/media'
-import { fetchPhotoFile, fetchPhotoForEdit, usePhotoUpload } from '../composables/usePhotos'
+import { fetchPhotoFile, fetchPhotoForEdit } from '../composables/usePhotos'
 import type { ViewName } from '../utils/photo'
 import { frameOf, isSmallPhoto, MAX_ZOOM, minZoom, moveView, newEdit, placementStyle, placePhoto, resetView, VIEW_RATIOS, withFocus, zoomView } from '../utils/photo'
-import type { PhotoSource } from '../utils/photo-canvas'
-import { fillOf, loadPhoto, photoUpload, rotatePhoto, sourceUrl } from '../utils/photo-canvas'
+import type { PhotoSource, PreparedPhoto } from '../utils/photo-canvas'
+import { fillOf, loadPhoto, preparePhoto, rotatePhoto, sourceUrl } from '../utils/photo-canvas'
 
 const props = defineProps<{
   /** The item's name, shown in the previews. */
   name?: string
   /** The photo to edit again (the item's `imageId`); without it, a new photo. */
   photoId?: string
+  /** A photo used but still uploading (or whose upload failed): opened from memory, as it was left. */
+  photo?: PreparedPhoto
 }>()
-const emit = defineEmits<{ 'close': [photo: UploadedPhoto | null], 'update:open': [open: boolean] }>()
+const emit = defineEmits<{ 'close': [photo: PreparedPhoto | null], 'update:open': [open: boolean] }>()
 
 const { isCompact } = useLayoutContext()
 const VIEWS: { name: ViewName, label: string, hint: string }[] = [
@@ -35,7 +39,7 @@ const VIEWS: { name: ViewName, label: string, hint: string }[] = [
 ]
 
 type Phase = 'pick' | 'loading' | 'edit'
-const phase = ref<Phase>(props.photoId ? 'loading' : 'pick')
+const phase = ref<Phase>(props.photoId || props.photo ? 'loading' : 'pick')
 const source = shallowRef<PhotoSource | null>(null)
 const imageUrl = ref<string | null>(null)
 const edit = ref<PhotoEdit | null>(null)
@@ -44,10 +48,9 @@ const problem = ref<string>()
 /** Bumped for every new photo: picking one is a change to ask about before closing. */
 const picked = ref(0)
 
-const upload = usePhotoUpload()
-const editorKey = useId()
+/** Making the files from the photo (a moment), after Use photo. */
 const saving = ref(false)
-const busy = computed(() => saving.value || upload.isPending(editorKey))
+const busy = computed(() => saving.value)
 
 const unsaved = useModalUnsavedChanges(() => ({ picked: picked.value, edit: edit.value }), {
   paused: busy,
@@ -115,6 +118,11 @@ if (import.meta.client) {
 
 // --- Editing a photo again ---
 onMounted(async () => {
+  if (props.photo) {
+    await show(props.photo.source, props.photo.edit)
+    unsaved.markClean()
+    return
+  }
   if (!props.photoId) return
   try {
     const photo = await fetchPhotoForEdit(props.photoId)
@@ -220,29 +228,23 @@ async function usePhoto() {
   if (!source.value || !edit.value || busy.value) return
   problem.value = undefined
   saving.value = true
-  let body: FormData
   try {
-    body = await photoUpload(source.value, edit.value)
+    const prepared = await preparePhoto(source.value, edit.value)
+    unsaved.markClean()
+    emit('close', prepared)
   }
   catch {
-    saving.value = false
     problem.value = 'This browser couldn\'t prepare the photo. Try again, or choose another one.'
-    return
   }
-  const result = await upload.execute({ body, editor: editorKey })
-  saving.value = false
-  if (!result.ok) {
-    if (result.status === 'error') problem.value = result.error.message
-    return
+  finally {
+    saving.value = false
   }
-  unsaved.markClean()
-  emit('close', result.data)
 }
 </script>
 
 <template>
   <UModal
-    :title="photoId ? 'Edit photo' : 'Add photo'"
+    :title="photoId || photo ? 'Edit photo' : 'Add photo'"
     description="Mark the middle of the dish, check how customers will see it, then use it."
     :fullscreen="isCompact"
     :dismissible="!busy"

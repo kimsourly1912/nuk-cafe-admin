@@ -171,6 +171,13 @@ async function choosePhoto(editor: Locator, file: TestFile, button = 'Choose pho
   await chooser.setFiles(file)
 }
 
+/** Latte's saved photo, for Edit photo: how it was made and its private source. */
+async function routeSavedPhoto(page: Page, edit: unknown = null) {
+  const source = await photoFile(page, 1200, 900)
+  await page.route('**/api/c/nuk/admin/media/photos/asset-latte', route => route.fulfill({ json: { id: 'asset-latte', edit, image: LATTE.image!.display } }))
+  await page.route('**/api/c/nuk/admin/media/photos/asset-latte/source', route => route.fulfill({ contentType: 'image/png', body: source.buffer }))
+}
+
 /** The photo editor's upload, its raw bytes kept (the mock's handlers get text, which garbles binary). */
 async function capturePhotoUpload(page: Page, answer: unknown = UPLOADED_PHOTO) {
   const uploads: Buffer[] = []
@@ -750,32 +757,105 @@ describe('menu item form', () => {
     expect(edit.detail.zoom).toBeLessThan(1)
   }, 60_000)
 
-  it('Edit photo opens the saved photo with how it was made; a failed upload keeps the editor and the old photo (D158)', async () => {
-    const { page, api } = await open()
+  it('opens again after being closed, any number of times (D158)', async () => {
+    const { page } = await open()
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    const form = await openNew(page)
+    for (let time = 0; time < 3; time++) {
+      const editor = await openPhotoEditor(form)
+      await editor.getByRole('button', { name: 'Cancel' }).click()
+      await editor.waitFor({ state: 'hidden' })
+    }
+    expect(errors).toEqual([])
+  })
+
+  it('Edit photo opens the saved photo with how it was made (D158)', async () => {
+    const { page } = await open()
     const saved = { focus: { x: 0.5, y: 0.5 }, card: { zoom: 2, x: 0.5, y: 0.5, adjusted: true }, detail: { zoom: 1, x: 0.5, y: 0.5, adjusted: false }, fill: '#e9dcc9' }
-    const source = await photoFile(page, 1200, 900)
-    await page.route('**/api/c/nuk/admin/media/photos/asset-latte', route => route.fulfill({ json: { id: 'asset-latte', edit: saved, image: LATTE.image!.display } }))
-    await page.route('**/api/c/nuk/admin/media/photos/asset-latte/source', route => route.fulfill({ contentType: 'image/png', body: source.buffer }))
-    await page.route('**/api/c/nuk/admin/media/photos', (route) => {
-      const message = 'This photo couldn\'t be saved. Try again, or choose another photo.'
-      return route.fulfill({ status: 400, json: { error: true, statusCode: 400, message, data: { code: 'VALIDATION_FAILED', message } } })
-    })
+    await routeSavedPhoto(page, saved)
     const form = await openEdit(page, 'Latte')
     const editor = await openPhotoEditor(form, 'Edit photo')
     await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
     // Opened as saved: Adjust shows the card at its zoom.
     await editor.getByRole('button', { name: 'Adjust the menu card' }).click()
     await expect.poll(() => editor.getByRole('slider', { name: 'Zoom' }).getAttribute('aria-valuenow')).toBe('2')
-    await editor.getByRole('button', { name: 'Done' }).click()
-
-    await editor.getByRole('button', { name: 'Use photo' }).click()
-    await editor.getByText('This photo couldn\'t be saved. Try again, or choose another photo.').first().waitFor()
-    // Still open, with the photo; nothing was changed, so Cancel closes it.
-    expect(await editor.getByRole('button', { name: 'Use photo' }).isDisabled()).toBe(false)
+    // Nothing changed: Cancel closes without asking.
     await editor.getByRole('button', { name: 'Cancel' }).click()
     await editor.waitFor({ state: 'hidden' })
-    expect(await form.getByRole('img', { name: 'Menu item photo' }).getAttribute('src')).toBe('/media/menu/latte.png')
-    expect(api.calls.filter(c => c.startsWith('PATCH'))).toEqual([])
+  }, 60_000)
+
+  it('Use photo closes the editor at once; the upload shows on the preview, Save waits, Edit photo reopens it from memory, and a failed upload offers Try again (D158)', async () => {
+    const { page } = await open()
+    let answer: 'hold' | 'fail' | 'ok' = 'hold'
+    const held: (() => void)[] = []
+    let uploads = 0
+    await page.route('**/api/c/nuk/admin/media/photos', async (route) => {
+      uploads++
+      if (answer === 'hold') await new Promise<void>(resolve => held.push(resolve))
+      if (answer === 'fail') {
+        const message = 'Telegram is down'
+        await route.fulfill({ status: 503, json: { error: true, statusCode: 503, message, data: { code: 'UNAVAILABLE', message } } })
+        return
+      }
+      await route.fulfill({ status: 201, json: UPLOADED_PHOTO })
+    })
+    await routeSavedPhoto(page)
+    let reads = 0
+    page.on('request', (request) => {
+      if (request.url().includes('/media/photos/asset-latte')) reads++
+    })
+    const form = await openEdit(page, 'Latte')
+    let editor = await openPhotoEditor(form, 'Edit photo')
+    await editor.getByRole('button', { name: 'Choose another' }).waitFor()
+    await choosePhoto(editor, await photoFile(page, 1600, 1200), 'Choose another')
+    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
+    await editor.getByRole('button', { name: 'Use photo' }).click()
+    await editor.waitFor({ state: 'hidden' })
+
+    // Uploading: the new photo on the preview with a spinner, and Save waits for it.
+    await form.getByText('Uploading the photo… You can keep editing.').waitFor()
+    await form.getByTestId('photo-upload-state').waitFor()
+    expect(await form.getByRole('img', { name: 'Menu item photo' }).getAttribute('src')).toMatch(/^blob:/)
+    await form.getByText('Waiting for the photo upload…').waitFor()
+    expect(await form.getByRole('button', { name: 'Save', exact: true }).isDisabled()).toBe(true)
+
+    // Edit photo meanwhile: the same photo, from memory (no request for the saved one).
+    const readsBefore = reads
+    editor = await openPhotoEditor(form, 'Edit photo')
+    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
+    await editor.getByRole('button', { name: 'Cancel' }).click()
+    await editor.waitFor({ state: 'hidden' })
+    expect(reads).toBe(readsBefore)
+
+    // It fails: said on the preview; Try again uploads the same photo.
+    answer = 'fail'
+    held.splice(0).forEach(release => release())
+    await form.getByText('The photo didn\'t upload. Try again, or Cancel to keep the photo it had.').waitFor()
+    expect(await form.getByRole('button', { name: 'Save', exact: true }).isDisabled()).toBe(false)
+    answer = 'ok'
+    await form.getByRole('button', { name: 'Try again' }).click()
+    await expect.poll(() => form.getByRole('img', { name: 'Menu item photo' }).getAttribute('src')).toBe(UPLOADED_PHOTO.image.card)
+    expect(uploads).toBe(2)
+    await form.getByText('Shown square on the menu and 4:3 on the item\'s page.').waitFor()
+  }, 60_000)
+
+  it('a failed upload\'s Cancel keeps the photo the item had (D158)', async () => {
+    const { page } = await open()
+    await page.route('**/api/c/nuk/admin/media/photos', (route) => {
+      const message = 'Busy'
+      return route.fulfill({ status: 503, json: { error: true, statusCode: 503, message, data: { code: 'UNAVAILABLE', message } } })
+    })
+    await routeSavedPhoto(page)
+    const form = await openEdit(page, 'Latte')
+    const editor = await openPhotoEditor(form, 'Edit photo')
+    await editor.getByRole('button', { name: 'Choose another' }).waitFor()
+    await choosePhoto(editor, await photoFile(page, 1600, 1200), 'Choose another')
+    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
+    await editor.getByRole('button', { name: 'Use photo' }).click()
+    await form.getByRole('button', { name: 'Try again' }).waitFor()
+    await form.getByRole('button', { name: 'Cancel', exact: true }).first().click()
+    await expect.poll(() => form.getByRole('img', { name: 'Menu item photo' }).getAttribute('src')).toBe('/media/menu/latte.png')
   }, 60_000)
 
   it('a changed price counts as unsaved: closing asks first', async () => {

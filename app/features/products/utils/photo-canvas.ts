@@ -86,16 +86,29 @@ async function fileOf(canvas: HTMLCanvasElement, name: string, quality: number):
   return new File([blob], `${name}.${blob.type === 'image/webp' ? 'webp' : 'jpg'}`, { type: blob.type })
 }
 
-/** Everything `POST /admin/media/photos` takes: the source, the three files, the edit, the placeholder. */
-export async function photoUpload(source: PhotoSource, edit: PhotoEdit): Promise<FormData> {
+/**
+ * A photo ready to upload (D158): what `POST /admin/media/photos` takes, the card file as a blob URL
+ * for the form's preview while it uploads, and the source and edit to open it in the editor again
+ * meanwhile. Revoke `cardUrl` when done with it.
+ */
+export interface PreparedPhoto {
+  source: PhotoSource
+  edit: PhotoEdit
+  body: FormData
+  cardUrl: string
+}
+
+/** Makes the files from the source and the edit (in the browser), ready to upload. */
+export async function preparePhoto(source: PhotoSource, edit: PhotoEdit): Promise<PreparedPhoto> {
+  const card = await fileOf(drawView(source, edit, 'card', PHOTO_SIZES.card), 'card', IMAGE_QUALITY)
   const body = new FormData()
   body.append('source', await fileOf(source.canvas, 'source', 0.9))
-  body.append('card', await fileOf(drawView(source, edit, 'card', PHOTO_SIZES.card), 'card', IMAGE_QUALITY))
+  body.append('card', card)
   body.append('detail', await fileOf(drawView(source, edit, 'detail', PHOTO_SIZES.detail), 'detail', IMAGE_QUALITY))
   body.append('detailSmall', await fileOf(drawView(source, edit, 'detail', PHOTO_SIZES.detailSmall), 'detail-small', IMAGE_QUALITY))
   body.append('edit', JSON.stringify(edit))
   body.append('placeholder', placeholderOf(source, edit))
-  return body
+  return { source, edit, body, cardUrl: URL.createObjectURL(card) }
 }
 
 /** The source as a blob URL, for the editor's images (revoke it when done). */
