@@ -92,6 +92,7 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
         totalMinor: quote.totalMinor,
         placedAt: now,
         paymentDueAt: new Date(now.getTime() + PAYMENT_WINDOW_MINUTES * MINUTE),
+        source: input.source ?? null,
       }
       const categories = categoriesOfItems(menu.categories)
       const lines = quote.lines.map((line, position): repo.NewOrderLine => ({

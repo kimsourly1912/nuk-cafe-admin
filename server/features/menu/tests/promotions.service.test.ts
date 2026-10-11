@@ -266,11 +266,11 @@ describe('promotions', () => {
     expect(order.totalMinor).toBe(810)
 
     // Results count paid orders only.
-    expect(await promotionResults(db, TEST_TENANT, promotion.id)).toEqual({ orders: 0, units: 0, discountMinor: 0, salesMinor: 0 })
+    expect(await promotionResults(db, TEST_TENANT, promotion.id)).toEqual({ orders: 0, units: 0, discountMinor: 0, salesMinor: 0, bySource: { telegram: 0, facebook: 0 } })
     await db.update(orders).set({ status: 'completed' }).where(eq(orders.id, orderId))
-    expect(await promotionResults(db, TEST_TENANT, promotion.id)).toEqual({ orders: 1, units: 2, discountMinor: 140, salesMinor: 560 })
+    expect(await promotionResults(db, TEST_TENANT, promotion.id)).toEqual({ orders: 1, units: 2, discountMinor: 140, salesMinor: 560, bySource: { telegram: 0, facebook: 0 } })
     // Another cafe asking about the same id gets nothing.
-    expect(await promotionResults(db, OTHER, promotion.id)).toEqual({ orders: 0, units: 0, discountMinor: 0, salesMinor: 0 })
+    expect(await promotionResults(db, OTHER, promotion.id)).toEqual({ orders: 0, units: 0, discountMinor: 0, salesMinor: 0, bySource: { telegram: 0, facebook: 0 } })
   })
 
   it('names the most items it may in statements D1 accepts', async () => {

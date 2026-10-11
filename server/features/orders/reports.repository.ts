@@ -1,4 +1,5 @@
 import { and, asc, count, desc, eq, gte, isNotNull, isNull, lt, sql } from 'drizzle-orm'
+import type { OrderSource } from '#shared/contracts/marketing'
 import type { SQL } from 'drizzle-orm'
 import type { OrderStatus, OrderType, PaymentMethod } from '#shared/contracts/orders'
 import type { OrderHistoryQuery } from '#shared/contracts/reports'
@@ -192,15 +193,17 @@ export async function returnedByName(db: Db, orderId: string): Promise<string | 
  * A promotion's results (M1, D163): the lines sold at its price on orders paid and not cancelled
  * (preparing, ready or completed). Discount = (price before − price paid) × quantity, per line.
  */
-export async function promotionTotals(db: Db, tenantId: string, promotionId: string): Promise<{ orders: number, units: number, discountMinor: number, salesMinor: number }> {
+export async function promotionTotals(db: Db, tenantId: string, promotionId: string): Promise<{ orders: number, units: number, discountMinor: number, salesMinor: number, bySource: Record<OrderSource, number> }> {
   const [row] = await db.select({
     orders: sql<number>`count(distinct ${orderLines.orderId})`,
     units: sql<number>`coalesce(sum(${orderLines.quantity}), 0)`,
     discountMinor: sql<number>`coalesce(sum((${orderLines.regularUnitPriceMinor} - ${orderLines.unitPriceMinor}) * ${orderLines.quantity}), 0)`,
     salesMinor: sql<number>`coalesce(sum(${orderLines.totalMinor}), 0)`,
+    telegram: sql<number>`count(distinct case when ${orders.source} = 'telegram' then ${orderLines.orderId} end)`,
+    facebook: sql<number>`count(distinct case when ${orders.source} = 'facebook' then ${orderLines.orderId} end)`,
   })
     .from(orderLines)
     .innerJoin(orders, and(eq(orders.tenantId, orderLines.tenantId), eq(orders.id, orderLines.orderId)))
     .where(and(eq(orderLines.tenantId, tenantId), eq(orderLines.promotionId, promotionId), sql`${orders.status} in ('preparing', 'ready', 'completed')`))
-  return { orders: row?.orders ?? 0, units: row?.units ?? 0, discountMinor: row?.discountMinor ?? 0, salesMinor: row?.salesMinor ?? 0 }
+  return { orders: row?.orders ?? 0, units: row?.units ?? 0, discountMinor: row?.discountMinor ?? 0, salesMinor: row?.salesMinor ?? 0, bySource: { telegram: row?.telegram ?? 0, facebook: row?.facebook ?? 0 } }
 }

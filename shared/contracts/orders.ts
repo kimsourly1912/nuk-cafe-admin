@@ -2,6 +2,7 @@ import * as v from 'valibot'
 import type { PublicBranch } from './branches'
 import type { Page } from './common'
 import { idSchema, pageQuerySchema } from './common'
+import { ORDER_SOURCES } from './marketing'
 import type { PromotionTag } from './menu-promotions'
 
 /**
@@ -163,6 +164,8 @@ export const placeOrderSchema = v.strictObject({
   expectedTotalMinor: v.pipe(v.number(), v.integer(), v.minValue(0)),
   /** A guest's name for the counter to call (D156); required from a guest, ignored from an account. */
   guestName: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1, 'Enter your name'), v.maxLength(GUEST_NAME_MAX, `At most ${GUEST_NAME_MAX} characters`))),
+  /** Where the customer came from: a channel post's link (`?src=telegram`, M2a, D164). */
+  source: v.optional(v.picklist(ORDER_SOURCES)),
 })
 export type PlaceOrderInput = v.InferOutput<typeof placeOrderSchema>
 

@@ -1,4 +1,5 @@
 import * as v from 'valibot'
+import type { OrderSource } from './marketing'
 import { idSchema, nameSchema, textSchema, versionSchema } from './common'
 
 /**
@@ -109,6 +110,8 @@ export interface PromotionResults {
   discountMinor: number
   /** What those lines sold for, after the discount. */
   salesMinor: number
+  /** Of `orders`, those placed from a channel post's link (M2a, D164). */
+  bySource: Record<OrderSource, number>
 }
 
 /** On the customer menu: a live promotion with what it applies to now. */

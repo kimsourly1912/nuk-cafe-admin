@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gt, inArray, lte, or, sql } from 'drizzle-orm'
+import type { OrderSource } from '#shared/contracts/marketing'
 import type { CancelReason, OrderStatus, OrderType, PaymentMethod, QuotedModifier, ReturnMethod } from '#shared/contracts/orders'
 import { branches, user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
@@ -20,6 +21,7 @@ export interface NewOrder {
   totalMinor: number
   placedAt: Date
   paymentDueAt: Date
+  source: OrderSource | null
 }
 
 export interface NewOrderLine {
