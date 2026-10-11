@@ -44,6 +44,11 @@ export interface UnsavedChangesOptions<T> {
   initial?: T
   /** Treat the form as saved while true, e.g. while its save is running. */
   paused?: MaybeRefOrGetter<boolean>
+  /**
+   * Unsaved while true, whatever the values: input not in them yet, such as a photo still uploading
+   * or one whose upload failed (D160).
+   */
+  pending?: MaybeRefOrGetter<boolean>
   /** Called when the user discards from outside the form (route change, logout). Modals close here. */
   onDiscard?: () => void
   /** Keep the unsaved input in this browser and offer it back (D151). Only for long forms. */
@@ -90,7 +95,7 @@ export function useUnsavedChanges<T extends object>(state: MaybeRefOrGetter<T>, 
   const markClean = (saved?: T) => {
     baseline.value = cloneFormValue(saved ?? toValue(state))
   }
-  const isDirty = computed(() => !toValue(options.paused) && !isSameFormValue(toValue(state), baseline.value))
+  const isDirty = computed(() => !toValue(options.paused) && (Boolean(toValue(options.pending)) || !isSameFormValue(toValue(state), baseline.value)))
   const draft = useStoredDraft(state, baseline, options.draft)
 
   /** Saved: the form is clean and its kept draft is gone. Use it instead of `markClean` after a save. */

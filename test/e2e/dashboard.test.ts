@@ -70,11 +70,13 @@ describe('dashboard', () => {
   it('a new cafe sees what to do, required steps first, each opening its page; nothing to hide yet', async () => {
     const { page } = await open()
     await checklist(page).waitFor()
-    await checklist(page).getByText('0 of 6 done').waitFor()
+    await checklist(page).getByText('0 of 7 done').waitFor()
     const rows = checklist(page).getByRole('listitem')
     expect(await rows.nth(0).textContent()).toContain('Set your opening hours')
     expect(await rows.nth(1).textContent()).toContain('Publish your first menu item')
     expect(await stepRow(page, 'Set your opening hours').getByRole('link', { name: 'Open: Set your opening hours' }).getAttribute('href')).toBe('/c/nuk/admin/branches')
+    // Photos (D160): the published items without one, from the step.
+    expect(await stepRow(page, 'Add a photo to each published item').getByRole('link').getAttribute('href')).toBe('/c/nuk/admin/products?status=active&photo=missing')
     // Telegram isn't set up on this server: not offered.
     expect(await stepRow(page, 'Telegram').count()).toBe(0)
     expect(await checklist(page).getByRole('button', { name: 'Hide' }).count()).toBe(0)
@@ -96,7 +98,7 @@ describe('dashboard', () => {
 
   it('only optional steps left: they come after today and can be hidden, for good on this browser', async () => {
     const { page } = await open(RUNNING)
-    await checklist(page).getByText('3 of 6 done').waitFor()
+    await checklist(page).getByText('3 of 7 done').waitFor()
     await checklist(page).getByRole('button', { name: 'Hide' }).click()
     await expect.poll(() => checklist(page).count()).toBe(0)
     await page.goto(url('/c/nuk/admin'), { waitUntil: 'hydration' })

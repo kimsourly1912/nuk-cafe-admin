@@ -18,7 +18,7 @@ The cafe's name at the top of the sidebar is a menu: **View menu** opens your cu
 The first page shows:
 
 - **Today** for each branch: paid sales (with the change against yesterday), orders, orders waiting for payment, and orders being prepared or ready. **Summary** opens today's report, **Counter** opens the counter in a new tab.
-- **Set up your cafe**, until it's done: opening hours, a published menu item and the riel rate first, then optional steps (KHQR payments, staff, your logo, Telegram). **Open** goes to the page where each is done; it's ticked off the next time you open the Dashboard. Once only optional steps are left you can **Hide** the list (on this browser).
+- **Set up your cafe**, until it's done: opening hours, a published menu item and the riel rate first, then optional steps (KHQR payments, a photo on each published item, staff, your logo, Telegram). **Open** goes to the page where each is done; it's ticked off the next time you open the Dashboard. Once only optional steps are left you can **Hide** the list (on this browser).
 - **Shortcuts**: New menu item, Sold out, Reports, View menu.
 
 ## Saving your work

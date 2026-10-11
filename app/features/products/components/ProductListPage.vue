@@ -5,6 +5,9 @@
  * remembered per viewer. States are actions: Publish, Unpublish, Archive, Restore (D70).
  * Links from other pages (D75): `?modifierGroupId=` shows the items offering an add-on group (a
  * filter that can be removed).
+ * Photos (D160): a line under the tabs says how many items have no photo, with **Show them**
+ * (`?photo=missing`, also the home page's setup step); with that filter on, Save in the slide-over
+ * is **Save and next**, opening the next item on the page.
  * Opening an item (D90, page-patterns §4): on phones the list pushes `/admin/products/<id>` (a new one:
  * `/admin/products/new`), from `sm` it opens the slide-over at `?item=<id>` (a new one: no URL). The
  * choice is made when opening; resizing never changes the URL. `?item=` opens the slide-over at
@@ -18,7 +21,7 @@ import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { ItemStatus, MenuItemSummary } from '#shared/contracts/menu-items'
 import { useEventListener, useLocalStorage } from '@vueuse/core'
 import { CategorySelect } from '~/features/categories'
-import { useItemList, useItemMutations, useItemStatusCounts } from '../composables/useItems'
+import { useItemList, useItemMutations, useItemStatusCounts, useMissingPhotoCount } from '../composables/useItems'
 import { itemOnMenuPath, ITEM_STATUS_LABELS, priceRange } from '../utils/item-display'
 import ProductCard from './ProductCard.vue'
 import ProductGroupFilter from './ProductGroupFilter.vue'
@@ -38,6 +41,8 @@ const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginate
   search: '',
   categoryId: ANY as string,
   modifierGroupId: '',
+  /** `missing`: only items without a photo (D160). */
+  photo: '',
   status: ANY as string,
 })
 
@@ -52,9 +57,11 @@ const categoryFilter = computed({
   },
 })
 
-const listQuery = computed(() => ({ ...query.value, status: query.value.status as ItemStatus | undefined }))
+const listQuery = computed(() => ({ ...query.value, photo: query.value.photo as 'missing' | undefined, status: query.value.status as ItemStatus | undefined }))
 const { data, loading, refreshing, error, refresh } = useItemList(listQuery)
-const counts = useItemStatusCounts(() => ({ search: query.value.search, categoryId: query.value.categoryId, modifierGroupId: query.value.modifierGroupId }))
+const counts = useItemStatusCounts(() => ({ search: query.value.search, categoryId: query.value.categoryId, modifierGroupId: query.value.modifierGroupId, photo: listQuery.value.photo }))
+/** Items the other filters show without a photo (archived ones only on their own tab, where it's hidden). */
+const missingPhotos = useMissingPhotoCount(() => ({ search: query.value.search, categoryId: query.value.categoryId, modifierGroupId: query.value.modifierGroupId, status: listQuery.value.status }))
 const { publish, unpublish, archive, restore, isBusy } = useItemMutations()
 
 const rows = computed(() => data.value?.items ?? [])
@@ -145,7 +152,15 @@ function rowActions(item: MenuItemSummary): DropdownMenuItem[] {
   ]
 }
 
-const formPanel = useOverlay().create(ProductFormSlideover)
+// A new slide-over each time: Save and next (D160) opens the next item while the last one is still
+// closing, and a reused instance would keep the item it was set up with.
+const overlay = useOverlay()
+const newPanel = () => overlay.create(ProductFormSlideover, { destroyOnClose: true })
+let formPanel: ReturnType<typeof newPanel> | undefined
+function openPanel(props: InstanceType<typeof ProductFormSlideover>['$props']) {
+  formPanel = newPanel()
+  return formPanel.open(props)
+}
 const route = useRoute()
 const router = useRouter()
 
@@ -154,7 +169,7 @@ function openForm(item?: MenuItemSummary) {
     router.push(tenantPath(item ? `/admin/products/${item.id}` : '/admin/products/new'))
   }
   else if (!item) {
-    formPanel.open({})
+    openPanel({})
   }
   else {
     pushedFor = item.id
@@ -165,20 +180,34 @@ function openForm(item?: MenuItemSummary) {
 /** Duplicate (D154): a new item filled from this one, no photo, "… (copy)"; created as a draft. */
 function duplicate(item: MenuItemSummary) {
   if (isCompact.value) router.push(tenantPath(`/admin/products/new?copy=${encodeURIComponent(item.id)}`))
-  else formPanel.open({ copyOf: item.id })
+  else openPanel({ copyOf: item.id })
 }
 
 /** The item the slide-over shows, and the one this list pushed `?item=` for (Back then closes it). */
 let openFor: string | undefined
 let pushedFor: string | undefined
 
+/** With "No photo" on (D160): the item after this one on the page, for Save and next. */
+function nextWithoutPhoto(itemId: string) {
+  if (!filters.photo) return undefined
+  const at = rows.value.findIndex(item => item.id === itemId)
+  return at === -1 ? undefined : rows.value[at + 1]
+}
+
 async function showPanel(itemId: string) {
   openFor = itemId
-  await formPanel.open({ itemId }).result
+  const next = nextWithoutPhoto(itemId)
+  const saved = await openPanel({ itemId, saveAndNext: Boolean(next) }).result
   if (openFor !== itemId) return
   openFor = undefined
   // Closed by the user (not by Back): remove `item` and nothing else from the URL.
   if (route.query.item !== itemId) return
+  if (saved && next) {
+    // Save and next: the next item in place of this one (Back still returns to the list).
+    if (pushedFor === itemId) pushedFor = next.id
+    router.replace({ query: { ...route.query, item: next.id } })
+    return
+  }
   if (pushedFor === itemId) {
     pushedFor = undefined
     router.back()
@@ -197,7 +226,7 @@ watch(() => route.query.item, (itemId) => {
     // Back removed `item` (the route guard already asked about unsaved input): close.
     openFor = undefined
     pushedFor = undefined
-    formPanel.close()
+    formPanel?.close()
   }
 }, { immediate: true })
 
@@ -269,6 +298,16 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             v-if="filters.modifierGroupId"
             :group-id="filters.modifierGroupId"
             @clear="filters.modifierGroupId = ''"
+          />
+          <UButton
+            v-if="filters.photo"
+            label="No photo"
+            icon="i-lucide-image-off"
+            trailing-icon="i-lucide-x"
+            color="neutral"
+            variant="soft"
+            aria-label="No photo: remove this filter"
+            @click="filters.photo = ''"
           />
           <UIcon
             v-if="refreshing"
@@ -361,6 +400,24 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         :tabs="TABS"
         :counts="counts"
       />
+
+      <p
+        v-if="!filters.photo && filters.status !== 'archived' && missingPhotos"
+        class="flex flex-wrap items-center gap-x-2 text-sm text-muted"
+      >
+        <UIcon
+          name="i-lucide-image-off"
+          class="size-4 shrink-0"
+        />
+        <span>{{ pluralize(missingPhotos, ['menu item has', 'menu items have']) }} no photo. Customers choose items with a photo more often.</span>
+        <UButton
+          label="Show them"
+          variant="link"
+          size="sm"
+          class="px-0"
+          @click="filters.photo = 'missing'"
+        />
+      </p>
 
       <BulkActionsBar
         v-if="selecting"

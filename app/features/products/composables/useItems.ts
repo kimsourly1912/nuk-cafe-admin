@@ -11,7 +11,7 @@ const lockOf = (id: string) => `menu-item:${id}`
 /** Features whose data shows menu items: the libraries' "used by N items". */
 const AFFECTED = ['products', 'option-sets', 'modifier-groups', 'availability-rules']
 
-export type ItemListFilters = Partial<Pick<ItemListQuery, 'search' | 'categoryId' | 'modifierGroupId' | 'page' | 'pageSize'>> & { status?: ItemStatus }
+export type ItemListFilters = Partial<Pick<ItemListQuery, 'search' | 'categoryId' | 'modifierGroupId' | 'photo' | 'page' | 'pageSize'>> & { status?: ItemStatus }
 
 /** The API's default leaves archived items out; the "All" tab means all of them. */
 const withStatus = (query: ItemListFilters) => ({ ...query, status: query.status ?? 'all' })
@@ -26,7 +26,7 @@ export function useItemList(query: MaybeRefOrGetter<ItemListFilters>) {
 }
 
 /** "All 24 · Draft 3 · Published 20 · Archived 1" for the status tabs, with the other filters. */
-export function useItemStatusCounts(filters: () => Pick<ItemListFilters, 'search' | 'categoryId' | 'modifierGroupId'>) {
+export function useItemStatusCounts(filters: () => Pick<ItemListFilters, 'search' | 'categoryId' | 'modifierGroupId' | 'photo'>) {
   const { data } = useApiQuery(
     'products:status-counts',
     async () => {
@@ -34,6 +34,19 @@ export function useItemStatusCounts(filters: () => Pick<ItemListFilters, 'search
       const [draft, active, archived] = await Promise.all([total('draft'), total('active'), total('archived')])
       return { draft, active, archived, all: draft + active + archived }
     },
+    { watch: [() => JSON.stringify(filters())] },
+  )
+  return data
+}
+
+/**
+ * How many items the list's filters show without a photo (D160), for the "No photo" hint; archived
+ * items aren't counted on the All tab.
+ */
+export function useMissingPhotoCount(filters: () => ItemListFilters) {
+  const { data } = useApiQuery(
+    'products:missing-photos',
+    () => apiFetch<Page<MenuItemSummary>>(BASE, { query: { ...filters(), photo: 'missing', page: 1, pageSize: 1 } }).then(page => page.total),
     { watch: [() => JSON.stringify(filters())] },
   )
   return data

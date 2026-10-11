@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, max, ne, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, isNull, max, ne, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { ItemListQuery, ItemStatus } from '#shared/contracts/menu-items'
 import type { Db, Statement } from '#server/utils/batch'
@@ -89,6 +89,7 @@ export async function listItems(db: Db, tenantId: string, query: ItemListQuery):
   if (query.modifierGroupId) {
     conditions.push(sql`exists (select 1 from ${menuItemModifierGroups} where ${menuItemModifierGroups.itemId} = ${menuItems.id} and ${menuItemModifierGroups.groupId} = ${query.modifierGroupId})`)
   }
+  if (query.photo === 'missing') conditions.push(isNull(menuItems.imageAssetId))
   if (query.search) conditions.push(sql`${menuItems.name} like ${`%${query.search.replace(/[\\%_]/g, c => `\\${c}`)}%`} escape '\\'`)
   const where = and(...conditions)
 

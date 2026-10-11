@@ -96,9 +96,13 @@ const MATCHA_ROW = summaryOf(MATCHA, { priceMinMinor: null, priceMaxMinor: null 
 /** What `POST /admin/media/photos` answers (D158). */
 const UPLOADED_PHOTO = { id: 'asset-new', image: { card: '/media/t/1/menu/new-card.webp', detail: '/media/t/1/menu/new-detail.webp', detailSmall: '/media/t/1/menu/new-small.webp', placeholder: null } }
 
+/** The list, with the server's `photo=missing` filter (D160). */
+const itemList = (rows: MenuItemSummary[]): MockHandler => request =>
+  paginatedHandler(request.url.searchParams.get('photo') === 'missing' ? rows.filter(row => !row.imageUrl) : rows)(request)
+
 function backend(rows: MenuItemSummary[] = [LATTE_ROW, MATCHA_ROW], items: MenuItem[] = [LATTE, MATCHA]) {
   const handlers: Record<string, MockHandler> = {
-    'GET /admin/menu/items': paginatedHandler(rows),
+    'GET /admin/menu/items': itemList(rows),
     'GET /admin/menu/items/{id}': ({ url }) => items.find(i => i.id === url.pathname.split('/').pop()),
     'GET /admin/menu/categories': () => [MENU_TEA, DRINKS, ESPRESSO],
     'GET /admin/menu/option-sets': () => [SIZE, TEMP],
@@ -723,6 +727,31 @@ describe('menu item form', () => {
     expect(partOf(body, 'placeholder').toString()).toMatch(/^data:image\/(webp|jpeg);base64,/)
   }, 60_000)
 
+  it('a big photo is made smaller while it opens, the same shape (D160)', async () => {
+    const { page } = await open()
+    // Record how the editor asks the browser to open photos.
+    await page.evaluate(() => {
+      const opened: unknown[] = []
+      ;(window as unknown as { opened: unknown[] }).opened = opened
+      const original = window.createImageBitmap.bind(window)
+      window.createImageBitmap = ((image: ImageBitmapSource, options?: ImageBitmapOptions) => {
+        opened.push(options ?? null)
+        return original(image, options)
+      }) as typeof window.createImageBitmap
+    })
+    const uploads = await capturePhotoUpload(page)
+    const form = await openNew(page)
+    const editor = await openPhotoEditor(form)
+    // 6000 × 4000 = 24 MP: opened at 2400 px wide instead of whole.
+    await choosePhoto(editor, await photoFile(page, 6000, 4000))
+    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
+    expect(await page.evaluate(() => (window as unknown as { opened: unknown[] }).opened)).toContainEqual({ imageOrientation: 'from-image', resizeWidth: 2400, resizeQuality: 'high' })
+    await editor.getByRole('button', { name: 'Use photo' }).click()
+    await editor.waitFor({ state: 'hidden' })
+    await expect.poll(() => uploads.length).toBe(1)
+    expect(await imageSizeOf(page, partOf(uploads[0]!, 'source'))).toEqual([2400, 1600])
+  }, 60_000)
+
   it('Adjust moves one view with the keyboard and zoom; Rotate turns the photo; a small photo is warned about (D158)', async () => {
     const { page } = await open()
     const uploads = await capturePhotoUpload(page)
@@ -820,6 +849,12 @@ describe('menu item form', () => {
     await form.getByText('Waiting for the photo upload…').waitFor()
     expect(await form.getByRole('button', { name: 'Save', exact: true }).isDisabled()).toBe(true)
 
+    // Closing the form meanwhile asks first: the photo isn't in the form yet (D160).
+    await form.locator('[data-slot="footer"]').getByRole('button', { name: 'Cancel' }).click()
+    await page.getByText('Discard unsaved changes?').waitFor()
+    await page.getByRole('button', { name: 'Keep editing' }).click()
+    await page.getByText('Discard unsaved changes?').waitFor({ state: 'hidden' })
+
     // Edit photo meanwhile: the same photo, from memory (no request for the saved one).
     const readsBefore = reads
     editor = await openPhotoEditor(form, 'Edit photo')
@@ -832,7 +867,9 @@ describe('menu item form', () => {
     answer = 'fail'
     held.splice(0).forEach(release => release())
     await form.getByText('The photo didn\'t upload. Try again, or Cancel to keep the photo it had.').waitFor()
-    expect(await form.getByRole('button', { name: 'Save', exact: true }).isDisabled()).toBe(false)
+    // Save waits for a decision: the photo again, or Cancel (D160).
+    await form.getByText('The photo didn\'t upload: Try again, or Cancel it, before saving.').waitFor()
+    expect(await form.getByRole('button', { name: 'Save', exact: true }).isDisabled()).toBe(true)
     answer = 'ok'
     await form.getByRole('button', { name: 'Try again' }).click()
     await expect.poll(() => form.getByRole('img', { name: 'Menu item photo' }).getAttribute('src')).toBe(UPLOADED_PHOTO.image.card)
@@ -856,6 +893,10 @@ describe('menu item form', () => {
     await form.getByRole('button', { name: 'Try again' }).waitFor()
     await form.getByRole('button', { name: 'Cancel', exact: true }).first().click()
     await expect.poll(() => form.getByRole('img', { name: 'Menu item photo' }).getAttribute('src')).toBe('/media/menu/latte.png')
+    // Back to the photo it had: nothing unsaved, Save works again (D160).
+    expect(await form.getByRole('button', { name: 'Save', exact: true }).isDisabled()).toBe(false)
+    await form.locator('[data-slot="footer"]').getByRole('button', { name: 'Cancel' }).click()
+    await form.waitFor({ state: 'hidden' })
   }, 60_000)
 
   it('a changed price counts as unsaved: closing asks first', async () => {
@@ -1306,5 +1347,48 @@ describe('Duplicate', () => {
     await page.getByRole('menuitem', { name: 'Duplicate' }).click()
     await expect.poll(() => `${new URL(page.url()).pathname}${new URL(page.url()).search}`).toBe('/c/nuk/admin/products/new?copy=item-1')
     await expect.poll(() => page.getByLabel('Name', { exact: true }).inputValue()).toBe('Latte (copy)')
+  })
+})
+
+describe('items without a photo (D160)', () => {
+  const TEA = menuItemOf('item-5', 'Tea')
+  const CHAI = menuItemOf('item-6', 'Chai')
+  const rows = [LATTE_ROW, MATCHA_ROW, summaryOf(TEA), summaryOf(CHAI)]
+
+  it('says how many items have no photo; Show them filters the list, and the filter can be removed', async () => {
+    const { page } = await open(backend(rows, [LATTE, MATCHA, TEA, CHAI]))
+    await page.getByText('3 menu items have no photo.').waitFor()
+    await page.getByRole('button', { name: 'Show them' }).click()
+    await expect.poll(() => new URL(page.url()).searchParams.get('photo')).toBe('missing')
+    await cardOf(page, 'Matcha').waitFor()
+    await cardOf(page, 'Latte').waitFor({ state: 'detached' })
+    await page.getByText('3 menu items have no photo.').waitFor({ state: 'detached' })
+    await page.getByRole('button', { name: 'No photo: remove this filter' }).click()
+    await cardOf(page, 'Latte').waitFor()
+    expect(new URL(page.url()).searchParams.get('photo')).toBeNull()
+  })
+
+  it('with the filter on, Save is Save and next: it opens the next item on the page; the last one says Save', async () => {
+    const saved: string[] = []
+    const { page } = await open({
+      ...backend(rows, [LATTE, MATCHA, TEA, CHAI]),
+      'PATCH /admin/menu/items/{id}': ({ url: address }) => {
+        const item = [TEA, CHAI].find(i => i.id === address.pathname.split('/').pop())!
+        saved.push(item.name)
+        return { ...item, version: item.version + 1 }
+      },
+    }, 'Matcha', '/c/nuk/admin/products?photo=missing')
+    await openEdit(page, 'Tea')
+    let form = page.getByRole('dialog', { name: 'Edit menu item' })
+    expect(await form.getByLabel('Name', { exact: true }).inputValue()).toBe('Tea')
+    await form.getByRole('button', { name: 'Save and next' }).click()
+    await expect.poll(() => new URL(page.url()).searchParams.get('item')).toBe(CHAI.id)
+    form = page.getByRole('dialog', { name: 'Edit menu item' })
+    await expect.poll(() => form.getByLabel('Name', { exact: true }).inputValue()).toBe('Chai')
+    expect(saved).toEqual(['Tea'])
+    // The last item on the page: an ordinary Save, which closes.
+    await form.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect.poll(() => new URL(page.url()).searchParams.get('item')).toBeNull()
+    expect(saved).toEqual(['Tea', 'Chai'])
   })
 })

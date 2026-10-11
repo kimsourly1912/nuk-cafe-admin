@@ -23,13 +23,57 @@ function canvasOf(size: Size) {
   return { canvas, context }
 }
 
+/** The photo's size the right way up, read without decoding its pixels; `undefined` if unreadable. */
+async function uprightSize(file: Blob): Promise<Size | undefined> {
+  const url = URL.createObjectURL(file)
+  try {
+    const image = new Image()
+    image.src = url
+    await new Promise((resolve, reject) => {
+      image.onload = resolve
+      image.onerror = reject
+    })
+    return { width: image.naturalWidth, height: image.naturalHeight }
+  }
+  catch {
+    return undefined
+  }
+  finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
+/**
+ * Decoded at most this many pixels at once: a 48 MP photo opened at full size takes about 200 MB,
+ * which a phone with little memory can't spare (D160). Bigger ones are decoded already made smaller.
+ */
+const DECODE_MAX_PIXELS = 16_000_000
+
+/**
+ * The photo decoded, made smaller while decoding when it's big. Only the width is given, so the
+ * browser keeps the shape whatever it does with the orientation (Chromium resizes upright).
+ */
+async function decodePhoto(file: Blob): Promise<ImageBitmap> {
+  const size = await uprightSize(file)
+  if (size && size.width * size.height > DECODE_MAX_PIXELS) {
+    const scale = PHOTO_SOURCE_MAX_EDGE / Math.max(size.width, size.height)
+    try {
+      return await createImageBitmap(file, { imageOrientation: 'from-image', resizeWidth: Math.round(size.width * scale), resizeQuality: 'high' })
+    }
+    catch {
+      // A browser without resizing while decoding: decode it whole below.
+    }
+  }
+  return createImageBitmap(file, { imageOrientation: 'from-image' })
+}
+
 /**
  * The photo the right way up (its EXIF orientation applied), at most 2400 px on its longest side.
  * Drawing it again also drops its metadata (where it was taken, the camera). Throws when the
  * browser can't read the file (HEIC on most desktop browsers).
  */
 export async function loadPhoto(file: Blob): Promise<PhotoSource> {
-  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  const bitmap = await decodePhoto(file)
   try {
     const scale = Math.min(1, PHOTO_SOURCE_MAX_EDGE / Math.max(bitmap.width, bitmap.height))
     const size = { width: Math.max(1, Math.round(bitmap.width * scale)), height: Math.max(1, Math.round(bitmap.height * scale)) }

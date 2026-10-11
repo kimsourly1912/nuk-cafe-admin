@@ -25,6 +25,8 @@ const imageUrl = defineModel<string | undefined>('imageUrl')
 const imageId = defineModel<string | undefined>('imageId')
 /** True while a photo uploads: the form waits for it before saving. */
 const uploading = defineModel<boolean>('uploading', { default: false })
+/** True while a photo uploads or after its upload failed: not in the form yet, so leaving asks (D160). */
+const photoPending = defineModel<boolean>('pending', { default: false })
 
 /** The photo the editor just made, for its blurred placeholder in the preview. */
 const image = ref<MenuImage | null>(null)
@@ -41,6 +43,7 @@ interface PendingPhoto {
 const pending = shallowRef<PendingPhoto | null>(null)
 watchEffect(() => {
   uploading.value = pending.value?.status === 'uploading'
+  photoPending.value = pending.value !== null
 })
 
 const upload = usePhotoUpload()
