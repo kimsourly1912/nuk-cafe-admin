@@ -694,7 +694,7 @@ describe('menu item form', () => {
     expect(api.calls.filter(c => c.includes('media'))).toEqual([])
   })
 
-  it('makes the photo\'s files in the browser at their sizes, from the point clicked as the middle of the dish (D158)', async () => {
+  it('makes the photo\'s files in the browser at their sizes, as framed; the item page follows the menu card (D158, D161)', async () => {
     const { page } = await open()
     const uploads = await capturePhotoUpload(page)
     const form = await openNew(page)
@@ -702,13 +702,12 @@ describe('menu item form', () => {
     const editor = await openPhotoEditor(form)
     // A 3200 × 2400 photo: the source is kept at 2400 px at most.
     await choosePhoto(editor, await photoFile(page, 3200, 2400))
-    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
+    await editor.getByTestId('photo-frame').waitFor()
     // Both previews, with the item's name.
     for (const view of ['card', 'detail']) await expect.poll(() => editor.getByTestId(`photo-preview-${view}`).getByText('Mocha').isVisible()).toBe(true)
-    // The middle of the dish is a quarter in from the left.
-    const stage = editor.getByTestId('photo-stage')
-    const box = (await stage.boundingBox())!
-    await stage.click({ position: { x: box.width * 0.25, y: box.height * 0.5 } })
+    // The menu card framed by hand: the photo moved right, as far as it goes.
+    await editor.getByTestId('photo-frame').focus()
+    for (let press = 0; press < 20; press++) await page.keyboard.press('ArrowRight')
     await editor.getByRole('button', { name: 'Use photo' }).click()
     await editor.waitFor({ state: 'hidden' })
 
@@ -719,10 +718,11 @@ describe('menu item form', () => {
     expect(await imageSizeOf(page, partOf(body, 'detailSmall'))).toEqual([600, 450])
     expect(body.toString('latin1')).toContain('Content-Type: image/webp')
     const edit = JSON.parse(partOf(body, 'edit').toString())
-    expect(edit.focus.x).toBeCloseTo(0.25, 1)
-    // The square follows the point (as far as the photo allows); the 4:3 photo fills the item page.
-    expect(edit.card).toMatchObject({ zoom: 1, adjusted: false })
+    // The square shows the photo's left part; its middle is the point the item page follows.
+    expect(edit.card).toMatchObject({ zoom: 1, adjusted: true })
     expect(edit.card.x).toBeCloseTo(0.375, 2)
+    expect(edit.focus.x).toBeCloseTo(0.375, 2)
+    // A 4:3 photo fills the item page whole wherever that point is.
     expect(edit.detail).toMatchObject({ zoom: 1, adjusted: false })
     expect(partOf(body, 'placeholder').toString()).toMatch(/^data:image\/(webp|jpeg);base64,/)
   }, 60_000)
@@ -744,7 +744,7 @@ describe('menu item form', () => {
     const editor = await openPhotoEditor(form)
     // 6000 × 4000 = 24 MP: opened at 2400 px wide instead of whole.
     await choosePhoto(editor, await photoFile(page, 6000, 4000))
-    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
+    await editor.getByTestId('photo-frame').waitFor()
     expect(await page.evaluate(() => (window as unknown as { opened: unknown[] }).opened)).toContainEqual({ imageOrientation: 'from-image', resizeWidth: 2400, resizeQuality: 'high' })
     await editor.getByRole('button', { name: 'Use photo' }).click()
     await editor.waitFor({ state: 'hidden' })
@@ -752,7 +752,7 @@ describe('menu item form', () => {
     expect(await imageSizeOf(page, partOf(uploads[0]!, 'source'))).toEqual([2400, 1600])
   }, 60_000)
 
-  it('Adjust moves one view with the keyboard and zoom; Rotate turns the photo; a small photo is warned about (D158)', async () => {
+  it('the frame moves and zooms with the keyboard; Rotate turns the photo; a small photo is warned about (D158, D161)', async () => {
     const { page } = await open()
     const uploads = await capturePhotoUpload(page)
     const form = await openNew(page)
@@ -760,19 +760,15 @@ describe('menu item form', () => {
     // 800 × 600: under 900 px on its short side.
     await choosePhoto(editor, await photoFile(page, 800, 600))
     await editor.getByText('This photo is small').waitFor()
-    await editor.getByRole('button', { name: 'Rotate right' }).click()
-    await expect.poll(async () => {
-      const box = (await editor.getByTestId('photo-stage').boundingBox())!
-      return box.height > box.width
-    }).toBe(true)
-
-    await editor.getByRole('button', { name: 'Adjust the menu card' }).click()
     const frame = editor.getByTestId('photo-frame')
+    await editor.getByRole('button', { name: 'Rotate right' }).click()
+    await expect.poll(() => frame.getAttribute('data-photo')).toBe('600x800')
+
+    // The menu card is framed first.
     await frame.focus()
     await page.keyboard.press('+')
     await page.keyboard.press('+')
     await page.keyboard.press('ArrowLeft')
-    await editor.getByRole('button', { name: 'Done' }).click()
     await editor.getByRole('button', { name: 'Use photo' }).click()
     await editor.waitFor({ state: 'hidden' })
 
@@ -784,6 +780,42 @@ describe('menu item form', () => {
     expect(edit.detail.adjusted).toBe(false)
     // A tall photo stays whole on the item page: zoomed out to fit, the fill colour around it.
     expect(edit.detail.zoom).toBeLessThan(1)
+  }, 60_000)
+
+  it('a preview frames its view; framing the item page stops it following the menu card, and Reset suggests it again (D161)', async () => {
+    const { page } = await open()
+    const uploads = await capturePhotoUpload(page)
+    const form = await openNew(page)
+    const editor = await openPhotoEditor(form)
+    // 1500 × 1000 (3:2): a little wider than 4:3, so the item page is a crop too.
+    await choosePhoto(editor, await photoFile(page, 1500, 1000))
+    const frame = editor.getByTestId('photo-frame')
+    await frame.waitFor()
+    expect(await editor.getByRole('button', { name: 'Reset' }).isDisabled()).toBe(true)
+    // Clicking the item page's preview frames it: a 4:3 frame.
+    await editor.getByRole('button', { name: 'Frame the item page' }).click()
+    expect(await editor.getByRole('button', { name: 'Frame the item page' }).getAttribute('aria-pressed')).toBe('true')
+    await expect.poll(async () => {
+      const box = (await frame.boundingBox())!
+      return Math.round((box.width / box.height) * 100) / 100
+    }).toBe(1.33)
+    await frame.focus()
+    for (let press = 0; press < 5; press++) await page.keyboard.press('ArrowLeft')
+    await editor.getByRole('button', { name: 'Reset' }).click()
+    await frame.focus()
+    for (let press = 0; press < 5; press++) await page.keyboard.press('ArrowLeft')
+    // Back to the menu card by its tab: moving it leaves the framed item page where it is.
+    await editor.getByRole('tab', { name: 'Menu card' }).click()
+    await frame.focus()
+    for (let press = 0; press < 5; press++) await page.keyboard.press('ArrowRight')
+    await editor.getByRole('button', { name: 'Use photo' }).click()
+    await editor.waitFor({ state: 'hidden' })
+
+    const edit = JSON.parse(partOf(uploads[0]!, 'edit').toString())
+    expect(edit.detail.adjusted).toBe(true)
+    expect(edit.detail.x).toBeGreaterThan(0.5)
+    expect(edit.card.adjusted).toBe(true)
+    expect(edit.card.x).toBeLessThan(0.5)
   }, 60_000)
 
   it('opens again after being closed, any number of times (D158)', async () => {
@@ -805,9 +837,8 @@ describe('menu item form', () => {
     await routeSavedPhoto(page, saved)
     const form = await openEdit(page, 'Latte')
     const editor = await openPhotoEditor(form, 'Edit photo')
-    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
-    // Opened as saved: Adjust shows the card at its zoom.
-    await editor.getByRole('button', { name: 'Adjust the menu card' }).click()
+    await editor.getByTestId('photo-frame').waitFor()
+    // Opened as saved: the menu card at its zoom.
     await expect.poll(() => editor.getByRole('slider', { name: 'Zoom' }).getAttribute('aria-valuenow')).toBe('2')
     // Nothing changed: Cancel closes without asking.
     await editor.getByRole('button', { name: 'Cancel' }).click()
@@ -838,7 +869,7 @@ describe('menu item form', () => {
     let editor = await openPhotoEditor(form, 'Edit photo')
     await editor.getByRole('button', { name: 'Choose another' }).waitFor()
     await choosePhoto(editor, await photoFile(page, 1600, 1200), 'Choose another')
-    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
+    await editor.getByTestId('photo-frame').waitFor()
     await editor.getByRole('button', { name: 'Use photo' }).click()
     await editor.waitFor({ state: 'hidden' })
 
@@ -858,7 +889,7 @@ describe('menu item form', () => {
     // Edit photo meanwhile: the same photo, from memory (no request for the saved one).
     const readsBefore = reads
     editor = await openPhotoEditor(form, 'Edit photo')
-    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
+    await editor.getByTestId('photo-frame').waitFor()
     await editor.getByRole('button', { name: 'Cancel' }).click()
     await editor.waitFor({ state: 'hidden' })
     expect(reads).toBe(readsBefore)
@@ -888,7 +919,7 @@ describe('menu item form', () => {
     const editor = await openPhotoEditor(form, 'Edit photo')
     await editor.getByRole('button', { name: 'Choose another' }).waitFor()
     await choosePhoto(editor, await photoFile(page, 1600, 1200), 'Choose another')
-    await editor.getByText('Click the middle of the dish', { exact: true }).waitFor()
+    await editor.getByTestId('photo-frame').waitFor()
     await editor.getByRole('button', { name: 'Use photo' }).click()
     await form.getByRole('button', { name: 'Try again' }).waitFor()
     await form.getByRole('button', { name: 'Cancel', exact: true }).first().click()

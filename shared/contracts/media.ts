@@ -67,7 +67,7 @@ export type PhotoView = v.InferOutput<typeof photoViewSchema>
 
 /** How the editor made a photo's files, kept so it can be edited again exactly. */
 export const photoEditSchema = v.object({
-  /** The middle of the dish, as fractions of the source. */
+  /** The point the item page follows while not framed by hand: the menu card's middle (D161), as fractions of the source. */
   focus: v.object({ x: fraction, y: fraction }),
   card: photoViewSchema,
   detail: photoViewSchema,

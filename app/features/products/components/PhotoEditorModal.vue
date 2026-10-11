@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /**
- * Add or edit a menu item's photo (D158). The owner picks a photo (or drops or pastes one, or takes
- * one on a phone), clicks the middle of the dish, and sees it as customers will: the square
- * **Menu card** and the 4:3 **Item page**, both suggested from that point (the item page keeps
- * the whole photo unless filling 4:3 cuts very little). **Adjust** on a preview moves and zooms
- * that one view (drag, the slider, arrow keys, + and −); **Reset** suggests it again. **Rotate**
- * turns a sideways photo. **Use photo** makes the files in the browser and closes at once with
+ * Add or edit a menu item's photo (D158, D161). The owner picks a photo (or drops or pastes one, or
+ * takes one on a phone) and frames it like a crop: **Menu card** (square) and **Item page** (4:3)
+ * are tabs over one frame, the photo dragged and zoomed inside it (the slider, the wheel, arrow
+ * keys, + and −), the part left out dimmed around it; **Reset** suggests the view again. Both start
+ * suggested (the item page keeps the whole photo unless filling 4:3 cuts very little), and the item
+ * page follows the menu card's middle until it is framed itself. The previews show both as
+ * customers will; clicking one frames it. **Rotate** turns the frame at once and the photo with it. **Use photo** makes the files in the browser and closes at once with
  * them: the form's photo field uploads them, showing it on the preview (`MenuPhotoField`), and the
  * menu item's own Save publishes it.
  *
@@ -14,7 +15,7 @@
  * is the prepared photo, or `null` when closed without one.
  */
 import { useEventListener, useFileDialog } from '@vueuse/core'
-import type { PhotoEdit } from '#shared/contracts/media'
+import type { PhotoEdit, PhotoView } from '#shared/contracts/media'
 import { IMAGE_TYPES } from '#shared/contracts/media'
 import { fetchPhotoFile, fetchPhotoForEdit } from '../composables/usePhotos'
 import type { ViewName } from '../utils/photo'
@@ -37,13 +38,15 @@ const VIEWS: { name: ViewName, label: string, hint: string }[] = [
   { name: 'card', label: 'Menu card', hint: 'On the menu, in checkout and orders' },
   { name: 'detail', label: 'Item page', hint: 'When a customer opens the item' },
 ]
+const VIEW_TABS = VIEWS.map(item => ({ label: item.label, value: item.name }))
 
 type Phase = 'pick' | 'loading' | 'edit'
 const phase = ref<Phase>(props.photoId || props.photo ? 'loading' : 'pick')
 const source = shallowRef<PhotoSource | null>(null)
 const imageUrl = ref<string | null>(null)
 const edit = ref<PhotoEdit | null>(null)
-const adjusting = ref<ViewName | null>(null)
+/** The view framed in the large area; its preview is marked. */
+const view = ref<ViewName>('card')
 const problem = ref<string>()
 /** Bumped for every new photo: picking one is a change to ask about before closing. */
 const picked = ref(0)
@@ -61,13 +64,14 @@ onBeforeUnmount(() => {
   if (imageUrl.value) URL.revokeObjectURL(imageUrl.value)
 })
 
-async function show(next: PhotoSource, nextEdit?: PhotoEdit) {
-  const url = await sourceUrl(next)
+/** Shows a photo; `url` when its display copy is already made (a turn). */
+async function show(next: PhotoSource, nextEdit?: PhotoEdit, url?: string) {
+  const shown = url ?? await sourceUrl(next)
   if (imageUrl.value) URL.revokeObjectURL(imageUrl.value)
-  imageUrl.value = url
+  imageUrl.value = shown
   source.value = next
   edit.value = nextEdit ?? newEdit(next.size, fillOf(next))
-  adjusting.value = null
+  view.value = 'card'
   phase.value = 'edit'
 }
 
@@ -136,61 +140,80 @@ onMounted(async () => {
   }
 })
 
-// --- The focus point ---
-const stage = useTemplateRef<HTMLElement>('stage')
-const ratioOf = (view: ViewName | 'source') => (view === 'source' ? (source.value ? source.value.size.width / source.value.size.height : 1) : VIEW_RATIOS[view])
-const boxStyle = (ratio: number) => ({ aspectRatio: String(ratio), width: `min(100%, calc(min(55dvh, 28rem) * ${ratio}))` })
+// --- Turning the photo ---
+const ratioOf = (name: ViewName) => VIEW_RATIOS[name]
+const boxStyle = (ratio: number) => ({ aspectRatio: String(ratio), width: `min(100%, calc(min(50dvh, 26rem) * ${ratio}))` })
 
-function setFocus(event: MouseEvent) {
-  if (!source.value || !edit.value || !stage.value) return
-  const rect = stage.value.getBoundingClientRect()
-  edit.value = withFocus(source.value.size, edit.value, { x: (event.clientX - rect.left) / rect.width, y: (event.clientY - rect.top) / rect.height })
-}
-const STEP = 0.02
-function moveFocus(event: KeyboardEvent) {
-  if (!source.value || !edit.value) return
-  const delta = { ArrowLeft: [-STEP, 0], ArrowRight: [STEP, 0], ArrowUp: [0, -STEP], ArrowDown: [0, STEP] }[event.key]
-  if (!delta) return
-  event.preventDefault()
-  edit.value = withFocus(source.value.size, edit.value, { x: edit.value.focus.x + delta[0]!, y: edit.value.focus.y + delta[1]! })
+/** A quarter turn on its way: the frame turns on screen at once while the photo is redrawn. */
+const turning = ref<0 | 1 | -1>(0)
+const TURN_MS = 200
+const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+
+async function rotate(direction: 1 | -1) {
+  if (!source.value || turning.value) return
+  turning.value = direction
+  // Let the turn start before the redraw takes the main thread.
+  await nextFrame()
+  const started = performance.now()
+  try {
+    const next = rotatePhoto(source.value, direction)
+    const url = await sourceUrl(next)
+    // Decoded before it's shown, so the turned photo appears without a blank moment.
+    const image = new Image()
+    image.src = url
+    await image.decode().catch(() => undefined)
+    await new Promise(resolve => setTimeout(resolve, Math.max(0, TURN_MS - (performance.now() - started))))
+    await show(next, undefined, url)
+  }
+  finally {
+    turning.value = 0
+  }
 }
 
-function rotate(direction: 1 | -1) {
-  if (!source.value) return
-  void show(rotatePhoto(source.value, direction))
-}
-
-// --- Adjusting one view ---
+// --- Framing one view ---
 const frameEl = useTemplateRef<HTMLElement>('frame')
 let last: { x: number, y: number } | null = null
+/** While the photo is dragged: the thirds grid shows. */
+const panning = ref(false)
 
 function startDrag(event: PointerEvent) {
   last = { x: event.clientX, y: event.clientY }
+  panning.value = true
   ;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
 }
 function drag(event: PointerEvent) {
-  if (!last || !adjusting.value || !frameEl.value) return
+  if (!last || !frameEl.value) return
   const rect = frameEl.value.getBoundingClientRect()
   move((event.clientX - last.x) / rect.height, (event.clientY - last.y) / rect.height)
   last = { x: event.clientX, y: event.clientY }
 }
 function endDrag() {
   last = null
+  panning.value = false
+}
+
+/**
+ * The framed view changed by hand. The menu card's middle is also the point the item page follows
+ * while it isn't framed by hand (the saved edit's `focus`).
+ */
+function setView(next: PhotoView) {
+  if (!source.value || !edit.value) return
+  const changed = { ...edit.value, [view.value]: next }
+  edit.value = view.value === 'card' ? withFocus(source.value.size, changed, { x: next.x, y: next.y }) : changed
 }
 function move(dx: number, dy: number) {
-  if (!source.value || !edit.value || !adjusting.value) return
-  const view = adjusting.value
-  edit.value = { ...edit.value, [view]: moveView(source.value.size, view, edit.value[view], dx, dy) }
+  if (!source.value || !edit.value) return
+  setView(moveView(source.value.size, view.value, edit.value[view.value], dx, dy))
 }
 const zoom = computed({
-  get: () => (edit.value && adjusting.value ? edit.value[adjusting.value].zoom : 1),
+  get: () => edit.value?.[view.value].zoom ?? 1,
   set: (value: number) => {
-    if (!source.value || !edit.value || !adjusting.value) return
-    const view = adjusting.value
-    edit.value = { ...edit.value, [view]: zoomView(source.value.size, view, edit.value[view], value) }
+    if (!source.value || !edit.value) return
+    setView(zoomView(source.value.size, view.value, edit.value[view.value], value))
   },
 })
-const zoomMin = computed(() => (source.value && adjusting.value ? minZoom(source.value.size, adjusting.value) : 1))
+const zoomMin = computed(() => (source.value ? minZoom(source.value.size, view.value) : 1))
+const STEP = 0.02
 function adjustKeys(event: KeyboardEvent) {
   const moves: Record<string, [number, number]> = { ArrowLeft: [-STEP, 0], ArrowRight: [STEP, 0], ArrowUp: [0, -STEP], ArrowDown: [0, STEP] }
   if (moves[event.key]) {
@@ -210,15 +233,21 @@ function onWheel(event: WheelEvent) {
   event.preventDefault()
   zoom.value *= 1 - Math.max(-0.2, Math.min(0.2, event.deltaY * 0.002))
 }
-function reset(view: ViewName) {
-  if (source.value && edit.value) edit.value = resetView(source.value.size, edit.value, view)
+/** Reset: the view suggested again (the menu card from the photo's middle; the item page then follows it). */
+function reset() {
+  if (!source.value || !edit.value) return
+  const size = source.value.size
+  edit.value = view.value === 'card'
+    ? withFocus(size, { ...edit.value, card: { ...edit.value.card, adjusted: false } }, { x: 0.5, y: 0.5 })
+    : resetView(size, edit.value, 'detail')
 }
+const framedByHand = computed(() => Boolean(edit.value?.[view.value].adjusted))
 
 /** Where the photo sits in a view's frame, as CSS. */
-function photoStyle(view: ViewName) {
+function photoStyle(name: ViewName) {
   if (!source.value || !edit.value) return {}
-  const frame = frameOf(view)
-  return placementStyle(placePhoto(source.value.size, frame, edit.value[view]), frame)
+  const frame = frameOf(name)
+  return placementStyle(placePhoto(source.value.size, frame, edit.value[name]), frame)
 }
 
 const small = computed(() => source.value && isSmallPhoto(source.value.size))
@@ -245,7 +274,7 @@ async function usePhoto() {
 <template>
   <UModal
     :title="photoId || photo ? 'Edit photo' : 'Add photo'"
-    description="Mark the middle of the dish, check how customers will see it, then use it."
+    description="Frame it for the menu card and the item page, check how customers will see it, then use it."
     :fullscreen="isCompact"
     :dismissible="!busy"
     :ui="{ content: 'sm:max-w-5xl', footer: 'justify-between gap-2 pb-[max(env(safe-area-inset-bottom),1rem)]' }"
@@ -331,118 +360,131 @@ async function usePhoto() {
       >
         <section
           class="min-w-0 space-y-3"
-          :aria-label="adjusting ? `Adjust the ${adjusting === 'card' ? 'menu card' : 'item page'}` : 'The photo'"
+          aria-label="Frame the photo"
         >
-          <template v-if="!adjusting">
-            <p class="text-sm font-medium text-highlighted">
-              {{ isCompact ? 'Tap' : 'Click' }} the middle of the dish
-            </p>
-            <div
-              ref="stage"
-              class="relative mx-auto cursor-crosshair touch-none overflow-hidden rounded-lg bg-elevated focus-visible:outline-2 focus-visible:outline-primary"
-              :style="boxStyle(ratioOf('source'))"
-              role="group"
-              tabindex="0"
-              aria-label="The photo. Click the middle of the dish, or move the point with the arrow keys."
-              data-testid="photo-stage"
-              @click="setFocus"
-              @keydown="moveFocus"
-            >
-              <img
-                :src="imageUrl"
-                alt=""
-                class="size-full select-none object-contain"
-                draggable="false"
-              >
-              <span
-                class="pointer-events-none absolute size-7 -translate-1/2 rounded-full border-2 border-white bg-primary/40 shadow ring-2 ring-primary"
-                :style="{ left: `${edit.focus.x * 100}%`, top: `${edit.focus.y * 100}%` }"
-                aria-hidden="true"
-              />
-            </div>
-            <div class="flex flex-wrap items-center justify-center gap-2">
-              <UButton
-                label="Rotate left"
-                icon="i-lucide-rotate-ccw"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                @click="rotate(-1)"
-              />
-              <UButton
-                label="Rotate right"
-                icon="i-lucide-rotate-cw"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                @click="rotate(1)"
-              />
-            </div>
-          </template>
-
-          <template v-else>
-            <div class="flex items-center justify-between gap-2">
-              <p class="text-sm font-medium text-highlighted">
-                {{ adjusting === 'card' ? 'Menu card' : 'Item page' }}: drag to move, zoom to fit
-              </p>
-              <div class="flex gap-1">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <UTabs
+              v-model="view"
+              :items="VIEW_TABS"
+              :content="false"
+              size="sm"
+              aria-label="Which view to frame"
+            />
+            <div class="flex gap-1">
+              <UTooltip text="Rotate left">
                 <UButton
-                  label="Reset"
-                  icon="i-lucide-undo-2"
+                  icon="i-lucide-rotate-ccw"
+                  aria-label="Rotate left"
                   color="neutral"
                   variant="ghost"
-                  size="sm"
-                  @click="reset(adjusting)"
+                  :disabled="turning !== 0"
+                  @click="rotate(-1)"
                 />
+              </UTooltip>
+              <UTooltip text="Rotate right">
                 <UButton
-                  label="Done"
-                  size="sm"
-                  @click="adjusting = null"
+                  icon="i-lucide-rotate-cw"
+                  aria-label="Rotate right"
+                  color="neutral"
+                  variant="ghost"
+                  :disabled="turning !== 0"
+                  @click="rotate(1)"
                 />
+              </UTooltip>
+            </div>
+          </div>
+
+          <!-- The frame, with the part of the photo left out dimmed around it. -->
+          <div
+            class="overflow-hidden rounded-lg bg-elevated px-6 py-8 sm:px-10"
+            data-testid="photo-stage"
+          >
+            <div
+              class="transition-transform ease-out motion-reduce:transition-none"
+              :class="turning ? 'duration-200' : 'duration-0'"
+              :style="{ transform: `rotate(${turning * 90}deg)` }"
+            >
+              <div
+                ref="frame"
+                class="relative mx-auto cursor-grab touch-none focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary active:cursor-grabbing"
+                :style="boxStyle(ratioOf(view))"
+                role="group"
+                tabindex="0"
+                :aria-label="`Frame the ${view === 'card' ? 'menu card' : 'item page'}: drag the photo, or use the arrow keys. Plus and minus zoom.`"
+                :data-photo="`${source.size.width}x${source.size.height}`"
+                data-testid="photo-frame"
+                @pointerdown="startDrag"
+                @pointermove="drag"
+                @pointerup="endDrag"
+                @pointercancel="endDrag"
+                @wheel="onWheel"
+                @keydown="adjustKeys"
+              >
+                <img
+                  :src="imageUrl"
+                  alt=""
+                  class="pointer-events-none absolute max-w-none opacity-30 select-none"
+                  :style="photoStyle(view)"
+                  draggable="false"
+                >
+                <div
+                  class="absolute inset-0 overflow-hidden rounded-md"
+                  :style="{ backgroundColor: edit.fill }"
+                >
+                  <img
+                    :src="imageUrl"
+                    alt=""
+                    class="absolute max-w-none select-none"
+                    :style="photoStyle(view)"
+                    draggable="false"
+                  >
+                </div>
+                <div
+                  class="pointer-events-none absolute inset-0 rounded-md ring-2 ring-white shadow-[0_0_0_3px_rgb(0_0_0/0.25)]"
+                  aria-hidden="true"
+                >
+                  <template v-if="panning">
+                    <span class="absolute inset-y-0 left-1/3 w-px bg-white/60" />
+                    <span class="absolute inset-y-0 left-2/3 w-px bg-white/60" />
+                    <span class="absolute inset-x-0 top-1/3 h-px bg-white/60" />
+                    <span class="absolute inset-x-0 top-2/3 h-px bg-white/60" />
+                  </template>
+                </div>
               </div>
             </div>
-            <div
-              ref="frame"
-              class="relative mx-auto cursor-grab touch-none overflow-hidden rounded-lg ring-1 ring-default focus-visible:outline-2 focus-visible:outline-primary active:cursor-grabbing"
-              :style="{ ...boxStyle(ratioOf(adjusting)), backgroundColor: edit.fill }"
-              role="group"
-              tabindex="0"
-              aria-label="Move the photo: drag it, or use the arrow keys. Plus and minus zoom."
-              data-testid="photo-frame"
-              @pointerdown="startDrag"
-              @pointermove="drag"
-              @pointerup="endDrag"
-              @pointercancel="endDrag"
-              @wheel="onWheel"
-              @keydown="adjustKeys"
-            >
-              <img
-                :src="imageUrl"
-                alt=""
-                class="absolute max-w-none select-none"
-                :style="photoStyle(adjusting)"
-                draggable="false"
-              >
-            </div>
-            <div class="mx-auto flex w-full max-w-md items-center gap-3">
-              <UIcon
-                name="i-lucide-zoom-out"
-                class="size-4 shrink-0 text-muted"
-              />
-              <USlider
-                v-model="zoom"
-                :min="zoomMin"
-                :max="MAX_ZOOM"
-                :step="0.01"
-                aria-label="Zoom"
-                class="flex-1"
-              />
-              <UIcon
-                name="i-lucide-zoom-in"
-                class="size-4 shrink-0 text-muted"
-              />
-            </div>
-          </template>
+          </div>
+
+          <div class="mx-auto flex w-full max-w-md items-center gap-3">
+            <UIcon
+              name="i-lucide-zoom-out"
+              class="size-4 shrink-0 text-muted"
+            />
+            <USlider
+              v-model="zoom"
+              :min="zoomMin"
+              :max="MAX_ZOOM"
+              :step="0.01"
+              aria-label="Zoom"
+              class="flex-1"
+            />
+            <UIcon
+              name="i-lucide-zoom-in"
+              class="size-4 shrink-0 text-muted"
+            />
+            <UButton
+              label="Reset"
+              icon="i-lucide-undo-2"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :disabled="!framedByHand"
+              @click="reset"
+            />
+          </div>
+          <p class="text-center text-xs text-muted">
+            {{ isCompact ? 'Drag the photo to move it; zoom with the slider.' : 'Drag the photo to move it; zoom with the slider or the mouse wheel.' }}
+            {{ view === 'card' ? 'The item page follows until you frame it.' : '' }}
+          </p>
 
           <UAlert
             v-if="small"
@@ -461,81 +503,79 @@ async function usePhoto() {
           />
         </section>
 
-        <!-- How customers will see it -->
+        <!-- How customers will see it; a preview frames its view. -->
         <section
           class="space-y-5"
           aria-label="How customers see it"
         >
           <div
-            v-for="view in VIEWS"
-            :key="view.name"
+            v-for="item in VIEWS"
+            :key="item.name"
             class="space-y-2"
-            :data-testid="`photo-preview-${view.name}`"
+            :data-testid="`photo-preview-${item.name}`"
           >
-            <div class="flex items-center justify-between gap-2">
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-highlighted">
-                  {{ view.label }}
-                </p>
-                <p class="text-xs text-muted">
-                  {{ view.hint }}
-                </p>
-              </div>
-              <UButton
-                :label="adjusting === view.name ? 'Adjusting' : 'Adjust'"
-                :aria-label="`Adjust the ${view.label.toLowerCase()}`"
-                icon="i-lucide-move"
-                color="neutral"
-                :variant="adjusting === view.name ? 'soft' : 'outline'"
-                size="xs"
-                @click="adjusting = view.name"
-              />
-            </div>
-            <!-- The menu card as on the menu: the square beside the name. -->
-            <div
-              v-if="view.name === 'card'"
-              class="flex items-center gap-3 rounded-lg border border-default bg-default p-3"
-            >
-              <div
-                class="relative size-24 shrink-0 overflow-hidden rounded-md"
-                :style="{ backgroundColor: edit.fill }"
-              >
-                <img
-                  :src="imageUrl"
-                  alt=""
-                  class="absolute max-w-none"
-                  :style="photoStyle('card')"
-                >
-              </div>
-              <div class="min-w-0 space-y-1">
-                <p class="truncate font-medium text-highlighted">
-                  {{ name || 'Menu item' }}
-                </p>
-                <p class="text-sm text-muted">
-                  Add to order
-                </p>
-              </div>
-            </div>
-            <!-- The item page's photo, 4:3 over its name. -->
-            <div
-              v-else
-              class="overflow-hidden rounded-lg border border-default bg-default"
-            >
-              <div
-                class="relative aspect-4/3 overflow-hidden"
-                :style="{ backgroundColor: edit.fill }"
-              >
-                <img
-                  :src="imageUrl"
-                  alt=""
-                  class="absolute max-w-none"
-                  :style="photoStyle('detail')"
-                >
-              </div>
-              <p class="truncate p-3 font-medium text-highlighted">
-                {{ name || 'Menu item' }}
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-highlighted">
+                {{ item.label }}
+              </p>
+              <p class="text-xs text-muted">
+                {{ item.hint }}
               </p>
             </div>
+            <button
+              type="button"
+              class="block w-full rounded-lg text-left outline-offset-2 transition focus-visible:outline-2 focus-visible:outline-primary"
+              :class="view === item.name ? 'ring-2 ring-primary' : 'hover:ring-2 hover:ring-accented'"
+              :aria-label="`Frame the ${item.label.toLowerCase()}`"
+              :aria-pressed="view === item.name"
+              @click="view = item.name"
+            >
+              <!-- The menu card as on the menu: the square beside the name. -->
+              <div
+                v-if="item.name === 'card'"
+                class="flex items-center gap-3 rounded-lg border border-default bg-default p-3"
+              >
+                <div
+                  class="relative size-24 shrink-0 overflow-hidden rounded-md"
+                  :style="{ backgroundColor: edit.fill }"
+                >
+                  <img
+                    :src="imageUrl"
+                    alt=""
+                    class="absolute max-w-none"
+                    :style="photoStyle('card')"
+                  >
+                </div>
+                <div class="min-w-0 space-y-1">
+                  <p class="truncate font-medium text-highlighted">
+                    {{ name || 'Menu item' }}
+                  </p>
+                  <p class="text-sm text-muted">
+                    Add to order
+                  </p>
+                </div>
+              </div>
+              <!-- The item page's photo, 4:3 over its name. -->
+              <div
+                v-else
+                class="overflow-hidden rounded-lg border border-default bg-default"
+              >
+                <div
+                  class="relative aspect-4/3 overflow-hidden"
+                  :style="{ backgroundColor: edit.fill }"
+                >
+                  <img
+                    :src="imageUrl"
+                    alt=""
+                    class="absolute max-w-none"
+                    :style="photoStyle('detail')"
+                  >
+                </div>
+                <p class="truncate p-3 font-medium text-highlighted">
+                  {{ name || 'Menu item' }}
+                </p>
+              </div>
+            </button>
           </div>
         </section>
       </div>

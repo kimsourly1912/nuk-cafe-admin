@@ -155,9 +155,19 @@ export async function preparePhoto(source: PhotoSource, edit: PhotoEdit): Promis
   return { source, edit, body, cardUrl: URL.createObjectURL(card) }
 }
 
-/** The source as a blob URL, for the editor's images (revoke it when done). */
+/**
+ * The editor shows the photo at most this size: sharp in its frame on a 2× screen, and a quarter of
+ * the pixels of the source to encode again after each turn (D161). The files are made from the source.
+ */
+const DISPLAY_MAX_EDGE = 1200
+
+/** A display copy of the source as a blob URL, for the editor's images (revoke it when done). */
 export async function sourceUrl(source: PhotoSource): Promise<string> {
-  const blob = await new Promise<Blob | null>(resolve => source.canvas.toBlob(resolve, 'image/jpeg', 0.92))
+  const scale = Math.min(1, DISPLAY_MAX_EDGE / Math.max(source.size.width, source.size.height))
+  const size = { width: Math.max(1, Math.round(source.size.width * scale)), height: Math.max(1, Math.round(source.size.height * scale)) }
+  const { canvas, context } = canvasOf(size)
+  context.drawImage(source.canvas, 0, 0, size.width, size.height)
+  const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9))
   if (!blob) throw new Error('This browser couldn\'t show the photo.')
   return URL.createObjectURL(blob)
 }
