@@ -1839,3 +1839,13 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Alternatives:** keep the point with a label and an animation linking it to the previews (still a concept to learn, and a second step before framing); both frames drawn over the photo at once (two overlapping rectangles); Cropper.js (the frame and the files already share `placePhoto`).
 - **Consequences:** a photo framed by hand on the card no longer moves when the item page is framed; editing a photo made before (with its point) opens with its views as saved.
 - **Verified:** e2e `products.test.ts` (the files as framed, the item page following the card, a preview and the tab choosing the view, framing the item page stops it following, Reset, rotate by its frame's size, the saved zoom on Edit photo; 60 passed); screenshots 1300 and 390.
+
+### D162: The photo editor's layout, from the owner's mockup, 2026-10-11
+- **Context:** the owner sent a mockup of the photo editor with each part in its own place (the frame's column and the previews' column, one toolbar, previews as cards) and asked for the previews' header to be a grey strip like the dashboard's cards, and for the previews to be visible on phones without scrolling (they were under the whole frame).
+- **Decision:**
+  - **Two named columns** from `lg`: **Adjust photo** (the tabs **Menu card | Item page** beside the title: tabs, not the mockup's dropdown, so both choices show and switch in one click) and **How customers see it** ("The item page follows the menu card until you frame it."), with a line between them.
+  - **One toolbar under the frame** in groups: **− slider +**, **rotate left / right**, **Reset** (an icon on phones); the frame in its own bordered panel.
+  - **Each preview a `UCard`** with the app's grey header strip: the name and shape ("Menu card · Square", "Item page · 4:3"), **Editing** on the view being framed and **Edit crop** on the other; a caption that says what it does: "On the menu, in checkout and orders", or the item page's "The whole photo" / "Cropped to fill" (from where the photo sits).
+  - **On phones:** the previews side by side under the toolbar, the frame smaller (30 % of the screen's height) and the captions shortened, so the whole editor shows without scrolling at 390 × 844; the title "Adjust photo" kept for screen readers only.
+  - **Choose another photo** an outlined button ("Another photo" on phones). Names stay the app's own ("Item page", not "Product detail"); colours and type from Nuxt UI (D74).
+- **Verified:** e2e (`products.test.ts` 60 with the preview test on the Editing badge and the tabs; `accessibility.test.ts`); screenshots 1300 × 900 and 390 × 844.
