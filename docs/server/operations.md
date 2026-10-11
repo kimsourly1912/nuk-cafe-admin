@@ -182,13 +182,14 @@ The bot sends reports and (from 8.1d) alerts to the chats connected on **Admin �
 2. Make a webhook secret: 48 random characters, e.g. `node -e "console.log(require('crypto').randomBytes(36).toString('base64url'))"`.
 3. Set all three on the Worker as secrets: `wrangler secret put NUXT_TELEGRAM_BOT_TOKEN`, `… NUXT_TELEGRAM_WEBHOOK_SECRET` and `… NUXT_TELEGRAM_BOT_USERNAME` (the name without `@`, e.g. `nuk_cafe_bot`; not secret, but a secret survives every deploy, while a plain variable set in the dashboard is replaced by the deploy's, and the same name as both a variable in `nuxt.config.ts` and a secret makes the deploy fail). Staging: `@nuk_cafe_bot`, set by the owner on 2026-09-30.
 4. Point the webhook at the site, once (and again if the address or the secret changes):
-   `curl -s "https://api.telegram.org/bot<TOKEN>/setWebhook" -d url=https://<site>/api/webhooks/telegram -d secret_token=<SECRET> -d 'allowed_updates=["message","my_chat_member"]'`
+   `curl -s "https://api.telegram.org/bot<TOKEN>/setWebhook" -d url=https://<site>/api/webhooks/telegram -d secret_token=<SECRET> -d 'allowed_updates=["message","my_chat_member","channel_post"]'`
    Telegram answers `{"ok":true,…}`. `…/getWebhookInfo` shows the last error, if any.
+   `channel_post` lets cafes connect their Telegram channel (Marketing → Channels, D164). A webhook set before it is fixed by itself: making a channel code adds `channel_post` with the same address and secret (a warning "could not check the webhook for channel posts" in Workers Logs means it couldn't: run the command above).
    On Windows, PowerShell mangles the quotes `curl.exe` gets; this asks for the token and the secret without showing them (staging was set up this way):
    ```powershell
    $t = Read-Host 'Bot token' -AsSecureString; $s = Read-Host 'Webhook secret' -AsSecureString
    $token = [Net.NetworkCredential]::new('', $t).Password; $secret = [Net.NetworkCredential]::new('', $s).Password
-   $body = @{ url = 'https://<site>/api/webhooks/telegram'; secret_token = $secret; allowed_updates = @('message', 'my_chat_member') } | ConvertTo-Json
+   $body = @{ url = 'https://<site>/api/webhooks/telegram'; secret_token = $secret; allowed_updates = @('message', 'my_chat_member', 'channel_post') } | ConvertTo-Json
    Invoke-RestMethod -Method Post -ContentType 'application/json' -Uri "https://api.telegram.org/bot$token/setWebhook" -Body $body
    Invoke-RestMethod "https://api.telegram.org/bot$token/getWebhookInfo" | Select-Object -ExpandProperty result
    Remove-Variable token, secret, t, s

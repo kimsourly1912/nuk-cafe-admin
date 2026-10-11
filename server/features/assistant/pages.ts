@@ -15,6 +15,7 @@ export const ASSISTANT_PAGES = {
   'availability': { title: 'Availability', path: '/admin/availability' },
   'promotions': { title: 'Promotions', path: '/admin/promotions' },
   'new-promotion': { title: 'New promotion', path: '/admin/promotions/new' },
+  'channels': { title: 'Channels', path: '/admin/channels' },
   'cafe-profile': { title: 'Cafe profile', path: '/admin/cafe' },
   'staff': { title: 'Staff', path: '/admin/staff' },
   'branch': { title: 'Branch', path: '/admin/branches' },

@@ -31,6 +31,14 @@ function show(promotion: PublicPromotion) {
   open.value = true
 }
 
+/** Opens an offer by id (a channel post's `?promo=`, M2a); whether it is on the menu now. */
+function showById(id: string): boolean {
+  const promotion = props.promotions.find(candidate => candidate.id === id)
+  if (promotion) show(promotion)
+  return !!promotion
+}
+defineExpose({ showById })
+
 function openItem(item: PublicMenuItem) {
   open.value = false
   emit('open-item', item)

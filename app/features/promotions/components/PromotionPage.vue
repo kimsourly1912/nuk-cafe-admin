@@ -4,10 +4,12 @@
  * column holds the results (orders paid at its price, items sold, the discount given, sales) and
  * its details; the side column its poster, to download for posting. Actions follow its phase:
  * Edit, Publish, End now, Delete draft; an ended one can Run again (a new promotion from it).
+ * Below the results, its posts to channels with Post to channels (M2a, D164).
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { usePromotion, usePromotionMutations, usePromotionResults } from '../composables/usePromotions'
 import { dateText, localToday, PHASES, timingText, whenText } from '../schemas/promotion-form'
+import PromotionPostsCard from './PromotionPostsCard.vue'
 
 const props = defineProps<{ id: string }>()
 
@@ -181,9 +183,16 @@ const more = computed<DropdownMenuItem[]>(() => {
               v-if="promotion.phase === 'live' || promotion.phase === 'ended'"
               class="text-xs text-muted"
             >
-              Orders paid and not cancelled, with at least one item at this promotion's price.
+              Orders paid and not cancelled, with at least one item at this promotion's price.<template v-if="results?.bySource.telegram">
+                {{ ' ' }}<strong class="text-highlighted">{{ pluralize(results.bySource.telegram, ['order', 'orders']) }} from Telegram posts.</strong>
+              </template>
             </p>
           </section>
+
+          <PromotionPostsCard
+            v-if="promotion.phase !== 'draft'"
+            :promotion="promotion"
+          />
 
           <UCard variant="outline">
             <template #header>

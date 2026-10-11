@@ -63,7 +63,9 @@ const ADMIN_PAGES: { path: string, ready: (page: Page) => Promise<unknown> }[] =
   // Promotions (D163): the library, the editor and a promotion's page.
   { path: '/c/nuk/admin/promotions', ready: page => page.getByRole('link', { name: 'Coffee week' }).waitFor() },
   { path: '/c/nuk/admin/promotions/new', ready: page => page.getByRole('heading', { name: 'How customers see it' }).waitFor() },
-  { path: '/c/nuk/admin/promotions/promo-1', ready: page => page.getByText('$21.00').waitFor() },
+  { path: '/c/nuk/admin/promotions/promo-1', ready: page => page.getByRole('link', { name: 'View post in NUK Cafe News' }).waitFor() },
+  // Channels (M2a, D164): a connected channel and one the bot was removed from.
+  { path: '/c/nuk/admin/channels', ready: page => page.getByText('Bot removed').waitFor() },
 ]
 
 const COFFEE_WEEK: Promotion = {
@@ -78,7 +80,9 @@ const ADMIN_MOCKS = {
   'GET /admin/branches/options': () => [RIVERSIDE],
   'GET /admin/menu/promotions': () => [COFFEE_WEEK],
   'GET /admin/menu/promotions/{id}': () => COFFEE_WEEK,
-  'GET /admin/menu/promotions/{id}/results': () => ({ orders: 12, units: 30, discountMinor: 2100, salesMinor: 8400 }),
+  'GET /admin/menu/promotions/{id}/results': () => ({ orders: 12, units: 30, discountMinor: 2100, salesMinor: 8400, bySource: { telegram: 3, facebook: 0 } }),
+  'GET /admin/menu/promotions/{id}/posts': () => [{ id: 'post-1', promotionId: 'promo-1', channel: { id: 'ch-1', title: 'NUK Cafe News', kind: 'telegram_channel' }, status: 'sent', caption: 'Coffee week: 20% off', withPoster: true, scheduledAt: '2026-10-11T03:00:00.000Z', attempts: 1, sentAt: '2026-10-11T03:00:05.000Z', url: 'https://t.me/nukcafe/101', reason: null, createdBy: 'alice', createdAt: '2026-10-11T03:00:00.000Z', version: 2 }],
+  'GET /admin/marketing/channels': () => ({ telegram: { enabled: true, botUsername: 'NukCafeBot' }, channels: [{ id: 'ch-1', kind: 'telegram_channel', title: 'NUK Cafe News', username: 'nukcafe', subscriberCount: 1250, status: 'connected', connectedBy: 'alice', connectedAt: '2026-10-11T03:00:00.000Z', version: 1 }, { id: 'ch-2', kind: 'telegram_channel', title: 'Old channel', username: null, subscriberCount: null, status: 'removed', connectedBy: null, connectedAt: '2026-10-01T03:00:00.000Z', version: 2 }] }),
 }
 
 describe('accessibility (axe, WCAG 2.1 AA)', () => {

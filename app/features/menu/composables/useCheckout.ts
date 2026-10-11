@@ -2,6 +2,7 @@ import type { CheckoutQuote, Order } from '#shared/contracts/orders'
 import { useAccountActions, useCustomerAccount } from '~/features/account'
 import type { PlaceFailure, PriceChange } from '../utils/checkout'
 import { orderLines, placeFailure, priceChange } from '../utils/checkout'
+import { useOrderSource } from './useOrderSource'
 import { useCart, useShopBranch, useTableContext } from './useShopMenu'
 
 /**
@@ -70,6 +71,7 @@ export function useCheckout() {
   const failure = ref<{ kind: PlaceFailure, message: string } | null>(null)
   const { account, guest } = useCustomerAccount()
   const { signInAsGuest } = useAccountActions()
+  const orderSource = useOrderSource()
 
   /** Places the order; resolves to it, or `null` with `failure` set. `guestName`: without an account. */
   async function place(options: { guestName?: string } = {}): Promise<Order | null> {
@@ -88,9 +90,11 @@ export function useCheckout() {
     try {
       // No account and no guest yet: this browser becomes a guest (one per browser, kept for its orders).
       if (!account.value && !guest.value) await signInAsGuest()
-      const named = account.value ? body : { ...body, guestName: options.guestName }
+      const source = orderSource.current()
+      const named = { ...(account.value ? body : { ...body, guestName: options.guestName }), ...(source ? { source } : {}) }
       const order = await apiFetch<Order>('/shop/orders', { method: 'POST', body: named, headers: { 'Idempotency-Key': idempotencyKey.value } })
       cart.clear()
+      orderSource.clear()
       return order
     }
     catch (error) {

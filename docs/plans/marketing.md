@@ -10,8 +10,9 @@ Built in two steps:
 
 | Step | What | Status |
 |---|---|---|
-| **M1** | **Promotions**: the discount on the menu, the checkout and the order; the poster; the admin's Promotions pages; the customer menu's Offers; results (D163) | built, awaiting review |
-| **M2** | **Post to channels**: connect a Telegram channel and a Facebook Page; Post now or at a time; per-channel results; tracked menu links | planned |
+| **M1** | **Promotions**: the discount on the menu, the checkout and the order; the poster; the admin's Promotions pages; the customer menu's Offers; results (D163) | built, merged |
+| **M2a** | **Post to a Telegram channel** (D164): connect it with a code, Post now or at a time, each post's result, orders counted per channel | built, awaiting review |
+| **M2b** | **Post to a Facebook Page**: needs Meta's App Review, Business Verification and a domain (QM1, Q4) | planned |
 
 ## M1: promotions (D163)
 
@@ -66,10 +67,45 @@ The server code lives in the **menu** feature (`promotions.*`): promotions chang
 
 Times of day (happy hour), "buy one get one", a minimum order, codes customers type, a limit per customer, promotions on add-ons, scheduling a post (M2).
 
-## M2: post to channels (planned)
+## M2a: post to a Telegram channel (D164)
 
-- **Connect a Telegram channel**: add the cafe's bot as an admin of the channel, then send the code the page shows in the channel (the same one-time link pattern as D112). Posting uses the Bot API's `sendPhoto` with the caption and a button to the menu.
+### Connecting a channel
+
+1. Marketing → **Channels** → **Connect a channel**: the dialog makes a one-time code (`/connect ABCD2345EF`, 15 minutes; only its hash is stored).
+2. **Open Telegram** (`https://t.me/<bot>?startchannel&admin=post_messages+delete_messages`): the admin picks the channel and adds the bot as an admin that can post. That link carries nothing back to us, hence the code.
+3. The admin posts the code in the channel. The webhook gets it as `channel_post`, checks the bot may post there (`getChatMember`), deletes the post and moves the code to **confirm** with the channel's title, @username and subscribers.
+4. **Connect channel** in the dialog. Closing at that point cancels it, and the bot leaves the channel.
+
+The webhook must receive `channel_post`: making a code adds it to the webhook's `allowed_updates` when it's missing (same address and secret).
+
+### Data (migration `0037_marketing_channels`)
+
+- `marketing_channels`: kind (`telegram_channel`), the Telegram chat id, title, username, subscribers, status (connected, removed, disconnected), who connected it and when; unique per tenant and chat, so one channel can serve two cafes.
+- `marketing_channel_links`: the code's hash, its status (waiting, confirm, connected, cancelled), the channel found, who made it, expiry.
+- `marketing_posts`: the promotion and the channel, status (pending, sent, failed, cancelled), the caption and the message as sent (HTML, the poster's key, the button), when, tries, the next try, the post's id and link in Telegram, the reason.
+- `orders.source` (`telegram`, `facebook` or null).
+
+### API
+
+| Route | Permission | |
+|---|---|---|
+| `GET /admin/marketing/channels` | menu: read | Whether this server has a bot, and the channels |
+| `POST /admin/marketing/channels/links`, `GET …/links/{id}`, `POST …/links/{id}/confirm`, `…/cancel` | settings: manage | Connecting |
+| `POST /admin/marketing/channels/{id}/disconnect` | settings: manage | `{ version }` |
+| `GET /admin/menu/promotions/{id}/posts` | menu: read | Latest first |
+| `POST /admin/menu/promotions/{id}/posts` | menu: write | `{ channelIds, caption, withPoster, at }` and an `Idempotency-Key`; without `at`, sent in the same request |
+| `POST /admin/marketing/posts/{id}/cancel`, `…/retry` | menu: write | `{ version }` |
+
+Scheduled posts: `marketing:deliver-posts` every minute.
+
+### Screens
+
+- **Channels**: the Telegram channels (Connected, or Bot removed with Reconnect; ⋮ Open in Telegram, Disconnect) and a Facebook Page card marked Coming soon.
+- **A promotion's page**: **Posts** (Sent with View post, Scheduled with Cancel, Sending or Retrying, Failed with the reason and Try again, Cancelled) and **Post to channels** for a live or scheduled promotion: the channels, the caption started from the promotion, Include the poster, Now or Later (this device's time, up to 30 days), the post as followers see it. Results add "N orders from Telegram posts".
+- **The customer menu**: `?promo=<id>` opens that offer (or says it isn't on anymore); `?src=telegram` is kept in the browser for 24 hours and sent with the next order. Both leave the address.
+
+## M2b: post to a Facebook Page (planned)
+
 - **Connect a Facebook Page**: "Continue with Facebook" (Facebook Login for Business), choose the Page; the Page token sealed per cafe like the Bakong token (D148). Posting uses the Graph API (`/{page-id}/photos`).
   - **Needs, before other cafes can use it:** a Meta app with **App Review** for `pages_manage_posts` and `pages_read_engagement`, **Business Verification**, a privacy policy page and **our own domain** (Q4). Until then it works only for the people added to the Meta app as testers (the owner's own Page).
-- **Post dialog** on a promotion's page: the channels with a preview each (the poster, the caption with the menu link added), **Post now** or **at a time**; delivered through the outbox with retries (D113); each channel's result (Posted with **View post**, or Failed with the reason and Try again / Reconnect).
-- **Tracked links**: the menu link in a post carries `?utm_source=telegram|facebook&p=<promotion>`, so the promotion's page can show visits and orders per channel.
+- A Page joins as another channel kind: the Post to channels dialog, the posts and `source=facebook` are ready for it.

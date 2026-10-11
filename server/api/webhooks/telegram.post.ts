@@ -1,4 +1,5 @@
 import type { Update } from 'grammy/types'
+import { handleChannelUpdate } from '#server/features/marketing'
 import { handleUpdate, secretMatches } from '#server/features/notifications'
 
 /**
@@ -15,5 +16,7 @@ export default defineEventHandler(async (event) => {
   const update = await readBody<Update>(event)
   if (!update || typeof update !== 'object' || typeof update.update_id !== 'number') return { ok: true }
   await handleUpdate(useDb(), api, settings, update)
+  // A channel's connect code and the bot removed from a channel (marketing, D164).
+  await handleChannelUpdate(useDb(), api, settings, update)
   return { ok: true }
 })

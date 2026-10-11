@@ -260,6 +260,13 @@
       "when": 1791716055017,
       "tag": "0036_promotions",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1791723599619,
+      "tag": "0037_marketing_channels",
+      "breakpoints": true
     }
   ]
 }

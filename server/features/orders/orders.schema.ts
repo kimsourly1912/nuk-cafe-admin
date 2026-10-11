@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { check, foreignKey, index, integer, sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
+import { ORDER_SOURCES } from '#shared/contracts/marketing'
 import { CANCEL_REASONS, KHQR_CURRENCIES, ORDER_STATUSES, ORDER_TYPES, PAYMENT_METHODS, RETURN_METHODS } from '#shared/contracts/orders'
 import { newId } from '#server/utils/ids'
 import { branches, tenantId } from '#server/features/branches/branches.schema'
@@ -47,6 +48,8 @@ export const orders = sqliteTable('orders', {
   readyAt: instant(),
   completedAt: instant(),
   cancelledAt: instant(),
+  /** Where the customer came from: a post's link (`?src=telegram`, M2a, D164); `null` otherwise. */
+  source: text({ enum: ORDER_SOURCES }),
   version: integer().notNull().default(1),
   createdAt: instant().notNull().default(nowMs),
   updatedAt: instant().notNull().default(nowMs),

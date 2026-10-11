@@ -64,7 +64,8 @@ async function open(path: string, options: Options = {}) {
     'GET /admin/menu/promotions/{id}': ({ url: u }) => store.get(idOf(u)) ?? (() => {
       throw failures.notFound()
     })(),
-    'GET /admin/menu/promotions/{id}/results': () => options.results ?? { orders: 0, units: 0, discountMinor: 0, salesMinor: 0 },
+    'GET /admin/menu/promotions/{id}/results': () => options.results ?? { orders: 0, units: 0, discountMinor: 0, salesMinor: 0, bySource: { telegram: 0, facebook: 0 } },
+    'GET /admin/menu/promotions/{id}/posts': () => [],
     'POST /admin/menu/promotions': ({ body }) => {
       sent.push({ method: 'POST', path: '', body })
       const input = body as Promotion & { publish: boolean }
@@ -188,7 +189,7 @@ describe('Promotions', () => {
   })
 
   it('shows a live promotion\'s results, and ends it after asking', async () => {
-    const { page, sent } = await open(`/admin/promotions/${COFFEE_WEEK.id}`, { results: { orders: 12, units: 30, discountMinor: 2100, salesMinor: 8400 } })
+    const { page, sent } = await open(`/admin/promotions/${COFFEE_WEEK.id}`, { results: { orders: 12, units: 30, discountMinor: 2100, salesMinor: 8400, bySource: { telegram: 0, facebook: 0 } } })
     const results = page.getByRole('region', { name: 'Results' })
     await results.getByText('$21.00').waitFor()
     expect(await results.textContent()).toContain('12')

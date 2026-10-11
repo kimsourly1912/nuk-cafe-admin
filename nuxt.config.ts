@@ -57,7 +57,7 @@ function securityHeaders(): Record<string, string> {
 
 /** Scheduled jobs, cron in UTC (docs/server/operations.md → Scheduled jobs). */
 const SCHEDULED_TASKS: Record<string, string[]> = {
-  '* * * * *': ['platform:deliver-outbox', 'orders:expire-unpaid', 'notifications:deliver'],
+  '* * * * *': ['platform:deliver-outbox', 'orders:expire-unpaid', 'notifications:deliver', 'marketing:deliver-posts'],
   '15 3 * * *': ['platform:expire-idempotency-keys', 'assistant:purge-usage', 'notifications:purge-deliveries'],
   '5 * * * *': ['media:purge-temporary'],
 }

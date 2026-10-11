@@ -3,6 +3,7 @@ import availability from './availability.md'
 import branch from './branch.md'
 import cafeProfile from './cafe-profile.md'
 import categories from './categories.md'
+import channels from './channels.md'
 import counter from './counter.md'
 import general from './general.md'
 import menuItems from './menu-items.md'
@@ -30,6 +31,7 @@ export const HELP_PAGES = [
   { name: 'add-ons', text: addOns },
   { name: 'availability', text: availability },
   { name: 'promotions', text: promotions },
+  { name: 'channels', text: channels },
   { name: 'cafe-profile', text: cafeProfile },
   { name: 'staff', text: staff },
   { name: 'branch', text: branch },
