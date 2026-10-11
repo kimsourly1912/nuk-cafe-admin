@@ -792,9 +792,12 @@ describe('menu item form', () => {
     const frame = editor.getByTestId('photo-frame')
     await frame.waitFor()
     expect(await editor.getByRole('button', { name: 'Reset' }).isDisabled()).toBe(true)
-    // Clicking the item page's preview frames it: a 4:3 frame.
+    // Edit crop on the item page's preview frames it: a 4:3 frame.
     await editor.getByRole('button', { name: 'Frame the item page' }).click()
-    expect(await editor.getByRole('button', { name: 'Frame the item page' }).getAttribute('aria-pressed')).toBe('true')
+    // The item page's card says Editing, the tab is chosen, and the menu card offers Edit crop.
+    await editor.getByTestId('photo-preview-detail').getByText('Editing').waitFor()
+    expect(await editor.getByRole('tab', { name: 'Item page' }).getAttribute('aria-selected')).toBe('true')
+    await editor.getByRole('button', { name: 'Frame the menu card' }).waitFor()
     await expect.poll(async () => {
       const box = (await frame.boundingBox())!
       return Math.round((box.width / box.height) * 100) / 100

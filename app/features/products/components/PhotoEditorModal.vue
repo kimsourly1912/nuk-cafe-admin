@@ -34,9 +34,9 @@ const props = defineProps<{
 const emit = defineEmits<{ 'close': [photo: PreparedPhoto | null], 'update:open': [open: boolean] }>()
 
 const { isCompact } = useLayoutContext()
-const VIEWS: { name: ViewName, label: string, hint: string }[] = [
-  { name: 'card', label: 'Menu card', hint: 'On the menu, in checkout and orders' },
-  { name: 'detail', label: 'Item page', hint: 'When a customer opens the item' },
+const VIEWS: { name: ViewName, label: string, shape: string }[] = [
+  { name: 'card', label: 'Menu card', shape: 'Square' },
+  { name: 'detail', label: 'Item page', shape: '4:3' },
 ]
 const VIEW_TABS = VIEWS.map(item => ({ label: item.label, value: item.name }))
 
@@ -142,7 +142,7 @@ onMounted(async () => {
 
 // --- Turning the photo ---
 const ratioOf = (name: ViewName) => VIEW_RATIOS[name]
-const boxStyle = (ratio: number) => ({ aspectRatio: String(ratio), width: `min(100%, calc(min(50dvh, 26rem) * ${ratio}))` })
+const boxStyle = (ratio: number) => ({ aspectRatio: String(ratio), width: `min(100%, calc(min(${isCompact.value ? '30dvh' : '50dvh'}, 26rem) * ${ratio}))` })
 
 /** A quarter turn on its way: the frame turns on screen at once while the photo is redrawn. */
 const turning = ref<0 | 1 | -1>(0)
@@ -241,6 +241,14 @@ function reset() {
     ? withFocus(size, { ...edit.value, card: { ...edit.value.card, adjusted: false } }, { x: 0.5, y: 0.5 })
     : resetView(size, edit.value, 'detail')
 }
+/** Under a preview: where customers see it, and for the item page whether the whole photo shows. */
+function captionOf(name: ViewName) {
+  if (name === 'card' || !source.value || !edit.value) return { lead: 'On the menu, in checkout and orders', where: '' }
+  const frame = frameOf('detail')
+  const placed = placePhoto(source.value.size, frame, edit.value.detail)
+  const whole = placed.width <= frame.width + 1e-6 && placed.height <= frame.height + 1e-6
+  return { lead: whole ? 'The whole photo' : 'Cropped to fill', where: ', when a customer opens the item' }
+}
 const framedByHand = computed(() => Boolean(edit.value?.[view.value].adjusted))
 
 /** Where the photo sits in a view's frame, as CSS. */
@@ -274,7 +282,7 @@ async function usePhoto() {
 <template>
   <UModal
     :title="photoId || photo ? 'Edit photo' : 'Add photo'"
-    description="Frame it for the menu card and the item page, check how customers will see it, then use it."
+    description="Adjust how your photo looks to customers, then use it."
     :fullscreen="isCompact"
     :dismissible="!busy"
     :ui="{ content: 'sm:max-w-5xl', footer: 'justify-between gap-2 pb-[max(env(safe-area-inset-bottom),1rem)]' }"
@@ -356,47 +364,32 @@ async function usePhoto() {
       <!-- Editing it -->
       <div
         v-else-if="source && edit && imageUrl"
-        class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]"
+        class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-0"
       >
         <section
-          class="min-w-0 space-y-3"
-          aria-label="Frame the photo"
+          class="min-w-0 space-y-3 lg:pr-6"
+          aria-labelledby="photo-adjust-title"
         >
-          <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex min-h-8 flex-wrap items-center justify-between gap-2">
+            <h3
+              id="photo-adjust-title"
+              class="font-semibold text-highlighted max-sm:sr-only"
+            >
+              Adjust photo
+            </h3>
             <UTabs
               v-model="view"
               :items="VIEW_TABS"
               :content="false"
               size="sm"
               aria-label="Which view to frame"
+              class="max-sm:w-full"
             />
-            <div class="flex gap-1">
-              <UTooltip text="Rotate left">
-                <UButton
-                  icon="i-lucide-rotate-ccw"
-                  aria-label="Rotate left"
-                  color="neutral"
-                  variant="ghost"
-                  :disabled="turning !== 0"
-                  @click="rotate(-1)"
-                />
-              </UTooltip>
-              <UTooltip text="Rotate right">
-                <UButton
-                  icon="i-lucide-rotate-cw"
-                  aria-label="Rotate right"
-                  color="neutral"
-                  variant="ghost"
-                  :disabled="turning !== 0"
-                  @click="rotate(1)"
-                />
-              </UTooltip>
-            </div>
           </div>
 
           <!-- The frame, with the part of the photo left out dimmed around it. -->
           <div
-            class="overflow-hidden rounded-lg bg-elevated px-6 py-8 sm:px-10"
+            class="overflow-hidden rounded-lg border border-default bg-elevated/50 px-6 py-4 sm:px-10 sm:py-8"
             data-testid="photo-stage"
           >
             <div
@@ -454,36 +447,76 @@ async function usePhoto() {
             </div>
           </div>
 
-          <div class="mx-auto flex w-full max-w-md items-center gap-3">
-            <UIcon
-              name="i-lucide-zoom-out"
-              class="size-4 shrink-0 text-muted"
+          <!-- The tools, in groups: zoom, turn, start again. -->
+          <div class="flex items-center gap-2 sm:gap-3">
+            <div class="flex min-w-0 flex-1 items-center gap-2">
+              <UButton
+                icon="i-lucide-minus"
+                aria-label="Zoom out"
+                color="neutral"
+                variant="outline"
+                :disabled="zoom <= zoomMin"
+                @click="zoom -= 0.1"
+              />
+              <USlider
+                v-model="zoom"
+                :min="zoomMin"
+                :max="MAX_ZOOM"
+                :step="0.01"
+                aria-label="Zoom"
+                class="min-w-0 flex-1"
+              />
+              <UButton
+                icon="i-lucide-plus"
+                aria-label="Zoom in"
+                color="neutral"
+                variant="outline"
+                :disabled="zoom >= MAX_ZOOM"
+                @click="zoom += 0.1"
+              />
+            </div>
+            <USeparator
+              orientation="vertical"
+              class="h-6"
             />
-            <USlider
-              v-model="zoom"
-              :min="zoomMin"
-              :max="MAX_ZOOM"
-              :step="0.01"
-              aria-label="Zoom"
-              class="flex-1"
-            />
-            <UIcon
-              name="i-lucide-zoom-in"
-              class="size-4 shrink-0 text-muted"
+            <div class="flex gap-1">
+              <UTooltip text="Rotate left">
+                <UButton
+                  icon="i-lucide-rotate-ccw"
+                  aria-label="Rotate left"
+                  color="neutral"
+                  variant="outline"
+                  :disabled="turning !== 0"
+                  @click="rotate(-1)"
+                />
+              </UTooltip>
+              <UTooltip text="Rotate right">
+                <UButton
+                  icon="i-lucide-rotate-cw"
+                  aria-label="Rotate right"
+                  color="neutral"
+                  variant="outline"
+                  :disabled="turning !== 0"
+                  @click="rotate(1)"
+                />
+              </UTooltip>
+            </div>
+            <USeparator
+              orientation="vertical"
+              class="h-6"
             />
             <UButton
-              label="Reset"
+              :label="isCompact ? undefined : 'Reset'"
+              aria-label="Reset"
               icon="i-lucide-undo-2"
               color="neutral"
-              variant="ghost"
-              size="sm"
+              variant="outline"
               :disabled="!framedByHand"
               @click="reset"
             />
           </div>
-          <p class="text-center text-xs text-muted">
-            {{ isCompact ? 'Drag the photo to move it; zoom with the slider.' : 'Drag the photo to move it; zoom with the slider or the mouse wheel.' }}
-            {{ view === 'card' ? 'The item page follows until you frame it.' : '' }}
+          <p class="text-xs text-muted max-sm:hidden">
+            Drag the photo to move it; zoom with the slider or the mouse wheel.
           </p>
 
           <UAlert
@@ -503,79 +536,110 @@ async function usePhoto() {
           />
         </section>
 
-        <!-- How customers will see it; a preview frames its view. -->
+        <!-- How customers will see it: side by side on phones, so both show under the tools. -->
         <section
-          class="space-y-5"
-          aria-label="How customers see it"
+          class="min-w-0 space-y-3 lg:border-l lg:border-default lg:pl-6"
+          aria-labelledby="photo-previews-title"
         >
-          <div
-            v-for="item in VIEWS"
-            :key="item.name"
-            class="space-y-2"
-            :data-testid="`photo-preview-${item.name}`"
-          >
-            <div class="min-w-0">
-              <p class="text-sm font-medium text-highlighted">
-                {{ item.label }}
-              </p>
-              <p class="text-xs text-muted">
-                {{ item.hint }}
-              </p>
-            </div>
-            <button
-              type="button"
-              class="block w-full rounded-lg text-left outline-offset-2 transition focus-visible:outline-2 focus-visible:outline-primary"
-              :class="view === item.name ? 'ring-2 ring-primary' : 'hover:ring-2 hover:ring-accented'"
-              :aria-label="`Frame the ${item.label.toLowerCase()}`"
-              :aria-pressed="view === item.name"
-              @click="view = item.name"
+          <div>
+            <h3
+              id="photo-previews-title"
+              class="flex min-h-8 items-center font-semibold text-highlighted"
             >
-              <!-- The menu card as on the menu: the square beside the name. -->
+              How customers see it
+            </h3>
+            <p class="text-sm text-muted max-sm:hidden">
+              The item page follows the menu card until you frame it.
+            </p>
+          </div>
+          <div class="grid grid-cols-2 items-start gap-3 lg:grid-cols-1 lg:gap-4">
+            <UCard
+              v-for="item in VIEWS"
+              :key="item.name"
+              :data-testid="`photo-preview-${item.name}`"
+              :class="view === item.name && 'ring-2 ring-primary'"
+              :ui="{ header: 'flex items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-2.5', body: 'p-0 sm:p-0' }"
+            >
+              <template #header>
+                <p class="min-w-0 truncate text-sm font-medium text-highlighted">
+                  {{ item.label }}<span class="font-normal text-muted max-sm:hidden"> · {{ item.shape }}</span>
+                </p>
+                <UBadge
+                  v-if="view === item.name"
+                  label="Editing"
+                  color="primary"
+                  variant="soft"
+                  icon="i-lucide-circle-dot"
+                  size="sm"
+                  class="shrink-0"
+                />
+                <UButton
+                  v-else
+                  :label="isCompact ? 'Edit' : 'Edit crop'"
+                  :aria-label="`Frame the ${item.label.toLowerCase()}`"
+                  trailing-icon="i-lucide-chevron-right"
+                  color="neutral"
+                  variant="outline"
+                  size="xs"
+                  class="shrink-0"
+                  @click="view = item.name"
+                />
+              </template>
+              <!-- The picture frames its view too, by pointer (the header's button by keyboard). -->
               <div
-                v-if="item.name === 'card'"
-                class="flex items-center gap-3 rounded-lg border border-default bg-default p-3"
+                class="cursor-pointer"
+                @click="view = item.name"
               >
+                <!-- The menu card as on the menu: the square beside the name. -->
                 <div
-                  class="relative size-24 shrink-0 overflow-hidden rounded-md"
-                  :style="{ backgroundColor: edit.fill }"
+                  v-if="item.name === 'card'"
+                  class="flex items-center gap-3 p-3"
                 >
-                  <img
-                    :src="imageUrl"
-                    alt=""
-                    class="absolute max-w-none"
-                    :style="photoStyle('card')"
+                  <div
+                    class="relative size-14 shrink-0 overflow-hidden rounded-md sm:size-20"
+                    :style="{ backgroundColor: edit.fill }"
                   >
+                    <img
+                      :src="imageUrl"
+                      alt=""
+                      class="absolute max-w-none"
+                      :style="photoStyle('card')"
+                    >
+                  </div>
+                  <div class="min-w-0 space-y-0.5">
+                    <p class="truncate text-sm font-medium text-highlighted sm:text-base">
+                      {{ name || 'Menu item' }}
+                    </p>
+                    <p class="text-xs text-muted sm:text-sm">
+                      Add to order
+                    </p>
+                  </div>
                 </div>
-                <div class="min-w-0 space-y-1">
-                  <p class="truncate font-medium text-highlighted">
+                <!-- The item page's photo, 4:3 over its name. -->
+                <template v-else>
+                  <div
+                    class="relative aspect-4/3 overflow-hidden"
+                    :style="{ backgroundColor: edit.fill }"
+                  >
+                    <img
+                      :src="imageUrl"
+                      alt=""
+                      class="absolute max-w-none"
+                      :style="photoStyle('detail')"
+                    >
+                  </div>
+                  <p class="truncate px-3 pt-2 text-sm font-medium text-highlighted">
                     {{ name || 'Menu item' }}
                   </p>
-                  <p class="text-sm text-muted">
-                    Add to order
-                  </p>
-                </div>
-              </div>
-              <!-- The item page's photo, 4:3 over its name. -->
-              <div
-                v-else
-                class="overflow-hidden rounded-lg border border-default bg-default"
-              >
-                <div
-                  class="relative aspect-4/3 overflow-hidden"
-                  :style="{ backgroundColor: edit.fill }"
+                </template>
+                <p
+                  class="px-3 pb-3 text-xs text-muted"
+                  :class="item.name === 'card' ? 'max-sm:hidden' : 'pt-0.5'"
                 >
-                  <img
-                    :src="imageUrl"
-                    alt=""
-                    class="absolute max-w-none"
-                    :style="photoStyle('detail')"
-                  >
-                </div>
-                <p class="truncate p-3 font-medium text-highlighted">
-                  {{ name || 'Menu item' }}
+                  {{ captionOf(item.name).lead }}<span class="max-sm:hidden">{{ captionOf(item.name).where }}</span>
                 </p>
               </div>
-            </button>
+            </UCard>
           </div>
         </section>
       </div>
@@ -584,10 +648,10 @@ async function usePhoto() {
     <template #footer>
       <UButton
         v-if="phase === 'edit'"
-        label="Choose another"
+        :label="isCompact ? 'Another photo' : 'Choose another photo'"
         icon="i-lucide-image"
         color="neutral"
-        variant="ghost"
+        variant="outline"
         :disabled="busy"
         @click="library.open()"
       />
