@@ -4,7 +4,7 @@
 
 How every new feature (Rewards, Vouchers, Orders, …) is planned, built and verified, so they behave the same way. This page **links** to the rules and APIs rather than repeating them:
 
-- [AGENTS.md](../AGENTS.md): the rules (architecture, boundaries, conventions). It wins if this page disagrees.
+- [AGENTS.md](../AGENTS.md): universal rules and task routing. Recipes live in [app architecture](guides/app-architecture.md); reference pages own API details. Flag disagreements instead of applying an old historical rule.
 - [docs/reference/](reference/README.md): the shared APIs, with types and examples.
 - [docs/decisions.md](decisions.md): why things are built this way.
 - [docs/progress.md](progress.md): what's done and how it was verified.
@@ -52,7 +52,7 @@ Every step with new screens starts with a design round before any code:
 2. **Upload.** The owner uploads the frames over several messages (at most 5 files per message) and says **"all uploaded"**. Until then the agent only confirms what arrived.
 3. **Review together.** The agent reviews all frames against the brief, the server's real behavior and the UI standard ([ui.md](reference/ui.md), [page-patterns.md](reference/page-patterns.md), D74: mockups decide layout and content, Nuxt UI decides styling). Per page: which frame to follow, what to change and why, what to reject (out of scope or against a rule), and any question only the owner can answer, each with a recommendation.
 4. **Approve.** The owner answers or accepts the recommendations. The agreed version goes into the step's plan and decisions entry.
-5. **Build on "next".** The owner says "next". Only then does the agent build, verify, document and open the PR (AGENTS.md → Checks), then stop for review.
+5. **Build on "next".** The owner says "next". Only then does the agent build, verify, document and open the PR ([development guide → Checks](guides/development.md#commands)), then stop for review.
 
 ---
 
@@ -110,7 +110,7 @@ Every step with new screens starts with a design round before any code:
 
 ## 2. Feature structure and boundaries
 
-**[Required]** Follow [AGENTS.md → Feature architecture](../AGENTS.md#feature-architecture). ESLint enforces the import boundaries. The short version:
+**[Required]** Follow [App feature architecture](guides/app-architecture.md#feature-architecture). ESLint enforces the import boundaries. The short version:
 
 - Business-specific code lives in `app/features/<feature>/`.
 - Route files in `app/pages/` stay thin: `definePageMeta({ title })` plus one page component.
@@ -303,7 +303,7 @@ How the reference feature maps to this standard:
 
 | Standard | Categories |
 |---|---|
-| Structure | [`app/features/categories/`](../app/features/categories/), route [`app/pages/categories/index.vue`](../app/pages/categories/index.vue) |
+| Structure | [`app/features/categories/`](../app/features/categories/), route [`app/pages/c/[slug]/admin/categories/index.vue`](../app/pages/c/[slug]/admin/categories/index.vue) |
 | Public API | [`index.ts`](../app/features/categories/index.ts): `CategorySelect`, `useCategoryOptions`, `categoriesNavigation` |
 | Behavior | [`useCategories.ts`](../app/features/categories/composables/useCategories.ts): `useCategoryMutations` (create keyed by parent and name, update/archive/restore by id with a shared `lock`, `invalidate: ['categories', 'products']`, batch archive with sub-categories first, reorder one level per request), `isBusy`; [`useCategoryTree.ts`](../app/features/categories/composables/useCategoryTree.ts): the tree, filters and ordering |
 | Form rules + mapping | [`category-form.ts`](../app/features/categories/schemas/category-form.ts) (create and update bodies, `version`, `null` makes it a main category), tests in [`category-form.test.ts`](../app/features/categories/tests/category-form.test.ts) |
