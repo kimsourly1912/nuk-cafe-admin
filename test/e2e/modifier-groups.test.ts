@@ -260,12 +260,16 @@ describe('new add-on group', () => {
     await form.getByLabel('Add-on 2', { exact: true }).fill('Oat milk')
     await duplicate.waitFor({ state: 'hidden', timeout: 5000 })
 
-    // The rule's error on At most leaves when At least is lowered.
+    // The rule's error on At most leaves when At least is lowered (the rule runs once the name is valid).
+    await form.getByLabel('Name', { exact: true }).fill('Milk')
     await form.getByLabel('No limit').click()
     await form.getByRole('spinbutton', { name: 'At least' }).fill('2')
     await form.getByRole('spinbutton', { name: 'At least' }).blur()
-    await form.getByRole('spinbutton', { name: 'At most' }).fill('1')
-    await form.getByRole('spinbutton', { name: 'At most' }).blur()
+    // Unticking No limit set At most to 1 already: change it, so the field is checked.
+    for (const value of ['3', '1']) {
+      await form.getByRole('spinbutton', { name: 'At most' }).fill(value)
+      await form.getByRole('spinbutton', { name: 'At most' }).blur()
+    }
     const tooFew = form.getByText(/less than the minimum/)
     await tooFew.waitFor({ timeout: 5000 })
     await form.getByRole('spinbutton', { name: 'At least' }).fill('1')
