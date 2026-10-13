@@ -253,12 +253,12 @@ describe('new add-on group', () => {
     await form.getByLabel('Add-on 2', { exact: true }).fill('Milk')
     await form.getByLabel('Add-on 2', { exact: true }).blur()
     await form.getByRole('button', { name: 'Create' }).click()
-    await duplicate.waitFor()
+    await duplicate.waitFor({ timeout: 5000 })
     // The add-ons' error doesn't paint the Pre-selected boxes red.
     for (const n of [1, 2]) expect(await form.getByLabel(`Pre-select add-on ${n}`).getAttribute('class') ?? '').not.toMatch(/error/)
 
     await form.getByLabel('Add-on 2', { exact: true }).fill('Oat milk')
-    await duplicate.waitFor({ state: 'hidden' })
+    await duplicate.waitFor({ state: 'hidden', timeout: 5000 })
 
     // The rule's error on At most leaves when At least is lowered.
     await form.getByLabel('No limit').click()
@@ -267,10 +267,10 @@ describe('new add-on group', () => {
     await form.getByRole('spinbutton', { name: 'At most' }).fill('1')
     await form.getByRole('spinbutton', { name: 'At most' }).blur()
     const tooFew = form.getByText(/less than the minimum/)
-    await tooFew.waitFor()
+    await tooFew.waitFor({ timeout: 5000 })
     await form.getByRole('spinbutton', { name: 'At least' }).fill('1')
     await form.getByRole('spinbutton', { name: 'At least' }).blur()
-    await tooFew.waitFor({ state: 'hidden' })
+    await tooFew.waitFor({ state: 'hidden', timeout: 5000 })
   })
 
   it('refuses rules the add-ons can\'t meet, with the server\'s own message, before sending', async () => {
