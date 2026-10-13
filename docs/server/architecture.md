@@ -2,6 +2,8 @@
 
 ← [Server standard](./README.md)
 
+> **Purpose:** How the server is shaped: surfaces and routes, features and their layers, imports and aliases, conventions, writing data (versions, batches, idempotency, audit), errors, validation, side effects and tests.
+
 - [Shape of the system](#shape-of-the-system)
 - [Surfaces and routes](#surfaces-and-routes)
 - [Features](#features): layout, the layers inside a feature, rules

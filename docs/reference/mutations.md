@@ -2,6 +2,8 @@
 
 ← [API Reference](./README.md)
 
+> **Purpose:** How the app writes data: `useMutation` (options, `execute`, `executeMany`), the concurrency guarantee and its limits, and `usePendingMutationCount`.
+
 - [`useMutation`](#usemutation)
   - [Usage](#usage) · [Type](#type) · [Options](#options) · [Returns](#returns) · [`execute`](#execute) · [`executeMany`](#executemany)
   - [Recipes](#recipes) · [Behavior details](#behavior-details) · [Common mistakes](#common-mistakes)

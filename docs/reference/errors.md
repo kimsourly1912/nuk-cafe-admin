@@ -2,6 +2,8 @@
 
 ← [API Reference](./README.md)
 
+> **Purpose:** How a failure becomes one error type (`ApiError`) and is shown to the user: `getErrorMessage`, `<ApiErrorAlert>`, `useNotify` and the error codes.
+
 - [Overview](#overview): how server failures become one error type
 - [`ApiError`](#apierror)
 - [`getErrorMessage`](#geterrormessage)

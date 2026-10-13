@@ -9,7 +9,7 @@ How the NUK Cafe server is designed and built. Every server change follows these
 | [Data model](./data-model.md) | The tables per domain (identity, branch, menu, customers & loyalty, orders), their invariants and open questions |
 | [Operations](./operations.md) | Environments, configuration, migrations, deploys, backups, scheduled jobs, email, monitoring |
 
-**Status (2026-09-27):** this is the target standard. All server code follows it: identity, staff, customers and the platform tables since steps 1.1–1.7, the menu since step 3.8b removed the legacy `/api/v1` menu (D71). See [progress.md](../progress.md).
+**Status (2026-09-27):** this is the target standard. All server code follows it: identity, staff, customers and the platform tables since steps 1.1–1.7, the menu since step 3.8b removed the legacy `/api/v1` menu (D71). See [status.md](../status.md).
 
 ## Decisions this standard is built on
 
@@ -35,3 +35,12 @@ Agreed with the project owner on 2026-09-27 (D43; the menu model in D44):
 ## Library first
 
 Before writing server code, check whether Better Auth, `@nuxtjs/better-auth`, NuxtHub, Nitro or Cloudflare already does it ([security.md → What the libraries do](./security.md#what-the-libraries-do)). We write only the business domain: rules, services, contracts and their tests.
+
+<!-- moved from AGENTS.md: server rules -->
+## Rules moved from AGENTS.md
+
+_Moved verbatim from AGENTS.md ("Server"). The other server bullets (routes and tenant, feature layers, writes, `apiFetch`) stay in AGENTS.md._
+
+- **Library first:** Better Auth (`admin` + `organization` plugins, access control), `@nuxtjs/better-auth`, NuxtHub and Cloudflare features before our own code ([security.md → What the libraries do](security.md#what-the-libraries-do)).
+- **Imports:** use `#server/` for server paths and `#shared/` for shared paths, including tests and dynamic imports. Same-directory `./` imports are allowed; parent-relative imports and `~~/server/` are lint errors. Cross-feature imports still use the public `index.ts`. The app feature relative-import rule above is app-only. See [Imports and aliases](architecture.md#imports-and-aliases), including the build-time auth exception.
+- Do not restore the Spring SDK, proxy or envelope handling (D39).

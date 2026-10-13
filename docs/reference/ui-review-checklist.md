@@ -76,4 +76,4 @@ For each screen and overlay, show and test the applicable [states](./page-patter
 ## Tests
 
 - [ ] e2e covers the compact layout where it differs (a phone-width test: no horizontal overflow, key controls reachable) and at least one keyboard path.
-- [ ] Each new guard (a disabled action, a read-only state, a conflict path) is checked to fail its test when removed ([progress → How to verify](../progress.md#how-to-verify)).
+- [ ] Each new guard (a disabled action, a read-only state, a conflict path) is checked to fail its test when removed ([how-to-verify.md → How to verify](../how-to-verify.md#how-to-verify)).

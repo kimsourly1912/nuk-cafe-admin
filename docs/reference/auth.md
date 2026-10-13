@@ -2,6 +2,8 @@
 
 ← [API Reference](./README.md)
 
+> **Purpose:** How the app signs staff in and keeps their session: `useAuth`, the public pages, the session and identity generation, the redirect after login, and the local first-admin setup.
+
 - [`useAuth`](#useauth)
 - [Public pages and the change-password page](#public-pages-and-the-change-password-page)
 - [How the session works](#how-the-session-works)

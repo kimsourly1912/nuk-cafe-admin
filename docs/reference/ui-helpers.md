@@ -2,6 +2,8 @@
 
 ← [API Reference](./README.md)
 
+> **Purpose:** API reference for the shared UI components and helpers (`useConfirm`, `<TaskFrame>`, `<RecordSelect>`, `<AppDrawer>`, money and time helpers, …).
+
 - [`useConfirm`](#useconfirm)
 - [`useTableSelection`](#usetableselection)
 - [`<TaskFrame>`](#taskframe)

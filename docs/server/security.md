@@ -2,6 +2,8 @@
 
 ← [Server standard](./README.md)
 
+> **Purpose:** Who may do what: what the libraries do, identity, roles and permissions, sessions, onboarding, request protection, uploads, secrets, logging, and the checklist for every route.
+
 - [What the libraries do](#what-the-libraries-do)
 - [Identity](#identity)
 - [Roles and permissions](#roles-and-permissions)

@@ -156,4 +156,60 @@ async function removeSelected() {
 
 ## Keeping this reference current
 
-When you add or change a shared API, update its page here in the same change (see AGENTS.md → "Resuming work"). Each entry follows the same format: **Usage → Type → Parameters → Returns → Examples → Caveats**.
+When you add or change a shared API, update its page here in the same change (see AGENTS.md → "Keep these documents current"). Each entry follows the same format: **Usage → Type → Parameters → Returns → Examples → Caveats**.
+
+<!-- moved from AGENTS.md: shared building blocks -->
+## Root shared blocks: usage rules (moved from AGENTS.md)
+
+_Moved verbatim from AGENTS.md ("Shared building blocks"). The table carries rules, not only names: for example **never write a cafe's name into a page** (`useCafe()`), **never a bare `<img>` for a menu photo** (`MenuItemImage`), `UInputTime` and `UDrawer` are lint errors, never `useMediaQuery` by hand, every quantity a `QuantityStepper`._
+
+Summary only. Full signatures, options and examples are in **[docs/reference/](README.md)**.
+
+| What | Where | Use for |
+|---|---|---|
+| `apiFetch<T>(path, opts)` | `utils/api.ts`, engine `utils/api-fetch.ts` | Every call to our API (`/api` + path; a cafe's surfaces under the page's cafe, `apiPath`): `ApiError` on failure, no retries, session loss and required password change handled |
+| `useTenantPath()`, `useTenantSlug()`, `tenantUrl`, `splitTenantUrl` | `composables/`, `utils/tenant-path.ts` | A cafe page's address: `tenantPath('/admin/products')` → `/c/nuk/admin/products` (D141) |
+| `useApiQuery(key, handler, opts)` | `composables/` | Every read (see "CRUD state") |
+| `useMutation(fn, opts)` | `composables/`, engine in `utils/mutation.ts` | Every create/update/delete, single or batch |
+| `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Selection for tables, cards and trees (`isSelected`, `toggle`, `toggleAll`); the Select mode bar |
+| `TaskFrame` | `components/` | A task-flow page's frame (sign-in, change password, the account pages): a card from `sm`, the full screen with the action at the bottom on phones; CSS only (D84, D97) |
+| `BottomActionBar` | `components/` | The one bottom bar for a page's mode, Save or bulk actions (fixed below `lg`, one at a time, steps aside for the keyboard) |
+| `useLayoutContext()` | `composables/` | `isCompact` / `isExpanded` for choices CSS can't make (full-screen modal, drawer vs dropdown); never `useMediaQuery` by hand |
+| `StatusTabs` | `components/` | Status filter as tabs with counts; each feature names its statuses |
+| `ListSkeleton` | `components/` | First-load placeholders (rows or cards) |
+| `previewList`, `pluralize`, `changeText` | `utils/text.ts` | "Coffee, Tea and 3 more", "3 categories", "+12%" against a previous number |
+| `usePaginatedQuery(filters)` | `composables/` | List state **kept in the URL**: 1-based `page` (UI and API), `query` with `page` + `pageSize`, resets page on filter change, strips `ANY`/'', `isFiltered`, `clearFilters` |
+| `ANY`, `toApiQuery` | `utils/query.ts` | "All" option in filter selects (`USelect` can't hold `undefined`) |
+| `invalidate(...features)` | `utils/invalidate.ts` | Refetch data after mutations |
+| `useConfirm()` | `composables/` | `await confirm({ title, danger: true })` resolves to `boolean` (`useMutation`'s `confirm` uses it) |
+| `ApiError`, `getErrorMessage` | `utils/api-error.ts` | One error type for every failure (our API's and Better Auth's formats); `kind`, `code`, `fieldErrors`, a user-safe `message` |
+| `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard` | `composables/`, `utils/form-value.ts` | "Discard unsaved changes?" for page and modal forms; the route middleware and tab-close plugin use them |
+| `draft` option, `<FormDraftAlert>`, `createFormDraftStore` | `useUnsavedChanges`, `components/`, `utils/form-draft.ts` | A long form keeps unsaved input in the browser per cafe, person and record, offered back with Restore after a crash or lost session; `markSaved()` after saving (D151) |
+| `mergeFormChanges` | `utils/form-value.ts` | Reload after someone else saved first (409): their version with this input on top, part by part, naming the parts both changed (D153) |
+| `<SearchInput>`, `<ListEmptyState>` | `components/` | List toolbar search (as you type) and empty states ("nothing yet" vs "filters hide everything") |
+| `invalidateAll()`, `invalidateInThisTab()` | `utils/invalidate.ts` | Refetch loaded or only stale queries / invalidate without telling other tabs (used by the freshness plugin) |
+| `usePageShortcuts`, `useSubmitShortcut`, `SHORTCUTS`, `<ShortcutsHelp>` | `composables/useShortcuts.ts`, `components/` | Keyboard shortcuts (skipped behind dialogs/menus), Ctrl/⌘+Enter to save, the `?` list |
+| `useNotify()` | `composables/` | Toasts for API actions that aren't mutations |
+| `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`, `CURRENCY` | `utils/money.ts` | Cents (API) ↔ dollars (forms, display), "$4.20" |
+| `timezoneOptions`, `utcOffset`, `cityOf` | `utils/timezones.ts` | Time zone pickers: "(GMT+07:00) Phnom Penh" by offset (the Branch form, New cafe, D142) |
+| `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute` | `utils/clock.ts` | Weekly windows' minutes after midnight ↔ "7:30 AM" and `<TimeInput>` (availability rules, branch hours) |
+| `TimeInput` | `components/` | Every time of day: `UInputTime` with AM/PM switched by a tap, which a phone's keyboard can't type (`UInputTime` is a lint error elsewhere, D165) |
+| `useFormErrorRecheck` | `composables/` | Every `UForm`: errors leave as soon as they're fixed, a rule across fields too; server errors stay until their field changes (D166) |
+| `useReorderTransition` | `composables/` | A reorder list's rows slide to their new place when moved by their chevrons or keys (`<TransitionGroup :move-class>` + Sortable's `onStart`/`onEnd`, D165) |
+| `ApiErrorAlert` | `components/` | Load-error alert with Retry |
+| `StatCard` | `components/` | One number on a page, in a soft card (never a number styled by hand) |
+| `RecordSelect` | `components/` | A dropdown of records: `USelectMenu` with search and virtual scroll, `pinned` "All"/"None"; a combobox, like `USelect` (D152) |
+| `adminSetupSteps()`, `AdminSetupStep` | `utils/admin-setup.ts`, `types/admin-setup.ts` | The home page's "Set up your cafe": each feature exports its step from its index.ts, listed here in order (D155) |
+| `adminSearchSources()`, `AdminSearch`, `AdminSearchSource` | `utils/admin-search.ts`, `components/`, `types/admin-search.ts` | Ctrl/⌘+K search in the admin: each feature exports a source from its index.ts, listed here like the sidebar (D152) |
+| `AppDrawer` | `components/` | Every drawer and bottom sheet: `UDrawer` without a handle or dragging (`UDrawer` is a lint error elsewhere) |
+| `ToolbarTabs`, `useUrlTab` | `components/`, `composables/` | Tabs on a toolbar's line; a page's tab in the URL (`?tab=`) |
+| `ListPagination` | `components/` | The pager of every paginated list: "Page [n] of N · Rows per page", page numbers; `pageSize` in the URL (D128) |
+| `QuantityStepper` | `components/` | Every quantity: − n + in a pill, no keyboard on touch screens (D128) |
+| `useCenteredTab` | `composables/` | A scrolling tab row keeps its active tab in the middle (`StatusTabs`, `ToolbarTabs` call it) (D128) |
+| `QrCode`, `qrImage`, `qrSvg` | `components/`, `utils/qr-code.ts` | A QR code drawn as SVG, dark on light in both themes: a table's link, an order's KHQR (D130) |
+| `fetchAccountCafes`, `otherCafes`, `workspaceUrl`, `worksElsewhere`, `CAFES_PATH` | `utils/account-cafes.ts` | The signed-in account's cafes (`GET /api/me/cafes`) for Your cafes, the switcher and a sign-in refused at the wrong cafe; another cafe always opens as a full page load (D141, D144) |
+| `useCafe()`, `CafeLogo` | `composables/`, `components/` | The cafe's name and logo (`GET /api/cafes/{slug}`): **never write a cafe's name into a page** (D143) |
+| `ImageInput`, `useImageUpload`, `shrinkImage` | `components/`, `composables/`, `utils/` | An image for a record (the cafe's logo): shrunk in the browser, uploaded on pick through `POST /admin/media` (D122, D143) |
+| `MenuItemImage` | `components/` | **Every menu item photo** (D158): `usage="card"` (square) or `"detail"` (4:3, two sizes), blurred placeholder, lazy, fade-in; never a bare `<img>` for a menu photo. Photos are made by the products feature's photo editor (`POST /admin/media/photos`) |
+| `OrderLinePromotion` | `components/` | An order line's promotion as sold ("20% off · Coffee week · was $7.00"): the customer's order, the counter, Order history (D163) |
+| `PhoneInput`, `parsePhone` / `phoneSchema` | `components/`, `shared/contracts/phone.ts` | Every phone number: a country (flag, dial code) and the number; stored and sent as E.164, checked by libphonenumber on both sides (D127) |

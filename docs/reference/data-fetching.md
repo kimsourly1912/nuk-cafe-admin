@@ -2,6 +2,8 @@
 
 ← [API Reference](./README.md)
 
+> **Purpose:** How the app reads data: `apiFetch`, `useApiQuery`, `usePaginatedQuery`, `ANY` / `toApiQuery` and the `invalidate` helpers, with the edge cases each handles.
+
 - [`apiFetch`](#apifetch): call our API
 - [`useApiQuery`](#useapiquery): read data
 - [`usePaginatedQuery`](#usepaginatedquery): filters and pagination for list pages

@@ -7,7 +7,7 @@ How every new feature (Rewards, Vouchers, Orders, …) is planned, built and ver
 - [AGENTS.md](../AGENTS.md): the rules (architecture, boundaries, conventions). It wins if this page disagrees.
 - [docs/reference/](reference/README.md): the shared APIs, with types and examples.
 - [docs/decisions.md](decisions.md): why things are built this way.
-- [docs/progress.md](progress.md): what's done and how it was verified.
+- [docs/status.md](status.md): what's done and how it was verified.
 
 Every statement here is labelled:
 
@@ -35,14 +35,14 @@ Not every unknown is the same kind.
 API mechanics (absent vs `null`, versions, error codes, ids, units) are **not** open: the [server standard](server/README.md) defines them.
 
 For each [Open] item:
-1. **Record the exact question and who can answer it** (the project owner for business rules and permissions; API semantics are ours to define in the server standard) in the plan and in [progress.md → Open questions](progress.md#open-questions--waiting-on-others).
+1. **Record the exact question and who can answer it** (the project owner for business rules and permissions; API semantics are ours to define in the server standard) in the plan and in [status.md → Open questions](status.md#open-questions--waiting-on-others).
 2. **Settle it with a decision** recorded in [decisions.md](decisions.md) and, for the server, in the [server standard](server/README.md). Server behavior is evidenced by the feature's server tests and a real-server check, not by frontend code.
 3. **Continue the work that doesn't depend on it.** One open question doesn't stop a feature.
-4. **Defer the affected behavior**: don't offer it in the UI, or leave it visibly incomplete, and say so in progress.md.
+4. **Defer the affected behavior**: don't offer it in the UI, or leave it visibly incomplete, and say so in status.md.
 
 An illustrative proposal may be written down, labelled **awaiting approval**. It is not an implementation instruction.
 
-Evidence levels follow [progress.md → Verification levels](progress.md#verification-levels). Note that **e2e tests are browser-mock evidence** (real Chrome, mocked API); **server** and **real-server** evidence come from the server tests and from running against `pnpm dev` (or staging).
+Evidence levels follow [how-to-verify.md → Verification levels](how-to-verify.md#verification-levels). Note that **e2e tests are browser-mock evidence** (real Chrome, mocked API); **server** and **real-server** evidence come from the server tests and from running against `pnpm dev` (or staging).
 
 ### Designing a UI step with mockups (the owner's workflow)
 
@@ -52,13 +52,13 @@ Every step with new screens starts with a design round before any code:
 2. **Upload.** The owner uploads the frames over several messages (at most 5 files per message) and says **"all uploaded"**. Until then the agent only confirms what arrived.
 3. **Review together.** The agent reviews all frames against the brief, the server's real behavior and the UI standard ([ui.md](reference/ui.md), [page-patterns.md](reference/page-patterns.md), D74: mockups decide layout and content, Nuxt UI decides styling). Per page: which frame to follow, what to change and why, what to reject (out of scope or against a rule), and any question only the owner can answer, each with a recommendation.
 4. **Approve.** The owner answers or accepts the recommendations. The agreed version goes into the step's plan and decisions entry.
-5. **Build on "next".** The owner says "next". Only then does the agent build, verify, document and open the PR (AGENTS.md → Checks), then stop for review.
+5. **Build on "next".** The owner says "next". Only then does the agent build, verify, document and open the PR (docs/workflow.md → Checks), then stop for review.
 
 ---
 
 ## 1. Feature planning template
 
-**[Required]** Before writing code, fill this in as `docs/plans/<feature>.md`. Keep it short: a line per item is fine. Mark each unknown as **[Choice]** (with the choice made) or **[Open]** (with the exact question and who can answer it), following [choices vs contracts](#open-questions-choices-vs-contracts). Add every [Open] item to [progress.md → Open questions](progress.md#open-questions--waiting-on-others).
+**[Required]** Before writing code, fill this in as `docs/plans/<feature>.md`. Keep it short: a line per item is fine. Mark each unknown as **[Choice]** (with the choice made) or **[Open]** (with the exact question and who can answer it), following [choices vs contracts](#open-questions-choices-vs-contracts). Add every [Open] item to [status.md → Open questions](status.md#open-questions--waiting-on-others).
 
 ```markdown
 # <Feature> plan
@@ -271,7 +271,7 @@ What features must not do is **duplicate the engine**: no in-flight maps, double
 
 ## 8. Verification recipes and definition of done
 
-Test by **risk**: pick the scenarios that can actually break in this feature, instead of applying every row to every feature. Helpers: `mockApi` (strict: unmocked requests fail the test), `MockFailure`, `failures`, `deferred`, `paginatedHandler`, `pageOf`, `toast`, `gotoViaSidebar`, `beforeUnloadPrevented`, `openTabs`, `gotoHydrated` in [`test/e2e/support/mock-api.ts`](../test/e2e/support/mock-api.ts), and the pitfalls in [progress.md → How to verify](progress.md#how-to-verify).
+Test by **risk**: pick the scenarios that can actually break in this feature, instead of applying every row to every feature. Helpers: `mockApi` (strict: unmocked requests fail the test), `MockFailure`, `failures`, `deferred`, `paginatedHandler`, `pageOf`, `toast`, `gotoViaSidebar`, `beforeUnloadPrevented`, `openTabs`, `gotoHydrated` in [`test/e2e/support/mock-api.ts`](../test/e2e/support/mock-api.ts), and the pitfalls in [status.md → How to verify](how-to-verify.md#how-to-verify).
 
 | Scenario | When | How |
 |---|---|---|
@@ -285,15 +285,15 @@ Test by **risk**: pick the scenarios that can actually break in this feature, in
 | Bulk: partial failure, failed stays selected. Stop / Retry failed where the feature adds phases or special rules | Features with bulk actions | e2e + engine unit tests |
 | Relationships: picker loads, exclusions, current value not in the options | Features with pickers | e2e |
 | Permissions: hidden actions, refused requests | Every feature behind a permission | server route tests + e2e |
-| **Real server:** every route's happy path and its permission refusals | Before calling a feature "done" in progress.md | Against `pnpm dev` (and staging once it exists). Record as **real-server** evidence |
+| **Real server:** every route's happy path and its permission refusals | Before calling a feature "done" in status.md | Against `pnpm dev` (and staging once it exists). Record as **real-server** evidence |
 
 **Definition of done** **[Required]**:
-- [ ] Plan in `docs/plans/<feature>.md`, with **[Open]** items listed in progress.md.
+- [ ] Plan in `docs/plans/<feature>.md`, with **[Open]** items listed in status.md.
 - [ ] Structure per §2. The public `index.ts` exports building blocks only.
 - [ ] Lists and forms behave per §4–§5. Pickers per §6.
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` pass. Run `pnpm build` too when touching config, plugins or modules (e2e also builds).
 - [ ] Tests chosen per the table above. For each important test, it was checked to fail when the behavior is removed.
-- [ ] Docs: `features.md` (public API), `progress.md` (status plus **evidence level per item**, browser-mock vs server vs real-server kept apart), case tables for new edge cases, `decisions.md` if a decision was made.
+- [ ] Docs: `features.md` (public API), `status.md` (status plus **evidence level per item**, browser-mock vs server vs real-server kept apart), case tables for new edge cases, `decisions.md` if a decision was made.
 
 ---
 
@@ -303,7 +303,7 @@ How the reference feature maps to this standard:
 
 | Standard | Categories |
 |---|---|
-| Structure | [`app/features/categories/`](../app/features/categories/), route [`app/pages/categories/index.vue`](../app/pages/categories/index.vue) |
+| Structure | [`app/features/categories/`](../app/features/categories/), route [`app/pages/c/[slug]/admin/categories/index.vue`](../app/pages/c/[slug]/admin/categories/index.vue) |
 | Public API | [`index.ts`](../app/features/categories/index.ts): `CategorySelect`, `useCategoryOptions`, `categoriesNavigation` |
 | Behavior | [`useCategories.ts`](../app/features/categories/composables/useCategories.ts): `useCategoryMutations` (create keyed by parent and name, update/archive/restore by id with a shared `lock`, `invalidate: ['categories', 'products']`, batch archive with sub-categories first, reorder one level per request), `isBusy`; [`useCategoryTree.ts`](../app/features/categories/composables/useCategoryTree.ts): the tree, filters and ordering |
 | Form rules + mapping | [`category-form.ts`](../app/features/categories/schemas/category-form.ts) (create and update bodies, `version`, `null` makes it a main category), tests in [`category-form.test.ts`](../app/features/categories/tests/category-form.test.ts) |

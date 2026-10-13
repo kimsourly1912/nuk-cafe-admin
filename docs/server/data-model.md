@@ -498,4 +498,4 @@ Feature: `sample-data`, only where `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` is on (loca
 
 ## Open questions
 
-Tracked in one place, with the step each blocks and a suggested default: [progress.md → Open questions](../progress.md#open-questions--waiting-on-others). Still open for these tables: Q24 (retention and erasure periods).
+Tracked in one place, with the step each blocks and a suggested default: [status.md → Open questions](../status.md#open-questions--waiting-on-others). Still open for these tables: Q24 (retention and erasure periods).

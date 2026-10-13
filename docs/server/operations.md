@@ -2,6 +2,8 @@
 
 ← [Server standard](./README.md)
 
+> **Purpose:** How the server runs: environments, configuration, migrations, deploys, backups and restore, scheduled jobs, email, Telegram, KHQR and monitoring.
+
 - [Environments](#environments)
 - [Configuration](#configuration)
 - [Migrations](#migrations)
@@ -138,7 +140,7 @@ D1 Time Travel is Cloudflare's, always on, no code of ours: every change is kept
    - `https://nuk-cafe-staging.kimsur61.workers.dev/api/health` answers 200;
    - the **Restore drill** category is gone;
    - you can sign in to the admin, the customer menu loads, and the counter queue opens.
-5. **Write it down** in `docs/progress.md` (step 10.4): the date, how long step 3 took, and anything that didn't work.
+5. **Write it down** in `docs/status.md` (step 10.4): the date, how long step 3 took, and anything that didn't work.
 
 **With Wrangler** (the same, from a terminal; also what a script would use): `npx wrangler d1 time-travel info nuk-cafe-staging` prints the current bookmark; `npx wrangler d1 time-travel restore nuk-cafe-staging --bookmark=<bookmark>` restores to it and prints the one from before the restore.
 

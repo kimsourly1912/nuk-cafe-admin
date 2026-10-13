@@ -31,7 +31,7 @@ What the tests can't see: real phones, the real Worker and D1, two real devices.
 4. **Ready twice (row 7).** On the paid order, press Mark ready in both windows. One succeeds; the other says it changed and offers Reload.
 5. **Image without a save (row 10).** In Admin → Menu items, open an item, upload a photo, then close without saving (Discard). The item keeps its old image (or none) on the customer menu.
 
-Write the date and anything odd into `docs/progress.md` (step 10.5).
+Write the date and anything odd into `docs/status.md` (step 10.5).
 
 ## Hand check result, 2026-10-01 (staging, run for the owner by an AI browser agent): NOT PASSED
 

@@ -1,6 +1,6 @@
 # NUK Cafe system blueprint
 
-_Greenfield product plan, 2026-09-26 (updated 2026-09-27). This document explains **what** the cafe platform must do: actors, journeys, rules and release scenarios. **How** the server is built (routes, code layout, tables, security, operations) is the [server standard](../server/README.md); the build order and the open questions live in [progress.md](../progress.md)._
+_Greenfield product plan, 2026-09-26 (updated 2026-09-27). This document explains **what** the cafe platform must do: actors, journeys, rules and release scenarios. **How** the server is built (routes, code layout, tables, security, operations) is the [server standard](../server/README.md); the build order and the open questions live in [status.md](../status.md)._
 
 _Original summary: The owner confirmed a customer website first, pickup and dine-in orders, points plus vouchers, USD, one branch, email/password accounts without guest checkout, dine-in table QR codes, and pay-at-counter checkout before preparation. Customers earn 1 point per USD after order completion and spend points on vouchers; staff can issue vouchers. Business rules decided on 2026-09-27 are in D45; anything still undecided is in progress.md → Open questions. The existing Spring API, generated SDK, and admin screen behavior are examples to learn from, not contracts to reproduce. No production data migration is planned._
 
@@ -127,7 +127,7 @@ Moved out of this document so they can't drift:
 - **Tables and invariants:** [server standard → data model](../server/data-model.md).
 - **Routes, surfaces and conventions:** [server standard → architecture](../server/architecture.md).
 - **Security, roles and permissions:** [server standard → security](../server/security.md).
-- **Build order (numbered steps):** [progress.md → Next steps](../progress.md#next-steps-recommended-order).
+- **Build order (numbered steps):** [status.md → Next steps](../status.md#next-steps-recommended-order).
 
 ## 8. Release test scenarios
 
@@ -152,4 +152,4 @@ These scenarios are required for the first release, in addition to form and list
 
 ## 9. Product decisions
 
-The open product questions, with what each one blocks, are tracked in one place: [progress.md → Open questions](../progress.md#open-questions--waiting-on-others). Answers are recorded in [decisions.md](../decisions.md) and folded into the server standard. No implementation step fills a business-policy gap on its own.
+The open product questions, with what each one blocks, are tracked in one place: [status.md → Open questions](../status.md#open-questions--waiting-on-others). Answers are recorded in [decisions.md](../decisions.md) and folded into the server standard. No implementation step fills a business-policy gap on its own.

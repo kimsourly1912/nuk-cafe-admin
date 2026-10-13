@@ -2,62 +2,63 @@
 
 Instructions for AI coding agents (Claude Code, Codex, and others) working in this repository. This is the **single source of truth**. `CLAUDE.md` only imports this file.
 
+This file holds the rules that always apply. Everything task-specific is in the docs named by the index below: read the one for your task before you start.
+
+## Task-to-doc index
+
+| When the task is... | Read first |
+|---|---|
+| Building a new feature | `docs/feature-standard.md`, then the feature's plan in `docs/plans/` |
+| Changing UI or visual style | `docs/reference/ui.md`, then `docs/reference/page-patterns.md` |
+| Changing layout or responsiveness | `docs/reference/responsive-layout.md` |
+| Before merging any UI change | `docs/reference/ui-review-checklist.md` |
+| Changing server code | `docs/server/README.md`, then the page it links to for the area |
+| Changing schema or data model | `docs/server/data-model.md` |
+| Changing auth or security | `docs/server/security.md`, `docs/reference/auth.md` |
+| Using or changing a shared API or composable | `docs/reference/README.md`, then the linked page |
+| Changing forms or unsaved-change behavior | `docs/reference/forms.md` |
+| Changing mutations or concurrency | `docs/reference/mutations.md` |
+| Checking current status or next steps | `docs/status.md` |
+| Checking why something was decided | `docs/decisions-index.md`, then the matching entry in `docs/decisions.md` (by D-number or topic; never the whole file) |
+| Writing or changing app (Vue/Nuxt) code in a feature | `docs/app-conventions.md` |
+| Changing app-wide behavior (tab titles, refresh on tab focus, offline, leave guards, session loss) | `docs/reference/app-behavior.md` |
+| Changing an admin screen | also update its page in `server/features/assistant/help/*.md` (the help assistant's guide); the rule is Rule 7 in `docs/app-conventions.md` |
+| Writing a cafe's name into a page, or showing a menu item photo | `docs/reference/README.md` → "Root shared blocks: usage rules" (`useCafe()` / `<CafeLogo>`, `<MenuItemImage>`) |
+| Linking to a cafe's page | `docs/app-conventions.md` → "What this is (continued): paths, screens, reference features" (`useTenantPath()`) |
+| Running checks, opening a PR, committing, or finishing a step | `docs/workflow.md` |
+| Writing, running, or debugging tests | `docs/how-to-verify.md` |
+
 ## Resuming work: read first
 
-1. **[docs/progress.md](docs/progress.md)**: what's done, what's next, open questions for the backend team, and how well each part has been verified. Start every session here.
+1. **[docs/status.md](docs/status.md)**: what's done, what's next, open questions for the backend team, and how well each part has been verified. Start every session here.
 2. **[docs/decisions.md](docs/decisions.md)**: why things are the way they are. Read the relevant entry **before changing** a pattern that looks odd. Most of them work around a verified backend or tooling quirk.
 3. **[docs/reference/](docs/reference/README.md)**: reference for every shared app composable, util and component (`useMutation`, `useApiQuery`, `apiFetch`, `ApiError`, …) with types, options and examples. Routes and the server's error format are in docs/server/. Check it before using or changing a shared API. **[App-wide behavior](docs/reference/app-behavior.md)** (tab titles, refresh on tab focus, offline, leave guards, session loss) and **[Forms: unsaved changes](docs/reference/forms.md)** list every edge case those handle.
 4. **[docs/feature-standard.md](docs/feature-standard.md)**: how every new feature is planned, built and verified (the mockup workflow for UI steps, planning template, list/form/picker behavior, definition of done). **Read it before starting a feature.**
 5. **UI and responsive layout (mandatory for any UI work):** Nuxt UI is the component design system and Tailwind CSS tokens are the layout and styling language. [ui.md](docs/reference/ui.md) (visual foundation; **§17 expected behavior**: overlays, form errors, controls that save when changed, reordering, times), [responsive-layout.md](docs/reference/responsive-layout.md) (width classes, shell, navigation, page anatomy), [page-patterns.md](docs/reference/page-patterns.md) (index, settings, detail/editor, task flow, states) and [ui-review-checklist.md](docs/reference/ui-review-checklist.md) (run before merging). **Design compact layouts (<640px) intentionally as focused touch workflows; never just shrink or stack the desktop composition.** The rollout of these rules to existing pages, and the owner-decision table (never build on an open decision): [plans/ui-standardization.md](docs/plans/ui-standardization.md).
 6. **[docs/server/](docs/server/README.md)**: the **server standard** (architecture, security, data model, operations). **Every server change follows it.** All server code follows it since the legacy menu was removed in step 3.8b (D71).
-7. The rest of this file: rules and recipes.
 
 **Keep these documents current as part of your work:**
-- Finished or started something → update `docs/progress.md` (status, next steps, and what you verified and how).
+- Finished or started something → update `docs/status.md` (status, next steps, and what you verified and how).
 - Made or changed an architectural decision → add or amend an entry in `docs/decisions.md`.
 - Changed a convention, rule or shared building block → update this file.
 - Added or changed a shared API (or a feature's public `index.ts`) → update its page in `docs/reference/` (examples must compile).
-- Found or handled an **edge case** (a browser quirk, a backend inconsistency, a timing issue) → add it to the case table of the page it belongs to (`app-behavior.md`, `forms.md`, `data-fetching.md`, …) with how it's handled and which test covers it. Test pitfalls go in `docs/progress.md` → "How to verify".
+- Found or handled an **edge case** (a browser quirk, a backend inconsistency, a timing issue) → add it to the case table of the page it belongs to (`app-behavior.md`, `forms.md`, `data-fetching.md`, …) with how it's handled and which test covers it. Test pitfalls go in `docs/how-to-verify.md` → "How to verify".
 
 ## What this is
 
-NUK Cafe is one Nuxt full stack app: the customer website, the admin workspace and the cashier workspace, plus our own API (Nitro) with Better Auth, NuxtHub, Drizzle, SQLite locally and D1/R2/KV on Cloudflare. Product scope: [the system blueprint](docs/plans/system-blueprint.md). **How the server is built: the [server standard](docs/server/README.md)** (routes `/api/<surface>/…`, `server/features/` with service/repository layers, Better Auth roles and branches, the data model, operations). Build order: [progress.md → Next steps](docs/progress.md#next-steps-recommended-order).
+NUK Cafe is one Nuxt full stack app: the customer website, the admin workspace and the cashier workspace, plus our own API (Nitro) with Better Auth, NuxtHub, Drizzle, SQLite locally and D1/R2/KV on Cloudflare. Product scope: [the system blueprint](docs/plans/system-blueprint.md). **How the server is built: the [server standard](docs/server/README.md)** (routes `/api/<surface>/…`, `server/features/` with service/repository layers, Better Auth roles and branches, the data model, operations). Build order: [status.md → Next steps](docs/status.md#next-steps-recommended-order).
 
 **Multi-tenant (D134, being built, [plan](docs/plans/multi-tenant.md)):** the app is becoming SaaS-ready: one tenant per cafe (a Better Auth organization), `tenant_id` on every tenant-owned table, the tenant in the path (`/c/<slug>/…` pages, D141; `/api/c/<slug>/…` routes, D140), `/platform` for super admins (the platform console, `app/features/platform/`, layout `platform`, on `/api/platform`, D142). **New tables and queries follow the plan's rules:** tenant-owned rows carry `tenant_id`, every query names the tenant, and a two-cafe test proves it.
 
-**Paths (D93, D141):** a cafe's pages live under its address, `/c/<slug>/…` (`app/pages/c/[slug]/`); **paths below are inside the cafe** (`/admin/products` means `/c/<slug>/admin/products`). Links go through `useTenantPath()` (`tenantPath('/admin/products')`); a lint rule refuses a bare cafe page in a link; the old addresses (`/`, `/admin/…`, …) redirect to NUK Cafe's. The platform's pages have no cafe: the account pages, Your cafes (`/cafes`, D144), `/table/<token>` and the platform console (`/platform/**`, super admins only, its own sign-in and session `usePlatformSession`, D142). Moving to another cafe is a full page load. The admin workspace lives under `/admin` (`/admin/login`, `/admin/products`, …); every other path is the **customer site**: `/` is the ordering-first menu (`app/features/menu/`, layout `shop`, on `/api/public`), `/table/<token>` a table's QR code, `/checkout` (Review order, D100) and `/orders/<id>` (the order, tracked) and `/orders` (Your orders; `app/features/orders/`, D114), and the customer's account pages (`/sign-in`, `/sign-up`, `/verify-email`, `/email-verified`, `/forgot-password`, `/reset-password`; `app/features/account/`, layout `account`, D97). The **counter workspace** (D102) lives under `/counter` (`/counter/sign-in`, `/counter/change-password`, `/counter` to choose a branch, `/counter/<branchId>` the queue; `app/features/counter/`, layout `counter`), for branch staff, managers and admins.
+## Authorization, tenant scoping and concurrency (quoted from the server standard)
 
-Every admin screen runs on the standard's `/api/admin` routes (D52): sign-in, **Cafe profile** (the cafe's name and logo, `app/features/cafe/`, D143), Staff, **Sample data** (test data from the UI, local and staging only, `app/features/sample-data/`, D94), **Branch** (settings, hours and dining tables with QR codes, `app/features/branches/`, D91), **Payments** (the riel rate, `app/features/exchange-rates/`, D102), **Telegram** (connected chats, `app/features/notifications/`, D112), **Reports** (`app/features/reports/`, D110, D111), **Promotions** (Marketing: discounts on the menu with an uploaded poster, `app/features/promotions/`, D163, posted to the cafe's channels from a promotion's page, D164), **Channels** (Marketing: the cafe's Telegram channel, `app/features/marketing/`, D164), and the menu's **Menu items**, **Categories**, **Options**, **Add-ons** and **Availability** pages (`app/features/products/`, `categories/`, `option-sets/`, `modifier-groups/`, `availability-rules/`, D66–D70). The pre-standard `/api/v1` menu and its tables were removed in step 3.8b (D71).
+_These are existing rules of [docs/server/](docs/server/README.md), quoted here so they are always loaded; the pages are the source. In the security.md quote, "Each" means each access helper (`requireTenant`, `requirePermission`, `requireBranchPermission`, `requirePlatformPermission`)._
 
-The code is **organized by feature** under `app/features/`. `app/features/categories/` is the **reference feature** for composables, mutations and forms: copy its patterns for every new feature (see "Adding a feature"). For **paginated list pages**, copy Menu items (card grid + table); for a small library loaded whole, Options or Add-ons (cards, filtered on the client); Categories is a tree (D37). For a **record with its own page** (a route such as `/add-ons/[id]`: breadcrumb, a main column and a settings column, tabs on phones), copy the Add-on group page (D75).
-
-## Commands
-
-Package manager is **pnpm**.
-
-```bash
-pnpm dev                                  # http://localhost:3000; /api is local Nitro/Better Auth
-pnpm nuxt db generate                     # create a migration after changing the server schema
-pnpm nuxt db migrate                      # apply local SQLite migrations
-pnpm lint / pnpm lint:fix                 # ESLint also does formatting (no Prettier) and enforces feature boundaries
-pnpm typecheck                            # vue-tsc via nuxt typecheck
-pnpm test                                 # all Vitest projects
-pnpm test:unit / pnpm test:e2e            # unit + server (seconds) / e2e only (about two minutes, builds the app)
-pnpm vitest run --project server          # one project: unit | server | e2e (| nuxt, once a *.nuxt.test.ts exists)
-pnpm vitest run app/features/categories   # one feature's tests
-pnpm vitest run -t "refreshes once"
-```
-
-**Checks (D83):**
-- **Before opening a PR, locally:** `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, and the e2e files of the feature you changed (`pnpm vitest run --project e2e test/e2e/<feature>.test.ts`). The e2e build is reused while no build input changed (`E2E_REBUILD=1` forces one), so rerunning tests or taking screenshots costs no rebuild.
-- **The full suite runs in CI** (`.github/workflows/ci.yml`: lint, typecheck, audit, unit/server, e2e in 3 shards) on every PR. A merge to `main` deploys to staging **without running them again** (D133): the PR already checked its code merged with `main` as it was. If `main` moved after the PR's checks ran (another PR merged meanwhile), press **Update branch** on the PR so its checks run on the new `main` before merging, or run the workflow on `main` by hand afterwards (Actions → CI → Run workflow). A shared building block or app-wide change (a root composable, `app.config.ts`, a plugin) also runs the full `pnpm test:e2e` locally first.
-- **Merge only when the PR's checks are green.** A red PR is fixed on the same PR; a failed staging deploy or a red manual run on `main` is fixed before any new work.
-- **"Remove the guard and see the test fail"** is required for new guards (locks, permissions, money, idempotency, version checks); optional elsewhere.
-- **Docs per step:** one `decisions.md` entry and the step's line in `progress.md`; reference pages only when a shared building block or a rule changes.
-
-Local setup for a first admin: [docs/reference/auth.md → First admin](docs/reference/auth.md#first-admin-local-setup).
-
-Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix open redirect after login`), not `new`. The history is how the team finds when something broke. If lint or typecheck complains about missing `.nuxt/*` files, run `pnpm nuxt prepare`.
+- **security.md:** Deny by default: a route without a permission check is a bug. The `routeRules` session gate only asks for a session (401); it can't see tenants, roles, branches, `mustChangePassword` or email verification. `server/tests/admin-routes.test.ts` fails when an admin route calls no access helper.
+- **security.md:** Each returns the **actor** (`{ userId, tenantId, role }`, plus `branchId` and `branchRole?` on the counter) that services receive: they scope every read and write to `actor.tenantId` and write it to the audit log.
+- **architecture.md:** No route takes a tenant from a body or query.
+- **security.md:** The branch id comes from the path (`readIdParam(event, 'branchId', 'The branch')`), never from a body.
+- **architecture.md:** Every editable record has `version`. An edit sends the version it read; the write applies only if it still matches, otherwise **409 `VERSION_CONFLICT`** and nothing changes. The UI shows "changed by someone else, reload". Status-changing actions (ready, complete…) also check the current state in the same conditional write.
 
 ## Feature architecture
 
@@ -88,167 +89,46 @@ shared/contracts/                # API contracts: request schemas + response typ
 2. **`index.ts` exports only building blocks:** pickers (`CategorySelect`), display components, option composables (`useCategoryOptions`), types and `navigation`. **Never export pages or forms from `index.ts`.** Otherwise features that use each other (a menu item picks categories; a category could list its items) would import each other's screens and create cycles.
 3. **Cross-feature imports go through the public API only:** `import { CategorySelect } from '~/features/categories'`. Deep imports (`~/features/x/composables/...`) and relative paths that leave the feature (`../../x`) are lint errors.
 4. **Public building blocks must not import other features.** This keeps the dependency graph one level deep, so no cycles can form. Screens (pages, forms) may import other features' public APIs.
-5. **Inside an app feature, use relative imports** (`../composables/useCategories`). Feature code is *not* auto-imported. Root shared code *is* auto-imported everywhere (`apiFetch`, `getErrorMessage`, `invalidate`, `usePaginatedQuery`, `useConfirm`, `StatusTabs`, `ANY`, `formatMinor`, ...).
-6. **Route files in `app/pages/` stay thin.** They hold `definePageMeta` (always with a `title` for the browser tab) plus one `<Feature>…Page.vue` from the feature (the only deep import pages are allowed). Routes stay discoverable in one place.
-7. **Name feature folders after the resource they manage**, so a folder maps to its routes (`/api/admin/<resource>`) and contracts: `categories`, `products` (shown as "Menu items" in the UI), `availability-rules` (shown as "Availability"), `option-sets` (shown as "Options"), `modifier-groups` (shown as "Add-ons"), `menu` (the customer menu, `/api/public/menu`), `account` (the customer's own account: its pages and the header's account button, on Better Auth and `/api/shop/me`, D97), `orders` (the customer's orders: the order page with tracking, Your orders and the menu's order bar, `/api/shop/orders`, D100, D114), `counter` (the cashier's workspace: its session, queue and commands on `/api/counter/{branchId}`, D102), `exchange-rates` (shown as "Payments", D102), `reports` (the admin's Summary, Sales by item and Order history, with CSV and Print, on `/api/admin/reports`, D110, D111), `notifications` (shown as "Telegram": connected chats and sending there, on `/api/admin/telegram`, D112), `sample-data` (test data, D94), `platform` (the platform console for super admins: Cafes, New cafe, a cafe's page, on `/api/platform/tenants`, D142; server feature `tenants`), `assistant` (the AI help assistant's panel, on `/api/admin/assistant`, D107, D109; its help guide is `server/features/assistant/help/*.md`: **a change to an admin screen updates its page there**), `cafe` (shown as "Cafe profile": the cafe's name and logo, on `/api/admin/cafe`, D143; Your cafes `/cafes` and the `<CafeSwitcher>`, on `/api/me/cafes`, D144), `dashboard` (the admin's home: today and "Set up your cafe", D155), `promotions` (Marketing → Promotions: discounts on the menu, on `/api/admin/menu/promotions`, D163; server code in the menu feature, since promotions change menu prices; its posts to channels, D164), `marketing` (Marketing → Channels: the cafe's social channels, on `/api/admin/marketing`, D164; posts are made from a promotion's page), `rewards` (reward categories live inside it: they're not menu categories), `vouchers`, `banners`, `customers`, `staff`, `auth`.
+
+_Rules 5 to 7 (relative imports, thin route files, feature folder names) are in [docs/app-conventions.md](docs/app-conventions.md)._
 
 ### Cross-feature relationships (from the API)
 
-- A menu item has a leaf `categoryId` (required, D44), option sets with a price grid, add-on groups and availability rules, so the item form uses `CategorySelect level="leaf"`, `useOptionSetOptions`, `useModifierGroupOptions` and `AvailabilityRuleSelect` (D70). Pickers forward attributes (`aria-label`) to their select and take `class` on the wrapper (D34).
 - An item's links to libraries (option sets, add-on groups, rules) are written **only from the item**, which sends the whole list; the library pages show "used by N items" read-only (D60, D61, D63).
-- A category has an optional `parentId` (main vs sub, two levels). The category form uses its own `CategorySelect level="main"`.
 - Every update names the `version` it read; a stale one is refused with 409 (D41). Forms keep the record they opened and send its version.
-
-### Data freshness
-
-- Query keys are **namespaced by feature**: `<feature>:<name>` (`categories:all`, `availability-rules:options`). `useApiQuery` warns in dev when a key isn't namespaced.
-- Mutations declare `invalidate: ['<own feature>', '<affected feature>']`. The same invalidation reaches the app's **other open tabs** (feature names over a `BroadcastChannel`, never data), so they refresh too. Data from **other devices** is picked up when the user returns to the tab. `invalidate()` (`app/utils/invalidate.ts`) refetches every loaded key with those prefixes, so a feature never imports another feature's keys. Calls within 30ms are merged into one refresh per list (batches, parallel deletes). Example: category mutations invalidate `['categories', 'products']` because product lists show category names.
 
 ## CRUD state: `useApiQuery` and `useMutation`
 
 Every read goes through **`useApiQuery`** and every create/update/delete through **`useMutation`**. Never duplicate their request state: no hand-rolled request `loading` refs, in-flight tracking, try/catch or toasts for API calls. A form may keep **its own** submission state (e.g. `saving` in `CategoryFormModal`, for its disabled inputs and unsaved-change pause). See [feature-standard.md §5](docs/feature-standard.md#form-local-vs-shared-pending-state).
 
-**Reads:** `useApiQuery(key, handler, useAsyncDataOptions)` is `useAsyncData` with `pending` (boolean), `loading` (first load, no data yet), `refreshing` (reloading while old data is shown) and `error` (already an `ApiError`). Its `watch` option **cancels** a running request instead of queueing behind it (D30), so a slow older response never replaces newer results. **A refresh that fails for the connection or the server keeps the last data** (`error` still set; never across keys or sessions, D150): show it with a note where it matters.
-
-**Writes:** mutations are defined once per feature, in `use<Feature>Mutations()`, with `useMutation(fn, options)`:
-
-| Option | Meaning |
-|---|---|
-| `id` | `'<feature>:<action>'`. **State is shared by id app-wide** (`useState`): a row sees "saving" even after the modal that started it was closed |
-| `key` | Identifies the item (`c => c.id`). Different keys run **in parallel**. A call for a key already in flight is **skipped** (no double submit). Omit only if calls must run one at a time |
-| `lock` | Record lock shared **across mutations** (e.g. `category:7` from both update and remove). Give every mutation that can conflict on a record (update, remove, status…) the same lock: a call whose lock is held is skipped when it would start (after confirmation, per batch item) with an explaining toast. **Required** for conflicting operations (D28) |
-| `confirm` | Ask first (deletes). The dialog closes on answer and the work continues in the background |
-| `undo` | Instead of asking: run at once and offer **Undo** on the toast (D152). Only where the reverse puts everything back the same (archive, unpublish); `execute(input, { undo: false, confirm })` inside a modal or slide-over, whose toast can't be reached |
-| `successMessage` / `errorMessage` | Toast titles; name the item (`Category "Tea" deleted`). The error description is the `ApiError` message |
-| `invalidate` | Features to refresh after success |
-| `removes` | The row disappears on success (`isRemoved(key)`) before the refreshed list arrives |
-| `batch` | Enables `executeMany`: `noun`, `verb`, `concurrency` (default 4), `confirm(items)`, `phases(items)` (e.g. children before parents) |
-
-The returned object is **reactive (don't destructure it)**:
-
-- `execute(input, { confirm?, errorActions? })` **never throws**. It resolves to `{ ok: true, data }`, `{ ok: false, status: 'error', error }`, or `{ ok: false, status: 'cancelled' | 'skipped' }`.
-- `executeMany(items)` runs with one confirmation, limited concurrency, a progress toast with **Stop**, one summary toast ("3 categories deleted, 1 failed", reasons grouped, **Retry failed**) and one refresh. It resolves to `{ succeeded, failed, skipped, notStarted, cancelled }`. Busy items (same mutation in flight, or their `lock` held by another mutation, e.g. a pending update during a bulk delete) are skipped, checked again when each item starts, and reported in the summary.
-- `isPending(key?)`, `pending`, `pendingCount()`, `errorOf(key?)`, `error`, `data`, `isRemoved(key)`, `reset(key?)`.
-- Calls are **never cancelled on unmount**. `plugins/leave-guard.client.ts` warns before the tab closes while anything is in flight.
-
-Rules the Categories reference follows:
-
-- The feature exposes **`isBusy(id)`** (any mutation in flight for that item). The list dims the row and shows a spinner instead of its row actions. That is the display; the exclusion itself is `lock` ([mutations.md](docs/reference/mutations.md#concurrency-guarantee-and-current-limits)). After a bulk action, keep `failed`, `skipped` and `notStarted` rows selected.
-- **Form modals stay open while saving** (backend errors need the input on screen) but **can be closed**: the save continues. If it then fails, the toast offers **"Reopen"** with the draft restored (`errorActions` + a `draft` prop).
-- **Unsaved changes are guarded.** Every create/edit form uses `useModalUnsavedChanges` (modals) or `useUnsavedChanges` (pages), so closing the modal, changing route, logging out or reloading with changed input asks first. Pass `paused: saving` and call `markClean()` after a successful save (see [docs/reference/forms.md](docs/reference/forms.md)). A **long** form (minutes of input) also passes `draft` and shows `<FormDraftAlert>`, and calls `markSaved()` instead (D151); never for secrets.
-- **Errors leave as soon as they're fixed:** every `UForm` calls `useFormErrorRecheck(form)` (D166). A checkbox or switch inside a group's `UFormField` gets its own `UFormField`. A control that saves when changed never blocks the others ([ui.md §17](docs/reference/ui.md#17-expected-behavior-owner-2026-10-13-d165-d166)).
-- **Create is keyed by something that identifies the submission** (the name), so two different creates can run in parallel while a double submit is skipped.
-- **Bulk actions:** a **Select mode** (a toolbar toggle: Select, then Cancel in the same place; `S` toggles, Escape leaves; no always-on checkboxes; on phones behind the toolbar's `⋯`, D129) with `useTableSelection(rows, getKey, { resetOn: [query] })` + `<BulkActionsBar>` (D89). Selection clears on filter or page change. After `executeMany`, keep only the `failed`, `skipped` and `notStarted` rows selected.
-- If the current page becomes empty after deletes, step back to the last existing page.
-
-The concurrency rules live in the framework-free engine `app/utils/mutation.ts` and are unit-tested in `test/unit/mutation.test.ts`. `useMutation` only wires it to Nuxt (state, toasts, confirm, invalidate).
+_The rest of this section (reads, the `useMutation` options, form and bulk-action rules) is in [docs/app-conventions.md](docs/app-conventions.md)._
 
 ## Server
 
 Every server change follows the [server standard](docs/server/README.md). The essentials:
 
-- **Library first:** Better Auth (`admin` + `organization` plugins, access control), `@nuxtjs/better-auth`, NuxtHub and Cloudflare features before our own code ([security.md → What the libraries do](docs/server/security.md#what-the-libraries-do)).
 - **Routes** are thin, unversioned, per surface, **under the cafe's address** (D140): `/api/c/<slug>/public`, `…/shop`, `…/counter/{branchId}`, `…/admin` (files in `server/api/c/[slug]/`); the platform's own (`/api/auth`, `/api/tables/{token}`, `/api/cafes/{slug}`, `/api/me/cafes`, `/api/health`, `/api/client-errors`, `/api/webhooks`, and the console's `/api/platform/**` behind `requirePlatformPermission`, D142) stay outside. Each cafe route acts in its **tenant** (D135): `requireTenant` / the access helpers load it from the path, the actor carries `tenantId`, and every query on tenant-owned data names it. The app calls `apiFetch('/admin/…')`; `apiPath` adds the cafe's address.
-- **Imports:** use `#server/` for server paths and `#shared/` for shared paths, including tests and dynamic imports. Same-directory `./` imports are allowed; parent-relative imports and `~~/server/` are lint errors. Cross-feature imports still use the public `index.ts`. The app feature relative-import rule above is app-only. See [Imports and aliases](docs/server/architecture.md#imports-and-aliases), including the build-time auth exception.
 - **Features** live in `server/features/<feature>/` with fixed layers: `index.ts` (public API), `*.schema.ts`, `*.types.ts`, `*.repository.ts` (all SQL), `*.service.ts` (rules and use cases), `*.errors.ts`, `tests/`.
 - **Writes:** `version` checks, one atomic `db.batch` with guards, idempotency keys for money/points/vouchers, audit in the same batch.
 - **The app calls the API only through `apiFetch`**, inside `useApiQuery` / `useMutation` (`ApiError`, session handling, stale-response discard).
-- Do not restore the Spring SDK, proxy or envelope handling (D39).
+
+_The other server bullets (library first, imports, the Spring SDK) are in [docs/server/README.md](docs/server/README.md#rules-moved-from-agentsmd)._
 
 ## Auth & app shell
 
 - `app/features/auth/` exposes `useAuth()`: sign-in, sign-out and password change through Better Auth (`/api/auth`), the admin session from `GET /api/admin/me`. Only the cafe's **owners** (`owner` in the tenant, shown as "Admin"; D52, D135) use the admin app; a customer or branch-staff account is refused at login. On a temporary password every admin page goes to `/admin/change-password` first. Its state keys are `staff-session:*`: `auth:*` belongs to `@nuxtjs/better-auth`. The shell imports it from `~/features/auth`. Staff are managed on the **Staff** page (`app/features/staff/`).
-- **The counter workspace** (`app/features/counter/`, D102) has its own session, `useCounterSession()`: Better Auth's sign-in, then `GET /api/counter/me` (the branches the person works at; every active branch for an owner; 403 `NOT_STAFF` for a customer). Its state keys are `counter-session:*`; its identity changes fire `app:session-changed` like the admin's, and the API plugin ends both sessions on a 401 and adds both generations. `middleware/counter.global.ts` protects `/counter/**` (`public: true` for sign-in) and sends a temporary password to `/counter/change-password`.
-- **The customer's account** (`app/features/account/`, D97) is separate from the admin's `useAuth`: its pages post to Better Auth's routes, and `useCustomerAccount()` reads `GET /api/shop/me` in the browser only (the server's pages are the same for everyone). The admin and the store share one Better Auth session per browser.
 - The middleware protects **every admin page (`/admin/**`) by default**. Opt out with `definePageMeta({ public: true })` (typed in `app/types/page-meta.d.ts`). The customer site (every other path) is public and never reads the admin session: anything session-related in the shell checks `isAdminPath()` from `~/features/auth` (D93).
 - **Session transitions** (login, logout, expiry, another staff member via another tab) clear the previous identity's query data, mutation outcomes, toasts, overlays and unsaved forms, and discard its in-flight responses (`plugins/session-boundary.client.ts`, `useAuth().generation`, D29). Features must not keep user data outside `useApiQuery`/`useMutation`/`useState`-based composables, or the boundary can't clear it.
-- **A record's name opens it:** the button holds only the name (the description beside it) and stretches over its row or card (`after:absolute after:inset-0` on a `relative` parent), so its accessible name is the text on it (D152, checked by `accessibility.test.ts`).
-- App-wide behavior needs nothing from features: login/logout apply to all open tabs (`plugins/auth-sync.client.ts`), `?` shows keyboard shortcuts, tab titles from `definePageMeta({ title })`, a save in one tab refreshes the same lists in the app's other tabs at once, lists refetch when the user returns to the tab (data ≥ 5s old) or the connection comes back (`plugins/data-freshness.client.ts`), offline banner (`OfflineBanner`), leave guards, a new deployed build offered with Reload (`NewVersionBanner`) and browser errors reported to Workers Logs (`plugins/errors.ts`, D149). Cases: [docs/reference/app-behavior.md](docs/reference/app-behavior.md).
-- **Rendering (D95):** the customer site is server-rendered; `/admin/**`, `/counter/**`, `/table/**`, `/checkout` and `/orders/**` are SPAs (`routeRules` `ssr: false`). On a server-rendered page, anything that differs by width is CSS (never `useLayoutContext`), browser storage is read after mounting (`initOnMounted`), and `apiFetch` fetches per request on the server. Nitro serves our `/api` and Better Auth `/api/auth` from the same origin.
-- **Light and dark (D96):** light by default, the system setting ignored (`colorMode` in `nuxt.config.ts`); Nuxt UI's `UColorModeButton` in the admin sidebar, the admin's sign-in pages, the store's header and the account pages. Use semantic tokens only, so both modes work.
-- `app/layouts/default.vue` is the admin's Nuxt UI dashboard shell; customer pages use `layout: 'shop'` (no sidebar, each page brings its header). The sidebar is `app/utils/navigation.ts`, which groups and orders each feature's exported `navigation` entry.
-- Every page component renders a `UDashboardPanel` with the anatomy in [responsive-layout.md → Page anatomy](docs/reference/responsive-layout.md#5-page-anatomy).
 
-## Shared building blocks (root, auto-imported)
-
-Summary only. Full signatures, options and examples are in **[docs/reference/](docs/reference/README.md)**.
-
-| What | Where | Use for |
-|---|---|---|
-| `apiFetch<T>(path, opts)` | `utils/api.ts`, engine `utils/api-fetch.ts` | Every call to our API (`/api` + path; a cafe's surfaces under the page's cafe, `apiPath`): `ApiError` on failure, no retries, session loss and required password change handled |
-| `useTenantPath()`, `useTenantSlug()`, `tenantUrl`, `splitTenantUrl` | `composables/`, `utils/tenant-path.ts` | A cafe page's address: `tenantPath('/admin/products')` → `/c/nuk/admin/products` (D141) |
-| `useApiQuery(key, handler, opts)` | `composables/` | Every read (see "CRUD state") |
-| `useMutation(fn, opts)` | `composables/`, engine in `utils/mutation.ts` | Every create/update/delete, single or batch |
-| `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Selection for tables, cards and trees (`isSelected`, `toggle`, `toggleAll`); the Select mode bar |
-| `TaskFrame` | `components/` | A task-flow page's frame (sign-in, change password, the account pages): a card from `sm`, the full screen with the action at the bottom on phones; CSS only (D84, D97) |
-| `BottomActionBar` | `components/` | The one bottom bar for a page's mode, Save or bulk actions (fixed below `lg`, one at a time, steps aside for the keyboard) |
-| `useLayoutContext()` | `composables/` | `isCompact` / `isExpanded` for choices CSS can't make (full-screen modal, drawer vs dropdown); never `useMediaQuery` by hand |
-| `StatusTabs` | `components/` | Status filter as tabs with counts; each feature names its statuses |
-| `ListSkeleton` | `components/` | First-load placeholders (rows or cards) |
-| `previewList`, `pluralize`, `changeText` | `utils/text.ts` | "Coffee, Tea and 3 more", "3 categories", "+12%" against a previous number |
-| `usePaginatedQuery(filters)` | `composables/` | List state **kept in the URL**: 1-based `page` (UI and API), `query` with `page` + `pageSize`, resets page on filter change, strips `ANY`/'', `isFiltered`, `clearFilters` |
-| `ANY`, `toApiQuery` | `utils/query.ts` | "All" option in filter selects (`USelect` can't hold `undefined`) |
-| `invalidate(...features)` | `utils/invalidate.ts` | Refetch data after mutations |
-| `useConfirm()` | `composables/` | `await confirm({ title, danger: true })` resolves to `boolean` (`useMutation`'s `confirm` uses it) |
-| `ApiError`, `getErrorMessage` | `utils/api-error.ts` | One error type for every failure (our API's and Better Auth's formats); `kind`, `code`, `fieldErrors`, a user-safe `message` |
-| `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard` | `composables/`, `utils/form-value.ts` | "Discard unsaved changes?" for page and modal forms; the route middleware and tab-close plugin use them |
-| `draft` option, `<FormDraftAlert>`, `createFormDraftStore` | `useUnsavedChanges`, `components/`, `utils/form-draft.ts` | A long form keeps unsaved input in the browser per cafe, person and record, offered back with Restore after a crash or lost session; `markSaved()` after saving (D151) |
-| `mergeFormChanges` | `utils/form-value.ts` | Reload after someone else saved first (409): their version with this input on top, part by part, naming the parts both changed (D153) |
-| `<SearchInput>`, `<ListEmptyState>` | `components/` | List toolbar search (as you type) and empty states ("nothing yet" vs "filters hide everything") |
-| `invalidateAll()`, `invalidateInThisTab()` | `utils/invalidate.ts` | Refetch loaded or only stale queries / invalidate without telling other tabs (used by the freshness plugin) |
-| `usePageShortcuts`, `useSubmitShortcut`, `SHORTCUTS`, `<ShortcutsHelp>` | `composables/useShortcuts.ts`, `components/` | Keyboard shortcuts (skipped behind dialogs/menus), Ctrl/⌘+Enter to save, the `?` list |
-| `useNotify()` | `composables/` | Toasts for API actions that aren't mutations |
-| `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`, `CURRENCY` | `utils/money.ts` | Cents (API) ↔ dollars (forms, display), "$4.20" |
-| `timezoneOptions`, `utcOffset`, `cityOf` | `utils/timezones.ts` | Time zone pickers: "(GMT+07:00) Phnom Penh" by offset (the Branch form, New cafe, D142) |
-| `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute` | `utils/clock.ts` | Weekly windows' minutes after midnight ↔ "7:30 AM" and `<TimeInput>` (availability rules, branch hours) |
-| `TimeInput` | `components/` | Every time of day: `UInputTime` with AM/PM switched by a tap, which a phone's keyboard can't type (`UInputTime` is a lint error elsewhere, D165) |
-| `useFormErrorRecheck` | `composables/` | Every `UForm`: errors leave as soon as they're fixed, a rule across fields too; server errors stay until their field changes (D166) |
-| `useReorderTransition` | `composables/` | A reorder list's rows slide to their new place when moved by their chevrons or keys (`<TransitionGroup :move-class>` + Sortable's `onStart`/`onEnd`, D165) |
-| `ApiErrorAlert` | `components/` | Load-error alert with Retry |
-| `StatCard` | `components/` | One number on a page, in a soft card (never a number styled by hand) |
-| `RecordSelect` | `components/` | A dropdown of records: `USelectMenu` with search and virtual scroll, `pinned` "All"/"None"; a combobox, like `USelect` (D152) |
-| `adminSetupSteps()`, `AdminSetupStep` | `utils/admin-setup.ts`, `types/admin-setup.ts` | The home page's "Set up your cafe": each feature exports its step from its index.ts, listed here in order (D155) |
-| `adminSearchSources()`, `AdminSearch`, `AdminSearchSource` | `utils/admin-search.ts`, `components/`, `types/admin-search.ts` | Ctrl/⌘+K search in the admin: each feature exports a source from its index.ts, listed here like the sidebar (D152) |
-| `AppDrawer` | `components/` | Every drawer and bottom sheet: `UDrawer` without a handle or dragging (`UDrawer` is a lint error elsewhere) |
-| `ToolbarTabs`, `useUrlTab` | `components/`, `composables/` | Tabs on a toolbar's line; a page's tab in the URL (`?tab=`) |
-| `ListPagination` | `components/` | The pager of every paginated list: "Page [n] of N · Rows per page", page numbers; `pageSize` in the URL (D128) |
-| `QuantityStepper` | `components/` | Every quantity: − n + in a pill, no keyboard on touch screens (D128) |
-| `useCenteredTab` | `composables/` | A scrolling tab row keeps its active tab in the middle (`StatusTabs`, `ToolbarTabs` call it) (D128) |
-| `QrCode`, `qrImage`, `qrSvg` | `components/`, `utils/qr-code.ts` | A QR code drawn as SVG, dark on light in both themes: a table's link, an order's KHQR (D130) |
-| `fetchAccountCafes`, `otherCafes`, `workspaceUrl`, `worksElsewhere`, `CAFES_PATH` | `utils/account-cafes.ts` | The signed-in account's cafes (`GET /api/me/cafes`) for Your cafes, the switcher and a sign-in refused at the wrong cafe; another cafe always opens as a full page load (D141, D144) |
-| `useCafe()`, `CafeLogo` | `composables/`, `components/` | The cafe's name and logo (`GET /api/cafes/{slug}`): **never write a cafe's name into a page** (D143) |
-| `ImageInput`, `useImageUpload`, `shrinkImage` | `components/`, `composables/`, `utils/` | An image for a record (the cafe's logo): shrunk in the browser, uploaded on pick through `POST /admin/media` (D122, D143) |
-| `MenuItemImage` | `components/` | **Every menu item photo** (D158): `usage="card"` (square) or `"detail"` (4:3, two sizes), blurred placeholder, lazy, fade-in; never a bare `<img>` for a menu photo. Photos are made by the products feature's photo editor (`POST /admin/media/photos`) |
-| `OrderLinePromotion` | `components/` | An order line's promotion as sold ("20% off · Coffee week · was $7.00"): the customer's order, the counter, Order history (D163) |
-| `PhoneInput`, `parsePhone` / `phoneSchema` | `components/`, `shared/contracts/phone.ts` | Every phone number: a country (flag, dial code) and the number; stored and sent as E.164, checked by libphonenumber on both sides (D127) |
-
+_The other auth and app-shell bullets are in [docs/app-conventions.md](docs/app-conventions.md#auth--app-shell)._
 
 ## Adding a full stack feature
 
 1. Start from the user journeys in [the system blueprint](docs/plans/system-blueprint.md) and write a plan with [docs/feature-standard.md](docs/feature-standard.md). Settle any unresolved business or permission rule first, or defer that behavior; never encode a guess.
-2. The server side per the [server standard](docs/server/README.md): contracts in `shared/contracts/<domain>.ts`; the feature in `server/features/<feature>/` (schema + migration, repository, service, errors, types); thin routes under the right surface; permissions in the identity feature.
-3. Server tests in the feature's `tests/` against SQLite built from the migrations: rules, each error code, permission cases, and a stale-version / race / replay case for every guarded or idempotent write (check that it fails with the guard removed).
-4. The feature folder in `app/features/<feature>/` (copy Categories for composables/forms, Menu items for paginated lists), calling `apiFetch` through `useApiQuery` / `useMutation`.
-5. Browser tests in `test/e2e/<feature>.test.ts` with `mockApi` and the typed fixtures in `test/e2e/support/mock-api.ts`.
-6. Update the server standard where it changed, the feature's reference page, progress.md and decisions.md.
 
-## Tests
+_Steps 2 to 6 are in [docs/workflow.md](docs/workflow.md#adding-a-full-stack-feature-steps-2-to-6)._
 
-`vitest.config.ts` projects:
-- **unit** (`test/unit`, `app/features/*/tests`): pure logic in Node: engines, form schemas and mappings.
-- **server** (`server/features/*/tests`, shared utils in `server/tests`): services against an in-memory SQLite database built from the checked-in migrations, foreign keys on (D42).
-- **e2e** (`test/e2e`): builds the app once and drives Chrome. Admin tests mock the API in the browser (`mockApi`); the customer site's tests read a real database seeded before each run (`test/e2e/support/seed.ts`, the Standard sample menu, D95), because the server renders those pages.
-- **nuxt**: only created once a `*.nuxt.test.ts` exists (D42).
+**Checks (D83):**
+- **"Remove the guard and see the test fail"** is required for new guards (locks, permissions, money, idempotency, version checks); optional elsewhere.
 
-## Conventions
-
-- Prefer Nuxt-native tools (`useAsyncData`, `useState`, `useRuntimeConfig`, route middleware), then `@vueuse/core` (import it explicitly: it isn't auto-imported), before adding a library or hand-rolling a utility. There is no Pinia: shared state is `useState` inside a composable.
-- Define new API contracts in project-owned code. Import Valibot as `import * as v from 'valibot'`.
-- **Local build modules** live in `modules/` (Nuxt registers them): today only `reka-namespaced.ts`, which keeps Reka UI's namespaced barrel from bundling the admin's calendar into the customer menu (D123). Import Nuxt's kit as `nuxt/kit` (pnpm doesn't let the app import `@nuxt/kit` or `vite`).
-- Icons are bundled at build time, never fetched (decisions D18). Write icon names as literal strings (`'i-lucide-tags'`), not template strings, and install `@iconify-json/<collection>` before using a new collection.
-- `USelect` cannot hold an empty or `undefined` value. Use `ANY` for "all" filters and let the `<Feature>Select` components handle "none".
-- **Dropdowns (owner, 2026-10-02, D126):** the cafe's records (categories, branches, rules, add-on groups, staff) or a long list use `<RecordSelect>` (search and virtual scroll, `pinned` "All"/"None"); `USelect` only for a fixed set the code defines (status, role, sort). See [ui.md §14](docs/reference/ui.md#14-dropdowns-owner-2026-10-02-d126).
-- **Tabs, pages and quantities (D128):** tab labels are never cut: a row that doesn't fit scrolls and centers the active tab (`useCenteredTab`); every paginated list ends with `<ListPagination>`; every quantity is a `<QuantityStepper>`, never `UInputNumber` ([ui.md §15–16](docs/reference/ui.md#16-pagination-and-quantities-owner-2026-10-02-d128)).
-- **Page width (D126):** admin pages set no max-width or width breakpoints: the shell centers them at 80rem; a settings or form page adds `class="page-narrow"` (56rem) to its `UDashboardPanel` ([ui.md §13](docs/reference/ui.md#13-page-width-owner-2026-10-02-d126)). Drawers and sheets are `<AppDrawer>`; tabs in a toolbar are `<ToolbarTabs>` with `useUrlTab`.
-- **Design system first (owner, 2026-09-28, D74).** Mockups are a reference for layout, element positions and content, not for styling; Nuxt UI defaults and global configuration decide styling. The rules are in [ui.md](docs/reference/ui.md). When a mockup needs something the design system lacks, ask first.
-- The UI chrome is English only. Translatable content fields (`nameI18n`, ...) are data, preserved on update.
+_The rest of the checks (commands, CI, merging, commits) are in [docs/workflow.md](docs/workflow.md)._
