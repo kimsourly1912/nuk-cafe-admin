@@ -53,6 +53,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<RecordSelect>` | component | [UI helpers](./ui-helpers.md#recordselect) | A searchable, virtualized dropdown of records |
 | `<AppDrawer>` | component | [UI helpers](./ui-helpers.md#appdrawer) | `UDrawer` without dragging: every drawer and bottom sheet |
 | `<TimeInput>` | component | [UI helpers](./ui-helpers.md#times-of-day-formatclock-timerange-isovernight-minutetotime-timetominute) | `UInputTime` with AM/PM switched by a tap (phones) |
+| `useFormErrorRecheck` | composable | [Forms](./forms.md#useformerrorrecheck) | Every `UForm`: an error leaves as soon as it's fixed, a rule across fields too |
 | `useReorderTransition` | composable | [UI helpers](./ui-helpers.md#usereordertransition) | Reorder rows slide to their new place when moved by a button or key |
 | `<ToolbarTabs>` | component | [UI helpers](./ui-helpers.md#toolbartabs) | Tabs on a toolbar's line |
 | `useUrlTab` | composable | [UI helpers](./ui-helpers.md#useurltab) | A page's tab in the URL (`?tab=`) |

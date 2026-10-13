@@ -24,6 +24,8 @@ const unsaved = useUnsavedChanges(state, { paused: saving })
 
 // A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
 const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
+const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 // The form keeps its fields disabled until after this event (`loadingAuto`, re-enabled in its
 // `finally`), and a disabled field can't take focus: focus on the next frame, once they're enabled.
 function focusFirstInvalid(event: FormErrorEvent) {
@@ -77,6 +79,7 @@ const fields = [
 
     <UForm
       id="password-form"
+      ref="form"
       :schema="passwordFormSchema"
       :state="state"
       :validate-on="['input', 'change']"

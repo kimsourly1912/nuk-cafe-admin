@@ -31,7 +31,7 @@ On a phone the editor shows one section at a time (Details, Prices, Add-ons, Ava
 
 ## Add-ons on an item
 
-- **Add add-on group** picks a group from the Add-ons library. Up to 10 groups; use the arrows to order them.
+- **Add add-on group** picks a group from the Add-ons library. Up to 10 groups; use the up and down buttons to order them.
 - By default the group's rules (At least / At most) and prices come from the library. Turn on **Own rules for this item** to set different rules for this item only.
 - Change an add-on's price here to charge a different price on this item only.
 
@@ -59,7 +59,7 @@ Customers see a category's items in the order you set here, for example best sel
 
 1. Press **Reorder** in the toolbar (or the **R** key). If you're filtering by a category, it opens on that category.
 2. Choose the **Category**.
-3. Drag an item by its handle, or use its up and down arrows.
+3. Drag an item by its handle, or use its up and down buttons.
 4. Press **Save order**. Archived items aren't listed and keep their place.
 
 If someone changed one of these items at the same moment, nothing is moved: press **Reload**, then move them again.

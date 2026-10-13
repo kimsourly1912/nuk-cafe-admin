@@ -15,6 +15,8 @@ const emit = defineEmits<{ close: [paused: boolean] }>()
 
 const schema = v.pick(suspendTenantSchema, ['reason'])
 const state = reactive({ reason: '' })
+const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 const { suspend } = useCafeMutations()
 const saving = ref(false)
 
@@ -34,6 +36,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
     <template #body>
       <UForm
         id="suspend-form"
+        ref="form"
         :schema="schema"
         :state="state"
         :disabled="saving"

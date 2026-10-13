@@ -23,6 +23,7 @@ const saving = ref(false)
 const uploading = ref(false)
 const unsaved = useUnsavedChanges(state, { paused: saving })
 const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 
 // The draft starts from the first load only: a refresh (another tab saved) never replaces input.
 watch(data, (settings) => {

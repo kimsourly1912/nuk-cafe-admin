@@ -17,6 +17,7 @@ import type { FormPart } from '~/utils/form-value'
 import { MAX_MODIFIERS } from '#shared/contracts/menu-modifiers'
 import type { AddOnAction } from './AddOnActions.vue'
 import { activeModifiers, archiveGroupConfirm, archivedModifiers, useModifierGroup, useModifierGroupMutations } from '../composables/useModifierGroups'
+import { usePreselectQueue } from '../composables/usePreselectQueue'
 import { describeRules } from '../schemas/modifier-group-display'
 import type { GroupSettingsForm, SettingsIssues } from '../schemas/modifier-group-form'
 import { archiveAddOnProblem, preselectProblem, settingsIssues, toSettingsChanges, toSettingsForm } from '../schemas/modifier-group-form'
@@ -144,10 +145,20 @@ async function openAddOn(modifier?: Modifier) {
   }
 }
 
-async function toggleDefault(modifier: Modifier, isDefault: boolean) {
-  if (!group.value) return
-  const result = checked(await mutations.updateModifier.execute({ group: group.value, modifier, fields: { isDefault } }))
-  if (result.ok) take(result.data)
+// Preselected: each box changes at once, the changes are sent in turn (D166).
+const preselect = usePreselectQueue({
+  group,
+  send: async (current, modifier, isDefault) => checked(await mutations.setDefault.execute({ group: current, modifier, isDefault })),
+  saved: take,
+  busy: () => busy.value,
+})
+/** The group as the add-on rows show it: Preselected as ticked, saved or not. */
+const shownGroup = computed(() => preselect.shown.value ?? group.value)
+/** The rows stay usable while a Preselected change is sent; any other change disables them. */
+const rowsBusy = computed(() => busy.value && !preselect.sending.value)
+
+function toggleDefault(modifier: Modifier, isDefault: boolean) {
+  preselect.set(modifier, isDefault)
 }
 
 async function archiveAddOn(modifier: Modifier) {
@@ -177,7 +188,7 @@ async function restoreGroup() {
 function addOnActions(modifier: Modifier): AddOnAction[] {
   if (!group.value) return []
   const cantArchive = archiveAddOnProblem(group.value, modifier)
-  const cantPreselect = modifier.isDefault ? undefined : preselectProblem(group.value, modifier)
+  const cantPreselect = modifier.isDefault ? undefined : preselectProblem(shownGroup.value!, modifier)
   return [
     { label: 'Edit add-on', icon: 'i-lucide-pencil', onSelect: () => openAddOn(modifier) },
     modifier.isDefault
@@ -190,7 +201,8 @@ function addOnActions(modifier: Modifier): AddOnAction[] {
 const addOnSearch = ref('')
 const shownAddOns = computed(() => {
   const term = addOnSearch.value.trim().toLowerCase()
-  return term ? active.value.filter(m => m.name.toLowerCase().includes(term)) : active.value
+  const rows = shownGroup.value ? activeModifiers(shownGroup.value) : []
+  return term ? rows.filter(m => m.name.toLowerCase().includes(term)) : rows
 })
 const showArchived = ref(false)
 
@@ -489,8 +501,9 @@ const headerActions = computed(() => archived.value
                     :modifier="modifier"
                     :actions="addOnActions(modifier)"
                     :read-only="archived"
-                    :busy="busy"
-                    :preselect-blocked="preselectProblem(group, modifier)"
+                    :busy="rowsBusy"
+                    :saving-default="preselect.isSaving(modifier.id)"
+                    :preselect-blocked="preselectProblem(shownGroup!, modifier)"
                     @edit="openAddOn(modifier)"
                     @toggle-default="value => toggleDefault(modifier, value)"
                   />

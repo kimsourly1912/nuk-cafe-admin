@@ -38,7 +38,9 @@ Check every changed screen at **320, 390, 768, 1024 and 1440 px** wide, plus one
 - [ ] One line under tabs: `<ToolbarTabs>` in a toolbar; the tab is in the URL (`useUrlTab`); the sidebar marks the section ([ui §15](./ui.md#15-tabs-and-the-sidebar-owner-2026-10-02-d126)). A tab row that doesn't fit scrolls with every label whole, the active tab centered.
 - [ ] The list toolbar doesn't scroll sideways at 320, 680 and 1024 px; a mode's button also leaves it; the bulk bar has no ✕ ([ui §16a](./ui.md#16a-list-toolbars-and-modes-owner-2026-10-02-d129)).
 - [ ] A paginated list ends with `<ListPagination>`; a quantity is a `<QuantityStepper>` ([ui §16](./ui.md#16-pagination-and-quantities-owner-2026-10-02-d128)).
-- [ ] Drawers and bottom sheets are `<AppDrawer>`: no handle, no dragging, an X ([ui §8](./ui.md#8-surface-hierarchy)).
+- [ ] Drawers and bottom sheets are `<AppDrawer>`: no handle, no dragging, an X ([ui §8](./ui.md#8-surface-hierarchy)); only the body scrolls, with spacing from `app.config.ts` (the page adds borders, never padding or gaps) ([ui §17](./ui.md#overlays)).
+- [ ] Reorder lists: chevrons for Move up / Move down, and moved rows slide (`useReorderTransition`) ([ui §17](./ui.md#reordering)).
+- [ ] A time of day is a `<TimeInput>` ([ui §17](./ui.md#times-of-day)).
 
 ## Touch and keyboard
 
@@ -58,6 +60,8 @@ For each screen and overlay, show and test the applicable [states](./page-patter
 - [ ] Load error with Retry; not found (detail routes)
 - [ ] Unauthorized / forbidden; offline
 - [ ] Saving (loading control, locked inputs), validation next to fields
+- [ ] Errors: each leaves as soon as it's fixed, a rule across fields too (`useFormErrorRecheck`); a checkbox or switch inside a group's field has its own `UFormField` (no shared id, no borrowed red) ([ui §17](./ui.md#forms-and-their-errors))
+- [ ] A control that saves when changed moves at once, shows its own spinner, never blocks the others, and goes back if refused ([ui §17](./ui.md#controls-that-save-when-changed))
 - [ ] Conflict (Reload inside the surface, input kept)
 - [ ] Archived / read-only (why, what still works, restore)
 - [ ] Long names, large numbers and counts, zero values, many rows

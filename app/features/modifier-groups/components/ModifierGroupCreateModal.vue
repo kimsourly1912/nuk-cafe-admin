@@ -22,6 +22,7 @@ const { isCompact: fullscreen } = useLayoutContext()
 const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emit('close') })
 
 const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 useSubmitShortcut(() => form.value?.submit())
 
 const noLimit = computed({
@@ -30,10 +31,6 @@ const noLimit = computed({
     state.maxSelect = value ? null : Math.max(1, state.minSelect)
   },
 })
-
-// Each checkbox its own id: inside the Add-ons field they'd all take the field's, and every
-// "Pre-selected" label would tick the first one.
-const formId = useId()
 
 const list = useTemplateRef<HTMLElement>('list')
 async function addRow() {
@@ -163,13 +160,16 @@ async function onSubmit({ data }: FormSubmitEvent<ModifierGroupForm>) {
                   @update:model-value="value => row.price = value ?? undefined"
                 />
               </UFormField>
-              <UCheckbox
-                :id="`${formId}-default-${i}`"
-                v-model="row.isDefault"
-                label="Pre-selected"
-                :aria-label="`Pre-select add-on ${i + 1}`"
-                class="pt-1.5"
-              />
+              <!-- Its own field: inside the Add-ons field it took that field's id (every label ticked the
+                   first box) and turned red with the field's errors (D165, D166). -->
+              <UFormField :name="`modifiers.${i}.isDefault`">
+                <UCheckbox
+                  v-model="row.isDefault"
+                  label="Pre-selected"
+                  :aria-label="`Pre-select add-on ${i + 1}`"
+                  class="pt-1.5"
+                />
+              </UFormField>
               <UButton
                 v-if="state.modifiers.length > 1"
                 icon="i-lucide-x"

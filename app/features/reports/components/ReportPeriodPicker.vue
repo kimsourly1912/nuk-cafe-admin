@@ -76,7 +76,7 @@ function startCustom() {
     v-model:open="open"
     :title="step === 'presets' ? 'Period' : 'Custom range'"
     :description="step === 'presets' ? 'Choose the days to report on.' : `Choose the first and last day, at most ${REPORT_MAX_DAYS} days.`"
-    :ui="{ body: 'pb-2', footer: 'flex-row gap-2' }"
+    :ui="{ footer: 'flex-row gap-2' }"
   >
     <UButton
       color="neutral"

@@ -550,12 +550,10 @@ watch(detailOpen, (open) => {
       close
       :ui="{
         content: isCompact ? 'max-h-[85dvh]' : 'w-full max-w-md',
-        // The side padding is on the parts, not the container, so the lines' scrollbar sits at the edge
-        container: 'overflow-y-hidden px-0',
-        header: 'border-b border-default px-4 pb-4',
+        // Spacing and scrolling are every drawer's (app.config.ts, D166); the order adds its borders.
+        header: 'border-b border-default pb-4',
         title: 'text-lg',
-        body: 'min-h-0 overflow-y-auto px-4',
-        footer: 'border-t border-default px-4 pt-4 pb-[env(safe-area-inset-bottom)]',
+        footer: 'border-t border-default pt-4',
       }"
     >
       <template #actions>

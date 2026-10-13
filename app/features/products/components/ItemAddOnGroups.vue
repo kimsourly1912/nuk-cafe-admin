@@ -13,6 +13,8 @@ import type { FormAddOnGroup } from '../schemas/item-form'
 defineProps<{ disabled?: boolean }>()
 
 const groups = defineModel<FormAddOnGroup[]>({ required: true })
+// Moved with its chevrons, a group slides to its new place (D166).
+const { moveClass } = useReorderTransition()
 
 const { data: library, error, refresh } = useModifierGroupOptions()
 
@@ -55,136 +57,138 @@ const ownPrice = (addOn: FormAddOnGroup['addOns'][number]) => toMinor(addOn.pric
       No add-ons. Add a group from the Add-ons library, e.g. milk or extra shots.
     </p>
 
-    <section
-      v-for="(group, i) in groups"
-      :key="group.id"
-      :aria-label="`Add-on group ${group.name}`"
-      class="space-y-3 rounded-md border border-default p-3"
-    >
-      <div class="flex items-center justify-between gap-2">
-        <h4 class="flex items-center gap-2 font-medium text-highlighted">
-          {{ group.name }}
-          <UBadge
-            v-if="group.status === 'archived'"
-            label="Archived"
-            color="neutral"
-            variant="subtle"
-            size="sm"
-          />
-        </h4>
-        <div class="flex gap-1">
-          <UButton
-            icon="i-lucide-arrow-up"
-            color="neutral"
-            variant="ghost"
-            size="xs"
-            :aria-label="`Move ${group.name} up`"
-            :disabled="disabled || i === 0"
-            @click="move(i, -1)"
-          />
-          <UButton
-            icon="i-lucide-arrow-down"
-            color="neutral"
-            variant="ghost"
-            size="xs"
-            :aria-label="`Move ${group.name} down`"
-            :disabled="disabled || i === groups.length - 1"
-            @click="move(i, 1)"
-          />
-          <UButton
-            icon="i-lucide-x"
-            color="neutral"
-            variant="ghost"
-            size="xs"
-            :aria-label="`Remove ${group.name}`"
+    <TransitionGroup :move-class="moveClass">
+      <section
+        v-for="(group, i) in groups"
+        :key="group.id"
+        :aria-label="`Add-on group ${group.name}`"
+        class="space-y-3 rounded-md border border-default p-3"
+      >
+        <div class="flex items-center justify-between gap-2">
+          <h4 class="flex items-center gap-2 font-medium text-highlighted">
+            {{ group.name }}
+            <UBadge
+              v-if="group.status === 'archived'"
+              label="Archived"
+              color="neutral"
+              variant="subtle"
+              size="sm"
+            />
+          </h4>
+          <div class="flex gap-1">
+            <UButton
+              icon="i-lucide-chevron-up"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              :aria-label="`Move ${group.name} up`"
+              :disabled="disabled || i === 0"
+              @click="move(i, -1)"
+            />
+            <UButton
+              icon="i-lucide-chevron-down"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              :aria-label="`Move ${group.name} down`"
+              :disabled="disabled || i === groups.length - 1"
+              @click="move(i, 1)"
+            />
+            <UButton
+              icon="i-lucide-x"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              :aria-label="`Remove ${group.name}`"
+              :disabled="disabled"
+              @click="groups.splice(i, 1)"
+            />
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <UCheckbox
+            :model-value="group.ownRules"
             :disabled="disabled"
-            @click="groups.splice(i, 1)"
+            :label="`Own rules for this item (library: ${libraryRules(group)})`"
+            @update:model-value="value => setOwnRules(group, !!value)"
           />
-        </div>
-      </div>
-
-      <div class="space-y-2">
-        <UCheckbox
-          :model-value="group.ownRules"
-          :disabled="disabled"
-          :label="`Own rules for this item (library: ${libraryRules(group)})`"
-          @update:model-value="value => setOwnRules(group, !!value)"
-        />
-        <div
-          v-if="group.ownRules"
-          class="flex flex-wrap gap-3"
-        >
-          <UFormField
-            label="At least"
-            :name="`addOnGroups.${i}.minSelect`"
+          <div
+            v-if="group.ownRules"
+            class="flex flex-wrap gap-3"
           >
-            <UInputNumber
-              v-model="group.minSelect"
-              :min="0"
-              :disabled="disabled"
-              :aria-label="`At least, ${group.name}`"
-              class="w-28"
-            />
-          </UFormField>
-          <UFormField
-            label="At most"
-            :name="`addOnGroups.${i}.maxSelect`"
-            :hint="group.maxSelect === null ? 'No limit' : undefined"
-          >
-            <UInputNumber
-              :model-value="group.maxSelect"
-              :min="1"
-              :disabled="disabled"
-              :aria-label="`At most, ${group.name}`"
-              placeholder="No limit"
-              class="w-28"
-              @update:model-value="value => group.maxSelect = value ?? null"
-            />
-          </UFormField>
-        </div>
-        <p class="text-sm text-muted">
-          {{ group.ownRules ? describeRules(group.minSelect, group.maxSelect) : libraryRules(group) }}
-        </p>
-      </div>
-
-      <ul class="divide-y divide-default">
-        <li
-          v-for="(addOn, j) in group.addOns"
-          :key="addOn.id"
-          class="flex items-center justify-between gap-3 py-2"
-        >
-          <span class="text-sm">
-            {{ addOn.name }}
-            <span
-              v-if="addOn.isDefault"
-              class="text-muted"
-            >(pre-selected)</span>
-            <span
-              v-if="addOn.status === 'archived'"
-              class="text-muted"
-            >(archived)</span>
-          </span>
-          <UFormField :name="`addOnGroups.${i}.addOns.${j}.price`">
-            <div class="flex items-center gap-2">
-              <span
-                v-if="ownPrice(addOn)"
-                class="text-xs text-muted"
-              >Library: {{ formatMinor(addOn.defaultPriceMinor) }}</span>
+            <UFormField
+              label="At least"
+              :name="`addOnGroups.${i}.minSelect`"
+            >
               <UInputNumber
-                :model-value="addOn.price ?? null"
-                :format-options="PRICE_FORMAT"
+                v-model="group.minSelect"
                 :min="0"
-                :step="0.01"
                 :disabled="disabled"
-                :aria-label="`Price of ${addOn.name} in ${group.name}`"
+                :aria-label="`At least, ${group.name}`"
                 class="w-28"
-                @update:model-value="value => addOn.price = value ?? undefined"
               />
-            </div>
-          </UFormField>
-        </li>
-      </ul>
-    </section>
+            </UFormField>
+            <UFormField
+              label="At most"
+              :name="`addOnGroups.${i}.maxSelect`"
+              :hint="group.maxSelect === null ? 'No limit' : undefined"
+            >
+              <UInputNumber
+                :model-value="group.maxSelect"
+                :min="1"
+                :disabled="disabled"
+                :aria-label="`At most, ${group.name}`"
+                placeholder="No limit"
+                class="w-28"
+                @update:model-value="value => group.maxSelect = value ?? null"
+              />
+            </UFormField>
+          </div>
+          <p class="text-sm text-muted">
+            {{ group.ownRules ? describeRules(group.minSelect, group.maxSelect) : libraryRules(group) }}
+          </p>
+        </div>
+
+        <ul class="divide-y divide-default">
+          <li
+            v-for="(addOn, j) in group.addOns"
+            :key="addOn.id"
+            class="flex items-center justify-between gap-3 py-2"
+          >
+            <span class="text-sm">
+              {{ addOn.name }}
+              <span
+                v-if="addOn.isDefault"
+                class="text-muted"
+              >(pre-selected)</span>
+              <span
+                v-if="addOn.status === 'archived'"
+                class="text-muted"
+              >(archived)</span>
+            </span>
+            <UFormField :name="`addOnGroups.${i}.addOns.${j}.price`">
+              <div class="flex items-center gap-2">
+                <span
+                  v-if="ownPrice(addOn)"
+                  class="text-xs text-muted"
+                >Library: {{ formatMinor(addOn.defaultPriceMinor) }}</span>
+                <UInputNumber
+                  :model-value="addOn.price ?? null"
+                  :format-options="PRICE_FORMAT"
+                  :min="0"
+                  :step="0.01"
+                  :disabled="disabled"
+                  :aria-label="`Price of ${addOn.name} in ${group.name}`"
+                  class="w-28"
+                  @update:model-value="value => addOn.price = value ?? undefined"
+                />
+              </div>
+            </UFormField>
+          </li>
+        </ul>
+      </section>
+    </TransitionGroup>
 
     <ApiErrorAlert
       v-if="error"

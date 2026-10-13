@@ -77,13 +77,13 @@ export function useModifierGroupMutations() {
   )
 
   /** One change to a group: shared key, lock and refresh. */
-  function change<T extends GroupChange>(id: string, request: (input: T) => Promise<ModifierGroup>, messages: { success: (input: T) => string, error: (input: T) => string, confirm?: (input: T) => ConfirmOptions }) {
+  function change<T extends GroupChange>(id: string, request: (input: T) => Promise<ModifierGroup>, messages: { success?: (input: T) => string, error: (input: T) => string, confirm?: (input: T) => ConfirmOptions }) {
     return useMutation(request, {
       id: `modifier-groups:${id}`,
       key: input => groupKey(input.group.id),
       lock: input => groupKey(input.group.id),
       confirm: messages.confirm,
-      successMessage: (_, input) => messages.success(input),
+      successMessage: messages.success ? (_, input) => messages.success!(input) : false,
       errorMessage: messages.error,
       invalidate: AFFECTED,
     })
@@ -130,6 +130,14 @@ export function useModifierGroupMutations() {
     { success: ({ modifier, fields }) => `"${fields.name ?? modifier.name}" saved`, error: ({ modifier }) => `Could not save "${modifier.name}"` },
   )
 
+  /** Preselected ticked or cleared: the box shows it, so no toast (the queue sends them in turn, D166). */
+  const setDefault = change(
+    'modifier-default',
+    ({ group, modifier, isDefault }: ModifierChange & { isDefault: boolean }) =>
+      apiFetch<ModifierGroup>(`${BASE}/${group.id}/modifiers/${modifier.id}`, { method: 'PATCH', body: { version: group.version, isDefault } }),
+    { error: ({ modifier }) => `Could not change "${modifier.name}"` },
+  )
+
   const archiveModifier = change(
     'modifier-archive',
     ({ group, modifier }: ModifierChange) => apiFetch<ModifierGroup>(`${BASE}/${group.id}/modifiers/${modifier.id}/archive`, { method: 'POST', body: { version: group.version } }),
@@ -159,7 +167,7 @@ export function useModifierGroupMutations() {
     { success: () => 'Order saved', error: () => 'Could not save the order' },
   )
 
-  const changes = [update, archive, restore, addModifier, updateModifier, archiveModifier, restoreModifier, reorderModifiers]
+  const changes = [update, archive, restore, addModifier, updateModifier, setDefault, archiveModifier, restoreModifier, reorderModifiers]
 
   return {
     create,
@@ -168,6 +176,7 @@ export function useModifierGroupMutations() {
     restore,
     addModifier,
     updateModifier,
+    setDefault,
     archiveModifier,
     restoreModifier,
     reorderModifiers,

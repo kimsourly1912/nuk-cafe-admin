@@ -243,6 +243,40 @@ describe('new add-on group', () => {
     expect(await form.getByLabel('Pre-select add-on 1').isChecked()).toBe(false)
   })
 
+  it('clears an error as soon as it\'s fixed, and keeps Pre-selected out of the add-ons\' errors (D166)', async () => {
+    const { page } = await open(backend([]))
+    await page.getByRole('button', { name: 'New add-on group' }).first().click()
+    const form = page.getByRole('dialog')
+    const duplicate = form.getByText('Each add-on can be listed only once')
+
+    await form.getByLabel('Add-on 1', { exact: true }).fill('Milk')
+    await form.getByLabel('Add-on 2', { exact: true }).fill('Milk')
+    await form.getByLabel('Add-on 2', { exact: true }).blur()
+    await form.getByRole('button', { name: 'Create' }).click()
+    await duplicate.waitFor({ timeout: 5000 })
+    // The add-ons' error doesn't paint the Pre-selected boxes red.
+    for (const n of [1, 2]) expect(await form.getByLabel(`Pre-select add-on ${n}`).getAttribute('class') ?? '').not.toMatch(/error/)
+
+    await form.getByLabel('Add-on 2', { exact: true }).fill('Oat milk')
+    await duplicate.waitFor({ state: 'hidden', timeout: 5000 })
+
+    // The rule's error on At most leaves when At least is lowered (the rule runs once the name is valid).
+    await form.getByLabel('Name', { exact: true }).fill('Milk')
+    await form.getByLabel('No limit').click()
+    await form.getByRole('spinbutton', { name: 'At least' }).fill('2')
+    await form.getByRole('spinbutton', { name: 'At least' }).blur()
+    // Unticking No limit set At most to 1 already: change it, so the field is checked.
+    for (const value of ['3', '1']) {
+      await form.getByRole('spinbutton', { name: 'At most' }).fill(value)
+      await form.getByRole('spinbutton', { name: 'At most' }).blur()
+    }
+    const tooFew = form.getByText(/less than the minimum/)
+    await tooFew.waitFor({ timeout: 5000 })
+    await form.getByRole('spinbutton', { name: 'At least' }).fill('1')
+    await form.getByRole('spinbutton', { name: 'At least' }).blur()
+    await tooFew.waitFor({ state: 'hidden', timeout: 5000 })
+  })
+
   it('refuses rules the add-ons can\'t meet, with the server\'s own message, before sending', async () => {
     const { page, api } = await open(backend([]))
     await page.getByRole('button', { name: 'New add-on group' }).first().click()
@@ -345,6 +379,54 @@ describe('add-on group page', () => {
     const set = milk.getByRole('menuitem', { name: /Set as preselected/ })
     expect(await set.getAttribute('aria-disabled')).toBe('true')
     await set.getByText('2 add-ons are pre-selected, but customers may choose at most 1.').waitFor()
+  })
+
+  it('ticks Preselected boxes without waiting: each shows at once, the changes are sent in turn (D166)', async () => {
+    const sent: { id: string, body: Record<string, unknown> }[] = []
+    let group = SYRUPS
+    let letFirstGo: () => void = () => {}
+    const firstHeld = new Promise<void>(resolve => (letFirstGo = resolve))
+    const handler: MockHandler = async ({ url, body }) => {
+      const id = url.pathname.split('/').pop()!
+      sent.push({ id, body: body as Record<string, unknown> })
+      if (sent.length === 1) await firstHeld
+      const isDefault = Boolean((body as Record<string, unknown>).isDefault)
+      group = { ...group, version: group.version + 1, modifiers: group.modifiers.map(m => (m.id === id ? { ...m, isDefault } : m)) }
+      latest.set(group.id, group)
+      return group
+    }
+    const { page } = await openGroup(backend(undefined, { 'PATCH /admin/menu/modifier-groups/{id}/modifiers/{id}': handler }), 'grp-2')
+    const box = (name: string) => row(page, name).getByRole('checkbox')
+
+    await box('Vanilla').click()
+    await expect.poll(() => sent.length).toBe(1)
+    // While Vanilla is saving: the other boxes still change at once, the page isn't blocked.
+    await box('Caramel').click()
+    await box('Hazelnut').click()
+    await box('Hazelnut').click()
+    expect(await box('Vanilla').isChecked()).toBe(true)
+    expect(await box('Caramel').isChecked()).toBe(true)
+    expect(await box('Hazelnut').isChecked()).toBe(false)
+    await row(page, 'Caramel').locator('[aria-label="Saving…"]').waitFor()
+    expect(sent.length).toBe(1)
+
+    letFirstGo()
+    // Then Caramel with the version Vanilla's answer gave; Hazelnut, ticked back, is never sent.
+    await expect.poll(() => sent.map(s => [s.id, s.body])).toEqual([
+      ['syr-0', { version: 1, isDefault: true }],
+      ['syr-1', { version: 2, isDefault: true }],
+    ])
+    await row(page, 'Caramel').locator('[aria-label="Saving…"]').waitFor({ state: 'detached' })
+    expect(await box('Caramel').isChecked()).toBe(true)
+  })
+
+  it('puts the boxes back when a Preselected change is refused, and says why', async () => {
+    const { page } = await openGroup(backend(undefined, {
+      'PATCH /admin/menu/modifier-groups/{id}/modifiers/{id}': () => { throw failures.conflict() },
+    }), 'grp-2')
+    await row(page, 'Vanilla').getByRole('checkbox').click()
+    await toast(page, 'Could not change "Vanilla"').waitFor()
+    await expect.poll(() => row(page, 'Vanilla').getByRole('checkbox').isChecked()).toBe(false)
   })
 
   it('archives an add-on after saying what customers stop seeing, and restores it', async () => {

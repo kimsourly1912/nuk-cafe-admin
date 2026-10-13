@@ -28,6 +28,8 @@ const { name, logoUrl } = useCafe()
 
 // A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
 const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
+const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 // The form keeps its fields disabled until after this event (`loadingAuto`, re-enabled in its
 // `finally`), and a disabled field can't take focus: focus on the next frame, once they're enabled.
 function focusFirstInvalid(event: FormErrorEvent) {
@@ -70,7 +72,9 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     </template>
 
     <UForm
+
       id="counter-sign-in"
+      ref="form"
       :schema="schema"
       :state="state"
       class="space-y-4"

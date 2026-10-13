@@ -64,6 +64,7 @@ const unsaved = useModalUnsavedChanges(state, {
 })
 
 const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 useSubmitShortcut(() => form.value?.submit())
 
 let closed = false

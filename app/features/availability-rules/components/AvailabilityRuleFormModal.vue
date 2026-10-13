@@ -48,6 +48,7 @@ const unsaved = useModalUnsavedChanges(state, {
 })
 
 const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 useSubmitShortcut(() => form.value?.submit())
 
 // UInputTime works with `Time` objects; the form keeps minutes after midnight (app/utils/clock.ts).
