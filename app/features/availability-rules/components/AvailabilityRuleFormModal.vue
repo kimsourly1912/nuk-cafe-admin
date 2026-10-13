@@ -250,7 +250,7 @@ async function onSubmit({ data }: FormSubmitEvent<AvailabilityRuleForm>) {
                   label="From"
                   :name="`rows.${i}.start`"
                 >
-                  <UInputTime
+                  <TimeInput
                     :model-value="toTime(row.start)"
                     :hour-cycle="12"
                     :aria-label="`Start of time ${i + 1}`"
@@ -262,7 +262,7 @@ async function onSubmit({ data }: FormSubmitEvent<AvailabilityRuleForm>) {
                   label="Until"
                   :name="`rows.${i}.end`"
                 >
-                  <UInputTime
+                  <TimeInput
                     :model-value="toTime(row.end)"
                     :hour-cycle="12"
                     :aria-label="`End of time ${i + 1}`"

@@ -67,12 +67,16 @@ export default withNuxt(
     },
   },
   // Drawers and bottom sheets don't drag (ui.md → Overlays): AppDrawer wraps UDrawer, nothing else uses it.
+  // A time of day is a TimeInput: AM/PM changes with a tap, which a phone's keyboard can't type (D165).
   // A cafe's pages live under its address (D141): links go through `useTenantPath()`.
   {
     files: ['app/**/*.vue'],
-    ignores: ['app/components/AppDrawer.vue'],
+    ignores: ['app/components/AppDrawer.vue', 'app/components/TimeInput.vue'],
     rules: {
-      'vue/no-restricted-html-elements': ['error', { element: ['UDrawer'], message: 'Use <AppDrawer>: drawers don\'t drag (ui.md → Overlays).' }],
+      'vue/no-restricted-html-elements': ['error',
+        { element: ['UDrawer'], message: 'Use <AppDrawer>: drawers don\'t drag (ui.md → Overlays).' },
+        { element: ['UInputTime'], message: 'Use <TimeInput>: AM/PM changes with a tap on phones (D165).' },
+      ],
       'vue/no-restricted-static-attribute': ['error', { key: 'to', value: CAFE_PAGE, message: CAFE_LINK_MESSAGE }],
       'no-restricted-syntax': ['error',
         { selector: 'CallExpression[callee.name="resolveComponent"][arguments.0.value="UDrawer"]', message: 'Use AppDrawer: drawers don\'t drag (ui.md → Overlays).' },

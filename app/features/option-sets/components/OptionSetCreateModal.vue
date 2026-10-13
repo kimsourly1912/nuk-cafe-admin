@@ -110,7 +110,7 @@ async function onSubmit({ data }: FormSubmitEvent<OptionSetForm>) {
                   @keydown.enter.prevent="i === state.values.length - 1 && state.values.length < MAX_OPTION_VALUES ? addValue() : undefined"
                 />
                 <UButton
-                  icon="i-lucide-arrow-up"
+                  icon="i-lucide-chevron-up"
                   color="neutral"
                   variant="ghost"
                   data-move="up"
@@ -119,7 +119,7 @@ async function onSubmit({ data }: FormSubmitEvent<OptionSetForm>) {
                   @click="moveValue(i, -1)"
                 />
                 <UButton
-                  icon="i-lucide-arrow-down"
+                  icon="i-lucide-chevron-down"
                   color="neutral"
                   variant="ghost"
                   data-move="down"

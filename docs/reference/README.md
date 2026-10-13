@@ -17,7 +17,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | [Data fetching](./data-fetching.md) | `apiFetch`, `useApiQuery`, `usePaginatedQuery` (URL sync), `ANY` / `toApiQuery`, `invalidate` (also other tabs), `invalidateInThisTab`, `invalidateAll` |
 | [Mutations](./mutations.md) | `useMutation` (create/update/delete, single and batch), `usePendingMutationCount` |
 | [Errors](./errors.md) | `ApiError`, `getErrorMessage`, `isSilentError`, error codes, `<ApiErrorAlert>`, `useNotify` |
-| [UI helpers](./ui-helpers.md) | `useConfirm`, `useTableSelection`, `<TaskFrame>`, `<BottomActionBar>`, `<BulkActionsBar>`, `useLayoutContext`, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, money (`toMinor`, `formatMinor`, …), `<ListSkeleton>`, `<StatCard>`, `<RecordSelect>`, `<AppDrawer>`, `<ToolbarTabs>`, `useUrlTab`, `useCenteredTab`, `<ListPagination>`, `<QuantityStepper>` |
+| [UI helpers](./ui-helpers.md) | `useConfirm`, `useTableSelection`, `<TaskFrame>`, `<BottomActionBar>`, `<BulkActionsBar>`, `useLayoutContext`, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, money (`toMinor`, `formatMinor`, …), `<ListSkeleton>`, `<StatCard>`, `<RecordSelect>`, `<AppDrawer>`, `<TimeInput>`, `useReorderTransition`, `<ToolbarTabs>`, `useUrlTab`, `useCenteredTab`, `<ListPagination>`, `<QuantityStepper>` |
 | [App-wide behavior](./app-behavior.md) | Tab titles, refresh on tab focus/reconnect, offline banner, leave guards, session loss: every case handled |
 | [Forms: unsaved changes](./forms.md) | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard`, `isSameFormValue` |
 | [Auth](./auth.md) | `useAuth`, public pages |
@@ -52,6 +52,8 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<OrderLinePromotion>` | component | [UI helpers](./ui-helpers.md#orderlinepromotion) | An order line's promotion as sold: "20% off · Coffee week · was $7.00" (D163) |
 | `<RecordSelect>` | component | [UI helpers](./ui-helpers.md#recordselect) | A searchable, virtualized dropdown of records |
 | `<AppDrawer>` | component | [UI helpers](./ui-helpers.md#appdrawer) | `UDrawer` without dragging: every drawer and bottom sheet |
+| `<TimeInput>` | component | [UI helpers](./ui-helpers.md#times-of-day-formatclock-timerange-isovernight-minutetotime-timetominute) | `UInputTime` with AM/PM switched by a tap (phones) |
+| `useReorderTransition` | composable | [UI helpers](./ui-helpers.md#usereordertransition) | Reorder rows slide to their new place when moved by a button or key |
 | `<ToolbarTabs>` | component | [UI helpers](./ui-helpers.md#toolbartabs) | Tabs on a toolbar's line |
 | `useUrlTab` | composable | [UI helpers](./ui-helpers.md#useurltab) | A page's tab in the URL (`?tab=`) |
 | `useCenteredTab` | composable | [UI helpers](./ui-helpers.md#usecenteredtab) | A scrolling tab row keeps its active tab in the middle (D128) |

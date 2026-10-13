@@ -232,6 +232,17 @@ describe('new add-on group', () => {
     await page.getByRole('heading', { level: 2, name: 'Syrups' }).waitFor()
   })
 
+  it('ticks the Pre-selected box whose label was clicked, not the first one', async () => {
+    const { page } = await open(backend([]))
+    await page.getByRole('button', { name: 'New add-on group' }).first().click()
+    const form = page.getByRole('dialog')
+    await form.getByRole('button', { name: 'Add another' }).click()
+    // The visible label, as a person clicks it (each checkbox once took the Add-ons field's id).
+    await form.getByText('Pre-selected', { exact: true }).nth(1).click()
+    await expect.poll(() => form.getByLabel('Pre-select add-on 2').isChecked()).toBe(true)
+    expect(await form.getByLabel('Pre-select add-on 1').isChecked()).toBe(false)
+  })
+
   it('refuses rules the add-ons can\'t meet, with the server\'s own message, before sending', async () => {
     const { page, api } = await open(backend([]))
     await page.getByRole('button', { name: 'New add-on group' }).first().click()

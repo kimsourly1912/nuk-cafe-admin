@@ -31,6 +31,10 @@ const noLimit = computed({
   },
 })
 
+// Each checkbox its own id: inside the Add-ons field they'd all take the field's, and every
+// "Pre-selected" label would tick the first one.
+const formId = useId()
+
 const list = useTemplateRef<HTMLElement>('list')
 async function addRow() {
   state.modifiers.push({ name: '', price: undefined, isDefault: false })
@@ -160,6 +164,7 @@ async function onSubmit({ data }: FormSubmitEvent<ModifierGroupForm>) {
                 />
               </UFormField>
               <UCheckbox
+                :id="`${formId}-default-${i}`"
                 v-model="row.isDefault"
                 label="Pre-selected"
                 :aria-label="`Pre-select add-on ${i + 1}`"

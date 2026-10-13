@@ -284,12 +284,16 @@ function onHandleKey(event: KeyboardEvent, index: number) {
   moveValue(index, to, 'handle')
 }
 
+// Moved by a chevron or key, a value slides to its new place (a drag has Sortable's animation).
+const { moveClass, onStart, onEnd } = useReorderTransition(() => mode.value === 'reorder')
 // Sortable moves the DOM row; put it back and move the data instead, so Vue owns the rows.
 const sortable = useSortable(listEl, [], {
   handle: '[data-value-handle]',
   animation: 150,
   // The slide-over renders its body after this component mounts.
   watchElement: true,
+  onStart,
+  onEnd,
   onUpdate: (event) => {
     removeNode(event.item)
     insertNodeAt(event.from, event.item, event.oldIndex!)
@@ -468,29 +472,31 @@ function onEscape(event: KeyboardEvent) {
             aria-labelledby="option-values-heading"
             class="space-y-2"
           >
-            <OptionValueRow
-              v-for="(value, i) in rows"
-              :key="value.id"
-              :value="value"
-              :position="i + 1"
-              :mode="mode"
-              :actions="valueActions(value)"
-              :renaming="isRenaming(value)"
-              :can-move-up="i > 0"
-              :can-move-down="i < rows.length - 1"
-              :highlighted="highlighted === value.id"
-              @move="by => moveValue(i, i + by, by < 0 ? 'up' : 'down')"
-              @handle-keydown="onHandleKey($event, i)"
-            >
-              <OptionInlineEdit
-                v-model="draft"
-                :label="`Name of ${value.name}`"
-                :error="draftError"
-                :saving="busy"
-                @save="saveEdit"
-                @cancel="stopEdit"
-              />
-            </OptionValueRow>
+            <TransitionGroup :move-class="moveClass">
+              <OptionValueRow
+                v-for="(value, i) in rows"
+                :key="value.id"
+                :value="value"
+                :position="i + 1"
+                :mode="mode"
+                :actions="valueActions(value)"
+                :renaming="isRenaming(value)"
+                :can-move-up="i > 0"
+                :can-move-down="i < rows.length - 1"
+                :highlighted="highlighted === value.id"
+                @move="by => moveValue(i, i + by, by < 0 ? 'up' : 'down')"
+                @handle-keydown="onHandleKey($event, i)"
+              >
+                <OptionInlineEdit
+                  v-model="draft"
+                  :label="`Name of ${value.name}`"
+                  :error="draftError"
+                  :saving="busy"
+                  @save="saveEdit"
+                  @cancel="stopEdit"
+                />
+              </OptionValueRow>
+            </TransitionGroup>
           </ol>
           <p
             aria-live="polite"
