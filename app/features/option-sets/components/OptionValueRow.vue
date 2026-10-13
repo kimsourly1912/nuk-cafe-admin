@@ -65,7 +65,7 @@ const name = computed(() => props.value.name)
 
     <template v-if="mode === 'reorder'">
       <UButton
-        icon="i-lucide-arrow-up"
+        icon="i-lucide-chevron-up"
         color="neutral"
         variant="ghost"
         :disabled="!canMoveUp"
@@ -74,7 +74,7 @@ const name = computed(() => props.value.name)
         @click="emit('move', -1)"
       />
       <UButton
-        icon="i-lucide-arrow-down"
+        icon="i-lucide-chevron-down"
         color="neutral"
         variant="ghost"
         :disabled="!canMoveDown"

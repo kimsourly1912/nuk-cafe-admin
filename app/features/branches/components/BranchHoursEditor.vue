@@ -94,7 +94,7 @@ const nextDay = (start?: number, end?: number) => start !== undefined && end !==
             :help="nextDay(window.start, window.end) ? 'Closes the next day' : undefined"
           >
             <div class="flex items-center gap-2">
-              <UInputTime
+              <TimeInput
                 :model-value="minuteToTime(window.start)"
                 :hour-cycle="12"
                 :aria-label="`${WEEKDAY_NAMES[dayIndex]} opens, window ${windowIndex + 1}`"
@@ -103,7 +103,7 @@ const nextDay = (start?: number, end?: number) => start !== undefined && end !==
                 @update:model-value="value => window.start = timeToMinute(value)"
               />
               <span class="text-muted">–</span>
-              <UInputTime
+              <TimeInput
                 :model-value="minuteToTime(window.end)"
                 :hour-cycle="12"
                 :aria-label="`${WEEKDAY_NAMES[dayIndex]} closes, window ${windowIndex + 1}`"

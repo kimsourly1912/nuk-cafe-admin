@@ -121,3 +121,18 @@
     display: none;
   }
 }
+
+/*
+ * Reorder lists (`useReorderTransition`): a row moved by its chevrons or keys slides to its new place
+ * (TransitionGroup's move class). Unlayered, so it wins over a row's own `transition-colors`; off
+ * for people who ask for less motion (Vue then skips the move).
+ */
+.reorder-move {
+  transition: transform 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reorder-move {
+    transition: none;
+  }
+}

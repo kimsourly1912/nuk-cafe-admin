@@ -113,7 +113,7 @@ function onName() {
           @keydown="emit('handle-keydown', $event)"
         />
         <UButton
-          icon="i-lucide-arrow-up"
+          icon="i-lucide-chevron-up"
           color="neutral"
           variant="ghost"
           :disabled="!canMoveUp"
@@ -122,7 +122,7 @@ function onName() {
           @click="emit('move', -1)"
         />
         <UButton
-          icon="i-lucide-arrow-down"
+          icon="i-lucide-chevron-down"
           color="neutral"
           variant="ghost"
           :disabled="!canMoveDown"

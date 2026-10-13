@@ -125,6 +125,31 @@ describe('availability rule form', () => {
     expect(created).toEqual([{ name: 'Brunch', windows: [w(6, 600, 840), w(7, 600, 840), w(5, 1320, 1440)] }])
   })
 
+  it('switches AM and PM with a tap, which a phone\'s keyboard can\'t type', async () => {
+    const created: unknown[] = []
+    const { page } = await open([], {
+      'POST /admin/menu/availability-rules': ({ body }) => {
+        created.push(body)
+        return ruleOf('rule-9', 'Evening')
+      },
+    })
+    await page.getByRole('button', { name: 'New rule' }).first().click()
+    const form = page.getByRole('dialog')
+    await form.getByLabel('Rule name').fill('Evening')
+    await typeTime(form, 'Start of time 1', '0600A')
+    await typeTime(form, 'End of time 1', '0900A')
+    const period = (label: string) => timeField(form, label).getByRole('spinbutton', { name: 'AM/PM' })
+    await period('Start of time 1').click()
+    await period('End of time 1').click()
+    await expect.poll(() => period('End of time 1').innerText()).toBe('PM')
+    await period('End of time 1').click()
+    await period('End of time 1').click()
+    await form.getByRole('button', { name: 'Create' }).click()
+
+    await toast(page, 'Rule "Evening" created').waitFor()
+    expect(created).toEqual([{ name: 'Evening', windows: [1, 2, 3, 4, 5].map(d => w(d, 1080, 1260)) }])
+  })
+
   it('shows what\'s missing before sending anything', async () => {
     const { page, api } = await open([])
     await page.getByRole('button', { name: 'New rule' }).first().click()

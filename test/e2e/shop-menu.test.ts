@@ -283,6 +283,9 @@ describe('the order beside the menu and in its drawer (D124)', () => {
     const box = (await dialog(page).boundingBox())!
     expect(box.height).toBeGreaterThan(1000)
     expect(await onScreen(page, dialog(page).getByRole('link', { name: 'Review order' }))).toBe(true)
+    // The lines scroll at the drawer's edge: their scrollbar isn't inset by the drawer's padding.
+    const lines = (await dialog(page).locator('[data-slot="body"]').first().boundingBox())!
+    expect(Math.round(lines.x + lines.width)).toBe(768)
   })
 })
 

@@ -114,10 +114,14 @@ async function saveOrder() {
 const saveConflict = computed(() => tree.saveError.value?.code === 'VERSION_CONFLICT')
 
 const groupsEl = useTemplateRef<HTMLElement>('groupsEl')
+// Moved by a chevron or key, a category slides to its new place (a drag has Sortable's animation).
+const { moveClass: groupsMoveClass, onStart, onEnd } = useReorderTransition(movable)
 const groupsSortable = useSortable(groupsEl, [], {
   handle: '[data-main-handle]',
   animation: 150,
   watchElement: true,
+  onStart,
+  onEnd,
   // Sortable moves the DOM node; put it back and move the data instead, so Vue owns the rows.
   onUpdate: (event) => {
     removeNode(event.item)
@@ -430,29 +434,31 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               aria-label="Categories"
               class="space-y-3 @2xl:space-y-0 @2xl:divide-y @2xl:divide-default"
             >
-              <CategoryTreeGroup
-                v-for="(group, i) in groups"
-                :key="group.main.id"
-                :group="group"
-                :mode="mode"
-                :movable="movable"
-                :expanded="isExpanded(group.main.id)"
-                :show-status="showStatus"
-                :selectable-status="view === 'all' ? undefined : view"
-                :index="i"
-                :count="groups.length"
-                :actions="rowActions"
-                :is-selected="selection.isSelected"
-                :is-busy="isBusy"
-                :rule-times="ruleTimes"
-                @open="category => openForm(category)"
-                @select="(category, value) => selection.toggle(category, value)"
-                @toggle="toggle(group.main.id)"
-                @add-sub="openForm(undefined, group.main.id)"
-                @move-main="by => moveMain(i, by, by < 0 ? '[data-move=up]' : '[data-move=down]')"
-                @main-handle-keydown="onMainKey($event, i)"
-                @move-sub="(from, to) => tree.moveSub(group.main.id, from, to)"
-              />
+              <TransitionGroup :move-class="groupsMoveClass">
+                <CategoryTreeGroup
+                  v-for="(group, i) in groups"
+                  :key="group.main.id"
+                  :group="group"
+                  :mode="mode"
+                  :movable="movable"
+                  :expanded="isExpanded(group.main.id)"
+                  :show-status="showStatus"
+                  :selectable-status="view === 'all' ? undefined : view"
+                  :index="i"
+                  :count="groups.length"
+                  :actions="rowActions"
+                  :is-selected="selection.isSelected"
+                  :is-busy="isBusy"
+                  :rule-times="ruleTimes"
+                  @open="category => openForm(category)"
+                  @select="(category, value) => selection.toggle(category, value)"
+                  @toggle="toggle(group.main.id)"
+                  @add-sub="openForm(undefined, group.main.id)"
+                  @move-main="by => moveMain(i, by, by < 0 ? '[data-move=up]' : '[data-move=down]')"
+                  @main-handle-keydown="onMainKey($event, i)"
+                  @move-sub="(from, to) => tree.moveSub(group.main.id, from, to)"
+                />
+              </TransitionGroup>
             </div>
 
             <!-- Subcategories whose parent is gone: shown, not reorderable. -->

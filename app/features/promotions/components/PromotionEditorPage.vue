@@ -42,6 +42,9 @@ const saving = ref(false)
 const uploading = ref(false)
 const unsaved = useUnsavedChanges(state, { paused: saving, pending: uploading })
 const form = useTemplateRef('form')
+// Each branch checkbox its own id: inside the branchIds field they'd all take the field's, and
+// every label would tick the first one.
+const formId = useId()
 
 async function load() {
   loadError.value = undefined
@@ -568,6 +571,7 @@ useSubmitShortcut(() => submit(!isDraft.value))
                   <div class="grid gap-2 sm:grid-cols-2">
                     <UCheckbox
                       v-for="branch in branches"
+                      :id="`${formId}-branch-${branch.id}`"
                       :key="branch.id"
                       :model-value="state.branchIds.includes(branch.id)"
                       :label="branch.name"

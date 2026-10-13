@@ -432,23 +432,47 @@ Source: `app/components/ListSkeleton.vue`
 
 ## Times of day: `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute`
 
-Weekly windows (availability rules, branch hours) are minutes after midnight in the branch's local time. These helpers show them and bind them to `UInputTime` (D91). Source: `app/utils/clock.ts` (auto-imported; unit-tested code imports it from `~/utils/clock`).
+Weekly windows (availability rules, branch hours) are minutes after midnight in the branch's local time. These helpers show them and bind them to `<TimeInput>` (D91). Source: `app/utils/clock.ts` (auto-imported; unit-tested code imports it from `~/utils/clock`).
 
 | Helper | Does |
 |---|---|
 | `formatClock(450)` | `"7:30 AM"`; `0` and `1440` are `"12:00 AM"` |
 | `timeRange(start, end)` | `"7:00 AM – 11:00 AM"`, `"All day"` for 0–1440 |
 | `isOvernight(start, end)` | An end before the start runs into the next day (an end of 12:00 AM doesn't) |
-| `minuteToTime(minute?)` / `timeToMinute(time)` | Minutes ↔ `UInputTime`'s `Time` value (`undefined` when empty) |
+| `minuteToTime(minute?)` / `timeToMinute(time)` | Minutes ↔ `<TimeInput>`'s `Time` value (`undefined` when empty) |
+
+**`<TimeInput>`** (`app/components/TimeInput.vue`, D165) is `UInputTime` with every prop, event and slot, plus one change: **a tap or click on AM/PM switches it** (the time moves by 12 hours; nothing while empty). Reka changes AM/PM only from the keyboard (A, P, the arrows), and a phone's keyboard sends none of them (Android reports letters as "Unidentified"). `UInputTime` elsewhere is a lint error.
 
 ```vue
-<UInputTime
+<TimeInput
   :model-value="minuteToTime(window.start)"
   :hour-cycle="12"
   aria-label="Opens"
   @update:model-value="value => window.start = timeToMinute(value)"
 />
 ```
+
+---
+
+## `useReorderTransition`
+
+The slide of a reorder list (D165): a row moved by its chevrons or ↑/↓ on its handle slides to its new place; a drag doesn't (Sortable animates it, and the dropped row is already there). Off for `prefers-reduced-motion`. Source: `app/composables/useReorderTransition.ts`, the `.reorder-move` class in `app/assets/css/tailwind.css`.
+
+```ts
+const { moveClass, onStart, onEnd } = useReorderTransition(() => mode.value === 'reorder')
+const sortable = useSortable(listEl, [], { handle: '[data-handle]', onStart, onEnd, onUpdate })
+```
+
+```vue
+<ol ref="listEl">
+  <!-- no tag: the rows stay the Sortable list's children -->
+  <TransitionGroup :move-class="moveClass">
+    <Row v-for="row in rows" :key="row.id" />
+  </TransitionGroup>
+</ol>
+```
+
+The argument turns the slide on (only while reordering, so a filter or refresh never animates). Rows need stable keys (an index key moves contents, not rows). The move buttons use `i-lucide-chevron-up` / `i-lucide-chevron-down`.
 
 ---
 

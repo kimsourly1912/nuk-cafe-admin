@@ -47,10 +47,14 @@ const selectable = (category: MenuCategory) => props.mode === 'select' && catego
 
 // Sortable moves the DOM row; put it back and move the data instead, so Vue owns the rows.
 const subsEl = useTemplateRef<HTMLElement>('subsEl')
+// Moved by a chevron or key, a subcategory slides to its new place.
+const { moveClass: subsMoveClass, onStart, onEnd } = useReorderTransition(() => props.movable)
 const subsSortable = useSortable(subsEl, [], {
   handle: '[data-sub-handle]',
   animation: 150,
   watchElement: true,
+  onStart,
+  onEnd,
   onUpdate: (event) => {
     removeNode(event.item)
     insertNodeAt(event.from, event.item, event.oldIndex!)
@@ -120,29 +124,31 @@ const activeSubs = computed(() => props.group.subs.filter(s => s.status === 'act
         :aria-label="`Subcategories of ${main.name}`"
         class="divide-y divide-default"
       >
-        <CategoryRow
-          v-for="(sub, i) in group.subs"
-          :key="sub.id"
-          role="listitem"
-          :aria-label="sub.name"
-          :data-sub="sub.id"
-          :category="sub"
-          level="sub"
-          :mode="mode"
-          :actions="actions(sub)"
-          :show-status="showStatus"
-          :selected="isSelected(sub)"
-          :selectable="selectable(sub)"
-          :busy="isBusy(sub.id)"
-          :can-move-up="movable && i > 0"
-          :can-move-down="movable && i < activeSubs - 1"
-          :last="!showAdd && i === group.subs.length - 1"
-          :rule-times="ruleTimes"
-          @open="emit('open', sub)"
-          @select="value => emit('select', sub, value)"
-          @move="by => moveSub(i, i + by, by < 0 ? '[data-move=up]' : '[data-move=down]')"
-          @handle-keydown="onSubKey($event, i)"
-        />
+        <TransitionGroup :move-class="subsMoveClass">
+          <CategoryRow
+            v-for="(sub, i) in group.subs"
+            :key="sub.id"
+            role="listitem"
+            :aria-label="sub.name"
+            :data-sub="sub.id"
+            :category="sub"
+            level="sub"
+            :mode="mode"
+            :actions="actions(sub)"
+            :show-status="showStatus"
+            :selected="isSelected(sub)"
+            :selectable="selectable(sub)"
+            :busy="isBusy(sub.id)"
+            :can-move-up="movable && i > 0"
+            :can-move-down="movable && i < activeSubs - 1"
+            :last="!showAdd && i === group.subs.length - 1"
+            :rule-times="ruleTimes"
+            @open="emit('open', sub)"
+            @select="value => emit('select', sub, value)"
+            @move="by => moveSub(i, i + by, by < 0 ? '[data-move=up]' : '[data-move=down]')"
+            @handle-keydown="onSubKey($event, i)"
+          />
+        </TransitionGroup>
       </div>
       <div
         v-if="showAdd"
