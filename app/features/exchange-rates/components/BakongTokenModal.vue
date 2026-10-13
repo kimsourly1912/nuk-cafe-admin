@@ -23,6 +23,7 @@ const state = reactive({ ...initial })
 const { saveToken } = useKhqrSettingsMutations()
 const saving = ref(false)
 const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 
 const unsaved = useModalUnsavedChanges(state, {
   initial,

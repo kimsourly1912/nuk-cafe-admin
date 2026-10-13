@@ -8,7 +8,7 @@ Each card shows the set's values and which menu items use it. Tabs **All**, **Ac
 
 1. Press **New option set** (or **N**).
 2. **Option set name**, for example "Size".
-3. **Values**: type each value (for example "Small"), add more, and order them with the arrows. At most 20.
+3. **Values**: type each value (for example "Small"), add more, and order them with the up and down buttons. At most 20.
 4. Press **Create**.
 5. Use it on a menu item: open the item, **Options and prices → Add option set**, then set a price per version.
 

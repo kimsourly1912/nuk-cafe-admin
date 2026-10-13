@@ -23,6 +23,7 @@ const { isCompact: fullscreen } = useLayoutContext()
 const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emit('close') })
 
 const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 useSubmitShortcut(() => form.value?.submit())
 
 const list = useTemplateRef<HTMLElement>('list')

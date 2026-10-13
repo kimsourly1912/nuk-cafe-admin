@@ -22,7 +22,7 @@
 Open a group from its card (**Manage**). On a phone, use the tabs to switch between add-ons and settings.
 
 - **Add add-on**, or click an add-on's name to edit its name and default price.
-- **Preselected**: tick or untick; saved at once.
+- **Preselected**: tick or untick; saved at once. You can tick several quickly: each box changes straight away and a small spinner shows until it's saved. If a change can't be saved, its box goes back and a message says why.
 - **Archive add-on** from its row's menu: customers stop seeing it; **Show archived** lists archived ones to restore.
 - **Reorder**: move add-ons, then **Save order**.
 - **Settings**: group name, **Selection** (Minimum and Maximum selections, **No maximum**). Press **Save changes**.

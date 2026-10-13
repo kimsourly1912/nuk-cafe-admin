@@ -17,6 +17,7 @@ const schema = v.pick(changeTenantSlugSchema, ['slug'])
 const state = reactive({ slug: props.cafe.slug })
 const origin = import.meta.client ? window.location.origin : ''
 const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 const { changeSlug } = useCafeMutations()
 const saving = ref(false)
 

@@ -42,6 +42,7 @@ const saving = ref(false)
 const uploading = ref(false)
 const unsaved = useUnsavedChanges(state, { paused: saving, pending: uploading })
 const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 // Each branch checkbox its own id: inside the branchIds field they'd all take the field's, and
 // every label would tick the first one.
 const formId = useId()

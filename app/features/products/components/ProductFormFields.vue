@@ -65,6 +65,7 @@ const canAddSet = computed(() => state.value.optionSets.length < MAX_ITEM_OPTION
 
 // --- Errors ---
 const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 
 function onError(event: FormErrorEvent) {
   const first = event.errors[0]?.name

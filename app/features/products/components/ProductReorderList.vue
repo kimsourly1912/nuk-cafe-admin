@@ -37,11 +37,15 @@ function onHandleKey(event: KeyboardEvent, index: number) {
   move(index, to, 'handle')
 }
 
+// Moved by a chevron or key, an item slides to its new place (a drag has Sortable's animation).
+const { moveClass, onStart, onEnd } = useReorderTransition(() => !props.disabled)
 // Sortable moves the DOM row; put it back and move the data instead, so Vue owns the rows.
 const sortable = useSortable(listEl, [], {
   handle: '[data-handle]',
   animation: 150,
   watchElement: true,
+  onStart,
+  onEnd,
   onUpdate: (event) => {
     removeNode(event.item)
     insertNodeAt(event.from, event.item, event.oldIndex!)
@@ -58,57 +62,59 @@ watchEffect(() => sortable.option('disabled', !!props.disabled))
       aria-label="Menu items in order"
       class="space-y-2"
     >
-      <li
-        v-for="(item, i) in items"
-        :key="item.id"
-        :aria-label="item.name"
-        :data-item="item.id"
-        class="flex items-center gap-2 rounded-lg border border-default bg-default px-2 py-2 motion-safe:transition-colors"
-      >
-        <UButton
-          icon="i-lucide-grip-vertical"
-          color="neutral"
-          variant="ghost"
-          class="cursor-grab touch-none"
-          data-handle
-          :disabled="disabled"
-          :aria-label="`Reorder ${item.name} (drag, or press up or down)`"
-          @keydown="onHandleKey($event, i)"
-        />
-        <UBadge
-          :label="String(i + 1)"
-          color="neutral"
-          variant="soft"
-          aria-hidden="true"
-          class="shrink-0"
-        />
-        <div class="min-w-0 flex-1">
-          <p class="break-words text-highlighted">
-            {{ item.name }}
-          </p>
-          <p class="text-sm text-muted">
-            {{ item.status === 'draft' ? 'Draft · not on the menu yet' : 'Published' }}
-          </p>
-        </div>
-        <UButton
-          icon="i-lucide-arrow-up"
-          color="neutral"
-          variant="ghost"
-          data-move="up"
-          :disabled="disabled || i === 0"
-          :aria-label="`Move ${item.name} up`"
-          @click="move(i, i - 1, 'up')"
-        />
-        <UButton
-          icon="i-lucide-arrow-down"
-          color="neutral"
-          variant="ghost"
-          data-move="down"
-          :disabled="disabled || i === items.length - 1"
-          :aria-label="`Move ${item.name} down`"
-          @click="move(i, i + 1, 'down')"
-        />
-      </li>
+      <TransitionGroup :move-class="moveClass">
+        <li
+          v-for="(item, i) in items"
+          :key="item.id"
+          :aria-label="item.name"
+          :data-item="item.id"
+          class="flex items-center gap-2 rounded-lg border border-default bg-default px-2 py-2 motion-safe:transition-colors"
+        >
+          <UButton
+            icon="i-lucide-grip-vertical"
+            color="neutral"
+            variant="ghost"
+            class="cursor-grab touch-none"
+            data-handle
+            :disabled="disabled"
+            :aria-label="`Reorder ${item.name} (drag, or press up or down)`"
+            @keydown="onHandleKey($event, i)"
+          />
+          <UBadge
+            :label="String(i + 1)"
+            color="neutral"
+            variant="soft"
+            aria-hidden="true"
+            class="shrink-0"
+          />
+          <div class="min-w-0 flex-1">
+            <p class="break-words text-highlighted">
+              {{ item.name }}
+            </p>
+            <p class="text-sm text-muted">
+              {{ item.status === 'draft' ? 'Draft · not on the menu yet' : 'Published' }}
+            </p>
+          </div>
+          <UButton
+            icon="i-lucide-chevron-up"
+            color="neutral"
+            variant="ghost"
+            data-move="up"
+            :disabled="disabled || i === 0"
+            :aria-label="`Move ${item.name} up`"
+            @click="move(i, i - 1, 'up')"
+          />
+          <UButton
+            icon="i-lucide-chevron-down"
+            color="neutral"
+            variant="ghost"
+            data-move="down"
+            :disabled="disabled || i === items.length - 1"
+            :aria-label="`Move ${item.name} down`"
+            @click="move(i, i + 1, 'down')"
+          />
+        </li>
+      </TransitionGroup>
     </ol>
     <p
       aria-live="polite"

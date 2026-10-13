@@ -8,6 +8,7 @@ Warn the user before input they haven't saved is lost.
 - [`isSameFormValue` and `cloneFormValue`](#issameformvalue-and-cloneformvalue)
 - [Drafts kept in the browser](#drafts-kept-in-the-browser): the `draft` option and `<FormDraftAlert>` (D151)
 - [`mergeFormChanges`](#mergeformchanges): Reload after someone else saved first, keeping this input on top (D153)
+- [`useFormErrorRecheck`](#useformerrorrecheck): errors leave as soon as they're fixed, a rule across fields too (D166)
 
 Source: `app/composables/useUnsavedChanges.ts`, `app/utils/form-value.ts`, `app/middleware/unsaved-changes.global.ts`, `app/plugins/leave-guard.client.ts`. Decision: [D19](../decisions.md).
 
@@ -77,6 +78,8 @@ Every case below is handled. **Keep this table and the tests in sync when changi
 | 27 | The record was saved by someone after the draft | Amber alert: restoring puts the draft's values over theirs | The draft keeps the version it was typed on | e2e |
 | 28 | Storage blocked or full | Nothing kept; the form works as before | Every storage call guarded | unit |
 | 29 | Someone else saved first (409), then **Reload** (the menu item editor, the add-on group's settings) | Their version, with this person's changed parts on top; the parts both changed named; still unsaved, against their version | `mergeFormChanges` + `markClean(theirs)` (D153) | unit, e2e (`products.test.ts`, checked to fail when Reload takes theirs) |
+| 30 | A rule across fields is fixed in the *other* field (At most raised after "Can't be less than the minimum"; one of two same-named add-ons renamed; the second password fixed), or a row with an error is removed | The error leaves at once | `useFormErrorRecheck`: after each change, the fields showing a schema error are checked again (D166) | e2e (`modifier-groups.test.ts`) |
+| 31 | A checkbox inside a group's field (Pre-selected inside Add-ons) | Its label ticks its own box; it isn't red when the group has an error | Its own `UFormField` (D165, D166) | e2e (`modifier-groups.test.ts`) |
 
 Implementation traps (each one broke something once, see [D19](../decisions.md)):
 - `isSameFormValue` must read **through** reactive proxies. `toRaw` makes the `computed` stop tracking, so `isDirty` never changes. A unit test guards this.
@@ -260,6 +263,29 @@ async function onSubmit() {
 - **Removed:** `markSaved()`, Discard in the alert, Discard in "Discard unsaved changes?" (route change, a modal's Cancel, voluntary sign-out); **every** draft on a voluntary sign-out; after 7 days.
 - **Kept:** when the session ends on its own (`discard('session')`), for the same person.
 - **Only for long forms and never for secrets** (passwords, the Bakong token). Source: `app/utils/form-draft.ts` (the store, unit-tested), `useUnsavedChanges.ts` (`useStoredDraft`), `components/FormDraftAlert.vue`, `plugins/form-drafts.client.ts`.
+
+## `useFormErrorRecheck`
+
+Errors leave as soon as they're fixed (D166, [ui §17](./ui.md#forms-and-their-errors)). `UForm` checks only the field being edited, so an error another field caused stayed after that field fixed it. After every change, the fields that show an error **the schema gave** are checked again, silently: fixed ones clear, changed ones update. Nothing new appears on a field the person hasn't reached, and an error the server gave (`setErrors`) stays until its own field is edited.
+
+Source: `app/composables/useFormErrorRecheck.ts` (auto-imported). **Every `UForm` calls it.**
+
+```vue
+<script setup lang="ts">
+const form = useTemplateRef('form')
+useFormErrorRecheck(form)
+</script>
+
+<template>
+  <UForm ref="form" :schema="schema" :state="state" :validate-on="['input', 'change']">
+    …
+  </UForm>
+</template>
+```
+
+It reads the form's `schema` and `state` props (any Standard Schema: Valibot here) and its exposed `getErrors` / `validate`; it needs nothing else.
+
+---
 
 ## `isSameFormValue` and `cloneFormValue`
 

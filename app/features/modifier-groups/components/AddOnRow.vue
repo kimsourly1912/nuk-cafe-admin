@@ -19,6 +19,8 @@ const props = defineProps<{
   busy?: boolean
   /** Why it can't be pre-selected now (the group's maximum), if so. */
   preselectBlocked?: string
+  /** Its Preselected change isn't saved yet: a spinner beside the box, which stays usable (D166). */
+  savingDefault?: boolean
 }>()
 
 const emit = defineEmits<{ 'edit': [], 'toggle-default': [value: boolean] }>()
@@ -60,7 +62,7 @@ const name = computed(() => props.modifier.name)
     <span class="hidden w-24 shrink-0 text-right tabular-nums @md:block">{{ formatMinor(modifier.priceDeltaMinor) }}</span>
 
     <!-- Preselected: a checkbox in the wide layout (saves when ticked), a mark when narrow -->
-    <div class="hidden w-36 shrink-0 @md:block">
+    <div class="hidden w-36 shrink-0 items-center gap-2 @md:flex">
       <UTooltip
         :text="preselectBlocked"
         :disabled="!preselectBlocked || modifier.isDefault"
@@ -69,10 +71,17 @@ const name = computed(() => props.modifier.name)
           :model-value="modifier.isDefault"
           :label="modifier.isDefault ? 'Yes' : 'No'"
           :aria-label="`${name} is preselected`"
+          :aria-busy="savingDefault || undefined"
           :disabled="readOnly || busy || (!modifier.isDefault && !!preselectBlocked)"
           @update:model-value="value => emit('toggle-default', !!value)"
         />
       </UTooltip>
+      <UIcon
+        v-if="savingDefault"
+        name="i-lucide-loader-circle"
+        class="size-4 animate-spin text-muted"
+        aria-label="Saving…"
+      />
     </div>
     <UBadge
       v-if="modifier.isDefault"

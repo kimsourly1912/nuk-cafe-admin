@@ -15,6 +15,8 @@ const { data, error, loading, refresh } = useExchangeRates()
 const { set } = useExchangeRateMutations()
 
 const state = reactive<{ khrPerUsd: number | undefined }>({ khrPerUsd: undefined })
+const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 watch(() => data.value?.current?.khrPerUsd, (rate) => {
   if (state.khrPerUsd === undefined && rate) state.khrPerUsd = rate
 }, { immediate: true })
@@ -105,7 +107,9 @@ const columns: TableColumn<ExchangeRate>[] = [
               </div>
 
               <UForm
+
                 id="rate-form"
+                ref="form"
                 :schema="setExchangeRateSchema"
                 :state="state"
                 :disabled="saving"

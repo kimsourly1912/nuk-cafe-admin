@@ -30,6 +30,8 @@ const fromSettings = (settings: KhqrSettings): KhqrSettingsInput => settings.ver
   : empty()
 
 const state = reactive<KhqrSettingsInput>(empty())
+const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 const saving = computed(() => save.pending)
 const { markClean } = useUnsavedChanges(state, { paused: saving })
 
@@ -140,6 +142,7 @@ const currencyItems: { label: string, value: KhqrCurrency }[] = [
     <UForm
       v-else
       id="khqr-form"
+      ref="form"
       :schema="khqrSettingsSchema"
       :state="state"
       :disabled="saving"

@@ -49,7 +49,7 @@ watch(() => props.activeMainId, async (id) => {
       v-model:open="sheetOpen"
       title="Categories"
       :content="{ onCloseAutoFocus: keepFocus }"
-      :ui="{ content: 'max-h-[70dvh]', body: 'overflow-y-auto' }"
+      :ui="{ content: 'max-h-[70dvh]' }"
     >
       <UButton
         icon="i-lucide-list"

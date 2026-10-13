@@ -33,6 +33,7 @@ const unsaved = useUnsavedChanges(state, {
 
 const { update } = useBranchMutations()
 const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 
 // --- Status cards: what's saved ---
 const todaysHours = computed(() => {

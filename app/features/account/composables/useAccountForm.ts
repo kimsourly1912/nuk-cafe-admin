@@ -19,6 +19,7 @@ export function useAccountForm(fieldIds: Partial<Record<AccountField, string>>) 
   /** The message for the alert above the fields. */
   const formError = ref<string>()
   const form = useTemplateRef<FormHandle>('form')
+  useFormErrorRecheck(form)
 
   function focusField(id: string | undefined) {
     // The form keeps its fields disabled until after its events (`loadingAuto`), and a disabled

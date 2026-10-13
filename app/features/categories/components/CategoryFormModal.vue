@@ -53,6 +53,7 @@ const unsaved = useModalUnsavedChanges(state, {
 })
 
 const form = useTemplateRef('form')
+useFormErrorRecheck(form)
 useSubmitShortcut(() => form.value?.submit())
 
 // If the user closes the modal mid-save, a failure offers to reopen it with their input.

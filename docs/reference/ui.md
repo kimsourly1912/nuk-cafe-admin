@@ -137,6 +137,8 @@ From the page outwards:
 
 **Drawers and bottom sheets don't drag (owner, 2026-10-02, D126).** A sheet that moves under a finger closes by accident while its content scrolls or a stepper is tapped. `<AppDrawer>` is `UDrawer` with no handle and no dragging, its X on by default; it closes with X, a tap outside, Escape or Back. `UDrawer` is a lint error anywhere else (`eslint.config.mjs`).
 
+**Overlay layout and backdrop (owner, 2026-10-13, D165, D166):** see [§17 → Overlays](#overlays).
+
 Alerts (`UAlert`, `variant="subtle"`) are for states that need action or explain a blocked action (conflict, archived, load error). A page's standing explanation is a muted intro paragraph, not an alert (D74).
 
 ## 9. Action hierarchy (owner-directed)
@@ -162,7 +164,7 @@ Alerts (`UAlert`, `variant="subtle"`) are for states that need action or explain
 
 ## 11. Motion
 
-- Use Nuxt UI's transitions (overlays, menus, collapsibles). App-level motion is limited to state feedback: a moved row's brief highlight, a spinner, a fade of a bulk bar. It lasts ≤200ms, or ≤1.5s for a highlight that fades.
+- Use Nuxt UI's transitions (overlays, menus, collapsibles). App-level motion is limited to state feedback: a moved row sliding to its place (`useReorderTransition`, [§17](#reordering)), a moved row's brief highlight, a spinner, a fade of a bulk bar. It lasts ≤200ms, or ≤1.5s for a highlight that fades.
 - Wrap app-level transitions in `motion-safe:`; nothing essential depends on motion (`prefers-reduced-motion`).
 - No decorative or looping animation, no animated status indicators.
 
@@ -224,3 +226,39 @@ Pick by **where the items come from**, not by how many there are today:
 - **Every paginated list ends with [`<ListPagination>`](./ui-helpers.md#listpagination):** "Page [n] of N · Rows per page" on the left, first / previous / numbers with ellipsis / next / last on the right; on phones previous, "Page [n] of N" and next, with rows per page under them. Rows per page is 10, 20, 50 or 100, kept in the URL; changing it goes back to page 1. Never a bare `UPagination`.
 - **Every quantity is a [`<QuantityStepper>`](./ui-helpers.md#quantitystepper)** (− n + in a pill), never `UInputNumber`: on touch screens it opens no keyboard. Its limits come from the rule it serves (20 per line for customer orders, D98; 99 by default).
 - **An order line** (the customer menu's order, Review order): the photo (or a cup when there is none), the name, the choices, a status only when something is wrong, the line's total on the right; under a divider, "Add a note" on the left and the trash with the stepper on the right. In the order panel each line is a soft card (`UCard` `subtle`).
+
+## 17. Expected behavior (owner, 2026-10-13, D165, D166)
+
+How controls behave, so every screen behaves the same. Each rule names what enforces it; [ui-review-checklist](./ui-review-checklist.md) checks the rest.
+
+### Overlays
+
+- **The backdrop is black** behind every modal, slide-over and drawer: `bg-black/50` (`/60` in dark mode), set once in `app.config.ts`. Nuxt UI's light `bg-elevated/75` left the page almost as bright as the dialog.
+- **A drawer's spacing is each part's own padding**, never the container's padding or gap (`app.config.ts` → `drawer`): the header `px-4 pt-4`, the body `p-4`, the footer `px-4` with the safe area at the bottom. **Only the body scrolls**, between a header and footer that stay in view; its scrollbar is at the drawer's edge, and the padding is inside the scrolling area, so the first and last content is never cut against the header or footer. A page adds borders or a footer's layout (`flex-row`), never spacing.
+
+### Forms and their errors
+
+- **An error appears** when a field is left (blur) or the form is submitted; while typing in a field already left, it updates as you type (`validate-on` `input`, `change`).
+- **An error leaves the moment it's fixed, wherever the fix is.** A rule across fields (At most not below At least, two add-ons with one name, the two new passwords) clears when either field fixes it, and an error on a removed row goes with the row: every form calls `useFormErrorRecheck(form)` ([forms → Errors](./forms.md#useformerrorrecheck)). Fixing one field never shows new errors on fields not reached yet.
+- **A server's error on a field** (`setErrors`: a name already used) stays until that field is edited, or the form is submitted again.
+- **A control inside a group's field gets its own `UFormField`.** A `UCheckbox` or `USwitch` takes the id and the error colour of the nearest field: inside the group's field (Add-ons), every label ticked the first box and every box turned red with the group's error. Give each its own `UFormField`, named after its value (`modifiers.1.isDefault`); a checkbox list that *is* the field (a promotion's branches) keeps the group's colour, with an `id` per box.
+
+### Controls that save when changed
+
+A checkbox or switch that saves at once (Preselected, Sold out, a notification switch) **never blocks the others**:
+
+- It moves **at once**; only its own row shows that it's saving (a spinner beside it), and the rest of the page stays usable.
+- **Separate records** (each sold-out switch is its own row) are sent in parallel.
+- **Records under one version** (an add-on group's add-ons share the group's version, D59) are sent **in turn**: each change after the previous answer, with the version it gave (`usePreselectQueue`). Changing a control back before its turn sends nothing.
+- **A refused change puts the control back** and says why (a toast; a conflict also on the page with Reload). A rule (the group's maximum) is checked on the controls as shown, not as last saved.
+- No success toast for each change: the control itself shows it.
+
+### Reordering
+
+- **Move up / Move down are chevrons** (`i-lucide-chevron-up` / `-down`), beside a drag handle (`i-lucide-grip-vertical`; ↑/↓ on it also move). Never arrows: they read as "sort".
+- **A row moved by its chevrons or keys slides to its new place** (`useReorderTransition`, 200 ms, off for `prefers-reduced-motion`). A drag shows Sortable's own animation. Every reorder list does both: Categories, Options, an add-on group's add-ons, Menu items, the add-on groups in the item form.
+
+### Times of day
+
+- **Every time of day is a `<TimeInput>`**: AM/PM switches with a tap or click, because a phone's keyboard can't type A or P. `UInputTime` is a lint error elsewhere.
+
