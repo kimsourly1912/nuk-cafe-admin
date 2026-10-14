@@ -42,7 +42,7 @@ export async function requireSignedIn(event: H3Event): Promise<Actor> {
   return { ...await authorizeSignedIn(useDb(), await sessionUser(event), tenant.id), requestId: requestIdOf(event) }
 }
 
-/** `/api/shop` writes: a signed-in customer with a verified email. */
+/** `/api/shop` writes: a signed-in customer or guest (D156). */
 export async function requireCustomer(event: H3Event): Promise<Actor> {
   const tenant = await requireTenant(event)
   return { ...await authorizeCustomer(useDb(), await sessionUser(event), tenant.id), requestId: requestIdOf(event) }

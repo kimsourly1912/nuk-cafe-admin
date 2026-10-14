@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, gt, isNull, or } from 'drizzle-orm'
 import type { Db, Statement } from '#server/utils/batch'
 import { branches, branchStaff, member, organization, user } from '#server/db/tables'
 
@@ -102,4 +102,16 @@ export function guestNameStatement(db: Db, userId: string, name: string, now: Da
   return db.update(user)
     .set({ name, updatedAt: now })
     .where(and(eq(user.id, userId), eq(user.isAnonymous, true)))
+}
+
+/** Bounded platform-task enumeration; UUIDs provide a stable cursor across runs. */
+export async function findActiveTenantPage(db: Db, after: string | null, limit: number) {
+  return db.select({ id: organization.id, slug: organization.slug, name: organization.name }).from(organization)
+    .where(and(or(eq(organization.status, 'active'), isNull(organization.status)), after ? gt(organization.id, after) : undefined))
+    .orderBy(asc(organization.id)).limit(limit)
+}
+
+export async function findTenantById(db: Db, id: string) {
+  const [row] = await db.select({ id: organization.id, slug: organization.slug, name: organization.name }).from(organization).where(eq(organization.id, id))
+  return row
 }

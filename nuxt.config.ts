@@ -59,7 +59,7 @@ function securityHeaders(): Record<string, string> {
 const SCHEDULED_TASKS: Record<string, string[]> = {
   '* * * * *': ['platform:deliver-outbox', 'orders:expire-unpaid', 'notifications:deliver', 'marketing:deliver-posts'],
   '15 3 * * *': ['platform:expire-idempotency-keys', 'assistant:purge-usage', 'notifications:purge-deliveries'],
-  '5 * * * *': ['media:purge-temporary'],
+  '5 * * * *': ['media:purge-temporary', 'platform:maintain-outbox'],
 }
 
 /**
@@ -158,6 +158,8 @@ export default defineNuxtConfig({
   // the first paint by the color-mode script, on server-rendered and browser-only pages alike.
   colorMode: { preference: 'light', fallback: 'light' },
   runtimeConfig: {
+    // NUXT_MAINTENANCE_OUTBOX_RETENTION_DAYS: 0 keeps metadata until retention is agreed.
+    maintenance: { outboxRetentionDays: 0, notificationMaxAgeSeconds: 0 },
     // The seed task's first admin (server/tasks/db/seed.ts): NUXT_SEED_ADMIN_EMAIL, NUXT_SEED_ADMIN_NAME.
     seed: { adminEmail: '', adminName: 'Admin' },
     // Account emails (docs/server/operations.md → Email): NUXT_MAIL_RESEND_API_KEY, NUXT_MAIL_FROM
@@ -263,6 +265,12 @@ export default defineNuxtConfig({
     // Added through nitro:init, not `nitro.hooks`: a `compiled` key there replaces the Cloudflare
     // preset's own `compiled` hook, which writes wrangler.json (D53).
     'nitro:init'(nitro) {
+      if (nitro.options.preset.replaceAll('_', '-') === 'cloudflare-module') {
+        // Nitro 2 buffers the entire request in its entry, before H3's route-level size checks.
+        // Wrap that entry, preserving all its other handlers and generated Wrangler bindings.
+        nitro.options.alias['#nitro-cloudflare-entry'] = nitro.options.entry
+        nitro.options.entry = fileURLToPath(new URL('./server/cloudflare-entry.ts', import.meta.url))
+      }
       nitro.hooks.hook('compiled', () => {
         if (nitro.options.preset.startsWith('node')) copyLibsqlNativeBinary(nitro.options.output.serverDir)
       })

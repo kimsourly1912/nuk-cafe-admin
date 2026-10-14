@@ -344,6 +344,8 @@ Feature: `media`.
 |---|---|---|
 | `media_assets` | `tenant_id` (D136), `object_key` (unique; `t/<tenantId>/menu/<id>.<ext>`, `menu/<id>.<ext>` before D136; a photo's source `t/<tenantId>/source/<id>.<ext>`, D158), `mime_type`, `byte_size` (> 0), `sha256`, `state` (`temporary` \| `attached`), `uploaded_by`, `created_at`, `state_changed_at`; for menu photos (D158, migration `0035_menu_photos`): `parent_id` → the photo's source (cascade), `variant` (`card` \| `detail` \| `detailSmall`), `width`, `height`, `placeholder` (a data URL), `edit` (JSON: the focus point and both views) | Temporary assets whose state is older than 24 h are deleted with their R2 object (every tenant's, by the platform task). An asset is attached to **one** record at a time, of its own tenant. A menu photo is its **source** row (private: `/media/…` never serves `source/`) with three file rows pointing at it: only the source's `state` counts (attached, released and purged with its files), and a file is never attached on its own |
 
+`media_object_deletions` (D168, migration `0038_delivery_reliability`) keeps `(object_key, tenant_id, next_attempt_at)` until deletion succeeds. Provisional uploads get a 24-hour grace period; asset removal queues source/variant keys atomically with row deletion.
+
 Built in step 3.2 (D57): `server/features/media/`, contract `shared/contracts/media.ts`.
 
 | Use | How |
@@ -359,14 +361,14 @@ Built in step 3.2 (D57): `server/features/media/`, contract `shared/contracts/me
 | Case | Result | Test |
 |---|---|---|
 | Bytes aren't JPEG/PNG/WebP, or don't match the claimed type (an SVG or HTML file renamed `.png`) | 415 `UNSUPPORTED_MEDIA`, nothing stored | ✔, real-server |
-| Over 5 MB | 413 `PAYLOAD_TOO_LARGE` (by `Content-Length` before reading, and by size after) | ✔, real-server |
+| Over 5 MB | 413 `PAYLOAD_TOO_LARGE` (received bytes counted before parsing; header precheck and file validation too) | ✔, real-server |
 | No file, or an empty one | 400 `VALIDATION_FAILED` | ✔, real-server |
 | Storing the object fails | No row | ✔ |
 | Writing the row fails | The object is removed again | ✔ |
 | Two records attach the same upload at once | One wins; the other's batch fails its guard | ✔ (race) |
 | An upload is cleaned up between a record's check and its write | The record's batch fails its guard | ✔ (race) |
 | A record attaches an upload between the purge finding it and deleting it | Kept (conditional delete) | ✔ (race) |
-| The object can't be removed after its row was deleted | Reported and logged; the object stays in R2 (no record can point at it) | ✔ |
+| The object can't be removed after its row was deleted | Reported and logged; a durable deletion key remains and a later purge retries it (D168) | ✔ |
 
 ## Customers & loyalty
 
@@ -438,7 +440,7 @@ placed (unpaid) ──payment recorded──► preparing ──► ready ──
 |---|---|---|
 | `GET /api/shop/orders?page=&pageSize=` | signed in | `{ inProgress, past }`: every order still in play (waiting for payment, preparing, ready), and a `Page` of completed and cancelled ones, both newest first; each an `OrderSummary` (number, status, pickup or table, `itemCount` = units, total, times) |
 | `GET /api/shop/orders/{id}` | signed in | The `Order` with what tracking needs: `version`; `paidAt`, `readyAt`, `completedAt`, `cancelledAt`; `payment` (method, amount, riel, when; how it went back if cancelled after paying; not the cashier or the KHQR reference); `cancellation` `{ by: customer \| cafe \| system, reason }` (the cafe's reason only; the staff's own words stay at the counter), read from the cancel event's actor |
-| `POST /api/shop/orders/{id}/cancel` `{ version }` (header `Idempotency-Key`) | a verified customer | Waiting for payment → cancelled, recorded with the customer as the actor and the reason `customer_changed_mind`, audited as `orders.order.customer_cancel`. Paid meanwhile: 409 `ORDER_NOT_CANCELLABLE` ("… is paid now, so it can't be cancelled here. Ask at the counter."); already cancelled: 409 `ORDER_CHANGED`. The same guarded batch as the counter's commands (`commands.ts`), so a payment recorded at that moment wins |
+| `POST /api/shop/orders/{id}/cancel` `{ version }` (header `Idempotency-Key`) | a customer or guest (D156) | Waiting for payment → cancelled, recorded with the customer as the actor and the reason `customer_changed_mind`, audited as `orders.order.customer_cancel`. Paid meanwhile: 409 `ORDER_NOT_CANCELLABLE` ("… is paid now, so it can't be cancelled here. Ask at the counter."); already cancelled: 409 `ORDER_CHANGED`. The same guarded batch as the counter's commands (`commands.ts`), so a payment recorded at that moment wins |
 
 The riel rate (admin, `settings: ['manage']`): `GET /api/admin/exchange-rates` (`{ current, history }`, the latest 20) and `POST /api/admin/exchange-rates` `{ khrPerUsd }` (from now on; the same rate again changes nothing).
 - A refund or cancellation after completion reverses loyalty (see above).
@@ -451,7 +453,9 @@ Feature: `platform`.
 |---|---|---|
 | `audit_events` | `tenant_id` (nullable, → organization: the tenant it happened in; `null` = the platform's; D139), `actor_id` (`null` = system), `action`, `target_type`, `target_id`, `branch_id`, `metadata` (JSON, no secrets or personal values), `request_id`, `at` | Append-only, written in the same batch as the change. Indexes: target, `at`, (actor, `at`), (tenant, `at`) |
 | `idempotency_keys` | `tenant_id` (D139), `actor_id`, `operation`, `key`, `request_hash` (SHA-256 of canonical JSON), `response` (JSON), `created_at`, `expires_at`; unique (`tenant_id`, `actor_id`, `operation`, `key`) | Removed after 24 h; a key counts until removed |
-| `outbox_messages` | `tenant_id` (nullable, → organization: the tenant whose change it is; `null` = the platform's, e.g. account emails; D138), `kind`, `payload` (JSON), `status` (`pending` \| `sent` \| `failed`), `attempts`, `next_attempt_at`, `locked_until` (delivery claim), `last_error` (one line), `created_at`, `sent_at` | Must-not-lose side effects, delivered at least once by `platform:deliver-outbox` |
+| `outbox_messages` | `tenant_id` (nullable, → organization: the tenant whose change it is; `null` = the platform's, e.g. account emails; D138), `kind`, `payload` (JSON), `status` (`pending` \| `sent` \| `failed`), `attempts`, `next_attempt_at`, `locked_until` (delivery claim), `claim_token` (owner, D168), `last_error` (one line), `created_at`, `sent_at` | Must-not-lose side effects, delivered at least once by `platform:deliver-outbox` |
+
+`job_cursors` (D168) holds a platform task's cursor and update time. It is operational progress, not tenant-owned business state. Notification generation visits at most 25 active cafes per run, skips individual failures and wraps for retries.
 
 ## AI assistant (phase 9, D107, D108)
 

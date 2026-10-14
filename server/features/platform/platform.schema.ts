@@ -77,10 +77,22 @@ export const outboxMessages = sqliteTable('outbox_messages', {
   attempts: integer().notNull().default(0),
   nextAttemptAt: instant().notNull().default(nowMs),
   lockedUntil: instant(),
+  /** Unique owner of this delivery lease; stale workers cannot finalize a new claim. */
+  claimToken: text(),
   lastError: text(),
   createdAt: instant().notNull().default(nowMs),
   sentAt: instant(),
 }, t => [
   index('outbox_messages_due_idx').on(t.status, t.nextAttemptAt),
+  index('outbox_messages_order_idx').on(t.tenantId, t.kind, sql`json_extract(${t.payload}, '$.orderId')`),
+  index('outbox_messages_expiry_idx').on(t.kind, t.createdAt),
+  index('outbox_messages_sent_idx').on(t.status, t.sentAt),
   check('outbox_messages_status_check', sql`${t.status} in ('pending', 'sent', 'failed')`),
 ])
+
+/** Operational progress, independent of a tenant's business data. Tasks may safely repeat work. */
+export const jobCursors = sqliteTable('job_cursors', {
+  job: text().primaryKey(),
+  cursor: text(),
+  updatedAt: instant().notNull().default(nowMs),
+})

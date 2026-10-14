@@ -14,7 +14,7 @@ import * as orderRepo from './orders.repository'
 import { csvFilename, itemsCsv, ordersCsv, summaryCsv } from './reports.csv'
 import { itemsMessage, periodText, plainText, summaryMessage } from './reports.message'
 import * as repo from './reports.repository'
-import { averageMinor, bestSellers, businessDateAt, categoriesOf, firstName, itemSalesRows, itemSalesTable, paymentState, periodInstants, previousPeriod, salesTrend } from './reports.rules'
+import { averageMinor, bestSellers, businessDateAt, categoriesOf, firstName, itemSalesRows, itemSalesTable, paymentState, paymentWindows, periodInstants, previousPeriod, salesTrend } from './reports.rules'
 
 /**
  * The reports (step 8.1, docs/plans/reports.md, D110): one branch, a range of business dates, read
@@ -53,7 +53,7 @@ export async function reportSummary(db: Db, tenantId: string, query: ReportPerio
   const dates = { branchId: ctx.branch.id, from: query.from, to: query.to }
 
   const [payments, refunds, previousPaidSalesMinor, paidItems, placed, cancelled, current] = await Promise.all([
-    repo.paymentsCollected(db, ctx.range),
+    repo.paymentsCollected(db, tenantId, ctx.range, paymentWindows(query, ctx.branch.timeZone)),
     repo.refundsReturned(db, ctx.range),
     repo.paidSalesTotal(db, { branchId: ctx.branch.id, ...previous }),
     repo.itemTotals(db, ctx.range, 'collected'),
@@ -63,11 +63,12 @@ export async function reportSummary(db: Db, tenantId: string, query: ReportPerio
   ])
 
   const salesMinor = payments.reduce((sum, p) => sum + p.amountMinor, 0)
+  const paidOrders = payments.reduce((sum, p) => sum + p.orders, 0)
   const byMethod = (method: PaymentMethod) => {
     const of = payments.filter(p => p.method === method)
     return {
       method,
-      orders: of.length,
+      orders: of.reduce((sum, p) => sum + p.orders, 0),
       amountMinor: of.reduce((sum, p) => sum + p.amountMinor, 0),
       amountKhr: method === 'cash_khr' ? of.reduce((sum, p) => sum + (p.amountKhr ?? 0), 0) : null,
     }
@@ -77,7 +78,7 @@ export async function reportSummary(db: Db, tenantId: string, query: ReportPerio
 
   return {
     ...reportContext(ctx),
-    paid: { salesMinor, orders: payments.length, averageMinor: averageMinor(salesMinor, payments.length) },
+    paid: { salesMinor, orders: paidOrders, averageMinor: averageMinor(salesMinor, paidOrders) },
     refunds,
     netSalesMinor: salesMinor - refunds.amountMinor,
     previousPaidSalesMinor,

@@ -10,6 +10,6 @@ export default defineEventHandler(async (event) => {
   const orderId = readIdParam(event, 'orderId', 'This order')
   const key = readIdempotencyKey(event)
   const order = await markOrderReady(useDb(), actor, orderId, await readValidBody(event, counterCommandSchema), key)
-  sendOrderEventsNow(event)
+  sendOrderEventsNow(event, { tenantId: actor.tenantId, orderId }, 'orders.ready')
   return order
 })

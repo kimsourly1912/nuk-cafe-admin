@@ -10,10 +10,7 @@ import { uploadPhoto } from '#server/features/media'
  */
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { media: ['upload'] })
-  if (Number(getHeader(event, 'content-length') ?? 0) > PHOTO_UPLOAD_MAX_BYTES) {
-    throw apiError(413, 'PAYLOAD_TOO_LARGE', `The photo is larger than ${PHOTO_UPLOAD_MAX_BYTES / 1024 / 1024} MB.`)
-  }
-  const parts = await readMultipartFormData(event) ?? []
+  const parts = await readLimitedMultipart(event, PHOTO_UPLOAD_MAX_BYTES)
   const file = (name: string) => {
     const part = parts.find(p => p.name === name && p.filename)
     return part && { type: part.type ?? '', data: new Uint8Array(part.data) }

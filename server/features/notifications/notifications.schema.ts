@@ -109,6 +109,7 @@ export const notificationDeliveries = sqliteTable('notification_deliveries', {
   subject: text().notNull(),
   message: text({ mode: 'json' }).$type<StoredMessage>().notNull(),
   status: text({ enum: DELIVERY_STATUSES }).notNull().default('pending'),
+  claimToken: text(),
   attempts: integer().notNull().default(0),
   nextAttemptAt: instant().notNull().default(nowMs),
   lastError: text(),

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { IMAGE_MAX_BYTES } from '#shared/contracts/media'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { mediaAssets } from '#server/features/media/media.schema'
+import { mediaAssets, mediaObjectDeletions } from '#server/features/media/media.schema'
 import { attachStatements, purgeExpiredUploads, releaseStatement, uploadImage } from '#server/features/media/media.service'
 import type { ObjectStore } from '#server/features/media/media.service'
 import { sniffImageType } from '#server/features/media/media.rules'
@@ -11,6 +11,7 @@ import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/d
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { isStaleWrite } from '#server/utils/batch'
+import { interleaved } from '#server/tests/support/interleave'
 
 let db: Db
 const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', requestId: 'req-1' }
@@ -173,24 +174,31 @@ describe('purging', () => {
     await age(asset.id, 25)
     // The purge finds it; then a record attaches it, just before the purge's delete runs.
     let attachedMeanwhile = false
-    const racing = new Proxy(db, {
-      get(target, key, receiver) {
-        if (key !== 'delete' || attachedMeanwhile) return Reflect.get(target, key, receiver)
-        attachedMeanwhile = true
-        return (table: typeof mediaAssets) => ({
-          where: (condition: never) => ({
-            returning: async (fields: never) => {
-              await target.batch(await attachStatements(target, TEST_TENANT, asset.id) as never)
-              return target.delete(table).where(condition).returning(fields)
-            },
-          }),
-        })
-      },
+    const racing = interleaved(db, async () => {
+      attachedMeanwhile = true
+      await db.batch(await attachStatements(db, TEST_TENANT, asset.id) as never)
     })
     expect(await purgeExpiredUploads(racing, store)).toEqual({ deleted: 0, kept: 1, objectErrors: [] })
     expect(attachedMeanwhile).toBe(true)
     expect(await rowOf(asset.id)).toMatchObject({ state: 'attached' })
     expect(store.objects.size).toBe(1)
+  })
+
+  it('retries failed R2 cleanup after the asset row is gone, for both cafes', async () => {
+    await ensureTenant(db, 'cafe-2')
+    const first = await upload('image/png', PNG)
+    const second = await uploadImage(db, store, { ...actor, tenantId: 'cafe-2' }, { type: 'image/png', data: PNG })
+    await age(first.id, 25)
+    await age(second.id, 25)
+    store.failDel = true
+    expect((await purgeExpiredUploads(db, store)).deleted).toBe(2)
+    expect(await db.select().from(mediaAssets)).toHaveLength(0)
+    expect(await db.select().from(mediaObjectDeletions)).toHaveLength(2)
+    expect(store.objects.size).toBe(2)
+    store.failDel = false
+    await purgeExpiredUploads(db, store)
+    expect(store.objects.size).toBe(0)
+    expect(await db.select().from(mediaObjectDeletions)).toHaveLength(0)
   })
 
   it('reports an object it couldn\'t remove, after deleting the row', async () => {

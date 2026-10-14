@@ -1,7 +1,8 @@
 import type { H3Event } from 'h3'
-import { getHeader, getQuery, getRouterParam, readBody } from 'h3'
+import { getQuery, getRouterParam } from 'h3'
 import * as v from 'valibot'
 import { apiError, ErrorCodes } from './errors'
+import { readLimitedBody } from './request-body'
 
 /** Largest JSON body a write accepts (docs/server/security.md → Request protection). */
 export const MAX_JSON_BYTES = 64 * 1024
@@ -23,12 +24,10 @@ export function parseInput<T extends v.GenericSchema>(schema: T, input: unknown)
 
 /** The JSON body, size-limited and validated. */
 export async function readValidBody<T extends v.GenericSchema>(event: H3Event, schema: T): Promise<v.InferOutput<T>> {
-  if (Number(getHeader(event, 'content-length') ?? 0) > MAX_JSON_BYTES) {
-    throw apiError(413, ErrorCodes.PAYLOAD_TOO_LARGE, 'The request is too large.')
-  }
+  const bytes = await readLimitedBody(event, MAX_JSON_BYTES)
   let body: unknown
   try {
-    body = await readBody(event)
+    body = bytes.length ? JSON.parse(new TextDecoder().decode(bytes)) : {}
   }
   catch {
     throw apiError(400, ErrorCodes.VALIDATION_FAILED, 'The request body is not valid JSON.')

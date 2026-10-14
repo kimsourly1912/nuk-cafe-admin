@@ -8,7 +8,8 @@ import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/d
 import { expectApiError } from '#server/tests/support/failure'
 import { auditEvents, idempotencyKeys, outboxMessages } from '#server/features/platform/platform.schema'
 import { auditStatement, deliverOutbox, expireIdempotencyKeys, outboxStatement, withIdempotency } from '#server/features/platform/platform.service'
-import { canonicalJson, OUTBOX_MAX_ATTEMPTS, retryDelayMs } from '#server/features/platform/platform.rules'
+import { canonicalJson, OUTBOX_CLAIM_MS, OUTBOX_MAX_ATTEMPTS, retryDelayMs } from '#server/features/platform/platform.rules'
+import * as outboxRepo from '#server/features/platform/platform.repository'
 import type { OutboxHandler } from '#server/features/platform/platform.types'
 
 let db: Db
@@ -262,6 +263,84 @@ describe('outbox', () => {
     expect(await deliverOutbox(db, handlers, { now: at(30_000) })).toMatchObject({ sent: 0 })
     expect(await deliverOutbox(db, handlers, { now: at(60_000) })).toMatchObject({ sent: 1 })
     expect(await message()).toMatchObject({ status: 'sent', attempts: 2 })
+  })
+
+  it.each(['success', 'failure'] as const)('ignores an expired worker settling with %s after a newer claim', async (outcome) => {
+    await enqueue()
+    await db.update(outboxMessages).set({ attempts: 7 })
+    let enter!: () => void
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve
+    })
+    let finish!: () => void
+    let fail!: (error: Error) => void
+    const stalled = new Promise<void>((resolve, reject) => {
+      finish = resolve
+      fail = reject
+    })
+    const old = deliverOutbox(db, mailTest(async () => {
+      enter()
+      await stalled
+    }), { now: T0 })
+    await entered
+    const newer = await deliverOutbox(db, mailTest(async () => {}), { now: at(OUTBOX_CLAIM_MS + 1) })
+    expect(newer.sent).toBe(1)
+    if (outcome === 'failure') fail(new Error('Old worker failed'))
+    else finish()
+    expect(await old).toMatchObject({ sent: 0, failed: 0, skipped: 1 })
+    expect(await message()).toMatchObject({ status: 'sent', attempts: 9, payload: {}, claimToken: null, lastError: null })
+  })
+
+  it.each(['success', 'failure'] as const)('an expired worker cannot settle a newer pending claim with %s', async (outcome) => {
+    await enqueue()
+    await db.update(outboxMessages).set({ attempts: 7 })
+    let enter!: () => void
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve
+    })
+    let finish!: () => void
+    let fail!: (error: Error) => void
+    const stalled = new Promise<void>((resolve, reject) => {
+      finish = resolve
+      fail = reject
+    })
+    const old = deliverOutbox(db, mailTest(async () => {
+      enter()
+      await stalled
+    }), { now: T0 })
+    await entered
+    const current = (await outboxRepo.claimMessage(db, (await message()).id, at(OUTBOX_CLAIM_MS + 1), at(OUTBOX_CLAIM_MS * 2)))!
+    if (outcome === 'failure') fail(new Error('Old worker failed'))
+    else finish()
+    expect(await old).toMatchObject({ sent: 0, failed: 0, skipped: 1 })
+    expect(await message()).toMatchObject({ status: 'pending', attempts: 9, claimToken: current.token, payload: { to: 'user-1' }, lastError: null })
+    expect(await outboxRepo.markSent(db, (await message()).id, current.token, at(OUTBOX_CLAIM_MS + 2))).toBe(true)
+  })
+
+  it('does not reclaim a retry before its new due time', async () => {
+    await enqueue()
+    await deliverOutbox(db, mailTest(async () => {
+      throw new Error('retry later')
+    }), { now: T0 })
+    expect(await outboxRepo.claimMessage(db, (await message()).id, T0, at(OUTBOX_CLAIM_MS))).toBeUndefined()
+  })
+
+  it('targets only the current tenant, order and kind', async () => {
+    await ensureTenant(db, 'other')
+    await db.batch([
+      outboxStatement(db, TEST_TENANT, 'orders.placed', { orderId: 'mine' }),
+      outboxStatement(db, 'other', 'orders.placed', { orderId: 'mine' }),
+      outboxStatement(db, TEST_TENANT, 'orders.placed', { orderId: 'another' }),
+      outboxStatement(db, TEST_TENANT, 'orders.paid', { orderId: 'mine' }),
+    ])
+    await db.update(outboxMessages).set({ nextAttemptAt: T0 })
+    const seen: unknown[] = []
+    const report = await deliverOutbox(db, { 'orders.placed': async (row) => {
+      seen.push(row)
+    } }, { now: T0, order: { tenantId: TEST_TENANT, orderId: 'mine' }, kinds: ['orders.placed'] })
+    expect(report.sent).toBe(1)
+    expect(seen).toEqual([expect.objectContaining({ tenantId: TEST_TENANT, kind: 'orders.placed', payload: { orderId: 'mine' } })])
+    expect((await db.select().from(outboxMessages)).filter(row => row.status === 'pending')).toHaveLength(3)
   })
 
   it('commits a message only with the change that caused it', async () => {

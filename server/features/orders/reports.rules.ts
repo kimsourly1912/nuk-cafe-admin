@@ -1,26 +1,32 @@
+import { CalendarDateTime, toZoned } from '@internationalized/date'
 import type { OrderStatus } from '#shared/contracts/orders'
 import { BUSINESS_DAY_START_MINUTE } from '#shared/contracts/orders'
 import type { ItemSalesQuery, ItemSalesRow, PaymentState, TrendPoint } from '#shared/contracts/reports'
 import { daysBetween } from '#shared/contracts/reports'
-import { addDays, localDate, localTime, zonedInstant } from '#server/utils/weekly-windows'
+import { addDays, localDate, localTime } from '#server/utils/weekly-windows'
 
 /**
  * Pure rules of the reports (step 8.1, docs/plans/reports.md, D110): business days, periods, the
  * sales trend, an order's payment state and the Sales by item table. No I/O.
  */
 
-const MINUTE = 60_000
+/** Use the existing timezone library's DST disambiguation: earlier repeated hour, later gap. */
+function reportInstant(date: string, minute: number, timeZone: string): Date {
+  const [year, month, day] = date.split('-').map(Number)
+  return toZoned(new CalendarDateTime(year!, month!, day!, Math.floor(minute / 60), minute % 60), timeZone).toDate()
+}
 
-/** The business date an instant belongs to: the local date 4 hours earlier (04:00 to 04:00, D99). */
+/** The business date starts at 04:00 on the branch wall clock, including DST changes (D99). */
 export function businessDateAt(instant: Date, timeZone: string): string {
-  return localDate(new Date(instant.getTime() - BUSINESS_DAY_START_MINUTE * MINUTE), timeZone)
+  const date = localDate(instant, timeZone)
+  return localTime(instant, timeZone).minute < BUSINESS_DAY_START_MINUTE ? addDays(date, -1) : date
 }
 
 /** The instants business dates `from` to `to` cover: `[from 04:00, to+1 04:00)` in the zone. */
 export function periodInstants(period: { from: string, to: string }, timeZone: string): { start: Date, end: Date } {
   return {
-    start: zonedInstant(period.from, BUSINESS_DAY_START_MINUTE, timeZone),
-    end: zonedInstant(addDays(period.to, 1), BUSINESS_DAY_START_MINUTE, timeZone),
+    start: reportInstant(period.from, BUSINESS_DAY_START_MINUTE, timeZone),
+    end: reportInstant(addDays(period.to, 1), BUSINESS_DAY_START_MINUTE, timeZone),
   }
 }
 
@@ -35,11 +41,28 @@ export function datesOf(period: { from: string, to: string }): string[] {
   return Array.from({ length: daysBetween(period.from, period.to) + 1 }, (_, i) => addDays(period.from, i))
 }
 
+/** UTC boundaries let SQLite aggregate in the branch's IANA zone without loading every payment. */
+export function paymentWindows(period: { from: string, to: string }, timeZone: string) {
+  const { start, end } = periodInstants(period, timeZone)
+  const singleDay = period.from === period.to
+  const boundaries = new Set([start.getTime(), end.getTime()])
+  if (singleDay) {
+    for (let hour = 0; hour < 24; hour++) {
+      const date = hour < BUSINESS_DAY_START_MINUTE / 60 ? addDays(period.from, 1) : period.from
+      const instant = reportInstant(date, hour * 60, timeZone).getTime()
+      if (instant > start.getTime() && instant < end.getTime()) boundaries.add(instant)
+    }
+  }
+  else for (const date of datesOf(period)) boundaries.add(reportInstant(date, BUSINESS_DAY_START_MINUTE, timeZone).getTime())
+  const ordered = [...boundaries].sort((a, b) => a - b)
+  return ordered.slice(0, -1).map((instant, i) => ({ start: instant, end: ordered[i + 1]! }))
+}
+
 /**
  * Paid sales by local hour for one business day (24 buckets from 04 to 03, the business day's
  * order), or by business date for a longer period. Each payment counts where it was collected.
  */
-export function salesTrend(payments: { collectedAt: Date, amountMinor: number }[], period: { from: string, to: string }, timeZone: string): { unit: 'hour' | 'day', points: TrendPoint[] } {
+export function salesTrend(payments: { collectedAt: Date, amountMinor: number, orders?: number }[], period: { from: string, to: string }, timeZone: string): { unit: 'hour' | 'day', points: TrendPoint[] } {
   const unit = period.from === period.to ? 'hour' : 'day'
   const keys = unit === 'hour'
     ? Array.from({ length: 24 }, (_, i) => String((i + BUSINESS_DAY_START_MINUTE / 60) % 24).padStart(2, '0'))
@@ -52,7 +75,7 @@ export function salesTrend(payments: { collectedAt: Date, amountMinor: number }[
     const point = points.get(key)
     if (!point) continue
     point.salesMinor += payment.amountMinor
-    point.orders += 1
+    point.orders += payment.orders ?? 1
   }
   return { unit, points: [...points.values()] }
 }

@@ -1,3 +1,4 @@
+import { isJobCurrent } from '#server/features/platform'
 import { sql } from 'drizzle-orm'
 
 /**
@@ -6,11 +7,16 @@ import { sql } from 'drizzle-orm'
  */
 export default defineEventHandler(async (event) => {
   try {
-    await useDb().run(sql`select 1`)
+    const db = useDb()
+    await db.run(sql`select 1`)
+    const maxAge = Number(useRuntimeConfig(event).maintenance.notificationMaxAgeSeconds)
+    if (maxAge > 0 && !await isJobCurrent(db, 'notifications:generate', maxAge)) {
+      throw new Error('Notification scheduler heartbeat is missing or stale')
+    }
     return { status: 'ok' }
   }
   catch (error) {
-    log('error', 'Health check: database unreachable', { error: String(error) }, event)
+    log('error', 'Health check: dependency unavailable', { error: String(error) }, event)
     setResponseStatus(event, 503)
     return { status: 'unavailable' }
   }

@@ -1,8 +1,8 @@
-import { and, asc, count, eq, inArray, isNull, lt } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'
 import type { PhotoEdit } from '#shared/contracts/media'
 import type { Db, Statement } from '#server/utils/batch'
-import { readInChunks } from '#server/utils/batch'
-import { mediaAssets } from './media.schema'
+import { chunk, readInChunks } from '#server/utils/batch'
+import { mediaAssets, mediaObjectDeletions } from './media.schema'
 
 export interface MediaRow {
   id: string
@@ -102,8 +102,8 @@ export function releaseStatement(db: Db, tenantId: string, id: string, now: Date
 }
 
 /** Temporary assets whose state is older than `before`, oldest first. */
-export async function findExpiredTemporary(db: Db, before: Date, limit: number): Promise<{ id: string, objectKey: string }[]> {
-  return db.select({ id: mediaAssets.id, objectKey: mediaAssets.objectKey }).from(mediaAssets)
+export async function findExpiredTemporary(db: Db, before: Date, limit: number): Promise<{ id: string, tenantId: string, objectKey: string }[]> {
+  return db.select({ id: mediaAssets.id, tenantId: mediaAssets.tenantId, objectKey: mediaAssets.objectKey }).from(mediaAssets)
     .where(and(eq(mediaAssets.state, 'temporary'), lt(mediaAssets.stateChangedAt, before), isNull(mediaAssets.parentId)))
     .orderBy(asc(mediaAssets.stateChangedAt))
     .limit(limit)
@@ -113,10 +113,13 @@ export async function findExpiredTemporary(db: Db, before: Date, limit: number):
  * Deletes the row only if it's still temporary and still expired: an attach (or a release that
  * restarted its 24 hours) since it was found keeps it. Returns whether it was deleted.
  */
-export async function deleteIfStillExpired(db: Db, id: string, before: Date): Promise<boolean> {
-  const rows = await db.delete(mediaAssets)
-    .where(and(eq(mediaAssets.id, id), eq(mediaAssets.state, 'temporary'), lt(mediaAssets.stateChangedAt, before)))
-    .returning({ id: mediaAssets.id })
+export async function deleteIfStillExpired(db: Db, tenantId: string, id: string, before: Date): Promise<boolean> {
+  const expired = and(eq(mediaAssets.tenantId, tenantId), eq(mediaAssets.id, id), eq(mediaAssets.state, 'temporary'), lt(mediaAssets.stateChangedAt, before))
+  const exists = sql`exists (select 1 from media_assets root where root.id = ${id} and root.tenant_id = ${tenantId} and root.state = 'temporary' and root.state_changed_at < ${before.getTime()})`
+  const [, rows] = await db.batch([
+    queueAssetObjects(db, tenantId, id, exists),
+    db.delete(mediaAssets).where(expired).returning({ id: mediaAssets.id }),
+  ])
   return rows.length === 1
 }
 
@@ -127,11 +130,41 @@ export async function countAssets(db: Db, tenantId: string): Promise<number> {
 }
 
 /** The tenant's next uploads to delete, oldest first. */
-export async function firstAssets(db: Db, tenantId: string, limit: number): Promise<{ id: string, objectKey: string }[]> {
-  return db.select({ id: mediaAssets.id, objectKey: mediaAssets.objectKey }).from(mediaAssets).where(and(eq(mediaAssets.tenantId, tenantId), isNull(mediaAssets.parentId))).orderBy(asc(mediaAssets.createdAt)).limit(limit)
+export async function firstAssets(db: Db, tenantId: string, limit: number): Promise<{ id: string, tenantId: string, objectKey: string }[]> {
+  return db.select({ id: mediaAssets.id, tenantId: mediaAssets.tenantId, objectKey: mediaAssets.objectKey }).from(mediaAssets).where(and(eq(mediaAssets.tenantId, tenantId), isNull(mediaAssets.parentId))).orderBy(asc(mediaAssets.createdAt)).limit(limit)
 }
 
 /** Deletes an upload and, for a menu photo, its files' rows (D158). */
-export async function deleteAsset(db: Db, id: string): Promise<void> {
-  await db.batch([db.delete(mediaAssets).where(eq(mediaAssets.parentId, id)), db.delete(mediaAssets).where(eq(mediaAssets.id, id))])
+function queueAssetObjects(db: Db, tenantId: string, id: string, extra?: ReturnType<typeof sql>): Statement {
+  return db.insert(mediaObjectDeletions).select(db.select({ objectKey: mediaAssets.objectKey, tenantId: mediaAssets.tenantId, nextAttemptAt: sql<Date>`0`.as('next_attempt_at') }).from(mediaAssets)
+    .where(and(eq(mediaAssets.tenantId, tenantId), or(eq(mediaAssets.id, id), eq(mediaAssets.parentId, id)), extra))).onConflictDoNothing()
+}
+
+export async function deleteAsset(db: Db, tenantId: string, id: string): Promise<void> {
+  await db.batch([
+    queueAssetObjects(db, tenantId, id),
+    db.delete(mediaAssets).where(and(eq(mediaAssets.tenantId, tenantId), eq(mediaAssets.parentId, id))),
+    db.delete(mediaAssets).where(and(eq(mediaAssets.tenantId, tenantId), eq(mediaAssets.id, id))),
+  ])
+}
+
+/** Written before R2: a crash before the asset commit leaves a recoverable provisional upload. */
+export async function planObjects(db: Db, tenantId: string, keys: string[], after: Date) {
+  for (const piece of chunk(keys, 25)) await db.insert(mediaObjectDeletions).values(piece.map(objectKey => ({ objectKey, tenantId, nextAttemptAt: after }))).onConflictDoNothing()
+}
+
+export function clearObjectPlans(db: Db, tenantId: string, keys: string[]): Statement {
+  return db.delete(mediaObjectDeletions).where(and(eq(mediaObjectDeletions.tenantId, tenantId), inArray(mediaObjectDeletions.objectKey, keys)))
+}
+
+export async function dueObjectDeletions(db: Db, now: Date, limit: number) {
+  return db.select().from(mediaObjectDeletions).where(lte(mediaObjectDeletions.nextAttemptAt, now)).orderBy(asc(mediaObjectDeletions.nextAttemptAt), asc(mediaObjectDeletions.objectKey)).limit(limit)
+}
+
+export async function deletedObject(db: Db, tenantId: string, key: string) {
+  await db.delete(mediaObjectDeletions).where(and(eq(mediaObjectDeletions.tenantId, tenantId), eq(mediaObjectDeletions.objectKey, key)))
+}
+
+export async function retryObjectDeletion(db: Db, tenantId: string, key: string, after: Date) {
+  await db.update(mediaObjectDeletions).set({ nextAttemptAt: after }).where(and(eq(mediaObjectDeletions.tenantId, tenantId), eq(mediaObjectDeletions.objectKey, key)))
 }

@@ -343,50 +343,50 @@ async function send(api: Api, readObject: ReadObject, chatId: string, message: r
  * be running and the channel connected. Never throws for Telegram's answers: they become the post's
  * state. At least once: a lost answer after Telegram accepted a post can repeat it.
  */
-export async function deliverDuePosts(db: Db, api: Api, readObject: ReadObject, now = new Date(), options: { limit?: number, ids?: string[] } = {}): Promise<PostDeliveryReport> {
+export async function deliverDuePosts(db: Db, api: Api, readObject: ReadObject, now: Date | undefined = undefined, options: { limit?: number, ids?: string[], budgetMs?: number } = {}): Promise<PostDeliveryReport> {
   const report = { sent: 0, retried: 0, failed: 0, cancelled: 0 }
   if (options.ids && !options.ids.length) return report
-  for (const row of await repo.duePosts(db, now, options.limit ?? 25, options.ids)) {
-    if (!await repo.claimPost(db, row.id, now, new Date(now.getTime() + CLAIM_MS))) continue
-    const attempt = row.attempts + 1
-    const promotion = await getPromotion(db, row.tenantId, row.promotionId, now).catch(() => undefined)
+  const started = Date.now()
+  for (const pending of await repo.duePosts(db, now ?? new Date(), options.limit ?? 25, options.ids)) {
+    if (Date.now() - started >= (options.budgetMs ?? 20_000)) break
+    const current = now ?? new Date()
+    const row = await repo.claimPost(db, pending.id, current, new Date(current.getTime() + CLAIM_MS))
+    if (!row) continue
+    const token = row.claimToken
+    const attempt = row.attempts
+    const promotion = await getPromotion(db, row.tenantId, row.promotionId, current).catch(() => undefined)
     if (!promotion || (promotion.phase !== 'live' && promotion.phase !== 'scheduled')) {
-      await repo.settlePost(db, row.id, { status: 'cancelled', reason: 'The promotion ended before this post went out.' })
-      report.cancelled++
+      if (await repo.settlePost(db, row.id, token, { status: 'cancelled', reason: 'The promotion ended before this post went out.' })) report.cancelled++
       continue
     }
     const channel = await repo.findChannel(db, row.tenantId, row.channelId)
     if (!channel || channel.status !== 'connected') {
-      await repo.settlePost(db, row.id, { status: 'failed', reason: channel?.status === 'removed' ? 'The bot is no longer an admin of this channel.' : 'This channel was disconnected.' })
-      report.failed++
+      if (await repo.settlePost(db, row.id, token, { status: 'failed', reason: channel?.status === 'removed' ? 'The bot is no longer an admin of this channel.' : 'This channel was disconnected.' })) report.failed++
       continue
     }
     try {
       const sent = await send(api, readObject, channel.externalId, row.message)
-      await repo.settlePost(db, row.id, { status: 'sent', sentAt: new Date(), externalMessageId: String(sent.message_id), externalUrl: postUrl(channel, sent.message_id), reason: null })
-      report.sent++
+      if (await repo.settlePost(db, row.id, token, { status: 'sent', sentAt: new Date(), externalMessageId: String(sent.message_id), externalUrl: postUrl(channel, sent.message_id), reason: null })) report.sent++
     }
     catch (error) {
       log('warn', 'Telegram: a post was not delivered', { postId: row.id, attempt, error: String(error) })
       if (isRemovedError(error)) {
-        await repo.markRemoved(db, channel.externalId, now)
-        await repo.settlePost(db, row.id, { status: 'failed', reason: 'The bot is no longer an admin of this channel.' })
-        report.failed++
+        if (await repo.settlePost(db, row.id, token, { status: 'failed', reason: 'The bot is no longer an admin of this channel.' })) {
+          await repo.markRemoved(db, channel.externalId, current)
+          report.failed++
+        }
       }
       else if (error instanceof GrammyError && error.error_code === 429) {
         // Telegram's flood control says when: that wait doesn't count against the tries.
         const seconds = error.parameters.retry_after ?? 30
-        await repo.settlePost(db, row.id, { attempts: row.attempts, nextAttemptAt: new Date(now.getTime() + seconds * 1000), reason: `Telegram asked to wait ${seconds} seconds.` })
-        report.retried++
+        if (await repo.settlePost(db, row.id, token, { attempts: row.attempts - 1, nextAttemptAt: new Date((now ?? new Date()).getTime() + seconds * 1000), reason: `Telegram asked to wait ${seconds} seconds.` })) report.retried++
       }
       else if ((error instanceof GrammyError && error.error_code === 400) || attempt >= POST_MAX_ATTEMPTS) {
         // A 400 won't change by trying again (a caption Telegram can't read, a bad link).
-        await repo.settlePost(db, row.id, { status: 'failed', reason: error instanceof GrammyError && error.error_code === 400 ? 'Telegram refused this post.' : `Telegram didn't accept it after ${attempt} tries.` })
-        report.failed++
+        if (await repo.settlePost(db, row.id, token, { status: 'failed', reason: error instanceof GrammyError && error.error_code === 400 ? 'Telegram refused this post.' : `Telegram didn't accept it after ${attempt} tries.` })) report.failed++
       }
       else {
-        await repo.settlePost(db, row.id, { nextAttemptAt: new Date(now.getTime() + retryDelayMs(attempt)), reason: 'Telegram didn\'t accept it. Trying again.' })
-        report.retried++
+        if (await repo.settlePost(db, row.id, token, { nextAttemptAt: new Date((now ?? new Date()).getTime() + retryDelayMs(attempt)), reason: 'Telegram didn\'t accept it. Trying again.' })) report.retried++
       }
     }
   }

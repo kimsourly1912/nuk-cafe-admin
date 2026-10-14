@@ -10,6 +10,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 
 | Page | Contents |
 |---|---|
+| [Server reliability](./server-reliability.md) | Body limits, delivery ownership and targeting, durable media cleanup, tenant job pages, maintenance and heartbeat APIs |
 | [UI foundation](./ui.md) | **Canonical visual rules**: tokens, spacing, radius, type, density and touch targets, icons, surfaces, action hierarchy, motion, accessibility |
 | [Responsive layout](./responsive-layout.md) | Width classes (compact/medium/expanded), shell and navigation, page anatomy, sticky bars, the responsive behavior matrix |
 | [Page patterns](./page-patterns.md) | Resource index, settings, detail/editor and task-flow blueprints; editing surfaces; bottom sheets; gestures; the states every page handles |

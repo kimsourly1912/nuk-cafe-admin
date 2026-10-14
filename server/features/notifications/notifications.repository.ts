@@ -2,6 +2,8 @@ import { and, asc, desc, eq, inArray, isNull, lt, lte, ne, sql } from 'drizzle-o
 import type { DestinationKind, NotificationKind, TelegramLinkStatus } from '#shared/contracts/notifications'
 import { user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
+import { isStaleWrite, requireOneChange } from '#server/utils/batch'
+import { newId } from '#server/utils/ids'
 import type { StoredMessage } from './notifications.schema'
 import { notificationDeliveries, notificationRules, orderReadyAlerts, telegramDestinations, telegramLinks } from './notifications.schema'
 
@@ -244,33 +246,46 @@ export async function dueDeliveries(db: Db, now: Date, limit: number, ids?: stri
  * Claims a due delivery for one run: counts the try and pushes its next time out, only if it's still
  * pending and due. Two overlapping runs never send it at once.
  */
-export async function claimDelivery(db: Db, row: DeliveryRow, now: Date, until: Date): Promise<boolean> {
-  const claimed = await db.update(notificationDeliveries)
-    .set({ attempts: sql`${notificationDeliveries.attempts} + 1`, nextAttemptAt: until })
+export async function claimDelivery(db: Db, row: DeliveryRow, now: Date, until: Date): Promise<(DeliveryRow & { claimToken: string }) | undefined> {
+  const token = newId()
+  const [claimed] = await db.update(notificationDeliveries)
+    .set({ claimToken: token, attempts: sql`${notificationDeliveries.attempts} + 1`, nextAttemptAt: until })
     .where(and(eq(notificationDeliveries.id, row.id), eq(notificationDeliveries.status, 'pending'), lte(notificationDeliveries.nextAttemptAt, now)))
-    .returning({ id: notificationDeliveries.id })
-  return claimed.length > 0
+    .returning()
+  return claimed ? { ...claimed, claimToken: token } : undefined
 }
 
-export async function markDelivered(db: Db, id: string, destinationId: string, at: Date): Promise<void> {
-  await db.batch([
-    db.update(notificationDeliveries).set({ status: 'sent', sentAt: at, lastError: null }).where(eq(notificationDeliveries.id, id)),
-    sentStatement(db, destinationId, at),
-  ])
+const ownsDelivery = (id: string, token: string) => and(eq(notificationDeliveries.id, id), eq(notificationDeliveries.status, 'pending'), eq(notificationDeliveries.claimToken, token))
+
+export async function markDelivered(db: Db, id: string, token: string, destinationId: string, at: Date): Promise<boolean> {
+  try {
+    await db.batch([
+      db.update(notificationDeliveries).set({ status: 'sent', sentAt: at, lastError: null, claimToken: null }).where(ownsDelivery(id, token)),
+      requireOneChange(db),
+      sentStatement(db, destinationId, at),
+    ])
+    return true
+  }
+  catch (error) {
+    if (isStaleWrite(error)) return false
+    throw error
+  }
 }
 
-export async function markRetry(db: Db, id: string, next: Date, reason: string): Promise<void> {
-  await db.update(notificationDeliveries).set({ status: 'pending', nextAttemptAt: next, lastError: reason }).where(eq(notificationDeliveries.id, id))
+export async function markRetry(db: Db, id: string, token: string, next: Date, reason: string): Promise<boolean> {
+  const rows = await db.update(notificationDeliveries).set({ nextAttemptAt: next, lastError: reason, claimToken: null }).where(ownsDelivery(id, token)).returning({ id: notificationDeliveries.id })
+  return rows.length === 1
 }
 
-export async function markFailed(db: Db, id: string, reason: string): Promise<void> {
-  await db.update(notificationDeliveries).set({ status: 'failed', lastError: reason }).where(eq(notificationDeliveries.id, id))
+export async function markFailed(db: Db, id: string, token: string, reason: string): Promise<boolean> {
+  const rows = await db.update(notificationDeliveries).set({ status: 'failed', lastError: reason, claimToken: null }).where(ownsDelivery(id, token)).returning({ id: notificationDeliveries.id })
+  return rows.length === 1
 }
 
 /** Retry: a failed delivery goes back to pending, due now, with its tries counted afresh. */
 export async function requeueFailed(db: Db, id: string, now: Date): Promise<boolean> {
   const changed = await db.update(notificationDeliveries)
-    .set({ status: 'pending', attempts: 0, nextAttemptAt: now, lastError: null })
+    .set({ status: 'pending', attempts: 0, nextAttemptAt: now, lastError: null, claimToken: null })
     .where(and(eq(notificationDeliveries.id, id), eq(notificationDeliveries.status, 'failed')))
     .returning({ id: notificationDeliveries.id })
   return changed.length > 0

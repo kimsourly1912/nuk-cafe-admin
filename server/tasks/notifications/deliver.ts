@@ -1,11 +1,9 @@
-import { activeTenants } from '#server/features/identity'
 import { deliverDue, queueBakongTokenReminder, queueClosingSummaries } from '#server/features/notifications'
 import { bakongTokenExpiries } from '#server/features/orders'
 
 /**
- * Every minute (nuxt.config.ts → nitro.scheduledTasks; D113): queues every tenant's closing
- * summaries that are due (D138) and each cafe's Bakong token reminders (10.16 D132, per cafe since
- * D148), then sends every due delivery (alerts retried, summaries, their CSV). Nothing without a bot.
+ * Every minute (D113): sends due deliveries first, then generates closing summaries (D138) and
+ * Bakong reminders (D132/D148) for one durable page of cafes (D168). Nothing without a bot.
  */
 export default defineTask({
   meta: { name: 'notifications:deliver', description: 'Queue closing summaries and reminders, and send due Telegram messages' },
@@ -14,18 +12,25 @@ export default defineTask({
       const settings = useTelegram()
       if (!settings) return { result: { off: true, queued: 0, sent: 0, retried: 0, failed: 0 } }
       const db = useDb()
-      const queued: string[] = []
-      const tenants = await activeTenants(db)
-      // Each cafe's buttons open its own pages (`/c/<slug>/…`, D141).
-      for (const tenant of tenants) queued.push(...await queueClosingSummaries(db, tenant.id, cafeSiteUrl(tenant.slug)))
-      // Each cafe's own token, reminded to its own chats (a paused cafe's waits until it's resumed).
-      const expiries = new Map((await bakongTokenExpiries(db)).map(row => [row.tenantId, row.expiresAt]))
-      for (const tenant of tenants) {
-        const expiresAt = expiries.get(tenant.id)
-        if (expiresAt) queued.push(...await queueBakongTokenReminder(db, tenant.id, expiresAt, cafeSiteUrl(tenant.slug)))
-      }
+      // Existing alerts must progress even when a cafe's report generation fails.
       const report = await deliverDue(db, telegramApi(settings))
+      const queued: string[] = []
+      const page = await runTenantPage(db, 'notifications:generate', async (tenant) => {
+        const cafeUrl = cafeSiteUrl(tenant.slug)
+        // Independent phases: a closing-summary failure must not suppress token reminders.
+        const results = await Promise.allSettled([
+          queueClosingSummaries(db, tenant.id, cafeUrl),
+          (async () => {
+            const [token] = await bakongTokenExpiries(db, tenant.id)
+            return token?.expiresAt ? queueBakongTokenReminder(db, tenant.id, token.expiresAt, cafeUrl) : []
+          })(),
+        ])
+        for (const result of results) if (result.status === 'fulfilled') queued.push(...result.value)
+        const failed = results.find(result => result.status === 'rejected')
+        if (failed?.status === 'rejected') throw failed.reason
+      })
       if (queued.length || report.sent || report.retried || report.failed) log('info', 'Telegram deliveries', { queued: queued.length, ...report })
+      if (page.failures.length) throw new Error(`Notification generation failed for ${page.failures.length} cafes; other cafes and due deliveries were processed.`)
       return { result: { off: false, queued: queued.length, ...report } }
     })
   },

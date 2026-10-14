@@ -75,6 +75,7 @@ export function resendSender(options: { apiKey: string, from: string, fetch?: ty
   return async (message, idempotencyKey) => {
     const response = await doFetch('https://api.resend.com/emails', {
       method: 'POST',
+      signal: AbortSignal.timeout(10_000),
       headers: {
         'Authorization': `Bearer ${options.apiKey}`,
         'Content-Type': 'application/json',
@@ -84,8 +85,8 @@ export function resendSender(options: { apiKey: string, from: string, fetch?: ty
       body: JSON.stringify({ from: options.from, to: [message.to], subject: message.subject, text: message.text, html: message.html }),
     })
     if (!response.ok) {
-      const detail = await response.text().catch(() => '')
-      throw new Error(`Resend answered ${response.status}: ${detail.slice(0, 200)}`)
+      await response.body?.cancel().catch(() => {})
+      throw new Error(`Resend answered ${response.status}`)
     }
   }
 }

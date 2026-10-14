@@ -145,3 +145,27 @@ jobs:
           # A cafe's admin routes refuse without a session (NUK Cafe's address, D140).
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/api/c/nuk/admin/me")" = 401
           echo "Staging is up: $STAGING_URL"
+
+  verified-release:
+    # A promotion candidate exists only after this exact main revision passes every required job.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: [check, e2e]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Record the checked revision
+        env:
+          VERIFIED_SHA: ${{ github.sha }}
+          VERIFIED_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          with open('verified-release.json', 'w') as output:
+              json.dump({'commit': os.environ['VERIFIED_SHA'], 'checks': os.environ['VERIFIED_RUN']}, output)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-release-${{ github.sha }}
+          path: verified-release.json
+          retention-days: 30

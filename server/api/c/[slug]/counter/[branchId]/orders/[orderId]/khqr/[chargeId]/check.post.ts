@@ -11,6 +11,6 @@ export default defineEventHandler(async (event) => {
   const orderId = readIdParam(event, 'orderId', 'This order')
   const chargeId = readIdParam(event, 'chargeId', 'This QR')
   const check = await checkKhqrCharge(useDb(), actor, orderId, chargeId, await useBakong(event, actor.tenantId))
-  if (check.status === 'paid') sendOrderEventsNow(event)
+  if (check.status === 'paid') sendOrderEventsNow(event, { tenantId: actor.tenantId, orderId }, 'orders.paid')
   return check
 })
