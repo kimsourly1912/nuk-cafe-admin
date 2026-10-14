@@ -58,7 +58,9 @@ describe('sealing', () => {
     await expect(openBakongToken(key, 'tenant-2', sealed)).rejects.toThrow(BakongSealError)
     await expect(openBakongToken(await importBakongKey(OTHER_KEY), TEST_TENANT, sealed)).rejects.toThrow(BakongSealError)
     const [scheme, iv, data] = sealed.split('.')
-    const altered = `${scheme}.${iv}.${data!.slice(0, -2)}${data!.endsWith('A') ? 'B' : 'A'}${data!.slice(-1)}`
+    // Change the first encoded character, which always changes decoded ciphertext bytes.
+    const altered = `${scheme}.${iv}.${data![0] === 'A' ? 'B' : 'A'}${data!.slice(1)}`
+    expect(altered).not.toBe(sealed)
     await expect(openBakongToken(key, TEST_TENANT, altered)).rejects.toThrow(BakongSealError)
   })
 

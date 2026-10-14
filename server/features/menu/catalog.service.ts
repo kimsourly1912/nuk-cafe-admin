@@ -16,8 +16,8 @@ import { runningAt } from './promotions.service'
 
 /**
  * The customer menu (docs/server/data-model.md → Menu, D65): the catalog (what could be sold,
- * independent of time and branch) narrowed to one branch at one moment. No cache yet (D65):
- * `loadCatalog` is the function a cache would wrap, purged on menu writes.
+ * independent of time and branch) narrowed to one branch at one moment. The twelve base reads
+ * share one fresh database snapshot (D169); quotes and placement select only their cart items.
  */
 
 const groupBy = <T, K>(rows: T[], key: (row: T) => K) => {
@@ -31,22 +31,9 @@ const groupBy = <T, K>(rows: T[], key: (row: T) => K) => {
   return map
 }
 
-/** Everything the tenant's customer menu could show: active categories and items, sellable versions. */
-export async function loadCatalog(db: Db, tenantId: string): Promise<Catalog> {
-  const [categories, categoryLinks, items, itemLinks, variations, itemSets, values, itemGroups, modifiers, ownPrices, rules, windows] = await Promise.all([
-    repo.activeCategories(db, tenantId),
-    repo.categoryRuleLinks(db, tenantId),
-    repo.activeItems(db, tenantId),
-    repo.itemRuleLinks(db, tenantId),
-    repo.sellableVariations(db, tenantId),
-    repo.itemOptionSets(db, tenantId),
-    repo.activeOptionValues(db, tenantId),
-    repo.itemModifierGroups(db, tenantId),
-    repo.activeModifiers(db, tenantId),
-    repo.itemModifierPrices(db, tenantId),
-    repo.allRules(db, tenantId),
-    repo.allWindows(db, tenantId),
-  ])
+/** Active categories and sellable items of this cafe; an internal cart selection narrows item relations. */
+export async function loadCatalog(db: Db, tenantId: string, itemIds?: readonly string[]): Promise<Catalog> {
+  const [categories, categoryLinks, items, itemLinks, variations, itemSets, values, itemGroups, modifiers, ownPrices, rules, windows] = await repo.catalogRows(db, tenantId, itemIds)
   const images = await imageSets(db, tenantId, items.flatMap(i => i.imageAssetId ? [i.imageAssetId] : []))
 
   const categoryRules = groupBy(categoryLinks, l => l.categoryId)
@@ -103,14 +90,15 @@ export async function loadCatalog(db: Db, tenantId: string): Promise<Catalog> {
 /**
  * What the tenant's branch sells at `now`: available items (in the branch's time zone), their versions marked
  * sold out or not there, and whether the branch is open. Without `branchId`, the first active branch
- * (D95). Unknown and archived branches are 404, and so is no branch at all.
+ * (D95). Unknown and archived branches are 404, and so is no branch at all. `itemIds` is internal
+ * checkout/placement selection, never a browser query parameter; dynamic checks remain current.
  */
-export async function getPublicMenu(db: Db, tenantId: string, query: PublicMenuQuery, now = new Date()): Promise<PublicMenu> {
+export async function getPublicMenu(db: Db, tenantId: string, query: PublicMenuQuery, now = new Date(), itemIds?: readonly string[]): Promise<PublicMenu> {
   const branchId = query.branchId ?? (await listBranchOptions(db, tenantId))[0]?.id
   if (!branchId) throw notFound('This branch')
   const branch = await getPublicBranch(db, tenantId, branchId, now)
   const [catalog, soldOut, promotions] = await Promise.all([
-    loadCatalog(db, tenantId),
+    loadCatalog(db, tenantId, itemIds),
     soldOutIds(db, branch.id),
     runningAt(db, tenantId, branch.id, localDate(now, branch.timezone)),
   ])

@@ -1,11 +1,14 @@
 import { purgeAssistantUsage } from '#server/features/assistant'
+import { drainMaintenance } from '#server/utils/maintenance'
 
 /** Daily (nuxt.config.ts → nitro.scheduledTasks): removes assistant usage rows past their 90 days (D108). */
 export default defineTask({
   meta: { name: 'assistant:purge-usage', description: 'Remove assistant usage older than 90 days' },
   async run() {
     return runJob('assistant:purge-usage', async () => {
-      const removed = await purgeAssistantUsage(useDb())
+      const db = useDb()
+      const now = new Date()
+      const removed = await drainMaintenance(limit => purgeAssistantUsage(db, now, limit))
       if (removed) log('info', 'Old assistant usage removed', { removed })
       return { result: { removed } }
     })

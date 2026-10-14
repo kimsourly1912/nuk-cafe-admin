@@ -350,6 +350,21 @@ describe('cleanup (D108)', () => {
     expect(await purgeAssistantUsage(db, now)).toBe(0)
   })
 
+  it('drains expired usage in bounded batches across cafes and rejects an unbounded limit', async () => {
+    const now = at('03:15')
+    await ensureTenant(db, 'other')
+    const other = { ...sokha, tenantId: 'other' }
+    for (const actor of [sokha, other, dara]) await startUsage(db, actor, settings, 'chat', new Date(now.getTime() - 91 * 86_400_000))
+    await startUsage(db, sokha, settings, 'chat', new Date(now.getTime() - 89 * 86_400_000))
+    await expect(purgeAssistantUsage(db, now, -1)).rejects.toThrow(RangeError)
+    expect(await rows()).toHaveLength(4)
+    expect(await purgeAssistantUsage(db, now, 2)).toBe(2)
+    expect(await rows()).toHaveLength(2)
+    expect(await purgeAssistantUsage(db, now, 2)).toBe(1)
+    expect(await purgeAssistantUsage(db, now, 2)).toBe(0)
+    expect(await rows()).toHaveLength(1)
+  })
+
   it('an account removed takes its usage with it', async () => {
     await startUsage(db, dara, settings, 'chat', at('09:00'))
     const { user } = await import('#server/db/tables')

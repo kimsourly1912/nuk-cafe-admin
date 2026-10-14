@@ -8,6 +8,7 @@ import { orderAlert } from '#server/features/orders'
 import type { Db } from '#server/utils/batch'
 import { isStaleWrite, requireOneChange } from '#server/utils/batch'
 import { log } from '#server/utils/log'
+import { maintenanceLimit } from '#server/utils/maintenance'
 import { orderReadyAlertTooLate } from './notifications.errors'
 import { orderReadyMessage, orderReadySubscribedText } from './notifications.messages'
 import * as repo from './notifications.repository'
@@ -136,6 +137,6 @@ export async function sendOrderReadyAlert(db: Db, api: Api, tenantId: string, or
 }
 
 /** Kept 2 days: the order is long finished by then. */
-export async function purgeOrderReadyAlerts(db: Db, now = new Date()): Promise<number> {
-  return repo.deleteOrderReadyAlertsBefore(db, new Date(now.getTime() - 2 * 24 * 60 * MINUTE))
+export async function purgeOrderReadyAlerts(db: Db, now = new Date(), limit = 500): Promise<number> {
+  return repo.deleteOrderReadyAlertsBefore(db, new Date(now.getTime() - 2 * 24 * 60 * MINUTE), maintenanceLimit(limit))
 }

@@ -95,4 +95,8 @@ export const jobCursors = sqliteTable('job_cursors', {
   job: text().primaryKey(),
   cursor: text(),
   updatedAt: instant().notNull().default(nowMs),
+  /** Last page with useful progress (or a successful empty page), distinct from activity. */
+  succeededAt: instant(),
+  processed: integer().notNull().default(0),
+  failures: integer().notNull().default(0),
 })

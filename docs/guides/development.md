@@ -19,6 +19,8 @@ pnpm vitest run app/features/categories   # one feature's tests
 pnpm vitest run -t "refreshes once"
 ```
 
+The browser suite uses the CI runner's Google Chrome by default. In a workspace with Chromium instead, use `E2E_BROWSER_PATH=/usr/bin/chromium pnpm test:e2e`; the optional executable path changes only the test browser launcher, not application behavior.
+
 **Checks (D83):**
 - **Before opening a PR, locally:** `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, and the e2e files of the feature you changed (`pnpm vitest run --project e2e test/e2e/<feature>.test.ts`). The e2e build is reused while no build input changed (`E2E_REBUILD=1` forces one), so rerunning tests or taking screenshots costs no rebuild.
 - **The full suite runs in CI** (`.github/workflows/ci.yml`: lint, typecheck, audit, unit/server, e2e in 3 shards) on every PR. A merge to `main` deploys to staging **without running them again** (D133): the PR already checked its code merged with `main` as it was. If `main` moved after the PR's checks ran (another PR merged meanwhile), press **Update branch** on the PR so its checks run on the new `main` before merging, or run the workflow on `main` by hand afterwards (Actions → CI → Run workflow). A shared building block or app-wide change (a root composable, `app.config.ts`, a plugin) also runs the full `pnpm test:e2e` locally first.

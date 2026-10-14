@@ -6,6 +6,7 @@ import type { Db } from '#server/utils/batch'
 import { runBatch } from '#server/utils/batch'
 import { apiError, ErrorCodes } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
+import { maintenanceLimit } from '#server/utils/maintenance'
 import { localDate } from '#server/utils/weekly-windows'
 import type { Actor } from '#server/features/identity'
 import { aiLimitReached } from './assistant.errors'
@@ -53,8 +54,8 @@ export async function finishUsage(db: Db, id: string, result: UsageResult): Prom
 }
 
 /** Daily: removes usage rows past their 90 days. */
-export async function purgeAssistantUsage(db: Db, now = new Date()): Promise<number> {
-  return repo.deleteUsageBefore(db, new Date(now.getTime() - ASSISTANT_USAGE_RETENTION_DAYS * DAY_MS))
+export async function purgeAssistantUsage(db: Db, now = new Date(), limit = 500): Promise<number> {
+  return repo.deleteUsageBefore(db, new Date(now.getTime() - ASSISTANT_USAGE_RETENTION_DAYS * DAY_MS), maintenanceLimit(limit))
 }
 
 export interface StreamHooks {

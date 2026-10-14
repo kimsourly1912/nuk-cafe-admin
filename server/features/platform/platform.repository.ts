@@ -108,8 +108,15 @@ export async function readJobCursor(db: Db, job: string): Promise<string | null>
   return row?.cursor ?? null
 }
 
-export async function saveJobCursor(db: Db, job: string, cursor: string | null) {
-  await db.insert(jobCursors).values({ job, cursor }).onConflictDoUpdate({ target: jobCursors.job, set: { cursor, updatedAt: new Date() } })
+export async function saveJobCursor(db: Db, job: string, cursor: string | null, result: { processed?: number, failures?: number, now?: Date } = {}) {
+  const now = result.now ?? new Date()
+  const processed = result.processed ?? 0
+  const failures = result.failures ?? 0
+  const succeededAt = failures === 0 || processed > failures ? now : null
+  await db.insert(jobCursors).values({ job, cursor, updatedAt: now, succeededAt, processed, failures }).onConflictDoUpdate({
+    target: jobCursors.job,
+    set: { cursor, updatedAt: now, succeededAt: succeededAt ?? jobCursors.succeededAt, processed, failures },
+  })
 }
 
 /** Expired one-time email links have no reason to remain in failed/pending payloads. */
@@ -133,7 +140,15 @@ export async function deleteSentOutboxBefore(db: Db, before: Date, limit: number
   return rows.length
 }
 
-export async function jobHeartbeat(db: Db, job: string): Promise<Date | undefined> {
-  const [row] = await db.select({ at: jobCursors.updatedAt }).from(jobCursors).where(eq(jobCursors.job, job))
-  return row?.at
+export async function jobProgress(db: Db, job: string) {
+  const [row] = await db.select({ activityAt: jobCursors.updatedAt, succeededAt: jobCursors.succeededAt, processed: jobCursors.processed, failures: jobCursors.failures })
+    .from(jobCursors).where(eq(jobCursors.job, job))
+  return row
+}
+
+/** Age is about overdue work, not intentionally scheduled future retries. */
+export async function oldestDueOutbox(db: Db, now: Date): Promise<Date | null> {
+  const [row] = await db.select({ at: sql<number | null>`min(${outboxMessages.nextAttemptAt})` }).from(outboxMessages)
+    .where(and(eq(outboxMessages.status, 'pending'), lte(outboxMessages.nextAttemptAt, now)))
+  return row?.at == null ? null : new Date(row.at)
 }

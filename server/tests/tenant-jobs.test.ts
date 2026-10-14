@@ -3,7 +3,7 @@ import { runTenantPage } from '#server/utils/jobs'
 import { createTestDb, ensureTenant } from '#server/tests/support/db'
 import { organization } from '#server/db/tables'
 import { eq } from 'drizzle-orm'
-import { isJobCurrent, saveJobCursor } from '#server/features/platform'
+import { isJobCurrent, jobProgress, saveJobCursor } from '#server/features/platform'
 
 describe('bounded tenant jobs', () => {
   it('reports missing and stale scheduler heartbeats as unavailable', async () => {
@@ -36,6 +36,59 @@ describe('bounded tenant jobs', () => {
         separate.push(tenant.id)
       }, 1)
       expect(separate).toEqual(['a'])
+    }
+    finally {
+      logs.mockRestore()
+    }
+  })
+
+  it('does not report all-failed generation as a successful heartbeat, but still advances', async () => {
+    const db = await createTestDb()
+    for (const id of ['a', 'b', 'c']) await ensureTenant(db, id)
+    const logs = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await runTenantPage(db, 'notifications:generate', async () => {
+        throw new Error('Unavailable')
+      }, 2)
+      expect(await jobProgress(db, 'notifications:generate')).toMatchObject({ processed: 2, failures: 2, succeededAt: null })
+      expect(await isJobCurrent(db, 'notifications:generate', 300)).toBe(false)
+      const seen: string[] = []
+      await runTenantPage(db, 'notifications:generate', async (tenant) => {
+        seen.push(tenant.id)
+      }, 2)
+      expect(seen).toEqual(['c'])
+      expect(await isJobCurrent(db, 'notifications:generate', 300)).toBe(true)
+    }
+    finally {
+      logs.mockRestore()
+    }
+  })
+
+  it('keeps the last success during transient total failures, which becomes stale during sustained failure', async () => {
+    const db = await createTestDb()
+    const now = new Date()
+    await saveJobCursor(db, 'job', 'a', { now, processed: 2, failures: 1 })
+    await saveJobCursor(db, 'job', 'b', { now: new Date(now.getTime() + 200_000), processed: 2, failures: 2 })
+    expect(await jobProgress(db, 'job')).toMatchObject({ succeededAt: now, processed: 2, failures: 2 })
+    expect(await isJobCurrent(db, 'job', 300, new Date(now.getTime() + 200_000))).toBe(true)
+    expect(await isJobCurrent(db, 'job', 300, new Date(now.getTime() + 301_000))).toBe(false)
+    await saveJobCursor(db, 'job', null)
+    expect(await isJobCurrent(db, 'job', 300)).toBe(true)
+    await saveJobCursor(db, 'job', null, { now: new Date(now.getTime() + 10) })
+    expect(await isJobCurrent(db, 'job', 300, now)).toBe(true)
+  })
+
+  it('does not invent success on an empty cursor page after an exact-size all-failed page', async () => {
+    const db = await createTestDb()
+    for (const id of ['a', 'b']) await ensureTenant(db, id)
+    const logs = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      for (let i = 0; i < 2; i++) {
+        expect(await runTenantPage(db, 'notifications:generate', async () => {
+          throw new Error('Every cafe unavailable')
+        }, 2)).toEqual({ processed: 2, failures: ['a', 'b'] })
+        expect(await isJobCurrent(db, 'notifications:generate', 300)).toBe(false)
+      }
     }
     finally {
       logs.mockRestore()

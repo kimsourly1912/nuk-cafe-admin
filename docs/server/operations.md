@@ -94,7 +94,8 @@ Bindings (D1, R2, KV) are configured per environment in `nuxt.config.ts` (`$env.
 | Variable | Use | Default | Configuration |
 |---|---|---|---|
 | `NUXT_MAINTENANCE_OUTBOX_RETENTION_DAYS` | Sent outbox metadata retention (D168) | `0` (keep) | Positive integer days opts in; does not delete audit, orders or failed work |
-| `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS` | Optional notification-scheduler health requirement | `0` (off) | Set e.g. `300` only with Telegram and the minute cron configured; missing/stale heartbeat makes health 503 |
+| `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS` | Optional notification-generation success requirement | `0` (off) | Set e.g. `300` only with Telegram and the minute cron configured; missing/stale useful success makes health 503 (D169), including sustained all-failed generation. After `0039_job_success`, the job must run to establish fresh success |
+| `NUXT_MAINTENANCE_DELIVERY_MAX_AGE_SECONDS` | Optional overdue-delivery health requirement (D169) | `0` (off) | Positive seconds rejects pending outbox/notification work whose due time is older than this threshold, across cafes. Future retries and sent/failed history are excluded; choose the threshold with monitoring policy |
 
 ## Migrations
 
@@ -254,7 +255,7 @@ The counter shows a KHQR made for each order (D130), set up on **Admin → Payme
 
 `.github/workflows/platform-health.yml` checks HTTPS health every five minutes from GitHub Actions, independently of the Worker/D1/Telegram alert path. **Disabled until repository variable `PLATFORM_HEALTH_URL` is configured**, e.g. the production `/api/health` URL. Select the platform's recipients in GitHub Actions notification settings; verify a deliberately failed manual run reaches the responsible person. Scheduled GitHub runs can be delayed: use a dedicated uptime/paging provider if Q24 requires a tighter guarantee. No destination or account setting was changed by D168.
 
-Enable `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS` after the notification cron is running to detect a stopped/failing notification dispatcher as well as a database outage. Otherwise health keeps its database-only behavior. Test both missing/stale heartbeat and database outage before enabling production traffic. Worker exception alerts and a platform-owned operational destination still require Cloudflare/account configuration under Q24; the app's existing tenant Telegram alerts remain supplemental.
+Enable `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS` after the notification cron is running to detect missing/stale useful generation success (D169), as well as a database outage. Configure `NUXT_MAINTENANCE_DELIVERY_MAX_AGE_SECONDS` separately to detect overdue pending outbox/notification work; generation success alone does not prove delivery. Defaults preserve database-only health. Test total generation failure, dispatcher backlog and database outage before enabling production traffic. Worker exception alerts and a platform-owned operational destination still require Cloudflare/account configuration under Q24; the app's existing tenant Telegram alerts remain supplemental.
 
 ## Platform facts
 

@@ -3,6 +3,24 @@ import { applyMigration, createTestClient, migrationFiles } from '#server/tests/
 
 // Migrations that change tables holding data are checked against data, not only an empty
 // database: staging runs them over its rows.
+describe('0039_job_success', () => {
+  it('preserves an old cursor without inventing success and keeps old-writer inserts compatible', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const position = files.indexOf('0039_job_success.sql')
+    expect(position).toBeGreaterThan(0)
+    for (const file of files.slice(0, position)) await applyMigration(client, file)
+    await client.execute('insert into job_cursors (job, cursor, updated_at) values (\'existing\', \'cafe-a\', 123)')
+    await applyMigration(client, files[position]!)
+    await client.execute('insert into job_cursors (job, cursor) values (\'old-worker\', \'cafe-b\')')
+    const result = await client.execute('select job, cursor, succeeded_at, processed, failures from job_cursors order by job')
+    expect(result.rows.map(row => ({ ...row }))).toEqual([
+      { job: 'existing', cursor: 'cafe-a', succeeded_at: null, processed: 0, failures: 0 },
+      { job: 'old-worker', cursor: 'cafe-b', succeeded_at: null, processed: 0, failures: 0 },
+    ])
+  })
+})
+
 describe('0011_drop_legacy_menu', () => {
   it('drops the legacy menu tables while they still hold linked rows (foreign keys on, like D1)', async () => {
     const client = await createTestClient()

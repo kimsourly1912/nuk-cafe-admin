@@ -140,6 +140,8 @@ export async function deliverOutbox(
 /** Internal scheduled-job progress, never an account/tenant preference. */
 export const readJobCursor = repo.readJobCursor
 export const saveJobCursor = repo.saveJobCursor
+export const jobProgress = repo.jobProgress
+export const oldestDueOutbox = repo.oldestDueOutbox
 
 /** Bounded maintenance; zero retention means keep sent metadata until policy is configured. */
 export async function maintainOutbox(db: Db, options: { now?: Date, limit?: number, sentRetentionDays?: number } = {}) {
@@ -155,6 +157,8 @@ export async function maintainOutbox(db: Db, options: { now?: Date, limit?: numb
 
 /** Optional production readiness signal; the deployment decides which jobs must be running. */
 export async function isJobCurrent(db: Db, job: string, maxAgeSeconds: number, now = new Date()): Promise<boolean> {
-  const at = await repo.jobHeartbeat(db, job)
+  const progress = await repo.jobProgress(db, job)
+  const at = progress?.succeededAt
+  // A concurrent run may finish after this request captured `now`; that is fresh success.
   return Boolean(at && now.getTime() - at.getTime() <= maxAgeSeconds * 1000)
 }

@@ -39,7 +39,10 @@ export async function runJob<T>(job: string, work: () => Promise<T>): Promise<T>
 /** Continue other cafes after a failure; advance a bounded, durable page and retry on the next cycle. */
 export async function runTenantPage(db: Db, job: string, work: (tenant: { id: string, slug: string, name: string }) => Promise<unknown>, limit = 25) {
   const cursor = await readJobCursor(db, job)
-  const tenants = await activeTenantPage(db, cursor, limit)
+  let tenants = await activeTenantPage(db, cursor, limit)
+  // Reaching the end of an exact-size page is not successful generation. Wrap and do real work;
+  // only an empty first page proves that there are no active cafes to process.
+  if (!tenants.length && cursor !== null) tenants = await activeTenantPage(db, null, limit)
   const failures: string[] = []
   for (const tenant of tenants) {
     try {
@@ -50,6 +53,6 @@ export async function runTenantPage(db: Db, job: string, work: (tenant: { id: st
       log('error', 'Scheduled tenant work failed', { job, tenantId: tenant.id, error: error instanceof Error ? error.message : String(error) })
     }
   }
-  await saveJobCursor(db, job, tenants.length === limit ? tenants.at(-1)!.id : null)
+  await saveJobCursor(db, job, tenants.length === limit ? tenants.at(-1)!.id : null, { processed: tenants.length, failures: failures.length })
   return { processed: tenants.length, failures }
 }

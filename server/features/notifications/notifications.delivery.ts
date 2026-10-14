@@ -10,6 +10,7 @@ import type { Db, Statement } from '#server/utils/batch'
 import { apiError, ErrorCodes } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
 import { log } from '#server/utils/log'
+import { maintenanceLimit } from '#server/utils/maintenance'
 import { toIso } from '#server/utils/time'
 import { addDays } from '#server/utils/weekly-windows'
 import { destinationBlocked, destinationNotFound } from './notifications.errors'
@@ -338,6 +339,8 @@ export async function retryDelivery(db: Db, api: Api, actor: Actor, id: string, 
 }
 
 /** History is kept 90 days. */
-export async function purgeDeliveries(db: Db, now = new Date()): Promise<number> {
-  return repo.deleteDeliveriesBefore(db, new Date(now.getTime() - 90 * 24 * 60 * MINUTE))
+export async function purgeDeliveries(db: Db, now = new Date(), limit = 500): Promise<number> {
+  return repo.deleteDeliveriesBefore(db, new Date(now.getTime() - 90 * 24 * 60 * MINUTE), maintenanceLimit(limit))
 }
+
+export const oldestDueNotification = repo.oldestDueNotification

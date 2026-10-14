@@ -159,7 +159,7 @@ export default defineNuxtConfig({
   colorMode: { preference: 'light', fallback: 'light' },
   runtimeConfig: {
     // NUXT_MAINTENANCE_OUTBOX_RETENTION_DAYS: 0 keeps metadata until retention is agreed.
-    maintenance: { outboxRetentionDays: 0, notificationMaxAgeSeconds: 0 },
+    maintenance: { outboxRetentionDays: 0, notificationMaxAgeSeconds: 0, deliveryMaxAgeSeconds: 0 },
     // The seed task's first admin (server/tasks/db/seed.ts): NUXT_SEED_ADMIN_EMAIL, NUXT_SEED_ADMIN_NAME.
     seed: { adminEmail: '', adminName: 'Admin' },
     // Account emails (docs/server/operations.md → Email): NUXT_MAIL_RESEND_API_KEY, NUXT_MAIL_FROM

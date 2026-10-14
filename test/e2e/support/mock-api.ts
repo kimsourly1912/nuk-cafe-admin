@@ -27,7 +27,7 @@ export function setupE2e() {
   return setup({
     host: inject('e2eHost'),
     browser: true,
-    browserOptions: { type: 'chromium', launch: { channel: 'chrome' } },
+    browserOptions: { type: 'chromium', launch: process.env.E2E_BROWSER_PATH ? { executablePath: process.env.E2E_BROWSER_PATH } : { channel: 'chrome' } },
   })
 }
 

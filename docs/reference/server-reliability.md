@@ -39,13 +39,31 @@ Purge and sample-data reset enqueue the source and variant keys in the same batc
 
 `activeTenantPage(db, after, limit)` and `tenantById(db, id)` are identity public APIs for platform orchestration, without granting permissions to cafe data. `bakongTokenExpiries(db, tenantId?)` can restrict reminders to the current cafe. Notification delivery runs before generation, so failed summaries cannot block existing due alerts. Summary and token-reminder generation also have independent failure boundaries within each cafe.
 
-`readJobCursor(db, job)` / `saveJobCursor(db, job, cursor)` store operational progress. `isJobCurrent(db, job, maxAgeSeconds, now?)` checks its heartbeat. The optional health requirement uses `notifications:generate`; enable it only when Telegram and the cron are configured.
+`readJobCursor(db, job)` / `saveJobCursor(db, job, cursor, { processed?, failures?, now? } = {})` store operational progress. `jobProgress(db, job)` returns activity/success instants and the latest processed/failure counts. A page with at least one successful cafe, or a successful empty page, updates `succeededAt`; an all-failed page advances the cursor/activity but preserves the last success. `isJobCurrent(db, job, maxAgeSeconds, now?)` checks **that success**, so a transient failure can recover while sustained total failure becomes stale. The optional health requirement uses `notifications:generate`; enable it only when Telegram and the cron are configured. Migration `0039_job_success` preserves prior cursors with a null success time, until fresh work runs.
+
+An empty page after a non-null cursor immediately wraps and processes the first page. It cannot invent success when every cafe fails and the cafe count is an exact multiple of the page size. Only an empty **first** page establishes that no active cafes need work.
+
+`operationalHealth(db, { notificationMaxAgeSeconds, deliveryMaxAgeSeconds }, now?)` in `server/utils/health.ts` applies those optional checks. The delivery threshold checks `oldestDueOutbox` and `oldestDueNotification` across cafes; it rejects overdue pending work beyond the configured seconds. Future retry times and historical sent/failed rows are excluded. Both thresholds default to zero, leaving health database-only. Responses disclose no job/cafe/message detail. Terminal delivery failures retain the existing alert path.
+
+## Fresh catalog reads
+
+`getPublicMenu(db, tenantId, query, now?, itemIds?)` accepts an **internal** optional cart selection; it is not a public HTTP query parameter. Public browsing loads the full cafe catalog; checkout quotes and placement select their item IDs. A JSON-bound ID list respects D1's parameter limit, including duplicates, empty lists and IDs from other cafes. All variations, sets, option values, modifier rules/overrides and relevant availability checks for selected items are still loaded.
+
+`catalogRows` in the menu repository batches twelve base relations in one database call/snapshot. Image lookups and dynamic branch/sold-out/promotion state are separate fresh reads. No cross-request catalog cache exists. Inner option/modifier subqueries name the tenant and use the existing `menu_items_tenant_status_idx`.
+
+Local workload command: `CATALOG_BENCH=1 pnpm exec vitest run --project server server/features/menu/tests/catalog-performance.test.ts --maxWorkers=2 --reporter=verbose`. It reports returned relation rows, database calls and local p50/p95 over twenty samples. These are SQLite workload measurements, not D1 row-read billing or production latency.
+
+## Safe structured logs
+
+`log` keeps the request pathname without queries/fragments and masks table/reset/verification token segments. It recursively redacts password/token/cookie/session/authorization/API-key/signature fields, strips URL credentials/query/fragment (including Telegram bot-token paths), and masks common credential assignments/header text in strings. Strings are capped at 4,000 characters, each object/array at 50 entries, and nesting at six levels; cycles and bigint/Error values serialize safely. Trusted context cannot be overwritten by caller fields. This is defense in depth: callers still must not pass bodies or secret values, including opaque free-form secrets the logger cannot recognize.
 
 ## Maintenance
 
 `expireIdempotencyKeys(db, now?, limit = 500)` deletes one bounded batch. Its daily task repeats batches for up to five seconds; remaining backlog waits for the next run.
 
 `maintainOutbox(db, { now?, limit = 500, sentRetentionDays = 0 })` returns `{ redacted, removed }`. It scrubs expired verification/reset email payloads (existing 24-hour/one-hour lifetimes), and marks undeliverable expired links failed. Other payloads and active leases are preserved. Positive `sentRetentionDays` opts into removing old sent metadata, one bounded batch per run; zero keeps it. Financial records, audit and failed non-mail work are never removed by this task.
+
+`purgeAssistantUsage(db, now?, limit = 500)`, `purgeDeliveries(db, now?, limit = 500)` and `purgeOrderReadyAlerts(db, now?, limit = 500)` delete one bounded batch; limits must be positive integers and are capped at 500. Their existing cutoffs remain 90 days, 90 days and two days. `drainMaintenance(work, { budgetMs = 5000, batchSize = 500 } = {})` repeats full batches, stops when a page is short or its start-work budget expires, and caps a run at 50 batches. An in-flight query completes; the next scheduled run resumes eligible rows. Notification cleanup reserves 2.5 seconds for each history class to avoid starving customer-alert cleanup.
 
 | Edge case | Behavior | Test |
 |---|---|---|
@@ -56,3 +74,8 @@ Purge and sample-data reset enqueue the source and variant keys in the same batc
 | Cafe A generation fails | Cafe B still runs; next page progresses; failed cafe retried next cycle | `server/tests/tenant-jobs.test.ts` |
 | Expired account links or large cleanup backlog | Redact only eligible payloads; delete bounded batches | platform `maintenance.test.ts` |
 | Reports cover repeated/skipped hours or half-hour DST | Existing timezone library resolves boundaries; dates change at 04:00 local; SQL aggregates bounded rows | orders `report-windows.test.ts`, `reports.service.test.ts` |
+| All cafes fail generation; partial progress resumes | Activity/cursor advances while success stays stale; useful work restores health | `server/tests/tenant-jobs.test.ts`, `health.test.ts` |
+| Dispatcher stalls with overdue pending work | Optional health threshold detects outbox/notification overdue time across cafes | `server/tests/health.test.ts` |
+| Nested/query/provider secrets or recursive log fields | Bounded sanitization preserves useful diagnostics | `server/tests/ids-and-log.test.ts` |
+| Two-item cart in a large multi-cafe catalog | One batch; requested cafe/items only; next edit is fresh | menu `catalog-performance.test.ts`, orders quote/placement tests |
+| Expired usage/history backlog | Bounded batches preserve newer records and referenced orders | assistant/notification cleanup tests; `server/tests/maintenance.test.ts` |

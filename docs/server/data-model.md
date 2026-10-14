@@ -285,7 +285,7 @@ The item returns each group with what applies **on this item**: `minSelect` / `m
 | Option values | Only those a listed version uses |
 | Add-ons | Active groups and add-ons; the item's own prices and rules; the minimum capped at the add-ons offered |
 
-A menu read is never a reservation: checkout checks everything again (6.1–6.2). No cache yet (D65); `loadCatalog` is the part a cache would hold.
+A menu read is never a reservation: checkout checks everything again (6.1–6.2). D169 batches twelve base catalog relations in one fresh snapshot and restricts quotes/placement to cart item IDs, with tenant-scoped inner option/modifier subqueries. Dynamic hours, sold-out state and promotions remain fresh reads. No cross-request catalog cache yet; see [server reliability](../reference/server-reliability.md#fresh-catalog-reads).
 
 ### Sold out per branch (step 3.6, D64)
 
@@ -455,7 +455,7 @@ Feature: `platform`.
 | `idempotency_keys` | `tenant_id` (D139), `actor_id`, `operation`, `key`, `request_hash` (SHA-256 of canonical JSON), `response` (JSON), `created_at`, `expires_at`; unique (`tenant_id`, `actor_id`, `operation`, `key`) | Removed after 24 h; a key counts until removed |
 | `outbox_messages` | `tenant_id` (nullable, → organization: the tenant whose change it is; `null` = the platform's, e.g. account emails; D138), `kind`, `payload` (JSON), `status` (`pending` \| `sent` \| `failed`), `attempts`, `next_attempt_at`, `locked_until` (delivery claim), `claim_token` (owner, D168), `last_error` (one line), `created_at`, `sent_at` | Must-not-lose side effects, delivered at least once by `platform:deliver-outbox` |
 
-`job_cursors` (D168) holds a platform task's cursor and update time. It is operational progress, not tenant-owned business state. Notification generation visits at most 25 active cafes per run, skips individual failures and wraps for retries.
+`job_cursors` (D168/D169) holds a platform task's cursor, activity time, last useful success and latest processed/failure counts. It is operational progress, not tenant-owned business state. Notification generation visits at most 25 active cafes per run, skips individual failures and wraps for retries. All-failed pages still advance but cannot refresh success-based readiness. Migration `0039_job_success` adds nullable success and default-zero counts without inventing historical success.
 
 ## AI assistant (phase 9, D107, D108)
 
