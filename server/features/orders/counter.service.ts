@@ -1,4 +1,4 @@
-import type { CancelOrderInput, CounterCommandInput, CounterFinishedOrders, CounterOrder, CounterOrderHistory, CounterQueue, ExchangeRate, ExchangeRates, OrderStatus, PayOrderInput, SetExchangeRateInput } from '#shared/contracts/orders'
+import type { CancelOrderInput, CounterCommandInput, CounterFinishedOrders, CounterOrder, CounterOrderHistory, CounterQueue, ExchangeRate, ExchangeRates, KhqrCurrency, OrderStatus, PayOrderInput, SetExchangeRateInput } from '#shared/contracts/orders'
 import { toRiel } from '#shared/contracts/orders'
 import type { Db } from '#server/utils/batch'
 import { toIso } from '#server/utils/time'
@@ -7,7 +7,7 @@ import { auditStatement, outboxStatement } from '#server/features/platform'
 import type { OrderStep } from './commands'
 import { runOrderCommand } from './commands'
 import { exchangeRateChanged, noExchangeRate, orderChanged, orderNotCancellable, orderNotFound, paymentExpired, returnMethodInvalid } from './orders.errors'
-import { counterKhqr, requireOrderCharge } from './khqr.service'
+import { requireOrderCharge } from './khqr.service'
 import { ORDER_EVENTS } from './orders.events'
 import * as repo from './orders.repository'
 import * as reportsRepo from './reports.repository'
@@ -64,12 +64,22 @@ const toCounterOrder = (row: repo.OrderRow, lines: Awaited<ReturnType<typeof rep
     : null,
 })
 
+function counterOrders(rows: repo.OrderRow[], lines: Awaited<ReturnType<typeof repo.linesOfOrders>>, payments: repo.PaymentRow[]): CounterOrder[] {
+  const linesOf = new Map<string, typeof lines>()
+  for (const line of lines) {
+    const own = linesOf.get(line.orderId)
+    if (own) own.push(line)
+    else linesOf.set(line.orderId, [line])
+  }
+  const paymentOf = new Map(payments.map(payment => [payment.orderId, payment]))
+  return rows.map(row => toCounterOrder(row, linesOf.get(row.id) ?? [], paymentOf.get(row.id)))
+}
+
 async function withDetails(db: Db, rows: repo.OrderRow[]): Promise<CounterOrder[]> {
   if (!rows.length) return []
   const ids = rows.map(row => row.id)
   const [lines, payments] = await Promise.all([repo.linesOfOrders(db, ids), repo.paymentsOf(db, ids)])
-  const paymentOf = new Map(payments.map(payment => [payment.orderId, payment]))
-  return rows.map(row => toCounterOrder(row, lines.filter(line => line.orderId === row.id), paymentOf.get(row.id)))
+  return counterOrders(rows, lines, payments)
 }
 
 const toRate = (row: repo.RateRow): ExchangeRate => ({ khrPerUsd: row.perUsd, effectiveFrom: toIso(row.effectiveFrom), setBy: { name: row.setByName } })
@@ -85,10 +95,15 @@ async function businessDateOf(db: Db, tenantId: string, branchId: string, now: D
  * The branch's orders still in play, the riel rate, KHQR (and whether this server checks it with
  * Bakong, `automaticCheck`, D131), the server's clock, and how many finished today.
  */
-export async function listCounterQueue(db: Db, actor: BranchActor, now = new Date(), automaticCheck = false): Promise<CounterQueue> {
-  const [rows, rate, today, khqr] = await Promise.all([repo.findActiveOrders(db, actor.branchId, now), repo.currentRate(db, actor.tenantId, now), businessDateOf(db, actor.tenantId, actor.branchId, now), counterKhqr(db, actor.tenantId, automaticCheck)])
-  const [orders, finishedToday] = await Promise.all([withDetails(db, rows), repo.countFinishedOrders(db, actor.branchId, today)])
-  return { orders, khrRate: rate ? toRate(rate) : null, khqr, serverTime: now.toISOString(), finishedToday }
+export async function listCounterQueue(db: Db, actor: BranchActor, now = new Date(), automaticCheck?: boolean): Promise<CounterQueue> {
+  const context = await repo.counterContext(db, actor.tenantId, actor.branchId, now)
+  if (!context) throw orderNotFound()
+  const today = businessDateAt(now, context.timeZone)
+  const { rows, lines, payments, finishedToday } = await repo.counterQueueRows(db, actor.tenantId, actor.branchId, today, now)
+  const khqr = context.khqr?.enabled
+    ? { currencies: context.khqr.currencies.split(',') as KhqrCurrency[], automaticCheck: automaticCheck ?? context.hasBakongToken }
+    : null
+  return { orders: counterOrders(rows, lines, payments), khrRate: context.rate ? toRate(context.rate) : null, khqr, serverTime: now.toISOString(), finishedToday }
 }
 
 /**

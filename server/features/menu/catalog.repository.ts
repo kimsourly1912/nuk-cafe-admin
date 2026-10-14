@@ -94,10 +94,10 @@ export function itemModifierGroups(db: Db, tenantId: string, itemIds?: readonly 
     groupId: menuItemModifierGroups.groupId,
     name: menuModifierGroups.name,
     rulesOverridden: menuItemModifierGroups.rulesOverridden,
-    ownMin: menuItemModifierGroups.minSelect,
-    ownMax: menuItemModifierGroups.maxSelect,
-    groupMin: menuModifierGroups.minSelect,
-    groupMax: menuModifierGroups.maxSelect,
+    ownMin: sql<number | null>`${menuItemModifierGroups.minSelect}`.as('own_min'),
+    ownMax: sql<number | null>`${menuItemModifierGroups.maxSelect}`.as('own_max'),
+    groupMin: sql<number>`${menuModifierGroups.minSelect}`.as('group_min'),
+    groupMax: sql<number | null>`${menuModifierGroups.maxSelect}`.as('group_max'),
   })
     .from(menuItemModifierGroups)
     .innerJoin(menuItems, eq(menuItems.id, menuItemModifierGroups.itemId))

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { createClient } from '@libsql/client'
 import type { Client } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
+import type { Logger } from 'drizzle-orm/logger'
 import type { Db } from '#server/utils/batch'
 import { and, eq } from 'drizzle-orm'
 import { branches, branchStaff, member, organization, user } from '#server/db/tables'
@@ -48,10 +49,10 @@ function likeD1(client: Client): Client {
  * snake_case mode NuxtHub uses. Foreign keys are enforced, as they always are on D1, and so is
  * D1's limit of 100 bound parameters per statement.
  */
-export async function createTestDb(): Promise<Db> {
+export async function createTestDb(options: { logger?: Logger } = {}): Promise<Db> {
   const client = await createTestClient()
   for (const file of migrationFiles()) await applyMigration(client, file)
-  return drizzle({ client, casing: 'snake_case' })
+  return drizzle({ client, casing: 'snake_case', logger: options.logger })
 }
 
 /** An empty in-memory database like `createTestDb`'s (foreign keys on, D1's parameter limit), no migrations. */

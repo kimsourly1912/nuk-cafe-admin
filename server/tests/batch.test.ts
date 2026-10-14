@@ -7,7 +7,8 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { Db } from '#server/utils/batch'
 import { isForeignKeyError, isStaleWrite, isUniqueViolation, requireCount, requireOneChange, runBatch } from '#server/utils/batch'
 import { versionConflict } from '#server/utils/errors'
-import { catalogRows } from '#server/features/menu/catalog.repository'
+import { catalogRows, itemModifierGroups } from '#server/features/menu/catalog.repository'
+import { counterContext, counterQueueRows } from '#server/features/orders/orders.repository'
 
 let db: Db
 beforeEach(async () => {
@@ -72,7 +73,7 @@ describe('on D1', () => {
    * D1 answered the old raw-SQL guards with "Cannot read properties of undefined (reading 'bind')"
    * as soon as a guard had a bound parameter (staging, D53); libsql never showed it.
    */
-  function fakeD1() {
+  function fakeD1(batchValues?: (unknown[] | undefined)[]) {
     const bound: { sql: string, params: unknown[] }[] = []
     const statement = (text: string) => ({
       bind: (...params: unknown[]) => {
@@ -83,7 +84,13 @@ describe('on D1', () => {
     })
     const client = {
       prepare: (text: string) => statement(text),
-      batch: async (statements: unknown[]) => statements.map(() => ({ results: [], success: true, meta: {} })),
+      batch: async (statements: { sql: string }[]) => statements.map((statement, i) => {
+        const values = batchValues?.[i]
+        // D1 batch objects use SQL column names, not Drizzle's property names. Duplicate names
+        // collapse, unlike individual .raw() reads. These fixtures contain simple selected columns.
+        const columns = values ? statement.sql.slice(7, statement.sql.indexOf(' from ')).split(', ').map(column => column.match(/"([^"]+)"$/)?.[1] ?? column) : []
+        return { results: values ? [Object.fromEntries(columns.map((column, index) => [column, values[index]]))] : [], success: true, meta: {} }
+      }),
     }
     return { db: drizzleD1(client as never) as unknown as Db, bound }
   }
@@ -108,5 +115,35 @@ describe('on D1', () => {
     expect(bound).toHaveLength(12)
     expect(bound.every(statement => statement.sql.startsWith('select ') && statement.params.includes('cafe-a') && statement.params.length <= 100)).toBe(true)
     expect(bound.some(statement => statement.params.includes('["item-1","item-2"]'))).toBe(true)
+  })
+
+  it('executes fresh counter context and all four queue selections through the actual D1 adapter', async () => {
+    const { db: d1, bound } = fakeD1()
+    const now = new Date('2026-10-14T05:00:00Z')
+    expect(await counterContext(d1, 'cafe-a', 'branch-a', now)).toBeUndefined()
+    expect(await counterQueueRows(d1, 'cafe-a', 'branch-a', '2026-10-14', now)).toEqual({ rows: [], lines: [], payments: [], finishedToday: 0 })
+    expect(bound).toHaveLength(5)
+    expect(bound.every(statement => statement.params.includes('cafe-a') && statement.params.includes('branch-a') && statement.params.length <= 100)).toBe(true)
+    expect(bound[0]!.sql).toContain('exists (select 1 from "bakong_tokens"')
+    expect(bound[0]!.sql).not.toContain('"sealed"')
+    expect(bound[2]!.sql).toContain('in (select "id" from "orders"')
+    expect(bound[3]!.sql).toContain('in (select "id" from "orders"')
+    expect(bound[4]!.params).toContain('2026-10-14')
+  })
+
+  it('keeps branch and customer names distinct in D1 batch objects without shifting timestamps', async () => {
+    const now = new Date('2026-10-14T05:00:00Z')
+    const { db: d1 } = fakeD1([
+      ['order-a', 'cafe-a', 'branch-a', 'Branch A', 'customer-a', 'Customer A', 1, '2026-10-14', 'preparing', 'pickup', null, 100, 100, now.getTime(), now.getTime() + 60000, now.getTime(), null, null, null, 2],
+      undefined, undefined, [0],
+    ])
+    const result = await counterQueueRows(d1, 'cafe-a', 'branch-a', '2026-10-14', now)
+    expect(result.rows).toEqual([expect.objectContaining({ branchName: 'Branch A', customerName: 'Customer A', placedAt: now, paymentDueAt: new Date(now.getTime() + 60000), paidAt: now, version: 2 })])
+  })
+
+  it('keeps item override and default add-on rules distinct in the catalog batch', async () => {
+    const { db: d1 } = fakeD1([['item-a', 'group-a', 'Extras', 1, 0, 2, 1, 3]])
+    const [rows] = await d1.batch([itemModifierGroups(d1, 'cafe-a')])
+    expect(rows).toEqual([{ itemId: 'item-a', groupId: 'group-a', name: 'Extras', rulesOverridden: true, ownMin: 0, ownMax: 2, groupMin: 1, groupMax: 3 }])
   })
 })

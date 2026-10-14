@@ -4,7 +4,7 @@ import type { CancelReason, OrderStatus, OrderType, PaymentMethod, QuotedModifie
 import { branches, user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
 import { insertPieces, readInChunks, requireAtMost } from '#server/utils/batch'
-import { counterPayments, exchangeRates, orderEvents, orderLines, orders } from './orders.schema'
+import { bakongTokens, counterPayments, exchangeRates, khqrSettings, orderEvents, orderLines, orders } from './orders.schema'
 
 /** All SQL of orders (docs/server/architecture.md → Repository). */
 
@@ -93,9 +93,10 @@ const orderColumns = {
   id: orders.id,
   tenantId: orders.tenantId,
   branchId: orders.branchId,
-  branchName: branches.name,
+  // D1 batch results are objects: repeated SQL names would collapse fields before Drizzle maps them.
+  branchName: sql<string>`${branches.name}`.as('branch_name'),
   customerId: orders.customerId,
-  customerName: user.name,
+  customerName: sql<string>`${user.name}`.as('customer_name'),
   pickupNumber: orders.pickupNumber,
   businessDate: orders.businessDate,
   status: orders.status,
@@ -126,16 +127,30 @@ export async function findOrder(db: Db, tenantId: string, id: string): Promise<O
  * The branch's orders still in play, oldest first: waiting for payment and not past their time
  * (an expired one is the expiry task's, 6.6), preparing, ready.
  */
-export async function findActiveOrders(db: Db, branchId: string, now: Date): Promise<OrderRow[]> {
+const activeOrdersWhere = (tenantId: string, branchId: string, now: Date) => and(
+  eq(orders.tenantId, tenantId),
+  eq(orders.branchId, branchId),
+  or(and(eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now)), inArray(orders.status, ['preparing', 'ready'])),
+)
+
+function activeOrdersQuery(db: Db, tenantId: string, branchId: string, now: Date) {
   return selectOrders(db)
-    .where(and(
-      eq(orders.branchId, branchId),
-      or(
-        and(eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now)),
-        inArray(orders.status, ['preparing', 'ready']),
-      ),
-    ))
-    .orderBy(asc(orders.placedAt))
+    .where(activeOrdersWhere(tenantId, branchId, now))
+    .orderBy(asc(orders.placedAt), asc(orders.id))
+}
+
+/** One fresh snapshot of the queue and its details/count, without building an unbounded ID list. */
+export async function counterQueueRows(db: Db, tenantId: string, branchId: string, businessDate: string, now: Date) {
+  const activeIds = db.select({ id: orders.id }).from(orders).where(activeOrdersWhere(tenantId, branchId, now))
+  const [rows, lines, payments, [counted]] = await db.batch([
+    activeOrdersQuery(db, tenantId, branchId, now),
+    db.select().from(orderLines).where(and(eq(orderLines.tenantId, tenantId), inArray(orderLines.orderId, activeIds)))
+      .orderBy(asc(orderLines.orderId), asc(orderLines.position)),
+    selectPayments(db).where(and(eq(counterPayments.tenantId, tenantId), inArray(counterPayments.orderId, activeIds))),
+    db.select({ n: sql<number>`count(*)` }).from(orders)
+      .where(and(eq(orders.tenantId, tenantId), eq(orders.branchId, branchId), eq(orders.businessDate, businessDate), inArray(orders.status, ['completed', 'cancelled']))),
+  ])
+  return { rows, lines, payments, finishedToday: counted?.n ?? 0 }
 }
 
 /** When an order left the queue: completed or cancelled. */
@@ -153,12 +168,6 @@ export async function findFinishedOrders(db: Db, branchId: string, businessDate:
     .where(and(eq(orders.branchId, branchId), eq(orders.businessDate, businessDate), inArray(orders.status, ['completed', 'cancelled'])))
     .orderBy(desc(finishedAt), desc(orders.id))
     .limit(FINISHED_LIMIT)
-}
-
-export async function countFinishedOrders(db: Db, branchId: string, businessDate: string): Promise<number> {
-  const [row] = await db.select({ n: sql<number>`count(*)` }).from(orders)
-    .where(and(eq(orders.branchId, branchId), eq(orders.businessDate, businessDate), inArray(orders.status, ['completed', 'cancelled'])))
-  return row?.n ?? 0
 }
 
 // --- The customer's orders (6.5, D106) ---
@@ -283,8 +292,8 @@ export interface PaymentRow {
   returnedAt: Date | null
 }
 
-export async function paymentsOf(db: Db, orderIds: string[]): Promise<PaymentRow[]> {
-  return readInChunks(orderIds, ids => db.select({
+function selectPayments(db: Db) {
+  return db.select({
     orderId: counterPayments.orderId,
     method: counterPayments.method,
     amountMinor: counterPayments.amountMinor,
@@ -296,7 +305,11 @@ export async function paymentsOf(db: Db, orderIds: string[]): Promise<PaymentRow
     collectedByName: user.name,
     returnMethod: counterPayments.returnMethod,
     returnedAt: counterPayments.returnedAt,
-  }).from(counterPayments).innerJoin(user, eq(user.id, counterPayments.collectedBy)).where(inArray(counterPayments.orderId, ids)))
+  }).from(counterPayments).innerJoin(user, eq(user.id, counterPayments.collectedBy))
+}
+
+export async function paymentsOf(db: Db, orderIds: string[]): Promise<PaymentRow[]> {
+  return readInChunks(orderIds, ids => selectPayments(db).where(inArray(counterPayments.orderId, ids)))
 }
 
 // --- The riel rate (6.3, D101) ---
@@ -310,10 +323,29 @@ export interface RateRow {
 const rateColumns = { perUsd: exchangeRates.perUsd, effectiveFrom: exchangeRates.effectiveFrom, setByName: user.name }
 
 /** The tenant's rate in force at `now`: the latest set before it. */
-export async function currentRate(db: Db, tenantId: string, now: Date): Promise<RateRow | undefined> {
-  const [row] = await db.select(rateColumns).from(exchangeRates).innerJoin(user, eq(user.id, exchangeRates.setBy))
+function currentRateQuery(db: Db, tenantId: string, now: Date) {
+  return db.select(rateColumns).from(exchangeRates).innerJoin(user, eq(user.id, exchangeRates.setBy))
     .where(and(eq(exchangeRates.tenantId, tenantId), eq(exchangeRates.currency, 'KHR'), lte(exchangeRates.effectiveFrom, now)))
     .orderBy(desc(exchangeRates.effectiveFrom)).limit(1)
+}
+
+export async function currentRate(db: Db, tenantId: string, now: Date): Promise<RateRow | undefined> {
+  const [row] = await currentRateQuery(db, tenantId, now)
+  return row
+}
+
+/** Branch clock, current rate and public KHQR capability in one read; sealed token data is never selected. */
+export async function counterContext(db: Db, tenantId: string, branchId: string, now: Date) {
+  const rate = currentRateQuery(db, tenantId, now).as('current_rate')
+  const [row] = await db.select({
+    timeZone: branches.timezone,
+    rate: { perUsd: rate.perUsd, effectiveFrom: rate.effectiveFrom, setByName: rate.setByName },
+    khqr: { enabled: khqrSettings.enabled, currencies: khqrSettings.currencies },
+    hasBakongToken: sql<boolean>`exists (select 1 from ${bakongTokens} where ${bakongTokens.tenantId} = ${tenantId})`.mapWith(Boolean),
+  }).from(branches)
+    .leftJoin(rate, sql`true`)
+    .leftJoin(khqrSettings, eq(khqrSettings.tenantId, branches.tenantId))
+    .where(and(eq(branches.tenantId, tenantId), eq(branches.id, branchId)))
   return row
 }
 

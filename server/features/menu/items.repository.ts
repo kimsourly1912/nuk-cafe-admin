@@ -97,7 +97,7 @@ export async function listItems(db: Db, tenantId: string, query: ItemListQuery):
     itemId: menuItemVariations.itemId,
     priceMin: sql<number | null>`min(${menuItemVariations.priceMinor})`.as('price_min'),
     priceMax: sql<number | null>`max(${menuItemVariations.priceMinor})`.as('price_max'),
-  }).from(menuItemVariations).where(sellable).groupBy(menuItemVariations.itemId).as('prices')
+  }).from(menuItemVariations).where(and(eq(menuItemVariations.tenantId, tenantId), sellable)).groupBy(menuItemVariations.itemId).as('prices')
 
   const [totals, rows] = await Promise.all([
     db.select({ total: count() }).from(menuItems).where(where) as Promise<{ total: number }[]>,
