@@ -227,6 +227,7 @@ D1 has no interactive transactions. A write that touches several rows is **one `
 - Statements that must only apply if a check still holds are guarded: `requireOneChange` after a conditional `UPDATE … WHERE version = ?`, `requireCount` for set checks. `runBatch(db, statements, onStale)` runs the batch and turns a guard failure into the feature's conflict error (`server/utils/batch.ts`).
 - Reads for validation happen before the batch; the guard catches anything that changed in between.
 - **D1 binds at most 100 parameters per statement** (D62). A list that can grow never goes into one statement: reads by a list of ids use `readInChunks`, multi-row inserts use `insertPieces(table, rows)`, and `IN` lists in updates and guards use `chunk(ids)`, one statement per piece in the same batch. The test database enforces the same limit, and `server/tests/d1-limits.test.ts` runs every such write and read at the largest size the contracts allow: add a case there for every new list.
+- **Batch read columns must have unique SQL output names** (D170). D1 returns object rows and collapses repeated names before Drizzle maps them; libsql's array results can hide the defect. Explicitly alias duplicate columns in joined batch selections, preserve decoders, and test populated D1 result mapping. See [counter reads and batch columns](../reference/server-reliability.md#fresh-counter-reads-and-d1-batch-columns).
 
 ### Idempotency
 

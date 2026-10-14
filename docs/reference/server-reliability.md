@@ -53,6 +53,14 @@ An empty page after a non-null cursor immediately wraps and processes the first 
 
 Local workload command: `CATALOG_BENCH=1 pnpm exec vitest run --project server server/features/menu/tests/catalog-performance.test.ts --maxWorkers=2 --reporter=verbose`. It reports returned relation rows, database calls and local p50/p95 over twenty samples. These are SQLite workload measurements, not D1 row-read billing or production latency.
 
+## Fresh counter reads and D1 batch columns
+
+`listCounterQueue(db, actor, now?, automaticCheck?)` loads one context row for the actor's tenant/branch, then one four-statement batch for active orders, lines, payments and finished count. The context combines timezone, the rate at `now`, KHQR settings and token presence without selecting the sealed token. An explicit `automaticCheck` argument remains an internal override; the HTTP route uses fresh token presence. Business-date calculation stays in the existing timezone rules, between context and batch.
+
+Every poll is fresh: two database calls/five SQL statements, excluding access/session resolution. Detail statements use the same active-order subquery and name the tenant, avoiding growing IN lists/chunk calls. The queue has no new cap, and lines are grouped once in placement/line order. Status changes, deadline expiry, rate changes, settings and token changes appear on the next poll. The queue batch is consistent; context is an earlier read. No cache or HTTP response change is implied.
+
+D1 batches return objects keyed by **SQL column names**, whereas individual raw reads and libsql can preserve duplicate names as arrays. Explicitly alias duplicate selected names in joined batch queries, and keep their column decoders. Branch/customer names and catalog add-on own/default min/max fields have distinct SQL names (D170). Regression fixtures model D1's object collapse through the actual Drizzle adapter; a local workerd/D1 probe also checks mapped values.
+
 ## Safe structured logs
 
 `log` keeps the request pathname without queries/fragments and masks table/reset/verification token segments. It recursively redacts password/token/cookie/session/authorization/API-key/signature fields, strips URL credentials/query/fragment (including Telegram bot-token paths), and masks common credential assignments/header text in strings. Strings are capped at 4,000 characters, each object/array at 50 entries, and nesting at six levels; cycles and bigint/Error values serialize safely. Trusted context cannot be overwritten by caller fields. This is defense in depth: callers still must not pass bodies or secret values, including opaque free-form secrets the logger cannot recognize.
@@ -79,3 +87,6 @@ Local workload command: `CATALOG_BENCH=1 pnpm exec vitest run --project server s
 | Nested/query/provider secrets or recursive log fields | Bounded sanitization preserves useful diagnostics | `server/tests/ids-and-log.test.ts` |
 | Two-item cart in a large multi-cafe catalog | One batch; requested cafe/items only; next edit is fresh | menu `catalog-performance.test.ts`, orders quote/placement tests |
 | Expired usage/history backlog | Bounded batches preserve newer records and referenced orders | assistant/notification cleanup tests; `server/tests/maintenance.test.ts` |
+| Small admin page beside other cafes | Inner price aggregate uses the existing tenant index and preserves ranges/pages | menu `item-list-performance.test.ts` |
+| Counter queue grows past a bind-list chunk or expires without a write | Two calls/five statements; all visible orders, ordered details, fresh deadline/settings/rates/count | orders `counter-performance.test.ts` |
+| Joined batch selects repeat SQL names | Unique aliases preserve name/date and add-on rule mapping through D1 objects | `server/tests/batch.test.ts`; local workerd/D1 probe |

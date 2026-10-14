@@ -1,4 +1,4 @@
-import type { CounterQueue, CreateKhqrInput, KhqrCharge, KhqrSettings, KhqrSettingsInput } from '#shared/contracts/orders'
+import type { CreateKhqrInput, KhqrCharge, KhqrSettings, KhqrSettingsInput } from '#shared/contracts/orders'
 import { KHQR_LIFETIME_MINUTES, toRiel } from '#shared/contracts/orders'
 import type { Db } from '#server/utils/batch'
 import { requireOneChange, runBatch } from '#server/utils/batch'
@@ -64,12 +64,6 @@ export async function saveKhqrSettings(db: Db, actor: Actor, input: KhqrSettings
     }),
   ], khqrSettingsChanged)
   return getKhqrSettings(db, actor.tenantId, tokenStorage)
-}
-
-/** What the counter needs to know: the currencies offered and whether it's checked with Bakong, or `null` while KHQR isn't on. */
-export async function counterKhqr(db: Db, tenantId: string, automaticCheck = false): Promise<CounterQueue['khqr']> {
-  const settings = await khqrRepo.findSettings(db, tenantId)
-  return settings?.enabled ? { currencies: settings.currencies, automaticCheck } : null
 }
 
 const toCharge = (row: khqrRepo.ChargeRow): KhqrCharge => ({
