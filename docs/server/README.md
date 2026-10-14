@@ -1,6 +1,6 @@
 # Server standard
 
-How the NUK Cafe server is designed and built. Every server change follows these pages; a change that needs to break a rule updates the page (and [decisions.md](../decisions.md)) in the same change.
+How the NUK Cafe server is designed and built. Every server change follows applicable rules in these pages. Start with architecture, the security route checklist and the affected data-model domain; read operations for migrations, jobs, configuration or deployment. Follow links to relevant sections, not every page; a change that needs to break a rule updates the page (and [decisions.md](../decisions.md)) in the same change.
 
 | Page | Contents |
 |---|---|
@@ -9,22 +9,22 @@ How the NUK Cafe server is designed and built. Every server change follows these
 | [Data model](./data-model.md) | The tables per domain (identity, branch, menu, customers & loyalty, orders), their invariants and open questions |
 | [Operations](./operations.md) | Environments, configuration, migrations, deploys, backups, scheduled jobs, email, monitoring |
 
-**Status (2026-09-27):** this is the target standard. All server code follows it: identity, staff, customers and the platform tables since steps 1.1–1.7, the menu since step 3.8b removed the legacy `/api/v1` menu (D71). See [progress.md](../progress.md).
+**Status:** this is the current server standard. All server code follows it: identity, staff, customers and the platform tables since steps 1.1–1.7, the menu since step 3.8b removed the legacy `/api/v1` menu (D71). See [progress.md](../progress.md).
 
 ## Decisions this standard is built on
 
-Agreed with the project owner on 2026-09-27 (D43; the menu model in D44):
+Initial standard agreed with the owner on 2026-09-27 (D43; menu model D44); the summary includes the later decisions cited below:
 
 | Topic | Decision |
 |---|---|
 | Clients | One Nuxt app: customer website, admin workspace and cashier workspace share one origin, one session cookie and one deploy |
-| Routes | Nuxt-native, **unversioned**: `/api/<surface>/<resource>` file routes; response types inferred by Nuxt's typed `$fetch` |
+| Routes | Nuxt-native, **unversioned**: cafe routes `/api/c/<slug>/<surface>/<resource>`; platform routes remain outside (D140); response types inferred by Nuxt's typed `$fetch` |
 | Code layout | **Features** in `server/features/<feature>/`, each with fixed layers: `index.ts`, `*.schema.ts`, `*.types.ts`, `*.repository.ts`, `*.service.ts`, `*.errors.ts`, optional `*.rules.ts` / `*.mappers.ts`, `tests/`; route files stay thin (revised 2026-09-27) |
 | Validation | **Valibot** (shared with the app's forms) |
-| Roles | Platform `admin` (Better Auth `admin` plugin) + per-branch `manager` and `staff` (Better Auth `organization` plugin, a branch is an organization) |
+| Roles | Platform `superadmin` (`user.role`); cafe `owner`/`member` (`member.role`, organization = tenant); branch `manager`/`staff` in our `branch_staff` table (D135; [permissions](./security.md#roles-and-permissions)) |
 | Staff onboarding | An admin creates the account with a **temporary password**; the password must be changed at first sign-in |
 | Staff and customer | **One account can be both.** Staff never act on their own points or vouchers |
-| Customer sign-up | **Verified email** before ordering; password reset by email |
+| Customer sign-up | Guests and unverified accounts may order (D156); sign-up sends a verification email; password reset by email ([Customers](./security.md#customers)) |
 | Ids | **UUID v7** for our tables |
 | Deleting | **Archive by default**; hard delete only for never-used records and privacy erasure; orders and ledgers are never deleted |
 | Errors | h3's standard error shape + our `data.code` (+ `data.fieldErrors`) |

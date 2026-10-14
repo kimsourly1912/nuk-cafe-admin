@@ -1,8 +1,7 @@
-# CLAUDE.md
+# Claude Code
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-All project instructions live in `AGENTS.md` (shared with Codex and other agents), imported below with the current progress. Edit `AGENTS.md`, not this file.
+Shared project rules and task routing:
 
 @AGENTS.md
-@docs/progress.md
+
+Keep this wrapper minimal; update the shared rules or their owning guide. Retrieve task documentation as directed there; do not import history here.

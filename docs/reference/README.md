@@ -156,4 +156,4 @@ async function removeSelected() {
 
 ## Keeping this reference current
 
-When you add or change a shared API, update its page here in the same change (see AGENTS.md → "Resuming work"). Each entry follows the same format: **Usage → Type → Parameters → Returns → Examples → Caveats**.
+When you add or change a shared API, update its page here in the same change (see [AGENTS.md → Verification and completion](../../AGENTS.md#verification-and-completion)). Each entry follows the same format: **Usage → Type → Parameters → Returns → Examples → Caveats**.
