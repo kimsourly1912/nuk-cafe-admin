@@ -9,6 +9,6 @@ import { quoteOrder } from './quote.rules'
  * prices it again for the signed-in customer. An unknown or archived branch is 404.
  */
 export async function getCheckoutQuote(db: Db, tenantId: string, input: CheckoutQuoteInput, now = new Date()): Promise<CheckoutQuote> {
-  const menu = await getPublicMenu(db, tenantId, { branchId: input.branchId }, now)
+  const menu = await getPublicMenu(db, tenantId, { branchId: input.branchId }, now, input.lines.map(line => line.itemId))
   return quoteOrder(menu, input.lines)
 }

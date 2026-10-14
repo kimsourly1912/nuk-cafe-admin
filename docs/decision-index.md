@@ -198,3 +198,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D166](decisions.md#d166-errors-that-leave-when-fixed-preselected-without-waiting-drawer-padding-a-black-backdrop-and-the-expected-ui-behavior-written-down-2026-10-13) | Errors that leave when fixed, Preselected without waiting, drawer padding, a black backdrop, and the expected UI behavior written down, 2026-10-13 |
 | [D167](decisions.md#d167-task-based-agent-documentation-loading-2026-10-13) | Task-based agent documentation loading, 2026-10-13 |
 | [D168](decisions.md#d168-architecture-reliability-bounded-requests-owned-delivery-and-durable-cleanup-2026-10-14) | Architecture reliability: bounded requests, owned delivery and durable cleanup, 2026-10-14 |
+| [D169](decisions.md#d169-server-log-privacy-fresh-catalog-reads-and-successful-job-health-2026-10-14) | Server log privacy, fresh catalog reads and successful-job health, 2026-10-14 |

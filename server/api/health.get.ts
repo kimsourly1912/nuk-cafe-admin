@@ -1,4 +1,4 @@
-import { isJobCurrent } from '#server/features/platform'
+import { operationalHealth } from '#server/utils/health'
 import { sql } from 'drizzle-orm'
 
 /**
@@ -9,9 +9,9 @@ export default defineEventHandler(async (event) => {
   try {
     const db = useDb()
     await db.run(sql`select 1`)
-    const maxAge = Number(useRuntimeConfig(event).maintenance.notificationMaxAgeSeconds)
-    if (maxAge > 0 && !await isJobCurrent(db, 'notifications:generate', maxAge)) {
-      throw new Error('Notification scheduler heartbeat is missing or stale')
+    const maintenance = useRuntimeConfig(event).maintenance
+    if (!await operationalHealth(db, { notificationMaxAgeSeconds: Number(maintenance.notificationMaxAgeSeconds), deliveryMaxAgeSeconds: Number(maintenance.deliveryMaxAgeSeconds) })) {
+      throw new Error('Scheduled work has no recent success or delivery work is overdue')
     }
     return { status: 'ok' }
   }

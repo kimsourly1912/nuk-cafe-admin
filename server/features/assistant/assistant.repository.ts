@@ -1,4 +1,4 @@
-import { and, count, eq, lt, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, lt, sql } from 'drizzle-orm'
 import type { AiProvider, AssistantFeature, AssistantOutcome } from '#shared/contracts/assistant'
 import type { Db, Statement } from '#server/utils/batch'
 import { requireAtMost } from '#server/utils/batch'
@@ -48,7 +48,9 @@ export async function countUsage(db: Db, tenantId: string, userId: string, day: 
 }
 
 /** Removes rows from before `cutoff`; returns how many. */
-export async function deleteUsageBefore(db: Db, cutoff: Date): Promise<number> {
-  const removed = await db.delete(assistantUsage).where(lt(assistantUsage.at, cutoff)).returning({ id: assistantUsage.id })
+export async function deleteUsageBefore(db: Db, cutoff: Date, limit: number): Promise<number> {
+  const ids = db.select({ id: assistantUsage.id }).from(assistantUsage)
+    .where(lt(assistantUsage.at, cutoff)).orderBy(asc(assistantUsage.at), asc(assistantUsage.id)).limit(limit)
+  const removed = await db.delete(assistantUsage).where(inArray(assistantUsage.id, ids)).returning({ id: assistantUsage.id })
   return removed.length
 }

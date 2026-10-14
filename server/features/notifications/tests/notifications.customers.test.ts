@@ -233,3 +233,22 @@ it('another cafe\'s order is never found by its id, and old requests are purged 
   expect(await purgeOrderReadyAlerts(db, later(3 * 24 * 60))).toBe(1)
   expect(await db.select().from(orderReadyAlerts).where(eq(orderReadyAlerts.orderId, orderId))).toEqual([])
 })
+
+it('purges customer alert requests in batches without deleting their referenced orders', async () => {
+  const ids: string[] = []
+  for (let i = 0; i < 3; i++) {
+    const id = await place()
+    await pay(id)
+    await createOrderReadyLink(db, TEST_TENANT, { id, status: 'preparing' }, SETTINGS, NOON)
+    ids.push(id)
+  }
+  const now = later(3 * 24 * 60)
+  await db.update(orderReadyAlerts).set({ createdAt: now }).where(eq(orderReadyAlerts.orderId, ids[2]!))
+  await expect(purgeOrderReadyAlerts(db, now, -1)).rejects.toThrow(RangeError)
+  expect(await purgeOrderReadyAlerts(db, now, 1)).toBe(1)
+  expect(await purgeOrderReadyAlerts(db, now, 1)).toBe(1)
+  expect(await purgeOrderReadyAlerts(db, now, 1)).toBe(0)
+  expect(await db.select().from(orderReadyAlerts)).toMatchObject([{ orderId: ids[2] }])
+  const { orders } = await import('#server/features/orders/orders.schema')
+  expect(await db.select().from(orders)).toHaveLength(3)
+})

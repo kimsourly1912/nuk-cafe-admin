@@ -309,8 +309,10 @@ export async function recentDeliveries(db: Db, tenantId: string, limit: number) 
 }
 
 /** Deliveries from before `cutoff` (history kept 90 days). */
-export async function deleteDeliveriesBefore(db: Db, cutoff: Date): Promise<number> {
-  const removed = await db.delete(notificationDeliveries).where(lt(notificationDeliveries.createdAt, cutoff)).returning({ id: notificationDeliveries.id })
+export async function deleteDeliveriesBefore(db: Db, cutoff: Date, limit: number): Promise<number> {
+  const ids = db.select({ id: notificationDeliveries.id }).from(notificationDeliveries)
+    .where(lt(notificationDeliveries.createdAt, cutoff)).orderBy(asc(notificationDeliveries.createdAt), asc(notificationDeliveries.id)).limit(limit)
+  const removed = await db.delete(notificationDeliveries).where(inArray(notificationDeliveries.id, ids)).returning({ id: notificationDeliveries.id })
   return removed.length
 }
 
@@ -355,7 +357,15 @@ export async function markOrderReadyNotified(db: Db, tenantId: string, orderId: 
 }
 
 /** Rows from before `cutoff`: their orders are long finished. */
-export async function deleteOrderReadyAlertsBefore(db: Db, cutoff: Date): Promise<number> {
-  const removed = await db.delete(orderReadyAlerts).where(lt(orderReadyAlerts.createdAt, cutoff)).returning({ orderId: orderReadyAlerts.orderId })
+export async function deleteOrderReadyAlertsBefore(db: Db, cutoff: Date, limit: number): Promise<number> {
+  const ids = db.select({ id: orderReadyAlerts.orderId }).from(orderReadyAlerts)
+    .where(lt(orderReadyAlerts.createdAt, cutoff)).orderBy(asc(orderReadyAlerts.createdAt), asc(orderReadyAlerts.orderId)).limit(limit)
+  const removed = await db.delete(orderReadyAlerts).where(inArray(orderReadyAlerts.orderId, ids)).returning({ orderId: orderReadyAlerts.orderId })
   return removed.length
+}
+
+export async function oldestDueNotification(db: Db, now: Date): Promise<Date | null> {
+  const [row] = await db.select({ at: sql<number | null>`min(${notificationDeliveries.nextAttemptAt})` }).from(notificationDeliveries)
+    .where(and(eq(notificationDeliveries.status, 'pending'), lte(notificationDeliveries.nextAttemptAt, now)))
+  return row?.at == null ? null : new Date(row.at)
 }

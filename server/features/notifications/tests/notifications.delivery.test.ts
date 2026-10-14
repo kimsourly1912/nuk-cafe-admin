@@ -6,7 +6,7 @@ import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { payOrder, placeOrder } from '#server/features/orders'
 import { outboxMessages } from '#server/features/platform/platform.schema'
-import { deliverDue, listDeliveries, queueBakongTokenReminder, queueClosingSummaries, queueJobFailureAlert, queueOrderAlert, queueServerErrorAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
+import { deliverDue, listDeliveries, purgeDeliveries, queueBakongTokenReminder, queueClosingSummaries, queueJobFailureAlert, queueOrderAlert, queueServerErrorAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
 import { closingInstant, routeOf, bakongReminderStage } from '#server/features/notifications/notifications.messages'
 import * as repo from '#server/features/notifications/notifications.repository'
 import { notificationDeliveries, telegramDestinations } from '#server/features/notifications/notifications.schema'
@@ -45,6 +45,19 @@ let db: Db
 let telegram: FakeTelegram
 let admin: Actor
 let branchId: string
+
+it('purges old delivery history in bounded batches across cafes, preserving newer records', async () => {
+  const now = new Date()
+  const other = await createAdmin(db, 'other-owner@example.com', 'other')
+  await db.insert(telegramDestinations).values({ id: 'other-destination', tenantId: 'other', chatId: 'other-chat', kind: 'private', title: 'Other', connectedBy: other.userId })
+  for (let i = 0; i < 3; i++) await db.insert(notificationDeliveries).values({ id: `old-${i}`, tenantId: i === 1 ? 'other' : TEST_TENANT, destinationId: i === 1 ? 'other-destination' : owner, kind: 'report', dedupeKey: `cleanup-${i}`, subject: 'Old', message: { html: 'Old' }, createdAt: new Date(now.getTime() - 91 * 86400_000) })
+  await db.insert(notificationDeliveries).values({ id: 'recent', tenantId: TEST_TENANT, destinationId: owner, kind: 'report', dedupeKey: 'recent', subject: 'Recent', message: { html: 'Recent' }, createdAt: now })
+  await expect(purgeDeliveries(db, now, 0)).rejects.toThrow(RangeError)
+  expect(await purgeDeliveries(db, now, 2)).toBe(2)
+  expect(await purgeDeliveries(db, now, 2)).toBe(1)
+  expect(await purgeDeliveries(db, now, 2)).toBe(0)
+  expect(await db.select().from(notificationDeliveries)).toMatchObject([{ id: 'recent' }])
+})
 let cashier: BranchActor
 let sokha: Actor
 let latte: { itemId: string, variationId: string }

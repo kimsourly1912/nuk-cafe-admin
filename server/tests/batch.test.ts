@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { Db } from '#server/utils/batch'
 import { isForeignKeyError, isStaleWrite, isUniqueViolation, requireCount, requireOneChange, runBatch } from '#server/utils/batch'
 import { versionConflict } from '#server/utils/errors'
+import { catalogRows } from '#server/features/menu/catalog.repository'
 
 let db: Db
 beforeEach(async () => {
@@ -98,5 +99,14 @@ describe('on D1', () => {
     ])
     expect(bound.map(b => b.params)).toEqual([[1, 0], [], ['admin', 1]])
     expect(bound[2]!.sql).toContain('json(\'stale write\')')
+  })
+
+  it('executes catalog selections through the actual D1 driver batch adapter', async () => {
+    const { db: d1, bound } = fakeD1()
+    const rows = await catalogRows(d1, 'cafe-a', ['item-1', 'item-2'])
+    expect(rows).toHaveLength(12)
+    expect(bound).toHaveLength(12)
+    expect(bound.every(statement => statement.sql.startsWith('select ') && statement.params.includes('cafe-a') && statement.params.length <= 100)).toBe(true)
+    expect(bound.some(statement => statement.params.includes('["item-1","item-2"]'))).toBe(true)
   })
 })

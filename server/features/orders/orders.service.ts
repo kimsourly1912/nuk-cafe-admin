@@ -71,7 +71,7 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
       if (actor.guest && !input.guestName?.trim()) {
         throw apiError(400, ErrorCodes.VALIDATION_FAILED, 'Some of the submitted data is invalid.', { fieldErrors: { guestName: ['Enter your name'] } })
       }
-      const menu = await getPublicMenu(db, actor.tenantId, { branchId: input.branchId }, now)
+      const menu = await getPublicMenu(db, actor.tenantId, { branchId: input.branchId }, now, input.lines.map(line => line.itemId))
       const quote = quoteOrder(menu, input.lines)
       if (quote.problems[0]) throw orderingClosed(quote.problems[0].message)
       if (!quote.orderable) throw orderNotOrderable()
