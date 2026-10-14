@@ -57,43 +57,44 @@ export interface DeliveryReport {
  * claimed first, so overlapping runs never send one twice at once. Never throws for Telegram's
  * answers: they become the delivery's state.
  */
-export async function deliverDue(db: Db, api: Api, now = new Date(), options: { limit?: number, ids?: string[] } = {}): Promise<DeliveryReport> {
+export async function deliverDue(db: Db, api: Api, now: Date | undefined = undefined, options: { limit?: number, ids?: string[], budgetMs?: number } = {}): Promise<DeliveryReport> {
   const report = { sent: 0, retried: 0, failed: 0 }
   if (options.ids && !options.ids.length) return report
-  for (const row of await repo.dueDeliveries(db, now, options.limit ?? 25, options.ids)) {
-    if (!await repo.claimDelivery(db, row, now, new Date(now.getTime() + CLAIM_MS))) continue
-    const attempt = row.attempts + 1
+  const started = Date.now()
+  for (const pending of await repo.dueDeliveries(db, now ?? new Date(), options.limit ?? 25, options.ids)) {
+    if (Date.now() - started >= (options.budgetMs ?? 20_000)) break
+    const current = now ?? new Date()
+    const row = await repo.claimDelivery(db, pending, current, new Date(current.getTime() + CLAIM_MS))
+    if (!row) continue
+    const token = row.claimToken
+    const attempt = row.attempts
     const destination = await repo.findDestination(db, row.tenantId, row.destinationId)
     if (!destination || destination.status !== 'connected') {
-      await repo.markFailed(db, row.id, destination?.status === 'blocked' ? 'The bot was removed or blocked in this chat.' : 'This chat was disconnected.')
-      report.failed++
+      if (await repo.markFailed(db, row.id, token, destination?.status === 'blocked' ? 'The bot was removed or blocked in this chat.' : 'This chat was disconnected.')) report.failed++
       continue
     }
     try {
       await sendStored(api, destination.chatId, row.message)
-      await repo.markDelivered(db, row.id, destination.id, new Date())
-      report.sent++
+      if (await repo.markDelivered(db, row.id, token, destination.id, new Date())) report.sent++
     }
     catch (error) {
       log('warn', 'Telegram: a notification was not delivered', { deliveryId: row.id, attempt, error: String(error) })
       if (isBlockedError(error)) {
-        await repo.markBlocked(db, destination.chatId, now)
-        await repo.markFailed(db, row.id, 'The bot was removed or blocked in this chat.')
-        report.failed++
+        if (await repo.markFailed(db, row.id, token, 'The bot was removed or blocked in this chat.')) {
+          await repo.markBlocked(db, destination.chatId, current)
+          report.failed++
+        }
       }
       else if (error instanceof GrammyError && error.error_code === 429) {
         // Telegram's flood control says when: that wait doesn't count against the tries.
         const seconds = error.parameters.retry_after ?? 30
-        await repo.markRetry(db, row.id, new Date(now.getTime() + seconds * 1000), `Telegram asked to wait ${seconds} seconds.`)
-        report.retried++
+        if (await repo.markRetry(db, row.id, token, new Date((now ?? new Date()).getTime() + seconds * 1000), `Telegram asked to wait ${seconds} seconds.`)) report.retried++
       }
       else if (attempt >= DELIVERY_MAX_ATTEMPTS) {
-        await repo.markFailed(db, row.id, `Telegram didn't accept it after ${attempt} tries.`)
-        report.failed++
+        if (await repo.markFailed(db, row.id, token, `Telegram didn't accept it after ${attempt} tries.`)) report.failed++
       }
       else {
-        await repo.markRetry(db, row.id, new Date(now.getTime() + retryDelayMs(attempt)), 'Telegram didn\'t accept it. Trying again.')
-        report.retried++
+        if (await repo.markRetry(db, row.id, token, new Date((now ?? new Date()).getTime() + retryDelayMs(attempt)), 'Telegram didn\'t accept it. Trying again.')) report.retried++
       }
     }
   }

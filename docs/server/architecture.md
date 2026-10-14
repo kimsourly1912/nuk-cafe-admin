@@ -71,7 +71,7 @@ Server code is organized **by feature** (one business area each), like the app's
 server/
 ├── features/
 │   ├── identity/      # Better Auth config glue, roles, permissions, staff onboarding
-│   ├── branches/      # branches (organizations), dining tables, QR tokens
+│   ├── branches/      # branches, dining tables, QR tokens
 │   ├── menu/          # categories, items, variations, modifiers, availability, sold-out
 │   ├── media/         # uploads to R2, asset lifecycle
 │   ├── customers/     # customer profiles
@@ -300,7 +300,7 @@ A record another branch or customer owns is **404**, not 403: don't confirm it e
 
 - Every input is validated with **Valibot** before any logic: body, route params and query. Schemas that the app also needs (forms, enums) live in `shared/contracts/<domain>.ts`; server-only ones stay in the feature (`*.types.ts`).
 - Objects are **strict** (unknown keys rejected) on writes. Strings are trimmed and length-bounded; numbers bounded; arrays bounded.
-- `readValidBody(event, schema)` also enforces the body size limit. Failures become `400 VALIDATION_FAILED` with `fieldErrors`.
+- `readValidBody(event, schema)` counts received bytes before JSON parsing (not just `Content-Length`). The Cloudflare entry enforces the cap before Nitro buffers the request. Multipart uploads use `readLimitedMultipart` to count the complete envelope. Failures become `400 VALIDATION_FAILED` with `fieldErrors`.
 - Validation checks shape; **business rules live in the service** (and `*.rules.ts`) (e.g. "this modifier belongs to this item").
 
 ## Side effects
@@ -308,9 +308,10 @@ A record another branch or customer owns is **404**, not 403: don't confirm it e
 Anything outside the database (email, cache purge, R2 object deletes) happens **after** the batch commits, never inside it.
 - Must-not-lose effects (verification email, order notifications later) go through an **`outbox`** row written in the same batch (`platform.outboxStatement(db, kind, payload)`); `platform:deliver-outbox` delivers and retries them (D50):
   - each kind has one handler, registered in `server/tasks/platform/deliver-outbox.ts` by the feature that owns it; a kind without a handler is retried and then marked `failed`, never dropped silently;
-  - a message is **claimed** before sending (conditional update), so overlapping runs don't send it twice at the same moment; failures retry after 1, 2, 4 … minutes (at most 6 h), and after 8 attempts the message is `failed` and logged as an error;
+  - a message is **claimed** before sending (conditional update); a unique `claim_token` must match to complete, retry or fail it, so expired workers cannot overwrite newer claims; failures retry after 1, 2, 4 … minutes (at most 6 h), and after 8 attempts the message is `failed` and logged as an error;
   - delivery is **at least once** (a run that dies mid-send leaves the claim to expire): handlers must tolerate a repeat, e.g. by passing the message id as the provider's idempotency key;
-  - payloads hold ids and what the handler needs, not secrets it can look up; a sent message's payload is emptied (account emails carry one-time links).
+  - payloads hold ids and what the handler needs, not secrets it can look up; a sent message's payload is emptied (account emails carry one-time links). Hourly maintenance also scrubs expired account links from failed/pending messages. Sent-metadata retention is opt-in (D168).
+- Media deletion work is durable: provisional uploads and removed assets retain object keys in `media_object_deletions` until R2 confirms deletion. See [reliability APIs](../reference/server-reliability.md).
 - Best-effort effects (purging the public menu cache) run directly after the commit; failure is logged, not surfaced.
 
 ## Tests
@@ -332,6 +333,7 @@ All in `server/utils/`. Routes get them by auto-import; features import them exp
 | File | Exports | Use |
 |---|---|---|
 | `errors.ts` | `apiError(status, code, message, { fieldErrors })`, `ErrorCodes`, `notFound`, `versionConflict`, `toErrorResponse` | Throw API errors; the error handler maps anything thrown to the response |
+| `request-body.ts` | `readLimitedBody`, `readLimitedMultipart` | Count received bytes before JSON/multipart parsing; [reliability APIs](../reference/server-reliability.md) |
 | `validation.ts` | `readValidBody`, `readValidQuery`, `readIdParam`, `parseInput`, `MAX_JSON_BYTES` | Validate every input |
 | `batch.ts` | `Db`, `Statement`, `runBatch`, `requireOneChange`, `requireCount`, `isStaleWrite`, `isForeignKeyError`, `isUniqueViolation`, `chunk`, `readInChunks`, `insertPieces` | Atomic multi-statement writes; D1's 100-parameter limit |
 | `ids.ts` | `newId()` | UUID v7 for our tables |

@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import { accountMailHandlers, activeTenants, consoleSender, resendSender } from '#server/features/identity'
+import { accountMailHandlers, consoleSender, resendSender, tenantById } from '#server/features/identity'
 import type { MailSender } from '#server/features/identity'
 import { deliverDue, queueOrderAlert, sendOrderReadyAlert } from '#server/features/notifications'
 import { ORDER_EVENTS } from '#server/features/orders'
@@ -32,9 +32,9 @@ async function orderAlert(tenantId: string | null, kind: 'new_order' | 'payment'
   if (!settings || !tenantId || typeof orderId !== 'string') return
   const db = useDb()
   // "Open order" opens the order's own cafe's counter (`/c/<slug>/counter/…`, D141).
-  const tenant = (await activeTenants(db)).find(t => t.id === tenantId)
+  const tenant = await tenantById(db, tenantId)
   const ids = await queueOrderAlert(db, tenantId, kind, orderId, tenant ? cafeSiteUrl(tenant.slug) : undefined)
-  await deliverDue(db, telegramApi(settings), new Date(), { ids })
+  await deliverDue(db, telegramApi(settings), undefined, { ids, budgetMs: 5000 })
 }
 
 /**
@@ -46,7 +46,7 @@ async function orderReady(tenantId: string | null, orderId: unknown) {
   const settings = useTelegram()
   if (!settings || !tenantId || typeof orderId !== 'string') return
   const db = useDb()
-  const tenant = (await activeTenants(db)).find(t => t.id === tenantId)
+  const tenant = await tenantById(db, tenantId)
   await sendOrderReadyAlert(db, telegramApi(settings), tenantId, orderId, tenant ? cafeSiteUrl(tenant.slug) : undefined)
 }
 
@@ -72,8 +72,8 @@ export function outboxHandlers(): Record<string, OutboxHandler> {
  * claimed first, so the scheduled run never sends it twice, and anything that fails here is retried
  * by that run. Never fails the request.
  */
-export function sendOrderEventsNow(event: H3Event) {
-  const work = deliverOutbox(useDb(), outboxHandlers(), { kinds: [ORDER_EVENTS.placed, ORDER_EVENTS.paid, ORDER_EVENTS.ready] })
+export function sendOrderEventsNow(event: H3Event, order: { tenantId: string, orderId: string }, kind: (typeof ORDER_EVENTS)[keyof typeof ORDER_EVENTS]) {
+  const work = deliverOutbox(useDb(), outboxHandlers(), { kinds: [kind], order, limit: 1 })
     .then((report) => {
       for (const failure of report.failures) log('warn', 'Order event will be retried by the scheduled run', failure, event)
     })

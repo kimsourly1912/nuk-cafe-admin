@@ -211,11 +211,24 @@ describe('delivery', () => {
     await expectApiError(() => retryDelivery(db, telegram.api, admin, id, at(MON, '10:05')), 409, 'TELEGRAM_BLOCKED')
   })
 
+  it('fences success, failure and retry from an expired notification claim', async () => {
+    const id = await queued()
+    const [due] = await repo.dueDeliveries(db, at(MON, '10:00'), 5)
+    const old = (await repo.claimDelivery(db, due!, at(MON, '10:00'), at(MON, '10:02')))!
+    const current = (await repo.claimDelivery(db, old, at(MON, '10:03'), at(MON, '10:05')))!
+    expect(current.attempts).toBe(2)
+    expect(await repo.markDelivered(db, id, old.claimToken, group, at(MON, '10:03'))).toBe(false)
+    expect(await repo.markRetry(db, id, old.claimToken, at(MON, '10:04'), 'old retry')).toBe(false)
+    expect(await repo.markFailed(db, id, old.claimToken, 'old failure')).toBe(false)
+    expect(await repo.markDelivered(db, id, current.claimToken, group, at(MON, '10:04'))).toBe(true)
+    expect(await row(id)).toMatchObject({ status: 'sent', attempts: 2, claimToken: null })
+  })
+
   it('a claimed delivery isn\'t sent by an overlapping run', async () => {
     const id = await queued()
     const [due] = await repo.dueDeliveries(db, at(MON, '10:00'), 5)
-    expect(await repo.claimDelivery(db, due!, at(MON, '10:00'), at(MON, '10:02'))).toBe(true)
-    expect(await repo.claimDelivery(db, due!, at(MON, '10:00'), at(MON, '10:02'))).toBe(false)
+    expect(await repo.claimDelivery(db, due!, at(MON, '10:00'), at(MON, '10:02'))).toBeTruthy()
+    expect(await repo.claimDelivery(db, due!, at(MON, '10:00'), at(MON, '10:02'))).toBeUndefined()
     expect(await deliverDue(db, telegram.api, at(MON, '10:01'))).toEqual({ sent: 0, retried: 0, failed: 0 })
     expect((await row(id)).attempts).toBe(1)
   })

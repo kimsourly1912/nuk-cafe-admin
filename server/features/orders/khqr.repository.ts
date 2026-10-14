@@ -77,8 +77,8 @@ export async function findBakongToken(db: Db, tenantId: string): Promise<BakongT
 }
 
 /** Every cafe's token expiry, for the reminders (no sealed tokens read). */
-export async function bakongTokenExpiries(db: Db): Promise<{ tenantId: string, expiresAt: Date | null }[]> {
-  return db.select({ tenantId: bakongTokens.tenantId, expiresAt: bakongTokens.expiresAt }).from(bakongTokens)
+export async function bakongTokenExpiries(db: Db, tenantId?: string): Promise<{ tenantId: string, expiresAt: Date | null }[]> {
+  return db.select({ tenantId: bakongTokens.tenantId, expiresAt: bakongTokens.expiresAt }).from(bakongTokens).where(tenantId ? eq(bakongTokens.tenantId, tenantId) : undefined)
 }
 
 export interface BakongTokenValues {

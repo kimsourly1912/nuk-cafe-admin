@@ -23,11 +23,20 @@ export async function activeBranches(db: Db, tenantId: string): Promise<{ id: st
 
 interface Range { branchId: string, start: Date, end: Date }
 
-/** Payments collected in `[start, end)`. */
-export async function paymentsCollected(db: Db, range: Range): Promise<{ method: PaymentMethod, amountMinor: number, amountKhr: number | null, collectedAt: Date }[]> {
-  return db.select({ method: counterPayments.method, amountMinor: counterPayments.amountMinor, amountKhr: counterPayments.amountKhr, collectedAt: counterPayments.collectedAt })
+/** At most one row per method/window, independent of sales volume. One JSON bind respects D1's limit. */
+export async function paymentsCollected(db: Db, tenantId: string, range: Range, windows: { start: number, end: number }[]): Promise<{ method: PaymentMethod, amountMinor: number, amountKhr: number | null, collectedAt: Date, orders: number }[]> {
+  const rows = await db.select({
+    method: counterPayments.method,
+    amountMinor: sql<number>`sum(${counterPayments.amountMinor})`,
+    amountKhr: sql<number | null>`sum(${counterPayments.amountKhr})`,
+    collectedAt: sql<number>`min(${counterPayments.collectedAt})`,
+    orders: count(),
+  })
     .from(counterPayments)
-    .where(and(eq(counterPayments.branchId, range.branchId), gte(counterPayments.collectedAt, range.start), lt(counterPayments.collectedAt, range.end)))
+    .innerJoin(sql`json_each(${JSON.stringify(windows)}) as bucket`, sql`${counterPayments.collectedAt} >= json_extract(bucket.value, '$.start') and ${counterPayments.collectedAt} < json_extract(bucket.value, '$.end')`)
+    .where(and(eq(counterPayments.tenantId, tenantId), eq(counterPayments.branchId, range.branchId), gte(counterPayments.collectedAt, range.start), lt(counterPayments.collectedAt, range.end)))
+    .groupBy(counterPayments.method, sql`bucket.key`)
+  return rows.map(row => ({ ...row, collectedAt: new Date(row.collectedAt) }))
 }
 
 /** Paid sales in `[start, end)` as one sum (the previous period's, for comparison). */

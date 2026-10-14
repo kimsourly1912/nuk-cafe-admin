@@ -1,3 +1,4 @@
+import { paymentsCollected } from '#server/features/orders/reports.repository'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { PayOrderInput } from '#shared/contracts/orders'
 import { toRiel } from '#shared/contracts/orders'
@@ -11,8 +12,8 @@ import { cancelMyOrder, placeOrder } from '#server/features/orders/orders.servic
 import { csvCell, csvFilename, moneyText } from '#server/features/orders/reports.csv'
 import { itemsMessage, periodText } from '#server/features/orders/reports.message'
 import { itemSalesExport, itemSalesReport, orderHistory, orderHistoryDetail, orderHistoryExport, reportBranches, reportMessage, reportSummary, summaryExport } from '#server/features/orders/reports.service'
-import { businessDateAt, periodInstants } from '#server/features/orders/reports.rules'
-import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { businessDateAt, paymentWindows, periodInstants } from '#server/features/orders/reports.rules'
+import { createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -129,7 +130,44 @@ describe('business days (D110)', () => {
   })
 })
 
+describe('SQL payment bucket boundaries', () => {
+  it.each([
+    ['2026-03-07', 'America/New_York', 23],
+    ['2026-10-31', 'America/New_York', 25],
+    ['2026-09-28', 'Asia/Phnom_Penh', 24],
+  ])('covers the whole business day once across offset changes (%s, %s)', (date, zone, hours) => {
+    const period = { from: String(date), to: String(date) }
+    const windows = paymentWindows(period, String(zone))
+    const range = periodInstants(period, String(zone))
+    expect(windows[0]!.start).toBe(range.start.getTime())
+    expect(windows.at(-1)!.end).toBe(range.end.getTime())
+    expect(windows.reduce((sum, window) => sum + window.end - window.start, 0)).toBe(Number(hours) * 3600_000)
+    for (let i = 1; i < windows.length; i++) expect(windows[i]!.start).toBe(windows[i - 1]!.end)
+    expect(windows.every(window => window.end > window.start)).toBe(true)
+  })
+})
+
 describe('the summary (D110)', () => {
+  it('aggregates many sales into one SQL bucket and explicitly rejects another tenant scope', async () => {
+    for (let i = 0; i < 25; i++) {
+      const order = await place(at(MON, '09:00'), [{ item: latte, quantity: 1 }], 875)
+      await pay(order.orderId, at(MON, '09:05'))
+    }
+    const range = { branchId, ...periodInstants({ from: MON, to: MON }, 'Asia/Phnom_Penh') }
+    const windows = paymentWindows({ from: MON, to: MON }, 'Asia/Phnom_Penh')
+    const buckets = await paymentsCollected(db, TEST_TENANT, range, windows)
+    expect(buckets).toHaveLength(1)
+    expect(buckets[0]).toMatchObject({ method: 'cash_usd', orders: 25, amountMinor: 21875 })
+    await ensureTenant(db, 'other-cafe')
+    expect(await paymentsCollected(db, 'other-cafe', range, windows)).toEqual([])
+    const summary = await reportSummary(db, TEST_TENANT, period(MON), at(TUE, '12:00'))
+    expect(summary.paid).toEqual({ salesMinor: 21875, orders: 25, averageMinor: 875 })
+    expect(summary.trend.points.find(point => point.key === '09')).toEqual({ key: '09', salesMinor: 21875, orders: 25 })
+    // The maximum allowed period still uses one JSON parameter, rather than two per day.
+    const largest = await paymentsCollected(db, TEST_TENANT, range, paymentWindows({ from: MON, to: '2026-12-29' }, 'Asia/Phnom_Penh'))
+    expect(largest.reduce((sum, row) => sum + row.orders, 0)).toBe(25)
+  })
+
   it('counts each paid order once, at payment time, and refunds when the money went back', async () => {
     await monday()
     const summary = await reportSummary(db, TEST_TENANT, period(MON), at(TUE, '12:00'))

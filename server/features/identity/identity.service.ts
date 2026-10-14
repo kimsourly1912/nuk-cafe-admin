@@ -205,3 +205,7 @@ export function platformSession(user: SessionUser | null | undefined): PlatformS
 export function guestNameStatement(db: Db, userId: string, name: string, now: Date) {
   return repo.guestNameStatement(db, userId, name, now)
 }
+
+/** Platform job enumeration and lookup; these grant no permission to cafe data. */
+export const activeTenantPage = repo.findActiveTenantPage
+export const tenantById = repo.findTenantById

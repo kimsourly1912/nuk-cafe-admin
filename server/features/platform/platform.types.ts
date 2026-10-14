@@ -46,3 +46,10 @@ export interface DeliveryReport {
   failed: number
   skipped: number
 }
+
+/** Optional targeting for immediate dispatch; a request never scans another order's backlog. */
+export interface OutboxTarget {
+  kinds?: string[]
+  ids?: string[]
+  order?: { tenantId: string, orderId: string }
+}

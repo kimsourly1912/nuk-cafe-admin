@@ -47,15 +47,17 @@ export async function uploadImage(db: Db, store: ObjectStore, actor: Actor, file
   const objectKey = objectKeyFor(actor.tenantId, mimeType)
   const row = { id, tenantId: actor.tenantId, objectKey, mimeType, byteSize: data.length, sha256: await sha256Hex(data), uploadedBy: actor.userId, now: new Date() }
 
-  await store.put(objectKey, data, { contentType: mimeType })
+  await repo.planObjects(db, actor.tenantId, [objectKey], new Date(Date.now() + TEMPORARY_TTL_MS))
   try {
+    await store.put(objectKey, data, { contentType: mimeType })
     await db.batch([
       repo.insertAssetStatement(db, row),
+      repo.clearObjectPlans(db, actor.tenantId, [objectKey]),
       auditStatement(db, actor, { action: 'media.asset.upload', targetType: 'media_asset', targetId: id, metadata: { mimeType, byteSize: data.length } }),
     ])
   }
   catch (error) {
-    await store.del(objectKey).catch(() => {})
+    await removeObject(db, store, actor.tenantId, objectKey).catch(() => {})
     throw error
   }
   return toAsset(row)
@@ -152,7 +154,8 @@ export async function uploadPhoto(db: Db, store: ObjectStore, actor: Actor, uplo
     rows.push({ id: newId(), tenantId: actor.tenantId, objectKey: objectKeyFor(actor.tenantId, file.type), mimeType: file.type, byteSize: file.data.length, sha256: await sha256Hex(file.data), uploadedBy: actor.userId, now, parentId: id, variant: file.variant, width: file.width, height: file.height })
   }
   const stored: string[] = []
-  const removeStored = () => Promise.all(stored.map(key => store.del(key).catch(() => {})))
+  const removeStored = () => Promise.all(stored.map(key => removeObject(db, store, actor.tenantId, key).catch(() => {})))
+  await repo.planObjects(db, actor.tenantId, rows.map(row => row.objectKey), new Date(now.getTime() + TEMPORARY_TTL_MS))
   try {
     for (const [i, row] of rows.entries()) {
       const data = i === 0 ? source.data : files[i - 1]!.data
@@ -163,6 +166,7 @@ export async function uploadPhoto(db: Db, store: ObjectStore, actor: Actor, uplo
     await db.batch([
       first!,
       ...rest,
+      repo.clearObjectPlans(db, actor.tenantId, rows.map(row => row.objectKey)),
       auditStatement(db, actor, { action: 'media.photo.upload', targetType: 'media_asset', targetId: id, metadata: { width: source.width, height: source.height } }),
     ])
   }
@@ -204,19 +208,29 @@ export interface PurgeReport {
  * record never points at a missing object; at worst an object outlives its row. Safe to run twice.
  */
 export async function purgeExpiredUploads(db: Db, store: ObjectStore, options: { now?: Date, limit?: number } = {}): Promise<PurgeReport> {
-  const before = new Date((options.now ?? new Date()).getTime() - TEMPORARY_TTL_MS)
+  const now = options.now ?? new Date()
+  const before = new Date(now.getTime() - TEMPORARY_TTL_MS)
   const report: PurgeReport = { deleted: 0, kept: 0, objectErrors: [] }
+  for (const pending of await repo.dueObjectDeletions(db, now, options.limit ?? 100)) {
+    try {
+      await removeObject(db, store, pending.tenantId, pending.objectKey)
+    }
+    catch (error) {
+      report.objectErrors.push({ objectKey: pending.objectKey, error: String(error) })
+      await repo.retryObjectDeletion(db, pending.tenantId, pending.objectKey, new Date(now.getTime() + 60_000))
+    }
+  }
   for (const asset of await repo.findExpiredTemporary(db, before, options.limit ?? 100)) {
     // A menu photo's files go with it (D158): their rows by the foreign key, their objects here.
     const files = await repo.variantKeys(db, asset.id)
-    if (!await repo.deleteIfStillExpired(db, asset.id, before)) {
+    if (!await repo.deleteIfStillExpired(db, asset.tenantId, asset.id, before)) {
       report.kept++
       continue
     }
     report.deleted++
     for (const objectKey of [asset.objectKey, ...files]) {
       try {
-        await store.del(objectKey)
+        await removeObject(db, store, asset.tenantId, objectKey)
       }
       catch (error) {
         report.objectErrors.push({ objectKey, error: String(error) })
@@ -241,11 +255,11 @@ export async function deleteUploads(db: Db, tenantId: string, store: ObjectStore
   const report: PurgeReport = { deleted: 0, kept: 0, objectErrors: [] }
   for (const asset of await repo.firstAssets(db, tenantId, limit)) {
     const files = await repo.variantKeys(db, asset.id)
-    await repo.deleteAsset(db, asset.id)
+    await repo.deleteAsset(db, tenantId, asset.id)
     report.deleted++
     for (const objectKey of [asset.objectKey, ...files]) {
       try {
-        await store.del(objectKey)
+        await removeObject(db, store, asset.tenantId, objectKey)
       }
       catch (error) {
         report.objectErrors.push({ objectKey, error: String(error) })
@@ -253,4 +267,10 @@ export async function deleteUploads(db: Db, tenantId: string, store: ObjectStore
     }
   }
   return report
+}
+
+/** Clear the durable reference only after R2 confirms deletion (missing objects are harmless). */
+async function removeObject(db: Db, store: ObjectStore, tenantId: string, key: string) {
+  await store.del(key)
+  await repo.deletedObject(db, tenantId, key)
 }

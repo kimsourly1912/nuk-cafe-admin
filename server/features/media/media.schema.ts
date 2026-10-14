@@ -57,3 +57,10 @@ export const mediaAssets = sqliteTable('media_assets', {
   index('media_assets_tenant_idx').on(t.tenantId, t.createdAt),
   index('media_assets_parent_idx').on(t.parentId),
 ])
+
+/** Durable deletion work, including provisional uploads that never acquired an asset row. */
+export const mediaObjectDeletions = sqliteTable('media_object_deletions', {
+  objectKey: text().primaryKey(),
+  tenantId: tenantId(),
+  nextAttemptAt: instant().notNull().default(nowMs),
+}, t => [index('media_object_deletions_due_idx').on(t.nextAttemptAt)])

@@ -8,11 +8,7 @@ import { uploadImage } from '#server/features/media'
  */
 export default defineEventHandler(async (event) => {
   const actor = await requirePermission(event, { media: ['upload'] })
-  // Refused before the body is read; the multipart envelope adds a little to the file itself.
-  if (Number(getHeader(event, 'content-length') ?? 0) > IMAGE_MAX_BYTES + 64 * 1024) {
-    throw apiError(413, 'PAYLOAD_TOO_LARGE', `The image is larger than ${IMAGE_MAX_BYTES / 1024 / 1024} MB.`)
-  }
-  const parts = await readMultipartFormData(event)
+  const parts = await readLimitedMultipart(event, IMAGE_MAX_BYTES + 64 * 1024)
   const part = parts?.find(p => p.name === 'file' && p.filename)
   const asset = await uploadImage(useDb(), blob, actor, part && { type: part.type ?? '', data: new Uint8Array(part.data) })
   setResponseStatus(event, 201)

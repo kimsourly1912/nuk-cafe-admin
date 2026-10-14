@@ -22,7 +22,12 @@ import { runningAt } from './promotions.service'
 
 const groupBy = <T, K>(rows: T[], key: (row: T) => K) => {
   const map = new Map<K, T[]>()
-  for (const row of rows) map.set(key(row), [...(map.get(key(row)) ?? []), row])
+  for (const row of rows) {
+    const group = key(row)
+    const bucket = map.get(group)
+    if (bucket) bucket.push(row)
+    else map.set(group, [row])
+  }
   return map
 }
 

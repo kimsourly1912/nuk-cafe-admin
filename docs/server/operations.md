@@ -91,6 +91,11 @@ Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudf
 
 Bindings (D1, R2, KV) are configured per environment in `nuxt.config.ts` (`$env.<name>`: NuxtHub turns `hub.db.connection.databaseId` and `hub.blob.bucketName` into the Worker's `DB` and `BLOB` bindings), not as variables. **`--envName staging` replaces `$production`**: settings every deployed build needs (the security headers) are repeated in each environment block.
 
+| Variable | Use | Default | Configuration |
+|---|---|---|---|
+| `NUXT_MAINTENANCE_OUTBOX_RETENTION_DAYS` | Sent outbox metadata retention (D168) | `0` (keep) | Positive integer days opts in; does not delete audit, orders or failed work |
+| `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS` | Optional notification-scheduler health requirement | `0` (off) | Set e.g. `300` only with Telegram and the minute cron configured; missing/stale heartbeat makes health 503 |
+
 ## Migrations
 
 1. Change the feature's `*.schema.ts`.
@@ -117,7 +122,9 @@ On push to `main` (a merged pull request, already checked there: D133), the `dep
 
 GitHub environment `staging` secrets: `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers" plus **Account → D1 → Edit**, this account only), `CLOUDFLARE_ACCOUNT_ID`, `NUXT_MAIL_RESEND_API_KEY`.
 
-Production: manual workflow from a commit that is live on staging: export the database (Time Travel bookmark), apply migrations, deploy, smoke check. Rollback = redeploy the previous Worker version (possible because migrations are backwards compatible).
+Production: first run CI manually on `main`. After `check` and all `e2e` shards pass, `verified-release` publishes `verified-release-<sha>` with the exact checked commit/run. Use that exact revision, verify its staging deployment and finish the release checklist. This is a checked promotion candidate, not a production deployment workflow; production configuration and enforceable promotion remain phase 8.2.
+
+Production deployment from that checked commit: export the database (Time Travel bookmark), apply migrations, deploy, smoke check. Rollback = redeploy the previous Worker version (possible because migrations are backwards compatible).
 
 ## Backups and restore
 
@@ -163,6 +170,10 @@ Built so far: `platform:deliver-outbox`, `orders:expire-unpaid` and `notificatio
 | `notifications:purge-deliveries` | daily | Removes Telegram deliveries older than 90 days |
 | `loyalty:expire-vouchers` | daily | Marks vouchers past `expires_at` as expired |
 | `orders:expire-unpaid` | every minute | Cancels orders still unpaid 30 minutes after placing (D45, D104): 100 a run, each guarded by status and version (a payment at that moment wins), an event with no actor and an audit entry |
+
+`platform:maintain-outbox` runs hourly at :05: at most 500 expired email payloads are redacted and, if explicitly configured, 500 old sent metadata rows removed. Pending/failed non-mail work and financial history are retained. The idempotency expiry task deletes 500-row batches for at most five seconds per run. Monitor backlog and run again if a large cleanup exceeds that budget.
+
+Notification generation uses a persistent 25-cafe page, catches per-cafe errors, and wraps after the last page. Existing deliveries run first, so a summary failure cannot block the queue. Delivery loops stop starting work after their budget; immediate order dispatch names its tenant, order and event. A claim token fences stale workers (D168).
 
 ## Email
 
@@ -239,6 +250,12 @@ The counter shows a KHQR made for each order (D130), set up on **Admin → Payme
 - Alerts (Cloudflare notifications) on a spike of 5xx responses and on Worker exceptions: set up with production (8.2).
 - [Open] Q24: who receives alerts, and during which hours.
 
+### Independent platform health (D168)
+
+`.github/workflows/platform-health.yml` checks HTTPS health every five minutes from GitHub Actions, independently of the Worker/D1/Telegram alert path. **Disabled until repository variable `PLATFORM_HEALTH_URL` is configured**, e.g. the production `/api/health` URL. Select the platform's recipients in GitHub Actions notification settings; verify a deliberately failed manual run reaches the responsible person. Scheduled GitHub runs can be delayed: use a dedicated uptime/paging provider if Q24 requires a tighter guarantee. No destination or account setting was changed by D168.
+
+Enable `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS` after the notification cron is running to detect a stopped/failing notification dispatcher as well as a database outage. Otherwise health keeps its database-only behavior. Test both missing/stale heartbeat and database outage before enabling production traffic. Worker exception alerts and a platform-owned operational destination still require Cloudflare/account configuration under Q24; the app's existing tenant Telegram alerts remain supplemental.
+
 ## Platform facts
 
 Verified behavior of the stack that the rest of the standard relies on. Re-check when upgrading NuxtHub, Better Auth or Wrangler.
@@ -254,6 +271,7 @@ Verified behavior of the stack that the rest of the standard relies on. Re-check
 | D1 refuses a statement with **more than 100 bound parameters** ("too many SQL variables"); local SQLite allows 32,766 | Growing lists are split into several statements; the test database enforces the limit (D62) |
 | An R2 upload and a D1 write can't share a transaction | Uploads start `temporary` and are attached by a later write; orphans are cleaned by a task |
 | D1 has per-database size and throughput limits | Check query plans and rows read before adding caches; index every filter used by a list |
+| Drizzle-kit quoted the JSON expression in `outbox_messages_order_idx` as malformed column names (D168) | `0038_delivery_reliability` uses inspected SQL `json_extract(payload, '$.orderId')`; retain the expression in the snapshot and verify future generated SQL before applying |
 | libsql loads its native binary through a computed `require()` that Nitro's tracer can't follow | A `compiled` hook in `nuxt.config.ts` copies it into node builds (local and e2e); see D46 |
 | A production build (`NODE_ENV=production`) refuses to serve auth without `NUXT_PUBLIC_SITE_URL` | Set it for every built server, including local smoke runs of `.output` |
 | Local dev uses libsql; the server tests use in-memory libsql built from the migrations | The batch guards are proven on libsql; staging (step 2.2) proves them on D1 |

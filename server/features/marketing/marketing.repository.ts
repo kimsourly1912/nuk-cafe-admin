@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, lt, lte, ne, sql } from 'drizzle-orm'
 import type { ChannelLinkStatus, ChannelStatus, PostStatus } from '#shared/contracts/marketing'
 import { user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
+import { newId } from '#server/utils/ids'
 import type { PostMessage } from './marketing.schema'
 import { marketingChannelLinks, marketingChannels, marketingPosts } from './marketing.schema'
 
@@ -140,6 +141,7 @@ const postColumns = {
   message: marketingPosts.message,
   scheduledAt: marketingPosts.scheduledAt,
   attempts: marketingPosts.attempts,
+  claimToken: marketingPosts.claimToken,
   nextAttemptAt: marketingPosts.nextAttemptAt,
   externalMessageId: marketingPosts.externalMessageId,
   externalUrl: marketingPosts.externalUrl,
@@ -205,13 +207,16 @@ export function duePosts(db: Db, now: Date, limit: number, ids?: string[]): Prom
  * Claims a due post for one run: counts the try and pushes its next time out, only if it's still
  * pending and due, so two overlapping runs never send it at once.
  */
-export async function claimPost(db: Db, id: string, now: Date, until: Date): Promise<boolean> {
-  const claimed = await db.update(marketingPosts).set({ attempts: sql`${marketingPosts.attempts} + 1`, nextAttemptAt: until, version: sql`${marketingPosts.version} + 1` })
+export async function claimPost(db: Db, id: string, now: Date, until: Date) {
+  const token = newId()
+  const [claimed] = await db.update(marketingPosts).set({ claimToken: token, attempts: sql`${marketingPosts.attempts} + 1`, nextAttemptAt: until, version: sql`${marketingPosts.version} + 1` })
     .where(and(eq(marketingPosts.id, id), eq(marketingPosts.status, 'pending'), lte(marketingPosts.nextAttemptAt, now)))
-    .returning({ id: marketingPosts.id })
-  return claimed.length > 0
+    .returning()
+  return claimed ? { ...claimed, claimToken: token } : undefined
 }
 
-export async function settlePost(db: Db, id: string, changes: Partial<typeof marketingPosts.$inferInsert>): Promise<void> {
-  await db.update(marketingPosts).set({ ...changes, version: sql`${marketingPosts.version} + 1` }).where(eq(marketingPosts.id, id))
+export async function settlePost(db: Db, id: string, token: string, changes: Partial<typeof marketingPosts.$inferInsert>): Promise<boolean> {
+  const rows = await db.update(marketingPosts).set({ ...changes, claimToken: null, version: sql`${marketingPosts.version} + 1` })
+    .where(and(eq(marketingPosts.id, id), eq(marketingPosts.status, 'pending'), eq(marketingPosts.claimToken, token))).returning({ id: marketingPosts.id })
+  return rows.length === 1
 }

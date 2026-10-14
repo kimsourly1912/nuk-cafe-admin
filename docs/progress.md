@@ -2,6 +2,17 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Architecture reliability (D168, 2026-10-14)
+
+The owner authorized implementation of the [audit](reviews/architecture-audit-2026-10-14.md) on a branch from main. Branch `fix/architecture-reliability`, main `2877655`; [scope and follow-ups](plans/architecture-reliability.md), [shared server APIs and edge cases](reference/server-reliability.md). Body-byte enforcement (including before Nitro's Cloudflare buffer), owned delivery claims, targeted dispatch, durable media deletion, tenant job isolation, SQL report aggregation and bounded maintenance implemented and locally verified; ready for PR review. Independent health checks and checked-release manifests are prepared; production URL/recipients/account settings and retention choices remain Q4/Q24. No deployment or merge.
+
+Verification on this branch:
+
+- **Automated:** lint and typecheck passed; dependency audit passed under the repository's existing ignore policy (remaining unignored advisories: one low, one moderate); unit/server **110 files / 1,441 tests passed** using the pinned pnpm 12.3.4. Browser coverage passed across all 46 files: the initial full run passed 33 files / 447 cases, then all 14 rerun files / 175 cases passed (12 setup-blocked files, the transient D166 form case, and reports). Counts overlap; this was not a single all-green invocation. The temporary Chromium override was restored. Environment corrections are recorded under D168 verification pitfalls below.
+- **Guard-removal probes:** removing claim ownership caused four regression failures across platform/notification/marketing tests; removing byte caps caused five failures; removing the expired-media state guard caused one failure. Restored all guards before the passing baseline.
+- **Build/runtime:** production Node build (browser setup) and Cloudflare Worker build passed. All 39 migrations applied to local D1. Local Wrangler verified health 200, valid JSON forwarded (204), oversized chunked JSON rejected before Nitro (413), the original scheduled handler (200), and atomic D1/R2 cleanup plus owned outbox settlement. These are local checks; no remote deployment was performed.
+- **Review checks:** additive migration `0038_delivery_reliability`, generated Worker entry/bindings/cron handlers inspected; schema generation reported no drift; workflow YAML and new documentation links checked. Dependency versions and the lockfile are unchanged.
+
 ## Agent documentation optimization (D167, 2026-10-13)
 
 Task-based startup routing, preserved recipe guides and history indexes implemented on the documentation branch; PR review pending. Audit, official loading sources, estimates and validation evidence: [context audit](context-audit.md). Update current-state and the decision index alongside future status/decision changes. No application behavior changed.
@@ -411,6 +422,14 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Headless Chrome doesn't show the `beforeunload` dialog. Verify the guard by dispatching a cancelable `beforeunload` event and checking `defaultPrevented`.
   - Stopping the dev-server task can leave an orphaned Nuxt process holding the port and the lock ("Another Nuxt dev server is already running"). Kill it by port (`Get-NetTCPConnection -LocalPort 3123`) before restarting.
 - **real-API** (historical): the Spring dev API is no longer used.
+
+### D168 verification pitfalls
+
+- The managed workspace initially had stale cached modules (including a missing `axe-core`) and a global pnpm 11 while the project pins 12.3.4. Use the pinned manager (`npm exec --yes --package=pnpm@12.3.4 -- pnpm …`) and restore with `install --frozen-lockfile` before verification. D168 restored the locked packages without changing dependency versions or the lockfile. The global manager's auto-install before scripts could also race with Nuxt generation.
+- Do not run Nuxt prepare/typecheck/build/db-generate commands while Vitest uses `.nuxt` configs: regeneration can remove a config during transformation. D168's initial full browser run passed 447 cases but blocked 12 suites this way; serialize generation and rerun affected suites.
+- The installed browser is `/usr/bin/chromium`, not Playwright's Chrome channel. The documented temporary `executablePath` override is used for local e2e and restored before commit.
+- Nitro 2's Cloudflare preset reads `request.arrayBuffer()` before H3. Route-only byte tests do not prove Worker memory protection: test/build the bounded preset-entry wrapper too.
+- Drizzle-kit generated malformed SQL for the JSON expression index. Inspect the migration and retain the corrected SQL; migration-backed tests catch the malformed form.
 
 ## Environment notes
 

@@ -1,4 +1,6 @@
-import { currentTenant } from '#server/features/identity'
+import type { Db } from '#server/utils/batch'
+import { readJobCursor, saveJobCursor } from '#server/features/platform'
+import { activeTenantPage, currentTenant } from '#server/features/identity'
 import { queueJobFailureAlert } from '#server/features/notifications'
 import { log } from '#server/utils/log'
 
@@ -32,4 +34,22 @@ export async function runJob<T>(job: string, work: () => Promise<T>): Promise<T>
     await alertJobFailure(job)
     throw error
   }
+}
+
+/** Continue other cafes after a failure; advance a bounded, durable page and retry on the next cycle. */
+export async function runTenantPage(db: Db, job: string, work: (tenant: { id: string, slug: string, name: string }) => Promise<unknown>, limit = 25) {
+  const cursor = await readJobCursor(db, job)
+  const tenants = await activeTenantPage(db, cursor, limit)
+  const failures: string[] = []
+  for (const tenant of tenants) {
+    try {
+      await work(tenant)
+    }
+    catch (error) {
+      failures.push(tenant.id)
+      log('error', 'Scheduled tenant work failed', { job, tenantId: tenant.id, error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+  await saveJobCursor(db, job, tenants.length === limit ? tenants.at(-1)!.id : null)
+  return { processed: tenants.length, failures }
 }

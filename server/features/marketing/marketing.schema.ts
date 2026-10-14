@@ -94,6 +94,7 @@ export const marketingPosts = sqliteTable('marketing_posts', {
   caption: text().notNull(),
   message: text({ mode: 'json' }).$type<PostMessage>().notNull(),
   scheduledAt: instant().notNull(),
+  claimToken: text(),
   attempts: integer().notNull().default(0),
   nextAttemptAt: instant().notNull(),
   externalMessageId: text(),

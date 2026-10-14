@@ -267,6 +267,13 @@
       "when": 1791723599619,
       "tag": "0037_marketing_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1791947510700,
+      "tag": "0038_delivery_reliability",
+      "breakpoints": true
     }
   ]
 }

@@ -41,7 +41,7 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
   return {
     emailAndPassword: {
       enabled: true,
-      // Signing in works before the email is verified; shop writes don't (requireCustomer, D51).
+      // Guests and unverified accounts can order (D156); verification still confirms account email.
       requireEmailVerification: false,
       resetPasswordTokenExpiresIn: 60 * MINUTE,
       revokeSessionsOnPasswordReset: true,
