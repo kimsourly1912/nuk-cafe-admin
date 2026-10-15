@@ -5,9 +5,10 @@ import { cancelOrderSchema, toRiel } from '#shared/contracts/orders'
 import { updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
-import { auditEvents } from '#server/features/platform/platform.schema'
+import { auditEvents, idempotencyKeys, outboxMessages } from '#server/features/platform/platform.schema'
 import { cancelOrderAtCounter, completeOrder, getCounterOrder, getCounterOrderHistory, getExchangeRates, listCounterQueue, listFinishedToday, markOrderReady, payOrder, setExchangeRate } from '#server/features/orders/counter.service'
 import { expireUnpaidOrders } from '#server/features/orders/expiry.service'
+import { ORDER_EVENTS } from '#server/features/orders/orders.events'
 import { counterPayments, orderEvents, orders } from '#server/features/orders/orders.schema'
 import { cancelMyOrder, placeOrder } from '#server/features/orders/orders.service'
 import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
@@ -283,6 +284,81 @@ describe('two cashiers, or a retry', () => {
     const first = await pay(orderId, input, cashier, monday('12:05'), db, same)
     await setExchangeRate(db, rateSetter, { khrPerUsd: 4200 }, monday('12:06'))
     expect(await pay(orderId, input, cashier, monday('12:07'), db, same)).toEqual(first)
+  })
+})
+
+describe('a manual payment for one\'s own order', () => {
+  const manualPayments: [string, PayOrderInput][] = [
+    ['cash in dollars', cash],
+    ['cash in riel', { version: 1, method: 'cash_khr', khrPerUsd: 4100 }],
+    ['manual KHQR', { version: 1, method: 'khqr', reference: 'FT2609ABC' }],
+  ]
+
+  beforeEach(async () => {
+    await setExchangeRate(db, rateSetter, { khrPerUsd: 4100 }, monday('09:00'))
+  })
+
+  it.each(manualPayments)('refuses %s by the customer, and writes nothing: no payment, no status change, no event, no paid message, no audit entry', async (_, input) => {
+    const orderId = await place(cashier)
+    await expectApiError(() => pay(orderId, input), 403, 'FORBIDDEN')
+    expect(await statusOf(orderId)).toBe('awaiting_payment')
+    expect(await paymentsOf(orderId)).toEqual([])
+    expect((await eventsOf(orderId)).map(e => e.toStatus)).toEqual(['awaiting_payment'])
+    expect(await db.select().from(auditEvents).where(eq(auditEvents.targetId, orderId))).toEqual([])
+    expect(await db.select().from(outboxMessages).where(eq(outboxMessages.kind, ORDER_EVENTS.paid))).toEqual([])
+  })
+
+  it('a retry with the same key, or a new one, is refused again, and the refusal stores no idempotency key', async () => {
+    const orderId = await place(cashier)
+    const same = key()
+    await expectApiError(() => pay(orderId, cash, cashier, monday('12:05'), db, same), 403, 'FORBIDDEN')
+    await expectApiError(() => pay(orderId, cash, cashier, monday('12:06'), db, same), 403, 'FORBIDDEN')
+    await expectApiError(() => pay(orderId, cash, cashier, monday('12:07'), db, key()), 403, 'FORBIDDEN')
+    expect(await db.select().from(idempotencyKeys).where(eq(idempotencyKeys.operation, 'orders.pay'))).toEqual([])
+    expect(await paymentsOf(orderId)).toEqual([])
+  })
+
+  it('can\'t replay a colleague\'s payment key to get in: keys are per cashier, and the guard runs first', async () => {
+    const orderId = await place(cashier)
+    const shared = key()
+    await pay(orderId, cash, colleague, monday('12:05'), db, shared)
+    // The version the cashier's screen now shows (the colleague's payment made it 2): the guard, not the version, refuses.
+    await expectApiError(() => pay(orderId, { version: 2, method: 'cash_usd' }, cashier, monday('12:06'), db, shared), 403, 'FORBIDDEN')
+    expect(await paymentsOf(orderId)).toHaveLength(1)
+    expect(await paymentsOf(orderId)).toEqual([expect.objectContaining({ collectedBy: colleague.userId })])
+  })
+
+  it('two attempts at once by the customer: both refused, nothing written', async () => {
+    const orderId = await place(cashier)
+    const results = await Promise.allSettled([pay(orderId, cash, cashier, monday('12:05')), pay(orderId, cash, cashier, monday('12:05'))])
+    expect(results.map(r => r.status)).toEqual(['rejected', 'rejected'])
+    for (const result of results as PromiseRejectedResult[]) expect(result.reason.data.code).toBe('FORBIDDEN')
+    expect(await paymentsOf(orderId)).toEqual([])
+    expect(await statusOf(orderId)).toBe('awaiting_payment')
+  })
+
+  it('a colleague collecting it at the same moment: the colleague\'s payment stands, the customer\'s is refused', async () => {
+    const orderId = await place(cashier)
+    const results = await Promise.allSettled([pay(orderId, cash, cashier, monday('12:05')), pay(orderId, cash, colleague, monday('12:05'))])
+    expect(results[1].status).toBe('fulfilled')
+    expect(results[0].status).toBe('rejected')
+    // Refused by the guard, or by the version the colleague's payment moved on: either way, no payment of its own.
+    expect(['FORBIDDEN', 'ORDER_CHANGED']).toContain((results[0] as PromiseRejectedResult).reason.data.code)
+    const payments = await paymentsOf(orderId)
+    expect(payments).toEqual([expect.objectContaining({ collectedBy: colleague.userId, method: 'cash_usd' })])
+  })
+
+  it.each(manualPayments)('another cashier collects %s on the customer\'s order', async (_, input) => {
+    const orderId = await place(cashier)
+    const order = await pay(orderId, { ...input, version: 1 }, colleague)
+    expect(order).toMatchObject({ status: 'preparing', payment: { method: input.method, collectedBy: { name: 'Vanna' } } })
+  })
+
+  it('the customer\'s order at another branch is not found, as any other is', async () => {
+    const elsewhere = await place(cashier, NOON, otherBranchId)
+    await expectApiError(() => pay(elsewhere), 404, 'NOT_FOUND')
+    expect(await statusOf(elsewhere)).toBe('awaiting_payment')
+    expect(await paymentsOf(elsewhere)).toEqual([])
   })
 })
 

@@ -41,11 +41,12 @@ const accountColumns = {
   createdAt: user.createdAt,
 }
 
-const memberOf = (tenantId: string, role?: 'owner') => exists(
-  sql`(select 1 from ${member} where ${member.userId} = ${user.id} and ${member.organizationId} = ${tenantId}${role ? sql` and ${member.role} = ${role}` : sql``})`,
-)
+/**
+ * "Works at a branch of the tenant" for the member's account. An `EXISTS`, not a join: a person at
+ * several branches must still be one row in the list.
+ */
 const worksAt = (tenantId: string, branchId?: string, role?: BranchRoleName) => exists(
-  sql`(select 1 from ${branchStaff} where ${branchStaff.userId} = ${user.id} and ${branchStaff.tenantId} = ${tenantId}${branchId ? sql` and ${branchStaff.branchId} = ${branchId}` : sql``}${role ? sql` and ${branchStaff.role} = ${role}` : sql``})`,
+  sql`(select 1 from ${branchStaff} where ${branchStaff.userId} = ${member.userId} and ${branchStaff.tenantId} = ${tenantId}${branchId ? sql` and ${branchStaff.branchId} = ${branchId}` : sql``}${role ? sql` and ${branchStaff.role} = ${role}` : sql``})`,
 )
 
 export async function findAccount(db: Db, userId: string): Promise<AccountRow | undefined> {
@@ -100,15 +101,20 @@ export async function activeBranchIds(db: Db, tenantId: string, branchIds: strin
   return new Set(rows.map(r => r.id))
 }
 
-/** The tenant's members, filtered and paginated. */
+/**
+ * The tenant's members, filtered and paginated. Starts from the tenant's `member` rows (indexed by
+ * `organization_id`), so the cost follows the cafe's people, not every account on the platform.
+ * The app writes one `member` row per person and cafe, so the join to `user` (by primary key) adds
+ * no duplicates. The database doesn't enforce that yet (no unique index on `member`).
+ */
 export async function listStaff(db: Db, tenantId: string, query: StaffListQuery): Promise<{ rows: AccountRow[], total: number }> {
-  const conditions: SQL[] = [memberOf(tenantId)]
+  const conditions: SQL[] = [eq(member.organizationId, tenantId)]
   if (query.search) {
     const pattern = `%${query.search.replace(/[\\%_]/g, c => `\\${c}`)}%`
     conditions.push(or(sql`${user.name} like ${pattern} escape '\\'`, sql`${user.email} like ${pattern} escape '\\'`)!)
   }
   if (query.role === 'admin') {
-    conditions.push(memberOf(tenantId, 'owner'))
+    conditions.push(eq(member.role, 'owner'))
     if (query.branchId) conditions.push(worksAt(tenantId, query.branchId))
   }
   else if (query.role || query.branchId) {
@@ -117,8 +123,8 @@ export async function listStaff(db: Db, tenantId: string, query: StaffListQuery)
   const where = and(...conditions)
 
   const [totals, rows] = await Promise.all([
-    db.select({ total: count() }).from(user).where(where) as Promise<{ total: number }[]>,
-    db.select(accountColumns).from(user).where(where)
+    db.select({ total: count() }).from(member).innerJoin(user, eq(user.id, member.userId)).where(where) as Promise<{ total: number }[]>,
+    db.select(accountColumns).from(member).innerJoin(user, eq(user.id, member.userId)).where(where)
       .orderBy(asc(user.name), asc(user.id))
       .limit(query.pageSize).offset((query.page - 1) * query.pageSize) as Promise<AccountRow[]>,
   ])

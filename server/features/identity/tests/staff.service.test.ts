@@ -294,6 +294,41 @@ describe('list', () => {
     expect((await listStaff(db, actor, { ...PAGE, search: '%' })).items).toEqual([])
     expect(await listStaff(db, actor, { page: 2, pageSize: 2 })).toMatchObject({ items: [{ name: 'Vanna' }], total: 3, totalPages: 2 })
   })
+
+  it('lists a person at several branches once, in the list and the total, under every branch filter', async () => {
+    // Vanna works at both branches (a manager at Airport, staff at Riverside).
+    const atRiverside = await listStaff(db, actor, { ...PAGE, branchId })
+    expect(atRiverside.items.map(s => s.name)).toEqual(['Sophea', 'Vanna'])
+    expect(atRiverside.total).toBe(2)
+    expect((await listStaff(db, actor, { ...PAGE, role: 'manager' })).items.map(s => s.name)).toEqual(['Vanna'])
+    expect(await listStaff(db, actor, { page: 1, pageSize: 1, branchId })).toMatchObject({ items: [{ name: 'Sophea' }], total: 2, totalPages: 2 })
+    expect(await listStaff(db, actor, { page: 2, pageSize: 1, branchId })).toMatchObject({ items: [{ name: 'Vanna' }], total: 2, totalPages: 2 })
+  })
+
+  it('matches a branch role only at that branch', async () => {
+    expect((await listStaff(db, actor, { ...PAGE, branchId: otherBranchId, role: 'staff' })).items).toEqual([])
+    expect((await listStaff(db, actor, { ...PAGE, branchId: otherBranchId, role: 'manager' })).items.map(s => s.name)).toEqual(['Vanna'])
+  })
+
+  it('never lists customer-only accounts, under any filter', async () => {
+    expect(await listStaff(db, actor, { ...PAGE, search: 'customer' })).toMatchObject({ items: [], total: 0, totalPages: 1 })
+    expect(await listStaff(db, actor, { ...PAGE, role: 'staff' })).toMatchObject({ items: [{ name: 'Sophea' }, { name: 'Vanna' }], total: 2 })
+    expect((await listStaff(db, actor, PAGE)).items.map(s => s.name)).not.toContain('Customer')
+  })
+
+  it('keeps another cafe\'s people and branches out of every filter and the total', async () => {
+    await ensureTenant(db, 'tenant-2')
+    const theirBranch = newId()
+    await insertBranch(db, { id: theirBranch, name: 'Their branch', timezone: 'Asia/Phnom_Penh', tenantId: 'tenant-2' })
+    const theirOwner = await seedFirstOwner(db, 'tenant-2', { name: 'Their owner', email: 'their-owner@example.com' })
+    await createStaff(db, { userId: theirOwner!.staff.id, tenantId: 'tenant-2', role: 'owner' }, staffInput({ name: 'Their manager', email: 'their-manager@example.com', memberships: [{ branchId: theirBranch, role: 'manager' }] }))
+
+    expect(await listStaff(db, actor, PAGE)).toMatchObject({ total: 3 })
+    expect((await listStaff(db, actor, { ...PAGE, role: 'manager' })).items.map(s => s.name)).toEqual(['Vanna'])
+    expect((await listStaff(db, actor, { ...PAGE, search: 'their' })).items).toEqual([])
+    expect(await listStaff(db, actor, { ...PAGE, branchId: theirBranch })).toMatchObject({ items: [], total: 0 })
+    expect(await listStaff(db, actor, { ...PAGE, branchId: theirBranch, role: 'manager' })).toMatchObject({ items: [], total: 0 })
+  })
 })
 
 describe('seed', () => {

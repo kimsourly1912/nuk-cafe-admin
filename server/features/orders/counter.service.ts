@@ -6,7 +6,7 @@ import type { Actor, BranchActor } from '#server/features/identity'
 import { auditStatement, outboxStatement } from '#server/features/platform'
 import type { OrderStep } from './commands'
 import { runOrderCommand } from './commands'
-import { exchangeRateChanged, noExchangeRate, orderChanged, orderNotCancellable, orderNotFound, paymentExpired, returnMethodInvalid } from './orders.errors'
+import { exchangeRateChanged, noExchangeRate, orderChanged, orderNotCancellable, orderNotFound, ownOrderPayment, paymentExpired, returnMethodInvalid } from './orders.errors'
 import { requireOrderCharge } from './khqr.service'
 import { ORDER_EVENTS } from './orders.events'
 import * as repo from './orders.repository'
@@ -184,10 +184,14 @@ function requireStatus(order: repo.OrderRow, allowed: OrderStatus[]) {
 /**
  * Records the payment (`payment: ['collect']`), which starts preparation. The amount is the order's
  * total; cash in riel uses the rate in force, which must be the one the screen showed. Refused
- * once the 30 minutes to pay are over.
+ * once the 30 minutes to pay are over. Refused too when the cashier is the order's customer (a
+ * manual payment is collected by someone else, security.md). Bakong's check isn't manual, so
+ * `recordCheckedKhqrPayment` doesn't apply this.
  */
 export async function payOrder(db: Db, actor: BranchActor, orderId: string, input: PayOrderInput, key: string, now = new Date()): Promise<CounterOrder> {
   return runCommand(db, actor, orderId, key, { operation: 'pay', input, request: input, now }, async (order) => {
+    // First in the plan, before any state or money check: no payment row is ever written for it.
+    if (order.customerId === actor.userId) throw ownOrderPayment()
     requireStatus(order, ['awaiting_payment'])
     if (order.paymentDueAt.getTime() <= now.getTime()) throw paymentExpired()
     const rate = input.method === 'cash_khr' ? await repo.currentRate(db, actor.tenantId, now) : undefined

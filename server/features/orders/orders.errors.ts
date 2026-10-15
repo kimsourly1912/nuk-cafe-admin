@@ -76,6 +76,10 @@ export const khqrNotSetUp = (currency?: string) =>
     ? `KHQR in ${currency === 'KHR' ? 'riel' : 'dollars'} isn't set up. An admin sets it on the Payments page.`
     : 'KHQR isn\'t set up yet. An admin sets it on the Payments page; use the counter\'s printed KHQR meanwhile.')
 
+/** A cashier can't take a manual payment for their own order (security.md → Staff never act on their own customer records). */
+export const ownOrderPayment = () =>
+  apiError(403, ErrorCodes.FORBIDDEN, 'You can\'t take payment for your own order. Another staff member has to take it.')
+
 export const khqrChargeInvalid = () =>
   apiError(409, OrderErrorCodes.KHQR_CHARGE_INVALID, 'That QR was made for another order. Show this order\'s QR and confirm again.')
 
