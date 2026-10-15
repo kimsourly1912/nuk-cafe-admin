@@ -281,6 +281,13 @@
       "when": 1791963218144,
       "tag": "0039_job_success",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1792087863374,
+      "tag": "0040_member_unique_index",
+      "breakpoints": true
     }
   ]
 }
