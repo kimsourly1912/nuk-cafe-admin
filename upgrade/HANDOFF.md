@@ -45,7 +45,7 @@ Module peer check against targets: no installed module has a peer range that rej
 @nuxthub/core 0.10.8 declares no nuxt peer (only optional @vercel/blob), so compatibility with nuxt 4.6.1 is `Needs verification` at build time.
 @nuxtjs/better-auth 0.3.5 has no pinned nuxt peer; latest 0.3.10 also accepts it.
 
-## Baseline (before any change)
+## Baseline (before any change; from S0 on compare with upgrade/baseline.md)
 
 | Check | Result | Notes |
 |---|---|---|
@@ -71,6 +71,8 @@ Q6: Nuxt 4.5 workaround in useApiQuery — Keep and log a follow-up, ONLY if pro
 Q7: Proving the Cloudflare entry (C17) — Before merge: staging build + wrangler.json diff + `wrangler deploy --dry-run` + local `wrangler dev` smoke test (login, one D1-backed API call). After merge: smoke-test the staging deploy before production; rollback = wrangler rollback. Claude does not deploy. — decided 2026-10-16
 
 ## Done
+
+S0: verify script split (test:unit every step, `--e2e` at milestones, 1 worker, 4 GB heap). Baseline retaken twice in `upgrade/baseline.md` (comparison source from now on): serial e2e is green (46 files / 566 tests) except one flaky test; the Q4 test fails only on Windows path separators.
 
 ## Blocked
 
