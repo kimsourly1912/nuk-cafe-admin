@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 3 done (waiting for approval)
-Next: /upgrade-4-execute S0-S12 (Sonnet). Plan: `upgrade/plan.md`
+Current phase: 4 (execute), S0 done
+Next: /upgrade-4-execute S1-S12. Compare every verify with `upgrade/baseline.md`.
 
 ## Versions
 

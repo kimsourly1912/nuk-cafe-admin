@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
-# Runs typecheck / lint / test / build and saves each log separately,
-# so the model reads only SUMMARY.md and the failing lines.
+# Runs typecheck / lint / test:unit / build (and e2e with --e2e) and saves each log
+# separately, so the model reads only SUMMARY.md and the failing lines.
 #
-# Usage: scripts/upgrade-verify.sh <label>      e.g. baseline | S3 | final
-# Output: upgrade/logs/<label>/{SUMMARY.md,typecheck.log,lint.log,test.log,build.log}
+# Usage: scripts/upgrade-verify.sh <label> [--e2e]    e.g. baseline | S3 | final
+#   --e2e  also run the e2e project after build (milestones only): one worker, 4 GB heap (as CI, D147).
+# Output: upgrade/logs/<label>/{SUMMARY.md,typecheck.log,lint.log,test-unit.log,build.log[,e2e.log]}
 # Exit:   0 if every check that ran passed, 1 otherwise.
 
 set -uo pipefail
 
 LABEL="${1:-run}"
+E2E=0
+[ "${2:-}" = "--e2e" ] && E2E=1
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT" || exit 2
 
@@ -58,15 +61,11 @@ resolve() { # $1 = check name
       if   has_script lint;       then run_script lint
       elif has_bin eslint;        then exec_bin eslint .
       fi ;;
-    test)
-      if   has_script test;       then
-        # vitest without --run waits in watch mode in a TTY
-        if node -e "process.exit(/vitest(?!.*\b(run|--run)\b)/.test(require('./package.json').scripts.test)?0:1)" 2>/dev/null; then
-          echo "$(run_script test) -- --run"
-        else
-          run_script test
-        fi
-      elif has_bin vitest;        then exec_bin vitest --run
+    test-unit)
+      if   has_script test:unit;  then run_script test:unit
+      fi ;;
+    e2e)
+      if   has_script test:e2e;   then echo "NODE_OPTIONS=--max-old-space-size=4096 $(run_script test:e2e) --maxWorkers=1"
       fi ;;
     build)
       if   has_script build;      then run_script build
@@ -75,7 +74,8 @@ resolve() { # $1 = check name
   esac
 }
 
-CHECKS=(typecheck lint test build)
+CHECKS=(typecheck lint test-unit build)
+[ "$E2E" -eq 1 ] && CHECKS+=(e2e)
 FAILED=0
 ROWS=""
 

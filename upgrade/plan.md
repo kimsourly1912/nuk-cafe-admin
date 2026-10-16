@@ -20,7 +20,7 @@ Facts settled while planning (no step needed):
 ## Steps
 
 ### S0 — Split verify into unit (every step) and e2e (milestones); re-take baseline
-- status: todo
+- status: done (aa08786)
 - covers: Q3, Q4 (decisions)
 - executor: sonnet
 - risk: low
