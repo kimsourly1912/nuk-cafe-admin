@@ -9,6 +9,7 @@ Warn the user before input they haven't saved is lost.
 - [Drafts kept in the browser](#drafts-kept-in-the-browser): the `draft` option and `<FormDraftAlert>` (D151)
 - [`mergeFormChanges`](#mergeformchanges): Reload after someone else saved first, keeping this input on top (D153)
 - [`useFormErrorRecheck`](#useformerrorrecheck): errors leave as soon as they're fixed, a rule across fields too (D166)
+- [Rows and their errors](#rows-and-their-errors): a removed or moved row takes its errors with it, `useFormRowErrors` (D171)
 
 Source: `app/composables/useUnsavedChanges.ts`, `app/utils/form-value.ts`, `app/middleware/unsaved-changes.global.ts`, `app/plugins/leave-guard.client.ts`. Decision: [D19](../decisions.md).
 
@@ -80,6 +81,7 @@ Every case below is handled. **Keep this table and the tests in sync when changi
 | 29 | Someone else saved first (409), then **Reload** (the menu item editor, the add-on group's settings) | Their version, with this person's changed parts on top; the parts both changed named; still unsaved, against their version | `mergeFormChanges` + `markClean(theirs)` (D153) | unit, e2e (`products.test.ts`, checked to fail when Reload takes theirs) |
 | 30 | A rule across fields is fixed in the *other* field (At most raised after "Can't be less than the minimum"; one of two same-named add-ons renamed; the second password fixed), or a row with an error is removed | The error leaves at once | `useFormErrorRecheck`: after each change, the fields showing a schema error are checked again (D166) | e2e (`modifier-groups.test.ts`) |
 | 31 | A checkbox inside a group's field (Pre-selected inside Add-ons) | Its label ticks its own box; it isn't red when the group has an error | Its own `UFormField` (D165, D166) | e2e (`modifier-groups.test.ts`) |
+| 32 | A row with its own error is removed or moved (an add-on, an option value) | The error goes with the row; the row that takes its place shows none | `useFormRowErrors` moves the errors with the rows (D171) | unit (`use-form-row-errors.test.ts`, `form-rows.test.ts`); browser check pending |
 
 Implementation traps (each one broke something once, see [D19](../decisions.md)):
 - `isSameFormValue` must read **through** reactive proxies. `toRaw` makes the `computed` stop tracking, so `isDirty` never changes. A unit test guards this.
@@ -284,6 +286,34 @@ useFormErrorRecheck(form)
 ```
 
 It reads the form's `schema` and `state` props (any Standard Schema: Valibot here) and its exposed `getErrors` / `validate`; it needs nothing else.
+
+## Rows and their errors
+
+A list whose rows each have fields (option values, add-ons, availability windows) names each row's error by its position: `values.2`, `modifiers.2.price`. Removing a row with `splice` leaves that error on its old position, so the row that moves into it shows an error it never had (D171). `useFormRowErrors` moves the errors with the rows. Use it for every remove and move in such a list:
+
+```vue
+<script setup lang="ts">
+const form = useTemplateRef('form')
+const state = reactive({ values: ['', ''] })
+const rowErrors = useFormRowErrors(form, 'values')
+</script>
+
+<template>
+  <UForm ref="form" :schema="schema" :state="state" :validate-on="['input', 'change']">
+    <UFormField v-for="(_, i) in state.values" :key="i" :name="`values.${i}`">
+      <UInput v-model="state.values[i]" :aria-label="`Value ${i + 1}`" />
+      <UButton icon="i-lucide-chevron-up" :disabled="i === 0" :aria-label="`Move value ${i + 1} up`" @click="rowErrors.moveRow(state.values, i, i - 1)" />
+      <UButton icon="i-lucide-x" :aria-label="`Remove value ${i + 1}`" @click="rowErrors.removeRow(state.values, i)" />
+    </UFormField>
+  </UForm>
+</template>
+```
+
+- `removeRow(list, index)` and `moveRow(list, from, to)` change the list in place. Anything else kept per row (a parallel array of keys, a row's id) must change the same way, in the same handler.
+- Move a row's element with `:key` set to an id per row, not its position, so a moved row slides to its place ([ui §17](./ui.md#forms-and-their-errors)). Position keys are fine for a list that only removes rows.
+- The field name is the list's name (`values`, `modifiers`). Sub-fields move too (`modifiers.2.price`); errors on other fields (the list's own "listed only once", the name) stay where they are.
+- Pass the template ref itself. The ref is read at each call, so a call before the form is mounted only changes the list.
+- Source: `app/composables/useFormRowErrors.ts` (auto-imported), its pure helper `followRowErrors` in `app/utils/form-rows.ts`. Unit tests: `test/unit/use-form-row-errors.test.ts`, `test/unit/form-rows.test.ts`. Used by the option set create modal (`values`) and the add-on group create modal (`modifiers`).
 
 ---
 
