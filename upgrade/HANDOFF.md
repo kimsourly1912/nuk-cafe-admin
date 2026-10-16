@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 0 in progress
-Next: /upgrade-1-inventory (Sonnet session — this one is fine)
+Current phase: 2 done (waiting for review)
+Next: /upgrade-3-plan (new OPUS session)
 
 ## Versions
 
@@ -49,14 +49,22 @@ Module peer check against targets: no installed module has a peer range that rej
 
 | Check | Result | Notes |
 |---|---|---|
-| typecheck | pending | |
-| lint | pending | |
-| test | pending | |
-| build | pending | |
+| typecheck | PASS | 48s |
+| lint | PASS | 33s |
+| test (`pnpm test`, full) | FAIL | 46 files / 459 tests failed, almost all e2e: a worker died with "JavaScript heap out of memory" on this machine. Not caused by the upgrade. |
+| test:unit (unit + server projects) | FAIL (1) | 1 failed: `server/tests/routes.test.ts > cafe routes (D140) > routes outside a cafe's address never act in one` (deep-equal of route file list). Also a worker crash (exit 3221225477) in `server/features/menu/tests/promotions.service.test.ts`. 1463 passed, 1 skipped. Log: `upgrade/logs/baseline/test-unit.log` |
+| build | PASS | 218s (4 error-like lines in log, exit 0) |
+
+Baseline notes:
+- The first baseline run (`upgrade/logs/baseline-run1-invalid`) is invalid: an orphaned earlier run still held the Nuxt build lock ("Another Nuxt build is already running"). The table above is the clean rerun.
+- A trustworthy e2e baseline needs per-file runs (as AGENTS.md says: changed feature e2e files) or more memory; decide before Phase 4. Before comparing after the upgrade, rerun the same files on both sides.
 
 ## Decisions
 
 <!-- Q1: question — answer (or `pending`) — decided on <date> -->
+Q1 (breaking-changes U1): retire `modules/reka-namespaced.ts` (no-op after @nuxt/ui 4.12.0) in this run or a separate PR? — pending (recommend separate PR)
+Q2 (U2): bump @nuxtjs/better-auth 0.3.5 → 0.3.10 in this run? — pending (recommend no)
+Q3: how to get a reliable e2e baseline given the out-of-memory crash on full `pnpm test`? — pending
 
 ## Done
 
@@ -65,3 +73,5 @@ Module peer check against targets: no installed module has a peer range that rej
 ## Plan issues
 
 ## Manual tests to do
+
+<!-- risk: high items from Phase 2: C12 useApiQuery/useAsyncData, C14 navigateTo redirects, C15 error rendering, C17 Cloudflare entry/nitro hooks -->
