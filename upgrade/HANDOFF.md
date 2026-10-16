@@ -66,9 +66,9 @@ Q1: Retire dead Reka module? — No, separate PR. Keep running test/e2e/shop-men
 Q2: Bump @nuxtjs/better-auth to 0.3.10? — No. Separate upgrade run later. — decided 2026-10-16
 Q3: Reliable e2e baseline? — Plan step S0 before any dependency change: split unit/server tests (every step) from e2e (milestones only: after nuxt bump, after nuxt-ui bump, final), run e2e serially or with low maxWorkers, re-take the baseline twice and mark flaky tests. — decided 2026-10-16
 Q4: Failing "routes outside a cafe's address never act in one" — Not accepted as a normal baseline failure. Investigate separately (tenant isolation). Record it as a known, explained failure in baseline.md; it must not get worse. — decided 2026-10-16
-Q5: If pnpm minimumReleaseAge refuses nuxt 4.6.1 / @nuxt/ui 4.12.0 (or their new deps): wait (recommended) or add temporary minimumReleaseAgeExclude entries? — pending
-Q6: If useApiQuery's Nuxt 4.5 watch-path workaround is redundant but harmless under 4.6: keep + follow-up (recommended) or remove in this run? — pending
-Q7: Is a staging build + wrangler.json diff before merge, then the automatic staging deploy after merge, enough proof for C17 (recommended)? — pending
+Q5: @nuxt/ui 4.12.0 below pnpm minimum-release-age — Wait; no exclusions (supply-chain protection stays on). Prep steps (S0 etc.) proceed now; the bump step waits. The bump step must report any transitive packages refused by the age rule. — decided 2026-10-16
+Q6: Nuxt 4.5 workaround in useApiQuery — Keep and log a follow-up, ONLY if proven harmless on 4.6: useApiQuery tests pass AND request count / refresh behavior unchanged (test or manual network check). If not harmless, fix in this run. — decided 2026-10-16
+Q7: Proving the Cloudflare entry (C17) — Before merge: staging build + wrangler.json diff + `wrangler deploy --dry-run` + local `wrangler dev` smoke test (login, one D1-backed API call). After merge: smoke-test the staging deploy before production; rollback = wrangler rollback. Claude does not deploy. — decided 2026-10-16
 
 ## Done
 
