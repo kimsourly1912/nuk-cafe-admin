@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 2 done (waiting for review)
-Next: /upgrade-3-plan (new OPUS session)
+Current phase: 3 done (waiting for approval)
+Next: /upgrade-4-execute S0-S12 (Sonnet). Plan: `upgrade/plan.md`
 
 ## Versions
 
@@ -62,9 +62,13 @@ Baseline notes:
 ## Decisions
 
 <!-- Q1: question — answer (or `pending`) — decided on <date> -->
-Q1 (breaking-changes U1): retire `modules/reka-namespaced.ts` (no-op after @nuxt/ui 4.12.0) in this run or a separate PR? — pending (recommend separate PR)
-Q2 (U2): bump @nuxtjs/better-auth 0.3.5 → 0.3.10 in this run? — pending (recommend no)
-Q3: how to get a reliable e2e baseline given the out-of-memory crash on full `pnpm test`? — pending
+Q1: Retire dead Reka module? — No, separate PR. Keep running test/e2e/shop-menu.test.ts after the Nuxt UI bump; a failure there is in scope. — decided 2026-10-16
+Q2: Bump @nuxtjs/better-auth to 0.3.10? — No. Separate upgrade run later. — decided 2026-10-16
+Q3: Reliable e2e baseline? — Plan step S0 before any dependency change: split unit/server tests (every step) from e2e (milestones only: after nuxt bump, after nuxt-ui bump, final), run e2e serially or with low maxWorkers, re-take the baseline twice and mark flaky tests. — decided 2026-10-16
+Q4: Failing "routes outside a cafe's address never act in one" — Not accepted as a normal baseline failure. Investigate separately (tenant isolation). Record it as a known, explained failure in baseline.md; it must not get worse. — decided 2026-10-16
+Q5: If pnpm minimumReleaseAge refuses nuxt 4.6.1 / @nuxt/ui 4.12.0 (or their new deps): wait (recommended) or add temporary minimumReleaseAgeExclude entries? — pending
+Q6: If useApiQuery's Nuxt 4.5 watch-path workaround is redundant but harmless under 4.6: keep + follow-up (recommended) or remove in this run? — pending
+Q7: Is a staging build + wrangler.json diff before merge, then the automatic staging deploy after merge, enough proof for C17 (recommended)? — pending
 
 ## Done
 
