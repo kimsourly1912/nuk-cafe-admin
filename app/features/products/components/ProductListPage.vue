@@ -21,7 +21,7 @@ import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { ItemStatus, MenuItemSummary } from '#shared/contracts/menu-items'
 import { useEventListener, useLocalStorage } from '@vueuse/core'
 import { CategorySelect } from '~/features/categories'
-import { useItemList, useItemMutations, useItemStatusCounts, useMissingPhotoCount } from '../composables/useItems'
+import { useItemCounts, useItemList, useItemMutations } from '../composables/useItems'
 import { itemOnMenuPath, ITEM_STATUS_LABELS, priceRange } from '../utils/item-display'
 import ProductCard from './ProductCard.vue'
 import ProductGroupFilter from './ProductGroupFilter.vue'
@@ -59,9 +59,8 @@ const categoryFilter = computed({
 
 const listQuery = computed(() => ({ ...query.value, photo: query.value.photo as 'missing' | undefined, status: query.value.status as ItemStatus | undefined }))
 const { data, loading, refreshing, error, refresh } = useItemList(listQuery)
-const counts = useItemStatusCounts(() => ({ search: query.value.search, categoryId: query.value.categoryId, modifierGroupId: query.value.modifierGroupId, photo: listQuery.value.photo }))
-/** Items the other filters show without a photo (archived ones only on their own tab, where it's hidden). */
-const missingPhotos = useMissingPhotoCount(() => ({ search: query.value.search, categoryId: query.value.categoryId, modifierGroupId: query.value.modifierGroupId, status: listQuery.value.status }))
+/** Tab counts, and items the filters show without a photo (archived ones only on their own tab, where it's hidden). */
+const { statusCounts: counts, missingPhotos } = useItemCounts(() => listQuery.value)
 const { publish, unpublish, archive, restore, isBusy } = useItemMutations()
 
 const rows = computed(() => data.value?.items ?? [])

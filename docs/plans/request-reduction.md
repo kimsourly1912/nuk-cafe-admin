@@ -25,7 +25,7 @@ A second, separate waste: Nuxt's first fetch uses `dedupe: 'cancel'`. When a sec
 
 1. **Measure.** The request-budget test above. Merged (PR #123).
 2. **One query per resource.** `/admin/branches/options` was read under three keys (`branches:options`, `staff:branch-options`, `promotions:branches`); branch writes invalidate `branches` and `staff`, so the promotion editor's copy missed branch changes, and once data is kept (step 3) each copy would go stale on its own. Staff and promotions now use the branches feature's public `useBranchOptions`; availability rules share `availability-rules:list` like option sets do. Merged (PR #124).
-3. **Keep data between visits, `useApiQuery` `staleTime` (opt-in).** Done: [D173](../decisions.md#d173-reference-data-kept-between-visits-a-querys-first-fetch-joins-a-running-one-2026-10-17) (it also leaves out `reports:branches`, and makes product writes invalidate `categories`). As planned:
+3. **Keep data between visits, `useApiQuery` `staleTime` (opt-in).** Merged (PR #125): [D173](../decisions.md#d173-reference-data-kept-between-visits-a-querys-first-fetch-joins-a-running-one-2026-10-17) (it also leaves out `reports:branches`, and makes product writes invalidate `categories`). As planned:
    - opted-in keys keep their data after unmount (a custom `getCachedData`, which also stops Nuxt purging them);
    - younger than `staleTime`: shown, no request; older: shown at once and refetched in the background;
    - `invalidate()`/`invalidateAll()` also mark kept, unmounted keys, so after our own write (this tab or another) the next visit loads fresh instead of showing the old copy;
@@ -33,7 +33,7 @@ A second, separate waste: Nuxt's first fetch uses `dedupe: 'cancel'`. When a sec
    - opt in: reference data (categories, option sets, add-on groups, availability rules, branch options, cafe settings, rates and KHQR, report branches and destinations), `staleTime` 60 s. Not: records opened for editing (forms send the version they read) and paginated lists (one key across filters);
    - session changes already clear every key; changing cafes is a full page load.
    Tests: no repeated reference reads in the budget test; create an option set, then the item editor offers it; another tab's change reaches a kept key; nothing kept after sign-out; removing the invalidation mark makes the freshness test fail.
-4. **Menu item counts in one read.** `GET /admin/menu/items/counts` (status counts and missing photos, same filters) replaces 4 reads per list load and filter change; two-cafe isolation test.
+4. **Menu item counts in one read.** Done (also the Dashboard's two menu checks; the photo count comes with it). `GET /admin/menu/items/counts` (status counts and missing photos, same filters) replaces 4 reads per list load and filter change; two-cafe isolation test.
 5. **Dashboard** (if still worth it after 3): setup checks and today's summaries in fewer reads, through each feature's service.
 6. Customer site (`/public/branches` is also read under two keys), then the platform.
 

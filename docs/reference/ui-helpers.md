@@ -387,7 +387,7 @@ Source: `app/components/StatusTabs.vue`
 
 Labels are never cut (D128): a row that doesn't fit scrolls sideways (no scrollbar shown), and the chosen status is brought to the middle of the row ([`useCenteredTab`](#usecenteredtab)); only the row scrolls, never the page.
 
-Counts: a list loaded whole (Categories, the libraries) counts on the client; a paginated one asks its list endpoint with `pageSize: 1` per status and reads `total`, in one query keyed `<feature>:status-counts` so `invalidate(feature)` refreshes it (`useItemStatusCounts` in the products feature).
+Counts: a list loaded whole (Categories, the libraries) counts on the client; a paginated one reads them from a counts endpoint grouped by status, in one request with the list's filters, keyed `<feature>:counts` so `invalidate(feature)` refreshes it (`useItemCounts` and `GET /admin/menu/items/counts` in the products feature; not one `pageSize: 1` list request per status).
 
 ---
 

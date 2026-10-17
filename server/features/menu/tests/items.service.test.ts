@@ -6,7 +6,7 @@ import type { Actor } from '#server/features/identity'
 import { mediaAssets } from '#server/features/media/media.schema'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import { archiveCategory, createCategory, updateCategory } from '#server/features/menu/categories.service'
-import { archiveItem, createItem, getItem, listItems, publishItem, reorderItems, restoreItem, unpublishItem, updateItem } from '#server/features/menu/items.service'
+import { archiveItem, countItems, createItem, getItem, listItems, publishItem, reorderItems, restoreItem, unpublishItem, updateItem } from '#server/features/menu/items.service'
 import { menuCategories, menuItemVariations, menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
 import { addOptionValue, archiveOptionSet, archiveOptionValue, createOptionSet, getOptionSet, restoreOptionValue } from '#server/features/menu/options.service'
 import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
@@ -310,6 +310,21 @@ describe('listing and ordering', () => {
     await updateItem(db, actor, pictured.id, { version: pictured.version, imageId: null })
     expect(await names({ photo: 'missing' })).toEqual(['Latte', 'Croissant'])
     expect((await listItems(db, TEST_TENANT, { page: 1, pageSize: 1, photo: 'missing' })).total).toBe(2)
+  })
+
+  it('counts the items of each status and those without a photo, with the list\'s filters, in one read (plan step 4)', async () => {
+    const pictured = await latte({ imageId: await upload() })
+    const plain = await croissant()
+    await publishItem(db, actor, pictured.id, { version: pictured.version })
+    expect(await countItems(db, TEST_TENANT, {})).toEqual({
+      draft: { items: 1, withoutPhoto: 1 },
+      active: { items: 1, withoutPhoto: 0 },
+      archived: { items: 0, withoutPhoto: 0 },
+    })
+    await archiveItem(db, actor, plain.id, { version: plain.version })
+    expect(await countItems(db, TEST_TENANT, {})).toMatchObject({ draft: { items: 0 }, archived: { items: 1, withoutPhoto: 1 } })
+    expect(await countItems(db, TEST_TENANT, { search: 'LAT' })).toMatchObject({ active: { items: 1 }, archived: { items: 0 } })
+    expect(await countItems(db, TEST_TENANT, { categoryId: drinks })).toMatchObject({ active: { items: 0 }, archived: { items: 0 } })
   })
 
   it('counts the items that use an option set', async () => {

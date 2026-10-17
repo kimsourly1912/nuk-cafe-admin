@@ -6,7 +6,7 @@ import type { ObjectStore } from '#server/features/media/media.service'
 import { createAvailabilityRule, getAvailabilityRule, listAvailabilityRules, updateAvailabilityRule } from '#server/features/menu/availability.service'
 import { getPublicMenu, loadCatalog } from '#server/features/menu/catalog.service'
 import { archiveCategory, createCategory, getCategory, listCategories, reorderCategories, updateCategory } from '#server/features/menu/categories.service'
-import { archiveItem, createItem, getItem, listItems, publishItem, reorderItems, updateItem } from '#server/features/menu/items.service'
+import { archiveItem, countItems, createItem, getItem, listItems, publishItem, reorderItems, updateItem } from '#server/features/menu/items.service'
 import { addModifier, createModifierGroup, getModifierGroup, listModifierGroups, updateModifierGroup } from '#server/features/menu/modifiers.service'
 import { addOptionValue, createOptionSet, getOptionSet, listOptionSets, renameOptionSet } from '#server/features/menu/options.service'
 import { countMenuData, deleteAllMenuStatements } from '#server/features/menu/reset.repository'
@@ -74,6 +74,11 @@ describe('menu tenants', () => {
     // A filter naming our records still lists only theirs.
     expect((await listItems(db, OTHER, { page: 1, pageSize: 20, categoryId: menu.coffee.id })).total).toBe(0)
     expect((await listItems(db, OTHER, { page: 1, pageSize: 20, modifierGroupId: menu.milk.id })).total).toBe(0)
+    // The list's counts too, also when their filters name our records.
+    const none = { draft: { items: 0, withoutPhoto: 0 }, active: { items: 0, withoutPhoto: 0 }, archived: { items: 0, withoutPhoto: 0 } }
+    expect(await countItems(db, OTHER, {})).toEqual(none)
+    expect(await countItems(db, OTHER, { categoryId: menu.coffee.id, modifierGroupId: menu.milk.id })).toEqual(none)
+    expect((await countItems(db, TEST_TENANT, {})).active.items).toBe(1)
 
     await expectApiError(() => getCategory(db, OTHER, menu.coffee.id), 404, 'NOT_FOUND')
     await expectApiError(() => getOptionSet(db, OTHER, menu.size.id), 404, 'NOT_FOUND')
