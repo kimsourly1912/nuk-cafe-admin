@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Fewer API requests, step 1: measure (2026-10-17)
+
+Owner: admin pages read data that rarely changes on every visit; reduce requests without stale data. [Plan](plans/request-reduction.md). Step 1 adds `test/e2e/request-budget.test.ts`, which counts the API reads of an item-editing loop and a sidebar tour; its expectations are the measured baseline. Found: every visit reads again (Nuxt purges unused keys), opening an item reads 5 times (add-on groups twice), the Menu items list 6, the Dashboard 11; shared keys read twice when a second component mounts during the first request (Nuxt's `dedupe: 'cancel'`). No app code changed.
+
+Checks: the new e2e file passes 3 runs in a row (browser-mock, Chromium); lint and typecheck pass.
+
 ## Faster and reliable local checks (D172, 2026-10-17)
 
 Owner: small fixes took too long. [Decision](decisions.md#d172-faster-and-reliable-local-checks-2026-10-17). Fixed the Windows-only `routes.test.ts` separator failure, cached ESLint (97 s → 4 s warm), capped local e2e at 4 workers (the default 11 starved Chrome: 4–6 timeouts per full run). Branch `chore/faster-local-checks`.
