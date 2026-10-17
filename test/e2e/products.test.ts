@@ -1076,6 +1076,18 @@ describe('menu item editor URLs (D90, decision 4)', () => {
     expect(params(page).get('status')).toBe('draft')
   })
 
+  it('the slide-over is as wide as max-w-2xl from sm (Nuxt UI 4.12 caps the width with sm:max-w-md)', async () => {
+    const { page } = await open()
+    await page.setViewportSize({ width: 1280, height: 800 })
+    const form = await openEdit(page, 'Latte')
+    // 42rem = 672px; the Nuxt UI default would leave 448px.
+    await expect.poll(async () => Math.round((await form.boundingBox())?.width ?? 0)).toBe(672)
+
+    // Under sm it takes the screen, as before.
+    await page.setViewportSize({ width: 390, height: 844 })
+    await expect.poll(async () => Math.round((await form.boundingBox())?.width ?? 0)).toBe(390)
+  })
+
   it('closing the slide-over removes only `item`, and asks only once about unsaved input', async () => {
     const { page } = await open(backend(), 'Matcha', '/c/nuk/admin/products?status=draft')
     await cardOf(page, 'Matcha').click()

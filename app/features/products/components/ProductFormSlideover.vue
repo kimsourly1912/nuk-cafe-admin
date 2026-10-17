@@ -80,7 +80,7 @@ async function onSubmit() {
   <USlideover
     :title="isEdit ? (archived ? 'Archived menu item' : 'Edit menu item') : 'New menu item'"
     :description="editor.summary.value"
-    :ui="{ content: 'max-w-2xl' }"
+    :ui="{ content: 'sm:max-w-2xl' }"
     @update:open="unsaved.onOpenChange"
   >
     <template #body>

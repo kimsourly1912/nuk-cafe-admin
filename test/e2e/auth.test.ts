@@ -70,6 +70,25 @@ describe('auth', () => {
     await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
   })
 
+  it('keeps a percent-encoded query through the sign-in round trip', async () => {
+    // vue-router writes a space in a query as `+` (same in 5.3 and 5.4): the values must survive, not the spelling.
+    const target = '/c/nuk/admin/categories?q=caf%C3%A9%20au%20lait&tag=a%26b'
+    const values = (address: string) => Object.fromEntries(new URL(address, 'http://x').searchParams)
+    const expected = { q: 'café au lait', tag: 'a&b' }
+    const page = await createPage()
+    const api = await mockApi(page, SIGNED_OUT)
+    await page.goto(url(target))
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/login')
+    const redirect = new URL(page.url()).searchParams.get('redirect') ?? ''
+    expect(new URL(redirect, 'http://x').pathname).toBe('/c/nuk/admin/categories')
+    expect(values(redirect)).toEqual(expected)
+    await page.getByLabel('Email').waitFor()
+    api.set({ ...SIGN_IN_OK, 'GET /admin/me': () => ADMIN })
+    await signIn(page)
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
+    expect(values(page.url())).toEqual(expected)
+  })
+
   it('validates the email before sending anything', async () => {
     const page = await createPage()
     const api = await mockApi(page, SIGNED_OUT)
