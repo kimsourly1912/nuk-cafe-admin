@@ -60,7 +60,7 @@ export default defineAppConfig({
     switch: { slots: { base: 'max-sm:relative max-sm:after:absolute max-sm:after:-inset-x-1 max-sm:after:-inset-y-3' } },
     // Overlays (owner, 2026-10-13, D166, ui.md → Overlays): behind a modal, slide-over or drawer the
     // page is dimmed with black, in both modes (Nuxt UI's light `bg-elevated/75` barely dimmed it).
-    modal: { slots: { overlay: 'bg-black/50! dark:bg-black/60' } },
+    modal: { slots: { overlay: 'bg-black/50 dark:bg-black/60' } },
     slideover: { slots: { overlay: 'bg-black/50 dark:bg-black/60' } },
     // Drawers and sheets (D166): the spacing is each part's own padding, not the container's padding
     // and gap, so the body scrolls on its own between a fixed header and footer, its scrollbar at the

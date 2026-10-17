@@ -23,7 +23,6 @@ const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emi
 
 const form = useTemplateRef('form')
 useFormErrorRecheck(form)
-const rowErrors = useFormRowErrors(form, 'modifiers')
 useSubmitShortcut(() => form.value?.submit())
 
 const noLimit = computed({
@@ -38,11 +37,6 @@ async function addRow() {
   state.modifiers.push({ name: '', price: undefined, isDefault: false })
   await nextTick()
   list.value?.querySelectorAll<HTMLInputElement>('input[type="text"], input:not([type])')[state.modifiers.length - 1]?.focus()
-}
-
-/** Removes an add-on; the ones after it move up, and their errors with them. */
-function removeRow(index: number) {
-  rowErrors.removeRow(state.modifiers, index)
 }
 
 async function onSubmit({ data }: FormSubmitEvent<ModifierGroupForm>) {
@@ -182,7 +176,7 @@ async function onSubmit({ data }: FormSubmitEvent<ModifierGroupForm>) {
                 color="neutral"
                 variant="ghost"
                 :aria-label="`Remove add-on ${i + 1}`"
-                @click="removeRow(i)"
+                @click="state.modifiers.splice(i, 1)"
               />
             </div>
             <UButton

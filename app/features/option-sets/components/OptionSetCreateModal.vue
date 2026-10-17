@@ -24,19 +24,11 @@ const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emi
 
 const form = useTemplateRef('form')
 useFormErrorRecheck(form)
-const rowErrors = useFormRowErrors(form, 'values')
 useSubmitShortcut(() => form.value?.submit())
-
-// A row keeps its key as it moves, so a moved row is the same element: it slides to its new place
-// (`useReorderTransition`) and keeps its input.
-let nextKey = state.values.length
-const rowKeys = ref(state.values.map((_, i) => i))
-const { moveClass } = useReorderTransition()
 
 const list = useTemplateRef<HTMLElement>('list')
 async function addValue() {
   state.values.push('')
-  rowKeys.value.push(nextKey++)
   await nextTick()
   list.value?.querySelectorAll('input')[state.values.length - 1]?.focus()
 }
@@ -44,19 +36,12 @@ async function addValue() {
 /** Moves a value and keeps focus on the button that moved it (or the other one at either end). */
 async function moveValue(index: number, by: -1 | 1) {
   const to = index + by
-  rowErrors.moveRow(state.values, index, to)
-  rowKeys.value = moveEntry(rowKeys.value, index, to)
+  state.values = moveEntry(state.values, index, to)
   await nextTick()
   const row = list.value?.querySelectorAll<HTMLElement>('[data-value-row]')[to]
   const button = row?.querySelector<HTMLButtonElement>(by < 0 ? '[data-move=up]' : '[data-move=down]')
   const target = button && !button.disabled ? button : row?.querySelector<HTMLElement>('[data-move]:not(:disabled)')
   target?.focus()
-}
-
-/** Removes a value; the values after it move up, and their errors with them. */
-function removeValue(index: number) {
-  rowErrors.removeRow(state.values, index)
-  rowKeys.value.splice(index, 1)
 }
 
 async function onSubmit({ data }: FormSubmitEvent<OptionSetForm>) {
@@ -110,51 +95,49 @@ async function onSubmit({ data }: FormSubmitEvent<OptionSetForm>) {
             ref="list"
             class="space-y-2"
           >
-            <TransitionGroup :move-class="moveClass">
-              <UFormField
-                v-for="(_, i) in state.values"
-                :key="rowKeys[i]"
-                :name="`values.${i}`"
+            <UFormField
+              v-for="(_, i) in state.values"
+              :key="i"
+              :name="`values.${i}`"
+            >
+              <div
+                class="flex items-center gap-1"
+                data-value-row
               >
-                <div
-                  class="flex items-center gap-1"
-                  data-value-row
-                >
-                  <UInput
-                    v-model="state.values[i]"
-                    :aria-label="`Value ${i + 1}`"
-                    class="flex-1"
-                    @keydown.enter.prevent="i === state.values.length - 1 && state.values.length < MAX_OPTION_VALUES ? addValue() : undefined"
-                  />
-                  <UButton
-                    icon="i-lucide-chevron-up"
-                    color="neutral"
-                    variant="ghost"
-                    data-move="up"
-                    :disabled="i === 0"
-                    :aria-label="`Move value ${i + 1} up`"
-                    @click="moveValue(i, -1)"
-                  />
-                  <UButton
-                    icon="i-lucide-chevron-down"
-                    color="neutral"
-                    variant="ghost"
-                    data-move="down"
-                    :disabled="i === state.values.length - 1"
-                    :aria-label="`Move value ${i + 1} down`"
-                    @click="moveValue(i, 1)"
-                  />
-                  <UButton
-                    v-if="state.values.length > 1"
-                    icon="i-lucide-x"
-                    color="neutral"
-                    variant="ghost"
-                    :aria-label="`Remove value ${i + 1}`"
-                    @click="removeValue(i)"
-                  />
-                </div>
-              </UFormField>
-            </TransitionGroup>
+                <UInput
+                  v-model="state.values[i]"
+                  :aria-label="`Value ${i + 1}`"
+                  class="flex-1"
+                  @keydown.enter.prevent="i === state.values.length - 1 && state.values.length < MAX_OPTION_VALUES ? addValue() : undefined"
+                />
+                <UButton
+                  icon="i-lucide-chevron-up"
+                  color="neutral"
+                  variant="ghost"
+                  data-move="up"
+                  :disabled="i === 0"
+                  :aria-label="`Move value ${i + 1} up`"
+                  @click="moveValue(i, -1)"
+                />
+                <UButton
+                  icon="i-lucide-chevron-down"
+                  color="neutral"
+                  variant="ghost"
+                  data-move="down"
+                  :disabled="i === state.values.length - 1"
+                  :aria-label="`Move value ${i + 1} down`"
+                  @click="moveValue(i, 1)"
+                />
+                <UButton
+                  v-if="state.values.length > 1"
+                  icon="i-lucide-x"
+                  color="neutral"
+                  variant="ghost"
+                  :aria-label="`Remove value ${i + 1}`"
+                  @click="state.values.splice(i, 1)"
+                />
+              </div>
+            </UFormField>
             <UButton
               label="Add value"
               icon="i-lucide-plus"

@@ -10,14 +10,6 @@ Checks: typecheck, lint, build and `build:staging` pass; e2e (serial) 46 files /
 
 **Follow-ups, not done:** fix the `routes.test.ts` path separators (Windows only); `@nuxtjs/better-auth` 0.3.5 → 0.3.10 (own upgrade run); nothing is wrong with the 4.5 `useApiQuery` workaround, remove it only with its own tests.
 
-## Form rows keep their errors (D171, 2026-10-16)
-
-Owner report: removing a row in the option set form left its "Value is required" on the row that moved into its place; the add-on group form had the same bug. [Decision](decisions.md#d171-errors-of-a-removed-or-moved-row-follow-the-row-2026-10-16). Added `useFormRowErrors` (`removeRow`, `moveRow`) over `followRowErrors`; both modals use it. The rule is in [ui §17](reference/ui.md#forms-and-their-errors) and [forms → Rows and their errors](reference/forms.md#rows-and-their-errors).
-
-Checks: unit `form-rows.test.ts` and `use-form-row-errors.test.ts` (8), the option set and add-on group unit tests; lint and typecheck pass. **Not checked in a browser or e2e.** To check: add rows, click Create, remove a middle row, and confirm its error goes with it.
-
-**Follow-ups, not fixed:** `AvailabilityRuleFormModal`, `ItemAddOnGroups` and `StaffFormModal` remove rows with `splice` on per-row error names.
-
 ## Admin and counter query performance (D170, 2026-10-14)
 
 The owner authorized follow-up audit N4/N8. `fix/admin-counter-query-performance` starts from merged main `8a47cb3`; [scope](plans/admin-counter-query-performance.md), [decision](decisions.md#d170-tenant-scoped-admin-pricing-and-fresh-counter-batches-2026-10-14). Confirmed main's `deploy-staging` job succeeded in [run 38540813805](https://github.com/kimsourly1912/nuk-cafe-admin/actions/runs/38540813805/job/115774811006). Scope: cafe-scoped admin price aggregation using the existing index, one counter context read plus a four-query queue snapshot, tenant/branch subqueries without expanding ID lists, a token-presence EXISTS instead of reading the sealed value, and grouping lines once. Two calls/five statements replace the former eight separate nonempty-queue reads, excluding access/session work. Freshness and the uncapped queue/API are preserved.
