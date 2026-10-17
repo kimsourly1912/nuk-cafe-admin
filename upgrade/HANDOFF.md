@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S8 done
-Next: /upgrade-4-execute S9-S12. Compare every verify with `upgrade/baseline.md`. The stale local dev DB was fixed in S8 (see S8 Env note).
+Current phase: 4 (execute), S0-S9 done
+Next: /upgrade-4-execute S10-S12. Compare every verify with `upgrade/baseline.md`. The stale local dev DB was fixed in S8 (see S8 Env note).
 
 ## Versions
 
@@ -113,6 +113,13 @@ S8 (C22, forms; no code change):
   - Dirty (#7033, #6545): no effect. The app never reads `UForm`'s `dirty`/`dirtyFields`/`@update:dirty`; unsaved state is its own `useUnsavedChanges` (`isSameFormValue` against a baseline). #7165 (state type) gave no typecheck error.
   - Tests PASS on 4.12.0: unit form-draft + form-value (14); e2e unsaved-changes, form-drafts, modifier-groups, option-sets, products, categories (6 files / 186 tests, serial). Verify S8 (`upgrade/logs/S8/`): typecheck/lint/build PASS; test:unit = Q4 failure only (1469 passed).
   - Env fix: `.data/db` was the stale 2026-09-27 copy (migration 0010 failed the build). Renamed it to `.data/db-stale-2026-09-27` and moved the fresh build DB to `.data/db`. Nothing deleted; the owner can drop the stale folder.
+
+S9 (C24, C25, C27, C28; one fix):
+  - C25 FIXED: Nuxt UI 4.12's slideover theme sets `sm:max-w-md` (was `max-w-md`). `ProductFormSlideover.vue` overrode with unprefixed `max-w-2xl`, which tailwind-merge no longer treats as a conflict, so from `sm` the panel shrank from 672px to 448px. Changed to `sm:max-w-2xl` (`ProductFormSlideover.vue:83`). Test `test/e2e/products.test.ts > the slide-over is as wide as max-w-2xl from sm`: width 672px at 1280, 390px at phone width. Fails without the fix (448 vs 672, run before the change), passes with it. `OptionSetEditor` only uses the default width (448px from sm, full width below; same on desktop).
+  - C27: no code change. `useOverlay` 4.12 keeps a `resolvers` list and `close()` resolves all of them with the same value; before, a second `open()` replaced the first resolver and left that promise pending forever. Every `useConfirm`/restore/photo/product/staff/category/platform open uses a fresh `destroyOnClose` instance, so nothing is reopened. Reused instances whose result is awaited (`ModifierGroupListPage.create`, `ModifierGroupPage.openAddOn`, `OptionSetListPage.create`, `PromotionEditorPage.chooseTargets`, `KhqrSettingsCard.openTokenModal`) could only resolve twice after a double open before the modal covers the page; each handler is idempotent (same navigation, same state assignment, `testResult = null`), so a double resolve is harmless, and the old hanging promise is gone.
+  - C24: no effect. `AppDrawer.vue` passes neither `noBodyStyles` nor `after:*` listeners (none in `app/`).
+  - C28: no code change. The toast list is `useState('toasts')` and `Toaster` renders from it, so a toast added before the lazy item loads is still shown; `useNotify`/`useMutation` only call `toast.add`. Admin sidebar, search palette and offline toast stay on the manual list.
+  - E2E on 4.12.0 PASS (8 files / 131 tests, serial, incl. the new one): products, option-sets, unsaved-changes, app-shell, admin-search, shortcuts, session, ui-foundations. Verify S9 (`upgrade/logs/S9/`): typecheck/lint/build PASS; test:unit = Q4 failure only (1469 passed).
 
 ## Manual tests to do
 
