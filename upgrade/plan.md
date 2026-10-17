@@ -101,7 +101,7 @@ Facts settled while planning (no step needed):
 - done when: HANDOFF records, per fix (#36124/#36301/#36436), "no effect" or "fixed in <file>, test <name>"; session-transition e2e green.
 
 ### S6 — Check auth redirects and router behavior after the Nuxt bump
-- status: done (HASH)
+- status: done (559bb4c)
 - covers: C14, C4, C6
 - executor: sonnet
 - risk: high (authentication redirect flow)
