@@ -111,7 +111,7 @@ Facts settled while planning (no step needed):
 - done when: redirect round trip proven by e2e + evidence; HANDOFF notes C4/C6 result.
 
 ### S7 — Bump @nuxt/ui to 4.12.0
-- status: blocked
+- status: done
 - covers: C1, C20–C33 (bump only)
 - executor: sonnet
 - risk: medium
@@ -119,6 +119,7 @@ Facts settled while planning (no step needed):
 - change: `pnpm add @nuxt/ui@^4.12.0`. No code change. Leave `modules/reka-namespaced.ts` and its unit test untouched (Q1). Check `pnpm why reka-ui` and `pnpm why tailwindcss` for one copy. If release age blocks the install → Q5.
 - verify: `scripts/upgrade-verify.sh S7 --e2e` (milestone 2); `test/e2e/shop-menu.test.ts` must pass (Q1, D123 guard at :82)
 - done when: no new failures vs baseline. If `shop-menu.test.ts:82` fails, mark `blocked` and add a Plan issue ("adapt reka-namespaced for by-name imports"). Do not change the test.
+- amended 2026-10-17 (Q1 revised): Nuxt UI 4.12.0 no longer imports `reka-ui/namespaced`, so the module is a no-op and its last unit test fails (0 families). S7 also deletes `modules/reka-namespaced.ts` and `test/unit/reka-namespaced.test.ts` and updates D123 and `docs/guides/development.md`. Verify: typecheck, lint, build, test:unit (Q4 failure only), `test/e2e/shop-menu.test.ts`.
 
 ### S8 — Check forms: state types, dirty, exposed API
 - status: todo

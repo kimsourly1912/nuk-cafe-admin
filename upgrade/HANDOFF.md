@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S6 done
-Next: /upgrade-4-execute S7-S12. S7 bumps @nuxt/ui (Q5: report any package refused by the release-age rule; if refused, wait, do not exclude). Compare every verify with `upgrade/baseline.md`.
+Current phase: 4 (execute), S0-S7 done
+Next: /upgrade-4-execute S8-S12. Compare every verify with `upgrade/baseline.md`. Before the next build, fix the stale local dev DB (see S7 Env note) or builds fail on migration 0010.
 
 ## Versions
 
@@ -63,6 +63,7 @@ Baseline notes:
 
 <!-- Q1: question — answer (or `pending`) — decided on <date> -->
 Q1: Retire dead Reka module? — No, separate PR. Keep running test/e2e/shop-menu.test.ts after the Nuxt UI bump; a failure there is in scope. — decided 2026-10-16
+  - REVISED 2026-10-17 (owner): retire it in S7. Nuxt UI 4.12.0 (and vaul-vue, the only other Reka UI user) has no `reka-ui/namespaced` import, so the module is a no-op and its unit test failed (0 families). D123 already said "remove it when Nuxt UI imports Reka UI by name". The shop-menu e2e guard stays.
 Q2: Bump @nuxtjs/better-auth to 0.3.10? — No. Separate upgrade run later. — decided 2026-10-16
 Q3: Reliable e2e baseline? — Plan step S0 before any dependency change: split unit/server tests (every step) from e2e (milestones only: after nuxt bump, after nuxt-ui bump, final), run e2e serially or with low maxWorkers, re-take the baseline twice and mark flaky tests. — decided 2026-10-16
 Q4: Failing "routes outside a cafe's address never act in one" — Not accepted as a normal baseline failure. Investigate separately (tenant isolation). Record it as a known, explained failure in baseline.md; it must not get worse. — decided 2026-10-16
@@ -101,16 +102,11 @@ S6 (C14, C4, C6; no app code change):
   - E2E on 4.6.1 PASS: auth, counter, platform, password, session, shop-menu, shop-orders*, shop-tracking, your-cafes (9 files, 110 tests incl. the new one). C4 (scroll spy/category bar in shop-menu) green; the in-page hash link, back/forward position still on the manual list. C6 confirmed no `/api`//`media` link targets (plan).
   - Verify S6: typecheck/lint/build PASS; test:unit Q4 failure only (1474 passed).
 
-## Blocked
-
-S7 (@nuxt/ui 4.12.0 bump): installed but NOT committed (package.json + pnpm-lock.yaml changed in the working tree). See Plan issues.
-  - Install: no release-age refusal (Q5). One reka-ui (2.11.0), one tailwindcss (4.3.3). typecheck/lint/build PASS. Log: `upgrade/logs/S7/` (git-ignored).
-  - Unit: 1473 passed, 2 failed: the known Q4 test and NEW `test/unit/reka-namespaced.test.ts > finds every family the installed Nuxt UI imports...` (`families.size` is 0).
-  - E2E serial: products.test.ts (14 timeouts) and modifier-groups D166 failed in the full run; both pass alone (products 60/60; modifier-groups + shop-menu 69/69). Load flakes, as in the baseline. The shop-menu D123 guard (:82) PASSES.
-
-## Plan issues
-
-S7: Nuxt UI 4.12.0 components no longer import `reka-ui/namespaced`, so `modules/reka-namespaced.ts` (D123) is a no-op and the last test in `test/unit/reka-namespaced.test.ts` fails (0 families found). Q1 says keep the module, but the plan did not foresee this failing unit test, and RULES forbid skipping or weakening tests. Needs a decision and a plan fix in a new Opus session: adapt/retire that test (and module, D123 docs) in this run, or accept it as a known failure.
+S7 (@nuxt/ui 4.12.0, bump in `4e05df3`; Reka module retired per revised Q1):
+  - Install: no release-age refusal (Q5). One reka-ui (2.11.0, used only by @nuxt/ui and vaul-vue), one tailwindcss (4.3.3). Bump-only verify (`upgrade/logs/S7/`): typecheck/lint/build PASS; unit = Q4 + the reka-namespaced test (0 families); e2e serial: products and modifier-groups D166 load flakes in the full run, both pass alone (products 60/60; modifier-groups + shop-menu 69/69).
+  - Retirement: no file in Nuxt UI 4.12.0 or vaul-vue imports `reka-ui/namespaced` (grep of the installed dist), so the plugin was a no-op. Deleted `modules/reka-namespaced.ts` (the `modules/` folder is now gone) and `test/unit/reka-namespaced.test.ts`; amended D123 ("Removed") and `docs/guides/development.md`. `docs/progress.md` 10.8 left as history.
+  - Verify S7a (`upgrade/logs/S7a/`): typecheck/lint PASS. Build first FAILED on the local dev DB, unrelated: `.data/db/sqlite.db` had been replaced by an old 2026-09-27 copy (10 migrations under the old numbering, `0009_branch_item_states`; the S7 build that morning saw 40), so 0010 hit "table already exists". Build against a fresh DB (old one moved aside, then restored) PASS, and the 4 reka-namespaced SOURCEMAP_BROKEN warnings are gone. Unit: 1466 passed, 4 failed = Q4 + three 5 s timeouts under load (migrations 0029, d1-limits, health); those 3 files pass alone (30/30). E2E `shop-menu.test.ts` 28/28 incl. the D123 guard.
+  - Env: the old local DB is still at `.data/db` (owner to reset it or restore a good copy); the fresh build DB is kept at `.data/db-fresh-build`.
 
 ## Manual tests to do
 
