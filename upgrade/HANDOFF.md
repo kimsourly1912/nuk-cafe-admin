@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S4 done
-Next: /upgrade-4-execute S5-S12. Compare every verify with `upgrade/baseline.md`.
+Current phase: 4 (execute), S0-S5 done
+Next: /upgrade-4-execute S6-S12. Compare every verify with `upgrade/baseline.md`.
 
 ## Versions
 
@@ -87,10 +87,18 @@ S3: fixed the only new type error (`app/utils/api.ts` serverFetch, C11): `Parame
 S4: evidence in `upgrade/evidence/after-nuxt/` (wrangler.json, http.md, build-warnings.txt). `wrangler.json` identical to before (D1, R2 BLOB, 3 ratelimits, crons, vars, main = index.mjs still re-exporting the cloudflare-entry wrapper; `boundedWorkerRequest` bundled). HTTP cases a-e + d2: same status, same security headers and request-id, same error body shapes, same 302 Location in (d). Only difference, accepted: case (a) (404 page render) now has `vary: accept, sec-fetch-mode`, added by Nuxt 4.6's own error handler (`@nuxt/nitro-server/dist/runtime/handlers/error.mjs`) for content negotiation; harmless. Build log: no `nitro.*` deprecation (C7), no template-compile failure (C18); only the same 4 reka-namespaced SOURCEMAP_BROKEN warnings and PLUGIN_TIMINGS (times differ). No code change.
   - Verify S4: typecheck/lint/build PASS; test:unit = Q4 failure only + the known flaky Windows worker crash (3221225477), now on `notifications.delivery.test.ts` (4 files / 58 tests pass alone). The crash lands on a different file each run, so it is environmental, not caused by the upgrade.
 
+S5 (C12, `useApiQuery` vs Nuxt 4.6.1 `useAsyncData`; read `node_modules/nuxt/dist/app/composables/asyncData.js`, no code change):
+  - Watch workaround (Q6): NOT redundant. 4.6.1's params watcher still calls `debounceTick`'d `_execute`, which returns the running promise while a request is in flight (`debounce-tick.js`: `if (currentPromise) return currentPromise`), so the 4.5 problem (a slow older search blocks the newer one) is unchanged. Workaround stays as is.
+  - D150 "keep data on failure": 4.6.1 failure path still sets `error` first, then resets `data` (asyncData.js:418-419), so the sync `rawError` watcher + `justFailed` logic still works. `clearNuxtDataByKey` now resets `data` before `error` (the old comment says clear dropped the error first), but `justFailed` is already false by then (a restored or unchanged data watcher clears it), so a clear cannot put old data back. The code comment says it does not rely on the order. Comment is accurate as is.
+  - #36124 / #36301 (awaited useAsyncData): no effect; no call site awaits `useApiQuery`/`useAsyncData`. #36436 (entry removal on key change): no effect found; `useApiQuery` keys are stable per call, and the full e2e (566 tests, S2) ran on 4.6.1.
+  - `invalidate.ts`/`session-boundary.client.ts`: still correct. `payload.data` keys are filled on success as before, `clearNuxtData` keeps `_asyncData` entries (resets value, error, status), `refreshNuxtData` still calls the `app:data:refresh` hook.
+  - Tests: no unit test covers `useApiQuery` itself (gap, not added: no change made). E2E on 4.6.1 PASS: session, list-page, form-drafts, counter-orders-api (4 files / 35 tests; stale response and session-transition cases are in session.test.ts, list-page.test.ts). Source tree unchanged since the S4 verify (typecheck/lint/build PASS).
+  - Follow-up for the final summary: none required; keep the workaround.
+
 ## Blocked
 
 ## Plan issues
 
 ## Manual tests to do
 
-<!-- risk: high items from Phase 2: C12 useApiQuery/useAsyncData, C14 navigateTo redirects, C15 error rendering, C17 Cloudflare entry/nitro hooks -->
+<!-- risk: high items from Phase 2 (S5 done: automated checks passed; the "switch user/cafe" item in the plan checklist still needs a human pass): C12 useApiQuery/useAsyncData, C14 navigateTo redirects, C15 error rendering, C17 Cloudflare entry/nitro hooks -->
