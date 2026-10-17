@@ -48,6 +48,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](.
 | `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute` | `utils/clock.ts` | Weekly windows' minutes after midnight ↔ "7:30 AM" and `<TimeInput>` (availability rules, branch hours) |
 | `TimeInput` | `components/` | Every time of day: `UInputTime` with AM/PM switched by a tap, which a phone's keyboard can't type (`UInputTime` is a lint error elsewhere, D165) |
 | `useFormErrorRecheck` | `composables/` | Every `UForm`: errors leave as soon as they're fixed, a rule across fields too; server errors stay until their field changes (D166) |
+| `useFormRowErrors`, `followRowErrors` | `composables/`, `utils/form-rows.ts` | A list's rows in a `UForm`: removing or moving a row moves its errors with it (`removeRow`, `moveRow`) (D171) |
 | `useReorderTransition` | `composables/` | A reorder list's rows slide to their new place when moved by their chevrons or keys (`<TransitionGroup :move-class>` + Sortable's `onStart`/`onEnd`, D165) |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
 | `StatCard` | `components/` | One number on a page, in a soft card (never a number styled by hand) |
