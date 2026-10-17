@@ -103,7 +103,14 @@ S6 (C14, C4, C6; no app code change):
 
 ## Blocked
 
+S7 (@nuxt/ui 4.12.0 bump): installed but NOT committed (package.json + pnpm-lock.yaml changed in the working tree). See Plan issues.
+  - Install: no release-age refusal (Q5). One reka-ui (2.11.0), one tailwindcss (4.3.3). typecheck/lint/build PASS. Log: `upgrade/logs/S7/` (git-ignored).
+  - Unit: 1473 passed, 2 failed: the known Q4 test and NEW `test/unit/reka-namespaced.test.ts > finds every family the installed Nuxt UI imports...` (`families.size` is 0).
+  - E2E serial: products.test.ts (14 timeouts) and modifier-groups D166 failed in the full run; both pass alone (products 60/60; modifier-groups + shop-menu 69/69). Load flakes, as in the baseline. The shop-menu D123 guard (:82) PASSES.
+
 ## Plan issues
+
+S7: Nuxt UI 4.12.0 components no longer import `reka-ui/namespaced`, so `modules/reka-namespaced.ts` (D123) is a no-op and the last test in `test/unit/reka-namespaced.test.ts` fails (0 families found). Q1 says keep the module, but the plan did not foresee this failing unit test, and RULES forbid skipping or weakening tests. Needs a decision and a plan fix in a new Opus session: adapt/retire that test (and module, D123 docs) in this run, or accept it as a known failure.
 
 ## Manual tests to do
 

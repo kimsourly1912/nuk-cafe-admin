@@ -111,7 +111,7 @@ Facts settled while planning (no step needed):
 - done when: redirect round trip proven by e2e + evidence; HANDOFF notes C4/C6 result.
 
 ### S7 — Bump @nuxt/ui to 4.12.0
-- status: todo
+- status: blocked
 - covers: C1, C20–C33 (bump only)
 - executor: sonnet
 - risk: medium
