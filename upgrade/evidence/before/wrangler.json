@@ -1,0 +1,71 @@
+{
+  "compatibility_date": "2025-07-15",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "no_nodejs_compat_v2"
+  ],
+  "name": "nuk-cafe-staging",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "NUXT_PUBLIC_SITE_URL": "https://nuk-cafe-staging.kimsur61.workers.dev",
+    "NUXT_MAIL_FROM": "NUK Cafe <onboarding@resend.dev>",
+    "NUXT_PUBLIC_SAMPLE_DATA_ENABLED": "true",
+    "NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT": "Staging",
+    "NUXT_AI_PROVIDER": "openai",
+    "NUXT_AI_MODEL": "gpt-5.4-mini"
+  },
+  "triggers": {
+    "crons": [
+      "* * * * *",
+      "15 3 * * *",
+      "5 * * * *"
+    ]
+  },
+  "ratelimits": [
+    {
+      "name": "RATE_LIMIT_QUOTE",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 120,
+        "period": 60
+      }
+    },
+    {
+      "name": "RATE_LIMIT_PUBLIC",
+      "namespace_id": "1002",
+      "simple": {
+        "limit": 600,
+        "period": 60
+      }
+    },
+    {
+      "name": "RATE_LIMIT_ORDERS",
+      "namespace_id": "1003",
+      "simple": {
+        "limit": 20,
+        "period": 60
+      }
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BLOB",
+      "bucket_name": "nuk-cafe-staging-media"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_id": "<redacted>",
+      "migrations_table": "_hub_migrations",
+      "migrations_dir": "db/migrations/sqlite/"
+    }
+  ],
+  "main": "index.mjs",
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "..\\public"
+  }
+}

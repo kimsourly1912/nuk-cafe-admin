@@ -37,7 +37,7 @@ Facts settled while planning (no step needed):
 - done when: the script supports both modes; `upgrade/baseline.md` lists stable/flaky failures from two e2e runs and explains the Q4 failure.
 
 ### S1 — Capture pre-upgrade runtime and theme evidence
-- status: todo
+- status: done (HASH)
 - covers: C14, C15, C17, C21 (evidence only)
 - executor: sonnet
 - risk: low

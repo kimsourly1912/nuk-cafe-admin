@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0 done
-Next: /upgrade-4-execute S1-S12. Compare every verify with `upgrade/baseline.md`.
+Current phase: 4 (execute), S0-S1 done
+Next: /upgrade-4-execute S2-S12. Compare every verify with `upgrade/baseline.md`.
 
 ## Versions
 
@@ -73,6 +73,10 @@ Q7: Proving the Cloudflare entry (C17) — Before merge: staging build + wrangle
 ## Done
 
 S0: verify script split (test:unit every step, `--e2e` at milestones, 1 worker, 4 GB heap). Baseline retaken twice in `upgrade/baseline.md` (comparison source from now on): serial e2e is green (46 files / 566 tests) except one flaky test; the Q4 test fails only on Windows path separators.
+
+S1: pre-upgrade evidence in `upgrade/evidence/before/`: `wrangler.json` (database_id redacted; main = index.mjs, re-exports the cloudflare-entry wrapper, see entry.txt), `http.md` (cases a, b, c, d, d2, e), `ui-theme/*.ts.txt` (all 118 generated theme files; renamed .txt so lint ignores them), `build-warnings.txt`. Capture script `upgrade/evidence/capture-http.test.ts.txt` (reuse in S4: copy to test/e2e/zz-capture-http.test.ts, `CAPTURE_LABEL=after-nuxt pnpm vitest run --project e2e zz-capture-http`, delete the copy).
+  - Case (d) note for S4/S6: the `Location` header exists only for old addresses (`/admin/orders?...` -> 302 `/c/nuk/admin/orders?...`, encoded query kept byte for byte). The auth redirect (middleware `auth.global.ts`) is client-side: SSR of an unauthenticated `/c/nuk/admin/...` is 200 (case d2), so C14 must be proven by e2e, not by a Location header.
+  - S1 verify: typecheck/lint/build PASS; test:unit only the known Q4 failure (separator diff unchanged). Unit counts (1474 passed) are higher than baseline (1466) because HEAD `4154474` added tests after the baseline commit.
 
 ## Blocked
 
