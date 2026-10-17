@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S9 done
-Next: /upgrade-4-execute S10-S12. Compare every verify with `upgrade/baseline.md`. The stale local dev DB was fixed in S8 (see S8 Env note).
+Current phase: 4 (execute), S0-S10 done
+Next: /upgrade-4-execute S11-S12. Compare every verify with `upgrade/baseline.md`. The stale local dev DB was fixed in S8 (see S8 Env note).
 
 ## Versions
 
@@ -120,6 +120,10 @@ S9 (C24, C25, C27, C28; one fix):
   - C24: no effect. `AppDrawer.vue` passes neither `noBodyStyles` nor `after:*` listeners (none in `app/`).
   - C28: no code change. The toast list is `useState('toasts')` and `Toaster` renders from it, so a toast added before the lazy item loads is still shown; `useNotify`/`useMutation` only call `toast.add`. Admin sidebar, search palette and offline toast stay on the manual list.
   - E2E on 4.12.0 PASS (8 files / 131 tests, serial, incl. the new one): products, option-sets, unsaved-changes, app-shell, admin-search, shortcuts, session, ui-foundations. Verify S9 (`upgrade/logs/S9/`): typecheck/lint/build PASS; test:unit = Q4 failure only (1469 passed).
+
+S10 (C23, C29; no change):
+  - E2E on 4.12.0 PASS, serial: accessibility (axe-core), assistant, availability-rules, branches, color-mode, list-bulk, list-page, pickers, cafes, platform, staff, shop-checkout, shop-menu (14 files / 188 tests). S8/S9 e2e already covered categories, option-sets, products, modifier-groups (pickers inside forms). No test pinned a default aria-label that Nuxt UI 4.12 changed, so no expectation was touched and none was loosened. `RecordSelect`/`BranchSettingsTab`/`CafeFormModal`/`ListPagination` unchanged.
+  - Source tree unchanged since the S9 verify (typecheck/lint/build PASS, test:unit Q4 failure only), so no new verify run.
 
 ## Manual tests to do
 

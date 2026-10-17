@@ -132,7 +132,7 @@ Facts settled while planning (no step needed):
 - done when: HANDOFF notes "no change" or the fix + test.
 
 ### S9 — Check overlays, drawer, slideover and toasts
-- status: done
+- status: done (b371af9)
 - covers: C24, C25, C27, C28
 - executor: sonnet
 - risk: medium
@@ -142,7 +142,7 @@ Facts settled while planning (no step needed):
 - done when: HANDOFF notes per C-item.
 
 ### S10 — Check selects and accessibility labels
-- status: todo
+- status: done
 - covers: C23, C29
 - executor: sonnet
 - risk: low
