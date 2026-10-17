@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S10 done
-Next: /upgrade-4-execute S11-S12. Compare every verify with `upgrade/baseline.md`. The stale local dev DB was fixed in S8 (see S8 Env note).
+Current phase: 4 (execute), S0-S11 done
+Next: /upgrade-4-execute S12. Compare every verify with `upgrade/baseline.md`. The stale local dev DB was fixed in S8 (see S8 Env note).
 
 ## Versions
 
@@ -124,6 +124,18 @@ S9 (C24, C25, C27, C28; one fix):
 S10 (C23, C29; no change):
   - E2E on 4.12.0 PASS, serial: accessibility (axe-core), assistant, availability-rules, branches, color-mode, list-bulk, list-page, pickers, cafes, platform, staff, shop-checkout, shop-menu (14 files / 188 tests). S8/S9 e2e already covered categories, option-sets, products, modifier-groups (pickers inside forms). No test pinned a default aria-label that Nuxt UI 4.12 changed, so no expectation was touched and none was loosened. `RecordSelect`/`BranchSettingsTab`/`CafeFormModal`/`ListPagination` unchanged.
   - Source tree unchanged since the S9 verify (typecheck/lint/build PASS, test:unit Q4 failure only), so no new verify run.
+
+S11 (C20, C21; no change): generated theme saved in `upgrade/evidence/after-ui/ui-theme/` (119 files, `.txt`; `chart.ts` is new). `before/` has CRLF line endings, so the diff ignores them (`diff --strip-trailing-cr`): 16 files differ in content. Only components the app overrides or uses matter:
+  - `slideover` (`app.config` overlay slot; `content` max-w): FIXED in S9 for `ProductFormSlideover`. The `overlay` override is not touched.
+  - `checkbox`, `radioGroup` (`app.config` `base`/`indicator` slots, `max-sm:` hit areas; inline `:ui` `root`/`fieldset`/`item` paddings and flex): the theme only added `not-has-aria-disabled` to hover/checked variants and raised the checked radio `z-[1]`→`z-[2]`. No overridden class conflicts: no effect.
+  - `table` (`ItemSalesPage` `tfoot: 'font-semibold text-highlighted'`): the base `tfoot` gains `[&>[data-slot=separator]]:z-2`; no conflict: no effect.
+  - `select`, `selectMenu` `content`: adds `data-[state=closed]:pointer-events-none!`; no app override of `content`: no effect.
+  - `separator` (17 uses): drops the no-op `align-center` from `root`: no effect.
+  - `sidebar` (`AssistantPanel`, `:ui body/footer`): breakpoint classes move into a new `breakpoint` variant whose prop default is `lg`, the old fixed value; the overridden slots `body`/`footer` are unchanged: no effect. Assistant e2e PASS (S10).
+  - Not used in the app (so no effect): `editor`, `inputTags`, `marquee`, `pageColumns`, `stepper`, `toaster` (internal data attributes only; no `toaster` override), `chart` (new, C31).
+  - `dashboardNavbar/Panel/Toolbar`, `tabs`, `card`, `switch`, `modal`, `drawer` (the other `app.config` overrides): theme files identical, no effect.
+  - C20: `tailwind.css` overrides `--ui-*` on `:root, .light`, `.dark` and in `@media print` (unlayered, over Nuxt UI's `@layer theme`). 4.12's `index.css` still declares tokens on `.light`/`.dark` in `@layer theme` and `@custom-variant light|dark (&:where(.light, .light *))`: same class strategy, so the overrides still win. `ui-foundations` (contrast), `color-mode` and `accessibility` e2e PASS (S9, S10). Light, dark and print still go on the manual list (already in the plan checklist).
+  - Source tree unchanged since the S9 verify, so no new verify run.
 
 ## Manual tests to do
 

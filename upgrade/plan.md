@@ -142,7 +142,7 @@ Facts settled while planning (no step needed):
 - done when: HANDOFF notes per C-item.
 
 ### S10 — Check selects and accessibility labels
-- status: done
+- status: done (97168af)
 - covers: C23, C29
 - executor: sonnet
 - risk: low
@@ -152,7 +152,7 @@ Facts settled while planning (no step needed):
 - done when: those e2e and a11y tests are green with no assertion weakened.
 
 ### S11 — Check theme overrides against the 4.12 theme
-- status: todo
+- status: done
 - covers: C20, C21
 - executor: sonnet
 - risk: medium
