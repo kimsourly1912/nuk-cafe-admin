@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S12 done (execute finished)
-Next: /upgrade-5-review in a new Opus session. Compare with `upgrade/baseline.md`.
+Current phase: 5 done (review in `upgrade/review.md`: 0 Critical, 2 Important, 2 Improvement, 4 Optional)
+Next: answer Q8 (commit 4154474), then /upgrade-4-execute R1-R2 (Sonnet). After that: manual test, then /upgrade-6-finish.
 
 ## Versions
 
@@ -69,6 +69,7 @@ Q3: Reliable e2e baseline? — Plan step S0 before any dependency change: split 
 Q4: Failing "routes outside a cafe's address never act in one" — Not accepted as a normal baseline failure. Investigate separately (tenant isolation). Record it as a known, explained failure in baseline.md; it must not get worse. — decided 2026-10-16
 Q5: @nuxt/ui 4.12.0 below pnpm minimum-release-age — Wait; no exclusions (supply-chain protection stays on). Prep steps (S0 etc.) proceed now; the bump step waits. The bump step must report any transitive packages refused by the age rule. — decided 2026-10-16
 Q6: Nuxt 4.5 workaround in useApiQuery — Keep and log a follow-up, ONLY if proven harmless on 4.6: useApiQuery tests pass AND request count / refresh behavior unchanged (test or manual network check). If not harmless, fix in this run. — decided 2026-10-16
+Q8: Unrelated commit `4154474 "new"` (D171 form-row errors, sidebar centring, modal overlay `!`) is on the upgrade branch. Keep it here (state it in the PR) or move it to its own PR (recommended, review R2)? — pending
 Q7: Proving the Cloudflare entry (C17) — Before merge: staging build + wrangler.json diff + `wrangler deploy --dry-run` + local `wrangler dev` smoke test (login, one D1-backed API call). After merge: smoke-test the staging deploy before production; rollback = wrangler rollback. Claude does not deploy. — decided 2026-10-16
 
 ## Done
@@ -162,7 +163,7 @@ Specific to this upgrade (risk: high steps S2–S6, plus S9 fix):
 - [ ] Customer menu: scroll spy, category bar, one in-page hash link; back/forward restores position (C4)
 - [ ] Light, dark and print views of an admin page and the customer menu (C20, C21, S11)
 - [ ] Assistant panel chat send (C29, C32)
-- [ ] After merge: staging deploy succeeds and a staging request works end to end (C17); before merge optionally `wrangler deploy --dry-run` and a local `wrangler dev` smoke test (Q7). The staging `wrangler.json` equals the `after-nuxt` evidence.
+- [ ] After merge: staging deploy succeeds and a staging request works end to end (C17); before merge (Q7, review R1): `wrangler deploy --dry-run` and a local `wrangler dev` smoke test. The staging `wrangler.json` equals the `after-nuxt` evidence.
 
 ## S12 — final verify (milestone 3)
 

@@ -171,6 +171,26 @@ Facts settled while planning (no step needed):
 - verify: `scripts/upgrade-verify.sh final --e2e` (milestone 3) + `pnpm build:staging`
 - done when: no new failures vs `upgrade/baseline.md`; Q4 test diff unchanged; HANDOFF ready for Phase 5.
 
+### R1 — Run the Q7 pre-merge Cloudflare checks (review R1)
+- status: todo
+- covers: C17, Q7
+- executor: sonnet
+- risk: high (Cloudflare entry, bindings)
+- files: `upgrade/HANDOFF.md` only (no source change)
+- change: `pnpm build:staging`, then `wrangler deploy --dry-run --config .output/server/wrangler.json` (no upload) and a local `wrangler dev --config .output/server/wrangler.json` smoke test: sign in, one D1-backed API call, one 404 render. Record the outcome in HANDOFF and change the manual-list line back to "before merge (Q7)". If wrangler needs credentials or remote bindings, stop and hand the commands to the owner. Never run a real deploy.
+- verify: the two commands' results recorded in HANDOFF
+- done when: dry-run validates and the local smoke test passes, or the step is handed to the owner with exact commands.
+
+### R2 — Decide on unrelated commit 4154474 "new" (review R2)
+- status: todo (blocked on owner decision)
+- covers: hygiene (one step per branch/PR)
+- executor: sonnet
+- risk: medium
+- files: those of `4154474` (D171 form-row errors, `layouts/default.vue` sidebar centring, `app.config.ts` modal overlay `!`)
+- change: owner chooses (a) keep it here and state it in the PR description, or (b) recommended: create `fix/form-row-errors` from `origin/main`, `git cherry-pick 4154474`, push it; on this branch add `git revert 4154474` (a new commit; no reset/rebase). For (b) then run `scripts/upgrade-verify.sh R2` and e2e `products`, `option-sets`, `modifier-groups`, `app-shell`.
+- verify: as above
+- done when: the decision is recorded in HANDOFF Decisions and, for (b), the revert commit is pushed with verify matching the final run.
+
 ## Manual test checklist
 Profile smoke test:
 - [ ] login, logout
