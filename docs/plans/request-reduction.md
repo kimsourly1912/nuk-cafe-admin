@@ -23,8 +23,8 @@ A second, separate waste: Nuxt's first fetch uses `dedupe: 'cancel'`. When a sec
 
 ## Steps (one PR each)
 
-1. **Measure.** The request-budget test above. Done on this branch.
-2. **One query per resource.** `/admin/branches/options` is read under three keys (`branches:options`, `staff:branch-options`, `promotions:branches`); branch writes invalidate only `branches`, so the other two never learn of a rename. Staff and promotions use the branches feature's public query; availability rules share one key like option sets do. Test: rename a branch, then the staff page shows the new name.
+1. **Measure.** The request-budget test above. Merged (PR #123).
+2. **One query per resource.** `/admin/branches/options` was read under three keys (`branches:options`, `staff:branch-options`, `promotions:branches`); branch writes invalidate `branches` and `staff`, so the promotion editor's copy missed branch changes, and once data is kept (step 3) each copy would go stale on its own. Staff and promotions now use the branches feature's public `useBranchOptions`; availability rules share `availability-rules:list` like option sets do. Done on branch `ccr-380320a9-495ewi`.
 3. **Keep data between visits, `useApiQuery` `staleTime` (opt-in).** A new decision amending D22:
    - opted-in keys keep their data after unmount (a custom `getCachedData`, which also stops Nuxt purging them);
    - younger than `staleTime`: shown, no request; older: shown at once and refetched in the background;

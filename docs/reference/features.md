@@ -19,6 +19,7 @@ A feature's public API contains **building blocks only** (pickers, option data, 
 | `counter` | `useCounterSession` (the counter workspace's own session: `user` with its `branches`, `signIn`, `signOut`, `changePassword`, `clearSession`, `generation`), `isCounterPath`, `counterRedirectTarget`, `COUNTER_HOME_PATH`, `COUNTER_SIGN_IN_PATH`, `COUNTER_CHANGE_PASSWORD_PATH`: for the shell (middleware, the API plugin, tab titles) (D102) |
 | `menu` | `openingText` ("Opens tomorrow at 7:00 AM"; also the counter's closed banner, D102); `useOrderAgain()` → `orderAgain({ branchId, lines: PastLine[] })`: adds an earlier order's lines still on that branch's menu to the order in this browser, returns `{ added, skipped }` (D114) |
 | `exchange-rates` | `exchangeRatesNavigation` ("Payments", D102) |
+| `branches` | [`useBranchOptions`](#usebranchoptions), `branchesNavigation`, `branchesSetup` |
 
 When you add a feature, add its section here. Pickers follow the contract in [feature-standard.md → Resource picker conventions](../feature-standard.md#6-resource-picker-conventions).
 
@@ -109,10 +110,10 @@ Behavior (e2e `test/e2e/categories.test.ts`), the picker contract:
 ### `useAvailabilityRuleOptions`
 
 ```ts
-function useAvailabilityRuleOptions() // → useApiQuery result, `data`: AvailabilityRule[] (default [])
+function useAvailabilityRuleOptions() // → useApiQuery result, `data`: AvailabilityRule[] (`[]` until loaded)
 ```
 
-- Key: `availability-rules:options`, refreshed by `invalidate('availability-rules')`.
+- Key: `availability-rules:list`, **shared with the Availability page** (like D69), refreshed by `invalidate('availability-rules')`.
 - Calls `GET /api/admin/menu/availability-rules?status=all`.
 
 ### `describeWindows`
@@ -171,3 +172,18 @@ formatDelta(50)         // "+$0.50"; 0 → "Free"
 
 The wording is derived from `minSelect` / `maxSelect` each time, never stored (D75). It lives in `schemas/modifier-group-display.ts`, with `ruleParts` (badge + summary) and `explainRules` (a sentence) used by the Add-ons pages.
 
+---
+
+## branches
+
+### `useBranchOptions`
+
+The cafe's active branches (`BranchOption`: id and name), for pickers and filters: the Branch page, staff memberships and promotions.
+
+```ts
+import { useBranchOptions } from '~/features/branches'
+const { data: branches } = useBranchOptions() // `data`: BranchOption[] | undefined until loaded
+```
+
+- Key: `branches:options`, the only query for this endpoint, so a branch change (`invalidate('branches')`) refreshes every screen that shows branches.
+- Calls `GET /api/admin/branches/options`.

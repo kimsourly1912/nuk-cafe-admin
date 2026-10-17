@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Fewer API requests, step 2: one query per resource (2026-10-17)
+
+[Plan](plans/request-reduction.md) step 2. `/admin/branches/options` had three keys (`branches:options`, `staff:branch-options`, `promotions:branches`); branch writes invalidate `branches` and `staff`, so the promotion editor missed branch changes. The branches feature now exports `useBranchOptions` (the one key); staff and promotions use it. `useAvailabilityRuleOptions` shares `availability-rules:list` with the Availability page, like option sets. Reference: [features → branches](reference/features.md#branches), [data fetching → options for a picker](reference/data-fetching.md#examples).
+
+Checks: new e2e "a branch change reaches the editor's branches" (`promotions.test.ts`) passes, and fails when the editor uses its own key again (guard check); e2e promotions, staff, branches, categories, availability-rules, products, dashboard and request-budget pass (174, browser-mock, Chromium); the budget's Branch → Staff visit no longer reads branch options; unit/server 1,470 pass; lint and typecheck pass.
+
 ## Fewer API requests, step 1: measure (2026-10-17)
 
 Owner: admin pages read data that rarely changes on every visit; reduce requests without stale data. [Plan](plans/request-reduction.md). Step 1 adds `test/e2e/request-budget.test.ts`, which counts the API reads of an item-editing loop and a sidebar tour; its expectations are the measured baseline. Found: every visit reads again (Nuxt purges unused keys), opening an item reads 5 times (add-on groups twice), the Menu items list 6, the Dashboard 11; shared keys read twice when a second component mounts during the first request (Nuxt's `dedupe: 'cancel'`). No app code changed.

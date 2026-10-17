@@ -1,7 +1,6 @@
 import type { Page } from '#shared/contracts/common'
 import type { MenuItemSummary } from '#shared/contracts/menu-items'
 import type { CreatePromotionInput, Promotion, PromotionResults, UpdatePromotionInput } from '#shared/contracts/menu-promotions'
-import type { BranchOption } from '#shared/contracts/staff'
 import { MAX_PAGE_SIZE } from '#shared/contracts/common'
 
 const BASE = '/admin/menu/promotions'
@@ -22,11 +21,6 @@ export function usePromotion(id: string) {
 
 export function usePromotionResults(id: string) {
   return useApiQuery(`promotions:results:${id}`, () => apiFetch<PromotionResults>(`${BASE}/${id}/results`))
-}
-
-/** The cafe's active branches, to choose where a promotion runs. */
-export function usePromotionBranches() {
-  return useApiQuery('promotions:branches', () => apiFetch<BranchOption[]>('/admin/branches/options'))
 }
 
 /**
