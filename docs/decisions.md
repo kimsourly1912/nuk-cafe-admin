@@ -1950,3 +1950,13 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Alternatives:** validate the whole form after each change (rejected: it shows errors on rows the person hasn't reached, against D166); clear every row error on each change (loses the other rows' errors); key errors by row id (`UForm` names errors by path, so the id never reaches them).
 - **Consequences:** a list whose rows have their own fields removes and moves rows only through the composable; a `splice` on such a list is a bug. Not yet fixed, follow-ups: `AvailabilityRuleFormModal` (`rows.N.*`, `rows.splice`), `ItemAddOnGroups` (`addOnGroups.N.*`, `groups.splice`), `StaffFormModal` (`memberships.N.branchId`, `memberships.splice`).
 - **Verified:** unit `test/unit/form-rows.test.ts` (4) and `test/unit/use-form-row-errors.test.ts` (4); the option set and add-on group unit tests pass; lint and typecheck pass. **Not checked in a browser yet** (forms reference, edge case 32).
+
+### D172: Faster and reliable local checks, 2026-10-17
+
+- **Context:** the owner found small fixes slow to finish. Measured on a clean `main` (12-core Windows laptop): lint 97 s, typecheck 185 s, unit/server 99 s with one Windows-only failure, the full e2e suite 487 s with 4 failed tests and 2 files failing before they ran, and a stale e2e build about 5 min (Nitro bundling about 3.3 min). Earlier runs worked around the failures (the upgrade ran e2e serially and listed the unit failure as known).
+- **Decision (owner):** quick wins first, the same gates as D83.
+  - `routes.test.ts` compares route paths with forward slashes on every OS.
+  - `pnpm lint` / `lint:fix` use ESLint's cache (`--cache-strategy content`, in `node_modules/.cache/eslint/`): 87 s cold, 4 s warm or after editing one file; a new error in a cached file is still reported (checked).
+  - Local e2e runs at most 4 files at a time (`E2E_WORKERS` overrides; CI unchanged). Full suite: 11 workers (the default) 487 s, 6 failed; 6 workers 577 s, 3 cross-tab timeouts; 4 workers 661 s, 568/568 pass.
+- **Rejected for now:** more than 4 local workers (faster but flaky). Still open, measured above: the stale-build cost on every source edit (e2e against `nuxt dev` locally, or a lighter e2e build) and the 3-minute typecheck. Capping the server-test workers does not stop their native Windows crash (exit 3221225477), so it is not capped.
+- **Where:** `package.json`, `vitest.config.ts`, `server/tests/routes.test.ts`; [development guide → Commands](guides/development.md#commands).

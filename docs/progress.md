@@ -2,6 +2,14 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Faster and reliable local checks (D172, 2026-10-17)
+
+Owner: small fixes took too long. [Decision](decisions.md#d172-faster-and-reliable-local-checks-2026-10-17). Fixed the Windows-only `routes.test.ts` separator failure, cached ESLint (97 s → 4 s warm), capped local e2e at 4 workers (the default 11 starved Chrome: 4–6 timeouts per full run). Branch `chore/faster-local-checks`.
+
+Checks: unit/server pass on Windows, including `routes.test.ts` (273), apart from the crash below; lint passes cold and warm, and a planted error in a cached file is reported; full e2e at 4 workers 46 files / 568 tests pass (661 s), at 6 workers 3 cross-tab timeouts (577 s). Typecheck unchanged.
+
+**Follow-ups, not done:** the e2e production rebuild (~5 min) after every source edit; typecheck (~3 min); cross-tab e2e tests that time out under CPU load; a server-test worker crashes natively on Windows (exit 3221225477, access violation, a different file each time) in about 1 run in 2, whether 11 or 4 workers (3 runs each), so a run that lost a file is rerun, not debugged.
+
 ## Nuxt 4.6.1 and Nuxt UI 4.12.0 (dependency upgrade, 2026-10-17)
 
 `nuxt` 4.5.2 → 4.6.1 (with `vue-router` 5.3.1 → 5.4.0, which Nuxt 4.6 requires) and `@nuxt/ui` 4.11.2 → 4.12.0, on branch `chore/upgrade-nuxt-ui-latest`. Code changes: the typed `serverFetch` in `app/utils/api.ts` (Nuxt 4.6's `TypedFetch` overloads), `ProductFormSlideover` width `sm:max-w-2xl` (Nuxt UI's slide-over theme now caps width with `sm:max-w-md`; e2e test in `products.test.ts`), one new auth round-trip e2e test (percent-encoded query), and `modules/reka-namespaced.ts` removed ([D123](decisions.md): Nuxt UI 4.12 imports Reka UI by name, so the module did nothing). `useApiQuery`'s 4.5 workaround stays (still needed). `wrangler.json` and the error/redirect responses are unchanged, except a `vary` header on Nuxt's 404 render.

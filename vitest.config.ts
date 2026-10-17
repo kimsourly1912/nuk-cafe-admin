@@ -64,6 +64,10 @@ export default defineConfig({
           // Builds and serves the app once for all e2e files.
           globalSetup: ['test/e2e/support/global-setup.ts'],
           testTimeout: 30_000,
+          // Every file opens its own Chrome. One worker per core (11 on a 12-core laptop) starved
+          // them: browser launches hit the 60 s hook timeout and cross-tab tests timed out.
+          // `E2E_WORKERS` overrides it; CI keeps Vitest's default (its runner has 2 cores).
+          ...(process.env.CI ? {} : { maxWorkers: Number(process.env.E2E_WORKERS) || 4 }),
           // expect.poll defaults to 1 s: too short for a cold page (session check → refresh → redirect)
           // while the whole suite runs, which made redirect/title assertions flaky.
           expect: { poll: { timeout: 5_000 } },
