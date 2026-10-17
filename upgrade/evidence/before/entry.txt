@@ -1,1 +1,0 @@
-Staging output (Nuxt 4.5.2): .output/server/index.mjs re-exports default from chunks/_/index2.mjs (the wrapper from server/cloudflare-entry.ts; boundedWorkerRequest is bundled in chunks/_/nitro.mjs). wrangler.json main = index.mjs.

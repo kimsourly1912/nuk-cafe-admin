@@ -1,3 +1,0 @@
-      1  WARN  [PLUGIN_TIMINGS] JavaScript callbacks ran for 10.6s of this 12.0s build (89%).
-      1  WARN  [PLUGIN_TIMINGS] JavaScript callbacks ran for 10.7s of this 13.1s build (82%).
-      4  WARN  [plugin nuk:reka-namespaced] [SOURCEMAP_BROKEN] Sourcemap is likely to be incorrect: a plugin (nuk:reka-namespaced) was used to trans
