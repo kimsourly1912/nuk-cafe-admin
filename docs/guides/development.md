@@ -10,14 +10,16 @@ Package manager is **pnpm**.
 pnpm dev                                  # http://localhost:3000; /api is local Nitro/Better Auth
 pnpm nuxt db generate                     # create a migration after changing the server schema
 pnpm nuxt db migrate                      # apply local SQLite migrations
-pnpm lint / pnpm lint:fix                 # ESLint also does formatting (no Prettier) and enforces feature boundaries
+pnpm lint / pnpm lint:fix                 # ESLint also does formatting (no Prettier) and enforces feature boundaries; cached (D172)
 pnpm typecheck                            # vue-tsc via nuxt typecheck
 pnpm test                                 # all Vitest projects
-pnpm test:unit / pnpm test:e2e            # unit + server (seconds) / e2e only (about two minutes, builds the app)
+pnpm test:unit / pnpm test:e2e            # unit + server (~1.5 min) / e2e only (~11 min locally at 4 workers, +5 min when the build is stale)
 pnpm vitest run --project server          # one project: unit | server | e2e (| nuxt, once a *.nuxt.test.ts exists)
 pnpm vitest run app/features/categories   # one feature's tests
 pnpm vitest run -t "refreshes once"
 ```
+
+**Local e2e runs 4 files at a time (D172):** each file opens its own Chrome, and more workers starved them (Chrome launches past the 60 s hook timeout, cross-tab tests timing out). `E2E_WORKERS=<n>` overrides it; CI keeps Vitest's default. ESLint caches results in `node_modules/.cache/eslint/` by file content; delete that folder if lint ever looks stale.
 
 The browser suite uses the CI runner's Google Chrome by default. In a workspace with Chromium instead, use `E2E_BROWSER_PATH=/usr/bin/chromium pnpm test:e2e`; the optional executable path changes only the test browser launcher, not application behavior.
 

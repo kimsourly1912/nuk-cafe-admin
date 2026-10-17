@@ -14,7 +14,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109 |
-| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147 |
+| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172 |
 | Documentation loading | D167 |
 
 ## Entries by ID
@@ -201,3 +201,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D169](decisions.md#d169-server-log-privacy-fresh-catalog-reads-and-successful-job-health-2026-10-14) | Server log privacy, fresh catalog reads and successful-job health, 2026-10-14 |
 | [D170](decisions.md#d170-tenant-scoped-admin-pricing-and-fresh-counter-batches-2026-10-14) | Tenant-scoped admin pricing and fresh counter batches, 2026-10-14 |
 | [D171](decisions.md#d171-errors-of-a-removed-or-moved-row-follow-the-row-2026-10-16) | Errors of a removed or moved row follow the row, 2026-10-16 |
+| [D172](decisions.md#d172-faster-and-reliable-local-checks-2026-10-17) | Faster and reliable local checks, 2026-10-17 |
