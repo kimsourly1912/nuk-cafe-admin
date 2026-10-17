@@ -77,13 +77,20 @@ Lists stay current in three ways. This is the model TanStack Query, SWR and Pini
 2. **Returning to the tab** refetches data loaded **more than 5 seconds ago**. This covers changes made by other staff on other devices.
 3. **The connection coming back** refetches everything loaded.
 
-Source: `app/plugins/data-freshness.client.ts` (VueUse `useBroadcastChannel`, `useDocumentVisibility`, `useOnline`), `app/utils/invalidate.ts` (`invalidate`, `invalidateInThisTab`, `invalidateAll({ olderThanMs })`, load times recorded by `useApiQuery`). E2E: `test/e2e/freshness.test.ts`. Decision: [D22](../decisions.md).
+Reference data (categories, option sets, add-on groups, availability rules, branch options) is also **kept between visits** for a minute (D173): opening it again shows it without a request; after a minute it's shown and refetched behind it. Any change we know of (a save here or in another tab) means the kept copy is never shown again.
+
+Source: `app/plugins/data-freshness.client.ts` (VueUse `useBroadcastChannel`, `useDocumentVisibility`, `useOnline`), `app/utils/invalidate.ts` (`invalidate`, `invalidateInThisTab`, `invalidateAll({ olderThanMs })`, per-key load bookkeeping recorded by `useApiQuery`). E2E: `test/e2e/freshness.test.ts`, `request-budget.test.ts`. Decisions: [D22](../decisions.md), [D173](../decisions.md#d173-reference-data-kept-between-visits-a-querys-first-fetch-joins-a-running-one-2026-10-17).
 
 | Case | Behavior |
 |---|---|
 | Create/edit/delete in tab 1, tab 2 shows the same list | Tab 2 refetches immediately (no need to switch to it) |
 | Same, with two windows side by side | Same: the broadcast doesn't depend on visibility. A visibility-only approach misses this case: no `visibilitychange` fires between two visible windows |
-| Tab 2 shows another page (Dashboard) | Nothing. The list loads fresh when opened |
+| Tab 2 shows another page (Dashboard) | Nothing. The list loads fresh when opened (kept reference data too: it's marked changed, D173) |
+| Reference data opened again within a minute (D173) | Shown from what was kept, no request |
+| … after a minute | Shown at once, refetched behind it (`refreshing`) |
+| … after a save of ours, or another tab's | Loaded fresh (loading state), never the kept copy |
+| … after its last load failed (any error, a 403 included) | Loaded fresh |
+| Two components of one page share a query (a form and its section) | One request: the second joins the first's load (D173) |
 | Bulk delete of 10 in tab 1 | One message after the 30ms merge window → one refresh per list in tab 2 |
 | The tab that saved | Refreshes once (its own `invalidate`). It doesn't receive its own message, and a received message is never re-sent (`invalidateInThisTab`), so there's no ping-pong |
 | Change made on **another device** | Picked up when the user returns to the tab (if the data is ≥ 5s old), or on the next navigation |

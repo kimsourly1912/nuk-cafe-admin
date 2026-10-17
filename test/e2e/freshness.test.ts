@@ -149,3 +149,56 @@ describe('data freshness: overlapping refreshes', () => {
     await categoryItem(page, 'Fresh matcha').waitFor()
   })
 })
+
+/** Opens a page from the sidebar (an in-app navigation: the previous page unmounts). */
+async function goTo(page: Page, name: string) {
+  const link = page.getByRole('navigation').getByRole('link', { name, exact: true }).first()
+  const path = await link.getAttribute('href')
+  await link.click()
+  await page.waitForURL(address => address.pathname === path)
+}
+
+describe('data freshness: reference data kept between visits (D173)', () => {
+  it('back within a minute: shown from what was kept, no request', async () => {
+    const tab = await openTab()
+    const before = listLoads(tab)
+    await goTo(tab.page, 'Options')
+    await goTo(tab.page, 'Categories')
+    await categoryItem(tab.page, 'Tea').waitFor()
+    await tab.page.waitForTimeout(500)
+    expect(listLoads(tab)).toBe(before)
+  })
+
+  it('back after a minute: shown at once, and refetched behind it', async () => {
+    const tab = await openTab()
+    const before = listLoads(tab)
+    await goTo(tab.page, 'Options')
+    await tab.page.clock.fastForward(61_000)
+    await goTo(tab.page, 'Categories')
+    await categoryItem(tab.page, 'Tea').waitFor()
+    await expect.poll(() => listLoads(tab)).toBe(before + 1)
+  })
+
+  it('changed meanwhile (here, another tab): the next visit loads it fresh, never the kept copy', async () => {
+    const context = await newContext()
+    const tab1 = await openTab('/c/nuk/admin/categories', context)
+    const tab2 = await openTab('/c/nuk/admin/categories', context)
+    await goTo(tab1.page, 'Options')
+    let saved = false
+    let loads = 0
+    tab1.api.set({
+      'GET /admin/menu/categories': () => {
+        loads++
+        return saved ? [MENU_TEA, MENU_COFFEE, menuCategoryOf('cat-3', 'Latte')] : [MENU_TEA, MENU_COFFEE]
+      },
+    })
+
+    saved = true
+    await createCategory(tab2.page, 'Latte')
+    await tab1.page.waitForTimeout(300) // the message reaches tab 1; it shows Options, so nothing loads yet
+    expect(loads).toBe(0)
+    await goTo(tab1.page, 'Categories')
+    await categoryItem(tab1.page, 'Latte').waitFor()
+    expect(loads).toBe(1)
+  })
+})

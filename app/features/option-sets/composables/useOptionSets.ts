@@ -15,7 +15,7 @@ const setKey = (setId: string) => `option-set:${setId}`
 
 /** Every set, active and archived: the library is small, so the page filters and counts itself. */
 export function useOptionSetList() {
-  return useApiQuery('option-sets:list', () => apiFetch<OptionSet[]>(BASE, { query: { status: 'all' } }))
+  return useApiQuery('option-sets:list', () => apiFetch<OptionSet[]>(BASE, { query: { status: 'all' } }), { staleTime: REFERENCE_STALE_TIME })
 }
 
 /** One set, fresh from the server (the editor's Reload after someone else changed it). */

@@ -24,8 +24,8 @@ A second, separate waste: Nuxt's first fetch uses `dedupe: 'cancel'`. When a sec
 ## Steps (one PR each)
 
 1. **Measure.** The request-budget test above. Merged (PR #123).
-2. **One query per resource.** `/admin/branches/options` was read under three keys (`branches:options`, `staff:branch-options`, `promotions:branches`); branch writes invalidate `branches` and `staff`, so the promotion editor's copy missed branch changes, and once data is kept (step 3) each copy would go stale on its own. Staff and promotions now use the branches feature's public `useBranchOptions`; availability rules share `availability-rules:list` like option sets do. Done on branch `ccr-380320a9-495ewi`.
-3. **Keep data between visits, `useApiQuery` `staleTime` (opt-in).** A new decision amending D22:
+2. **One query per resource.** `/admin/branches/options` was read under three keys (`branches:options`, `staff:branch-options`, `promotions:branches`); branch writes invalidate `branches` and `staff`, so the promotion editor's copy missed branch changes, and once data is kept (step 3) each copy would go stale on its own. Staff and promotions now use the branches feature's public `useBranchOptions`; availability rules share `availability-rules:list` like option sets do. Merged (PR #124).
+3. **Keep data between visits, `useApiQuery` `staleTime` (opt-in).** Done: [D173](../decisions.md#d173-reference-data-kept-between-visits-a-querys-first-fetch-joins-a-running-one-2026-10-17) (it also leaves out `reports:branches`, and makes product writes invalidate `categories`). As planned:
    - opted-in keys keep their data after unmount (a custom `getCachedData`, which also stops Nuxt purging them);
    - younger than `staleTime`: shown, no request; older: shown at once and refetched in the background;
    - `invalidate()`/`invalidateAll()` also mark kept, unmounted keys, so after our own write (this tab or another) the next visit loads fresh instead of showing the old copy;
