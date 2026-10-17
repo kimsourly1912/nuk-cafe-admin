@@ -11,7 +11,7 @@ Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
 Current phase: 5 done (review in `upgrade/review.md`: 0 Critical, 2 Important, 2 Improvement, 4 Optional)
-Next: /upgrade-4-execute R1 (Q7 Cloudflare dry-run + `wrangler dev` smoke test; R2 is done). After that: manual test, then /upgrade-6-finish.
+Next: the owner runs the manual test list below (R1 and R2 are done), then /upgrade-6-finish.
 
 ## Versions
 
@@ -142,6 +142,13 @@ R2 (Q8, option b; no upgrade code touched):
   - `4154474` (D171 form-row errors, sidebar centring, modal overlay `!`) moved to branch `fix/form-row-errors` (worktree `C:\Users\kimso\worktrees\form-row-errors`, one commit on `origin/main` `56d576c`). Here: `git revert` `8eb73e8` (one conflict in `docs/progress.md`: kept the upgrade section, dropped D171; no history rewrite). The new branch is its own PR; review item I1 (sidebar centring vs the lazy 4.12 sidebar menu) and the D171 manual checks belong to it.
   - Verify R2 (`upgrade/logs/R2/`): typecheck/lint/build PASS; test:unit = Q4 failure only + the known Windows worker crash (3221225477) in `identity.service.test.ts`, which passes alone (27 tests). E2E products, option-sets, modifier-groups, app-shell: 4 files / 127 tests PASS.
 
+R1 (Q7 pre-merge Cloudflare checks, C17; no source change; logs in `upgrade/logs/R1/` with the database id redacted):
+  - `pnpm build:staging` PASS. `.output/server/wrangler.json` equals `upgrade/evidence/after-nuxt/wrangler.json` except `database_id`, which the evidence redacts.
+  - `wrangler deploy --dry-run --config .output/server/wrangler.json` PASS (nothing uploaded, no login needed): 228 assets, 9271 KiB total (gzip 1849 KiB); bindings DB (D1), BLOB (R2), 3 rate limits, ASSETS and the 6 vars are as in staging. One esbuild warning: duplicate key `payload` in Nuxt's generated `chunks/virtual/entry.mjs`. It also appears on Nuxt 4.5.2 (the `fix/form-row-errors` worktree, main's lockfile, same dry-run), so the upgrade did not add it. The 4.5.2 bundle is 9522 KiB, so 4.6.1 is slightly smaller.
+  - Local `wrangler dev` smoke (local D1/R2 only: `d1 migrations apply --local`, a throwaway user and secret, a `nuk` cafe made as in operations.md; `--persist-to` in the scratchpad, nothing remote): 39 migrations apply; sign-up and `get-session` OK; unauthenticated admin API 401 with security headers and request id; HTML 404 renders (200 for the signed-in SSR admin page) with `Vary: accept, sec-fetch-mode` as in S4; owner reads `GET /api/c/nuk/admin/menu/categories` (`[]`), creates one (`201`, atomic batch write) and reads it back.
+  - Local-run notes: the Worker only trusts `NUXT_PUBLIC_SITE_URL` as an auth origin (the staging value is in `wrangler.json`), so the local run set it through `--env-file`; `--var` lost to the env file when both were given. `wrangler dev` leaves `workerd` processes behind when its shell is stopped (killed the ones on port 8799).
+  - Not proven here (needs the real Cloudflare account): the staging deploy itself and a request against the deployed Worker; that stays on the after-merge list.
+
 ## Manual tests to do
 
 <!-- risk: high items from Phase 2 (S5 done: automated checks passed; the "switch user/cafe" item in the plan checklist still needs a human pass): C12 useApiQuery/useAsyncData, C14 navigateTo redirects, C15 error rendering, C17 Cloudflare entry/nitro hooks -->
@@ -167,7 +174,8 @@ Specific to this upgrade (risk: high steps S2–S6, plus S9 fix):
 - [ ] Customer menu: scroll spy, category bar, one in-page hash link; back/forward restores position (C4)
 - [ ] Light, dark and print views of an admin page and the customer menu (C20, C21, S11)
 - [ ] Assistant panel chat send (C29, C32)
-- [ ] After merge: staging deploy succeeds and a staging request works end to end (C17); before merge (Q7, review R1): `wrangler deploy --dry-run` and a local `wrangler dev` smoke test. The staging `wrangler.json` equals the `after-nuxt` evidence.
+- [x] Before merge (Q7, review R1): `wrangler deploy --dry-run` and a local `wrangler dev` smoke test. Done, see R1 under Done.
+- [ ] After merge: staging deploy succeeds and a staging request works end to end (C17); rollback = `wrangler rollback`. The staging `wrangler.json` equals the `after-nuxt` evidence.
 
 ## S12 — final verify (milestone 3)
 

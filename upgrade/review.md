@@ -69,7 +69,7 @@ None.
 | C12 useAsyncData | S5 | yes |
 | C14 navigateTo encoding | S6 (+ new e2e) | yes |
 | C15 error rendering | S4 | yes, 500 render on manual list |
-| C17 Nitro/Cloudflare (unknown) | S4, S12 (build + `wrangler.json` diff) | partial → R1 |
+| C17 Nitro/Cloudflare (unknown) | S4, S12 (build + `wrangler.json` diff), R1 (dry-run + local `wrangler dev` smoke) | yes (deployed Worker: after merge) |
 | C20 `@custom-variant` light/dark | S11 | yes, manual visual open |
 | C21 theme class cleanup (unknown) | S11 (+ S9 fix) | yes |
 | C22 Form | S8 | yes |
@@ -83,7 +83,7 @@ None.
 ## Manual test checklist (final)
 
 Before merge:
-- [ ] R1: `wrangler deploy --dry-run` on the staging build and a local `wrangler dev` smoke test (sign in, one D1-backed API call, one 404) (Q7, C17)
+- [x] R1: `wrangler deploy --dry-run` on the staging build and a local `wrangler dev` smoke test (sign in, one D1-backed API call, one 404) (Q7, C17)
 - [x] R2: moved to `fix/form-row-errors` and reverted here (Q8, option b)
 
 Profile smoke test:
