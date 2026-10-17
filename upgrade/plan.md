@@ -91,7 +91,7 @@ Facts settled while planning (no step needed):
 - done when: the evidence diff is empty or each difference is explained and accepted in HANDOFF; any fix has a failing-without-fix test.
 
 ### S5 — Check `useApiQuery` against Nuxt 4.6 `useAsyncData`
-- status: done (HASH)
+- status: done (30272a8)
 - covers: C12
 - executor: sonnet
 - risk: high (every app read; identity-bound data clearing on session transitions)
