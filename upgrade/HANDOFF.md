@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S11 done
-Next: /upgrade-4-execute S12. Compare every verify with `upgrade/baseline.md`. The stale local dev DB was fixed in S8 (see S8 Env note).
+Current phase: 4 (execute), S0-S12 done (execute finished)
+Next: /upgrade-5-review in a new Opus session. Compare with `upgrade/baseline.md`.
 
 ## Versions
 
@@ -140,3 +140,31 @@ S11 (C20, C21; no change): generated theme saved in `upgrade/evidence/after-ui/u
 ## Manual tests to do
 
 <!-- risk: high items from Phase 2 (S5 done: automated checks passed; the "switch user/cafe" item in the plan checklist still needs a human pass): C12 useApiQuery/useAsyncData, C14 navigateTo redirects, C15 error rendering, C17 Cloudflare entry/nitro hooks -->
+
+Profile smoke test:
+- [ ] login, logout
+- [ ] session refresh; expired session → redirect to sign-in and back to the original page, with an encoded query in the URL (C14, S6)
+- [ ] one protected route as an unauthorized user (staff, counter, platform)
+- [ ] one CRUD flow
+- [ ] one stale edit → 409 with Reload
+- [ ] main dashboard pages
+- [ ] one form with validation
+- [ ] dark mode
+
+Specific to this upgrade (risk: high steps S2–S6, plus S9 fix):
+- [ ] Switch user/cafe: no data from the previous identity shows, and in-flight responses are discarded (C12, S5)
+- [ ] 404 page and a forced 500: page renders, security headers present (C15, S4). Automated: only the 404 `vary: accept, sec-fetch-mode` difference was seen.
+- [ ] Unsaved-changes prompt: appears after typing, not on open; confirm dialog cancel/confirm (C22, C27)
+- [ ] Searchable RecordSelect: type, keyboard select, focus stays, closes correctly on touch (C23)
+- [ ] AppDrawer on phone width; both slideovers at phone and tablet width. The menu item slide-over must be about 672px wide from `sm` (S9 fix, C24, C25)
+- [ ] First toast after sign-in, and a toast while offline (C28)
+- [ ] Admin sidebar menu and search palette (Ctrl/Cmd+K) open on first use (C28)
+- [ ] Customer menu: scroll spy, category bar, one in-page hash link; back/forward restores position (C4)
+- [ ] Light, dark and print views of an admin page and the customer menu (C20, C21, S11)
+- [ ] Assistant panel chat send (C29, C32)
+- [ ] After merge: staging deploy succeeds and a staging request works end to end (C17); before merge optionally `wrangler deploy --dry-run` and a local `wrangler dev` smoke test (Q7). The staging `wrangler.json` equals the `after-nuxt` evidence.
+
+## S12 — final verify (milestone 3)
+
+`scripts/upgrade-verify.sh final --e2e` (`upgrade/logs/final/`): typecheck/lint/build PASS, e2e PASS (46 files / 568 tests, serial, 907 s), `pnpm build:staging` PASS, `.output/server/wrangler.json` identical to `upgrade/evidence/after-nuxt/wrangler.json`. test:unit: the Q4 failure (same separator diff as S9) and the known flaky Windows worker crash (3221225477) in `staff.service.test.ts`, which passes alone (33 tests). No new failure vs `upgrade/baseline.md`. Progress entry added to `docs/progress.md`.
+Follow-ups for the summary: Q4 test path separators; `@nuxtjs/better-auth` bump (Q2); owner may delete `.data/db-stale-2026-09-27`.

@@ -152,7 +152,7 @@ Facts settled while planning (no step needed):
 - done when: those e2e and a11y tests are green with no assertion weakened.
 
 ### S11 — Check theme overrides against the 4.12 theme
-- status: done
+- status: done (b78fb7d)
 - covers: C20, C21
 - executor: sonnet
 - risk: medium
@@ -162,7 +162,7 @@ Facts settled while planning (no step needed):
 - done when: each relevant theme diff entry is marked "no effect" or "fixed" in HANDOFF; light, dark and print checks are added to the manual list.
 
 ### S12 — Final verify and progress note
-- status: todo
+- status: done
 - covers: all
 - executor: sonnet
 - risk: low
