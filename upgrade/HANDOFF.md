@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S1 done
-Next: /upgrade-4-execute S2-S12. Compare every verify with `upgrade/baseline.md`.
+Current phase: 4 (execute), S0-S2 done
+Next: /upgrade-4-execute S3-S12. Compare every verify with `upgrade/baseline.md`.
 
 ## Versions
 
@@ -77,6 +77,10 @@ S0: verify script split (test:unit every step, `--e2e` at milestones, 1 worker, 
 S1: pre-upgrade evidence in `upgrade/evidence/before/`: `wrangler.json` (database_id redacted; main = index.mjs, re-exports the cloudflare-entry wrapper, see entry.txt), `http.md` (cases a, b, c, d, d2, e), `ui-theme/*.ts.txt` (all 118 generated theme files; renamed .txt so lint ignores them), `build-warnings.txt`. Capture script `upgrade/evidence/capture-http.test.ts.txt` (reuse in S4: copy to test/e2e/zz-capture-http.test.ts, `CAPTURE_LABEL=after-nuxt pnpm vitest run --project e2e zz-capture-http`, delete the copy).
   - Case (d) note for S4/S6: the `Location` header exists only for old addresses (`/admin/orders?...` -> 302 `/c/nuk/admin/orders?...`, encoded query kept byte for byte). The auth redirect (middleware `auth.global.ts`) is client-side: SSR of an unauthenticated `/c/nuk/admin/...` is 200 (case d2), so C14 must be proven by e2e, not by a Location header.
   - S1 verify: typecheck/lint/build PASS; test:unit only the known Q4 failure (separator diff unchanged). Unit counts (1474 passed) are higher than baseline (1466) because HEAD `4154474` added tests after the baseline commit.
+
+S2: nuxt 4.6.1 + vue-router 5.4.0 installed (no release-age refusal). `pnpm why`: one vue-router (5.4.0), nitropack 2.13.4, h3 1.15.11, @nuxt/cli 4.0.1. Verify: lint PASS, build PASS, test:unit only the known Q4 failure, e2e 46 files / 566 tests PASS (1401s). Typecheck: one new error, `app/utils/api.ts:41` (TS2769, `useRequestFetch` typed overload, C11) -> S3.
+  - Finding: @nuxt/kit now has copies 3.21.11 (was already there), 4.5.2 and 4.6.1. nuxt itself uses 4.6.1; modules (@nuxt/ui, @nuxthub/core, @nuxtjs/better-auth, @nuxt/devtools, @dxup/nuxt, color-mode, icon, fonts) keep resolving 4.5.2 through their peer ranges (pnpm reuses the locked version). Not deduped (plan). Build and e2e are green; revisit if S4 finds module-hook problems.
+  - Env note: stale e2e processes from a killed session hold `.data/e2e/db` (EPERM on rmSync); kill vitest/.output server processes before rerunning e2e.
 
 ## Blocked
 
