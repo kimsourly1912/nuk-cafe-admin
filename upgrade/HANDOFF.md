@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S7 done
-Next: /upgrade-4-execute S8-S12. Compare every verify with `upgrade/baseline.md`. Before the next build, fix the stale local dev DB (see S7 Env note) or builds fail on migration 0010.
+Current phase: 4 (execute), S0-S8 done
+Next: /upgrade-4-execute S9-S12. Compare every verify with `upgrade/baseline.md`. The stale local dev DB was fixed in S8 (see S8 Env note).
 
 ## Versions
 
@@ -107,6 +107,12 @@ S7 (@nuxt/ui 4.12.0, bump in `4e05df3`; Reka module retired per revised Q1):
   - Retirement: no file in Nuxt UI 4.12.0 or vaul-vue imports `reka-ui/namespaced` (grep of the installed dist), so the plugin was a no-op. Deleted `modules/reka-namespaced.ts` (the `modules/` folder is now gone) and `test/unit/reka-namespaced.test.ts`; amended D123 ("Removed") and `docs/guides/development.md`. `docs/progress.md` 10.8 left as history.
   - Verify S7a (`upgrade/logs/S7a/`): typecheck/lint PASS. Build first FAILED on the local dev DB, unrelated: `.data/db/sqlite.db` had been replaced by an old 2026-09-27 copy (10 migrations under the old numbering, `0009_branch_item_states`; the S7 build that morning saw 40), so 0010 hit "table already exists". Build against a fresh DB (old one moved aside, then restored) PASS, and the 4 reka-namespaced SOURCEMAP_BROKEN warnings are gone. Unit: 1466 passed, 4 failed = Q4 + three 5 s timeouts under load (migrations 0029, d1-limits, health); those 3 files pass alone (30/30). E2E `shop-menu.test.ts` 28/28 incl. the D123 guard.
   - Env: the old local DB is still at `.data/db` (owner to reset it or restore a good copy); the fresh build DB is kept at `.data/db-fresh-build`.
+
+S8 (C22, forms; no code change):
+  - `UForm` 4.12.0 still exposes what the app reads: `getErrors()`, `validate({ name: string[], silent: true })` (same `_validate`, names matched by `nameMatcher`), and the props `schema`/`state` via `$props` (`useFormErrorRecheck.ts`). `TaskFrame.vue` only documents the `id`/`form=` pattern and calls no form API.
+  - Dirty (#7033, #6545): no effect. The app never reads `UForm`'s `dirty`/`dirtyFields`/`@update:dirty`; unsaved state is its own `useUnsavedChanges` (`isSameFormValue` against a baseline). #7165 (state type) gave no typecheck error.
+  - Tests PASS on 4.12.0: unit form-draft + form-value (14); e2e unsaved-changes, form-drafts, modifier-groups, option-sets, products, categories (6 files / 186 tests, serial). Verify S8 (`upgrade/logs/S8/`): typecheck/lint/build PASS; test:unit = Q4 failure only (1469 passed).
+  - Env fix: `.data/db` was the stale 2026-09-27 copy (migration 0010 failed the build). Renamed it to `.data/db-stale-2026-09-27` and moved the fresh build DB to `.data/db`. Nothing deleted; the owner can drop the stale folder.
 
 ## Manual tests to do
 

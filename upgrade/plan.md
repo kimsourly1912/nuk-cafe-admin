@@ -122,7 +122,7 @@ Facts settled while planning (no step needed):
 - amended 2026-10-17 (Q1 revised): Nuxt UI 4.12.0 no longer imports `reka-ui/namespaced`, so the module is a no-op and its last unit test fails (0 families). S7 also deletes `modules/reka-namespaced.ts` and `test/unit/reka-namespaced.test.ts` and updates D123 and `docs/guides/development.md`. Verify: typecheck, lint, build, test:unit (Q4 failure only), `test/e2e/shop-menu.test.ts`.
 
 ### S8 — Check forms: state types, dirty, exposed API
-- status: todo
+- status: done
 - covers: C22
 - executor: sonnet
 - risk: medium
