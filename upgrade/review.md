@@ -84,7 +84,7 @@ None.
 
 Before merge:
 - [ ] R1: `wrangler deploy --dry-run` on the staging build and a local `wrangler dev` smoke test (sign in, one D1-backed API call, one 404) (Q7, C17)
-- [ ] R2: owner decision on commit `4154474`
+- [x] R2: moved to `fix/form-row-errors` and reverted here (Q8, option b)
 
 Profile smoke test:
 - [ ] login, logout
@@ -103,11 +103,10 @@ Specific to this upgrade:
 - [ ] Searchable RecordSelect: type, keyboard select, focus stays, closes on touch (C23)
 - [ ] AppDrawer at phone width; menu item slide-over ~672px from `sm`, full width on phone; option set slide-over at phone and tablet (C24, C25)
 - [ ] First toast after sign-in, and a toast while offline (C28)
-- [ ] Admin sidebar menu (phone) and search palette (Ctrl/Cmd+K) open on first use (C28); if `4154474` stays, the current page is centred on the first phone open (I1)
+- [ ] Admin sidebar menu (phone) and search palette (Ctrl/Cmd+K) open on first use (C28)
 - [ ] Customer menu: scroll spy, category bar, one in-page hash link; back/forward restores position (C4)
 - [ ] Light, dark and print of an admin page and the customer menu (C20, C21)
 - [ ] Assistant panel chat send (C29, C32)
-- [ ] If `4154474` stays: remove a middle row with an error in the option set and add-on group forms; the error goes with its row (D171)
 
 After merge:
 - [ ] Staging deploy succeeds and a staging request works end to end (C17); rollback = `wrangler rollback`

@@ -11,7 +11,7 @@ Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
 Current phase: 5 done (review in `upgrade/review.md`: 0 Critical, 2 Important, 2 Improvement, 4 Optional)
-Next: answer Q8 (commit 4154474), then /upgrade-4-execute R1-R2 (Sonnet). After that: manual test, then /upgrade-6-finish.
+Next: /upgrade-4-execute R1 (Q7 Cloudflare dry-run + `wrangler dev` smoke test; R2 is done). After that: manual test, then /upgrade-6-finish.
 
 ## Versions
 
@@ -69,7 +69,7 @@ Q3: Reliable e2e baseline? — Plan step S0 before any dependency change: split 
 Q4: Failing "routes outside a cafe's address never act in one" — Not accepted as a normal baseline failure. Investigate separately (tenant isolation). Record it as a known, explained failure in baseline.md; it must not get worse. — decided 2026-10-16
 Q5: @nuxt/ui 4.12.0 below pnpm minimum-release-age — Wait; no exclusions (supply-chain protection stays on). Prep steps (S0 etc.) proceed now; the bump step waits. The bump step must report any transitive packages refused by the age rule. — decided 2026-10-16
 Q6: Nuxt 4.5 workaround in useApiQuery — Keep and log a follow-up, ONLY if proven harmless on 4.6: useApiQuery tests pass AND request count / refresh behavior unchanged (test or manual network check). If not harmless, fix in this run. — decided 2026-10-16
-Q8: Unrelated commit `4154474 "new"` (D171 form-row errors, sidebar centring, modal overlay `!`) is on the upgrade branch. Keep it here (state it in the PR) or move it to its own PR (recommended, review R2)? — pending
+Q8: Unrelated commit `4154474 "new"` (D171 form-row errors, sidebar centring, modal overlay `!`) is on the upgrade branch. Keep it here (state it in the PR) or move it to its own PR (recommended, review R2)? — Move it to its own PR (option b). Cherry-picked onto `fix/form-row-errors` (from origin/main); reverted here with `8eb73e8`. — decided 2026-10-17
 Q7: Proving the Cloudflare entry (C17) — Before merge: staging build + wrangler.json diff + `wrangler deploy --dry-run` + local `wrangler dev` smoke test (login, one D1-backed API call). After merge: smoke-test the staging deploy before production; rollback = wrangler rollback. Claude does not deploy. — decided 2026-10-16
 
 ## Done
@@ -137,6 +137,10 @@ S11 (C20, C21; no change): generated theme saved in `upgrade/evidence/after-ui/u
   - `dashboardNavbar/Panel/Toolbar`, `tabs`, `card`, `switch`, `modal`, `drawer` (the other `app.config` overrides): theme files identical, no effect.
   - C20: `tailwind.css` overrides `--ui-*` on `:root, .light`, `.dark` and in `@media print` (unlayered, over Nuxt UI's `@layer theme`). 4.12's `index.css` still declares tokens on `.light`/`.dark` in `@layer theme` and `@custom-variant light|dark (&:where(.light, .light *))`: same class strategy, so the overrides still win. `ui-foundations` (contrast), `color-mode` and `accessibility` e2e PASS (S9, S10). Light, dark and print still go on the manual list (already in the plan checklist).
   - Source tree unchanged since the S9 verify, so no new verify run.
+
+R2 (Q8, option b; no upgrade code touched):
+  - `4154474` (D171 form-row errors, sidebar centring, modal overlay `!`) moved to branch `fix/form-row-errors` (worktree `C:\Users\kimso\worktrees\form-row-errors`, one commit on `origin/main` `56d576c`). Here: `git revert` `8eb73e8` (one conflict in `docs/progress.md`: kept the upgrade section, dropped D171; no history rewrite). The new branch is its own PR; review item I1 (sidebar centring vs the lazy 4.12 sidebar menu) and the D171 manual checks belong to it.
+  - Verify R2 (`upgrade/logs/R2/`): typecheck/lint/build PASS; test:unit = Q4 failure only + the known Windows worker crash (3221225477) in `identity.service.test.ts`, which passes alone (27 tests). E2E products, option-sets, modifier-groups, app-shell: 4 files / 127 tests PASS.
 
 ## Manual tests to do
 
