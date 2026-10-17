@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S5 done
-Next: /upgrade-4-execute S6-S12. Compare every verify with `upgrade/baseline.md`.
+Current phase: 4 (execute), S0-S6 done
+Next: /upgrade-4-execute S7-S12. S7 bumps @nuxt/ui (Q5: report any package refused by the release-age rule; if refused, wait, do not exclude). Compare every verify with `upgrade/baseline.md`.
 
 ## Versions
 
@@ -94,6 +94,12 @@ S5 (C12, `useApiQuery` vs Nuxt 4.6.1 `useAsyncData`; read `node_modules/nuxt/dis
   - `invalidate.ts`/`session-boundary.client.ts`: still correct. `payload.data` keys are filled on success as before, `clearNuxtData` keeps `_asyncData` entries (resets value, error, status), `refreshNuxtData` still calls the `app:data:refresh` hook.
   - Tests: no unit test covers `useApiQuery` itself (gap, not added: no change made). E2E on 4.6.1 PASS: session, list-page, form-drafts, counter-orders-api (4 files / 35 tests; stale response and session-transition cases are in session.test.ts, list-page.test.ts). Source tree unchanged since the S4 verify (typecheck/lint/build PASS).
   - Follow-up for the final summary: none required; keep the workaround.
+
+S6 (C14, C4, C6; no app code change):
+  - Case (d) Location byte-identical before/after the Nuxt bump (S4 evidence). The auth/counter/platform redirects are client-side middleware (`navigateTo` with `query: { redirect: to.fullPath }`); no open-redirect guard touched (`loginRedirectTarget` unchanged).
+  - New e2e test `test/e2e/auth.test.ts > keeps a percent-encoded query through the sign-in round trip`: a logged-out visit to `/c/nuk/admin/categories?q=caf%C3%A9%20au%20lait&tag=a%26b` goes to login with `redirect` holding the same values, and after sign-in lands on the page with `q=café au lait`, `tag=a&b`. Note: vue-router writes a space in a query as `+` (`encodeQueryValue` is identical in 5.3.1 and 5.4.0), so the test compares decoded values, not spelling. Not a regression.
+  - E2E on 4.6.1 PASS: auth, counter, platform, password, session, shop-menu, shop-orders*, shop-tracking, your-cafes (9 files, 110 tests incl. the new one). C4 (scroll spy/category bar in shop-menu) green; the in-page hash link, back/forward position still on the manual list. C6 confirmed no `/api`//`media` link targets (plan).
+  - Verify S6: typecheck/lint/build PASS; test:unit Q4 failure only (1474 passed).
 
 ## Blocked
 
