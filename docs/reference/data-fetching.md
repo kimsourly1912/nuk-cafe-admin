@@ -97,15 +97,12 @@ export function useItemList(query: MaybeRefOrGetter<ItemListFilters>) {
 
 > Watch `() => ({ ...toValue(query) })`, not `query` itself. The spread creates a new object on every change, so changes to nested filters trigger a refetch.
 
-**Options for a picker** (empty-array default; archived records included so a current value keeps its name):
+**Options for a picker** (archived records included so a current value keeps its name). Share the library page's query instead of a second key for the same endpoint: one request, and one `invalidate` refreshes both. `[]` until loaded comes from a `computed`, not a `default`, because call sites of one key must pass the same options:
 
 ```ts
 export function useAvailabilityRuleOptions() {
-  return useApiQuery(
-    'availability-rules:options',
-    () => apiFetch<AvailabilityRule[]>('/admin/menu/availability-rules', { query: { status: 'all' } }),
-    { default: () => [] }, // data is never undefined
-  )
+  const query = useAvailabilityRuleList() // 'availability-rules:list', the Availability page's query
+  return { ...query, data: computed<AvailabilityRule[]>(() => query.data.value ?? []) }
 }
 ```
 

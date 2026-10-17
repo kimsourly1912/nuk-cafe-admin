@@ -1,15 +1,9 @@
 import type { BranchSettings, CreateTableInput, DiningTable, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
-import type { BranchOption } from '#shared/contracts/staff'
 
 const base = (branchId: string) => `/admin/branches/${branchId}`
 
 /** Staff lists show branch names. */
 const AFFECTED = ['branches', 'staff']
-
-/** Active branches (the Branch page opens the only one, or lists them). */
-export function useBranchOptions() {
-  return useApiQuery('branches:options', () => apiFetch<BranchOption[]>('/admin/branches/options'))
-}
 
 /** A branch's settings and hours, with "open now" as the server saw it. */
 export function useBranchSettings(branchId: string) {

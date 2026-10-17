@@ -1,5 +1,5 @@
 import type { Page } from '#shared/contracts/common'
-import type { BranchOption, CreatedStaff, CreateStaffInput, StaffListQuery, StaffMember, StaffPasswordReset, UpdateStaffAccessInput } from '#shared/contracts/staff'
+import type { CreatedStaff, CreateStaffInput, StaffListQuery, StaffMember, StaffPasswordReset, UpdateStaffAccessInput } from '#shared/contracts/staff'
 
 export type { StaffListQuery }
 
@@ -11,11 +11,6 @@ export function useStaffList(query: MaybeRefOrGetter<Partial<StaffListQuery>>) {
   return useApiQuery('staff:list', () => apiFetch<Page<StaffMember>>('/admin/staff', { query: toValue(query) }), {
     watch: [() => ({ ...toValue(query) })],
   })
-}
-
-/** Active branches for the membership pickers. */
-export function useBranchOptions() {
-  return useApiQuery('staff:branch-options', () => apiFetch<BranchOption[]>('/admin/branches/options'))
 }
 
 /**

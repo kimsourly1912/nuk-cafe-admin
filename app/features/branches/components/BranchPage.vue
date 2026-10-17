@@ -6,7 +6,8 @@
  * is kept in the URL (`?tab=tables`, `useUrlTab`) without a route change, so switching never asks
  * about unsaved changes.
  */
-import { useBranchOptions, useBranchSettings, useBranchTables } from '../composables/useBranches'
+import { useBranchOptions } from '../composables/useBranchOptions'
+import { useBranchSettings, useBranchTables } from '../composables/useBranches'
 import BranchSettingsTab from './BranchSettingsTab.vue'
 import BranchTablesTab from './BranchTablesTab.vue'
 

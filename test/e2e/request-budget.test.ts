@@ -151,7 +151,8 @@ describe('request budget: admin', () => {
       'Add-ons': { '/admin/menu/modifier-groups': 1 },
       'Availability': { '/admin/menu/availability-rules': 1 },
       'Branch': { '/admin/branches/options': 1 },
-      'Staff': { '/admin/staff': 1, '/admin/branches/options': 1 },
+      // One branch-options query for every feature: the Branch page's is still loaded as Staff opens.
+      'Staff': { '/admin/staff': 1 },
       'Payments': { '/admin/exchange-rates': 1, '/admin/khqr': 1 },
       'Categories (again)': { '/admin/menu/categories': 1, '/admin/menu/availability-rules': 1 },
       'Menu items (again)': { '/admin/menu/items': 5 },

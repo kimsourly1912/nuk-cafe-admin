@@ -44,6 +44,6 @@ shared/contracts/                # API contracts: request schemas + response typ
 
 ### Data freshness
 
-- Query keys are **namespaced by feature**: `<feature>:<name>` (`categories:all`, `availability-rules:options`). `useApiQuery` warns in dev when a key isn't namespaced.
+- Query keys are **namespaced by feature**: `<feature>:<name>` (`categories:all`, `availability-rules:list`). `useApiQuery` warns in dev when a key isn't namespaced.
 - Mutations declare `invalidate: ['<own feature>', '<affected feature>']`. The same invalidation reaches the app's **other open tabs** (feature names over a `BroadcastChannel`, never data), so they refresh too. Data from **other devices** is picked up when the user returns to the tab. `invalidate()` (`app/utils/invalidate.ts`) refetches every loaded key with those prefixes, so a feature never imports another feature's keys. Calls within 30ms are merged into one refresh per list (batches, parallel deletes). Example: category mutations invalidate `['categories', 'products']` because product lists show category names.
 

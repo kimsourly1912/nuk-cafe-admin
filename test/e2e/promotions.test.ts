@@ -2,7 +2,7 @@ import { createPage, url } from '@nuxt/test-utils/e2e'
 import type { Page } from 'playwright-core'
 import { describe, expect, it } from 'vitest'
 import type { Promotion, PromotionResults } from '../../shared/contracts/menu-promotions'
-import { failures, MENU_COFFEE, MENU_TEA, menuItemSummaryOf, mockApi, pageOf, RIVERSIDE, setupE2e, toast } from './support/mock-api'
+import { AIRPORT, failures, MENU_COFFEE, MENU_TEA, menuItemSummaryOf, mockApi, pageOf, RIVERSIDE, setupE2e, toast } from './support/mock-api'
 
 await setupE2e()
 
@@ -59,7 +59,7 @@ async function open(path: string, options: Options = {}) {
   const page = await createPage()
   await page.setViewportSize({ width: 1440, height: 900 })
   const idOf = (u: URL) => u.pathname.split('/promotions/')[1]!.split('/')[0]!
-  await mockApi(page, {
+  const api = await mockApi(page, {
     'GET /admin/menu/promotions': () => [...store.values()],
     'GET /admin/menu/promotions/{id}': ({ url: u }) => store.get(idOf(u)) ?? (() => {
       throw failures.notFound()
@@ -108,7 +108,7 @@ async function open(path: string, options: Options = {}) {
     'POST /admin/media': () => ({ id: 'asset-9', url: '/media/asset-9.png', mimeType: 'image/png', byteSize: 100 }),
   })
   await page.goto(url(`/c/nuk${path}`), { waitUntil: 'hydration' })
-  return { page, sent, store }
+  return { page, sent, store, api }
 }
 
 const card = (page: Page, name: string) => page.getByRole('article').filter({ has: page.getByRole('link', { name, exact: true }) })
@@ -232,5 +232,20 @@ describe('Promotions', () => {
     await page.getByLabel('Name').fill('Half done')
     await page.getByRole('link', { name: 'Back to promotions' }).click()
     await page.getByText('Discard unsaved changes?').waitFor()
+  })
+
+  it('shows a branch added meanwhile: a branch change reaches the editor\'s branches', async () => {
+    const { page, api } = await open('/admin/promotions/new', { promotions: [] })
+    await page.getByLabel('Name').waitFor()
+    // One branch: nothing to choose, so no Branches card.
+    expect(await page.getByRole('radiogroup', { name: 'Branches' }).count()).toBe(0)
+
+    // A second branch is saved in another tab of this browser: its invalidate('branches') arrives
+    // as the data-changed message (plugins/data-freshness.client.ts).
+    api.set({ 'GET /admin/branches/options': () => [RIVERSIDE, AIRPORT] })
+    await page.evaluate(() => new BroadcastChannel('nuk-cafe-admin:data-changed').postMessage({ features: ['branches'] }))
+
+    await page.getByRole('radiogroup', { name: 'Branches' }).getByText('Chosen branches').click()
+    await page.getByRole('checkbox', { name: 'Airport' }).waitFor()
   })
 })

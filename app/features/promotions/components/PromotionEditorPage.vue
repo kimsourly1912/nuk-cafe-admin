@@ -10,7 +10,8 @@
 import type { Promotion } from '#shared/contracts/menu-promotions'
 import { discountLabel, discountOff, PROMOTION_DESCRIPTION_MAX } from '#shared/contracts/menu-promotions'
 import { useCategoryOptions } from '~/features/categories'
-import { fetchPromotion, usePromotionBranches, usePromotionList, usePromotionMenuItems, usePromotionMutations } from '../composables/usePromotions'
+import { useBranchOptions } from '~/features/branches'
+import { fetchPromotion, usePromotionList, usePromotionMenuItems, usePromotionMutations } from '../composables/usePromotions'
 import type { PromotionForm } from '../schemas/promotion-form'
 import { addDays, categoryPath, daysBetween, formDiscount, localToday, newPromotionForm, overlapping, pickerTree, promotionFormSchema, toPromotionBody, toPromotionForm, whenText } from '../schemas/promotion-form'
 import PromotionDateField from './PromotionDateField.vue'
@@ -29,7 +30,7 @@ const today = localToday()
 
 const { create, update } = usePromotionMutations()
 const { data: list } = usePromotionList()
-const { data: branches } = usePromotionBranches()
+const { data: branches } = useBranchOptions()
 const { data: menuItems, loading: itemsLoading } = usePromotionMenuItems()
 const { data: categories } = useCategoryOptions()
 

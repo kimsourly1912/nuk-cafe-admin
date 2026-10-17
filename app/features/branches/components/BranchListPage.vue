@@ -3,7 +3,7 @@
  * `/admin/branches` (D91): opens the only branch at once (launch has one), or lists them when there are
  * several (staging has a second test branch). Branches are created by the seed task, not here.
  */
-import { useBranchOptions } from '../composables/useBranches'
+import { useBranchOptions } from '../composables/useBranchOptions'
 
 const tenantPath = useTenantPath()
 
