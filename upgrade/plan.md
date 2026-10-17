@@ -55,7 +55,7 @@ Facts settled while planning (no step needed):
 - done when: `upgrade/evidence/before/` holds `wrangler.json` (no secrets), `http.md` with 5 cases, and the theme snapshot; committed.
 
 ### S2 — Bump nuxt to 4.6.1 with vue-router ^5.4.0
-- status: done (HASH)
+- status: done (2683e62)
 - covers: C3; confirms no-ops C2, C5, C8, C9, C10, C13, C16, C18, C19, C34, C35, C36
 - executor: sonnet
 - risk: high (dependency change reaching server behavior, auth redirects and the data layer)
