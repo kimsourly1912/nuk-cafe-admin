@@ -200,3 +200,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D168](decisions.md#d168-architecture-reliability-bounded-requests-owned-delivery-and-durable-cleanup-2026-10-14) | Architecture reliability: bounded requests, owned delivery and durable cleanup, 2026-10-14 |
 | [D169](decisions.md#d169-server-log-privacy-fresh-catalog-reads-and-successful-job-health-2026-10-14) | Server log privacy, fresh catalog reads and successful-job health, 2026-10-14 |
 | [D170](decisions.md#d170-tenant-scoped-admin-pricing-and-fresh-counter-batches-2026-10-14) | Tenant-scoped admin pricing and fresh counter batches, 2026-10-14 |
+| [D171](decisions.md#d171-errors-of-a-removed-or-moved-row-follow-the-row-2026-10-16) | Errors of a removed or moved row follow the row, 2026-10-16 |

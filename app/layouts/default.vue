@@ -13,6 +13,29 @@ const tenantPath = useTenantPath()
 const sidebarItems = computed(() => withActiveItem(allItems, splitTenantUrl(route.path)?.path ?? route.path)
   .map(group => group.map(item => (typeof item.to === 'string' ? { ...item, to: tenantPath(item.to) } : item))))
 const open = ref(false)
+// The desktop sidebar and the phone menu both render the nav, so pick the copy that is on screen.
+function scrollParent(el: HTMLElement) {
+  let parent = el.parentElement
+  while (parent && !/(auto|scroll)/.test(getComputedStyle(parent).overflowY)) parent = parent.parentElement
+  return parent
+}
+// Centre the current page's link in the sidebar, so a page below the fold (Telegram) is not left hidden.
+function revealActiveItem() {
+  const to = sidebarItems.value.flat().find(item => item.active)?.to
+  if (typeof to !== 'string') return
+  const link = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-sidebar-nav] a'))
+    .find(anchor => anchor.getAttribute('href') === to && anchor.getClientRects().length > 0)
+  const scroller = link && scrollParent(link)
+  if (!link || !scroller) return
+  const linkRect = link.getBoundingClientRect()
+  const offset = linkRect.top - scroller.getBoundingClientRect().top - (scroller.clientHeight - linkRect.height) / 2
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
+  scroller.scrollTo({ top: scroller.scrollTop + offset, behavior: reduceMotion ? 'auto' : 'smooth' })
+}
+onMounted(revealActiveItem)
+watch(() => route.path, revealActiveItem, { flush: 'post' })
+// The phone menu mounts when it opens, so centre the current page once it is on screen.
+watch(open, isOpen => isOpen && nextTick(revealActiveItem))
 /** Every page in the sidebar, for the search (Ctrl/⌘+K, D152). */
 const searchPages = computed(() => sidebarItems.value.flat()
   .filter((item): item is typeof item & { label: string, to: string } => typeof item.to === 'string' && typeof item.label === 'string')
@@ -45,7 +68,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
       collapsible
       resizable
       class="bg-elevated/25 print:hidden"
-      :ui="{ footer: 'lg:border-t lg:border-default' }"
+      :ui="{ body: '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden', footer: 'lg:border-t lg:border-default' }"
     >
       <template #header="{ collapsed }">
         <CafeSwitcher
@@ -60,12 +83,17 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
           label="Search"
           class="bg-transparent ring-default"
         />
-        <UNavigationMenu
-          :collapsed="collapsed"
-          :items="sidebarItems"
-          orientation="vertical"
-          tooltip
-        />
+        <div
+          data-sidebar-nav
+          class="contents"
+        >
+          <UNavigationMenu
+            :collapsed="collapsed"
+            :items="sidebarItems"
+            orientation="vertical"
+            tooltip
+          />
+        </div>
       </template>
 
       <template #footer="{ collapsed }">
