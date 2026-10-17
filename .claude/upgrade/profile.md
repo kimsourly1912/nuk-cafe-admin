@@ -87,6 +87,9 @@ and how migrations are applied, every import from `drizzle-orm/*`.
    validation, caching (`routeRules`, cached handlers), middleware order.
 6. Runtime config & secrets: nothing secret moves into `public`.
 7. Database: bindings, migrations, query behavior changes.
+8. Cloudflare entry (custom entry/error handler via Nitro hooks): before merge, `pnpm build:staging`,
+   diff `.output/server/wrangler.json` against the pre-upgrade copy, `wrangler deploy --dry-run`, and a local
+   `wrangler dev` smoke test. Do not downgrade this to optional.
 
 ## Manual smoke test (after every upgrade)
 
