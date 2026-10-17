@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S3 done
-Next: /upgrade-4-execute S4-S12. Compare every verify with `upgrade/baseline.md`.
+Current phase: 4 (execute), S0-S4 done
+Next: /upgrade-4-execute S5-S12. Compare every verify with `upgrade/baseline.md`.
 
 ## Versions
 
@@ -83,6 +83,9 @@ S2: nuxt 4.6.1 + vue-router 5.4.0 installed (no release-age refusal). `pnpm why`
   - Env note: stale e2e processes from a killed session hold `.data/e2e/db` (EPERM on rmSync); kill vitest/.output server processes before rerunning e2e.
 
 S3: fixed the only new type error (`app/utils/api.ts` serverFetch, C11): `Parameters<typeof fetch>[1]` now resolves to the wrong overload of Nuxt 4.6's `TypedFetch`; the call names `fetch<T, string, AnyServerRouteMethod>` and casts the options to `TypedFetchOptions<string, AnyServerRouteMethod>` (both from `#app`). Runtime unchanged. Typecheck/lint/build PASS; test:unit = Q4 failure only, plus the known flaky Windows worker crash (exit 3221225477) which hit `modifiers.service.test.ts` this time (passes alone, 17 tests).
+
+S4: evidence in `upgrade/evidence/after-nuxt/` (wrangler.json, http.md, build-warnings.txt). `wrangler.json` identical to before (D1, R2 BLOB, 3 ratelimits, crons, vars, main = index.mjs still re-exporting the cloudflare-entry wrapper; `boundedWorkerRequest` bundled). HTTP cases a-e + d2: same status, same security headers and request-id, same error body shapes, same 302 Location in (d). Only difference, accepted: case (a) (404 page render) now has `vary: accept, sec-fetch-mode`, added by Nuxt 4.6's own error handler (`@nuxt/nitro-server/dist/runtime/handlers/error.mjs`) for content negotiation; harmless. Build log: no `nitro.*` deprecation (C7), no template-compile failure (C18); only the same 4 reka-namespaced SOURCEMAP_BROKEN warnings and PLUGIN_TIMINGS (times differ). No code change.
+  - Verify S4: typecheck/lint/build PASS; test:unit = Q4 failure only + the known flaky Windows worker crash (3221225477), now on `notifications.delivery.test.ts` (4 files / 58 tests pass alone). The crash lands on a different file each run, so it is environmental, not caused by the upgrade.
 
 ## Blocked
 

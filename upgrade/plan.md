@@ -77,7 +77,7 @@ Facts settled while planning (no step needed):
 - done when: typecheck passes. If S2 had no new type errors, set `status: done` with the note "no change needed" in HANDOFF and make no commit.
 
 ### S4 — Check server runtime, errors and Cloudflare entry after the Nuxt bump
-- status: todo
+- status: done (HASH)
 - covers: C7, C15, C17, C18
 - executor: sonnet
 - risk: high
