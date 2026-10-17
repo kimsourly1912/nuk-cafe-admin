@@ -67,7 +67,7 @@ Facts settled while planning (no step needed):
 - done when: install succeeds; lint, test:unit, build and e2e show no new failures vs baseline. Typecheck passes, or its only new errors are `$fetch`/`Serialize` typing errors (C11), listed in HANDOFF for S3.
 
 ### S3 — Fix typed `$fetch` / `Serialize` errors (only if S2 typecheck has new errors)
-- status: todo
+- status: done (HASH)
 - covers: C11
 - executor: sonnet
 - risk: high (sites include `useAuth.ts`, `usePlatformSession.ts`, `useCounterSession.ts`, i.e. the session/auth area)

@@ -10,8 +10,8 @@ Branch: chore/upgrade-nuxt-ui-latest
 Package manager: pnpm (12.3.4, from lockfile + packageManager)
 Started: 2026-10-16
 
-Current phase: 4 (execute), S0-S2 done
-Next: /upgrade-4-execute S3-S12. Compare every verify with `upgrade/baseline.md`.
+Current phase: 4 (execute), S0-S3 done
+Next: /upgrade-4-execute S4-S12. Compare every verify with `upgrade/baseline.md`.
 
 ## Versions
 
@@ -81,6 +81,8 @@ S1: pre-upgrade evidence in `upgrade/evidence/before/`: `wrangler.json` (databas
 S2: nuxt 4.6.1 + vue-router 5.4.0 installed (no release-age refusal). `pnpm why`: one vue-router (5.4.0), nitropack 2.13.4, h3 1.15.11, @nuxt/cli 4.0.1. Verify: lint PASS, build PASS, test:unit only the known Q4 failure, e2e 46 files / 566 tests PASS (1401s). Typecheck: one new error, `app/utils/api.ts:41` (TS2769, `useRequestFetch` typed overload, C11) -> S3.
   - Finding: @nuxt/kit now has copies 3.21.11 (was already there), 4.5.2 and 4.6.1. nuxt itself uses 4.6.1; modules (@nuxt/ui, @nuxthub/core, @nuxtjs/better-auth, @nuxt/devtools, @dxup/nuxt, color-mode, icon, fonts) keep resolving 4.5.2 through their peer ranges (pnpm reuses the locked version). Not deduped (plan). Build and e2e are green; revisit if S4 finds module-hook problems.
   - Env note: stale e2e processes from a killed session hold `.data/e2e/db` (EPERM on rmSync); kill vitest/.output server processes before rerunning e2e.
+
+S3: fixed the only new type error (`app/utils/api.ts` serverFetch, C11): `Parameters<typeof fetch>[1]` now resolves to the wrong overload of Nuxt 4.6's `TypedFetch`; the call names `fetch<T, string, AnyServerRouteMethod>` and casts the options to `TypedFetchOptions<string, AnyServerRouteMethod>` (both from `#app`). Runtime unchanged. Typecheck/lint/build PASS; test:unit = Q4 failure only, plus the known flaky Windows worker crash (exit 3221225477) which hit `modifiers.service.test.ts` this time (passes alone, 17 tests).
 
 ## Blocked
 

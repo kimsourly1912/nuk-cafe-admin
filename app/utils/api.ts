@@ -1,3 +1,4 @@
+import type { AnyServerRouteMethod, TypedFetchOptions } from '#app'
 import type { ApiFetch, ApiFetchOptions } from './api-fetch'
 import { ApiError } from './api-error'
 import { apiPath } from './api-path'
@@ -38,7 +39,7 @@ export function apiFetch<T>(path: string, options?: ApiFetchOptions): Promise<T>
 async function serverFetch<T>(path: string, options?: ApiFetchOptions): Promise<T> {
   const fetch = useRequestFetch()
   try {
-    return await fetch<T>(`/api${path}`, { ...options, retry: 0, timeout: 30_000 } as Parameters<typeof fetch>[1]) as T
+    return await fetch<T, string, AnyServerRouteMethod>(`/api${path}`, { ...options, retry: 0, timeout: 30_000 } as TypedFetchOptions<string, AnyServerRouteMethod>) as T
   }
   catch (error) {
     throw ApiError.from(error)
