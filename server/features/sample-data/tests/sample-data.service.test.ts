@@ -27,7 +27,10 @@ beforeEach(async () => {
   await insertBranch(db, { id: branchId, name: 'Riverside', timezone: 'Asia/Phnom_Penh', status: 'active' })
 })
 
-/** Runs steps until the load finishes, like the page does; returns the last state and the step count. */
+/**
+ * Runs steps until the load finishes, like the page does; returns the last state and the step count.
+ * Tests that call it carry the `slow` tag (a whole menu, step by step; vitest.config.ts).
+ */
 async function loadAll(size: SampleMenuSize) {
   let state: SampleDataState | undefined
   let steps = 0
@@ -46,7 +49,7 @@ async function itemNames() {
 }
 
 describe('the sample menu', () => {
-  it('loads the standard menu in small steps, in the states of the brief', async () => {
+  it('loads the standard menu in small steps, in the states of the brief', { tags: ['slow'] }, async () => {
     const { state, steps } = await loadAll('standard')
     expect(state.menu.counts).toMatchObject({ categories: 8, optionSets: 3, modifierGroups: 4, availabilityRules: 2, items: { active: 35, draft: 3, archived: 2 } })
     expect(state.menu.run).toMatchObject({ size: 'standard', finished: true })
@@ -57,18 +60,18 @@ describe('the sample menu', () => {
     expect([...new Set(soldOut.variations.map(v => v.itemName))].sort()).toEqual(['Cheese Foam Cold Brew', 'Hojicha Latte'])
   })
 
-  it('loads 12 items for Small and 150 for Large, names unique', async () => {
+  it('loads 12 items for Small and 150 for Large, names unique', { tags: ['slow'] }, async () => {
     await loadAll('small')
     expect((await itemNames()).length).toBe(12)
     expect(new Set(itemsForSize('large').map(i => i.name.toLowerCase())).size).toBe(150)
   })
 
-  it('loads Large: 150 items, every generated one valid', async () => {
+  it('loads Large: 150 items, every generated one valid', { tags: ['slow'] }, async () => {
     const { state } = await loadAll('large')
     expect(state.menu.counts.items).toEqual({ active: 145, draft: 3, archived: 2 })
-  }, 60_000)
+  })
 
-  it('refuses to start on a menu that has data, and loads once', async () => {
+  it('refuses to start on a menu that has data, and loads once', { tags: ['slow'] }, async () => {
     await createCategory(db, admin, { name: 'Coffee', description: '', parentId: null, availabilityRuleIds: [] })
     await expectApiError(() => loadSampleMenuStep(db, admin, { size: 'small' }, ENV), 409, 'SAMPLE_MENU_NOT_EMPTY')
     await resetSampleMenu(db, admin, { put: async () => {}, del: async () => {} }, ENV)
@@ -83,7 +86,7 @@ describe('the sample menu', () => {
     expect(state.menu.run!.stages[0]).toMatchObject({ key: 'categories', done: 4, total: 8 })
   })
 
-  it('finishes an item a failed step left as a draft, and never duplicates one', async () => {
+  it('finishes an item a failed step left as a draft, and never duplicates one', { tags: ['slow'] }, async () => {
     // Load everything but the items, then create the last sample item as a crashed step would
     // have: created, never published. (The last: a step's spare budget may already start on items.)
     let state: SampleDataState
@@ -140,7 +143,7 @@ describe('the sample menu', () => {
 })
 
 describe('reset', () => {
-  it('deletes every menu record and upload, forgets the load, and audits it', async () => {
+  it('deletes every menu record and upload, forgets the load, and audits it', { tags: ['slow'] }, async () => {
     await loadAll('small')
     for (const n of [1, 2, 3]) {
       await db.insert(mediaAssets).values({ tenantId: TEST_TENANT, objectKey: `menu/photo-${n}.png`, mimeType: 'image/png', byteSize: 10, sha256: 'x', state: 'attached' })

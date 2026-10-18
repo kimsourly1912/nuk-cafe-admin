@@ -1,9 +1,11 @@
 import { globSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import { defineVitestProject } from '@nuxt/test-utils/config'
 
 const path = (relative: string) => fileURLToPath(new URL(relative, import.meta.url))
+/** The project root with forward slashes, as Vitest matches file globs. */
+const root = path('.').replaceAll('\\', '/').replace(/\/$/, '')
 
 const NUXT_TESTS = ['test/nuxt/**/*.test.ts', 'app/features/*/tests/**/*.nuxt.test.ts']
 
@@ -33,6 +35,14 @@ const markdownAsText = {
 // `*.nuxt.test.ts` runs in the Nuxt environment (auto-imports, components); everything else in plain Node.
 export default defineConfig({
   test: {
+    // `--changed` and watch mode follow imports; the server tests read the migrations from disk,
+    // so a migration-only change would run nothing. Changing one, package.json or this file reruns
+    // every test (D175). Anchored at the root: the defaults' `**/` skips dot folders, so they never
+    // matched in a checkout under `.claude/worktrees/`.
+    forceRerunTriggers: [
+      ...configDefaults.forceRerunTriggers,
+      ...['package.json', 'vitest.config.*', 'server/db/migrations/**'].map(glob => `${root}/${glob}`),
+    ],
     projects: [
       {
         resolve: { alias },
@@ -54,6 +64,11 @@ export default defineConfig({
           // Runs the migrations once; each test database replays the result (D174).
           globalSetup: ['server/tests/support/global-setup.ts'],
           environment: 'node',
+          // Heavy tests (D175): the largest data the contracts allow, whole sample menus, migrations
+          // replayed one by one, several password hashes. Up to 10 s on an idle laptop (the Large
+          // sample menu), 25–31 s while other checks run. Every other test keeps the 5 s default.
+          // `pnpm test:fast` leaves them out (`--tags-filter=!slow`).
+          tags: [{ name: 'slow', description: 'Heavy work (large data, migration replays, password hashing); skipped by test:fast', timeout: 60_000 }],
         },
       },
       {

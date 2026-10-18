@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Heavy server tests tagged `slow`; `test:changed` and `test:fast` (D175, 2026-10-18)
+
+Follows D174. [Decision](decisions.md#d175-heavy-server-tests-tagged-slow-quick-test-commands-for-the-inner-loop-2026-10-18). Brings D174's once-per-run global setup into `main` (it missed the merge). Heavy tests carry a `slow` tag with a 60 s timeout: d1-limits, migrations.test.ts, the sample-data tests that load a whole menu, staff's password resets. The default stays 5 s. `health.ts` imports notifications statically (its first test 3–4 s → 72 ms). New `pnpm test:changed` / `pnpm test:fast`, and a migration, package.json or config change now reruns every test under `--changed` and watch mode, in `.claude/worktrees/` checkouts too.
+
+Checks (12-core Windows laptop): `pnpm test:unit` 28–29 s, 3 runs in a row, all 1,479 pass; two at once 54 s, 4 of 4 green. `test:fast` 26 s; `test:changed` 2–10 s for one edit. Guard checks: the tag's timeout lowered to 100 ms times out every tagged test and no untagged one; without it, the Large sample menu fails under two runs at once. Rejected after measuring: `NODE_COMPILE_CACHE` (no gain beyond noise, crashes in 3 of 5 runs). `experimental.recordDependencies` doesn't exist in Vitest 5.0.1, and `--changed` already follows dynamic imports. `pnpm lint` and `pnpm typecheck` pass; the final `pnpm test:unit` 27 s, all pass. **Still open:** the native worker crash (exit 3221225477) in 2 of 17 full runs; git hooks wait for the owner.
+
 ## Faster server tests: the test database built once per run (D174, 2026-10-18)
 
 Follows D172. [Decision](decisions.md#d174-the-server-tests-database-is-built-once-per-run-2026-10-18). `createTestDb()` replayed 41 migration files for each of ~780 tests (230–570 ms a database); it now replays a dump of the migrated database (14 ms), built once per run by the server project's global setup. New `server/tests/test-db.test.ts`: the dump equals a fully migrated database (schema and rows), copied rows load in any key order, each call is its own database; dropping one schema object or the rows from the dump fails it (guard checks).
@@ -422,6 +428,8 @@ Business decisions the build still needs, with the step each blocks. All are for
 - **D169 browser environment:** if setup fails before executing tests with “Chromium distribution 'chrome' is not found”, select an installed Chromium with `E2E_BROWSER_PATH=/usr/bin/chromium`. CI retains its Chrome default. A launch failure with skipped tests is not browser validation evidence.
 - Before a PR: `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` and the changed feature's e2e files; CI runs everything ([development guide → Checks](guides/development.md#commands), D83). All pass as of 2026-09-30 (unit + server 795 and the full e2e suite 368, at steps 10.2–10.4).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
+  - Pitfall: `pnpm test:changed` (`--changed`) ignores **untracked** files: `git add` a new test before relying on it (D175).
+  - Pitfall: a Vitest glob starting `**/` doesn't match through a dot folder, so in a checkout under `.claude/worktrees/` it matches nothing. Anchor such globs at the project root, as `forceRerunTriggers` in `vitest.config.ts` does (D175).
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
   - **Test data:** open **Sample data** in the admin sidebar (on for the dev server; D94): load a sample menu (Small, Standard or Large), branch hours and tables, and reset it all from there. No scripts.

@@ -1,3 +1,4 @@
+// @module-tag slow (every test writes or reads the largest data the contracts allow; see vitest.config.ts)
 import { sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { MAX_AVAILABILITY_WINDOWS, MAX_TARGET_RULES } from '#shared/contracts/menu-availability'

@@ -14,10 +14,15 @@ pnpm lint / pnpm lint:fix                 # ESLint also does formatting (no Pret
 pnpm typecheck                            # vue-tsc via nuxt typecheck
 pnpm test                                 # all Vitest projects
 pnpm test:unit / pnpm test:e2e            # unit + server (~30 s idle, D174) / e2e only (~11 min locally at 4 workers, +5 min when the build is stale)
+pnpm test:changed                         # unit + server tests reached by files changed since origin/main (2–10 s for one edit, D175)
+pnpm test:fast                            # unit + server without the `slow` tag (~26 s idle)
+pnpm vitest --project server server/tests/health.test.ts   # watch mode: reruns on save
 pnpm vitest run --project server          # one project: unit | server | e2e (| nuxt, once a *.nuxt.test.ts exists)
 pnpm vitest run app/features/categories   # one feature's tests
 pnpm vitest run -t "refreshes once"
 ```
+
+**Which test command (D175):** while working, watch the file you're changing (`pnpm vitest --project server <path>`) or run `pnpm test:changed` after an edit. It follows imports, dynamic ones too, from every changed file: committed since `origin/main` (fetch first if it's old), staged and unstaged. It **ignores untracked files**, so `git add` a new file first. A change to `package.json`, `vitest.config.ts` or a migration runs everything. `pnpm test:fast` skips the `slow` tests (large data, whole sample menus, migration replays, password hashing); on an idle machine it saves only a few seconds, more while other checks run. Before a PR it is still the full `pnpm test:unit` (Checks below).
 
 **Local e2e runs 4 files at a time (D172):** each file opens its own Chrome, and more workers starved them (Chrome launches past the 60 s hook timeout, cross-tab tests timing out). `E2E_WORKERS=<n>` overrides it; CI keeps Vitest's default. ESLint caches results in `node_modules/.cache/eslint/` by file content; delete that folder if lint ever looks stale.
 
@@ -47,7 +52,7 @@ Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix o
 
 `vitest.config.ts` projects:
 - **unit** (`test/unit`, `app/features/*/tests`): pure logic in Node: engines, form schemas and mappings.
-- **server** (`server/features/*/tests`, shared utils in `server/tests`): services against an in-memory SQLite database built from the checked-in migrations, foreign keys on (D42). The project's global setup runs the migrations once per run and `createTestDb()` replays a dump of the result (schema and rows, ~14 ms instead of ~230 ms, D174); `test-db.test.ts` checks the dump equals a migrated database. Tests of one migration use `createTestClient()` + `applyMigration()`.
+- **server** (`server/features/*/tests`, shared utils in `server/tests`): services against an in-memory SQLite database built from the checked-in migrations, foreign keys on (D42). The project's global setup runs the migrations once per run and `createTestDb()` replays a dump of the result (schema and rows, ~14 ms instead of ~230 ms, D174); `test-db.test.ts` checks the dump equals a migrated database. Tests of one migration use `createTestClient()` + `applyMigration()`. A test whose own work is heavy (data at the contracts' limits, a whole sample menu, migrations replayed, several password hashes) and takes over ~1 s idle gets the `slow` tag (`{ tags: ['slow'] }` on the test or describe, or `// @module-tag slow` atop the file): 60 s instead of 5 s, skipped by `test:fast` (D175). A slow import or setup gets fixed, not tagged.
 - **e2e** (`test/e2e`): builds the app once and drives Chrome. Admin tests mock the API in the browser (`mockApi`); the customer site's tests read a real database seeded before each run (`test/e2e/support/seed.ts`, the Standard sample menu, D95), because the server renders those pages.
 - **nuxt**: only created once a `*.nuxt.test.ts` exists (D42).
 
