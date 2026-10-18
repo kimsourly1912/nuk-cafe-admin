@@ -36,6 +36,12 @@ onMounted(revealActiveItem)
 watch(() => route.path, revealActiveItem, { flush: 'post' })
 // The phone menu mounts when it opens, so centre the current page once it is on screen.
 watch(open, isOpen => isOpen && nextTick(revealActiveItem))
+// Closing the search hands focus back to its button at the top of the sidebar, which scrolls the
+// sidebar up and undoes the centring done on navigation; centre again once the palette has gone.
+const searchOpen = ref(false)
+watch(searchOpen, (isOpen) => {
+  if (!isOpen) setTimeout(revealActiveItem, 300)
+})
 /** Every page in the sidebar, for the search (Ctrl/⌘+K, D152). */
 const searchPages = computed(() => sidebarItems.value.flat()
   .filter((item): item is typeof item & { label: string, to: string } => typeof item.to === 'string' && typeof item.label === 'string')
@@ -165,6 +171,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
          Mounting it at the moment it opens would let USidebar close it again on phones. -->
     <AssistantPanel class="print:hidden" />
     <AdminSearch
+      v-model:open="searchOpen"
       :pages="searchPages"
       @shortcuts="showShortcuts"
     />
