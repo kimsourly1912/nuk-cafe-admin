@@ -51,6 +51,8 @@ export default defineConfig({
           name: 'server',
           // server/tests: shared server utils; server/features/*/tests: features (docs/server/architecture.md → Tests).
           include: ['server/tests/**/*.test.ts', 'server/features/*/tests/**/*.test.ts'],
+          // Runs the migrations once; each test database replays the result (D174).
+          globalSetup: ['server/tests/support/global-setup.ts'],
           environment: 'node',
         },
       },
