@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Row errors in every list (D178, 2026-10-18)
+
+[Decision](decisions.md#d178-every-list-that-removes-or-moves-rows-moves-its-errors-2026-10-18). Audit of every `UForm` for lists: staff branches, availability times, hours windows and the item form's add-on groups removed or moved rows with `splice`, so an error stayed on the old position. They now use `useFormRowErrors`.
+
+Checks: `pnpm lint` and `pnpm typecheck` pass. E2E of staff, availability, branches and products: see below. No new test for these four lists.
+
 ## A failed submit goes to the first invalid field (D177, 2026-10-18)
 
 [Decision](decisions.md#d177-a-failed-submit-goes-to-the-first-invalid-field-2026-10-18). Owner report (screenshots): in New option set, an empty 15th value is below the fold and Create seems to do nothing. New shared `focusFirstInvalid` (`@error` on the `UForm`) scrolls to the first invalid field in page order and focuses it; wired into the 13 schema forms that lacked it. Documented in forms → Errors on submit, ui §17, the review checklist and the project map.

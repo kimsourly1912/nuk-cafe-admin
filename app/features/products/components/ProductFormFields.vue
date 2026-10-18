@@ -254,6 +254,7 @@ defineExpose({ submit: () => form.value?.submit(), setServerErrors })
       </h3>
       <ItemAddOnGroups
         v-model="state.addOnGroups"
+        :errors-form="form"
         :disabled="disabled"
       />
     </section>

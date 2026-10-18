@@ -10,7 +10,8 @@ import { describeRules, useModifierGroupOptions } from '~/features/modifier-grou
 import { addOnGroupFromLibrary } from '../schemas/item-form'
 import type { FormAddOnGroup } from '../schemas/item-form'
 
-defineProps<{ disabled?: boolean }>()
+// `errorsForm` is the item's `UForm`: a removed or moved group takes its errors with it (D171).
+const props = defineProps<{ disabled?: boolean, errorsForm?: object | null }>()
 
 const groups = defineModel<FormAddOnGroup[]>({ required: true })
 // Moved with its chevrons, a group slides to its new place (D166).
@@ -37,11 +38,10 @@ function setOwnRules(group: FormAddOnGroup, own: boolean) {
   }
 }
 
+const rowErrors = useFormRowErrors(() => props.errorsForm as never, 'addOnGroups')
+
 function move(index: number, by: -1 | 1) {
-  const list = [...groups.value]
-  const [group] = list.splice(index, 1)
-  list.splice(index + by, 0, group!)
-  groups.value = list
+  rowErrors.moveRow(groups.value, index, index + by)
 }
 
 /** This item's own price: it differs from the library's (sent as an override, D61). */
@@ -101,7 +101,7 @@ const ownPrice = (addOn: FormAddOnGroup['addOns'][number]) => toMinor(addOn.pric
               size="xs"
               :aria-label="`Remove ${group.name}`"
               :disabled="disabled"
-              @click="groups.splice(i, 1)"
+              @click="rowErrors.removeRow(groups, i)"
             />
           </div>
         </div>

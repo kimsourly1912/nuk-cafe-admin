@@ -81,7 +81,7 @@ Every case below is handled. **Keep this table and the tests in sync when changi
 | 29 | Someone else saved first (409), then **Reload** (the menu item editor, the add-on group's settings) | Their version, with this person's changed parts on top; the parts both changed named; still unsaved, against their version | `mergeFormChanges` + `markClean(theirs)` (D153) | unit, e2e (`products.test.ts`, checked to fail when Reload takes theirs) |
 | 30 | A rule across fields is fixed in the *other* field (At most raised after "Can't be less than the minimum"; one of two same-named add-ons renamed; the second password fixed), or a row with an error is removed | The error leaves at once | `useFormErrorRecheck`: after each change, the fields showing a schema error are checked again (D166) | e2e (`modifier-groups.test.ts`) |
 | 31 | A checkbox inside a group's field (Pre-selected inside Add-ons) | Its label ticks its own box; it isn't red when the group has an error | Its own `UFormField` (D165, D166) | e2e (`modifier-groups.test.ts`) |
-| 32 | A row with its own error is removed or moved (an add-on, an option value) | The error goes with the row; the row that takes its place shows none | `useFormRowErrors` moves the errors with the rows (D171) | unit (`use-form-row-errors.test.ts`, `form-rows.test.ts`); browser check pending |
+| 32 | A row with its own error is removed or moved (an add-on, an option value) | The error goes with the row; the row that takes its place shows none | `useFormRowErrors` moves the errors with the rows (D171) | unit (`use-form-row-errors.test.ts`, `form-rows.test.ts`); browser check pending; staff branches, availability times, add-on groups and hours windows (D178) are wired but have no test of their own |
 | 33 | Submit pressed while the invalid field is out of view (the 15th option value, a field in a long page or a scrolled modal) | The first invalid field (highest on the page) scrolls to the middle of the view and takes focus; nothing is sent | `@error="focusFirstInvalid"` on the `UForm` (D177) | e2e (`option-sets.test.ts`, checked to fail without it) |
 
 Implementation traps (each one broke something once, see [D19](../decisions.md)):
@@ -290,7 +290,7 @@ It reads the form's `schema` and `state` props (any Standard Schema: Valibot her
 
 ## Rows and their errors
 
-A list whose rows each have fields (option values, add-ons, availability windows) names each row's error by its position: `values.2`, `modifiers.2.price`. Removing a row with `splice` leaves that error on its old position, so the row that moves into it shows an error it never had (D171). `useFormRowErrors` moves the errors with the rows. Use it for every remove and move in such a list:
+A list whose rows each have fields (option values, add-ons, availability windows) names each row's error by its position: `values.2`, `modifiers.2.price`. Removing a row with `splice` leaves that error on its old position, so the row that moves into it shows an error it never had (D171). `useFormRowErrors` moves the errors with the rows. Use it for every remove and move in such a list. A list inside a child component (the add-on groups of the item form, the weekly hours' windows) gets the page's `UForm` ref as a prop (`errors-form`) and passes it as a getter: `useFormRowErrors(() => props.errorsForm, 'addOnGroups')`; nested rows name the whole path (`days.2.windows`). Audited in D178: option values, add-ons, availability times, staff branches, add-on groups and hours windows all use it:
 
 ```vue
 <script setup lang="ts">

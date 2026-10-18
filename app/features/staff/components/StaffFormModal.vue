@@ -57,6 +57,7 @@ const unsaved = useModalUnsavedChanges(state, {
 
 const form = useTemplateRef('form')
 useFormErrorRecheck(form)
+const rowErrors = useFormRowErrors(form, 'memberships')
 useSubmitShortcut(() => form.value?.submit())
 
 let closed = false
@@ -191,7 +192,7 @@ async function onSubmit({ data }: FormSubmitEvent<StaffForm>) {
                 color="neutral"
                 variant="ghost"
                 :aria-label="`Remove branch ${index + 1}`"
-                @click="state.memberships.splice(index, 1)"
+                @click="rowErrors.removeRow(state.memberships, index)"
               />
             </div>
             <p
