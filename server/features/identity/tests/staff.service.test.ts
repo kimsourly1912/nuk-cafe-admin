@@ -205,7 +205,8 @@ describe('disable', () => {
   })
 })
 
-describe('reset password (step 10.1, D115)', () => {
+// Slow: each test hashes and checks several passwords (scrypt, CPU-bound; vitest.config.ts).
+describe('reset password (step 10.1, D115)', { tags: ['slow'] }, () => {
   it('gives a new temporary password: the old one stops working, every session ends, and they must change it', async () => {
     const created = await createStaff(db, actor, staffInput())
     const headers = await signIn(auth, 'sophea@example.com', created.temporaryPassword!)

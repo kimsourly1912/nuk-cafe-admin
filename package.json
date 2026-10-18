@@ -16,6 +16,8 @@
     "lint:fix": "eslint . --fix --cache --cache-strategy content --cache-location node_modules/.cache/eslint/",
     "test": "vitest run",
     "test:unit": "vitest run --project unit --project server",
+    "test:changed": "vitest run --project unit --project server --changed origin/main",
+    "test:fast": "vitest run --project unit --project server --tags-filter=!slow",
     "test:e2e": "vitest run --project e2e",
     "typecheck": "nuxt typecheck"
   },

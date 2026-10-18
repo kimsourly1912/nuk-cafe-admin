@@ -1,3 +1,4 @@
+// @module-tag slow (replays the migrations one by one for each test; see vitest.config.ts)
 import { describe, expect, it } from 'vitest'
 import { applyMigration, createTestClient, migrationFiles } from '#server/tests/support/db'
 
