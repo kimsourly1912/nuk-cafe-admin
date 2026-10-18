@@ -86,6 +86,9 @@ export const tenantListQuerySchema = v.object({
 })
 export type TenantListQuery = v.InferOutput<typeof tenantListQuerySchema>
 
+/** `GET /platform/tenants/counts`: how many cafes each status holds, for the list's tabs. */
+export type TenantCounts = Record<TenantStatus, number>
+
 export const SUSPEND_REASON_MAX = 200
 
 /** `POST …/{id}/suspend`: why, shown to the platform team (customers see "Ordering is paused"). */

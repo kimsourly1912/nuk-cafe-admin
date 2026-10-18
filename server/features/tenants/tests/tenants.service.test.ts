@@ -8,7 +8,7 @@ import { orders } from '#server/features/orders/orders.schema'
 import { addBranchStaff, createAdmin, createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
-import { changeTenantSlug, createTenant, currentSlugFor, getCafeProfile, getCafeSettings, getTenant, listAccountCafes, listOwners, listTenants, resumeTenant, seedTenant, suspendTenant, updateCafeSettings } from '#server/features/tenants'
+import { changeTenantSlug, countTenants, createTenant, currentSlugFor, getCafeProfile, getCafeSettings, getTenant, listAccountCafes, listOwners, listTenants, resumeTenant, seedTenant, suspendTenant, updateCafeSettings } from '#server/features/tenants'
 import { mediaAssets } from '#server/features/media/media.schema'
 import { tenantSlugs } from '#server/features/tenants/tenants.schema'
 
@@ -216,6 +216,13 @@ describe('the list', () => {
     await suspendTenant(db, admin, TEST_TENANT, { version: nuk.version, reason: 'Unpaid invoice' })
     expect((await listTenants(db, query({ status: 'suspended' }))).items.map(t => t.slug)).toEqual(['nuk'])
     expect((await listTenants(db, query({ status: 'active' }))).items.map(t => t.slug)).toEqual(['apple-tea', 'brown-bean'])
+  })
+
+  it('counts the cafes of each status in one read, zeros included', async () => {
+    expect(await countTenants(db)).toEqual({ active: 3, suspended: 0 })
+    const nuk = await getTenant(db, TEST_TENANT)
+    await suspendTenant(db, admin, TEST_TENANT, { version: nuk.version, reason: 'Unpaid invoice' })
+    expect(await countTenants(db)).toEqual({ active: 2, suspended: 1 })
   })
 
   it('counts each cafe\'s own orders of the last 30 days and its last order', async () => {

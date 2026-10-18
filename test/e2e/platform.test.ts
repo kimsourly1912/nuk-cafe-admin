@@ -40,7 +40,7 @@ const summary = ({ owners: _o, formerSlugs: _f, ...cafe }: TenantDetail): Tenant
 
 const signedIn = (session: PlatformSession = SUPERADMIN): Record<string, MockHandler> => ({ 'GET /platform/me': () => session })
 
-/** Cafes filtered by `status` and `search` like the server, with the counts' `pageSize=1` calls. */
+/** Cafes filtered by `status` and `search` like the server. */
 function cafesHandler(cafes: () => TenantDetail[]): MockHandler {
   const list = paginatedHandler(() => cafes().map(summary))
   return (request) => {
@@ -57,6 +57,7 @@ async function open(path: string, handlers: Record<string, MockHandler> = {}, wi
   const api = await mockApi(page, {
     ...signedIn(),
     'GET /platform/tenants': cafesHandler(() => [NUK, PAUSED]),
+    'GET /platform/tenants/counts': () => ({ active: 1, suspended: 1 }),
     'GET /platform/owners': () => OWNERS,
     ...handlers,
   })
@@ -145,6 +146,8 @@ describe('cafes', () => {
     await page.getByPlaceholder('Search name or address…').fill('mill')
     await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('mill')
     expect(api.calls.filter(c => c === 'GET /platform/tenants').length).toBeGreaterThan(2)
+    // The tab counts are one read that filters and search don't repeat.
+    expect(api.calls.filter(c => c === 'GET /platform/tenants/counts')).toHaveLength(1)
   })
 
   it('on a phone, each cafe is a row', async () => {
