@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Fewer API requests, step 3: reference data kept between visits (D173, 2026-10-17)
+
+[Plan](plans/request-reduction.md) step 3, [decision](decisions.md#d173-reference-data-kept-between-visits-a-querys-first-fetch-joins-a-running-one-2026-10-17). `useApiQuery` takes an opt-in `staleTime` (kept after unmount; fresh → no request, older → shown and refetched); `invalidate()` marks kept keys so the next visit after a known change loads fresh, and a load started before a write never counts as fresh; a second component joins a running first fetch (`dedupe: 'defer'`) while every refresh cancels (a registry of mounted queries replaces `refreshNuxtData` in `invalidate`/`invalidateAll`). Opted in: categories, option sets, add-on groups, availability rules, branch options (60 s). Product writes now also invalidate `categories` (item counts).
+
+Request budget: a second item opened 1 read (was 5), the first 4 (was 5), the shell's assistant 1 (was 2), Categories and Availability again 0. Guard checks (each removed, rebuilt, failed as expected, restored): the invalidation mark ("changed meanwhile … loads it fresh"), `defer` (add-on groups read twice), cancel on refresh (D30's overlapping-refresh test). Evidence labels and full results: the PR.
+
 ## Fewer API requests, step 2: one query per resource (2026-10-17)
 
 [Plan](plans/request-reduction.md) step 2. `/admin/branches/options` had three keys (`branches:options`, `staff:branch-options`, `promotions:branches`); branch writes invalidate `branches` and `staff`, so the promotion editor missed branch changes. The branches feature now exports `useBranchOptions` (the one key); staff and promotions use it. `useAvailabilityRuleOptions` shares `availability-rules:list` with the Availability page, like option sets. Reference: [features → branches](reference/features.md#branches), [data fetching → options for a picker](reference/data-fetching.md#examples).

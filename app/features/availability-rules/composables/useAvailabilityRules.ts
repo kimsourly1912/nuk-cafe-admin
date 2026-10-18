@@ -25,7 +25,7 @@ export function usageLabel(rule: AvailabilityRule): string {
 
 /** Every rule, active and archived: the library is small, so the page filters and counts itself. */
 export function useAvailabilityRuleList() {
-  return useApiQuery('availability-rules:list', () => apiFetch<AvailabilityRule[]>(BASE, { query: { status: 'all' } }))
+  return useApiQuery('availability-rules:list', () => apiFetch<AvailabilityRule[]>(BASE, { query: { status: 'all' } }), { staleTime: REFERENCE_STALE_TIME })
 }
 
 /**

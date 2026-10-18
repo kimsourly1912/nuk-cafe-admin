@@ -8,8 +8,12 @@ const NOUN: [string, string] = ['menu item', 'menu items']
 /** Every write to one item moves its one `version`, so they never overlap: they share this lock. */
 const lockOf = (id: string) => `menu-item:${id}`
 
-/** Features whose data shows menu items: the libraries' "used by N items". */
-const AFFECTED = ['products', 'option-sets', 'modifier-groups', 'availability-rules']
+/**
+ * Features whose data shows menu items: the libraries' "used by N items" and categories' item
+ * counts (which also decide what `CategorySelect` offers). Kept between visits (D173), so each
+ * must be named.
+ */
+const AFFECTED = ['products', 'categories', 'option-sets', 'modifier-groups', 'availability-rules']
 
 export type ItemListFilters = Partial<Pick<ItemListQuery, 'search' | 'categoryId' | 'modifierGroupId' | 'photo' | 'page' | 'pageSize'>> & { status?: ItemStatus }
 

@@ -5,5 +5,5 @@ import type { BranchOption } from '#shared/contracts/staff'
  * staff memberships and promotions share it, so a branch change refreshes all of them.
  */
 export function useBranchOptions() {
-  return useApiQuery('branches:options', () => apiFetch<BranchOption[]>('/admin/branches/options'))
+  return useApiQuery('branches:options', () => apiFetch<BranchOption[]>('/admin/branches/options'), { staleTime: REFERENCE_STALE_TIME })
 }

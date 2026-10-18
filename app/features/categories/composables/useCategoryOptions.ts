@@ -7,7 +7,7 @@ import type { MenuCategory } from '#shared/contracts/menu-categories'
  * standard §4), and every caller of this key must pass the same options.
  */
 export function useAllCategories() {
-  return useApiQuery('categories:all', () => apiFetch<MenuCategory[]>('/admin/menu/categories', { query: { status: 'all' } }))
+  return useApiQuery('categories:all', () => apiFetch<MenuCategory[]>('/admin/menu/categories', { query: { status: 'all' } }), { staleTime: REFERENCE_STALE_TIME })
 }
 
 /**

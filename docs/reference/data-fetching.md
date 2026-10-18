@@ -68,7 +68,7 @@ function useApiQuery<T, DefaultT = undefined>(
 |---|---|
 | `key` | **`'<feature>:<name>'`**, e.g. `'categories:list'`. Can be a getter for parameterized queries: `` () => `categories:options:${type}` ``. [`invalidate`](#invalidate) finds queries by the feature prefix. In dev, a key without a prefix logs a warning. |
 | `handler` | Fetches the data, normally `() => apiFetch<T>('/admin/…', { query })`. Read reactive inputs with `toValue()` inside it. |
-| `options` | Any [`useAsyncData` option](https://nuxt.com/docs/api/composables/use-async-data#params). Common ones: `watch` (refetch when sources change), `default` (initial value), `immediate`, `lazy`. |
+| `options` | Any [`useAsyncData` option](https://nuxt.com/docs/api/composables/use-async-data#params). Common ones: `watch` (refetch when sources change), `default` (initial value), `immediate`, `lazy`. Plus [`staleTime`](#kept-between-visits-staletime-d173) (reference data only). |
 
 ### Returns
 
@@ -80,7 +80,7 @@ function useApiQuery<T, DefaultT = undefined>(
 | `refreshing` | `ComputedRef<boolean>` | Reloading while previous data is shown. Use it for a small inline spinner. |
 | `error` | `ComputedRef<ApiError \| undefined>` | Already normalized. Pass it to [`<ApiErrorAlert>`](./errors.md#apierroralert). |
 | `status` | `Ref<'idle' \| 'pending' \| 'success' \| 'error'>` | Raw `useAsyncData` status. |
-| `refresh()` / `execute()` | `() => Promise<void>` | Refetch. |
+| `refresh()` / `execute()` | `() => Promise<void>` | Refetch. Cancels a load already running for the key (pass `{ dedupe: 'defer' }` to join it instead). |
 | `clear()` | `() => void` | Reset data and error. |
 
 ### Examples
@@ -127,6 +127,28 @@ A key can also be a getter for a parameterized query (``() => `products:list:${t
 ### `watch` cancels, it doesn't queue
 
 `useApiQuery` handles the `watch` option itself: a change calls `refresh({ dedupe: 'cancel' })`, so the newer request starts at once and a slower, older response is ignored. Plain `useAsyncData` in Nuxt 4.5 would wait for the running request and show its (outdated) result first (D30). E2E: `list-page.test.ts` → "a slow response for an older search…".
+
+---
+
+### Kept between visits: `staleTime` (D173)
+
+Nuxt forgets a key's data when the last component using it unmounts, so every visit reads again. `staleTime` (ms) keeps it. Set it **where the query is defined**, so every call site of the key passes it, and only for reference data: libraries and pickers' options (`REFERENCE_STALE_TIME`, 60 s). Not for a record opened for editing (forms send the version they read), a paginated list (one key across filters), or a settings form.
+
+```ts
+export function useOptionSetList() {
+  return useApiQuery('option-sets:list', () => apiFetch<OptionSet[]>(BASE, { query: { status: 'all' } }), { staleTime: REFERENCE_STALE_TIME })
+}
+```
+
+| Next time the key is shown | Behavior |
+|---|---|
+| Kept, younger than `staleTime` | Shown, no request |
+| Kept, older (or `invalidateAll` on tab return/reconnect marked it stale) | Shown at once, refetched behind it (`refreshing`) |
+| `invalidate()` named its feature since (here or another tab) | Loaded fresh (`loading`), the kept copy never shown |
+| Its last load failed (any error) | Loaded fresh |
+| Signed in/out, another person (`clearNuxtData`) | Nothing kept |
+
+A load that started before an `invalidate` never makes the key fresh (a generation per key). The bookkeeping (`app/utils/invalidate.ts`: `queryStarted`, `queryReusable`, `queryAge`, `registerQuery`) runs in the browser only. Every query, kept or not: a second component mounting a key while it loads **joins** that load (`dedupe: 'defer'` for the first fetch; Nuxt's default `cancel` read it twice). Tests: e2e `freshness.test.ts` ("reference data kept between visits"), `request-budget.test.ts`.
 
 ---
 
@@ -271,7 +293,7 @@ function invalidate(...features: string[]): Promise<void>
 await invalidate('products', 'option-sets') // refreshes 'products:list', 'option-sets:list', … here and in other tabs
 ```
 
-- Matches keys by prefix: `'products'` refreshes every key starting with `products:`. Queries not currently loaded are ignored.
+- Matches keys by prefix: `'products'` refreshes every key starting with `products:` that a component uses now, cancelling a load already running (it started before the write). Kept keys nobody shows ([`staleTime`](#kept-between-visits-staletime-d173)) are marked, so they load fresh when next opened; others aren't loaded and load fresh anyway.
 - **Batched:** calls within 30ms are merged into one refresh per key and **one** message to other tabs. The promise resolves after this tab's refresh.
 - **Other tabs:** the feature names go out through the runtime hook `app:data-changed`, which `plugins/data-freshness.client.ts` forwards over a `BroadcastChannel`. Only names cross, never data. See [App-wide behavior → Data freshness](./app-behavior.md#data-freshness).
 - **Usually you don't call it.** Declare `invalidate: [...]` on [`useMutation`](./mutations.md#options) instead.
@@ -291,4 +313,4 @@ function invalidateInThisTab(features: string[]): Promise<void>
 function invalidateAll(options?: { olderThanMs?: number }): Promise<void>
 ```
 
-Refetches loaded API queries (`<feature>:<name>` keys) in this tab. With `olderThanMs`, only the queries whose last successful load (recorded per key by `useApiQuery`) is at least that old. The freshness plugin calls `invalidateAll({ olderThanMs: 5000 })` when the user returns to the tab, and `invalidateAll()` on reconnect. Features don't need it.
+Refetches the API queries (`<feature>:<name>` keys) components use now in this tab, cancelling running loads. With `olderThanMs`, only the queries whose last successful load (recorded per key by `useApiQuery`) is at least that old. Kept keys nobody shows are marked stale: they revalidate when next shown. The freshness plugin calls `invalidateAll({ olderThanMs: 5000 })` when the user returns to the tab, and `invalidateAll()` on reconnect. Features don't need it.

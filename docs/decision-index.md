@@ -8,7 +8,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 |---|---|
 | Replaced Spring/SPA/SDK | D1–D5; superseded by D39, D43, D71, D95 |
 | API/server architecture and integrity | D39–D45, D52, D71, D116; version, idempotency, guard, audit |
-| App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153 |
+| App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173 |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166 |
 | Tenancy and permissions | D134–D146; organization, tenant, branch |
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157 |
@@ -202,3 +202,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D170](decisions.md#d170-tenant-scoped-admin-pricing-and-fresh-counter-batches-2026-10-14) | Tenant-scoped admin pricing and fresh counter batches, 2026-10-14 |
 | [D171](decisions.md#d171-errors-of-a-removed-or-moved-row-follow-the-row-2026-10-16) | Errors of a removed or moved row follow the row, 2026-10-16 |
 | [D172](decisions.md#d172-faster-and-reliable-local-checks-2026-10-17) | Faster and reliable local checks, 2026-10-17 |
+| [D173](decisions.md#d173-reference-data-kept-between-visits-a-querys-first-fetch-joins-a-running-one-2026-10-17) | Reference data kept between visits; a query's first fetch joins a running one, 2026-10-17 |

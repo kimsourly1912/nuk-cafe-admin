@@ -86,22 +86,21 @@ describe('request budget: admin', () => {
     })
     console.info('[request-budget] menu items', JSON.stringify(steps, null, 2))
 
-    // Every opening reads the item and the three libraries again, though none of them changed, and
-    // the add-on library twice: the form and its add-on section both use `modifier-groups:list`, and
-    // Nuxt's first fetch for the second one cancels the first one's request and starts another.
-    // Back on the list, the page and its three status counts and photo count load again.
-    const editor = (id: string) => ({
-      [`/admin/menu/items/${id}`]: 1,
-      '/admin/menu/modifier-groups': 2,
-      '/admin/menu/option-sets': 1,
-      '/admin/menu/availability-rules': 1,
-    })
+    // The first opening reads the item and the three libraries, each once (the form and its add-on
+    // section share `modifier-groups:list`; the second joins the first's load, D173). The libraries
+    // are kept (D173), so the next opening reads only its item. Back on the list, the page and its
+    // three status counts and photo count load again (one read in step 4 of the plan).
     expect(steps).toEqual({
-      'edit Latte': editor('item-1'),
+      'edit Latte': {
+        '/admin/menu/items/item-1': 1,
+        '/admin/menu/modifier-groups': 1,
+        '/admin/menu/option-sets': 1,
+        '/admin/menu/availability-rules': 1,
+      },
       'close': {},
-      'edit Matcha': editor('item-2'),
+      'edit Matcha': { '/admin/menu/items/item-2': 1 },
       'close again': {},
-      'to Categories': { '/admin/menu/availability-rules': 1 },
+      'to Categories': {},
       'back to Menu items': { '/admin/menu/items': 5 },
     })
   }, 60_000)
@@ -122,7 +121,7 @@ describe('request budget: admin', () => {
     }
     console.info('[request-budget] tour', JSON.stringify({ firstLoad, ...reads }, null, 2))
 
-    // The dashboard's setup checks (D155) read each feature's endpoint themselves.
+    // The dashboard's setup checks (D155) read each feature's endpoint themselves, outside any query.
     const dashboard = {
       '/admin/branches/options': 1,
       '/admin/menu/items': 3,
@@ -133,28 +132,27 @@ describe('request budget: admin', () => {
       '/admin/cafe': 1,
       '/admin/reports/branches': 1,
     }
-    // The shell: Better Auth's client reads its session twice; the layout and the assistant's panel
-    // both use `assistant:status`, and the second one's first fetch restarts the first one's.
+    // The shell: Better Auth's client reads its session twice (its module, not ours).
     expect(firstLoad).toEqual({
       '/auth/get-session': 2,
       '/admin/me': 1,
       '/cafes/nuk': 1,
       '/me/cafes': 1,
-      '/admin/assistant': 2,
+      '/admin/assistant': 1,
       ...dashboard,
     })
-    // Every visit reads its page's data again, the libraries and branch options included.
+    // Reference data (categories, the libraries, branch options) is read once and kept (D173);
+    // lists and settings are read on every visit.
     expect(reads).toEqual({
       'Menu items': { '/admin/menu/items': 5, '/admin/menu/categories': 1 },
       'Categories': { '/admin/menu/availability-rules': 1 },
       'Options': { '/admin/menu/option-sets': 1 },
       'Add-ons': { '/admin/menu/modifier-groups': 1 },
-      'Availability': { '/admin/menu/availability-rules': 1 },
+      'Availability': {},
       'Branch': { '/admin/branches/options': 1 },
-      // One branch-options query for every feature: the Branch page's is still loaded as Staff opens.
       'Staff': { '/admin/staff': 1 },
       'Payments': { '/admin/exchange-rates': 1, '/admin/khqr': 1 },
-      'Categories (again)': { '/admin/menu/categories': 1, '/admin/menu/availability-rules': 1 },
+      'Categories (again)': {},
       'Menu items (again)': { '/admin/menu/items': 5 },
       'Dashboard': dashboard,
     })

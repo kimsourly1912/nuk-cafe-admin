@@ -16,7 +16,7 @@ const groupKey = (groupId: string) => `modifier-group:${groupId}`
 
 /** Every group, active and archived: the library is small, so the page filters and counts itself. */
 export function useModifierGroupList() {
-  return useApiQuery('modifier-groups:list', () => apiFetch<ModifierGroup[]>(BASE, { query: { status: 'all' } }))
+  return useApiQuery('modifier-groups:list', () => apiFetch<ModifierGroup[]>(BASE, { query: { status: 'all' } }), { staleTime: REFERENCE_STALE_TIME })
 }
 
 /** One group, fresh from the server (the page's Reload after someone else changed it). */
