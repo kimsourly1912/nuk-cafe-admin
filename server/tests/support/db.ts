@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createClient } from '@libsql/client'
-import type { Client } from '@libsql/client'
+import type { Client, InStatement } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import type { Logger } from 'drizzle-orm/logger'
 import type { Db } from '#server/utils/batch'
@@ -50,9 +50,43 @@ function likeD1(client: Client): Client {
  * D1's limit of 100 bound parameters per statement.
  */
 export async function createTestDb(options: { logger?: Logger } = {}): Promise<Db> {
-  const client = await createTestClient()
-  for (const file of migrationFiles()) await applyMigration(client, file)
-  return drizzle({ client, casing: 'snake_case', logger: options.logger })
+  const client = createClient({ url: ':memory:' })
+  // The whole schema and its rows in one transaction, then foreign keys on: the pragma can't
+  // change inside a transaction, and copied rows needn't be in key order.
+  await client.batch(await migratedSchema(), 'write')
+  await client.execute('PRAGMA foreign_keys = ON')
+  return drizzle({ client: likeD1(client), casing: 'snake_case', logger: options.logger })
+}
+
+let migrated: Promise<InStatement[]> | undefined
+
+/**
+ * What the checked-in migrations build, as statements that recreate it (`dumpSchema`). Built once
+ * per test worker: replaying the 41 migration files took about 230 ms per database, the dump about 10 ms (D174).
+ */
+export function migratedSchema(): Promise<InStatement[]> {
+  return migrated ??= (async () => {
+    const client = await createTestClient()
+    for (const file of migrationFiles()) await applyMigration(client, file)
+    const statements = await dumpSchema(client)
+    client.close()
+    return statements
+  })()
+}
+
+/** A database's tables, indexes, triggers and views (`sqlite_master`, in creation order), then every row of its tables. */
+export async function dumpSchema(client: Client): Promise<InStatement[]> {
+  const objects = (await client.execute(`SELECT type, name, sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%' ORDER BY rowid`)).rows
+  const statements: InStatement[] = objects.map(object => String(object.sql))
+  for (const name of objects.filter(object => object.type === 'table').map(object => String(object.name))) {
+    // Generated columns (hidden 2 and 3) can't be inserted.
+    const columns = (await client.execute({ sql: 'SELECT name FROM pragma_table_xinfo(?) WHERE hidden = 0', args: [name] })).rows.map(column => `"${String(column.name)}"`)
+    const insert = `INSERT INTO "${name}" (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`
+    for (const row of (await client.execute(`SELECT ${columns.join(', ')} FROM "${name}"`)).rows) {
+      statements.push({ sql: insert, args: columns.map((_, i) => row[i]!) })
+    }
+  }
+  return statements
 }
 
 /** An empty in-memory database like `createTestDb`'s (foreign keys on, D1's parameter limit), no migrations. */
