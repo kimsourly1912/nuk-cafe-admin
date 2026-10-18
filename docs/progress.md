@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## The local e2e build leaves dependencies untraced (D177, 2026-10-18)
+
+Follows D172. [Decision](decisions.md#d177-the-local-e2e-build-leaves-dependencies-untraced-2026-10-18). A stale e2e build spent most of its time in Nitro's dependency tracing (uncached `stat`-heavy resolution of every server import). The local e2e build now skips tracing (`E2E_UNTRACED`, set by the global setup) and imports dependencies from `node_modules`. CI and `E2E_TRACE=1` still trace. Idle laptop: a stale build 2m23s → 35 s; categories + shop-menu with a stale build 241 s → 94 s. Rejected: no sourcemaps or minify (no change), and `nuxt dev` (146 s to start, 9 of 68 tests timed out on first-request compiles).
+
+Checks: categories + shop-menu 3 untraced stale-build runs, 68/68 each; the full e2e suite on the untraced build 576/576 (436 s). One earlier full run on an overloaded laptop failed 50 tests, all from Chrome or worker crashes, none from the app. `pnpm lint`, `pnpm typecheck` and `pnpm test:unit` pass.
+
 ## The server tests' worker crash: every test database closed (D176, 2026-10-18)
 
 Follows D175. [Decision](decisions.md#d176-every-server-test-database-is-closed-2026-10-18). The native worker crash (exit 3221225477) came from libsql freeing in-memory databases the tests never closed. Outside Vitest, unclosed clients crash Node's exit in up to 9 of 20 runs (300 clients); closed ones never do. A setup file now closes each test's databases after the test, and `beforeAll` ones after the file (`server/tests/support/clients.ts`, `setup.ts`). New tests in `test-db.test.ts` cover this and fail without either hook (guard checks).
@@ -436,6 +442,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
   - Pitfall: `pnpm test:changed` (`--changed`) ignores **untracked** files: `git add` a new test before relying on it (D175).
   - Pitfall: a libsql client left open crashes the test worker when it is freed (exit code 3221225477, D176). Get databases from `createTestDb()` / `createTestClient()`, which close them; close any client you open yourself.
+  - Pitfall: the `.output` a local e2e run leaves is untraced (D177): it imports from this checkout's `node_modules` and can't be copied elsewhere or deployed. A real build is `pnpm build` / `pnpm build:staging`. For a suspected tracing-only bug: `E2E_TRACE=1 pnpm vitest run --project e2e <file>`.
   - Pitfall: a Vitest glob starting `**/` doesn't match through a dot folder, so in a checkout under `.claude/worktrees/` it matches nothing. Anchor such globs at the project root, as `forceRerunTriggers` in `vitest.config.ts` does (D175).
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
