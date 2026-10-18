@@ -78,6 +78,8 @@ export function useApiQuery<T, DefaultT = undefined>(
     // `invalidate()` refreshes the keys on screen through this (with cancel, see above).
     const unregister = registerQuery({ key: () => toValue(key), refresh: () => refresh() })
     if (getCurrentScope()) onScopeDispose(unregister)
+    // Rendered by the server with the page: as fresh as a load now, not "never loaded" (D173).
+    if (useNuxtApp().isHydrating && data.value != null) queryHydrated(toValue(key))
     // Shown from what was kept, but older than `staleTime`: refetch behind it.
     if (staleTime !== undefined && data.value != null && !queryRunning(toValue(key)) && queryAge(toValue(key)) >= staleTime) void refresh()
   }

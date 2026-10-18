@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Fewer API requests, step 6: the customer site (D173 amendment, 2026-10-18)
+
+[Plan](plans/request-reduction.md) step 6 (step 5, the Dashboard, skipped by the owner). Measured with `test/e2e/request-budget-shop.test.ts` against the seeded server (a guest orders; a signed-in customer browses, as `budgetShopper`, a seed customer with no orders so nothing polls). The site was already lean: the menu is server-rendered, Review order quotes once per visit. Coming back to the menu read it again: `menu:branches` and `menu:public:<branch>` now keep their data (60 s, the server re-checks at quote and Place order), and server-rendered data counts as loaded at hydration so the first paint isn't followed by a refetch.
+
+Budget: back to the menu from Review order 0 reads (was 1), from Your orders 0 (was 2; signed in 0, was 2); opening the menu unchanged. Checks: shop e2e (menu, checkout, tracking, account, marketing, promotions, checkout quote), freshness, session and both budget files: 91 pass; without the hydration line the guest budget fails (guard check).
+
 ## Fewer API requests, step 4: menu item counts in one read (2026-10-17)
 
 [Plan](plans/request-reduction.md) step 4. `GET /admin/menu/items/counts` (search, category, add-on group) answers `{ draft, active, archived }`, each `{ items, withoutPhoto }`, from one grouped query sharing the list's tenant-scoped filters; `useItemCounts` derives the status tabs (with the photo filter) and the "No photo" hint (with the tab) from it, so a tab or photo-filter change no longer reads counts. The Dashboard's two menu setup checks use it too. E2E mocks derive the counts from a test's own list handler (`mockApi`), so fixtures are unchanged.
