@@ -63,6 +63,8 @@ export default defineConfig({
           include: ['server/tests/**/*.test.ts', 'server/features/*/tests/**/*.test.ts'],
           // Runs the migrations once; each test database replays the result (D174).
           globalSetup: ['server/tests/support/global-setup.ts'],
+          // Closes every test database: libsql crashes the worker when the GC frees one (D176).
+          setupFiles: ['server/tests/support/setup.ts'],
           environment: 'node',
           // Heavy tests (D175): the largest data the contracts allow, whole sample menus, migrations
           // replayed one by one, several password hashes. Up to 10 s on an idle laptop (the Large

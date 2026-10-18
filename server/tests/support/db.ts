@@ -7,6 +7,7 @@ import type { Logger } from 'drizzle-orm/logger'
 import type { Db } from '#server/utils/batch'
 import { and, eq } from 'drizzle-orm'
 import { inject } from 'vitest'
+import { trackClient } from './clients'
 import { branches, branchStaff, member, organization, user } from '#server/db/tables'
 import { tenantSlugs } from '#server/features/tenants/tenants.schema'
 
@@ -48,10 +49,11 @@ function likeD1(client: Client): Client {
 /**
  * A fresh in-memory SQLite database with every checked-in migration applied, in the same
  * snake_case mode NuxtHub uses. Foreign keys are enforced, as they always are on D1, and so is
- * D1's limit of 100 bound parameters per statement.
+ * D1's limit of 100 bound parameters per statement. Closed after the test that opened it, or after
+ * the file when opened outside a test (`./clients.ts`, D176).
  */
 export async function createTestDb(options: { logger?: Logger } = {}): Promise<Db> {
-  const client = createClient({ url: ':memory:' })
+  const client = trackClient(createClient({ url: ':memory:' }))
   // The whole schema and its rows in one transaction, then foreign keys on: the pragma can't
   // change inside a transaction, and copied rows needn't be in key order.
   await client.batch(await migratedSchema(), 'write')
@@ -103,7 +105,7 @@ export async function dumpSchema(client: Client): Promise<InStatement[]> {
 
 /** An empty in-memory database like `createTestDb`'s (foreign keys on, D1's parameter limit), no migrations. */
 export async function createTestClient(): Promise<Client> {
-  const client = likeD1(createClient({ url: ':memory:' }))
+  const client = likeD1(trackClient(createClient({ url: ':memory:' })))
   await client.execute('PRAGMA foreign_keys = ON')
   return client
 }

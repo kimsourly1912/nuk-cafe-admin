@@ -14,7 +14,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109 |
-| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175 |
+| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176 |
 | Documentation loading | D167 |
 
 ## Entries by ID
@@ -205,3 +205,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D173](decisions.md#d173-reference-data-kept-between-visits-a-querys-first-fetch-joins-a-running-one-2026-10-17) | Reference data kept between visits; a query's first fetch joins a running one, 2026-10-17 |
 | [D174](decisions.md#d174-the-server-tests-database-is-built-once-per-run-2026-10-18) | The server tests' database is built once per run, 2026-10-18 |
 | [D175](decisions.md#d175-heavy-server-tests-tagged-slow-quick-test-commands-for-the-inner-loop-2026-10-18) | Heavy server tests tagged `slow`; quick test commands for the inner loop, 2026-10-18 |
+| [D176](decisions.md#d176-every-server-test-database-is-closed-2026-10-18) | Every server-test database is closed, 2026-10-18 |

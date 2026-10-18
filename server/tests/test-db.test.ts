@@ -1,7 +1,7 @@
 import type { Client } from '@libsql/client'
 import { sql } from 'drizzle-orm'
 import type { Db } from '#server/utils/batch'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { applyMigration, createTestClient, createTestDb, D1_MAX_PARAMS, dumpSchema, migrationFiles } from '#server/tests/support/db'
 
 // `createTestDb` replays a dump of the migrated schema instead of every migration (D174). It must
@@ -45,6 +45,30 @@ describe('createTestDb', () => {
     const second = await createTestDb()
     await first.run(sql`CREATE TABLE only_here (id integer)`)
     expect((await clientOf(second).execute(`SELECT count(*) FROM sqlite_master WHERE name = 'only_here'`)).rows[0]![0]).toBe(0)
+  })
+})
+
+// libsql crashes the worker when the GC frees an open database, so every one is closed (D176).
+describe('closing test databases', () => {
+  let fromBeforeAll: Db
+  let fromBeforeEach: Db
+  let fromTest: Db
+  beforeAll(async () => {
+    fromBeforeAll = await createTestDb()
+  })
+  beforeEach(async () => {
+    fromBeforeEach = await createTestDb()
+  })
+
+  it('opens them for the test', async () => {
+    fromTest = await createTestDb()
+    for (const db of [fromBeforeAll, fromBeforeEach, fromTest]) expect(clientOf(db).closed).toBe(false)
+  })
+
+  it('closed the previous test\'s, and keeps one from beforeAll open until the file ends', () => {
+    expect(clientOf(fromTest).closed).toBe(true)
+    expect(clientOf(fromBeforeAll).closed).toBe(false)
+    expect(clientOf(fromBeforeEach).closed).toBe(false)
   })
 })
 
