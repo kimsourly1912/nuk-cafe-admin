@@ -265,6 +265,11 @@ export default defineNuxtConfig({
     // Added through nitro:init, not `nitro.hooks`: a `compiled` key there replaces the Cloudflare
     // preset's own `compiled` hook, which writes wrangler.json (D53).
     'nitro:init'(nitro) {
+      // The local e2e build (test/e2e/support/global-setup.ts, D177) imports dependencies from the
+      // project's node_modules instead of tracing and copying them into .output: Nitro's tracer
+      // resolves every server import uncached, which took most of the build on Windows. That
+      // build only runs from this checkout. CI, staging and every other build still trace.
+      if (process.env.E2E_UNTRACED) nitro.options.externals = { ...nitro.options.externals, trace: false }
       if (nitro.options.preset.replaceAll('_', '-') === 'cloudflare-module') {
         // Nitro 2 buffers the entire request in its entry, before H3's route-level size checks.
         // Wrap that entry, preserving all its other handlers and generated Wrangler bindings.
