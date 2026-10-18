@@ -6,6 +6,7 @@ import { drizzle } from 'drizzle-orm/libsql'
 import type { Logger } from 'drizzle-orm/logger'
 import type { Db } from '#server/utils/batch'
 import { and, eq } from 'drizzle-orm'
+import { inject } from 'vitest'
 import { branches, branchStaff, member, organization, user } from '#server/db/tables'
 import { tenantSlugs } from '#server/features/tenants/tenants.schema'
 
@@ -58,20 +59,31 @@ export async function createTestDb(options: { logger?: Logger } = {}): Promise<D
   return drizzle({ client: likeD1(client), casing: 'snake_case', logger: options.logger })
 }
 
+declare module 'vitest' {
+  interface ProvidedContext {
+    migratedSchema: InStatement[]
+  }
+}
+
 let migrated: Promise<InStatement[]> | undefined
 
 /**
- * What the checked-in migrations build, as statements that recreate it (`dumpSchema`). Built once
- * per test worker: replaying the 41 migration files took about 230 ms per database, the dump about 10 ms (D174).
+ * What the checked-in migrations build, as statements that recreate it. The server project's
+ * global setup builds it once per run (`server/tests/support/global-setup.ts`); a project without
+ * it builds it once per test file. Replaying the 41 migration files took about 230 ms per database,
+ * the dump about 14 ms (D174).
  */
 export function migratedSchema(): Promise<InStatement[]> {
-  return migrated ??= (async () => {
-    const client = await createTestClient()
-    for (const file of migrationFiles()) await applyMigration(client, file)
-    const statements = await dumpSchema(client)
-    client.close()
-    return statements
-  })()
+  return migrated ??= Promise.resolve(inject('migratedSchema') ?? buildMigratedSchema())
+}
+
+/** Runs every migration on a scratch database and dumps the result (`dumpSchema`). */
+export async function buildMigratedSchema(): Promise<InStatement[]> {
+  const client = await createTestClient()
+  for (const file of migrationFiles()) await applyMigration(client, file)
+  const statements = await dumpSchema(client)
+  client.close()
+  return statements
 }
 
 /** A database's tables, indexes, triggers and views (`sqlite_master`, in creation order), then every row of its tables. */

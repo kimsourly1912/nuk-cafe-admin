@@ -203,4 +203,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D171](decisions.md#d171-errors-of-a-removed-or-moved-row-follow-the-row-2026-10-16) | Errors of a removed or moved row follow the row, 2026-10-16 |
 | [D172](decisions.md#d172-faster-and-reliable-local-checks-2026-10-17) | Faster and reliable local checks, 2026-10-17 |
 | [D173](decisions.md#d173-reference-data-kept-between-visits-a-querys-first-fetch-joins-a-running-one-2026-10-17) | Reference data kept between visits; a query's first fetch joins a running one, 2026-10-17 |
-| [D174](decisions.md#d174-the-server-tests-database-is-built-once-per-worker-2026-10-18) | The server tests' database is built once per worker, 2026-10-18 |
+| [D174](decisions.md#d174-the-server-tests-database-is-built-once-per-run-2026-10-18) | The server tests' database is built once per run, 2026-10-18 |

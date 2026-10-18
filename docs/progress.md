@@ -2,9 +2,9 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
-## Faster server tests: the test database built once per worker (D174, 2026-10-18)
+## Faster server tests: the test database built once per run (D174, 2026-10-18)
 
-Follows D172. [Decision](decisions.md#d174-the-server-tests-database-is-built-once-per-worker-2026-10-18). `createTestDb()` replayed 41 migration files for each of ~780 tests (230–570 ms a database); it now replays a once-per-worker dump of the migrated database (14 ms). New `server/tests/test-db.test.ts`: the dump equals a fully migrated database (schema and rows), copied rows load in any key order, each call is its own database; dropping one schema object or the rows from the dump fails it (guard checks).
+Follows D172. [Decision](decisions.md#d174-the-server-tests-database-is-built-once-per-run-2026-10-18). `createTestDb()` replayed 41 migration files for each of ~780 tests (230–570 ms a database); it now replays a dump of the migrated database (14 ms), built once per run by the server project's global setup. New `server/tests/test-db.test.ts`: the dump equals a fully migrated database (schema and rows), copied rows load in any key order, each call is its own database; dropping one schema object or the rows from the dump fails it (guard checks).
 
 Checks (12-core Windows laptop): `pnpm test:unit` idle 64 s → 30 s (3 consecutive runs and 4 more, all 1,479 pass; main 2 runs, green); two runs at once main 126 s with a timeout in each, this 60 s all pass; on a busy machine main 188 s with 5 timeouts, this 64–81 s with 2–7. No native worker crash in 13 runs. Lint and typecheck pass. **Still open:** under heavy load `health.test.ts`'s first `operationalHealth` call (a dynamic import of the notifications feature, 4 s idle) and the standard sample menu test (~5.6 s) can exceed 5 s.
 
