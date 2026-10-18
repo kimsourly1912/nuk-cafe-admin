@@ -270,8 +270,31 @@ function requestBody(request: ReturnType<Route['request']>): unknown {
 
 const TINY_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64')
 
+/**
+ * The menu items list's counts (`GET /admin/menu/items/counts`), asked of the test's own list
+ * handler the way the server counts: per status, all items and those without a photo, with the
+ * list's filters (`pageSize=1`, so handlers that tell count requests apart still can).
+ */
+function itemCountsFrom(list: () => MockHandler | undefined): MockHandler {
+  return async (request) => {
+    const handler = list()
+    if (!handler) return { draft: { items: 0, withoutPhoto: 0 }, active: { items: 0, withoutPhoto: 0 }, archived: { items: 0, withoutPhoto: 0 } }
+    const total = async (status: string, photo: boolean) => {
+      const asked = new URL(request.url)
+      asked.pathname = asked.pathname.replace(/\/counts$/, '')
+      asked.searchParams.set('status', status)
+      asked.searchParams.set('pageSize', '1')
+      if (photo) asked.searchParams.set('photo', 'missing')
+      return ((await handler({ ...request, url: asked })) as ApiPage<unknown>).total
+    }
+    const entries = await Promise.all(['draft', 'active', 'archived'].map(async status => [status, { items: await total(status, false), withoutPhoto: await total(status, true) }]))
+    return Object.fromEntries(entries)
+  }
+}
+
 export async function mockApi(page: Page, handlers: Record<string, MockHandler> = {}): Promise<MockApi> {
-  const active = { ...DEFAULT_HANDLERS, ...handlers }
+  const active: Record<string, MockHandler> = { ...DEFAULT_HANDLERS, ...handlers }
+  if (!handlers['GET /admin/menu/items/counts']) active['GET /admin/menu/items/counts'] = itemCountsFrom(() => active['GET /admin/menu/items'])
   const calls: string[] = []
   const missing: string[] = []
   const origin = new URL(url('/')).origin

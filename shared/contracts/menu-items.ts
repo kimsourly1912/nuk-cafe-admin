@@ -154,18 +154,30 @@ const optionSetIds = v.pipe(
 )
 const variations = v.pipe(v.array(variationSchema), v.minLength(1), v.maxLength(400))
 
-export const itemListQuerySchema = v.object({
-  ...pageQuerySchema,
+/** The filters the list and its counts share. */
+const itemFilters = {
   search: optionalParam(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   categoryId: optionalParam(idSchema),
   /** Items that offer this add-on group (the Add-ons page's "Used by" list). */
   modifierGroupId: optionalParam(idSchema),
+}
+
+export const itemListQuerySchema = v.object({
+  ...pageQuerySchema,
+  ...itemFilters,
   /** `missing`: only items without a photo (D160). */
   photo: optionalParam(v.picklist(['missing'])),
   /** Default: everything but archived. */
   status: optionalParam(v.picklist([...ITEM_STATUSES, 'all'])),
 })
 export type ItemListQuery = v.InferOutput<typeof itemListQuerySchema>
+
+/** `GET /admin/menu/items/counts`: the list's filters, without status, photo or paging. */
+export const itemCountsQuerySchema = v.object(itemFilters)
+export type ItemCountsQuery = v.InferOutput<typeof itemCountsQuerySchema>
+
+/** Per status, the items the filters match and how many of them have no photo (D160). */
+export type ItemCounts = Record<ItemStatus, { items: number, withoutPhoto: number }>
 
 /**
  * A new item (a draft; publish it to sell it). `variations` is the whole grid: every combination of

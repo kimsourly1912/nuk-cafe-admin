@@ -227,6 +227,7 @@ Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/c
 | Route | Permission | Does |
 |---|---|---|
 | `GET /api/admin/menu/items?page&pageSize&search&categoryId&status` | `menu:read` | Summaries by category, then position: category name, image, the sellable price range. Default status: drafts and active (`status=archived` or `all` on request) |
+| `GET /api/admin/menu/items/counts?search&categoryId&modifierGroupId` | `menu:read` | `{ draft, active, archived }`, each `{ items, withoutPhoto }`, with the list's filters: the status tabs and the "No photo" hint in one grouped read (request-reduction plan step 4) |
 | `GET /api/admin/menu/items/{itemId}` | `menu:read` | The item with its option sets and variations |
 | `POST /api/admin/menu/items` | `menu:write` | `{ categoryId, name, description?, imageId?, optionSetIds?, variations, modifierGroups? }` → 201, a **draft** at the end of its category |
 | `PATCH /api/admin/menu/items/{itemId}` | `menu:write` | `{ version, categoryId?, name?, description?, imageId?, optionSetIds?, variations?, modifierGroups? }`: absent keeps; `imageId: null` removes; `optionSetIds` needs `variations`; `modifierGroups` replaces the whole list |

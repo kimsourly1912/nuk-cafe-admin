@@ -2,7 +2,8 @@ import type { Page } from '#shared/contracts/common'
 import { totalPages } from '#shared/contracts/common'
 import type { AvailabilityRuleRef } from '#shared/contracts/menu-availability'
 import type { MenuImage } from '#shared/contracts/media'
-import type { CreateItemInput, ItemListQuery, ItemModifierGroup, ItemModifierGroupsInput, ItemVersionInput, MenuItem, MenuItemSummary, ReorderItemsInput, RestoreItemInput, UpdateItemInput } from '#shared/contracts/menu-items'
+import type { CreateItemInput, ItemCounts, ItemCountsQuery, ItemListQuery, ItemModifierGroup, ItemModifierGroupsInput, ItemVersionInput, MenuItem, MenuItemSummary, ReorderItemsInput, RestoreItemInput, UpdateItemInput } from '#shared/contracts/menu-items'
+import { ITEM_STATUSES } from '#shared/contracts/menu-items'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, requireOneChange } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -151,6 +152,13 @@ export async function listItems(db: Db, tenantId: string, query: ItemListQuery):
     total,
     totalPages: totalPages(total, query.pageSize),
   }
+}
+
+/** The list's status tabs and its "No photo" hint (D160) in one read: every status, zeros included. */
+export async function countItems(db: Db, tenantId: string, query: ItemCountsQuery): Promise<ItemCounts> {
+  const counts = Object.fromEntries(ITEM_STATUSES.map(status => [status, { items: 0, withoutPhoto: 0 }])) as ItemCounts
+  for (const row of await repo.countItems(db, tenantId, query)) counts[row.status] = { items: row.items, withoutPhoto: row.withoutPhoto }
+  return counts
 }
 
 export async function getItem(db: Db, tenantId: string, id: string): Promise<MenuItem> {

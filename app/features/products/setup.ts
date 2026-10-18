@@ -1,5 +1,4 @@
-import type { Page } from '#shared/contracts/common'
-import type { MenuItemSummary } from '#shared/contracts/menu-items'
+import type { ItemCounts } from '#shared/contracts/menu-items'
 import type { AdminSetupStep } from '~/types/admin-setup'
 
 /** The home page's setup step (D155): something on the customer menu. */
@@ -9,8 +8,8 @@ export const menuItemsSetup: AdminSetupStep = {
   description: 'Only published items are on the customer menu.',
   page: '/admin/products',
   async check() {
-    const page = await apiFetch<Page<MenuItemSummary>>('/admin/menu/items', { query: { status: 'active', pageSize: 1 } })
-    return page.total > 0
+    const counts = await apiFetch<ItemCounts>('/admin/menu/items/counts')
+    return counts.active.items > 0
   },
 }
 
@@ -25,10 +24,7 @@ export const menuPhotosSetup: AdminSetupStep = {
   page: '/admin/products?status=active&photo=missing',
   optional: true,
   async check() {
-    const [published, missing] = await Promise.all([
-      apiFetch<Page<MenuItemSummary>>('/admin/menu/items', { query: { status: 'active', pageSize: 1 } }),
-      apiFetch<Page<MenuItemSummary>>('/admin/menu/items', { query: { status: 'active', photo: 'missing', pageSize: 1 } }),
-    ])
-    return published.total > 0 && missing.total === 0
+    const { active } = await apiFetch<ItemCounts>('/admin/menu/items/counts')
+    return active.items > 0 && active.withoutPhoto === 0
   },
 }

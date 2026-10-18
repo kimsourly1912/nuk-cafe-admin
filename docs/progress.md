@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Fewer API requests, step 4: menu item counts in one read (2026-10-17)
+
+[Plan](plans/request-reduction.md) step 4. `GET /admin/menu/items/counts` (search, category, add-on group) answers `{ draft, active, archived }`, each `{ items, withoutPhoto }`, from one grouped query sharing the list's tenant-scoped filters; `useItemCounts` derives the status tabs (with the photo filter) and the "No photo" hint (with the tab) from it, so a tab or photo-filter change no longer reads counts. The Dashboard's two menu setup checks use it too. E2E mocks derive the counts from a test's own list handler (`mockApi`), so fixtures are unchanged.
+
+Request budget: the Menu items list 2 reads (was 5: page + 3 status counts + photo count), a status tab 1, the Dashboard's item checks 2 (was 3). Checks: server tests for the counts (statuses, zeros, filters) and two-cafe isolation (also when filters name the other cafe's records); removing the tenant condition fails them; affected e2e files pass (179).
+
 ## Fewer API requests, step 3: reference data kept between visits (D173, 2026-10-17)
 
 [Plan](plans/request-reduction.md) step 3, [decision](decisions.md#d173-reference-data-kept-between-visits-a-querys-first-fetch-joins-a-running-one-2026-10-17). `useApiQuery` takes an opt-in `staleTime` (kept after unmount; fresh → no request, older → shown and refetched); `invalidate()` marks kept keys so the next visit after a known change loads fresh, and a load started before a write never counts as fresh; a second component joins a running first fetch (`dedupe: 'defer'`) while every refresh cancels (a registry of mounted queries replaces `refreshNuxtData` in `invalidate`/`invalidateAll`). Opted in: categories, option sets, add-on groups, availability rules, branch options (60 s). Product writes now also invalidate `categories` (item counts).

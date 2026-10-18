@@ -1,6 +1,6 @@
 import { and, asc, count, eq, inArray, isNull, max, ne, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
-import type { ItemListQuery, ItemStatus } from '#shared/contracts/menu-items'
+import type { ItemCountsQuery, ItemListQuery, ItemStatus } from '#shared/contracts/menu-items'
 import type { Db, Statement } from '#server/utils/batch'
 import { chunk, insertPieces, readInChunks, requireCount } from '#server/utils/batch'
 import { menuCategories, menuItemModifierGroups, menuItemModifierPrices, menuItemOptionSets, menuItems, menuItemVariations, menuModifierGroups, menuModifiers, menuOptionSets, menuOptionValues, menuVariationOptionValues } from './menu.schema'
@@ -80,17 +80,23 @@ export interface ItemSummaryRow extends ItemRow {
   priceMax: number | null
 }
 
-/** Items by category order, then position, with their category's name and sellable price range. */
-export async function listItems(db: Db, tenantId: string, query: ItemListQuery): Promise<{ rows: ItemSummaryRow[], total: number }> {
+/** The tenant's items the list's shared filters match (search, category, add-on group). */
+function filterConditions(tenantId: string, query: ItemCountsQuery): SQL[] {
   const conditions: SQL[] = [eq(menuItems.tenantId, tenantId)]
-  if (query.status && query.status !== 'all') conditions.push(eq(menuItems.status, query.status))
-  else if (!query.status) conditions.push(ne(menuItems.status, 'archived'))
   if (query.categoryId) conditions.push(eq(menuItems.categoryId, query.categoryId))
   if (query.modifierGroupId) {
     conditions.push(sql`exists (select 1 from ${menuItemModifierGroups} where ${menuItemModifierGroups.itemId} = ${menuItems.id} and ${menuItemModifierGroups.groupId} = ${query.modifierGroupId})`)
   }
-  if (query.photo === 'missing') conditions.push(isNull(menuItems.imageAssetId))
   if (query.search) conditions.push(sql`${menuItems.name} like ${`%${query.search.replace(/[\\%_]/g, c => `\\${c}`)}%`} escape '\\'`)
+  return conditions
+}
+
+/** Items by category order, then position, with their category's name and sellable price range. */
+export async function listItems(db: Db, tenantId: string, query: ItemListQuery): Promise<{ rows: ItemSummaryRow[], total: number }> {
+  const conditions = filterConditions(tenantId, query)
+  if (query.status && query.status !== 'all') conditions.push(eq(menuItems.status, query.status))
+  else if (!query.status) conditions.push(ne(menuItems.status, 'archived'))
+  if (query.photo === 'missing') conditions.push(isNull(menuItems.imageAssetId))
   const where = and(...conditions)
 
   const prices = db.select({
@@ -111,6 +117,15 @@ export async function listItems(db: Db, tenantId: string, query: ItemListQuery):
       .offset((query.page - 1) * query.pageSize) as Promise<ItemSummaryRow[]>,
   ])
   return { rows, total: totals[0]?.total ?? 0 }
+}
+
+/** Per status, the items the filters match and those without a photo: one grouped read. */
+export async function countItems(db: Db, tenantId: string, query: ItemCountsQuery): Promise<{ status: ItemStatus, items: number, withoutPhoto: number }[]> {
+  return db.select({
+    status: menuItems.status,
+    items: count(),
+    withoutPhoto: sql<number>`sum(case when ${menuItems.imageAssetId} is null then 1 else 0 end)`.mapWith(Number),
+  }).from(menuItems).where(and(...filterConditions(tenantId, query))).groupBy(menuItems.status)
 }
 
 /** The item's option sets in grid order. */

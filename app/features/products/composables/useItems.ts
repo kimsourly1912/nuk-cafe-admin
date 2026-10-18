@@ -1,5 +1,5 @@
 import type { Page } from '#shared/contracts/common'
-import type { CreateItemInput, ItemListQuery, ItemStatus, MenuItem, MenuItemSummary, UpdateItemInput } from '#shared/contracts/menu-items'
+import type { CreateItemInput, ItemCounts, ItemCountsQuery, ItemListQuery, ItemStatus, MenuItem, MenuItemSummary, UpdateItemInput } from '#shared/contracts/menu-items'
 import type { MutationOptions } from '~/utils/mutation'
 
 const BASE = '/admin/menu/items'
@@ -29,31 +29,36 @@ export function useItemList(query: MaybeRefOrGetter<ItemListFilters>) {
   )
 }
 
-/** "All 24 · Draft 3 · Published 20 · Archived 1" for the status tabs, with the other filters. */
-export function useItemStatusCounts(filters: () => Pick<ItemListFilters, 'search' | 'categoryId' | 'modifierGroupId' | 'photo'>) {
-  const { data } = useApiQuery(
-    'products:status-counts',
-    async () => {
-      const total = (status: ItemStatus) => apiFetch<Page<MenuItemSummary>>(BASE, { query: { ...filters(), status, pageSize: 1 } }).then(page => page.total)
-      const [draft, active, archived] = await Promise.all([total('draft'), total('active'), total('archived')])
-      return { draft, active, archived, all: draft + active + archived }
-    },
-    { watch: [() => JSON.stringify(filters())] },
-  )
-  return data
-}
-
 /**
- * How many items the list's filters show without a photo (D160), for the "No photo" hint; archived
- * items aren't counted on the All tab.
+ * The list's counts in one read: "All 24 · Draft 3 · Published 20 · Archived 1" for the status
+ * tabs (with the photo filter), and how many items it shows without a photo (D160) for the "No
+ * photo" hint (with the status tab; archived items aren't counted on the All tab). Only search,
+ * category and add-on group change the read; a tab or the photo filter doesn't.
  */
-export function useMissingPhotoCount(filters: () => ItemListFilters) {
+export function useItemCounts(filters: () => ItemListFilters) {
+  const counted = (): ItemCountsQuery => {
+    const { search, categoryId, modifierGroupId } = filters()
+    return { search, categoryId, modifierGroupId }
+  }
   const { data } = useApiQuery(
-    'products:missing-photos',
-    () => apiFetch<Page<MenuItemSummary>>(BASE, { query: { ...filters(), photo: 'missing', page: 1, pageSize: 1 } }).then(page => page.total),
-    { watch: [() => JSON.stringify(filters())] },
+    'products:counts',
+    () => apiFetch<ItemCounts>(`${BASE}/counts`, { query: counted() }),
+    { watch: [() => JSON.stringify(counted())] },
   )
-  return data
+  const statusCounts = computed(() => {
+    const counts = data.value
+    if (!counts) return undefined
+    const shown = (status: ItemStatus) => (filters().photo ? counts[status].withoutPhoto : counts[status].items)
+    const [draft, active, archived] = [shown('draft'), shown('active'), shown('archived')]
+    return { draft, active, archived, all: draft + active + archived }
+  })
+  const missingPhotos = computed(() => {
+    const counts = data.value
+    if (!counts) return undefined
+    const status = filters().status
+    return status ? counts[status].withoutPhoto : counts.draft.withoutPhoto + counts.active.withoutPhoto
+  })
+  return { statusCounts, missingPhotos }
 }
 
 /** One item with its grid, add-ons and rules: what the form edits (the list has summaries only). */

@@ -84,12 +84,13 @@ describe('request budget: admin', () => {
       await clickSidebar(page, 'Menu items')
       await page.getByRole('article', { name: 'Latte', exact: true }).waitFor()
     })
+    await step('Published tab', () => page.getByRole('group', { name: 'Status' }).getByRole('tab', { name: /Published/ }).click())
     console.info('[request-budget] menu items', JSON.stringify(steps, null, 2))
 
     // The first opening reads the item and the three libraries, each once (the form and its add-on
     // section share `modifier-groups:list`; the second joins the first's load, D173). The libraries
-    // are kept (D173), so the next opening reads only its item. Back on the list, the page and its
-    // three status counts and photo count load again (one read in step 4 of the plan).
+    // are kept (D173), so the next opening reads only its item. Back on the list: the page and its
+    // counts (status tabs and the "No photo" hint in one read).
     expect(steps).toEqual({
       'edit Latte': {
         '/admin/menu/items/item-1': 1,
@@ -101,7 +102,9 @@ describe('request budget: admin', () => {
       'edit Matcha': { '/admin/menu/items/item-2': 1 },
       'close again': {},
       'to Categories': {},
-      'back to Menu items': { '/admin/menu/items': 5 },
+      'back to Menu items': { '/admin/menu/items': 1, '/admin/menu/items/counts': 1 },
+      // The counts don't depend on the tab: only the page is read.
+      'Published tab': { '/admin/menu/items': 1 },
     })
   }, 60_000)
 
@@ -124,7 +127,7 @@ describe('request budget: admin', () => {
     // The dashboard's setup checks (D155) read each feature's endpoint themselves, outside any query.
     const dashboard = {
       '/admin/branches/options': 1,
-      '/admin/menu/items': 3,
+      '/admin/menu/items/counts': 2,
       '/admin/exchange-rates': 1,
       '/admin/khqr': 1,
       '/admin/telegram': 1,
@@ -144,7 +147,7 @@ describe('request budget: admin', () => {
     // Reference data (categories, the libraries, branch options) is read once and kept (D173);
     // lists and settings are read on every visit.
     expect(reads).toEqual({
-      'Menu items': { '/admin/menu/items': 5, '/admin/menu/categories': 1 },
+      'Menu items': { '/admin/menu/items': 1, '/admin/menu/items/counts': 1, '/admin/menu/categories': 1 },
       'Categories': { '/admin/menu/availability-rules': 1 },
       'Options': { '/admin/menu/option-sets': 1 },
       'Add-ons': { '/admin/menu/modifier-groups': 1 },
@@ -153,7 +156,7 @@ describe('request budget: admin', () => {
       'Staff': { '/admin/staff': 1 },
       'Payments': { '/admin/exchange-rates': 1, '/admin/khqr': 1 },
       'Categories (again)': {},
-      'Menu items (again)': { '/admin/menu/items': 5 },
+      'Menu items (again)': { '/admin/menu/items': 1, '/admin/menu/items/counts': 1 },
       'Dashboard': dashboard,
     })
   }, 90_000)
