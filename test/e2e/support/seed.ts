@@ -40,7 +40,7 @@ export interface ShopSeed {
    * files run in any order, so no other file may rely on its state (`apiUnverified` is
    * shop-orders-api's, since shop-account verifies `unverified`).
    */
-  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'followerD' | 'a11yGuest' | 'tableGuest' | 'cafeHopper' | 'beanOwner' | 'guestLinker', SeedCustomer>
+  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'followerD' | 'a11yGuest' | 'tableGuest' | 'cafeHopper' | 'beanOwner' | 'guestLinker' | 'budgetShopper', SeedCustomer>
   /** A second table at Riverside (T02), for tests that archive it. */
   spareTableToken: string
   /**
@@ -85,6 +85,8 @@ const CUSTOMERS: ShopSeed['customers'] = {
   cafeHopper: { name: 'Malis Prum', email: 'malis@example.com', password: 'long-enough-password-18' },
   // Orders as a guest, then signs in: the guest's order moves to this account (D156).
   guestLinker: { name: 'Dalin Hor', email: 'dalin@example.com', password: 'long-enough-password-42' },
+  /** Only browses (request-budget-shop.test.ts): no orders, so nothing polls and the counts hold. */
+  budgetShopper: { name: 'Narin Pech', email: 'narin@example.com', password: 'long-enough-password-43' },
   // Not a customer: Brown Bean's second owner, who signs in at NUK Cafe's admin by mistake (T2c, D144).
   beanOwner: { name: 'Bea Brown', email: 'bea@brown-bean.example', password: 'long-enough-password-19' },
   // Not a customer: the counter's cashier (step 6.3), staff at Riverside.
@@ -163,7 +165,7 @@ export async function seedShop(dbFile: string, qrSecret: string, bakong: { encry
   // without the breached-password lookup (an external API). Their queued emails carry test links.
   const auth = createTestAuth(db)
   for (const customer of Object.values(CUSTOMERS)) await auth.api.signUpEmail({ body: customer })
-  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.followerD, CUSTOMERS.a11yGuest, CUSTOMERS.tableGuest, CUSTOMERS.cafeHopper, CUSTOMERS.guestLinker, CUSTOMERS.cashier, CUSTOMERS.beanOwner]) {
+  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.followerD, CUSTOMERS.a11yGuest, CUSTOMERS.tableGuest, CUSTOMERS.cafeHopper, CUSTOMERS.guestLinker, CUSTOMERS.cashier, CUSTOMERS.beanOwner, CUSTOMERS.budgetShopper]) {
     await db.update(user).set({ emailVerified: true }).where(eq(user.email, customer.email))
   }
   // An existing account keeps its password when it's given branch access (D49).

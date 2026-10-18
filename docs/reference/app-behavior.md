@@ -77,7 +77,7 @@ Lists stay current in three ways. This is the model TanStack Query, SWR and Pini
 2. **Returning to the tab** refetches data loaded **more than 5 seconds ago**. This covers changes made by other staff on other devices.
 3. **The connection coming back** refetches everything loaded.
 
-Reference data (categories, option sets, add-on groups, availability rules, branch options) is also **kept between visits** for a minute (D173): opening it again shows it without a request; after a minute it's shown and refetched behind it. Any change we know of (a save here or in another tab) means the kept copy is never shown again.
+Reference data (categories, option sets, add-on groups, availability rules, branch options; on the customer site the menu and its branches) is also **kept between visits** for a minute (D173): opening it again shows it without a request; after a minute it's shown and refetched behind it. Any change we know of (a save here or in another tab) means the kept copy is never shown again.
 
 Source: `app/plugins/data-freshness.client.ts` (VueUse `useBroadcastChannel`, `useDocumentVisibility`, `useOnline`), `app/utils/invalidate.ts` (`invalidate`, `invalidateInThisTab`, `invalidateAll({ olderThanMs })`, per-key load bookkeeping recorded by `useApiQuery`). E2E: `test/e2e/freshness.test.ts`, `request-budget.test.ts`. Decisions: [D22](../decisions.md), [D173](../decisions.md#d173-reference-data-kept-between-visits-a-querys-first-fetch-joins-a-running-one-2026-10-17).
 

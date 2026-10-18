@@ -65,7 +65,8 @@ const useChosenBranch = createSharedComposable(() => useLocalStorage<string | nu
 export function useShopBranch() {
   const { table } = useTableContext()
   const chosen = useChosenBranch()
-  const query = useApiQuery('menu:branches', () => apiFetch<PublicBranch[]>('/public/branches'))
+  // Kept between visits (D173): Review order and Place order check the branch is open on the server.
+  const query = useApiQuery('menu:branches', () => apiFetch<PublicBranch[]>('/public/branches'), { staleTime: REFERENCE_STALE_TIME })
   const branches = computed(() => query.data.value ?? [])
   /**
    * A table's branch first, then the customer's pick while it's still active; otherwise none, and
@@ -92,6 +93,9 @@ export function usePublicMenu(branchId: Ref<string | undefined>) {
   return useApiQuery(
     () => `menu:public:${branchId.value ?? 'default'}`,
     () => apiFetch<PublicMenu>('/public/menu', { query: branchId.value ? { branchId: branchId.value } : {} }),
+    // Kept between visits (D173), so coming back from Review order doesn't read the whole menu
+    // again. Sold out, prices and opening are checked again by the quote and by Place order.
+    { staleTime: REFERENCE_STALE_TIME },
   )
 }
 

@@ -142,7 +142,7 @@ export function useOptionSetList() {
 
 | Next time the key is shown | Behavior |
 |---|---|
-| Kept, younger than `staleTime` | Shown, no request |
+| Kept, younger than `staleTime` (data the server rendered with the page counts as loaded at hydration) | Shown, no request |
 | Kept, older (or `invalidateAll` on tab return/reconnect marked it stale) | Shown at once, refetched behind it (`refreshing`) |
 | `invalidate()` named its feature since (here or another tab) | Loaded fresh (`loading`), the kept copy never shown |
 | Its last load failed (any error) | Loaded fresh |

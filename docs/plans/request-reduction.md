@@ -35,7 +35,8 @@ A second, separate waste: Nuxt's first fetch uses `dedupe: 'cancel'`. When a sec
    Tests: no repeated reference reads in the budget test; create an option set, then the item editor offers it; another tab's change reaches a kept key; nothing kept after sign-out; removing the invalidation mark makes the freshness test fail.
 4. **Menu item counts in one read.** Done (also the Dashboard's two menu checks; the photo count comes with it). `GET /admin/menu/items/counts` (status counts and missing photos, same filters) replaces 4 reads per list load and filter change; two-cafe isolation test.
 5. **Dashboard** (if still worth it after 3): setup checks and today's summaries in fewer reads, through each feature's service.
-6. Customer site (`/public/branches` is also read under two keys), then the platform.
+6. **Customer site.** Done on branch `ccr-380320a9-495ewi`: measured (`request-budget-shop.test.ts`, a guest ordering and a signed-in customer browsing); the menu and branches kept between visits (D173 amendment). Already lean otherwise: the menu is server-rendered, Review order quotes once per visit (needed). The other `/public/branches` key is the counter's (staff), not the customer site's. Left: the account header's own `get-session` before `/shop/me` (D97) and Better Auth's client reading the session again (its module).
+7. The platform console.
 
 Not planned: a server-side cache (KV) — reads are cheap, the cost is round trips, and it would add a tenant-isolation and invalidation risk; ETag/304 — still a round trip and a query; replacing `useApiQuery` with TanStack Query or Pinia Colada.
 

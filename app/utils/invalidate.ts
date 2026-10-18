@@ -30,6 +30,11 @@ export function queryStarted(key: string) {
   }
 }
 
+/** Data the server rendered with the page: loaded now, as far as `staleTime` is concerned. */
+export function queryHydrated(key: string) {
+  if (!fetchedAt.has(key)) fetchedAt.set(key, Date.now())
+}
+
 /** A load for this key is running (another component's): join it instead of starting one. */
 export const queryRunning = (key: string) => (running.get(key) ?? 0) > 0
 
