@@ -126,6 +126,7 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
         :disabled="saving"
         class="space-y-4"
         @submit="onSubmit"
+        @error="focusFirstInvalid"
       >
         <UAlert
           v-if="lastError"

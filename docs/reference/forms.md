@@ -82,6 +82,7 @@ Every case below is handled. **Keep this table and the tests in sync when changi
 | 30 | A rule across fields is fixed in the *other* field (At most raised after "Can't be less than the minimum"; one of two same-named add-ons renamed; the second password fixed), or a row with an error is removed | The error leaves at once | `useFormErrorRecheck`: after each change, the fields showing a schema error are checked again (D166) | e2e (`modifier-groups.test.ts`) |
 | 31 | A checkbox inside a group's field (Pre-selected inside Add-ons) | Its label ticks its own box; it isn't red when the group has an error | Its own `UFormField` (D165, D166) | e2e (`modifier-groups.test.ts`) |
 | 32 | A row with its own error is removed or moved (an add-on, an option value) | The error goes with the row; the row that takes its place shows none | `useFormRowErrors` moves the errors with the rows (D171) | unit (`use-form-row-errors.test.ts`, `form-rows.test.ts`); browser check pending |
+| 33 | Submit pressed while the invalid field is out of view (the 15th option value, a field in a long page or a scrolled modal) | The first invalid field (highest on the page) scrolls to the middle of the view and takes focus; nothing is sent | `@error="focusFirstInvalid"` on the `UForm` (D177) | e2e (`option-sets.test.ts`, checked to fail without it) |
 
 Implementation traps (each one broke something once, see [D19](../decisions.md)):
 - `isSameFormValue` must read **through** reactive proxies. `toRaw` makes the `computed` stop tracking, so `isDirty` never changes. A unit test guards this.
@@ -316,6 +317,19 @@ const rowErrors = useFormRowErrors(form, 'values')
 - Source: `app/composables/useFormRowErrors.ts` (auto-imported), its pure helper `followRowErrors` in `app/utils/form-rows.ts`. Unit tests: `test/unit/use-form-row-errors.test.ts`, `test/unit/form-rows.test.ts`. Used by the option set create modal (`values`) and the add-on group create modal (`modifiers`).
 
 ---
+
+## Errors on submit
+
+A submit that fails validation must show the person what's wrong, even when it is out of view: the 15th value of a list in a scrolled modal, a field lower on a long page (D177). Every `UForm` with a schema listens to its `error` event with `focusFirstInvalid`:
+
+```vue
+<UForm ref="form" :schema="schema" :state="state" @submit="onSubmit" @error="focusFirstInvalid" />
+```
+
+- Source: `app/utils/focus-first-invalid.ts` (auto-imported). It scrolls the **first invalid field in page order** (not the schema's order) to the middle of the view (so a sticky header or footer never covers it) and focuses it. A rows list works the same way: each row is its own `UFormField` named `values.<i>`.
+- It waits one frame: the form keeps its fields disabled until after its events (`loadingAuto`), and a disabled field can't take focus.
+- An error on a group with no input of its own (a list's "listed only once") has nothing to focus: the page scrolls to the first error message.
+- A form whose sections hide fields (the menu item editor's tabs) opens the field's section first (`emit('invalid', section)`) and keeps its own handler. A server's field error (`setErrors`) is not an `error` event: focus that field yourself, as the sign-in forms do.
 
 ## `isSameFormValue` and `cloneFormValue`
 

@@ -114,6 +114,7 @@ async function onSubmit({ data }: FormSubmitEvent<StaffForm>) {
         :disabled="saving"
         class="space-y-5"
         @submit="onSubmit"
+        @error="focusFirstInvalid"
       >
         <template v-if="!isEdit">
           <UFormField

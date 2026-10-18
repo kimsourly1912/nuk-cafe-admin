@@ -41,6 +41,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
         :state="state"
         :disabled="saving"
         @submit="onSubmit"
+        @error="focusFirstInvalid"
       >
         <UFormField
           label="Reason"

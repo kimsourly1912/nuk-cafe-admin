@@ -115,6 +115,7 @@ const columns: TableColumn<ExchangeRate>[] = [
                 :disabled="saving"
                 class="space-y-3"
                 @submit="save"
+                @error="focusFirstInvalid"
               >
                 <UFormField
                   label="Riel per $1"

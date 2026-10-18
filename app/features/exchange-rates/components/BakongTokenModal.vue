@@ -62,6 +62,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
         :disabled="saving"
         :validate-on="['blur', 'change']"
         @submit="onSubmit"
+        @error="focusFirstInvalid"
       >
         <UFormField
           label="Token"

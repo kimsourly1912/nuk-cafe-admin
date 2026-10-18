@@ -158,6 +158,7 @@ async function onSubmit({ data }: FormSubmitEvent<AvailabilityRuleForm>) {
         :disabled="saving || readOnly"
         class="space-y-6"
         @submit="onSubmit"
+        @error="focusFirstInvalid"
       >
         <UFormField
           label="Rule name"

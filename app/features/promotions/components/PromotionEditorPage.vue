@@ -284,6 +284,7 @@ useSubmitShortcut(() => submit(!isDraft.value))
             :disabled="saving"
             class="space-y-6"
             @submit="onSubmit"
+            @error="focusFirstInvalid"
           >
             <UCard variant="outline">
               <template #header>

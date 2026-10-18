@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## A failed submit goes to the first invalid field (D177, 2026-10-18)
+
+[Decision](decisions.md#d177-a-failed-submit-goes-to-the-first-invalid-field-2026-10-18). Owner report (screenshots): in New option set, an empty 15th value is below the fold and Create seems to do nothing. New shared `focusFirstInvalid` (`@error` on the `UForm`) scrolls to the first invalid field in page order and focuses it; wired into the 13 schema forms that lacked it. Documented in forms → Errors on submit, ui §17, the review checklist and the project map.
+
+Checks: `pnpm lint` and `pnpm typecheck` pass; `option-sets.test.ts` 24 of 24 pass; the new test fails with the handler removed (guard check). Not run: the full `pnpm test:e2e`. Not covered: the other 12 forms are wired but only the option set form has an e2e test.
+
 ## The server tests' worker crash: every test database closed (D176, 2026-10-18)
 
 Follows D175. [Decision](decisions.md#d176-every-server-test-database-is-closed-2026-10-18). The native worker crash (exit 3221225477) came from libsql freeing in-memory databases the tests never closed. Outside Vitest, unclosed clients crash Node's exit in up to 9 of 20 runs (300 clients); closed ones never do. A setup file now closes each test's databases after the test, and `beforeAll` ones after the file (`server/tests/support/clients.ts`, `setup.ts`). New tests in `test-db.test.ts` cover this and fail without either hook (guard checks).

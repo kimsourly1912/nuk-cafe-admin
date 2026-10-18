@@ -116,6 +116,7 @@ async function onSubmit({ data }: FormSubmitEvent<CreateTenantInput>) {
         :disabled="saving"
         class="space-y-6"
         @submit="onSubmit"
+        @error="focusFirstInvalid"
       >
         <section
           aria-labelledby="cafe-form-cafe"

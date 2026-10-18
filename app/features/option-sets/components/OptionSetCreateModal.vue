@@ -86,6 +86,7 @@ async function onSubmit({ data }: FormSubmitEvent<OptionSetForm>) {
         :disabled="saving"
         class="space-y-4"
         @submit="onSubmit"
+        @error="focusFirstInvalid"
       >
         <UFormField
           label="Name"

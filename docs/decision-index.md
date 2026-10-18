@@ -206,3 +206,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D174](decisions.md#d174-the-server-tests-database-is-built-once-per-run-2026-10-18) | The server tests' database is built once per run, 2026-10-18 |
 | [D175](decisions.md#d175-heavy-server-tests-tagged-slow-quick-test-commands-for-the-inner-loop-2026-10-18) | Heavy server tests tagged `slow`; quick test commands for the inner loop, 2026-10-18 |
 | [D176](decisions.md#d176-every-server-test-database-is-closed-2026-10-18) | Every server-test database is closed, 2026-10-18 |
+| [D177](decisions.md#d177-a-failed-submit-goes-to-the-first-invalid-field-2026-10-18) | A failed submit goes to the first invalid field, 2026-10-18 |
