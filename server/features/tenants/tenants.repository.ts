@@ -36,6 +36,12 @@ const tenantColumns = {
 /** A cafe created before `status` existed counts as active. */
 const statusIs = (status: TenantStatus) => sql`coalesce(${organization.status}, 'active') = ${status}`
 
+/** How many cafes each status holds: one grouped read. */
+export async function countTenants(db: Db): Promise<{ status: TenantStatus, total: number }[]> {
+  const status = sql<TenantStatus>`coalesce(${organization.status}, 'active')`
+  return db.select({ status, total: count() }).from(organization).groupBy(status)
+}
+
 /** Cafes by name, filtered by name or address and status, a page at a time. */
 export async function listTenants(db: Db, query: TenantListQuery): Promise<{ rows: TenantRow[], total: number }> {
   const conditions: SQL[] = []

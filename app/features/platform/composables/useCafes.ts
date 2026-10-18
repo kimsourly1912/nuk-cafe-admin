@@ -1,5 +1,5 @@
 import type { Page } from '#shared/contracts/common'
-import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, PlatformOwner, SuspendTenantInput, TenantDetail, TenantListQuery, TenantSummary } from '#shared/contracts/tenants'
+import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, PlatformOwner, SuspendTenantInput, TenantCounts, TenantDetail, TenantListQuery, TenantSummary } from '#shared/contracts/tenants'
 
 /** Pausing, resuming and moving one cafe must never overlap: all take this record lock. */
 const lockOf = (id: string) => `cafe:${id}`
@@ -91,11 +91,10 @@ export function useCafeMutations() {
   }
 }
 
-/** How many cafes each status tab holds: one count request per status (page size 1). */
+/** How many cafes each status tab holds, in one read. */
 export function useCafeCounts() {
-  const count = (status?: string) => apiFetch<Page<TenantSummary>>('/platform/tenants', { query: { pageSize: 1, ...(status && { status }) } }).then(page => page.total)
   return useApiQuery('platform:cafe-counts', async () => {
-    const [all, active, suspended] = await Promise.all([count(), count('active'), count('suspended')])
-    return { all, active, suspended }
+    const { active, suspended } = await apiFetch<TenantCounts>('/platform/tenants/counts')
+    return { all: active + suspended, active, suspended }
   })
 }

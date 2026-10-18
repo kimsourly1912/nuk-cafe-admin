@@ -1,7 +1,8 @@
 import type { Page } from '#shared/contracts/common'
 import { totalPages } from '#shared/contracts/common'
 import type { AccountCafe, CafeProfile, CafeSettings, UpdateCafeInput } from '#shared/contracts/cafe'
-import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, PlatformOwner, ResumeTenantInput, SuspendTenantInput, TenantDetail, TenantListQuery, TenantStatus, TenantSummary } from '#shared/contracts/tenants'
+import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, PlatformOwner, ResumeTenantInput, SuspendTenantInput, TenantCounts, TenantDetail, TenantListQuery, TenantStatus, TenantSummary } from '#shared/contracts/tenants'
+import { TENANT_STATUSES } from '#shared/contracts/tenants'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -69,6 +70,13 @@ export async function listTenants(db: Db, query: TenantListQuery): Promise<Page<
     total,
     totalPages: totalPages(total, query.pageSize),
   }
+}
+
+/** The list's status tabs in one read: every status, zeros included. */
+export async function countTenants(db: Db): Promise<TenantCounts> {
+  const counts = Object.fromEntries(TENANT_STATUSES.map(status => [status, 0])) as TenantCounts
+  for (const row of await repo.countTenants(db)) counts[row.status] = row.total
+  return counts
 }
 
 export async function getTenant(db: Db, id: string): Promise<TenantDetail> {

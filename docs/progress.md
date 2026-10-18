@@ -2,6 +2,10 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Fewer API requests, step 7: the platform console (2026-10-18)
+
+[Plan](plans/request-reduction.md) step 7, the last. The Cafes list counted its status tabs with three `GET /platform/tenants?pageSize=1` requests; `GET /platform/tenants/counts` (one grouped query, `tenant:read`) answers `{ active, suspended }`, so a list visit reads 2 requests (was 4), and filters and search never re-read the counts. Checks: server test for the counts (with a suspended cafe), route access test, e2e `platform.test.ts` (15, the counts read once while filtering and searching) and `cafes.test.ts`; lint and typecheck.
+
 ## Fewer API requests, step 6: the customer site (D173 amendment, 2026-10-18)
 
 [Plan](plans/request-reduction.md) step 6 (step 5, the Dashboard, skipped by the owner). Measured with `test/e2e/request-budget-shop.test.ts` against the seeded server (a guest orders; a signed-in customer browses, as `budgetShopper`, a seed customer with no orders so nothing polls). The site was already lean: the menu is server-rendered, Review order quotes once per visit. Coming back to the menu read it again: `menu:branches` and `menu:public:<branch>` now keep their data (60 s, the server re-checks at quote and Place order), and server-rendered data counts as loaded at hydration so the first paint isn't followed by a refetch.
