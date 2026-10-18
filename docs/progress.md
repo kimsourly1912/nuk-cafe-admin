@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## The server tests' worker crash: every test database closed (D176, 2026-10-18)
+
+Follows D175. [Decision](decisions.md#d176-every-server-test-database-is-closed-2026-10-18). The native worker crash (exit 3221225477) came from libsql freeing in-memory databases the tests never closed. Outside Vitest, unclosed clients crash Node's exit in up to 9 of 20 runs (300 clients); closed ones never do. A setup file now closes each test's databases after the test, and `beforeAll` ones after the file (`server/tests/support/clients.ts`, `setup.ts`). New tests in `test-db.test.ts` cover this and fail without either hook (guard checks).
+
+Checks: with the fix, 16 full `pnpm test:unit` runs and 0 crashes (10 of them two at once with the compile cache), against 5 crashes in 30 runs without it. `test:unit` still takes 28–29 s. `pnpm lint` and `pnpm typecheck` pass.
+
 ## Heavy server tests tagged `slow`; `test:changed` and `test:fast` (D175, 2026-10-18)
 
 Follows D174. [Decision](decisions.md#d175-heavy-server-tests-tagged-slow-quick-test-commands-for-the-inner-loop-2026-10-18). Brings D174's once-per-run global setup into `main` (it missed the merge). Heavy tests carry a `slow` tag with a 60 s timeout: d1-limits, migrations.test.ts, the sample-data tests that load a whole menu, staff's password resets. The default stays 5 s. `health.ts` imports notifications statically (its first test 3–4 s → 72 ms). New `pnpm test:changed` / `pnpm test:fast`, and a migration, package.json or config change now reruns every test under `--changed` and watch mode, in `.claude/worktrees/` checkouts too.
@@ -429,6 +435,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 - Before a PR: `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` and the changed feature's e2e files; CI runs everything ([development guide → Checks](guides/development.md#commands), D83). All pass as of 2026-09-30 (unit + server 795 and the full e2e suite 368, at steps 10.2–10.4).
 - **server:** `pnpm vitest run --project server`. Each test gets a fresh in-memory database from the checked-in migrations. To check that a concurrency test guards something, remove the guard (`requireOneChange`) and see it fail.
   - Pitfall: `pnpm test:changed` (`--changed`) ignores **untracked** files: `git add` a new test before relying on it (D175).
+  - Pitfall: a libsql client left open crashes the test worker when it is freed (exit code 3221225477, D176). Get databases from `createTestDb()` / `createTestClient()`, which close them; close any client you open yourself.
   - Pitfall: a Vitest glob starting `**/` doesn't match through a dot folder, so in a checkout under `.claude/worktrees/` it matches nothing. Anchor such globs at the project root, as `forceRerunTriggers` in `vitest.config.ts` does (D175).
 - **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
