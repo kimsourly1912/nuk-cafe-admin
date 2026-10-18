@@ -138,14 +138,16 @@ const fields = [
           v-if="forced"
           label="Sign out"
           color="neutral"
-          variant="link"
+          variant="ghost"
+          block
           @click="signOut()"
         />
         <UButton
           v-else
           label="Back"
           color="neutral"
-          variant="link"
+          variant="ghost"
+          block
           :to="counterRedirectTarget(route.query.redirect, slug)"
         />
       </div>

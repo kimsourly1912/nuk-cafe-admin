@@ -6,21 +6,33 @@
  * sign out).
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
+import type { PublicBranch } from '#shared/contracts/branches'
 import { useAccountCafes } from '~/features/cafe'
+import { useCounterMuted } from '../composables/useCounterQueue'
 import { counterChangePasswordPath, counterHomePath, useCounterSession } from '../composables/useCounterSession'
 
-defineProps<{
-  branchName: string
-  openNow: boolean | null
-  /** The Sold out page's address; the button is left out on that page itself. */
-  soldOutTo?: string
-}>()
-/** The queue's order search; left out when not bound (the Sold out page has its own). */
+const props = withDefaults(defineProps<{
+  branchId: string
+  /** The Sold out button; left out on the Sold out page itself. */
+  soldOutButton?: boolean
+}>(), { soldOutButton: true })
+/** The queue's order search; left out when not bound (the other pages have their own). */
 const search = defineModel<string | undefined>('search', { default: undefined })
-const muted = defineModel<boolean>('muted', { required: true })
+
+// `/` focuses the order search, like the list search boxes (the hint shows while it's empty).
+const searchInput = useTemplateRef('searchInput')
+// Only where the header has the search: the Finished and Sold out pages bring their own.
+if (search.value !== undefined) usePageShortcuts({ '/': () => searchInput.value?.inputRef?.focus() })
 
 const { user, signOut } = useCounterSession()
 const slug = useTenantSlug()
+const tenantPath = useTenantPath()
+// The branch, whether it's open and the chime setting come from here, so every page passes only the branch.
+const branch = computed(() => user.value?.branches.find(b => b.id === props.branchId) ?? null)
+const status = useApiQuery('counter:branch-status', () => apiFetch<PublicBranch[]>('/public/branches'), { server: false })
+const openNow = computed(() => status.data.value?.find(b => b.id === props.branchId)?.openNow ?? null)
+const soldOutTo = computed(() => (props.soldOutButton && branch.value ? tenantPath(`/counter/${branch.value.id}/sold-out`) : undefined))
+const muted = useCounterMuted()
 const { name, logoUrl } = useCafe()
 // Someone who works at more than one cafe (T2c, D144) can open another one's counter from Your cafes.
 const { data: cafes } = useAccountCafes()
@@ -40,17 +52,18 @@ const menu = computed<DropdownMenuItem[][]>(() => [
 </script>
 
 <template>
-  <header class="sticky top-0 z-10 border-b border-default bg-default">
-    <div class="flex h-16 items-center gap-3 px-4">
+  <header class="sticky top-0 z-10 border-b border-accented bg-default shadow-xs">
+    <!-- Below sm the search drops to its own full-width row so nothing is squeezed; from sm it sits inline. -->
+    <div class="mx-auto flex min-h-16 w-full max-w-7xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:flex-nowrap sm:py-0">
       <div class="min-w-0">
         <p class="flex items-center gap-2 font-semibold text-highlighted">
           <CafeLogo
             :url="logoUrl"
-            class="size-5"
+            class="size-5 shrink-0"
           />
-          <span class="max-sm:hidden">{{ name }}</span>
-          <span class="text-muted max-sm:hidden">·</span>
-          <span class="truncate">{{ branchName }}</span>
+          <span class="whitespace-nowrap max-lg:hidden">{{ name }}</span>
+          <span class="text-muted max-lg:hidden">·</span>
+          <span class="truncate">{{ branch?.name ?? 'Branch' }}</span>
         </p>
       </div>
       <UBadge
@@ -63,12 +76,30 @@ const menu = computed<DropdownMenuItem[][]>(() => [
       <div class="ms-auto" />
       <UInput
         v-if="search !== undefined"
+        ref="searchInput"
         v-model="search"
         icon="i-lucide-search"
         placeholder="Order number"
         aria-label="Search orders by number or name"
-        class="w-32 sm:w-72"
-      />
+        class="order-last w-full sm:order-0 sm:w-44 lg:w-72"
+        :ui="{ trailing: 'pe-1' }"
+      >
+        <template #trailing>
+          <UKbd
+            v-if="!search"
+            value="/"
+          />
+          <UButton
+            v-else
+            color="neutral"
+            variant="link"
+            size="sm"
+            icon="i-lucide-x"
+            aria-label="Clear search"
+            @click="search = ''"
+          />
+        </template>
+      </UInput>
       <UButton
         v-if="soldOutTo"
         :to="soldOutTo"

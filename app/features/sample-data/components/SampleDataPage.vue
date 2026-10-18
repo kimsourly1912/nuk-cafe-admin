@@ -104,7 +104,7 @@ async function reset() {
                 </div>
                 <div class="flex shrink-0 flex-col items-stretch gap-1 sm:items-end">
                   <UButton
-                    label="Reset menu data…"
+                    label="Reset menu data"
                     color="error"
                     variant="outline"
                     icon="i-lucide-trash-2"

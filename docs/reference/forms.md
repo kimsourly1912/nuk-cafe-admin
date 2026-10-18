@@ -329,7 +329,7 @@ A submit that fails validation must show the person what's wrong, even when it i
 - Source: `app/utils/focus-first-invalid.ts` (auto-imported). It scrolls the **first invalid field in page order** (not the schema's order) to the middle of the view (so a sticky header or footer never covers it) and focuses it. A rows list works the same way: each row is its own `UFormField` named `values.<i>`.
 - It waits one frame: the form keeps its fields disabled until after its events (`loadingAuto`), and a disabled field can't take focus.
 - An error on a group with no input of its own (a list's "listed only once") has nothing to focus: the page scrolls to the first error message.
-- A form whose sections hide fields (the menu item editor's tabs) opens the field's section first (`emit('invalid', section)`) and keeps its own handler. A server's field error (`setErrors`) is not an `error` event: focus that field yourself, as the sign-in forms do.
+- A form whose sections hide fields (the menu item editor's tabs) opens the field's section first (`emit('invalid', section)`) and then calls `focusFirstInvalid(event)` from its own handler (it runs on the next frame, after the section is shown). A server's field error (`setErrors`) is not an `error` event: focus that field yourself, as the sign-in forms do.
 
 ## `isSameFormValue` and `cloneFormValue`
 

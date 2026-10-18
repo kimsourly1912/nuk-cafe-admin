@@ -377,15 +377,17 @@ describe('page shell (D126)', () => {
   })
 })
 
-// The phone field (D127): a country with its flag and code beside the number, sent as E.164.
+// The phone field (D127): a country flag beside the number, led by its code, sent as E.164.
 describe('branch phone', () => {
   const phone = (page: Page) => page.getByLabel('Phone', { exact: true })
-  const country = (page: Page) => page.getByRole('combobox', { name: 'Country code' })
+  const country = (page: Page) => page.getByRole('button', { name: 'Country code' })
+  // The dial code leads the number's input; the country menu itself shows only the flag.
+  const dialCode = (page: Page) => phone(page).locator('xpath=..').getByText(/^\+\d+$/)
 
   it('shows a saved number without its code, under its country\'s flag', async () => {
     const { page } = await open(backend({ 'GET /admin/branches/{id}': () => ({ ...SETTINGS, phone: '+85291234567' }) }).handlers)
     await expect.poll(() => phone(page).inputValue()).toBe('9123 4567')
-    expect(await country(page).textContent()).toContain('+852')
+    await expect.poll(() => dialCode(page).textContent()).toBe('+852')
   })
 
   it('a pasted full number switches the country; leaving drops the trunk 0; it saves as E.164', async () => {
@@ -393,13 +395,13 @@ describe('branch phone', () => {
     const { page } = await open(handlers)
     await phone(page).fill('+852 9123 4567')
     await expect.poll(() => phone(page).inputValue()).toBe('9123 4567')
-    expect(await country(page).textContent()).toContain('+852')
+    await expect.poll(() => dialCode(page).textContent()).toBe('+852')
 
     await country(page).click()
     await page.getByRole('option', { name: 'Cambodia (+855)' }).click()
     // The list hands focus back to its button as it closes: a fill() meanwhile lands before the old number.
     await page.getByRole('listbox').waitFor({ state: 'hidden' })
-    await expect.poll(() => country(page).textContent()).toContain('+855')
+    await expect.poll(() => dialCode(page).textContent()).toBe('+855')
     await phone(page).fill('012345678')
     await phone(page).blur()
     await expect.poll(() => phone(page).inputValue()).toBe('12 345 678')

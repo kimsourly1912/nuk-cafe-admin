@@ -83,7 +83,10 @@ export interface ItemSummaryRow extends ItemRow {
 /** The tenant's items the list's shared filters match (search, category, add-on group). */
 function filterConditions(tenantId: string, query: ItemCountsQuery): SQL[] {
   const conditions: SQL[] = [eq(menuItems.tenantId, tenantId)]
-  if (query.categoryId) conditions.push(eq(menuItems.categoryId, query.categoryId))
+  // Items sit in sub-categories only, so a main category matches its sub-categories' items (two levels).
+  if (query.categoryId) {
+    conditions.push(sql`(${menuItems.categoryId} = ${query.categoryId} or ${menuItems.categoryId} in (select ${menuCategories.id} from ${menuCategories} where ${menuCategories.tenantId} = ${tenantId} and ${menuCategories.parentId} = ${query.categoryId}))`)
+  }
   if (query.modifierGroupId) {
     conditions.push(sql`exists (select 1 from ${menuItemModifierGroups} where ${menuItemModifierGroups.itemId} = ${menuItems.id} and ${menuItemModifierGroups.groupId} = ${query.modifierGroupId})`)
   }

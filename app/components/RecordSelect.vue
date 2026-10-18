@@ -13,7 +13,7 @@
  * @example
  * <RecordSelect v-model="filters.branchId" :items="branchItems" noun="branches" :pinned="[ANY]" aria-label="Branch" />
  */
-import type { SelectMenuItem } from '@nuxt/ui'
+import type { SelectMenuItem, SelectMenuProps } from '@nuxt/ui'
 
 export interface RecordSelectItem {
   label: string
@@ -32,6 +32,24 @@ const props = defineProps<{
 }>()
 /** One value, or several with the `multiple` attribute. */
 const model = defineModel<string | string[] | undefined>()
+
+/**
+ * The menu is at least as wide as its longest label, not just its button. Virtual rows are
+ * positioned absolutely, so the browser can't size the menu to them (`min-w-fit` measures nothing):
+ * the width is estimated from the label length (`ch`) plus room for the padding and check mark.
+ */
+const contentProps = computed<SelectMenuProps['content']>(() => ({
+  // `style` isn't in the content prop's type, but falls through to the menu's element.
+  style: { minWidth: `calc(${Math.max(0, ...props.items.map(item => item.label.length))}ch + 3.5rem)`, maxWidth: '90vw' },
+} as object))
+
+/** The empty trigger keeps its line height. */
+const placeholder = computed(() => (useAttrs().placeholder as string | undefined) || String.fromCharCode(160))
+
+function selectedLabel(value: unknown): string {
+  const values = Array.isArray(value) ? value : value == null || value === '' ? [] : [value]
+  return values.map(one => props.items.find(item => item.value === one)?.label ?? '').filter(Boolean).join(', ')
+}
 
 const searchTerm = ref('')
 const shown = computed<SelectMenuItem[]>(() => {
@@ -54,9 +72,22 @@ const shown = computed<SelectMenuItem[]>(() => {
     :items="shown"
     value-key="value"
     ignore-filter
+    :content="contentProps"
     virtualize
     :search-input="{ placeholder: `Search ${noun}…` }"
   >
+    <!-- The trigger's text comes from every item: a search that filters the chosen one out of the
+         menu must not turn it into its raw value (an id). -->
+    <template #default="{ modelValue }">
+      <span
+        v-if="selectedLabel(modelValue)"
+        class="truncate"
+      >{{ selectedLabel(modelValue) }}</span>
+      <span
+        v-else
+        class="truncate text-dimmed"
+      >{{ placeholder }}</span>
+    </template>
     <template #empty>
       No {{ noun }} match “{{ searchTerm }}”
     </template>

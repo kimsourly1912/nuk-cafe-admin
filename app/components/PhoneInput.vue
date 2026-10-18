@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * A phone number (D127): the country (a flag and its dial code, a fixed set: `USelect`) beside the
- * number, as one field. People type or paste anything; the form's schema decides what's valid
+ * A phone number (D127): the country (a flag, a fixed set: searchable `USelectMenu`) beside the
+ * number, whose dial code leads the input, as one field group. People type or paste anything; the form's schema decides what's valid
  * (`parsePhone` from `#shared/contracts/phone`, the same check the server makes), and the request
  * carries E.164. Typing or pasting a full number (`+855 12 345 678`, `00852…`, `85512345678`) switches
  * the country and keeps the local part; leaving the field drops a trunk 0 and groups the digits (`012345678` → `12 345 678`).
@@ -21,10 +21,9 @@ const number = defineModel<string>({ required: true })
 const country = defineModel<PhoneCountry>('country', { required: true })
 const props = defineProps<{ disabled?: boolean }>()
 
+const input = useTemplateRef<{ inputRef: HTMLInputElement | null }>('input')
 const countries = PHONE_COUNTRIES.map(c => ({ label: `${c.name} (${c.dialCode})`, value: c.code, icon: c.icon }))
 const selected = computed(() => phoneCountryOf(country.value))
-/** Its own id: the form field's id (its label's target) is the number's. */
-const countryId = useId()
 
 /**
  * The full number in what was typed, if it is one: `+…` or `00…`; or digits starting with a country
@@ -38,9 +37,18 @@ function fullNumberIn(value: string) {
   return parsePhone(`+${digits}`)
 }
 
+function syncField() {
+  const el = input.value?.inputRef
+  if (el) el.value = number.value
+}
+
 /** A full number names its country: take it, and keep the local part in the field. */
-function onInput(value: string) {
+function onInput(raw: string) {
+  // Digits only, plus what a pasted number carries: a leading +, and spaces, dashes, dots and brackets.
+  const value = raw.replace(/[^\d+\s\-.()]/g, '').replace(/(?!^)\+/g, '')
   number.value = value
+  // A rejected key leaves the model as it was: the field must still drop it.
+  if (value !== raw) void nextTick(syncField)
   const full = fullNumberIn(value)
   if (full?.ok) {
     country.value = full.country
@@ -56,39 +64,33 @@ function onBlur() {
 </script>
 
 <template>
-  <!-- The select sits in the input's leading slot (Nuxt UI's pattern): the input owns the form field's
-       id, name and label; a control inside it gets none of them. -->
-  <UInput
-    v-bind="$attrs"
-    :model-value="number"
-    type="tel"
-    inputmode="tel"
-    autocomplete="tel-national"
-    :disabled="props.disabled"
-    class="w-full"
-    :ui="{ leading: 'pointer-events-auto ps-0', base: 'ps-24' }"
-    @update:model-value="value => onInput(String(value ?? ''))"
-    @blur="onBlur"
-  >
-    <template #leading>
-      <USelect
-        :id="countryId"
-        v-model="country"
-        :items="countries"
-        :disabled="props.disabled"
-        variant="ghost"
-        aria-label="Country code"
-        :ui="{ content: 'min-w-56', trailingIcon: 'size-4' }"
-        class="w-24 justify-between rounded-e-none"
-      >
-        <span class="flex items-center gap-1.5">
-          <UIcon
-            :name="selected.icon"
-            class="size-4"
-          />
-          <span class="tabular-nums">{{ selected.dialCode }}</span>
-        </span>
-      </USelect>
-    </template>
-  </UInput>
+  <!-- The country menu and the number sit in one field group; the input owns the form field's id, name and
+       label (`PhoneInputCountry` keeps the menu out of the field). The dial code is the input's leading text. -->
+  <UFieldGroup class="w-full">
+    <PhoneInputCountry
+      v-model="country"
+      :items="countries"
+      :icon="selected.icon"
+      :disabled="props.disabled"
+    />
+
+    <UInput
+      ref="input"
+      v-bind="$attrs"
+      :model-value="number"
+      type="tel"
+      inputmode="tel"
+      autocomplete="tel-national"
+      :disabled="props.disabled"
+      class="flex-1"
+      :style="{ '--dial-code-length': `calc(${selected.dialCode.length}ch + 1.25rem)` }"
+      :ui="{ base: 'ps-(--dial-code-length)', leading: 'pointer-events-none text-base md:text-sm text-muted' }"
+      @update:model-value="value => onInput(String(value ?? ''))"
+      @blur="onBlur"
+    >
+      <template #leading>
+        <span class="tabular-nums">{{ selected.dialCode }}</span>
+      </template>
+    </UInput>
+  </UFieldGroup>
 </template>

@@ -29,7 +29,7 @@ const action = computed(() => {
 
 <template>
   <article
-    class="rounded-lg bg-default p-3 ring ring-default transition-opacity"
+    class="rounded-lg bg-default p-3 shadow-sm ring ring-default transition-opacity dark:bg-elevated dark:ring-accented"
     :class="[isNew && 'ring-2 ring-primary', busy && 'opacity-60']"
     :aria-label="`Order ${orderNumber(order)}`"
     :aria-busy="busy"

@@ -592,9 +592,9 @@ Source: `app/components/QrCode.vue`, `app/utils/qr-code.ts` (both auto-imported)
 
 ## `<PhoneInput>`
 
-A phone number (D127): the country (flag and dial code, a `USelect` in the input's leading slot) and the number as one field. People type or paste anything; the form's schema decides validity with `parsePhone(text, country)` from `#shared/contracts/phone` (the server checks the same rules on the E.164 it receives). A full number typed or pasted (`+852 9123 4567`, `00855…`, `855…`) switches the country and keeps the local part; leaving the field drops a trunk 0 and groups the digits (`012345678` → `12 345 678`). The select sits inside the input so the `UFormField`'s id, name and label stay the number's; it has its own id.
+A phone number (D127): the country (a flag, a searchable `USelectMenu`) and the number, whose dial code leads the input, as one `UFieldGroup`. People type or paste anything; the form's schema decides validity with `parsePhone(text, country)` from `#shared/contracts/phone` (the server checks the same rules on the E.164 it receives). A full number typed or pasted (`+852 9123 4567`, `00855…`, `855…`) switches the country and keeps the local part; leaving the field drops a trunk 0 and groups the digits (`012345678` → `12 345 678`). Nuxt UI hands a `UFormField`'s id and name to every control under it, so the menu lives in `PhoneInputCountry`, which provides no form field below it: the id, name and label stay the number's (side by side without it the field's id lands twice and the label points at the menu).
 
-Source: `app/components/PhoneInput.vue`; the rules in `shared/contracts/phone.ts` (`PHONE_COUNTRIES`, `parsePhone`, `formatPhone`, `phoneSchema`).
+Source: `app/components/PhoneInput.vue`, `PhoneInputCountry.vue`; the rules in `shared/contracts/phone.ts` (`PHONE_COUNTRIES`, `parsePhone`, `formatPhone`, `phoneSchema`).
 
 ```vue
 <UFormField label="Phone" name="phone">

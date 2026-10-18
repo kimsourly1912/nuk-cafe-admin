@@ -191,14 +191,15 @@ export function useCategoryItems(categoryId: MaybeRefOrGetter<string | undefined
     () => `products:category-order:${toValue(categoryId) ?? 'none'}`,
     async () => {
       const id = toValue(categoryId)
-      if (!id) return []
+      if (!id) return { categoryId: id, items: [] as MenuItemSummary[] }
       const items: MenuItemSummary[] = []
       for (let page = 1; ; page++) {
         const answer = await apiFetch<Page<MenuItemSummary>>(BASE, { query: { categoryId: id, page, pageSize: 100 } })
         items.push(...answer.items)
         if (page >= answer.totalPages) break
       }
-      return items.filter(item => item.status !== 'archived').sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+      // Tagged with its category: a switch can leave the previous category's answer in `data` until the new one lands.
+      return { categoryId: id, items: items.filter(item => item.status !== 'archived').sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)) }
     },
     { server: false },
   )
