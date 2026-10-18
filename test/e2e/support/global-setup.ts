@@ -34,6 +34,8 @@ const E2E_QR_SECRET = 'e2e-qr-secret'
 const E2E_BAKONG_KEY = Buffer.alloc(32, 7).toString('base64')
 /** Written next to the build; any other `nuxt build` (staging, dev) cleans `.output` and removes it. */
 const FINGERPRINT_FILE = join(rootDir, '.output', '.e2e-build-fingerprint')
+/** Local builds skip Nitro's dependency tracing (D177); CI and `E2E_TRACE=1` keep it. */
+const UNTRACED = !process.env.CI && !process.env.E2E_TRACE
 
 /**
  * Builds the app once and serves it for every e2e file (`setup({ host: inject('e2eHost') })`),
@@ -42,6 +44,10 @@ const FINGERPRINT_FILE = join(rootDir, '.output', '.e2e-build-fingerprint')
  * Locally the build is reused when nothing it reads has changed (D83): the fingerprint covers every
  * build input's path and content plus the `NUXT_*` and `NODE_ENV` variables. CI (`CI` set) always
  * builds; `E2E_REBUILD=1` forces a build.
+ *
+ * Locally the build also leaves dependencies untraced (D177): its server imports them from this
+ * checkout's node_modules, which made a stale build about 3× faster. CI builds traced, like a
+ * deployment; `E2E_TRACE=1` does the same locally.
  */
 export default async function ({ provide }: TestProject) {
   const fingerprint = buildFingerprint()
@@ -57,7 +63,7 @@ export default async function ({ provide }: TestProject) {
     // The build migrates the e2e database; the seed below rebuilds it without NuxtHub's migration
     // record, so a leftover one would be migrated twice ("table already exists"). Start empty.
     rmSync(join(rootDir, E2E_HUB_DIR, 'db'), { recursive: true, force: true })
-    execSync('pnpm nuxt build', { cwd: rootDir, stdio: 'inherit', env: { ...process.env, E2E_HUB_DIR } })
+    execSync('pnpm nuxt build', { cwd: rootDir, stdio: 'inherit', env: { ...process.env, E2E_HUB_DIR, ...(UNTRACED ? { E2E_UNTRACED: '1' } : {}) } })
     writeFileSync(FINGERPRINT_FILE, fingerprint)
   }
 
@@ -112,6 +118,7 @@ function buildFingerprint() {
     .sort(([a], [b]) => a.localeCompare(b))
   hash.update(JSON.stringify(env))
   hash.update(E2E_HUB_DIR)
+  hash.update(UNTRACED ? 'untraced' : 'traced')
   return hash.digest('hex')
 }
 
