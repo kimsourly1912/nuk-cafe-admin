@@ -7,9 +7,6 @@
  * menu's categories as tabs (chips that scroll on phones), and "N sold out" to show only those. The
  * customer menu shows the change on its next load.
  */
-import { useLocalStorage } from '@vueuse/core'
-import type { PublicBranch } from '#shared/contracts/branches'
-import { useCounterSession } from '../composables/useCounterSession'
 import { useSoldOut } from '../composables/useSoldOut'
 import { clockTime } from '../utils/counter'
 import { filterSoldOutRows, rowName, soldOutCategories } from '../utils/sold-out'
@@ -20,10 +17,6 @@ const tenantPath = useTenantPath()
 
 const route = useRoute()
 const branchId = computed(() => String(route.params.branchId ?? ''))
-const { user } = useCounterSession()
-const branch = computed(() => user.value?.branches.find(b => b.id === branchId.value) ?? null)
-const status = useApiQuery('counter:branch-status', () => apiFetch<PublicBranch[]>('/public/branches'), { server: false })
-const branchStatus = computed(() => status.data.value?.find(b => b.id === branchId.value) ?? null)
 
 const { rows, set, toggle, error, refresh } = useSoldOut(branchId)
 
@@ -35,17 +28,20 @@ const keep = ref(new Set<string>())
 watch([search, category, onlySoldOut], () => {
   keep.value = new Set()
 })
+// The category row scrolls without a scrollbar and the chosen category is centered, like the tab rows (D128).
+const categoryRow = useTemplateRef('categoryRow')
+watch(category, () => nextTick(() => {
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  categoryRow.value?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: reduced ? 'auto' : 'smooth' })
+}), { flush: 'post' })
 const categories = computed(() => [{ id: 'all', name: 'All' }, ...soldOutCategories(rows.value ?? [])])
 const shown = computed(() => filterSoldOutRows(rows.value ?? [], { search: search.value, category: category.value, onlySoldOut: onlySoldOut.value, keep: keep.value }))
 const soldOutCount = computed(() => (rows.value ?? []).filter(row => row.soldOut).length)
 
-// The queue's new-order chime setting, kept in this browser (useCounterQueue).
 function setAvailable(row: SoldOutRow, available: boolean) {
   if (available && onlySoldOut.value) keep.value = new Set([...keep.value, row.variationId])
   void toggle(row, !available)
 }
-
-const muted = useLocalStorage('counter:muted', false, { initOnMounted: true })
 
 useSeoMeta({ robots: 'noindex' })
 </script>
@@ -53,12 +49,11 @@ useSeoMeta({ robots: 'noindex' })
 <template>
   <div class="flex min-h-dvh flex-col">
     <CounterHeader
-      v-model:muted="muted"
-      :branch-name="branch?.name ?? 'Branch'"
-      :open-now="branchStatus ? branchStatus.openNow : null"
+      :branch-id="branchId"
+      :sold-out-button="false"
     />
 
-    <main class="mx-auto w-full max-w-5xl flex-1 space-y-4 p-4">
+    <main class="mx-auto w-full max-w-7xl flex-1 space-y-4 p-4">
       <UButton
         :to="tenantPath(`/counter/${branchId}`)"
         label="Back to queue"
@@ -95,15 +90,14 @@ useSeoMeta({ robots: 'noindex' })
       />
       <template v-else>
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <UInput
+          <SearchInput
             v-model="search"
-            icon="i-lucide-search"
             placeholder="Find an item"
-            aria-label="Find an item"
             class="sm:w-72"
           />
           <nav
-            class="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0"
+            ref="categoryRow"
+            class="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0"
             aria-label="Categories"
           >
             <UButton
@@ -135,7 +129,7 @@ useSeoMeta({ robots: 'noindex' })
 
         <UCard
           v-else
-          :ui="{ body: 'p-0 sm:p-0' }"
+          :ui="{ root: 'shadow-sm ring-accented', body: 'p-0 sm:p-0' }"
         >
           <ul
             class="divide-y divide-default"

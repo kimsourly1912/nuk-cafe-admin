@@ -21,7 +21,7 @@
  * and the browser's first render agree. The menu is the server's first branch until the browser's
  * stored table or branch choice (read after mounting) asks for another.
  */
-import { useElementSize } from '@vueuse/core'
+import { createReusableTemplate, useElementSize } from '@vueuse/core'
 import { AccountButton, useCustomerAccount, VerifyEmailBanner } from '~/features/account'
 import { ActiveOrdersBar } from '~/features/orders'
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
@@ -73,6 +73,8 @@ useSeoMeta({
   ogTitle: () => `${cafeName.value} menu`,
   ogDescription: () => `Browse the ${cafeName.value} menu and order for pickup or at your table.`,
 })
+
+const [DefineOrderType, ReuseOrderType] = createReusableTemplate()
 
 /** "Table 12" (a label may already say "Table"), or "Pickup". */
 const orderType = computed(() => {
@@ -201,6 +203,55 @@ watch(detailOpen, (open) => {
 
 <template>
   <div class="min-h-dvh bg-muted">
+    <!-- The order type, branch and open state: one panel, opened from the button (sm and up) or the branch line (phones). -->
+    <DefineOrderType>
+      <div class="w-72 space-y-3 p-4">
+        <template v-if="table">
+          <p class="font-medium text-highlighted">
+            Dine-in · {{ orderType }}
+          </p>
+          <p class="text-sm text-muted">
+            You're ordering for this table{{ branch ? ` at ${branch.name}` : '' }}.
+          </p>
+          <UButton
+            label="Switch to pickup"
+            color="neutral"
+            variant="outline"
+            block
+            @click="clearTable"
+          />
+        </template>
+        <template v-else>
+          <p class="font-medium text-highlighted">
+            Pickup{{ branch ? ` at ${branch.name}` : '' }}
+          </p>
+          <p class="text-sm text-muted">
+            Collect your order at the counter. To order for a table, scan the QR code on it.
+          </p>
+          <UFormField
+            v-if="branches.length > 1"
+            label="Branch"
+          >
+            <USelect
+              :model-value="branchId"
+              :items="branches.map(b => ({ label: b.name, value: b.id }))"
+              class="w-full"
+              @update:model-value="value => choose(String(value))"
+            />
+          </UFormField>
+        </template>
+        <p
+          v-if="branch"
+          class="flex items-center gap-2 border-t border-default pt-3 text-sm text-muted"
+        >
+          <span
+            class="size-2 rounded-full"
+            :class="branch.openNow ? 'bg-success' : 'bg-warning'"
+          />
+          {{ branch.openNow ? 'Open now' : 'Closed now' }}
+        </p>
+      </div>
+    </DefineOrderType>
     <header
       ref="header"
       class="sticky top-0 z-30 border-b border-default bg-default"
@@ -235,9 +286,36 @@ watch(detailOpen, (open) => {
               >
                 {{ cafeName }}
               </NuxtLink>
+              <UPopover
+                v-if="branch"
+                :content="{ align: 'start' }"
+              >
+                <button
+                  type="button"
+                  class="flex max-w-full items-center gap-1.5 text-xs text-muted sm:hidden"
+                  :aria-label="`${orderType} at ${branch.name}${branch.openNow ? '' : ', closed'}: change order type or branch`"
+                >
+                  <span
+                    class="size-1.5 shrink-0 rounded-full"
+                    :class="branch.openNow ? 'bg-success' : 'bg-warning'"
+                  />
+                  <span class="truncate">{{ table ? `${orderType} · ${branch.name}` : branch.name }}</span>
+                  <span
+                    v-if="!branch.openNow"
+                    class="shrink-0 font-medium text-warning"
+                  >Closed</span>
+                  <UIcon
+                    name="i-lucide-chevron-down"
+                    class="size-3.5 shrink-0"
+                  />
+                </button>
+                <template #content>
+                  <ReuseOrderType />
+                </template>
+              </UPopover>
               <p
                 v-if="branch"
-                class="flex min-w-0 items-center gap-1.5 text-xs text-muted lg:rounded-full lg:border lg:border-default lg:py-0.5 lg:ps-3 lg:pe-1 lg:text-sm"
+                class="flex min-w-0 items-center gap-1.5 text-xs text-muted max-sm:hidden lg:rounded-full lg:border lg:border-default lg:py-0.5 lg:ps-3 lg:pe-1 lg:text-sm"
                 :title="branch.name"
               >
                 <span class="truncate">{{ branch.name }}</span>
@@ -277,6 +355,7 @@ watch(detailOpen, (open) => {
               aria-label="Search the menu"
               @click="searching = true"
             />
+            <!-- From sm: the order type button. Phones have it under the cafe name (the branch line). -->
             <UPopover :content="{ align: 'end' }">
               <UButton
                 :icon="table ? 'i-lucide-utensils' : 'i-lucide-shopping-bag'"
@@ -284,47 +363,11 @@ watch(detailOpen, (open) => {
                 trailing-icon="i-lucide-chevron-down"
                 color="neutral"
                 variant="outline"
-                class="max-sm:px-2"
-                :ui="{ trailingIcon: 'max-[22.5rem]:hidden' }"
+                class="max-sm:hidden"
                 :aria-label="`Order type: ${orderType}`"
               />
               <template #content>
-                <div class="w-72 space-y-3 p-4">
-                  <template v-if="table">
-                    <p class="font-medium text-highlighted">
-                      Dine-in · {{ orderType }}
-                    </p>
-                    <p class="text-sm text-muted">
-                      You're ordering for this table{{ branch ? ` at ${branch.name}` : '' }}.
-                    </p>
-                    <UButton
-                      label="Switch to pickup"
-                      color="neutral"
-                      variant="outline"
-                      block
-                      @click="clearTable"
-                    />
-                  </template>
-                  <template v-else>
-                    <p class="font-medium text-highlighted">
-                      Pickup{{ branch ? ` at ${branch.name}` : '' }}
-                    </p>
-                    <p class="text-sm text-muted">
-                      Collect your order at the counter. To order for a table, scan the QR code on it.
-                    </p>
-                    <UFormField
-                      v-if="branches.length > 1"
-                      label="Branch"
-                    >
-                      <USelect
-                        :model-value="branchId"
-                        :items="branches.map(b => ({ label: b.name, value: b.id }))"
-                        class="w-full"
-                        @update:model-value="value => choose(String(value))"
-                      />
-                    </UFormField>
-                  </template>
-                </div>
+                <ReuseOrderType />
               </template>
             </UPopover>
             <!-- Below lg, Appearance is in the account menu (D124) -->

@@ -1134,6 +1134,9 @@ describe('menu item editor URLs (D90, decision 4)', () => {
     await page.getByRole('toolbar', { name: 'Save', exact: true }).getByRole('button', { name: 'Create', exact: true }).click()
     await page.getByText('Name is required').waitFor()
     expect(await page.getByRole('tab', { name: 'Details' }).getAttribute('aria-selected')).toBe('true')
+    // The invalid field is focused (and so scrolled into view) once its section is shown.
+    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('name') ?? document.activeElement?.id)).toBeTruthy()
+    expect(await page.getByLabel('Name', { exact: true }).evaluate(el => el === document.activeElement)).toBe(true)
   })
 
   it('/c/nuk/admin/products/<id> opens the item at every width; Save sends the version read and returns to the list', async () => {

@@ -8,6 +8,24 @@ Follows D172. [Decision](decisions.md#d177-the-local-e2e-build-leaves-dependenci
 
 Checks: categories + shop-menu 3 untraced stale-build runs, 68/68 each; the full e2e suite on the untraced build 576/576 (436 s). One earlier full run on an overloaded laptop failed 50 tests, all from Chrome or worker crashes, none from the app. `pnpm lint`, `pnpm typecheck` and `pnpm test:unit` pass.
 
+## Form-control and counter polish: CI follow-up (2026-10-18)
+
+The polish commit on this branch failed 6 e2e tests in CI. The counter queue's columns moved to `bg-elevated`, where `text-muted` ("None right now") is below 4.5:1 (axe); the columns and the Finished page's empty state now use `bg-elevated/50`, as before. The rest were tests behind intentional UI changes: Sold out's search is now `SearchInput` (role `searchbox`), the sample-data button lost its ellipsis (help page updated too), and the customer menu's phone-only branch line is the first, hidden match for the branch and table text (tests now pick the visible one).
+
+Checks: accessibility, cafes, counter, sample-data and shop-menu e2e 89/89; `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` (1482 passed, 1 skipped) pass. Not run: the full `pnpm test:e2e`.
+
+## Row errors in every list (D179, 2026-10-18)
+
+[Decision](decisions.md#d179-every-list-that-removes-or-moves-rows-moves-its-errors-2026-10-18). Audit of every `UForm` for lists: staff branches, availability times, hours windows and the item form's add-on groups removed or moved rows with `splice`, so an error stayed on the old position. They now use `useFormRowErrors`.
+
+Checks: `pnpm lint` and `pnpm typecheck` pass. E2E of staff, availability, branches and products: see below. No new test for these four lists.
+
+## A failed submit goes to the first invalid field (D178, 2026-10-18)
+
+[Decision](decisions.md#d178-a-failed-submit-goes-to-the-first-invalid-field-2026-10-18). Owner report (screenshots): in New option set, an empty 15th value is below the fold and Create seems to do nothing. New shared `focusFirstInvalid` (`@error` on the `UForm`) scrolls to the first invalid field in page order and focuses it; wired into the 13 schema forms that lacked it. Documented in forms → Errors on submit, ui §17, the review checklist and the project map.
+
+Checks: `pnpm lint` and `pnpm typecheck` pass; `option-sets.test.ts` 24 of 24 pass; the new test fails with the handler removed (guard check). Not run: the full `pnpm test:e2e`. Not covered: the other 12 forms are wired but only the option set form has an e2e test.
+
 ## The server tests' worker crash: every test database closed (D176, 2026-10-18)
 
 Follows D175. [Decision](decisions.md#d176-every-server-test-database-is-closed-2026-10-18). The native worker crash (exit 3221225477) came from libsql freeing in-memory databases the tests never closed. Outside Vitest, unclosed clients crash Node's exit in up to 9 of 20 runs (300 clients); closed ones never do. A setup file now closes each test's databases after the test, and `beforeAll` ones after the file (`server/tests/support/clients.ts`, `setup.ts`). New tests in `test-db.test.ts` cover this and fail without either hook (guard checks).

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * "All categories" (D93): main categories with their item counts; a chevron shows a main category's
- * sub-categories. The one being read is highlighted, and its main category starts expanded (the
- * others collapsed). Choosing any entry scrolls the menu to it.
+ * sub-categories. The one being read is highlighted, and its main category is expanded, following
+ * the reading (the others collapsed). Choosing any entry scrolls the menu to it.
  */
 import type { MenuSection } from '../utils/menu'
 
@@ -20,6 +20,15 @@ function toggle(id: string) {
   else next.add(id)
   expanded.value = next
 }
+
+// Reading on into the next main category (the tree stays open, or a sheet stays mounted): its
+// sub-categories open and the one just left closes. What the person opened themselves stays.
+watch(() => props.activeMainId, (id, previous) => {
+  const next = new Set(expanded.value)
+  if (previous) next.delete(previous)
+  if (id) next.add(id)
+  expanded.value = next
+})
 
 const entryClass = (active: boolean) => [
   'flex w-full min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm',

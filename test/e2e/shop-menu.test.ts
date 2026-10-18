@@ -350,7 +350,7 @@ describe('branches and table QR codes', () => {
 
   it('a table at a closed branch shows its menu, closed: one warning, adding disabled', async () => {
     const { page } = await open(1440, `/table/${seed.closedTableToken}`)
-    await page.getByText('Zeta Kiosk', { exact: false }).first().waitFor()
+    await page.getByText('Zeta Kiosk', { exact: false }).filter({ visible: true }).first().waitFor()
     await page.getByText('Closed now', { exact: true }).waitFor()
     await page.getByText('Online ordering isn\'t available right now.').waitFor()
     expect(await visible(card(page, 'Banana Bread').getByRole('button', { name: 'Add Banana Bread to order' })).isDisabled()).toBe(true)

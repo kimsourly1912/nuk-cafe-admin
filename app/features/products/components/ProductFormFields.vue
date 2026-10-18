@@ -70,6 +70,8 @@ useFormErrorRecheck(form)
 function onError(event: FormErrorEvent) {
   const first = event.errors[0]?.name
   if (first) emit('invalid', sectionOf(first))
+  // Runs on the next frame, after the owner has shown the field's section.
+  focusFirstInvalid(event)
 }
 
 /** Shows the server's field errors on the fields they name. */
@@ -254,6 +256,7 @@ defineExpose({ submit: () => form.value?.submit(), setServerErrors })
       </h3>
       <ItemAddOnGroups
         v-model="state.addOnGroups"
+        :errors-form="form"
         :disabled="disabled"
       />
     </section>

@@ -8,7 +8,8 @@
 import type { BranchForm } from '../schemas/branch-form'
 import { copyDay, MAX_DAY_WINDOWS, newWindow, WEEKDAY_NAMES } from '../schemas/branch-form'
 
-defineProps<{ disabled?: boolean }>()
+// `errorsForm` is the page's `UForm`: a removed window takes its error with it (D171).
+const props = defineProps<{ disabled?: boolean, errorsForm?: object | null }>()
 const form = defineModel<BranchForm>({ required: true })
 
 function addWindow(dayIndex: number) {
@@ -16,7 +17,7 @@ function addWindow(dayIndex: number) {
   day.windows.push(newWindow(day))
 }
 function removeWindow(dayIndex: number, windowIndex: number) {
-  form.value.days[dayIndex]!.windows.splice(windowIndex, 1)
+  useFormRowErrors(() => props.errorsForm as never, `days.${dayIndex}.windows`).removeRow(form.value.days[dayIndex]!.windows, windowIndex)
 }
 function setOpen(dayIndex: number, open: boolean) {
   const day = form.value.days[dayIndex]!

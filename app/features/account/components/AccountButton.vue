@@ -31,10 +31,11 @@ const tenantPath = useTenantPath()
 
 // This cafe's workspaces (D124, D141).
 const WORKSPACE_LINKS = {
-  admin: { label: 'Admin workspace', icon: 'i-lucide-layout-dashboard', page: '/admin' },
   counter: { label: 'Counter', icon: 'i-lucide-store', page: '/counter' },
+  admin: { label: 'Admin workspace', icon: 'i-lucide-layout-dashboard', page: '/admin' },
 } as const
-const workspaces = computed(() => (account.value?.workspaces ?? []).map((id) => {
+const WORKSPACE_ORDER = Object.keys(WORKSPACE_LINKS) as (keyof typeof WORKSPACE_LINKS)[]
+const workspaces = computed(() => WORKSPACE_ORDER.filter(id => account.value?.workspaces.includes(id)).map((id) => {
   const { page, ...link } = WORKSPACE_LINKS[id]
   return { id, ...link, to: tenantPath(page) }
 }))

@@ -51,6 +51,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
         :disabled="saving"
         class="space-y-4"
         @submit="onSubmit"
+        @error="focusFirstInvalid"
       >
         <UFormField
           label="New address"

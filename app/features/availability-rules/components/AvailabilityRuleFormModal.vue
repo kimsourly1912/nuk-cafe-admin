@@ -49,6 +49,7 @@ const unsaved = useModalUnsavedChanges(state, {
 
 const form = useTemplateRef('form')
 useFormErrorRecheck(form)
+const rowFormErrors = useFormRowErrors(form, 'rows')
 useSubmitShortcut(() => form.value?.submit())
 
 // UInputTime works with `Time` objects; the form keeps minutes after midnight (app/utils/clock.ts).
@@ -158,6 +159,7 @@ async function onSubmit({ data }: FormSubmitEvent<AvailabilityRuleForm>) {
         :disabled="saving || readOnly"
         class="space-y-6"
         @submit="onSubmit"
+        @error="focusFirstInvalid"
       >
         <UFormField
           label="Rule name"
@@ -197,7 +199,7 @@ async function onSubmit({ data }: FormSubmitEvent<AvailabilityRuleForm>) {
                   color="neutral"
                   variant="ghost"
                   :aria-label="`Remove time ${i + 1}`"
-                  @click="state.rows.splice(i, 1)"
+                  @click="rowFormErrors.removeRow(state.rows, i)"
                 />
               </div>
 

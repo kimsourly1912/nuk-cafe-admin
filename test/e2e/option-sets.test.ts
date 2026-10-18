@@ -200,6 +200,28 @@ describe('new option set', () => {
     expect(writes(api.calls)).toEqual([])
   })
 
+  it('scrolls to the first invalid value when Create is pressed, even far below the fold', async () => {
+    const { page, api } = await open([])
+    await page.getByRole('button', { name: 'New option set' }).first().click()
+    const form = page.getByRole('dialog')
+    await form.getByLabel('Name', { exact: true }).fill('Size')
+    for (let i = 1; i <= 14; i++) {
+      if (i > 1) await form.getByRole('button', { name: 'Add value' }).click()
+      await form.getByLabel(`Value ${i}`, { exact: true }).fill(`Size ${i}`)
+    }
+    await form.getByRole('button', { name: 'Add value' }).click()
+    // The empty 15th value is the only error; scroll the dialog back to the top, then submit.
+    await form.getByLabel('Name', { exact: true }).scrollIntoViewIfNeeded()
+    await form.getByRole('button', { name: 'Create' }).click()
+    await form.getByText('Value is required').first().waitFor()
+    await expect.poll(() => focused(page)).toBe('Value 15')
+    await expect.poll(() => form.getByLabel('Value 15', { exact: true }).evaluate((el) => {
+      const box = el.getBoundingClientRect()
+      return box.top >= 0 && box.bottom <= window.innerHeight
+    })).toBe(true)
+    expect(writes(api.calls)).toEqual([])
+  })
+
   it('is full screen on phones', async () => {
     const page = await createPage()
     await page.setViewportSize({ width: 375, height: 812 })

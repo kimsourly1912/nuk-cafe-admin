@@ -9,9 +9,7 @@
  * Browser-only (`routeRules`), so the width can choose what renders (`useLayoutContext`).
  */
 import type { TableColumn } from '@nuxt/ui'
-import type { PublicBranch } from '#shared/contracts/branches'
 import type { CounterOrder } from '#shared/contracts/orders'
-import { useCounterMuted } from '../composables/useCounterQueue'
 import { useCounterSession } from '../composables/useCounterSession'
 import { useFinishedToday, useOrderHistory } from '../composables/useFinishedToday'
 import { clockTime, firstName, matchesSearch, orderNumber, orderTypeText } from '../utils/counter'
@@ -27,9 +25,6 @@ const route = useRoute()
 const branchId = computed(() => String(route.params.branchId ?? ''))
 const { user } = useCounterSession()
 const branch = computed(() => user.value?.branches.find(b => b.id === branchId.value) ?? null)
-const muted = useCounterMuted()
-const status = useApiQuery('counter:branch-status', () => apiFetch<PublicBranch[]>('/public/branches'), { server: false })
-const branchStatus = computed(() => status.data.value?.find(b => b.id === branchId.value) ?? null)
 
 const query = useFinishedToday(branchId)
 const all = computed(() => query.data.value?.orders ?? [])
@@ -88,12 +83,7 @@ useSeoMeta({ robots: 'noindex' })
 
 <template>
   <div class="flex min-h-dvh flex-col">
-    <CounterHeader
-      v-model:muted="muted"
-      :branch-name="branch?.name ?? 'Branch'"
-      :open-now="branchStatus ? branchStatus.openNow : null"
-      :sold-out-to="branch ? tenantPath(`/counter/${branch.id}/sold-out`) : undefined"
-    />
+    <CounterHeader :branch-id="branchId" />
 
     <div
       v-if="!branch"
@@ -108,7 +98,10 @@ useSeoMeta({ robots: 'noindex' })
       />
     </div>
 
-    <template v-else>
+    <div
+      v-else
+      class="mx-auto flex w-full max-w-7xl flex-1 flex-col"
+    >
       <CounterViewSwitch
         :branch-id="branchId"
         current="finished"
@@ -174,7 +167,7 @@ useSeoMeta({ robots: 'noindex' })
           />
           <div
             v-else-if="!shown.length"
-            class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-default py-16 text-center"
+            class="flex flex-col items-center gap-2 rounded-lg bg-elevated/50 py-16 text-center ring ring-accented dark:bg-default"
           >
             <UIcon
               name="i-lucide-receipt"
@@ -194,7 +187,7 @@ useSeoMeta({ robots: 'noindex' })
           <!-- Phones: rows, the whole row opens the order -->
           <UCard
             v-else-if="isCompact"
-            :ui="{ body: 'p-0 sm:p-0' }"
+            :ui="{ root: 'shadow-sm ring-accented', body: 'p-0 sm:p-0' }"
           >
             <ul
               class="divide-y divide-default"
@@ -245,7 +238,7 @@ useSeoMeta({ robots: 'noindex' })
           <!-- Tablets and wider: a table; the order number opens it -->
           <UCard
             v-else
-            :ui="{ body: 'p-0 sm:p-0' }"
+            :ui="{ root: 'shadow-sm ring-accented', body: 'p-0 sm:p-0' }"
           >
             <UTable
               :data="shown"
@@ -297,7 +290,7 @@ useSeoMeta({ robots: 'noindex' })
           as="aside"
           aria-label="Order"
           class="sticky top-20"
-          :ui="{ body: 'p-0 sm:p-0' }"
+          :ui="{ root: 'shadow-sm ring-accented', body: 'p-0 sm:p-0' }"
         >
           <CounterHistoryPanel
             :history="history.data.value ?? null"
@@ -308,7 +301,7 @@ useSeoMeta({ robots: 'noindex' })
           />
         </UCard>
       </div>
-    </template>
+    </div>
 
     <!-- Below `lg`: a side panel, full screen on phones -->
     <component

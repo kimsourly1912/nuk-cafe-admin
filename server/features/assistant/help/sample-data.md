@@ -15,4 +15,4 @@ Press **Load hours and tables**: Mon–Fri 7:00 AM – 9:00 PM, Sat–Sun 8:00 A
 
 ## Reset
 
-**Reset menu data…** deletes every menu record (items, categories, options, add-ons, availability rules) and every uploaded image. Type **RESET** to confirm. It can't be undone. Staff and the branch settings aren't touched.
+**Reset menu data** deletes every menu record (items, categories, options, add-ons, availability rules) and every uploaded image. Type **RESET** to confirm. It can't be undone. Staff and the branch settings aren't touched.

@@ -9,7 +9,12 @@ import { watchDebounced } from '@vueuse/core'
  * <SearchInput v-model="filters.search" placeholder="Search categories…" />
  */
 const model = defineModel<string>({ default: '' })
-const props = withDefaults(defineProps<{ placeholder?: string, delay?: number }>(), {
+const props = withDefaults(defineProps<{
+  placeholder?: string
+  delay?: number
+  /** A refresh is running: the spinner takes the search icon's place, so it never wraps onto its own line. */
+  loading?: boolean
+}>(), {
   placeholder: 'Search…',
   delay: 300,
 })
@@ -43,6 +48,7 @@ function clear() {
     v-model="text"
     type="search"
     icon="i-lucide-search"
+    :loading="loading"
     :placeholder="placeholder"
     :aria-label="placeholder"
     :ui="{ trailing: 'pe-1' }"

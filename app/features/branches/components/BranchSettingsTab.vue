@@ -274,6 +274,7 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
       >
         <BranchHoursEditor
           :model-value="state"
+          :errors-form="form"
           :disabled="saving"
         />
       </UCard>

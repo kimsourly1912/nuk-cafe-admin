@@ -148,6 +148,7 @@ const currencyItems: { label: string, value: KhqrCurrency }[] = [
       :disabled="saving"
       class="space-y-4"
       @submit="submit"
+      @error="focusFirstInvalid"
     >
       <UAlert
         v-if="conflict"

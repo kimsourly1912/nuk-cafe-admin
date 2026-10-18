@@ -15,6 +15,8 @@ const props = defineProps<{
   pages: { label: string, icon?: string, to: string }[]
 }>()
 const emit = defineEmits<{ shortcuts: [] }>()
+/** Whether the palette is open, so the shell can react to it closing. */
+const open = defineModel<boolean>('open', { default: false })
 
 const tenantPath = useTenantPath()
 const sources = adminSearchSources()
@@ -81,6 +83,7 @@ const groups = computed<CommandPaletteGroup[]>(() => {
 
 <template>
   <UDashboardSearch
+    v-model:open="open"
     v-model:search-term="term"
     :groups="groups"
     :loading="pending && term.trim().length >= 2"

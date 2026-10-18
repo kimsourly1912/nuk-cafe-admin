@@ -160,6 +160,7 @@ const address = computed(() => (saved.value ? `${origin}${tenantUrl(saved.value.
           :disabled="saving"
           class="space-y-6"
           @submit="onSubmit"
+          @error="focusFirstInvalid"
         >
           <UCard variant="outline">
             <section

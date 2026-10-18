@@ -73,6 +73,7 @@ async function onSubmit({ data }: FormSubmitEvent<ModifierGroupForm>) {
         :disabled="saving"
         class="space-y-4"
         @submit="onSubmit"
+        @error="focusFirstInvalid"
       >
         <UFormField
           label="Name"

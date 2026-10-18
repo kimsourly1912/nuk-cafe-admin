@@ -467,7 +467,7 @@ describe('sold out at the counter (D105)', () => {
     await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}/sold-out`)
     await page.getByRole('heading', { name: 'Sold out', exact: true }).waitFor()
 
-    await page.getByRole('textbox', { name: 'Find an item' }).fill('coconut')
+    await page.getByRole('searchbox', { name: 'Find an item' }).fill('coconut')
     const [first] = (await coconut()).variations
     const name = `Coconut Coffee · ${first!.label}`
     const row = page.getByRole('listitem', { name, exact: true })
@@ -481,7 +481,7 @@ describe('sold out at the counter (D105)', () => {
     await expect.poll(async () => (await coconut()).variations.find(v => v.id === first!.id)!.soldOut).toBe(true)
 
     // Only the sold-out ones.
-    await page.getByRole('textbox', { name: 'Find an item' }).fill('')
+    await page.getByRole('searchbox', { name: 'Find an item' }).fill('')
     await page.getByRole('button', { name: /^\d+ sold out$/ }).click()
     await row.waitFor()
     expect(await page.getByRole('listitem').filter({ hasText: 'Coconut Coffee' }).count()).toBe(1)
@@ -501,7 +501,7 @@ describe('sold out at the counter (D105)', () => {
   it('a switch moves at once, and goes back with the reason when the server refuses (D152)', async () => {
     const { page, problems } = await cashierAtCounter()
     await page.goto(url(`/c/nuk/counter/${seed.openBranchId}/sold-out`), { waitUntil: 'hydration' })
-    await page.getByRole('textbox', { name: 'Find an item' }).fill('coconut')
+    await page.getByRole('searchbox', { name: 'Find an item' }).fill('coconut')
     const [first] = (await coconut()).variations
     const name = `Coconut Coffee · ${first!.label}`
     const row = page.getByRole('listitem', { name, exact: true })

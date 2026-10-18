@@ -112,10 +112,7 @@ useSeoMeta({ robots: 'noindex' })
   <div class="flex min-h-dvh flex-col">
     <CounterHeader
       v-model:search="search"
-      v-model:muted="muted"
-      :branch-name="branch?.name ?? 'Branch'"
-      :open-now="branchStatus ? branchStatus.openNow : null"
-      :sold-out-to="branch ? tenantPath(`/counter/${branch.id}/sold-out`) : undefined"
+      :branch-id="branchId"
     />
 
     <div
@@ -131,7 +128,10 @@ useSeoMeta({ robots: 'noindex' })
       />
     </div>
 
-    <template v-else>
+    <div
+      v-else
+      class="mx-auto flex w-full max-w-7xl flex-1 flex-col"
+    >
       <CounterViewSwitch
         :branch-id="branchId"
         current="queue"
@@ -253,7 +253,7 @@ useSeoMeta({ robots: 'noindex' })
         <section
           v-for="column in columns"
           :key="column.id"
-          class="flex min-h-0 flex-col rounded-lg bg-elevated/50"
+          class="flex min-h-0 flex-col rounded-lg bg-elevated/50 ring ring-accented dark:bg-default"
           :aria-labelledby="`column-${column.id}`"
         >
           <h2
@@ -304,7 +304,7 @@ useSeoMeta({ robots: 'noindex' })
           </div>
         </section>
       </div>
-    </template>
+    </div>
 
     <CounterOrderPanel
       v-model:open="panelOpen"

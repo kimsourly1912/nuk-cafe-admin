@@ -17,17 +17,23 @@ const emit = defineEmits<{ close: [saved: boolean] }>()
 const { isCompact } = useLayoutContext()
 const categoryId = ref<string | undefined>(props.categoryId)
 const query = useCategoryItems(categoryId)
+/** The chosen category's items; undefined until they've loaded (never the previous category's). */
+const loaded = computed(() => query.data.value?.categoryId === categoryId.value ? query.data.value?.items : undefined)
 
 /** The order being edited; the loaded one until something moves. */
 const order = ref<MenuItemSummary[]>([])
-const moved = computed(() => order.value.some((item, i) => item.id !== query.data.value?.[i]?.id))
+const moved = computed(() => order.value.some((item, i) => item.id !== loaded.value?.[i]?.id))
+
+// Loading covers the tick between choosing a category and its request starting (no data, not yet
+// pending), so the previous list or "no items" never flashes. A reload keeps the list on screen.
+const loading = computed(() => !!categoryId.value && !query.error.value && !loaded.value)
 
 const saving = ref(false)
 const error = ref<ApiError | null>(null)
 const conflict = computed(() => error.value?.kind === 'conflict')
 const unsaved = useModalUnsavedChanges(() => ({ order: order.value.map(item => item.id) }), { paused: saving, close: () => emit('close', false) })
 // A loaded (or reloaded) order is the new baseline: only moves count as unsaved.
-watch(() => query.data.value, async (items) => {
+watch(loaded, async (items) => {
   order.value = [...(items ?? [])]
   await nextTick()
   unsaved.markClean()
@@ -67,7 +73,7 @@ async function reload() {
   try {
     await query.refresh()
     if (query.error.value) return
-    order.value = [...(query.data.value ?? [])]
+    order.value = [...(loaded.value ?? [])]
     error.value = null
     await nextTick()
     unsaved.markClean()
@@ -128,15 +134,16 @@ watch(categoryId, () => {
           Choose a category to arrange its items.
         </p>
         <ApiErrorAlert
-          v-else-if="query.error.value && !query.data.value"
+          v-else-if="query.error.value && !loaded"
           :error="query.error.value"
           title="Couldn't load the items"
           @retry="query.refresh()"
         />
         <ListSkeleton
-          v-else-if="query.pending.value && !query.data.value?.length"
+          v-else-if="loading"
           label="Loading the items…"
           :count="4"
+          class="overflow-hidden"
         />
         <p
           v-else-if="!order.length"
@@ -155,6 +162,7 @@ watch(categoryId, () => {
             Drag an item or use its arrows.
           </p>
           <ProductReorderList
+            :key="categoryId"
             :items="order"
             :disabled="saving"
             @move="move"

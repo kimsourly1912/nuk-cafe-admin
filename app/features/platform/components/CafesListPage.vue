@@ -70,28 +70,23 @@ usePageShortcuts({ n: openForm })
 
       <UDashboardToolbar>
         <template #left>
-          <StatusTabs
-            v-model="filters.status"
-            :tabs="statusTabs"
-            :counts="counts.data.value"
-          />
-        </template>
-        <template #right>
           <SearchInput
             v-model="filters.search"
             placeholder="Search name or address…"
+            :loading="refreshing"
             class="w-full sm:w-64"
-          />
-          <UIcon
-            v-if="refreshing"
-            name="i-lucide-loader-circle"
-            class="size-4 animate-spin text-muted"
           />
         </template>
       </UDashboardToolbar>
     </template>
 
     <template #body>
+      <StatusTabs
+        v-model="filters.status"
+        :tabs="statusTabs"
+        :counts="counts.data.value"
+      />
+
       <ApiErrorAlert
         v-if="error"
         :error="error"
