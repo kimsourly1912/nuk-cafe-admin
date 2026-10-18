@@ -167,7 +167,7 @@ useSeoMeta({ robots: 'noindex' })
           />
           <div
             v-else-if="!shown.length"
-            class="flex flex-col items-center gap-2 rounded-lg bg-elevated py-16 text-center ring ring-accented dark:bg-default"
+            class="flex flex-col items-center gap-2 rounded-lg bg-elevated/50 py-16 text-center ring ring-accented dark:bg-default"
           >
             <UIcon
               name="i-lucide-receipt"

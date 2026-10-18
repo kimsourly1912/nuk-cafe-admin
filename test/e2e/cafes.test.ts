@@ -73,7 +73,7 @@ describe('each cafe at its own address', () => {
     await page.goto(url(`/table/${cafe.tableToken}`), { waitUntil: 'hydration' })
     await page.waitForURL(address => address.pathname === `/c/${cafe.slug}`)
     await page.getByRole('heading', { name: 'Beans', exact: true }).waitFor()
-    await page.getByText('Table B1').first().waitFor()
+    await page.getByText('Table B1').filter({ visible: true }).first().waitFor()
     expect(await page.getByText('Banana Bread').count()).toBe(0)
   })
 })

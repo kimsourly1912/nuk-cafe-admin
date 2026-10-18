@@ -149,7 +149,7 @@ describe('sample data', () => {
         return state
       },
     })
-    await dangerZone(page).getByRole('button', { name: 'Reset menu data…' }).click()
+    await dangerZone(page).getByRole('button', { name: 'Reset menu data', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: 'Reset menu data?' })
     await dialog.getByText('40 menu items').waitFor()
     await dialog.getByText('30 uploaded photos').waitFor()

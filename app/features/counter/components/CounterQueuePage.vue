@@ -253,7 +253,7 @@ useSeoMeta({ robots: 'noindex' })
         <section
           v-for="column in columns"
           :key="column.id"
-          class="flex min-h-0 flex-col rounded-lg bg-elevated ring ring-accented dark:bg-default"
+          class="flex min-h-0 flex-col rounded-lg bg-elevated/50 ring ring-accented dark:bg-default"
           :aria-labelledby="`column-${column.id}`"
         >
           <h2

@@ -7,6 +7,13 @@
 Follows D172. [Decision](decisions.md#d177-the-local-e2e-build-leaves-dependencies-untraced-2026-10-18). A stale e2e build spent most of its time in Nitro's dependency tracing (uncached `stat`-heavy resolution of every server import). The local e2e build now skips tracing (`E2E_UNTRACED`, set by the global setup) and imports dependencies from `node_modules`. CI and `E2E_TRACE=1` still trace. Idle laptop: a stale build 2m23s → 35 s; categories + shop-menu with a stale build 241 s → 94 s. Rejected: no sourcemaps or minify (no change), and `nuxt dev` (146 s to start, 9 of 68 tests timed out on first-request compiles).
 
 Checks: categories + shop-menu 3 untraced stale-build runs, 68/68 each; the full e2e suite on the untraced build 576/576 (436 s). One earlier full run on an overloaded laptop failed 50 tests, all from Chrome or worker crashes, none from the app. `pnpm lint`, `pnpm typecheck` and `pnpm test:unit` pass.
+
+## Form-control and counter polish: CI follow-up (2026-10-18)
+
+The polish commit on this branch failed 6 e2e tests in CI. The counter queue's columns moved to `bg-elevated`, where `text-muted` ("None right now") is below 4.5:1 (axe); the columns and the Finished page's empty state now use `bg-elevated/50`, as before. The rest were tests behind intentional UI changes: Sold out's search is now `SearchInput` (role `searchbox`), the sample-data button lost its ellipsis (help page updated too), and the customer menu's phone-only branch line is the first, hidden match for the branch and table text (tests now pick the visible one).
+
+Checks: accessibility, cafes, counter, sample-data and shop-menu e2e 89/89; `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` (1482 passed, 1 skipped) pass. Not run: the full `pnpm test:e2e`.
+
 ## Row errors in every list (D179, 2026-10-18)
 
 [Decision](decisions.md#d179-every-list-that-removes-or-moves-rows-moves-its-errors-2026-10-18). Audit of every `UForm` for lists: staff branches, availability times, hours windows and the item form's add-on groups removed or moved rows with `splice`, so an error stayed on the old position. They now use `useFormRowErrors`.
