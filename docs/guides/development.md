@@ -13,7 +13,7 @@ pnpm nuxt db migrate                      # apply local SQLite migrations
 pnpm lint / pnpm lint:fix                 # ESLint also does formatting (no Prettier) and enforces feature boundaries; cached (D172)
 pnpm typecheck                            # vue-tsc via nuxt typecheck
 pnpm test                                 # all Vitest projects
-pnpm test:unit / pnpm test:e2e            # unit + server (~1.5 min) / e2e only (~11 min locally at 4 workers, +5 min when the build is stale)
+pnpm test:unit / pnpm test:e2e            # unit + server (~30 s idle, D174) / e2e only (~11 min locally at 4 workers, +5 min when the build is stale)
 pnpm vitest run --project server          # one project: unit | server | e2e (| nuxt, once a *.nuxt.test.ts exists)
 pnpm vitest run app/features/categories   # one feature's tests
 pnpm vitest run -t "refreshes once"
@@ -47,7 +47,7 @@ Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix o
 
 `vitest.config.ts` projects:
 - **unit** (`test/unit`, `app/features/*/tests`): pure logic in Node: engines, form schemas and mappings.
-- **server** (`server/features/*/tests`, shared utils in `server/tests`): services against an in-memory SQLite database built from the checked-in migrations, foreign keys on (D42).
+- **server** (`server/features/*/tests`, shared utils in `server/tests`): services against an in-memory SQLite database built from the checked-in migrations, foreign keys on (D42). Each worker runs the migrations once and `createTestDb()` replays a dump of the result (schema and rows, ~14 ms instead of ~230 ms, D174); `test-db.test.ts` checks the dump equals a migrated database. Tests of one migration use `createTestClient()` + `applyMigration()`.
 - **e2e** (`test/e2e`): builds the app once and drives Chrome. Admin tests mock the API in the browser (`mockApi`); the customer site's tests read a real database seeded before each run (`test/e2e/support/seed.ts`, the Standard sample menu, D95), because the server renders those pages.
 - **nuxt**: only created once a `*.nuxt.test.ts` exists (D42).
 
