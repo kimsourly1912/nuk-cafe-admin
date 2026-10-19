@@ -4,7 +4,7 @@ export { BRANCH_ROLES, branchAc, branchRoles, branchStatements, PLATFORM_ROLES, 
 export type { BranchPermission, BranchRole, PlatformPermission, PlatformRole, TenantPermission, TenantRole } from './identity.permissions'
 export { accountWorkspaces, activeTenantPage, activeTenants, adminSession, authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, counterSession, currentTenant, guestNameStatement, platformSession, tenantById, tenantBySlug, workspacesOf } from './identity.service'
 export { IdentityErrorCodes } from './identity.errors'
-export { banAccount, getPlatformAccount, listPlatformAccounts, setTemporaryPassword, signOutAccount, unbanAccount } from './accounts.service'
+export { accountIdentities, banAccount, countBannedAccounts, getPlatformAccount, listPlatformAccounts, setTemporaryPassword, signOutAccount, unbanAccount } from './accounts.service'
 export type { PlatformAccountActor } from './accounts.service'
 export { AccountErrorCodes } from './accounts.errors'
 export type { Actor, BranchActor, SessionUser } from './identity.types'

@@ -9,7 +9,7 @@ import { createStaff, listStaff, seedFirstOwner } from '#server/features/identit
 import { getPlatformAccount, listPlatformAccounts } from '#server/features/identity/accounts.service'
 import { createCategory } from '#server/features/menu/categories.service'
 import { createItem, listItems } from '#server/features/menu/items.service'
-import { addOwner, createTenant, getTenant, listTenants, removeOwner, seedTenant, updateTenantNotes } from '#server/features/tenants'
+import { addOwner, createTenant, getPlatformOverview, getTenant, listPlatformActivity, listTenants, removeOwner, seedTenant, updateTenantNotes } from '#server/features/tenants'
 import type { Db } from '#server/utils/batch'
 import { migrationFiles } from '#server/tests/support/db'
 import type { StaffListQuery } from '#shared/contracts/staff'
@@ -194,5 +194,18 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
     expect(notes.notes).toMatchObject({ contactName: 'Bea', version: 1 })
     await expectApiError(() => updateTenantNotes(db, admin, theirs, { version: 0, contactName: 'Late', contactPhone: null, notes: null }), 409, 'VERSION_CONFLICT')
     expect((await getTenant(db, ours)).notes.version).toBe(0)
+  })
+
+  it('reads the Overview and the platform\'s Activity, only its own rows, filtered by cafe and date (P3, D191)', async () => {
+    const overview = await getPlatformOverview(db, 'Asia/Phnom_Penh')
+    expect(overview.cafes.active).toBeGreaterThan(1)
+    expect(overview.noActiveOwner).toBe(1)
+    const activity = await listPlatformActivity(db, { page: 1, pageSize: 100 }, 'Asia/Phnom_Penh')
+    expect(activity.items.every(entry => entry.action.startsWith('tenant.') || entry.action.startsWith('platform.'))).toBe(true)
+    expect(activity.items.map(entry => entry.action)).toContain('tenant.owner.add')
+    expect(activity.items.map(entry => entry.action)).not.toContain('staff.create')
+    const theirsOnly = await listPlatformActivity(db, { page: 1, pageSize: 100, tenantId: theirs, from: '2000-01-01', to: '2999-12-31' }, 'Asia/Phnom_Penh')
+    expect(theirsOnly.items.length).toBeGreaterThan(0)
+    expect(theirsOnly.items.every(entry => entry.cafe?.id === theirs)).toBe(true)
   })
 })

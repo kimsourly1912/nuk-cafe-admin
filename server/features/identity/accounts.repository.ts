@@ -149,3 +149,15 @@ export function temporaryPasswordStatement(db: Db, userId: string, expected: Dat
     .set({ mustChangePassword: true, updatedAt: next })
     .where(and(changeable(userId, expected), sql`coalesce(${user.banned}, 0) = 0`))
 }
+
+/** Registered accounts banned now (the console's Overview, D191). */
+export async function countBanned(db: Db): Promise<number> {
+  const rows: { total: number }[] = await db.select({ total: count() }).from(user).where(and(registered, isBanned))
+  return rows[0]?.total ?? 0
+}
+
+/** These accounts' names and emails, guests included (an audit row may name any account). */
+export async function identities(db: Db, userIds: string[]): Promise<{ id: string, name: string, email: string }[]> {
+  if (!userIds.length) return []
+  return readInChunks(userIds, ids => db.select({ id: user.id, name: user.name, email: user.email }).from(user).where(inArray(user.id, ids)))
+}

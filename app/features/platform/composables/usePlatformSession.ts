@@ -8,7 +8,10 @@ import type { PlatformSession } from '#shared/contracts/tenants'
  * previous person's data (D29).
  */
 
+/** The console opens on its Overview (P3, D191); the Cafes list is `CAFES_PATH`. */
 export const PLATFORM_HOME = '/platform'
+export const CAFES_PATH = '/platform/cafes'
+export const ACTIVITY_PATH = '/platform/activity'
 export const PLATFORM_SIGN_IN = '/platform/sign-in'
 export const PLATFORM_CHANGE_PASSWORD = '/platform/change-password'
 export const PLATFORM_TWO_FACTOR = '/platform/two-factor'

@@ -8,8 +8,10 @@
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { formatPhone } from '#shared/contracts/phone'
 import type { TenantOwner } from '#shared/contracts/tenants'
-import { usePlatformSession } from '../composables/usePlatformSession'
+import { CAFES_PATH, usePlatformSession } from '../composables/usePlatformSession'
 import { accountPath } from '../composables/useAccounts'
+import { cafeActivityPath, useCafeActivity } from '../composables/useActivity'
+import { ACTION_LABELS, activitySubject, actorName } from '../schemas/activity'
 import { newCafePath, useCafe, useCafeMutations } from '../composables/useCafes'
 import { timeAgo } from '../schemas/cafe-form'
 import { othersCanSignIn } from '../schemas/owner-form'
@@ -35,6 +37,7 @@ const removeModal = overlay.create(CafeOwnerRemoveModal)
 const notesModal = overlay.create(CafeNotesModal)
 
 const { user } = usePlatformSession()
+const activity = useCafeActivity(props.id)
 /** One's own ownership is changed by another super admin (D189). */
 const isOwn = (owner: TenantOwner) => owner.id === user.value?.userId
 
@@ -77,14 +80,14 @@ const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLo
             icon="i-lucide-arrow-left"
             color="neutral"
             variant="ghost"
-            to="/platform"
+            :to="CAFES_PATH"
             aria-label="Back to Cafes"
             class="lg:hidden"
           />
         </template>
         <template #title>
           <UBreadcrumb
-            :items="[{ label: 'Cafes', to: '/platform' }, { label: cafe?.name ?? 'Cafe' }]"
+            :items="[{ label: 'Cafes', to: CAFES_PATH }, { label: cafe?.name ?? 'Cafe' }]"
             class="hidden min-w-0 lg:flex"
           />
           <span class="truncate lg:hidden">{{ cafe?.name ?? 'Cafe' }}</span>
@@ -117,7 +120,7 @@ const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLo
         </p>
         <UButton
           label="Back to Cafes"
-          to="/platform"
+          :to="CAFES_PATH"
           color="neutral"
           variant="outline"
           class="mt-2"
@@ -392,6 +395,64 @@ const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLo
             class="text-sm text-muted"
           >
             No notes yet: add a contact person, their phone or anything the team should know.
+          </p>
+        </UCard>
+
+        <UCard variant="outline">
+          <template #header>
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="font-semibold text-highlighted">
+                Platform activity
+              </h2>
+              <UButton
+                label="See all"
+                :to="cafeActivityPath(cafe.id)"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                aria-label="See all the platform's activity on this cafe"
+              />
+            </div>
+          </template>
+          <ApiErrorAlert
+            v-if="activity.error.value"
+            :error="activity.error.value"
+            title="Could not load the activity"
+            @retry="activity.refresh()"
+          />
+          <ul
+            v-else-if="activity.data.value?.items.length"
+            class="divide-y divide-default text-sm"
+            aria-label="Platform activity"
+          >
+            <li
+              v-for="entry in activity.data.value.items"
+              :key="entry.id"
+              class="py-2 first:pt-0 last:pb-0"
+            >
+              <p class="font-medium text-highlighted">
+                {{ ACTION_LABELS[entry.action] }}
+                <span
+                  v-if="activitySubject(entry)"
+                  class="font-normal text-default"
+                >: {{ activitySubject(entry) }}</span>
+              </p>
+              <p
+                v-if="entry.details.reason"
+                class="break-words text-muted"
+              >
+                Reason: {{ entry.details.reason }}
+              </p>
+              <p class="text-muted">
+                {{ actorName(entry) }} · {{ timeAgo(entry.at) }}
+              </p>
+            </li>
+          </ul>
+          <p
+            v-else-if="!activity.loading.value"
+            class="text-sm text-muted"
+          >
+            The platform team hasn't acted on this cafe yet.
           </p>
         </UCard>
 
