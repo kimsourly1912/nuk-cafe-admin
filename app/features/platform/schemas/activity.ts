@@ -14,6 +14,8 @@ export const ACTION_LABELS: Record<PlatformAction, string> = {
   'tenant.owner.remove': 'Owner removed',
   'tenant.owner.transfer': 'Ownership transferred',
   'tenant.notes.update': 'Notes edited',
+  'tenant.support.open': 'Support view opened',
+  'tenant.support.close': 'Support view left',
   'platform.account.ban': 'Account banned',
   'platform.account.unban': 'Account unbanned',
   'platform.account.sign-out': 'Signed out everywhere',

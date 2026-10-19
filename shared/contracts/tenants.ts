@@ -1,6 +1,7 @@
 import * as v from 'valibot'
 import { nameSchema, optionalParam, pageQuerySchema, textSchema, versionSchema } from './common'
 import { phoneSchema } from './phone'
+import type { TenantSupport } from './support'
 
 /**
  * The platform console (`/api/platform/tenants`, step T2a, D142): super admins create cafes
@@ -233,6 +234,8 @@ export interface TenantDetail extends TenantSummary {
   formerSlugs: string[]
   /** The platform team's notes about the cafe (P2, D189). */
   notes: TenantNotes
+  /** The owner allows platform support until then (P5, D193); `null` when not. */
+  support: TenantSupport | null
 }
 
 /** A cafe as the console names it in a list (an owner's cafes). */

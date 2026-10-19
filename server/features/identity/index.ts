@@ -8,6 +8,7 @@ export { accountIdentities, banAccount, countBannedAccounts, getPlatformAccount,
 export type { PlatformAccountActor } from './accounts.service'
 export { AccountErrorCodes } from './accounts.errors'
 export type { Actor, BranchActor, SessionUser } from './identity.types'
+export { isSuperadmin } from './staff.rules'
 export { accountForEmail, createStaff, disableStaff, getStaffMember, listStaff, ownerCandidates, planStaffCreate, requireEligibleAccount, resetStaffPassword, seedFirstOwner, seedSuperadmin, staffCounts, tenantOwners, updateStaffAccess } from './staff.service'
 export type { OwnerAccount, StaffCreatePlan } from './staff.service'
 export { StaffErrorCodes } from './staff.errors'

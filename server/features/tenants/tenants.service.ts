@@ -13,6 +13,7 @@ import { accountForEmail, accountWorkspaces, activeOwnerCounts, ownerCandidates,
 import type { Actor, OwnerAccount, OwnerAddPlan, SessionUser } from '#server/features/identity'
 import { assetUrls, attachStatements, mediaNotAvailable, releaseStatement } from '#server/features/media'
 import { orderActivity } from '#server/features/orders'
+import { tenantSupport } from '#server/features/support'
 import { auditStatement } from '#server/features/platform'
 import type { AuditActor } from '#server/features/platform'
 import { accountExists, accountNotEligible, alreadyOwner, alreadySuspended, emailUnavailable, lastOwner, notesChanged, notSuspended, ownerAccountChanged, ownerNotFound, ownershipChanged, ownOwnership, sameSlug, slugTaken, tenantChanged, tenantNotFound } from './tenants.errors'
@@ -84,8 +85,8 @@ export async function countTenants(db: Db): Promise<TenantCounts> {
 export async function getTenant(db: Db, id: string): Promise<TenantDetail> {
   const row = await repo.findTenant(db, id)
   if (!row) throw tenantNotFound()
-  const [[summary], owners, formerSlugs, notes] = await Promise.all([toSummaries(db, [row]), tenantOwners(db, id), repo.formerSlugs(db, id, row.slug), repo.findNotes(db, id)])
-  return { ...summary!, owners, formerSlugs, notes: notesOf(notes) }
+  const [[summary], owners, formerSlugs, notes, support] = await Promise.all([toSummaries(db, [row]), tenantOwners(db, id), repo.formerSlugs(db, id, row.slug), repo.findNotes(db, id), tenantSupport(db, id)])
+  return { ...summary!, owners, formerSlugs, notes: notesOf(notes), support }
 }
 
 function notesOf(row: repo.TenantNotesRow | undefined): TenantNotes {

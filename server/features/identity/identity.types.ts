@@ -25,7 +25,8 @@ export interface Actor {
   userId: string
   tenantId: string
   /** Their role in the tenant; `customer` when they're not a member (a shop customer). */
-  role: TenantRole | 'customer'
+  /** `support`: a super admin's read-only support visit (P5, D193), never a member. */
+  role: TenantRole | 'customer' | 'support'
   /** The request this actor made, for the audit trail (set by the access helpers). */
   requestId?: string
   /** A guest (D156): orders as a customer, never a member of any tenant. */

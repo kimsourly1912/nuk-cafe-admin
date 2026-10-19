@@ -22,6 +22,7 @@ const platformMatrix: Row[] = [
   ['notes', 'update', ['superadmin']],
   ['activity', 'read', ['superadmin']],
   ['health', 'read', ['superadmin']],
+  ['support', 'open', ['superadmin']],
   // Better Auth's admin endpoints: nobody (D187), accounts change through our routes only.
   ['user', 'create', []],
   ['user', 'list', []],
@@ -54,6 +55,7 @@ const tenantMatrix: Row[] = [
   ['loyalty', 'adjust', ['owner']],
   ['settings', 'manage', ['owner']],
   ['assistant', 'use', ['owner']],
+  ['support', 'grant', ['owner']],
   ['report', 'read', ['owner']],
   ['report', 'export', ['owner']],
   ['audit', 'read', ['owner']],
