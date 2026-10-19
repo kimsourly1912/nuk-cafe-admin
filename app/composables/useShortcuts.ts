@@ -15,6 +15,7 @@ export const SHORTCUTS = [
   { kbds: ['escape'], label: 'Close the dialog (asks first if there are unsaved changes)' },
   { kbds: ['escape'], label: 'Leave Select or Reorder (Categories; an unsaved order stays until saved or discarded)' },
   { kbds: ['meta', '/'], label: 'Open or close the assistant (where it is on)' },
+  { kbds: ['meta', 'b'], label: 'Collapse or expand the sidebar' },
   { kbds: ['?'], label: 'Show keyboard shortcuts' },
 ] as const
 

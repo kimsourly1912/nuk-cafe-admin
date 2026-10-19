@@ -1,20 +1,21 @@
 import type { Page } from '#shared/contracts/common'
 import { totalPages } from '#shared/contracts/common'
 import type { AccountCafe, CafeProfile, CafeSettings, UpdateCafeInput } from '#shared/contracts/cafe'
-import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, PlatformOwner, ResumeTenantInput, SuspendTenantInput, TenantCounts, TenantDetail, TenantListQuery, TenantStatus, TenantSummary } from '#shared/contracts/tenants'
+import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, OwnerSearchQuery, PlatformOwner, ResumeTenantInput, SlugAvailability, SuspendTenantInput, TenantCounts, TenantDetail, TenantListQuery, TenantStatus, TenantSummary } from '#shared/contracts/tenants'
 import { TENANT_STATUSES } from '#shared/contracts/tenants'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
+import { notFound } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
 import { activeBranchCounts, firstBranchStatement } from '#server/features/branches'
-import { accountWorkspaces, ownerAccounts, planStaffCreate, staffCounts, tenantOwners } from '#server/features/identity'
+import { accountForEmail, accountWorkspaces, ownerCandidates, planStaffCreate, requireEligibleAccount, staffCounts, tenantOwners } from '#server/features/identity'
 import type { Actor, OwnerAccount, SessionUser } from '#server/features/identity'
 import { assetUrls, attachStatements, mediaNotAvailable, releaseStatement } from '#server/features/media'
 import { orderActivity } from '#server/features/orders'
 import { auditStatement } from '#server/features/platform'
 import type { AuditActor } from '#server/features/platform'
-import { alreadySuspended, notAnOwner, notSuspended, ownerAccountChanged, ownerExists, sameSlug, slugTaken, tenantChanged, tenantNotFound } from './tenants.errors'
+import { accountExists, accountNotEligible, alreadySuspended, emailUnavailable, notSuspended, ownerAccountChanged, sameSlug, slugTaken, tenantChanged, tenantNotFound } from './tenants.errors'
 import * as repo from './tenants.repository'
 import type { TenantRow } from './tenants.repository'
 
@@ -86,36 +87,48 @@ export async function getTenant(db: Db, id: string): Promise<TenantDetail> {
   return { ...summary!, owners, formerSlugs }
 }
 
-/** Owners with their cafes by name (D146). */
+/** Accounts with the cafes they own, by name (D146). */
 async function withCafes(db: Db, owners: OwnerAccount[]): Promise<PlatformOwner[]> {
   if (!owners.length) return []
-  const refs = await repo.tenantRefs(db)
+  const refs = await repo.tenantRefs(db, [...new Set(owners.flatMap(owner => owner.tenantIds))])
   return owners.map(({ tenantIds, ...owner }) => ({ ...owner, cafes: refs.filter(ref => tenantIds.includes(ref.id)) }))
 }
 
-/**
- * Everyone who owns a cafe, by name, with their cafes (`GET /api/platform/owners`, D146): New
- * cafe's "An existing owner". One row per cafe owned, so the list grows with the platform's cafes;
- * a search parameter comes when there are thousands.
- */
-export async function listOwners(db: Db): Promise<PlatformOwner[]> {
-  return withCafes(db, await ownerAccounts(db))
+/** A bounded search of the accounts a cafe can be given to, by name or email (`GET /api/platform/accounts`, D185). */
+export async function searchOwnerAccounts(db: Db, query: OwnerSearchQuery): Promise<PlatformOwner[]> {
+  return withCafes(db, await ownerCandidates(db, { search: query.search }))
+}
+
+/** One such account by id, for a page that opens with it chosen; 404 when it can't be chosen. */
+export async function getOwnerAccount(db: Db, userId: string): Promise<PlatformOwner> {
+  const [account] = await withCafes(db, await ownerCandidates(db, { userId }))
+  if (!account) throw notFound('The account')
+  return account
 }
 
 /**
- * The first owner's account: an existing owner by id (they must own a cafe and not be disabled), or
- * a new person by name and email. A new person's email may already have an account (a customer, or
- * branch staff elsewhere): it gets access and keeps its password. An existing owner's email is
- * refused there, so that adding someone who owns a cafe is always the explicit choice (D146).
+ * Whether no cafe has or had this address (`GET /api/platform/slug-availability`, D185): the
+ * address history keeps every address a cafe ever had. Advisory: another save may take it before
+ * this one, and creating the cafe decides.
+ */
+export async function checkSlug(db: Db, slug: string): Promise<SlugAvailability> {
+  return { slug, available: !await repo.slugOwner(db, slug) }
+}
+
+/**
+ * The first owner's account: an existing account by id (registered and not disabled; its name and
+ * email are the account's own), or a new person by name and email. A new person's email must have
+ * no account: one that exists is chosen as an existing account instead, so "Create new account"
+ * never quietly hands out access on someone's own password (D185).
  */
 async function resolveOwner(db: Db, owner: CreateTenantInput['owner']): Promise<{ name: string, email: string, userId?: string }> {
   if (owner.kind === 'existing') {
-    const [account] = await ownerAccounts(db, { userId: owner.userId })
-    if (!account) throw notAnOwner()
+    const [account] = await ownerCandidates(db, { userId: owner.userId })
+    if (!account) throw accountNotEligible()
     return { name: account.name, email: account.email, userId: account.id }
   }
-  const [existing] = await ownerAccounts(db, { email: owner.email })
-  if (existing) throw ownerExists(existing.name)
+  const known = await accountForEmail(db, owner.email)
+  if (known) throw known.eligible ? accountExists() : emailUnavailable()
   return { name: owner.name, email: owner.email }
 }
 
@@ -136,12 +149,16 @@ export async function createTenant(db: Db, actor: PlatformActor, input: CreateTe
     admin: true,
     memberships: [],
   }, now)
+  // A new person's email got an account between the check and the plan.
+  if (input.owner.kind === 'new' && owner.temporaryPassword === null) throw accountExists()
   // The chosen owner's email now belongs to another account: they changed it meanwhile.
   if (ownerInput.userId && owner.userId !== ownerInput.userId) throw ownerAccountChanged()
   const statements: Statement[] = [
     repo.insertTenantStatement(db, { id: tenantId, name: input.name, slug: input.slug, now }),
     repo.insertSlugStatement(db, { slug: input.slug, tenantId, now }),
     branch.statement,
+    // An account that was disabled, or became a guest, since it was read aborts everything.
+    ...(ownerInput.userId ? [requireEligibleAccount(db, ownerInput.userId)] : []),
     ...owner.statements,
     audit(db, actor, tenantId, 'tenant.create', { slug: input.slug, branchId: branch.id, ownerId: owner.userId, ownerKind: input.owner.kind, existingAccount: owner.temporaryPassword === null }),
   ]
@@ -151,13 +168,19 @@ export async function createTenant(db: Db, actor: PlatformActor, input: CreateTe
   catch (error) {
     // Another save took the address meanwhile, or the owner's account was created or changed.
     if (isUniqueViolation(error) && await repo.slugOwner(db, input.slug)) throw slugTaken()
-    if (isUniqueViolation(error) || isStaleWrite(error)) throw ownerAccountChanged()
+    if (isUniqueViolation(error) && input.owner.kind === 'new' && await accountForEmail(db, input.owner.email)) throw accountExists()
+    if (isUniqueViolation(error)) throw ownerAccountChanged()
+    if (isStaleWrite(error)) {
+      // The chosen account's version moved, or it can't own a cafe any more.
+      if (ownerInput.userId && !(await ownerCandidates(db, { userId: ownerInput.userId })).length) throw accountNotEligible()
+      throw ownerAccountChanged()
+    }
     throw error
   }
-  const [tenant, [ownerCafes]] = await Promise.all([getTenant(db, tenantId), withCafes(db, await ownerAccounts(db, { userId: owner.userId }))])
-  // A disabled account isn't in the owner list; the answer still names the cafe it was given.
+  const [tenant, ownerCafes] = await Promise.all([getTenant(db, tenantId), ownerCandidates(db, { userId: owner.userId }).then(accounts => withCafes(db, accounts))])
+  // The answer names the cafe it was given even when the account is no longer eligible.
   const fallback = { id: owner.userId, name: ownerInput.name, email: ownerInput.email, cafes: [{ id: tenant.id, name: tenant.name, slug: tenant.slug }] }
-  return { tenant, temporaryPassword: owner.temporaryPassword, owner: ownerCafes ?? fallback }
+  return { tenant, temporaryPassword: owner.temporaryPassword, owner: ownerCafes[0] ?? fallback }
 }
 
 /** Runs a change guarded by the cafe's version; a stale write is someone else's change. */

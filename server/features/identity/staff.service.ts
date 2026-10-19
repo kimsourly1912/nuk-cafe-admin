@@ -277,7 +277,7 @@ export async function tenantOwners(db: Db, tenantId: string): Promise<{ id: stri
   return repo.ownersOf(db, tenantId)
 }
 
-/** An account that owns cafes, with the ids of the cafes it owns (D146). */
+/** An account that can own a cafe, with the ids of the cafes it owns already, none included (D185). */
 export interface OwnerAccount {
   id: string
   name: string
@@ -285,20 +285,36 @@ export interface OwnerAccount {
   tenantIds: string[]
 }
 
-/**
- * Everyone who owns a cafe and isn't disabled, by name, with the cafes they own (the platform
- * console's owner list, D146). Narrowed to one account by id or email when given. Customers and
- * branch staff aren't owners, so they're never in it.
- */
-export async function ownerAccounts(db: Db, filter: { userId?: string, email?: string } = {}): Promise<OwnerAccount[]> {
-  const owners = new Map<string, OwnerAccount>()
-  for (const row of await repo.ownerRows(db, filter)) {
-    const owner = owners.get(row.id) ?? { id: row.id, name: row.name, email: row.email, tenantIds: [] }
-    owner.tenantIds.push(row.tenantId)
-    owners.set(row.id, owner)
-  }
-  return [...owners.values()]
+/** The most accounts one lookup answers: the platform console never gets the user table. */
+export const OWNER_LOOKUP_LIMIT = 8
+
+async function withOwnedTenants(db: Db, accounts: repo.AccountIdentity[]): Promise<OwnerAccount[]> {
+  const owned = await repo.ownedTenants(db, accounts.map(account => account.id))
+  return accounts.map(account => ({ ...account, tenantIds: owned.filter(row => row.userId === account.id).map(row => row.tenantId) }))
 }
+
+/**
+ * Accounts a cafe can be given to (the platform console's "Use existing account", D185): one by id,
+ * or a bounded search of names and emails. Registered accounts only: never a guest or a disabled
+ * account, whatever their access elsewhere; customers, branch staff and owners all qualify.
+ */
+export async function ownerCandidates(db: Db, filter: { userId: string } | { search: string }): Promise<OwnerAccount[]> {
+  if ('userId' in filter) {
+    const account = await repo.findEligibleAccount(db, filter.userId)
+    return account ? withOwnedTenants(db, [account]) : []
+  }
+  return withOwnedTenants(db, await repo.searchEligibleAccounts(db, filter.search, OWNER_LOOKUP_LIMIT))
+}
+
+/** The account that has this email, and whether it can own a cafe; `undefined` when there is none. */
+export async function accountForEmail(db: Db, email: string): Promise<{ id: string, eligible: boolean } | undefined> {
+  const account = await repo.findAccountByEmail(db, email)
+  if (!account) return undefined
+  return { id: account.id, eligible: Boolean(await repo.findEligibleAccount(db, account.id)) }
+}
+
+/** Aborts a batch unless the account can still own a cafe (the platform console's create, D185). */
+export const requireEligibleAccount = repo.requireEligibleAccountStatement
 
 /**
  * The seed task (local development and disposable environments, D142): the first owner is also on

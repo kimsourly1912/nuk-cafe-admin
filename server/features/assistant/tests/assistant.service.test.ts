@@ -299,11 +299,11 @@ describe('the help chat (9.1, D109)', () => {
 
 describe('the page list (9.1, D109)', () => {
   it('names the page a path belongs to', () => {
-    expect(pageAt('/admin')).toMatchObject({ title: 'Dashboard' })
+    expect(pageAt('/admin')).toMatchObject({ title: 'Overview' })
     expect(pageAt('/admin/products/new')).toMatchObject({ title: 'New menu item' })
     expect(pageAt('/admin/products/0199abc?tab=prices')).toMatchObject({ title: 'Menu items' })
     expect(pageAt('/admin/add-ons/abc')).toMatchObject({ title: 'Add-ons' })
-    expect(pageAt('/admin/staffing')).toMatchObject({ title: 'Dashboard' })
+    expect(pageAt('/admin/staffing')).toMatchObject({ title: 'Overview' })
   })
 
   it('every page it lists exists in the app', () => {

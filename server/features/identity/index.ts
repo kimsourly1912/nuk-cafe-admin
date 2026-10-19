@@ -5,7 +5,7 @@ export type { BranchPermission, BranchRole, PlatformPermission, PlatformRole, Te
 export { accountWorkspaces, activeTenantPage, activeTenants, adminSession, authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, counterSession, currentTenant, guestNameStatement, platformSession, tenantById, tenantBySlug, workspacesOf } from './identity.service'
 export { IdentityErrorCodes } from './identity.errors'
 export type { Actor, BranchActor, SessionUser } from './identity.types'
-export { createStaff, disableStaff, getStaffMember, listStaff, ownerAccounts, planStaffCreate, resetStaffPassword, seedFirstOwner, seedSuperadmin, staffCounts, tenantOwners, updateStaffAccess } from './staff.service'
+export { accountForEmail, createStaff, disableStaff, getStaffMember, listStaff, ownerCandidates, planStaffCreate, requireEligibleAccount, resetStaffPassword, seedFirstOwner, seedSuperadmin, staffCounts, tenantOwners, updateStaffAccess } from './staff.service'
 export type { OwnerAccount, StaffCreatePlan } from './staff.service'
 export { StaffErrorCodes } from './staff.errors'
 export { accountMailHandlers, consoleSender, MAIL_KINDS, resendSender } from './identity.mail'

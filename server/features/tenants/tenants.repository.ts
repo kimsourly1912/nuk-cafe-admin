@@ -1,7 +1,8 @@
-import { and, asc, count, eq, ne, or, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, ne, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { TenantListQuery, TenantStatus } from '#shared/contracts/tenants'
 import type { Db, Statement } from '#server/utils/batch'
+import { readInChunks } from '#server/utils/batch'
 import { containsText } from '#server/utils/search'
 import { organization } from '#server/db/tables'
 import { tenantSlugs } from './tenants.schema'
@@ -118,8 +119,9 @@ export function updateTenantStatement(db: Db, id: string, version: number, value
     .where(and(eq(organization.id, id), sql`coalesce(${organization.version}, 1) = ${version}`))
 }
 
-/** Every cafe's id, name and address (the platform console names an owner's cafes, D146). */
-export async function tenantRefs(db: Db): Promise<{ id: string, name: string, slug: string }[]> {
-  return db.select({ id: organization.id, name: organization.name, slug: organization.slug }).from(organization)
-    .orderBy(sql`${organization.name} collate nocase`, asc(organization.id))
+/** These cafes' ids, names and addresses, by name (the platform console names an account's cafes, D146). */
+export async function tenantRefs(db: Db, ids: string[]): Promise<{ id: string, name: string, slug: string }[]> {
+  const rows = await readInChunks(ids, chunk => db.select({ id: organization.id, name: organization.name, slug: organization.slug }).from(organization)
+    .where(inArray(organization.id, chunk)))
+  return rows.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }) || a.id.localeCompare(b.id))
 }

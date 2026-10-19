@@ -12,7 +12,7 @@ async function openCategories() {
   const page = await createPage()
   const api = await mockApi(page)
   // In-app history: / → /categories → / → /categories, so back/forward stay inside the SPA.
-  await gotoViaSidebar(page, [/Categories/, /Dashboard/, /Categories/])
+  await gotoViaSidebar(page, [/Categories/, /Overview/, /Categories/])
   return { page, api }
 }
 
@@ -153,7 +153,7 @@ describe('unsaved changes: leaving the page', () => {
 
   it('does not block navigation when nothing is unsaved', async () => {
     const { page } = await openCategories()
-    await page.getByRole('link', { name: /Dashboard/ }).first().click()
+    await page.getByRole('link', { name: /Overview/ }).first().click()
     await expect.poll(() => page.url()).not.toMatch(/\/admin\/categories$/)
     expect(await discardDialog(page).count()).toBe(0)
   })

@@ -1,9 +1,10 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import type { PlatformOwner } from '#shared/contracts/tenants'
-import { cafeFormSchema, emptyCafeForm, lastOrderText, nowOwnsLine, ownedCafesLine, usageLine } from '../schemas/cafe-form'
+import { accountIdSchema } from '#shared/contracts/tenants'
+import { afterCreationSteps, cafeFormSchema, emptyCafeForm, lastOrderText, nowOwnsLine, ownedCafesLine, usageLine } from '../schemas/cafe-form'
 
-// The New cafe form (D142, D146) and the console's usage lines.
+// The New cafe form (D142, D146, D185) and the console's usage lines.
 
 const filled = () => ({ ...emptyCafeForm(), name: 'Brown Bean', slug: 'Brown-Bean' })
 
@@ -34,8 +35,32 @@ describe('the New cafe form', () => {
     expect(v.parse(cafeFormSchema, form).owner).toEqual({ kind: 'existing', userId: 'u-1' })
   })
 
-  it('opens with the owner of a cafe\'s page chosen', () => {
-    expect(emptyCafeForm({ owner: { id: 'u-1', name: 'Bea', email: 'bea@example.com' } }).owner).toMatchObject({ kind: 'existing', userId: 'u-1' })
+  it('opens with the account of a cafe\'s page chosen, by id only', () => {
+    expect(emptyCafeForm({ ownerId: 'u-1' }).owner).toEqual({ kind: 'existing', userId: 'u-1', name: '', email: '' })
+  })
+
+  it('sends an existing account by id only: a name or email that came with it is dropped', () => {
+    const form = filled()
+    form.owner = { kind: 'existing', userId: 'u-1', name: 'Mallory', email: 'mallory@example.com' }
+    expect(v.parse(cafeFormSchema, form).owner).toEqual({ kind: 'existing', userId: 'u-1' })
+  })
+
+  it('asks for an account to be chosen, in the words of the screen', () => {
+    const form = filled()
+    form.owner = { ...form.owner, kind: 'existing' }
+    expect(v.flatten(v.safeParse(cafeFormSchema, form).issues!).nested?.['owner.userId']).toEqual(['Choose an account'])
+  })
+
+  it('takes an account id from the page address only when it is one', () => {
+    expect(v.safeParse(accountIdSchema, '3f6c1d1e-8a54-4a0e-9a53-6e0d7f7d3c11').success).toBe(true)
+    for (const bad of ['', 'u-zoe', '../x', 'x'.repeat(200), ['a']]) expect(v.safeParse(accountIdSchema, bad).success).toBe(false)
+  })
+
+  it('does not promise a password to an existing account', () => {
+    expect(afterCreationSteps('new').join(' ')).toMatch(/temporary password/)
+    const existing = afterCreationSteps('existing').join(' ')
+    expect(existing).toMatch(/current password/)
+    expect(existing).not.toMatch(/temporary|copy/i)
   })
 })
 

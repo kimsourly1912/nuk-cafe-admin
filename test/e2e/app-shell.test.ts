@@ -10,8 +10,8 @@ describe('app shell', () => {
     await mockApi(page)
     await gotoViaSidebar(page, [/Categories/])
     await expect.poll(() => page.title()).toBe('Categories · NUK Cafe Admin')
-    await page.getByRole('link', { name: /Dashboard/ }).first().click()
-    await expect.poll(() => page.title()).toBe('Dashboard · NUK Cafe Admin')
+    await page.getByRole('link', { name: /Overview/ }).first().click()
+    await expect.poll(() => page.title()).toBe('Overview · NUK Cafe Admin')
   })
 
   it('titles the error page', async () => {

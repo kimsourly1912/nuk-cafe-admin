@@ -85,7 +85,7 @@ Source: `app/plugins/data-freshness.client.ts` (VueUse `useBroadcastChannel`, `u
 |---|---|
 | Create/edit/delete in tab 1, tab 2 shows the same list | Tab 2 refetches immediately (no need to switch to it) |
 | Same, with two windows side by side | Same: the broadcast doesn't depend on visibility. A visibility-only approach misses this case: no `visibilitychange` fires between two visible windows |
-| Tab 2 shows another page (Dashboard) | Nothing. The list loads fresh when opened (kept reference data too: it's marked changed, D173) |
+| Tab 2 shows another page (Overview) | Nothing. The list loads fresh when opened (kept reference data too: it's marked changed, D173) |
 | Reference data opened again within a minute (D173) | Shown from what was kept, no request |
 | … after a minute | Shown at once, refetched behind it (`refreshing`) |
 | … after a save of ours, or another tab's | Loaded fresh (loading state), never the kept copy |
@@ -359,7 +359,7 @@ Tests: e2e `counter.test.ts` (the real seeded server: the screen kept on, the ta
 
 For staff who use the portal all day. Press **`?`** (or user menu → Keyboard shortcuts) for the list.
 
-**The home page** (`/admin`, D155): today in each branch (the Reports summary) and **Set up your cafe**: each feature exports an `AdminSetupStep` from its `index.ts` (`setup.ts`), `utils/admin-setup.ts` lists them; the checks re-run each time the page opens, a failed one says so. Required steps left: the checklist comes first and can't be hidden; only optional ones left: below today, **Hide** kept in this browser per cafe and person. E2E: `dashboard.test.ts`.
+**The home page, "Overview"** (`/admin`, D155; the sidebar and tab title say Overview, the code still says `dashboard`): today in each branch (the Reports summary, with **Summary** and **Open counter**) and **Set up your cafe**: each feature exports an `AdminSetupStep` from its `index.ts` (`setup.ts`), `utils/admin-setup.ts` lists them; the checks re-run each time the page opens, a failed one says so. Steps to do list first (**Open**), done ones under "Completed" with **Manage**. Required steps left: the checklist comes first and can't be hidden; only optional ones left (badge "Essentials complete"): below today, **Hide checklist** kept in this browser per cafe and person. Shortcuts are `UPageCard` links. The page is gray (`bg-elevated`, `bg-muted` in dark) with Today, the checklist and Shortcuts in white cards. E2E: `dashboard.test.ts`.
 
 **Ctrl/⌘+K** (or the sidebar's Search button) opens the admin's search (D152): two characters or more ask every source at once (menu items by the server's search, categories, option sets, add-on groups), the pages and a few actions are always listed; a source that fails says so in its group. Source: `components/AdminSearch.vue`, `utils/admin-search.ts`, each feature's `search.ts`. E2E: `admin-search.test.ts`.
 
@@ -372,6 +372,7 @@ For staff who use the portal all day. Press **`?`** (or user menu → Keyboard s
 | `Esc` | Dialogs | Close (asks first if there are unsaved changes) |
 | `Esc` | Categories in Select or Reorder mode | Leave the mode (an unsaved order stays until saved or discarded). Only when no dialog, menu or select is open: those close first. A plain keydown listener, not `defineShortcuts`, which would prevent the default and stop Escape closing menus |
 | `Ctrl`+`/` (`⌘`+`/` on Mac) | Admin pages, where the assistant is on (D109) | Open or close the assistant, also while typing (in a form or in its question box) |
+| `Ctrl`+`B` (`⌘`+`B` on Mac) | Admin pages | Collapse or expand the sidebar (from `lg` up); on a phone it opens or closes the menu. Skipped while a dialog, menu or select is open. Not while typing, so rich-text bold is untouched |
 | `?` | Everywhere | Show the shortcut list |
 
 Source: `app/composables/useShortcuts.ts` (`usePageShortcuts`, `useSubmitShortcut`, `SHORTCUTS`) on Nuxt UI `defineShortcuts`, `app/components/ShortcutsHelp.vue`. E2E: `test/e2e/shortcuts.test.ts`.

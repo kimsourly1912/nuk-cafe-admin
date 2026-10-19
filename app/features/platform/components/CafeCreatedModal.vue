@@ -88,9 +88,12 @@ async function openCafe() {
             description="Hand it over in person or through a private channel."
           />
         </template>
-        <p v-else>
-          <span class="font-medium">{{ owner.name }}</span> ({{ owner.email }}) already had an account:
-          they sign in with their own password, and find this cafe under Your cafes.
+        <p
+          v-else
+          data-testid="existing-account"
+        >
+          <span class="font-medium">{{ owner.name }}</span> ({{ owner.email }}) already had an account.
+          Use your current password: nothing was changed on it, and this cafe is under Your cafes.
         </p>
         <p
           class="rounded-md bg-elevated px-3 py-2"

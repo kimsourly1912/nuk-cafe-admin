@@ -5,10 +5,9 @@
  * super admin never sees the cafe's menu, orders or customers (D134): its owners run it in the
  * cafe's own admin.
  */
-import { useCafe, useCafeMutations } from '../composables/useCafes'
+import { newCafePath, useCafe, useCafeMutations } from '../composables/useCafes'
 import { timeAgo } from '../schemas/cafe-form'
 import CafeAddressModal from './CafeAddressModal.vue'
-import CafeFormModal from './CafeFormModal.vue'
 import CafeSuspendModal from './CafeSuspendModal.vue'
 
 const props = defineProps<{ id: string }>()
@@ -22,7 +21,6 @@ const paused = computed(() => cafe.value?.status === 'suspended')
 const overlay = useOverlay()
 const addressModal = overlay.create(CafeAddressModal)
 const suspendModal = overlay.create(CafeSuspendModal)
-const formModal = overlay.create(CafeFormModal)
 
 const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))
 </script>
@@ -211,7 +209,7 @@ const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLo
                 size="sm"
                 class="shrink-0"
                 :aria-label="`New cafe for this owner: ${owner.name}`"
-                @click="formModal.open({ owner })"
+                :to="newCafePath(owner.id)"
               />
             </li>
           </ul>
