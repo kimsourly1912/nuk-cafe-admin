@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Staff list starts from the cafe's memberships (D184, 2026-10-19)
+
+[Decision](decisions.md#d184-the-staff-list-starts-from-the-cafes-memberships-not-from-every-account-2026-10-19). Audit N5: `listStaff` scanned `user` (every customer and guest) and checked membership per row, in both the page and the count. Membership and branch checks are now tenant-scoped `in (select …)` semi-joins, so the plan starts from the cafe's own rows and looks users up by primary key. Built on the D183 `instr` search (branch `claude/d1-search-like-limit`); no migration, no contract or write change.
+
+Evidence is query plans, not latency (20,000 unrelated users, a 3,000-member second cafe): before, `SCAN user` in every page and count query; after, `SEARCH user (id=?)` driven by `member_organizationId_idx` and the `branch_staff` primary key, with and without `ANALYZE`. Checks: `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` (120 files, 1519 passed, 1 skipped) pass; the new service tests fail on the old query and on a missing tenant condition; the same filters and plans pass on real D1 (workerd, `server/tests/d1-search.test.ts`). Remaining limit: a role filter without a branch can still read `branch_staff` across cafes after `ANALYZE` (staff rows only); see the decision.
+
 ## Search compatible with D1's 50-byte pattern limit (D183, 2026-10-19)
 
 [Decision](decisions.md#d183-searches-match-with-instr-not-like-because-d1-limits-patterns-to-50-bytes-2026-10-19). Searches for menu items, staff and platform cafes built a `like` pattern that D1 refuses over 50 bytes (49 ASCII letters, 17 Khmer letters or 25 `%` already did), a 500 that libsql hid. They now use `instr(lower(column), lower(?))` through `containsText`.

@@ -11,6 +11,9 @@ import { createItem, listItems } from '#server/features/menu/items.service'
 import { createTenant, listTenants, seedTenant } from '#server/features/tenants'
 import type { Db } from '#server/utils/batch'
 import { migrationFiles } from '#server/tests/support/db'
+import type { StaffListQuery } from '#shared/contracts/staff'
+import { branches } from '#server/db/tables'
+import { newId } from '#server/utils/ids'
 
 // Real D1 (workerd, through wrangler's platform proxy) with the app's Drizzle D1 adapter. The
 // other server tests run on libsql, which accepts a LIKE pattern of 50,000 bytes where D1 refuses
@@ -103,6 +106,47 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
     }
     // The other cafe has none of these people.
     expect((await listStaff(db, { ...actor, tenantId: theirs }, { page: 1, pageSize: 20, search: ASCII_49 })).total).toBe(0)
+  })
+
+  it('lists people by role and branch from the cafe memberships, once each, without scanning users', async () => {
+    const d1 = (proxy.env as { DB: { prepare: (statement: string) => { bind: (...values: unknown[]) => { all: () => Promise<{ results: Record<string, unknown>[] }> } } } }).DB
+    const seen: { sql: string, params: unknown[] }[] = []
+    const logged = drizzle(d1 as never, { casing: 'snake_case', logger: { logQuery: (statement, params) => void seen.push({ sql: statement, params }) } }) as unknown as Db
+    const [riverside, airport] = [newId(), newId()]
+    await db.insert(branches).values([{ id: riverside, tenantId: ours, name: 'Riverside', timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() }, { id: airport, tenantId: ours, name: 'Airport', timezone: 'Asia/Phnom_Penh', status: 'archived', createdAt: new Date() }])
+    const ownerId = (await listStaff(db, { userId: 'x', tenantId: ours, role: 'owner' }, { page: 1, pageSize: 20, search: 'owner@example.com' })).items[0]!.id
+    const actor: Actor = { userId: ownerId, tenantId: ours, role: 'owner' }
+    await createStaff(db, actor, { name: 'Dara Lead', email: 'dara@example.com', admin: false, memberships: [{ branchId: riverside, role: 'manager' }] })
+    // Archived since: the person keeps their row at the second branch.
+    const dara = (await listStaff(db, actor, { page: 1, pageSize: 20, search: 'dara@' })).items[0]!
+    await db.run(sql`insert into branch_staff (tenant_id, branch_id, user_id, role) values (${ours}, ${airport}, ${dara.id}, 'staff')`)
+    const queries: [Partial<StaffListQuery>, string[]][] = [
+      [{ role: 'admin' }, ['Our owner']],
+      [{ role: 'manager' }, ['Dara Lead']],
+      [{ role: 'staff' }, ['Dara Lead']],
+      [{ branchId: riverside }, ['Dara Lead']],
+      [{ branchId: airport }, ['Dara Lead']],
+      [{ branchId: riverside, role: 'staff' }, []],
+      [{ branchId: airport, role: 'staff', search: 'LEAD' }, ['Dara Lead']],
+      [{ role: 'admin', branchId: riverside }, []],
+    ]
+    for (const [query, names] of queries) {
+      seen.length = 0
+      const page = await listStaff(logged, actor, { page: 1, pageSize: 20, ...query })
+      expect(page.items.map(s => s.name), JSON.stringify(query)).toEqual(names)
+      expect(page.total, JSON.stringify(query)).toBe(names.length)
+      const reads = seen.filter(s => /from "user"/.test(s.sql))
+      expect(reads).toHaveLength(2)
+      for (const read of reads) {
+        const plan = (await d1.prepare(`explain query plan ${read.sql}`).bind(...read.params).all()).results.map(r => String(r.detail))
+        expect(plan.filter(d => /^SCAN user\b/.test(d)), `${JSON.stringify(query)}: ${plan.join(' | ')}`).toEqual([])
+      }
+    }
+    // The other cafe sees none of them.
+    const theirActor: Actor = { ...actor, tenantId: theirs }
+    for (const query of [{ role: 'manager' }, { role: 'staff' }, { branchId: riverside }, { branchId: airport }, { search: 'dara' }] as Partial<StaffListQuery>[]) {
+      expect((await listStaff(db, theirActor, { page: 1, pageSize: 20, ...query })).total, JSON.stringify(query)).toBe(0)
+    }
   })
 
   it('lists cafes for every boundary search, by name or address', async () => {
