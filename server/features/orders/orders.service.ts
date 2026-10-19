@@ -253,6 +253,11 @@ export async function orderActivity(db: Db, tenantIds: string[], now = new Date(
   return new Map(rows.map(({ tenantId, ...activity }) => [tenantId, activity]))
 }
 
+/** Of these cafes, the ones with an order placed in the last `days` days (the console's Overview, D191): counts, never the orders. */
+export async function tenantsOrderingRecently(db: Db, tenantIds: string[], days: number, now = new Date()): Promise<Set<string>> {
+  return new Set(await repo.tenantsWithOrdersSince(db, tenantIds, new Date(now.getTime() - days * 24 * 60 * 60 * 1000)))
+}
+
 /**
  * A guest signed in or signed up on the device they ordered from (D156, the anonymous plugin's
  * link): their orders, in every cafe, now belong to that account. The guest stays, with nothing.

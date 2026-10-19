@@ -87,9 +87,11 @@ async function open(path: string, handlers: Record<string, MockHandler> = {}, wi
     ...signedIn(),
     'GET /platform/tenants': cafesHandler(() => [NUK, PAUSED]),
     'GET /platform/tenants/counts': () => ({ active: 1, suspended: 1 }),
+    'GET /platform/overview': () => ({ cafes: { active: 1, suspended: 1 }, newCafesThisMonth: 0, quietCafes: 0, noActiveOwner: 0, bannedAccounts: 0, timeZone: 'Asia/Phnom_Penh' }),
     'GET /platform/slug-availability': availability,
     'GET /platform/owner-candidates': accountSearch,
     'GET /platform/owner-candidates/{id}': accountById,
+    'GET /platform/activity': () => ({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 }),
     ...handlers,
   })
   await page.goto(url(path), { waitUntil: 'hydration' })
@@ -144,7 +146,7 @@ describe('signing in', () => {
   })
 
   it('on a temporary password, asks for a new one before anything else', async () => {
-    const { page } = await open('/platform', signedIn({ ...SUPERADMIN, mustChangePassword: true }))
+    const { page } = await open('/platform/cafes', signedIn({ ...SUPERADMIN, mustChangePassword: true }))
     await page.waitForURL(address => address.pathname === '/platform/change-password')
     await page.getByRole('heading', { name: 'Choose your password' }).waitFor()
   })
@@ -152,7 +154,7 @@ describe('signing in', () => {
 
 describe('cafes', () => {
   it('lists each cafe with its status, address and usage; the name opens it', async () => {
-    const { page } = await open('/platform', { 'GET /platform/tenants/{id}': () => NUK })
+    const { page } = await open('/platform/cafes', { 'GET /platform/tenants/{id}': () => NUK })
     const nuk = page.getByRole('row').filter({ hasText: 'NUK Cafe' })
     await nuk.getByText('/c/nuk').waitFor()
     await nuk.getByText('Active').waitFor()
@@ -169,7 +171,7 @@ describe('cafes', () => {
   })
 
   it('searches and filters through the URL and the API', async () => {
-    const { page, api } = await open('/platform')
+    const { page, api } = await open('/platform/cafes')
     await page.getByRole('table').getByText('Old Mill').waitFor()
     await page.getByRole('tab', { name: /Paused/ }).click()
     await expect.poll(() => new URL(page.url()).searchParams.get('status')).toBe('suspended')
@@ -182,7 +184,7 @@ describe('cafes', () => {
   })
 
   it('on a phone, each cafe is a row', async () => {
-    const { page } = await open('/platform', {}, 390)
+    const { page } = await open('/platform/cafes', {}, 390)
     const list = page.getByRole('list', { name: 'Cafes' })
     await list.getByRole('link', { name: 'NUK Cafe' }).waitFor()
     await list.getByText('Last order 2 hours ago').waitFor()
@@ -212,7 +214,7 @@ describe('creating a cafe (D185)', () => {
   const summaryCard = (page: Page) => page.getByRole('complementary')
   const createButton = (page: Page) => page.getByRole('button', { name: 'Create cafe' })
 
-  async function openNew(handlers: Record<string, MockHandler> = {}, width?: number, path = '/platform') {
+  async function openNew(handlers: Record<string, MockHandler> = {}, width?: number, path = '/platform/cafes') {
     const opened = await open(path, handlers, width)
     await opened.page.getByRole('link', { name: 'New cafe' }).click()
     await opened.page.getByRole('heading', { name: 'Create a cafe' }).waitFor()
@@ -289,7 +291,7 @@ describe('creating a cafe (D185)', () => {
     expect(sent).toEqual({ name: 'Brown Bean', slug: 'brown-bean', branchName: 'Bean Street', timezone: 'Asia/Phnom_Penh', owner: { kind: 'new', name: 'Bea Brown', email: 'bea@example.com' } })
     await toast(page, 'Brown Bean created').waitFor()
     // The page is left behind the result, with no password in the address.
-    await page.waitForURL(address => address.pathname === '/platform')
+    await page.waitForURL(address => address.pathname === '/platform/cafes')
     expect(page.url()).not.toContain('tmp-Pass')
 
     await result.getByRole('button', { name: 'Open cafe' }).click()
@@ -488,7 +490,7 @@ describe('creating a cafe (D185)', () => {
     await expect.poll(async () => ownerCard(gone.page).getByRole('radio', { name: /Create new account/ }).isChecked()).toBe(true)
     // Nothing was typed: leaving doesn't ask.
     await gone.page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
-    await gone.page.waitForURL(address => address.pathname === '/platform')
+    await gone.page.waitForURL(address => address.pathname === '/platform/cafes')
     expect(await gone.page.getByText('Discard unsaved changes?').count()).toBe(0)
   })
 
@@ -589,7 +591,7 @@ describe('creating a cafe (D185)', () => {
     await createButton(page).click()
     await save.started()
     await page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
-    await page.waitForURL(address => address.pathname === '/platform')
+    await page.waitForURL(address => address.pathname === '/platform/cafes')
     expect(await page.getByText('Discard unsaved changes?').count()).toBe(0)
     await page.getByRole('table').getByRole('link', { name: /^NUK Cafe\b/ }).click()
     await page.waitForURL(address => address.pathname === '/platform/cafes/cafe-1')
@@ -607,7 +609,7 @@ describe('creating a cafe (D185)', () => {
     await createButton(page).click()
     await save.started()
     await page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
-    await page.waitForURL(address => address.pathname === '/platform')
+    await page.waitForURL(address => address.pathname === '/platform/cafes')
     // The page has gone (the list is showing) before the save fails.
     await page.getByRole('table').waitFor()
     await expect.poll(() => page.getByRole('heading', { name: 'Create a cafe' }).count()).toBe(0)
@@ -622,10 +624,10 @@ describe('creating a cafe (D185)', () => {
   })
 
   it('Leaving through the Cafes breadcrumb asks before throwing away input, and goes back to the list with its filters', async () => {
-    const { page } = await openNew({}, undefined, '/platform?status=suspended')
+    const { page } = await openNew({}, undefined, '/platform/cafes?status=suspended')
     // Untouched: no question.
     await page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
-    await page.waitForURL(address => address.pathname === '/platform')
+    await page.waitForURL(address => address.pathname === '/platform/cafes')
     expect(new URL(page.url()).searchParams.get('status')).toBe('suspended')
 
     await page.getByRole('link', { name: 'New cafe' }).click()
@@ -637,7 +639,7 @@ describe('creating a cafe (D185)', () => {
     expect(await cafeCard(page).getByLabel('Name', { exact: true }).inputValue()).toBe('Half done')
     await page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
     await page.getByRole('button', { name: 'Discard' }).click()
-    await page.waitForURL(address => address.pathname === '/platform')
+    await page.waitForURL(address => address.pathname === '/platform/cafes')
     expect(new URL(page.url()).searchParams.get('status')).toBe('suspended')
   })
 

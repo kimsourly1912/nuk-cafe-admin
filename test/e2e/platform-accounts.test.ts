@@ -69,6 +69,7 @@ async function open(path: string, handlers: Record<string, MockHandler> = {}, wi
   if (width) await page.setViewportSize({ width, height: 844 })
   const api = await mockApi(page, {
     'GET /platform/me': () => SUPERADMIN,
+    'GET /platform/activity': () => ({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 }),
     'GET /platform/accounts': accountsHandler(() => ALL),
     'GET /platform/accounts/{id}': ({ url: address }) => {
       const found = [...ALL, SELF].find(a => a.id === lastSegment(address))
@@ -86,7 +87,7 @@ const writes = (calls: string[]) => calls.filter(c => !c.startsWith('GET'))
 
 describe('accounts', () => {
   it('are in the sidebar, listed with what each does and whether it is banned; the name opens it', async () => {
-    const { page } = await open('/platform', {
+    const { page } = await open('/platform/cafes', {
       'GET /platform/tenants': () => ({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 }),
       'GET /platform/tenants/counts': () => ({ active: 0, suspended: 0 }),
     })
@@ -289,20 +290,18 @@ describe('accessibility', () => {
     expect(await axeFindings(page)).toEqual([])
   }
 
-  it('the list, an account and the ban dialog meet the rules in light and dark, wide and narrow', async () => {
-    for (const width of [1440, 390]) {
-      const list = await open('/platform/accounts', {}, width)
-      await list.page.getByText('Bea Brown').first().waitFor()
-      await bothModes(list.page)
+  it.each([1440, 390])('the list, an account and the ban dialog meet the rules in light and dark, at %ipx', async (width) => {
+    const list = await open('/platform/accounts', {}, width)
+    await list.page.getByText('Bea Brown').first().waitFor()
+    await bothModes(list.page)
 
-      const detail = await open('/platform/accounts/acc-4', {}, width)
-      await detail.page.getByText('Reason: Fraudulent orders').waitFor()
-      await bothModes(detail.page)
+    const detail = await open('/platform/accounts/acc-4', {}, width)
+    await detail.page.getByText('Reason: Fraudulent orders').waitFor()
+    await bothModes(detail.page)
 
-      const ban = await open('/platform/accounts/acc-1', {}, width)
-      await ban.page.getByRole('button', { name: 'Ban account' }).click()
-      await dialog(ban.page).getByTestId('ownerless-warning').waitFor()
-      await bothModes(ban.page)
-    }
+    const ban = await open('/platform/accounts/acc-1', {}, width)
+    await ban.page.getByRole('button', { name: 'Ban account' }).click()
+    await dialog(ban.page).getByTestId('ownerless-warning').waitFor()
+    await bothModes(ban.page)
   })
 })

@@ -171,3 +171,12 @@ export async function setTemporaryPassword(db: Db, actor: PlatformAccountActor, 
   ], accountChanged)
   return { account: await getPlatformAccount(db, userId, now), temporaryPassword }
 }
+
+/** Registered accounts banned now, for the console's Overview (D191). */
+export const countBannedAccounts = repo.countBanned
+
+/** The names and emails of these accounts, by id (the console's Activity names its people, D191). */
+export async function accountIdentities(db: Db, userIds: string[]): Promise<Map<string, { id: string, name: string, email: string }>> {
+  const rows = await repo.identities(db, [...new Set(userIds)])
+  return new Map(rows.map(row => [row.id, row]))
+}

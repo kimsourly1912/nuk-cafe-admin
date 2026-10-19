@@ -19,6 +19,30 @@ export interface AuditEntry {
   metadata?: Record<string, unknown>
 }
 
+/** Which audit rows to read (the platform console's Activity, D191). */
+export interface AuditFilter {
+  /** Only these actions: required, so no caller reads every cafe's history by accident. */
+  actions: readonly string[]
+  actorId?: string
+  tenantId?: string
+  /** `at >= since` and `at < before`. */
+  since?: Date
+  before?: Date
+  limit: number
+  offset: number
+}
+
+export interface AuditRow {
+  id: string
+  at: Date
+  tenantId: string | null
+  actorId: string | null
+  action: string
+  targetType: string
+  targetId: string | null
+  metadata: Record<string, unknown> | null
+}
+
 /** An idempotent action's scope: one key per tenant, actor and operation (D139). */
 export interface IdempotencyScope {
   /** The tenant the action runs in: the same key in another cafe is another action. */

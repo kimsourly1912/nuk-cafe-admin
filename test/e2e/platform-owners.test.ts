@@ -72,6 +72,7 @@ async function open(path: string, handlers: Record<string, MockHandler> = {}, wi
     'GET /platform/tenants/counts': () => ({ active: 2, suspended: 0 }),
     'GET /platform/tenants/{id}': () => cafeOf(),
     'GET /platform/owner-candidates': accountSearch,
+    'GET /platform/activity': () => ({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 }),
     ...handlers,
   })
   await page.goto(url(path), { waitUntil: 'hydration' })
@@ -302,7 +303,7 @@ describe('internal notes', () => {
 
 describe('the Cafes list', () => {
   it('filters cafes with no active owner through the URL and the API, and marks them', async () => {
-    const { page, api } = await open('/platform')
+    const { page, api } = await open('/platform/cafes')
     await page.getByRole('row').filter({ hasText: 'Old Mill' }).getByText('No active owner').waitFor()
     expect(await page.getByRole('row').filter({ hasText: 'Brown Bean' }).getByText('No active owner').count()).toBe(0)
     await page.getByRole('combobox', { name: 'Owner' }).click()
@@ -314,7 +315,7 @@ describe('the Cafes list', () => {
   })
 
   it('on a phone, the row says it too', async () => {
-    const { page } = await open('/platform?owner=none', {}, 390)
+    const { page } = await open('/platform/cafes?owner=none', {}, 390)
     const list = page.getByRole('list', { name: 'Cafes' })
     await list.getByRole('link', { name: 'Old Mill' }).getByText('No active owner').waitFor()
     expect(await list.getByRole('link').count()).toBe(1)
@@ -343,27 +344,25 @@ describe('accessibility', () => {
     expect(await axeFindings(page)).toEqual([])
   }
 
-  it('the page without an active owner, with notes, the owner and notes dialogs and the list meet the rules in light and dark, wide and narrow', async () => {
+  it.each([1440, 390])('the page without an active owner, with notes, the owner and notes dialogs and the list meet the rules in light and dark, at %ipx', async (width) => {
     const noted = { ...OWNERLESS, notes: { contactName: 'Bea Brown', contactPhone: '+85512345678', notes: 'Prefers Telegram.', version: 1, updatedAt: new Date().toISOString() } }
-    for (const width of [1440, 390]) {
-      const detail = await open('/platform/cafes/cafe-2', { 'GET /platform/tenants/{id}': () => noted }, width)
-      await detail.page.getByTestId('no-active-owner').waitFor()
-      await detail.page.getByText('Prefers Telegram.').waitFor()
-      await bothModes(detail.page)
+    const detail = await open('/platform/cafes/cafe-2', { 'GET /platform/tenants/{id}': () => noted }, width)
+    await detail.page.getByTestId('no-active-owner').waitFor()
+    await detail.page.getByText('Prefers Telegram.').waitFor()
+    await bothModes(detail.page)
 
-      const add = await open('/platform/cafes/cafe-1', {}, width)
-      await add.page.getByRole('button', { name: 'Add owner' }).click()
-      await dialog(add.page).getByRole('combobox', { name: 'Account', exact: true }).waitFor()
-      await bothModes(add.page)
+    const add = await open('/platform/cafes/cafe-1', {}, width)
+    await add.page.getByRole('button', { name: 'Add owner' }).click()
+    await dialog(add.page).getByRole('combobox', { name: 'Account', exact: true }).waitFor()
+    await bothModes(add.page)
 
-      const notes = await open('/platform/cafes/cafe-1', {}, width)
-      await notes.page.getByRole('button', { name: 'Edit internal notes' }).click()
-      await dialog(notes.page).getByLabel('Contact person').waitFor()
-      await bothModes(notes.page)
+    const notes = await open('/platform/cafes/cafe-1', {}, width)
+    await notes.page.getByRole('button', { name: 'Edit internal notes' }).click()
+    await dialog(notes.page).getByLabel('Contact person').waitFor()
+    await bothModes(notes.page)
 
-      const list = await open('/platform?owner=none', {}, width)
-      await list.page.getByText('No active owner').first().waitFor()
-      await bothModes(list.page)
-    }
+    const list = await open('/platform/cafes?owner=none', {}, width)
+    await list.page.getByText('No active owner').first().waitFor()
+    await bothModes(list.page)
   })
 })

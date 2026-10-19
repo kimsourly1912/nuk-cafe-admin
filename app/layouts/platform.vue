@@ -6,7 +6,7 @@
  */
 import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
 import { ShortcutsHelp } from '#components'
-import { PLATFORM_CHANGE_PASSWORD, PLATFORM_HOME, usePlatformSession } from '~/features/platform'
+import { ACTIVITY_PATH, CAFES_PATH, PLATFORM_CHANGE_PASSWORD, PLATFORM_HOME, usePlatformSession } from '~/features/platform'
 
 const { user, signOut } = usePlatformSession()
 const route = useRoute()
@@ -17,8 +17,10 @@ const { open, collapsed: sidebarCollapsed } = useSidebarShortcut({ '?': showShor
 
 // A cafe's own page is still under Cafes, an account's under Accounts.
 const items = computed<NavigationMenuItem[]>(() => [
-  { label: 'Cafes', icon: 'i-lucide-store', to: PLATFORM_HOME, active: route.path === PLATFORM_HOME || route.path.startsWith('/platform/cafes/') },
+  { label: 'Overview', icon: 'i-lucide-layout-dashboard', to: PLATFORM_HOME, active: route.path === PLATFORM_HOME },
+  { label: 'Cafes', icon: 'i-lucide-store', to: CAFES_PATH, active: route.path === CAFES_PATH || route.path.startsWith(`${CAFES_PATH}/`) },
   { label: 'Accounts', icon: 'i-lucide-users', to: '/platform/accounts', active: route.path.startsWith('/platform/accounts') },
+  { label: 'Activity', icon: 'i-lucide-history', to: ACTIVITY_PATH, active: route.path === ACTIVITY_PATH },
 ])
 
 const userMenu = computed<DropdownMenuItem[]>(() => [

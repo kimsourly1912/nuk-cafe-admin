@@ -138,6 +138,9 @@ export async function deliverOutbox(
 }
 
 /** Internal scheduled-job progress, never an account/tenant preference. */
+/** Audit rows by action, newest first (the console's Activity, D191). */
+export const listAuditEvents = repo.listAuditEvents
+
 export const readJobCursor = repo.readJobCursor
 export const saveJobCursor = repo.saveJobCursor
 export const jobProgress = repo.jobProgress

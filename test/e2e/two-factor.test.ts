@@ -109,6 +109,7 @@ describe('signing in with two-step sign-in', () => {
       },
       'GET /platform/tenants': () => ({ items: [], page: 1, pageSize: 20, total: 0, totalPages: 1 }),
       'GET /platform/tenants/counts': () => ({ active: 0, suspended: 0 }),
+      'GET /platform/overview': () => ({ cafes: { active: 0, suspended: 0 }, newCafesThisMonth: 0, quietCafes: 0, noActiveOwner: 0, bannedAccounts: 0, timeZone: 'Asia/Phnom_Penh' }),
     })
     await password(page)
     await page.getByText(/enter the 6-digit code for NUK Platform/).waitFor()

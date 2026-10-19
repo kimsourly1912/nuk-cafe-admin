@@ -1,8 +1,8 @@
-import { and, asc, eq, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'
 import type { Db, Statement } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import { auditEvents, idempotencyKeys, jobCursors, outboxMessages } from './platform.schema'
-import type { AuditActor, AuditEntry, IdempotencyScope, OutboxTarget } from './platform.types'
+import type { AuditActor, AuditEntry, AuditFilter, AuditRow, IdempotencyScope, OutboxTarget } from './platform.types'
 
 // --- Audit ---
 
@@ -18,6 +18,37 @@ export function insertAuditStatement(db: Db, actor: AuditActor, entry: AuditEntr
     metadata: entry.metadata ?? null,
     requestId: actor.requestId ?? null,
   })
+}
+
+/**
+ * Audit rows with one of `actions`, newest first, a page at a time (the platform console's Activity,
+ * D191). The action list is the boundary: a cafe's own rows never match it. Served by
+ * `audit_events_at_idx`, `audit_events_tenant_idx` (a cafe) and `audit_events_actor_idx` (an actor).
+ */
+export async function listAuditEvents(db: Db, filter: AuditFilter): Promise<{ rows: AuditRow[], total: number }> {
+  const where = and(
+    inArray(auditEvents.action, filter.actions),
+    filter.actorId ? eq(auditEvents.actorId, filter.actorId) : undefined,
+    filter.tenantId ? eq(auditEvents.tenantId, filter.tenantId) : undefined,
+    filter.since ? gte(auditEvents.at, filter.since) : undefined,
+    filter.before ? lt(auditEvents.at, filter.before) : undefined,
+  )
+  const [totals, rows] = await Promise.all([
+    db.select({ total: count() }).from(auditEvents).where(where) as Promise<{ total: number }[]>,
+    db.select({
+      id: auditEvents.id,
+      at: auditEvents.at,
+      tenantId: auditEvents.tenantId,
+      actorId: auditEvents.actorId,
+      action: auditEvents.action,
+      targetType: auditEvents.targetType,
+      targetId: auditEvents.targetId,
+      metadata: auditEvents.metadata,
+    }).from(auditEvents).where(where)
+      .orderBy(desc(auditEvents.at), desc(auditEvents.id))
+      .limit(filter.limit).offset(filter.offset) as Promise<AuditRow[]>,
+  ])
+  return { rows, total: totals[0]?.total ?? 0 }
 }
 
 // --- Idempotency ---

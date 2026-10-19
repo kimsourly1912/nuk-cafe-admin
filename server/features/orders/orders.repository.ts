@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from 'drizzle-orm'
 import type { OrderSource } from '#shared/contracts/marketing'
 import type { CancelReason, OrderStatus, OrderType, PaymentMethod, QuotedModifier, ReturnMethod } from '#shared/contracts/orders'
 import { branches, user } from '#server/db/tables'
@@ -384,6 +384,13 @@ export async function orderActivity(db: Db, tenantIds: string[], since: Date): P
     recent: sql<number>`sum(case when ${orders.placedAt} >= ${since.getTime()} then 1 else 0 end)`.mapWith(Number),
     lastPlacedAt: sql<Date | null>`max(${orders.placedAt})`.mapWith(orders.placedAt),
   }).from(orders).where(inArray(orders.tenantId, ids)).groupBy(orders.tenantId))
+}
+
+/** Of these cafes, those with an order placed at or after `since` (`orders_tenant_placed_idx`: a range per cafe). */
+export async function tenantsWithOrdersSince(db: Db, tenantIds: string[], since: Date): Promise<string[]> {
+  const rows: { tenantId: string }[] = await readInChunks(tenantIds, ids => db.selectDistinct({ tenantId: orders.tenantId }).from(orders)
+    .where(and(inArray(orders.tenantId, ids), gte(orders.placedAt, since))))
+  return rows.map(row => row.tenantId)
 }
 
 /** Every order of one customer handed to another (a guest's to their account, D156), across cafes. */

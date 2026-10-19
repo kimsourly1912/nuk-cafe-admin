@@ -44,6 +44,21 @@ const statusIs = (status: TenantStatus) => sql`coalesce(${organization.status}, 
  */
 const noActiveOwner = sql`${organization.id} not in (select ${member.organizationId} from ${member} join ${user} on ${user.id} = ${member.userId} where ${member.role} = 'owner' and coalesce(${user.banned}, 0) = 0)`
 
+/** Counts for the console's Overview (D191): cafes created since `since`, and cafes without an active owner. */
+export async function overviewCounts(db: Db, since: Date): Promise<{ created: number, ownerless: number }> {
+  const rows: { created: number, ownerless: number }[] = await db.select({
+    created: sql<number>`coalesce(sum(case when ${organization.createdAt} >= ${since.getTime()} then 1 else 0 end), 0)`.mapWith(Number),
+    ownerless: sql<number>`coalesce(sum(case when ${noActiveOwner} then 1 else 0 end), 0)`.mapWith(Number),
+  }).from(organization)
+  return rows[0] ?? { created: 0, ownerless: 0 }
+}
+
+/** Every active cafe's id (a cafe created before `status` existed counts as active). */
+export async function activeTenantIds(db: Db): Promise<string[]> {
+  const rows = await db.select({ id: organization.id }).from(organization).where(statusIs('active'))
+  return rows.map(row => row.id)
+}
+
 /** How many cafes each status holds: one grouped read. */
 export async function countTenants(db: Db): Promise<{ status: TenantStatus, total: number }[]> {
   const status = sql<TenantStatus>`coalesce(${organization.status}, 'active')`

@@ -16,7 +16,7 @@
 import type { FormSubmitEvent, RadioGroupItem } from '@nuxt/ui'
 import type { CreateTenantInput, PlatformOwner } from '#shared/contracts/tenants'
 import { slugFromName } from '#shared/contracts/tenants'
-import { PLATFORM_HOME } from '../composables/usePlatformSession'
+import { CAFES_PATH } from '../composables/usePlatformSession'
 import { reopenCafeForm, takeReopenedCafeForm, useCafeMutations, useOwnerAccount, useSlugAvailability } from '../composables/useCafes'
 import { afterCreationSteps, cafeFormSchema, emptyCafeForm, ownedCafesLine } from '../schemas/cafe-form'
 import type { CafeForm } from '../schemas/cafe-form'
@@ -103,14 +103,14 @@ const router = useRouter()
 /** Back to where the page was opened from (the list with its search and filters, or a cafe's page), else the list. */
 function leave() {
   const back = window.history.state?.back
-  if (typeof back === 'string' && (back === PLATFORM_HOME || back.startsWith(`${PLATFORM_HOME}?`) || back.startsWith('/platform/cafes/'))) router.back()
-  else void navigateTo(PLATFORM_HOME)
+  if (typeof back === 'string' && (back === CAFES_PATH || back.startsWith(`${CAFES_PATH}?`) || back.startsWith(`${CAFES_PATH}/`))) router.back()
+  else void navigateTo(CAFES_PATH)
 }
 /** After saving: to the list, with its filters when the page came from it. */
 function leaveSaved() {
   const back = window.history.state?.back
-  if (typeof back === 'string' && (back === PLATFORM_HOME || back.startsWith(`${PLATFORM_HOME}?`))) router.back()
-  else void navigateTo(PLATFORM_HOME)
+  if (typeof back === 'string' && (back === CAFES_PATH || back.startsWith(`${CAFES_PATH}?`))) router.back()
+  else void navigateTo(CAFES_PATH)
 }
 
 let closed = false
