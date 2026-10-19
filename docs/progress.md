@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Search compatible with D1's 50-byte pattern limit (D183, 2026-10-19)
+
+[Decision](decisions.md#d183-searches-match-with-instr-not-like-because-d1-limits-patterns-to-50-bytes-2026-10-19). Searches for menu items, staff and platform cafes built a `like` pattern that D1 refuses over 50 bytes (49 ASCII letters, 17 Khmer letters or 25 `%` already did), a 500 that libsql hid. They now use `instr(lower(column), lower(?))` through `containsText`.
+
+Checks: `pnpm lint`, `pnpm typecheck` and `pnpm test:unit` (120 files, 1512 tests) pass. The new service tests fail on the old repositories (8) and `server/tests/d1-search.test.ts` fails on them (3) on real D1 (workerd); both pass with `containsText`. Real-server e2e `platform`, `products`, `staff`, `list-page` 107/107. Not run: the full `pnpm test:e2e` (server-only change), a deployed D1.
+
 ## One crop modal for every photo upload (D180, 2026-10-19)
 
 [Decision](decisions.md#d180-one-crop-modal-for-every-photo-upload-2026-10-19). Owner request: the menu photo editor's crop and zoom as a reusable component. New `<ImageCropModal>` and `<ImageInput crop-ratio>`; the shared geometry and canvas code moved to `app/utils/image-crop.ts` and `image-canvas.ts`, and the menu editor imports them (no behaviour change intended). The cafe logo uses `crop-ratio="1"`; the promotion poster opens the modal only for a design that isn't already 4:5, with a **Keep whole poster** button (owner answer: Telegram posts get the framed poster, as the menu does).

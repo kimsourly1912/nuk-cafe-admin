@@ -4,6 +4,7 @@ import type { BranchRoleName, StaffListQuery } from '#shared/contracts/staff'
 import type { Db, Statement } from '#server/utils/batch'
 import { insertPieces, readInChunks, requireCount } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
+import { containsText } from '#server/utils/search'
 import { account, branches, branchStaff, member, session, user } from '#server/db/tables'
 
 /**
@@ -104,8 +105,7 @@ export async function activeBranchIds(db: Db, tenantId: string, branchIds: strin
 export async function listStaff(db: Db, tenantId: string, query: StaffListQuery): Promise<{ rows: AccountRow[], total: number }> {
   const conditions: SQL[] = [memberOf(tenantId)]
   if (query.search) {
-    const pattern = `%${query.search.replace(/[\\%_]/g, c => `\\${c}`)}%`
-    conditions.push(or(sql`${user.name} like ${pattern} escape '\\'`, sql`${user.email} like ${pattern} escape '\\'`)!)
+    conditions.push(or(containsText(user.name, query.search), containsText(user.email, query.search))!)
   }
   if (query.role === 'admin') {
     conditions.push(memberOf(tenantId, 'owner'))

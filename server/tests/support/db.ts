@@ -16,15 +16,25 @@ const migrationsDir = fileURLToPath(new URL('../../../server/db/migrations/sqlit
 /** D1 refuses a statement with more bound parameters than this ("too many SQL variables"); libsql allows 32,766. */
 export const D1_MAX_PARAMS = 100
 
+/** D1 refuses a LIKE or GLOB pattern over 50 bytes ("LIKE or GLOB pattern too complex"); libsql allows 50,000. */
+export const D1_MAX_PATTERN_BYTES = 50
+
 type Stmt = string | { sql: string, args?: unknown[] | Record<string, unknown> }
 const paramCount = (stmt: Stmt) => typeof stmt === 'string' ? 0 : Array.isArray(stmt.args) ? stmt.args.length : Object.keys(stmt.args ?? {}).length
 
 function checkParams(stmt: Stmt) {
   const n = paramCount(stmt)
   if (n > D1_MAX_PARAMS) throw new Error(`too many SQL variables: ${n} bound parameters (D1 allows ${D1_MAX_PARAMS}) in: ${typeof stmt === 'string' ? stmt : stmt.sql.slice(0, 120)}`)
+  // Which argument is the pattern isn't known here, so any long text bound beside a like/glob counts:
+  // stricter than D1, never looser. Real D1 stays the authority.
+  if (typeof stmt === 'string' || !/\b(?:like|glob)\b/i.test(stmt.sql)) return
+  const args = Array.isArray(stmt.args) ? stmt.args : Object.values(stmt.args ?? {})
+  for (const arg of args) {
+    if (typeof arg === 'string' && new TextEncoder().encode(arg).length > D1_MAX_PATTERN_BYTES) throw new Error(`LIKE or GLOB pattern too complex: ${arg.length} characters bound beside like/glob (D1 allows ${D1_MAX_PATTERN_BYTES} bytes) in: ${stmt.sql.slice(0, 120)}`)
+  }
 }
 
-/** The client, refusing what D1 refuses: more than 100 bound parameters in one statement. */
+/** The client, refusing what D1 refuses: more than 100 bound parameters in one statement, a LIKE pattern over 50 bytes. */
 function likeD1(client: Client): Client {
   return new Proxy(client, {
     get(target, key, receiver) {

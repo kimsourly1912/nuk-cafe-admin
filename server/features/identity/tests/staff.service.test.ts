@@ -295,6 +295,51 @@ describe('list', () => {
     expect((await listStaff(db, actor, { ...PAGE, search: '%' })).items).toEqual([])
     expect(await listStaff(db, actor, { page: 2, pageSize: 2 })).toMatchObject({ items: [{ name: 'Vanna' }], total: 3, totalPages: 2 })
   })
+
+  // D1 refuses a LIKE pattern over 50 bytes, so a search is matched with instr(), not like.
+  describe('long and literal searches', () => {
+    const SLASH = String.fromCharCode(92)
+    const ASCII_49 = 'a'.repeat(30) + 'Name' + 'b'.repeat(15)
+    const KHMER_17 = 'ស'.repeat(17)
+    const SYMBOLS = `Fifty% _off_ ${SLASH} Sam`
+    const NAME_MAX = 100
+    const names = async (search: string, query: object = {}) => (await listStaff(db, actor, { ...PAGE, search, ...query })).items.map(s => s.name).sort()
+
+    beforeEach(async () => {
+      await createStaff(db, actor, staffInput({ name: ASCII_49, email: 'ascii@example.com', memberships: [] }))
+      await createStaff(db, actor, staffInput({ name: KHMER_17, email: 'khmer@example.com', memberships: [] }))
+      await createStaff(db, actor, staffInput({ name: `${KHMER_17} Mixed`, email: 'mixed@example.com', memberships: [] }))
+      await createStaff(db, actor, staffInput({ name: SYMBOLS, email: 'symbols@example.com', memberships: [] }))
+      await createStaff(db, actor, staffInput({ name: 'z'.repeat(NAME_MAX), email: 'max@example.com', memberships: [] }))
+    })
+
+    it('finds what a 50-byte LIKE pattern could not hold, ignoring ASCII case', async () => {
+      expect(ASCII_49).toHaveLength(49)
+      expect(await names(ASCII_49)).toEqual([ASCII_49])
+      expect(await names(ASCII_49.toUpperCase())).toEqual([ASCII_49])
+      expect(await names(KHMER_17)).toEqual([KHMER_17, `${KHMER_17} Mixed`].sort())
+      expect(await names(`${KHMER_17} mixed`)).toEqual([`${KHMER_17} Mixed`])
+      expect(await names('z'.repeat(NAME_MAX))).toEqual(['z'.repeat(NAME_MAX)])
+      expect(await names('z'.repeat(NAME_MAX).replace(/z$/, 'y'))).toEqual([])
+      expect(await names('ស'.repeat(NAME_MAX))).toEqual([])
+      expect(await names('MAX@EXAMPLE.COM')).toEqual(['z'.repeat(NAME_MAX)])
+      expect(await names('x'.repeat(NAME_MAX) + '@example.com')).toEqual([])
+    })
+
+    it('treats %, _ and backslash as plain characters', async () => {
+      for (const search of ['%', '_', SLASH, '% _off_ ', `${SLASH} Sam`]) expect(await names(search)).toEqual([SYMBOLS])
+      expect(await names('_ff_')).toEqual([])
+      expect(await names('%'.repeat(25))).toEqual([])
+      expect(await names(SLASH.repeat(60))).toEqual([])
+    })
+
+    it('keeps the page and the total in step, with the other filters', async () => {
+      const page = await listStaff(db, actor, { page: 2, pageSize: 1, search: KHMER_17 })
+      expect(page).toMatchObject({ items: [{}], total: 2, totalPages: 2 })
+      expect((await listStaff(db, actor, { ...PAGE, search: KHMER_17, role: 'admin' })).total).toBe(0)
+      expect((await listStaff(db, actor, { ...PAGE, search: ASCII_49, branchId })).total).toBe(0)
+    })
+  })
 })
 
 describe('seed', () => {
@@ -347,6 +392,15 @@ describe('tenants', () => {
     expect(await failure(resetStaffPassword(db, theirs, ours.staff.id, version))).toEqual({ status: 404, code: 'NOT_FOUND' })
     // Nothing changed here.
     expect(await getStaffMember(db, actor, ours.staff.id)).toEqual(ours.staff)
+  })
+
+  it('searches only the cafe\'s own people, also with a search past 50 bytes', async () => {
+    const long = 'Long name '.repeat(8).trim()
+    await createStaff(db, actor, staffInput({ name: long, email: 'mine@example.com' }))
+    await createStaff(db, theirs, staffInput({ name: long, email: 'their-long@example.com', memberships: [{ branchId: theirBranch, role: 'staff' }] }))
+    expect((await listStaff(db, actor, { ...PAGE, search: long })).items.map(s => s.email)).toEqual(['mine@example.com'])
+    expect((await listStaff(db, theirs, { ...PAGE, search: long })).items.map(s => s.email)).toEqual(['their-long@example.com'])
+    expect((await listStaff(db, theirs, { ...PAGE, search: 'mine@' })).total).toBe(0)
   })
 
   it('refuses another cafe\'s branch as an unknown one', async () => {

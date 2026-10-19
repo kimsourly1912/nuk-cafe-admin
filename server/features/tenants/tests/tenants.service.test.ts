@@ -218,6 +218,31 @@ describe('the list', () => {
     expect((await listTenants(db, query({ status: 'active' }))).items.map(t => t.slug)).toEqual(['apple-tea', 'brown-bean'])
   })
 
+  // D1 refuses a LIKE pattern over 50 bytes, so a search is matched with instr(), not like.
+  it('finds cafes by searches past 50 bytes, and by literal %, _ and backslash', async () => {
+    const slash = String.fromCharCode(92)
+    const khmer = 'ក'.repeat(17)
+    const ascii = 'The Very Long Named Brown Bean Roastery Phnom Penh'.slice(0, 49)
+    await createTenant(db, admin, input({ name: khmer, slug: 'khmer-cafe', ownerEmail: 'k@example.com' }))
+    await createTenant(db, admin, input({ name: ascii, slug: 'long-named', ownerEmail: 'l@example.com' }))
+    await createTenant(db, admin, input({ name: `Half% _off_ ${slash} cafe`, slug: 'half-off', ownerEmail: 'h@example.com' }))
+    await createTenant(db, admin, input({ name: 'M'.repeat(80), slug: 'm'.repeat(40), ownerEmail: 'm@example.com' }))
+    const slugs = async (search: string, extra = {}) => (await listTenants(db, query({ search, ...extra }))).items.map(t => t.slug).sort()
+
+    expect(await slugs(khmer)).toEqual(['khmer-cafe'])
+    expect(await slugs(ascii.toUpperCase())).toEqual(['long-named'])
+    expect(await slugs('m'.repeat(80))).toEqual(['m'.repeat(40)])
+    expect(await slugs('m'.repeat(100))).toEqual([])
+    expect(await slugs('ក'.repeat(100))).toEqual([])
+    expect(await slugs('m'.repeat(40))).toEqual(['m'.repeat(40)]) // the address matches too
+    for (const search of ['%', '_', slash, '% _off_ ', `${slash} cafe`]) expect(await slugs(search)).toEqual(['half-off'])
+    expect(await slugs('%'.repeat(25))).toEqual([])
+    expect(await slugs(slash.repeat(60))).toEqual([])
+    // The page and the total agree, with the status filter.
+    expect(await listTenants(db, query({ search: khmer, pageSize: 1 }))).toMatchObject({ total: 1, totalPages: 1 })
+    expect((await listTenants(db, query({ search: khmer, status: 'suspended' }))).total).toBe(0)
+  })
+
   it('counts the cafes of each status in one read, zeros included', async () => {
     expect(await countTenants(db)).toEqual({ active: 3, suspended: 0 })
     const nuk = await getTenant(db, TEST_TENANT)
