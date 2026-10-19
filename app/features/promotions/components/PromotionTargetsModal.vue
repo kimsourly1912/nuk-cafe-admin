@@ -2,7 +2,9 @@
 /**
  * "Choose what's included" (M1, D163): the menu as a checklist. Ticking a category covers all of
  * its items, now and later (a main category: its sub-categories too), and its items show as
- * included; ticking items picks them one by one. Search finds items and categories by name. Open
+ * included; ticking items picks them one by one. A category whose items are all ticked one by one
+ * shows ticked too, but stays those items: an item added to it later isn't included unless the
+ * category itself is ticked. Search finds items and categories by name. Open
  * via `useOverlay().create(PromotionTargetsModal)`; emits `close({ itemIds, categoryIds })`, or
  * nothing on Cancel.
  */
@@ -38,36 +40,54 @@ const coveredBy = (main: PickerCategory, sub?: PickerCategory) => categories.val
 const fullMain = computed(() => new Map(props.tree.map(main => [main.id, main])))
 const fullSub = computed(() => new Map(props.tree.flatMap(main => main.subs.map(sub => [sub.id, sub] as const))))
 
-/** A category's box: ticked when it's chosen, dashed when only some of what's under it is. */
+/** Every item under a sub-category is ticked one by one (it has at least one). */
+function everySubItem(sub: PickerCategory) {
+  const full = fullSub.value.get(sub.id) ?? sub
+  return full.items.length > 0 && full.items.every(i => items.value.has(i.id))
+}
+/** Everything under a main category is ticked, by item or by sub-category, without the category itself. */
+function everyMainItem(main: PickerCategory) {
+  const full = fullMain.value.get(main.id) ?? main
+  return (full.items.length > 0 || full.subs.length > 0)
+    && full.items.every(i => items.value.has(i.id))
+    && full.subs.every(sub => categories.value.has(sub.id) || everySubItem(sub))
+}
+
+/**
+ * A category's box: ticked when it's chosen or everything under it is, dashed when only some of it
+ * is. Ticked by its items alone it still saves only those items (see `normalize`).
+ */
 function mainState(main: PickerCategory): boolean | 'indeterminate' {
-  if (categories.value.has(main.id)) return true
+  if (categories.value.has(main.id) || everyMainItem(main)) return true
   const full = fullMain.value.get(main.id) ?? main
   const some = full.items.some(i => items.value.has(i.id))
     || full.subs.some(sub => categories.value.has(sub.id) || sub.items.some(i => items.value.has(i.id)))
   return some ? 'indeterminate' : false
 }
 function subState(main: PickerCategory, sub: PickerCategory): boolean | 'indeterminate' {
-  if (coveredBy(main) || categories.value.has(sub.id)) return true
+  if (coveredBy(main) || categories.value.has(sub.id) || everySubItem(sub)) return true
   const full = fullSub.value.get(sub.id) ?? sub
   return full.items.some(i => items.value.has(i.id)) ? 'indeterminate' : false
 }
 
+/** Under a box ticked by its items alone, says that new items aren't included. */
+const ITEMS_ONLY = 'Every item now, not ones added later'
+function mainDescription(main: PickerCategory) {
+  if (!categories.value.has(main.id) && everyMainItem(main)) return ITEMS_ONLY
+  return main.subs.length ? 'The whole category, every sub-category' : 'The whole category'
+}
+const subDescription = (main: PickerCategory, sub: PickerCategory) =>
+  !coveredBy(main, sub) && everySubItem(sub) ? ITEMS_ONLY : undefined
+
 const itemIdsUnder = (category: PickerCategory) => [...category.items, ...category.subs.flatMap(sub => sub.items)].map(i => i.id)
 
 /**
- * Keeps the choice in its simplest form: a category whose items are all ticked becomes the category
- * itself (so the box means "the whole category, also items added later"), and nothing under a
- * ticked category is kept as its own tick.
+ * Keeps nothing under a ticked category as its own tick. Items all ticked one by one are never
+ * turned into their category: that would also include items added to it later, a wider discount
+ * than anyone chose.
  */
 function normalize(cats: Set<string>, its: Set<string>) {
   for (const main of props.tree) {
-    for (const sub of main.subs) {
-      if (sub.items.length && sub.items.every(i => its.has(i.id))) cats.add(sub.id)
-    }
-    const whole = (main.items.length > 0 || main.subs.length > 0)
-      && main.items.every(i => its.has(i.id))
-      && main.subs.every(sub => cats.has(sub.id))
-    if (whole) cats.add(main.id)
     if (cats.has(main.id)) {
       for (const sub of main.subs) cats.delete(sub.id)
       for (const id of itemIdsUnder(main)) its.delete(id)
@@ -189,7 +209,7 @@ function done() {
           <UCheckbox
             :model-value="mainState(main)"
             :label="main.name"
-            :description="main.subs.length ? 'The whole category, every sub-category' : 'The whole category'"
+            :description="mainDescription(main)"
             :ui="{ root: 'px-4 py-2', label: 'font-semibold text-highlighted' }"
             @update:model-value="on => setCategory(main, !!on)"
           />
@@ -231,6 +251,7 @@ function done() {
             <UCheckbox
               :model-value="subState(main, sub)"
               :label="sub.name"
+              :description="subDescription(main, sub)"
               :ui="{ root: 'px-4 py-1.5', label: 'font-medium text-highlighted' }"
               @update:model-value="on => setCategory(sub, !!on, main)"
             />

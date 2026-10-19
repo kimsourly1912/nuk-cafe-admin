@@ -160,7 +160,10 @@ describe('Promotions', () => {
     const picker = page.getByRole('dialog', { name: 'Choose what\'s included' })
     await picker.getByRole('checkbox', { name: 'Tea', exact: true }).click()
     await picker.getByRole('checkbox', { name: 'Latte' }).click()
-    await picker.getByText('1 category and 1 item').waitFor()
+    await picker.getByText('2 items included · 1 whole category').waitFor()
+    // Latte is all Coffee has: its box shows ticked, but Latte stays an item (itemIds below), so a
+    // coffee added later isn't discounted.
+    await picker.getByText('Every item now, not ones added later').waitFor()
     await picker.getByRole('button', { name: 'Done' }).click()
     await page.getByRole('list', { name: 'Included' }).getByText('Tea').waitFor()
     // Latte is in Coffee week too: the bigger discount wins, and the page says so.

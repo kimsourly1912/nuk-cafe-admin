@@ -1,4 +1,5 @@
 import { createPage, url } from '@nuxt/test-utils/e2e'
+import type { Page } from 'playwright-core'
 import { describe, expect, it } from 'vitest'
 import type { ChannelLink, MarketingChannel, MarketingChannels, MarketingPost } from '../../shared/contracts/marketing'
 import type { Promotion } from '../../shared/contracts/menu-promotions'
@@ -132,6 +133,15 @@ describe('Channels', () => {
   })
 })
 
+/**
+ * Sets AM with the A key. A tap on AM/PM switches it (`TimeInput`), so the result of a tap depends on
+ * the suggested time, which follows the clock the test runs at.
+ */
+async function setAm(page: Page) {
+  await page.locator('[data-reka-time-field-segment="dayPeriod"]').focus()
+  await page.keyboard.press('a')
+}
+
 describe('posting a promotion', () => {
   it('posts now with the poster and the caption it starts from, once per submission', async () => {
     const { page, sent } = await openPromotion()
@@ -173,7 +183,7 @@ describe('posting a promotion', () => {
     const sheet = page.getByRole('dialog', { name: 'Date and time' })
     await sheet.getByRole('spinbutton', { name: /hour/i }).click()
     await page.keyboard.type('0930')
-    await sheet.locator('[data-reka-time-field-segment="dayPeriod"]').click()
+    await setAm(page)
     await expect.poll(() => field.getAttribute('aria-label')).toMatch(/9:30 AM$/)
     await sheet.getByRole('button', { name: 'Cancel' }).click()
     await expect.poll(() => field.getAttribute('aria-label')).toBe(before)
@@ -181,7 +191,7 @@ describe('posting a promotion', () => {
     await field.click()
     await sheet.getByRole('spinbutton', { name: /hour/i }).click()
     await page.keyboard.type('0930')
-    await sheet.locator('[data-reka-time-field-segment="dayPeriod"]').click()
+    await setAm(page)
     await sheet.getByRole('button', { name: 'Done' }).click()
     await expect.poll(() => field.getAttribute('aria-label')).toMatch(/9:30 AM$/)
   })
@@ -204,7 +214,7 @@ describe('posting a promotion', () => {
       await day.click()
       await page.getByRole('spinbutton', { name: /hour/i }).click()
       await page.keyboard.type('0930')
-      await page.locator('[data-reka-time-field-segment="dayPeriod"]').click()
+      await setAm(page)
     }
     // What's picked previews on the button, but closing without Done keeps the previous value.
     await pick()
