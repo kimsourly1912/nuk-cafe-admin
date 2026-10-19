@@ -53,9 +53,11 @@ const OWNER_CHOICES: RadioGroupItem[] = [
   { label: 'Use existing account', description: 'Keep their current password.', value: 'existing' },
 ]
 const account = ref<PlatformOwner>()
+// Sync: the picker's change/blur validation runs in the same tick as the pick, so a later flush
+// would validate the old (empty) id and show "Choose an account" for a valid choice.
 watch(account, (chosen) => {
   state.owner.userId = chosen?.id ?? ''
-})
+}, { flush: 'sync' })
 
 // An account chosen before the page (a cafe's page, a failed save's draft): read from the server.
 const preset = useOwnerAccount(presetId)
@@ -156,11 +158,7 @@ const unset = 'Not set yet'
 </script>
 
 <template>
-  <UDashboardPanel
-    id="cafe-new"
-    class="page-narrow"
-    :ui="{ body: 'bg-elevated/50' }"
-  >
+  <UDashboardPanel id="cafe-new">
     <template #header>
       <UDashboardNavbar>
         <template #leading>
@@ -176,10 +174,25 @@ const unset = 'Not set yet'
         </template>
         <template #title>
           <UBreadcrumb
-            :items="[{ label: 'Cafes', to: PLATFORM_HOME }, { label: 'New cafe' }]"
+            :items="[{ label: 'Cafes', onClick: leave }, { label: 'New cafe' }]"
             class="hidden min-w-0 lg:flex"
           />
           <span class="truncate lg:hidden">New cafe</span>
+        </template>
+        <template #right>
+          <UTooltip
+            text="Create cafe"
+            :kbds="['meta', 'enter']"
+          >
+            <UButton
+              type="submit"
+              form="cafe-form"
+              label="Create cafe"
+              icon="i-lucide-save"
+              class="hidden lg:inline-flex"
+              :loading="saving"
+            />
+          </UTooltip>
         </template>
       </UDashboardNavbar>
     </template>
@@ -252,8 +265,7 @@ const unset = 'Not set yet'
                       </template>
                     </UInput>
                     <!-- Beside the field's own help or error, so an error on the field never hides the check. -->
-                    <div class="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm text-muted">
-                      <span class="min-w-0 break-all">{{ origin }}/c/{{ state.slug || '…' }}</span>
+                    <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
                       <span
                         role="status"
                         aria-live="polite"
@@ -466,7 +478,7 @@ const unset = 'Not set yet'
 
             <aside
               aria-labelledby="cafe-new-summary"
-              class="space-y-6 self-start"
+              class="space-y-6 self-start @3xl:sticky @3xl:top-4"
             >
               <UCard variant="outline">
                 <template #header>
@@ -537,33 +549,42 @@ const unset = 'Not set yet'
                   </ol>
                 </div>
               </UCard>
+
+              <UCard variant="outline">
+                <template #header>
+                  <h3 class="font-semibold text-highlighted">
+                    Preview URL
+                  </h3>
+                </template>
+                <p
+                  class="break-all text-sm text-muted"
+                  data-testid="preview-url"
+                >
+                  {{ origin }}/c/{{ state.slug || '…' }}
+                </p>
+              </UCard>
             </aside>
           </div>
         </UForm>
 
+        <!-- Phones and tablets: Create at the bottom (from lg it's in the navbar) -->
         <BottomActionBar
           label="Create cafe actions"
-          expanded="pinned"
+          expanded="hidden"
         >
-          <div class="flex w-full flex-wrap items-center justify-between gap-2">
-            <UButton
-              label="Cancel"
-              color="neutral"
-              variant="outline"
-              @click="leave()"
-            />
-            <UTooltip
-              text="Create cafe"
-              :kbds="['meta', 'enter']"
-            >
-              <UButton
-                type="submit"
-                form="cafe-form"
-                label="Create cafe"
-                :loading="saving"
-              />
-            </UTooltip>
-          </div>
+          <UButton
+            label="Cancel"
+            color="neutral"
+            variant="outline"
+            @click="leave()"
+          />
+          <UButton
+            type="submit"
+            form="cafe-form"
+            label="Create cafe"
+            icon="i-lucide-save"
+            :loading="saving"
+          />
         </BottomActionBar>
       </div>
     </template>

@@ -19,6 +19,15 @@ export const SHORTCUTS = [
   { kbds: ['?'], label: 'Show keyboard shortcuts' },
 ] as const
 
+/** The platform console's shortcuts, for its help dialog. Keep it in sync when adding one. */
+export const PLATFORM_SHORTCUTS = [
+  { kbds: ['n'], label: 'New cafe (on the Cafes list)' },
+  { kbds: ['meta', 'enter'], label: 'Save the open form' },
+  { kbds: ['escape'], label: 'Close the dialog (asks first if there are unsaved changes)' },
+  { kbds: ['meta', 'b'], label: 'Collapse or expand the sidebar' },
+  { kbds: ['?'], label: 'Show keyboard shortcuts' },
+] as const
+
 /** A dialog, alert, menu or open select is on screen: page shortcuts must not act behind it. */
 function somethingOnTop() {
   return !!document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')
@@ -35,6 +44,25 @@ export function usePageShortcuts(config: Record<string, () => void>) {
   defineShortcuts(Object.fromEntries(Object.entries(config).map(([key, handler]) => [key, () => {
     if (!somethingOnTop()) handler()
   }])))
+}
+
+/**
+ * Ctrl/⌘+B for a shell's sidebar: collapses the desktop sidebar; below `lg` it opens or closes the
+ * phone menu. Bind the returned refs to `UDashboardSidebar`'s `v-model:collapsed` and `v-model:open`.
+ * Extra page shortcuts go in `extra`, so a layout has one `usePageShortcuts` call.
+ *
+ * @example
+ * const { open, collapsed } = useSidebarShortcut({ '?': showShortcuts })
+ */
+export function useSidebarShortcut(extra: Record<string, () => void> = {}) {
+  const open = ref(false)
+  const collapsed = ref(false)
+  function toggle() {
+    if (matchMedia('(min-width: 1024px)').matches) collapsed.value = !collapsed.value
+    else open.value = !open.value
+  }
+  usePageShortcuts({ ...extra, meta_b: toggle })
+  return { open, collapsed }
 }
 
 /**
