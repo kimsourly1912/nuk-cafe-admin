@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { ITEM_NAME_MAX } from '#shared/contracts/menu-items'
 import type { CreateItemInput } from '#shared/contracts/menu-items'
 import type { OptionSet } from '#shared/contracts/menu-options'
 import type { Actor } from '#server/features/identity'
@@ -283,6 +284,65 @@ describe('publishing and archiving', () => {
 })
 
 describe('listing and ordering', () => {
+  // D1 refuses a LIKE pattern over 50 bytes, so a search is matched with instr(), not like (D183).
+  describe('search', () => {
+    const LONG_ASCII = 'Hazelnut oat milk cold brew with extra vanilla bean'.slice(0, 49)
+    const KHMER_17 = 'ក'.repeat(17)
+    const MAX = 'm'.repeat(ITEM_NAME_MAX)
+    const SLASH = String.fromCharCode(92)
+    const SYMBOLS = `100% _real_ ${SLASH} deal`
+    const names = async (search: string, extra: Record<string, unknown> = {}) =>
+      (await listItems(db, TEST_TENANT, { page: 1, pageSize: 20, status: 'all', search, ...extra })).items.map(i => i.name).sort()
+
+    beforeEach(async () => {
+      for (const name of ['Latte', LONG_ASCII, KHMER_17, 'កាហ្វេ Latte', SYMBOLS, 'Plain', MAX]) await latte({ name })
+    })
+
+    it('finds short searches, ignoring ASCII case, with Khmer and mixed text', async () => {
+      expect(await names('LATTE')).toEqual(['Latte', 'កាហ្វេ Latte'].sort())
+      expect(await names('កាហ្វេ')).toEqual(['កាហ្វេ Latte'])
+      expect(await names('កាហ្វេ lat')).toEqual(['កាហ្វេ Latte'])
+    })
+
+    it('finds searches that would pass 50 bytes as a pattern: 49 ASCII letters, 17 Khmer letters, the contract maximum', async () => {
+      expect(await names(LONG_ASCII)).toEqual([LONG_ASCII])
+      expect(await names(LONG_ASCII.toUpperCase())).toEqual([LONG_ASCII])
+      expect(await names(KHMER_17)).toEqual([KHMER_17])
+      expect(await names('ក'.repeat(100))).toEqual([])
+      expect(await names(MAX)).toEqual([MAX])
+      expect(await names('m'.repeat(100))).toEqual([])
+      expect(await names(`${MAX}x`)).toEqual([])
+    })
+
+    it('treats %, _ and backslash as plain characters', async () => {
+      expect(await names('%')).toEqual([SYMBOLS])
+      expect(await names('_')).toEqual([SYMBOLS])
+      expect(await names(SLASH)).toEqual([SYMBOLS])
+      expect(await names(`% _real_ ${SLASH} d`)).toEqual([SYMBOLS])
+      expect(await names('_ea_')).toEqual([]) // "_" isn't one-character wildcards over "Latte" or "real"
+      expect(await names('%'.repeat(25))).toEqual([])
+      expect(await names(SLASH.repeat(60))).toEqual([])
+    })
+
+    it('counts, pages and isolates by cafe the same way', async () => {
+      const other = await ensureTenant(db, 'tenant-2')
+      const theirs: Actor = { ...actor, tenantId: other }
+      const top = await createCategory(db, theirs, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
+      const sub = await createCategory(db, theirs, { name: 'Hot', description: '', parentId: top.id, availabilityRuleIds: [] })
+      await createItem(db, theirs, { categoryId: sub.id, name: LONG_ASCII, description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 100, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
+
+      for (const search of ['latte', LONG_ASCII, KHMER_17, '%', MAX]) {
+        const listed = await listItems(db, TEST_TENANT, { page: 1, pageSize: 20, status: 'all', search })
+        const counted = await countItems(db, TEST_TENANT, { search })
+        expect(listed.total).toBe(listed.items.length)
+        expect(Object.values(counted).reduce((sum, c) => sum + c.items, 0)).toBe(listed.total)
+      }
+      expect(await names(LONG_ASCII)).toEqual([LONG_ASCII])
+      expect((await listItems(db, other, { page: 1, pageSize: 20, status: 'all', search: LONG_ASCII })).items).toHaveLength(1)
+      expect(await listItems(db, TEST_TENANT, { page: 2, pageSize: 1, status: 'all', search: 'latte' })).toMatchObject({ items: [{}], total: 2 })
+    })
+  })
+
   it('lists drafts and active items with their price range; archived ones on request', async () => {
     const item = await latte()
     const plain = await croissant()

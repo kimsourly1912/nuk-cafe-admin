@@ -1,9 +1,10 @@
-import { and, asc, count, eq, exists, inArray, or, sql } from 'drizzle-orm'
+import { and, asc, count, eq, inArray, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { BranchRoleName, StaffListQuery } from '#shared/contracts/staff'
 import type { Db, Statement } from '#server/utils/batch'
 import { insertPieces, readInChunks, requireCount } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
+import { containsText } from '#server/utils/search'
 import { account, branches, branchStaff, member, session, user } from '#server/db/tables'
 
 /**
@@ -41,12 +42,17 @@ const accountColumns = {
   createdAt: user.createdAt,
 }
 
-const memberOf = (tenantId: string, role?: 'owner') => exists(
-  sql`(select 1 from ${member} where ${member.userId} = ${user.id} and ${member.organizationId} = ${tenantId}${role ? sql` and ${member.role} = ${role}` : sql``})`,
-)
-const worksAt = (tenantId: string, branchId?: string, role?: BranchRoleName) => exists(
-  sql`(select 1 from ${branchStaff} where ${branchStaff.userId} = ${user.id} and ${branchStaff.tenantId} = ${tenantId}${branchId ? sql` and ${branchStaff.branchId} = ${branchId}` : sql``}${role ? sql` and ${branchStaff.role} = ${role}` : sql``})`,
-)
+// The staff list starts from the tenant's own rows (`member_organizationId_idx`, the `branch_staff`
+// primary key) and then looks users up by primary key. `user` holds every customer and guest of every
+// cafe, so a check per user (a correlated `exists`) scanned all of them. `in (select …)` is a
+// semi-join: a person with several membership or branch rows still matches once.
+const memberIds = (tenantId: string, role?: 'owner') =>
+  sql`${user.id} in (select ${member.userId} from ${member} where ${member.organizationId} = ${tenantId}${role ? sql` and ${member.role} = ${role}` : sql``})`
+// `branch_staff` is indexed by branch and by user, not by tenant: without a branch, the tenant's rows
+// are reached through its branches (`branches_tenant_id_unique`, archived ones too) instead of
+// scanning every cafe's staff. A row's branch always belongs to its tenant (composite key).
+const workerIds = (tenantId: string, branchId?: string, role?: BranchRoleName) =>
+  sql`${user.id} in (select ${branchStaff.userId} from ${branchStaff} where ${branchStaff.tenantId} = ${tenantId}${branchId ? sql` and ${branchStaff.branchId} = ${branchId}` : sql` and ${branchStaff.branchId} in (select ${branches.id} from ${branches} where ${branches.tenantId} = ${tenantId})`}${role ? sql` and ${branchStaff.role} = ${role}` : sql``})`
 
 export async function findAccount(db: Db, userId: string): Promise<AccountRow | undefined> {
   const rows: AccountRow[] = await db.select(accountColumns).from(user).where(eq(user.id, userId)).limit(1)
@@ -102,17 +108,16 @@ export async function activeBranchIds(db: Db, tenantId: string, branchIds: strin
 
 /** The tenant's members, filtered and paginated. */
 export async function listStaff(db: Db, tenantId: string, query: StaffListQuery): Promise<{ rows: AccountRow[], total: number }> {
-  const conditions: SQL[] = [memberOf(tenantId)]
+  // Owners are members, so the owner filter stands in for the membership one.
+  const conditions: SQL[] = [memberIds(tenantId, query.role === 'admin' ? 'owner' : undefined)]
   if (query.search) {
-    const pattern = `%${query.search.replace(/[\\%_]/g, c => `\\${c}`)}%`
-    conditions.push(or(sql`${user.name} like ${pattern} escape '\\'`, sql`${user.email} like ${pattern} escape '\\'`)!)
+    conditions.push(or(containsText(user.name, query.search), containsText(user.email, query.search))!)
   }
   if (query.role === 'admin') {
-    conditions.push(memberOf(tenantId, 'owner'))
-    if (query.branchId) conditions.push(worksAt(tenantId, query.branchId))
+    if (query.branchId) conditions.push(workerIds(tenantId, query.branchId))
   }
   else if (query.role || query.branchId) {
-    conditions.push(worksAt(tenantId, query.branchId, query.role))
+    conditions.push(workerIds(tenantId, query.branchId, query.role))
   }
   const where = and(...conditions)
 

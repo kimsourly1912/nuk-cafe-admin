@@ -2,14 +2,14 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as v from 'valibot'
 import { createStaffSchema, updateStaffAccessSchema } from '#shared/contracts/staff'
-import type { CreateStaffInput } from '#shared/contracts/staff'
+import type { CreateStaffInput, StaffListQuery } from '#shared/contracts/staff'
 import { seedDemoBranch } from '#server/features/branches'
 import { auditEvents, member, user } from '#server/db/tables'
 import { newId } from '#server/utils/ids'
 import type { Db } from '#server/utils/batch'
 import { createTestAuth, signIn } from '#server/tests/support/auth'
 import type { TestAuth } from '#server/tests/support/auth'
-import { addBranchStaff, createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { addBranchStaff, createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError, failure } from '#server/tests/support/failure'
 import { createStaff, disableStaff, getStaffMember, listStaff, resetStaffPassword, seedFirstOwner, updateStaffAccess } from '#server/features/identity/staff.service'
 import { seedTenant } from '#server/features/tenants'
@@ -295,6 +295,149 @@ describe('list', () => {
     expect((await listStaff(db, actor, { ...PAGE, search: '%' })).items).toEqual([])
     expect(await listStaff(db, actor, { page: 2, pageSize: 2 })).toMatchObject({ items: [{ name: 'Vanna' }], total: 3, totalPages: 2 })
   })
+
+  // D1 refuses a LIKE pattern over 50 bytes, so a search is matched with instr(), not like.
+  describe('long and literal searches', () => {
+    const SLASH = String.fromCharCode(92)
+    const ASCII_49 = 'a'.repeat(30) + 'Name' + 'b'.repeat(15)
+    const KHMER_17 = 'ស'.repeat(17)
+    const SYMBOLS = `Fifty% _off_ ${SLASH} Sam`
+    const NAME_MAX = 100
+    const names = async (search: string, query: object = {}) => (await listStaff(db, actor, { ...PAGE, search, ...query })).items.map(s => s.name).sort()
+
+    beforeEach(async () => {
+      await createStaff(db, actor, staffInput({ name: ASCII_49, email: 'ascii@example.com', memberships: [] }))
+      await createStaff(db, actor, staffInput({ name: KHMER_17, email: 'khmer@example.com', memberships: [] }))
+      await createStaff(db, actor, staffInput({ name: `${KHMER_17} Mixed`, email: 'mixed@example.com', memberships: [] }))
+      await createStaff(db, actor, staffInput({ name: SYMBOLS, email: 'symbols@example.com', memberships: [] }))
+      await createStaff(db, actor, staffInput({ name: 'z'.repeat(NAME_MAX), email: 'max@example.com', memberships: [] }))
+    })
+
+    it('finds what a 50-byte LIKE pattern could not hold, ignoring ASCII case', async () => {
+      expect(ASCII_49).toHaveLength(49)
+      expect(await names(ASCII_49)).toEqual([ASCII_49])
+      expect(await names(ASCII_49.toUpperCase())).toEqual([ASCII_49])
+      expect(await names(KHMER_17)).toEqual([KHMER_17, `${KHMER_17} Mixed`].sort())
+      expect(await names(`${KHMER_17} mixed`)).toEqual([`${KHMER_17} Mixed`])
+      expect(await names('z'.repeat(NAME_MAX))).toEqual(['z'.repeat(NAME_MAX)])
+      expect(await names('z'.repeat(NAME_MAX).replace(/z$/, 'y'))).toEqual([])
+      expect(await names('ស'.repeat(NAME_MAX))).toEqual([])
+      expect(await names('MAX@EXAMPLE.COM')).toEqual(['z'.repeat(NAME_MAX)])
+      expect(await names('x'.repeat(NAME_MAX) + '@example.com')).toEqual([])
+    })
+
+    it('treats %, _ and backslash as plain characters', async () => {
+      for (const search of ['%', '_', SLASH, '% _off_ ', `${SLASH} Sam`]) expect(await names(search)).toEqual([SYMBOLS])
+      expect(await names('_ff_')).toEqual([])
+      expect(await names('%'.repeat(25))).toEqual([])
+      expect(await names(SLASH.repeat(60))).toEqual([])
+    })
+
+    it('keeps the page and the total in step, with the other filters', async () => {
+      const page = await listStaff(db, actor, { page: 2, pageSize: 1, search: KHMER_17 })
+      expect(page).toMatchObject({ items: [{}], total: 2, totalPages: 2 })
+      expect((await listStaff(db, actor, { ...PAGE, search: KHMER_17, role: 'admin' })).total).toBe(0)
+      expect((await listStaff(db, actor, { ...PAGE, search: ASCII_49, branchId })).total).toBe(0)
+    })
+  })
+})
+
+// The list starts from the cafe's own memberships and looks users up by primary key; `user` holds
+// every customer and guest of every cafe, so a check per user would grow with them.
+describe('list from the cafe\'s memberships', () => {
+  const OTHER = 'tenant-2'
+  const everyone = async (query: object = {}) => (await listStaff(db, actor, { ...PAGE, ...query })).items.map(s => s.name)
+  let archivedBranchId: string
+  let theirBranchId: string
+
+  beforeEach(async () => {
+    archivedBranchId = await addBranch('Closed', 'archived')
+    await ensureTenant(db, OTHER)
+    theirBranchId = newId()
+    await insertBranch(db, { id: theirBranchId, name: 'Theirs', timezone: 'Asia/Phnom_Penh', tenantId: OTHER })
+    // Customers and guests of every cafe, far more than this cafe's staff.
+    for (let start = 0; start < 120; start += 12) {
+      await db.insert(user).values(Array.from({ length: 12 }, (_, i) => ({ id: `crowd-${start + i}`, name: `Crowd ${start + i}`, email: `crowd${start + i}@example.com` })))
+    }
+    // Vanna works at three branches (one archived since) and has a repeated membership row (nothing makes the pair unique).
+    const vanna = (await createStaff(db, actor, staffInput({ name: 'Vanna', email: 'vanna@example.com', memberships: [{ branchId, role: 'staff' }, { branchId: otherBranchId, role: 'manager' }] }))).staff
+    await addBranchStaff(db, archivedBranchId, vanna.id, 'staff')
+    await db.insert(member).values({ id: newId(), organizationId: TEST_TENANT, userId: vanna.id, role: 'member', createdAt: new Date() })
+    await createStaff(db, actor, staffInput({ name: 'Sophea', email: 'sophea@example.com', memberships: [{ branchId, role: 'staff' }] }))
+    const closed = (await createStaff(db, actor, staffInput({ name: 'Closed hand', email: 'closed@example.com', memberships: [] }))).staff
+    await addBranchStaff(db, archivedBranchId, closed.id, 'manager')
+    // The other cafe: its own owner, and Vanna and a customer working there too.
+    await addBranchStaff(db, theirBranchId, vanna.id, 'manager', OTHER)
+    await addBranchStaff(db, theirBranchId, 'crowd-1', 'manager', OTHER)
+    await db.insert(member).values({ id: newId(), organizationId: OTHER, userId: 'crowd-2', role: 'owner', createdAt: new Date() })
+  })
+
+  it('returns each person once, however many branches or membership rows they have', async () => {
+    expect(await everyone()).toEqual(['Closed hand', 'Owner', 'Sophea', 'Vanna'])
+    expect(await listStaff(db, actor, PAGE)).toMatchObject({ total: 4 })
+    expect(await everyone({ role: 'staff' })).toEqual(['Sophea', 'Vanna'])
+    expect(await listStaff(db, actor, { ...PAGE, role: 'staff' })).toMatchObject({ total: 2 })
+    expect(await everyone({ role: 'manager' })).toEqual(['Closed hand', 'Vanna'])
+    expect(await everyone({ branchId })).toEqual(['Sophea', 'Vanna'])
+    expect(await everyone({ branchId, search: 'VAN' })).toEqual(['Vanna'])
+    expect(await everyone({ branchId, role: 'staff', search: 'a' })).toEqual(['Sophea', 'Vanna'])
+    expect((await listStaff(db, actor, { ...PAGE, search: 'a' })).total).toBe(await everyone({ search: 'a' }).then(names => names.length))
+  })
+
+  it('keeps people at an archived branch', async () => {
+    expect(await everyone({ branchId: archivedBranchId })).toEqual(['Closed hand', 'Vanna'])
+    expect(await everyone({ branchId: archivedBranchId, role: 'manager' })).toEqual(['Closed hand'])
+  })
+
+  it('answers the admin filter from owners alone, with or without a branch', async () => {
+    expect(await everyone({ role: 'admin' })).toEqual(['Owner'])
+    expect(await everyone({ role: 'admin', branchId })).toEqual([])
+    const [sophea] = (await listStaff(db, actor, { ...PAGE, search: 'sophea' })).items
+    await updateStaffAccess(db, actor, sophea!.id, { version: sophea!.version, admin: true, memberships: [{ branchId, role: 'staff' }] })
+    expect(await everyone({ role: 'admin', branchId })).toEqual(['Sophea'])
+  })
+
+  it('never shows the other cafe\'s people or branches', async () => {
+    expect(await everyone({ branchId: theirBranchId })).toEqual([])
+    expect(await everyone({ search: 'crowd' })).toEqual([])
+    const theirs: Actor = { userId: actor.userId, tenantId: OTHER, role: 'owner' }
+    expect((await listStaff(db, theirs, PAGE)).items.map(s => s.name).sort()).toEqual(['Crowd 1', 'Crowd 2', 'Vanna'])
+    expect((await listStaff(db, theirs, { ...PAGE, role: 'admin' })).items.map(s => s.name)).toEqual(['Crowd 2'])
+    expect((await listStaff(db, theirs, { ...PAGE, role: 'manager' })).items.map(s => s.name)).toEqual(['Crowd 1', 'Vanna'])
+    expect((await listStaff(db, theirs, { ...PAGE, branchId })).items).toEqual([])
+  })
+
+  it('pages stably: every person once across pages, totals matching', async () => {
+    const seen: string[] = []
+    for (const page of [1, 2, 3]) {
+      const result = await listStaff(db, actor, { page, pageSize: 2 })
+      expect(result).toMatchObject({ total: 4, totalPages: 2 })
+      seen.push(...result.items.map(s => s.name))
+    }
+    expect(seen).toEqual(['Closed hand', 'Owner', 'Sophea', 'Vanna'])
+  })
+
+  it('looks users up by key from the memberships, never scanning every account', async () => {
+    const seen: { sql: string, params: unknown[] }[] = []
+    const probe = await createTestDb({ logger: { logQuery: (statement, params) => void seen.push({ sql: statement, params }) } })
+    const plan = (probe as unknown as { $client: { execute: (statement: { sql: string, args: unknown[] }) => Promise<{ rows: Record<string, unknown>[] }> } }).$client
+    const probeBranch = newId()
+    await insertBranch(probe, { id: probeBranch, name: 'Riverside', timezone: 'Asia/Phnom_Penh' })
+    const owner = await seedFirstOwner(probe, TEST_TENANT, { name: 'Owner', email: 'owner@example.com' })
+    for (let i = 0; i < 30; i++) await createUser(probe, `crowd${i}@example.com`)
+    const asOwner: Actor = { userId: owner!.staff.id, tenantId: TEST_TENANT, role: 'owner' }
+    const queries: Partial<StaffListQuery>[] = [{}, { search: 'own' }, { role: 'admin' }, { role: 'manager' }, { branchId: probeBranch }, { branchId: probeBranch, role: 'staff', search: 'a' }, { role: 'admin', branchId: probeBranch }]
+    for (const query of queries) {
+      seen.length = 0
+      await listStaff(probe, asOwner, { ...PAGE, ...query })
+      const reads = seen.filter(s => /from "user"/.test(s.sql))
+      expect(reads, JSON.stringify(query)).toHaveLength(2) // the page and the count
+      for (const read of reads) {
+        const details = (await plan.execute({ sql: `explain query plan ${read.sql}`, args: read.params })).rows.map(r => String(r.detail))
+        expect(details.filter(d => /^SCAN user\b/.test(d)), `${JSON.stringify(query)}: ${details.join(' | ')}`).toEqual([])
+      }
+    }
+  })
 })
 
 describe('seed', () => {
@@ -347,6 +490,15 @@ describe('tenants', () => {
     expect(await failure(resetStaffPassword(db, theirs, ours.staff.id, version))).toEqual({ status: 404, code: 'NOT_FOUND' })
     // Nothing changed here.
     expect(await getStaffMember(db, actor, ours.staff.id)).toEqual(ours.staff)
+  })
+
+  it('searches only the cafe\'s own people, also with a search past 50 bytes', async () => {
+    const long = 'Long name '.repeat(8).trim()
+    await createStaff(db, actor, staffInput({ name: long, email: 'mine@example.com' }))
+    await createStaff(db, theirs, staffInput({ name: long, email: 'their-long@example.com', memberships: [{ branchId: theirBranch, role: 'staff' }] }))
+    expect((await listStaff(db, actor, { ...PAGE, search: long })).items.map(s => s.email)).toEqual(['mine@example.com'])
+    expect((await listStaff(db, theirs, { ...PAGE, search: long })).items.map(s => s.email)).toEqual(['their-long@example.com'])
+    expect((await listStaff(db, theirs, { ...PAGE, search: 'mine@' })).total).toBe(0)
   })
 
   it('refuses another cafe\'s branch as an unknown one', async () => {

@@ -1,12 +1,14 @@
 import type { Api } from 'grammy'
 import type { Message } from 'grammy/types'
 import type { OrderReadyAlert, OrderReadyAlertStatus, OrderReadyLink } from '#shared/contracts/notifications'
-import { ORDER_READY_LINK_MINUTES } from '#shared/contracts/notifications'
+import { DELIVERY_MAX_ATTEMPTS, ORDER_READY_LINK_MINUTES } from '#shared/contracts/notifications'
 import type { OrderStatus } from '#shared/contracts/orders'
 import { activeTenants } from '#server/features/identity'
 import { orderAlert } from '#server/features/orders'
+import { retryDelayMs } from '#server/features/platform'
 import type { Db } from '#server/utils/batch'
 import { isStaleWrite, requireOneChange } from '#server/utils/batch'
+import { newId } from '#server/utils/ids'
 import { log } from '#server/utils/log'
 import { maintenanceLimit } from '#server/utils/maintenance'
 import { orderReadyAlertTooLate } from './notifications.errors'
@@ -95,45 +97,109 @@ export async function useOrderReadyCode(db: Db, api: Api, message: Message, code
   }
   // Single use: only the code this row holds, unexpired. Telegram resending the update finds nothing.
   try {
-    await db.batch([repo.subscribeOrderReadyAlertStatement(db, row.orderId, row.codeHash!, String(chat.id), now), requireOneChange(db)])
+    await db.batch([repo.subscribeOrderReadyAlertStatement(db, row.orderId, row.codeHash!, String(chat.id), newId(), now), requireOneChange(db)])
   }
   catch (error) {
     if (isStaleWrite(error)) return true
     throw error
   }
   await reply(api, chat.id, orderReadySubscribedText(cafeName, alert.pickupNumber))
-  // Marked ready while this chat was signing up: its event found no chat, so send it now.
-  if ((await orderAlert(db, row.tenantId, row.orderId))?.status === 'ready') await sendOrderReadyAlert(db, api, row.tenantId, row.orderId, undefined, now)
+  // Marked ready while this chat was signing up: its event found no chat, so send it now. The sign-up
+  // already made this durable (due now), so a failure here is retried by the scheduled run.
+  try {
+    if ((await orderAlert(db, row.tenantId, row.orderId))?.status === 'ready') await attemptOrderReady(db, api, row.tenantId, row.orderId, undefined, now, 'skip')
+  }
+  catch (error) {
+    log('warn', 'Telegram: a customer\'s ready message was not delivered; it will be retried', { orderId: row.orderId, error: String(error) })
+  }
   return true
 }
 
 /**
  * The `orders.ready` event: the message to the chat that asked, once. Telegram's refusal for a
- * blocked bot gives up (the chat is forgotten); anything else throws, so the outbox retries. A
- * retry after a lost answer can repeat the message (Telegram has no idempotency key), like the
- * staff alerts (D113).
+ * blocked bot gives up (the chat is forgotten); anything else throws, so the outbox retries. While
+ * another sender holds the claim it throws too, so the event is retried instead of lost if that
+ * sender fails. A retry after a lost answer can repeat the message (Telegram has no idempotency
+ * key), like the staff alerts (D113).
  */
 export async function sendOrderReadyAlert(db: Db, api: Api, tenantId: string, orderId: string, cafeUrl?: string, now = new Date()): Promise<boolean> {
-  const row = await repo.findOrderReadyAlert(db, tenantId, orderId)
-  if (!row?.chatId || row.notifiedAt) return false
-  const [alert, tenants] = await Promise.all([orderAlert(db, tenantId, orderId), activeTenants(db)])
-  const cafeName = tenants.find(t => t.id === tenantId)?.name
-  if (!alert || !cafeName || alert.status !== 'ready') {
-    // Completed or cancelled before the event was handled: nothing to say any more.
-    await repo.markOrderReadyNotified(db, tenantId, orderId, row.chatId, now)
+  return attemptOrderReady(db, api, tenantId, orderId, cafeUrl, now, 'throw')
+}
+
+/** How long a sender holds the message while sending it; a stopped worker's claim is claimable again after that. */
+const CLAIM_MS = 2 * MINUTE
+
+/**
+ * Every sender of the order's message (the ready event, the sign-up catch-up, the scheduled run)
+ * goes through here: one atomic claim on the order's row, then the send, then a completion fenced
+ * by the subscription and the claim's token. Overlapping senders find the claim taken and send
+ * nothing; a sender that lost its claim (its lease ended, the chat was replaced) completes nothing.
+ * `onBusy`: what a sender does when another holds the claim: the event throws (to be retried), the
+ * others leave it (the holder or the schedule follows up).
+ */
+async function attemptOrderReady(db: Db, api: Api, tenantId: string, orderId: string, cafeUrl: string | undefined, now: Date, onBusy: 'throw' | 'skip'): Promise<boolean> {
+  const claim = await repo.claimOrderReady(db, tenantId, orderId, now, new Date(now.getTime() + CLAIM_MS))
+  if (!claim) {
+    if (onBusy === 'throw' && await repo.orderReadyClaimed(db, tenantId, orderId, now)) throw new Error('The customer\'s ready message is being sent by another run; retrying later.')
     return false
   }
   try {
-    await sendStored(api, row.chatId, orderReadyMessage(cafeName, alert, cafeUrl))
+    const [alert, tenants] = await Promise.all([orderAlert(db, tenantId, orderId), activeTenants(db)])
+    const cafeName = tenants.find(t => t.id === tenantId)?.name
+    if (alert && cafeName && WAITING_FOR_READY.includes(alert.status)) {
+      // Not ready yet (a sign-up's first look): the ready event sends it.
+      await repo.parkOrderReady(db, claim)
+      return false
+    }
+    if (!alert || !cafeName || alert.status !== 'ready') {
+      // Completed or cancelled before the event was handled: nothing to say any more.
+      await repo.completeOrderReady(db, claim, now)
+      return false
+    }
+    try {
+      await sendStored(api, claim.chatId, orderReadyMessage(cafeName, alert, cafeUrl))
+    }
+    catch (error) {
+      if (!isBlockedError(error)) throw error
+      log('info', 'Telegram: a customer blocked the bot before their order was ready', { orderId })
+      await repo.completeOrderReady(db, claim, now)
+      return false
+    }
+    // False when the chat was replaced meanwhile: the new subscription is not ours to mark.
+    await repo.completeOrderReady(db, claim, now)
+    return true
   }
   catch (error) {
-    if (!isBlockedError(error)) throw error
-    log('info', 'Telegram: a customer blocked the bot before their order was ready', { orderId })
-    await repo.markOrderReadyNotified(db, tenantId, orderId, row.chatId, now)
-    return false
+    if (claim.attempts >= DELIVERY_MAX_ATTEMPTS) await repo.abandonOrderReady(db, claim)
+    else await repo.retryOrderReady(db, claim, new Date(now.getTime() + retryDelayMs(claim.attempts)))
+    throw error
   }
-  await repo.markOrderReadyNotified(db, tenantId, orderId, row.chatId, now)
-  return true
+}
+
+export interface OrderReadyReport {
+  sent: number
+  failed: number
+}
+
+/**
+ * The scheduled run (`notifications:deliver`): sends the ready messages that are due, the ones a
+ * failed catch-up, a failed retry or a stopped worker left behind. `cafeUrlOf` names the order's own
+ * cafe (D141). Never throws for one message: it is retried at its next time.
+ */
+export async function deliverOrderReadyDue(db: Db, api: Api, cafeUrlOf: (tenantId: string) => Promise<string | undefined>, now: Date | undefined = undefined, options: { limit?: number, budgetMs?: number } = {}): Promise<OrderReadyReport> {
+  const report = { sent: 0, failed: 0 }
+  const started = Date.now()
+  for (const due of await repo.dueOrderReadyAlerts(db, now ?? new Date(), options.limit ?? 25)) {
+    if (Date.now() - started >= (options.budgetMs ?? 20_000)) break
+    try {
+      if (await attemptOrderReady(db, api, due.tenantId, due.orderId, await cafeUrlOf(due.tenantId), now ?? new Date(), 'skip')) report.sent++
+    }
+    catch (error) {
+      log('warn', 'Telegram: a customer\'s ready message was not delivered; it will be retried', { orderId: due.orderId, error: String(error) })
+      report.failed++
+    }
+  }
+  return report
 }
 
 /** Kept 2 days: the order is long finished by then. */

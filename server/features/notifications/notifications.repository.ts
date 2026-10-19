@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, lt, lte, ne, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm'
 import type { DestinationKind, NotificationKind, TelegramLinkStatus } from '#shared/contracts/notifications'
 import { user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
@@ -342,18 +342,102 @@ export async function saveOrderReadyLink(db: Db, link: { tenantId: string, order
 
 /**
  * A chat used the code: it gets the message. Only the code it was given, unexpired, once (the code
- * is cleared; a guard follows it in the batch).
+ * is cleared; a guard follows it in the batch). In the same statement the subscription gets a new
+ * identity, any older send loses its claim, and the scheduled run is due now: if the order was
+ * marked ready while the chat signed up, that is the durable work that sends it.
  */
-export function subscribeOrderReadyAlertStatement(db: Db, orderId: string, codeHash: string, chatId: string, now: Date): Statement {
+export function subscribeOrderReadyAlertStatement(db: Db, orderId: string, codeHash: string, chatId: string, subscriptionId: string, now: Date): Statement {
   return db.update(orderReadyAlerts)
-    .set({ chatId, codeHash: null, subscribedAt: now })
+    .set({ chatId, codeHash: null, subscribedAt: now, subscriptionId, claimToken: null, claimUntil: null, attempts: 0, retryAt: now })
     .where(and(eq(orderReadyAlerts.orderId, orderId), eq(orderReadyAlerts.codeHash, codeHash), sql`${orderReadyAlerts.linkExpiresAt} > ${now.getTime()}`))
 }
 
-/** Sent (or given up on): the chat is forgotten. Only while that chat is still the one asked. */
-export async function markOrderReadyNotified(db: Db, tenantId: string, orderId: string, chatId: string, at: Date): Promise<void> {
-  await db.update(orderReadyAlerts).set({ chatId: null, notifiedAt: at })
-    .where(and(eq(orderReadyAlerts.tenantId, tenantId), eq(orderReadyAlerts.orderId, orderId), eq(orderReadyAlerts.chatId, chatId), isNull(orderReadyAlerts.notifiedAt)))
+/** A send of one subscription: what it is for, and the claim that lets it complete. */
+export type OrderReadyClaim = OrderReadyAlertRow & { chatId: string, claimToken: string }
+
+/**
+ * Claims the order's message for one sender (the ready event, the sign-up catch-up or the scheduled
+ * run): one atomic update, only while a chat is waiting, nothing was sent and nobody else holds an
+ * unexpired claim. Counts the try; the lease ends at `until` (an abandoned claim is claimable then).
+ */
+export async function claimOrderReady(db: Db, tenantId: string, orderId: string, now: Date, until: Date): Promise<OrderReadyClaim | undefined> {
+  const token = newId()
+  const [claimed] = await db.update(orderReadyAlerts)
+    .set({ claimToken: token, claimUntil: until, attempts: sql`${orderReadyAlerts.attempts} + 1`, retryAt: until })
+    .where(and(
+      eq(orderReadyAlerts.tenantId, tenantId),
+      eq(orderReadyAlerts.orderId, orderId),
+      isNotNull(orderReadyAlerts.chatId),
+      isNull(orderReadyAlerts.notifiedAt),
+      or(isNull(orderReadyAlerts.claimUntil), lte(orderReadyAlerts.claimUntil, now)),
+    ))
+    .returning()
+  return claimed ? { ...claimed, chatId: claimed.chatId!, claimToken: token } : undefined
+}
+
+/** Whether a sender holds an unexpired claim on the order's message. */
+export async function orderReadyClaimed(db: Db, tenantId: string, orderId: string, now: Date): Promise<boolean> {
+  const [row] = await db.select({ orderId: orderReadyAlerts.orderId }).from(orderReadyAlerts)
+    .where(and(eq(orderReadyAlerts.tenantId, tenantId), eq(orderReadyAlerts.orderId, orderId), isNotNull(orderReadyAlerts.claimUntil), gt(orderReadyAlerts.claimUntil, now)))
+  return !!row
+}
+
+/** The claim's own subscription and token: what a sender must still hold to change the row. */
+const ownsOrderReady = (claim: OrderReadyClaim) => and(
+  eq(orderReadyAlerts.tenantId, claim.tenantId),
+  eq(orderReadyAlerts.orderId, claim.orderId),
+  sql`${orderReadyAlerts.subscriptionId} is ${claim.subscriptionId}`,
+  eq(orderReadyAlerts.claimToken, claim.claimToken),
+  isNull(orderReadyAlerts.notifiedAt),
+)
+
+/**
+ * Sent (or given up on): the chat is forgotten. Only for the subscription and claim the sender
+ * holds, so an old send never marks a newer chat. Returns whether it did.
+ */
+export async function completeOrderReady(db: Db, claim: OrderReadyClaim, at: Date): Promise<boolean> {
+  const done = await db.update(orderReadyAlerts)
+    .set({ chatId: null, notifiedAt: at, claimToken: null, claimUntil: null, retryAt: null })
+    .where(ownsOrderReady(claim)).returning({ orderId: orderReadyAlerts.orderId })
+  return done.length === 1
+}
+
+/** A try that failed: the claim is released and the scheduled run tries again at `next`. */
+export async function retryOrderReady(db: Db, claim: OrderReadyClaim, next: Date): Promise<boolean> {
+  const done = await db.update(orderReadyAlerts)
+    .set({ claimToken: null, claimUntil: null, retryAt: next })
+    .where(ownsOrderReady(claim)).returning({ orderId: orderReadyAlerts.orderId })
+  return done.length === 1
+}
+
+/** Nothing to send yet (the order is still being prepared): releases the claim without counting the try; the ready event comes. */
+export async function parkOrderReady(db: Db, claim: OrderReadyClaim): Promise<boolean> {
+  const done = await db.update(orderReadyAlerts)
+    .set({ claimToken: null, claimUntil: null, retryAt: null, attempts: sql`max(${orderReadyAlerts.attempts} - 1, 0)` })
+    .where(ownsOrderReady(claim)).returning({ orderId: orderReadyAlerts.orderId })
+  return done.length === 1
+}
+
+/** Too many tries: the chat is forgotten without a "sent" mark (nothing was confirmed). */
+export async function abandonOrderReady(db: Db, claim: OrderReadyClaim): Promise<boolean> {
+  const done = await db.update(orderReadyAlerts)
+    .set({ chatId: null, claimToken: null, claimUntil: null, retryAt: null })
+    .where(ownsOrderReady(claim)).returning({ orderId: orderReadyAlerts.orderId })
+  return done.length === 1
+}
+
+/** Messages the scheduled run should try: a chat waiting, due now, no unexpired claim (a stopped worker's lease has ended). */
+export async function dueOrderReadyAlerts(db: Db, now: Date, limit: number): Promise<{ tenantId: string, orderId: string }[]> {
+  return db.select({ tenantId: orderReadyAlerts.tenantId, orderId: orderReadyAlerts.orderId }).from(orderReadyAlerts)
+    .where(and(
+      isNotNull(orderReadyAlerts.chatId),
+      isNull(orderReadyAlerts.notifiedAt),
+      isNotNull(orderReadyAlerts.retryAt),
+      lte(orderReadyAlerts.retryAt, now),
+      or(isNull(orderReadyAlerts.claimUntil), lte(orderReadyAlerts.claimUntil, now)),
+    ))
+    .orderBy(asc(orderReadyAlerts.retryAt))
+    .limit(limit)
 }
 
 /** Rows from before `cutoff`: their orders are long finished. */

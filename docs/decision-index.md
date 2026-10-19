@@ -210,3 +210,7 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D178](decisions.md#d178-a-failed-submit-goes-to-the-first-invalid-field-2026-10-18) | A failed submit goes to the first invalid field, 2026-10-18 |
 | [D179](decisions.md#d179-every-list-that-removes-or-moves-rows-moves-its-errors-2026-10-18) | Every list that removes or moves rows moves its errors, 2026-10-18 |
 | [D180](decisions.md#d180-one-crop-modal-for-every-photo-upload-2026-10-19) | One crop modal for every photo upload, 2026-10-19 |
+| [D181](decisions.md#d181-staff-cannot-take-the-payment-of-their-own-order-by-hand-2026-10-19) | Staff cannot take the payment of their own order by hand, 2026-10-19 |
+| [D182](decisions.md#d182-one-durable-claim-for-the-customers-order-ready-message-2026-10-19) | One durable claim for the customer's "order ready" message, 2026-10-19 |
+| [D183](decisions.md#d183-searches-match-with-instr-not-like-because-d1-limits-patterns-to-50-bytes-2026-10-19) | Searches match with `instr`, not `like`: D1 limits patterns to 50 bytes, 2026-10-19 |
+| [D184](decisions.md#d184-the-staff-list-starts-from-the-cafes-memberships-not-from-every-account-2026-10-19) | The staff list starts from the cafe's memberships, not from every account, 2026-10-19 |

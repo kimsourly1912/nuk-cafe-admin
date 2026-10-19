@@ -7,7 +7,9 @@ import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { completeOrder, markOrderReady, payOrder, placeOrder } from '#server/features/orders'
 import { outboxMessages } from '#server/features/platform/platform.schema'
-import { createOrderReadyLink, orderReadyAlert, purgeOrderReadyAlerts, sendOrderReadyAlert } from '#server/features/notifications/notifications.customers'
+import { createOrderReadyLink, deliverOrderReadyDue, orderReadyAlert, purgeOrderReadyAlerts, sendOrderReadyAlert } from '#server/features/notifications/notifications.customers'
+import * as repo from '#server/features/notifications/notifications.repository'
+import { hashLinkCode } from '#server/features/notifications/notifications.rules'
 import { orderReadyAlerts } from '#server/features/notifications/notifications.schema'
 import { handleUpdate } from '#server/features/notifications/notifications.service'
 import type { TelegramSettings } from '#server/features/notifications/notifications.settings'
@@ -15,6 +17,7 @@ import { createAdmin, createTestDb, createUser, insertBranch, TEST_TENANT } from
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
+import { requireOneChange } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 
 // "Your order is ready" on Telegram, for customers (D157): the order page's one-time link, the
@@ -28,11 +31,15 @@ type Answer = { ok: true, result: unknown } | { ok: false, error_code: number, d
 
 class FakeTelegram {
   calls: { method: string, payload: Record<string, unknown> | null }[] = []
+  /** Runs before Telegram answers: a test holds a call in flight here. */
+  before: ((method: string, payload: Record<string, unknown> | null) => Promise<void>) | undefined
   answer: (method: string) => Answer = () => ({ ok: true, result: true })
   readonly api = new Api(SETTINGS.botToken, {
     fetch: (async (url: string | URL, init?: { body?: unknown }) => {
       const method = String(url).split('/').pop()!
-      this.calls.push({ method, payload: typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : null })
+      const payload = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : null
+      this.calls.push({ method, payload })
+      await this.before?.(method, payload)
       return new Response(JSON.stringify(this.answer(method)), { headers: { 'content-type': 'application/json' } })
     }) as unknown as typeof fetch,
   })
@@ -221,6 +228,213 @@ describe('the message when it\'s ready (D157)', () => {
     await ready(orderId)
     await handleUpdate(db, telegram.api, SETTINGS, start(codeOf(link.url)), later(6))
     expect(telegram.texts().map(t => t.text)).toEqual([expect.stringMatching(/is ready now/)])
+  })
+})
+
+// The two senders of the ready message (the orders.ready event and the sign-up catch-up) and the
+// scheduled run share one durable claim on the order's row. Barriers (deferred promises) place the
+// interleavings; nothing waits on a clock.
+describe('the ready message\'s delivery: one claim, durable recovery', () => {
+  const deferred = () => {
+    let resolve!: () => void
+    const promise = new Promise<void>((done) => {
+      resolve = done
+    })
+    return { promise, resolve }
+  }
+  const readyTexts = () => telegram.texts().filter(t => /Your order \d{3} is ready/.test(t.text))
+  const noUrl = async () => undefined
+  const row = async () => (await db.select().from(orderReadyAlerts))[0]!
+
+  /** Holds the ready message in flight until `release()`; `inFlight` settles once the provider call began. */
+  function holdReadyMessage() {
+    const gate = deferred()
+    const inFlight = deferred()
+    telegram.before = async (method, payload) => {
+      if (method === 'sendMessage' && /Your order \d{3} is ready/.test(String(payload?.text))) {
+        inFlight.resolve()
+        await gate.promise
+      }
+    }
+    return { inFlight: inFlight.promise, release: gate.resolve }
+  }
+
+  /** The chat signs up while the counter marks the order ready: the order is ready by the time the sign-up writes. */
+  async function signUpWhileReady(orderId: string, meanwhile: () => Promise<unknown> = async () => undefined, at = later(6)) {
+    const link = await createOrderReadyLink(db, TEST_TENANT, { id: orderId, status: 'awaiting_payment' }, SETTINGS, NOON)
+    const racing = interleaved(db, async () => {
+      await pay(orderId)
+      await ready(orderId)
+      await meanwhile()
+    })
+    return { link, signUp: () => handleUpdate(racing, telegram.api, SETTINGS, start(codeOf(link.url)), at) }
+  }
+
+  it('the catch-up and the ready event overlap: one provider send while the claim is active', async () => {
+    const orderId = await place()
+    const { signUp } = await signUpWhileReady(orderId)
+    const held = holdReadyMessage()
+    const catchUp = signUp()
+    await held.inFlight
+    // The event arrives while the catch-up's send is in flight: it must not send, and must be retried (not lost).
+    await expect(sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(6))).rejects.toThrow(/another run/)
+    expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(6))).toEqual({ sent: 0, failed: 0 })
+    expect(readyTexts()).toHaveLength(1)
+    held.release()
+    await catchUp
+    expect(readyTexts()).toHaveLength(1)
+    expect((await status(orderId, later(7))).status).toBe('sent')
+    // The retried event finds it done.
+    expect(await sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(8))).toBe(false)
+    expect(readyTexts()).toHaveLength(1)
+  })
+
+  it('the event finished before the sign-up committed and the catch-up fails once: the scheduled run sends, without a new code', async () => {
+    const orderId = await place()
+    const { signUp } = await signUpWhileReady(orderId, async () => {
+      // The event handled "ready" while nobody was subscribed yet: it is done and will not run again.
+      expect(await sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(5))).toBe(false)
+    })
+    telegram.answer = (method) => {
+      return method === 'sendMessage' && telegram.calls.length > 1 ? { ok: false, error_code: 502, description: 'Bad Gateway' } : { ok: true, result: true }
+    }
+    // The subscribed reply (the first call) works; the ready message fails. The sign-up still succeeds.
+    await expect(signUp()).resolves.toBeUndefined()
+    expect(await row()).toMatchObject({ chatId: '777', notifiedAt: null, claimToken: null, attempts: 1 })
+
+    telegram.answer = () => ({ ok: true, result: true })
+    telegram.calls = []
+    // Not due before the backoff ends; due after it.
+    expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(6))).toEqual({ sent: 0, failed: 0 })
+    expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(8))).toEqual({ sent: 1, failed: 0 })
+    expect(readyTexts()).toHaveLength(1)
+    expect(await row()).toMatchObject({ chatId: null, retryAt: null })
+    expect((await status(orderId, later(9))).status).toBe('sent')
+    expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(60))).toEqual({ sent: 0, failed: 0 })
+  })
+
+  it('a worker that stops after claiming: its claim expires and the message is recovered', async () => {
+    const orderId = await place()
+    await subscribe(orderId)
+    await pay(orderId)
+    await ready(orderId)
+    // A run claims, then dies before sending.
+    const claim = await repo.claimOrderReady(db, TEST_TENANT, orderId, later(6), later(8))
+    expect(claim).toBeDefined()
+    await expect(sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(7))).rejects.toThrow(/another run/)
+    expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(7))).toEqual({ sent: 0, failed: 0 })
+    expect(readyTexts()).toHaveLength(0)
+    // After the lease ends the scheduled run takes over.
+    expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(9))).toEqual({ sent: 1, failed: 0 })
+    expect(readyTexts()).toHaveLength(1)
+    // The dead worker waking up cannot complete anything.
+    expect(await repo.completeOrderReady(db, claim!, later(10))).toBe(false)
+  })
+
+  it('a send whose claim expired cannot complete or release the newer claim\'s message', async () => {
+    const orderId = await place()
+    await subscribe(orderId)
+    await pay(orderId)
+    await ready(orderId)
+    const stale = (await repo.claimOrderReady(db, TEST_TENANT, orderId, later(6), later(8)))!
+    // Its lease ended; a second sender claimed and is still sending.
+    const current = (await repo.claimOrderReady(db, TEST_TENANT, orderId, later(9), later(11)))!
+    expect(current.claimToken).not.toBe(stale.claimToken)
+    expect(await repo.completeOrderReady(db, stale, later(10))).toBe(false)
+    expect(await repo.retryOrderReady(db, stale, later(20))).toBe(false)
+    expect(await repo.parkOrderReady(db, stale)).toBe(false)
+    expect(await repo.abandonOrderReady(db, stale)).toBe(false)
+    expect(await row()).toMatchObject({ chatId: '777', notifiedAt: null, claimToken: current.claimToken })
+    // The same claim for another subscription (a replaced chat) is refused too.
+    expect(await repo.completeOrderReady(db, { ...current, subscriptionId: 'another' }, later(10))).toBe(false)
+    expect(await repo.completeOrderReady(db, current, later(10))).toBe(true)
+  })
+
+  it('redeeming the code again creates no new work', async () => {
+    const orderId = await place()
+    const link = await subscribe(orderId)
+    const before = await row()
+    await handleUpdate(db, telegram.api, SETTINGS, start(codeOf(link.url), { id: 888, type: 'private', first_name: 'Other' }), later(3))
+    await handleUpdate(db, telegram.api, SETTINGS, start(codeOf(link.url)), later(4))
+    expect(await row()).toEqual(before)
+    await pay(orderId)
+    await ready(orderId)
+    // Every sender, one after another, adds up to one message.
+    await deliverOrderReadyDue(db, telegram.api, noUrl, later(6))
+    await deliverOrderReadyDue(db, telegram.api, noUrl, later(7))
+    await sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(8))
+    expect(readyTexts()).toHaveLength(1)
+  })
+
+  it('a subscription replaced while an old send is in flight: the old completion changes nothing of the new one', async () => {
+    const orderId = await place()
+    await subscribe(orderId)
+    // A second link was made meanwhile; its chat opens it just as the old chat's message is on its way.
+    const second = await createOrderReadyLink(db, TEST_TENANT, { id: orderId, status: 'preparing' }, SETTINGS, NOON)
+    await pay(orderId)
+    await ready(orderId)
+    const held = holdReadyMessage()
+    const oldSend = sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(6))
+    await held.inFlight
+    await db.batch([repo.subscribeOrderReadyAlertStatement(db, orderId, await hashLinkCode(codeOf(second.url)), '888', 'second-subscription', later(6)), requireOneChange(db)])
+    held.release()
+    await expect(oldSend).resolves.toBe(true)
+    // The old send's completion was fenced out: the new chat is still waiting, unmarked.
+    expect(await row()).toMatchObject({ chatId: '888', subscriptionId: 'second-subscription', notifiedAt: null, claimToken: null })
+    telegram.before = undefined
+    expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(7))).toEqual({ sent: 1, failed: 0 })
+    expect(readyTexts().map(t => t.chatId)).toEqual(['777', '888'])
+    expect(await row()).toMatchObject({ chatId: null, subscriptionId: 'second-subscription', notifiedAt: later(7) })
+  })
+
+  it('the process dies right after the sign-up committed: the sign-up alone left the work, the scheduled run sends', async () => {
+    const orderId = await place()
+    const link = await createOrderReadyLink(db, TEST_TENANT, { id: orderId, status: 'awaiting_payment' }, SETTINGS, NOON)
+    await pay(orderId)
+    await ready(orderId)
+    // The event found no chat; the sign-up commits; the catch-up never runs.
+    expect(await sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(5))).toBe(false)
+    await db.batch([repo.subscribeOrderReadyAlertStatement(db, orderId, await hashLinkCode(codeOf(link.url)), '777', 'sub', later(6)), requireOneChange(db)])
+    expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(6))).toEqual({ sent: 1, failed: 0 })
+    expect(readyTexts()).toHaveLength(1)
+  })
+
+  it('a customer who blocks the bot during the catch-up is forgotten and nothing is retried', async () => {
+    const orderId = await place()
+    const { signUp } = await signUpWhileReady(orderId)
+    telegram.answer = () => telegram.calls.length > 1
+      ? { ok: false, error_code: 403, description: 'Forbidden: bot was blocked by the user' }
+      : { ok: true, result: true }
+    await signUp()
+    expect(await row()).toMatchObject({ chatId: null, retryAt: null, claimToken: null })
+    expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(60))).toEqual({ sent: 0, failed: 0 })
+  })
+
+  it('sends nothing for an order completed meanwhile, and nothing across cafes', async () => {
+    const orderId = await place()
+    await subscribe(orderId)
+    await pay(orderId)
+    await ready(orderId)
+    telegram.calls = []
+    // Another cafe's id never claims this order's message.
+    expect(await sendOrderReadyAlert(db, telegram.api, newId(), orderId, CAFE_URL, later(6))).toBe(false)
+    expect(await row()).toMatchObject({ chatId: '777', attempts: 0, claimToken: null })
+
+    await completeOrder(db, cashier, orderId, { version: 3 }, crypto.randomUUID(), later(6))
+    expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(7))).toEqual({ sent: 0, failed: 0 })
+    expect(telegram.calls).toEqual([])
+    expect(await row()).toMatchObject({ chatId: null, retryAt: null })
+  })
+
+  it('a message still being prepared is parked by the scheduled run, then sent by the ready event', async () => {
+    const orderId = await place()
+    await subscribe(orderId)
+    await deliverOrderReadyDue(db, telegram.api, noUrl, later(2))
+    expect(await row()).toMatchObject({ chatId: '777', retryAt: null, attempts: 0, claimToken: null })
+    await pay(orderId)
+    await ready(orderId)
+    expect(await sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(6))).toBe(true)
+    expect(readyTexts()).toHaveLength(1)
   })
 })
 

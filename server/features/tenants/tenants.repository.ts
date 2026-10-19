@@ -2,6 +2,7 @@ import { and, asc, count, eq, ne, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { TenantListQuery, TenantStatus } from '#shared/contracts/tenants'
 import type { Db, Statement } from '#server/utils/batch'
+import { containsText } from '#server/utils/search'
 import { organization } from '#server/db/tables'
 import { tenantSlugs } from './tenants.schema'
 
@@ -46,8 +47,7 @@ export async function countTenants(db: Db): Promise<{ status: TenantStatus, tota
 export async function listTenants(db: Db, query: TenantListQuery): Promise<{ rows: TenantRow[], total: number }> {
   const conditions: SQL[] = []
   if (query.search) {
-    const pattern = `%${query.search.replace(/[\\%_]/g, c => `\\${c}`)}%`
-    conditions.push(or(sql`${organization.name} like ${pattern} escape '\\'`, sql`${organization.slug} like ${pattern} escape '\\'`)!)
+    conditions.push(or(containsText(organization.name, query.search), containsText(organization.slug, query.search))!)
   }
   if (query.status) conditions.push(statusIs(query.status))
   const where = conditions.length ? and(...conditions) : undefined

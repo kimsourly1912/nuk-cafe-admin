@@ -3,6 +3,7 @@ import type { SQL } from 'drizzle-orm'
 import type { ItemCountsQuery, ItemListQuery, ItemStatus } from '#shared/contracts/menu-items'
 import type { Db, Statement } from '#server/utils/batch'
 import { chunk, insertPieces, readInChunks, requireCount } from '#server/utils/batch'
+import { containsText } from '#server/utils/search'
 import { menuCategories, menuItemModifierGroups, menuItemModifierPrices, menuItemOptionSets, menuItems, menuItemVariations, menuModifierGroups, menuModifiers, menuOptionSets, menuOptionValues, menuVariationOptionValues } from './menu.schema'
 
 export interface ItemRow {
@@ -90,7 +91,7 @@ function filterConditions(tenantId: string, query: ItemCountsQuery): SQL[] {
   if (query.modifierGroupId) {
     conditions.push(sql`exists (select 1 from ${menuItemModifierGroups} where ${menuItemModifierGroups.itemId} = ${menuItems.id} and ${menuItemModifierGroups.groupId} = ${query.modifierGroupId})`)
   }
-  if (query.search) conditions.push(sql`${menuItems.name} like ${`%${query.search.replace(/[\\%_]/g, c => `\\${c}`)}%`} escape '\\'`)
+  if (query.search) conditions.push(containsText(menuItems.name, query.search))
   return conditions
 }
 
