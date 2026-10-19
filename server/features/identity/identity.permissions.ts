@@ -22,6 +22,9 @@ export const platformStatements = {
   tenant: ['create', 'read', 'update', 'suspend'],
   // Accounts in the console (step P1, D187): through our routes, audited in the same batch.
   account: ['read', 'ban', 'sign-out', 'reset-password'],
+  // A cafe's owners and the platform's notes about it (step P2, D189).
+  owner: ['add', 'remove', 'transfer'],
+  notes: ['update'],
 } as const
 
 export const platformAc = createAccessControl(platformStatements)
@@ -34,6 +37,8 @@ export const platformRoles = {
     // either: off until there is a support process for it (QP1).
     tenant: ['create', 'read', 'update', 'suspend'],
     account: ['read', 'ban', 'sign-out', 'reset-password'],
+    owner: ['add', 'remove', 'transfer'],
+    notes: ['update'],
   }),
 }
 

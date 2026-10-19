@@ -4,8 +4,8 @@ import type { TenantListQuery, TenantStatus } from '#shared/contracts/tenants'
 import type { Db, Statement } from '#server/utils/batch'
 import { readInChunks } from '#server/utils/batch'
 import { containsText } from '#server/utils/search'
-import { organization } from '#server/db/tables'
-import { tenantSlugs } from './tenants.schema'
+import { member, organization, user } from '#server/db/tables'
+import { tenantNotes, tenantSlugs } from './tenants.schema'
 
 /**
  * All SQL of the platform console (D142): cafes (Better Auth's `organization`, D134) and their
@@ -38,6 +38,12 @@ const tenantColumns = {
 /** A cafe created before `status` existed counts as active. */
 const statusIs = (status: TenantStatus) => sql`coalesce(${organization.status}, 'active') = ${status}`
 
+/**
+ * No owner who can sign in (D186, D189): every owner banned, or none. A semi-join over the owners'
+ * memberships (`member_organizationId_idx` would need a cafe; this reads the owner rows once).
+ */
+const noActiveOwner = sql`${organization.id} not in (select ${member.organizationId} from ${member} join ${user} on ${user.id} = ${member.userId} where ${member.role} = 'owner' and coalesce(${user.banned}, 0) = 0)`
+
 /** How many cafes each status holds: one grouped read. */
 export async function countTenants(db: Db): Promise<{ status: TenantStatus, total: number }[]> {
   const status = sql<TenantStatus>`coalesce(${organization.status}, 'active')`
@@ -51,6 +57,7 @@ export async function listTenants(db: Db, query: TenantListQuery): Promise<{ row
     conditions.push(or(containsText(organization.name, query.search), containsText(organization.slug, query.search))!)
   }
   if (query.status) conditions.push(statusIs(query.status))
+  if (query.owner === 'none') conditions.push(noActiveOwner)
   const where = conditions.length ? and(...conditions) : undefined
 
   const [totals, rows] = await Promise.all([
@@ -124,4 +131,47 @@ export async function tenantRefs(db: Db, ids: string[]): Promise<{ id: string, n
   const rows = await readInChunks(ids, chunk => db.select({ id: organization.id, name: organization.name, slug: organization.slug }).from(organization)
     .where(inArray(organization.id, chunk)))
   return rows.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }) || a.id.localeCompare(b.id))
+}
+
+// --- Internal notes (step P2, D189) ---
+
+export interface TenantNotesRow {
+  contactName: string | null
+  contactPhone: string | null
+  notes: string | null
+  version: number
+  updatedAt: Date
+}
+
+export async function findNotes(db: Db, tenantId: string): Promise<TenantNotesRow | undefined> {
+  const rows: TenantNotesRow[] = await db.select({
+    contactName: tenantNotes.contactName,
+    contactPhone: tenantNotes.contactPhone,
+    notes: tenantNotes.notes,
+    version: tenantNotes.version,
+    updatedAt: tenantNotes.updatedAt,
+  }).from(tenantNotes).where(eq(tenantNotes.tenantId, tenantId)).limit(1)
+  return rows[0]
+}
+
+export interface NotesValues {
+  contactName: string | null
+  contactPhone: string | null
+  notes: string | null
+  updatedBy: string
+  now: Date
+}
+
+/** The cafe's first notes: a second first save fails on the key (the cafe's id). */
+export function insertNotesStatement(db: Db, tenantId: string, values: NotesValues): Statement {
+  const { now, ...fields } = values
+  return db.insert(tenantNotes).values({ tenantId, ...fields, version: 1, updatedAt: now })
+}
+
+/** Replaces the notes only at the version read. Follow it with `requireOneChange`. */
+export function updateNotesStatement(db: Db, tenantId: string, version: number, values: NotesValues): Statement {
+  const { now, ...fields } = values
+  return db.update(tenantNotes)
+    .set({ ...fields, version: version + 1, updatedAt: now })
+    .where(and(eq(tenantNotes.tenantId, tenantId), eq(tenantNotes.version, version)))
 }

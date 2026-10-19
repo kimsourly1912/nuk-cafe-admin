@@ -4,8 +4,9 @@
  * team. A table from `sm` (the question is "which cafe, how active, is it paused"); on phones a
  * list of rows (page-patterns §2). The name opens the cafe's page, where its actions are. New cafe
  * opens its own page (`/platform/cafes/new`, D185); coming back keeps this list's search and filters.
+ * "No active owner" finds the cafes whose owners are all banned, or that have none (P2, D189).
  */
-import type { TableColumn } from '@nuxt/ui'
+import type { SelectItem, TableColumn } from '@nuxt/ui'
 import type { TenantSummary } from '#shared/contracts/tenants'
 import { NEW_CAFE_PATH, useCafeCounts, useCafeList } from '../composables/useCafes'
 import { lastOrderText, timeAgo, usageLine } from '../schemas/cafe-form'
@@ -16,7 +17,13 @@ const { isCompact } = useLayoutContext()
 const { page, pageSize, filters, query, isFiltered, clearFilters } = usePaginatedQuery({
   search: '',
   status: ANY as 'active' | 'suspended' | Any,
+  owner: ANY as 'none' | Any,
 })
+
+const ownerItems: SelectItem[] = [
+  { label: 'Any owner', value: ANY },
+  { label: 'No active owner', value: 'none' },
+]
 
 const { data, loading, refreshing, error, refresh } = useCafeList(query)
 const counts = useCafeCounts()
@@ -74,6 +81,12 @@ usePageShortcuts({ n: openForm })
             :loading="refreshing"
             class="w-full sm:w-64"
           />
+          <USelect
+            v-model="filters.owner"
+            :items="ownerItems"
+            aria-label="Owner"
+            class="min-w-0 flex-1 sm:w-44 sm:flex-none"
+          />
         </template>
       </UDashboardToolbar>
     </template>
@@ -121,12 +134,11 @@ usePageShortcuts({ n: openForm })
             color="neutral"
             variant="ghost"
             :to="cafePath(cafe)"
-            :aria-label="cafe.name"
             block
             class="justify-start text-left"
           >
             <span class="flex min-w-0 flex-col items-start gap-0.5">
-              <span class="flex max-w-full items-center gap-2">
+              <span class="flex max-w-full flex-wrap items-center gap-2">
                 <span class="break-words font-medium text-highlighted">{{ cafe.name }}</span>
                 <UBadge
                   v-if="cafe.status === 'suspended'"
@@ -134,6 +146,13 @@ usePageShortcuts({ n: openForm })
                   variant="subtle"
                 >
                   Paused
+                </UBadge>
+                <UBadge
+                  v-if="!cafe.activeOwners"
+                  color="error"
+                  variant="subtle"
+                >
+                  No active owner
                 </UBadge>
               </span>
               <span class="max-w-full truncate font-normal text-muted">/c/{{ cafe.slug }}</span>
@@ -156,7 +175,6 @@ usePageShortcuts({ n: openForm })
             color="neutral"
             variant="ghost"
             :to="cafePath(row.original)"
-            :aria-label="row.original.name"
             class="-mx-2.5 -my-1.5 max-w-full text-left"
           >
             <span class="flex min-w-0 flex-col">
@@ -167,12 +185,21 @@ usePageShortcuts({ n: openForm })
         </template>
 
         <template #status-cell="{ row }">
-          <UBadge
-            :color="row.original.status === 'suspended' ? 'warning' : 'success'"
-            variant="subtle"
-          >
-            {{ row.original.status === 'suspended' ? 'Paused' : 'Active' }}
-          </UBadge>
+          <span class="flex flex-wrap gap-1">
+            <UBadge
+              :color="row.original.status === 'suspended' ? 'warning' : 'success'"
+              variant="subtle"
+            >
+              {{ row.original.status === 'suspended' ? 'Paused' : 'Active' }}
+            </UBadge>
+            <UBadge
+              v-if="!row.original.activeOwners"
+              color="error"
+              variant="subtle"
+            >
+              No active owner
+            </UBadge>
+          </span>
         </template>
 
         <template #usage-cell="{ row }">

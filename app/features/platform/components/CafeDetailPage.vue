@@ -1,19 +1,28 @@
 <script setup lang="ts">
 /**
  * One cafe in the platform console (`/platform/cafes/:id`, D142): how much it's used, where it
- * lives, who owns it, and the platform's actions on it (change the address, pause, resume). A
- * super admin never sees the cafe's menu, orders or customers (D134): its owners run it in the
- * cafe's own admin.
+ * lives, who owns it, and the platform's actions on it (change the address, pause, resume; add,
+ * remove and transfer owners, P2, D189), with the platform team's internal notes. A super admin
+ * never sees the cafe's menu, orders or customers (D134): its owners run it in the cafe's own admin.
  */
+import type { DropdownMenuItem } from '@nuxt/ui'
+import { formatPhone } from '#shared/contracts/phone'
+import type { TenantOwner } from '#shared/contracts/tenants'
+import { usePlatformSession } from '../composables/usePlatformSession'
+import { accountPath } from '../composables/useAccounts'
 import { newCafePath, useCafe, useCafeMutations } from '../composables/useCafes'
 import { timeAgo } from '../schemas/cafe-form'
+import { othersCanSignIn } from '../schemas/owner-form'
 import CafeAddressModal from './CafeAddressModal.vue'
+import CafeNotesModal from './CafeNotesModal.vue'
+import CafeOwnerModal from './CafeOwnerModal.vue'
+import CafeOwnerRemoveModal from './CafeOwnerRemoveModal.vue'
 import CafeSuspendModal from './CafeSuspendModal.vue'
 
 const props = defineProps<{ id: string }>()
 
 const { data: cafe, loading, error, refresh } = useCafe(props.id)
-const { resume, isBusy } = useCafeMutations()
+const { resume, updateNotes, isBusy } = useCafeMutations()
 const busy = computed(() => isBusy(props.id))
 const notFound = computed(() => error.value?.status === 404)
 const paused = computed(() => cafe.value?.status === 'suspended')
@@ -21,6 +30,36 @@ const paused = computed(() => cafe.value?.status === 'suspended')
 const overlay = useOverlay()
 const addressModal = overlay.create(CafeAddressModal)
 const suspendModal = overlay.create(CafeSuspendModal)
+const ownerModal = overlay.create(CafeOwnerModal)
+const removeModal = overlay.create(CafeOwnerRemoveModal)
+const notesModal = overlay.create(CafeNotesModal)
+
+const { user } = usePlatformSession()
+/** One's own ownership is changed by another super admin (D189). */
+const isOwn = (owner: TenantOwner) => owner.id === user.value?.userId
+
+function ownerActions(owner: TenantOwner): DropdownMenuItem[] {
+  const own = isOwn(owner)
+  const lastActive = !othersCanSignIn(cafe.value!, owner)
+  return [
+    { label: 'Open account', icon: 'i-lucide-user', to: accountPath(owner.id) },
+    {
+      label: 'Transfer ownership',
+      icon: 'i-lucide-arrow-right-left',
+      disabled: own || busy.value,
+      description: own ? 'Ask another super admin' : undefined,
+      onSelect: () => ownerModal.open({ cafe: cafe.value!, from: owner }),
+    },
+    {
+      label: 'Remove owner',
+      icon: 'i-lucide-user-minus',
+      color: 'error',
+      disabled: own || lastActive || busy.value,
+      description: own ? 'Ask another super admin' : lastActive ? 'No other owner can sign in: transfer instead' : undefined,
+      onSelect: () => removeModal.open({ cafe: cafe.value!, owner }),
+    },
+  ]
+}
 
 const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))
 </script>
@@ -182,35 +221,89 @@ const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLo
           </div>
         </UCard>
 
+        <UAlert
+          v-if="cafe.activeOwners === 0"
+          color="warning"
+          variant="subtle"
+          icon="i-lucide-user-x"
+          title="No active owner"
+          description="The cafe keeps taking orders, but nobody can change its menu, staff or payments until an owner can sign in. Add an owner, or transfer a banned owner's ownership."
+          :actions="[{ label: 'Add owner', color: 'warning', variant: 'solid', disabled: busy, onClick: () => { void ownerModal.open({ cafe: cafe! }) } }]"
+          data-testid="no-active-owner"
+        />
+
         <UCard variant="outline">
           <template #header>
-            <h2 class="font-semibold text-highlighted">
-              Owners
-            </h2>
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="font-semibold text-highlighted">
+                Owners
+              </h2>
+              <UButton
+                label="Add owner"
+                icon="i-lucide-user-plus"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                :disabled="busy"
+                @click="ownerModal.open({ cafe })"
+              />
+            </div>
           </template>
           <ul
             v-if="cafe.owners.length"
             class="divide-y divide-default"
+            aria-label="Owners"
           >
             <li
               v-for="owner in cafe.owners"
               :key="owner.id"
               class="flex flex-wrap items-center gap-x-3 gap-y-2 py-2 first:pt-0 last:pb-0"
             >
-              <div class="flex min-w-0 flex-1 basis-56 flex-col sm:flex-row sm:items-center sm:gap-2">
-                <span class="font-medium text-highlighted">{{ owner.name }}</span>
+              <div class="flex min-w-0 flex-1 basis-56 flex-col">
+                <span class="flex flex-wrap items-center gap-2">
+                  <span class="font-medium text-highlighted">{{ owner.name }}</span>
+                  <UBadge
+                    v-if="owner.banned"
+                    color="error"
+                    variant="subtle"
+                    size="sm"
+                  >
+                    Banned
+                  </UBadge>
+                  <UBadge
+                    v-if="owner.staffAccess"
+                    color="neutral"
+                    variant="subtle"
+                    size="sm"
+                  >
+                    Also branch staff
+                  </UBadge>
+                </span>
                 <span class="truncate text-sm text-muted">{{ owner.email }}</span>
               </div>
-              <UButton
-                label="New cafe for this owner"
-                icon="i-lucide-plus"
-                color="neutral"
-                variant="outline"
-                size="sm"
-                class="shrink-0"
-                :aria-label="`New cafe for this owner: ${owner.name}`"
-                :to="newCafePath(owner.id)"
-              />
+              <div class="flex shrink-0 items-center gap-1">
+                <UButton
+                  label="New cafe for this owner"
+                  icon="i-lucide-plus"
+                  color="neutral"
+                  variant="outline"
+                  size="sm"
+                  :aria-label="`New cafe for this owner: ${owner.name}`"
+                  :to="newCafePath(owner.id)"
+                />
+                <UDropdownMenu
+                  :items="ownerActions(owner)"
+                  :content="{ align: 'end' }"
+                >
+                  <UButton
+                    icon="i-lucide-ellipsis-vertical"
+                    color="neutral"
+                    variant="ghost"
+                    size="sm"
+                    :aria-label="`Actions for ${owner.name}`"
+                  />
+                </UDropdownMenu>
+              </div>
             </li>
           </ul>
           <p
@@ -221,6 +314,84 @@ const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLo
           </p>
           <p class="mt-3 text-sm text-muted">
             Owners manage the cafe's menu, staff and payments in its admin. Created {{ created }}.
+          </p>
+        </UCard>
+
+        <UCard variant="outline">
+          <template #header>
+            <div class="flex items-center justify-between gap-2">
+              <div>
+                <h2 class="font-semibold text-highlighted">
+                  Internal notes
+                </h2>
+                <p class="text-sm text-muted">
+                  For the platform team: never shown to the cafe.
+                </p>
+              </div>
+              <UButton
+                label="Edit"
+                icon="i-lucide-pencil"
+                color="neutral"
+                variant="outline"
+                size="sm"
+                aria-label="Edit internal notes"
+                :disabled="updateNotes.isPending(cafe.id)"
+                @click="notesModal.open({ cafe })"
+              />
+            </div>
+          </template>
+          <div
+            v-if="cafe.notes.version"
+            class="space-y-3 text-sm"
+          >
+            <dl class="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <div>
+                <dt class="text-muted">
+                  Contact person
+                </dt>
+                <dd class="text-highlighted">
+                  {{ cafe.notes.contactName ?? 'Not set' }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-muted">
+                  Phone
+                </dt>
+                <dd class="text-highlighted">
+                  <a
+                    v-if="cafe.notes.contactPhone"
+                    :href="`tel:${cafe.notes.contactPhone}`"
+                    class="underline"
+                  >{{ formatPhone(cafe.notes.contactPhone) }}</a>
+                  <template v-else>
+                    Not set
+                  </template>
+                </dd>
+              </div>
+              <div
+                v-if="cafe.notes.notes"
+                class="sm:col-span-2"
+              >
+                <dt class="text-muted">
+                  Notes
+                </dt>
+                <dd class="whitespace-pre-line break-words text-highlighted">
+                  {{ cafe.notes.notes }}
+                </dd>
+              </div>
+            </dl>
+            <p
+              v-if="cafe.notes.updatedAt"
+              class="text-muted"
+            >
+              Updated {{ timeAgo(cafe.notes.updatedAt) }}
+            </p>
+          </div>
+          <p
+            v-else
+            class="text-sm text-muted"
+          >
+            No notes yet: add a contact person, their phone or anything the team should know.
           </p>
         </UCard>
 

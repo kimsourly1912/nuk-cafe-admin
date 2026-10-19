@@ -1,7 +1,7 @@
 import type { Page } from '#shared/contracts/common'
 import { totalPages } from '#shared/contracts/common'
 import type { AccountCafe, CafeProfile, CafeSettings, UpdateCafeInput } from '#shared/contracts/cafe'
-import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, OwnerSearchQuery, PlatformOwner, ResumeTenantInput, SlugAvailability, SuspendTenantInput, TenantCounts, TenantDetail, TenantListQuery, TenantStatus, TenantSummary } from '#shared/contracts/tenants'
+import type { AddOwnerInput, ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, NewCafeOwner, OwnerChange, OwnerSearchQuery, PlatformOwner, RemoveOwnerInput, ResumeTenantInput, SlugAvailability, SuspendTenantInput, TenantCounts, TenantDetail, TenantListQuery, TenantNotes, TenantStatus, TenantSummary, TransferOwnerInput, UpdateTenantNotesInput } from '#shared/contracts/tenants'
 import { TENANT_STATUSES } from '#shared/contracts/tenants'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
@@ -9,13 +9,13 @@ import { notFound } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
 import { activeBranchCounts, firstBranchStatement } from '#server/features/branches'
-import { accountForEmail, accountWorkspaces, ownerCandidates, planStaffCreate, requireEligibleAccount, staffCounts, tenantOwners } from '#server/features/identity'
-import type { Actor, OwnerAccount, SessionUser } from '#server/features/identity'
+import { accountForEmail, accountWorkspaces, activeOwnerCounts, ownerCandidates, ownershipFacts, planExistingOwner, planNewOwner, planOwnerRemoval, planStaffCreate, requireAnOwner, requireEligibleAccount, staffCounts, tenantOwners } from '#server/features/identity'
+import type { Actor, OwnerAccount, OwnerAddPlan, SessionUser } from '#server/features/identity'
 import { assetUrls, attachStatements, mediaNotAvailable, releaseStatement } from '#server/features/media'
 import { orderActivity } from '#server/features/orders'
 import { auditStatement } from '#server/features/platform'
 import type { AuditActor } from '#server/features/platform'
-import { accountExists, accountNotEligible, alreadySuspended, emailUnavailable, notSuspended, ownerAccountChanged, sameSlug, slugTaken, tenantChanged, tenantNotFound } from './tenants.errors'
+import { accountExists, accountNotEligible, alreadyOwner, alreadySuspended, emailUnavailable, lastOwner, notesChanged, notSuspended, ownerAccountChanged, ownerNotFound, ownershipChanged, ownOwnership, sameSlug, slugTaken, tenantChanged, tenantNotFound } from './tenants.errors'
 import * as repo from './tenants.repository'
 import type { TenantRow } from './tenants.repository'
 
@@ -41,7 +41,7 @@ const audit = (db: Db, actor: PlatformActor, tenantId: string, action: string, m
 
 async function toSummaries(db: Db, rows: TenantRow[], now = new Date()): Promise<TenantSummary[]> {
   const ids = rows.map(row => row.id)
-  const [branches, staff, orders] = await Promise.all([activeBranchCounts(db, ids), staffCounts(db, ids), orderActivity(db, ids, now)])
+  const [branches, staff, orders, owners] = await Promise.all([activeBranchCounts(db, ids), staffCounts(db, ids), orderActivity(db, ids, now), activeOwnerCounts(db, ids)])
   return rows.map((row) => {
     const activity = orders.get(row.id)
     return {
@@ -58,6 +58,7 @@ async function toSummaries(db: Db, rows: TenantRow[], now = new Date()): Promise
         ordersLast30Days: activity?.recent ?? 0,
         lastOrderAt: activity?.lastPlacedAt ? toIso(activity.lastPlacedAt) : null,
       },
+      activeOwners: owners.get(row.id) ?? 0,
     }
   })
 }
@@ -83,8 +84,18 @@ export async function countTenants(db: Db): Promise<TenantCounts> {
 export async function getTenant(db: Db, id: string): Promise<TenantDetail> {
   const row = await repo.findTenant(db, id)
   if (!row) throw tenantNotFound()
-  const [[summary], owners, formerSlugs] = await Promise.all([toSummaries(db, [row]), tenantOwners(db, id), repo.formerSlugs(db, id, row.slug)])
-  return { ...summary!, owners, formerSlugs }
+  const [[summary], owners, formerSlugs, notes] = await Promise.all([toSummaries(db, [row]), tenantOwners(db, id), repo.formerSlugs(db, id, row.slug), repo.findNotes(db, id)])
+  return { ...summary!, owners, formerSlugs, notes: notesOf(notes) }
+}
+
+function notesOf(row: repo.TenantNotesRow | undefined): TenantNotes {
+  return {
+    contactName: row?.contactName ?? null,
+    contactPhone: row?.contactPhone ?? null,
+    notes: row?.notes ?? null,
+    version: row?.version ?? 0,
+    updatedAt: row ? toIso(row.updatedAt) : null,
+  }
 }
 
 /** Accounts with the cafes they own, by name (D146). */
@@ -253,6 +264,151 @@ export async function changeTenantSlug(db: Db, actor: PlatformActor, id: string,
     throw error
   }
   return getTenant(db, id)
+}
+
+// --- Ownership (step P2, D189) ---
+
+/*
+ * A super admin adds, removes or transfers a cafe's ownership alone, with a reason kept in the
+ * audit row (D186). Each change is one batch: the cafe's version (409 when stale), each account's
+ * version and eligibility, the last-owner guard (`requireAnOwner`: at least one owner who can sign
+ * in) and the audit row in the cafe's history. Never one's own ownership: that is one's own role,
+ * changed by another super admin (the plan's self-protection). A super admin may be a cafe's owner
+ * (QT4, answered 2026-10-19).
+ */
+
+/** Whether an owner other than `userId` can sign in. */
+async function othersCanSignIn(db: Db, tenantId: string, userId: string): Promise<boolean> {
+  return (await tenantOwners(db, tenantId)).some(owner => owner.id !== userId && !owner.banned)
+}
+
+/** The account to make an owner: an existing one that can own a cafe and doesn't own this one yet, or a new person. */
+async function planAddition(db: Db, actor: PlatformActor, tenantId: string, owner: NewCafeOwner, now: Date): Promise<OwnerAddPlan> {
+  if (owner.kind === 'new') {
+    const known = await accountForEmail(db, owner.email)
+    if (known) throw known.eligible ? accountExists() : emailUnavailable()
+    return planNewOwner(db, tenantId, owner, now)
+  }
+  if (owner.userId === actor.userId) throw ownOwnership()
+  const facts = (await ownerCandidates(db, { userId: owner.userId })).length ? await ownershipFacts(db, tenantId, owner.userId) : undefined
+  if (!facts) throw accountNotEligible()
+  if (facts.role === 'owner') throw alreadyOwner()
+  return planExistingOwner(db, tenantId, facts, now)
+}
+
+/**
+ * Runs an ownership batch and names what stopped it: someone changed the cafe, an account made with
+ * the new owner's email meanwhile, the chosen account can't own a cafe any more, the last owner who
+ * can sign in would go (`removing`), or an account's version moved.
+ */
+async function runOwnershipBatch(db: Db, tenantId: string, version: number, statements: Statement[], change: { owner?: NewCafeOwner, removing?: string }) {
+  try {
+    await db.batch(statements as [Statement, ...Statement[]])
+  }
+  catch (error) {
+    if (isUniqueViolation(error) && change.owner?.kind === 'new') throw accountExists()
+    if (!isStaleWrite(error)) throw error
+    const current = await repo.findTenant(db, tenantId)
+    if (!current || versionOf(current) !== version) throw tenantChanged()
+    if (change.owner?.kind === 'existing' && !(await ownerCandidates(db, { userId: change.owner.userId })).length) throw accountNotEligible()
+    if (change.removing && !change.owner && !await othersCanSignIn(db, tenantId, change.removing)) throw lastOwner()
+    throw ownershipChanged()
+  }
+}
+
+/** The cafe's version moves with every ownership change: two super admins can't both act on what they saw. */
+const ownershipVersion = (db: Db, tenantId: string, version: number) => [repo.updateTenantStatement(db, tenantId, version, {}), requireOneChange(db)]
+
+/**
+ * Adds an owner: an existing account (it keeps its password, its branch roles and its other cafes)
+ * or a new account with a temporary password, returned once. For a cafe whose owners are all banned
+ * or unreachable (the plan's "No active owner").
+ */
+export async function addOwner(db: Db, actor: PlatformActor, tenantId: string, input: AddOwnerInput, now = new Date()): Promise<OwnerChange> {
+  await loadForChange(db, tenantId, input.version)
+  const plan = await planAddition(db, actor, tenantId, input.owner, now)
+  await runOwnershipBatch(db, tenantId, input.version, [
+    ...ownershipVersion(db, tenantId, input.version),
+    ...plan.statements,
+    audit(db, actor, tenantId, 'tenant.owner.add', { ownerId: plan.userId, newAccount: plan.temporaryPassword !== null, reason: input.reason }),
+  ], { owner: input.owner })
+  return { tenant: await getTenant(db, tenantId), temporaryPassword: plan.temporaryPassword }
+}
+
+/** An owner of this cafe other than the caller; another cafe's owner is 404 here. */
+async function loadOwner(db: Db, actor: PlatformActor, tenantId: string, userId: string) {
+  if (userId === actor.userId) throw ownOwnership()
+  const facts = await ownershipFacts(db, tenantId, userId)
+  if (facts?.role !== 'owner') throw ownerNotFound()
+  return facts
+}
+
+/**
+ * Removes an owner: they keep staff access only if they work at one of the cafe's branches, and
+ * every session of theirs ends. Refused when no other owner could sign in (409 `LAST_OWNER`):
+ * transfer the ownership instead.
+ */
+export async function removeOwner(db: Db, actor: PlatformActor, tenantId: string, userId: string, input: RemoveOwnerInput, now = new Date()): Promise<OwnerChange> {
+  await loadForChange(db, tenantId, input.version)
+  const facts = await loadOwner(db, actor, tenantId, userId)
+  if (!await othersCanSignIn(db, tenantId, userId)) throw lastOwner()
+  const removal = await planOwnerRemoval(db, tenantId, facts, now)
+  await runOwnershipBatch(db, tenantId, input.version, [
+    ...ownershipVersion(db, tenantId, input.version),
+    ...removal.statements,
+    requireAnOwner(db, tenantId),
+    audit(db, actor, tenantId, 'tenant.owner.remove', { ownerId: userId, staysStaff: removal.staysStaff, reason: input.reason }),
+  ], { removing: userId })
+  return { tenant: await getTenant(db, tenantId), temporaryPassword: null }
+}
+
+/**
+ * Transfers an owner's ownership: the new owner is added and this one removed in one batch, so the
+ * cafe is never without both. Works when the old owner is banned (the usual case: "owner
+ * unreachable"). The old owner keeps staff access only if they work at a branch.
+ */
+export async function transferOwner(db: Db, actor: PlatformActor, tenantId: string, fromUserId: string, input: TransferOwnerInput, now = new Date()): Promise<OwnerChange> {
+  await loadForChange(db, tenantId, input.version)
+  const from = await loadOwner(db, actor, tenantId, fromUserId)
+  const plan = await planAddition(db, actor, tenantId, input.owner, now)
+  const removal = await planOwnerRemoval(db, tenantId, from, now)
+  await runOwnershipBatch(db, tenantId, input.version, [
+    ...ownershipVersion(db, tenantId, input.version),
+    ...plan.statements,
+    ...removal.statements,
+    requireAnOwner(db, tenantId),
+    audit(db, actor, tenantId, 'tenant.owner.transfer', { fromId: fromUserId, toId: plan.userId, newAccount: plan.temporaryPassword !== null, staysStaff: removal.staysStaff, reason: input.reason }),
+  ], { owner: input.owner, removing: fromUserId })
+  return { tenant: await getTenant(db, tenantId), temporaryPassword: plan.temporaryPassword }
+}
+
+// --- Internal notes (step P2, D189) ---
+
+const NOTE_FIELDS = ['contactName', 'contactPhone', 'notes'] as const
+
+/**
+ * Replaces the platform team's notes about a cafe, at the notes' version read (0 before the first
+ * save). The audit row names the fields changed, never their values (a phone is personal data).
+ */
+export async function updateTenantNotes(db: Db, actor: PlatformActor, tenantId: string, input: UpdateTenantNotesInput, now = new Date()): Promise<TenantDetail> {
+  if (!await repo.findTenant(db, tenantId)) throw tenantNotFound()
+  const current = notesOf(await repo.findNotes(db, tenantId))
+  if (current.version !== input.version) throw notesChanged()
+  const values = { contactName: input.contactName, contactPhone: input.contactPhone, notes: input.notes, updatedBy: actor.userId, now }
+  const fields = NOTE_FIELDS.filter(field => current[field] !== input[field])
+  const statements: Statement[] = input.version === 0
+    ? [repo.insertNotesStatement(db, tenantId, values)]
+    : [repo.updateNotesStatement(db, tenantId, input.version, values), requireOneChange(db)]
+  statements.push(audit(db, actor, tenantId, 'tenant.notes.update', { fields }))
+  try {
+    await db.batch(statements as [Statement, ...Statement[]])
+  }
+  catch (error) {
+    // Someone saved them first: the first save's key, or a later one's version.
+    if (isUniqueViolation(error) || isStaleWrite(error)) throw notesChanged()
+    throw error
+  }
+  return getTenant(db, tenantId)
 }
 
 /**

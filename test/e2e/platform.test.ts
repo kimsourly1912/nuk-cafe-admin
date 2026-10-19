@@ -30,21 +30,23 @@ function cafeOf(id: string, name: string, slug: string, overrides: Partial<Tenan
     createdAt: '2026-10-01T03:00:00.000Z',
     version: 1,
     usage: { branches: 1, staff: 2, ordersLast30Days: 12, lastOrderAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
-    owners: [{ id: `${id}-owner`, name: `${name} Owner`, email: `owner@${slug}.example` }],
+    owners: [{ id: `${id}-owner`, name: `${name} Owner`, email: `owner@${slug}.example`, banned: false, staffAccess: false }],
     formerSlugs: [],
+    activeOwners: 1,
+    notes: { contactName: null, contactPhone: null, notes: null, version: 0, updatedAt: null },
     ...overrides,
   }
 }
 
-const NUK = cafeOf('cafe-1', 'NUK Cafe', 'nuk', { owners: [{ id: NUK_OWNER_ID, name: 'NUK Cafe Owner', email: 'owner@nuk.example' }] })
+const NUK = cafeOf('cafe-1', 'NUK Cafe', 'nuk', { owners: [{ id: NUK_OWNER_ID, name: 'NUK Cafe Owner', email: 'owner@nuk.example', banned: false, staffAccess: false }] })
 const PAUSED = cafeOf('cafe-2', 'Old Mill', 'old-mill', { status: 'suspended', suspendedReason: 'Unpaid invoice', usage: { branches: 2, staff: 5, ordersLast30Days: 0, lastOrderAt: null } })
 /** Accounts a new cafe can be given to (D185): an owner of two cafes, one of NUK Cafe, and a customer with no cafe. */
 const ACCOUNTS: PlatformOwner[] = [
-  { ...NUK.owners[0]!, cafes: [{ id: NUK.id, name: NUK.name, slug: NUK.slug }] },
+  { id: NUK_OWNER_ID, name: 'NUK Cafe Owner', email: 'owner@nuk.example', cafes: [{ id: NUK.id, name: NUK.name, slug: NUK.slug }] },
   { id: ZOE_ID, name: 'Zoe Tran', email: 'zoe@example.com', cafes: [{ id: 'cafe-8', name: 'Tea Kiosk', slug: 'tea-kiosk' }, { id: PAUSED.id, name: PAUSED.name, slug: PAUSED.slug }] },
   { id: CARL_ID, name: 'Carl Customer', email: 'carl@example.com', cafes: [] },
 ]
-const summary = ({ owners: _o, formerSlugs: _f, ...cafe }: TenantDetail): TenantSummary => cafe
+const summary = ({ owners: _o, formerSlugs: _f, notes: _n, ...cafe }: TenantDetail): TenantSummary => cafe
 
 const signedIn = (session: PlatformSession = SUPERADMIN): Record<string, MockHandler> => ({ 'GET /platform/me': () => session })
 
@@ -162,7 +164,7 @@ describe('cafes', () => {
     // The status tabs count every cafe.
     await page.getByRole('tab', { name: /Paused\s*1/ }).waitFor()
 
-    await page.getByRole('table').getByRole('link', { name: 'NUK Cafe', exact: true }).click()
+    await page.getByRole('table').getByRole('link', { name: /^NUK Cafe\b/ }).click()
     await page.waitForURL(address => address.pathname === '/platform/cafes/cafe-1')
   })
 
@@ -190,7 +192,7 @@ describe('cafes', () => {
 
 describe('creating a cafe (D185)', () => {
   const NEW_OWNER = { name: 'Bea Brown', email: 'bea@example.com' }
-  const created = cafeOf('cafe-3', 'Brown Bean', 'brown-bean', { usage: { branches: 1, staff: 1, ordersLast30Days: 0, lastOrderAt: null }, owners: [{ id: 'u-3', name: NEW_OWNER.name, email: NEW_OWNER.email }] })
+  const created = cafeOf('cafe-3', 'Brown Bean', 'brown-bean', { usage: { branches: 1, staff: 1, ordersLast30Days: 0, lastOrderAt: null }, owners: [{ id: 'u-3', name: NEW_OWNER.name, email: NEW_OWNER.email, banned: false, staffAccess: false }] })
   const newAccountResult = { tenant: created, temporaryPassword: 'tmp-Pass-1234', owner: { ...created.owners[0]!, cafes: [{ id: created.id, name: created.name, slug: created.slug }] } } satisfies CreatedTenant
 
   /** Saves like the server: the chosen account, now with the new cafe too. */
@@ -199,7 +201,7 @@ describe('creating a cafe (D185)', () => {
       sent.push(body)
       const input = body as { name: string, slug: string, owner: { kind: string, userId: string } }
       const owner = ACCOUNTS.find(account => account.id === input.owner.userId)!
-      const tenant = cafeOf('cafe-9', input.name, input.slug, { owners: [{ id: owner.id, name: owner.name, email: owner.email }] })
+      const tenant = cafeOf('cafe-9', input.name, input.slug, { owners: [{ id: owner.id, name: owner.name, email: owner.email, banned: false, staffAccess: false }] })
       return { tenant, temporaryPassword: null, owner: { ...owner, cafes: [...owner.cafes, { id: tenant.id, name: tenant.name, slug: tenant.slug }] } } satisfies CreatedTenant
     }
   }
@@ -589,7 +591,7 @@ describe('creating a cafe (D185)', () => {
     await page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
     await page.waitForURL(address => address.pathname === '/platform')
     expect(await page.getByText('Discard unsaved changes?').count()).toBe(0)
-    await page.getByRole('table').getByRole('link', { name: 'NUK Cafe', exact: true }).click()
+    await page.getByRole('table').getByRole('link', { name: /^NUK Cafe\b/ }).click()
     await page.waitForURL(address => address.pathname === '/platform/cafes/cafe-1')
     save.release(newAccountResult)
     await page.getByRole('dialog', { name: 'Brown Bean is ready' }).getByTestId('temporary-password').getByText('tmp-Pass-1234').waitFor()

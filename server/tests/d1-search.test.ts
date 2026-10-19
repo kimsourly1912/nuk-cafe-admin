@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getPlatformProxy } from 'wrangler'
@@ -9,11 +9,13 @@ import { createStaff, listStaff, seedFirstOwner } from '#server/features/identit
 import { getPlatformAccount, listPlatformAccounts } from '#server/features/identity/accounts.service'
 import { createCategory } from '#server/features/menu/categories.service'
 import { createItem, listItems } from '#server/features/menu/items.service'
-import { createTenant, listTenants, seedTenant } from '#server/features/tenants'
+import { addOwner, createTenant, getTenant, listTenants, removeOwner, seedTenant, updateTenantNotes } from '#server/features/tenants'
 import type { Db } from '#server/utils/batch'
 import { migrationFiles } from '#server/tests/support/db'
 import type { StaffListQuery } from '#shared/contracts/staff'
-import { branches } from '#server/db/tables'
+import { branches, user } from '#server/db/tables'
+import { interleaved } from '#server/tests/support/interleave'
+import { expectApiError } from '#server/tests/support/failure'
 import { newId } from '#server/utils/ids'
 
 // Real D1 (workerd, through wrangler's platform proxy) with the app's Drizzle D1 adapter. The
@@ -172,5 +174,25 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
       expect(page.total, search).toBe(expected.get(search) ?? 0)
       expect(page.items, search).toHaveLength(expected.get(search) ?? 0)
     }
+  })
+
+  it('changes owners and notes in one batch with their guards, and finds cafes without an active owner (P2, D189)', async () => {
+    const admin = { userId: 'superadmin-1' }
+    const cafe = await getTenant(db, theirs)
+    const first = cafe.owners[0]!
+    const added = await addOwner(db, admin, theirs, { version: cafe.version, reason: 'Asked', owner: { kind: 'new', name: 'Second owner', email: 'second@example.com' } })
+    const second = added.tenant.owners.find(owner => owner.email === 'second@example.com')!
+    // The second owner banned while the first is removed: the last-owner guard stops the batch on D1.
+    const racing = interleaved(db, () => db.update(user).set({ banned: true }).where(eq(user.id, second.id)))
+    await expectApiError(() => removeOwner(racing, admin, theirs, first.id, { version: added.tenant.version, reason: 'Left' }), 409, 'LAST_OWNER')
+    expect((await getTenant(db, theirs)).owners.map(owner => owner.id).sort()).toEqual([first.id, second.id].sort())
+    expect((await listTenants(db, { page: 1, pageSize: 20, owner: 'none' })).items.map(t => t.id)).toEqual([])
+    await db.update(user).set({ banned: true }).where(eq(user.id, first.id))
+    expect((await listTenants(db, { page: 1, pageSize: 20, owner: 'none' })).items.map(t => t.id)).toEqual([theirs])
+
+    const notes = await updateTenantNotes(db, admin, theirs, { version: 0, contactName: 'Bea', contactPhone: '+85512345678', notes: null })
+    expect(notes.notes).toMatchObject({ contactName: 'Bea', version: 1 })
+    await expectApiError(() => updateTenantNotes(db, admin, theirs, { version: 0, contactName: 'Late', contactPhone: null, notes: null }), 409, 'VERSION_CONFLICT')
+    expect((await getTenant(db, ours)).notes.version).toBe(0)
   })
 })

@@ -272,8 +272,8 @@ export async function staffCounts(db: Db, tenantIds: string[]): Promise<Map<stri
   return new Map(rows.map(row => [row.tenantId, row.total]))
 }
 
-/** A cafe's owners (name and email), for the platform console's cafe details (D142). */
-export async function tenantOwners(db: Db, tenantId: string): Promise<{ id: string, name: string, email: string }[]> {
+/** A cafe's owners (name, email, banned, branch roles here), for the platform console's cafe details (D142, D189). */
+export async function tenantOwners(db: Db, tenantId: string): Promise<repo.OwnerRow[]> {
   return repo.ownersOf(db, tenantId)
 }
 

@@ -16,6 +16,10 @@ const platformMatrix: Row[] = [
   ['account', 'ban', ['superadmin']],
   ['account', 'sign-out', ['superadmin']],
   ['account', 'reset-password', ['superadmin']],
+  ['owner', 'add', ['superadmin']],
+  ['owner', 'remove', ['superadmin']],
+  ['owner', 'transfer', ['superadmin']],
+  ['notes', 'update', ['superadmin']],
   // Better Auth's admin endpoints: nobody (D187), accounts change through our routes only.
   ['user', 'create', []],
   ['user', 'list', []],
