@@ -12,7 +12,8 @@ const tenantPath = useTenantPath()
 // Features name their pages inside the cafe (`/admin/products`); the sidebar links to this cafe's (D141).
 const sidebarItems = computed(() => withActiveItem(allItems, splitTenantUrl(route.path)?.path ?? route.path)
   .map(group => group.map(item => (typeof item.to === 'string' ? { ...item, to: tenantPath(item.to) } : item))))
-const open = ref(false)
+// Ctrl/⌘+B collapses the desktop sidebar; below `lg` it opens or closes the phone menu.
+const { open, collapsed: sidebarCollapsed } = useSidebarShortcut()
 // The desktop sidebar and the phone menu both render the nav, so pick the copy that is on screen.
 function scrollParent(el: HTMLElement) {
   let parent = el.parentElement
@@ -51,13 +52,7 @@ const assistant = useAssistant()
 
 const shortcutsHelp = useOverlay().create(ShortcutsHelp)
 const showShortcuts = () => shortcutsHelp.open()
-// Ctrl/⌘+B collapses the desktop sidebar; below `lg` it opens or closes the phone menu.
-const sidebarCollapsed = ref(false)
-function toggleSidebar() {
-  if (matchMedia('(min-width: 1024px)').matches) sidebarCollapsed.value = !sidebarCollapsed.value
-  else open.value = !open.value
-}
-usePageShortcuts({ '?': showShortcuts, 'meta_b': toggleSidebar })
+usePageShortcuts({ '?': showShortcuts })
 // Ctrl/⌘+/ works while typing too (in a form, or in the assistant's own question box).
 defineShortcuts({ 'meta_/': { usingInput: true, handler: assistant.toggle } })
 

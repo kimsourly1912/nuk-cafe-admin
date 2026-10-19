@@ -255,7 +255,7 @@ describe('creating a cafe (D185)', () => {
     await cafeCard(page).getByLabel('Name', { exact: true }).fill('Brown Bean')
     expect(await page.getByLabel('Web address').inputValue()).toBe('brown-bean')
     // The full address uses this app's own origin.
-    await cafeCard(page).getByText(`${new URL(page.url()).origin}/c/brown-bean`).waitFor()
+    await expect.poll(() => page.getByTestId('preview-url').textContent().then(text => text?.trim())).toBe(`${new URL(page.url()).origin}/c/brown-bean`)
   })
 
   it('saves the cafe, branch and a new account, shows the password once, and returns to the list', async () => {
@@ -270,7 +270,7 @@ describe('creating a cafe (D185)', () => {
     await fillNewAccount(page)
     await branchCard(page).getByLabel('Branch name').fill('Bean Street')
     // The summary follows what is typed, and says the account is new.
-    await summaryCard(page).getByText('/c/brown-bean').waitFor()
+    await summaryCard(page).getByText('/c/brown-bean', { exact: true }).waitFor()
     await summaryCard(page).getByText('Bean Street').waitFor()
     await summaryCard(page).getByText('Bea Brown').waitFor()
     await summaryCard(page).getByText('New account').waitFor()
@@ -374,6 +374,24 @@ describe('creating a cafe (D185)', () => {
     expect(writes(api.calls)).toEqual([])
   })
 
+  it('choosing a valid account shows no "Choose an account", before or after a failed submit', async () => {
+    const { page } = await openNew()
+    await chooseAccount(page, 'zoe', /zoe@example\.com/)
+    await page.getByTestId('chosen-owner').getByText('Zoe Tran').waitFor()
+    // Let blur validation of the picker run (focus leaves it).
+    await cafeCard(page).getByLabel('Name', { exact: true }).focus()
+    await page.waitForTimeout(300)
+    expect(await ownerCard(page).getByText('Choose an account').count()).toBe(0)
+    // And after the error has been shown once: choosing another clears it.
+    await ownerCard(page).getByRole('radio', { name: /Create new account/ }).check()
+    await createButton(page).click()
+    await ownerCard(page).getByRole('radio', { name: /Use existing account/ }).check()
+    await chooseAccount(page, 'carl', /carl@example\.com/)
+    await page.getByTestId('chosen-owner').getByText('Carl Customer').waitFor()
+    await page.waitForTimeout(300)
+    expect(await ownerCard(page).getByText('Choose an account').count()).toBe(0)
+  })
+
   it('uses an existing account found by name: the summary and the result say it keeps its password', async () => {
     const sent: unknown[] = []
     const { page } = await openNew({ 'POST /platform/tenants': createsFor(sent) })
@@ -467,7 +485,7 @@ describe('creating a cafe (D185)', () => {
     await gone.page.getByRole('heading', { name: 'Create a cafe' }).waitFor()
     await expect.poll(async () => ownerCard(gone.page).getByRole('radio', { name: /Create new account/ }).isChecked()).toBe(true)
     // Nothing was typed: leaving doesn't ask.
-    await gone.page.getByRole('button', { name: 'Cancel' }).click()
+    await gone.page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
     await gone.page.waitForURL(address => address.pathname === '/platform')
     expect(await gone.page.getByText('Discard unsaved changes?').count()).toBe(0)
   })
@@ -568,7 +586,7 @@ describe('creating a cafe (D185)', () => {
     await fillNewAccount(page)
     await createButton(page).click()
     await save.started()
-    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
     await page.waitForURL(address => address.pathname === '/platform')
     expect(await page.getByText('Discard unsaved changes?').count()).toBe(0)
     await page.getByRole('table').getByRole('link', { name: 'NUK Cafe', exact: true }).click()
@@ -586,7 +604,7 @@ describe('creating a cafe (D185)', () => {
     await fillNewAccount(page)
     await createButton(page).click()
     await save.started()
-    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
     await page.waitForURL(address => address.pathname === '/platform')
     // The page has gone (the list is showing) before the save fails.
     await page.getByRole('table').waitFor()
@@ -601,21 +619,21 @@ describe('creating a cafe (D185)', () => {
     expect(page.url()).not.toMatch(/Bea|bea@|password/i)
   })
 
-  it('Cancel asks before throwing away input, and goes back to the list with its filters', async () => {
+  it('Leaving through the Cafes breadcrumb asks before throwing away input, and goes back to the list with its filters', async () => {
     const { page } = await openNew({}, undefined, '/platform?status=suspended')
     // Untouched: no question.
-    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
     await page.waitForURL(address => address.pathname === '/platform')
     expect(new URL(page.url()).searchParams.get('status')).toBe('suspended')
 
     await page.getByRole('link', { name: 'New cafe' }).click()
     await cafeCard(page).getByLabel('Name', { exact: true }).fill('Half done')
-    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
     await page.getByText('Discard unsaved changes?').waitFor()
     await page.getByRole('button', { name: 'Keep editing' }).click()
     await page.getByText('Discard unsaved changes?').waitFor({ state: 'hidden' })
     expect(await cafeCard(page).getByLabel('Name', { exact: true }).inputValue()).toBe('Half done')
-    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('navigation', { name: 'breadcrumb' }).getByText('Cafes').click()
     await page.getByRole('button', { name: 'Discard' }).click()
     await page.waitForURL(address => address.pathname === '/platform')
     expect(new URL(page.url()).searchParams.get('status')).toBe('suspended')
@@ -666,14 +684,19 @@ describe('creating a cafe (D185)', () => {
     expect(await overflow()).toBeLessThanOrEqual(0)
   })
 
-  it('on a wide screen: the summary stands beside the form, the actions stay at the bottom', async () => {
+  it('on a wide screen: the summary stands beside the form and stays in view, Create cafe is in the navbar', async () => {
     const { page } = await openNew({}, 1440)
     const form = (await cafeCard(page).boundingBox())!
     const summary = (await summaryCard(page).boundingBox())!
     expect(summary.x).toBeGreaterThan(form.x + form.width - 1)
-    const bar = page.getByRole('toolbar', { name: 'Create cafe actions' })
-    await bar.waitFor()
-    expect(await createButton(page).evaluate(el => el.getBoundingClientRect().bottom <= window.innerHeight)).toBe(true)
+    // From lg the action is in the navbar, not in a bottom bar.
+    expect(await page.getByRole('toolbar', { name: 'Create cafe actions' }).count()).toBe(0)
+    await createButton(page).waitFor()
+    expect(await createButton(page).evaluate(el => el.getBoundingClientRect().top < 80)).toBe(true)
+    // The summary follows the scroll while the owner is filled in.
+    await page.getByRole('region', { name: 'First owner' }).scrollIntoViewIfNeeded()
+    await page.mouse.wheel(0, 600)
+    await expect.poll(async () => (await summaryCard(page).boundingBox())!.y).toBeLessThan(200)
   })
 
   const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
@@ -689,6 +712,8 @@ describe('creating a cafe (D185)', () => {
   it('meets the accessibility rules in light and dark, wide and narrow, in both account choices', async () => {
     for (const width of [1440, 390]) {
       const { page } = await openNew({}, width)
+      // The pointer stays where "New cafe" was clicked, over the navbar's Create cafe: its hover colour isn't what's measured.
+      await page.mouse.move(0, 400)
       await page.getByLabel('Web address').fill('brown-bean')
       await page.getByRole('status').getByText('Address available').waitFor()
       expect(await axeFindings(page)).toEqual([])
