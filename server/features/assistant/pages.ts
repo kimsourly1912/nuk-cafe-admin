@@ -21,6 +21,7 @@ export const ASSISTANT_PAGES = {
   'branch': { title: 'Branch', path: '/admin/branches' },
   'payments': { title: 'Payments', path: '/admin/payments' },
   'telegram': { title: 'Telegram', path: '/admin/telegram' },
+  'support': { title: 'Platform support', path: '/admin/support' },
   'reports-summary': { title: 'Summary', path: '/admin/reports/summary' },
   'reports-items': { title: 'Sales by item', path: '/admin/reports/items' },
   'reports-orders': { title: 'Order history', path: '/admin/reports/orders' },

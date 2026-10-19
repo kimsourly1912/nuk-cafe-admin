@@ -49,6 +49,7 @@ const CAFE: TenantDetail = {
   owners: [{ id: 'u-2', name: 'Zoe Tran', email: 'zoe@example.com', banned: false, staffAccess: false }],
   formerSlugs: [],
   notes: { contactName: null, contactPhone: null, notes: null, version: 0, updatedAt: null },
+  support: null,
 }
 
 /** Activity like the server: filtered by actor, action and cafe; dates are only recorded. */

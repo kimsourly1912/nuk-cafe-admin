@@ -13,6 +13,7 @@ import { promotionsNavigation } from '~/features/promotions'
 import { reportsNavigation } from '~/features/reports'
 import { sampleDataNavigation } from '~/features/sample-data'
 import { staffNavigation } from '~/features/staff'
+import { supportNavigation } from '~/features/support'
 
 /**
  * Sidebar, grouped by area. Each feature exports its own entry from its index.ts;
@@ -48,6 +49,7 @@ export function navigationItems(options: { sampleData: boolean }): NavigationMen
       branchesNavigation,
       exchangeRatesNavigation,
       notificationsNavigation,
+      supportNavigation,
       ...(options.sampleData ? [sampleDataNavigation] : []),
     ],
   ]

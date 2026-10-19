@@ -8,7 +8,8 @@ export interface AdminSession {
   userId: string
   email: string
   name: string
-  role: 'admin'
+  /** `support`: a super admin's read-only visit, allowed by the cafe's owner (P5, D193). */
+  role: 'admin' | 'support'
   /**
    * The platform actions this account may take, as `resource:action` (`menu:write`,
    * `staff:create`). For hiding UI only: the server checks every request itself.
@@ -19,6 +20,10 @@ export interface AdminSession {
    * `PASSWORD_CHANGE_REQUIRED` until it's changed, and the app shows the change-password page.
    */
   mustChangePassword: boolean
+  /** During a support visit: when the visit and the owner's permission end. */
+  support?: { tenantId: string, visitExpiresAt: string, grantExpiresAt: string }
+  /** Platform support is allowed until then (the owners' banner); `null` when it isn't. */
+  supportAllowedUntil: string | null
 }
 
 /** Better Auth's limits (`minPasswordLength` / `maxPasswordLength` defaults). */

@@ -2,6 +2,8 @@ import type { H3Event } from 'h3'
 import { authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, tenantBySlug } from '#server/features/identity'
 import type { Actor, BranchActor, BranchPermission, PlatformPermission, SessionUser, TenantPermission } from '#server/features/identity'
 import type { PlatformActor } from '#server/features/tenants'
+import { supportActor } from '#server/features/support'
+import type { SupportRequest } from '#server/features/support'
 import { useDb } from './db'
 
 /**
@@ -48,10 +50,36 @@ export async function requireCustomer(event: H3Event): Promise<Actor> {
   return { ...await authorizeCustomer(useDb(), await sessionUser(event), tenant.id), requestId: requestIdOf(event) }
 }
 
-/** `/api/admin`: the user's role in the tenant must grant the actions, e.g. `{ menu: ['write'] }`. */
+/** The session's id too: a support visit is bound to the session that opened it (D193). */
+async function sessionOf(event: H3Event): Promise<{ user: SessionUser | null, sessionId: string | undefined }> {
+  const session = await getUserSession(event)
+  return { user: (session?.user as SessionUser | undefined) ?? null, sessionId: (session?.session as { id?: string } | undefined)?.id }
+}
+
+const isForbidden = (error: unknown) => (error as { statusCode?: number, data?: { code?: string } }).statusCode === 403 && (error as { data?: { code?: string } }).data?.code === 'FORBIDDEN'
+
+/** What a support visit needs to know about this request: who, which session, and what it does where. */
+export async function supportRequestOf(event: H3Event, tenantId: string): Promise<SupportRequest> {
+  return { ...await sessionOf(event), tenantId, method: event.method, path: getRequestURL(event).pathname, requestId: requestIdOf(event) }
+}
+
+/**
+ * `/api/admin`: the user's role in the tenant must grant the actions, e.g. `{ menu: ['write'] }`.
+ * Refused, a super admin on a support visit the cafe's owner allowed may still read (P5, D193):
+ * GET only, the support permissions only, every request audited.
+ */
 export async function requirePermission(event: H3Event, permissions: TenantPermission): Promise<Actor> {
   const tenant = await requireTenant(event)
-  return { ...await authorizeTenant(useDb(), await sessionUser(event), tenant.id, permissions), requestId: requestIdOf(event) }
+  const { user } = await sessionOf(event)
+  try {
+    return { ...await authorizeTenant(useDb(), user, tenant.id, permissions), requestId: requestIdOf(event) }
+  }
+  catch (error) {
+    if (!isForbidden(error)) throw error
+    const support = await supportActor(useDb(), await supportRequestOf(event, tenant.id), permissions)
+    if (!support) throw error
+    return support
+  }
 }
 
 /**

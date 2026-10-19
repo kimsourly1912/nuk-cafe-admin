@@ -65,6 +65,7 @@ export const ADMIN: AdminSession = {
   role: 'admin',
   permissions: ['menu:read', 'menu:write', 'media:upload', 'branch:read', 'staff:read', 'staff:create', 'staff:update', 'staff:disable'],
   mustChangePassword: false,
+  supportAllowedUntil: null,
 }
 
 /** A category of the new menu API (`/api/admin/menu/categories`). */

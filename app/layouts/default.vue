@@ -4,8 +4,11 @@ import { ShortcutsHelp } from '#components'
 import { AssistantPanel, useAssistant } from '~/features/assistant'
 import { useAuth } from '~/features/auth'
 import { CafeSwitcher } from '~/features/cafe'
+import { SupportBanner } from '~/features/support'
 
 const { user, logout } = useAuth()
+/** A support visit, or support allowed: the strip above the admin (P5, D193). */
+const supportStrip = computed(() => Boolean(user.value?.support || user.value?.supportAllowedUntil))
 const allItems = navigationItems({ sampleData: useRuntimeConfig().public.sampleData.enabled })
 const route = useRoute()
 const tenantPath = useTenantPath()
@@ -66,116 +69,122 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
 </script>
 
 <template>
-  <UDashboardGroup
-    unit="rem"
-    class="print:static print:block print:overflow-visible"
-  >
-    <UDashboardSidebar
-      v-model:open="open"
-      v-model:collapsed="sidebarCollapsed"
-      collapsible
-      resizable
-      class="bg-elevated/25 print:hidden"
-      :ui="{ body: '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden', footer: 'lg:border-t lg:border-default' }"
+  <div :class="supportStrip ? 'fixed inset-0 flex flex-col print:static' : 'contents'">
+    <!-- Support access (P5, D193): a strip above the whole admin while a visit or a grant is on; the
+         dashboard then fills the rest of the screen instead of all of it. Without it, `contents`. -->
+    <SupportBanner />
+    <UDashboardGroup
+      unit="rem"
+      class="print:static print:block print:overflow-visible"
+      :class="supportStrip && 'relative inset-auto min-h-0 flex-1'"
     >
-      <template #header="{ collapsed }">
-        <CafeSwitcher
-          workspace="admin"
-          :collapsed="collapsed"
-        />
-      </template>
-
-      <template #default="{ collapsed }">
-        <UDashboardSearchButton
-          :collapsed="collapsed"
-          label="Search"
-          class="bg-transparent ring-default"
-        />
-        <div
-          data-sidebar-nav
-          class="contents"
-        >
-          <UNavigationMenu
+      <UDashboardSidebar
+        v-model:open="open"
+        v-model:collapsed="sidebarCollapsed"
+        collapsible
+        resizable
+        class="bg-elevated/25 print:hidden"
+        :ui="{ body: '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden', footer: 'lg:border-t lg:border-default' }"
+      >
+        <template #header="{ collapsed }">
+          <CafeSwitcher
+            workspace="admin"
             :collapsed="collapsed"
-            :items="sidebarItems"
-            orientation="vertical"
-            tooltip
           />
-        </div>
-      </template>
+        </template>
 
-      <template #footer="{ collapsed }">
-        <div class="flex w-full flex-col gap-1">
-          <!-- The cafe's customer menu in a new tab, to check a change as customers see it (D145). -->
-          <UButton
-            :label="collapsed ? undefined : 'View menu'"
-            aria-label="View menu (opens in a new tab)"
-            icon="i-lucide-external-link"
-            color="neutral"
-            variant="ghost"
-            block
-            :square="collapsed"
-            class="justify-start"
-            :to="tenantPath('/')"
-            target="_blank"
+        <template #default="{ collapsed }">
+          <UDashboardSearchButton
+            :collapsed="collapsed"
+            label="Search"
+            class="bg-transparent ring-default"
           />
-          <UButton
-            v-if="assistant.enabled.value"
-            :label="collapsed ? undefined : 'Assistant'"
-            :aria-label="collapsed ? 'Assistant' : undefined"
-            icon="i-lucide-sparkles"
-            color="neutral"
-            variant="ghost"
-            block
-            :square="collapsed"
-            class="justify-start"
-            :aria-pressed="assistant.open.value"
-            @click="assistant.toggle(); open = false"
-          >
-            <template
-              v-if="!collapsed"
-              #trailing
-            >
-              <span class="ms-auto hidden gap-0.5 lg:flex">
-                <UKbd value="meta" />
-                <UKbd value="/" />
-              </span>
-            </template>
-          </UButton>
           <div
-            class="flex w-full items-center gap-1"
-            :class="{ 'flex-col': collapsed }"
+            data-sidebar-nav
+            class="contents"
           >
-            <UDropdownMenu
-              :items="userMenu"
-              :content="{ align: 'start' }"
-              class="min-w-0 flex-1"
-            >
-              <UButton
-                :label="collapsed ? undefined : (user?.name || user?.email)"
-                icon="i-lucide-circle-user"
-                color="neutral"
-                variant="ghost"
-                block
-                :square="collapsed"
-                class="justify-start"
-              />
-            </UDropdownMenu>
-            <UColorModeButton />
+            <UNavigationMenu
+              :collapsed="collapsed"
+              :items="sidebarItems"
+              orientation="vertical"
+              tooltip
+            />
           </div>
-        </div>
-      </template>
-    </UDashboardSidebar>
+        </template>
 
-    <slot />
+        <template #footer="{ collapsed }">
+          <div class="flex w-full flex-col gap-1">
+            <!-- The cafe's customer menu in a new tab, to check a change as customers see it (D145). -->
+            <UButton
+              :label="collapsed ? undefined : 'View menu'"
+              aria-label="View menu (opens in a new tab)"
+              icon="i-lucide-external-link"
+              color="neutral"
+              variant="ghost"
+              block
+              :square="collapsed"
+              class="justify-start"
+              :to="tenantPath('/')"
+              target="_blank"
+            />
+            <UButton
+              v-if="assistant.enabled.value"
+              :label="collapsed ? undefined : 'Assistant'"
+              :aria-label="collapsed ? 'Assistant' : undefined"
+              icon="i-lucide-sparkles"
+              color="neutral"
+              variant="ghost"
+              block
+              :square="collapsed"
+              class="justify-start"
+              :aria-pressed="assistant.open.value"
+              @click="assistant.toggle(); open = false"
+            >
+              <template
+                v-if="!collapsed"
+                #trailing
+              >
+                <span class="ms-auto hidden gap-0.5 lg:flex">
+                  <UKbd value="meta" />
+                  <UKbd value="/" />
+                </span>
+              </template>
+            </UButton>
+            <div
+              class="flex w-full items-center gap-1"
+              :class="{ 'flex-col': collapsed }"
+            >
+              <UDropdownMenu
+                :items="userMenu"
+                :content="{ align: 'start' }"
+                class="min-w-0 flex-1"
+              >
+                <UButton
+                  :label="collapsed ? undefined : (user?.name || user?.email)"
+                  icon="i-lucide-circle-user"
+                  color="neutral"
+                  variant="ghost"
+                  block
+                  :square="collapsed"
+                  class="justify-start"
+                />
+              </UDropdownMenu>
+              <UColorModeButton />
+            </div>
+          </div>
+        </template>
+      </UDashboardSidebar>
 
-    <!-- Mounted with the shell, closed: only the Ask button or Ctrl/⌘+/ opens it, where it's on.
-         Mounting it at the moment it opens would let USidebar close it again on phones. -->
-    <AssistantPanel class="print:hidden" />
-    <AdminSearch
-      v-model:open="searchOpen"
-      :pages="searchPages"
-      @shortcuts="showShortcuts"
-    />
-  </UDashboardGroup>
+      <slot />
+
+      <!-- Mounted with the shell, closed: only the Ask button or Ctrl/⌘+/ opens it, where it's on.
+           Mounting it at the moment it opens would let USidebar close it again on phones. -->
+      <AssistantPanel class="print:hidden" />
+      <AdminSearch
+        v-model:open="searchOpen"
+        :pages="searchPages"
+        @shortcuts="showShortcuts"
+      />
+    </UDashboardGroup>
+  </div>
 </template>

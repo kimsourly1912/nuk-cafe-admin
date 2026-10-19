@@ -82,7 +82,8 @@ export async function authorizeCustomer(db: Db, user: SessionUser | null | undef
 /** The admin surface: the user's role in the tenant must grant every requested action. */
 export async function authorizeTenant(db: Db, user: SessionUser | null | undefined, tenantId: string, permissions: TenantPermission): Promise<Actor> {
   const actor = await authorizeSignedIn(db, user, tenantId)
-  if (actor.role === 'customer' || !tenantRoles[actor.role].authorize(permissions).success) throw forbidden()
+  // `support` comes only from a support visit (P5, D193), never from a membership.
+  if (actor.role === 'customer' || actor.role === 'support' || !tenantRoles[actor.role].authorize(permissions).success) throw forbidden()
   return actor
 }
 
@@ -139,6 +140,7 @@ export async function adminSession(db: Db, user: SessionUser | null | undefined,
     role: 'admin',
     permissions: grantedPermissions('owner'),
     mustChangePassword: Boolean(user.mustChangePassword),
+    supportAllowedUntil: null,
   }
 }
 

@@ -38,13 +38,14 @@ function cafeOf(overrides: Partial<TenantDetail> = {}): TenantDetail {
     usage: { branches: 1, staff: 3, ordersLast30Days: 12, lastOrderAt: null },
     formerSlugs: [],
     notes: { contactName: null, contactPhone: null, notes: null, version: 0, updatedAt: null },
+    support: null,
     ...overrides,
     owners,
     activeOwners: owners.filter(owner => !owner.banned).length,
   }
 }
 const OWNERLESS = cafeOf({ id: 'cafe-2', name: 'Old Mill', slug: 'old-mill', owners: [ownerOf(BEA_ID, 'Bea Brown', { banned: true })] })
-const summary = ({ owners: _o, formerSlugs: _f, notes: _n, ...cafe }: TenantDetail): TenantSummary => cafe
+const summary = ({ owners: _o, formerSlugs: _f, notes: _n, support: _s, ...cafe }: TenantDetail): TenantSummary => cafe
 
 const ACCOUNTS: PlatformOwner[] = [
   { id: ZOE_ID, name: 'Zoe Tran', email: 'zoe@example.com', cafes: [{ id: 'cafe-8', name: 'Tea Kiosk', slug: 'tea-kiosk' }] },

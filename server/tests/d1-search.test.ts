@@ -15,6 +15,7 @@ import { migrationFiles } from '#server/tests/support/db'
 import type { StaffListQuery } from '#shared/contracts/staff'
 import { branches, user } from '#server/db/tables'
 import { recordJobRun } from '#server/features/platform'
+import { allowSupport, endSupport, openSupportVisit, supportActor } from '#server/features/support'
 import { interleaved } from '#server/tests/support/interleave'
 import { expectApiError } from '#server/tests/support/failure'
 import { newId } from '#server/utils/ids'
@@ -220,5 +221,18 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
     expect(jobs.get('platform:deliver-outbox')).toMatchObject({ state: 'ok', lastSuccessAt: at.toISOString() })
     expect(jobs.get('orders:expire-unpaid')).toMatchObject({ state: 'failing', failuresInARow: 1 })
     expect(health.outbox.groups.every(group => typeof group.kind === 'string')).toBe(true)
+  })
+
+  it('allows support once, opens a visit that only reads, and ends it, with the guards in D1\'s batch (P5, D193)', async () => {
+    const owner = { userId: 'owner-d1', tenantId: ours, role: 'owner' as const }
+    const { active } = await allowSupport(db, owner)
+    await expectApiError(() => allowSupport(db, owner), 409, 'SUPPORT_ALREADY_ALLOWED')
+    await openSupportVisit(db, { userId: 'super-d1', sessionId: 'session-d1' }, ours, async () => true)
+    const request = { user: { id: 'super-d1', email: 'ops@example.com', name: 'Ops', role: 'superadmin', twoFactorEnabled: true } as never, sessionId: 'session-d1', tenantId: ours, method: 'GET', path: '/api/c/ours/admin/menu/items' }
+    expect(await supportActor(db, request, { menu: ['read'] })).toMatchObject({ role: 'support' })
+    await expectApiError(() => supportActor(db, { ...request, method: 'POST' }, { menu: ['write'] }), 403, 'SUPPORT_READ_ONLY')
+    expect(await supportActor(db, { ...request, tenantId: theirs }, { menu: ['read'] })).toBeUndefined()
+    await endSupport(db, owner, active!.id)
+    expect(await supportActor(db, request, { menu: ['read'] })).toBeUndefined()
   })
 })

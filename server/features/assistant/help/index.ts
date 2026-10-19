@@ -14,6 +14,7 @@ import promotions from './promotions.md'
 import reports from './reports.md'
 import sampleData from './sample-data.md'
 import staff from './staff.md'
+import support from './support.md'
 import telegram from './telegram.md'
 
 /**
@@ -37,6 +38,7 @@ export const HELP_PAGES = [
   { name: 'branch', text: branch },
   { name: 'payments', text: payments },
   { name: 'telegram', text: telegram },
+  { name: 'support', text: support },
   { name: 'reports', text: reports },
   { name: 'counter', text: counter },
   { name: 'sample-data', text: sampleData },

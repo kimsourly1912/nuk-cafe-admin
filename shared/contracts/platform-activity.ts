@@ -19,6 +19,8 @@ export const PLATFORM_ACTIONS = [
   'tenant.owner.remove',
   'tenant.owner.transfer',
   'tenant.notes.update',
+  'tenant.support.open',
+  'tenant.support.close',
   'platform.account.ban',
   'platform.account.unban',
   'platform.account.sign-out',

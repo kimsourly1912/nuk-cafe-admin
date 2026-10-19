@@ -3,6 +3,7 @@ import * as v from 'valibot'
 import type { Page } from '#shared/contracts/common'
 import type { AddOwnerInput, ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, OwnerChange, PlatformOwner, RemoveOwnerInput, SlugAvailability, SuspendTenantInput, TenantCounts, TenantDetail, TenantListQuery, TenantOwner, TenantSummary, TransferOwnerInput, UpdateTenantNotesInput } from '#shared/contracts/tenants'
 import { OWNER_SEARCH_MIN, slugSchema } from '#shared/contracts/tenants'
+import type { OpenSupportInput, SupportOpened } from '#shared/contracts/support'
 import type { CafeForm } from '../schemas/cafe-form'
 
 /** Pausing, resuming, moving one cafe and changing its owners must never overlap: all take this record lock. */
@@ -215,8 +216,21 @@ export function useCafeMutations() {
     },
   )
 
+  // Opening a cafe as support (P5, D193): the dialog leaves for the cafe's admin, so no toast.
+  const openSupport = useMutation(
+    ({ cafe, body }: { cafe: TenantDetail, body: OpenSupportInput }) =>
+      apiFetch<SupportOpened>(`/platform/tenants/${cafe.id}/support/open`, { method: 'POST', body }),
+    {
+      id: 'platform:open-support',
+      key: ({ cafe }) => cafe.id,
+      successMessage: false,
+      errorMessage: ({ cafe }) => `Could not open ${cafe.name}`,
+    },
+  )
+
   return {
     create,
+    openSupport,
     suspend,
     resume,
     changeSlug,

@@ -29,6 +29,8 @@ export const platformStatements = {
   activity: ['read'],
   // System health: counts and dates, never a secret (step P4, D192).
   health: ['read'],
+  // Opening a cafe its owner allowed support for (step P5, D193).
+  support: ['open'],
 } as const
 
 export const platformAc = createAccessControl(platformStatements)
@@ -45,6 +47,7 @@ export const platformRoles = {
     notes: ['update'],
     activity: ['read'],
     health: ['read'],
+    support: ['open'],
   }),
 }
 
@@ -68,6 +71,8 @@ export const tenantStatements = {
   audit: ['read'],
   // The AI assistant (phase 9, D107): owners only for now.
   assistant: ['use'],
+  // Allowing platform support (step P5, D193): owners only.
+  support: ['grant'],
 } as const
 
 export const tenantAc = createAccessControl(tenantStatements)
@@ -84,6 +89,7 @@ export const tenantRoles = {
     report: ['read', 'export'],
     audit: ['read'],
     assistant: ['use'],
+    support: ['grant'],
   }),
   // Works at some branches (branch_staff); nothing tenant-wide.
   member: tenantAc.newRole({}),

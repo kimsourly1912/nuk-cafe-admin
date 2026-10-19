@@ -19,6 +19,7 @@ import CafeAddressModal from './CafeAddressModal.vue'
 import CafeNotesModal from './CafeNotesModal.vue'
 import CafeOwnerModal from './CafeOwnerModal.vue'
 import CafeOwnerRemoveModal from './CafeOwnerRemoveModal.vue'
+import CafeSupportOpenModal from './CafeSupportOpenModal.vue'
 import CafeSuspendModal from './CafeSuspendModal.vue'
 
 const props = defineProps<{ id: string }>()
@@ -35,6 +36,7 @@ const suspendModal = overlay.create(CafeSuspendModal)
 const ownerModal = overlay.create(CafeOwnerModal)
 const removeModal = overlay.create(CafeOwnerRemoveModal)
 const notesModal = overlay.create(CafeNotesModal)
+const supportModal = overlay.create(CafeSupportOpenModal)
 
 const { user } = usePlatformSession()
 const activity = useCafeActivity(props.id)
@@ -395,6 +397,35 @@ const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLo
             class="text-sm text-muted"
           >
             No notes yet: add a contact person, their phone or anything the team should know.
+          </p>
+        </UCard>
+
+        <UCard variant="outline">
+          <template #header>
+            <h2 class="font-semibold text-highlighted">
+              Support access
+            </h2>
+          </template>
+          <div
+            v-if="cafe.support"
+            class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <p class="text-sm">
+              The owner allows platform support until {{ new Date(cafe.support.expiresAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) }}: read-only, for up to an hour per visit.
+            </p>
+            <UButton
+              label="Open read-only"
+              icon="i-lucide-life-buoy"
+              class="shrink-0"
+              :disabled="paused"
+              @click="supportModal.open({ cafe })"
+            />
+          </div>
+          <p
+            v-else
+            class="text-sm text-muted"
+          >
+            The owner hasn't allowed platform support. When they need help, they allow it for 24 hours in their admin under Platform support; nobody on the platform team can open the cafe without it.
           </p>
         </UCard>
 
