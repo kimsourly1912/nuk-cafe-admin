@@ -14,7 +14,9 @@ import type { PostForm } from '../schemas/post-form'
 import { localInputValue, postFormIssues, postRequest, suggestedTime } from '../schemas/post-form'
 
 const props = defineProps<{ promotion: Promotion }>()
-const emit = defineEmits<{ close: [posted: boolean] }>()
+// `update:open` is declared so closing (X, Esc, outside click) goes through `unsaved` instead of
+// the overlay closing itself, which would hide the modal even when the person chooses Keep editing.
+const emit = defineEmits<{ 'close': [posted: boolean], 'update:open': [open: boolean] }>()
 
 const tenantPath = useTenantPath()
 const { isCompact } = useLayoutContext()
@@ -41,7 +43,9 @@ const saving = ref(false)
 const tried = ref(false)
 const unsaved = useModalUnsavedChanges(form, { paused: saving, close: () => emit('close', false) })
 const issues = computed(() => postFormIssues(form, new Date()))
-const shown = computed(() => (tried.value ? issues.value : {}))
+// A time in the past is said as soon as it's chosen (it can't be fixed later by typing elsewhere);
+// the other fields wait for the first submit so an untouched form isn't shouted at.
+const shown = computed<typeof issues.value>(() => (tried.value ? issues.value : { at: issues.value.at }))
 
 /** One key per request as sent: a retry of the same post reuses it; any change makes a new one. */
 const key = ref(crypto.randomUUID())
