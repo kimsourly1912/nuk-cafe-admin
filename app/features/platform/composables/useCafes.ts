@@ -1,11 +1,11 @@
 import { refDebounced } from '@vueuse/core'
 import * as v from 'valibot'
 import type { Page } from '#shared/contracts/common'
-import type { ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, PlatformOwner, SlugAvailability, SuspendTenantInput, TenantCounts, TenantDetail, TenantListQuery, TenantSummary } from '#shared/contracts/tenants'
+import type { AddOwnerInput, ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, OwnerChange, PlatformOwner, RemoveOwnerInput, SlugAvailability, SuspendTenantInput, TenantCounts, TenantDetail, TenantListQuery, TenantOwner, TenantSummary, TransferOwnerInput, UpdateTenantNotesInput } from '#shared/contracts/tenants'
 import { OWNER_SEARCH_MIN, slugSchema } from '#shared/contracts/tenants'
 import type { CafeForm } from '../schemas/cafe-form'
 
-/** Pausing, resuming and moving one cafe must never overlap: all take this record lock. */
+/** Pausing, resuming, moving one cafe and changing its owners must never overlap: all take this record lock. */
 const lockOf = (id: string) => `cafe:${id}`
 
 /** The New cafe page (`/platform/cafes/new`); `ownerId` opens it with that account chosen as the owner. */
@@ -161,13 +161,71 @@ export function useCafeMutations() {
     },
   )
 
+  // --- Owners (step P2, D189): the dialogs show a new account's password, so no toast repeats it ---
+
+  const addOwner = useMutation(
+    ({ cafe, body }: { cafe: TenantDetail, body: AddOwnerInput }) =>
+      apiFetch<OwnerChange>(`/platform/tenants/${cafe.id}/owners`, { method: 'POST', body }),
+    {
+      id: 'platform:add-cafe-owner',
+      key: ({ cafe }) => cafe.id,
+      lock: ({ cafe }) => lockOf(cafe.id),
+      successMessage: (_, { cafe }) => `Owner added to ${cafe.name}`,
+      errorMessage: ({ cafe }) => `Could not add an owner to ${cafe.name}`,
+      invalidate: ['platform'],
+    },
+  )
+
+  const removeOwner = useMutation(
+    ({ cafe, owner, body }: { cafe: TenantDetail, owner: TenantOwner, body: RemoveOwnerInput }) =>
+      apiFetch<OwnerChange>(`/platform/tenants/${cafe.id}/owners/${owner.id}/remove`, { method: 'POST', body }),
+    {
+      id: 'platform:remove-cafe-owner',
+      key: ({ cafe }) => cafe.id,
+      lock: ({ cafe }) => lockOf(cafe.id),
+      successMessage: (_, { cafe, owner }) => `${owner.name} no longer owns ${cafe.name}`,
+      errorMessage: ({ owner }) => `Could not remove ${owner.name}`,
+      invalidate: ['platform'],
+    },
+  )
+
+  const transferOwner = useMutation(
+    ({ cafe, owner, body }: { cafe: TenantDetail, owner: TenantOwner, body: TransferOwnerInput }) =>
+      apiFetch<OwnerChange>(`/platform/tenants/${cafe.id}/owners/${owner.id}/transfer`, { method: 'POST', body }),
+    {
+      id: 'platform:transfer-cafe-owner',
+      key: ({ cafe }) => cafe.id,
+      lock: ({ cafe }) => lockOf(cafe.id),
+      successMessage: (_, { cafe, owner }) => `${owner.name}'s ownership of ${cafe.name} transferred`,
+      errorMessage: ({ owner }) => `Could not transfer ${owner.name}'s ownership`,
+      invalidate: ['platform'],
+    },
+  )
+
+  // Notes have their own version: they don't wait for the cafe's other changes.
+  const updateNotes = useMutation(
+    ({ cafe, body }: { cafe: TenantDetail, body: UpdateTenantNotesInput }) =>
+      apiFetch<TenantDetail>(`/platform/tenants/${cafe.id}/notes`, { method: 'PUT', body }),
+    {
+      id: 'platform:cafe-notes',
+      key: ({ cafe }) => cafe.id,
+      successMessage: (_, { cafe }) => `Notes about ${cafe.name} saved`,
+      errorMessage: ({ cafe }) => `Could not save the notes about ${cafe.name}`,
+      invalidate: ['platform'],
+    },
+  )
+
   return {
     create,
     suspend,
     resume,
     changeSlug,
+    addOwner,
+    removeOwner,
+    transferOwner,
+    updateNotes,
     /** Any change in flight for this cafe: its actions wait. */
-    isBusy: (id: string) => suspend.isPending(id) || resume.isPending(id) || changeSlug.isPending(id),
+    isBusy: (id: string) => [suspend, resume, changeSlug, addOwner, removeOwner, transferOwner].some(mutation => mutation.isPending(id)),
   }
 }
 

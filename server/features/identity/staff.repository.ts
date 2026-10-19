@@ -239,12 +239,45 @@ export async function memberCounts(db: Db, tenantIds: string[]): Promise<{ tenan
     .groupBy(member.organizationId))
 }
 
-/** A tenant's owners, by name (the platform console's cafe details, D142). */
-export async function ownersOf(db: Db, tenantId: string): Promise<{ id: string, name: string, email: string }[]> {
-  return db.select({ id: user.id, name: user.name, email: user.email }).from(member)
+export interface OwnerRow {
+  id: string
+  name: string
+  email: string
+  banned: boolean
+  /** Works at one of the tenant's branches too: removing the ownership keeps that (P2, D189). */
+  staffAccess: boolean
+}
+
+/** A tenant's owners, by name (the platform console's cafe details, D142, D189). */
+export async function ownersOf(db: Db, tenantId: string): Promise<OwnerRow[]> {
+  const rows = await db.select({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    banned: sql<number>`coalesce(${user.banned}, 0)`,
+    staffAccess: sql<number>`exists (select 1 from ${branchStaff} where ${branchStaff.tenantId} = ${tenantId} and ${branchStaff.userId} = ${user.id})`,
+  }).from(member)
     .innerJoin(user, eq(user.id, member.userId))
     .where(and(eq(member.organizationId, tenantId), eq(member.role, 'owner')))
     .orderBy(asc(user.name), asc(user.email))
+  return rows.map(row => ({ ...row, banned: Boolean(row.banned), staffAccess: Boolean(row.staffAccess) }))
+}
+
+/** Whether the account works at one of the tenant's branches. */
+export async function hasBranchRole(db: Db, tenantId: string, userId: string): Promise<boolean> {
+  const rows = await db.select({ userId: branchStaff.userId }).from(branchStaff)
+    .where(and(eq(branchStaff.tenantId, tenantId), eq(branchStaff.userId, userId))).limit(1)
+  return rows.length > 0
+}
+
+/**
+ * Replaces the account's role in the tenant (`owner`, `member`, none when `null`), keeping the
+ * branches it works at: the platform's ownership changes (P2, D189) never touch branch roles.
+ */
+export function setTenantRoleStatements(db: Db, tenantId: string, userId: string, role: 'owner' | 'member' | null, now: Date): Statement[] {
+  const statements: Statement[] = [db.delete(member).where(and(eq(member.organizationId, tenantId), eq(member.userId, userId)))]
+  if (role) statements.push(db.insert(member).values({ id: newId(), organizationId: tenantId, userId, role, createdAt: now }))
+  return statements
 }
 
 /** Makes an account a super admin, unless it already is (the seed task, D142). */

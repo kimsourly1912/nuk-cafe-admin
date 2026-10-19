@@ -1,5 +1,6 @@
 import * as v from 'valibot'
-import { nameSchema, optionalParam, pageQuerySchema, versionSchema } from './common'
+import { nameSchema, optionalParam, pageQuerySchema, textSchema, versionSchema } from './common'
+import { phoneSchema } from './phone'
 
 /**
  * The platform console (`/api/platform/tenants`, step T2a, D142): super admins create cafes
@@ -101,10 +102,14 @@ export interface SlugAvailability {
   available: boolean
 }
 
+/** The Cafes list's owner filter: `none` = cafes with no owner who can sign in (P2, D189). */
+export const OWNER_FILTERS = ['none'] as const
+
 export const tenantListQuerySchema = v.object({
   ...pageQuerySchema,
   search: optionalParam(v.pipe(v.string(), v.trim(), v.maxLength(100))),
   status: optionalParam(v.picklist(TENANT_STATUSES)),
+  owner: optionalParam(v.picklist(OWNER_FILTERS)),
 })
 export type TenantListQuery = v.InferOutput<typeof tenantListQuerySchema>
 
@@ -127,6 +132,66 @@ export type ResumeTenantInput = v.InferOutput<typeof resumeTenantSchema>
 export const changeTenantSlugSchema = v.object({ version: versionSchema, slug: slugSchema })
 export type ChangeTenantSlugInput = v.InferOutput<typeof changeTenantSlugSchema>
 
+// --- Ownership (step P2, D189) ---
+
+export const OWNERSHIP_REASON_MAX = 500
+
+/** Why a super admin changed a cafe's owners: kept in the audit row, never shown to the cafe. */
+const ownershipReasonSchema = nameSchema(OWNERSHIP_REASON_MAX)
+
+/** `POST …/{id}/owners`: an existing account (by id) or a new person, made an owner. */
+export const addOwnerSchema = v.object({
+  version: versionSchema,
+  reason: ownershipReasonSchema,
+  owner: newCafeOwnerSchema,
+})
+export type AddOwnerInput = v.InferOutput<typeof addOwnerSchema>
+
+/** `POST …/{id}/owners/{userId}/remove`. */
+export const removeOwnerSchema = v.object({ version: versionSchema, reason: ownershipReasonSchema })
+export type RemoveOwnerInput = v.InferOutput<typeof removeOwnerSchema>
+
+/** `POST …/{id}/owners/{userId}/transfer`: the new owner is added and this one removed, in one save. */
+export const transferOwnerSchema = addOwnerSchema
+export type TransferOwnerInput = AddOwnerInput
+
+/** The cafe after an ownership change, and a new account's temporary password (shown once). */
+export interface OwnerChange {
+  tenant: TenantDetail
+  /** `null` when the owner already had an account. */
+  temporaryPassword: string | null
+}
+
+// --- Internal notes (step P2, D189): the platform team's own, never shown to the cafe ---
+
+export const NOTES_CONTACT_MAX = 100
+export const NOTES_TEXT_MAX = 2000
+
+/** Blank is no value. */
+const optionalText = (max: number) => v.pipe(textSchema(max), v.transform(text => text || null))
+
+/**
+ * `PUT …/{id}/notes`: replaces the notes. `version` is the notes' own (0 before they were ever
+ * saved), not the cafe's: a pause meanwhile doesn't conflict with them.
+ */
+export const updateTenantNotesSchema = v.object({
+  version: v.pipe(v.number(), v.integer(), v.minValue(0)),
+  contactName: optionalText(NOTES_CONTACT_MAX),
+  contactPhone: phoneSchema,
+  notes: optionalText(NOTES_TEXT_MAX),
+})
+export type UpdateTenantNotesInput = v.InferOutput<typeof updateTenantNotesSchema>
+
+export interface TenantNotes {
+  contactName: string | null
+  /** E.164. */
+  contactPhone: string | null
+  notes: string | null
+  /** Send it back with the next change; 0 before the notes were ever saved. */
+  version: number
+  updatedAt: string | null
+}
+
 /** What a super admin sees of a cafe: no menu, orders or customers (D134). */
 export interface TenantUsage {
   /** Active branches. */
@@ -148,18 +213,26 @@ export interface TenantSummary {
   /** Send it back with every change (409 when someone changed the cafe meanwhile). */
   version: number
   usage: TenantUsage
+  /** Owners who can sign in (not banned); 0 = "No active owner" (D186, D189). */
+  activeOwners: number
 }
 
 export interface TenantOwner {
   id: string
   name: string
   email: string
+  /** Can't sign in: the cafe keeps running (D186), but this owner doesn't count as active. */
+  banned: boolean
+  /** Also works at one of the cafe's branches: removing the ownership keeps that. */
+  staffAccess: boolean
 }
 
 export interface TenantDetail extends TenantSummary {
   owners: TenantOwner[]
   /** Addresses the cafe had before; each still redirects to the current one. */
   formerSlugs: string[]
+  /** The platform team's notes about the cafe (P2, D189). */
+  notes: TenantNotes
 }
 
 /** A cafe as the console names it in a list (an owner's cafes). */

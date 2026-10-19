@@ -216,7 +216,7 @@ describe('a new cafe for an existing account (D146, D185)', () => {
     const { tenant, temporaryPassword, owner } = await createTenant(db, admin, input({ owner: existing(userId) }))
 
     expect(temporaryPassword).toBeNull()
-    expect(tenant.owners).toEqual([{ id: userId, name: 'Admin', email: 'zoe@example.com' }])
+    expect(tenant.owners).toEqual([{ id: userId, name: 'Admin', email: 'zoe@example.com', banned: false, staffAccess: false }])
     expect(owner.cafes.map(cafe => cafe.name)).toEqual(['Brown Bean', 'NUK Cafe'])
     expect(await db.select({ mustChangePassword: user.mustChangePassword }).from(user).where(eq(user.id, userId))).toEqual([before])
     expect(await db.select({ n: count() }).from(user)).toEqual([{ n: 1 }])
@@ -239,7 +239,7 @@ describe('a new cafe for an existing account (D146, D185)', () => {
     for (const [person, slug] of [[customer, 'carl-cafe'], [staff, 'sam-cafe']] as const) {
       const created = await createTenant(db, admin, input({ name: slug, slug, owner: existing(person.id) }))
       expect(created.temporaryPassword).toBeNull()
-      expect(created.tenant.owners).toEqual([{ id: person.id, name: person.email.startsWith('carl') ? 'Carl' : 'Sam', email: person.email }])
+      expect(created.tenant.owners).toEqual([{ id: person.id, name: person.email.startsWith('carl') ? 'Carl' : 'Sam', email: person.email, banned: false, staffAccess: false }])
       expect(await db.select({ role: member.role }).from(member).where(and(eq(member.userId, person.id), eq(member.organizationId, created.tenant.id)))).toEqual([{ role: 'owner' }])
       // Their own password, still asking nothing new of them; their sessions go on.
       expect(await db.select({ password: account.password }).from(account).where(eq(account.userId, person.id))).toEqual([{ password: `hash-${person.id}` }])
@@ -259,7 +259,7 @@ describe('a new cafe for an existing account (D146, D185)', () => {
     const body = v.parse(createTenantSchema, { ...input(), owner: { kind: 'existing', userId: customer.id, name: 'Mallory', email: 'mallory@example.com' } })
     expect(body.owner).toEqual({ kind: 'existing', userId: customer.id })
     const { tenant } = await createTenant(db, admin, body)
-    expect(tenant.owners).toEqual([{ id: customer.id, name: 'Carl', email: 'carl@example.com' }])
+    expect(tenant.owners).toEqual([{ id: customer.id, name: 'Carl', email: 'carl@example.com', banned: false, staffAccess: false }])
     expect(await db.select({ n: count() }).from(user).where(eq(user.email, 'mallory@example.com'))).toEqual([{ n: 0 }])
   })
 

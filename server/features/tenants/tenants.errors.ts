@@ -5,6 +5,12 @@ export const TenantErrorCodes = {
   SLUG_TAKEN: 'SLUG_TAKEN',
   /** The new owner's email already has an account: choose it under "Use existing account" (D185). */
   ACCOUNT_EXISTS: 'ACCOUNT_EXISTS',
+  /** The account already owns this cafe (P2, D189). */
+  ALREADY_OWNER: 'ALREADY_OWNER',
+  /** The change would leave the cafe without an owner who can sign in (P2, D189). */
+  LAST_OWNER: 'LAST_OWNER',
+  /** A super admin's own ownership: changed by another super admin, never by oneself (P2, D189). */
+  OWN_ACCOUNT: 'OWN_ACCOUNT',
 } as const
 
 export const tenantNotFound = () => notFound('The cafe')
@@ -46,3 +52,26 @@ export const emailUnavailable = () =>
   apiError(422, ErrorCodes.VALIDATION_FAILED, 'This email belongs to an account that can\'t own a cafe. Use another email.', {
     fieldErrors: { 'owner.email': ['This email belongs to an account that can\'t own a cafe'] },
   })
+
+// --- Ownership and notes (step P2, D189) ---
+
+export const ownerNotFound = () => notFound('This owner')
+
+export const alreadyOwner = () =>
+  apiError(409, TenantErrorCodes.ALREADY_OWNER, 'This account already owns the cafe.', {
+    fieldErrors: { 'owner.userId': ['Already an owner of this cafe'] },
+  })
+
+export const lastOwner = () =>
+  apiError(409, TenantErrorCodes.LAST_OWNER, 'The cafe needs at least one owner who can sign in. Add another owner first, or transfer the ownership.')
+
+export const ownOwnership = () =>
+  apiError(409, TenantErrorCodes.OWN_ACCOUNT, 'You can\'t change your own ownership of a cafe. Ask another super admin.', {
+    fieldErrors: { 'owner.userId': ['This is your own account'] },
+  })
+
+/** An account in the change was changed meanwhile (its access, its ban, its name). */
+export const ownershipChanged = () =>
+  apiError(409, ErrorCodes.VERSION_CONFLICT, 'An account changed while the owners were being saved. Nothing was saved: reload and try again.')
+
+export const notesChanged = () => versionConflict('These notes')
