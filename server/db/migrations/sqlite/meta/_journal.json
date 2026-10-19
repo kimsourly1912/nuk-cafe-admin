@@ -281,6 +281,13 @@
       "when": 1791963218144,
       "tag": "0039_job_success",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1792391527197,
+      "tag": "0040_order_ready_delivery",
+      "breakpoints": true
     }
   ]
 }

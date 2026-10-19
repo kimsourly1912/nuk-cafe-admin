@@ -28,6 +28,8 @@ export const OrderErrorCodes = {
   BAKONG_KEY_MISSING: 'BAKONG_KEY_MISSING',
   /** A payment named a QR made for another order. */
   KHQR_CHARGE_INVALID: 'KHQR_CHARGE_INVALID',
+  /** Staff taking the payment of their own order by hand (docs/server/security.md → Identity). */
+  OWN_ORDER_PAYMENT: 'OWN_ORDER_PAYMENT',
 } as const
 
 export const orderingClosed = (message: string) => apiError(409, OrderErrorCodes.ORDERING_CLOSED, message)
@@ -78,6 +80,9 @@ export const khqrNotSetUp = (currency?: string) =>
 
 export const khqrChargeInvalid = () =>
   apiError(409, OrderErrorCodes.KHQR_CHARGE_INVALID, 'That QR was made for another order. Show this order\'s QR and confirm again.')
+
+export const ownOrderPayment = () =>
+  apiError(403, OrderErrorCodes.OWN_ORDER_PAYMENT, 'You can\'t take the payment of your own order. Ask a colleague to take it.')
 
 /** The KHQR settings were saved by someone else since the page read them. */
 export const khqrSettingsChanged = () => versionConflict('The KHQR settings')

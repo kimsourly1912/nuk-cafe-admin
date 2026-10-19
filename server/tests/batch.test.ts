@@ -8,6 +8,7 @@ import type { Db } from '#server/utils/batch'
 import { isForeignKeyError, isStaleWrite, isUniqueViolation, requireCount, requireOneChange, runBatch } from '#server/utils/batch'
 import { versionConflict } from '#server/utils/errors'
 import { catalogRows, itemModifierGroups } from '#server/features/menu/catalog.repository'
+import * as repo from '#server/features/notifications/notifications.repository'
 import { counterContext, counterQueueRows } from '#server/features/orders/orders.repository'
 
 let db: Db
@@ -139,6 +140,22 @@ describe('on D1', () => {
     ])
     const result = await counterQueueRows(d1, 'cafe-a', 'branch-a', '2026-10-14', now)
     expect(result.rows).toEqual([expect.objectContaining({ branchName: 'Branch A', customerName: 'Customer A', placedAt: now, paymentDueAt: new Date(now.getTime() + 60000), paidAt: now, version: 2 })])
+  })
+
+  it('executes the customer ready message subscribe, claim, completion and due query through the actual D1 adapter', async () => {
+    const { db: d1, bound } = fakeD1()
+    const now = new Date('2026-10-14T05:00:00Z')
+    await d1.batch([repo.subscribeOrderReadyAlertStatement(d1, 'order-a', 'hash', 'chat-1', 'sub-1', now), requireOneChange(d1)])
+    const claim = await repo.claimOrderReady(d1, 'cafe-a', 'order-a', now, new Date(now.getTime() + 120_000))
+    expect(claim).toBeUndefined()
+    const fenced = { tenantId: 'cafe-a', orderId: 'order-a', chatId: 'chat-1', subscriptionId: 'sub-1', claimToken: 'token-1' } as repo.OrderReadyClaim
+    expect(await repo.completeOrderReady(d1, fenced, now)).toBe(false)
+    expect(await repo.dueOrderReadyAlerts(d1, now, 5)).toEqual([])
+    expect(bound.every(statement => statement.params.length <= 100)).toBe(true)
+    const complete = bound.find(statement => statement.sql.startsWith('update "order_ready_alerts" set "chatId" = ?, "notifiedAt"'))!
+    // The claim's token and subscription are bound values, never inlined.
+    expect(complete.params).toEqual(expect.arrayContaining(['cafe-a', 'order-a', 'sub-1', 'token-1']))
+    expect(bound.find(statement => statement.sql.includes('"order_ready_alerts"') && statement.sql.includes('"claimUntil" <= ?'))).toBeDefined()
   })
 
   it('keeps item override and default add-on rules distinct in the catalog batch', async () => {

@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Customer "order ready" message: one durable claim (D182, 2026-10-19)
+
+- **Done:** the event handler, the sign-up catch-up and the scheduled run share one atomic, fenced claim on `order_ready_alerts` (migration `0040_order_ready_delivery`); the sign-up commits its recovery work; `notifications:deliver` retries and recovers expired claims.
+- **Evidence:** `pnpm vitest run --project server server/features/notifications/tests/notifications.customers.test.ts` (21 tests, deferred-promise barriers); guards removed one by one (lease, token, subscription, tenant, durable sign-up) each failed a named test; `batch.test.ts` runs the queries through Drizzle's D1 driver (stand-in client, not a real D1); `migrations.test.ts` replays 0040 over old rows. `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` green.
+- **Not run:** e2e, a real D1 or Telegram.
+
 ## Staff list starts from the cafe's memberships (D184, 2026-10-19)
 
 [Decision](decisions.md#d184-the-staff-list-starts-from-the-cafes-memberships-not-from-every-account-2026-10-19). Audit N5: `listStaff` scanned `user` (every customer and guest) and checked membership per row, in both the page and the count. Membership and branch checks are now tenant-scoped `in (select …)` semi-joins, so the plan starts from the cafe's own rows and looks users up by primary key. Built on the D183 `instr` search (branch `claude/d1-search-like-limit`); no migration, no contract or write change.

@@ -135,6 +135,8 @@ export interface StoredMessage {
  * A customer's "message me on Telegram when it's ready" for one order (D157): one row per order.
  * The one-time code's hash is cleared when a chat uses it (so it works once); the chat is cleared
  * once the message was sent (nothing personal is kept longer than needed). Purged after 2 days.
+ * The delivery state is on the row (one message per order): the ready event, the sign-up catch-up
+ * and the scheduled run share one atomic claim on it.
  */
 export const orderReadyAlerts = sqliteTable('order_ready_alerts', {
   orderId: text().primaryKey(),
@@ -146,9 +148,19 @@ export const orderReadyAlerts = sqliteTable('order_ready_alerts', {
   chatId: text(),
   subscribedAt: instant(),
   notifiedAt: instant(),
+  /** Who is subscribed: new for every chat that uses a code. Completion is fenced by it, so an old send never touches a newer chat. */
+  subscriptionId: text(),
+  /** The send in flight and when its lease ends (an abandoned one is claimable again after that). */
+  claimToken: text(),
+  claimUntil: instant(),
+  /** Sends begun for this subscription (the provider may have accepted any of them). */
+  attempts: integer().notNull().default(0),
+  /** When the scheduled run sends it or retries it; `null` while nothing is due (the ready event will come). */
+  retryAt: instant(),
   createdAt: instant().notNull().default(nowMs),
 }, t => [
   foreignKey({ name: 'order_ready_alerts_order_fk', columns: [t.tenantId, t.orderId], foreignColumns: [orders.tenantId, orders.id] }).onDelete('cascade'),
   uniqueIndex('order_ready_alerts_code_idx').on(t.codeHash),
   index('order_ready_alerts_created_idx').on(t.createdAt),
+  index('order_ready_alerts_due_idx').on(t.retryAt),
 ])

@@ -4,6 +4,26 @@ import { applyMigration, createTestClient, migrationFiles } from '#server/tests/
 
 // Migrations that change tables holding data are checked against data, not only an empty
 // database: staging runs them over its rows.
+describe('0040_order_ready_delivery', () => {
+  it('keeps an old subscribed row and a row written by the old code, with no delivery work invented', async () => {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const position = files.indexOf('0040_order_ready_delivery.sql')
+    expect(position).toBeGreaterThan(0)
+    for (const file of files.slice(0, position)) await applyMigration(client, file)
+    // A row that exists only to satisfy the foreign keys is not worth building: they are off for this check.
+    await client.execute('pragma foreign_keys = off')
+    await client.execute(`insert into order_ready_alerts (order_id, tenant_id, link_expires_at, chat_id, subscribed_at) values ('old-order', 'cafe', 1, '777', 2)`)
+    await applyMigration(client, files[position]!)
+    await client.execute(`insert into order_ready_alerts (order_id, tenant_id, link_expires_at, chat_id) values ('old-writer', 'cafe', 1, '888')`)
+    const result = await client.execute('select order_id, chat_id, subscription_id, claim_token, claim_until, attempts, retry_at from order_ready_alerts order by order_id')
+    expect(result.rows.map(row => ({ ...row }))).toEqual([
+      { order_id: 'old-order', chat_id: '777', subscription_id: null, claim_token: null, claim_until: null, attempts: 0, retry_at: null },
+      { order_id: 'old-writer', chat_id: '888', subscription_id: null, claim_token: null, claim_until: null, attempts: 0, retry_at: null },
+    ])
+  })
+})
+
 describe('0039_job_success', () => {
   it('preserves an old cursor without inventing success and keeps old-writer inserts compatible', async () => {
     const client = await createTestClient()

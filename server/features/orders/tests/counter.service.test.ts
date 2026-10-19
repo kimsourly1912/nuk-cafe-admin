@@ -5,7 +5,7 @@ import { cancelOrderSchema, toRiel } from '#shared/contracts/orders'
 import { updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
-import { auditEvents } from '#server/features/platform/platform.schema'
+import { auditEvents, idempotencyKeys } from '#server/features/platform/platform.schema'
 import { cancelOrderAtCounter, completeOrder, getCounterOrder, getCounterOrderHistory, getExchangeRates, listCounterQueue, listFinishedToday, markOrderReady, payOrder, setExchangeRate } from '#server/features/orders/counter.service'
 import { expireUnpaidOrders } from '#server/features/orders/expiry.service'
 import { counterPayments, orderEvents, orders } from '#server/features/orders/orders.schema'
@@ -190,6 +190,43 @@ describe('taking payment', () => {
   it('KHQR keeps the reference, if any', async () => {
     const orderId = await place(sokha)
     expect((await pay(orderId, { version: 1, method: 'khqr', reference: 'FT2609ABC' })).payment).toMatchObject({ method: 'khqr', reference: 'FT2609ABC', amountKhr: null })
+  })
+
+  describe('a cashier\'s own order (security.md → Identity)', () => {
+    const methods: [string, PayOrderInput][] = [
+      ['cash_usd', { version: 1, method: 'cash_usd' }],
+      ['cash_khr', { version: 1, method: 'cash_khr', khrPerUsd: 4100 }],
+      ['khqr', { version: 1, method: 'khqr', reference: 'FT2609ABC' }],
+    ]
+
+    it.each(methods)('cannot be paid by hand by that cashier with %s; nothing is written', async (_name, input) => {
+      await setExchangeRate(db, rateSetter, { khrPerUsd: 4100 }, monday('09:00'))
+      const orderId = await place(cashier)
+      const k = key()
+      await expectApiError(() => pay(orderId, input, cashier, monday('12:05'), db, k), 403, 'OWN_ORDER_PAYMENT')
+      expect(await statusOf(orderId)).toBe('awaiting_payment')
+      expect(await paymentsOf(orderId)).toEqual([])
+      expect(await eventsOf(orderId)).toHaveLength(1)
+      expect(await db.select().from(auditEvents).where(eq(auditEvents.targetId, orderId))).toEqual([])
+      expect(await db.select().from(idempotencyKeys).where(eq(idempotencyKeys.key, k))).toEqual([])
+      expect((await db.select({ version: orders.version }).from(orders).where(eq(orders.id, orderId)))[0]!.version).toBe(1)
+    })
+
+    it('can be paid by another cashier, with the same version, after the refusal', async () => {
+      const orderId = await place(cashier)
+      await expectApiError(() => pay(orderId, cash, cashier), 403, 'OWN_ORDER_PAYMENT')
+      expect(await pay(orderId, cash, colleague)).toMatchObject({ status: 'preparing', payment: { collectedBy: { name: 'Vanna' } } })
+    })
+
+    it('does not stop a cashier from paying someone else\'s order', async () => {
+      expect(await pay(await place(sokha))).toMatchObject({ status: 'preparing' })
+    })
+
+    it('stays tenant and branch isolated: another branch\'s order is still not found', async () => {
+      const elsewhere = await place(cashier, NOON, otherBranchId)
+      await expectApiError(() => pay(elsewhere, cash, cashier), 404, 'NOT_FOUND')
+      expect(await paymentsOf(elsewhere)).toEqual([])
+    })
   })
 
   it('is refused once the 30 minutes to pay are over', async () => {

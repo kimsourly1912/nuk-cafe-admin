@@ -6,7 +6,7 @@ import type { Actor, BranchActor } from '#server/features/identity'
 import { auditStatement, outboxStatement } from '#server/features/platform'
 import type { OrderStep } from './commands'
 import { runOrderCommand } from './commands'
-import { exchangeRateChanged, noExchangeRate, orderChanged, orderNotCancellable, orderNotFound, paymentExpired, returnMethodInvalid } from './orders.errors'
+import { exchangeRateChanged, noExchangeRate, orderChanged, orderNotCancellable, orderNotFound, ownOrderPayment, paymentExpired, returnMethodInvalid } from './orders.errors'
 import { requireOrderCharge } from './khqr.service'
 import { ORDER_EVENTS } from './orders.events'
 import * as repo from './orders.repository'
@@ -189,6 +189,9 @@ function requireStatus(order: repo.OrderRow, allowed: OrderStatus[]) {
 export async function payOrder(db: Db, actor: BranchActor, orderId: string, input: PayOrderInput, key: string, now = new Date()): Promise<CounterOrder> {
   return runCommand(db, actor, orderId, key, { operation: 'pay', input, request: input, now }, async (order) => {
     requireStatus(order, ['awaiting_payment'])
+    // Staff never complete their own order's payment by hand (security.md → Identity). Bakong-confirmed
+    // arrivals go through `recordCheckedKhqrPayment`, which the money itself verifies.
+    if (order.customerId === actor.userId) throw ownOrderPayment()
     if (order.paymentDueAt.getTime() <= now.getTime()) throw paymentExpired()
     const rate = input.method === 'cash_khr' ? await repo.currentRate(db, actor.tenantId, now) : undefined
     if (input.method === 'cash_khr') {

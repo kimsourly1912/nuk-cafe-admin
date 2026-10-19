@@ -1,4 +1,5 @@
-import { deliverDue, queueBakongTokenReminder, queueClosingSummaries } from '#server/features/notifications'
+import { tenantById } from '#server/features/identity'
+import { deliverDue, deliverOrderReadyDue, queueBakongTokenReminder, queueClosingSummaries } from '#server/features/notifications'
 import { bakongTokenExpiries } from '#server/features/orders'
 
 /**
@@ -13,7 +14,13 @@ export default defineTask({
       if (!settings) return { result: { off: true, queued: 0, sent: 0, retried: 0, failed: 0 } }
       const db = useDb()
       // Existing alerts must progress even when a cafe's report generation fails.
-      const report = await deliverDue(db, telegramApi(settings))
+      const api = telegramApi(settings)
+      const report = await deliverDue(db, api)
+      // Customers' ready messages a failed catch-up, a failed retry or a stopped worker left behind.
+      const customers = await deliverOrderReadyDue(db, api, async (tenantId) => {
+        const tenant = await tenantById(db, tenantId)
+        return tenant ? cafeSiteUrl(tenant.slug) : undefined
+      })
       const queued: string[] = []
       const page = await runTenantPage(db, 'notifications:generate', async (tenant) => {
         const cafeUrl = cafeSiteUrl(tenant.slug)
@@ -29,9 +36,9 @@ export default defineTask({
         const failed = results.find(result => result.status === 'rejected')
         if (failed?.status === 'rejected') throw failed.reason
       })
-      if (queued.length || report.sent || report.retried || report.failed) log('info', 'Telegram deliveries', { queued: queued.length, ...report })
+      if (queued.length || report.sent || report.retried || report.failed || customers.sent || customers.failed) log('info', 'Telegram deliveries', { queued: queued.length, ...report, customerSent: customers.sent, customerFailed: customers.failed })
       if (page.failures.length) throw new Error(`Notification generation failed for ${page.failures.length} cafes; other cafes and due deliveries were processed.`)
-      return { result: { off: false, queued: queued.length, ...report } }
+      return { result: { off: false, queued: queued.length, ...report, customerSent: customers.sent, customerFailed: customers.failed } }
     })
   },
 })
