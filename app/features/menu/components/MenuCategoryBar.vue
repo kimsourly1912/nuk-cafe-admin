@@ -6,7 +6,7 @@
  * entry scrolls the menu there. Which trigger shows is CSS (both are rendered, each opens its own
  * overlay), so the server's page and the browser's agree (D95).
  */
-import { usePreferredReducedMotion } from '@vueuse/core'
+import { usePreferredReducedMotion, useResizeObserver } from '@vueuse/core'
 import type { MenuSection } from '../utils/menu'
 import MenuCategoryTree from './MenuCategoryTree.vue'
 
@@ -32,14 +32,45 @@ function go(id: string) {
   emit('go', id)
 }
 
-// Keep the active tab in view: scroll the tab strip only (never the page).
 const strip = useTemplateRef<HTMLElement>('strip')
-watch(() => props.activeMainId, async (id) => {
-  await nextTick()
-  const tab = strip.value?.querySelector<HTMLElement>(`[data-section="${id}"]`)
+const findTab = (id?: string) => strip.value?.querySelector<HTMLElement>(`[data-section="${id}"]`) ?? null
+
+// The highlight is one pill that slides to the active tab (position and width in the strip's own
+// scroll coordinates, so it follows the tabs when the strip scrolls). Until the browser has placed
+// it, the active tab paints its own background (server render), and the first placement is not
+// animated.
+const marker = ref<{ left: number, width: number } | null>(null)
+const animated = ref(false)
+
+function placeMarker() {
+  const tab = findTab(props.activeMainId)
+  marker.value = tab ? { left: tab.offsetLeft, width: tab.offsetWidth } : null
+}
+
+// Keep the active tab in view: scroll the tab strip only (never the page).
+function centreTab() {
+  const tab = findTab(props.activeMainId)
   if (!strip.value || !tab) return
   const left = tab.offsetLeft - (strip.value.clientWidth - tab.offsetWidth) / 2
   strip.value.scrollTo({ left: Math.max(0, left), behavior: motion.value === 'reduce' ? 'auto' : 'smooth' })
+}
+
+watch(() => props.activeMainId, async () => {
+  await nextTick()
+  placeMarker()
+  centreTab()
+})
+onMounted(() => {
+  placeMarker()
+  requestAnimationFrame(() => {
+    animated.value = true
+  })
+})
+// Tabs change width with the sections, the font loading or the window.
+useResizeObserver(strip, placeMarker)
+watch(() => props.sections, async () => {
+  await nextTick()
+  placeMarker()
 })
 </script>
 
@@ -94,17 +125,25 @@ watch(() => props.activeMainId, async (id) => {
     <nav
       ref="strip"
       aria-label="Categories"
-      class="flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none]"
+      class="relative flex min-w-0 flex-1 gap-1 overflow-x-auto [scrollbar-width:none]"
     >
+      <span
+        v-if="marker"
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-primary/10"
+        :class="animated && 'transition-[transform,width] duration-300 ease-out motion-reduce:transition-none'"
+        :style="{ width: `${marker.width}px`, transform: `translateX(${marker.left}px)` }"
+      />
       <UButton
         v-for="section in sections"
         :key="section.id"
         :data-section="section.id"
         :label="section.name"
         :color="section.id === activeMainId ? 'primary' : 'neutral'"
-        :variant="section.id === activeMainId ? 'soft' : 'ghost'"
+        variant="ghost"
         :aria-current="section.id === activeMainId ? 'true' : undefined"
-        class="shrink-0 rounded-full px-4"
+        class="relative shrink-0 rounded-full px-4 transition-colors duration-200 motion-reduce:transition-none"
+        :class="!marker && section.id === activeMainId && 'bg-primary/10'"
         @click="go(section.id)"
       />
     </nav>

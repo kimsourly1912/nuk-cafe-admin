@@ -109,7 +109,9 @@ export function useCounterSession() {
       }
       throw apiError
     }
-    await fetchSession()
+    // The server cleared the flag: reflect it now, confirm in the background.
+    if (user.value?.mustChangePassword) user.value = { ...user.value, mustChangePassword: false }
+    void fetchSession()
   }
 
   async function signOut() {

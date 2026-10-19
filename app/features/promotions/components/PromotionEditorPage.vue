@@ -621,7 +621,7 @@ useSubmitShortcut(() => submit(!isDraft.value))
             </template>
             <div class="space-y-4">
               <div class="flex gap-3 rounded-lg bg-elevated/50 p-3">
-                <div class="aspect-[4/5] w-16 shrink-0 overflow-hidden rounded-md bg-elevated ring ring-default">
+                <div class="aspect-4/5 w-16 shrink-0 overflow-hidden rounded-md bg-elevated ring ring-default">
                   <img
                     v-if="state.posterUrl"
                     :src="state.posterUrl"

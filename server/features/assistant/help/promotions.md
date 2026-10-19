@@ -17,7 +17,7 @@
 1. Press **New promotion** (or **N**).
 2. **Name** (customers see it beside the poster) and an optional **Description**.
 3. **Discount**: **Percent off** or **Amount off**, and how much.
-4. **What's included**: **Chosen items**, then **Choose items**: tick categories or single items, **Done**. Or **Whole menu**.
+4. **What's included**: **Chosen items**, then **Choose items**: tick categories or single items, **Done**. Or **Whole menu**. Ticking every item of a category one by one also shows the category ticked ("Every item now, not ones added later"), but items added to it later are only included when the category itself is ticked.
 5. **When**: the **First day** and **Last day**, or a quick length (**1 day**, **Weekend**, **1 week**, **2 weeks**, **1 month**), or **No end date**.
 6. **Poster** (optional): design it in Canva or with an AI tool, then **Upload poster** (square 1080 × 1080 or portrait 1080 × 1350; JPEG, PNG or WebP). Customers see it in **Offers** at the top of the menu.
 7. **How customers see it** (beside the form on a computer) shows the badge, the poster and an example price.

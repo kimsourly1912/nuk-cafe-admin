@@ -46,10 +46,15 @@ async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
     errorAlert.value?.focus()
     return
   }
-  saving.value = false
+  // Stays `saving` until the next page is up, so the wait doesn't look like a frozen form.
   unsaved.markClean()
   toast.add({ title: 'Password changed', description: 'You were signed out on your other devices.', color: 'success', icon: 'i-lucide-circle-check' })
-  await navigateTo(platformRedirectTarget(route.query.redirect))
+  try {
+    await navigateTo(platformRedirectTarget(route.query.redirect))
+  }
+  finally {
+    saving.value = false
+  }
 }
 
 const fields = [

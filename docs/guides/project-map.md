@@ -46,6 +46,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](.
 | `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`, `CURRENCY` | `utils/money.ts` | Cents (API) ↔ dollars (forms, display), "$4.20" |
 | `timezoneOptions`, `utcOffset`, `cityOf` | `utils/timezones.ts` | Time zone pickers: "(GMT+07:00) Phnom Penh" by offset (the Branch form, New cafe, D142) |
 | `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute` | `utils/clock.ts` | Weekly windows' minutes after midnight ↔ "7:30 AM" and `<TimeInput>` (availability rules, branch hours) |
+| `DateTimeInput` | `components/` | A day and a time in one field (`YYYY-MM-DDTHH:mm`): calendar popover + `<TimeInput>`; `type="datetime-local"` is a lint error |
 | `TimeInput` | `components/` | Every time of day: `UInputTime` with AM/PM switched by a tap, which a phone's keyboard can't type (`UInputTime` is a lint error elsewhere, D165) |
 | `useFormErrorRecheck` | `composables/` | Every `UForm`: errors leave as soon as they're fixed, a rule across fields too; server errors stay until their field changes (D166) |
 | `useFormRowErrors`, `followRowErrors` | `composables/`, `utils/form-rows.ts` | A list's rows in a `UForm`: removing or moving a row moves its errors with it (`removeRow`, `moveRow`) (D171) |
@@ -64,7 +65,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](.
 | `QrCode`, `qrImage`, `qrSvg` | `components/`, `utils/qr-code.ts` | A QR code drawn as SVG, dark on light in both themes: a table's link, an order's KHQR (D130) |
 | `fetchAccountCafes`, `otherCafes`, `workspaceUrl`, `worksElsewhere`, `CAFES_PATH` | `utils/account-cafes.ts` | The signed-in account's cafes (`GET /api/me/cafes`) for Your cafes, the switcher and a sign-in refused at the wrong cafe; another cafe always opens as a full page load (D141, D144) |
 | `useCafe()`, `CafeLogo` | `composables/`, `components/` | The cafe's name and logo (`GET /api/cafes/{slug}`): **never write a cafe's name into a page** (D143) |
-| `ImageInput`, `useImageUpload`, `shrinkImage` | `components/`, `composables/`, `utils/` | An image for a record (the cafe's logo): shrunk in the browser, uploaded on pick through `POST /admin/media` (D122, D143) |
+| `ImageInput`, `ImageCropModal`, `useImageUpload`, `shrinkImage`, `image-crop` / `image-canvas` | `components/`, `composables/`, `utils/` | An image for a record (the cafe's logo): shrunk in the browser, uploaded on pick through `POST /admin/media` (D122, D143); `crop-ratio` frames and zooms it first in `ImageCropModal` (D180) |
 | `MenuItemImage` | `components/` | **Every menu item photo** (D158): `usage="card"` (square) or `"detail"` (4:3, two sizes), blurred placeholder, lazy, fade-in; never a bare `<img>` for a menu photo. Photos are made by the products feature's photo editor (`POST /admin/media/photos`) |
 | `OrderLinePromotion` | `components/` | An order line's promotion as sold ("20% off · Coffee week · was $7.00"): the customer's order, the counter, Order history (D163) |
 | `PhoneInput`, `parsePhone` / `phoneSchema` | `components/`, `shared/contracts/phone.ts` | Every phone number: a country (flag, dial code) and the number; stored and sent as E.164, checked by libphonenumber on both sides (D127) |

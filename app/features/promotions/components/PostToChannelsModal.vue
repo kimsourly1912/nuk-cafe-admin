@@ -6,12 +6,12 @@
  * Post now waits for Telegram's answer and closes with how each channel went; a refused channel
  * is said on the posts list with Try again.
  */
-import { POST_CAPTION_MAX, defaultCaption } from '#shared/contracts/marketing'
+import { POST_CAPTION_MAX, POST_SCHEDULE_MAX_DAYS, defaultCaption } from '#shared/contracts/marketing'
 import type { Promotion } from '#shared/contracts/menu-promotions'
 import { useMarketingChannels } from '~/features/marketing'
 import { usePostMutations } from '../composables/usePromotionPosts'
 import type { PostForm } from '../schemas/post-form'
-import { postFormIssues, postRequest, suggestedTime } from '../schemas/post-form'
+import { localInputValue, postFormIssues, postRequest, suggestedTime } from '../schemas/post-form'
 
 const props = defineProps<{ promotion: Promotion }>()
 const emit = defineEmits<{ close: [posted: boolean] }>()
@@ -125,7 +125,7 @@ const previewChannel = computed(() => connected.value.find(c => form.channelIds.
               v-for="channel in channels"
               :key="channel.id"
               class="flex items-center gap-3 rounded-md border border-default p-3"
-              :class="channel.status === 'connected' ? 'cursor-pointer has-[:checked]:border-primary' : 'opacity-60'"
+              :class="channel.status === 'connected' ? 'cursor-pointer has-checked:border-primary' : 'opacity-60'"
             >
               <UCheckbox
                 :model-value="form.channelIds.includes(channel.id)"
@@ -193,11 +193,13 @@ const previewChannel = computed(() => connected.value.find(c => form.channelIds.
               :error="shown.at"
               :help="`Your device's time (${timezone}). Up to 30 days ahead.`"
             >
-              <UInput
+              <DateTimeInput
                 v-model="form.at"
-                type="datetime-local"
+                label="Date and time"
+                :min="localInputValue(new Date())"
+                :max="localInputValue(new Date(Date.now() + POST_SCHEDULE_MAX_DAYS * 86_400_000))"
                 :disabled="saving"
-                class="w-full sm:w-64"
+                class="w-full sm:w-72"
               />
             </UFormField>
           </div>

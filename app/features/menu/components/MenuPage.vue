@@ -98,6 +98,12 @@ function closeSearch() {
   search.value = ''
   searching.value = false
 }
+/** From "no results": leave the search and show the category chosen. */
+async function browseSection(id: string) {
+  closeSearch()
+  await nextTick()
+  scrollTo(`section-${id}`)
+}
 
 // --- Scroll spy: the sticky header's height is the offset ---
 const header = useTemplateRef<HTMLElement>('header')
@@ -433,6 +439,7 @@ watch(detailOpen, (open) => {
 
         <template v-else-if="search">
           <p
+            v-if="results.length"
             class="text-sm text-muted"
             role="status"
           >
@@ -458,21 +465,50 @@ watch(detailOpen, (open) => {
           </section>
           <div
             v-if="!results.length"
-            class="flex flex-col items-center gap-3 py-12 text-center"
+            class="mx-auto flex max-w-sm flex-col items-center gap-4 py-16 text-center"
+            role="status"
           >
-            <UIcon
-              name="i-lucide-search-x"
-              class="size-8 text-dimmed"
-            />
-            <p class="font-medium text-highlighted">
-              No items match "{{ search }}"
-            </p>
+            <span class="flex size-14 items-center justify-center rounded-full bg-elevated">
+              <UIcon
+                name="i-lucide-search-x"
+                class="size-7 text-muted"
+              />
+            </span>
+            <div class="space-y-1">
+              <p class="text-lg font-semibold text-highlighted">
+                No items match "{{ search }}"
+              </p>
+              <p class="text-sm text-muted">
+                Check the spelling or try a shorter or different word.
+              </p>
+            </div>
             <UButton
               label="Clear search"
+              icon="i-lucide-x"
               color="neutral"
               variant="outline"
-              @click="search = ''"
+              @click="closeSearch"
             />
+            <div
+              v-if="sections.length"
+              class="w-full space-y-2 border-t border-default pt-4"
+            >
+              <p class="text-xs font-medium text-muted">
+                Or browse a category
+              </p>
+              <div class="flex flex-wrap justify-center gap-2">
+                <UButton
+                  v-for="section in sections.slice(0, 6)"
+                  :key="section.id"
+                  :label="section.name"
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                  class="rounded-full"
+                  @click="browseSection(section.id)"
+                />
+              </div>
+            </div>
           </div>
         </template>
 

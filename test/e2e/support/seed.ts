@@ -40,7 +40,7 @@ export interface ShopSeed {
    * files run in any order, so no other file may rely on its state (`apiUnverified` is
    * shop-orders-api's, since shop-account verifies `unverified`).
    */
-  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'followerD' | 'a11yGuest' | 'tableGuest' | 'cafeHopper' | 'beanOwner' | 'guestLinker' | 'budgetShopper', SeedCustomer>
+  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'followerD' | 'a11yGuest' | 'tableGuest' | 'cafeHopper' | 'beanOwner' | 'guestLinker' | 'budgetShopper' | 'temporaryStaff', SeedCustomer>
   /** A second table at Riverside (T02), for tests that archive it. */
   spareTableToken: string
   /**
@@ -91,6 +91,9 @@ const CUSTOMERS: ShopSeed['customers'] = {
   beanOwner: { name: 'Bea Brown', email: 'bea@brown-bean.example', password: 'long-enough-password-19' },
   // Not a customer: the counter's cashier (step 6.3), staff at Riverside.
   cashier: { name: 'Sophea Keo', email: 'sophea@example.com', password: 'long-enough-password-10' },
+  // Not a customer: staff at Riverside still on the temporary password an admin gave them, who
+  // signs in on the store (shop-account.test.ts).
+  temporaryStaff: { name: 'Davy Sam', email: 'davy@example.com', password: 'long-enough-password-44' },
 }
 
 async function addBranch(db: Db, name: string, tenantId = TEST_TENANT) {
@@ -170,6 +173,8 @@ export async function seedShop(dbFile: string, qrSecret: string, bakong: { encry
   }
   // An existing account keeps its password when it's given branch access (D49).
   await createStaff(db, actor, { name: CUSTOMERS.cashier.name, email: CUSTOMERS.cashier.email, admin: false, memberships: [{ branchId: openBranchId, role: 'staff' }] })
+  await createStaff(db, actor, { name: CUSTOMERS.temporaryStaff.name, email: CUSTOMERS.temporaryStaff.email, admin: false, memberships: [{ branchId: openBranchId, role: 'staff' }] })
+  await db.update(user).set({ mustChangePassword: true }).where(eq(user.email, CUSTOMERS.temporaryStaff.email))
   // Brown Bean's owner too (the platform console adds an existing account so, D142).
   const [bea] = await db.select({ id: user.id }).from(user).where(eq(user.email, CUSTOMERS.beanOwner.email))
   await db.insert(member).values({ id: crypto.randomUUID(), organizationId: 'tenant-2', userId: bea!.id, role: 'owner', createdAt: new Date() })

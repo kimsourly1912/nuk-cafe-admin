@@ -209,3 +209,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D177](decisions.md#d177-the-local-e2e-build-leaves-dependencies-untraced-2026-10-18) | The local e2e build leaves dependencies untraced, 2026-10-18 |
 | [D178](decisions.md#d178-a-failed-submit-goes-to-the-first-invalid-field-2026-10-18) | A failed submit goes to the first invalid field, 2026-10-18 |
 | [D179](decisions.md#d179-every-list-that-removes-or-moves-rows-moves-its-errors-2026-10-18) | Every list that removes or moves rows moves its errors, 2026-10-18 |
+| [D180](decisions.md#d180-one-crop-modal-for-every-photo-upload-2026-10-19) | One crop modal for every photo upload, 2026-10-19 |

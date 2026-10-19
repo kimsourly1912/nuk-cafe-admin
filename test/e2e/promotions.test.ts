@@ -1,5 +1,5 @@
 import { createPage, url } from '@nuxt/test-utils/e2e'
-import type { Page } from 'playwright-core'
+import type { Page, Request } from 'playwright-core'
 import { describe, expect, it } from 'vitest'
 import type { Promotion, PromotionResults } from '../../shared/contracts/menu-promotions'
 import { AIRPORT, failures, MENU_COFFEE, MENU_TEA, menuItemSummaryOf, mockApi, pageOf, RIVERSIDE, setupE2e, toast } from './support/mock-api'
@@ -111,6 +111,22 @@ async function open(path: string, options: Options = {}) {
   return { page, sent, store, api }
 }
 
+/** Picks a real PNG poster of `width` × `height` (drawn in the page) in the file dialog. */
+async function choosePoster(page: Page, width: number, height: number) {
+  const bytes = await page.evaluate(async ([w, h]) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = w!
+    canvas.height = h!
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#7a4b2a'
+    context.fillRect(0, 0, w!, h!)
+    const blob = await new Promise<Blob>(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+    return [...new Uint8Array(await blob.arrayBuffer())]
+  }, [width, height])
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: /^(Upload|Replace) poster$/ }).click()])
+  await chooser.setFiles({ name: 'poster.png', mimeType: 'image/png', buffer: Buffer.from(bytes) })
+}
+
 const card = (page: Page, name: string) => page.getByRole('article').filter({ has: page.getByRole('link', { name, exact: true }) })
 
 describe('Promotions', () => {
@@ -144,7 +160,10 @@ describe('Promotions', () => {
     const picker = page.getByRole('dialog', { name: 'Choose what\'s included' })
     await picker.getByRole('checkbox', { name: 'Tea', exact: true }).click()
     await picker.getByRole('checkbox', { name: 'Latte' }).click()
-    await picker.getByText('1 category and 1 item').waitFor()
+    await picker.getByText('2 items included · 1 whole category').waitFor()
+    // Latte is all Coffee has: its box shows ticked, but Latte stays an item (itemIds below), so a
+    // coffee added later isn't discounted.
+    await picker.getByText('Every item now, not ones added later').waitFor()
     await picker.getByRole('button', { name: 'Done' }).click()
     await page.getByRole('list', { name: 'Included' }).getByText('Tea').waitFor()
     // Latte is in Coffee week too: the bigger discount wins, and the page says so.
@@ -152,9 +171,12 @@ describe('Promotions', () => {
 
     await page.getByRole('button', { name: '2 weeks' }).click()
 
-    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Upload poster' }).click()])
-    await chooser.setFiles({ name: 'poster.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64') })
+    // A 4:5 design goes up as it is: no dialog, the file untouched.
+    const upload = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/admin/media'))
+    await choosePoster(page, 400, 500)
+    expect((await upload).postData()).toContain('filename="poster.png"')
     await page.getByRole('button', { name: 'Replace poster' }).waitFor()
+    expect(await page.getByRole('dialog').count()).toBe(0)
 
     await page.getByRole('button', { name: 'Publish' }).click()
     await toast(page, 'Promotion "Tea festival" published').waitFor()
@@ -172,6 +194,44 @@ describe('Promotions', () => {
       posterId: 'asset-9',
       publish: true,
     } }])
+  })
+
+  it('a square poster is framed 4:5 first, or kept whole', async () => {
+    const { page } = await open('/admin/promotions/new', { promotions: [] })
+    const isUpload = (request: Request) => request.method() === 'POST' && request.url().endsWith('/admin/media')
+
+    // Framed: the frame is portrait and the file uploaded is the cropped one, not the picked PNG.
+    await choosePoster(page, 500, 500)
+    let dialog = page.getByRole('dialog', { name: 'Frame the poster' })
+    const frame = (await dialog.getByTestId('crop-frame').boundingBox())!
+    expect(frame.width / frame.height).toBeCloseTo(0.8, 1)
+    let upload = page.waitForRequest(isUpload)
+    await dialog.getByRole('button', { name: 'Use photo' }).click()
+    expect((await upload).postData()).toMatch(/filename="poster\.(webp|jpg)"/)
+    await page.getByRole('button', { name: 'Replace poster' }).waitFor()
+
+    // Kept whole: the picked file, untouched.
+    await choosePoster(page, 500, 500)
+    dialog = page.getByRole('dialog', { name: 'Frame the poster' })
+    upload = page.waitForRequest(isUpload)
+    await dialog.getByRole('button', { name: 'Keep whole poster' }).click()
+    expect((await upload).postData()).toContain('filename="poster.png"')
+    await dialog.waitFor({ state: 'detached' })
+  })
+
+  it('closing the frame dialog uploads nothing and keeps the poster it had', async () => {
+    const { page } = await open('/admin/promotions/new', { promotions: [] })
+    let uploads = 0
+    await page.route('**/api/c/nuk/admin/media', async (route) => {
+      uploads++
+      await route.fallback()
+    })
+    await choosePoster(page, 500, 500)
+    const dialog = page.getByRole('dialog', { name: 'Frame the poster' })
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await dialog.waitFor({ state: 'detached' })
+    await page.getByRole('button', { name: 'Upload poster' }).waitFor()
+    expect(uploads).toBe(0)
   })
 
   it('saves a draft of a whole-menu amount off with no end date', async () => {

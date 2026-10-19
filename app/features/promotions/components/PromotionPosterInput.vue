@@ -1,12 +1,15 @@
 <script setup lang="ts">
 /**
  * The promotion's poster (M1, D163): an image designed elsewhere (Canva, an AI tool) and uploaded
- * finished. Shown portrait (4:5) as customers see it on the menu. Uploaded as it is, so its text
- * stays sharp; only a file over the server's 5 MB is made smaller first (D122). The form holds the
- * upload's `url` (the preview) and asset `id` (what's saved).
+ * finished. Shown portrait (4:5) as customers see it on the menu. A 4:5 design is uploaded as it
+ * is, so its text stays sharp; only a file over the server's 5 MB is made smaller first (D122).
+ * Any other shape (a square, a landscape) opens the crop modal (D180): the owner frames it 4:5 at
+ * a high quality, or keeps it whole. The form holds the upload's `url` (the preview) and asset
+ * `id` (what's saved).
  */
-import { useFileDialog } from '@vueuse/core'
+import { useClipboard, useFileDialog } from '@vueuse/core'
 import { IMAGE_MAX_BYTES, IMAGE_TYPES } from '#shared/contracts/media'
+import ImageCropModal from '~/components/ImageCropModal.vue'
 
 const props = defineProps<{ disabled?: boolean }>()
 
@@ -24,6 +27,41 @@ watchEffect(() => {
   uploading.value = preparing.value || pending
 })
 
+/** The menu shows the poster 4:5. */
+const POSTER_RATIO = 4 / 5
+/** Twice the 1080 × 1350 a design usually is, and a high quality: a cropped design keeps its text sharp. */
+const POSTER_MAX_EDGE = 2700
+const POSTER_QUALITY = 0.92
+
+// A new instance each time: one closed with `destroyOnClose` can't be opened again.
+const overlay = useOverlay()
+
+/** The poster framed 4:5, or `file` itself when kept whole; `null` when closed without either. */
+function frame(file: File) {
+  return overlay.create(ImageCropModal, { destroyOnClose: true })
+    .open({
+      file,
+      aspectRatio: POSTER_RATIO,
+      title: 'Frame the poster',
+      description: 'The menu shows the poster portrait (4:5). Choose what stays in, or keep the whole poster.',
+      maxEdge: POSTER_MAX_EDGE,
+      quality: POSTER_QUALITY,
+      keepLabel: 'Keep whole poster',
+    })
+    .result
+}
+
+/** A starting prompt for an AI image tool; the owner fills the [brackets] before sending it. */
+const AI_PROMPT = [
+  'Design a promotional poster for a cafe, portrait 4:5 (1080 × 1350 px).',
+  'Promotion: [what is offered, e.g. "Buy 1 get 1 free on iced lattes"].',
+  'Headline text: "[short headline]". Small text: "[dates or conditions]".',
+  'Style: [warm, modern, playful…], using [brand colors].',
+  'If I attach images: use my logo as is (do not redraw or change it) and place it small near the top or bottom, and build the poster around my product photo(s), keeping them recognisable. Delete this line if I attach nothing.',
+  'Keep the key text large and inside the centre, with a safe margin on every edge. No logos of other brands.',
+].join('\n')
+const { copy, copied } = useClipboard({ copiedDuring: 2000, legacy: true })
+
 const { open, onChange } = useFileDialog({ accept: IMAGE_TYPES.join(','), multiple: false, reset: true })
 
 onChange(async (files) => {
@@ -39,9 +77,17 @@ onChange(async (files) => {
     return
   }
   let chosen = file
-  if (file.size > IMAGE_MAX_BYTES) {
+  // A design that isn't portrait (a square 1080 × 1080 is fine) is cut to 4:5 on the menu: the
+  // owner frames it, or keeps it whole. A 4:5 design, or one the browser can't read, goes as it is.
+  const size = await uprightSize(file)
+  if (size && !isNearRatio(size, POSTER_RATIO)) {
+    const framed = await frame(file)
+    if (!framed) return
+    chosen = framed
+  }
+  if (chosen.size > IMAGE_MAX_BYTES) {
     preparing.value = true
-    chosen = await shrinkImage(file).finally(() => {
+    chosen = await shrinkImage(chosen).finally(() => {
       preparing.value = false
     })
     if (chosen.size > IMAGE_MAX_BYTES) {
@@ -63,7 +109,7 @@ function remove() {
 
 <template>
   <div class="flex flex-col gap-4 sm:flex-row sm:items-start">
-    <div class="relative aspect-[4/5] w-36 shrink-0 overflow-hidden rounded-lg bg-elevated ring ring-default sm:w-40">
+    <div class="relative aspect-4/5 w-36 shrink-0 overflow-hidden rounded-lg bg-elevated ring ring-default sm:w-40">
       <img
         v-if="posterUrl"
         :src="posterUrl"
@@ -121,6 +167,20 @@ function remove() {
       >
         {{ problem }}
       </p>
+      <div class="space-y-2 border-t border-default pt-3">
+        <p class="text-sm text-muted">
+          Not sure how to start? Copy this prompt, paste it into an AI tool such as ChatGPT or Gemini, and fill in the [brackets]. To use your own logo or product photos, attach them in the AI tool too.
+        </p>
+        <UButton
+          :label="copied ? 'Copied' : 'Copy AI prompt'"
+          :icon="copied ? 'i-lucide-check' : 'i-lucide-sparkles'"
+          color="neutral"
+          variant="soft"
+          size="sm"
+          :disabled="props.disabled"
+          @click="copy(AI_PROMPT)"
+        />
+      </div>
     </div>
   </div>
 </template>

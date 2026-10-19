@@ -95,6 +95,9 @@ export function accountFormError(error: unknown): AccountFormError {
       return { field: 'password', message: 'At least 8 characters' }
     case 'PASSWORD_TOO_LONG':
       return { field: 'password', message: 'At most 128 characters' }
+    // A staff account on its temporary password: the store has no page to change it.
+    case 'PASSWORD_CHANGE_REQUIRED':
+      return { message: 'This account still has a temporary password. Choose a new one in the cafe\'s admin or counter, then sign in here.' }
   }
   if (apiError.kind === 'rate_limited') return { message: 'Too many tries. Try again in a few minutes.' }
   return { message: apiError.message }
