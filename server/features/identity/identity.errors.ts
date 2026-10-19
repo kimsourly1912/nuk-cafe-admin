@@ -12,6 +12,8 @@ export const IdentityErrorCodes = {
   TENANT_SUSPENDED: 'TENANT_SUSPENDED',
   /** Signed in, but not on the platform team: no platform console (D142). */
   NOT_PLATFORM_ADMIN: 'NOT_PLATFORM_ADMIN',
+  /** A super admin without two-step sign-in: the console asks them to set it up first (P1b, D188). */
+  TWO_FACTOR_REQUIRED: 'TWO_FACTOR_REQUIRED',
 } as const
 
 /** Signed in, but not an owner of the cafe: the admin app is owners only for now (D52, D134). */
@@ -21,6 +23,9 @@ export const notAdmin = () =>
 /** Signed in, but not a super admin: the platform console is the platform team's (D142). */
 export const notPlatformAdmin = () =>
   apiError(403, IdentityErrorCodes.NOT_PLATFORM_ADMIN, 'This account doesn\'t have access to the platform console.')
+
+export const twoFactorRequired = () =>
+  apiError(403, IdentityErrorCodes.TWO_FACTOR_REQUIRED, 'Set up two-step sign-in to use the platform console.')
 
 export const passwordChangeRequired = () =>
   apiError(403, ErrorCodes.PASSWORD_CHANGE_REQUIRED, 'Change your temporary password to continue.')

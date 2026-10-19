@@ -24,6 +24,7 @@ Use these; don't rebuild them. Checked against better-auth 1.7.3, @nuxtjs/better
 |---|---|
 | Accounts, passwords, sessions, cookies | Better Auth `emailAndPassword` |
 | Email verification, password reset | Better Auth `emailVerification` / `sendResetPassword`, delivered with Resend |
+| Two-step sign-in (TOTP and backup codes; required for super admins, D188) | Better Auth **`twoFactor`** plugin |
 | Platform role, the ban fields and the banned-sign-in check (an expired ban lifted at sign-in) | Better Auth **`admin`** plugin; its endpoints granted to nobody, the console writes bans in our own batch (D187) |
 | Branches, branch staff and their roles | Better Auth **`organization`** plugin (a branch is an organization) |
 | Permission checks | Better Auth **access control** (`createAccessControl`) + `userHasPermission` / `hasPermission` |
@@ -92,7 +93,7 @@ A tenant's `owner` has every branch permission in every branch of that tenant: *
 | `requireBranchPermission(event, branchId, { order: ['cancel'] })` | `/api/counter/{branchId}` | 401; 403 `PASSWORD_CHANGE_REQUIRED`; **404** for an unknown or archived branch, **another tenant's branch**, a branch the caller doesn't work at, or an unknown role; 403 `FORBIDDEN` for staff whose role lacks the action. The tenant's owners pass in every active branch of the tenant |
 | `requireCustomer(event)` | `/api/shop` writes | 401; 403 `PASSWORD_CHANGE_REQUIRED` (a guest passes, D156) |
 | `requireSignedIn(event)` | own-account reads | 401; 403 `PASSWORD_CHANGE_REQUIRED` |
-| `requirePlatformPermission(event, { tenant: ['create'] })` | `/api/platform` (D142) | 401; 403 `PASSWORD_CHANGE_REQUIRED`; 403 `FORBIDDEN` unless the account is a `superadmin` whose role grants the action. No tenant: the console acts on cafes by id and never reads their data. `GET /api/platform/me` uses `platformSession` (answers on a temporary password; 403 `NOT_PLATFORM_ADMIN` for everyone else) |
+| `requirePlatformPermission(event, { tenant: ['create'] })` | `/api/platform` (D142) | 401; 403 `PASSWORD_CHANGE_REQUIRED`; 403 `FORBIDDEN` unless the account is a `superadmin` whose role grants the action; then 403 `TWO_FACTOR_REQUIRED` until two-step sign-in is on (D188). No tenant: the console acts on cafes by id and never reads their data. `GET /api/platform/me` uses `platformSession` (answers on a temporary password or without two-step sign-in, with `mustChangePassword` / `twoFactorEnabled`; 403 `NOT_PLATFORM_ADMIN` for everyone else) |
 
 - Each returns the **actor** (`{ userId, tenantId, role }`, plus `branchId` and `branchRole?` on the counter) that services receive: they scope every read and write to `actor.tenantId` and write it to the audit log.
 - The branch id comes from the path (`readIdParam(event, 'branchId', 'The branch')`), never from a body. Better Auth's tables use UUID v7 like ours (`advanced.database.generateId`), so `readIdParam` applies to users and tenants too.
@@ -102,6 +103,15 @@ A tenant's `owner` has every branch permission in every branch of that tenant: *
 - Tenants are never deleted (`disableOrganizationDeletion`); they're suspended through `organization.status`. Branches are our own table, archived through `branches.status`.
 - **Every query on tenant-owned data names the tenant** (the plan's rules): a repository takes `tenantId`, and another tenant's record is the same 404 as a missing one. Each feature's tests seed two tenants and check this, with the filter removed to see them fail.
 - The whole configuration is `identityAuthOptions()` in `server/features/identity/identity.auth.ts`; `server/auth.config.ts` only passes it the site URL.
+
+## Two-step sign-in (D188)
+
+- Better Auth's `twoFactor` plugin: an authenticator app's 6-digit code (TOTP, issuer "NUK Platform") or one of ten backup codes, after the password. Its secret and backup codes are stored encrypted (`two_factor`, migration `0041_two_factor`).
+- **Required for super admins:** `authorizePlatform` refuses 403 `TWO_FACTOR_REQUIRED` until `user.two_factor_enabled`; the console's only page is then `/platform/two-factor` (password, QR code or key, backup codes shown once, a code from the app).
+- It belongs to the **account**: every sign-in (the console, a cafe's admin and counter, the customer account) answers a password with `twoFactorRedirect` and a 10-minute challenge cookie, and shows the shared `<TwoFactorCodeForm>`; 5 wrong codes end the challenge, 10 across challenges lock the account for 15 minutes (Better Auth's defaults). No "trust this device".
+- Turning it on signs the account out on its other devices (`identity.auth.ts`, after-hook on `/two-factor/verify-totp`): a session made with the password alone must not count as two-step.
+- A super admin who lost the app and the backup codes is reset by hand ([operations → Super admins](operations.md)).
+- Limit: a guest's orders move to an account at sign-in by Better Auth's anonymous plugin, which runs on the password step; with two-step sign-in that step makes no session, so they don't move. Only accounts with 2FA (super admins) are affected.
 
 ## Sessions
 

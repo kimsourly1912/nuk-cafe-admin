@@ -15,7 +15,7 @@ await setupE2e()
 // and an end, unban, sign out everywhere, a temporary password shown once). The server's own rules
 // (versions, refusals, the batch) are covered by the server tests.
 
-const SUPERADMIN: PlatformSession = { userId: 'super-1', email: 'ops@example.com', name: 'Ops', mustChangePassword: false }
+const SUPERADMIN: PlatformSession = { userId: 'super-1', email: 'ops@example.com', name: 'Ops', mustChangePassword: false, twoFactorEnabled: true }
 
 function accountOf(id: string, name: string, overrides: Partial<PlatformAccountDetail> = {}): PlatformAccountDetail {
   return {

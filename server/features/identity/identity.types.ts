@@ -12,6 +12,8 @@ export interface SessionUser {
   mustChangePassword?: boolean | null
   /** A guest (D156): signed in by Place order, with no email or password. */
   isAnonymous?: boolean | null
+  /** Two-step sign-in (Better Auth `twoFactor`): required for the platform console (P1b, D188). */
+  twoFactorEnabled?: boolean | null
 }
 
 /**

@@ -117,16 +117,25 @@ describe('admin surface', () => {
 
 describe('platform surface (T2)', () => {
   it('grants a super admin the platform\'s actions; refuses everyone else', async () => {
-    const superadmin = { ...(await person()), role: 'superadmin' }
+    const superadmin = { ...(await person()), role: 'superadmin', twoFactorEnabled: true }
     expect(authorizePlatform(superadmin, { tenant: ['create'] })).toEqual({ userId: superadmin.id })
     await expectApiError(async () => authorizePlatform(await person('owner'), { tenant: ['read'] }), 403, 'FORBIDDEN')
     await expectApiError(async () => authorizePlatform(null, { tenant: ['read'] }), 401, 'UNAUTHENTICATED')
   })
 
-  it('the console\'s session check: a super admin, also on a temporary password; nobody else (D142)', async () => {
+  it('requires two-step sign-in, after the temporary password (P1b, D188)', async () => {
     const superadmin = { ...(await person()), role: 'superadmin' }
-    expect(platformSession(superadmin)).toEqual({ userId: superadmin.id, email: superadmin.email, name: 'Test User', mustChangePassword: false })
+    await expectApiError(async () => authorizePlatform(superadmin, { tenant: ['read'] }), 403, 'TWO_FACTOR_REQUIRED')
+    await expectApiError(async () => authorizePlatform({ ...superadmin, mustChangePassword: true }, { tenant: ['read'] }), 403, 'PASSWORD_CHANGE_REQUIRED')
+    // Someone not on the platform team learns nothing about it.
+    await expectApiError(async () => authorizePlatform(await person('owner'), { tenant: ['read'] }), 403, 'FORBIDDEN')
+  })
+
+  it('the console\'s session check: a super admin, also on a temporary password or without 2FA; nobody else (D142)', async () => {
+    const superadmin = { ...(await person()), role: 'superadmin' }
+    expect(platformSession(superadmin)).toEqual({ userId: superadmin.id, email: superadmin.email, name: 'Test User', mustChangePassword: false, twoFactorEnabled: false })
     expect(platformSession({ ...superadmin, mustChangePassword: true }).mustChangePassword).toBe(true)
+    expect(platformSession({ ...superadmin, twoFactorEnabled: true }).twoFactorEnabled).toBe(true)
     // An owner of a cafe is not on the platform team.
     await expectApiError(async () => platformSession(await person('owner')), 403, 'NOT_PLATFORM_ADMIN')
     await expectApiError(async () => platformSession({ ...superadmin, banned: true }), 401, 'UNAUTHENTICATED')

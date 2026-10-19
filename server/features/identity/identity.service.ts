@@ -2,7 +2,7 @@ import type { Workspace } from '#shared/contracts/account'
 import type { AdminSession, CounterSession } from '#shared/contracts/identity'
 import type { PlatformSession } from '#shared/contracts/tenants'
 import type { Db } from '#server/utils/batch'
-import { branchNotFound, forbidden, notAdmin, notPlatformAdmin, notStaff, passwordChangeRequired, tenantNotFound, tenantSuspended, unauthenticated } from './identity.errors'
+import { branchNotFound, forbidden, notAdmin, notPlatformAdmin, notStaff, passwordChangeRequired, tenantNotFound, tenantSuspended, twoFactorRequired, unauthenticated } from './identity.errors'
 import { branchRoles, platformRoles, tenantRoles, tenantStatements } from './identity.permissions'
 import type { BranchPermission, BranchRole, PlatformPermission, PlatformRole, TenantPermission, TenantRole } from './identity.permissions'
 import * as repo from './identity.repository'
@@ -86,10 +86,15 @@ export async function authorizeTenant(db: Db, user: SessionUser | null | undefin
   return actor
 }
 
-/** The platform surface (T2): a super admin whose platform role grants the actions. */
+/**
+ * The platform surface (T2): a super admin whose platform role grants the actions, signed in with
+ * two-step sign-in set up (P1b, D188): a stolen password alone doesn't open the console. The
+ * temporary-password check comes first, so the console asks for a new password, then for 2FA.
+ */
 export function authorizePlatform(user: SessionUser | null | undefined, permissions: PlatformPermission): { userId: string } {
   const { id } = signedIn(user)
   if (!platformRolesOf(user!).some(role => platformRoles[role].authorize(permissions).success)) throw forbidden()
+  if (!user!.twoFactorEnabled) throw twoFactorRequired()
   return { userId: id }
 }
 
@@ -189,13 +194,13 @@ export async function accountWorkspaces(db: Db, user: SessionUser | null | undef
 
 /**
  * The platform console's session check (`GET /api/platform/me`, D142): a super admin, **including
- * one still on a temporary password** (the console then asks for a new one; every other platform
- * route refuses). Not signed in or banned: 401. Signed in, not a super admin: 403 `NOT_PLATFORM_ADMIN`.
+ * one still on a temporary password or without two-step sign-in** (the console then asks for a new
+ * password, then for 2FA; every other platform route refuses). Not signed in or banned: 401. Signed in, not a super admin: 403 `NOT_PLATFORM_ADMIN`.
  */
 export function platformSession(user: SessionUser | null | undefined): PlatformSession {
   if (!user || user.banned) throw unauthenticated()
   if (!platformRolesOf(user).includes('superadmin')) throw notPlatformAdmin()
-  return { userId: user.id, email: user.email ?? '', name: user.name ?? '', mustChangePassword: Boolean(user.mustChangePassword) }
+  return { userId: user.id, email: user.email ?? '', name: user.name ?? '', mustChangePassword: Boolean(user.mustChangePassword), twoFactorEnabled: Boolean(user.twoFactorEnabled) }
 }
 
 /**

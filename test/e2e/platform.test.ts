@@ -13,7 +13,7 @@ await setupE2e()
 // sign-in, Cafes, Create a cafe (one page, D185) with the owner's password shown once, and a cafe's
 // page (change the address, pause, resume).
 
-const SUPERADMIN: PlatformSession = { userId: 'super-1', email: 'ops@example.com', name: 'Ops', mustChangePassword: false }
+const SUPERADMIN: PlatformSession = { userId: 'super-1', email: 'ops@example.com', name: 'Ops', mustChangePassword: false, twoFactorEnabled: true }
 
 /** Account ids are UUIDs (the page's `?owner=` only takes one). */
 const NUK_OWNER_ID = '0a1b2c3d-0000-4000-8000-000000000001'

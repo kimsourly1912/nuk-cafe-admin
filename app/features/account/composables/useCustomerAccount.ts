@@ -84,8 +84,22 @@ export function useAccountActions() {
    * again, like the workspaces' sign-ins do with an account they don't let in, so the menu isn't
    * left with a session it can't use.
    */
-  async function signIn(form: SignInForm) {
-    const { user } = await authFetch<{ user: AuthUser }>('/sign-in/email', { email: form.email, password: form.password })
+  /** The password step. `two-factor` (D188): the page asks for the code, then calls `finishSignIn`. */
+  async function signIn(form: SignInForm): Promise<PasswordStep> {
+    const response = await authFetch<{ user?: AuthUser, twoFactorRedirect?: boolean }>('/sign-in/email', { email: form.email, password: form.password })
+    if (passwordStepOf(response) === 'two-factor') return 'two-factor'
+    await signedIn(response.user!)
+    return 'signed-in'
+  }
+
+  /** Signed in by the code after the password: the same checks as a password-only sign-in. */
+  async function finishSignIn() {
+    const session = await $fetch<{ user: AuthUser } | null>('/api/auth/get-session', { retry: 0, timeout: 30_000 })
+    if (!session) throw new ApiError('Sign in to continue.', { kind: 'unauthorized', status: 401 })
+    await signedIn(session.user)
+  }
+
+  async function signedIn(user: AuthUser) {
     if (user.mustChangePassword) {
       await authFetch('/sign-out').catch(() => {})
       await accountChanged()
@@ -133,7 +147,7 @@ export function useAccountActions() {
     await accountChanged()
   }
 
-  return { signIn, signUp, signInAsGuest, signOut, resendVerification, requestPasswordReset, resetPassword }
+  return { signIn, finishSignIn, signUp, signInAsGuest, signOut, resendVerification, requestPasswordReset, resetPassword }
 }
 
 /** Seconds between two emails of the same kind (the server allows about 3 per 10 minutes). */

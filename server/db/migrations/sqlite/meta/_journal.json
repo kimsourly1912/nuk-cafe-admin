@@ -288,6 +288,13 @@
       "when": 1792391527197,
       "tag": "0040_order_ready_delivery",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1792407260263,
+      "tag": "0041_two_factor",
+      "breakpoints": true
     }
   ]
 }

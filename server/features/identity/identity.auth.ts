@@ -1,5 +1,5 @@
 import { createAuthMiddleware, isAPIError } from 'better-auth/api'
-import { admin, anonymous, haveIBeenPwned, organization } from 'better-auth/plugins'
+import { admin, anonymous, haveIBeenPwned, organization, twoFactor } from 'better-auth/plugins'
 import type { ServerAuthConfig } from '@nuxtjs/better-auth/config'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
@@ -112,6 +112,16 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
           ? ctx.context.session?.user.id
           : ctx.path === '/reset-password' ? resetFor.get(ctx.context) : undefined
         if (userId) await ctx.context.internalAdapter.updateUser(userId, { mustChangePassword: false })
+        // Setting up two-step sign-in (D188) ends the account's other sessions: a device signed in
+        // before it, with the password alone, must not count as two-step. Only setup swaps the
+        // session (a sign-in's code check starts from none), so the old and new sessions differ.
+        const before = ctx.context.session?.session
+        const after = ctx.context.newSession
+        if (ctx.path === '/two-factor/verify-totp' && before && after && after.session.token !== before.token) {
+          for (const other of await ctx.context.internalAdapter.listSessions(after.user.id)) {
+            if (other.token !== after.session.token) await ctx.context.internalAdapter.deleteSession(other.token)
+          }
+        }
       }),
     },
     rateLimit: {
@@ -162,6 +172,10 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
         },
       }),
       haveIBeenPwned({ enabled: checkBreachedPasswords }),
+      // Two-step sign-in (P1b, D188): an authenticator app's code (TOTP) or a backup code, after the
+      // password. Required for super admins (\`authorizePlatform\`); any account that turns it on is
+      // asked for a code at every sign-in. No "trust this device": sessions already last 7 days.
+      twoFactor({ issuer: 'NUK Platform' }),
       // Guests (D156): Place order without an account signs the browser in as a guest, a user with
       // no email or password. Orders keep their owner, so "only your own orders" holds as before.
       anonymous({

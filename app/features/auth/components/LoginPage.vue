@@ -14,13 +14,15 @@ const loading = ref(false)
 // Hidden by default: staff sign in at the counter, where customers can see the screen.
 const showPassword = ref(false)
 const error = ref<string>()
+/** After a password that needs a code (two-step sign-in, D188): the code step replaces the form. */
+const codeStep = ref(false)
 /** Refused here, but the account works at another cafe (T2c, D144): the alert offers Your cafes. */
 const elsewhere = ref(false)
 
 const route = useRoute()
 const slug = useTenantSlug()
 const { name, logoUrl } = useCafe()
-const { login } = useAuth()
+const { login, finishLogin } = useAuth()
 
 // A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
 const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
@@ -38,18 +40,48 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   error.value = undefined
   elsewhere.value = false
   try {
-    await login(event.data)
+    if (await login(event.data) === 'two-factor') {
+      codeStep.value = true
+      state.password = ''
+      return
+    }
     await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
   }
   catch (e) {
-    error.value = getErrorMessage(e)
-    elsewhere.value = ApiError.from(e).code === WORKS_ELSEWHERE
-    await nextTick()
-    errorAlert.value?.focus()
+    await showError(e)
   }
   finally {
     loading.value = false
   }
+}
+
+async function showError(e: unknown) {
+  error.value = typeof e === 'string' ? e : getErrorMessage(e)
+  elsewhere.value = typeof e !== 'string' && ApiError.from(e).code === WORKS_ELSEWHERE
+  await nextTick()
+  errorAlert.value?.focus()
+}
+
+/** The code was right (D188): finish the sign-in as after a password alone. */
+async function onCodeVerified() {
+  loading.value = true
+  try {
+    await finishLogin()
+    await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
+  }
+  catch (e) {
+    codeStep.value = false
+    await showError(e)
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+async function restart(message?: string) {
+  codeStep.value = false
+  if (message) await showError(message)
+  else error.value = undefined
 }
 </script>
 
@@ -67,8 +99,16 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
       </div>
     </template>
 
-    <UForm
+    <TwoFactorCodeForm
+      v-if="codeStep"
+      v-model:saving="loading"
+      form-id="login-form-code"
+      @verified="onCodeVerified()"
+      @restart="restart"
+    />
 
+    <UForm
+      v-else
       id="login-form"
       ref="form"
       :schema="schema"
@@ -135,13 +175,24 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     </UForm>
 
     <template #footer>
-      <UButton
-        type="submit"
-        form="login-form"
-        label="Sign in"
-        block
-        :loading="loading"
-      />
+      <div class="flex w-full flex-col gap-2">
+        <UButton
+          type="submit"
+          :form="codeStep ? 'login-form-code' : 'login-form'"
+          :label="codeStep ? 'Verify' : 'Sign in'"
+          block
+          :loading="loading"
+        />
+        <UButton
+          v-if="codeStep"
+          label="Back"
+          color="neutral"
+          variant="ghost"
+          block
+          :disabled="loading"
+          @click="restart()"
+        />
+      </div>
     </template>
   </TaskFrame>
 </template>

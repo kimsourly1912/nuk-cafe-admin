@@ -117,6 +117,8 @@ describe('accessibility (axe, WCAG 2.1 AA)', () => {
       await page.getByRole('button', { name: 'Sign in', exact: true }).click()
       await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}`)
       await page.getByRole('button', { name: `Open order ${String(order.pickupNumber).padStart(3, '0')}` }).first().waitFor()
+      // The pointer stays where Sign in was clicked; at 390px the queue's Take payment lands under it, and its hover colour isn't what's measured.
+      await page.mouse.move(0, 0)
       expect(await findings(page)).toEqual([])
     })
   }
