@@ -43,11 +43,10 @@ are not.
 ## Rules every step follows
 
 - **Our routes, not Better Auth's admin endpoints.** Every platform write is one `db.batch` with its
-  guards and its `audit_events` row (`tenant_id` null for an account action, the cafe's id for an
-  action on a cafe; action names `platform.*`). Better Auth's `/api/auth/admin/*` endpoints write
-  without our audit row or version guard. Our code doesn't call them today, but the `superadmin`
-  role grants them (`identity.permissions.ts`). P1 removes those `user`/`session` grants (a test
-  shows the endpoint refused), so the console is the only way in.
+  guards and its `audit_events` row (`tenant_id` null and `platform.account.*` for an account
+  action; the cafe's id and `tenant.*` for an action on a cafe, as since D142). Better Auth's `/api/auth/admin/*` endpoints write
+  without our audit row or version guard. P1 removed the `superadmin` role's `user`/`session`
+  grants (D187; a test shows the endpoints refused), so the console is the only way in.
 - **Versions:** every account and cafe edit sends the version read (409 on stale), as staff edits do
   (`user.updatedAt`).
 - **No deletion.** No account delete, no cafe delete: ban and pause instead. Orders and ledgers are
@@ -71,7 +70,7 @@ are not.
    (owner/staff, from memberships). It **doesn't** list the cafes a customer has ordered from or
    has a profile in: that is order data.
 4. **Super admins sign in with 2FA** (Better Auth `twoFactor`, an authenticator app), required for
-   `/platform` from P1 on.
+   `/platform` from P1b on.
 5. **Support access (impersonation) stays off** until there is a support process (QP1). When built,
    it is granted by the cafe's owner, never taken.
 
@@ -84,9 +83,10 @@ follow the page patterns and Nuxt UI defaults (D142).
 
 | # | Step | Done when |
 |---|---|---|
-| P1 | **Accounts.** Platform nav gets **Accounts**. A list of all registered accounts (guests excluded): search by name or email (bounded server search, `instr`, D183), filter (owners, staff, customers, banned, super admins), pages, newest first. An account page: name, email, verified, created, last sign-in (latest session), active sessions count, the cafes it works in with the role, banned state with reason and end. Actions: **Ban** (reason, optional end date: deletes every session in the batch), **Unban**, **Sign out everywhere**, **Set temporary password** (as D115: returned once, `mustChangePassword`, sessions deleted; not for super admins). 2FA for super admins (enrol on first platform sign-in, then required). The `user`/`session` grants removed from `superadmin`. Permission: a new platform statement `account: ['read', 'ban', 'reset-password', 'revoke-sessions']` | Server tests: every route's permission, version 409, self/super-admin refusals, ban ends sessions and blocks every workspace (customer, admin, counter, platform), Better Auth's admin endpoints refused, guard-removal tests; e2e for the list, the page and each action at 390/1440 |
+| P1 | **Accounts**, built, awaiting review (D187; owner: no mockup round). Platform nav **Accounts**: every registered account (guests excluded), search by name or email (`instr`, D183), tabs Owners, Staff, Customers, Super admins, Banned, pages, newest first. An account page: email and verified, joined, open sessions and the latest activity, the cafes it works in with the role and "Only owner", the ban with its reason and end. **Ban** (reason, until unbanned or 1/7/30 days; sessions deleted), **Unban**, **Sign out everywhere**, **Set temporary password** (as D115). Never one's own or a super admin's. Better Auth's `user`/`session` grants removed from `superadmin`; platform statement `account: ['read', 'ban', 'sign-out', 'reset-password']`; the owner picker's search moved to `/api/platform/owner-candidates` | Server tests (every refusal, version 409, in-batch guards against a role or ban that didn't move the version, ban ends sessions and blocks every workspace, an expired ban lifted at sign-in, Better Auth's endpoints refused), real-D1 search test; e2e for the list, the page and each action at 390/1440 with axe in light and dark |
+| P1b | **2FA for super admins**: Better Auth `twoFactor` (an authenticator app, backup codes), enrolment on the first platform sign-in, then required for `/platform` | Server tests (the platform refuses a session without 2FA); e2e for enrolment and the sign-in challenge |
 | P2 | **Cafe owners.** On a cafe's page: **Add owner** (an existing account, the D185 search, or a new account with a temporary password), **Remove owner** (they keep staff access only if they had a branch role; else none), **Transfer ownership** (add the new one and remove the old one in one batch). The batch keeps at least one active owner (`requireAnOwner`). Reason required. The **No active owner** state on the cafe's page and as a Cafes list filter. **Internal notes** per cafe (contact person, phone, notes: platform-only, versioned) | Server tests incl. the last-owner race (two removals at once leave one), two cafes, version 409; e2e |
-| P3 | **Overview and Activity.** `/platform` opens on **Overview**: cafes by status, new cafes this month, cafes with no order in 7 days, cafes with no active owner, banned accounts; counts only. **Activity**: every `platform.*` audit row, newest first, filters by actor, cafe, action and date, paged (`audit_events_at_idx`, `audit_events_tenant_idx`). A cafe's page lists the platform's actions on it | Server tests (only `platform.*` rows; never a cafe's own audit rows); e2e |
+| P3 | **Overview and Activity.** `/platform` opens on **Overview**: cafes by status, new cafes this month, cafes with no order in 7 days, cafes with no active owner, banned accounts; counts only. **Activity**: every audit row a super admin wrote (`platform.*` on accounts, `tenant.*` on cafes), newest first, filters by actor, cafe, action and date, paged (`audit_events_at_idx`, `audit_events_tenant_idx`). A cafe's page lists the platform's actions on it | Server tests (only the platform's actions; never a cafe's own staff's audit rows); e2e |
 | P4 | **System health.** The outbox (waiting, failing, dead, per kind and cafe), scheduled jobs' last run and failures, Telegram deliveries failing per cafe, Bakong token expiry per cafe (dates only, never the token). Read-only; links to the cafe's page. Prepares for QT3 | Server tests (no secret in any answer); e2e |
 | P5 ✋ | **Support access**, after QP1: the cafe's owner turns on "Allow platform support" for 24 hours in the admin; the super admin, after a 2FA check, opens the cafe read-only with a banner; every request audited with the grant's id; the owner can end it at any time; it ends by itself. Not Better Auth's plain `impersonateUser` (it acts as a person in all their cafes and needs no consent) | Owner's go on QP1 |
 

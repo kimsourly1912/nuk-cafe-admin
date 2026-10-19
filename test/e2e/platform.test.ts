@@ -86,8 +86,8 @@ async function open(path: string, handlers: Record<string, MockHandler> = {}, wi
     'GET /platform/tenants': cafesHandler(() => [NUK, PAUSED]),
     'GET /platform/tenants/counts': () => ({ active: 1, suspended: 1 }),
     'GET /platform/slug-availability': availability,
-    'GET /platform/accounts': accountSearch,
-    'GET /platform/accounts/{id}': accountById,
+    'GET /platform/owner-candidates': accountSearch,
+    'GET /platform/owner-candidates/{id}': accountById,
     ...handlers,
   })
   await page.goto(url(path), { waitUntil: 'hydration' })
@@ -428,7 +428,7 @@ describe('creating a cafe (D185)', () => {
   it('searches the server only for two or more characters, and shows only the answer to what is typed', async () => {
     const searches: string[] = []
     const { page, api } = await openNew({
-      'GET /platform/accounts': (request) => {
+      'GET /platform/owner-candidates': (request) => {
         searches.push(request.url.searchParams.get('search') ?? '')
         return accountSearch(request)
       },
@@ -448,7 +448,7 @@ describe('creating a cafe (D185)', () => {
 
     // Results of the search before are not shown for the next while it is asked.
     const slow = deferred()
-    api.set({ 'GET /platform/accounts': request => (request.url.searchParams.get('search') === 'carl' ? slow.handler(request) : accountSearch(request)) })
+    api.set({ 'GET /platform/owner-candidates': request => (request.url.searchParams.get('search') === 'carl' ? slow.handler(request) : accountSearch(request)) })
     await box.fill('zoe')
     await page.getByRole('option', { name: /zoe@example.com/ }).waitFor()
     await box.fill('carl')
@@ -479,7 +479,7 @@ describe('creating a cafe (D185)', () => {
     const garbage = await open(`${'/platform/cafes/new'}?owner=not-an-id`)
     await garbage.page.getByRole('heading', { name: 'Create a cafe' }).waitFor()
     expect(await ownerCard(garbage.page).getByRole('radio', { name: /Create new account/ }).isChecked()).toBe(true)
-    expect(garbage.api.calls.filter(call => call.startsWith('GET /platform/accounts'))).toEqual([])
+    expect(garbage.api.calls.filter(call => call.startsWith('GET /platform/owner-candidates'))).toEqual([])
 
     const gone = await open('/platform/cafes/new?owner=0a1b2c3d-0000-4000-8000-0000000000ff')
     await gone.page.getByRole('heading', { name: 'Create a cafe' }).waitFor()

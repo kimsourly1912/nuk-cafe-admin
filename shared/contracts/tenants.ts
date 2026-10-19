@@ -86,7 +86,7 @@ export type CreateTenantInput = v.InferOutput<typeof createTenantSchema>
 
 export const OWNER_SEARCH_MIN = 2
 
-/** `GET /api/platform/accounts?search=`: a name or email, at least two characters. */
+/** `GET /api/platform/owner-candidates?search=`: a name or email, at least two characters. */
 export const ownerSearchQuerySchema = v.object({
   search: v.pipe(v.string(), v.trim(), v.minLength(OWNER_SEARCH_MIN, `Type at least ${OWNER_SEARCH_MIN} characters`), v.maxLength(100)),
 })
@@ -170,7 +170,7 @@ export interface CafeRef {
 }
 
 /**
- * An account that can own a cafe, with the cafes it owns already (`GET /api/platform/accounts`,
+ * An account that can own a cafe, with the cafes it owns already (`GET /api/platform/owner-candidates`,
  * D185): New cafe's "Use existing account". Guests and disabled accounts never are.
  */
 export interface PlatformOwner {

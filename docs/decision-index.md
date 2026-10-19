@@ -216,3 +216,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D184](decisions.md#d184-the-staff-list-starts-from-the-cafes-memberships-not-from-every-account-2026-10-19) | The staff list starts from the cafe's memberships, not from every account, 2026-10-19 |
 | [D185](decisions.md#d185-create-a-cafe-is-one-page-create-new-account-never-reuses-an-account-2026-10-19) | Create a cafe is one page; "Create new account" never reuses an account, 2026-10-19 |
 | [D186](decisions.md#d186-the-platform-console-manages-the-container-never-the-contents-2026-10-19) | The platform console manages the container, never the contents, 2026-10-19 |
+| [D187](decisions.md#d187-the-consoles-accounts-ban-sign-out-temporary-password-through-our-routes-only-2026-10-19) | The console's Accounts: ban, sign out, temporary password, through our routes only, 2026-10-19 |

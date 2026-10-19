@@ -1,9 +1,9 @@
-import { ownerSearchQuerySchema } from '#shared/contracts/tenants'
-import { searchOwnerAccounts } from '#server/features/tenants'
+import { accountListQuerySchema } from '#shared/contracts/accounts'
+import { listPlatformAccounts } from '#server/features/identity'
 
-/** A bounded search of the accounts a new cafe can be given to: New cafe's "Use existing account" (D185). */
+/** Every registered account, newest first: the console's Accounts (step P1, D187). */
 export default defineEventHandler(async (event) => {
-  await requirePlatformPermission(event, { tenant: ['create'] })
-  const query = readValidQuery(event, ownerSearchQuerySchema)
-  return searchOwnerAccounts(useDb(), query)
+  await requirePlatformPermission(event, { account: ['read'] })
+  const query = readValidQuery(event, accountListQuerySchema)
+  return listPlatformAccounts(useDb(), query)
 })
