@@ -11,6 +11,7 @@ import type { PlatformSession } from '#shared/contracts/tenants'
 export const PLATFORM_HOME = '/platform'
 export const PLATFORM_SIGN_IN = '/platform/sign-in'
 export const PLATFORM_CHANGE_PASSWORD = '/platform/change-password'
+export const PLATFORM_TWO_FACTOR = '/platform/two-factor'
 
 export const isPlatformPath = (path: string) => path === PLATFORM_HOME || path.startsWith(`${PLATFORM_HOME}/`) || path.startsWith(`${PLATFORM_HOME}?`)
 
@@ -38,6 +39,8 @@ export function usePlatformSession() {
   const generation = useState('platform-session:generation', () => 0)
   const isSignedIn = computed(() => user.value !== null)
   const mustChangePassword = computed(() => user.value?.mustChangePassword ?? false)
+  /** Two-step sign-in is set up (D188): until it is, the console's only page is its setup. */
+  const twoFactorEnabled = computed(() => user.value?.twoFactorEnabled ?? false)
 
   function setUser(next: PlatformSession | null) {
     const changed = (next?.userId ?? null) !== (user.value?.userId ?? null)
@@ -61,10 +64,14 @@ export function usePlatformSession() {
     return user.value
   }
 
-  /** Signs in with Better Auth, then checks the account is a super admin. Throws `ApiError`. */
-  async function signIn(credentials: { email: string, password: string }) {
+  /**
+   * The password step of a sign-in. `two-factor`: the page asks for the code (`<TwoFactorCodeForm>`,
+   * D188), then calls `finishSignIn`. Throws `ApiError`.
+   */
+  async function signIn(credentials: { email: string, password: string }): Promise<PasswordStep> {
+    let step: PasswordStep
     try {
-      await authFetch('/sign-in/email', credentials)
+      step = passwordStepOf(await authFetch('/sign-in/email', credentials))
     }
     catch (error) {
       const apiError = ApiError.from(error)
@@ -73,6 +80,13 @@ export function usePlatformSession() {
       }
       throw apiError
     }
+    if (step === 'two-factor') return step
+    await finishSignIn()
+    return step
+  }
+
+  /** Signed in (by password, or by the code after it): checks the account is a super admin. Throws `ApiError`. */
+  async function finishSignIn() {
     let session: PlatformSession
     try {
       session = await apiFetch<PlatformSession>('/platform/me')
@@ -117,6 +131,35 @@ export function usePlatformSession() {
     }
   }
 
+  /**
+   * Starts setting up two-step sign-in (D188): checks the password, and answers what the app needs
+   * (the `otpauth://` link for the QR code) and the backup codes, shown once. Nothing is on until
+   * `confirmTwoFactor` gets a right code. Throws `ApiError`.
+   */
+  async function startTwoFactor(password: string): Promise<{ totpURI: string, backupCodes: string[] }> {
+    try {
+      return await authFetch<{ totpURI: string, backupCodes: string[] }>('/two-factor/enable', { password, method: 'totp' })
+    }
+    catch (error) {
+      const apiError = ApiError.from(error)
+      if (apiError.code === 'INVALID_PASSWORD') {
+        throw new ApiError('Your password is incorrect.', { kind: 'business', status: apiError.status, code: apiError.code, cause: error })
+      }
+      throw apiError
+    }
+  }
+
+  /**
+   * A code from the app turns two-step sign-in on. The server signs the account out on its other
+   * devices and gives this one a new session. Throws `ApiError`.
+   */
+  async function confirmTwoFactor(code: string) {
+    await verifyTwoFactorCode('app', code)
+    // Reflect it now, confirm in the background.
+    if (user.value && !user.value.twoFactorEnabled) user.value = { ...user.value, twoFactorEnabled: true }
+    void fetchSession()
+  }
+
   /** A route answered PASSWORD_CHANGE_REQUIRED: the middleware moves to the change-password page. */
   function requirePasswordChange() {
     if (user.value && !user.value.mustChangePassword) user.value = { ...user.value, mustChangePassword: true }
@@ -128,8 +171,12 @@ export function usePlatformSession() {
     generation: readonly(generation),
     isSignedIn,
     mustChangePassword,
+    twoFactorEnabled,
     fetchSession,
     signIn,
+    finishSignIn,
+    startTwoFactor,
+    confirmTwoFactor,
     changePassword,
     signOut,
     requirePasswordChange,

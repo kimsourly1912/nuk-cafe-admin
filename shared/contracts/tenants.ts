@@ -197,4 +197,9 @@ export interface PlatformSession {
   email: string
   name: string
   mustChangePassword: boolean
+  /**
+   * Two-step sign-in is set up (P1b, D188). Until it is, every other platform route answers 403
+   * `TWO_FACTOR_REQUIRED` and the console asks for it first.
+   */
+  twoFactorEnabled: boolean
 }

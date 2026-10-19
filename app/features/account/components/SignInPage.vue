@@ -2,7 +2,8 @@
 /**
  * Sign in (step 5.2, D97): email and password, "Forgot password?", a link to create an account.
  * Returns to `?redirect=` (a page of the customer site) or the menu. After a password reset
- * (`?reset=1`) it says so. Someone already signed in goes straight on.
+ * (`?reset=1`) it says so. Someone already signed in goes straight on. With two-step sign-in (D188)
+ * the password is followed by the code from the app (`<TwoFactorCodeForm>`).
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { SignInForm } from '../schemas/account-form'
@@ -22,7 +23,9 @@ const afterReset = computed(() => route.query.reset === '1')
 
 const state = reactive({ email: '', password: '' })
 const { saving, formError, focusFirstInvalid, submit } = useAccountForm({ email: 'sign-in-email', password: 'sign-in-password' })
-const { signIn } = useAccountActions()
+const { signIn, finishSignIn } = useAccountActions()
+/** After a password that needs a code: the code step replaces the form. */
+const codeStep = ref(false)
 
 const { account, known } = useCustomerAccount()
 let arrived = false
@@ -35,9 +38,27 @@ watch(known, (isKnown) => {
 async function onSubmit(event: FormSubmitEvent<SignInForm>) {
   arrived = true
   await submit(async () => {
-    await signIn(event.data)
+    if (await signIn(event.data) === 'two-factor') {
+      codeStep.value = true
+      state.password = ''
+      return
+    }
     await navigateTo(target.value)
   })
+}
+
+/** The code was right: finish as after a password alone. A failure goes back to the password form. */
+async function onCodeVerified() {
+  codeStep.value = false
+  await submit(async () => {
+    await finishSignIn()
+    await navigateTo(target.value)
+  })
+}
+
+function restart(message?: string) {
+  codeStep.value = false
+  formError.value = message
 }
 </script>
 
@@ -47,7 +68,16 @@ async function onSubmit(event: FormSubmitEvent<SignInForm>) {
     description="Sign in to order ahead and collect points."
     :back="{ label: 'Back to the menu', to: home }"
   >
+    <TwoFactorCodeForm
+      v-if="codeStep"
+      v-model:saving="saving"
+      form-id="sign-in-code"
+      @verified="onCodeVerified()"
+      @restart="restart"
+    />
+
     <UForm
+      v-else
       id="sign-in-form"
       ref="form"
       :schema="signInSchema"
@@ -101,12 +131,24 @@ async function onSubmit(event: FormSubmitEvent<SignInForm>) {
     <template #footer>
       <UButton
         type="submit"
-        form="sign-in-form"
-        label="Sign in"
+        :form="codeStep ? 'sign-in-code' : 'sign-in-form'"
+        :label="codeStep ? 'Verify' : 'Sign in'"
         block
         :loading="saving"
       />
-      <p class="text-center text-sm text-muted">
+      <UButton
+        v-if="codeStep"
+        label="Back"
+        color="neutral"
+        variant="ghost"
+        block
+        :disabled="saving"
+        @click="restart()"
+      />
+      <p
+        v-else
+        class="text-center text-sm text-muted"
+      >
         New here?
         <ULink
           :to="accountLink(ACCOUNT_PATHS.signUp, route.query.redirect)"

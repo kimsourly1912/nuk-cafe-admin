@@ -5,6 +5,7 @@ export {
   PLATFORM_CHANGE_PASSWORD,
   PLATFORM_HOME,
   PLATFORM_SIGN_IN,
+  PLATFORM_TWO_FACTOR,
   platformRedirectTarget,
   usePlatformSession,
 } from './composables/usePlatformSession'

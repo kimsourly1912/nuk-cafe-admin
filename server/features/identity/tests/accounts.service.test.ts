@@ -301,7 +301,7 @@ describe('Better Auth\'s own admin endpoints', () => {
   })
 
   it('while the console\'s own permission is granted', () => {
-    const superadmin = { id: SUPER, role: 'superadmin' } as SessionUser
+    const superadmin = { id: SUPER, role: 'superadmin', twoFactorEnabled: true } as SessionUser
     expect(authorizePlatform(superadmin, { account: ['read', 'ban', 'sign-out', 'reset-password'] })).toEqual({ userId: SUPER })
   })
 })

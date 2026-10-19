@@ -58,7 +58,13 @@ Everyone else is added from the Staff page; branches come from the seed locally,
 npx wrangler d1 execute nuk-cafe-staging --remote --command "UPDATE user SET role = 'superadmin' WHERE email = 'you@example.com'"
 ```
 
-Then sign in at `/platform/sign-in`. A super admin sees each cafe's usage numbers, never its menu, orders or customers. To take it away: `SET role = 'customer'`. Keep the team small: a super admin can create cafes with owners, pause any cafe and change its address. To give an owner another cafe, use **New cafe for this owner** on one of their cafes' pages, or New cafe → **An existing owner** (D146): they keep their own account and find the cafe under Your cafes.
+Then sign in at `/platform/sign-in`. The console first asks them to set up **two-step sign-in** (D188): an authenticator app's code after the password at every sign-in (the console, and also a cafe's admin, counter or customer account with that account), with ten backup codes shown once. **A super admin who lost both the app and the backup codes** is reset by hand, by another person on the team, after checking it's them; the next sign-in asks for setup again:
+
+```bash
+npx wrangler d1 execute nuk-cafe-staging --remote --command "DELETE FROM two_factor WHERE user_id = (SELECT id FROM user WHERE email = 'you@example.com'); UPDATE user SET two_factor_enabled = 0 WHERE email = 'you@example.com'; DELETE FROM session WHERE user_id = (SELECT id FROM user WHERE email = 'you@example.com')"
+```
+
+A super admin sees each cafe's usage numbers, never its menu, orders or customers. To take it away: `SET role = 'customer'`. Keep the team small: a super admin can create cafes with owners, pause any cafe and change its address. To give an owner another cafe, use **New cafe for this owner** on one of their cafes' pages, or New cafe → **An existing owner** (D146): they keep their own account and find the cafe under Your cafes.
 
 **Migration `0024_tenants` (D135)** rebuilds the branch and order tables. Before the deploy that carries it, note the time for a D1 Time Travel restore (Restore drill below); after it, admin sign-in, the menu, a dine-in order and the counter are checked by hand.
 

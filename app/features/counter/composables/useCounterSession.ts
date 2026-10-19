@@ -69,9 +69,10 @@ export function useCounterSession() {
   }
 
   /** Signs in with Better Auth, then checks the account works at a branch. Throws `ApiError`. */
-  async function signIn(credentials: { email: string, password: string }) {
+  async function signIn(credentials: { email: string, password: string }): Promise<PasswordStep> {
+    let step: PasswordStep
     try {
-      await authFetch('/sign-in/email', credentials)
+      step = passwordStepOf(await authFetch('/sign-in/email', credentials))
     }
     catch (error) {
       const apiError = ApiError.from(error)
@@ -80,6 +81,14 @@ export function useCounterSession() {
       }
       throw apiError
     }
+    // Two-step sign-in (D188): the page asks for the code, then calls `finishSignIn`.
+    if (step === 'two-factor') return step
+    await finishSignIn()
+    return step
+  }
+
+  /** Signed in (by password, or by the code after it): checks the account works at a branch. Throws `ApiError`. */
+  async function finishSignIn() {
     let session: CounterSession
     try {
       session = await apiFetch<CounterSession>('/counter/me')
@@ -141,6 +150,7 @@ export function useCounterSession() {
     mustChangePassword,
     fetchSession,
     signIn,
+    finishSignIn,
     changePassword,
     signOut,
     requirePasswordChange,

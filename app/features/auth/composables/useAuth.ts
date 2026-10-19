@@ -98,9 +98,10 @@ export function useAuth() {
    * Signs in with Better Auth, then checks admin access. An account without it (a customer, branch
    * staff) is signed out again and gets a clear error. Throws `ApiError`.
    */
-  async function login(credentials: Credentials) {
+  async function login(credentials: Credentials): Promise<PasswordStep> {
+    let step: PasswordStep
     try {
-      await authFetch('/sign-in/email', { email: credentials.email, password: credentials.password })
+      step = passwordStepOf(await authFetch('/sign-in/email', { email: credentials.email, password: credentials.password }))
     }
     catch (error) {
       const apiError = ApiError.from(error)
@@ -110,7 +111,14 @@ export function useAuth() {
       }
       throw apiError
     }
+    // Two-step sign-in (D188): the page asks for the code, then calls `finishLogin`.
+    if (step === 'two-factor') return step
+    await finishLogin()
+    return step
+  }
 
+  /** Signed in (by password, or by the code after it): checks the account manages this cafe. Throws `ApiError`. */
+  async function finishLogin() {
     let session: AdminSession
     try {
       session = await apiFetch<AdminSession>('/admin/me')
@@ -195,6 +203,7 @@ export function useAuth() {
     mustChangePassword,
     fetchSession,
     login,
+    finishLogin,
     changePassword,
     requirePasswordChange,
     logout,
