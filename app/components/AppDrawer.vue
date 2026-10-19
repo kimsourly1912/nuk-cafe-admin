@@ -12,7 +12,17 @@ import { UDrawer } from '#components'
 
 defineOptions({ inheritAttrs: false })
 const attrs = useAttrs()
-const { close = true } = defineProps<{ close?: DrawerProps['close'] }>()
+const { close = true, ui } = defineProps<{ close?: DrawerProps['close'], ui?: DrawerProps['ui'] }>()
+
+// The header and footer get their own padding and rule, so a scrolling body never runs into them.
+// A consumer's `ui.header` / `ui.footer` is merged in, not replaced. The body scrolls with a thin
+// scrollbar unless a consumer sets its own `ui.body` (the layout hides it on purpose).
+const drawerUi = computed<DrawerProps['ui']>(() => ({
+  ...ui,
+  header: ['pb-3 border-b border-default', ui?.header].filter(Boolean).join(' '),
+  footer: ['pt-3 border-t border-default', ui?.footer].filter(Boolean).join(' '),
+  body: ui?.body ?? '[scrollbar-width:thin]',
+}))
 </script>
 
 <template>
@@ -21,6 +31,7 @@ const { close = true } = defineProps<{ close?: DrawerProps['close'] }>()
     :close="close"
     :handle="false"
     handle-only
+    :ui="drawerUi"
   >
     <template
       v-for="(_, name) in $slots"

@@ -31,7 +31,7 @@ watch(() => props.activeMainId, (id, previous) => {
 })
 
 const entryClass = (active: boolean) => [
-  'flex w-full min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm',
+  'flex w-full min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors duration-200 motion-reduce:transition-none',
   active ? 'bg-primary/10 font-medium text-primary' : 'text-default hover:bg-elevated',
 ]
 </script>
@@ -66,25 +66,30 @@ const entryClass = (active: boolean) => [
           @click="toggle(section.id)"
         />
       </div>
-      <ul
-        v-if="section.subSections.length && expanded.has(section.id)"
-        class="ms-3 space-y-0.5 border-s border-default ps-2"
+      <!-- Grid-row trick: animates to and from the content's own height without measuring it. -->
+      <div
+        v-if="section.subSections.length"
+        class="grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none"
+        :class="expanded.has(section.id) ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'"
+        :inert="!expanded.has(section.id)"
       >
-        <li
-          v-for="sub in section.subSections"
-          :key="sub.id"
-        >
-          <button
-            type="button"
-            :class="entryClass(sub.id === activeSubId)"
-            :aria-current="sub.id === activeSubId ? 'true' : undefined"
-            @click="emit('go', sub.id)"
+        <ul class="ms-3 min-h-0 space-y-0.5 overflow-hidden border-s border-default ps-2">
+          <li
+            v-for="sub in section.subSections"
+            :key="sub.id"
           >
-            <span class="truncate">{{ sub.name }}</span>
-            <span class="shrink-0 text-xs text-muted">{{ sub.items.length }}</span>
-          </button>
-        </li>
-      </ul>
+            <button
+              type="button"
+              :class="entryClass(sub.id === activeSubId)"
+              :aria-current="sub.id === activeSubId ? 'true' : undefined"
+              @click="emit('go', sub.id)"
+            >
+              <span class="truncate">{{ sub.name }}</span>
+              <span class="shrink-0 text-xs text-muted">{{ sub.items.length }}</span>
+            </button>
+          </li>
+        </ul>
+      </div>
     </li>
   </ul>
 </template>

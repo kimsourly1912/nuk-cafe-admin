@@ -27,22 +27,37 @@ export function useCustomerAccount() {
   return { account, guest, known, error: query.error, refresh: query.refresh }
 }
 
+/** The server's code for an account that must replace its temporary password first. */
+const PASSWORD_CHANGE_REQUIRED = 'PASSWORD_CHANGE_REQUIRED'
+
+/** The part of Better Auth's user (sign-in, `get-session`) the store reads. */
+interface AuthUser {
+  /** A staff account on its temporary password (security.md → Staff onboarding). */
+  mustChangePassword?: boolean | null
+}
+
 /**
  * Signed out is Better Auth's `get-session` answering `null` (no failed request in the console on
  * every visit); only a session reads the account itself.
+ *
+ * A staff account still on its temporary password counts as signed out on the store: every route
+ * but `/api/auth` refuses it (PASSWORD_CHANGE_REQUIRED) and only its workspace can change the
+ * password. It isn't signed out, since the same session may be on the change-password page in
+ * another tab (one sign-in per browser, D97).
  */
 async function loadAccount(): Promise<ShopMe | null> {
-  const session = await $fetch<{ user: unknown } | null>('/api/auth/get-session', { retry: 0, timeout: 30_000 })
+  const session = await $fetch<{ user: AuthUser } | null>('/api/auth/get-session', { retry: 0, timeout: 30_000 })
     .catch((error: unknown) => {
       throw ApiError.from(error)
     })
-  if (!session?.user) return null
+  if (!session?.user || session.user.mustChangePassword) return null
   try {
     return await apiFetch<ShopMe>('/shop/me')
   }
   catch (error) {
-    // Signed out between the two requests.
-    if (ApiError.from(error).kind === 'unauthorized') return null
+    // Signed out, or given a temporary password, between the two requests.
+    const apiError = ApiError.from(error)
+    if (apiError.kind === 'unauthorized' || apiError.code === PASSWORD_CHANGE_REQUIRED) return null
     throw error
   }
 }
@@ -64,8 +79,18 @@ const accountChanged = () => invalidate('account')
  * (`accountFormError`) and keep their own `saving` state, like the admin's sign-in (D84).
  */
 export function useAccountActions() {
+  /**
+   * Signs in. A staff account on its temporary password is refused (see `loadAccount`): signed out
+   * again, like the workspaces' sign-ins do with an account they don't let in, so the menu isn't
+   * left with a session it can't use.
+   */
   async function signIn(form: SignInForm) {
-    await authFetch('/sign-in/email', { email: form.email, password: form.password })
+    const { user } = await authFetch<{ user: AuthUser }>('/sign-in/email', { email: form.email, password: form.password })
+    if (user.mustChangePassword) {
+      await authFetch('/sign-out').catch(() => {})
+      await accountChanged()
+      throw new ApiError('Change your temporary password to continue.', { kind: 'forbidden', status: 403, code: PASSWORD_CHANGE_REQUIRED })
+    }
     await accountChanged()
   }
 

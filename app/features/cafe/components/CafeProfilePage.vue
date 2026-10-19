@@ -193,7 +193,7 @@ const address = computed(() => (saved.value ? `${origin}${tenantUrl(saved.value.
               <UFormField
                 label="Logo"
                 name="logoId"
-                help="A square image works best: it's shown small, beside the name. Without one, a coffee cup is shown."
+                help="It's cropped square and shown small, beside the name. Without one, a coffee cup is shown."
               >
                 <ImageInput
                   v-model:image-url="state.logoUrl"
@@ -201,6 +201,7 @@ const address = computed(() => (saved.value ? `${origin}${tenantUrl(saved.value.
                   v-model:uploading="uploading"
                   alt="Cafe logo"
                   noun="logo"
+                  :crop-ratio="1"
                   :disabled="saving"
                 />
               </UFormField>

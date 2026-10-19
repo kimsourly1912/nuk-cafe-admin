@@ -10,6 +10,7 @@
  */
 import { useFileDialog } from '@vueuse/core'
 import { IMAGE_MAX_BYTES, IMAGE_TYPES } from '#shared/contracts/media'
+import ImageCropModal from './ImageCropModal.vue'
 
 const props = withDefaults(defineProps<{
   /** The preview's text alternative: what the image is ("Menu item image", "Cafe logo"). */
@@ -17,6 +18,11 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   /** The word on the buttons: "Upload image", "Replace logo". */
   noun?: string
+  /**
+   * Width ÷ height to crop every picked photo to (1 square, 4 / 5 portrait); the crop modal opens
+   * after picking, and the upload is the cropped file. Without it, the photo is uploaded whole.
+   */
+  cropRatio?: number
 }>(), { noun: 'image' })
 
 const imageUrl = defineModel<string | undefined>('imageUrl')
@@ -39,6 +45,16 @@ const maxMb = IMAGE_MAX_BYTES / 1024 / 1024
 
 const { open, onChange } = useFileDialog({ accept: IMAGE_TYPES.join(','), multiple: false, reset: true })
 
+// A new instance each time: one closed with `destroyOnClose` can't be opened again.
+const overlay = useOverlay()
+
+/** The photo cropped in the crop modal; `null` when it was closed without one. */
+function cropFile(file: File) {
+  return overlay.create(ImageCropModal, { destroyOnClose: true })
+    .open({ file, aspectRatio: props.cropRatio, title: `Crop ${props.noun}` })
+    .result
+}
+
 onChange(async (files) => {
   const file = files?.[0]
   if (!file) return
@@ -51,10 +67,19 @@ onChange(async (files) => {
     problem.value = `The image is larger than ${IMAGE_MAX_ORIGINAL_BYTES / 1024 / 1024} MB.`
     return
   }
-  preparing.value = true
-  const upload = await shrinkImage(file).finally(() => {
-    preparing.value = false
-  })
+  // With a crop shape, the owner frames the photo first; the cropped file is already small.
+  let upload = file
+  if (props.cropRatio) {
+    const cropped = await cropFile(file)
+    if (!cropped) return
+    upload = cropped
+  }
+  else {
+    preparing.value = true
+    upload = await shrinkImage(file).finally(() => {
+      preparing.value = false
+    })
+  }
   if (upload.size > IMAGE_MAX_BYTES) {
     problem.value = `The image is still larger than ${maxMb} MB after making it smaller. Try another photo.`
     return

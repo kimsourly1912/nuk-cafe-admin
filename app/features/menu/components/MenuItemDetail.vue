@@ -60,18 +60,22 @@ function valueItems(setIndex: number) {
   const single = props.item.optionSets.length === 1
   return set.values.map((value) => {
     const orderable = isValueOrderable(props.item, selection.value, setIndex, value.id)
-    // With one option set a value is a version: its price is known. With two it depends on both.
-    const version = single ? props.item.variations.find(v => v.valueIds[0] === value.id) : undefined
+    // With one option set a value is a version: its price is known. With two it depends on both,
+    // so the version is the one this value gives with the other set's current choice.
+    const version = single ? props.item.variations.find(v => v.valueIds[0] === value.id) : variationOf(props.item, chooseValue(props.item, selection.value, setIndex, value.id))
     return {
       label: value.name,
       value: value.id,
       disabled: !orderable,
-      description: !orderable && single ? 'Sold out' : version ? (version.regularPriceMinor === null ? formatMinor(version.priceMinor) : `${formatMinor(version.priceMinor)} (was ${formatMinor(version.regularPriceMinor)})`) : undefined,
+      description: !orderable && single ? 'Sold out' : version?.regularPriceMinor != null ? `was ${formatMinor(version.regularPriceMinor)}` : undefined,
+      price: version ? (version.priceMinor > 0 ? formatMinor(version.priceMinor) : 'Free') : undefined,
     }
   })
 }
 
-const priceDelta = (minor: number) => (minor > 0 ? `+${formatMinor(minor)}` : undefined)
+const priceDelta = (minor: number) => (minor > 0 ? `+${formatMinor(minor)}` : 'Free')
+/** Rows are full width so the label slot can put the price at the right edge. */
+const radioUi = { wrapper: 'w-full' }
 const chosenIn = (group: PublicMenuModifierGroup) => selection.value.modifiers[group.id] ?? []
 const isRadioGroup = (group: PublicMenuModifierGroup) => group.minSelect === 1 && group.maxSelect === 1
 
@@ -162,8 +166,16 @@ function submit() {
             :model-value="selection.values[setIndex]"
             :items="valueItems(setIndex)"
             :aria-label="set.name"
+            :ui="radioUi"
             @update:model-value="value => selection = chooseValue(item, selection, setIndex, String(value))"
-          />
+          >
+            <template #label="{ item: option }">
+              <span class="flex w-full items-center justify-between gap-3">
+                <span>{{ option.label }}</span>
+                <span v-if="option.price">{{ option.price }}</span>
+              </span>
+            </template>
+          </URadioGroup>
         </fieldset>
 
         <fieldset
@@ -193,10 +205,18 @@ function submit() {
           <URadioGroup
             v-if="isRadioGroup(group)"
             :model-value="chosenIn(group)[0]"
-            :items="group.modifiers.map(m => ({ label: m.name, value: m.id, description: priceDelta(m.priceDeltaMinor) }))"
+            :items="group.modifiers.map(m => ({ label: m.name, value: m.id, price: priceDelta(m.priceDeltaMinor) }))"
             :aria-label="group.name"
+            :ui="radioUi"
             @update:model-value="value => pickOne(group, String(value))"
-          />
+          >
+            <template #label="{ item: option }">
+              <span class="flex w-full items-center justify-between gap-3">
+                <span>{{ option.label }}</span>
+                <span v-if="option.price">{{ option.price }}</span>
+              </span>
+            </template>
+          </URadioGroup>
           <div
             v-else
             class="space-y-2"
@@ -205,11 +225,17 @@ function submit() {
               v-for="modifier in group.modifiers"
               :key="modifier.id"
               :model-value="chosenIn(group).includes(modifier.id)"
-              :label="modifier.name"
-              :description="priceDelta(modifier.priceDeltaMinor)"
+              :ui="radioUi"
               :disabled="!chosenIn(group).includes(modifier.id) && group.maxSelect !== null && group.maxSelect !== 1 && chosenIn(group).length >= group.maxSelect"
               @update:model-value="toggle(group, modifier.id)"
-            />
+            >
+              <template #label>
+                <span class="flex w-full items-center justify-between gap-3">
+                  <span>{{ modifier.name }}</span>
+                  <span v-if="priceDelta(modifier.priceDeltaMinor)">{{ priceDelta(modifier.priceDeltaMinor) }}</span>
+                </span>
+              </template>
+            </UCheckbox>
           </div>
         </fieldset>
       </div>

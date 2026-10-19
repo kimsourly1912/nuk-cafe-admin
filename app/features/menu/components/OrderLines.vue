@@ -25,6 +25,12 @@ function setNote(key: string, note: string) {
   notesOpen.value.add(key)
   emit('set-note', key, note)
 }
+
+/** Clears the note and closes its box; only emits when there was text to clear. */
+function removeNote(line: ResolvedCart['lines'][number]) {
+  notesOpen.value.delete(line.key)
+  if (line.note) emit('set-note', line.key, '')
+}
 </script>
 
 <template>
@@ -113,6 +119,16 @@ function setNote(key: string, note: string) {
             size="sm"
             class="px-0"
             @click="notesOpen.add(line.key)"
+          />
+          <UButton
+            v-else-if="line.available"
+            label="Remove note"
+            icon="i-lucide-x"
+            color="neutral"
+            variant="link"
+            size="sm"
+            class="px-0"
+            @click="removeNote(line)"
           />
           <span v-else />
           <div class="flex items-center gap-1">

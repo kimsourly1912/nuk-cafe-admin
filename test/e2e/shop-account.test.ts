@@ -103,6 +103,24 @@ describe('signing in and out', () => {
     await page.waitForURL(url('/c/nuk'))
   })
 
+  it('a staff account on its temporary password is refused and signed out; signed in elsewhere, the menu shows it signed out', async () => {
+    const staff = seed.customers.temporaryStaff
+    const { page, problems } = await open('/sign-in')
+    await signIn(page, staff)
+    await page.getByRole('alert').filter({ hasText: 'This account still has a temporary password.' }).waitFor()
+    expect(new URL(page.url()).pathname).toBe('/sign-in')
+    const session = () => page.evaluate(() => fetch('/api/auth/get-session').then(r => r.json()))
+    expect(await session()).toBeNull()
+
+    // Signed in at the counter (same browser, same session, D97), then on the menu: no account, no error.
+    const status = await page.evaluate(body => fetch('/api/auth/sign-in/email', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.status), { email: staff.email, password: staff.password })
+    expect(status).toBe(200)
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
+    await page.getByRole('link', { name: 'Sign in' }).waitFor()
+    expect(await session()).not.toBeNull()
+    expect(problems).toEqual([])
+  })
+
   it('the password can be shown', async () => {
     const { page } = await open('/sign-in')
     const password = page.getByLabel('Password', { exact: true })

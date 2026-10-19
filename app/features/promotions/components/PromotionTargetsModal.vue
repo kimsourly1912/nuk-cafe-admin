@@ -31,23 +31,119 @@ const shown = computed(() => props.tree.flatMap((main) => {
   return subs.length || own.length ? [{ ...main, subs, items: own }] : []
 }))
 
-function toggle(set: Set<string>, id: string, on: boolean) {
-  const next = new Set(set)
-  if (on) next.add(id)
-  else next.delete(id)
-  return next
-}
-
 /** A category's items are covered by it, or by its main category. */
 const coveredBy = (main: PickerCategory, sub?: PickerCategory) => categories.value.has(main.id) || (!!sub && categories.value.has(sub.id))
 
+/** The whole tree by id, so a search that hides a ticked item doesn't hide it from the parent's state. */
+const fullMain = computed(() => new Map(props.tree.map(main => [main.id, main])))
+const fullSub = computed(() => new Map(props.tree.flatMap(main => main.subs.map(sub => [sub.id, sub] as const))))
+
+/** A category's box: ticked when it's chosen, dashed when only some of what's under it is. */
+function mainState(main: PickerCategory): boolean | 'indeterminate' {
+  if (categories.value.has(main.id)) return true
+  const full = fullMain.value.get(main.id) ?? main
+  const some = full.items.some(i => items.value.has(i.id))
+    || full.subs.some(sub => categories.value.has(sub.id) || sub.items.some(i => items.value.has(i.id)))
+  return some ? 'indeterminate' : false
+}
+function subState(main: PickerCategory, sub: PickerCategory): boolean | 'indeterminate' {
+  if (coveredBy(main) || categories.value.has(sub.id)) return true
+  const full = fullSub.value.get(sub.id) ?? sub
+  return full.items.some(i => items.value.has(i.id)) ? 'indeterminate' : false
+}
+
+const itemIdsUnder = (category: PickerCategory) => [...category.items, ...category.subs.flatMap(sub => sub.items)].map(i => i.id)
+
+/**
+ * Keeps the choice in its simplest form: a category whose items are all ticked becomes the category
+ * itself (so the box means "the whole category, also items added later"), and nothing under a
+ * ticked category is kept as its own tick.
+ */
+function normalize(cats: Set<string>, its: Set<string>) {
+  for (const main of props.tree) {
+    for (const sub of main.subs) {
+      if (sub.items.length && sub.items.every(i => its.has(i.id))) cats.add(sub.id)
+    }
+    const whole = (main.items.length > 0 || main.subs.length > 0)
+      && main.items.every(i => its.has(i.id))
+      && main.subs.every(sub => cats.has(sub.id))
+    if (whole) cats.add(main.id)
+    if (cats.has(main.id)) {
+      for (const sub of main.subs) cats.delete(sub.id)
+      for (const id of itemIdsUnder(main)) its.delete(id)
+    }
+    else {
+      for (const sub of main.subs) {
+        if (cats.has(sub.id)) for (const i of sub.items) its.delete(i.id)
+      }
+    }
+  }
+  categories.value = cats
+  items.value = its
+}
+
+/**
+ * Something covered by a ticked category is being unticked: the category steps aside and what is
+ * left of it is ticked one by one ("everything except Cortado"), a sub-category staying whole.
+ */
+function release(cats: Set<string>, its: Set<string>, main: PickerCategory, sub?: PickerCategory) {
+  if (cats.has(main.id)) {
+    cats.delete(main.id)
+    for (const i of main.items) its.add(i.id)
+    for (const s of main.subs) cats.add(s.id)
+  }
+  if (sub && cats.has(sub.id) && sub.items.length) {
+    // Only an item is unticked inside it: the sub-category gives way to its items too.
+    cats.delete(sub.id)
+    for (const i of sub.items) its.add(i.id)
+  }
+}
+
+/** A category's own box: sets everything under it the same way. */
+function setCategory(category: PickerCategory, on: boolean, parent?: PickerCategory) {
+  const full = fullMain.value.get(category.id) ?? fullSub.value.get(category.id) ?? category
+  const cats = new Set(categories.value)
+  const its = new Set(items.value)
+  if (!on && parent) release(cats, its, fullMain.value.get(parent.id) ?? parent)
+  for (const sub of full.subs) cats.delete(sub.id)
+  for (const id of itemIdsUnder(full)) its.delete(id)
+  if (on) cats.add(category.id)
+  else cats.delete(category.id)
+  normalize(cats, its)
+}
+
+/** An item's box, inside `main` or its sub-category `sub`. */
+function setItem(id: string, on: boolean, main: PickerCategory, sub?: PickerCategory) {
+  const cats = new Set(categories.value)
+  const its = new Set(items.value)
+  if (on) {
+    its.add(id)
+  }
+  else {
+    const fullM = fullMain.value.get(main.id) ?? main
+    release(cats, its, fullM, sub && (fullSub.value.get(sub.id) ?? sub))
+    its.delete(id)
+  }
+  normalize(cats, its)
+}
+
+// Open on the simplest form of what was saved, without categories or items the menu no longer has.
+{
+  const knownCategories = new Set(props.tree.flatMap(main => [main.id, ...main.subs.map(sub => sub.id)]))
+  const knownItems = new Set(props.tree.flatMap(itemIdsUnder))
+  normalize(new Set(props.categoryIds.filter(id => knownCategories.has(id))), new Set(props.itemIds.filter(id => knownItems.has(id))))
+}
+
 const count = computed(() => items.value.size + categories.value.size)
+/** How many items are included in all, however they got ticked. */
+const covered = computed(() => props.tree.reduce((total, main) =>
+  total
+  + main.items.filter(i => coveredBy(main) || items.value.has(i.id)).length
+  + main.subs.reduce((n, sub) => n + sub.items.filter(i => coveredBy(main, sub) || items.value.has(i.id)).length, 0), 0))
 const summary = computed(() => {
-  const parts = [
-    categories.value.size ? pluralize(categories.value.size, ['category', 'categories']) : '',
-    items.value.size ? pluralize(items.value.size, ['item', 'items']) : '',
-  ].filter(Boolean)
-  return parts.length ? parts.join(' and ') : 'Nothing chosen yet'
+  if (!count.value) return 'Nothing chosen yet'
+  const whole = categories.value.size ? ` · ${pluralize(categories.value.size, ['whole category', 'whole categories'])}` : ''
+  return `${pluralize(covered.value, ['item', 'items'])} included${whole}`
 })
 
 function done() {
@@ -59,9 +155,11 @@ function done() {
   <UModal
     :fullscreen="fullscreen"
     title="Choose what's included"
-    description="Tick a category to include everything in it, also items you add later, or tick items one by one."
     :ui="{ content: 'sm:max-w-xl', body: 'p-0 sm:p-0' }"
   >
+    <template #description>
+      <span class="sr-only">Tick a category to include everything in it, also items you add later, or tick items one by one.</span>
+    </template>
     <template #body>
       <div class="sticky top-0 z-10 border-b border-default bg-default p-4">
         <UInput
@@ -89,11 +187,11 @@ function done() {
           class="py-2"
         >
           <UCheckbox
-            :model-value="categories.has(main.id)"
+            :model-value="mainState(main)"
             :label="main.name"
             :description="main.subs.length ? 'The whole category, every sub-category' : 'The whole category'"
             :ui="{ root: 'px-4 py-2', label: 'font-semibold text-highlighted' }"
-            @update:model-value="on => categories = toggle(categories, main.id, !!on)"
+            @update:model-value="on => setCategory(main, !!on)"
           />
           <ul
             v-if="main.items.length"
@@ -105,10 +203,9 @@ function done() {
             >
               <UCheckbox
                 :model-value="coveredBy(main) || items.has(item.id)"
-                :disabled="coveredBy(main)"
                 :ui="{ root: 'px-4 py-1.5', wrapper: 'flex-1 min-w-0' }"
                 :aria-label="item.name"
-                @update:model-value="on => items = toggle(items, item.id, !!on)"
+                @update:model-value="on => setItem(item.id, !!on, main)"
               >
                 <template #label>
                   <span class="flex items-center gap-2">
@@ -132,11 +229,10 @@ function done() {
             class="pl-6"
           >
             <UCheckbox
-              :model-value="coveredBy(main) || categories.has(sub.id)"
-              :disabled="coveredBy(main)"
+              :model-value="subState(main, sub)"
               :label="sub.name"
               :ui="{ root: 'px-4 py-1.5', label: 'font-medium text-highlighted' }"
-              @update:model-value="on => categories = toggle(categories, sub.id, !!on)"
+              @update:model-value="on => setCategory(sub, !!on, main)"
             />
             <ul class="pl-8">
               <li
@@ -145,10 +241,9 @@ function done() {
               >
                 <UCheckbox
                   :model-value="coveredBy(main, sub) || items.has(item.id)"
-                  :disabled="coveredBy(main, sub)"
                   :ui="{ root: 'px-4 py-1.5', wrapper: 'flex-1 min-w-0' }"
                   :aria-label="item.name"
-                  @update:model-value="on => items = toggle(items, item.id, !!on)"
+                  @update:model-value="on => setItem(item.id, !!on, main, sub)"
                 >
                   <template #label>
                     <span class="flex items-center gap-2">

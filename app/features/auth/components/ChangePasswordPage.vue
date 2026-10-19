@@ -47,10 +47,16 @@ async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
     errorAlert.value?.focus()
     return
   }
-  saving.value = false
+  // Stays `saving` (button spinning, form locked) until the next page is up: the dashboard can
+  // take a moment to load, and a re-enabled form looks like nothing happened.
   unsaved.markClean()
   toast.add({ title: 'Password changed', description: 'You were signed out on your other devices.', color: 'success', icon: 'i-lucide-circle-check' })
-  await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
+  try {
+    await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
+  }
+  finally {
+    saving.value = false
+  }
 }
 
 const fields = [

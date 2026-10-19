@@ -452,6 +452,16 @@ Weekly windows (availability rules, branch hours) are minutes after midnight in 
 />
 ```
 
+**`<DateTimeInput>`** (`app/components/DateTimeInput.vue`) is a day plus a time of day in one field, replacing `type="datetime-local"` (a lint error: the browser's picker looks different everywhere and can't be themed). A button shows "Mon, 19 Oct 2026, 12:00 PM" and opens a `UCalendar` with a `<TimeInput>` under it: a popover from `sm`, a bottom sheet (`<AppDrawer>`, full-width calendar, Cancel / Done) on phones, like the report period picker. What's picked previews on the button, but **only Done sets the value**; closing any other way keeps the previous one. `v-model` is the same `YYYY-MM-DDTHH:mm` string in the device's time (`''` while empty); choosing a day keeps the time (12:00 PM when empty). `min`/`max` (same format) grey out days only, so validate the whole value in the form's rules.
+
+```vue
+<DateTimeInput
+  v-model="form.at"
+  label="Date and time"
+  :min="localInputValue(new Date())"
+/>
+```
+
 ---
 
 ## `useReorderTransition`
@@ -616,7 +626,7 @@ A form keeps `phone` and `phoneCountry` in its draft, validates them together (`
 
 ## `<ImageInput>`
 
-An image for a record (the cafe's logo, D143; a menu item's photo has its own editor since D158, `PhotoEditorModal` in the products feature): a preview with Upload / Replace / Remove. A picked file is checked (JPEG, PNG or WebP; at most `IMAGE_MAX_ORIGINAL_BYTES` before shrinking), made smaller in the browser (`shrinkImage`: the longest side at most 1600 px, WebP; D122), checked against `IMAGE_MAX_BYTES`, and uploaded at once through `useImageUpload()` (`POST /admin/media`, mutation `media:upload`, keyed per input). The form then holds the upload's `url` (the preview) and asset `id` (what the record saves); Remove clears both (saved as `null`). A form waits for `uploading` before saving.
+An image for a record (the cafe's logo, D143, cropped square with `crop-ratio`, D180; a menu item's photo has its own editor since D158, `PhotoEditorModal` in the products feature): a preview with Upload / Replace / Remove. A picked file is checked (JPEG, PNG or WebP; at most `IMAGE_MAX_ORIGINAL_BYTES` before shrinking), made smaller in the browser (`shrinkImage`: the longest side at most 1600 px, WebP; D122), checked against `IMAGE_MAX_BYTES`, and uploaded at once through `useImageUpload()` (`POST /admin/media`, mutation `media:upload`, keyed per input). The form then holds the upload's `url` (the preview) and asset `id` (what the record saves); Remove clears both (saved as `null`). A form waits for `uploading` before saving.
 
 Source: `app/components/ImageInput.vue`, `app/composables/useImageUpload.ts`, `app/utils/shrink-image.ts` (all auto-imported).
 
@@ -633,8 +643,29 @@ Source: `app/components/ImageInput.vue`, `app/composables/useImageUpload.ts`, `a
 | `disabled` | While the form saves |
 | `v-model:image-url`, `v-model:image-id` | The upload's `url` and asset `id`; `undefined` for none |
 | `v-model:uploading` | True while the file is being shrunk or uploaded |
+| `crop-ratio` | Width ÷ height to crop every picked photo to (`1` square, `4 / 5` portrait). The crop modal opens after picking and the cropped file is uploaded (already small, not shrunk again). Without it the photo is uploaded whole |
 
 The server attaches the asset when the record is saved and releases the one it replaced (the media feature); an upload never saved is purged after 24 hours.
+
+### `<ImageCropModal>`
+
+Crops a picked photo to one shape (D180), for any photo upload. The photo is dragged and zoomed inside a frame of `aspectRatio` (drag, wheel, slider, arrow keys, + and −; it always fills the frame), with Rotate and Reset. **Use photo** makes the cropped file in the browser (WebP, JPEG where WebP can't be written; the longest side at most `maxEdge`, default 1600, never enlarged) and closes with it. Opened with `useOverlay`, a new instance each time; the result is the `File` or `null` when closed without one. It takes a file already checked for type and size; a file the browser can't open shows the error with Cancel only. Menu photos keep `PhotoEditorModal` (two views, D158). `isNearRatio(size, ratio)` (`image-crop.ts`) tells a photo that is already the shape, so a caller can skip the dialog (the poster does).
+
+Source: `app/components/ImageCropModal.vue`; geometry `app/utils/image-crop.ts` (pure, `test/unit/image-crop.test.ts`); canvas `app/utils/image-canvas.ts`.
+
+```ts
+const cropped = await useOverlay().create(ImageCropModal, { destroyOnClose: true })
+  .open({ file, aspectRatio: 4 / 5, title: 'Crop the poster' }).result
+```
+
+| Prop | Description |
+|---|---|
+| `file` | The photo to crop; required |
+| `aspectRatio` | Width ÷ height of the frame (default `1`) |
+| `title`, `description` | The dialog's heading and line (default "Crop photo") |
+| `maxEdge` | The cropped file's longest side, at most (default 1600) |
+| `quality` | The encoder's quality, 0 to 1 (default as for every upload; the poster uses 0.92 to keep text sharp) |
+| `keepLabel` | Adds a button that closes with the picked `file` itself, uncropped: for designs that must stay whole (the promotion poster's "Keep whole poster") |
 
 ---
 

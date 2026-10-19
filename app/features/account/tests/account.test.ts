@@ -68,6 +68,12 @@ describe('accountFormError', () => {
     expect(accountFormError(betterAuthError(400, 'PASSWORD_TOO_SHORT')).field).toBe('password')
   })
 
+  it('a temporary password says where to change it, above the fields', () => {
+    expect(accountFormError(betterAuthError(403, 'PASSWORD_CHANGE_REQUIRED'))).toEqual({
+      message: 'This account still has a temporary password. Choose a new one in the cafe\'s admin or counter, then sign in here.',
+    })
+  })
+
   it('too many tries, and anything else as the server or the kind words it', () => {
     expect(accountFormError(ApiError.fromResponse(429, {}))).toEqual({ message: 'Too many tries. Try again in a few minutes.' })
     expect(accountFormError(ApiError.fromResponse(500, {})).field).toBeUndefined()

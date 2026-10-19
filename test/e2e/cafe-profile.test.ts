@@ -10,7 +10,30 @@ await setupE2e()
 // menu and the counter. The web address is read-only.
 
 const SAVED: CafeSettings = { ...NUK_PROFILE, logoAssetId: null, version: 2 }
-const PNG = { name: 'logo.png', mimeType: 'image/png', buffer: Buffer.from('89504e470d0a1a0a', 'hex') }
+
+/** A real PNG of `width` × `height`, drawn in the page (the crop modal has to open it). */
+async function logoFile(page: Page, width = 600, height = 400) {
+  const bytes = await page.evaluate(async ([w, h]) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = w!
+    canvas.height = h!
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#7a4b2a'
+    context.fillRect(0, 0, w!, h!)
+    const blob = await new Promise<Blob>(resolve => canvas.toBlob(b => resolve(b!), 'image/png'))
+    return [...new Uint8Array(await blob.arrayBuffer())]
+  }, [width, height])
+  return { name: 'logo.png', mimeType: 'image/png', buffer: Buffer.from(bytes) }
+}
+
+/** Picks a logo file; the crop dialog opens over the form. */
+async function chooseLogo(page: Page) {
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: /^(Upload|Replace) logo$/ }).click()])
+  await chooser.setFiles(await logoFile(page))
+  const dialog = page.getByRole('dialog', { name: 'Crop logo' })
+  await dialog.getByTestId('crop-frame').waitFor()
+  return dialog
+}
 
 async function open(options: { width?: number, conflictOnce?: boolean } = {}) {
   let settings = SAVED
@@ -52,8 +75,11 @@ describe('Cafe profile', () => {
     expect(await page.getByRole('button', { name: 'Save changes' }).first().isDisabled()).toBe(true)
 
     await page.getByLabel('Cafe name').fill('Nuk Coffee House')
-    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Upload logo' }).click()])
-    await chooser.setFiles(PNG)
+    const dialog = await chooseLogo(page)
+    // Cropped before upload: the file is the cropped WebP/JPEG, not the picked PNG.
+    const upload = page.waitForRequest(request => request.method() === 'POST' && request.url().endsWith('/admin/media'))
+    await dialog.getByRole('button', { name: 'Use photo' }).click()
+    expect((await upload).postData()).toMatch(/filename="logo\.(webp|jpg)"/)
     await page.getByRole('button', { name: 'Replace logo' }).waitFor()
     await page.getByText('Nuk Coffee House', { exact: true }).waitFor()
 
@@ -63,6 +89,25 @@ describe('Cafe profile', () => {
     await expect.poll(() => sidebarName(page).textContent()).toContain('Nuk Coffee House Admin')
     await expect.poll(() => page.title()).toBe('Cafe profile · Nuk Coffee House Admin')
     expect(await sidebarName(page).locator('img').getAttribute('src')).toBe('/media/asset-9.webp')
+  })
+
+  it('frames the logo square; cancelling the crop uploads nothing and changes nothing', async () => {
+    const { page, saved } = await open()
+    const dialog = await chooseLogo(page)
+    // A 600 × 400 photo in a square frame: the frame is square.
+    const frame = (await dialog.getByTestId('crop-frame').boundingBox())!
+    expect(Math.abs(frame.width - frame.height)).toBeLessThan(1)
+    let uploaded = false
+    await page.route('**/api/c/nuk/admin/media', async (route) => {
+      uploaded = true
+      await route.fallback()
+    })
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await dialog.waitFor({ state: 'detached' })
+    await page.getByRole('button', { name: 'Upload logo' }).waitFor()
+    expect(uploaded).toBe(false)
+    expect(await page.getByRole('button', { name: 'Save changes' }).first().isDisabled()).toBe(true)
+    expect(saved).toEqual([])
   })
 
   it('needs a name', async () => {

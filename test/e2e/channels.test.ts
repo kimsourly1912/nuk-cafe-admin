@@ -159,6 +159,33 @@ describe('posting a promotion', () => {
     expect(await posts.getByRole('link', { name: 'View post in NUK Cafe News' }).getAttribute('href')).toBe('https://t.me/nukcafe/101')
   })
 
+  it('picks the date and time in a bottom sheet on a phone, and Cancel keeps the previous value', async () => {
+    const { page } = await openPromotion()
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.getByRole('button', { name: 'Post to channels' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Post “Coffee week”' })
+    await dialog.getByRole('radio', { name: 'Later' }).check()
+    // Behind an open sheet the page is aria-hidden, so find the button by its label, not its role.
+    const field = page.locator('button[aria-label^="Date and time:"]')
+    const before = await field.getAttribute('aria-label')
+
+    await field.click()
+    const sheet = page.getByRole('dialog', { name: 'Date and time' })
+    await sheet.getByRole('spinbutton', { name: /hour/i }).click()
+    await page.keyboard.type('0930')
+    await sheet.locator('[data-reka-time-field-segment="dayPeriod"]').click()
+    await expect.poll(() => field.getAttribute('aria-label')).toMatch(/9:30 AM$/)
+    await sheet.getByRole('button', { name: 'Cancel' }).click()
+    await expect.poll(() => field.getAttribute('aria-label')).toBe(before)
+
+    await field.click()
+    await sheet.getByRole('spinbutton', { name: /hour/i }).click()
+    await page.keyboard.type('0930')
+    await sheet.locator('[data-reka-time-field-segment="dayPeriod"]').click()
+    await sheet.getByRole('button', { name: 'Done' }).click()
+    await expect.poll(() => field.getAttribute('aria-label')).toMatch(/9:30 AM$/)
+  })
+
   it('schedules a post for later, and cancels it after asking', async () => {
     const { page, sent } = await openPromotion()
     await page.getByRole('button', { name: 'Post to channels' }).click()
@@ -167,7 +194,26 @@ describe('posting a promotion', () => {
     await dialog.getByRole('switch', { name: 'Include the poster' }).click()
     const later = new Date(Date.now() + 2 * 86_400_000)
     const pad = (n: number) => String(n).padStart(2, '0')
-    await dialog.getByLabel('Date and time').fill(`${later.getFullYear()}-${pad(later.getMonth() + 1)}-${pad(later.getDate())}T09:30`)
+    const field = dialog.getByRole('button', { name: /^Date and time:/ })
+    const before = await field.getAttribute('aria-label')
+    const pick = async () => {
+      await field.click()
+      const day = page.locator(`[data-reka-calendar-cell-trigger][data-value="${later.getFullYear()}-${pad(later.getMonth() + 1)}-${pad(later.getDate())}"]`)
+      // The calendar opens on the current value's month; two days on may be the next one.
+      if (!(await day.count())) await page.getByRole('button', { name: /next/i }).first().click()
+      await day.click()
+      await page.getByRole('spinbutton', { name: /hour/i }).click()
+      await page.keyboard.type('0930')
+      await page.locator('[data-reka-time-field-segment="dayPeriod"]').click()
+    }
+    // What's picked previews on the button, but closing without Done keeps the previous value.
+    await pick()
+    expect(await field.getAttribute('aria-label')).toMatch(/9:30 AM$/)
+    await dialog.getByText('How followers see it').click()
+    await expect.poll(() => field.getAttribute('aria-label')).toBe(before)
+    await pick()
+    await page.getByRole('button', { name: 'Done' }).click()
+    expect(await field.getAttribute('aria-label')).toMatch(/9:30 AM$/)
     await dialog.getByRole('button', { name: 'Schedule post' }).click()
     await toast(page, 'Post scheduled for NUK Cafe News').waitFor()
     const body = sent[0]!.body as { at: string, withPoster: boolean }

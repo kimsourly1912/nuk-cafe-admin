@@ -146,7 +146,10 @@ export function useAuth() {
       }
       throw apiError
     }
-    await fetchSession()
+    // The server cleared the flag: reflect that now so the route middleware lets the next page
+    // through without waiting for a round trip, then confirm against the server in the background.
+    if (user.value?.mustChangePassword) user.value = { ...user.value, mustChangePassword: false }
+    void fetchSession()
   }
 
   /** A route answered PASSWORD_CHANGE_REQUIRED: the app moves to the change-password page. */

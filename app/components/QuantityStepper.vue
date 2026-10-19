@@ -3,8 +3,9 @@
  * A quantity: − the number + in a pill (owner, 2026-10-02, D128), Nuxt UI buttons and input. The
  * number never leaves `min`–`max`; − is disabled at `min`, + at `max`.
  *
- * Touch screens get no keyboard: the field has `inputmode="none"`, so tapping it on a phone or tablet
- * doesn't pop one up (− and + are the way there); with a keyboard (a computer) a number can still
+ * Touch screens get no keyboard and no cursor: the field has `inputmode="none"` and, where the main
+ * pointer is coarse (`pointer-coarse:`), ignores taps, so nothing pops up and no caret shows (− and +
+ * are the way there); with a keyboard (a computer) a number can still
  * be typed, applied on Enter or on leaving the field, and ↑ / ↓ step it. The attribute is the same
  * for every visitor, so the server-rendered menu needs no width check.
  *
@@ -69,7 +70,7 @@ function commit() {
       :disabled="disabled"
       :aria-label="`Quantity of ${label}`"
       class="w-9"
-      :ui="{ base: 'px-0 text-center tabular-nums font-medium' }"
+      :ui="{ base: 'px-0 text-center tabular-nums font-medium pointer-coarse:pointer-events-none pointer-coarse:select-none pointer-coarse:caret-transparent' }"
       @keydown.enter.prevent="commit"
       @keydown.up.prevent="set(quantity + 1)"
       @keydown.down.prevent="set(quantity - 1)"

@@ -1,32 +1,21 @@
 import type { PhotoEdit, PhotoView } from '#shared/contracts/media'
+import type { Size } from '~/utils/image-crop'
+import { clamp, coverScale, MAX_ZOOM, placePhoto, settleView } from '~/utils/image-crop'
+
+// The frame geometry is shared with the general crop modal (`app/utils/image-crop.ts`).
+export type { Placement, Size } from '~/utils/image-crop'
+export { MAX_ZOOM, placePhoto, placementStyle } from '~/utils/image-crop'
 
 /**
- * The photo editor's rules (D158), pure and unit-tested: where a photo sits in a frame for a view,
- * the suggested views from the focus point, moving and zooming within limits. The previews (CSS)
- * and the saved files (canvas) both place the photo with `placePhoto`, so what the owner sees is
- * what is saved.
+ * The photo editor's rules (D158), pure and unit-tested: the suggested views from the focus point,
+ * moving and zooming within limits. The previews (CSS) and the saved files (canvas) both place the
+ * photo with `placePhoto`, so what the owner sees is what is saved.
  */
-
-export interface Size {
-  width: number
-  height: number
-}
-
-/** Where the photo is drawn in a frame, in the frame's units (its top-left corner is 0, 0). */
-export interface Placement {
-  x: number
-  y: number
-  width: number
-  height: number
-}
 
 export type ViewName = 'card' | 'detail'
 
 /** Width ÷ height of each view's frame. */
 export const VIEW_RATIOS: Record<ViewName, number> = { card: 1, detail: 4 / 3 }
-
-/** As close as a view can zoom in (four times the size that fills the frame). */
-export const MAX_ZOOM = 4
 
 /**
  * A suggested item-page view keeps the photo whole (fitted, the fill colour around it) unless
@@ -40,11 +29,6 @@ export const SMALL_PHOTO_EDGE = 900
 /** The frame of a view, one unit tall. */
 export const frameOf = (view: ViewName): Size => ({ width: VIEW_RATIOS[view], height: 1 })
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
-
-/** The scale at which the photo exactly fills the frame (zoom 1). */
-const coverScale = (source: Size, frame: Size) => Math.max(frame.width / source.width, frame.height / source.height)
-
 /**
  * How far a view can zoom out: the menu card always fills its square (a tiny photo with bars looks
  * broken); the item page can show the whole photo, fitted in its frame.
@@ -55,30 +39,8 @@ export function minZoom(source: Size, view: ViewName): number {
   return Math.min(frame.width / source.width, frame.height / source.height) / coverScale(source, frame)
 }
 
-/**
- * Where the photo sits in the frame for a view: scaled by its zoom, with the view's point of the
- * photo at the frame's centre, but never leaving a gap at an edge it could cover (the photo
- * slides back); smaller than the frame on a side, it's centred on that side.
- */
-export function placePhoto(source: Size, frame: Size, view: Pick<PhotoView, 'zoom' | 'x' | 'y'>): Placement {
-  const scale = coverScale(source, frame) * view.zoom
-  const width = source.width * scale
-  const height = source.height * scale
-  const along = (size: number, frameSize: number, point: number) =>
-    size >= frameSize ? clamp(frameSize / 2 - point * size, frameSize - size, 0) : (frameSize - size) / 2
-  return { x: along(width, frame.width, view.x), y: along(height, frame.height, view.y), width, height }
-}
-
 /** The view's point as it is after `placePhoto` slid the photo back: so moves never pile up past an edge. */
-function settle(source: Size, viewName: ViewName, view: PhotoView): PhotoView {
-  const frame = frameOf(viewName)
-  const placed = placePhoto(source, frame, view)
-  return {
-    ...view,
-    x: clamp((frame.width / 2 - placed.x) / placed.width, 0, 1),
-    y: clamp((frame.height / 2 - placed.y) / placed.height, 0, 1),
-  }
-}
+const settle = (source: Size, viewName: ViewName, view: PhotoView) => settleView(source, frameOf(viewName), view)
 
 /**
  * The suggested view from the focus point (the middle of the dish): the menu card fills its square
@@ -147,12 +109,6 @@ export function edgeColor(pixels: Uint8ClampedArray, width: number, height: numb
   }
   const hex = (sum: number) => Math.round(sum / Math.max(1, n)).toString(16).padStart(2, '0')
   return `#${hex(r)}${hex(g)}${hex(b)}`
-}
-
-/** A placement as CSS percentages of its frame (the previews and the adjust frame). */
-export function placementStyle(placed: Placement, frame: Size): Record<string, string> {
-  const pct = (value: number, of: number) => `${(value / of) * 100}%`
-  return { left: pct(placed.x, frame.width), top: pct(placed.y, frame.height), width: pct(placed.width, frame.width), height: pct(placed.height, frame.height) }
 }
 
 export const isSmallPhoto = (source: Size) => Math.min(source.width, source.height) < SMALL_PHOTO_EDGE
