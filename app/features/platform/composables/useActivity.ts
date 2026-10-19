@@ -1,4 +1,5 @@
 import type { ActivityEntry, ActivityQuery, PlatformOverview } from '#shared/contracts/platform-activity'
+import type { PlatformHealth } from '#shared/contracts/platform-health'
 import type { PlatformAccountSummary } from '#shared/contracts/accounts'
 import type { Page } from '#shared/contracts/common'
 import type { TenantDetail } from '#shared/contracts/tenants'
@@ -39,4 +40,9 @@ export function useActivityCafe(cafeId: () => string | undefined) {
     const id = cafeId()
     return id ? apiFetch<TenantDetail>(`/platform/tenants/${encodeURIComponent(id)}`) : null
   }, { watch: [cafeId] })
+}
+
+/** System health (P4, D192): counts and dates, one read. */
+export function usePlatformHealth() {
+  return useApiQuery('platform:health', () => apiFetch<PlatformHealth>('/platform/health'))
 }

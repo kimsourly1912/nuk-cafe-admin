@@ -3,3 +3,4 @@ export { addOwner, changeTenantSlug, checkSlug, countTenants, createTenant, curr
 export type { PlatformActor } from './tenants.service'
 export { getPlatformOverview, listPlatformActivity, QUIET_DAYS } from './activity.service'
 export { TenantErrorCodes } from './tenants.errors'
+export { getPlatformHealth } from './health.service'

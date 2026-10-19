@@ -1,9 +1,36 @@
 import { describe, expect, it, vi } from 'vitest'
-import { runTenantPage } from '#server/utils/jobs'
+import { runJob, runTenantPage } from '#server/utils/jobs'
 import { createTestDb, ensureTenant } from '#server/tests/support/db'
 import { organization } from '#server/db/tables'
 import { eq } from 'drizzle-orm'
-import { isJobCurrent, jobProgress, saveJobCursor } from '#server/features/platform'
+import { isJobCurrent, jobProgress, jobRunRows, saveJobCursor } from '#server/features/platform'
+
+describe('a scheduled job\'s run (System health, D192)', () => {
+  it('is recorded when it succeeds and when it fails; the failure is still thrown, and a lost record never fails the job', async () => {
+    const db = await createTestDb()
+    vi.stubGlobal('useDb', () => db)
+    const logs = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      expect(await runJob('test:job', async () => 'done')).toBe('done')
+      expect(await jobRunRows(db)).toMatchObject([{ job: 'test:job', failuresInARow: 0 }])
+      await expect(runJob('test:job', async () => {
+        throw new Error('broken')
+      })).rejects.toThrow('broken')
+      expect(await jobRunRows(db)).toMatchObject([{ job: 'test:job', failuresInARow: 1 }])
+      // The database is gone: the job's own result still comes back.
+      vi.stubGlobal('useDb', () => {
+        throw new Error('no database')
+      })
+      const warnings = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      expect(await runJob('test:job', async () => 'still done')).toBe('still done')
+      warnings.mockRestore()
+    }
+    finally {
+      logs.mockRestore()
+      vi.unstubAllGlobals()
+    }
+  })
+})
 
 describe('bounded tenant jobs', () => {
   it('reports missing and stale scheduler heartbeats as unavailable', async () => {

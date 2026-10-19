@@ -344,3 +344,8 @@ export async function purgeDeliveries(db: Db, now = new Date(), limit = 500): Pr
 }
 
 export const oldestDueNotification = repo.oldestDueNotification
+
+/** Telegram deliveries failing per cafe since `since` (the console's System health, P4, D192): counts and dates only. */
+export async function telegramDeliveryHealth(db: Db, since: Date) {
+  return repo.deliveryHealth(db, since)
+}

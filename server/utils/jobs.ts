@@ -1,5 +1,5 @@
 import type { Db } from '#server/utils/batch'
-import { readJobCursor, saveJobCursor } from '#server/features/platform'
+import { readJobCursor, recordJobRun, saveJobCursor } from '#server/features/platform'
 import { activeTenantPage, currentTenant } from '#server/features/identity'
 import { queueJobFailureAlert } from '#server/features/notifications'
 import { log } from '#server/utils/log'
@@ -27,12 +27,25 @@ export async function alertJobFailure(job: string, detail?: string) {
  */
 export async function runJob<T>(job: string, work: () => Promise<T>): Promise<T> {
   try {
-    return await work()
+    const result = await work()
+    await noteJobRun(job, 'success')
+    return result
   }
   catch (error) {
     log('error', 'Scheduled job failed', { job, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined })
+    await noteJobRun(job, 'failure')
     await alertJobFailure(job)
     throw error
+  }
+}
+
+/** The run's outcome for System health (P4, D192). Never fails the job: a lost record is logged. */
+async function noteJobRun(job: string, outcome: 'success' | 'failure') {
+  try {
+    await recordJobRun(useDb(), job, outcome, new Date())
+  }
+  catch (failure) {
+    log('warn', 'Could not record the job run', { job, outcome, error: failure instanceof Error ? failure.message : String(failure) })
   }
 }
 

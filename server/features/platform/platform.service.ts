@@ -141,6 +141,11 @@ export async function deliverOutbox(
 /** Audit rows by action, newest first (the console's Activity, D191). */
 export const listAuditEvents = repo.listAuditEvents
 
+/** System health (P4, D192): each job's latest outcome, and unsent outbox messages per kind and cafe. */
+export const recordJobRun = repo.recordJobRun
+export const jobRunRows = repo.jobRunRows
+export const outboxHealth = repo.outboxHealth
+
 export const readJobCursor = repo.readJobCursor
 export const saveJobCursor = repo.saveJobCursor
 export const jobProgress = repo.jobProgress

@@ -9,11 +9,12 @@ import { createStaff, listStaff, seedFirstOwner } from '#server/features/identit
 import { getPlatformAccount, listPlatformAccounts } from '#server/features/identity/accounts.service'
 import { createCategory } from '#server/features/menu/categories.service'
 import { createItem, listItems } from '#server/features/menu/items.service'
-import { addOwner, createTenant, getPlatformOverview, getTenant, listPlatformActivity, listTenants, removeOwner, seedTenant, updateTenantNotes } from '#server/features/tenants'
+import { addOwner, createTenant, getPlatformHealth, getPlatformOverview, getTenant, listPlatformActivity, listTenants, removeOwner, seedTenant, updateTenantNotes } from '#server/features/tenants'
 import type { Db } from '#server/utils/batch'
 import { migrationFiles } from '#server/tests/support/db'
 import type { StaffListQuery } from '#shared/contracts/staff'
 import { branches, user } from '#server/db/tables'
+import { recordJobRun } from '#server/features/platform'
 import { interleaved } from '#server/tests/support/interleave'
 import { expectApiError } from '#server/tests/support/failure'
 import { newId } from '#server/utils/ids'
@@ -207,5 +208,17 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
     const theirsOnly = await listPlatformActivity(db, { page: 1, pageSize: 100, tenantId: theirs, from: '2000-01-01', to: '2999-12-31' }, 'Asia/Phnom_Penh')
     expect(theirsOnly.items.length).toBeGreaterThan(0)
     expect(theirsOnly.items.every(entry => entry.cafe?.id === theirs)).toBe(true)
+  })
+
+  it('reads System health and records job runs, the 5-minute success throttle included (P4, D192)', async () => {
+    const at = new Date()
+    await recordJobRun(db, 'platform:deliver-outbox', 'success', at)
+    await recordJobRun(db, 'platform:deliver-outbox', 'success', new Date(at.getTime() + 60_000))
+    await recordJobRun(db, 'orders:expire-unpaid', 'failure', at)
+    const health = await getPlatformHealth(db)
+    const jobs = new Map(health.jobs.map(job => [job.job, job]))
+    expect(jobs.get('platform:deliver-outbox')).toMatchObject({ state: 'ok', lastSuccessAt: at.toISOString() })
+    expect(jobs.get('orders:expire-unpaid')).toMatchObject({ state: 'failing', failuresInARow: 1 })
+    expect(health.outbox.groups.every(group => typeof group.kind === 'string')).toBe(true)
   })
 })
