@@ -372,10 +372,10 @@ For staff who use the portal all day. Press **`?`** (or user menu → Keyboard s
 | `Esc` | Dialogs | Close (asks first if there are unsaved changes) |
 | `Esc` | Categories in Select or Reorder mode | Leave the mode (an unsaved order stays until saved or discarded). Only when no dialog, menu or select is open: those close first. A plain keydown listener, not `defineShortcuts`, which would prevent the default and stop Escape closing menus |
 | `Ctrl`+`/` (`⌘`+`/` on Mac) | Admin pages, where the assistant is on (D109) | Open or close the assistant, also while typing (in a form or in its question box) |
-| `Ctrl`+`B` (`⌘`+`B` on Mac) | Admin pages | Collapse or expand the sidebar (from `lg` up); on a phone it opens or closes the menu. Skipped while a dialog, menu or select is open. Not while typing, so rich-text bold is untouched |
-| `?` | Everywhere | Show the shortcut list |
+| `Ctrl`+`B` (`⌘`+`B` on Mac) | Admin and platform pages (`useSidebarShortcut`) | Collapse or expand the sidebar (from `lg` up); on a phone it opens or closes the menu. Skipped while a dialog, menu or select is open. Not while typing, so rich-text bold is untouched |
+| `?` | Admin and platform pages | Show the shortcut list (also in the user menu). Each shell has its own list: `SHORTCUTS` (admin) and `PLATFORM_SHORTCUTS` (platform: `N` new cafe, `Ctrl`+`Enter`, `Esc`, `Ctrl`+`B`, `?`) |
 
-Source: `app/composables/useShortcuts.ts` (`usePageShortcuts`, `useSubmitShortcut`, `SHORTCUTS`) on Nuxt UI `defineShortcuts`, `app/components/ShortcutsHelp.vue`. E2E: `test/e2e/shortcuts.test.ts`.
+Source: `app/composables/useShortcuts.ts` (`usePageShortcuts`, `useSubmitShortcut`, `useSidebarShortcut`, `SHORTCUTS`, `PLATFORM_SHORTCUTS`) on Nuxt UI `defineShortcuts`, `app/components/ShortcutsHelp.vue` (takes the shell's list as its `shortcuts` prop). A new shortcut goes in its shell's list so the dialog stays true. E2E: `test/e2e/shortcuts.test.ts`.
 
 | Case | Behavior |
 |---|---|

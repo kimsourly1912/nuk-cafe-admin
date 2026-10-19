@@ -5,11 +5,15 @@
  * (QT1).
  */
 import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
+import { ShortcutsHelp } from '#components'
 import { PLATFORM_CHANGE_PASSWORD, PLATFORM_HOME, usePlatformSession } from '~/features/platform'
 
 const { user, signOut } = usePlatformSession()
 const route = useRoute()
-const open = ref(false)
+// Ctrl/⌘+B collapses the desktop sidebar; below `lg` it opens or closes the phone menu.
+const shortcutsHelp = useOverlay().create(ShortcutsHelp)
+const showShortcuts = () => shortcutsHelp.open({ shortcuts: PLATFORM_SHORTCUTS })
+const { open, collapsed: sidebarCollapsed } = useSidebarShortcut({ '?': showShortcuts })
 
 // A cafe's own page is still under Cafes.
 const items = computed<NavigationMenuItem[]>(() => [
@@ -20,6 +24,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
   { label: user.value?.email, type: 'label' },
   { type: 'separator' },
   { label: 'Change password', icon: 'i-lucide-key-round', to: PLATFORM_CHANGE_PASSWORD },
+  { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
   { label: 'Log out', icon: 'i-lucide-log-out', onSelect: () => signOut() },
 ])
 </script>
@@ -28,6 +33,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
   <UDashboardGroup unit="rem">
     <UDashboardSidebar
       v-model:open="open"
+      v-model:collapsed="sidebarCollapsed"
       collapsible
       resizable
       class="bg-elevated/25"
