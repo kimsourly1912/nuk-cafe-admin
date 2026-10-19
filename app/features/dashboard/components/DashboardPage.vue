@@ -38,20 +38,39 @@ const summaryLink = (branchId: string, date: string) =>
 </script>
 
 <template>
-  <UDashboardPanel id="dashboard">
+  <!-- A gray page with white cards on it (owner, D155 follow-up): the cards read against the ground. -->
+  <UDashboardPanel
+    id="overview"
+    :ui="{ body: 'bg-elevated dark:bg-muted' }"
+  >
     <template #header>
-      <UDashboardNavbar title="Dashboard">
+      <UDashboardNavbar title="Overview">
         <template #leading>
           <UDashboardSidebarCollapse />
+        </template>
+        <template #right>
+          <UButton
+            :to="tenantPath('/')"
+            target="_blank"
+            label="View menu"
+            trailing-icon="i-lucide-external-link"
+            color="neutral"
+            variant="outline"
+          />
         </template>
       </UDashboardNavbar>
     </template>
 
     <template #body>
       <div class="space-y-6">
-        <p class="text-lg font-medium text-highlighted">
-          {{ greeting }}
-        </p>
+        <div>
+          <p class="text-2xl font-semibold text-highlighted">
+            {{ greeting }}
+          </p>
+          <p class="text-sm text-toned">
+            Here is what is happening at your cafe today.
+          </p>
+        </div>
 
         <!-- Required steps left: setup comes first. -->
         <SetupChecklist
@@ -72,13 +91,14 @@ const summaryLink = (branchId: string, date: string) =>
           variant="row"
           :count="2"
         />
-        <section
+        <UCard
           v-for="entry in today.data.value ?? []"
           :key="entry.branch.id"
+          as="section"
           :aria-labelledby="`today-${entry.branch.id}`"
-          class="space-y-3"
+          :ui="{ header: 'flex flex-wrap items-center justify-between gap-x-4 gap-y-2' }"
         >
-          <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <template #header>
             <h2
               :id="`today-${entry.branch.id}`"
               class="font-semibold text-highlighted"
@@ -91,20 +111,20 @@ const summaryLink = (branchId: string, date: string) =>
                 label="Summary"
                 icon="i-lucide-chart-column"
                 color="neutral"
-                variant="ghost"
+                variant="outline"
                 size="sm"
               />
               <UButton
                 :to="tenantPath(`/counter/${entry.branch.id}`)"
                 target="_blank"
-                label="Counter"
+                label="Open counter"
                 icon="i-lucide-monitor"
                 color="neutral"
-                variant="ghost"
+                variant="outline"
                 size="sm"
               />
             </div>
-          </div>
+          </template>
           <ApiErrorAlert
             v-if="entry.error"
             :error="entry.error"
@@ -117,24 +137,28 @@ const summaryLink = (branchId: string, date: string) =>
           >
             <StatCard
               label="Paid sales"
+              icon="i-lucide-banknote"
               :value="formatMinor(entry.summary.paid.salesMinor)"
               :change="changeText(entry.summary.paid.salesMinor, entry.summary.previousPaidSalesMinor) ?? undefined"
               change-label="vs yesterday"
             />
             <StatCard
               label="Orders"
+              icon="i-lucide-shopping-cart"
               :value="entry.summary.ordersPlaced.toLocaleString('en-US')"
             />
             <StatCard
               label="Waiting for payment"
+              icon="i-lucide-clock"
               :value="String(entry.summary.current?.awaitingPayment ?? 0)"
             />
             <StatCard
               label="Preparing or ready"
+              icon="i-lucide-chef-hat"
               :value="String((entry.summary.current?.preparing ?? 0) + (entry.summary.current?.ready ?? 0))"
             />
           </dl>
-        </section>
+        </UCard>
 
         <SetupChecklist
           v-if="showSetup && !mustFinish"
@@ -143,50 +167,52 @@ const summaryLink = (branchId: string, date: string) =>
           @hide="hidden = true"
         />
 
-        <section
+        <UCard
+          as="section"
           aria-labelledby="shortcuts-title"
-          class="space-y-3"
         >
-          <h2
-            id="shortcuts-title"
-            class="font-semibold text-highlighted"
-          >
-            Shortcuts
-          </h2>
-          <div class="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
-            <UButton
+          <template #header>
+            <h2
+              id="shortcuts-title"
+              class="font-semibold text-highlighted"
+            >
+              Shortcuts
+            </h2>
+          </template>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <UPageCard
               :to="tenantPath('/admin/products/new')"
-              label="New menu item"
-              icon="i-lucide-plus"
-              color="neutral"
+              title="New menu item"
+              description="Add an item to your menu"
+              icon="i-lucide-file-plus"
               variant="outline"
             />
-            <UButton
+            <UPageCard
               v-if="firstBranch"
               :to="tenantPath(`/counter/${firstBranch.id}/sold-out`)"
               target="_blank"
-              label="Sold out"
+              title="Sold out"
+              description="Mark items as sold out"
               icon="i-lucide-circle-slash"
-              color="neutral"
               variant="outline"
             />
-            <UButton
+            <UPageCard
               :to="tenantPath('/admin/reports')"
-              label="Reports"
+              title="Reports"
+              description="View sales and orders"
               icon="i-lucide-chart-column"
-              color="neutral"
               variant="outline"
             />
-            <UButton
+            <UPageCard
               :to="tenantPath('/')"
               target="_blank"
-              label="View menu"
+              title="View menu"
+              description="See your customer menu"
               icon="i-lucide-external-link"
-              color="neutral"
               variant="outline"
             />
           </div>
-        </section>
+        </UCard>
       </div>
     </template>
   </UDashboardPanel>

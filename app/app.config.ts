@@ -54,6 +54,8 @@ export default defineAppConfig({
       slots: {
         base: 'max-sm:relative max-sm:overflow-visible max-sm:after:absolute max-sm:after:-inset-3.5',
         indicator: 'max-sm:rounded-full',
+        // A card's description is `text-muted`, 4.1:1 on the checked card's `bg-primary/10`: under AA (4.5:1).
+        description: 'text-toned',
       },
     },
     // The default switch is 36×20px: 4px more on each side and 12px above and below.

@@ -1,9 +1,9 @@
-import type { OwnerKind, PlatformOwner, TenantOwner, TenantUsage } from '#shared/contracts/tenants'
+import type { OwnerKind, PlatformOwner, TenantUsage } from '#shared/contracts/tenants'
 import { createTenantSchema } from '#shared/contracts/tenants'
 import { pluralize, previewList } from '~/utils/text'
 
 /**
- * The New cafe form (D142, D146): the cafe, its first branch and its first owner. The contract's
+ * The New cafe form (D142, D146, D185): the cafe, its first branch and its first owner. The contract's
  * schema is the form's, so the form refuses exactly what the server would; the server also checks
  * the time zone, that the address is free and who owns cafes.
  */
@@ -23,16 +23,17 @@ export interface CafeForm {
 
 /**
  * An empty form; the first branch's zone is the platform's home zone until someone picks another.
- * With `owner` (New cafe for this owner, on a cafe's page) that owner is already chosen.
+ * With `ownerId` (New cafe for this owner, on a cafe's page) that account is already chosen: its
+ * name and email come from the account, never from the page's address.
  */
-export function emptyCafeForm(options: { timezone?: string, owner?: TenantOwner } = {}): CafeForm {
-  const { timezone = 'Asia/Phnom_Penh', owner } = options
+export function emptyCafeForm(options: { timezone?: string, ownerId?: string } = {}): CafeForm {
+  const { timezone = 'Asia/Phnom_Penh', ownerId } = options
   return {
     name: '',
     slug: '',
     branchName: 'Main branch',
     timezone,
-    owner: owner ? { kind: 'existing', userId: owner.id, name: '', email: '' } : { kind: 'new', userId: '', name: '', email: '' },
+    owner: ownerId ? { kind: 'existing', userId: ownerId, name: '', email: '' } : { kind: 'new', userId: '', name: '', email: '' },
   }
 }
 
@@ -81,4 +82,16 @@ export function timeAgo(at: string, now = new Date()): string {
 /** "Last order 2 hours ago"; "No orders yet" without one. */
 export function lastOrderText(at: string | null, now = new Date()): string {
   return at ? `Last order ${timeAgo(at, now)}` : 'No orders yet'
+}
+
+/**
+ * What follows creating the cafe, for the summary beside the form: a new account's owner gets a
+ * temporary password to change; an existing account signs in as before, so nothing here promises
+ * a password for it.
+ */
+export function afterCreationSteps(kind: OwnerKind): string[] {
+  const setup = 'The owner sets up the menu and payments'
+  return kind === 'new'
+    ? ['Copy the owner\'s sign-in details', 'The owner changes the temporary password', setup]
+    : ['The owner signs in with their current password', 'The cafe appears under Your cafes', setup]
 }

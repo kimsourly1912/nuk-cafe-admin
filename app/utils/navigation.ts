@@ -22,7 +22,7 @@ import { staffNavigation } from '~/features/staff'
 export function navigationItems(options: { sampleData: boolean }): NavigationMenuItem[][] {
   return [
     [
-      { label: 'Dashboard', icon: 'i-lucide-layout-dashboard', to: '/admin' },
+      { label: 'Overview', icon: 'i-lucide-layout-dashboard', to: '/admin' },
     ],
     [
       { label: 'Menu', type: 'label' },

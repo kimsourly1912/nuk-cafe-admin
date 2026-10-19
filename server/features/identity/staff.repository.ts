@@ -253,15 +253,38 @@ export function grantSuperadminStatement(db: Db, userId: string): Statement {
 }
 
 /**
- * Accounts that own a cafe and aren't disabled, a row per cafe owned, by name (the platform
- * console's owner list, D146). Narrowed to one account by id or email when given.
+ * An account a cafe can be given to (D185): registered (not a guest, `is_anonymous`) and not
+ * disabled. A super admin counts: the new-person path always allowed one.
  */
-export async function ownerRows(db: Db, filter: { userId?: string, email?: string } = {}): Promise<{ id: string, name: string, email: string, tenantId: string }[]> {
-  const conditions: SQL[] = [eq(member.role, 'owner'), sql`coalesce(${user.banned}, 0) = 0`]
-  if (filter.userId) conditions.push(eq(user.id, filter.userId))
-  if (filter.email) conditions.push(eq(user.email, filter.email))
-  return db.select({ id: user.id, name: user.name, email: user.email, tenantId: member.organizationId }).from(member)
-    .innerJoin(user, eq(user.id, member.userId))
-    .where(and(...conditions))
+const eligibleAccount = sql`coalesce(${user.banned}, 0) = 0 and coalesce(${user.isAnonymous}, 0) = 0`
+
+export interface AccountIdentity {
+  id: string
+  name: string
+  email: string
+}
+
+export async function findEligibleAccount(db: Db, userId: string): Promise<AccountIdentity | undefined> {
+  const rows: AccountIdentity[] = await db.select({ id: user.id, name: user.name, email: user.email }).from(user)
+    .where(and(eq(user.id, userId), eligibleAccount)).limit(1)
+  return rows[0]
+}
+
+/** Eligible accounts whose name or email contains `search`, by name, at most `limit`: a bounded lookup, never the whole user table. */
+export async function searchEligibleAccounts(db: Db, search: string, limit: number): Promise<AccountIdentity[]> {
+  return db.select({ id: user.id, name: user.name, email: user.email }).from(user)
+    .where(and(eligibleAccount, or(containsText(user.name, search), containsText(user.email, search))))
     .orderBy(sql`${user.name} collate nocase`, asc(user.email), asc(user.id))
+    .limit(limit)
+}
+
+/** Aborts the batch unless the account is still eligible: disabling it meanwhile must not be missed. */
+export function requireEligibleAccountStatement(db: Db, userId: string): Statement {
+  return requireCount(db, sql`select count(*) from ${user} where ${user.id} = ${userId} and ${eligibleAccount}`, 1)
+}
+
+/** The cafes these accounts own: a row per cafe. */
+export async function ownedTenants(db: Db, userIds: string[]): Promise<{ userId: string, tenantId: string }[]> {
+  return readInChunks(userIds, ids => db.select({ userId: member.userId, tenantId: member.organizationId }).from(member)
+    .where(and(eq(member.role, 'owner'), inArray(member.userId, ids))))
 }

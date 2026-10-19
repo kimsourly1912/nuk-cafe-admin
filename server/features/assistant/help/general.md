@@ -4,7 +4,7 @@ The admin portal is where admins set up their cafe (its profile, the menu, staff
 
 ## The sidebar
 
-- **Dashboard**: the start page (see below).
+- **Overview**: the start page (see below).
 - **Menu**: Menu items, Categories, Options, Add-ons, Availability.
 - **Marketing**: Promotions.
 - **Reports**: Summary, Sales by item, Order history.
@@ -14,12 +14,12 @@ On a phone, open the sidebar with the menu button at the top left.
 
 The cafe's name at the top of the sidebar is a menu: **View menu** opens your customer menu in a new tab (also at the bottom of the sidebar), and **All your cafes** lists every cafe you work at (**Your cafes**, with Admin and Counter for each). If you run more than one cafe, the menu also lists them: choose one to open its admin. Each cafe opens fresh, as its own page.
 
-## The Dashboard
+## The Overview
 
 The first page shows:
 
-- **Today** for each branch: paid sales (with the change against yesterday), orders, orders waiting for payment, and orders being prepared or ready. **Summary** opens today's report, **Counter** opens the counter in a new tab.
-- **Set up your cafe**, until it's done: opening hours, a published menu item and the riel rate first, then optional steps (KHQR payments, a photo on each published item, staff, your logo, Telegram). **Open** goes to the page where each is done; it's ticked off the next time you open the Dashboard. Once only optional steps are left you can **Hide** the list (on this browser).
+- **Today** for each branch: paid sales (with the change against yesterday), orders, orders waiting for payment, and orders being prepared or ready. **Summary** opens today's report, **Open counter** opens the counter in a new tab.
+- **Set up your cafe**, until it's done: opening hours, a published menu item and the riel rate first, then optional steps (KHQR payments, a photo on each published item, staff, your logo, Telegram). **Open** goes to the page where each is done; done steps move to **Completed** with a **Manage** link; it's ticked off the next time you open the Overview. Once only optional steps are left you can use **Hide checklist** (on this browser).
 - **Shortcuts**: New menu item, Sold out, Reports, View menu.
 
 ## Saving your work

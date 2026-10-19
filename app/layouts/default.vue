@@ -51,7 +51,13 @@ const assistant = useAssistant()
 
 const shortcutsHelp = useOverlay().create(ShortcutsHelp)
 const showShortcuts = () => shortcutsHelp.open()
-usePageShortcuts({ '?': showShortcuts })
+// Ctrl/⌘+B collapses the desktop sidebar; below `lg` it opens or closes the phone menu.
+const sidebarCollapsed = ref(false)
+function toggleSidebar() {
+  if (matchMedia('(min-width: 1024px)').matches) sidebarCollapsed.value = !sidebarCollapsed.value
+  else open.value = !open.value
+}
+usePageShortcuts({ '?': showShortcuts, 'meta_b': toggleSidebar })
 // Ctrl/⌘+/ works while typing too (in a form, or in the assistant's own question box).
 defineShortcuts({ 'meta_/': { usingInput: true, handler: assistant.toggle } })
 
@@ -71,6 +77,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
   >
     <UDashboardSidebar
       v-model:open="open"
+      v-model:collapsed="sidebarCollapsed"
       collapsible
       resizable
       class="bg-elevated/25 print:hidden"

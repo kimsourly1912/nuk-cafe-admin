@@ -3,13 +3,12 @@
  * Cafes (`/platform`, D142): every cafe on the platform with its status and usage, for the platform
  * team. A table from `sm` (the question is "which cafe, how active, is it paused"); on phones a
  * list of rows (page-patterns §2). The name opens the cafe's page, where its actions are. New cafe
- * opens the form; the result shows the owner's temporary password once.
+ * opens its own page (`/platform/cafes/new`, D185); coming back keeps this list's search and filters.
  */
 import type { TableColumn } from '@nuxt/ui'
 import type { TenantSummary } from '#shared/contracts/tenants'
-import { useCafeCounts, useCafeList } from '../composables/useCafes'
+import { NEW_CAFE_PATH, useCafeCounts, useCafeList } from '../composables/useCafes'
 import { lastOrderText, timeAgo, usageLine } from '../schemas/cafe-form'
-import CafeFormModal from './CafeFormModal.vue'
 
 const { isCompact } = useLayoutContext()
 
@@ -41,8 +40,7 @@ const columns: TableColumn<TenantSummary>[] = [
 
 const cafePath = (cafe: TenantSummary) => `/platform/cafes/${cafe.id}`
 
-const formModal = useOverlay().create(CafeFormModal)
-const openForm = () => formModal.open()
+const openForm = () => navigateTo(NEW_CAFE_PATH)
 
 usePageShortcuts({ n: openForm })
 </script>
@@ -62,7 +60,7 @@ usePageShortcuts({ n: openForm })
             <UButton
               label="New cafe"
               icon="i-lucide-plus"
-              @click="openForm()"
+              :to="NEW_CAFE_PATH"
             />
           </UTooltip>
         </template>

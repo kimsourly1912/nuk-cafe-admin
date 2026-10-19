@@ -214,3 +214,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D182](decisions.md#d182-one-durable-claim-for-the-customers-order-ready-message-2026-10-19) | One durable claim for the customer's "order ready" message, 2026-10-19 |
 | [D183](decisions.md#d183-searches-match-with-instr-not-like-because-d1-limits-patterns-to-50-bytes-2026-10-19) | Searches match with `instr`, not `like`: D1 limits patterns to 50 bytes, 2026-10-19 |
 | [D184](decisions.md#d184-the-staff-list-starts-from-the-cafes-memberships-not-from-every-account-2026-10-19) | The staff list starts from the cafe's memberships, not from every account, 2026-10-19 |
+| [D185](decisions.md#d185-create-a-cafe-is-one-page-create-new-account-never-reuses-an-account-2026-10-19) | Create a cafe is one page; "Create new account" never reuses an account, 2026-10-19 |

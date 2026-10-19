@@ -6,7 +6,7 @@ import type { AssistantPageLink } from '#shared/contracts/assistant'
  * with a record in its path (`/admin/add-ons/<id>`) isn't here: the answer names the list instead.
  */
 export const ASSISTANT_PAGES = {
-  'dashboard': { title: 'Dashboard', path: '/admin' },
+  'dashboard': { title: 'Overview', path: '/admin' },
   'menu-items': { title: 'Menu items', path: '/admin/products' },
   'new-menu-item': { title: 'New menu item', path: '/admin/products/new' },
   'categories': { title: 'Categories', path: '/admin/categories' },

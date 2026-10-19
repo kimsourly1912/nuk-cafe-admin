@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { withActiveItem } from '../../app/utils/navigation-active'
 
 const groups = [
-  [{ label: 'Dashboard', to: '/admin' }],
+  [{ label: 'Overview', to: '/admin' }],
   [{ label: 'Menu', type: 'label' as const }, { label: 'Menu items', to: '/admin/products' }, { label: 'Add-ons', to: '/admin/add-ons' }],
   [{ label: 'Branch', to: '/admin/branches' }],
 ]
@@ -14,7 +14,7 @@ function activeLabels(path: string) {
 describe('the sidebar\'s active item', () => {
   it('is the page itself', () => {
     expect(activeLabels('/admin/branches')).toEqual(['Branch'])
-    expect(activeLabels('/admin')).toEqual(['Dashboard'])
+    expect(activeLabels('/admin')).toEqual(['Overview'])
   })
 
   it('stays on the section for a page under it', () => {
@@ -23,7 +23,7 @@ describe('the sidebar\'s active item', () => {
     expect(activeLabels('/admin/add-ons/grp-1')).toEqual(['Add-ons'])
   })
 
-  it('never marks Dashboard for another admin page, nor a section sharing a prefix', () => {
+  it('never marks Overview for another admin page, nor a section sharing a prefix', () => {
     expect(activeLabels('/admin/staff')).toEqual([])
     expect(activeLabels('/admin/products-archive')).toEqual([])
   })

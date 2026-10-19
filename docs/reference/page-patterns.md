@@ -19,7 +19,7 @@ Status labels: **owner-directed** and **Open** (waiting on an owner decision, no
 | Viewing or editing one record, possibly with sub-collections | [Detail / editor](#4-detail--editor) | `/add-ons/[id]`; overlays on the other indexes |
 | Completing one focused, sequential job | [Task flow](#5-task-flow) | `/admin/login`, `/admin/change-password` |
 
-`/` (Dashboard) is a placeholder. It gets a pattern (likely an overview of the resource-index family) when reports exist (step 8.1).
+`/admin` (Overview, D155 follow-up) is a one-off composition (greeting, stat cards, setup checklist, shortcut cards), not a pattern. The older text that follows is history: `/` (Dashboard) was a placeholder. It gets a pattern (likely an overview of the resource-index family) when reports exist (step 8.1).
 
 ## 2. Resource index
 

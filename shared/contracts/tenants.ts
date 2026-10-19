@@ -51,14 +51,19 @@ const emailSchema = v.pipe(v.string(), v.trim(), v.toLowerCase(), v.email('Must 
 export const OWNER_KINDS = ['existing', 'new'] as const
 export type OwnerKind = typeof OWNER_KINDS[number]
 
+/** An account's id as a page address or a lookup carries it: never a password or another secret. */
+export const accountIdSchema = v.pipe(v.string(), v.trim(), v.uuid())
+
 /**
- * The first owner (D146): someone who already owns a cafe (they keep their account and password),
- * or a new person, who gets an account with a temporary password.
+ * The first owner (D146, D185): an existing account (a registered customer, branch staff or an
+ * owner of other cafes; it keeps its password, profile and other access) or a new person, who gets
+ * a new account with a temporary password. Only the id of an existing account is taken: its name
+ * and email come from the account itself.
  */
 export const newCafeOwnerSchema = v.variant('kind', [
   v.object({
     kind: v.literal('existing'),
-    userId: v.pipe(v.string('Choose an owner'), v.trim(), v.minLength(1, 'Choose an owner'), v.maxLength(64)),
+    userId: v.pipe(v.string('Choose an account'), v.trim(), v.minLength(1, 'Choose an account'), v.maxLength(64)),
   }),
   v.object({
     kind: v.literal('new'),
@@ -78,6 +83,23 @@ export const createTenantSchema = v.object({
   owner: newCafeOwnerSchema,
 })
 export type CreateTenantInput = v.InferOutput<typeof createTenantSchema>
+
+export const OWNER_SEARCH_MIN = 2
+
+/** `GET /api/platform/accounts?search=`: a name or email, at least two characters. */
+export const ownerSearchQuerySchema = v.object({
+  search: v.pipe(v.string(), v.trim(), v.minLength(OWNER_SEARCH_MIN, `Type at least ${OWNER_SEARCH_MIN} characters`), v.maxLength(100)),
+})
+export type OwnerSearchQuery = v.InferOutput<typeof ownerSearchQuerySchema>
+
+/** `GET /api/platform/slug-availability?slug=`: an address that already passes the address rules. */
+export const slugAvailabilityQuerySchema = v.object({ slug: slugSchema })
+
+/** Whether no cafe has or had the address. Advisory: creating the cafe decides. */
+export interface SlugAvailability {
+  slug: string
+  available: boolean
+}
 
 export const tenantListQuerySchema = v.object({
   ...pageQuerySchema,
@@ -148,8 +170,8 @@ export interface CafeRef {
 }
 
 /**
- * `GET /api/platform/owners` (D146): everyone who owns a cafe, by name, with their cafes; for New
- * cafe's "An existing owner". Customers and branch staff aren't in it, nor disabled accounts.
+ * An account that can own a cafe, with the cafes it owns already (`GET /api/platform/accounts`,
+ * D185): New cafe's "Use existing account". Guests and disabled accounts never are.
  */
 export interface PlatformOwner {
   id: string

@@ -45,7 +45,7 @@ Status labels used below:
 
 | Surface | Use |
 |---|---|
-| `bg-default` | Page, cards, overlays |
+| `bg-default` | Page, cards, overlays (the Overview page is `bg-elevated` with white cards, D155 follow-up) |
 | `bg-elevated` (`/25`–`/50`) | Sidebar, a quiet grouped area (a table header, a main-category row), a card's header strip (`/25`, set once in `app.config.ts`), a number's soft card (`/50`, [`<StatCard>`](./ui-helpers.md#statcard)) |
 | `bg-muted`, `bg-accented` | Rare; hover and pressed states come from Nuxt UI |
 

@@ -116,7 +116,7 @@ describe('request budget: admin', () => {
     const firstLoad = readsSince(api.calls, 0)
 
     const reads: Record<string, Record<string, number>> = {}
-    for (const name of ['Menu items', 'Categories', 'Options', 'Add-ons', 'Availability', 'Branch', 'Staff', 'Payments', 'Categories', 'Menu items', 'Dashboard']) {
+    for (const name of ['Menu items', 'Categories', 'Options', 'Add-ons', 'Availability', 'Branch', 'Staff', 'Payments', 'Categories', 'Menu items', 'Overview']) {
       const from = api.calls.length
       await clickSidebar(page, name)
       await settled(api.calls)
@@ -157,7 +157,7 @@ describe('request budget: admin', () => {
       'Payments': { '/admin/exchange-rates': 1, '/admin/khqr': 1 },
       'Categories (again)': {},
       'Menu items (again)': { '/admin/menu/items': 1, '/admin/menu/items/counts': 1 },
-      'Dashboard': dashboard,
+      'Overview': dashboard,
     })
   }, 90_000)
 })
