@@ -15,9 +15,10 @@ const shortcutsHelp = useOverlay().create(ShortcutsHelp)
 const showShortcuts = () => shortcutsHelp.open({ shortcuts: PLATFORM_SHORTCUTS })
 const { open, collapsed: sidebarCollapsed } = useSidebarShortcut({ '?': showShortcuts })
 
-// A cafe's own page is still under Cafes.
+// A cafe's own page is still under Cafes, an account's under Accounts.
 const items = computed<NavigationMenuItem[]>(() => [
   { label: 'Cafes', icon: 'i-lucide-store', to: PLATFORM_HOME, active: route.path === PLATFORM_HOME || route.path.startsWith('/platform/cafes/') },
+  { label: 'Accounts', icon: 'i-lucide-users', to: '/platform/accounts', active: route.path.startsWith('/platform/accounts') },
 ])
 
 const userMenu = computed<DropdownMenuItem[]>(() => [

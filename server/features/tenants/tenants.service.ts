@@ -94,7 +94,7 @@ async function withCafes(db: Db, owners: OwnerAccount[]): Promise<PlatformOwner[
   return owners.map(({ tenantIds, ...owner }) => ({ ...owner, cafes: refs.filter(ref => tenantIds.includes(ref.id)) }))
 }
 
-/** A bounded search of the accounts a cafe can be given to, by name or email (`GET /api/platform/accounts`, D185). */
+/** A bounded search of the accounts a cafe can be given to, by name or email (`GET /api/platform/owner-candidates`, D185). */
 export async function searchOwnerAccounts(db: Db, query: OwnerSearchQuery): Promise<PlatformOwner[]> {
   return withCafes(db, await ownerCandidates(db, { search: query.search }))
 }

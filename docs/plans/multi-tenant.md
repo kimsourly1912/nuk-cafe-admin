@@ -167,6 +167,7 @@ patterns and Nuxt UI's defaults instead (D142), and the owner reviews them on st
   the counter; nothing is deleted; the expiry of unpaid orders still runs.
 - **[Choice] Paths, not subdomains,** while the only address is `*.workers.dev` (no wildcard
   subdomains there). Subdomains or cafes' own domains later, on top.
+- **[Choice] The console's next phase** (accounts, owners, activity, health, support access): [platform console plan](platform-console.md), D186.
 - **[Open] QT1:** the platform's name (working name "NUK Platform") and, later, its domain. Blocks
   nothing in T1; T2's screens show it.
 - **[Open] QT2:** the commercial plan (prices, trial, what a plan limits). Blocks T3 only.

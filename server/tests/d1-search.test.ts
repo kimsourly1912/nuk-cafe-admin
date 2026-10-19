@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getPlatformProxy } from 'wrangler'
 import type { Actor } from '#server/features/identity'
 import { createStaff, listStaff, seedFirstOwner } from '#server/features/identity/staff.service'
+import { getPlatformAccount, listPlatformAccounts } from '#server/features/identity/accounts.service'
 import { createCategory } from '#server/features/menu/categories.service'
 import { createItem, listItems } from '#server/features/menu/items.service'
 import { createTenant, listTenants, seedTenant } from '#server/features/tenants'
@@ -106,6 +107,21 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
     }
     // The other cafe has none of these people.
     expect((await listStaff(db, { ...actor, tenantId: theirs }, { page: 1, pageSize: 20, search: ASCII_49 })).total).toBe(0)
+  })
+
+  it('lists the platform\'s accounts for every boundary search and by kind (P1, D187)', async () => {
+    const expected = new Map<string, string[]>([[KHMER_17, [KHMER_17]], [ASCII_49, [ASCII_49]], [ASCII_49.toUpperCase(), [ASCII_49]], ['%', [SYMBOLS]], ['_', [SYMBOLS]], [SLASH, [SYMBOLS]], ['% _off_ ', [SYMBOLS]]])
+    for (const search of searches) {
+      const page = await listPlatformAccounts(db, { page: 1, pageSize: 20, search })
+      expect(page.items.map(a => a.name), search).toEqual(expected.get(search) ?? [])
+      expect(page.total, search).toBe(page.items.length)
+    }
+    const owners = await listPlatformAccounts(db, { page: 1, pageSize: 100, kind: 'owner' })
+    expect(owners.items.map(a => a.name)).toEqual(expect.arrayContaining(['Our owner', 'Their owner']))
+    expect((await listPlatformAccounts(db, { page: 1, pageSize: 100, kind: 'staff' })).items.map(a => a.name).sort()).toEqual([KHMER_17, ASCII_49, SYMBOLS].sort())
+    expect((await listPlatformAccounts(db, { page: 1, pageSize: 100, kind: 'superadmin' })).total).toBe(0)
+    const ours = owners.items.find(a => a.name === 'Our owner')!
+    expect((await getPlatformAccount(db, ours.id)).cafes).toEqual([expect.objectContaining({ name: 'Our cafe', role: 'owner', onlyActiveOwner: true })])
   })
 
   it('lists people by role and branch from the cafe memberships, once each, without scanning users', async () => {

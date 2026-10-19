@@ -24,7 +24,7 @@ Use these; don't rebuild them. Checked against better-auth 1.7.3, @nuxtjs/better
 |---|---|
 | Accounts, passwords, sessions, cookies | Better Auth `emailAndPassword` |
 | Email verification, password reset | Better Auth `emailVerification` / `sendResetPassword`, delivered with Resend |
-| Platform role, ban, admin-created users, revoke sessions | Better Auth **`admin`** plugin |
+| Platform role, the ban fields and the banned-sign-in check (an expired ban lifted at sign-in) | Better Auth **`admin`** plugin; its endpoints granted to nobody, the console writes bans in our own batch (D187) |
 | Branches, branch staff and their roles | Better Auth **`organization`** plugin (a branch is an organization) |
 | Permission checks | Better Auth **access control** (`createAccessControl`) + `userHasPermission` / `hasPermission` |
 | Rate limiting of auth routes | Better Auth `rateLimit` (database storage, `customRules`) |
@@ -79,7 +79,7 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | assistant | use the AI assistant (phase 9, D107, D108) | ✔ | | |
 | Better Auth `organization` / `member` / `invitation` / `ac` endpoints | update, delete, add or remove members, invite | | | |
 
-The platform role grants only `tenant` (create, read, update, suspend; the platform console, T2) and Better Auth's `user` / `session` admin endpoints (no impersonation) to `superadmin`, and **nothing inside a tenant**. The last row is Better Auth's own statements: no tenant role gets them, so nobody adds members or changes a tenant through Better Auth's endpoints; staff changes go through our admin routes. `server/features/identity/tests/identity.permissions.test.ts` asserts these tables, one row per grant.
+The platform role grants only `tenant` (create, read, update, suspend; the platform console, T2) and `account` (read, ban, sign-out, reset-password; the console's Accounts, P1, D187) to `superadmin`, and **nothing inside a tenant**. No role gets Better Auth's `user` / `session` admin endpoints (D187): they would write without our audit row or version guard, so accounts change only through `/api/platform/accounts/**`; impersonation stays off until there is a support process (QP1). The last row is Better Auth's own statements: no tenant role gets them, so nobody adds members or changes a tenant through Better Auth's endpoints; staff changes go through our admin routes. `server/features/identity/tests/identity.permissions.test.ts` asserts these tables, one row per grant.
 
 A tenant's `owner` has every branch permission in every branch of that tenant: **our** `requireBranchPermission` grants that.
 
@@ -177,7 +177,7 @@ Built in step 1.6 (D51).
 | Reset requested for an unknown email | Same 200 answer, no email |
 | Staff on a temporary password resets by email | Flag cleared, like changing it |
 | The sign-up hook fails to create the profile | Logged; created on the first `ensureProfile` (e.g. `GET /api/shop/me`) |
-- An admin can **ban** an abusive account (`admin.banUser`), which ends its sessions.
+- A super admin can **ban** an abusive account from the platform console (P1, D187): a reason and an optional end, every session deleted and the audit row in the same batch; Better Auth's sign-in hook refuses a banned account and lifts an expired ban. Never a super admin's account or one's own.
 
 ## Request protection
 

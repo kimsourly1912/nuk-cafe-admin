@@ -20,6 +20,8 @@ export const platformStatements = {
   // Better Auth's own admin endpoints (create user, set role, ban, sessions…).
   ...adminPluginStatements,
   tenant: ['create', 'read', 'update', 'suspend'],
+  // Accounts in the console (step P1, D187): through our routes, audited in the same batch.
+  account: ['read', 'ban', 'sign-out', 'reset-password'],
 } as const
 
 export const platformAc = createAccessControl(platformStatements)
@@ -27,10 +29,11 @@ export const platformAc = createAccessControl(platformStatements)
 export const platformRoles = {
   customer: platformAc.newRole({}),
   superadmin: platformAc.newRole({
-    // No impersonation: off until there is a support process for it (security.md).
-    user: ['create', 'list', 'set-role', 'ban', 'delete', 'set-password', 'set-email', 'get', 'update'],
-    session: ['list', 'revoke', 'delete'],
+    // None of Better Auth's `user` / `session` admin endpoints (D187): they write without our audit
+    // row or version guard, so accounts change only through the console's routes. No impersonation
+    // either: off until there is a support process for it (QP1).
     tenant: ['create', 'read', 'update', 'suspend'],
+    account: ['read', 'ban', 'sign-out', 'reset-password'],
   }),
 }
 

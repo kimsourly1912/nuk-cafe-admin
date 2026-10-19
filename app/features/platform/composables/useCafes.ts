@@ -38,7 +38,7 @@ export function useOwnerAccountSearch(term: MaybeRefOrGetter<string>) {
   const query = useApiQuery('platform:owner-search', async () => {
     const search = settled.value
     if (search.length < OWNER_SEARCH_MIN) return { search, items: [] as PlatformOwner[] }
-    return { search, items: await apiFetch<PlatformOwner[]>('/platform/accounts', { query: { search } }) }
+    return { search, items: await apiFetch<PlatformOwner[]>('/platform/owner-candidates', { query: { search } }) }
   }, { watch: [settled] })
 
   const current = computed(() => query.data.value?.search === typed.value)
@@ -52,7 +52,7 @@ export function useOwnerAccountSearch(term: MaybeRefOrGetter<string>) {
 
 /** One account the page opens with chosen (`?owner=<id>`); `null` without one, a 404 when it can't be chosen. */
 export function useOwnerAccount(id: string | undefined) {
-  return useApiQuery(`platform:owner-account:${id ?? 'none'}`, async () => (id ? apiFetch<PlatformOwner>(`/platform/accounts/${id}`) : null))
+  return useApiQuery(`platform:owner-account:${id ?? 'none'}`, async () => (id ? apiFetch<PlatformOwner>(`/platform/owner-candidates/${id}`) : null))
 }
 
 export type SlugCheck = 'idle' | 'checking' | 'available' | 'taken' | 'unknown'
