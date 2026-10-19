@@ -10,7 +10,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | API/server architecture and integrity | D39–D45, D52, D71, D116; version, idempotency, guard, audit |
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173 |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166 |
-| Tenancy and permissions | D134–D146, D186–D191; organization, tenant, branch, platform console |
+| Tenancy and permissions | D134–D146, D186–D192; organization, tenant, branch, platform console |
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109 |
@@ -221,3 +221,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D189](decisions.md#d189-a-cafes-owners-and-internal-notes-in-the-console-add-remove-transfer-one-batch-each-2026-10-19) | A cafe's owners and internal notes in the console: add, remove, transfer, one batch each, 2026-10-19 |
 | [D190](decisions.md#d190-a-super-admin-may-be-a-cafes-owner-qt4-answered-2026-10-19) | A super admin may be a cafe's owner (QT4 answered), 2026-10-19 |
 | [D191](decisions.md#d191-the-consoles-overview-and-activity-counts-and-the-platforms-own-audit-rows-by-action-2026-10-19) | The console's Overview and Activity: counts, and the platform's own audit rows by action, 2026-10-19 |
+| [D192](decisions.md#d192-the-consoles-system-health-read-only-counts-and-dates-and-a-record-of-every-jobs-run-2026-10-19) | The console's System health: read-only counts and dates, and a record of every job's run, 2026-10-19 |

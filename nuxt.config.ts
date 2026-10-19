@@ -2,6 +2,8 @@ import { cpSync, existsSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+// Scheduled jobs, cron in UTC (docs/server/operations.md → Scheduled jobs): shared with System health (D192).
+import { SCHEDULED_TASKS } from './shared/scheduled-tasks'
 
 /**
  * Local and e2e builds (node-server preset) only: libsql loads its native binary with a computed
@@ -53,13 +55,6 @@ function securityHeaders(): Record<string, string> {
     'cross-origin-opener-policy': 'same-origin',
     'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
   }
-}
-
-/** Scheduled jobs, cron in UTC (docs/server/operations.md → Scheduled jobs). */
-const SCHEDULED_TASKS: Record<string, string[]> = {
-  '* * * * *': ['platform:deliver-outbox', 'orders:expire-unpaid', 'notifications:deliver', 'marketing:deliver-posts'],
-  '15 3 * * *': ['platform:expire-idempotency-keys', 'assistant:purge-usage', 'notifications:purge-deliveries'],
-  '5 * * * *': ['media:purge-temporary', 'platform:maintain-outbox'],
 }
 
 /**

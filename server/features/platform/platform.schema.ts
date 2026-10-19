@@ -100,3 +100,18 @@ export const jobCursors = sqliteTable('job_cursors', {
   processed: integer().notNull().default(0),
   failures: integer().notNull().default(0),
 })
+
+/**
+ * Each scheduled job's latest outcome (P4, D192), written by `runJob`: System health shows when a
+ * job last ran, last succeeded, last failed and how many runs in a row failed. Never an error's
+ * text (it can name an address or a token). A success is written at most every
+ * `JOB_RUN_SUCCESS_EVERY_MS` while nothing failed, so a job running every minute costs one write
+ * every 5 minutes, not 1,440 a day.
+ */
+export const jobRuns = sqliteTable('job_runs', {
+  job: text().primaryKey(),
+  lastRunAt: instant().notNull(),
+  lastSuccessAt: instant(),
+  lastFailureAt: instant(),
+  failuresInARow: integer().notNull().default(0),
+})

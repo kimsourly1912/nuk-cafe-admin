@@ -6,7 +6,7 @@
  */
 import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
 import { ShortcutsHelp } from '#components'
-import { ACTIVITY_PATH, CAFES_PATH, PLATFORM_CHANGE_PASSWORD, PLATFORM_HOME, usePlatformSession } from '~/features/platform'
+import { ACTIVITY_PATH, CAFES_PATH, HEALTH_PATH, PLATFORM_CHANGE_PASSWORD, PLATFORM_HOME, usePlatformSession } from '~/features/platform'
 
 const { user, signOut } = usePlatformSession()
 const route = useRoute()
@@ -21,6 +21,7 @@ const items = computed<NavigationMenuItem[]>(() => [
   { label: 'Cafes', icon: 'i-lucide-store', to: CAFES_PATH, active: route.path === CAFES_PATH || route.path.startsWith(`${CAFES_PATH}/`) },
   { label: 'Accounts', icon: 'i-lucide-users', to: '/platform/accounts', active: route.path.startsWith('/platform/accounts') },
   { label: 'Activity', icon: 'i-lucide-history', to: ACTIVITY_PATH, active: route.path === ACTIVITY_PATH },
+  { label: 'System health', icon: 'i-lucide-activity', to: HEALTH_PATH, active: route.path === HEALTH_PATH },
 ])
 
 const userMenu = computed<DropdownMenuItem[]>(() => [

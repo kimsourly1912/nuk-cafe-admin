@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'
 import type { Db, Statement } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
-import { auditEvents, idempotencyKeys, jobCursors, outboxMessages } from './platform.schema'
+import { auditEvents, idempotencyKeys, jobCursors, jobRuns, outboxMessages } from './platform.schema'
 import type { AuditActor, AuditEntry, AuditFilter, AuditRow, IdempotencyScope, OutboxTarget } from './platform.types'
 
 // --- Audit ---
@@ -182,4 +182,65 @@ export async function oldestDueOutbox(db: Db, now: Date): Promise<Date | null> {
   const [row] = await db.select({ at: sql<number | null>`min(${outboxMessages.nextAttemptAt})` }).from(outboxMessages)
     .where(and(eq(outboxMessages.status, 'pending'), lte(outboxMessages.nextAttemptAt, now)))
   return row?.at == null ? null : new Date(row.at)
+}
+
+// --- System health (P4, D192): counts and dates, never a payload or an error's text ---
+
+/** A success within this long of the last one isn't written again while nothing failed. */
+export const JOB_RUN_SUCCESS_EVERY_MS = 5 * 60_000
+
+/** Records a job's run: a failure always, a success only when the last one is older than the interval or a failure came between. */
+export async function recordJobRun(db: Db, job: string, outcome: 'success' | 'failure', now: Date) {
+  if (outcome === 'failure') {
+    await db.insert(jobRuns).values({ job, lastRunAt: now, lastFailureAt: now, failuresInARow: 1 }).onConflictDoUpdate({
+      target: jobRuns.job,
+      set: { lastRunAt: now, lastFailureAt: now, failuresInARow: sql`${jobRuns.failuresInARow} + 1` },
+    })
+    return
+  }
+  await db.insert(jobRuns).values({ job, lastRunAt: now, lastSuccessAt: now, failuresInARow: 0 }).onConflictDoUpdate({
+    target: jobRuns.job,
+    set: { lastRunAt: now, lastSuccessAt: now, failuresInARow: 0 },
+    setWhere: sql`${jobRuns.failuresInARow} > 0 or ${jobRuns.lastSuccessAt} is null or ${jobRuns.lastSuccessAt} <= ${now.getTime() - JOB_RUN_SUCCESS_EVERY_MS}`,
+  })
+}
+
+export interface JobRunRow {
+  job: string
+  lastRunAt: Date
+  lastSuccessAt: Date | null
+  lastFailureAt: Date | null
+  failuresInARow: number
+}
+
+export async function jobRunRows(db: Db): Promise<JobRunRow[]> {
+  return db.select().from(jobRuns)
+}
+
+export interface OutboxHealthRow {
+  kind: string
+  tenantId: string | null
+  /** Pending, not tried yet. */
+  waiting: number
+  /** Pending after a failed try: will be retried. */
+  failing: number
+  /** Given up on. */
+  dead: number
+  /** The oldest unsent message of the group. */
+  oldestAt: Date | null
+}
+
+/** Unsent outbox messages per kind and cafe (`outbox_messages_due_idx` by status); sent ones are not read. */
+export async function outboxHealth(db: Db): Promise<OutboxHealthRow[]> {
+  const rows = await db.select({
+    kind: outboxMessages.kind,
+    tenantId: outboxMessages.tenantId,
+    waiting: sql<number>`sum(case when ${outboxMessages.status} = 'pending' and ${outboxMessages.attempts} = 0 then 1 else 0 end)`.mapWith(Number),
+    failing: sql<number>`sum(case when ${outboxMessages.status} = 'pending' and ${outboxMessages.attempts} > 0 then 1 else 0 end)`.mapWith(Number),
+    dead: sql<number>`sum(case when ${outboxMessages.status} = 'failed' then 1 else 0 end)`.mapWith(Number),
+    oldestAt: sql<number | null>`min(${outboxMessages.createdAt})`,
+  }).from(outboxMessages)
+    .where(inArray(outboxMessages.status, ['pending', 'failed']))
+    .groupBy(outboxMessages.kind, outboxMessages.tenantId)
+  return rows.map(row => ({ ...row, oldestAt: row.oldestAt == null ? null : new Date(row.oldestAt) }))
 }

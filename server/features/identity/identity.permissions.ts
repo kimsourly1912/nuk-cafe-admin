@@ -27,6 +27,8 @@ export const platformStatements = {
   notes: ['update'],
   // The console's Activity: what the platform team did (step P3, D191).
   activity: ['read'],
+  // System health: counts and dates, never a secret (step P4, D192).
+  health: ['read'],
 } as const
 
 export const platformAc = createAccessControl(platformStatements)
@@ -42,6 +44,7 @@ export const platformRoles = {
     owner: ['add', 'remove', 'transfer'],
     notes: ['update'],
     activity: ['read'],
+    health: ['read'],
   }),
 }
 

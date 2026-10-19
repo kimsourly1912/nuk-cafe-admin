@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm'
 import type { DestinationKind, NotificationKind, TelegramLinkStatus } from '#shared/contracts/notifications'
 import { user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
@@ -452,4 +452,21 @@ export async function oldestDueNotification(db: Db, now: Date): Promise<Date | n
   const [row] = await db.select({ at: sql<number | null>`min(${notificationDeliveries.nextAttemptAt})` }).from(notificationDeliveries)
     .where(and(eq(notificationDeliveries.status, 'pending'), lte(notificationDeliveries.nextAttemptAt, now)))
   return row?.at == null ? null : new Date(row.at)
+}
+
+/**
+ * Telegram deliveries going wrong, per cafe (the console's System health, P4, D192): failed ones
+ * made since `since`, pending ones retrying after a failed try, and the latest failed try. Counts
+ * and dates only; never the message, the chat or the error. Reads `notification_deliveries_created_idx`.
+ */
+export async function deliveryHealth(db: Db, since: Date): Promise<{ tenantId: string, failed: number, retrying: number, lastFailureAt: Date | null }[]> {
+  const rows = await db.select({
+    tenantId: notificationDeliveries.tenantId,
+    failed: sql<number>`sum(case when ${notificationDeliveries.status} = 'failed' then 1 else 0 end)`.mapWith(Number),
+    retrying: sql<number>`sum(case when ${notificationDeliveries.status} = 'pending' and ${notificationDeliveries.attempts} > 0 then 1 else 0 end)`.mapWith(Number),
+    lastFailureAt: sql<number | null>`max(case when ${notificationDeliveries.status} = 'failed' or ${notificationDeliveries.attempts} > 0 then ${notificationDeliveries.createdAt} end)`,
+  }).from(notificationDeliveries)
+    .where(and(gte(notificationDeliveries.createdAt, since), or(eq(notificationDeliveries.status, 'failed'), and(eq(notificationDeliveries.status, 'pending'), gt(notificationDeliveries.attempts, 0)))))
+    .groupBy(notificationDeliveries.tenantId)
+  return rows.map(row => ({ ...row, lastFailureAt: row.lastFailureAt == null ? null : new Date(row.lastFailureAt) }))
 }
