@@ -20,7 +20,7 @@ function deferred<T = void>() {
 const tick = () => new Promise(r => setTimeout(r, 0))
 const notFound = () => ApiError.fromResponse(404, { statusCode: 404, message: 'Category not found', data: { code: 'NOT_FOUND', message: 'Category not found' } })
 
-function setup(fn: (item: Item) => Promise<unknown>, options: Partial<MutationOptions<Item, unknown>> = {}, confirmAnswer = true) {
+function setup(fn: (item: Item) => Promise<unknown>, options: Partial<MutationOptions<Item, unknown>> = {}, confirmAnswer = true, readOnly: string | undefined = undefined) {
   const state = reactive(createMutationState<Item, unknown>())
   const progress = { update: vi.fn(), close: vi.fn() }
   let stop = () => {}
@@ -36,6 +36,7 @@ function setup(fn: (item: Item) => Promise<unknown>, options: Partial<MutationOp
     }),
     invalidate: vi.fn(async () => {}),
     onPendingChange: vi.fn(),
+    readOnly: () => readOnly,
   }
   const mutation = createMutation(fn, {
     key: item => item.id,
@@ -468,5 +469,36 @@ describe('undo instead of asking first (D152)', () => {
     }, { undo: vi.fn() })
     await mutation.execute(a)
     expect(deps.failure.mock.calls[0]![2]).toBeUndefined()
+  })
+})
+
+describe('a read-only session (platform support, D193)', () => {
+  const READ_ONLY = 'Platform support can only look at this cafe. Nothing can be changed.'
+
+  it('asks nothing and sends nothing; one explanation', async () => {
+    const fn = vi.fn(async () => 1)
+    const { mutation, deps } = setup(fn, { confirm: () => ({ title: 'Delete?' }) }, true, READ_ONLY)
+    await expect(mutation.execute(a)).resolves.toEqual({ ok: false, status: 'skipped', reason: 'read-only' })
+    expect(deps.confirm).not.toHaveBeenCalled()
+    expect(fn).not.toHaveBeenCalled()
+    expect(deps.failure).toHaveBeenCalledExactlyOnceWith('Nothing was changed', READ_ONLY)
+    expect(mutation.isPending(1)).toBe(false)
+  })
+
+  it('a batch skips every item with one explanation', async () => {
+    const fn = vi.fn(async () => 1)
+    const { mutation, deps } = setup(fn, {}, true, READ_ONLY)
+    const result = await mutation.executeMany([a, b, c])
+    expect(result).toMatchObject({ succeeded: [], failed: [], skipped: [a, b, c], cancelled: false })
+    expect(fn).not.toHaveBeenCalled()
+    expect(deps.confirm).not.toHaveBeenCalled()
+    expect(deps.failure).toHaveBeenCalledExactlyOnceWith('Nothing was changed', READ_ONLY)
+  })
+
+  it('runs as usual when the session can change things', async () => {
+    const fn = vi.fn(async () => 1)
+    const { mutation } = setup(fn)
+    await expect(mutation.execute(a)).resolves.toMatchObject({ ok: true })
+    expect(fn).toHaveBeenCalledTimes(1)
   })
 })

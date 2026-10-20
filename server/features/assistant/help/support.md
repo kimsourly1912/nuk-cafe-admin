@@ -14,6 +14,10 @@ They see what you see in the admin: the menu, orders, reports, staff and setting
 
 Press **End now** on Platform support (or **Manage** in the strip). Anyone looking is shut out at once. Otherwise it ends by itself after 24 hours.
 
+## End one visit
+
+In **History**, a visit that is still open shows **Looking now** with **End visit**. It shuts that person out at once; support stays allowed, so they can open the cafe again with a fresh code. To stop that too, press **End now** on the whole thing.
+
 ## Who looked
 
 **History** lists each time support was allowed, who allowed and ended it, and who from the platform team opened the cafe and when. Every page they opened is also in the cafe's audit history.

@@ -26,7 +26,7 @@ const GRANT: SupportGrant = {
   endedAt: null,
   endedBy: null,
   active: true,
-  visits: [{ id: 'visit-1', by: { id: 'super-1', name: 'Ops' }, openedAt: '2026-10-19T05:10:00.000Z', expiresAt: '2026-10-19T06:10:00.000Z', closedAt: null }],
+  visits: [{ id: 'visit-1', by: { id: 'super-1', name: 'Ops' }, openedAt: '2026-10-19T05:10:00.000Z', expiresAt: '2026-10-19T06:10:00.000Z', closedAt: null, active: true }],
 }
 const OLD: SupportGrant = { ...GRANT, id: 'grant-0', active: false, grantedAt: '2026-10-01T05:00:00.000Z', expiresAt: '2026-10-02T05:00:00.000Z', endedAt: '2026-10-01T08:00:00.000Z', endedBy: { id: 'user-1', name: 'alice' }, visits: [] }
 const SUPPORT_SESSION: AdminSession = {
@@ -106,6 +106,31 @@ describe('the owner', () => {
     expect(writes).toEqual(['allow', 'end'])
   })
 
+  it('shuts out one visit after asking; the grant stays allowed', async () => {
+    let support: CafeSupport = { active: GRANT, history: [GRANT, OLD] }
+    const writes: string[] = []
+    const { page } = await open('/c/nuk/admin/support', {
+      'GET /admin/me': () => ({ ...ADMIN, supportAllowedUntil: UNTIL }),
+      'GET /admin/support': () => support,
+      'POST /admin/support/visits/{id}/end': () => {
+        writes.push('end-visit')
+        const visit = { ...GRANT.visits[0]!, active: false, closedAt: '2026-10-19T05:30:00.000Z' }
+        support = { active: { ...GRANT, visits: [visit] }, history: [{ ...GRANT, visits: [visit] }, OLD] }
+        return support
+      },
+    })
+    const history = page.getByRole('list', { name: 'Support history' })
+    await history.getByText('Looking now').waitFor()
+    await history.getByRole('button', { name: 'End visit' }).click()
+    await dialog(page).getByText('Platform support stays allowed').waitFor()
+    await dialog(page).getByRole('button', { name: 'End visit' }).click()
+    await toast(page, 'The visit has ended').waitFor()
+    await history.getByText('Looking now').waitFor({ state: 'detached' })
+    await history.getByText(/closed/).first().waitFor()
+    await page.getByTestId('support-active').waitFor()
+    expect(writes).toEqual(['end-visit'])
+  })
+
   it('sees who looked under each grant', async () => {
     const { page } = await open('/c/nuk/admin/support', {
       'GET /admin/me': () => ({ ...ADMIN, supportAllowedUntil: UNTIL }),
@@ -132,10 +157,12 @@ describe('a super admin on a support visit', () => {
     expect(api.calls).toContain('POST /platform/tenants/cafe-1/support/close')
   })
 
-  it('a change is refused with a clear message', async () => {
+  it('a change is stopped by the app with a clear message, before any request', async () => {
+    const posts: string[] = []
     const { page } = await open('/c/nuk/admin/categories', {
       'GET /admin/me': () => SUPPORT_SESSION,
       'POST /admin/menu/categories': () => {
+        posts.push('create')
         throw new MockFailure(403, 'SUPPORT_READ_ONLY', 'Support access is read-only: nothing can be changed.')
       },
     })
@@ -143,7 +170,9 @@ describe('a super admin on a support visit', () => {
     await page.getByRole('button', { name: /New category/ }).first().click()
     await dialog(page).getByLabel('Name').fill('Cakes')
     await dialog(page).getByRole('button', { name: /Create|Save/ }).first().click()
-    await page.getByText('Support access is read-only: nothing can be changed.').first().waitFor()
+    await toast(page, 'Nothing was changed').waitFor()
+    await page.getByText('Platform support can only look at this cafe. Nothing can be changed.').first().waitFor()
+    expect(posts).toEqual([])
   })
 })
 

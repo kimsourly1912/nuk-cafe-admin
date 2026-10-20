@@ -8,7 +8,7 @@ import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { SessionUser } from '#server/features/identity/identity.types'
 import type { TenantPermission } from '#server/features/identity'
-import { allowSupport, closeSupportVisits, endSupport, getCafeSupport, openSupportVisit, supportActor, supportSession, tenantSupport } from '#server/features/support'
+import { allowSupport, closeSupportVisits, endSupport, endSupportVisit, getCafeSupport, openSupportVisit, supportActor, supportSession, tenantSupport } from '#server/features/support'
 import { supportGrants, supportVisits } from '#server/features/support/support.schema'
 
 // Support access (step P5, D193): the owner's grant, a super admin's visit after a fresh code,
@@ -71,6 +71,43 @@ describe('the owner allows platform support', () => {
     const otherOwner = await createAdmin(db, 'other@example.com', OTHER)
     await expectApiError(() => endSupport(db, { userId: otherOwner.userId, tenantId: OTHER, role: 'owner' }, grant.id, minutes(5)), 404, 'NOT_FOUND')
     expect((await getCafeSupport(db, TEST_TENANT, minutes(5))).active?.id).toBe(grant.id)
+  })
+})
+
+describe('the owner shuts out one visit', () => {
+  const second = { userId: 'superadmin-2', sessionId: 'session-2' }
+  const secondRequest = () => request({ user: superUser({ id: 'superadmin-2' }), sessionId: 'session-2' })
+
+  it('its next request is refused; the grant and the other visits stay; audited', async () => {
+    await allowSupport(db, ownerActor(), NOW)
+    await openSupportVisit(db, visitor, TEST_TENANT, right, minutes(1))
+    await openSupportVisit(db, second, TEST_TENANT, right, minutes(1))
+    const before = await getCafeSupport(db, TEST_TENANT, minutes(2))
+    expect(before.active!.visits.map(visit => visit.active)).toEqual([true, true])
+    const first = before.active!.visits.find(visit => visit.by.id === SUPER)!
+
+    const after = await endSupportVisit(db, ownerActor(), first.id, minutes(3))
+    expect(after.active).not.toBeNull()
+    expect(after.active!.visits.find(visit => visit.id === first.id)).toMatchObject({ active: false, closedAt: minutes(3).toISOString() })
+    expect(after.active!.visits.find(visit => visit.by.id === 'superadmin-2')).toMatchObject({ active: true, closedAt: null })
+    expect(await supportActor(db, request(), { menu: ['read'] }, minutes(4))).toBeUndefined()
+    expect(await supportActor(db, secondRequest(), { menu: ['read'] }, minutes(4))).toMatchObject({ role: 'support' })
+    expect(await audits('support.visit.end')).toEqual([{ tenantId: TEST_TENANT, actorId: owner.userId, metadata: {} }])
+    // The platform team can open it again with a fresh code while the grant stands.
+    await openSupportVisit(db, visitor, TEST_TENANT, right, minutes(5))
+  })
+
+  it('a closed visit, an expired one or one of another cafe is 404', async () => {
+    await allowSupport(db, ownerActor(), NOW)
+    await openSupportVisit(db, visitor, TEST_TENANT, right, minutes(1))
+    const visit = (await getCafeSupport(db, TEST_TENANT, minutes(2))).active!.visits[0]!
+    const otherOwner = await createAdmin(db, 'other@example.com', OTHER)
+    await expectApiError(() => endSupportVisit(db, { userId: otherOwner.userId, tenantId: OTHER, role: 'owner' }, visit.id, minutes(2)), 404, 'NOT_FOUND')
+    expect(await supportActor(db, request(), { menu: ['read'] }, minutes(3))).toMatchObject({ role: 'support' })
+    await expectApiError(() => endSupportVisit(db, ownerActor(), visit.id, minutes(62)), 404, 'NOT_FOUND')
+    await endSupportVisit(db, ownerActor(), visit.id, minutes(3))
+    await expectApiError(() => endSupportVisit(db, ownerActor(), visit.id, minutes(4)), 404, 'NOT_FOUND')
+    await expectApiError(() => endSupportVisit(db, ownerActor(), 'nope', minutes(4)), 404, 'NOT_FOUND')
   })
 })
 

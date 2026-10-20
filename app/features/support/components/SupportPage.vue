@@ -10,7 +10,7 @@ import { useAuth } from '~/features/auth'
 import { useCafeSupport, useCafeSupportMutations } from '../composables/useCafeSupport'
 
 const { data, loading, error, refresh } = useCafeSupport()
-const { allow, end, busy } = useCafeSupportMutations()
+const { allow, end, endVisit, busy } = useCafeSupportMutations()
 const { fetchSession } = useAuth()
 
 const dateTime = (at: string) => new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
@@ -155,7 +155,29 @@ function statusOf(grant: SupportGrant) {
                   :key="visit.id"
                   class="list-disc"
                 >
-                  {{ nameOf(visit.by) }} opened it {{ dateTime(visit.openedAt) }}
+                  <span class="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span>
+                      {{ nameOf(visit.by) }} opened it {{ dateTime(visit.openedAt) }}<template v-if="visit.closedAt"> · closed {{ dateTime(visit.closedAt) }}</template>
+                    </span>
+                    <template v-if="visit.active">
+                      <UBadge
+                        color="success"
+                        variant="subtle"
+                      >
+                        Looking now
+                      </UBadge>
+                      <UButton
+                        label="End visit"
+                        icon="i-lucide-circle-stop"
+                        size="xs"
+                        color="error"
+                        variant="outline"
+                        :loading="endVisit.isPending(visit.id)"
+                        :disabled="busy"
+                        @click="endVisit.execute(visit)"
+                      />
+                    </template>
+                  </span>
                 </li>
               </ul>
               <p
