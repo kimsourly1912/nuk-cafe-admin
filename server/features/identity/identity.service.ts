@@ -2,6 +2,8 @@ import type { Workspace } from '#shared/contracts/account'
 import type { AdminSession, CounterSession } from '#shared/contracts/identity'
 import type { PlatformSession } from '#shared/contracts/tenants'
 import type { Db } from '#server/utils/batch'
+import { listBranchOptions } from '#server/features/branches'
+import { findOldestTenant, findTenant, findTenantBySlug, listActiveTenants, listActiveTenantPage } from '#server/features/tenants'
 import { branchNotFound, forbidden, notAdmin, notPlatformAdmin, notStaff, passwordChangeRequired, tenantNotFound, tenantSuspended, twoFactorRequired, unauthenticated } from './identity.errors'
 import { branchRoles, platformRoles, tenantRoles, tenantStatements } from './identity.permissions'
 import type { BranchPermission, BranchRole, PlatformPermission, PlatformRole, TenantPermission, TenantRole } from './identity.permissions'
@@ -29,7 +31,7 @@ const tenantRoleOf = (role: string | undefined): TenantRole | undefined =>
  * (`tenantBySlug`). None (an empty database) or a suspended one: 404.
  */
 export async function currentTenant(db: Db): Promise<{ id: string, slug: string, name: string }> {
-  const tenant = await repo.findCurrentTenant(db)
+  const tenant = await findOldestTenant(db)
   if (!tenant || (tenant.status ?? 'active') !== 'active') throw tenantNotFound()
   return { id: tenant.id, slug: tenant.slug, name: tenant.name }
 }
@@ -39,7 +41,7 @@ export async function currentTenant(db: Db): Promise<{ id: string, slug: string,
  * a cafe ever had that address); suspended: 403 `TENANT_SUSPENDED`.
  */
 export async function tenantBySlug(db: Db, slug: string): Promise<{ id: string, slug: string, name: string }> {
-  const tenant = await repo.findTenantBySlug(db, slug)
+  const tenant = await findTenantBySlug(db, slug)
   if (!tenant) throw tenantNotFound()
   if ((tenant.status ?? 'active') !== 'active') throw tenantSuspended()
   return { id: tenant.id, slug: tenant.slug, name: tenant.name }
@@ -47,7 +49,7 @@ export async function tenantBySlug(db: Db, slug: string): Promise<{ id: string, 
 
 /** Every active tenant, oldest first: the scheduled tasks that work per tenant go through them (D138). */
 export async function activeTenants(db: Db): Promise<{ id: string, slug: string, name: string }[]> {
-  return repo.findActiveTenants(db)
+  return listActiveTenants(db)
 }
 
 /**
@@ -153,10 +155,10 @@ export async function adminSession(db: Db, user: SessionUser | null | undefined,
 export async function counterSession(db: Db, user: SessionUser | null | undefined, tenantId: string): Promise<CounterSession> {
   if (!user || user.banned) throw unauthenticated()
   const owner = tenantRoleOf(await repo.findTenantRole(db, tenantId, user.id)) === 'owner'
-  const staff = await repo.staffBranches(db, tenantId, user.id)
+  const staff = await repo.listStaffBranches(db, tenantId, user.id)
   const roleOf = new Map(staff.filter(m => m.role in branchRoles).map(m => [m.id, m.role as BranchRole]))
   const branches = owner
-    ? (await repo.activeBranches(db, tenantId)).map(branch => ({ ...branch, role: roleOf.get(branch.id) ?? 'admin' as const }))
+    ? (await listBranchOptions(db, tenantId)).map(branch => ({ ...branch, role: roleOf.get(branch.id) ?? 'admin' as const }))
     : staff.filter(m => roleOf.has(m.id)).map(m => ({ id: m.id, name: m.name, role: roleOf.get(m.id)! }))
   if (!branches.length && !owner) throw notStaff()
   return {
@@ -175,7 +177,7 @@ export async function counterSession(db: Db, user: SessionUser | null | undefine
  */
 export async function workspacesOf(db: Db, user: SessionUser, tenantId: string): Promise<Workspace[]> {
   if (tenantRoleOf(await repo.findTenantRole(db, tenantId, user.id)) === 'owner') return ['admin', 'counter']
-  const staff = await repo.staffBranches(db, tenantId, user.id)
+  const staff = await repo.listStaffBranches(db, tenantId, user.id)
   return staff.some(m => m.role in branchRoles) ? ['counter'] : []
 }
 
@@ -188,7 +190,7 @@ export async function workspacesOf(db: Db, user: SessionUser, tenantId: string):
  */
 export async function accountWorkspaces(db: Db, user: SessionUser | null | undefined): Promise<{ tenantId: string, workspaces: Workspace[] }[]> {
   if (!user || user.banned) throw unauthenticated()
-  const [memberships, staff] = await Promise.all([repo.memberTenants(db, user.id), repo.staffTenants(db, user.id)])
+  const { memberships, staff } = await repo.workspaceRoles(db, user.id)
   const owned = new Set(memberships.filter(m => tenantRoleOf(m.role) === 'owner').map(m => m.tenantId))
   const counter = new Set([...owned, ...staff.filter(s => s.role in branchRoles).map(s => s.tenantId)])
   return [...counter].map(tenantId => ({ tenantId, workspaces: owned.has(tenantId) ? ['admin', 'counter'] : ['counter'] }))
@@ -210,9 +212,12 @@ export function platformSession(user: SessionUser | null | undefined): PlatformS
  * order are stored together or not at all. Does nothing for an account.
  */
 export function guestNameStatement(db: Db, userId: string, name: string, now: Date) {
-  return repo.guestNameStatement(db, userId, name, now)
+  return repo.updateGuestNameStatement(db, userId, name, now)
 }
 
 /** Platform job enumeration and lookup; these grant no permission to cafe data. */
-export const activeTenantPage = repo.findActiveTenantPage
-export const tenantById = repo.findTenantById
+export const activeTenantPage = listActiveTenantPage
+export async function tenantById(db: Db, id: string): Promise<{ id: string, slug: string, name: string } | undefined> {
+  const row = await findTenant(db, id)
+  return row && { id: row.id, slug: row.slug, name: row.name }
+}

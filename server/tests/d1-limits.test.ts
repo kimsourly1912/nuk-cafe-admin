@@ -19,6 +19,7 @@ import { createOptionSet, listOptionSets } from '#server/features/menu/options.s
 import { setSoldOut } from '#server/features/menu/soldout.service'
 import { getPublicMenu } from '#server/features/menu/catalog.service'
 import { mediaAssets } from '#server/features/media/media.schema'
+import { findTenants } from '#server/features/tenants/tenants.repository'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import { addBranchStaff, createAdmin, createTestDb, createUser, D1_MAX_PARAMS, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
@@ -43,6 +44,14 @@ it('the test database refuses what D1 refuses', async () => {
   await expect(db.run(sql`select 1 in (${list(D1_MAX_PARAMS)})`)).resolves.toBeDefined()
   const error = await db.run(sql`select 1 in (${list(D1_MAX_PARAMS + 1)})`).then(() => undefined, (e: Error) => e)
   expect(String((error?.cause as Error | undefined)?.message)).toMatch(/too many SQL variables/)
+})
+
+it('reads an account\'s cafes in pieces beyond D1\'s bind limit, omitting unknown ids (D194)', async () => {
+  const ids = names(201, 'cafe')
+  for (const id of ids) await ensureTenant(db, id)
+  const rows = await findTenants(db, [...ids, 'unknown'])
+  expect(rows.map(row => row.id).sort()).toEqual(ids.sort())
+  expect(await findTenants(db, [])).toEqual([])
 })
 
 describe('menu at its limits', () => {

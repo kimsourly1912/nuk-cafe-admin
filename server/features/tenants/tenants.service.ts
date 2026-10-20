@@ -1,5 +1,5 @@
 import type { Page } from '#shared/contracts/common'
-import { totalPages } from '#shared/contracts/common'
+import { toPage } from '#shared/contracts/common'
 import type { AccountCafe, CafeProfile, CafeSettings, UpdateCafeInput } from '#shared/contracts/cafe'
 import type { AddOwnerInput, ChangeTenantSlugInput, CreatedTenant, CreateTenantInput, NewCafeOwner, OwnerChange, OwnerSearchQuery, PlatformOwner, RemoveOwnerInput, ResumeTenantInput, SlugAvailability, SuspendTenantInput, TenantCounts, TenantDetail, TenantListQuery, TenantNotes, TenantStatus, TenantSummary, TransferOwnerInput, UpdateTenantNotesInput } from '#shared/contracts/tenants'
 import { TENANT_STATUSES } from '#shared/contracts/tenants'
@@ -66,13 +66,7 @@ async function toSummaries(db: Db, rows: TenantRow[], now = new Date()): Promise
 
 export async function listTenants(db: Db, query: TenantListQuery): Promise<Page<TenantSummary>> {
   const { rows, total } = await repo.listTenants(db, query)
-  return {
-    items: await toSummaries(db, rows),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
-    totalPages: totalPages(total, query.pageSize),
-  }
+  return toPage(await toSummaries(db, rows), query, total)
 }
 
 /** The list's status tabs in one read: every status, zeros included. */
@@ -85,7 +79,7 @@ export async function countTenants(db: Db): Promise<TenantCounts> {
 export async function getTenant(db: Db, id: string): Promise<TenantDetail> {
   const row = await repo.findTenant(db, id)
   if (!row) throw tenantNotFound()
-  const [[summary], owners, formerSlugs, notes, support] = await Promise.all([toSummaries(db, [row]), tenantOwners(db, id), repo.formerSlugs(db, id, row.slug), repo.findNotes(db, id), tenantSupport(db, id)])
+  const [[summary], owners, formerSlugs, notes, support] = await Promise.all([toSummaries(db, [row]), tenantOwners(db, id), repo.slugsOf(db, id, row.slug), repo.findNotes(db, id), tenantSupport(db, id)])
   return { ...summary!, owners, formerSlugs, notes: notesOf(notes), support }
 }
 
@@ -102,7 +96,7 @@ function notesOf(row: repo.TenantNotesRow | undefined): TenantNotes {
 /** Accounts with the cafes they own, by name (D146). */
 async function withCafes(db: Db, owners: OwnerAccount[]): Promise<PlatformOwner[]> {
   if (!owners.length) return []
-  const refs = await repo.tenantRefs(db, [...new Set(owners.flatMap(owner => owner.tenantIds))])
+  const refs = await repo.findTenantRefs(db, [...new Set(owners.flatMap(owner => owner.tenantIds))])
   return owners.map(({ tenantIds, ...owner }) => ({ ...owner, cafes: refs.filter(ref => tenantIds.includes(ref.id)) }))
 }
 
@@ -124,7 +118,7 @@ export async function getOwnerAccount(db: Db, userId: string): Promise<PlatformO
  * this one, and creating the cafe decides.
  */
 export async function checkSlug(db: Db, slug: string): Promise<SlugAvailability> {
-  return { slug, available: !await repo.slugOwner(db, slug) }
+  return { slug, available: !await repo.findSlugOwner(db, slug) }
 }
 
 /**
@@ -150,7 +144,7 @@ async function resolveOwner(db: Db, owner: CreateTenantInput['owner']): Promise<
  * every cafe the owner has now, the new one included.
  */
 export async function createTenant(db: Db, actor: PlatformActor, input: CreateTenantInput, now = new Date()): Promise<CreatedTenant> {
-  if (await repo.slugOwner(db, input.slug)) throw slugTaken()
+  if (await repo.findSlugOwner(db, input.slug)) throw slugTaken()
   const ownerInput = await resolveOwner(db, input.owner)
 
   const tenantId = newId()
@@ -179,7 +173,7 @@ export async function createTenant(db: Db, actor: PlatformActor, input: CreateTe
   }
   catch (error) {
     // Another save took the address meanwhile, or the owner's account was created or changed.
-    if (isUniqueViolation(error) && await repo.slugOwner(db, input.slug)) throw slugTaken()
+    if (isUniqueViolation(error) && await repo.findSlugOwner(db, input.slug)) throw slugTaken()
     if (isUniqueViolation(error) && input.owner.kind === 'new' && await accountForEmail(db, input.owner.email)) throw accountExists()
     if (isUniqueViolation(error)) throw ownerAccountChanged()
     if (isStaleWrite(error)) {
@@ -248,13 +242,13 @@ export async function resumeTenant(db: Db, actor: PlatformActor, id: string, inp
 export async function changeTenantSlug(db: Db, actor: PlatformActor, id: string, input: ChangeTenantSlugInput, now = new Date()): Promise<TenantDetail> {
   const row = await loadForChange(db, id, input.version)
   if (row.slug === input.slug) throw sameSlug()
-  const owner = await repo.slugOwner(db, input.slug)
+  const owner = await repo.findSlugOwner(db, input.slug)
   if (owner && owner !== id) throw slugTaken()
   try {
     await runTenantChange(db, [
       repo.updateTenantStatement(db, id, input.version, { slug: input.slug }),
       requireOneChange(db),
-      repo.forgetOwnSlugStatement(db, input.slug, id),
+      repo.forgetOwnSlugStatement(db, id, input.slug),
       repo.insertSlugStatement(db, { slug: input.slug, tenantId: id, now }),
       audit(db, actor, id, 'tenant.slug.change', { from: row.slug, to: input.slug }),
     ])
@@ -417,7 +411,7 @@ export async function updateTenantNotes(db: Db, actor: PlatformActor, tenantId: 
  * to; `undefined` when no cafe ever had it.
  */
 export async function currentSlugFor(db: Db, formerSlug: string): Promise<string | undefined> {
-  const tenantId = await repo.slugOwner(db, formerSlug)
+  const tenantId = await repo.findSlugOwner(db, formerSlug)
   if (!tenantId) return undefined
   const row = await repo.findTenant(db, tenantId)
   return row && row.slug !== formerSlug ? row.slug : undefined
@@ -465,14 +459,14 @@ export async function getCafeProfile(db: Db, slug: string): Promise<CafeProfile>
  */
 export async function listAccountCafes(db: Db, user: SessionUser | null | undefined): Promise<AccountCafe[]> {
   const entries = await accountWorkspaces(db, user)
-  // One read per cafe: an account works in a handful, and a list of ids would meet D1's parameter limit.
-  const cafes = await Promise.all(entries.map(async ({ tenantId, workspaces }) => {
-    const row = await repo.findTenant(db, tenantId)
-    if (!row) return null
+  const rows = await repo.findTenants(db, entries.map(entry => entry.tenantId))
+  const workspacesOf = new Map(entries.map(entry => [entry.tenantId, entry.workspaces]))
+  const cafes = await Promise.all(rows.map(async (row) => {
+    const workspaces = workspacesOf.get(row.id)!
     const { logoAssetId: _, version: __, ...profile } = await profileOf(db, row)
     return { ...profile, workspaces }
   }))
-  return cafes.filter(cafe => cafe !== null).sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }) || a.slug.localeCompare(b.slug))
+  return cafes.sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }) || a.slug.localeCompare(b.slug))
 }
 
 /** The owner's settings page (`GET /api/c/<slug>/admin/cafe`). */

@@ -1,6 +1,9 @@
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { Db, Statement } from '#server/utils/batch'
+import { firstRow, inTenant } from '#server/utils/query'
 import { customerProfiles } from './customers.schema'
+
+// --- Row types ---
 
 export interface ProfileRow {
   tenantId: string
@@ -11,15 +14,28 @@ export interface ProfileRow {
   createdAt: Date
 }
 
+// --- Column lists and conditions ---
+
+const profileColumns = {
+  tenantId: customerProfiles.tenantId,
+  userId: customerProfiles.userId,
+  memberCode: customerProfiles.memberCode,
+  phone: customerProfiles.phone,
+  marketingOptIn: customerProfiles.marketingOptIn,
+  createdAt: customerProfiles.createdAt,
+}
+
+// --- Reads ---
+
 /** The account's profile in the tenant. */
 export async function findProfile(db: Db, tenantId: string, userId: string): Promise<ProfileRow | undefined> {
-  const rows: ProfileRow[] = await db
-    .select({ tenantId: customerProfiles.tenantId, userId: customerProfiles.userId, memberCode: customerProfiles.memberCode, phone: customerProfiles.phone, marketingOptIn: customerProfiles.marketingOptIn, createdAt: customerProfiles.createdAt })
+  return firstRow(db
+    .select(profileColumns)
     .from(customerProfiles)
-    .where(and(eq(customerProfiles.tenantId, tenantId), eq(customerProfiles.userId, userId)))
-    .limit(1)
-  return rows[0]
+    .where(inTenant(customerProfiles, tenantId, eq(customerProfiles.userId, userId))))
 }
+
+// --- Write statements ---
 
 /**
  * Creates the profile unless the account has one in the tenant already (`on conflict (tenant_id,

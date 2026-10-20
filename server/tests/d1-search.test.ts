@@ -14,7 +14,7 @@ import type { Db } from '#server/utils/batch'
 import { deleteOldest, insertAll, requireCount, requireOneChange, runBatch, updateAtVersion } from '#server/utils/batch'
 import { byId, byName, firstRow, hasAny, inTenant, nextPosition, readPage } from '#server/utils/query'
 import { menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
-import { migrationFiles } from '#server/tests/support/db'
+import { migrationFiles, addBranchStaff, createUser, insertBranch } from '#server/tests/support/db'
 import type { StaffListQuery } from '#shared/contracts/staff'
 import { branches, user } from '#server/db/tables'
 import { recordJobRun } from '#server/features/platform'
@@ -22,6 +22,7 @@ import { allowSupport, endSupport, openSupportVisit, supportActor } from '#serve
 import { interleaved } from '#server/tests/support/interleave'
 import { expectApiError } from '#server/tests/support/failure'
 import { newId } from '#server/utils/ids'
+import { workspaceRoles } from '#server/features/identity/identity.repository'
 
 // Real D1 (workerd, through wrangler's platform proxy) with the app's Drizzle D1 adapter. The
 // other server tests run on libsql, which accepts a LIKE pattern of 50,000 bytes where D1 refuses
@@ -137,6 +138,14 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
     const d1 = (proxy.env as { DB: { prepare: (statement: string) => { bind: (...values: unknown[]) => { all: () => Promise<{ results: Record<string, unknown>[] }> } } } }).DB
     const seen: { sql: string, params: unknown[] }[] = []
     const logged = drizzle(d1 as never, { casing: 'snake_case', logger: { logQuery: (statement, params) => void seen.push({ sql: statement, params }) } }) as unknown as Db
+    // The D1 driver also omits batch statements from the logger (D194).
+    const batch = logged.batch.bind(logged)
+    logged.batch = ((items) => {
+      for (const item of items) {
+        seen.push((item as unknown as { toSQL: () => { sql: string, params: unknown[] } }).toSQL())
+      }
+      return batch(items)
+    }) as typeof logged.batch
     const [riverside, airport] = [newId(), newId()]
     await db.insert(branches).values([{ id: riverside, tenantId: ours, name: 'Riverside', timezone: 'Asia/Phnom_Penh', status: 'active', createdAt: new Date() }, { id: airport, tenantId: ours, name: 'Airport', timezone: 'Asia/Phnom_Penh', status: 'archived', createdAt: new Date() }])
     const ownerId = (await listStaff(db, { userId: 'x', tenantId: ours, role: 'owner' }, { page: 1, pageSize: 20, search: 'owner@example.com' })).items[0]!.id
@@ -268,5 +277,23 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
     await expect(runBatch(db, [updateAtVersion(db, menuOptionSets, key, { name: 'Stale' }), requireOneChange(db)], stale)).rejects.toThrow('stale')
     await expect(runBatch(db, [updateAtVersion(db, menuOptionSets, { ...key, version: 2 }, { name: 'Counted' }), requireCount(db, db.$count(menuOptionSets, mine), 4)], stale)).rejects.toThrow('stale')
     expect(await firstRow(db.select(columns).from(menuOptionSets).where(byId(menuOptionSets, ours, sets[2]!.id)))).toMatchObject({ name: 'Beta 2', version: 2 })
+  })
+  it('reads an account\'s roles across two cafes in a joined batch, excluding other accounts and archived branches (D194)', async () => {
+    const person = await createUser(db, 'workspace-person@example.com', 'Person')
+    const stranger = await createUser(db, 'workspace-stranger@example.com', 'Stranger')
+    for (const [tenantId, role] of [[ours, 'staff'], [theirs, 'manager']] as const) {
+      const branchId = newId()
+      await insertBranch(db, { id: branchId, tenantId, name: 'Workspace branch', timezone: 'Asia/Phnom_Penh' })
+      await addBranchStaff(db, branchId, person.id, role, tenantId)
+      await addBranchStaff(db, branchId, stranger.id, 'manager', tenantId)
+    }
+    const archived = newId()
+    await insertBranch(db, { id: archived, tenantId: ours, name: 'Closed', timezone: 'Asia/Phnom_Penh', status: 'archived' })
+    await addBranchStaff(db, archived, person.id, 'manager', ours)
+    const result = await workspaceRoles(db, person.id)
+    expect(result.memberships).toEqual(expect.arrayContaining([{ tenantId: ours, role: 'member' }, { tenantId: theirs, role: 'member' }]))
+    expect(result.memberships).toHaveLength(2)
+    expect(result.staff).toEqual(expect.arrayContaining([{ tenantId: ours, role: 'staff' }, { tenantId: theirs, role: 'manager' }]))
+    expect(result.staff).toHaveLength(2)
   })
 })

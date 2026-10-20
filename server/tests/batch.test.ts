@@ -10,6 +10,10 @@ import { versionConflict } from '#server/utils/errors'
 import { catalogRows, itemModifierGroups } from '#server/features/menu/catalog.repository'
 import { listItems } from '#server/features/menu/items.repository'
 import { linksOf } from '#server/features/menu/promotions.repository'
+import { workspaceRoles } from '#server/features/identity/identity.repository'
+import { listAccounts } from '#server/features/identity/accounts.repository'
+import { listStaff } from '#server/features/identity/staff.repository'
+import { listTenants } from '#server/features/tenants/tenants.repository'
 import * as repo from '#server/features/notifications/notifications.repository'
 import { counterContext, counterQueueRows } from '#server/features/orders/orders.repository'
 import { orderHistory } from '#server/features/orders/reports.repository'
@@ -102,6 +106,26 @@ describe('on D1', () => {
   }
 
   const things = sqliteTable('t', { v: integer() })
+
+  it('maps the joined workspace batch by SQL name, keeping each cafe and role together (D194)', async () => {
+    const { db: d1, bound } = fakeD1([['cafe-a', 'owner'], ['cafe-b', 'manager']])
+    expect(await workspaceRoles(d1, 'person')).toEqual({
+      memberships: [{ tenantId: 'cafe-a', role: 'owner' }], staff: [{ tenantId: 'cafe-b', role: 'manager' }],
+    })
+    expect(bound).toHaveLength(2)
+    expect(bound.every(statement => statement.params.includes('person'))).toBe(true)
+    expect(bound[1]!.sql).toContain('"branches"."tenantId" = "branch_staff"."tenantId"')
+  })
+
+  it('reads identity and cafe pages with their totals through D1, preserving booleans and dates (D194)', async () => {
+    const now = new Date('2026-10-20T03:00:00Z')
+    const { db: accountDb } = fakeD1([['person', 'Person', 'person@example.com', 1, 'customer', 0, null, null, 0, 0, now.getTime(), now.getTime()], [1]])
+    expect(await listAccounts(accountDb, { page: 1, pageSize: 20, kind: 'owner' })).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'person', name: 'Person', emailVerified: true, banned: false, createdAt: now, updatedAt: now })] })
+    const { db: staffDb } = fakeD1([['person', 'Person', 'person@example.com', 'customer', 0, now.getTime(), now.getTime()], [1]])
+    expect(await listStaff(staffDb, 'cafe-a', { page: 1, pageSize: 20, branchId: 'branch-a' })).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'person', mustChangePassword: false, updatedAt: now, createdAt: now })] })
+    const { db: tenantDb } = fakeD1([['cafe-a', 'Cafe A', 'cafe-a', 'active', null, null, 2, now.getTime()], [1]])
+    expect(await listTenants(tenantDb, { page: 1, pageSize: 20, owner: 'none' })).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'cafe-a', name: 'Cafe A', version: 2, createdAt: now })] })
+  })
 
   it('batches every guard, with and without bound parameters', async () => {
     const { db: d1, bound } = fakeD1()

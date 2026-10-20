@@ -1,19 +1,15 @@
-import { and, asc, count, eq, inArray, or, sql } from 'drizzle-orm'
+import { and, asc, count, eq, exists, inArray, ne, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { BranchRoleName, StaffListQuery } from '#shared/contracts/staff'
 import type { Db, Statement } from '#server/utils/batch'
-import { insertPieces, readInChunks, requireCount } from '#server/utils/batch'
+import { insertAll, readInChunks, requireCount } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
-import { containsText } from '#server/utils/search'
+import { byName, firstRow, hasAny, inTenant, readPage, searchIn } from '#server/utils/query'
+import { activeBranch } from '#server/features/branches'
 import { account, branches, branchStaff, member, session, user } from '#server/db/tables'
+import { accountCanSignIn, ownerCanSignIn, registeredAccount } from './identity.repository'
 
-/**
- * Staff queries (D49, D134): a tenant's staff are its members (Better Auth's `member`, `owner` or
- * `member`) and their branches (`branch_staff`). Staff management writes these tables directly so
- * that an account, its memberships, its sessions and the audit row change in **one batch** (D1 has
- * no transactions). Better Auth reads them per request, so changes apply at once. Every query here
- * is scoped to one tenant.
- */
+// --- Row types ---
 
 export interface AccountRow {
   id: string
@@ -32,6 +28,23 @@ export interface MembershipRow {
   role: string
 }
 
+export interface OwnerRow {
+  id: string
+  name: string
+  email: string
+  banned: boolean
+  /** Works at one of the tenant's branches too: removing the ownership keeps that (P2, D189). */
+  staffAccess: boolean
+}
+
+export interface AccountIdentity {
+  id: string
+  name: string
+  email: string
+}
+
+// --- Column lists and conditions ---
+
 const accountColumns = {
   id: user.id,
   name: user.name,
@@ -46,91 +59,156 @@ const accountColumns = {
 // primary key) and then looks users up by primary key. `user` holds every customer and guest of every
 // cafe, so a check per user (a correlated `exists`) scanned all of them. `in (select …)` is a
 // semi-join: a person with several membership or branch rows still matches once.
-const memberIds = (tenantId: string, role?: 'owner') =>
-  sql`${user.id} in (select ${member.userId} from ${member} where ${member.organizationId} = ${tenantId}${role ? sql` and ${member.role} = ${role}` : sql``})`
+const memberIds = (db: Db, tenantId: string, role?: 'owner') =>
+  inArray(user.id, db.select({ userId: member.userId }).from(member).where(and(
+    eq(member.organizationId, tenantId),
+    role ? eq(member.role, role) : undefined,
+  )))
+
 // `branch_staff` is indexed by branch and by user, not by tenant: without a branch, the tenant's rows
 // are reached through its branches (`branches_tenant_id_unique`, archived ones too) instead of
 // scanning every cafe's staff. A row's branch always belongs to its tenant (composite key).
-const workerIds = (tenantId: string, branchId?: string, role?: BranchRoleName) =>
-  sql`${user.id} in (select ${branchStaff.userId} from ${branchStaff} where ${branchStaff.tenantId} = ${tenantId}${branchId ? sql` and ${branchStaff.branchId} = ${branchId}` : sql` and ${branchStaff.branchId} in (select ${branches.id} from ${branches} where ${branches.tenantId} = ${tenantId})`}${role ? sql` and ${branchStaff.role} = ${role}` : sql``})`
+const workerIds = (db: Db, tenantId: string, branchId?: string, role?: BranchRoleName) =>
+  inArray(user.id, db.select({ userId: branchStaff.userId }).from(branchStaff).where(inTenant(branchStaff, tenantId,
+    branchId ? eq(branchStaff.branchId, branchId) : inArray(branchStaff.branchId, db.select({ id: branches.id }).from(branches).where(inTenant(branches, tenantId))),
+    role ? eq(branchStaff.role, role) : undefined,
+  )))
+
+/**
+ * An account a cafe can be given to (D185): registered (not a guest, `is_anonymous`) and not
+ * disabled. A super admin counts: the new-person path always allowed one.
+ */
+const eligibleAccount = and(accountCanSignIn, registeredAccount)
+
+// --- Reads ---
 
 export async function findAccount(db: Db, userId: string): Promise<AccountRow | undefined> {
-  const rows: AccountRow[] = await db.select(accountColumns).from(user).where(eq(user.id, userId)).limit(1)
-  return rows[0]
+  return firstRow(db.select(accountColumns).from(user).where(eq(user.id, userId)))
 }
 
 export async function findAccountByEmail(db: Db, email: string): Promise<AccountRow | undefined> {
-  const rows: AccountRow[] = await db.select(accountColumns).from(user).where(eq(user.email, email)).limit(1)
-  return rows[0]
-}
-
-/** The account's role in the tenant (`owner`, `member`), `undefined` when not a member. */
-export async function tenantRoleOf(db: Db, tenantId: string, userId: string): Promise<string | undefined> {
-  const rows = await db.select({ role: member.role }).from(member)
-    .where(and(eq(member.organizationId, tenantId), eq(member.userId, userId))).limit(1)
-  return rows[0]?.role
+  return firstRow(db.select(accountColumns).from(user).where(eq(user.email, email)))
 }
 
 /** The owners among these accounts, in the tenant. */
 export async function ownersAmong(db: Db, tenantId: string, userIds: string[]): Promise<Set<string>> {
-  if (!userIds.length) return new Set()
-  const rows: { userId: string }[] = await readInChunks(userIds, ids => db.select({ userId: member.userId }).from(member)
-    .where(and(eq(member.organizationId, tenantId), eq(member.role, 'owner'), inArray(member.userId, ids))))
+  const rows = await readInChunks(userIds, ids => db.select({ userId: member.userId }).from(member)
+    .where(and(
+      eq(member.organizationId, tenantId),
+      eq(member.role, 'owner'),
+      inArray(member.userId, ids),
+    )))
   return new Set(rows.map(r => r.userId))
 }
 
-/** Whether the account belongs to any other tenant (staff, owner) or can manage the platform. */
+/** Across cafes: whether the account belongs to another cafe (staff or owner). */
 export async function hasAccessElsewhere(db: Db, tenantId: string, userId: string): Promise<boolean> {
-  const rows = await db.select({ id: member.id }).from(member)
-    .where(and(eq(member.userId, userId), sql`${member.organizationId} <> ${tenantId}`)).limit(1)
-  return rows.length > 0
+  return hasAny(db, member, and(eq(member.userId, userId), ne(member.organizationId, tenantId)))
 }
 
 export async function membershipsOf(db: Db, tenantId: string, userIds: string[]): Promise<MembershipRow[]> {
-  if (!userIds.length) return []
   return readInChunks(userIds, ids => db
     .select({ userId: branchStaff.userId, branchId: branchStaff.branchId, branchName: branches.name, role: branchStaff.role })
     .from(branchStaff)
-    .innerJoin(branches, eq(branches.id, branchStaff.branchId))
-    .where(and(eq(branchStaff.tenantId, tenantId), inArray(branchStaff.userId, ids)))
-    .orderBy(asc(branches.name)))
+    .innerJoin(branches, and(eq(branches.tenantId, branchStaff.tenantId), eq(branches.id, branchStaff.branchId)))
+    .where(inTenant(branchStaff, tenantId, inArray(branchStaff.userId, ids)))
+    .orderBy(asc(branches.name), asc(branches.id), asc(branchStaff.userId)))
 }
 
 /** Of these branch ids, the tenant's that exist and are active. */
 export async function activeBranchIds(db: Db, tenantId: string, branchIds: string[]): Promise<Set<string>> {
-  if (!branchIds.length) return new Set()
-  const rows: { id: string }[] = await db
-    .select({ id: branches.id })
-    .from(branches)
-    .where(and(eq(branches.tenantId, tenantId), inArray(branches.id, branchIds), eq(branches.status, 'active')))
+  const rows = await readInChunks(branchIds, ids => db.select({ id: branches.id }).from(branches)
+    .where(inTenant(branches, tenantId, inArray(branches.id, ids), activeBranch)))
   return new Set(rows.map(r => r.id))
 }
 
-/** The tenant's members, filtered and paginated. */
+/** The cafe's members, filtered and paginated. Uses member_organizationId_idx and branch_staff's primary key. */
 export async function listStaff(db: Db, tenantId: string, query: StaffListQuery): Promise<{ rows: AccountRow[], total: number }> {
   // Owners are members, so the owner filter stands in for the membership one.
-  const conditions: SQL[] = [memberIds(tenantId, query.role === 'admin' ? 'owner' : undefined)]
-  if (query.search) {
-    conditions.push(or(containsText(user.name, query.search), containsText(user.email, query.search))!)
-  }
+  const conditions: SQL[] = [memberIds(db, tenantId, query.role === 'admin' ? 'owner' : undefined)]
+  const search = searchIn(query.search, user.name, user.email)
+  if (search) conditions.push(search)
   if (query.role === 'admin') {
-    if (query.branchId) conditions.push(workerIds(tenantId, query.branchId))
+    if (query.branchId) conditions.push(workerIds(db, tenantId, query.branchId))
   }
   else if (query.role || query.branchId) {
-    conditions.push(workerIds(tenantId, query.branchId, query.role))
+    conditions.push(workerIds(db, tenantId, query.branchId, query.role))
   }
   const where = and(...conditions)
 
-  const [totals, rows] = await Promise.all([
-    db.select({ total: count() }).from(user).where(where) as Promise<{ total: number }[]>,
-    db.select(accountColumns).from(user).where(where)
-      .orderBy(asc(user.name), asc(user.id))
-      .limit(query.pageSize).offset((query.page - 1) * query.pageSize) as Promise<AccountRow[]>,
-  ])
-  return { rows, total: totals[0]?.total ?? 0 }
+  return readPage(db,
+    db.select(accountColumns).from(user).where(where).orderBy(asc(user.name), asc(user.id)).$dynamic(),
+    db.select({ total: count() }).from(user).where(where), query)
 }
 
-// --- Writes: statements for the service's batch ---
+/** Whether the account signs in with an email and password (Better Auth's "credential" provider). */
+export async function hasPasswordAccount(db: Db, userId: string): Promise<boolean> {
+  return hasAny(db, account, and(eq(account.userId, userId), eq(account.providerId, 'credential')))
+}
+
+export async function countOwners(db: Db, tenantId: string): Promise<number> {
+  return db.$count(member, and(eq(member.organizationId, tenantId), ownerCanSignIn(db)))
+}
+
+/** Across cafes: people with access per tenant (owners and branch staff are all members), for the platform console (D142). */
+export async function memberCounts(db: Db, tenantIds: string[]): Promise<{ tenantId: string, total: number }[]> {
+  return readInChunks(tenantIds, ids => db.select({ tenantId: member.organizationId, total: count() }).from(member)
+    .where(inArray(member.organizationId, ids))
+    .groupBy(member.organizationId))
+}
+
+/** A tenant's owners, by name (the platform console's cafe details, D142, D189). */
+export async function ownersOf(db: Db, tenantId: string): Promise<OwnerRow[]> {
+  const rows = await db.select({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    banned: sql<number>`coalesce(${user.banned}, 0)`,
+    staffAccess: exists(db.select({ userId: branchStaff.userId }).from(branchStaff).where(inTenant(branchStaff, tenantId, eq(branchStaff.userId, user.id)))),
+  }).from(member)
+    .innerJoin(user, eq(user.id, member.userId))
+    .where(and(eq(member.organizationId, tenantId), eq(member.role, 'owner')))
+    .orderBy(asc(user.name), asc(user.email), asc(user.id))
+  return rows.map(row => ({ ...row, banned: Boolean(row.banned), staffAccess: Boolean(row.staffAccess) }))
+}
+
+/** Whether the account works at one of the tenant's branches. */
+export async function hasBranchRole(db: Db, tenantId: string, userId: string): Promise<boolean> {
+  return hasAny(db, branchStaff, inTenant(branchStaff, tenantId, eq(branchStaff.userId, userId)))
+}
+
+export async function findEligibleAccount(db: Db, userId: string): Promise<AccountIdentity | undefined> {
+  return firstRow(db.select({ id: user.id, name: user.name, email: user.email }).from(user)
+    .where(and(eq(user.id, userId), eligibleAccount)))
+}
+
+/** Eligible accounts whose name or email contains `search`, by name, at most `limit`: a bounded lookup, never the whole user table. */
+export async function searchEligibleAccounts(db: Db, search: string, limit: number): Promise<AccountIdentity[]> {
+  return db.select({ id: user.id, name: user.name, email: user.email }).from(user)
+    .where(and(eligibleAccount, searchIn(search, user.name, user.email)))
+    .orderBy(byName(user.name), asc(user.email), asc(user.id))
+    .limit(limit)
+}
+
+/** Across cafes: the cafes these accounts own: a row per cafe. */
+export async function ownedTenants(db: Db, userIds: string[]): Promise<{ userId: string, tenantId: string }[]> {
+  return readInChunks(userIds, ids => db.select({ userId: member.userId, tenantId: member.organizationId }).from(member)
+    .where(and(eq(member.role, 'owner'), inArray(member.userId, ids))))
+}
+
+// --- Guards ---
+
+/** Aborts the batch if it would leave the tenant without an owner who can sign in. */
+export function requireAnOwner(db: Db, tenantId: string): Statement {
+  return requireCount(db, sql`${db.$count(member, and(eq(member.organizationId, tenantId), ownerCanSignIn(db)))} > 0`, 1)
+}
+
+/** Aborts the batch unless the account is still eligible: disabling it meanwhile must not be missed. */
+export function requireEligibleAccount(db: Db, userId: string): Statement {
+  return requireCount(db, db.$count(user, and(eq(user.id, userId), eligibleAccount)), 1)
+}
+
+// --- Write statements ---
 
 export function insertAccountStatements(db: Db, row: { id: string, name: string, email: string, passwordHash: string, now: Date }): Statement[] {
   return [
@@ -164,7 +242,7 @@ export function insertAccountStatements(db: Db, row: { id: string, name: string,
  * someone's access does, so two admins editing the same person can't overwrite each other. Follow
  * it with `requireOneChange`.
  */
-export function bumpVersionStatement(db: Db, userId: string, expected: Date, next: Date): Statement {
+export function touchAccountStatement(db: Db, userId: string, expected: Date, next: Date): Statement {
   return db.update(user)
     .set({ updatedAt: next })
     .where(and(eq(user.id, userId), eq(user.updatedAt, expected)))
@@ -176,13 +254,11 @@ export function bumpVersionStatement(db: Db, userId: string, expected: Date, nex
  */
 export function replaceAccessStatements(db: Db, tenantId: string, userId: string, role: 'owner' | 'member' | null, memberships: { branchId: string, role: BranchRoleName }[], now: Date): Statement[] {
   const statements: Statement[] = [
-    db.delete(branchStaff).where(and(eq(branchStaff.tenantId, tenantId), eq(branchStaff.userId, userId))),
+    db.delete(branchStaff).where(inTenant(branchStaff, tenantId, eq(branchStaff.userId, userId))),
     db.delete(member).where(and(eq(member.organizationId, tenantId), eq(member.userId, userId))),
   ]
   if (role) statements.push(db.insert(member).values({ id: newId(), organizationId: tenantId, userId, role, createdAt: now }))
-  for (const piece of insertPieces(branchStaff, memberships)) {
-    statements.push(db.insert(branchStaff).values(piece.map(m => ({ tenantId, branchId: m.branchId, userId, role: m.role, createdAt: now }))))
-  }
+  statements.push(...insertAll(db, branchStaff, memberships.map(m => ({ tenantId, branchId: m.branchId, userId, role: m.role, createdAt: now }))))
   return statements
 }
 
@@ -190,17 +266,10 @@ export function replaceAccessStatements(db: Db, tenantId: string, userId: string
  * Asks for a new password at the next sign-in, only if the account is still at the version read.
  * Follow it with `requireOneChange`.
  */
-export function requirePasswordChangeStatement(db: Db, userId: string, expected: Date, next: Date): Statement {
+export function updatePasswordRequirementStatement(db: Db, userId: string, expected: Date, next: Date): Statement {
   return db.update(user)
     .set({ mustChangePassword: true, updatedAt: next })
     .where(and(eq(user.id, userId), eq(user.updatedAt, expected)))
-}
-
-/** Whether the account signs in with an email and password (Better Auth's "credential" provider). */
-export async function hasPasswordAccount(db: Db, userId: string): Promise<boolean> {
-  const rows = await db.select({ id: account.id }).from(account)
-    .where(and(eq(account.userId, userId), eq(account.providerId, 'credential'))).limit(1)
-  return rows.length > 0
 }
 
 /** Replaces the password, or adds one to an account that had none. */
@@ -218,58 +287,6 @@ export function deleteSessionsStatement(db: Db, userId: string): Statement {
   return db.delete(session).where(eq(session.userId, userId))
 }
 
-const activeOwners = (tenantId: string) => sql`select count(*) from ${member} join ${user} on ${user.id} = ${member.userId} where ${member.organizationId} = ${tenantId} and ${member.role} = 'owner' and coalesce(${user.banned}, 0) = 0`
-
-/** Aborts the batch if it would leave the tenant without an owner who can sign in. */
-export function requireAnOwnerStatement(db: Db, tenantId: string): Statement {
-  return requireCount(db, sql`select (${activeOwners(tenantId)}) > 0`, 1)
-}
-
-export async function countOwners(db: Db, tenantId: string): Promise<number> {
-  const rows: { total: number }[] = await db.select({ total: count() }).from(member)
-    .innerJoin(user, eq(user.id, member.userId))
-    .where(and(eq(member.organizationId, tenantId), eq(member.role, 'owner'), sql`coalesce(${user.banned}, 0) = 0`))
-  return rows[0]?.total ?? 0
-}
-
-/** People with access per tenant (owners and branch staff are all members), for the platform console (D142). */
-export async function memberCounts(db: Db, tenantIds: string[]): Promise<{ tenantId: string, total: number }[]> {
-  return readInChunks(tenantIds, ids => db.select({ tenantId: member.organizationId, total: count() }).from(member)
-    .where(inArray(member.organizationId, ids))
-    .groupBy(member.organizationId))
-}
-
-export interface OwnerRow {
-  id: string
-  name: string
-  email: string
-  banned: boolean
-  /** Works at one of the tenant's branches too: removing the ownership keeps that (P2, D189). */
-  staffAccess: boolean
-}
-
-/** A tenant's owners, by name (the platform console's cafe details, D142, D189). */
-export async function ownersOf(db: Db, tenantId: string): Promise<OwnerRow[]> {
-  const rows = await db.select({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    banned: sql<number>`coalesce(${user.banned}, 0)`,
-    staffAccess: sql<number>`exists (select 1 from ${branchStaff} where ${branchStaff.tenantId} = ${tenantId} and ${branchStaff.userId} = ${user.id})`,
-  }).from(member)
-    .innerJoin(user, eq(user.id, member.userId))
-    .where(and(eq(member.organizationId, tenantId), eq(member.role, 'owner')))
-    .orderBy(asc(user.name), asc(user.email))
-  return rows.map(row => ({ ...row, banned: Boolean(row.banned), staffAccess: Boolean(row.staffAccess) }))
-}
-
-/** Whether the account works at one of the tenant's branches. */
-export async function hasBranchRole(db: Db, tenantId: string, userId: string): Promise<boolean> {
-  const rows = await db.select({ userId: branchStaff.userId }).from(branchStaff)
-    .where(and(eq(branchStaff.tenantId, tenantId), eq(branchStaff.userId, userId))).limit(1)
-  return rows.length > 0
-}
-
 /**
  * Replaces the account's role in the tenant (`owner`, `member`, none when `null`), keeping the
  * branches it works at: the platform's ownership changes (P2, D189) never touch branch roles.
@@ -283,41 +300,4 @@ export function setTenantRoleStatements(db: Db, tenantId: string, userId: string
 /** Makes an account a super admin, unless it already is (the seed task, D142). */
 export function grantSuperadminStatement(db: Db, userId: string): Statement {
   return db.update(user).set({ role: 'superadmin' }).where(and(eq(user.id, userId), sql`coalesce(${user.role}, 'customer') <> 'superadmin'`))
-}
-
-/**
- * An account a cafe can be given to (D185): registered (not a guest, `is_anonymous`) and not
- * disabled. A super admin counts: the new-person path always allowed one.
- */
-const eligibleAccount = sql`coalesce(${user.banned}, 0) = 0 and coalesce(${user.isAnonymous}, 0) = 0`
-
-export interface AccountIdentity {
-  id: string
-  name: string
-  email: string
-}
-
-export async function findEligibleAccount(db: Db, userId: string): Promise<AccountIdentity | undefined> {
-  const rows: AccountIdentity[] = await db.select({ id: user.id, name: user.name, email: user.email }).from(user)
-    .where(and(eq(user.id, userId), eligibleAccount)).limit(1)
-  return rows[0]
-}
-
-/** Eligible accounts whose name or email contains `search`, by name, at most `limit`: a bounded lookup, never the whole user table. */
-export async function searchEligibleAccounts(db: Db, search: string, limit: number): Promise<AccountIdentity[]> {
-  return db.select({ id: user.id, name: user.name, email: user.email }).from(user)
-    .where(and(eligibleAccount, or(containsText(user.name, search), containsText(user.email, search))))
-    .orderBy(sql`${user.name} collate nocase`, asc(user.email), asc(user.id))
-    .limit(limit)
-}
-
-/** Aborts the batch unless the account is still eligible: disabling it meanwhile must not be missed. */
-export function requireEligibleAccountStatement(db: Db, userId: string): Statement {
-  return requireCount(db, sql`select count(*) from ${user} where ${user.id} = ${userId} and ${eligibleAccount}`, 1)
-}
-
-/** The cafes these accounts own: a row per cafe. */
-export async function ownedTenants(db: Db, userIds: string[]): Promise<{ userId: string, tenantId: string }[]> {
-  return readInChunks(userIds, ids => db.select({ userId: member.userId, tenantId: member.organizationId }).from(member)
-    .where(and(eq(member.role, 'owner'), inArray(member.userId, ids))))
 }

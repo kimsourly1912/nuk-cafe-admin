@@ -2,3 +2,5 @@ export { activeBranchCounts, activeTableLabels, archiveTable, cafeToday, createT
 export type { BranchClock, SeededBranch } from './branches.service'
 export { qrConfigFrom } from './branches.qr'
 export type { QrConfig } from './branches.qr'
+
+export { activeBranch } from './branches.repository'

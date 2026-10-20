@@ -34,7 +34,7 @@ export async function getPlatformHealth(db: Db, now = new Date()): Promise<Platf
     bakongTokenExpiries(db),
   ])
   const ids = [...new Set([...outbox.flatMap(row => row.tenantId ?? []), ...telegram.map(row => row.tenantId), ...tokens.map(row => row.tenantId)])]
-  const refs = new Map((await repo.tenantRefs(db, ids)).map(cafe => [cafe.id, cafe]))
+  const refs = new Map((await repo.findTenantRefs(db, ids)).map(cafe => [cafe.id, cafe]))
   const cafe = (id: string): CafeRef => refs.get(id) ?? { id, name: 'Unknown cafe', slug: '' }
 
   const byJob = new Map(runs.map(run => [run.job, run]))

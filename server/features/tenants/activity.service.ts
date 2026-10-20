@@ -28,7 +28,7 @@ export async function getPlatformOverview(db: Db, timeZone: string, now = new Da
   const [cafes, counts, active, bannedAccounts] = await Promise.all([
     countTenants(db),
     repo.overviewCounts(db, monthStart),
-    repo.activeTenantIds(db),
+    repo.listActiveTenantIds(db),
     countBannedAccounts(db),
   ])
   const ordering = await tenantsOrderingRecently(db, active, QUIET_DAYS, now)
@@ -77,7 +77,7 @@ export async function listPlatformActivity(db: Db, query: ActivityQuery, timeZon
     offset: (query.page - 1) * query.pageSize,
   })
   const people = await accountIdentities(db, rows.flatMap(row => [row.actorId, accountIdOf(row), text(row.metadata?.fromId)]).filter((id): id is string => !!id))
-  const cafes = new Map((await repo.tenantRefs(db, [...new Set(rows.flatMap(row => row.tenantId ?? []))])).map(cafe => [cafe.id, cafe]))
+  const cafes = new Map((await repo.findTenantRefs(db, [...new Set(rows.flatMap(row => row.tenantId ?? []))])).map(cafe => [cafe.id, cafe]))
   const person = (id: string | null | undefined): ActivityPerson | null => {
     if (!id) return null
     const found = people.get(id)

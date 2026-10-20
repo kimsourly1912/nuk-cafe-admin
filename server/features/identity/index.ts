@@ -16,3 +16,5 @@ export { activeOwnerCounts, ownershipFacts, planExistingOwner, planNewOwner, pla
 export type { OwnerAddPlan, OwnershipFacts } from './owners.service'
 export { accountMailHandlers, consoleSender, MAIL_KINDS, resendSender } from './identity.mail'
 export type { MailMessage, MailSender } from './identity.mail'
+
+export { accountCanSignIn, hasActiveOwner, ownerCanSignIn, registeredAccount } from './identity.repository'

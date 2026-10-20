@@ -76,6 +76,10 @@ Answered by the owner on 2026-10-20 (audit R7, D194). A join to another feature'
 
 ESLint's feature-boundary rule (`eslint.config.mjs`) refuses a repository's import of another feature's `*.schema` file, so `tables.ts` is the only way in. The column list is checked in review ([checklist](#checklist-for-a-repository-change)).
 
+**Shared owner conditions (step 5):** identity exports `accountCanSignIn` (not banned), `registeredAccount` (not anonymous), `ownerCanSignIn(db)` (a membership with role `owner` whose account is not banned), and `hasActiveOwner(db, cafeIdColumn)` (a cafe has such a membership). The latter builds the subquery inside identity, so tenants never reads `member` or `user.banned`. Tenants exports `activeCafe`; branches exports `activeBranch`. Legacy null account flags mean false; a null cafe status means active. An owner count keeps the existing ban rule: ban expiry is lifted by Better Auth at sign-in, not inferred here. These are SQL conditions, not permission checks. Cafe lookups and active-cafe enumeration live only in tenants; identity asks its public `index.ts`. The oldest-cafe fallback (D140) is unchanged.
+
+`ownerCanSignIn(db)` uses a correlated `exists` lookup on the account's primary key. Keep that lookup: an `in (select user.id …)` of all unbanned accounts scans every cafe's customers even for a one-cafe owner count. The repository two-cafe suite checks its query plan, and fails if that scan returns.
+
 ## Reads
 
 ```ts

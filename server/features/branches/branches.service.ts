@@ -98,13 +98,13 @@ function toPublicBranch(branch: BranchRow, hours: WeeklyWindow[], now: Date): Pu
 export async function getPublicBranch(db: Db, tenantId: string, id: string, now = new Date()): Promise<PublicBranch> {
   const branch = await repo.findBranch(db, tenantId, id)
   if (!branch || branch.status !== 'active') throw notFound('This branch')
-  return toPublicBranch(branch, await repo.hoursOf(db, id), now)
+  return toPublicBranch(branch, await repo.hoursOf(db, tenantId, id), now)
 }
 
 /** The labels of a branch's active tables (no QR links: for counts and sample data, D94). */
 export async function activeTableLabels(db: Db, tenantId: string, branchId: string): Promise<string[]> {
   await loadBranch(db, tenantId, branchId)
-  return (await repo.listTables(db, branchId, 'active')).map(table => table.label)
+  return (await repo.listTables(db, tenantId, branchId, 'active')).map(table => table.label)
 }
 
 /** Every active branch for customers, by name (launch has one, D45). */
@@ -127,7 +127,7 @@ async function loadBranch(db: Db, tenantId: string, id: string): Promise<BranchR
 /** The branch's settings, and whether it's open at `now` (its hours, in its timezone). */
 export async function getBranchSettings(db: Db, tenantId: string, id: string, now = new Date()): Promise<BranchSettings> {
   const branch = await loadBranch(db, tenantId, id)
-  const hours = await repo.hoursOf(db, id)
+  const hours = await repo.hoursOf(db, tenantId, id)
   const at = localTime(now, branch.timezone)
   return {
     id: branch.id,
@@ -166,7 +166,7 @@ export async function updateBranchSettings(db: Db, actor: Actor, id: string, inp
   const changed = Object.fromEntries(Object.entries(changes)
     .filter(([key, value]) => value !== branch[key as keyof BranchRow])
     .map(([key, value]) => [key, { from: branch[key as keyof BranchRow] ?? null, to: value }]))
-  const before = hours && await repo.hoursOf(db, id)
+  const before = hours && await repo.hoursOf(db, actor.tenantId, id)
 
   try {
     await db.batch([
@@ -209,8 +209,8 @@ async function activeBranch(db: Db, tenantId: string, branchId: string): Promise
   return branch
 }
 
-async function loadTable(db: Db, branchId: string, tableId: string, qr: QrConfig): Promise<DiningTable> {
-  const row = await repo.findTable(db, branchId, tableId)
+async function loadTable(db: Db, tenantId: string, branchId: string, tableId: string, qr: QrConfig): Promise<DiningTable> {
+  const row = await repo.findTable(db, tenantId, branchId, tableId)
   if (!row) throw tableNotFound()
   return toTable(row, qr)
 }
@@ -218,7 +218,7 @@ async function loadTable(db: Db, branchId: string, tableId: string, qr: QrConfig
 /** The table, checked: in this branch of the tenant, at the version read, and active (unless restoring). */
 async function openTable(db: Db, tenantId: string, branchId: string, tableId: string, version: number, allowArchived = false): Promise<TableRow> {
   await loadBranch(db, tenantId, branchId)
-  const row = await repo.findTable(db, branchId, tableId)
+  const row = await repo.findTable(db, tenantId, branchId, tableId)
   if (!row) throw tableNotFound()
   if (row.version !== version) throw tableChanged()
   if (!allowArchived && row.status !== 'active') throw tableArchived()
@@ -239,7 +239,7 @@ async function runTableBatch(db: Db, statements: Statement[], label: string) {
 
 export async function listTables(db: Db, tenantId: string, branchId: string, query: TableListQuery, qr: QrConfig): Promise<DiningTable[]> {
   await loadBranch(db, tenantId, branchId)
-  const rows = await repo.listTables(db, branchId, query.status)
+  const rows = await repo.listTables(db, tenantId, branchId, query.status)
   rows.sort((a, b) => byLabel.compare(a.label, b.label))
   return Promise.all(rows.map(row => toTable(row, qr)))
 }
@@ -250,14 +250,14 @@ export async function listTables(db: Db, tenantId: string, branchId: string, que
  */
 export async function createTable(db: Db, actor: Actor, branchId: string, input: CreateTableInput, qr: QrConfig): Promise<DiningTable> {
   await activeBranch(db, actor.tenantId, branchId)
-  if (await repo.countTables(db, branchId) >= MAX_BRANCH_TABLES) throw tableLimit()
+  if (await repo.countTables(db, actor.tenantId, branchId) >= MAX_BRANCH_TABLES) throw tableLimit()
   const id = newId()
   const hash = await tokenHash(await tableToken(qr.secret, id, 1))
   await runTableBatch(db, [
     repo.insertTableStatement(db, { id, tenantId: actor.tenantId, branchId, label: input.label, area: input.area, qrTokenHash: hash, now: new Date() }),
     audit(db, actor, 'table.create', 'dining_table', id, { branchId, label: input.label, area: input.area }),
   ], input.label)
-  return loadTable(db, branchId, id, qr)
+  return loadTable(db, actor.tenantId, branchId, id, qr)
 }
 
 /** Renames the table or changes its area; its QR stays the same. */
@@ -268,25 +268,25 @@ export async function updateTable(db: Db, actor: Actor, branchId: string, tableI
     ...(input.area !== undefined && { area: input.area }),
   }
   await runTableBatch(db, [
-    repo.touchTableStatement(db, tableId, input.version, new Date(), changes),
+    repo.touchTableStatement(db, actor.tenantId, tableId, input.version, changes, new Date()),
     requireOneChange(db),
     audit(db, actor, 'table.update', 'dining_table', tableId, {
       ...(input.label !== undefined && input.label !== current.label && { label: { from: current.label, to: input.label } }),
       ...(input.area !== undefined && input.area !== current.area && { area: { from: current.area, to: input.area } }),
     }),
   ], input.label ?? current.label)
-  return loadTable(db, branchId, tableId, qr)
+  return loadTable(db, actor.tenantId, branchId, tableId, qr)
 }
 
 /** Archives the table: its QR stops working until it's restored. */
 export async function archiveTable(db: Db, actor: Actor, branchId: string, tableId: string, input: TableVersionInput, qr: QrConfig): Promise<DiningTable> {
   const current = await openTable(db, actor.tenantId, branchId, tableId, input.version)
   await runTableBatch(db, [
-    repo.touchTableStatement(db, tableId, input.version, new Date(), { status: 'archived' }),
+    repo.touchTableStatement(db, actor.tenantId, tableId, input.version, { status: 'archived' }, new Date()),
     requireOneChange(db),
     audit(db, actor, 'table.archive', 'dining_table', tableId, {}),
   ], current.label)
-  return loadTable(db, branchId, tableId, qr)
+  return loadTable(db, actor.tenantId, branchId, tableId, qr)
 }
 
 /** Restores the table with the same QR, unless an active table took its label meanwhile. */
@@ -295,11 +295,11 @@ export async function restoreTable(db: Db, actor: Actor, branchId: string, table
   const current = await openTable(db, actor.tenantId, branchId, tableId, input.version, true)
   if (current.status !== 'archived') throw tableNotArchived()
   await runTableBatch(db, [
-    repo.touchTableStatement(db, tableId, input.version, new Date(), { status: 'active' }, true),
+    repo.touchTableStatement(db, actor.tenantId, tableId, input.version, { status: 'active' }, new Date(), true),
     requireOneChange(db),
     audit(db, actor, 'table.restore', 'dining_table', tableId, {}),
   ], current.label)
-  return loadTable(db, branchId, tableId, qr)
+  return loadTable(db, actor.tenantId, branchId, tableId, qr)
 }
 
 /** Gives the table a new QR: the printed one stops working at once. */
@@ -308,12 +308,12 @@ export async function rotateTableQr(db: Db, actor: Actor, branchId: string, tabl
   const qrVersion = current.qrVersion + 1
   const now = new Date()
   await runTableBatch(db, [
-    repo.touchTableStatement(db, tableId, input.version, now, { qrVersion, qrTokenHash: await tokenHash(await tableToken(qr.secret, tableId, qrVersion)), qrRotatedAt: now }),
+    repo.touchTableStatement(db, actor.tenantId, tableId, input.version, { qrVersion, qrTokenHash: await tokenHash(await tableToken(qr.secret, tableId, qrVersion)), qrRotatedAt: now }, now),
     requireOneChange(db),
     // Never the token itself (security.md → Logging).
     audit(db, actor, 'table.rotate_qr', 'dining_table', tableId, { qrVersion }),
   ], current.label)
-  return loadTable(db, branchId, tableId, qr)
+  return loadTable(db, actor.tenantId, branchId, tableId, qr)
 }
 
 /**
