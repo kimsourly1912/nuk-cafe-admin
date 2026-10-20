@@ -8,9 +8,12 @@ import type { Db } from '#server/utils/batch'
 import { isForeignKeyError, isStaleWrite, isUniqueViolation, requireCount, requireOneChange, runBatch } from '#server/utils/batch'
 import { versionConflict } from '#server/utils/errors'
 import { catalogRows, itemModifierGroups } from '#server/features/menu/catalog.repository'
+import { listItems } from '#server/features/menu/items.repository'
+import { linksOf } from '#server/features/menu/promotions.repository'
 import * as repo from '#server/features/notifications/notifications.repository'
 import { counterContext, counterQueueRows } from '#server/features/orders/orders.repository'
 import { orderHistory } from '#server/features/orders/reports.repository'
+import type { ItemListQuery } from '#shared/contracts/menu-items'
 import type { OrderHistoryQuery } from '#shared/contracts/reports'
 
 let db: Db
@@ -175,5 +178,25 @@ describe('on D1', () => {
     const { db: d1 } = fakeD1([['item-a', 'group-a', 'Extras', 1, 0, 2, 1, 3]])
     const [rows] = await d1.batch([itemModifierGroups(d1, 'cafe-a')])
     expect(rows).toEqual([{ itemId: 'item-a', groupId: 'group-a', name: 'Extras', rulesOverridden: true, ownMin: 0, ownMax: 2, groupMin: 1, groupMax: 3 }])
+  })
+
+  it('keeps the category name apart from the item name in a menu item page read in one D1 batch (D170, D194)', async () => {
+    const created = new Date('2026-10-14T05:00:00Z')
+    const { db: d1 } = fakeD1([
+      ['item-a', 'category-a', 'Iced Latte', '', null, 'active', 1, 3, created.getTime(), created.getTime(), 'Coffee', 875, 950],
+      [1],
+    ])
+    const page = await listItems(d1, 'cafe-a', { page: 1, pageSize: 20 } as ItemListQuery)
+    expect(page).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'item-a', name: 'Iced Latte', categoryName: 'Coffee', priceMin: 875, priceMax: 950, createdAt: created })] })
+  })
+
+  it('reads a promotion\'s items, categories and branches in one D1 batch, each with its own name', async () => {
+    const { db: d1, bound } = fakeD1([['promo-a', 'item-a', 'Iced Latte', 'active'], ['promo-a', 'category-a', 'Coffee', 'active'], ['promo-a', 'branch-a', 'Main']])
+    const links = await linksOf(d1, 'cafe-a', ['promo-a'])
+    expect(links.items.get('promo-a')).toEqual([{ id: 'item-a', name: 'Iced Latte', status: 'active' }])
+    expect(links.categories.get('promo-a')).toEqual([{ id: 'category-a', name: 'Coffee', status: 'active' }])
+    expect(links.branches.get('promo-a')).toEqual([{ id: 'branch-a', name: 'Main' }])
+    expect(bound).toHaveLength(3)
+    expect(bound.every(statement => statement.params.includes('cafe-a'))).toBe(true)
   })
 })

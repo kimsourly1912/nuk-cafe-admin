@@ -33,7 +33,7 @@ function toRule(row: RuleRow, windows: Map<string, AvailabilityWindow[]>, usage:
 async function loadRule(db: Db, tenantId: string, id: string): Promise<AvailabilityRule> {
   const row = await repo.findRule(db, tenantId, id)
   if (!row) throw availabilityRuleNotFound()
-  const [windows, usage] = await Promise.all([repo.windowsOf(db, [id]), repo.usageCounts(db, [id])])
+  const [windows, usage] = await Promise.all([repo.windowsOf(db, tenantId, [id]), repo.usageCounts(db, tenantId, [id])])
   return toRule(row, windows, usage)
 }
 
@@ -75,7 +75,7 @@ async function runRuleBatch(db: Db, tenantId: string, ruleId: string, version: n
 export async function listAvailabilityRules(db: Db, tenantId: string, query: AvailabilityRuleListQuery): Promise<AvailabilityRule[]> {
   const rules = await repo.listRules(db, tenantId, query.status)
   const ids = rules.map(r => r.id)
-  const [windows, usage] = await Promise.all([repo.windowsOf(db, ids), repo.usageCounts(db, ids)])
+  const [windows, usage] = await Promise.all([repo.windowsOf(db, tenantId, ids), repo.usageCounts(db, tenantId, ids)])
   return rules.map(rule => toRule(rule, windows, usage))
 }
 
@@ -106,7 +106,7 @@ export async function createAvailabilityRule(db: Db, actor: Actor, input: Create
 export async function updateAvailabilityRule(db: Db, actor: Actor, id: string, input: UpdateAvailabilityRuleInput): Promise<AvailabilityRule> {
   const current = await openRule(db, actor.tenantId, id, input.version)
   const windows = input.windows && checkedWindows(input.windows)
-  const before = windows && (await repo.windowsOf(db, [id])).get(id)
+  const before = windows && (await repo.windowsOf(db, actor.tenantId, [id])).get(id)
   await runRuleBatch(db, actor.tenantId, id, input.version, [
     repo.touchRuleStatement(db, actor.tenantId, id, input.version, new Date(), input.name === undefined ? {} : { name: input.name }),
     requireOneChange(db),
@@ -126,15 +126,15 @@ export async function updateAvailabilityRule(db: Db, actor: Actor, id: string, i
 export async function archiveAvailabilityRule(db: Db, actor: Actor, id: string, input: AvailabilityRuleVersionInput): Promise<AvailabilityRule> {
   await openRule(db, actor.tenantId, id, input.version)
   const inUse = async () => {
-    const usage = await repo.usageCounts(db, [id])
+    const usage = await repo.usageCounts(db, actor.tenantId, [id])
     return availabilityRuleInUse(usage.items.get(id) ?? 0, usage.categories.get(id) ?? 0)
   }
-  const usage = await repo.usageCounts(db, [id])
-  if (usage.items.has(id) || usage.categories.has(id)) throw await inUse()
+  const usage = await repo.usageCounts(db, actor.tenantId, [id])
+  if (usage.items.has(id) || usage.categories.has(id)) throw availabilityRuleInUse(usage.items.get(id) ?? 0, usage.categories.get(id) ?? 0)
   await runRuleBatch(db, actor.tenantId, id, input.version, [
     repo.touchRuleStatement(db, actor.tenantId, id, input.version, new Date(), { status: 'archived' }),
     requireOneChange(db),
-    repo.requireRuleUnused(db, id),
+    repo.requireRuleUnused(db, actor.tenantId, id),
     audit(db, actor, 'archive', id, {}),
   ], () => availabilityRuleChanged(), inUse)
   return loadRule(db, actor.tenantId, id)

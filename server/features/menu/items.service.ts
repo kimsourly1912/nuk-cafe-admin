@@ -14,6 +14,7 @@ import { auditStatement } from '#server/features/platform'
 import * as availabilityRepo from './availability.repository'
 import { planRuleLinks, ruleLinksFailure } from './availability.service'
 import { categoryNotALeaf, categoryNotAvailable, itemChanged, itemInWrongState, itemNotFound, itemSelectionRules, itemsChanged, modifierGroupNotAvailable, modifierNotAvailable, nothingToSell, optionSetNotAvailable, priceGrid } from './items.errors'
+import * as categoriesRepo from './categories.repository'
 import * as repo from './items.repository'
 import type { GroupWithModifiers, ItemGroupRow, ItemRow, SetWithValues, VariationRow } from './items.repository'
 import type { GridEntry, GridPlan } from './items.rules'
@@ -63,7 +64,7 @@ function toItemGroups({ rows, groups, prices }: AddOns): ItemModifierGroup[] {
 }
 
 async function loadAddOns(db: Db, tenantId: string, itemId: string): Promise<AddOns> {
-  const [rows, prices] = await Promise.all([repo.itemGroups(db, itemId), repo.itemModifierPrices(db, itemId)])
+  const [rows, prices] = await Promise.all([repo.itemGroups(db, tenantId, itemId), repo.itemModifierPrices(db, tenantId, itemId)])
   return { rows, prices, groups: await repo.groupsWithModifiers(db, tenantId, rows.map(r => r.groupId)) }
 }
 
@@ -120,10 +121,10 @@ async function loadItem(db: Db, tenantId: string, id: string): Promise<MenuItem>
   const row = await repo.findItem(db, tenantId, id)
   if (!row) throw itemNotFound()
   const [sets, variations, addOns, rules, image] = await Promise.all([
-    repo.itemSetIds(db, id).then(ids => repo.setsWithValues(db, tenantId, ids)),
-    repo.variationsOf(db, id),
+    repo.itemSetIds(db, tenantId, id).then(ids => repo.setsWithValues(db, tenantId, ids)),
+    repo.variationsOf(db, tenantId, id),
     loadAddOns(db, tenantId, id),
-    availabilityRepo.itemRules(db, id),
+    availabilityRepo.itemRules(db, tenantId, id),
     row.imageAssetId ? imageSets(db, tenantId, [row.imageAssetId]).then(found => found.get(row.imageAssetId!)) : undefined,
   ])
   return toItem(row, sets, variations, addOns, rules, image)
@@ -168,9 +169,9 @@ export async function getItem(db: Db, tenantId: string, id: string): Promise<Men
 // --- Checks shared by the writes ---
 
 async function ensureLeafCategory(db: Db, tenantId: string, categoryId: string) {
-  const category = await repo.findCategory(db, tenantId, categoryId)
+  const category = await categoriesRepo.findCategory(db, tenantId, categoryId)
   if (!category || category.status !== 'active') throw categoryNotAvailable()
-  if (await repo.countChildCategories(db, categoryId) > 0) throw categoryNotALeaf()
+  if (await categoriesRepo.countChildren(db, tenantId, categoryId) > 0) throw categoryNotALeaf()
 }
 
 /** The chosen option sets with their values; newly chosen ones must be active. */
@@ -197,9 +198,9 @@ function plan(sets: SetWithValues[], existing: VariationRow[], entries: GridEntr
 function gridStatements(db: Db, tenantId: string, itemId: string, grid: GridPlan, now: Date): Statement[] {
   return [
     ...grid.cells.flatMap(cell => cell.id
-      ? [repo.updateVariationStatement(db, itemId, cell.id, { priceMinor: cell.priceMinor, status: cell.status, sortOrder: cell.sortOrder }, now)]
+      ? [repo.updateVariationStatement(db, tenantId, itemId, cell.id, { priceMinor: cell.priceMinor, status: cell.status, sortOrder: cell.sortOrder }, now)]
       : repo.insertVariationStatements(db, tenantId, itemId, { ...cell, id: newId() }, now)),
-    ...repo.retireVariationsStatements(db, itemId, grid.retire, now),
+    ...repo.retireVariationsStatements(db, tenantId, itemId, grid.retire, now),
   ]
 }
 
@@ -324,7 +325,7 @@ export async function createItem(db: Db, actor: Actor, input: CreateItemInput): 
     ...(valueIds.length ? [repo.requireActiveValues(db, tenantId, valueIds)] : []),
     ...addOnGuards(db, tenantId, addOns),
     ...availabilityRepo.requireActiveRules(db, tenantId, addedRules),
-    repo.insertItemStatement(db, { id, tenantId, categoryId: input.categoryId, name: input.name, description: input.description, imageAssetId: input.imageId, sortOrder: await repo.nextItemOrder(db, input.categoryId) }, now),
+    repo.insertItemStatement(db, { id, tenantId, categoryId: input.categoryId, name: input.name, description: input.description, imageAssetId: input.imageId, sortOrder: await repo.nextItemOrder(db, tenantId, input.categoryId) }, now),
     ...repo.replaceOptionSetsStatements(db, tenantId, id, input.optionSetIds),
     ...gridStatements(db, tenantId, id, grid, now),
     ...repo.replaceModifierGroupsStatements(db, tenantId, id, addOns.groups, addOns.prices),
@@ -350,18 +351,18 @@ export async function updateItem(db: Db, actor: Actor, id: string, input: Update
   const moving = input.categoryId !== undefined && input.categoryId !== item.categoryId
   if (moving) await ensureLeafCategory(db, tenantId, input.categoryId!)
 
-  const currentSetIds = await repo.itemSetIds(db, id)
+  const currentSetIds = await repo.itemSetIds(db, tenantId, id)
   const setIds = input.optionSetIds ?? currentSetIds
   const setsChanged = input.optionSetIds !== undefined && input.optionSetIds.join() !== currentSetIds.join()
   const newSetIds = setIds.filter(setId => !currentSetIds.includes(setId))
   let grid: GridPlan | undefined
   if (input.variations) {
     const sets = await loadSets(db, tenantId, setIds, currentSetIds)
-    grid = plan(sets, await repo.variationsOf(db, id), input.variations)
+    grid = plan(sets, await repo.variationsOf(db, tenantId, id), input.variations)
   }
   const addOns = input.modifierGroups ? await planAddOns(db, tenantId, input.modifierGroups, await loadAddOns(db, tenantId, id)) : undefined
   const ruleIds = input.availabilityRuleIds
-  const addedRules = ruleIds ? await planRuleLinks(db, tenantId, ruleIds, (await availabilityRepo.itemRules(db, id)).map(r => r.id)) : []
+  const addedRules = ruleIds ? await planRuleLinks(db, tenantId, ruleIds, (await availabilityRepo.itemRules(db, tenantId, id)).map(r => r.id)) : []
 
   const imageChanging = input.imageId !== undefined && input.imageId !== item.imageAssetId
   const imageStatements = imageChanging
@@ -372,7 +373,7 @@ export async function updateItem(db: Db, actor: Actor, id: string, input: Update
   const changes = {
     ...(input.name !== undefined && { name: input.name }),
     ...(input.description !== undefined && { description: input.description }),
-    ...(moving && { categoryId: input.categoryId, sortOrder: await repo.nextItemOrder(db, input.categoryId!) }),
+    ...(moving && { categoryId: input.categoryId, sortOrder: await repo.nextItemOrder(db, tenantId, input.categoryId!) }),
     ...(imageChanging && { imageAssetId: input.imageId }),
   }
   const valueIds = grid ? gridValueIds(grid) : []
@@ -389,7 +390,7 @@ export async function updateItem(db: Db, actor: Actor, id: string, input: Update
     ...(addOns ? repo.replaceModifierGroupsStatements(db, tenantId, id, addOns.groups, addOns.prices) : []),
     ...(ruleIds ? availabilityRepo.replaceItemRulesStatements(db, tenantId, id, ruleIds) : []),
     ...imageStatements,
-    ...(item.status === 'active' ? [repo.requireSellable(db, id)] : []),
+    ...(item.status === 'active' ? [repo.requireSellable(db, tenantId, id)] : []),
     audit(db, actor, moving ? 'move' : 'update', id, {
       fields: [...Object.keys(changes).filter(k => k !== 'sortOrder'), ...(setsChanged ? ['optionSetIds'] : []), ...(grid ? ['variations'] : []), ...(addOns ? ['modifierGroups'] : []), ...(ruleIds ? ['availabilityRuleIds'] : [])],
       ...(moving && { from: item.categoryId, to: input.categoryId }),
@@ -403,12 +404,12 @@ export async function publishItem(db: Db, actor: Actor, id: string, input: ItemV
   const { tenantId } = actor
   const item = await openForAction(db, tenantId, id, input.version, ['draft'], 'Only a draft can be published.')
   await ensureLeafCategory(db, tenantId, item.categoryId)
-  if (await repo.countSellable(db, id) === 0) throw nothingToSell()
+  if (await repo.countSellable(db, tenantId, id) === 0) throw nothingToSell()
   await runItemBatch(db, tenantId, [
     repo.touchItemStatement(db, tenantId, id, input.version, new Date(), { status: 'active' }, ['draft']),
     requireOneChange(db),
     repo.requireLeafCategory(db, tenantId, item.categoryId),
-    repo.requireSellable(db, id),
+    repo.requireSellable(db, tenantId, id),
     audit(db, actor, 'publish', id, {}),
   ], { itemId: id, version: input.version, categoryId: item.categoryId })
   return loadItem(db, tenantId, id)
@@ -449,13 +450,13 @@ export async function restoreItem(db: Db, actor: Actor, id: string, input: Resto
   await ensureLeafCategory(db, tenantId, item.categoryId)
   const status = input.undo?.status ?? 'draft'
   const publishing = status === 'active'
-  if (publishing && await repo.countSellable(db, id) === 0) throw nothingToSell()
-  const changes = input.undo ? { status } : { status, sortOrder: await repo.nextItemOrder(db, item.categoryId) }
+  if (publishing && await repo.countSellable(db, tenantId, id) === 0) throw nothingToSell()
+  const changes = input.undo ? { status } : { status, sortOrder: await repo.nextItemOrder(db, tenantId, item.categoryId) }
   await runItemBatch(db, tenantId, [
     repo.touchItemStatement(db, tenantId, id, input.version, new Date(), changes, ['archived']),
     requireOneChange(db),
     repo.requireLeafCategory(db, tenantId, item.categoryId),
-    ...(publishing ? [repo.requireSellable(db, id)] : []),
+    ...(publishing ? [repo.requireSellable(db, tenantId, id)] : []),
     audit(db, actor, 'restore', id, input.undo ? { undo: true, status } : {}),
   ], { itemId: id, version: input.version, categoryId: item.categoryId })
   return loadItem(db, tenantId, id)

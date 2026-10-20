@@ -10,6 +10,7 @@ import * as availabilityRepo from './availability.repository'
 import { planRuleLinks, ruleLinksFailure } from './availability.service'
 import { categoryArchived, categoryChanged, categoryNameTaken, categoryNotArchived, categoryNotFound, parentArchived, parentHasItems, parentNotAvailable, siblingsChanged, tooDeep } from './categories.errors'
 import * as repo from './categories.repository'
+import * as itemsRepo from './items.repository'
 import type { CategoryRow } from './categories.repository'
 
 /**
@@ -42,7 +43,7 @@ function toCategory(row: CategoryRow, counts: Counts, rules: Map<string, Availab
 async function loadCategory(db: Db, tenantId: string, id: string): Promise<MenuCategory> {
   const row = await repo.findCategory(db, tenantId, id)
   if (!row) throw categoryNotFound()
-  const [children, items, rules] = await Promise.all([repo.countChildren(db, id, 'active'), repo.countListedItems(db, id), availabilityRepo.categoryRules(db, [id])])
+  const [children, items, rules] = await Promise.all([repo.countChildren(db, tenantId, id, 'active'), itemsRepo.countListedItems(db, tenantId, id), availabilityRepo.categoryRules(db, tenantId, [id])])
   return toCategory(row, { children: new Map([[id, children]]), items: new Map([[id, items]]) }, rules)
 }
 
@@ -69,7 +70,7 @@ async function ensureParent(db: Db, tenantId: string, parentId: string) {
   const parent = await repo.findCategory(db, tenantId, parentId)
   if (!parent || parent.status !== 'active') throw parentNotAvailable()
   if (parent.parentId !== null) throw tooDeep('parent-is-sub')
-  if (await repo.countListedItems(db, parentId) > 0) throw parentHasItems()
+  if (await itemsRepo.countListedItems(db, tenantId, parentId) > 0) throw parentHasItems()
 }
 
 /**
@@ -77,7 +78,7 @@ async function ensureParent(db: Db, tenantId: string, parentId: string) {
  * (default `active`); with `all`, archived sub-categories stay under their parent.
  */
 export async function listCategories(db: Db, tenantId: string, query: CategoryListQuery): Promise<MenuCategory[]> {
-  const [rows, children, items] = await Promise.all([repo.listCategories(db, tenantId, query.status), repo.activeChildCounts(db, tenantId), repo.listedItemCounts(db, tenantId)])
+  const [rows, children, items] = await Promise.all([repo.listCategories(db, tenantId, query.status), repo.activeChildCounts(db, tenantId), itemsRepo.listedItemCounts(db, tenantId)])
   const byParent = new Map<string | null, CategoryRow[]>()
   for (const row of rows) byParent.set(row.parentId, [...(byParent.get(row.parentId) ?? []), row])
   const ids = new Set(rows.map(r => r.id))
@@ -88,7 +89,7 @@ export async function listCategories(db: Db, tenantId: string, query: CategoryLi
     ...(byParent.get(null) ?? []).flatMap(top => [top, ...(byParent.get(top.id) ?? [])]),
     ...orphans,
   ]
-  const rules = await availabilityRepo.categoryRules(db, ordered.map(row => row.id))
+  const rules = await availabilityRepo.categoryRules(db, tenantId, ordered.map(row => row.id))
   return ordered.map(row => toCategory(row, { children, items }, rules))
 }
 
@@ -104,7 +105,7 @@ export async function createCategory(db: Db, actor: Actor, input: CreateCategory
   const id = newId()
   const now = new Date()
   const statements: Statement[] = [
-    ...(input.parentId ? [repo.requireActiveTopLevel(db, tenantId, input.parentId), repo.requireNoItems(db, input.parentId)] : []),
+    ...(input.parentId ? [repo.requireActiveTopLevel(db, tenantId, input.parentId), itemsRepo.requireListedCount(db, tenantId, input.parentId, 0)] : []),
     ...availabilityRepo.requireActiveRules(db, tenantId, addedRules),
     repo.insertCategoryStatement(db, { id, tenantId, parentId: input.parentId, name: input.name, description: input.description, sortOrder: await repo.nextSortOrder(db, tenantId, input.parentId), now }),
     ...availabilityRepo.replaceCategoryRulesStatements(db, tenantId, id, input.availabilityRuleIds),
@@ -137,13 +138,13 @@ export async function updateCategory(db: Db, actor: Actor, id: string, input: Up
     if (input.parentId === id) throw tooDeep('parent-is-sub')
     if (input.parentId) {
       await ensureParent(db, tenantId, input.parentId)
-      if (await repo.countChildren(db, id) > 0) throw tooDeep('has-children')
-      guards.push(repo.requireActiveTopLevel(db, tenantId, input.parentId), repo.requireNoItems(db, input.parentId), repo.requireNoChildren(db, id))
+      if (await repo.countChildren(db, tenantId, id) > 0) throw tooDeep('has-children')
+      guards.push(repo.requireActiveTopLevel(db, tenantId, input.parentId), itemsRepo.requireListedCount(db, tenantId, input.parentId, 0), repo.requireNoChildren(db, tenantId, id))
     }
     sortOrder = await repo.nextSortOrder(db, tenantId, input.parentId ?? null)
   }
   const ruleIds = input.availabilityRuleIds
-  const addedRules = ruleIds ? await planRuleLinks(db, tenantId, ruleIds, ((await availabilityRepo.categoryRules(db, [id])).get(id) ?? []).map(r => r.id)) : []
+  const addedRules = ruleIds ? await planRuleLinks(db, tenantId, ruleIds, ((await availabilityRepo.categoryRules(db, tenantId, [id])).get(id) ?? []).map(r => r.id)) : []
 
   const changes = {
     ...(input.name !== undefined && { name: input.name }),
@@ -161,7 +162,7 @@ export async function updateCategory(db: Db, actor: Actor, id: string, input: Up
   await runCategoryBatch(db, statements, input.name ?? current.name, async () => {
     if (moving && input.parentId) {
       await ensureParent(db, tenantId, input.parentId)
-      if (await repo.countChildren(db, id) > 0) return tooDeep('has-children')
+      if (await repo.countChildren(db, tenantId, id) > 0) return tooDeep('has-children')
     }
     return (ruleIds && await ruleLinksFailure(db, tenantId, ruleIds, addedRules)) || categoryChanged()
   })
@@ -177,11 +178,11 @@ export async function archiveCategory(db: Db, actor: Actor, id: string, input: C
   if (current.status === 'archived') throw categoryArchived()
 
   const now = new Date()
-  const children = await repo.countChildren(db, id, 'active')
+  const children = await repo.countChildren(db, tenantId, id, 'active')
   const statements: Statement[] = [
     repo.updateCategoryStatement(db, tenantId, id, input.version, { status: 'archived' }, now),
     requireOneChange(db),
-    ...(current.parentId === null ? [repo.archiveChildrenStatement(db, id, now)] : []),
+    ...(current.parentId === null ? [repo.archiveChildrenStatement(db, tenantId, id, now)] : []),
     audit(db, actor, 'archive', id, { subCategories: children }),
   ]
   await runCategoryBatch(db, statements, current.name, () => categoryChanged())
@@ -206,12 +207,12 @@ export async function restoreCategory(db: Db, actor: Actor, id: string, input: R
 
   const now = new Date()
   const withSubs = input.withSubcategories && current.parentId === null
-  const subs = withSubs ? await repo.countChildren(db, id, 'archived') : 0
+  const subs = withSubs ? await repo.countChildren(db, tenantId, id, 'archived') : 0
   const statements: Statement[] = [
     ...(current.parentId ? [repo.requireActiveTopLevel(db, tenantId, current.parentId)] : []),
     repo.updateCategoryStatement(db, tenantId, id, input.version, { status: 'active', sortOrder: await repo.nextSortOrder(db, tenantId, current.parentId) }, now),
     requireOneChange(db),
-    ...(withSubs ? [repo.restoreChildrenStatement(db, id, now)] : []),
+    ...(withSubs ? [repo.restoreChildrenStatement(db, tenantId, id, now)] : []),
     audit(db, actor, 'restore', id, withSubs ? { subCategories: subs } : {}),
   ]
   await runCategoryBatch(db, statements, current.name, () => current.parentId ? parentArchived() : categoryChanged())
@@ -236,6 +237,6 @@ export async function reorderCategories(db: Db, actor: Actor, input: ReorderCate
   ]
   await runCategoryBatch(db, statements, '', () => siblingsChanged())
   const rows = await repo.findCategoriesByIds(db, tenantId, input.items.map(i => i.id))
-  const [children, items, rules] = await Promise.all([repo.activeChildCounts(db, tenantId), repo.listedItemCounts(db, tenantId), availabilityRepo.categoryRules(db, rows.map(row => row.id))])
+  const [children, items, rules] = await Promise.all([repo.activeChildCounts(db, tenantId), itemsRepo.listedItemCounts(db, tenantId), availabilityRepo.categoryRules(db, tenantId, rows.map(row => row.id))])
   return rows.sort((a, b) => a.sortOrder - b.sortOrder).map(row => toCategory(row, { children, items }, rules))
 }

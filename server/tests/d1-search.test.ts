@@ -101,6 +101,8 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
       const page = await listItems(db, ours, { page: 1, pageSize: 20, status: 'all', search })
       expect(page.items.map(i => i.name), search).toEqual(expected.get(search) ?? [])
       expect(page.total, search).toBe(page.items.length)
+      // The page and its total are one batch: the category's name keeps its own column (D170, D194).
+      expect(page.items.every(i => i.categoryName === 'Hot' && i.priceMinMinor === 100), search).toBe(true)
     }
   })
 

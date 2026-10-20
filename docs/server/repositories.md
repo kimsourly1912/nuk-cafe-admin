@@ -30,7 +30,7 @@ A file needs no header comment. Write one only when the file has a rule that app
 
 ## Names and signatures
 
-Parameters come in this order: `db`, `tenantId`, the ids, the values, then `now` (and `limit`). Every exported function has an explicit return type.
+Parameters come in this order: `db`, `tenantId`, the ids, the values, then `now` (and `limit`). Every exported function has an explicit return type, except a read returned unexecuted for a `db.batch` (the catalog's twelve in `catalog.repository.ts`): its builder type is what carries its rows into the batch's result.
 
 | Kind | Name | Returns |
 |---|---|---|
@@ -133,7 +133,8 @@ export function valuesOf(db: Db, tenantId: string, setIds: string[]): Promise<Op
 - **Use the builder's operators** (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `isNull`, `isNotNull`, `inArray`, `notInArray`, `between`, `and`, `or`, `not`, `exists`, `notExists`) and the aggregate helpers (`count()`, `max()`, `min()`, `sum()`). They encode values the way the column stores them.
 - **Use `sql` only for what the builder lacks:** `case`, `coalesce`, `json_each` and `json_extract`, `changes()`, `lower()` or `collate nocase` in an order, and searches through `containsText` (D183). Inside `sql`, every column and table is an interpolation (`${menuItems.status}`), never a written name such as `c.tenant_id`. For a table joined to itself, use `alias(table, 'name')` from `drizzle-orm/sqlite-core`.
 - **Never write a time as a number** (`${now.getTime()}`). Compare the column with an operator (`gt(table.expiresAt, now)`), which encodes it as the column's `timestamp_ms`.
-- **A rule written twice is defined once.** A condition used by more than one query is a named constant or function next to the column lists (`const unclaimed = (now: Date) => …`). A condition that several features share, such as "an owner who can sign in", lives with the table's owner and is exported through its `index.ts`.
+- **A rule written twice is defined once.** A condition used by more than one query is a named constant or function next to the column lists (`const unclaimed = (now: Date) => …`). Inside a feature it lives in the file of the table it filters and the others import it (`listedItem` in `items.repository.ts`, `activeCategory` in `categories.repository.ts`). A condition that several features share, such as "an owner who can sign in", lives with the table's owner and is exported through its `index.ts`.
+- **A condition with a subquery is a function of `db`** (`sellable(db)` builds its `notExists(db.select()…)`): Drizzle's standalone `QueryBuilder` doesn't know the database's snake_case setting. A subquery that refers to the outer row compares columns (`eq(links.itemId, menuItems.id)`), and its join to another cafe table names both keys.
 - **One condition per line** when an `and(...)` has three or more conditions or doesn't fit on one line.
 
 ## Guards
@@ -245,7 +246,7 @@ They are in [architecture → Atomic writes](./architecture.md#atomic-writes): 1
 
 Repositories are tested through their services ([architecture → Tests](./architecture.md#tests)):
 
-- the two-cafe test for every function on a cafe table ([The tenant rule](#the-tenant-rule)). When the service checks the parent first (the usual case), removing the repository's own filter doesn't fail a service test, so the second layer gets a **repository-level** two-cafe test: another cafe's real rows, asked for with our cafe's id, read or change nothing, and the same call with their id finds them (so an empty answer can't come from a wrong fixture). Example: `server/features/orders/tests/orders.repository.tenants.test.ts`;
+- the two-cafe test for every function on a cafe table ([The tenant rule](#the-tenant-rule)). When the service checks the parent first (the usual case), removing the repository's own filter doesn't fail a service test, so the second layer gets a **repository-level** two-cafe test: another cafe's real rows, asked for with our cafe's id, read or change nothing, and the same call with their id finds them (so an empty answer can't come from a wrong fixture). Examples: `server/features/orders/tests/orders.repository.tenants.test.ts`, `server/features/menu/tests/menu.repository.tenants.test.ts`;
 - for every batch read that joins tables (`readPage`, a `db.batch` of reads), a case in `server/tests/batch.test.ts` through its D1-shaped driver (`fakeD1`), which returns rows as objects by SQL name as D1 does: two columns with one SQL name (`orders.id` and `counter_payments.id`) collapse there, as on D1, while libsql hides it (D170). Give such a column its own name (`sql\`${counterPayments.id}\`.as('payment_id')`);
 - a stale-version or race case for every conditional write, and the guard removed to see it fail;
 - a case in `server/tests/d1-limits.test.ts` for every new list at the contract's largest size;
@@ -259,7 +260,7 @@ Repositories are tested through their services ([architecture → Tests](./archi
 - [ ] Names, parameter order and explicit return types as in the table above.
 - [ ] Every function on a cafe table filters the table's own `tenant_id`, or says "Across cafes:" and is one of the allowed kinds.
 - [ ] Writes only to the feature's own tables; another feature's table only through `tables.ts`, read-only, with the listed columns, and its business conditions imported from its owner.
-- [ ] Named columns, no casts, no annotation of results, one row with `[row]` and `limit(1)`.
+- [ ] Named columns, no casts, no annotation of results, one row with `firstRow`.
 - [ ] Several reads for one answer in one `db.batch`; no query in a loop; filtering and ordering in SQL.
 - [ ] Builder operators; `sql` only for what they lack, with interpolated columns and no written times.
 - [ ] No condition written twice; guards reuse the reads' conditions.

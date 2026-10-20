@@ -1,7 +1,9 @@
-import { and, asc, eq, inArray, max, sql } from 'drizzle-orm'
+import { asc, eq, inArray, sql } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
 import type { OptionStatus } from '#shared/contracts/menu-options'
 import type { Db, Statement } from '#server/utils/batch'
-import { insertPieces, readInChunks, requireCount } from '#server/utils/batch'
+import { insertAll, readInChunks, requireCount, updateAtVersion } from '#server/utils/batch'
+import { byId, byName, firstRow, inTenant, nextPosition, withStatus } from '#server/utils/query'
 import { menuOptionSets, menuOptionValues } from './menu.schema'
 
 export interface OptionSetRow {
@@ -38,34 +40,46 @@ const valueColumns = {
   status: menuOptionValues.status,
 }
 
-export async function findSet(db: Db, tenantId: string, id: string): Promise<OptionSetRow | undefined> {
-  const rows: OptionSetRow[] = await db.select(setColumns).from(menuOptionSets).where(and(eq(menuOptionSets.tenantId, tenantId), eq(menuOptionSets.id, id))).limit(1)
-  return rows[0]
+/** The cafe's values of one set. */
+const valuesOfSet = (tenantId: string, setId: string, ...conditions: SQL[]) =>
+  inTenant(menuOptionValues, tenantId, eq(menuOptionValues.setId, setId), ...conditions)
+
+// --- Reads ---
+
+export function findSet(db: Db, tenantId: string, id: string): Promise<OptionSetRow | undefined> {
+  return firstRow(db.select(setColumns).from(menuOptionSets).where(byId(menuOptionSets, tenantId, id)))
 }
 
-export async function listSets(db: Db, tenantId: string, status: OptionStatus | 'all'): Promise<OptionSetRow[]> {
-  return db.select(setColumns).from(menuOptionSets)
-    .where(and(eq(menuOptionSets.tenantId, tenantId), status === 'all' ? undefined : eq(menuOptionSets.status, status))).orderBy(asc(sql`lower(${menuOptionSets.name})`))
+export function listSets(db: Db, tenantId: string, status: OptionStatus | 'all'): Promise<OptionSetRow[]> {
+  return db.select(setColumns)
+    .from(menuOptionSets)
+    .where(inTenant(menuOptionSets, tenantId, withStatus(menuOptionSets.status, status)))
+    .orderBy(byName(menuOptionSets.name), asc(menuOptionSets.id))
 }
 
-/** The values of these sets, in order. */
-export async function valuesOf(db: Db, setIds: string[]): Promise<OptionValueRow[]> {
-  if (!setIds.length) return []
-  return readInChunks(setIds, ids => db.select(valueColumns).from(menuOptionValues)
-    .where(inArray(menuOptionValues.setId, ids))
-    .orderBy(asc(menuOptionValues.sortOrder), asc(menuOptionValues.name)))
+/** The values of these sets, each set's in order (`readInChunks` runs no query for none). */
+export function valuesOf(db: Db, tenantId: string, setIds: string[]): Promise<OptionValueRow[]> {
+  return readInChunks(setIds, ids => db
+    .select(valueColumns)
+    .from(menuOptionValues)
+    .where(inTenant(menuOptionValues, tenantId, inArray(menuOptionValues.setId, ids)))
+    .orderBy(asc(menuOptionValues.setId), asc(menuOptionValues.sortOrder), asc(menuOptionValues.name)))
 }
 
-export async function findValue(db: Db, setId: string, valueId: string): Promise<OptionValueRow | undefined> {
-  const rows: OptionValueRow[] = await db.select(valueColumns).from(menuOptionValues)
-    .where(and(eq(menuOptionValues.id, valueId), eq(menuOptionValues.setId, setId))).limit(1)
-  return rows[0]
+export function findValue(db: Db, tenantId: string, setId: string, valueId: string): Promise<OptionValueRow | undefined> {
+  return firstRow(db.select(valueColumns).from(menuOptionValues).where(valuesOfSet(tenantId, setId, eq(menuOptionValues.id, valueId))))
 }
 
-export async function nextValueOrder(db: Db, setId: string): Promise<number> {
-  const rows: { top: number | null }[] = await db.select({ top: max(menuOptionValues.sortOrder) }).from(menuOptionValues)
-    .where(eq(menuOptionValues.setId, setId))
-  return (rows[0]?.top ?? 0) + 1
+export function nextValueOrder(db: Db, tenantId: string, setId: string): Promise<number> {
+  return nextPosition(db, menuOptionValues, menuOptionValues.sortOrder, valuesOfSet(tenantId, setId))
+}
+
+// --- Guards ---
+
+/** Aborts the batch unless the set has between 1 and `maxValues` active values (run it after the change). */
+export function requireActiveValueCount(db: Db, tenantId: string, setId: string, maxValues: number): Statement {
+  const active = db.$count(menuOptionValues, valuesOfSet(tenantId, setId, eq(menuOptionValues.status, 'active')))
+  return requireCount(db, sql`${active} between 1 and ${maxValues}`, 1)
 }
 
 // --- Writes: statements for the service's batch ---
@@ -76,9 +90,7 @@ export async function nextValueOrder(db: Db, setId: string): Promise<number> {
  * `requireOneChange`: the set's version is the lock for all of it.
  */
 export function touchSetStatement(db: Db, tenantId: string, id: string, version: number, now: Date, changes: Partial<Pick<OptionSetRow, 'name' | 'status'>> = {}, anyStatus = false): Statement {
-  return db.update(menuOptionSets)
-    .set({ ...changes, version: sql`${menuOptionSets.version} + 1`, updatedAt: now })
-    .where(and(eq(menuOptionSets.tenantId, tenantId), eq(menuOptionSets.id, id), eq(menuOptionSets.version, version), anyStatus ? undefined : eq(menuOptionSets.status, 'active')))
+  return updateAtVersion(db, menuOptionSets, { tenantId, id, version }, { ...changes, updatedAt: now }, anyStatus ? undefined : eq(menuOptionSets.status, 'active'))
 }
 
 export function insertSetStatement(db: Db, row: { id: string, tenantId: string, name: string, now: Date }): Statement {
@@ -86,15 +98,11 @@ export function insertSetStatement(db: Db, row: { id: string, tenantId: string, 
 }
 
 export function insertValuesStatements(db: Db, values: { id: string, tenantId: string, setId: string, name: string, sortOrder: number }[], now: Date): Statement[] {
-  return insertPieces(menuOptionValues, values).map(piece => db.insert(menuOptionValues).values(piece.map(value => ({ ...value, createdAt: now, updatedAt: now }))))
+  return insertAll(db, menuOptionValues, values.map(value => ({ ...value, createdAt: now, updatedAt: now })))
 }
 
-export function updateValueStatement(db: Db, setId: string, valueId: string, changes: Partial<Pick<OptionValueRow, 'name' | 'status' | 'sortOrder'>>, now: Date): Statement {
-  return db.update(menuOptionValues).set({ ...changes, updatedAt: now })
-    .where(and(eq(menuOptionValues.id, valueId), eq(menuOptionValues.setId, setId)))
-}
-
-/** Aborts the batch unless the set has between 1 and `max` active values (run it after the change). */
-export function requireActiveValueCount(db: Db, setId: string, maxValues: number): Statement {
-  return requireCount(db, sql`select count(*) between 1 and ${maxValues} from ${menuOptionValues} where ${menuOptionValues.setId} = ${setId} and ${menuOptionValues.status} = 'active'`, 1)
+export function updateValueStatement(db: Db, tenantId: string, setId: string, valueId: string, changes: Partial<Pick<OptionValueRow, 'name' | 'status' | 'sortOrder'>>, now: Date): Statement {
+  return db.update(menuOptionValues)
+    .set({ ...changes, updatedAt: now })
+    .where(valuesOfSet(tenantId, setId, eq(menuOptionValues.id, valueId)))
 }

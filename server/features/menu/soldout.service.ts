@@ -12,8 +12,8 @@ import * as repo from './soldout.repository'
  */
 
 export async function listSoldOut(db: Db, actor: BranchActor): Promise<SoldOutList> {
-  const rows = await repo.listSoldOut(db, actor.branchId)
-  const labels = await repo.labels(db, rows.map(r => r.variationId))
+  const rows = await repo.listSoldOut(db, actor.tenantId, actor.branchId)
+  const labels = await repo.labelsOf(db, actor.tenantId, rows.map(r => r.variationId))
   return {
     branchId: actor.branchId,
     variations: rows.map(row => ({
@@ -48,7 +48,7 @@ export async function setSoldOut(db: Db, actor: BranchActor, input: SetSoldOutIn
   const now = new Date()
   const change = input.soldOut
     ? repo.markSoldOutStatements(db, actor.tenantId, actor.branchId, input.variationIds, actor.userId, now)
-    : repo.markOnSaleStatements(db, actor.branchId, input.variationIds, actor.userId, now)
+    : repo.markOnSaleStatements(db, actor.tenantId, actor.branchId, input.variationIds, actor.userId, now)
   const audit = auditStatement(db, actor, {
     action: 'menu.sold_out.set',
     targetType: 'branch',

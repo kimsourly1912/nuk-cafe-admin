@@ -10,7 +10,7 @@ import { localTime } from './availability.rules'
 import * as repo from './catalog.repository'
 import type { Catalog } from './catalog.rules'
 import { groupOnItem, menuAt } from './catalog.rules'
-import { soldOutIds } from './soldout.repository'
+import { listSoldOutIds } from './soldout.repository'
 import { applyPromotions } from './promotions.rules'
 import { runningAt } from './promotions.service'
 
@@ -99,7 +99,7 @@ export async function getPublicMenu(db: Db, tenantId: string, query: PublicMenuQ
   const branch = await getPublicBranch(db, tenantId, branchId, now)
   const [catalog, soldOut, promotions] = await Promise.all([
     loadCatalog(db, tenantId, itemIds),
-    soldOutIds(db, branch.id),
+    listSoldOutIds(db, tenantId, branch.id),
     runningAt(db, tenantId, branch.id, localDate(now, branch.timezone)),
   ])
   // Prices after the promotions running at this branch today (M1, D163): the bigger discount wins.
