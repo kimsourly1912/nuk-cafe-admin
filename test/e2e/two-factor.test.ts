@@ -34,6 +34,19 @@ async function password(page: Page, button = 'Sign in') {
   await page.getByRole('button', { name: button, exact: true }).click()
 }
 
+/** The sign-in code step's cells (a pin input; a backup code is a plain field). */
+const APP_CODE_CELL = 'input[autocomplete="one-time-code"]'
+async function enterAppCode(page: Page, code: string) {
+  const cells = page.locator(APP_CODE_CELL)
+  for (let i = 0; i < 6; i++) await cells.nth(i).fill(code[i] ?? '')
+}
+
+/** The setup's code field is six cells: empty each, then fill one digit per cell. */
+async function enterSetupCode(page: Page, code: string) {
+  const cells = page.locator('#two-factor-code input:not([type="hidden"])')
+  for (let i = 0; i < 6; i++) await cells.nth(i).fill(code[i] ?? '')
+}
+
 describe('setting up two-step sign-in in the platform console', () => {
   it('is the only page until it is on: password, QR code and key, backup codes, then a code from the app', async () => {
     let session: PlatformSession = { ...SUPER, twoFactorEnabled: false }
@@ -58,14 +71,21 @@ describe('setting up two-step sign-in in the platform console', () => {
     await page.getByRole('button', { name: 'Continue' }).click()
 
     await page.getByRole('img', { name: 'QR code for your authenticator app' }).waitFor()
+    await page.getByRole('button', { name: 'Can\'t scan? Use a setup key' }).click()
     await page.getByTestId('two-factor-key').getByText('JBSW Y3DP EHPK 3PXP').waitFor()
     await page.getByTestId('backup-codes').getByText('aaaa1-bbbb2').waitFor()
-    await page.getByLabel('Code', { exact: true }).fill('000000')
-    await page.getByRole('button', { name: 'Turn on two-step sign-in' }).click()
-    await page.getByRole('alert').getByText(/That code isn't right/).waitFor()
 
-    await page.getByLabel('Code', { exact: true }).fill('123456')
-    await page.getByRole('button', { name: 'Turn on two-step sign-in' }).click()
+    // Turning it on waits until the backup codes are saved.
+    const turnOn = page.getByRole('button', { name: 'Turn on two-step sign-in' })
+    await enterSetupCode(page, '000000')
+    expect(await turnOn.isDisabled()).toBe(true)
+    await page.getByRole('checkbox', { name: 'I\'ve saved my backup codes' }).click()
+    await turnOn.click()
+    await page.getByText(/That code isn't right/).waitFor()
+
+    // The cells are emptied for the next try.
+    await enterSetupCode(page, '123456')
+    await turnOn.click()
     await toast(page, 'Two-step sign-in is on').waitFor()
     await page.waitForURL(address => address.pathname === '/platform/accounts')
     expect(sent).toEqual([
@@ -93,13 +113,15 @@ describe('signing in with two-step sign-in', () => {
   it('the platform console asks for the code after the password, and takes a backup code instead', async () => {
     let signedIn = false
     const verified: string[] = []
+    const totpSent: string[] = []
     const { page } = await open('/platform/sign-in', {
       'GET /platform/me': () => {
         if (!signedIn) throw new MockFailure(401, 'UNAUTHENTICATED', 'Sign in to continue.')
         return SUPER
       },
       'POST /auth/sign-in/email': TWO_FACTOR_REDIRECT,
-      'POST /auth/two-factor/verify-totp': () => {
+      'POST /auth/two-factor/verify-totp': ({ body }) => {
+        totpSent.push((body as { code: string }).code)
         throw wrongCode()
       },
       'POST /auth/two-factor/verify-backup-code': ({ body }) => {
@@ -114,12 +136,15 @@ describe('signing in with two-step sign-in', () => {
     await password(page)
     await page.getByText(/enter the 6-digit code for NUK Platform/).waitFor()
     // Six digits, checked before asking.
-    await page.getByLabel('Code', { exact: true }).fill('12')
+    await enterAppCode(page, '12')
     await page.getByRole('button', { name: 'Verify' }).click()
     await page.getByText('Enter the 6 digits from your app').waitFor()
-    await page.getByLabel('Code', { exact: true }).fill('654321')
-    await page.getByRole('button', { name: 'Verify' }).click()
+    // The sixth digit sends it: no button press.
+    await enterAppCode(page, '654321')
     await page.getByRole('alert').getByText(/That code isn't right/).waitFor()
+    // Sent once, though the pin input announces the full code more than once.
+    await page.waitForTimeout(500)
+    expect(totpSent).toEqual(['654321'])
 
     await page.getByRole('button', { name: 'Use a backup code instead' }).click()
     await page.getByLabel('Backup code', { exact: true }).fill('aaaa1-bbbb2')
@@ -139,8 +164,7 @@ describe('signing in with two-step sign-in', () => {
       },
     })
     await password(page)
-    await page.getByLabel('Code', { exact: true }).fill('123456')
-    await page.getByRole('button', { name: 'Verify' }).click()
+    await enterAppCode(page, '123456')
     await page.getByRole('alert').getByText('This sign-in timed out or had too many tries. Sign in again.').waitFor()
     await page.getByLabel('Password', { exact: true }).waitFor()
   })
@@ -160,8 +184,7 @@ describe('signing in with two-step sign-in', () => {
       },
     })
     await password(page)
-    await page.getByLabel('Code', { exact: true }).fill('123456')
-    await page.getByRole('button', { name: 'Verify' }).click()
+    await enterAppCode(page, '123456')
     await expect.poll(() => new URL(page.url()).pathname).not.toBe('/c/nuk/admin/login')
     expect(new URL(page.url()).pathname).toMatch(/^\/c\/nuk\/admin(\/|$)/)
   })
@@ -174,7 +197,7 @@ describe('signing in with two-step sign-in', () => {
       'POST /auth/sign-in/email': TWO_FACTOR_REDIRECT,
     })
     await password(page)
-    await page.getByLabel('Code', { exact: true }).waitFor()
+    await (page).locator(APP_CODE_CELL).first().waitFor()
     await page.getByRole('button', { name: 'Back', exact: true }).click()
     await page.getByLabel('Password', { exact: true }).waitFor()
     expect(api.calls.filter(c => c.startsWith('POST /auth/two-factor'))).toEqual([])
@@ -197,8 +220,7 @@ describe('signing in with two-step sign-in', () => {
       'GET /shop/orders': menu.handler,
     })
     await password(page)
-    await page.getByLabel('Code', { exact: true }).fill('123456')
-    await page.getByRole('button', { name: 'Verify' }).click()
+    await enterAppCode(page, '123456')
     await expect.poll(() => new URL(page.url()).pathname).not.toBe('/sign-in')
     await menu.started()
   })
@@ -241,7 +263,7 @@ describe('accessibility', () => {
       })
       await code.page.setViewportSize({ width, height: 844 })
       await password(code.page)
-      await code.page.getByLabel('Code', { exact: true }).waitFor()
+      await (code.page).locator(APP_CODE_CELL).first().waitFor()
       await code.page.mouse.move(0, 0)
       expect(await axeFindings(code.page)).toEqual([])
       await code.page.evaluate(() => document.documentElement.classList.add('dark'))

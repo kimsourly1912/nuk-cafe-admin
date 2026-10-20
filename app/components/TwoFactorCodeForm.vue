@@ -4,7 +4,7 @@
  * authenticator app, or one of the backup codes. Every sign-in page shows it in place of its
  * password form when the password step answers `two-factor`; `verified` means the session is set
  * and the page finishes its own sign-in, `restart` that the challenge is over (back to the password).
- * The page's submit button posts `form-id`.
+ * The page's submit button posts `form-id`. The app's code is six cells (`UPinInput`); a backup code is a text field.
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import * as v from 'valibot'
@@ -14,6 +14,11 @@ const emit = defineEmits<{ verified: [], restart: [message: string] }>()
 
 const method = ref<TwoFactorMethod>('app')
 const state = reactive({ code: '' })
+// A number-type UPinInput models an array of digit numbers; the schema takes the joined string.
+const pin = computed<number[]>({
+  get: () => state.code.split('').map(Number),
+  set: (digits) => { state.code = digits.join('') },
+})
 const error = ref<string>()
 const saving = defineModel<boolean>('saving', { default: false })
 
@@ -32,7 +37,27 @@ function switchMethod() {
   form.value?.clear()
 }
 
+/**
+ * All six digits in: send them, as pressing Verify would (a backup code still waits for the button).
+ * The pin input announces "complete" again when the model changes after it (our own update coming
+ * back as a new array), so one entry can arrive twice; the second send would find the sign-in's
+ * challenge already used and bounce to the password. `sending` holds it until the first is on its way.
+ */
+let sending = false
+async function submitWhenComplete() {
+  if (sending || saving.value) return
+  sending = true
+  try {
+    await nextTick()
+    await form.value?.submit()
+  }
+  finally {
+    sending = false
+  }
+}
+
 async function onSubmit({ data }: FormSubmitEvent<{ code: string }>) {
+  if (saving.value) return
   saving.value = true
   error.value = undefined
   try {
@@ -61,6 +86,7 @@ async function onSubmit({ data }: FormSubmitEvent<{ code: string }>) {
     :schema="schema"
     :state="state"
     :disabled="saving"
+    :validate-on="[]"
     class="space-y-4"
     @submit="onSubmit"
     @error="focusFirstInvalid"
@@ -90,11 +116,21 @@ async function onSubmit({ data }: FormSubmitEvent<{ code: string }>) {
       name="code"
       required
     >
+      <UPinInput
+        v-if="method === 'app'"
+        v-model="pin"
+        :length="6"
+        type="number"
+        size="lg"
+        otp
+        autofocus
+        @complete="submitWhenComplete"
+      />
       <UInput
+        v-else
         v-model="state.code"
-        :inputmode="method === 'app' ? 'numeric' : 'text'"
-        :autocomplete="method === 'app' ? 'one-time-code' : 'off'"
-        :maxlength="method === 'app' ? 6 : 32"
+        autocomplete="off"
+        :maxlength="32"
         autofocus
         class="w-full"
         :ui="{ base: 'font-mono tracking-widest' }"

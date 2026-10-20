@@ -12,6 +12,9 @@
  * The submit button lives in the footer, outside the form: give the `UForm` an `id` and the button
  * `form="<id>"`, so Enter still submits.
  *
+ * `wide` lifts the card's width from `sm:max-w-sm` to `sm:max-w-3xl` for a step with side-by-side
+ * parts (the two-factor setup); it is still one column on phones.
+ *
  * @example
  * <TaskFrame>
  *   <template #header><h1>Sign in</h1></template>
@@ -19,11 +22,13 @@
  *   <template #footer><UButton type="submit" form="login-form" label="Sign in" block /></template>
  * </TaskFrame>
  */
+defineProps<{ wide?: boolean }>()
 </script>
 
 <template>
   <UCard
-    class="w-full sm:max-w-sm max-sm:flex max-sm:flex-1 max-sm:flex-col max-sm:rounded-none max-sm:ring-0"
+    class="w-full max-sm:flex max-sm:flex-1 max-sm:flex-col max-sm:rounded-none max-sm:ring-0"
+    :class="wide ? 'sm:max-w-3xl' : 'sm:max-w-sm'"
     :ui="{ body: 'max-sm:flex-1', footer: 'space-y-2 max-sm:pb-[max(env(safe-area-inset-bottom),1rem)]' }"
   >
     <template

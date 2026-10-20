@@ -151,6 +151,8 @@ Source: `app/components/TaskFrame.vue`. Slots: `header`, default, `footer` (each
 
 The submit button is outside the form, joined with `form="<id>"`: Enter still submits.
 
+`wide` lifts the card from `sm:max-w-sm` to `sm:max-w-3xl` for a step with side-by-side parts (the platform two-factor setup: QR code and backup codes in two columns from `md`); still one column on phones.
+
 ## `<BottomActionBar>`
 
 The one bottom action bar (D77 decision 3, D78): a page's mode bar (Select, Reorder), its Save bar or its bulk bar. The feature puts ordinary Nuxt UI buttons (and a short status text) in the slot; the bar owns only its placement:
