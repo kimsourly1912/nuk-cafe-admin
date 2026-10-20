@@ -22,6 +22,8 @@ export interface SupportVisit {
   openedAt: string
   expiresAt: string
   closedAt: string | null
+  /** Looking now: not closed, not past its hour, and the grant still in force. */
+  active: boolean
 }
 
 export interface SupportGrant {

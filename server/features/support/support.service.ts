@@ -8,7 +8,7 @@ import { toIso } from '#server/utils/time'
 import { accountIdentities, isSuperadmin, tenantById } from '#server/features/identity'
 import type { Actor, SessionUser, TenantPermission } from '#server/features/identity'
 import { auditStatement, listAuditEvents } from '#server/features/platform'
-import { grantNotFound, invalidCode, supportAlreadyAllowed, supportNotAllowed, supportNotPermitted, supportReadOnly, tooManyCodes } from './support.errors'
+import { grantNotFound, invalidCode, supportAlreadyAllowed, supportNotAllowed, supportNotPermitted, supportReadOnly, tooManyCodes, visitNotFound } from './support.errors'
 import * as repo from './support.repository'
 import type { GrantRow } from './support.repository'
 import { CODE_WINDOW_MS, isReadRequest, isSupportReadable, MAX_CODE_FAILURES, supportPermissionList } from './support.rules'
@@ -44,6 +44,7 @@ async function toGrants(db: Db, tenantId: string, rows: GrantRow[], now: Date): 
       openedAt: toIso(visit.openedAt),
       expiresAt: toIso(visit.expiresAt),
       closedAt: visit.closedAt ? toIso(visit.closedAt) : null,
+      active: !visit.closedAt && visit.expiresAt.getTime() > now.getTime() && !row.endedAt && row.expiresAt.getTime() > now.getTime(),
     })),
   }))
 }
@@ -89,6 +90,27 @@ export async function endSupport(db: Db, actor: Actor, grantId: string, now = ne
   catch (error) {
     // Unknown, another cafe's, already ended or expired.
     if (isStaleWrite(error)) throw grantNotFound()
+    throw error
+  }
+  return getCafeSupport(db, tenantId, now)
+}
+
+/**
+ * Shuts out one visit now: its next request is refused. The grant stays, so the platform team can
+ * open the cafe again with a fresh code; end the grant to stop that too.
+ */
+export async function endSupportVisit(db: Db, actor: Actor, visitId: string, now = new Date()): Promise<CafeSupport> {
+  const { tenantId } = actor
+  try {
+    await db.batch([
+      repo.endVisitStatement(db, tenantId, visitId, now),
+      requireOneChange(db),
+      auditStatement(db, { userId: actor.userId, tenantId, requestId: actor.requestId }, { action: 'support.visit.end', targetType: 'support_visit', targetId: visitId, metadata: {} }),
+    ])
+  }
+  catch (error) {
+    // Unknown, another cafe's, already closed or past its hour.
+    if (isStaleWrite(error)) throw visitNotFound()
     throw error
   }
   return getCafeSupport(db, tenantId, now)

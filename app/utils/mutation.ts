@@ -25,8 +25,9 @@ export interface ToastAction {
  * Why a call didn't run:
  * - `in-flight`: this mutation is already running for the same key (a double submit; silent).
  * - `locked`: another mutation holds the same record lock (e.g. an update while deleting).
+ * - `read-only`: the session can only look (a platform support visit, D193); nothing is asked or sent.
  */
-export type SkipReason = 'in-flight' | 'locked'
+export type SkipReason = 'in-flight' | 'locked' | 'read-only'
 
 export type MutationResult<T>
   = | { ok: true, status: 'success', data: T }
@@ -168,6 +169,8 @@ export interface MutationDeps<TInput, TResult> {
   invalidate: (features: string[]) => Promise<void>
   /** +1 when a call starts, -1 when it ends (drives the leave-page warning). */
   onPendingChange?: (delta: number) => void
+  /** Why this session can't change anything right now, or `undefined`. Checked before any confirmation. */
+  readOnly?: () => string | undefined
 }
 
 const SINGLE = '__single__'
@@ -275,6 +278,7 @@ export function createMutation<TInput, TResult>(
   async function execute(input: TInput, overrides: ExecuteOverrides<TInput> = {}): Promise<MutationResult<TResult>> {
     // Early check so no confirmation is shown for work that can't run. Not the guarantee:
     // `run` checks again when the request actually starts, after the confirmation.
+    if (deps.readOnly?.()) return skipped(input, 'read-only')
     const early = busyReason(input)
     if (early) return skipped(input, early)
 
@@ -290,6 +294,7 @@ export function createMutation<TInput, TResult>(
   /** A double submit stays silent; a conflict with another action is explained. */
   function skipped(input: TInput, reason: SkipReason): MutationResult<TResult> {
     if (reason === 'locked') deps.failure(resolve(options.errorMessage, input) ?? 'Something went wrong', LOCKED_MESSAGE)
+    if (reason === 'read-only') deps.failure('Nothing was changed', deps.readOnly?.())
     return { ok: false, status: 'skipped', reason }
   }
 
@@ -300,6 +305,14 @@ export function createMutation<TInput, TResult>(
   async function executeMany(inputs: TInput[], overrides: Pick<ExecuteOverrides<TInput>, 'confirm'> = {}): Promise<BatchResult<TInput, TResult>> {
     const batch = options.batch
     const result: BatchResult<TInput, TResult> = { succeeded: [], failed: [], skipped: [], notStarted: [], cancelled: false }
+
+    // A read-only session changes nothing: one explanation, no confirmation, no requests.
+    const readOnly = deps.readOnly?.()
+    if (readOnly) {
+      if (inputs.length) deps.failure('Nothing was changed', readOnly)
+      result.skipped.push(...inputs)
+      return result
+    }
 
     // Early filter (no point confirming busy items). Each item is checked again when it starts.
     const runnable = inputs.filter((input) => {

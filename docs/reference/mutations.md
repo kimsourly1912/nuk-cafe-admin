@@ -139,7 +139,7 @@ type MutationResult<T> =
   | { ok: true, status: 'success', data: T }
   | { ok: false, status: 'error', error: ApiError }   // already toasted
   | { ok: false, status: 'cancelled' }                // user declined the confirmation
-  | { ok: false, status: 'skipped', reason: 'in-flight' | 'locked' } // same key running (silent) / record locked by another mutation (toast)
+  | { ok: false, status: 'skipped', reason: 'in-flight' | 'locked' | 'read-only' } // same key running (silent) / record locked by another mutation (toast) / a read-only session (toast)
 ```
 
 ```ts
@@ -166,6 +166,7 @@ interface BatchResult<TInput, TResult> {
 
 The backend has no bulk endpoints, so a batch is N single calls:
 
+0. **Read-only session** (a platform support visit, D193): `execute` and `executeMany` ask nothing and send nothing; one toast "Nothing was changed" explains it (`execute` resolves `skipped` / `read-only`, a batch skips every item). The server refuses every write of a visit anyway; this stops the confirmation dialog and the failed request. Wired in `useMutation` from the session; the engine takes it as `deps.readOnly`.
 1. Items that are busy (this mutation in flight, or their `lock` held by another mutation) are set aside as `skipped`. Each remaining item is checked **again** when its turn comes (see [below](#concurrency-guarantee-and-current-limits)). If nothing is left to run, it returns immediately with no toast.
 2. One confirmation (`batch.confirm`), unless `overrides.confirm === false`.
 3. Calls run with at most `batch.concurrency` in parallel, phase by phase. Each item gets the normal per-item state (`isPending`, `errorOf`, `isRemoved`), but **no per-item toasts**.

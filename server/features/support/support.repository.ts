@@ -97,6 +97,12 @@ export function closeGrantVisitsStatement(db: Db, tenantId: string, grantId: str
     .where(and(eq(supportVisits.tenantId, tenantId), eq(supportVisits.grantId, grantId), isNull(supportVisits.closedAt), gt(supportVisits.expiresAt, now)))
 }
 
+/** Closes one visit if it is still open (the owner shuts it out). Follow it with `requireOneChange`. */
+export function endVisitStatement(db: Db, tenantId: string, visitId: string, now: Date): Statement {
+  return db.update(supportVisits).set({ closedAt: now })
+    .where(and(eq(supportVisits.tenantId, tenantId), eq(supportVisits.id, visitId), isNull(supportVisits.closedAt), gt(supportVisits.expiresAt, now)))
+}
+
 export function insertVisitStatement(db: Db, row: { id: string, tenantId: string, grantId: string, userId: string, sessionId: string, openedAt: Date, expiresAt: Date }): Statement {
   return db.insert(supportVisits).values(row)
 }
