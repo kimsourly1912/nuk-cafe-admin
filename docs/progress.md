@@ -2,6 +2,14 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Repository standard and audit (D194, 2026-10-20)
+
+[Decision](decisions.md#d194-repositories-keep-drizzles-query-builder-one-repository-standard-2026-10-20). Branch `claude/repository-standard`, documentation only. Repositories keep Drizzle's query builder: relational queries v2 needs Drizzle 1.0 (a release candidate) and NuxtHub support (nuxt-hub/core PR #825, open). New [repository standard](server/repositories.md); [audit](reviews/repository-audit-2026-10-20.md) of the 25 repositories at `0f8a81e` with findings R1–R10 and a seven-step clean-up plan.
+
+- **Evidence (2026-10-20, local):** source review only. Checked: the installed `@nuxthub/core` 0.10.8 builds the database with `{ schema }` and no `relations`; `npm view drizzle-orm dist-tags` gives `latest` 0.45.4 and `rc` 1.0.0-rc.4; the Drizzle names the standard uses (`alias`, `between`, `exists`, `notExists`, `sum`, `notInArray`) exist in the installed version; every unchunked `inArray` list is bounded by a contract or page size under 90; the standard's code examples type-check (copied into a temporary repository file and checked with `vue-tsc -p .nuxt/tsconfig.server.json`, which caught a planted error, then removed); every new relative link and anchor resolves. No application code changed, so `pnpm lint`, `pnpm typecheck` and the tests weren't run for this step.
+- **Open:** audit R7 (may repositories keep reading other features' tables for display names and branch scope?) is the owner's decision.
+- **Next:** step 2 of the clean-up plan (shared helpers), one PR per step.
+
 ## Platform console P5 follow-up: end one visit, read-only stops edits early (D193, 2026-10-20)
 
 The owner can end a single visit (**Looking now** → **End visit** in the History); the grant and other visits stay. During a visit, `useMutation` stops every edit before its confirmation or request (toast "Nothing was changed").

@@ -7,7 +7,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Domain | Search IDs / terms |
 |---|---|
 | Replaced Spring/SPA/SDK | D1–D5; superseded by D39, D43, D71, D95 |
-| API/server architecture and integrity | D39–D45, D52, D71, D116; version, idempotency, guard, audit |
+| API/server architecture and integrity | D39–D45, D52, D71, D116, D194; version, idempotency, guard, audit, repository |
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173 |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166 |
 | Tenancy and permissions | D134–D146, D186–D193; organization, tenant, branch, platform console |
@@ -223,3 +223,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D191](decisions.md#d191-the-consoles-overview-and-activity-counts-and-the-platforms-own-audit-rows-by-action-2026-10-19) | The console's Overview and Activity: counts, and the platform's own audit rows by action, 2026-10-19 |
 | [D192](decisions.md#d192-the-consoles-system-health-read-only-counts-and-dates-and-a-record-of-every-jobs-run-2026-10-19) | The console's System health: read-only counts and dates, and a record of every job's run, 2026-10-19 |
 | [D193](decisions.md#d193-support-access-the-owner-allows-it-a-super-admin-reads-with-a-fresh-code-read-only-every-request-audited-2026-10-19) | Support access: the owner allows it, a super admin reads with a fresh code, read-only, every request audited, 2026-10-19 |
+| [D194](decisions.md#d194-repositories-keep-drizzles-query-builder-one-repository-standard-2026-10-20) | Repositories keep Drizzle's query builder; one repository standard, 2026-10-20 |

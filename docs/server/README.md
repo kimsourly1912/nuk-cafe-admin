@@ -5,6 +5,7 @@ How the NUK Cafe server is designed and built. Every server change follows appli
 | Page | Contents |
 |---|---|
 | [Architecture & conventions](./architecture.md) | Surfaces and routes, features and their layers (service, repository, errors, types…), the anatomy of a route, ids, money, time, errors, validation, archiving, versions, idempotency, tests |
+| [Repository standard](./repositories.md) | How a feature's SQL is written (D194): Drizzle's query builder, names, the tenant rule, reads in one batch, conditions, guards, writes as statements, D1 limits, tests |
 | [Security & hardening](./security.md) | Identity (Better Auth), roles and permissions, sessions, email verification, staff onboarding, CSRF, headers, rate limits, uploads, secrets, logging |
 | [Data model](./data-model.md) | The tables per domain (identity, branch, menu, customers & loyalty, orders), their invariants and open questions |
 | [Operations](./operations.md) | Environments, configuration, migrations, deploys, backups, scheduled jobs, email, monitoring |
