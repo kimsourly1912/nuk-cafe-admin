@@ -57,11 +57,12 @@ export async function findBranch(db: Db, tenantId: string, id: string): Promise<
 export interface BranchOptionRow {
   id: string
   name: string
+  timezone: string
 }
 
-/** Active branches by name, for pickers. */
+/** Active branches by name, with their clocks. */
 export async function listActiveBranches(db: Db, tenantId: string): Promise<BranchOptionRow[]> {
-  return db.select({ id: branches.id, name: branches.name }).from(branches)
+  return db.select({ id: branches.id, name: branches.name, timezone: branches.timezone }).from(branches)
     .where(and(eq(branches.tenantId, tenantId), eq(branches.status, 'active')))
     .orderBy(asc(branches.name))
 }

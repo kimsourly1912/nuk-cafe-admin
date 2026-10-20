@@ -2,14 +2,15 @@ import type { CreateKhqrInput, KhqrCharge, KhqrSettings, KhqrSettingsInput } fro
 import { KHQR_LIFETIME_MINUTES, toRiel } from '#shared/contracts/orders'
 import type { Db } from '#server/utils/batch'
 import { requireOneChange, runBatch } from '#server/utils/batch'
+import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
+import { findBranchClock } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
 import { buildKhqr, KHQR_LIMITS } from './khqr'
 import * as khqrRepo from './khqr.repository'
 import { khqrChargeInvalid, khqrNotSetUp, khqrSettingsChanged, noExchangeRate, orderChanged, orderNotFound, paymentExpired } from './orders.errors'
 import * as repo from './orders.repository'
-import * as reportsRepo from './reports.repository'
 
 /**
  * KHQR at the counter (step 10.15, D130): an admin sets the Bakong account that receives the money;
@@ -97,7 +98,7 @@ export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: stri
   if (!settings?.enabled) throw khqrNotSetUp()
   if (!settings.currencies.includes(input.currency)) throw khqrNotSetUp(input.currency)
 
-  const open = await khqrRepo.findOpenCharge(db, orderId, input.currency, new Date(now.getTime() + MIN_REMAINING_MS))
+  const open = await khqrRepo.findOpenCharge(db, actor.tenantId, orderId, input.currency, new Date(now.getTime() + MIN_REMAINING_MS))
   if (open && open.accountId === settings.accountId && open.merchantName === settings.merchantName) return toCharge(open)
 
   let amount = order.totalMinor
@@ -109,7 +110,7 @@ export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: stri
     amount = toRiel(order.totalMinor, rate.perUsd)
   }
 
-  const branch = await reportsRepo.findReportBranch(db, actor.tenantId, actor.branchId)
+  const branch = await findBranchClock(db, actor.tenantId, actor.branchId)
   const billNumber = `Order ${String(order.pickupNumber).padStart(3, '0')}`
   const expiresAt = new Date(Math.min(now.getTime() + KHQR_LIFETIME_MINUTES * 60_000, order.paymentDueAt.getTime()))
   const { qr, md5 } = buildKhqr({
@@ -123,7 +124,8 @@ export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: stri
     createdAt: now,
     expiresAt,
   })
-  return toCharge(await khqrRepo.insertCharge(db, {
+  const charge: khqrRepo.NewCharge = {
+    id: newId(),
     tenantId: actor.tenantId,
     orderId,
     branchId: actor.branchId,
@@ -138,7 +140,10 @@ export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: stri
     createdAt: now,
     expiresAt,
     createdBy: actor.userId,
-  }))
+  }
+  await db.batch([khqrRepo.insertChargeStatement(db, charge)])
+  const { tenantId: _, createdBy: __, ...row } = charge
+  return toCharge(row)
 }
 
 /**

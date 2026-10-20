@@ -2,9 +2,8 @@ import { and, desc, eq, gt } from 'drizzle-orm'
 import type { KhqrCurrency } from '#shared/contracts/orders'
 import { user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
+import { byId, firstRow, inTenant } from '#server/utils/query'
 import { bakongTokens, khqrCharges, khqrSettings } from './orders.schema'
-
-/** All SQL of KHQR at the counter (step 10.15, D130). */
 
 export interface KhqrSettingsRow {
   enabled: boolean
@@ -19,7 +18,7 @@ export interface KhqrSettingsRow {
 
 /** The tenant's settings (one row per tenant, D137). */
 export async function findSettings(db: Db, tenantId: string): Promise<KhqrSettingsRow | undefined> {
-  const [row] = await db.select({
+  const row = await firstRow(db.select({
     enabled: khqrSettings.enabled,
     accountId: khqrSettings.accountId,
     merchantName: khqrSettings.merchantName,
@@ -28,7 +27,7 @@ export async function findSettings(db: Db, tenantId: string): Promise<KhqrSettin
     version: khqrSettings.version,
     updatedAt: khqrSettings.updatedAt,
     updatedByName: user.name,
-  }).from(khqrSettings).innerJoin(user, eq(user.id, khqrSettings.updatedBy)).where(eq(khqrSettings.tenantId, tenantId))
+  }).from(khqrSettings).innerJoin(user, eq(user.id, khqrSettings.updatedBy)).where(eq(khqrSettings.tenantId, tenantId)))
   return row && { ...row, currencies: row.currencies.split(',') as KhqrCurrency[] }
 }
 
@@ -65,20 +64,24 @@ export interface BakongTokenRow {
   updatedByName: string
 }
 
-export async function findBakongToken(db: Db, tenantId: string): Promise<BakongTokenRow | undefined> {
-  const [row] = await db.select({
+export function findBakongToken(db: Db, tenantId: string): Promise<BakongTokenRow | undefined> {
+  return firstRow(db.select({
     sealed: bakongTokens.sealed,
     expiresAt: bakongTokens.expiresAt,
     version: bakongTokens.version,
     updatedAt: bakongTokens.updatedAt,
     updatedByName: user.name,
-  }).from(bakongTokens).innerJoin(user, eq(user.id, bakongTokens.updatedBy)).where(eq(bakongTokens.tenantId, tenantId))
-  return row
+  }).from(bakongTokens).innerJoin(user, eq(user.id, bakongTokens.updatedBy)).where(eq(bakongTokens.tenantId, tenantId)))
 }
 
-/** Every cafe's token expiry, for the reminders (no sealed tokens read). */
-export async function bakongTokenExpiries(db: Db, tenantId?: string): Promise<{ tenantId: string, expiresAt: Date | null }[]> {
-  return db.select({ tenantId: bakongTokens.tenantId, expiresAt: bakongTokens.expiresAt }).from(bakongTokens).where(tenantId ? eq(bakongTokens.tenantId, tenantId) : undefined)
+/** Across cafes: every saved token's expiry, for System health (no sealed tokens read). */
+export function bakongTokenExpiries(db: Db): Promise<{ tenantId: string, expiresAt: Date | null }[]> {
+  return db.select({ tenantId: bakongTokens.tenantId, expiresAt: bakongTokens.expiresAt }).from(bakongTokens)
+}
+
+/** The cafe's token expiry (`null`: none set), for its reminder; `undefined` without a token. */
+export function findBakongTokenExpiry(db: Db, tenantId: string): Promise<{ expiresAt: Date | null } | undefined> {
+  return firstRow(db.select({ expiresAt: bakongTokens.expiresAt }).from(bakongTokens).where(eq(bakongTokens.tenantId, tenantId)))
 }
 
 export interface BakongTokenValues {
@@ -136,22 +139,20 @@ const chargeColumns = {
   expiresAt: khqrCharges.expiresAt,
 }
 
-/** The order's latest QR in a currency that still works after `after`. */
-export async function findOpenCharge(db: Db, orderId: string, currency: KhqrCurrency, after: Date): Promise<ChargeRow | undefined> {
-  const [row] = await db.select(chargeColumns).from(khqrCharges)
-    .where(and(eq(khqrCharges.orderId, orderId), eq(khqrCharges.currency, currency), gt(khqrCharges.expiresAt, after)))
-    .orderBy(desc(khqrCharges.createdAt)).limit(1)
-  return row
+/** The order's latest QR in a currency that still works after `after` (`khqr_charges_order_idx`). */
+export function findOpenCharge(db: Db, tenantId: string, orderId: string, currency: KhqrCurrency, after: Date): Promise<ChargeRow | undefined> {
+  return firstRow(db.select(chargeColumns).from(khqrCharges)
+    .where(inTenant(khqrCharges, tenantId, eq(khqrCharges.orderId, orderId), eq(khqrCharges.currency, currency), gt(khqrCharges.expiresAt, after)))
+    .orderBy(desc(khqrCharges.createdAt)))
 }
 
-export async function findCharge(db: Db, tenantId: string, id: string): Promise<ChargeRow | undefined> {
-  const [row] = await db.select(chargeColumns).from(khqrCharges).where(and(eq(khqrCharges.tenantId, tenantId), eq(khqrCharges.id, id)))
-  return row
+export function findCharge(db: Db, tenantId: string, id: string): Promise<ChargeRow | undefined> {
+  return firstRow(db.select(chargeColumns).from(khqrCharges).where(byId(khqrCharges, tenantId, id)))
 }
 
-export type NewCharge = Omit<ChargeRow, 'id'> & { tenantId: string, createdBy: string }
+export type NewCharge = ChargeRow & { tenantId: string, createdBy: string }
 
-export async function insertCharge(db: Db, charge: NewCharge): Promise<ChargeRow> {
-  const [row] = await db.insert(khqrCharges).values(charge).returning(chargeColumns)
-  return row!
+/** A new QR for an order; the service makes its id, so the response needs no read back. */
+export function insertChargeStatement(db: Db, charge: NewCharge): Statement {
+  return db.insert(khqrCharges).values(charge)
 }

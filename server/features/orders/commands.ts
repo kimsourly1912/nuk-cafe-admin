@@ -58,7 +58,7 @@ export async function runOrderCommand(db: Db, command: OrderCommand, plan: (orde
         if (!order || !command.owns(order)) throw orderNotFound()
         if (order.version !== command.version) throw command.changed(order)
         const step = await plan(order)
-        const change: repo.OrderChange = { orderId, fromStatus: order.status, toStatus: step.to, version: order.version, at: now }
+        const change: repo.OrderChange = { tenantId: order.tenantId, orderId, fromStatus: order.status, toStatus: step.to, version: order.version, at: now }
         return {
           statements: [
             repo.transitionStatement(db, change),

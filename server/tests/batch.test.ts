@@ -10,6 +10,8 @@ import { versionConflict } from '#server/utils/errors'
 import { catalogRows, itemModifierGroups } from '#server/features/menu/catalog.repository'
 import * as repo from '#server/features/notifications/notifications.repository'
 import { counterContext, counterQueueRows } from '#server/features/orders/orders.repository'
+import { orderHistory } from '#server/features/orders/reports.repository'
+import type { OrderHistoryQuery } from '#shared/contracts/reports'
 
 let db: Db
 beforeEach(async () => {
@@ -140,6 +142,17 @@ describe('on D1', () => {
     ])
     const result = await counterQueueRows(d1, 'cafe-a', 'branch-a', '2026-10-14', now)
     expect(result.rows).toEqual([expect.objectContaining({ branchName: 'Branch A', customerName: 'Customer A', placedAt: now, paymentDueAt: new Date(now.getTime() + 60000), paidAt: now, version: 2 })])
+  })
+
+  it('keeps the order id apart from its payment id in an order history page read in one D1 batch (D170, D194)', async () => {
+    const placed = new Date('2026-10-14T05:00:00Z')
+    const { db: d1 } = fakeD1([
+      ['order-a', 7, '2026-10-14', placed.getTime(), 'pickup', null, 'completed', 875, 'cash_usd', 'payment-a', null],
+      [1],
+    ])
+    const query = { branchId: 'branch-a', from: '2026-10-14', to: '2026-10-14', page: 1, pageSize: 20, sort: 'placed', direction: 'desc' } as OrderHistoryQuery
+    const page = await orderHistory(d1, 'cafe-a', query)
+    expect(page).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'order-a', pickupNumber: 7, paymentId: 'payment-a', placedAt: placed })] })
   })
 
   it('executes the customer ready message subscribe, claim, completion and due query through the actual D1 adapter', async () => {

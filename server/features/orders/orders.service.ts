@@ -121,7 +121,7 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
           repo.insertOrderStatement(db, order),
           ...repo.insertLinesStatements(db, actor.tenantId, orderId, lines),
           repo.eventStatement(db, { tenantId: actor.tenantId, orderId, toVersion: 1, actorId: actor.userId, fromStatus: null, toStatus: 'awaiting_payment', at: now }),
-          repo.unpaidAtMostStatement(db, actor.tenantId, actor.userId, now, MAX_UNPAID_ORDERS),
+          repo.requireUnpaidAtMost(db, actor.tenantId, actor.userId, now, MAX_UNPAID_ORDERS),
           // A neutral event for whoever listens (the Telegram alerts, D113): orders don't know them.
           outboxStatement(db, actor.tenantId, ORDER_EVENTS.placed, { orderId }),
         ],
@@ -150,9 +150,9 @@ export async function getOrder(db: Db, actor: Actor, id: string): Promise<Order>
   const row = await repo.findOrder(db, actor.tenantId, id)
   if (!row || row.customerId !== actor.userId) throw orderNotFound()
   const [lines, [payment], cancel] = await Promise.all([
-    repo.linesOf(db, id),
-    repo.paymentsOf(db, [id]),
-    row.status === 'cancelled' ? repo.cancelEventOf(db, id) : undefined,
+    repo.linesOf(db, actor.tenantId, id),
+    repo.paymentsOf(db, actor.tenantId, [id]),
+    row.status === 'cancelled' ? repo.cancelEventOf(db, actor.tenantId, id) : undefined,
   ])
   return {
     id: row.id,
@@ -199,7 +199,7 @@ export async function listMyOrders(db: Db, actor: Actor, query: CustomerOrdersQu
     repo.findCustomerOrdersInProgress(db, actor.tenantId, actor.userId, IN_PROGRESS_LIMIT),
     repo.findCustomerOrdersPast(db, actor.tenantId, actor.userId, query),
   ])
-  const counts = await repo.itemCounts(db, [...inProgress, ...past.rows].map(row => row.id))
+  const counts = await repo.itemCounts(db, actor.tenantId, [...inProgress, ...past.rows].map(row => row.id))
   const summary = (row: repo.OrderRow): OrderSummary => ({
     id: row.id,
     branch: { id: row.branchId, name: row.branchName },

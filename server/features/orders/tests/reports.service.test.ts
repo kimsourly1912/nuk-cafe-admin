@@ -155,16 +155,16 @@ describe('the summary (D110)', () => {
     }
     const range = { branchId, ...periodInstants({ from: MON, to: MON }, 'Asia/Phnom_Penh') }
     const windows = paymentWindows({ from: MON, to: MON }, 'Asia/Phnom_Penh')
-    const buckets = await paymentsCollected(db, TEST_TENANT, range, windows)
+    const buckets = await paymentsCollected(db, { tenantId: TEST_TENANT, ...range }, windows)
     expect(buckets).toHaveLength(1)
     expect(buckets[0]).toMatchObject({ method: 'cash_usd', orders: 25, amountMinor: 21875 })
     await ensureTenant(db, 'other-cafe')
-    expect(await paymentsCollected(db, 'other-cafe', range, windows)).toEqual([])
+    expect(await paymentsCollected(db, { tenantId: 'other-cafe', ...range }, windows)).toEqual([])
     const summary = await reportSummary(db, TEST_TENANT, period(MON), at(TUE, '12:00'))
     expect(summary.paid).toEqual({ salesMinor: 21875, orders: 25, averageMinor: 875 })
     expect(summary.trend.points.find(point => point.key === '09')).toEqual({ key: '09', salesMinor: 21875, orders: 25 })
     // The maximum allowed period still uses one JSON parameter, rather than two per day.
-    const largest = await paymentsCollected(db, TEST_TENANT, range, paymentWindows({ from: MON, to: '2026-12-29' }, 'Asia/Phnom_Penh'))
+    const largest = await paymentsCollected(db, { tenantId: TEST_TENANT, ...range }, paymentWindows({ from: MON, to: '2026-12-29' }, 'Asia/Phnom_Penh'))
     expect(largest.reduce((sum, row) => sum + row.orders, 0)).toBe(25)
   })
 

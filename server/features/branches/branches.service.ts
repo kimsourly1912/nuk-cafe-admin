@@ -56,8 +56,26 @@ export async function activeBranchCounts(db: Db, tenantIds: string[]): Promise<M
 }
 
 /** Active branches (id and name), for pickers such as the staff form's. */
-export async function listBranchOptions(db: Db, tenantId: string): Promise<repo.BranchOptionRow[]> {
-  return repo.listActiveBranches(db, tenantId)
+export async function listBranchOptions(db: Db, tenantId: string): Promise<{ id: string, name: string }[]> {
+  return (await repo.listActiveBranches(db, tenantId)).map(({ id, name }) => ({ id, name }))
+}
+
+/** A branch and its clock (its time zone): what another feature needs to date its work. */
+export interface BranchClock {
+  id: string
+  name: string
+  timeZone: string
+}
+
+/** The cafe's branch, archived or not, with its clock; `undefined` for another cafe's or an unknown id. */
+export async function findBranchClock(db: Db, tenantId: string, id: string): Promise<BranchClock | undefined> {
+  const branch = await repo.findBranch(db, tenantId, id)
+  return branch && { id: branch.id, name: branch.name, timeZone: branch.timezone }
+}
+
+/** The cafe's active branches by name, each with its clock. */
+export async function listActiveBranchClocks(db: Db, tenantId: string): Promise<BranchClock[]> {
+  return (await repo.listActiveBranches(db, tenantId)).map(branch => ({ id: branch.id, name: branch.name, timeZone: branch.timezone }))
 }
 
 /** The branch as customers see it at `now`: open by its hours on its own clock, or when it opens. */

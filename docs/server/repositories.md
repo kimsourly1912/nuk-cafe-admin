@@ -245,7 +245,8 @@ They are in [architecture → Atomic writes](./architecture.md#atomic-writes): 1
 
 Repositories are tested through their services ([architecture → Tests](./architecture.md#tests)):
 
-- the two-cafe test for every function on a cafe table ([The tenant rule](#the-tenant-rule));
+- the two-cafe test for every function on a cafe table ([The tenant rule](#the-tenant-rule)). When the service checks the parent first (the usual case), removing the repository's own filter doesn't fail a service test, so the second layer gets a **repository-level** two-cafe test: another cafe's real rows, asked for with our cafe's id, read or change nothing, and the same call with their id finds them (so an empty answer can't come from a wrong fixture). Example: `server/features/orders/tests/orders.repository.tenants.test.ts`;
+- for every batch read that joins tables (`readPage`, a `db.batch` of reads), a case in `server/tests/batch.test.ts` through its D1-shaped driver (`fakeD1`), which returns rows as objects by SQL name as D1 does: two columns with one SQL name (`orders.id` and `counter_payments.id`) collapse there, as on D1, while libsql hides it (D170). Give such a column its own name (`sql\`${counterPayments.id}\`.as('payment_id')`);
 - a stale-version or race case for every conditional write, and the guard removed to see it fail;
 - a case in `server/tests/d1-limits.test.ts` for every new list at the contract's largest size;
 - a case in `server/tests/d1-search.test.ts` (real D1) for every new search and every new batch read that joins tables.
