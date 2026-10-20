@@ -309,12 +309,12 @@ describe('outbox', () => {
       await stalled
     }), { now: T0 })
     await entered
-    const current = (await outboxRepo.claimMessage(db, (await message()).id, at(OUTBOX_CLAIM_MS + 1), at(OUTBOX_CLAIM_MS * 2)))!
+    const current = (await outboxRepo.claimMessage(db, (await message()).id, at(OUTBOX_CLAIM_MS * 2), at(OUTBOX_CLAIM_MS + 1)))!
     if (outcome === 'failure') fail(new Error('Old worker failed'))
     else finish()
     expect(await old).toMatchObject({ sent: 0, failed: 0, skipped: 1 })
-    expect(await message()).toMatchObject({ status: 'pending', attempts: 9, claimToken: current.token, payload: { to: 'user-1' }, lastError: null })
-    expect(await outboxRepo.markSent(db, (await message()).id, current.token, at(OUTBOX_CLAIM_MS + 2))).toBe(true)
+    expect(await message()).toMatchObject({ status: 'pending', attempts: 9, claimToken: current.claimToken, payload: { to: 'user-1' }, lastError: null })
+    expect(await outboxRepo.markSent(db, (await message()).id, current.claimToken, at(OUTBOX_CLAIM_MS + 2))).toBe(true)
   })
 
   it('does not reclaim a retry before its new due time', async () => {
@@ -322,7 +322,7 @@ describe('outbox', () => {
     await deliverOutbox(db, mailTest(async () => {
       throw new Error('retry later')
     }), { now: T0 })
-    expect(await outboxRepo.claimMessage(db, (await message()).id, T0, at(OUTBOX_CLAIM_MS))).toBeUndefined()
+    expect(await outboxRepo.claimMessage(db, (await message()).id, at(OUTBOX_CLAIM_MS), T0)).toBeUndefined()
   })
 
   it('targets only the current tenant, order and kind', async () => {

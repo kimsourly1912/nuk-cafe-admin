@@ -8,7 +8,7 @@ import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { completeOrder, markOrderReady, payOrder, placeOrder } from '#server/features/orders'
 import { outboxMessages } from '#server/features/platform/platform.schema'
 import { createOrderReadyLink, deliverOrderReadyDue, orderReadyAlert, purgeOrderReadyAlerts, sendOrderReadyAlert } from '#server/features/notifications/notifications.customers'
-import * as repo from '#server/features/notifications/notifications.repository'
+import * as repo from '#server/features/notifications/notifications.customers.repository'
 import { hashLinkCode } from '#server/features/notifications/notifications.rules'
 import { orderReadyAlerts } from '#server/features/notifications/notifications.schema'
 import { handleUpdate } from '#server/features/notifications/notifications.service'
@@ -319,7 +319,7 @@ describe('the ready message\'s delivery: one claim, durable recovery', () => {
     await pay(orderId)
     await ready(orderId)
     // A run claims, then dies before sending.
-    const claim = await repo.claimOrderReady(db, TEST_TENANT, orderId, later(6), later(8))
+    const claim = await repo.claimOrderReady(db, TEST_TENANT, orderId, later(8), later(6))
     expect(claim).toBeDefined()
     await expect(sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(7))).rejects.toThrow(/another run/)
     expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(7))).toEqual({ sent: 0, failed: 0 })
@@ -328,7 +328,7 @@ describe('the ready message\'s delivery: one claim, durable recovery', () => {
     expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(9))).toEqual({ sent: 1, failed: 0 })
     expect(readyTexts()).toHaveLength(1)
     // The dead worker waking up cannot complete anything.
-    expect(await repo.completeOrderReady(db, claim!, later(10))).toBe(false)
+    expect(await repo.markOrderReadyComplete(db, claim!, later(10))).toBe(false)
   })
 
   it('a send whose claim expired cannot complete or release the newer claim\'s message', async () => {
@@ -336,18 +336,18 @@ describe('the ready message\'s delivery: one claim, durable recovery', () => {
     await subscribe(orderId)
     await pay(orderId)
     await ready(orderId)
-    const stale = (await repo.claimOrderReady(db, TEST_TENANT, orderId, later(6), later(8)))!
+    const stale = (await repo.claimOrderReady(db, TEST_TENANT, orderId, later(8), later(6)))!
     // Its lease ended; a second sender claimed and is still sending.
-    const current = (await repo.claimOrderReady(db, TEST_TENANT, orderId, later(9), later(11)))!
+    const current = (await repo.claimOrderReady(db, TEST_TENANT, orderId, later(11), later(9)))!
     expect(current.claimToken).not.toBe(stale.claimToken)
-    expect(await repo.completeOrderReady(db, stale, later(10))).toBe(false)
-    expect(await repo.retryOrderReady(db, stale, later(20))).toBe(false)
-    expect(await repo.parkOrderReady(db, stale)).toBe(false)
-    expect(await repo.abandonOrderReady(db, stale)).toBe(false)
+    expect(await repo.markOrderReadyComplete(db, stale, later(10))).toBe(false)
+    expect(await repo.markOrderReadyRetry(db, stale, later(20))).toBe(false)
+    expect(await repo.markOrderReadyParked(db, stale)).toBe(false)
+    expect(await repo.markOrderReadyAbandoned(db, stale)).toBe(false)
     expect(await row()).toMatchObject({ chatId: '777', notifiedAt: null, claimToken: current.claimToken })
     // The same claim for another subscription (a replaced chat) is refused too.
-    expect(await repo.completeOrderReady(db, { ...current, subscriptionId: 'another' }, later(10))).toBe(false)
-    expect(await repo.completeOrderReady(db, current, later(10))).toBe(true)
+    expect(await repo.markOrderReadyComplete(db, { ...current, subscriptionId: 'another' }, later(10))).toBe(false)
+    expect(await repo.markOrderReadyComplete(db, current, later(10))).toBe(true)
   })
 
   it('redeeming the code again creates no new work', async () => {
@@ -376,7 +376,7 @@ describe('the ready message\'s delivery: one claim, durable recovery', () => {
     const held = holdReadyMessage()
     const oldSend = sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(6))
     await held.inFlight
-    await db.batch([repo.subscribeOrderReadyAlertStatement(db, orderId, await hashLinkCode(codeOf(second.url)), '888', 'second-subscription', later(6)), requireOneChange(db)])
+    await db.batch([repo.subscribeOrderReadyAlertStatement(db, TEST_TENANT, orderId, await hashLinkCode(codeOf(second.url)), '888', 'second-subscription', later(6)), requireOneChange(db)])
     held.release()
     await expect(oldSend).resolves.toBe(true)
     // The old send's completion was fenced out: the new chat is still waiting, unmarked.
@@ -394,7 +394,7 @@ describe('the ready message\'s delivery: one claim, durable recovery', () => {
     await ready(orderId)
     // The event found no chat; the sign-up commits; the catch-up never runs.
     expect(await sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(5))).toBe(false)
-    await db.batch([repo.subscribeOrderReadyAlertStatement(db, orderId, await hashLinkCode(codeOf(link.url)), '777', 'sub', later(6)), requireOneChange(db)])
+    await db.batch([repo.subscribeOrderReadyAlertStatement(db, TEST_TENANT, orderId, await hashLinkCode(codeOf(link.url)), '777', 'sub', later(6)), requireOneChange(db)])
     expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(6))).toEqual({ sent: 1, failed: 0 })
     expect(readyTexts()).toHaveLength(1)
   })

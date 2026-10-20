@@ -16,6 +16,18 @@ export type Db = LibSQLDatabase<any>
 /** One statement of a batch (built by a repository, not yet executed). */
 export type Statement = BatchItem<'sqlite'>
 
+/** Runs a service's guarded batch: a lost race applies nothing and answers false; other failures throw. */
+export async function tryGuardedBatch(db: Db, statements: [Statement, ...Statement[]]): Promise<boolean> {
+  try {
+    await db.batch(statements)
+    return true
+  }
+  catch (error) {
+    if (isStaleWrite(error)) return false
+    throw error
+  }
+}
+
 /**
  * A guard: a one-row `select` that raises inside the batch unless `condition` holds, so the whole
  * batch rolls back. SQLite's `json()` raises on the malformed text. Built with the query builder,

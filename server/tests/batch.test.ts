@@ -14,7 +14,8 @@ import { workspaceRoles } from '#server/features/identity/identity.repository'
 import { listAccounts } from '#server/features/identity/accounts.repository'
 import { listStaff } from '#server/features/identity/staff.repository'
 import { listTenants } from '#server/features/tenants/tenants.repository'
-import * as repo from '#server/features/notifications/notifications.repository'
+import { overviewRows } from '#server/features/notifications/notifications.repository'
+import * as repo from '#server/features/notifications/notifications.customers.repository'
 import { counterContext, counterQueueRows } from '#server/features/orders/orders.repository'
 import { orderHistory } from '#server/features/orders/reports.repository'
 import type { ItemListQuery } from '#shared/contracts/menu-items'
@@ -107,6 +108,21 @@ describe('on D1', () => {
 
   const things = sqliteTable('t', { v: integer() })
 
+  it('decodes the joined Telegram overview batch without collapsing ids, dates or booleans (D194)', async () => {
+    const now = new Date('2026-10-20T03:00:00Z')
+    const { db: d1, bound } = fakeD1([
+      ['destination-a', 'cafe-a', 'chat-a', 'group', 'Our group', 'connected', 'person-a', now.getTime(), null, null, 2, now.getTime(), now.getTime(), 'Our owner'],
+      ['closing_summary', 'destination-a', 1],
+    ])
+    expect(await overviewRows(d1, 'cafe-a')).toEqual({
+      destinations: [expect.objectContaining({ id: 'destination-a', tenantId: 'cafe-a', title: 'Our group', connectedByName: 'Our owner', connectedAt: now, version: 2 })],
+      rules: [{ kind: 'closing_summary', destinationId: 'destination-a', attachCsv: true }],
+    })
+    expect(bound).toHaveLength(2)
+    expect(bound.every(statement => statement.params.includes('cafe-a'))).toBe(true)
+    expect(bound[1]!.sql).toContain('"telegram_destinations"."tenantId" = "notification_rules"."tenantId"')
+  })
+
   it('maps the joined workspace batch by SQL name, keeping each cafe and role together (D194)', async () => {
     const { db: d1, bound } = fakeD1([['cafe-a', 'owner'], ['cafe-b', 'manager']])
     expect(await workspaceRoles(d1, 'person')).toEqual({
@@ -185,11 +201,11 @@ describe('on D1', () => {
   it('executes the customer ready message subscribe, claim, completion and due query through the actual D1 adapter', async () => {
     const { db: d1, bound } = fakeD1()
     const now = new Date('2026-10-14T05:00:00Z')
-    await d1.batch([repo.subscribeOrderReadyAlertStatement(d1, 'order-a', 'hash', 'chat-1', 'sub-1', now), requireOneChange(d1)])
-    const claim = await repo.claimOrderReady(d1, 'cafe-a', 'order-a', now, new Date(now.getTime() + 120_000))
+    await d1.batch([repo.subscribeOrderReadyAlertStatement(d1, 'cafe-a', 'order-a', 'hash', 'chat-1', 'sub-1', now), requireOneChange(d1)])
+    const claim = await repo.claimOrderReady(d1, 'cafe-a', 'order-a', new Date(now.getTime() + 120_000), now)
     expect(claim).toBeUndefined()
     const fenced = { tenantId: 'cafe-a', orderId: 'order-a', chatId: 'chat-1', subscriptionId: 'sub-1', claimToken: 'token-1' } as repo.OrderReadyClaim
-    expect(await repo.completeOrderReady(d1, fenced, now)).toBe(false)
+    expect(await repo.markOrderReadyComplete(d1, fenced, now)).toBe(false)
     expect(await repo.dueOrderReadyAlerts(d1, now, 5)).toEqual([])
     expect(bound.every(statement => statement.params.length <= 100)).toBe(true)
     const complete = bound.find(statement => statement.sql.startsWith('update "order_ready_alerts" set "chatId" = ?, "notifiedAt"'))!

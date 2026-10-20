@@ -101,12 +101,12 @@ export async function deliverOutbox(
   for (const message of await repo.findDueMessages(db, now, options.limit ?? 25, options)) {
     if (Date.now() - started >= (options.budgetMs ?? 20_000)) break
     const current = options.now ?? new Date()
-    const claim = await repo.claimMessage(db, message.id, current, new Date(current.getTime() + OUTBOX_CLAIM_MS))
+    const claim = await repo.claimMessage(db, message.id, new Date(current.getTime() + OUTBOX_CLAIM_MS), current)
     if (!claim) {
       report.skipped++
       continue
     }
-    const { attempt, token } = claim
+    const { attempts: attempt, claimToken: token } = claim
     try {
       const handler = handlers[message.kind]
       if (!handler) throw new Error(`No handler for outbox messages of kind "${message.kind}"`)

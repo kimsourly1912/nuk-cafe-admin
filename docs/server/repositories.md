@@ -2,7 +2,7 @@
 
 How a feature's `*.repository.ts` is written: the query API, names, the tenant rule, reads, conditions, guards, writes and tests. It refines [architecture → Features](./architecture.md#features) (what a repository is for) and [architecture → Atomic writes](./architecture.md#atomic-writes) (batches and D1's limits); those rules still apply.
 
-**Status (D194, 2026-10-20):** new and changed repository code follows this page. The existing repositories don't yet; the [repository audit](../reviews/repository-audit-2026-10-20.md) lists every gap and the order of the clean-up steps. The [shared helpers](#shared-helpers) exist (step 2, 2026-10-20). A rule marked with a later step (**(step 6)**) waits for that step; until then, follow the nearest existing pattern.
+**Status (D194, 2026-10-20):** new and changed repository code follows this page. Steps 2–6 have built the shared helpers and cleaned orders, menu, identity/cafes and messages; the [repository audit](../reviews/repository-audit-2026-10-20.md) lists the remaining step 7 work.
 
 **Official documentation first.** Before using a Drizzle, NuxtHub or D1 API, read its current official page ([Drizzle](https://orm.drizzle.team/docs/overview), [NuxtHub database](https://hub.nuxt.com/docs/database/query), [D1](https://developers.cloudflare.com/d1/)) and check the installed version's types: the docs can describe a newer release, and they don't always say which dialect a feature supports (`db.$count` exists for SQLite in 0.45, but isn't a batch item). Prefer the documented API to a helper of our own; cite the page in the decision or PR that introduces the use.
 
@@ -175,10 +175,14 @@ A guard is a statement in a batch that aborts the whole batch unless a check sti
 The one exception: a scheduled task or a delivery run may execute a **single conditional statement** in the repository and learn whether it applied: claiming due work (`claimMessage`), settling it with the claim's token (`markSent`, `markRetry`, `markFailed`), taking a lock (`claimRun`), or deleting a bounded batch of old rows (`deleteXBefore`). Such a function:
 
 - is one `update`, `insert … on conflict` or `delete` with all of its conditions in the `where`, and `returning` the key;
-- returns `boolean` (it applied) or `number` (rows changed);
+- returns `boolean` (it applied) or `number` (rows changed); a claim returns the fresh token and atomic attempt count, plus any row fields the sender needs, or `undefined` when it lost;
 - never runs a batch or a second statement. When it needs two statements, it returns them and the task's service runs the batch.
 
-**(step 6)** The four queues that claim work with a token (outbox, marketing posts, notification deliveries, order-ready alerts) get one shared shape for these functions, built with the messages clean-up, where three of them live.
+**Token claims (step 6):** outbox, marketing posts, notification deliveries and order-ready alerts return `WorkClaim` fields (`claimToken`, `attempts`) and use `claimAttempt` to set a fresh `claimToken` and increment `attempts` inside the conditional update. `pendingWork` checks pending status and due time; `availableLease` checks a separate nullable lease deadline where the queue has one. Notification/marketing sends use their next-attempt time as their lease. `ownsWork` combines the exact token with the repository's mandatory row scope and valid state. Claim signatures take `db, tenantId, id, until, now` (the global outbox omits `tenantId`). Settlements clear the token; a delayed sender cannot change a newer claim. Order-ready settlements additionally keep their subscription identity and unsent-state fences, including a legacy null subscription. An immediate ready event may claim parked work without a scheduled retry; the due-list query still requires a retry time. The outbox intentionally includes global work with a null tenant; its id/token operations remain across cafes.
+
+A settlement requiring more than one statement belongs to the service: notification success updates the delivery, checks `requireOneChange`, then stamps its own cafe's destination in one `tryGuardedBatch`. The helper answers false only for a stale guard and propagates other failures. Rule changes and manual delivery retries include their audit in the same batch; retry also guards the still-failed state.
+
+**Single-use connect codes (step 6):** notification links and marketing channel links share `liveConnectCode`, `cancellableConnectCode` and `advanceConnectCodeStatement` in `server/utils/connect-codes.ts`. A transition names the cafe, id, allowed statuses and strict expiry (`expiresAt > now`), returning a statement for the service's guarded batch. Cancellation permits expired waiting/confirm codes, as before, but never connected/cancelled ones. Each owner keeps its own payload columns and workflow; there is no generic state machine. Cleanup deletes at most 500 expired links per pass, oldest first. Marketing preserves connected link records; notification links retain their existing expiry cleanup policy.
 
 ## Shared helpers
 
@@ -190,13 +194,15 @@ Repositories are built from **small typed building blocks**, not from a generic 
 |---|---|
 | `server/utils/query.ts` | Conditions and reads for repositories |
 | `server/utils/batch.ts` | Statements, guards and D1 limits |
+| `server/utils/claims.ts` | Atomic claim fields, due/lease conditions and token ownership for the four delivery queues |
+| `server/utils/connect-codes.ts` | Cafe-scoped single-use connect-code transitions and cancellation |
 | `shared/utils/` | Pure helpers the app also uses (no Vue, no Nitro: [Nuxt's rule](https://nuxt.com/docs/4.x/directory-structure/shared)); features import them as `#shared/utils/<file>` |
 
 Nitro auto-imports every export of `server/utils/` into routes, so a helper's name says what it does there too (`firstRow`, `readPage`, not `first`, `page`).
 
 **Drizzle's own, used as documented:** [`db.$count(table, condition)`](https://orm.drizzle.team/docs/query-utils#count) for a count and inside guards (it isn't a batch item); [`.$dynamic()`](https://orm.drizzle.team/docs/dynamic-query-building) for a query a helper changes; [`alias`](https://orm.drizzle.team/docs/joins#aliases--selfjoins) for a self-join; `getTableColumns`.
 
-**The building blocks** (built in step 2, 2026-10-20; tested in `server/tests/query.test.ts` on the SQLite test database, which refuses more than D1's 100 parameters, and in `server/tests/d1-search.test.ts` on real D1):
+**The building blocks** (built in steps 2 and 6, 2026-10-20; tested in `server/tests/query.test.ts` and `server/tests/messages.repository.tenants.test.ts` on SQLite with D1's 100-parameter limit, and in `server/tests/d1-search.test.ts` on real D1):
 
 | Helper | File | Does | Replaces (uses on 2026-10-20) |
 |---|---|---|---|
@@ -214,6 +220,9 @@ Nitro auto-imports every export of `server/utils/` into routes, so a helper's na
 | `insertAll(db, table, rows)` | batch | `Statement[]` in pieces under D1's limit; none for no rows | 13 |
 | `replaceAll(db, table, where, rows)` | batch | delete what `where` names, then `insertAll` | 7 |
 | `deleteOldest(db, table, key, where, orderBy, limit)` | batch | a scheduled cleanup: at most `limit` rows, first by `orderBy`; returns how many | 5 |
+| `tryGuardedBatch(db, statements)` | batch | service-owned atomic batch; false on a stale guard, other failures propagate | Telegram code transitions/cancellation and notification success |
+| `claimAttempt`, `pendingWork`, `availableLease`, `ownsWork` | claims | common token/attempt and ownership shape; each repository supplies its scope and state | outbox, marketing, notifications, order-ready alerts |
+| `liveConnectCode`, `cancellableConnectCode`, `advanceConnectCodeStatement` | connect-codes | mandatory cafe/id, allowed state and expiry; a transition returns a guarded batch statement | notification and marketing connect links |
 | `toPage(items, query, total)`, `slicePage(rows, query)` | `shared/contracts/common.ts` | a `Page<T>` response; one page of a list held in memory | 7 hand-built pages in services |
 | `groupBy(rows, key)` | `shared/utils/collections.ts` | `Map<key, rows>`, in the rows' order | 6 |
 

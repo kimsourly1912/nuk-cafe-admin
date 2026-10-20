@@ -11,9 +11,9 @@ import { createCategory } from '#server/features/menu/categories.service'
 import { createItem, listItems } from '#server/features/menu/items.service'
 import { addOwner, createTenant, getPlatformHealth, getPlatformOverview, getTenant, listPlatformActivity, listTenants, removeOwner, seedTenant, updateTenantNotes } from '#server/features/tenants'
 import type { Db } from '#server/utils/batch'
-import { deleteOldest, insertAll, requireCount, requireOneChange, runBatch, updateAtVersion } from '#server/utils/batch'
+import { deleteOldest, insertAll, requireCount, requireOneChange, runBatch, updateAtVersion, tryGuardedBatch } from '#server/utils/batch'
 import { byId, byName, firstRow, hasAny, inTenant, nextPosition, readPage } from '#server/utils/query'
-import { menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
+import { menuOptionSets, menuOptionValues, menuPromotions } from '#server/features/menu/menu.schema'
 import { migrationFiles, addBranchStaff, createUser, insertBranch } from '#server/tests/support/db'
 import type { StaffListQuery } from '#shared/contracts/staff'
 import { branches, user } from '#server/db/tables'
@@ -23,6 +23,17 @@ import { interleaved } from '#server/tests/support/interleave'
 import { expectApiError } from '#server/tests/support/failure'
 import { newId } from '#server/utils/ids'
 import { workspaceRoles } from '#server/features/identity/identity.repository'
+import { notificationDeliveries, notificationRules, orderReadyAlerts, telegramDestinations, telegramLinks } from '#server/features/notifications/notifications.schema'
+import { marketingChannelLinks, marketingChannels, marketingPosts } from '#server/features/marketing/marketing.schema'
+import { orders } from '#server/features/orders/orders.schema'
+import { outboxMessages } from '#server/features/platform/platform.schema'
+import { overviewRows } from '#server/features/notifications/notifications.repository'
+import * as deliveryRepo from '#server/features/notifications/notifications.deliveries.repository'
+import * as readyRepo from '#server/features/notifications/notifications.customers.repository'
+import * as linkRepo from '#server/features/notifications/notifications.links.repository'
+import * as channelLinkRepo from '#server/features/marketing/marketing.links.repository'
+import * as postRepo from '#server/features/marketing/marketing.posts.repository'
+import * as outboxRepo from '#server/features/platform/platform.repository'
 
 // Real D1 (workerd, through wrangler's platform proxy) with the app's Drizzle D1 adapter. The
 // other server tests run on libsql, which accepts a LIKE pattern of 50,000 bytes where D1 refuses
@@ -297,3 +308,52 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
     expect(result.staff).toHaveLength(2)
   })
 })
+
+it('runs the message snapshot, shared connect codes and all four token queues on real D1 (D194)', async () => {
+  const now = new Date('2026-10-20T03:00:00Z')
+  const until = new Date(now.getTime() + 60_000)
+  const person = await createUser(db, 'messages-d1@example.com', 'Messages owner')
+  const id = 'd194-messages'
+  await insertBranch(db, { id, tenantId: ours, name: 'Messages', timezone: 'Asia/Phnom_Penh' })
+  await db.batch([
+    db.insert(telegramDestinations).values({ id, tenantId: ours, kind: 'group', chatId: id, title: 'Messages group', connectedBy: person.id, connectedAt: now }),
+    db.insert(notificationRules).values({ tenantId: ours, kind: 'closing_summary', destinationId: id, attachCsv: true }),
+    db.insert(notificationDeliveries).values({ id, tenantId: ours, kind: 'report', destinationId: id, dedupeKey: id, subject: id, message: { html: 'Hello' }, nextAttemptAt: now }),
+    db.insert(telegramLinks).values({ id, tenantId: ours, kind: 'group', codeHash: id, createdBy: person.id, expiresAt: until }),
+    db.insert(marketingChannelLinks).values({ id, tenantId: ours, codeHash: id, createdBy: person.id, expiresAt: until }),
+    db.insert(marketingChannels).values({ id, tenantId: ours, kind: 'telegram_channel', externalId: id, title: 'News', connectedAt: now }),
+    db.insert(menuPromotions).values({ id, tenantId: ours, name: 'News', discountKind: 'percent', percent: 10, scope: 'menu', startsOn: '2026-10-20' }),
+    db.insert(marketingPosts).values({ id, tenantId: ours, promotionId: id, channelId: id, caption: 'News', message: { html: 'News', button: { text: 'Menu', url: 'https://example.com' } }, scheduledAt: now, nextAttemptAt: now }),
+    db.insert(orders).values({ id, tenantId: ours, branchId: id, customerId: person.id, businessDate: '2026-10-20', pickupNumber: 1, orderType: 'pickup', subtotalMinor: 100, totalMinor: 100, placedAt: now, paymentDueAt: until }),
+    db.insert(orderReadyAlerts).values({ orderId: id, tenantId: ours, codeHash: id, linkExpiresAt: until, chatId: 'chat', subscriptionId: 'sub', retryAt: now }),
+    db.insert(outboxMessages).values({ id, tenantId: ours, kind: 'orders.ready', payload: { orderId: id }, nextAttemptAt: now }),
+  ])
+  expect(await overviewRows(db, ours)).toEqual({
+    destinations: [expect.objectContaining({ id, tenantId: ours, title: 'Messages group', connectedByName: 'Messages owner', connectedAt: now })],
+    rules: [{ kind: 'closing_summary', destinationId: id, attachCsv: true }],
+  })
+  expect(await overviewRows(db, theirs)).toEqual({ destinations: [], rules: [] })
+  for (const repo of [linkRepo, channelLinkRepo]) {
+    expect(await tryGuardedBatch(db, [repo.advanceLinkStatement(db, theirs, id, ['waiting'], { status: 'confirm' }, now), requireOneChange(db)])).toBe(false)
+    expect(await tryGuardedBatch(db, [repo.advanceLinkStatement(db, ours, id, ['waiting'], { status: 'confirm' }, until), requireOneChange(db)])).toBe(false)
+    expect(await tryGuardedBatch(db, [repo.advanceLinkStatement(db, ours, id, ['waiting'], { status: 'confirm' }, now), requireOneChange(db)])).toBe(true)
+  }
+  expect(await deliveryRepo.claimDelivery(db, theirs, id, until, now)).toBeUndefined()
+  const delivery = (await deliveryRepo.claimDelivery(db, ours, id, until, now))!
+  expect(delivery).toMatchObject({ attempts: 1, nextAttemptAt: until, message: { html: 'Hello' } })
+  expect(await deliveryRepo.markFailed(db, ours, id, 'stale', 'failed')).toBe(false)
+  expect(await deliveryRepo.markFailed(db, ours, id, delivery.claimToken, 'failed')).toBe(true)
+  const post = (await postRepo.claimPost(db, ours, id, until, now))!
+  expect(post).toMatchObject({ attempts: 1, version: 2, nextAttemptAt: until })
+  expect(await postRepo.settlePost(db, theirs, id, post.claimToken, { status: 'sent' })).toBe(false)
+  expect(await postRepo.settlePost(db, ours, id, post.claimToken, { status: 'sent' })).toBe(true)
+  const ready = (await readyRepo.claimOrderReady(db, ours, id, until, now))!
+  expect(await readyRepo.claimOrderReady(db, ours, id, until, now)).toBeUndefined()
+  expect(await readyRepo.markOrderReadyComplete(db, { ...ready, claimToken: 'stale' }, now)).toBe(false)
+  expect(await readyRepo.markOrderReadyComplete(db, ready, now)).toBe(true)
+  const outbox = (await outboxRepo.claimMessage(db, id, until, now))!
+  expect(outbox.attempts).toBe(1)
+  expect(await outboxRepo.claimMessage(db, id, until, now)).toBeUndefined()
+  expect(await outboxRepo.markSent(db, id, 'stale', now)).toBe(false)
+  expect(await outboxRepo.markSent(db, id, outbox.claimToken, now)).toBe(true)
+}, 60_000)

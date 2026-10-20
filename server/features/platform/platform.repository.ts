@@ -1,5 +1,7 @@
-import { and, asc, count, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gte, inArray, lt, lte, or, sql } from 'drizzle-orm'
 import type { Db, Statement } from '#server/utils/batch'
+import type { WorkClaim } from '#server/utils/claims'
+import { availableLease, claimAttempt, ownsWork, pendingWork } from '#server/utils/claims'
 import { newId } from '#server/utils/ids'
 import { auditEvents, idempotencyKeys, jobCursors, jobRuns, outboxMessages } from './platform.schema'
 import type { AuditActor, AuditEntry, AuditFilter, AuditRow, IdempotencyScope, OutboxTarget } from './platform.types'
@@ -91,44 +93,47 @@ export interface DueMessage {
   attempts: number
 }
 
-const unclaimed = (now: Date) => or(isNull(outboxMessages.lockedUntil), lte(outboxMessages.lockedUntil, now))
+const unclaimed = (now: Date) => availableLease(outboxMessages.lockedUntil, now)
 
-/** Pending messages whose time has come and that no run holds, oldest first. */
+/** Across cafes: pending work, including global rows, due without a live lease; uses outbox_messages_due_idx. */
 export async function findDueMessages(db: Db, now: Date, limit: number, target: OutboxTarget = {}): Promise<DueMessage[]> {
   return db
     .select({ id: outboxMessages.id, tenantId: outboxMessages.tenantId, kind: outboxMessages.kind, payload: outboxMessages.payload, attempts: outboxMessages.attempts })
     .from(outboxMessages)
-    .where(and(eq(outboxMessages.status, 'pending'), lte(outboxMessages.nextAttemptAt, now), unclaimed(now), target.kinds ? inArray(outboxMessages.kind, target.kinds) : undefined, target.ids ? inArray(outboxMessages.id, target.ids) : undefined, target.order ? and(eq(outboxMessages.tenantId, target.order.tenantId), sql`json_extract(${outboxMessages.payload}, '$.orderId') = ${target.order.orderId}`) : undefined))
+    .where(and(pendingWork(outboxMessages, now), unclaimed(now), target.kinds ? inArray(outboxMessages.kind, target.kinds) : undefined, target.ids ? inArray(outboxMessages.id, target.ids) : undefined, target.order ? and(eq(outboxMessages.tenantId, target.order.tenantId), sql`json_extract(${outboxMessages.payload}, '$.orderId') = ${target.order.orderId}`) : undefined))
     .orderBy(asc(outboxMessages.nextAttemptAt), asc(outboxMessages.id))
     .limit(limit)
 }
 
 /**
- * Takes a message for this run until `until`, counting the attempt. `false` when another run got
+ * Across cafes: takes a message for this run until `until`, counting the attempt. `false` when another run got
  * it first: the conditional update changed no row.
  */
-export async function claimMessage(db: Db, id: string, now: Date, until: Date): Promise<{ token: string, attempt: number } | undefined> {
-  const token = newId()
+export async function claimMessage(db: Db, id: string, until: Date, now: Date): Promise<WorkClaim | undefined> {
+  const claim = claimAttempt(outboxMessages)
   const [row] = await db.update(outboxMessages)
-    .set({ claimToken: token, lockedUntil: until, attempts: sql`${outboxMessages.attempts} + 1` })
-    .where(and(eq(outboxMessages.id, id), eq(outboxMessages.status, 'pending'), lte(outboxMessages.nextAttemptAt, now), unclaimed(now)))
-    .returning({ attempt: outboxMessages.attempts })
-  return row ? { token, attempt: row.attempt } : undefined
+    .set({ ...claim, lockedUntil: until })
+    .where(and(eq(outboxMessages.id, id), pendingWork(outboxMessages, now), unclaimed(now)))
+    .returning({ attempts: outboxMessages.attempts })
+  return row ? { claimToken: claim.claimToken, attempts: row.attempts } : undefined
 }
 
-const ownsClaim = (id: string, token: string) => and(eq(outboxMessages.id, id), eq(outboxMessages.status, 'pending'), eq(outboxMessages.claimToken, token))
+const ownsClaim = (id: string, token: string) => ownsWork(outboxMessages, token, eq(outboxMessages.id, id), eq(outboxMessages.status, 'pending'))
 
+/** Across cafes: settles only the exact pending claim, including global work. */
 export async function markSent(db: Db, id: string, token: string, now: Date): Promise<boolean> {
   // Drop one-time links once sent; an expired worker must not clear another claim's payload.
   const rows = await db.update(outboxMessages).set({ status: 'sent', sentAt: now, lockedUntil: null, claimToken: null, lastError: null, payload: {} }).where(ownsClaim(id, token)).returning({ id: outboxMessages.id })
   return rows.length === 1
 }
 
+/** Across cafes: retries only the exact pending claim, including global work. */
 export async function markRetry(db: Db, id: string, token: string, nextAttemptAt: Date, error: string): Promise<boolean> {
   const rows = await db.update(outboxMessages).set({ nextAttemptAt, lockedUntil: null, claimToken: null, lastError: error }).where(ownsClaim(id, token)).returning({ id: outboxMessages.id })
   return rows.length === 1
 }
 
+/** Across cafes: fails only the exact pending claim, including global work. */
 export async function markFailed(db: Db, id: string, token: string, error: string): Promise<boolean> {
   const rows = await db.update(outboxMessages).set({ status: 'failed', lockedUntil: null, claimToken: null, lastError: error }).where(ownsClaim(id, token)).returning({ id: outboxMessages.id })
   return rows.length === 1

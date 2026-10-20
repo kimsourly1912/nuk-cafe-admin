@@ -1,3 +1,4 @@
+import { markDelivered, deliverDue, listDeliveries, purgeDeliveries, queueBakongTokenReminder, queueClosingSummaries, queueJobFailureAlert, queueOrderAlert, queueServerErrorAlert, queueSupportOpenedAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
 import { Api } from 'grammy'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -6,9 +7,8 @@ import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { payOrder, placeOrder } from '#server/features/orders'
 import { outboxMessages } from '#server/features/platform/platform.schema'
-import { deliverDue, listDeliveries, purgeDeliveries, queueBakongTokenReminder, queueClosingSummaries, queueJobFailureAlert, queueOrderAlert, queueServerErrorAlert, queueSupportOpenedAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
 import { closingInstant, routeOf, bakongReminderStage } from '#server/features/notifications/notifications.messages'
-import * as repo from '#server/features/notifications/notifications.repository'
+import * as repo from '#server/features/notifications/notifications.deliveries.repository'
 import { notificationDeliveries, telegramDestinations } from '#server/features/notifications/notifications.schema'
 import { sendReport, telegramOverview } from '#server/features/notifications/notifications.service'
 import type { TelegramSettings } from '#server/features/notifications/notifications.settings'
@@ -227,21 +227,21 @@ describe('delivery', () => {
   it('fences success, failure and retry from an expired notification claim', async () => {
     const id = await queued()
     const [due] = await repo.dueDeliveries(db, at(MON, '10:00'), 5)
-    const old = (await repo.claimDelivery(db, due!, at(MON, '10:00'), at(MON, '10:02')))!
-    const current = (await repo.claimDelivery(db, old, at(MON, '10:03'), at(MON, '10:05')))!
+    const old = (await repo.claimDelivery(db, due!.tenantId, due!.id, at(MON, '10:02'), at(MON, '10:00')))!
+    const current = (await repo.claimDelivery(db, old.tenantId, old.id, at(MON, '10:05'), at(MON, '10:03')))!
     expect(current.attempts).toBe(2)
-    expect(await repo.markDelivered(db, id, old.claimToken, group, at(MON, '10:03'))).toBe(false)
-    expect(await repo.markRetry(db, id, old.claimToken, at(MON, '10:04'), 'old retry')).toBe(false)
-    expect(await repo.markFailed(db, id, old.claimToken, 'old failure')).toBe(false)
-    expect(await repo.markDelivered(db, id, current.claimToken, group, at(MON, '10:04'))).toBe(true)
+    expect(await markDelivered(db, TEST_TENANT, id, old.claimToken, group, at(MON, '10:03'))).toBe(false)
+    expect(await repo.markRetry(db, TEST_TENANT, id, old.claimToken, at(MON, '10:04'), 'old retry')).toBe(false)
+    expect(await repo.markFailed(db, TEST_TENANT, id, old.claimToken, 'old failure')).toBe(false)
+    expect(await markDelivered(db, TEST_TENANT, id, current.claimToken, group, at(MON, '10:04'))).toBe(true)
     expect(await row(id)).toMatchObject({ status: 'sent', attempts: 2, claimToken: null })
   })
 
   it('a claimed delivery isn\'t sent by an overlapping run', async () => {
     const id = await queued()
     const [due] = await repo.dueDeliveries(db, at(MON, '10:00'), 5)
-    expect(await repo.claimDelivery(db, due!, at(MON, '10:00'), at(MON, '10:02'))).toBeTruthy()
-    expect(await repo.claimDelivery(db, due!, at(MON, '10:00'), at(MON, '10:02'))).toBeUndefined()
+    expect(await repo.claimDelivery(db, due!.tenantId, due!.id, at(MON, '10:02'), at(MON, '10:00'))).toBeTruthy()
+    expect(await repo.claimDelivery(db, due!.tenantId, due!.id, at(MON, '10:02'), at(MON, '10:00'))).toBeUndefined()
     expect(await deliverDue(db, telegram.api, at(MON, '10:01'))).toEqual({ sent: 0, retried: 0, failed: 0 })
     expect((await row(id)).attempts).toBe(1)
   })

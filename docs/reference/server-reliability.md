@@ -25,6 +25,8 @@ Nitro 2's Cloudflare preset buffers the request before H3. `server/cloudflare-en
 
 Each claim has a random `claim_token`; completion, retry and failure update only the current owner. Attempts come from the atomic claim, not a stale due-list snapshot. This also applies to notification and marketing delivery. Lease expiry still permits at-least-once sending; Telegram cannot deduplicate a message accepted just before a lost response.
 
+D194 step 6 gives all four queues the shared SQL shape in `server/utils/claims.ts`: fresh token/attempt count, due/lease checks and exact token ownership. Cafe-owned claims and settlements name the cafe; order-ready alerts also fence the subscription and unsent state. The outbox still supports global rows. Notification success and its destination timestamp commit together in the service's guarded batch. Manual retries guard the failed state and audit the change in that same batch. See [repository standard → Background-task writes](../server/repositories.md#background-task-writes) for the helper contracts and connect-code semantics. Repository two-cafe tests, existing expired-worker/subscription race tests, a D1-shaped overview batch and real D1 cover these paths.
+
 `sendOrderEventsNow(event, { tenantId, orderId }, kind)` sends only that order's matching event, with limit 1; the scheduled outbox run recovers other work. `deliverDue` and `deliverDuePosts` also accept `budgetMs` in their options. Budgets stop additional work, not a running provider request. Resend has a 10-second deadline; Telegram has a 20-second deadline. The immediate order-alert handler starts further notification sends only within a five-second budget.
 
 ## Durable media cleanup

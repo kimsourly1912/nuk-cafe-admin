@@ -33,8 +33,8 @@ const REPOSITORY_RULES = [
 ]
 // Repositories not yet cleaned up to the standard (the audit's steps 3–7); each step removes its files.
 const REPOSITORIES_TO_CLEAN = [
-  'marketing/marketing', 'media/media',
-  'notifications/notifications', 'platform/platform',
+  'media/media',
+  'platform/platform',
   'support/support',
 ].map(path => `server/features/${path}.repository.ts`)
 
