@@ -112,8 +112,9 @@ export interface SupportVisitor {
  * Opens a visit to the cafe for this session after a fresh two-step code (`verifyCode`, Better
  * Auth's own check of the super admin's authenticator code). At most `MAX_CODE_FAILURES` wrong codes
  * per super admin in 15 minutes, each one audited: Better Auth doesn't limit a signed-in check.
+ * `visitId` is for the caller (the owners' alert), not for the browser.
  */
-export async function openSupportVisit(db: Db, visitor: SupportVisitor, tenantId: string, verifyCode: () => Promise<boolean>, now = new Date()): Promise<SupportOpened> {
+export async function openSupportVisit(db: Db, visitor: SupportVisitor, tenantId: string, verifyCode: () => Promise<boolean>, now = new Date()): Promise<SupportOpened & { visitId: string }> {
   const tenant = await tenantById(db, tenantId)
   if (!tenant) throw grantNotFound()
   const grant = await repo.findActiveGrant(db, tenantId, now)
@@ -142,7 +143,7 @@ export async function openSupportVisit(db: Db, visitor: SupportVisitor, tenantId
     if (isStaleWrite(error)) throw supportNotAllowed()
     throw error
   }
-  return { path: `/c/${tenant.slug}/admin`, expiresAt: toIso(expiresAt) }
+  return { path: `/c/${tenant.slug}/admin`, expiresAt: toIso(expiresAt), visitId: id }
 }
 
 /** Leaves the cafe: closes this session's open visits there. */

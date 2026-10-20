@@ -109,6 +109,28 @@ export function bakongTokenMessage(expiresAt: Date, now: Date, cafeUrl?: string)
   return { html: lines.join('\n'), button }
 }
 
+// --- Platform support opened (D193) ---
+
+export interface SupportOpenedInfo {
+  /** Who from the platform team; `null` when the account can't be found. */
+  name: string | null
+  /** When the visit ends. */
+  expiresAt: Date
+}
+
+/** "Someone from the platform team opened your cafe", to the chats that get operational alerts. */
+export function supportOpenedMessage(info: SupportOpenedInfo, cafeUrl?: string): StoredMessage {
+  const until = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Phnom_Penh' }).format(info.expiresAt)
+  const lines = [
+    '🛟 <b>Platform support opened your cafe</b>',
+    `${escapeHtml(info.name ?? 'Someone from the platform team')} is looking at your admin, read-only, until ${until}.`,
+    '',
+    'You allowed this in Platform support. Open it to see who looked, or end it now.',
+  ]
+  const button = cafeUrl?.startsWith('https://') ? { text: 'Open Platform support', url: `${cafeUrl}/admin/support` } : undefined
+  return { html: lines.join('\n'), button }
+}
+
 export const orderNumber = (pickupNumber: number) => `#${String(pickupNumber).padStart(3, '0')}`
 
 /**

@@ -16,4 +16,6 @@ Press **End now** on Platform support (or **Manage** in the strip). Anyone looki
 
 ## Who looked
 
+Each time the platform team opens your cafe, the chats with **Server errors and reminders** on (Telegram) get a message saying who opened it and until when.
+
 **History** lists each time support was allowed, who allowed and ended it, and who from the platform team opened the cafe and when. Every page they opened is also in the cafe's audit history.
