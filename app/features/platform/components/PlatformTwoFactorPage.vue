@@ -61,6 +61,7 @@ async function onPassword({ data }: FormSubmitEvent<v.InferOutput<typeof passwor
 }
 
 async function onCode({ data }: FormSubmitEvent<{ code: string }>) {
+  if (saving.value || !savedCodes.value) return
   saving.value = true
   error.value = undefined
   try {
@@ -68,7 +69,11 @@ async function onCode({ data }: FormSubmitEvent<{ code: string }>) {
   }
   catch (e) {
     saving.value = false
-    await showError(e)
+    // Beside the field, with the cells emptied and the first one focused: retyping is one motion.
+    codeState.code = ''
+    codeForm.value?.setErrors([{ name: 'code', message: getErrorMessage(e) }])
+    await nextTick()
+    pinCells.value?.querySelector<HTMLInputElement>('input:not([type="hidden"])')?.focus()
     return
   }
   toast.add({ title: 'Two-step sign-in is on', description: 'You were signed out on your other devices.', color: 'success', icon: 'i-lucide-circle-check' })
@@ -81,27 +86,46 @@ async function onCode({ data }: FormSubmitEvent<{ code: string }>) {
 }
 
 const codeState = reactive({ code: '' })
+// A number-type UPinInput models an array of digit numbers; the schema takes the joined string.
+const pin = computed<number[]>({
+  get: () => codeState.code.split('').map(Number),
+  set: (digits) => { codeState.code = digits.join('') },
+})
 const codeSchema = v.object({ code: v.pipe(v.string(), v.trim(), v.regex(/^\d{6}$/, 'Enter the 6 digits from your app')) })
 const codeForm = useTemplateRef('codeForm')
 useFormErrorRecheck(codeForm)
+const pinCells = useTemplateRef<HTMLElement>('pinCells')
+/** The backup codes are shown once: turning it on waits until they are saved. */
+const savedCodes = ref(false)
 </script>
 
 <template>
-  <TaskFrame>
+  <TaskFrame :wide="!!setup">
     <template #header>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-3">
         <UIcon
           name="i-lucide-shield-check"
-          class="size-6 text-primary"
+          class="size-6 shrink-0 text-primary"
         />
-        <h1 class="text-lg font-semibold">
-          Set up two-step sign-in
-        </h1>
+        <div class="min-w-0">
+          <h1 class="text-lg font-semibold">
+            Set up two-step sign-in
+          </h1>
+          <p
+            v-if="setup"
+            class="text-sm text-muted"
+          >
+            Protect your console with an authenticator app.
+          </p>
+        </div>
       </div>
     </template>
 
     <div class="space-y-4">
-      <p class="text-sm text-muted">
+      <p
+        v-if="!setup"
+        class="text-sm text-muted"
+      >
         The platform console needs a code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password…) as well as your password, so a stolen password alone can't open it.
       </p>
 
@@ -161,83 +185,127 @@ useFormErrorRecheck(codeForm)
       </UForm>
 
       <template v-else>
-        <section class="space-y-2">
-          <h2 class="font-medium text-highlighted">
-            1. Add it to your app
-          </h2>
-          <div class="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
-            <QrCode
-              :value="setup.totpURI"
-              label="QR code for your authenticator app"
-              class="size-40 shrink-0"
-            />
-            <div class="min-w-0 space-y-1 text-sm">
-              <p class="text-muted">
-                Scan the QR code with the app. Can't scan it? Enter this key:
-              </p>
-              <div class="flex items-center gap-2">
-                <code
-                  class="min-w-0 flex-1 break-all rounded-md bg-elevated px-2 py-1 font-mono"
-                  data-testid="two-factor-key"
-                >{{ key }}</code>
+        <div class="grid gap-6 md:grid-cols-2 md:gap-8">
+          <section class="space-y-3 md:flex md:flex-col">
+            <div class="flex items-start gap-3">
+              <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-sm font-medium">1</span>
+              <div>
+                <h2 class="font-medium text-highlighted">
+                  Add your authenticator
+                </h2>
+                <p class="text-sm text-muted">
+                  Scan this QR code with your authenticator app.
+                </p>
+              </div>
+            </div>
+            <div class="flex flex-col items-center gap-3 md:flex-1 md:justify-center">
+              <QrCode
+                :value="setup.totpURI"
+                label="QR code for your authenticator app"
+                class="size-40 shrink-0"
+              />
+              <UCollapsible class="w-full">
                 <UButton
-                  v-if="copyKey.isSupported.value"
-                  :icon="copyKey.copied.value ? 'i-lucide-check' : 'i-lucide-copy'"
-                  :aria-label="copyKey.copied.value ? 'Key copied' : 'Copy key'"
+                  label="Can't scan? Use a setup key"
+                  trailing-icon="i-lucide-chevron-down"
+                  color="neutral"
+                  variant="link"
+                  size="sm"
+                  class="mx-auto flex"
+                />
+                <template #content>
+                  <div class="flex items-center gap-2 pt-2">
+                    <code
+                      class="min-w-0 flex-1 break-all rounded-md bg-elevated px-2 py-1 font-mono text-sm"
+                      data-testid="two-factor-key"
+                    >{{ key }}</code>
+                    <UButton
+                      v-if="copyKey.isSupported.value"
+                      :icon="copyKey.copied.value ? 'i-lucide-check' : 'i-lucide-copy'"
+                      :aria-label="copyKey.copied.value ? 'Key copied' : 'Copy key'"
+                      color="neutral"
+                      variant="outline"
+                      size="sm"
+                      @click="copyKey.copy()"
+                    />
+                  </div>
+                </template>
+              </UCollapsible>
+              <p class="max-w-64 text-balance text-center text-xs text-muted">
+                Works with Google Authenticator, Microsoft Authenticator and 1Password.
+              </p>
+            </div>
+          </section>
+
+          <section class="space-y-3 border-default max-md:border-t max-md:pt-6 md:border-s md:ps-8">
+            <div class="flex items-start gap-3">
+              <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-sm font-medium">2</span>
+              <div>
+                <h2 class="font-medium text-highlighted">
+                  Save your backup codes
+                </h2>
+                <p class="text-sm text-muted">
+                  If you lose your phone, each code signs you in once. They won't be shown again.
+                </p>
+              </div>
+            </div>
+            <div class="space-y-3 rounded-md bg-elevated p-3">
+              <ul
+                class="grid grid-cols-2 gap-x-3 gap-y-2 font-mono text-sm"
+                aria-label="Backup codes"
+                data-testid="backup-codes"
+              >
+                <li
+                  v-for="code in setup.backupCodes"
+                  :key="code"
+                >
+                  {{ code }}
+                </li>
+              </ul>
+              <div class="flex gap-2">
+                <UButton
+                  v-if="copyCodes.isSupported.value"
+                  :icon="copyCodes.copied.value ? 'i-lucide-check' : 'i-lucide-copy'"
+                  :label="copyCodes.copied.value ? 'Copied' : 'Copy codes'"
                   color="neutral"
                   variant="outline"
                   size="sm"
-                  @click="copyKey.copy()"
+                  class="flex-1 justify-center"
+                  @click="copyCodes.copy()"
+                />
+                <UButton
+                  icon="i-lucide-download"
+                  label="Download"
+                  color="neutral"
+                  variant="outline"
+                  size="sm"
+                  class="flex-1 justify-center"
+                  @click="downloadCodes()"
                 />
               </div>
+              <UCheckbox
+                v-model="savedCodes"
+                label="I've saved my backup codes"
+                :description="savedCodes ? undefined : 'Tick this to turn on two-step sign-in.'"
+                class="border-t border-default pt-3"
+                :ui="{ description: 'text-toned' }"
+              />
+            </div>
+          </section>
+        </div>
+
+        <section class="space-y-3 border-t border-default pt-6">
+          <div class="flex items-start gap-3">
+            <span class="flex size-7 shrink-0 items-center justify-center rounded-full bg-elevated text-sm font-medium">3</span>
+            <div>
+              <h2 class="font-medium text-highlighted">
+                Verify your app
+              </h2>
+              <p class="text-sm text-muted">
+                Enter the 6-digit code from your app.
+              </p>
             </div>
           </div>
-        </section>
-
-        <section class="space-y-2">
-          <h2 class="font-medium text-highlighted">
-            2. Save your backup codes
-          </h2>
-          <p class="text-sm text-muted">
-            If you lose your phone, each code signs you in once. They won't be shown again.
-          </p>
-          <ul
-            class="grid grid-cols-2 gap-1 rounded-md bg-elevated p-3 font-mono text-sm"
-            aria-label="Backup codes"
-            data-testid="backup-codes"
-          >
-            <li
-              v-for="code in setup.backupCodes"
-              :key="code"
-            >
-              {{ code }}
-            </li>
-          </ul>
-          <div class="flex flex-wrap gap-2">
-            <UButton
-              v-if="copyCodes.isSupported.value"
-              :icon="copyCodes.copied.value ? 'i-lucide-check' : 'i-lucide-copy'"
-              :label="copyCodes.copied.value ? 'Copied' : 'Copy codes'"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              @click="copyCodes.copy()"
-            />
-            <UButton
-              icon="i-lucide-download"
-              label="Download"
-              color="neutral"
-              variant="outline"
-              size="sm"
-              @click="downloadCodes()"
-            />
-          </div>
-        </section>
-
-        <section class="space-y-2">
-          <h2 class="font-medium text-highlighted">
-            3. Enter a code from the app
-          </h2>
           <UForm
             id="two-factor-code"
             ref="codeForm"
@@ -248,18 +316,21 @@ useFormErrorRecheck(codeForm)
             @error="focusFirstInvalid"
           >
             <UFormField
-              label="Code"
+              label="Authentication code"
               name="code"
+              help="The code changes every 30 seconds."
               required
+              :ui="{ root: 'flex flex-col items-center text-center' }"
             >
-              <UInput
-                v-model="codeState.code"
-                inputmode="numeric"
-                autocomplete="one-time-code"
-                :maxlength="6"
-                class="w-full"
-                :ui="{ base: 'font-mono tracking-widest' }"
-              />
+              <div ref="pinCells">
+                <UPinInput
+                  v-model="pin"
+                  :length="6"
+                  type="number"
+                  size="lg"
+                  otp
+                />
+              </div>
             </UFormField>
           </UForm>
         </section>
@@ -268,12 +339,23 @@ useFormErrorRecheck(codeForm)
 
     <template #footer>
       <div class="flex w-full flex-col gap-2">
+        <p
+          v-if="setup"
+          class="mb-1 flex items-center justify-center gap-1.5 text-xs text-muted"
+        >
+          <UIcon
+            name="i-lucide-info"
+            class="size-4 shrink-0"
+          />
+          Turning this on signs you out on your other devices.
+        </p>
         <UButton
           type="submit"
           :form="setup ? 'two-factor-code' : 'two-factor-password'"
           :label="setup ? 'Turn on two-step sign-in' : 'Continue'"
           block
           :loading="saving"
+          :disabled="!!setup && !savedCodes"
         />
         <UButton
           label="Log out"
