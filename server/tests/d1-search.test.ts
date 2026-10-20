@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { eq, sql } from 'drizzle-orm'
+import { asc, count, eq, inArray, sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/d1'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { getPlatformProxy } from 'wrangler'
@@ -11,6 +11,9 @@ import { createCategory } from '#server/features/menu/categories.service'
 import { createItem, listItems } from '#server/features/menu/items.service'
 import { addOwner, createTenant, getPlatformHealth, getPlatformOverview, getTenant, listPlatformActivity, listTenants, removeOwner, seedTenant, updateTenantNotes } from '#server/features/tenants'
 import type { Db } from '#server/utils/batch'
+import { deleteOldest, insertAll, requireCount, requireOneChange, runBatch, updateAtVersion } from '#server/utils/batch'
+import { byId, byName, firstRow, hasAny, inTenant, nextPosition, readPage } from '#server/utils/query'
+import { menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
 import { migrationFiles } from '#server/tests/support/db'
 import type { StaffListQuery } from '#shared/contracts/staff'
 import { branches, user } from '#server/db/tables'
@@ -234,5 +237,34 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
     expect(await supportActor(db, { ...request, tenantId: theirs }, { menu: ['read'] })).toBeUndefined()
     await endSupport(db, owner, active!.id)
     expect(await supportActor(db, request, { menu: ['read'] })).toBeUndefined()
+  })
+
+  it('runs the repository building blocks: a page and its total in one batch, versioned writes and $count guards (D194)', async () => {
+    const at = new Date()
+    const stale = () => new Error('stale')
+    const sets = ['Zeta', 'alpha', 'Beta'].map((name, i) => ({ id: newId(), tenantId: ours, name, createdAt: at, updatedAt: at, sortOrder: i }))
+    await runBatch(db, insertAll(db, menuOptionSets, [...sets.map(({ sortOrder: _, ...set }) => set), { id: newId(), tenantId: theirs, name: 'Theirs', createdAt: at, updatedAt: at }]), stale)
+    const mine = inTenant(menuOptionSets, ours, inArray(menuOptionSets.id, sets.map(set => set.id)))
+    const columns = { id: menuOptionSets.id, name: menuOptionSets.name, version: menuOptionSets.version }
+
+    const read = (page: number) => readPage(db, db.select(columns).from(menuOptionSets).where(mine).orderBy(byName(menuOptionSets.name), asc(menuOptionSets.id)).$dynamic(),
+      db.select({ total: count() }).from(menuOptionSets).where(mine), { page, pageSize: 2 })
+    expect(await read(1)).toMatchObject({ total: 3, rows: [{ name: 'alpha', version: 1 }, { name: 'Beta', version: 1 }] })
+    expect(await read(2)).toMatchObject({ total: 3, rows: [{ name: 'Zeta' }] })
+    expect(await firstRow(db.select(columns).from(menuOptionSets).where(byId(menuOptionSets, ours, sets[0]!.id)))).toMatchObject({ name: 'Zeta' })
+    expect(await hasAny(db, menuOptionSets, inTenant(menuOptionSets, theirs, eq(menuOptionSets.name, 'Theirs')))).toBe(true)
+    expect(await db.$count(menuOptionSets, mine)).toBe(3)
+
+    // 60 values of 9 columns: several statements under D1's 100 parameters, in one batch.
+    const values = Array.from({ length: 60 }, (_, i) => ({ id: newId(), tenantId: ours, setId: sets[1]!.id, name: `Value ${i}`, sortOrder: i + 1, createdAt: at, updatedAt: at }))
+    await runBatch(db, insertAll(db, menuOptionValues, values), stale)
+    expect(await nextPosition(db, menuOptionValues, menuOptionValues.sortOrder, inTenant(menuOptionValues, ours, eq(menuOptionValues.setId, sets[1]!.id)))).toBe(61)
+    expect(await deleteOldest(db, menuOptionValues, menuOptionValues.id, inTenant(menuOptionValues, ours, eq(menuOptionValues.setId, sets[1]!.id)), [asc(menuOptionValues.sortOrder)], 50)).toBe(50)
+
+    const key = { tenantId: ours, id: sets[2]!.id, version: 1 }
+    await runBatch(db, [updateAtVersion(db, menuOptionSets, key, { name: 'Beta 2' }), requireOneChange(db), requireCount(db, db.$count(menuOptionSets, mine), 3)], stale)
+    await expect(runBatch(db, [updateAtVersion(db, menuOptionSets, key, { name: 'Stale' }), requireOneChange(db)], stale)).rejects.toThrow('stale')
+    await expect(runBatch(db, [updateAtVersion(db, menuOptionSets, { ...key, version: 2 }, { name: 'Counted' }), requireCount(db, db.$count(menuOptionSets, mine), 4)], stale)).rejects.toThrow('stale')
+    expect(await firstRow(db.select(columns).from(menuOptionSets).where(byId(menuOptionSets, ours, sets[2]!.id)))).toMatchObject({ name: 'Beta 2', version: 2 })
   })
 })

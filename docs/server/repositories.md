@@ -2,7 +2,7 @@
 
 How a feature's `*.repository.ts` is written: the query API, names, the tenant rule, reads, conditions, guards, writes and tests. It refines [architecture → Features](./architecture.md#features) (what a repository is for) and [architecture → Atomic writes](./architecture.md#atomic-writes) (batches and D1's limits); those rules still apply.
 
-**Status (D194, 2026-10-20):** new and changed repository code follows this page. The existing repositories don't yet; the [repository audit](../reviews/repository-audit-2026-10-20.md) lists every gap and the order of the clean-up PRs. A rule marked **(step 2)** needs a shared helper that the second clean-up PR adds ([Shared helpers](#shared-helpers)); until then, follow the nearest existing pattern and leave a `TODO(D194)`.
+**Status (D194, 2026-10-20):** new and changed repository code follows this page. The existing repositories don't yet; the [repository audit](../reviews/repository-audit-2026-10-20.md) lists every gap and the order of the clean-up steps. The [shared helpers](#shared-helpers) exist (step 2, 2026-10-20). A rule marked with a later step (**(step 6)**) waits for that step; until then, follow the nearest existing pattern.
 
 **Official documentation first.** Before using a Drizzle, NuxtHub or D1 API, read its current official page ([Drizzle](https://orm.drizzle.team/docs/overview), [NuxtHub database](https://hub.nuxt.com/docs/database/query), [D1](https://developers.cloudflare.com/d1/)) and check the installed version's types: the docs can describe a newer release, and they don't always say which dialect a feature supports (`db.$count` exists for SQLite in 0.45, but isn't a batch item). Prefer the documented API to a helper of our own; cite the page in the decision or PR that introduces the use.
 
@@ -74,7 +74,7 @@ Answered by the owner on 2026-10-20 (audit R7, D194). A join to another feature'
 3. **Meaning comes from the owner.** A condition with business meaning (an active branch, an owner who can sign in, an active cafe) is imported from the owner's `index.ts`, never written again in the joining repository.
 4. **Anything else goes through the owner's `index.ts`:** another feature's business tables, and any column not listed.
 
-**(step 2)** An ESLint `no-restricted-imports` rule refuses a repository's import of another feature's `*.schema` file, so `tables.ts` is the only way in. The column list is checked in review ([checklist](#checklist-for-a-repository-change)).
+ESLint's feature-boundary rule (`eslint.config.mjs`) refuses a repository's import of another feature's `*.schema` file, so `tables.ts` is the only way in. The column list is checked in review ([checklist](#checklist-for-a-repository-change)).
 
 ## Reads
 
@@ -87,33 +87,26 @@ const valueColumns = {
   status: menuOptionValues.status,
 }
 
-export async function findValue(db: Db, tenantId: string, setId: string, valueId: string): Promise<OptionValueRow | undefined> {
-  const [row] = await db
+export function findValue(db: Db, tenantId: string, setId: string, valueId: string): Promise<OptionValueRow | undefined> {
+  return firstRow(db
     .select(valueColumns)
     .from(menuOptionValues)
-    .where(and(
-      eq(menuOptionValues.tenantId, tenantId),
-      eq(menuOptionValues.setId, setId),
-      eq(menuOptionValues.id, valueId),
-    ))
-    .limit(1)
-  return row
+    .where(inTenant(menuOptionValues, tenantId, eq(menuOptionValues.setId, setId), eq(menuOptionValues.id, valueId))))
 }
 
-/** The values of these sets, each set's in order. */
-export async function valuesOf(db: Db, tenantId: string, setIds: string[]): Promise<OptionValueRow[]> {
-  if (!setIds.length) return []
+/** The values of these sets, each set's in order (`readInChunks` runs no query for none). */
+export function valuesOf(db: Db, tenantId: string, setIds: string[]): Promise<OptionValueRow[]> {
   return readInChunks(setIds, ids => db
     .select(valueColumns)
     .from(menuOptionValues)
-    .where(and(eq(menuOptionValues.tenantId, tenantId), inArray(menuOptionValues.setId, ids)))
+    .where(inTenant(menuOptionValues, tenantId, inArray(menuOptionValues.setId, ids)))
     .orderBy(asc(menuOptionValues.setId), asc(menuOptionValues.sortOrder), asc(menuOptionValues.name)))
 }
 ```
 
 - **Select named columns.** Each aggregate has one column list (`xColumns`) and one row type, used by every read of it. A row type is an `interface`, or `typeof table.$inferSelect` (narrowed with `Pick`) when it is the whole row. `db.select()` without columns is only for rows a background task uses whole and never returns to a route.
 - **Let the return type check the row.** Don't annotate the result (`const rows: XRow[] = await …`) and never cast it (`as Promise<XRow[]>`). A cast hides a column that no longer matches. If the inferred type is wrong, fix the column (`$type<…>()` in the schema, `.mapWith()` on an `sql` value).
-- **One row:** `const [row] = await ….limit(1)` and `return row`.
+- **One row:** `firstRow(query)`. **A list by ids:** `readInChunks`, without an `if (!ids.length) return []` before it (it runs no query for no ids).
 - **No query in a loop.** Children of many parents come from one `xOf(db, tenantId, parentIds)` read, grouped in the service or into a `Map` in the repository.
 - **Several reads for one answer go in one `db.batch([...])`**, not `Promise.all` and never one `await` after another. On D1 a batch is one round trip and one consistent snapshot ([`catalogRows`](../../server/features/menu/catalog.repository.ts), [`counterQueueRows`](../../server/features/orders/orders.repository.ts)). This includes a page and its total:
 
@@ -130,7 +123,7 @@ export async function valuesOf(db: Db, tenantId: string, setIds: string[]): Prom
   return { rows, total: counted?.total ?? 0 }
   ```
 
-  **(step 2)** this becomes `page(db, rows, total, query)` ([Shared helpers](#shared-helpers)). Columns read in a batch need unique SQL names (D170). `readInChunks` reads stay as they are: their pieces already run at once.
+  A page and its total use `readPage(db, rows, total, query)`, which does exactly this ([Shared helpers](#shared-helpers)). Columns read in a batch need unique SQL names (D170). `readInChunks` reads stay as they are: their pieces already run at once.
 - **Order in SQL**, and always end with a unique column (`id`) so pages never overlap. `readInChunks` keeps the order only inside each piece: sort the joined rows afterwards, or group them by the id you passed.
 - **Filter in SQL.** Never load a table and filter it in JavaScript.
 - **Name the index** a list or task query depends on in its doc comment (`Uses orders_branch_date_idx`), and check new list queries with `EXPLAIN QUERY PLAN` against the test database.
@@ -165,11 +158,11 @@ A guard is a statement in a batch that aborts the whole batch unless a check sti
 ## Writes
 
 - **A write returns its statement(s)** for the service's `runBatch` (with the guards, audit and idempotency key in the same batch). A repository never calls `db.batch` or `runBatch` for a write.
-- **An edit is conditional on the version read:** `where(and(eq(t.tenantId, tenantId), eq(t.id, id), eq(t.version, version)))` and `set({ version: sql\`${t.version} + 1\` })`, then `requireOneChange` in the service. Add the current state to the condition when the edit is only valid from it (`eq(t.status, 'active')`).
-- **Lists:** multi-row inserts use `insertPieces(table, rows)`; `IN` lists in updates, deletes and guards use `chunk(ids)`.
-- **A replace** (`replaceXStatements`) deletes the cafe's rows of that parent and inserts the new ones, all as statements of the same batch.
+- **An edit is conditional on the version read:** `updateAtVersion(db, table, { tenantId, id, version }, set, extra?)`, then `requireOneChange` in the service. Pass the current state as `extra` when the edit is only valid from it (`eq(t.status, 'active')`).
+- **Lists:** multi-row inserts use `insertAll(db, table, rows)`; `IN` lists in updates, deletes and guards use `chunk(ids)`.
+- **A replace** (`replaceXStatements`) is `replaceAll(db, table, inTenant(table, tenantId, eq(table.parentId, parentId)), rows)`: the cafe's rows of that parent go and the new ones come, in the same batch.
 - **Upserts** name their conflict target and set only what changes (`onConflictDoUpdate({ target, set, setWhere })`).
-- **Never delete** orders, their lines and events, payments, ledgers or audit rows. Cleanup of other history deletes a bounded set: `inArray(t.id, db.select({ id: t.id }).from(t).where(…).orderBy(…).limit(limit))`.
+- **Never delete** orders, their lines and events, payments, ledgers or audit rows. Cleanup of other history deletes a bounded set with `deleteOldest(db, table, key, where, orderBy, limit)` (a [background-task write](#background-task-writes)).
 - **Values the database computes** (a pickup number, a counter) are computed in the same statement (`insertOrderStatement`), never read first and written after.
 
 ### Background-task writes
@@ -180,7 +173,7 @@ The one exception: a scheduled task or a delivery run may execute a **single con
 - returns `boolean` (it applied) or `number` (rows changed);
 - never runs a batch or a second statement. When it needs two statements, it returns them and the task's service runs the batch.
 
-**(step 2)** The four queues that claim work with a token (outbox, marketing posts, notification deliveries, order-ready alerts) get one shared shape for these functions.
+**(step 6)** The four queues that claim work with a token (outbox, marketing posts, notification deliveries, order-ready alerts) get one shared shape for these functions, built with the messages clean-up, where three of them live.
 
 ## Shared helpers
 
@@ -191,35 +184,58 @@ Repositories are built from **small typed building blocks**, not from a generic 
 | Where | What goes there |
 |---|---|
 | `server/utils/query.ts` | Conditions and reads for repositories |
-| `server/utils/batch.ts` | Statements, guards and D1 limits (exists) |
+| `server/utils/batch.ts` | Statements, guards and D1 limits |
 | `shared/utils/` | Pure helpers the app also uses (no Vue, no Nitro: [Nuxt's rule](https://nuxt.com/docs/4.x/directory-structure/shared)); features import them as `#shared/utils/<file>` |
 
-**Use today:** `runBatch`, `requireOneChange`, `requireCount`, `requireAtMost`, `chunk`, `readInChunks`, `insertPieces` (`server/utils/batch.ts`), `containsText` (`server/utils/search.ts`), and Drizzle's own [`db.$count`](https://orm.drizzle.team/docs/query-utils#count) (counts and guards; not a batch item), [`.$dynamic()`](https://orm.drizzle.team/docs/dynamic-query-building) (a query a helper changes), `alias` and `getTableColumns`.
+Nitro auto-imports every export of `server/utils/` into routes, so a helper's name says what it does there too (`firstRow`, `readPage`, not `first`, `page`).
 
-**(step 2) Planned**, each with its own tests on the SQLite test database and on real D1 (`server/tests/d1-search.test.ts`):
+**Drizzle's own, used as documented:** [`db.$count(table, condition)`](https://orm.drizzle.team/docs/query-utils#count) for a count and inside guards (it isn't a batch item); [`.$dynamic()`](https://orm.drizzle.team/docs/dynamic-query-building) for a query a helper changes; [`alias`](https://orm.drizzle.team/docs/joins#aliases--selfjoins) for a self-join; `getTableColumns`.
 
-| Helper | Shape | Replaces (uses on 2026-10-20) | Based on |
+**The building blocks** (built in step 2, 2026-10-20; tested in `server/tests/query.test.ts` on the SQLite test database, which refuses more than D1's 100 parameters, and in `server/tests/d1-search.test.ts` on real D1):
+
+| Helper | File | Does | Replaces (uses on 2026-10-20) |
 |---|---|---|---|
-| `inTenant(table, tenantId, ...conditions)` | `and(eq(t.tenantId, tenantId), …)` | starting each `where` by hand (167) | builder operators |
-| `byId(table, tenantId, id)`, `atVersion(table, tenantId, id, version)` | the key, and the key at a version | 34, 18 | builder operators |
-| `withStatus(column, status \| 'all')` | `undefined` for `'all'` | 5 | builder operators |
-| `searchIn(search, ...columns)` | `or(containsText(…), …)`, `undefined` without a search | 5 | D183 |
-| `byName(column)` | one case-insensitive name order (today `lower()` and `collate nocase` both) | 8 | SQLite |
-| `first(query)` | `T \| undefined` from `.limit(1)` | ~41 | builder |
-| `withPage(query, { page, pageSize })` | limit and offset on a `.$dynamic()` query (`T extends SQLiteSelect`) | 7 | [Drizzle's pagination guide](https://orm.drizzle.team/docs/guides/limit-offset-pagination) |
-| `page(db, rows, total, { page, pageSize })` | `{ rows, total }`: the page and `select({ total: count() })` in one `db.batch` | 7, and their 10 casts | [batch API](https://orm.drizzle.team/docs/sqlite/batch-api) |
-| `countBy(db, key, from, where)` | `Map<string, number>` | 7 | builder |
-| `hasAny(db, table, where)` | `boolean` from `select 1 … limit 1` | ~10 | builder |
-| `nextPosition(db, column, where)` | `max(column) + 1` | 4 | builder |
-| `updateAtVersion(db, table, key, set, extra?)` | a `Statement`: the key at its version, `version + 1`, typed by `SQLiteUpdateSetSource<T>` | 22 | builder |
-| `insertAll(db, table, rows)`, `replaceAll(db, table, where, rows)` | `Statement[]` in pieces under D1's limit | 13, 7 | `insertPieces` |
-| `deleteOldest(db, table, where, orderBy, limit)` | a bounded cleanup, `Promise<number>` | 5 | builder |
-| `pageOf(items, query, total)`, `slicePage(rows, query)` | `Page<T>` (`shared/contracts/common.ts`) | 7 hand-built pages in services | — |
-| `groupBy(rows, key)` | `Map<string, T[]>` | 6 | — |
+| `inTenant(table, tenantId, ...conditions)` | query | `and(eq(t.tenantId, tenantId), …)`, `undefined` conditions skipped; the table must have `tenantId` | starting each `where` by hand (167) |
+| `byId(table, tenantId, id)`, `atVersion(table, tenantId, id, version)` | query | the cafe's row by id, and by id at a version | 34, 18 |
+| `withStatus(column, status)` | query | `eq(column, status)`; none for `'all'` or no status | 5 |
+| `searchIn(search, ...columns)` | query | any column contains the search (`containsText`, D183); none without a search | 5 |
+| `byName(column)` | query | `asc(lower(column))`: the one case-insensitive name order (`collate nocase` goes). Add `asc(t.id)` after it | 8 |
+| `firstRow(query)` | query | `T \| undefined`: adds `limit 1` | ~41 |
+| `withPage(query, { page, pageSize })` | query | limit and offset on a `.$dynamic()` query, as [Drizzle's pagination guide](https://orm.drizzle.team/docs/guides/limit-offset-pagination) | 7 |
+| `readPage(db, rows, total, { page, pageSize })` | query | `{ rows, total }`: the ordered `.$dynamic()` page and `select({ total: count() })` in one [`db.batch`](https://orm.drizzle.team/docs/sqlite/batch-api); `total` must be a batch item, so `$count` is refused at compile time | 7, and their 10 casts |
+| `hasAny(db, table, where)` | query | `boolean` from `select 1 … limit 1` | ~10 |
+| `nextPosition(db, table, column, where)` | query | `max(column) + 1`, 1 when nothing matches | 4 |
+| `updateAtVersion(db, table, { tenantId, id, version }, set, extra?)` | batch | a `Statement`: the cafe's row at its version, `version + 1`; `set` is typed by the table (a wrong column or value is refused). Follow it with `requireOneChange` | 22 |
+| `insertAll(db, table, rows)` | batch | `Statement[]` in pieces under D1's limit; none for no rows | 13 |
+| `replaceAll(db, table, where, rows)` | batch | delete what `where` names, then `insertAll` | 7 |
+| `deleteOldest(db, table, key, where, orderBy, limit)` | batch | a scheduled cleanup: at most `limit` rows, first by `orderBy`; returns how many | 5 |
+| `toPage(items, query, total)`, `slicePage(rows, query)` | `shared/contracts/common.ts` | a `Page<T>` response; one page of a list held in memory | 7 hand-built pages in services |
+| `groupBy(rows, key)` | `shared/utils/collections.ts` | `Map<key, rows>`, in the rows' order | 6 |
 
-`first`, `withPage`, the batched page and total, `updateAtVersion` and `$count` inside `requireCount` were tried on 2026-10-20: they type-check with result types inferred (a wrong column or value type is refused) and run on the migrated SQLite test database, including a stale version and another cafe's id changing nothing. `page()` needs one cast inside itself, because `db.batch`'s tuple types don't pass through a generic.
+Not built: a `countBy` helper. Five of its seven uses join another table and read in chunks, which a helper over one table can't do; the remaining step, `new Map(rows.map(row => [row.key, row.n]))`, is one line. `readPage` holds the one cast of these helpers: `db.batch`'s tuple types don't pass through a generic.
 
-**Enforced by lint (step 2):** an ESLint `no-restricted-syntax` block for `*.repository.ts` refuses `as Promise<…>`, `db.run`/`db.all`, and `.getTime()` inside an `sql` template; `no-restricted-imports` refuses another feature's `*.schema` file ([Other features' tables](#other-features-tables)).
+```ts
+const setColumns = { id: menuOptionSets.id, name: menuOptionSets.name, status: menuOptionSets.status, version: menuOptionSets.version }
+
+export function findSet(db: Db, tenantId: string, id: string): Promise<OptionSetRow | undefined> {
+  return firstRow(db.select(setColumns).from(menuOptionSets).where(byId(menuOptionSets, tenantId, id)))
+}
+
+export function listSets(db: Db, tenantId: string, query: { status?: string, page: number, pageSize: number }): Promise<{ rows: OptionSetRow[], total: number }> {
+  const where = inTenant(menuOptionSets, tenantId, withStatus(menuOptionSets.status, query.status))
+  return readPage(db,
+    db.select(setColumns).from(menuOptionSets).where(where).orderBy(byName(menuOptionSets.name), asc(menuOptionSets.id)).$dynamic(),
+    db.select({ total: count() }).from(menuOptionSets).where(where),
+    query)
+}
+
+/** Renames the set if it's still at `version` and active. Follow it with `requireOneChange`. */
+export function renameSetStatement(db: Db, tenantId: string, id: string, version: number, name: string, now: Date): Statement {
+  return updateAtVersion(db, menuOptionSets, { tenantId, id, version }, { name, updatedAt: now }, eq(menuOptionSets.status, 'active'))
+}
+```
+
+**Enforced by lint** (`eslint.config.mjs`): in a `*.repository.ts`, `no-restricted-syntax` refuses `as Promise<…>`, `db.run`/`db.all`/`db.get`/`db.values`, and `.getTime()` inside an `sql` template; the feature-boundary rule already refuses another feature's `*.schema` file ([Other features' tables](#other-features-tables)). Repositories not yet cleaned up are listed in `REPOSITORIES_TO_CLEAN` there, and each clean-up step removes its own.
 
 ## D1 limits
 

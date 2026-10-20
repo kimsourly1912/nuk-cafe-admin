@@ -131,12 +131,12 @@ Three ways: an annotation on the result (most files), `as Promise<…>` (10 cast
 
 ## Clean-up plan
 
-One PR per step, each with `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, and the feature's e2e files when a response could change. Behavior and responses stay the same; only R1's added filters change what a wrong id from another cafe would reach (nothing, as before, now proven by tests).
+One step at a time, all on branch `claude/repository-standard` (the owner, 2026-10-20: no push or PR until the repository standard is finished), each with `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, and the feature's e2e files when a response could change. Behavior and responses stay the same; only R1's added filters change what a wrong id from another cafe would reach (nothing, as before, now proven by tests). Each feature step removes its files from `REPOSITORIES_TO_CLEAN` in `eslint.config.mjs`, so the lint rules then hold for them.
 
-1. **Standard (this PR):** [repositories.md](../server/repositories.md), D194, this audit.
-2. **Shared helpers:** the planned building blocks in [repositories.md → Shared helpers](../server/repositories.md#shared-helpers) (R5, R6, R8, R9), built on Drizzle's documented `.$dynamic()` and `$count`; the lint rules; shared conditions exported by their owners (an owner who can sign in, an active cafe, a registered account) (R6); one shape for claimable queues and for link codes (R6); the lint rule for the owner's R7 answer (no import of another feature's `*.schema`).
-3. **Menu:** options, modifiers, categories, items, availability, soldout, promotions, reset, catalog (R1, R2, R3, R5, R6, R8, R9).
-4. **Orders:** orders, reports, khqr (R1, R3, R5, R6, R9).
-5. **Identity and cafes:** identity, accounts, staff, tenants, branches, customers (R1, R5, R6, R8, R9).
-6. **Messages:** notifications, marketing (R1, R3, R4, R6, R8).
+1. **Standard (done):** [repositories.md](../server/repositories.md), D194, this audit.
+2. **Shared helpers (done, 2026-10-20):** the building blocks in [repositories.md → Shared helpers](../server/repositories.md#shared-helpers) (`server/utils/query.ts`, the write helpers in `server/utils/batch.ts`, `groupBy`, `toPage`, `slicePage`), built on Drizzle's documented `.$dynamic()` and `$count`, tested on SQLite and real D1; the repository lint rules. The R7 import rule already existed (the feature-boundary rule). No feature code changed.
+3. **Orders:** orders, reports, khqr (R1, R3, R5, R6, R9). First of the features (the owner, 2026-10-20): money and payments.
+4. **Menu:** options, modifiers, categories, items, availability, soldout, promotions, reset, catalog (R1, R2, R3, R5, R6, R8, R9).
+5. **Identity and cafes:** identity, accounts, staff, tenants, branches, customers (R1, R5, R6, R8, R9); the shared conditions their owners export (an owner who can sign in, an active cafe, a registered account) (R6).
+6. **Messages:** notifications, marketing (R1, R3, R4, R6, R8); one shape for the claimable queues and one for link codes (R6).
 7. **The rest:** platform, media, support, assistant, sample-data (R2, R3, R4, R5, R8, R9).

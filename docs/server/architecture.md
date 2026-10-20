@@ -337,7 +337,8 @@ All in `server/utils/`. Routes get them by auto-import; features import them exp
 | `errors.ts` | `apiError(status, code, message, { fieldErrors })`, `ErrorCodes`, `notFound`, `versionConflict`, `toErrorResponse` | Throw API errors; the error handler maps anything thrown to the response |
 | `request-body.ts` | `readLimitedBody`, `readLimitedMultipart` | Count received bytes before JSON/multipart parsing; [reliability APIs](../reference/server-reliability.md) |
 | `validation.ts` | `readValidBody`, `readValidQuery`, `readIdParam`, `parseInput`, `MAX_JSON_BYTES` | Validate every input |
-| `batch.ts` | `Db`, `Statement`, `runBatch`, `requireOneChange`, `requireCount`, `isStaleWrite`, `isForeignKeyError`, `isUniqueViolation`, `chunk`, `readInChunks`, `insertPieces` | Atomic multi-statement writes; D1's 100-parameter limit |
+| `batch.ts` | `Db`, `Statement`, `runBatch`, `requireOneChange`, `requireCount`, `requireAtMost`, `isStaleWrite`, `isForeignKeyError`, `isUniqueViolation`, `chunk`, `readInChunks`, `insertPieces`, `updateAtVersion`, `insertAll`, `replaceAll`, `deleteOldest` | Atomic multi-statement writes; D1's 100-parameter limit; the [repository standard](./repositories.md#shared-helpers)'s write helpers |
+| `query.ts` | `inTenant`, `byId`, `atVersion`, `withStatus`, `searchIn`, `byName`, `firstRow`, `withPage`, `readPage`, `hasAny`, `nextPosition`, `TenantTable`, `KeyedTable`, `VersionedTable`, `PageQuery` | Repository conditions and reads ([repository standard → Shared helpers](./repositories.md#shared-helpers), D194) |
 | `ids.ts` | `newId()` | UUID v7 for our tables |
 | `time.ts` | `toIso` | Instants in responses |
 | `log.ts` | `log(level, message, fields, event?)` | Structured logs with the request id; secret-looking keys are redacted |

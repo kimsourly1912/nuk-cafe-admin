@@ -65,6 +65,17 @@ export function totalPages(total: number, pageSize: number) {
   return Math.max(1, Math.ceil(total / pageSize))
 }
 
+/** A page's response (`Page<T>`) from the page's items, the query that asked and how many match. */
+export function toPage<T>(items: T[], query: { page: number, pageSize: number }, total: number): Page<T> {
+  return { items, page: query.page, pageSize: query.pageSize, total, totalPages: totalPages(total, query.pageSize) }
+}
+
+/** One page of a list held in memory (a report computed in full), as a `Page<T>`. */
+export function slicePage<T>(rows: readonly T[], query: { page: number, pageSize: number }): Page<T> {
+  const start = (query.page - 1) * query.pageSize
+  return toPage(rows.slice(start, start + query.pageSize), query, rows.length)
+}
+
 // --- Weekly windows: availability rules and branch hours ---
 
 export const MINUTES_PER_DAY = 1440
