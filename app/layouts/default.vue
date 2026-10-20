@@ -76,7 +76,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
     <UDashboardGroup
       unit="rem"
       class="print:static print:block print:overflow-visible"
-      :class="supportStrip && 'relative inset-auto min-h-0 flex-1'"
+      :class="supportStrip && 'relative inset-auto min-h-0 flex-1 *:h-full! *:min-h-0!'"
     >
       <UDashboardSidebar
         v-model:open="open"
