@@ -1,4 +1,5 @@
 import type { MutationOptions, MutationState } from '~/utils/mutation'
+import { useAuth } from '~/features/auth'
 import { clearOutcomes, createMutation, createMutationState, createRecord } from '~/utils/mutation'
 
 /** Number of mutations in flight app-wide (drives the leave-page warning). */
@@ -51,6 +52,7 @@ export function useMutation<TInput, TResult>(
   useMutationIds().value[options.id] = true
   const pendingCount = usePendingMutationCount()
   const toast = useToast()
+  const { user } = useAuth()
   // Always: a call can ask even when the mutation doesn't (`execute(input, { confirm })`, D152).
   const confirm = useConfirm()
 
@@ -103,6 +105,8 @@ export function useMutation<TInput, TResult>(
     onPendingChange: (delta) => {
       pendingCount.value += delta
     },
+    // A platform support visit only looks (D193): the server refuses every write anyway.
+    readOnly: () => (user.value?.support ? 'Platform support can only look at this cafe. Nothing can be changed.' : undefined),
   })
 
   return reactive({

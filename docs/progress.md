@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Platform console P5 follow-up: end one visit, read-only stops edits early (D193, 2026-10-20)
+
+The owner can end a single visit (**Looking now** → **End visit** in the History); the grant and other visits stay. During a visit, `useMutation` stops every edit before its confirmation or request (toast "Nothing was changed").
+
+- **Evidence (2026-10-20, local):** `support.service.test.ts` 2 new (next request refused, grant and other visit stay, audited, can open again; closed, expired, unknown and another cafe's visit 404; removing the cafe filter or the still-open filter in `endVisitStatement` fails them); `mutation.test.ts` 3 new (a read-only session asks and sends nothing, a batch skips all with one toast, normal sessions unchanged; removing the guard fails the first); `support-access.test.ts` e2e: ending one visit, and an edit stopped with no request.
+- **Limit:** edit buttons are still shown during a visit; hiding or disabling them page by page needs per-permission UI that the app doesn't have yet.
+
 ## Platform console P5 follow-up: owners told on Telegram (D193, 2026-10-20)
 
 Opening a support visit queues "Platform support opened your cafe" to the cafe's chats with **Server errors and reminders** on (`queueSupportOpenedAlert`, `server/utils/support-alert.ts`), one per chat and visit, sent after the answer. No migration.

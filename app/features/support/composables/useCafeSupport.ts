@@ -1,4 +1,4 @@
-import type { CafeSupport } from '#shared/contracts/support'
+import type { CafeSupport, SupportVisit } from '#shared/contracts/support'
 
 /** Support access in the cafe's admin (P5, D193): the owner's grant and who looked. */
 
@@ -39,5 +39,21 @@ export function useCafeSupportMutations() {
     },
   )
 
-  return { allow, end, busy: computed(() => allow.isPending() || end.isPending()) }
+  const endVisit = useMutation(
+    (visit: SupportVisit) => apiFetch<CafeSupport>(`/admin/support/visits/${visit.id}/end`, { method: 'POST' }),
+    {
+      id: 'support:end-visit',
+      key: visit => visit.id,
+      confirm: () => ({
+        title: 'End this visit now?',
+        description: 'This person is shut out at once. Platform support stays allowed: they can open the cafe again with a fresh code. End platform support to stop that too.',
+        confirmLabel: 'End visit',
+      }),
+      successMessage: () => 'The visit has ended',
+      errorMessage: () => 'Could not end the visit',
+      invalidate: ['support'],
+    },
+  )
+
+  return { allow, end, endVisit, busy: computed(() => allow.isPending() || end.isPending()) }
 }

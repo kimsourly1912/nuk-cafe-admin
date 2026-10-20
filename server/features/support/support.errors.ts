@@ -24,6 +24,8 @@ export const supportAlreadyAllowed = () =>
 
 export const grantNotFound = () => notFound('This support access')
 
+export const visitNotFound = () => notFound('This visit')
+
 export const invalidCode = () =>
   apiError(422, SupportErrorCodes.INVALID_CODE, 'That code isn\'t right. Check your app and try again.', {
     fieldErrors: { code: ['That code isn\'t right'] },
