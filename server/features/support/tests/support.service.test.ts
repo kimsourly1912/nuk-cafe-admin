@@ -79,7 +79,7 @@ describe('a super admin opens the cafe', () => {
     await expectApiError(() => openSupportVisit(db, visitor, TEST_TENANT, right, NOW), 409, 'SUPPORT_NOT_ALLOWED')
     await allowSupport(db, ownerActor(), NOW)
     const opened = await openSupportVisit(db, visitor, TEST_TENANT, right, minutes(1))
-    expect(opened).toEqual({ path: '/c/nuk/admin', expiresAt: minutes(61).toISOString() })
+    expect(opened).toEqual({ path: '/c/nuk/admin', expiresAt: minutes(61).toISOString(), visitId: expect.any(String) })
     expect((await audits('tenant.support.open'))[0]).toMatchObject({ tenantId: TEST_TENANT, actorId: SUPER })
   })
 

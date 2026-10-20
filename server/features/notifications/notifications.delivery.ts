@@ -14,8 +14,8 @@ import { maintenanceLimit } from '#server/utils/maintenance'
 import { toIso } from '#server/utils/time'
 import { addDays } from '#server/utils/weekly-windows'
 import { destinationBlocked, destinationNotFound } from './notifications.errors'
-import { alertSubject, bakongReminderStage, bakongTokenMessage, CLOSING_SUMMARY_DELAY_MINUTES, CLOSING_SUMMARY_WINDOW_HOURS, closingInstant, jobFailureMessage, newOrderMessage, paymentMessage, routeOf, serverErrorMessage } from './notifications.messages'
-import type { JobFailureInfo, ServerErrorInfo } from './notifications.messages'
+import { alertSubject, bakongReminderStage, bakongTokenMessage, CLOSING_SUMMARY_DELAY_MINUTES, CLOSING_SUMMARY_WINDOW_HOURS, closingInstant, jobFailureMessage, newOrderMessage, paymentMessage, routeOf, serverErrorMessage, supportOpenedMessage } from './notifications.messages'
+import type { JobFailureInfo, ServerErrorInfo, SupportOpenedInfo } from './notifications.messages'
 import * as repo from './notifications.repository'
 import { isBlockedError, plainText } from './notifications.rules'
 import type { StoredMessage } from './notifications.schema'
@@ -225,6 +225,34 @@ export async function queueBakongTokenReminder(db: Db, tenantId: string, expires
   if (!deliveries.length) return []
   await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
   // The ones this call saved (an overlapping run may have been first: the unique index drops ours).
+  const saved = await repo.deliveryIds(db, deliveries.map(d => d.id))
+  return deliveries.map(d => d.id).filter(id => saved.has(id))
+}
+
+// --- Platform support opened (D193) ---
+
+/**
+ * Tells the chats of the cafe that get operational alerts (`server_error`) that someone from the
+ * platform team opened a support visit. One per chat and visit: the dedupe key names the visit.
+ * Returns the saved deliveries' ids, to send at once.
+ */
+export async function queueSupportOpenedAlert(db: Db, tenantId: string, visitId: string, info: SupportOpenedInfo, cafeUrl?: string, now = new Date()): Promise<string[]> {
+  const targets = await repo.targetsOf(db, tenantId, 'server_error')
+  if (!targets.length) return []
+  const dedupeKey = `support_open:${visitId}`
+  const message = supportOpenedMessage(info, cafeUrl)
+  const deliveries = targets.map((target): repo.NewDelivery => ({
+    id: newId(),
+    tenantId,
+    kind: 'server_error',
+    destinationId: target.destinationId,
+    dedupeKey,
+    subject: 'Platform support opened',
+    message,
+    createdAt: now,
+    nextAttemptAt: now,
+  }))
+  await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
   const saved = await repo.deliveryIds(db, deliveries.map(d => d.id))
   return deliveries.map(d => d.id).filter(id => saved.has(id))
 }

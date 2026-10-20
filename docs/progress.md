@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Platform console P5 follow-up: owners told on Telegram (D193, 2026-10-20)
+
+Opening a support visit queues "Platform support opened your cafe" to the cafe's chats with **Server errors and reminders** on (`queueSupportOpenedAlert`, `server/utils/support-alert.ts`), one per chat and visit, sent after the answer. No migration.
+
+- **Evidence (2026-10-20, local):** `notifications.delivery.test.ts` 2 new (once per chat and visit, who and until when, button, sent; name unknown; another cafe's chat with the rule on gets nothing: removing the tenant filter in `targetsOf` fails it).
+- **Not run:** a real bot on staging.
+
 ## Platform console P5: support access (D193, 2026-10-19)
 
 [Decision](decisions.md#d193-support-access-the-owner-allows-it-a-super-admin-reads-with-a-fresh-code-read-only-every-request-audited-2026-10-19), [plan](plans/platform-console.md). **QP1 answered by the owner (2026-10-19): the defaults** (read-only, 24 hours, granted by the cafe's owner, who sees it and can end it); any super admin may open it; no mockup round. QP1 left the open questions. An owner allows support on **Admin → Platform support** (24 hours, End now, history of who looked); while it's on, owners see a strip above the admin. On the console's cafe page, **Open read-only** asks for a fresh authenticator code (5 wrong codes per 15 minutes at most), opens a visit bound to that session for an hour at most, and loads the cafe's admin with a "read-only" strip and Leave. On the server, `requirePermission` lets a super admin with an open visit through only after refusing them, for GET requests on the support permissions only; anything else is 403 `SUPPORT_READ_ONLY` or `FORBIDDEN`, and every allowed request is audited (`support.request`). Migration `0044_support_access` (additive). The assistant's help has a Platform support page.
