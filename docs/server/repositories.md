@@ -59,7 +59,22 @@ A guard is a statement, but its name says what it checks, so it has no `Statemen
 
 ## Other features' tables
 
-A repository writes only its own feature's tables ([architecture rule 2](./architecture.md#rules)). Several repositories today also **read** other features' tables through `server/db/tables.ts`: `user.name` for who did something, and `branches` for a branch's name, timezone or status. **Open (audit R7):** whether such read-only joins stay allowed or move behind the owner's `index.ts` is the owner's decision. Until it is made, don't add a new kind of cross-feature join; existing ones stay as they are.
+Answered by the owner on 2026-10-20 (audit R7, D194). A join to another feature's table stays a join: one query, one D1 round trip, one snapshot, and it can sort, filter and guard in SQL. Calling the owner's service for names would cost a second request and a merge in JavaScript on every read. So:
+
+1. **Writes only by the owner.** A repository inserts, updates and deletes only its own feature's tables. One documented exception: identity's staff management writes `branch_staff` together with the account's `member` rows and sessions in one batch ([security → Staff onboarding](./security.md#staff-onboarding)).
+2. **Read-only joins on this list only**, imported from `server/db/tables.ts` (never from another feature's `*.schema.ts`):
+
+   | Table | Owner (writes) | Columns another feature may read | For |
+   |---|---|---|---|
+   | `user` | identity (and Better Auth) | `id`, `name` | who did something (`updatedByName`, `customerName`) |
+   | `branches` | branches | `id`, `tenantId`, `name`, `timezone`, `status` | a branch's scope, clock and label |
+   | `organization` | tenants (and Better Auth) | `id`, `slug`, `name`, `status` | resolving a cafe (a table's QR code) |
+
+   No other column, so personal data (`email`, `banned`, `role`) stays with identity. Join `user` with `leftJoin` when the reference can be null, so a missing account reads as `null`. Identity also reads `branches` and `branch_staff` for access checks (D134).
+3. **Meaning comes from the owner.** A condition with business meaning (an active branch, an owner who can sign in, an active cafe) is imported from the owner's `index.ts`, never written again in the joining repository.
+4. **Anything else goes through the owner's `index.ts`:** another feature's business tables, and any column not listed.
+
+**(step 2)** An ESLint `no-restricted-imports` rule refuses a repository's import of another feature's `*.schema` file, so `tables.ts` is the only way in. The column list is checked in review ([checklist](#checklist-for-a-repository-change)).
 
 ## Reads
 
@@ -204,7 +219,7 @@ Repositories are built from **small typed building blocks**, not from a generic 
 
 `first`, `withPage`, the batched page and total, `updateAtVersion` and `$count` inside `requireCount` were tried on 2026-10-20: they type-check with result types inferred (a wrong column or value type is refused) and run on the migrated SQLite test database, including a stale version and another cafe's id changing nothing. `page()` needs one cast inside itself, because `db.batch`'s tuple types don't pass through a generic.
 
-**Enforced by lint (step 2):** an ESLint `no-restricted-syntax` block for `*.repository.ts` refuses `as Promise<…>`, `db.run`/`db.all`, and `.getTime()` inside an `sql` template.
+**Enforced by lint (step 2):** an ESLint `no-restricted-syntax` block for `*.repository.ts` refuses `as Promise<…>`, `db.run`/`db.all`, and `.getTime()` inside an `sql` template; `no-restricted-imports` refuses another feature's `*.schema` file ([Other features' tables](#other-features-tables)).
 
 ## D1 limits
 
@@ -226,7 +241,7 @@ Repositories are tested through their services ([architecture → Tests](./archi
 - [ ] A shared helper used where one exists; a shape now repeated in a second feature made into one.
 - [ ] Names, parameter order and explicit return types as in the table above.
 - [ ] Every function on a cafe table filters the table's own `tenant_id`, or says "Across cafes:" and is one of the allowed kinds.
-- [ ] Writes only to the feature's own tables; no new kind of cross-feature join while R7 is open.
+- [ ] Writes only to the feature's own tables; another feature's table only through `tables.ts`, read-only, with the listed columns, and its business conditions imported from its owner.
 - [ ] Named columns, no casts, no annotation of results, one row with `[row]` and `limit(1)`.
 - [ ] Several reads for one answer in one `db.batch`; no query in a loop; filtering and ordering in SQL.
 - [ ] Builder operators; `sql` only for what they lack, with interpolated columns and no written times.

@@ -122,7 +122,7 @@ Dependencies point one way: **route → service → repository → schema**. Typ
 ### Rules
 
 1. **Routes call a feature's service through its `index.ts`, nothing else.** No SQL, rule or cross-table write in a route file.
-2. **Only a feature's repository touches its tables.** Services never write SQL, and no other feature touches those tables.
+2. **Only a feature's repository writes its tables.** Services never write SQL. Another feature's repository may only **read** a few listed columns in a join (who did something, a branch's scope, a cafe's address), imported from `server/db/tables.ts` ([repositories.md → Other features' tables](./repositories.md#other-features-tables), D194); everything else goes through the owner's `index.ts`.
 3. **Features talk through `index.ts` only.** `orders` asks `menu` for current prices (`menu.priceLines(...)`), never its repository. A write that spans features stays atomic: the owner of the action (`orders.complete`) asks the other feature for its statements (`loyalty.earnStatements(...)`, a service function that validates and returns batch statements) and runs them in its own `db.batch`.
 4. **Services and repositories take `db` as their first parameter and use explicit imports** (no Nitro auto-imports), so tests run them against SQLite directly.
 5. **Nothing in a feature knows about HTTP** except by throwing errors from `*.errors.ts`. The `actor` comes in as a parameter.

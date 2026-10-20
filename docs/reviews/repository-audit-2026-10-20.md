@@ -23,7 +23,7 @@ P1: next clean-up PRs, because a standard rule is broken. P2: the same PRs where
 | R4 | P1 | Repositories that run their own batch |
 | R5 | P2 | Reads that wait on each other, or could share one round trip |
 | R6 | P2 | The same query or condition in several places |
-| R7 | P2 | Other features' tables read directly |
+| R7 | P2 / answered | Other features' tables read directly (owner's answer: read-only joins on a column list) |
 | R8 | P2 | Results typed three different ways; ten casts |
 | R9 | P2 | Names and operators used inconsistently |
 | R10 | P3 | Work that grows with the cafe's whole menu |
@@ -98,13 +98,15 @@ On D1 each query is a request; a `db.batch` of reads is one request and one snap
 
 ### R7. Other features' tables
 
-[Architecture rule 2](../server/architecture.md#rules) says only a feature's repository touches its tables. `server/db/tables.ts` exports the Better Auth tables, `auditEvents`, `branches` and `branchStaff` for explicit imports, and documents only identity's reads of the branch tables (D134). In practice:
+> **Answered by the owner on 2026-10-20 (D194):** writes only by the owner; read-only joins on a short list of columns through `tables.ts`; business conditions from the owner; the rest through `index.ts`. See [repositories.md → Other features' tables](../server/repositories.md#other-features-tables). Rule 2 below is quoted as it stood before the answer.
+
+[Architecture rule 2](../server/architecture.md#rules) said only a feature's repository touches its tables. `server/db/tables.ts` exports the Better Auth tables, `auditEvents`, `branches` and `branchStaff` for explicit imports, and documents only identity's reads of the branch tables (D134). In practice:
 
 - `reports`, `orders` and `menu/promotions` read `branches` directly (name, timezone, status).
 - Six repositories (soldout, khqr, orders, reports, marketing, notifications) join `user` for a display name (`updatedByName`, `connectedByName`, `customerName`).
 - `identity`, `tenants` and `staff` all write or read `organization`, `member` and `user`.
 
-No write to another feature's table was found outside identity's documented ownership. **Owner decision needed:** either allow read-only joins for a display name or a branch's scope through `tables.ts` (and write that into architecture), or move them behind the owners' `index.ts`. The standard leaves this open.
+No write to another feature's table was found except identity's staff management writing `branch_staff` (documented in security → Staff onboarding). Checked against the answer, every read outside the owners uses only the listed columns (`user.id` 16×, `user.name` 11×; `branches.id`, `.tenantId`, `.name`, `.timezone`, `.status`; `organization.id`, `.slug`, `.name`, `.status` in branches' QR lookup), except `tenants.noActiveOwner`, which reads `member` and `user.banned`: it becomes identity's exported "owner who can sign in" condition in step 5 (R6). Identity's own cafe lookups on `organization` (by `createdAt` too) merge into tenants' in step 5 (R6).
 
 ### R8. How results are typed
 
@@ -132,7 +134,7 @@ Three ways: an annotation on the result (most files), `as Promise<…>` (10 cast
 One PR per step, each with `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, and the feature's e2e files when a response could change. Behavior and responses stay the same; only R1's added filters change what a wrong id from another cafe would reach (nothing, as before, now proven by tests).
 
 1. **Standard (this PR):** [repositories.md](../server/repositories.md), D194, this audit.
-2. **Shared helpers:** the planned building blocks in [repositories.md → Shared helpers](../server/repositories.md#shared-helpers) (R5, R6, R8, R9), built on Drizzle's documented `.$dynamic()` and `$count`; the lint rules; shared conditions exported by their owners (an owner who can sign in, an active cafe, a registered account) (R6); one shape for claimable queues and for link codes (R6); the owner's answer on R7.
+2. **Shared helpers:** the planned building blocks in [repositories.md → Shared helpers](../server/repositories.md#shared-helpers) (R5, R6, R8, R9), built on Drizzle's documented `.$dynamic()` and `$count`; the lint rules; shared conditions exported by their owners (an owner who can sign in, an active cafe, a registered account) (R6); one shape for claimable queues and for link codes (R6); the lint rule for the owner's R7 answer (no import of another feature's `*.schema`).
 3. **Menu:** options, modifiers, categories, items, availability, soldout, promotions, reset, catalog (R1, R2, R3, R5, R6, R8, R9).
 4. **Orders:** orders, reports, khqr (R1, R3, R5, R6, R9).
 5. **Identity and cafes:** identity, accounts, staff, tenants, branches, customers (R1, R5, R6, R8, R9).
