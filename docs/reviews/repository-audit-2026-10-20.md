@@ -65,7 +65,7 @@ A renamed column still compiles here and fails only at runtime.
 
 All 21 `requireCount` and `requireAtMost` guards are `sql` strings, and several restate a condition their file already has: `requireNoActiveGrant` and `requireGrantActive` repeat `grantActive`; `requireActiveSiblingCount` repeats `parentIs`; `requireAnOwnerStatement` repeats `countOwners`. Ten conditions compare a time as `${now.getTime()}` (support ×2, notifications ×2, orders ×2, marketing, media, reports, tenants), which is right only because every timestamp column is `timestamp_ms`; `status <> 'archived'` is also written by hand in several.
 
-**Fix (step 2):** a guard in `server/utils/batch.ts` that takes a builder query, so guards reuse the named conditions and the operators encode times.
+**Fix:** no new helper is needed. Drizzle's [`db.$count(table, condition)`](https://orm.drizzle.team/docs/query-utils#count) is an `SQL<number>` subquery that goes straight into the existing `requireCount` and `requireAtMost` (tried on the SQLite test database on 2026-10-20, including a guard that fails for another cafe), so guards reuse the named conditions and the operators encode times. Each feature's PR converts its own guards.
 
 ### R4. Repositories that run their own batch
 
@@ -132,7 +132,7 @@ Three ways: an annotation on the result (most files), `as Promise<…>` (10 cast
 One PR per step, each with `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, and the feature's e2e files when a response could change. Behavior and responses stay the same; only R1's added filters change what a wrong id from another cafe would reach (nothing, as before, now proven by tests).
 
 1. **Standard (this PR):** [repositories.md](../server/repositories.md), D194, this audit.
-2. **Shared helpers:** the builder guard (R3); shared conditions exported by their owners (an owner who can sign in, an active cafe, a registered account) (R6); one shape for claimable queues and for link codes (R6); the owner's answer on R7.
+2. **Shared helpers:** the planned building blocks in [repositories.md → Shared helpers](../server/repositories.md#shared-helpers) (R5, R6, R8, R9), built on Drizzle's documented `.$dynamic()` and `$count`; the lint rules; shared conditions exported by their owners (an owner who can sign in, an active cafe, a registered account) (R6); one shape for claimable queues and for link codes (R6); the owner's answer on R7.
 3. **Menu:** options, modifiers, categories, items, availability, soldout, promotions, reset, catalog (R1, R2, R3, R5, R6, R8, R9).
 4. **Orders:** orders, reports, khqr (R1, R3, R5, R6, R9).
 5. **Identity and cafes:** identity, accounts, staff, tenants, branches, customers (R1, R5, R6, R8, R9).

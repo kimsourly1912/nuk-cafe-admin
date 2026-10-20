@@ -36,3 +36,5 @@ Initial standard agreed with the owner on 2026-09-27 (D43; menu model D44); the 
 ## Library first
 
 Before writing server code, check whether Better Auth, `@nuxtjs/better-auth`, NuxtHub, Nitro or Cloudflare already does it ([security.md → What the libraries do](./security.md#what-the-libraries-do)). We write only the business domain: rules, services, contracts and their tests.
+
+Use a library's API as its **current official documentation** describes, checked against the installed version (its types, or its changelog when the docs are newer), never from memory or an old example (D194). When code repeats across features, make it a shared helper instead of another copy ([repositories.md → Shared helpers](./repositories.md#shared-helpers) for queries).

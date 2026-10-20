@@ -2,7 +2,9 @@
 
 How a feature's `*.repository.ts` is written: the query API, names, the tenant rule, reads, conditions, guards, writes and tests. It refines [architecture → Features](./architecture.md#features) (what a repository is for) and [architecture → Atomic writes](./architecture.md#atomic-writes) (batches and D1's limits); those rules still apply.
 
-**Status (D194, 2026-10-20):** new and changed repository code follows this page. The existing repositories don't yet; the [repository audit](../reviews/repository-audit-2026-10-20.md) lists every gap and the order of the clean-up PRs. A rule marked **(step 2)** needs a shared helper that the second clean-up PR adds; until then, follow the nearest existing pattern and leave a `TODO(D194)`.
+**Status (D194, 2026-10-20):** new and changed repository code follows this page. The existing repositories don't yet; the [repository audit](../reviews/repository-audit-2026-10-20.md) lists every gap and the order of the clean-up PRs. A rule marked **(step 2)** needs a shared helper that the second clean-up PR adds ([Shared helpers](#shared-helpers)); until then, follow the nearest existing pattern and leave a `TODO(D194)`.
+
+**Official documentation first.** Before using a Drizzle, NuxtHub or D1 API, read its current official page ([Drizzle](https://orm.drizzle.team/docs/overview), [NuxtHub database](https://hub.nuxt.com/docs/database/query), [D1](https://developers.cloudflare.com/d1/)) and check the installed version's types: the docs can describe a newer release, and they don't always say which dialect a feature supports (`db.$count` exists for SQLite in 0.45, but isn't a batch item). Prefer the documented API to a helper of our own; cite the page in the decision or PR that introduces the use.
 
 ## Query API
 
@@ -113,7 +115,7 @@ export async function valuesOf(db: Db, tenantId: string, setIds: string[]): Prom
   return { rows, total: counted?.total ?? 0 }
   ```
 
-  Columns read in a batch need unique SQL names (D170). `readInChunks` reads stay as they are: their pieces already run at once.
+  **(step 2)** this becomes `page(db, rows, total, query)` ([Shared helpers](#shared-helpers)). Columns read in a batch need unique SQL names (D170). `readInChunks` reads stay as they are: their pieces already run at once.
 - **Order in SQL**, and always end with a unique column (`id`) so pages never overlap. `readInChunks` keeps the order only inside each piece: sort the joined rows afterwards, or group them by the id you passed.
 - **Filter in SQL.** Never load a table and filter it in JavaScript.
 - **Name the index** a list or task query depends on in its doc comment (`Uses orders_branch_date_idx`), and check new list queries with `EXPLAIN QUERY PLAN` against the test database.
@@ -130,7 +132,18 @@ export async function valuesOf(db: Db, tenantId: string, setIds: string[]): Prom
 
 A guard is a statement in a batch that aborts the whole batch unless a check still holds ([architecture → Atomic writes](./architecture.md#atomic-writes)): `requireOneChange(db)` after a conditional update, and `requireCount`, `requireAtMost` for set checks.
 
-- **A guard reuses the conditions its reads use**, so the read and the guard can't disagree. **(step 2)** `server/utils/batch.ts` gets a guard that takes a query built with the builder (`db.select({ n: count() }).from(table).where(condition)`), and the `sql\`select count(*) …\`` strings move to it. Until then, a new guard interpolates the same named condition into its `sql` instead of writing the predicate again.
+- **A guard counts with Drizzle's [`db.$count(table, condition)`](https://orm.drizzle.team/docs/query-utils#count)**, which is an `SQL<number>` subquery, so it goes straight into `requireCount` and `requireAtMost`. The guard then reuses the named conditions its reads use, and the operators encode times, so the read and the guard can't disagree. Not `sql\`select count(*) from …\`` strings.
+
+  ```ts
+  /** Aborts unless the set has between 1 and `maxValues` active values (run it after the change). */
+  export function requireActiveValueCount(db: Db, tenantId: string, setId: string, maxValues: number): Statement {
+    const active = and(eq(menuOptionValues.tenantId, tenantId), eq(menuOptionValues.setId, setId), eq(menuOptionValues.status, 'active'))
+    return requireCount(db, sql`${db.$count(menuOptionValues, active)} between 1 and ${maxValues}`, 1)
+  }
+
+  // the simple case: exactly `n` rows match
+  requireCount(db, db.$count(menuItems, and(eq(menuItems.tenantId, tenantId), eq(menuItems.categoryId, categoryId), ne(menuItems.status, 'archived'))), n)
+  ```
 - **A guard over a list** splits it with `chunk(ids)`, one guard per piece, like any other statement over a list.
 - **Its doc comment** says what aborts it, and the write it protects says "Follow it with `requireOneChange`".
 
@@ -154,6 +167,45 @@ The one exception: a scheduled task or a delivery run may execute a **single con
 
 **(step 2)** The four queues that claim work with a token (outbox, marketing posts, notification deliveries, order-ready alerts) get one shared shape for these functions.
 
+## Shared helpers
+
+Repositories are built from **small typed building blocks**, not from a generic repository. There is no `BaseRepository`, no `findOne(table, id)` / `create(table, values)` for any table, and no filter language that turns query parameters into `where` clauses. Those would make the tenant, version and status conditions optional per call (audit R1), lose the result types and bring back casts (R8), run writes outside the service's batch, and let a client filter on columns nobody chose. Drizzle already is the generic layer; a helper only names a shape that repositories repeat.
+
+**When a helper is made:** a query shape repeated in two or more features becomes a helper, in the narrowest shared place that every user can import (the same rule as [app architecture](../guides/app-architecture.md)). A shape that only one feature uses stays a named constant or function in that feature. A rule that belongs to a feature's data ("an owner who can sign in", "an active cafe") is a condition exported by that feature's `index.ts`, not a util.
+
+| Where | What goes there |
+|---|---|
+| `server/utils/query.ts` | Conditions and reads for repositories |
+| `server/utils/batch.ts` | Statements, guards and D1 limits (exists) |
+| `shared/utils/` | Pure helpers the app also uses (no Vue, no Nitro: [Nuxt's rule](https://nuxt.com/docs/4.x/directory-structure/shared)); features import them as `#shared/utils/<file>` |
+
+**Use today:** `runBatch`, `requireOneChange`, `requireCount`, `requireAtMost`, `chunk`, `readInChunks`, `insertPieces` (`server/utils/batch.ts`), `containsText` (`server/utils/search.ts`), and Drizzle's own [`db.$count`](https://orm.drizzle.team/docs/query-utils#count) (counts and guards; not a batch item), [`.$dynamic()`](https://orm.drizzle.team/docs/dynamic-query-building) (a query a helper changes), `alias` and `getTableColumns`.
+
+**(step 2) Planned**, each with its own tests on the SQLite test database and on real D1 (`server/tests/d1-search.test.ts`):
+
+| Helper | Shape | Replaces (uses on 2026-10-20) | Based on |
+|---|---|---|---|
+| `inTenant(table, tenantId, ...conditions)` | `and(eq(t.tenantId, tenantId), …)` | starting each `where` by hand (167) | builder operators |
+| `byId(table, tenantId, id)`, `atVersion(table, tenantId, id, version)` | the key, and the key at a version | 34, 18 | builder operators |
+| `withStatus(column, status \| 'all')` | `undefined` for `'all'` | 5 | builder operators |
+| `searchIn(search, ...columns)` | `or(containsText(…), …)`, `undefined` without a search | 5 | D183 |
+| `byName(column)` | one case-insensitive name order (today `lower()` and `collate nocase` both) | 8 | SQLite |
+| `first(query)` | `T \| undefined` from `.limit(1)` | ~41 | builder |
+| `withPage(query, { page, pageSize })` | limit and offset on a `.$dynamic()` query (`T extends SQLiteSelect`) | 7 | [Drizzle's pagination guide](https://orm.drizzle.team/docs/guides/limit-offset-pagination) |
+| `page(db, rows, total, { page, pageSize })` | `{ rows, total }`: the page and `select({ total: count() })` in one `db.batch` | 7, and their 10 casts | [batch API](https://orm.drizzle.team/docs/sqlite/batch-api) |
+| `countBy(db, key, from, where)` | `Map<string, number>` | 7 | builder |
+| `hasAny(db, table, where)` | `boolean` from `select 1 … limit 1` | ~10 | builder |
+| `nextPosition(db, column, where)` | `max(column) + 1` | 4 | builder |
+| `updateAtVersion(db, table, key, set, extra?)` | a `Statement`: the key at its version, `version + 1`, typed by `SQLiteUpdateSetSource<T>` | 22 | builder |
+| `insertAll(db, table, rows)`, `replaceAll(db, table, where, rows)` | `Statement[]` in pieces under D1's limit | 13, 7 | `insertPieces` |
+| `deleteOldest(db, table, where, orderBy, limit)` | a bounded cleanup, `Promise<number>` | 5 | builder |
+| `pageOf(items, query, total)`, `slicePage(rows, query)` | `Page<T>` (`shared/contracts/common.ts`) | 7 hand-built pages in services | — |
+| `groupBy(rows, key)` | `Map<string, T[]>` | 6 | — |
+
+`first`, `withPage`, the batched page and total, `updateAtVersion` and `$count` inside `requireCount` were tried on 2026-10-20: they type-check with result types inferred (a wrong column or value type is refused) and run on the migrated SQLite test database, including a stale version and another cafe's id changing nothing. `page()` needs one cast inside itself, because `db.batch`'s tuple types don't pass through a generic.
+
+**Enforced by lint (step 2):** an ESLint `no-restricted-syntax` block for `*.repository.ts` refuses `as Promise<…>`, `db.run`/`db.all`, and `.getTime()` inside an `sql` template.
+
 ## D1 limits
 
 They are in [architecture → Atomic writes](./architecture.md#atomic-writes): 100 bound parameters per statement (D62), unique column names in batch reads (D170), no `like` patterns over 50 bytes (D183). For a repository that means: a list of ids goes through `readInChunks`, `insertPieces` or `chunk`. An `inArray` without them is allowed only when a contract bounds the list well under 90 items, and the comment names that bound (`At most MAX_ITEM_MODIFIER_GROUPS (10) groups`).
@@ -169,7 +221,9 @@ Repositories are tested through their services ([architecture → Tests](./archi
 
 ## Checklist for a repository change
 
+- [ ] Each library API used as its current official docs describe, checked against the installed version.
 - [ ] Query builder only; no relational queries and no raw statements.
+- [ ] A shared helper used where one exists; a shape now repeated in a second feature made into one.
 - [ ] Names, parameter order and explicit return types as in the table above.
 - [ ] Every function on a cafe table filters the table's own `tenant_id`, or says "Across cafes:" and is one of the allowed kinds.
 - [ ] Writes only to the feature's own tables; no new kind of cross-feature join while R7 is open.
