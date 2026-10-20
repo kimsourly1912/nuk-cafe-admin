@@ -6,13 +6,13 @@ import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { payOrder, placeOrder } from '#server/features/orders'
 import { outboxMessages } from '#server/features/platform/platform.schema'
-import { deliverDue, listDeliveries, purgeDeliveries, queueBakongTokenReminder, queueClosingSummaries, queueJobFailureAlert, queueOrderAlert, queueServerErrorAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
+import { deliverDue, listDeliveries, purgeDeliveries, queueBakongTokenReminder, queueClosingSummaries, queueJobFailureAlert, queueOrderAlert, queueServerErrorAlert, queueSupportOpenedAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
 import { closingInstant, routeOf, bakongReminderStage } from '#server/features/notifications/notifications.messages'
 import * as repo from '#server/features/notifications/notifications.repository'
 import { notificationDeliveries, telegramDestinations } from '#server/features/notifications/notifications.schema'
 import { sendReport, telegramOverview } from '#server/features/notifications/notifications.service'
 import type { TelegramSettings } from '#server/features/notifications/notifications.settings'
-import { createAdmin, createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { createAdmin, createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -432,5 +432,43 @@ describe('the Bakong token\'s reminders (step 10.16, D132)', () => {
     const renewed = new Date(EXPIRES.getTime() + 90 * 24 * 3_600_000)
     expect(await queueBakongTokenReminder(db, TEST_TENANT, renewed, CAFE_URL, new Date(renewed.getTime() - 24 * 3_600_000))).toHaveLength(2)
     expect(await deliveries()).toHaveLength(4)
+  })
+})
+
+describe('platform support opened (D193)', () => {
+  const VISIT = { name: 'Ops', expiresAt: new Date('2026-10-19T06:00:00Z') }
+
+  it('goes once per chat and visit to the chats that get operational alerts, with who and until when', async () => {
+    expect(await queueSupportOpenedAlert(db, TEST_TENANT, 'visit-1', VISIT, CAFE_URL)).toEqual([])
+    await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
+
+    const ids = await queueSupportOpenedAlert(db, TEST_TENANT, 'visit-1', VISIT, CAFE_URL)
+    expect(ids).toHaveLength(1)
+    // The same visit again adds nothing; a new visit is a new message.
+    expect(await queueSupportOpenedAlert(db, TEST_TENANT, 'visit-1', VISIT, CAFE_URL)).toEqual([])
+    expect(await queueSupportOpenedAlert(db, TEST_TENANT, 'visit-2', VISIT, CAFE_URL)).toHaveLength(1)
+
+    const [row] = await deliveries()
+    expect(row).toMatchObject({ kind: 'server_error', destinationId: owner, subject: 'Platform support opened' })
+    expect(row!.message.html).toContain('<b>Platform support opened your cafe</b>')
+    expect(row!.message.html).toContain('Ops is looking at your admin, read-only, until 19 Oct, 13:00')
+    expect(row!.message.button).toEqual({ text: 'Open Platform support', url: `${CAFE_URL}/admin/support` })
+
+    await deliverDue(db, telegram.api, undefined, { ids })
+    expect(telegram.sent()).toHaveLength(1)
+  })
+
+  it('names nobody it cannot find, and never reaches another cafe\'s chats', async () => {
+    // Another cafe's chat gets operational alerts too: ours must not reach it.
+    await ensureTenant(db, 'tenant-2', 'brown-bean')
+    const other = await createAdmin(db, 'other-owner@example.com', 'tenant-2')
+    await db.insert(telegramDestinations).values({ id: 'other-chat', tenantId: 'tenant-2', chatId: '999', kind: 'private', title: 'Other', connectedBy: other.userId })
+    await setNotificationRule(db, { ...other, tenantId: 'tenant-2', role: 'owner' }, { kind: 'server_error', destinationId: 'other-chat', enabled: true, attachCsv: false })
+    await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
+    await queueSupportOpenedAlert(db, TEST_TENANT, 'visit-0', VISIT, CAFE_URL)
+    expect((await deliveries()).map(d => d.destinationId)).toEqual([owner])
+
+    await queueSupportOpenedAlert(db, TEST_TENANT, 'visit-1', { ...VISIT, name: null }, CAFE_URL)
+    expect((await deliveries()).find(d => d.dedupeKey === 'support_open:visit-1')!.message.html).toContain('Someone from the platform team is looking')
   })
 })

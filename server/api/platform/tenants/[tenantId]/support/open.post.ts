@@ -12,5 +12,8 @@ export default defineEventHandler(async (event) => {
   const { sessionId } = await supportRequestOf(event, tenantId)
   if (!sessionId) throw createError({ statusCode: 401 })
   const verifyCode = () => serverAuth(event).api.verifyTOTP({ headers: event.headers, body: { code } }).then(() => true, () => false)
-  return openSupportVisit(useDb(), { ...actor, sessionId }, tenantId, verifyCode)
+  const { visitId, ...opened } = await openSupportVisit(useDb(), { ...actor, sessionId }, tenantId, verifyCode)
+  // The cafe's Telegram chats hear about it (D193); the browser only needs where to go.
+  alertSupportOpened(event, tenantId, { visitId, userId: actor.userId, expiresAt: opened.expiresAt })
+  return opened
 })
