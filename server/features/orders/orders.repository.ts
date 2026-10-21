@@ -1,12 +1,12 @@
-import { and, asc, desc, eq, gt, gte, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, gte, inArray, lte, or, sql } from 'drizzle-orm'
 import type { OrderSource } from '#shared/contracts/marketing'
 import type { CancelReason, OrderStatus, OrderType, PaymentMethod, QuotedModifier, ReturnMethod } from '#shared/contracts/orders'
 import { branches, user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
-import { insertPieces, readInChunks, requireAtMost } from '#server/utils/batch'
+import { insertAll, readInChunks, requireAtMost } from '#server/utils/batch'
+import type { PageQuery } from '#server/utils/query'
+import { byId, firstRow, inTenant, readPage } from '#server/utils/query'
 import { bakongTokens, counterPayments, exchangeRates, khqrSettings, orderEvents, orderLines, orders } from './orders.schema'
-
-/** All SQL of orders (docs/server/architecture.md → Repository). */
 
 export interface NewOrder {
   id: string
@@ -43,27 +43,30 @@ export interface NewOrderLine {
   promotionLabel: string | null
 }
 
+/** An order line as stored. */
+export type OrderLineRow = typeof orderLines.$inferSelect
+
 /**
  * The order, with the next pickup number of its branch and business day computed **in the same
  * statement** (SQLite runs one write at a time, so two orders can't read the same maximum); the
  * unique index on the number is the final guard.
  */
 export function insertOrderStatement(db: Db, order: NewOrder): Statement {
-  const next = sql<number>`(select coalesce(max(${orders.pickupNumber}), 0) + 1 from ${orders} where ${orders.branchId} = ${order.branchId} and ${orders.businessDate} = ${order.businessDate})`
+  const next = sql<number>`(select coalesce(max(${orders.pickupNumber}), 0) + 1 from ${orders} where ${inTenant(orders, order.tenantId, eq(orders.branchId, order.branchId), eq(orders.businessDate, order.businessDate))})`
   return db.insert(orders).values({ ...order, pickupNumber: next, status: 'awaiting_payment' })
 }
 
 /** The lines, in pieces small enough for D1's parameter limit (30 lines at most anyway). */
 export function insertLinesStatements(db: Db, tenantId: string, orderId: string, lines: NewOrderLine[]): Statement[] {
-  return insertPieces(orderLines, lines).map(piece => db.insert(orderLines).values(piece.map(line => ({ ...line, tenantId, orderId }))))
+  return insertAll(db, orderLines, lines.map(line => ({ ...line, tenantId, orderId })))
 }
 
 /**
  * A guard for the batch: the customer has at most `max` unpaid orders still due, counting the one
  * this batch inserts (put it after the insert). Concurrent placements can't both slip under it.
  */
-export function unpaidAtMostStatement(db: Db, tenantId: string, customerId: string, now: Date, max: number): Statement {
-  return requireAtMost(db, sql`select count(*) from ${orders} where ${orders.tenantId} = ${tenantId} and ${orders.customerId} = ${customerId} and ${orders.status} = 'awaiting_payment' and ${orders.paymentDueAt} > ${now.getTime()}`, max)
+export function requireUnpaidAtMost(db: Db, tenantId: string, customerId: string, now: Date, max: number): Statement {
+  return requireAtMost(db, db.$count(orders, inTenant(orders, tenantId, eq(orders.customerId, customerId), eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now))), max)
 }
 
 export interface OrderRow {
@@ -113,42 +116,44 @@ const orderColumns = {
   version: orders.version,
 }
 
+/** Orders with their branch's and customer's names: the branch by the composite key, inside the cafe. */
 const selectOrders = (db: Db) => db.select(orderColumns).from(orders)
-  .innerJoin(branches, eq(branches.id, orders.branchId))
+  .innerJoin(branches, and(eq(branches.tenantId, orders.tenantId), eq(branches.id, orders.branchId)))
   .innerJoin(user, eq(user.id, orders.customerId))
 
 /** The tenant's order; another tenant's is `undefined`, like an unknown id. */
-export async function findOrder(db: Db, tenantId: string, id: string): Promise<OrderRow | undefined> {
-  const [row] = await selectOrders(db).where(and(eq(orders.tenantId, tenantId), eq(orders.id, id)))
-  return row
+export function findOrder(db: Db, tenantId: string, id: string): Promise<OrderRow | undefined> {
+  return firstRow(selectOrders(db).where(byId(orders, tenantId, id)))
 }
 
 /**
  * The branch's orders still in play, oldest first: waiting for payment and not past their time
  * (an expired one is the expiry task's, 6.6), preparing, ready.
  */
-const activeOrdersWhere = (tenantId: string, branchId: string, now: Date) => and(
-  eq(orders.tenantId, tenantId),
+const activeOrdersWhere = (tenantId: string, branchId: string, now: Date) => inTenant(
+  orders,
+  tenantId,
   eq(orders.branchId, branchId),
   or(and(eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now)), inArray(orders.status, ['preparing', 'ready'])),
 )
 
-function activeOrdersQuery(db: Db, tenantId: string, branchId: string, now: Date) {
-  return selectOrders(db)
-    .where(activeOrdersWhere(tenantId, branchId, now))
-    .orderBy(asc(orders.placedAt), asc(orders.id))
+export interface CounterQueueRows {
+  rows: OrderRow[]
+  lines: OrderLineRow[]
+  payments: PaymentRow[]
+  finishedToday: number
 }
 
 /** One fresh snapshot of the queue and its details/count, without building an unbounded ID list. */
-export async function counterQueueRows(db: Db, tenantId: string, branchId: string, businessDate: string, now: Date) {
+export async function counterQueueRows(db: Db, tenantId: string, branchId: string, businessDate: string, now: Date): Promise<CounterQueueRows> {
   const activeIds = db.select({ id: orders.id }).from(orders).where(activeOrdersWhere(tenantId, branchId, now))
   const [rows, lines, payments, [counted]] = await db.batch([
-    activeOrdersQuery(db, tenantId, branchId, now),
-    db.select().from(orderLines).where(and(eq(orderLines.tenantId, tenantId), inArray(orderLines.orderId, activeIds)))
+    selectOrders(db).where(activeOrdersWhere(tenantId, branchId, now)).orderBy(asc(orders.placedAt), asc(orders.id)),
+    db.select().from(orderLines).where(inTenant(orderLines, tenantId, inArray(orderLines.orderId, activeIds)))
       .orderBy(asc(orderLines.orderId), asc(orderLines.position)),
-    selectPayments(db).where(and(eq(counterPayments.tenantId, tenantId), inArray(counterPayments.orderId, activeIds))),
-    db.select({ n: sql<number>`count(*)` }).from(orders)
-      .where(and(eq(orders.tenantId, tenantId), eq(orders.branchId, branchId), eq(orders.businessDate, businessDate), inArray(orders.status, ['completed', 'cancelled']))),
+    selectPayments(db).where(inTenant(counterPayments, tenantId, inArray(counterPayments.orderId, activeIds))),
+    db.select({ n: count() }).from(orders)
+      .where(inTenant(orders, tenantId, eq(orders.branchId, branchId), eq(orders.businessDate, businessDate), inArray(orders.status, ['completed', 'cancelled']))),
   ])
   return { rows, lines, payments, finishedToday: counted?.n ?? 0 }
 }
@@ -163,9 +168,9 @@ export const FINISHED_LIMIT = 500
  * A business day's orders that left the queue (step 10.2), the most recently finished first; the
  * id breaks ties. Uses `orders_branch_date_idx`.
  */
-export async function findFinishedOrders(db: Db, branchId: string, businessDate: string): Promise<OrderRow[]> {
+export function findFinishedOrders(db: Db, tenantId: string, branchId: string, businessDate: string): Promise<OrderRow[]> {
   return selectOrders(db)
-    .where(and(eq(orders.branchId, branchId), eq(orders.businessDate, businessDate), inArray(orders.status, ['completed', 'cancelled'])))
+    .where(inTenant(orders, tenantId, eq(orders.branchId, branchId), eq(orders.businessDate, businessDate), inArray(orders.status, ['completed', 'cancelled'])))
     .orderBy(desc(finishedAt), desc(orders.id))
     .limit(FINISHED_LIMIT)
 }
@@ -178,52 +183,51 @@ const FINISHED: OrderStatus[] = ['completed', 'cancelled']
 const newestFirst = [desc(orders.placedAt), desc(orders.id)]
 
 /** The customer's orders still in play, newest first (a few at most: two can be unpaid). */
-export async function findCustomerOrdersInProgress(db: Db, tenantId: string, customerId: string, limit: number): Promise<OrderRow[]> {
+export function findCustomerOrdersInProgress(db: Db, tenantId: string, customerId: string, limit: number): Promise<OrderRow[]> {
   return selectOrders(db)
-    .where(and(eq(orders.tenantId, tenantId), eq(orders.customerId, customerId), inArray(orders.status, IN_PROGRESS)))
+    .where(inTenant(orders, tenantId, eq(orders.customerId, customerId), inArray(orders.status, IN_PROGRESS)))
     .orderBy(...newestFirst)
     .limit(limit)
 }
 
 /** A page of the customer's completed and cancelled orders, newest first, and how many there are. */
-export async function findCustomerOrdersPast(db: Db, tenantId: string, customerId: string, page: { page: number, pageSize: number }): Promise<{ rows: OrderRow[], total: number }> {
-  const where = and(eq(orders.tenantId, tenantId), eq(orders.customerId, customerId), inArray(orders.status, FINISHED))
-  const [rows, [count]] = await Promise.all([
-    selectOrders(db).where(where).orderBy(...newestFirst).limit(page.pageSize).offset((page.page - 1) * page.pageSize),
-    db.select({ total: sql<number>`count(*)` }).from(orders).where(where),
-  ])
-  return { rows, total: count?.total ?? 0 }
+export function findCustomerOrdersPast(db: Db, tenantId: string, customerId: string, page: PageQuery): Promise<{ rows: OrderRow[], total: number }> {
+  const where = inTenant(orders, tenantId, eq(orders.customerId, customerId), inArray(orders.status, FINISHED))
+  return readPage(db, selectOrders(db).where(where).orderBy(...newestFirst).$dynamic(), db.select({ total: count() }).from(orders).where(where), page)
 }
 
 /** Units per order (the sum of the lines' quantities). */
-export async function itemCounts(db: Db, orderIds: string[]): Promise<Map<string, number>> {
-  const rows: { orderId: string, count: number }[] = await readInChunks(orderIds, ids => db
-    .select({ orderId: orderLines.orderId, count: sql<number>`sum(${orderLines.quantity})` })
-    .from(orderLines).where(inArray(orderLines.orderId, ids)).groupBy(orderLines.orderId))
-  return new Map(rows.map(row => [row.orderId, Number(row.count)]))
+export async function itemCounts(db: Db, tenantId: string, orderIds: string[]): Promise<Map<string, number>> {
+  const rows = await readInChunks(orderIds, ids => db
+    .select({ orderId: orderLines.orderId, count: sql<number>`sum(${orderLines.quantity})`.mapWith(Number) })
+    .from(orderLines)
+    .where(inTenant(orderLines, tenantId, inArray(orderLines.orderId, ids)))
+    .groupBy(orderLines.orderId))
+  return new Map(rows.map(row => [row.orderId, row.count]))
 }
 
 /** The event that cancelled the order, if it was: who did it (`null`: the system) and why. */
-export async function cancelEventOf(db: Db, orderId: string): Promise<{ actorId: string | null, reason: CancelReason | null } | undefined> {
-  const [row] = await db.select({ actorId: orderEvents.actorId, reason: orderEvents.reason }).from(orderEvents)
-    .where(and(eq(orderEvents.orderId, orderId), eq(orderEvents.toStatus, 'cancelled')))
-    .orderBy(desc(orderEvents.toVersion)).limit(1)
-  return row
+export function cancelEventOf(db: Db, tenantId: string, orderId: string): Promise<{ actorId: string | null, reason: CancelReason | null } | undefined> {
+  return firstRow(db.select({ actorId: orderEvents.actorId, reason: orderEvents.reason }).from(orderEvents)
+    .where(inTenant(orderEvents, tenantId, eq(orderEvents.orderId, orderId), eq(orderEvents.toStatus, 'cancelled')))
+    .orderBy(desc(orderEvents.toVersion)))
 }
 
-export async function linesOf(db: Db, orderId: string) {
-  return db.select().from(orderLines).where(eq(orderLines.orderId, orderId)).orderBy(asc(orderLines.position))
+/** The order's lines, by position. */
+export function linesOf(db: Db, tenantId: string, orderId: string): Promise<OrderLineRow[]> {
+  return db.select().from(orderLines).where(inTenant(orderLines, tenantId, eq(orderLines.orderId, orderId))).orderBy(asc(orderLines.position))
 }
 
 /** The lines of many orders (in pieces for D1's parameter limit), by position. */
-export async function linesOfOrders(db: Db, orderIds: string[]) {
-  const rows = await readInChunks(orderIds, ids => db.select().from(orderLines).where(inArray(orderLines.orderId, ids)))
+export async function linesOfOrders(db: Db, tenantId: string, orderIds: string[]): Promise<OrderLineRow[]> {
+  const rows = await readInChunks(orderIds, ids => db.select().from(orderLines).where(inTenant(orderLines, tenantId, inArray(orderLines.orderId, ids))))
   return rows.sort((a, b) => a.position - b.position)
 }
 
 // --- The counter (6.3, D101) ---
 
 export interface OrderChange {
+  tenantId: string
   orderId: string
   fromStatus: OrderStatus
   toStatus: OrderStatus
@@ -247,7 +251,7 @@ export function transitionStatement(db: Db, change: OrderChange): Statement {
   const at = stamp[change.toStatus]
   return db.update(orders)
     .set({ status: change.toStatus, version: change.version + 1, updatedAt: change.at, ...(at ? { [at]: change.at } : {}) })
-    .where(and(eq(orders.id, change.orderId), eq(orders.status, change.fromStatus), eq(orders.version, change.version)))
+    .where(inTenant(orders, change.tenantId, eq(orders.id, change.orderId), eq(orders.status, change.fromStatus), eq(orders.version, change.version)))
 }
 
 export function eventStatement(db: Db, event: { tenantId: string, orderId: string, toVersion: number, actorId: string | null, fromStatus: OrderStatus | null, toStatus: OrderStatus, reason?: CancelReason | null, note?: string | null, at: Date }): Statement {
@@ -274,8 +278,8 @@ export function insertPaymentStatement(db: Db, payment: NewPayment): Statement {
 }
 
 /** Records how the money of a cancelled paid order went back. */
-export function returnPaymentStatement(db: Db, orderId: string, returned: { returnMethod: ReturnMethod, returnedBy: string, returnedAt: Date }): Statement {
-  return db.update(counterPayments).set(returned).where(eq(counterPayments.orderId, orderId))
+export function returnPaymentStatement(db: Db, tenantId: string, orderId: string, returned: { returnMethod: ReturnMethod, returnedBy: string, returnedAt: Date }): Statement {
+  return db.update(counterPayments).set(returned).where(inTenant(counterPayments, tenantId, eq(counterPayments.orderId, orderId)))
 }
 
 export interface PaymentRow {
@@ -308,8 +312,9 @@ function selectPayments(db: Db) {
   }).from(counterPayments).innerJoin(user, eq(user.id, counterPayments.collectedBy))
 }
 
-export async function paymentsOf(db: Db, orderIds: string[]): Promise<PaymentRow[]> {
-  return readInChunks(orderIds, ids => selectPayments(db).where(inArray(counterPayments.orderId, ids)))
+/** The payments of these orders of the cafe (one at most per order). */
+export function paymentsOf(db: Db, tenantId: string, orderIds: string[]): Promise<PaymentRow[]> {
+  return readInChunks(orderIds, ids => selectPayments(db).where(inTenant(counterPayments, tenantId, inArray(counterPayments.orderId, ids))))
 }
 
 // --- The riel rate (6.3, D101) ---
@@ -325,8 +330,9 @@ const rateColumns = { perUsd: exchangeRates.perUsd, effectiveFrom: exchangeRates
 /** The tenant's rate in force at `now`: the latest set before it. */
 function currentRateQuery(db: Db, tenantId: string, now: Date) {
   return db.select(rateColumns).from(exchangeRates).innerJoin(user, eq(user.id, exchangeRates.setBy))
-    .where(and(eq(exchangeRates.tenantId, tenantId), eq(exchangeRates.currency, 'KHR'), lte(exchangeRates.effectiveFrom, now)))
-    .orderBy(desc(exchangeRates.effectiveFrom)).limit(1)
+    .where(inTenant(exchangeRates, tenantId, eq(exchangeRates.currency, 'KHR'), lte(exchangeRates.effectiveFrom, now)))
+    .orderBy(desc(exchangeRates.effectiveFrom))
+    .limit(1)
 }
 
 export async function currentRate(db: Db, tenantId: string, now: Date): Promise<RateRow | undefined> {
@@ -334,10 +340,17 @@ export async function currentRate(db: Db, tenantId: string, now: Date): Promise<
   return row
 }
 
+export interface CounterContextRow {
+  timeZone: string
+  rate: RateRow | null
+  khqr: { enabled: boolean, currencies: string } | null
+  hasBakongToken: boolean
+}
+
 /** Branch clock, current rate and public KHQR capability in one read; sealed token data is never selected. */
-export async function counterContext(db: Db, tenantId: string, branchId: string, now: Date) {
+export function counterContext(db: Db, tenantId: string, branchId: string, now: Date): Promise<CounterContextRow | undefined> {
   const rate = currentRateQuery(db, tenantId, now).as('current_rate')
-  const [row] = await db.select({
+  return firstRow(db.select({
     timeZone: branches.timezone,
     rate: { perUsd: rate.perUsd, effectiveFrom: rate.effectiveFrom, setByName: rate.setByName },
     khqr: { enabled: khqrSettings.enabled, currencies: khqrSettings.currencies },
@@ -345,55 +358,48 @@ export async function counterContext(db: Db, tenantId: string, branchId: string,
   }).from(branches)
     .leftJoin(rate, sql`true`)
     .leftJoin(khqrSettings, eq(khqrSettings.tenantId, branches.tenantId))
-    .where(and(eq(branches.tenantId, tenantId), eq(branches.id, branchId)))
-  return row
+    .where(and(eq(branches.tenantId, tenantId), eq(branches.id, branchId))))
 }
 
-export async function rateHistory(db: Db, tenantId: string, limit: number): Promise<RateRow[]> {
+export function rateHistory(db: Db, tenantId: string, limit: number): Promise<RateRow[]> {
   return db.select(rateColumns).from(exchangeRates).innerJoin(user, eq(user.id, exchangeRates.setBy))
-    .where(and(eq(exchangeRates.tenantId, tenantId), eq(exchangeRates.currency, 'KHR')))
-    .orderBy(desc(exchangeRates.effectiveFrom)).limit(limit)
+    .where(inTenant(exchangeRates, tenantId, eq(exchangeRates.currency, 'KHR')))
+    .orderBy(desc(exchangeRates.effectiveFrom))
+    .limit(limit)
 }
 
 export function insertRateStatement(db: Db, rate: { tenantId: string, perUsd: number, effectiveFrom: Date, setBy: string }): Statement {
   return db.insert(exchangeRates).values({ ...rate, currency: 'KHR' })
 }
 
-/** Unpaid orders still due, for tests and the expiry task (6.6). */
-/** Unpaid orders whose time to pay is over (the expiry task, 6.6), oldest first. */
-export async function findExpiredUnpaid(db: Db, now: Date, limit: number): Promise<{ id: string, tenantId: string, version: number, branchId: string }[]> {
+/** Across cafes: unpaid orders whose time to pay is over (the expiry task, 6.6), oldest first. */
+export function findExpiredUnpaid(db: Db, now: Date, limit: number): Promise<{ id: string, tenantId: string, version: number, branchId: string }[]> {
   return db.select({ id: orders.id, tenantId: orders.tenantId, version: orders.version, branchId: orders.branchId }).from(orders)
     .where(and(eq(orders.status, 'awaiting_payment'), lte(orders.paymentDueAt, now)))
     .orderBy(asc(orders.paymentDueAt))
     .limit(limit)
 }
 
-export async function unpaidCount(db: Db, tenantId: string, customerId: string, now: Date): Promise<number> {
-  const [row] = await db.select({ count: sql<number>`count(*)` }).from(orders)
-    .where(and(eq(orders.tenantId, tenantId), eq(orders.customerId, customerId), eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now)))
-  return row?.count ?? 0
-}
-
 /**
- * Per cafe: orders placed since `since`, and when the last one was placed (the platform console's
- * usage numbers, D142). Counts only: a super admin never sees the orders themselves.
+ * Across cafes: per cafe, orders placed since `since`, and when the last one was placed (the
+ * platform console's usage numbers, D142). Counts only: a super admin never sees the orders themselves.
  */
-export async function orderActivity(db: Db, tenantIds: string[], since: Date): Promise<{ tenantId: string, recent: number, lastPlacedAt: Date | null }[]> {
+export function orderActivity(db: Db, tenantIds: string[], since: Date): Promise<{ tenantId: string, recent: number, lastPlacedAt: Date | null }[]> {
   return readInChunks(tenantIds, ids => db.select({
     tenantId: orders.tenantId,
-    recent: sql<number>`sum(case when ${orders.placedAt} >= ${since.getTime()} then 1 else 0 end)`.mapWith(Number),
+    recent: sql<number>`sum(case when ${gte(orders.placedAt, since)} then 1 else 0 end)`.mapWith(Number),
     lastPlacedAt: sql<Date | null>`max(${orders.placedAt})`.mapWith(orders.placedAt),
   }).from(orders).where(inArray(orders.tenantId, ids)).groupBy(orders.tenantId))
 }
 
-/** Of these cafes, those with an order placed at or after `since` (`orders_tenant_placed_idx`: a range per cafe). */
+/** Across cafes: of these cafes, those with an order placed at or after `since` (`orders_tenant_placed_idx`: a range per cafe). */
 export async function tenantsWithOrdersSince(db: Db, tenantIds: string[], since: Date): Promise<string[]> {
-  const rows: { tenantId: string }[] = await readInChunks(tenantIds, ids => db.selectDistinct({ tenantId: orders.tenantId }).from(orders)
+  const rows = await readInChunks(tenantIds, ids => db.selectDistinct({ tenantId: orders.tenantId }).from(orders)
     .where(and(inArray(orders.tenantId, ids), gte(orders.placedAt, since))))
   return rows.map(row => row.tenantId)
 }
 
-/** Every order of one customer handed to another (a guest's to their account, D156), across cafes. */
+/** Across cafes: every order of one customer handed to another (a guest's to their account, D156). */
 export function moveOrdersStatement(db: Db, fromCustomerId: string, toCustomerId: string): Statement {
   return db.update(orders).set({ customerId: toCustomerId }).where(eq(orders.customerId, fromCustomerId))
 }

@@ -8,11 +8,13 @@ import { getPromotion } from '#server/features/menu'
 import type { TelegramSettings } from '#server/features/notifications'
 import { auditStatement, retryDelayMs, withIdempotency } from '#server/features/platform'
 import type { Db } from '#server/utils/batch'
-import { isStaleWrite, requireOneChange, runBatch } from '#server/utils/batch'
+import { isStaleWrite, requireOneChange, tryGuardedBatch, runBatch } from '#server/utils/batch'
 import { apiError, ErrorCodes } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
 import { log } from '#server/utils/log'
 import { toIso } from '#server/utils/time'
+import * as postRepo from './marketing.posts.repository'
+import * as linkRepo from './marketing.links.repository'
 import { channelChanged, channelLinkNotFound, channelLinkUnusable, channelNotFound, channelRemoved, postChanged, postNotFailed, postNotFound, postNotPending, postTimeInvalid, promotionNotRunning } from './marketing.errors'
 import * as repo from './marketing.repository'
 import { addBotUrl, connectCode, escapeHtml, hashChannelCode, isChannel, newChannelCode, postUrl } from './marketing.rules'
@@ -42,7 +44,7 @@ function channelOf(row: repo.ChannelRow): MarketingChannel {
   }
 }
 
-function linkOf(row: repo.LinkRow, now: Date): ChannelLink {
+function linkOf(row: linkRepo.LinkRow, now: Date): ChannelLink {
   const live = row.status === 'waiting' || row.status === 'confirm'
   return {
     id: row.id,
@@ -85,11 +87,11 @@ async function ensureChannelUpdates(api: Api, settings: TelegramSettings) {
 /** A one-time `/connect` code for the admin to post in the channel. The code is only in this answer. */
 export async function createChannelLink(db: Db, api: Api, actor: Actor, settings: TelegramSettings, now = new Date()): Promise<NewChannelLink> {
   await ensureChannelUpdates(api, settings)
-  await repo.deleteOldLinks(db, new Date(now.getTime() - DAY))
+  await linkRepo.deleteLinksBefore(db, new Date(now.getTime() - DAY))
   const code = newChannelCode()
   const id = newId()
   const expiresAt = new Date(now.getTime() + CHANNEL_LINK_MINUTES * MINUTE)
-  await db.batch([repo.insertLinkStatement(db, { id, tenantId: actor.tenantId, codeHash: await hashChannelCode(code), createdBy: actor.userId, expiresAt, createdAt: now })])
+  await db.batch([linkRepo.insertLinkStatement(db, { id, tenantId: actor.tenantId, codeHash: await hashChannelCode(code), createdBy: actor.userId, expiresAt, createdAt: now })])
   return {
     id,
     status: 'waiting',
@@ -103,7 +105,7 @@ export async function createChannelLink(db: Db, api: Api, actor: Actor, settings
 }
 
 async function ownLink(db: Db, actor: Actor, id: string) {
-  const row = await repo.findLink(db, actor.tenantId, id)
+  const row = await linkRepo.findLink(db, actor.tenantId, id)
   if (!row || row.createdBy !== actor.userId) throw channelLinkNotFound()
   return row
 }
@@ -121,7 +123,7 @@ export async function confirmChannelLink(db: Db, actor: Actor, id: string, now =
   // The channel first (the code points at it), then the code, guarded: a used or expired code undoes both.
   await runBatch(db, [
     repo.upsertChannelStatement(db, channelId, { tenantId: actor.tenantId, externalId: row.chatId, title: row.chatTitle, username: row.chatUsername, subscriberCount: row.memberCount, connectedBy: actor.userId, at: now }),
-    repo.advanceLinkStatement(db, id, ['confirm'], { status: 'connected', channelId }, now),
+    linkRepo.advanceLinkStatement(db, actor.tenantId, id, ['confirm'], { status: 'connected', channelId }, now),
     requireOneChange(db),
     audit(db, actor, 'channel.connect', 'marketing_channel', channelId, { kind: 'telegram_channel' }),
   ], channelLinkUnusable)
@@ -140,9 +142,9 @@ async function leaveQuietly(api: Api, chatId: string) {
 /** The admin doesn't want that channel: the code ends, and the bot leaves it (unless a cafe uses it). */
 export async function cancelChannelLink(db: Db, api: Api, actor: Actor, id: string, now = new Date()): Promise<ChannelLink> {
   const row = await ownLink(db, actor, id)
-  const cancelled = await repo.cancelLink(db, id)
-  if (cancelled && row.status === 'confirm' && row.chatId && !await repo.channelConnectedAnywhere(db, row.chatId)) await leaveQuietly(api, row.chatId)
-  return linkOf((await repo.findLink(db, actor.tenantId, id))!, now)
+  const cancelled = await tryGuardedBatch(db, [linkRepo.cancelLinkStatement(db, actor.tenantId, id), requireOneChange(db)])
+  if (cancelled && row.status === 'confirm' && row.chatId && !await repo.hasConnectedChannelAcrossCafes(db, row.chatId)) await leaveQuietly(api, row.chatId)
+  return linkOf((await linkRepo.findLink(db, actor.tenantId, id))!, now)
 }
 
 /** Nothing more is posted there; the bot leaves the channel unless another cafe still uses it. Its posts stay. */
@@ -154,7 +156,7 @@ export async function disconnectChannel(db: Db, api: Api, actor: Actor, id: stri
     requireOneChange(db),
     audit(db, actor, 'channel.disconnect', 'marketing_channel', id),
   ], channelChanged)
-  if (row.status === 'connected' && !await repo.channelConnectedAnywhere(db, row.externalId)) await leaveQuietly(api, row.externalId)
+  if (row.status === 'connected' && !await repo.hasConnectedChannelAcrossCafes(db, row.externalId)) await leaveQuietly(api, row.externalId)
 }
 
 /** The bot's own id is the token's first part (`123456:ABC…`). */
@@ -162,7 +164,7 @@ const botIdOf = (settings: TelegramSettings) => Number(settings.botToken.split('
 
 async function useCode(db: Db, api: Api, settings: TelegramSettings, post: Message, code: string, now: Date) {
   const chat = post.chat
-  const link = await repo.findLinkByCode(db, await hashChannelCode(code))
+  const link = await linkRepo.findLinkByCode(db, await hashChannelCode(code))
   if (!link || link.status !== 'waiting' || link.expiresAt <= now) return
   // The bot must be able to post there; otherwise the code waits (the dialog says what to check).
   const rights = await api.getChatMember(chat.id, botIdOf(settings)).catch(() => null)
@@ -175,7 +177,7 @@ async function useCode(db: Db, api: Api, settings: TelegramSettings, post: Messa
   const username = 'username' in chat && chat.username ? chat.username : null
   try {
     await db.batch([
-      repo.advanceLinkStatement(db, link.id, ['waiting'], { status: 'confirm', chatId: String(chat.id), chatTitle: title, chatUsername: username, memberCount: subscribers }, now),
+      linkRepo.advanceLinkStatement(db, link.tenantId, link.id, ['waiting'], { status: 'confirm', chatId: String(chat.id), chatTitle: title, chatUsername: username, memberCount: subscribers }, now),
       requireOneChange(db),
     ])
   }
@@ -210,7 +212,7 @@ export async function handleChannelUpdate(db: Db, api: Api, settings: TelegramSe
 
 // --- Posts ---
 
-function postOf(row: repo.PostRow, kind: MarketingPost['channel']['kind'] = 'telegram_channel'): MarketingPost {
+function postOf(row: postRepo.PostRow, kind: MarketingPost['channel']['kind'] = 'telegram_channel'): MarketingPost {
   return {
     id: row.id,
     promotionId: row.promotionId,
@@ -232,7 +234,7 @@ function postOf(row: repo.PostRow, kind: MarketingPost['channel']['kind'] = 'tel
 /** A promotion's posts, latest first (another cafe's promotion is 404, from the menu feature). */
 export async function listPosts(db: Db, tenantId: string, promotionId: string): Promise<MarketingPost[]> {
   await getPromotion(db, tenantId, promotionId)
-  return (await repo.listPosts(db, tenantId, promotionId)).map(row => postOf(row))
+  return (await postRepo.listPosts(db, tenantId, promotionId)).map(row => postOf(row))
 }
 
 /** The poster's stored object from its address (`/media/<key>`). */
@@ -265,20 +267,20 @@ export async function createPosts(db: Db, actor: Actor, promotionId: string, inp
       ...(input.withPoster && promotion.poster ? { photoKey: objectKeyOf(promotion.poster.url) } : {}),
       button: { text: 'Order now', url: postMenuUrl(cafeUrl, promotion.id, 'telegram') },
     }
-    const posts = input.channelIds.map((channelId): repo.NewPost => ({ id: newId(), tenantId: actor.tenantId, promotionId, channelId, caption: input.caption, message, scheduledAt, createdBy: actor.userId, createdAt: now }))
+    const posts = input.channelIds.map((channelId): postRepo.NewPost => ({ id: newId(), tenantId: actor.tenantId, promotionId, channelId, caption: input.caption, message, scheduledAt, createdBy: actor.userId, createdAt: now }))
     return {
       statements: [
-        ...posts.map(post => repo.insertPostStatement(db, post)),
+        ...posts.map(post => postRepo.insertPostStatement(db, post)),
         audit(db, actor, 'post.create', 'menu_promotion', promotionId, { channelIds: input.channelIds, at: input.at, withPoster: !!message.photoKey }),
       ],
       response: { ids: posts.map(post => post.id) },
     }
   }, { now })
-  return (await repo.findPostsByIds(db, actor.tenantId, response.ids)).map(row => postOf(row))
+  return (await postRepo.findPosts(db, actor.tenantId, response.ids)).map(row => postOf(row))
 }
 
 async function openPost(db: Db, tenantId: string, id: string, version: number) {
-  const row = await repo.findPost(db, tenantId, id)
+  const row = await postRepo.findPost(db, tenantId, id)
   if (!row) throw postNotFound()
   if (row.version !== version) throw postChanged()
   return row
@@ -289,11 +291,11 @@ export async function cancelPost(db: Db, actor: Actor, id: string, input: PostVe
   const row = await openPost(db, actor.tenantId, id, input.version)
   if (row.status !== 'pending' || row.attempts > 0) throw postNotPending()
   await runBatch(db, [
-    repo.changePostStatement(db, actor.tenantId, id, input.version, ['pending'], { status: 'cancelled', reason: 'Cancelled before it went out.' }),
+    postRepo.changePostStatement(db, actor.tenantId, id, input.version, ['pending'], { status: 'cancelled', reason: 'Cancelled before it went out.' }),
     requireOneChange(db),
     audit(db, actor, 'post.cancel', 'marketing_post', id),
   ], postChanged) // the task claimed it, or someone else acted meanwhile
-  return postOf((await repo.findPost(db, actor.tenantId, id))!)
+  return postOf((await postRepo.findPost(db, actor.tenantId, id))!)
 }
 
 /** A failed post goes out again now (its tries start over). */
@@ -301,11 +303,11 @@ export async function retryPost(db: Db, actor: Actor, id: string, input: PostVer
   const row = await openPost(db, actor.tenantId, id, input.version)
   if (row.status !== 'failed') throw postNotFailed()
   await runBatch(db, [
-    repo.changePostStatement(db, actor.tenantId, id, input.version, ['failed'], { status: 'pending', attempts: 0, nextAttemptAt: now, reason: null }),
+    postRepo.changePostStatement(db, actor.tenantId, id, input.version, ['failed'], { status: 'pending', attempts: 0, nextAttemptAt: now, reason: null }),
     requireOneChange(db),
     audit(db, actor, 'post.retry', 'marketing_post', id),
   ], postChanged)
-  return postOf((await repo.findPost(db, actor.tenantId, id))!)
+  return postOf((await postRepo.findPost(db, actor.tenantId, id))!)
 }
 
 // --- Sending ---
@@ -327,7 +329,7 @@ export interface PostDeliveryReport {
 /** Reads a stored object (the poster); `null` when it's gone. */
 export type ReadObject = (key: string) => Promise<Uint8Array<ArrayBuffer> | null>
 
-async function send(api: Api, readObject: ReadObject, chatId: string, message: repo.PostRow['message']) {
+async function send(api: Api, readObject: ReadObject, chatId: string, message: postRepo.PostRow['message']) {
   const options = {
     parse_mode: 'HTML' as const,
     reply_markup: { inline_keyboard: [[{ text: message.button.text, url: message.button.url }]] },
@@ -347,31 +349,31 @@ export async function deliverDuePosts(db: Db, api: Api, readObject: ReadObject, 
   const report = { sent: 0, retried: 0, failed: 0, cancelled: 0 }
   if (options.ids && !options.ids.length) return report
   const started = Date.now()
-  for (const pending of await repo.duePosts(db, now ?? new Date(), options.limit ?? 25, options.ids)) {
+  for (const pending of await postRepo.duePosts(db, now ?? new Date(), options.limit ?? 25, options.ids)) {
     if (Date.now() - started >= (options.budgetMs ?? 20_000)) break
     const current = now ?? new Date()
-    const row = await repo.claimPost(db, pending.id, current, new Date(current.getTime() + CLAIM_MS))
+    const row = await postRepo.claimPost(db, pending.tenantId, pending.id, new Date(current.getTime() + CLAIM_MS), current)
     if (!row) continue
     const token = row.claimToken
     const attempt = row.attempts
     const promotion = await getPromotion(db, row.tenantId, row.promotionId, current).catch(() => undefined)
     if (!promotion || (promotion.phase !== 'live' && promotion.phase !== 'scheduled')) {
-      if (await repo.settlePost(db, row.id, token, { status: 'cancelled', reason: 'The promotion ended before this post went out.' })) report.cancelled++
+      if (await postRepo.settlePost(db, row.tenantId, row.id, token, { status: 'cancelled', reason: 'The promotion ended before this post went out.' })) report.cancelled++
       continue
     }
     const channel = await repo.findChannel(db, row.tenantId, row.channelId)
     if (!channel || channel.status !== 'connected') {
-      if (await repo.settlePost(db, row.id, token, { status: 'failed', reason: channel?.status === 'removed' ? 'The bot is no longer an admin of this channel.' : 'This channel was disconnected.' })) report.failed++
+      if (await postRepo.settlePost(db, row.tenantId, row.id, token, { status: 'failed', reason: channel?.status === 'removed' ? 'The bot is no longer an admin of this channel.' : 'This channel was disconnected.' })) report.failed++
       continue
     }
     try {
       const sent = await send(api, readObject, channel.externalId, row.message)
-      if (await repo.settlePost(db, row.id, token, { status: 'sent', sentAt: new Date(), externalMessageId: String(sent.message_id), externalUrl: postUrl(channel, sent.message_id), reason: null })) report.sent++
+      if (await postRepo.settlePost(db, row.tenantId, row.id, token, { status: 'sent', sentAt: new Date(), externalMessageId: String(sent.message_id), externalUrl: postUrl(channel, sent.message_id), reason: null })) report.sent++
     }
     catch (error) {
       log('warn', 'Telegram: a post was not delivered', { postId: row.id, attempt, error: String(error) })
       if (isRemovedError(error)) {
-        if (await repo.settlePost(db, row.id, token, { status: 'failed', reason: 'The bot is no longer an admin of this channel.' })) {
+        if (await postRepo.settlePost(db, row.tenantId, row.id, token, { status: 'failed', reason: 'The bot is no longer an admin of this channel.' })) {
           await repo.markRemoved(db, channel.externalId, current)
           report.failed++
         }
@@ -379,14 +381,14 @@ export async function deliverDuePosts(db: Db, api: Api, readObject: ReadObject, 
       else if (error instanceof GrammyError && error.error_code === 429) {
         // Telegram's flood control says when: that wait doesn't count against the tries.
         const seconds = error.parameters.retry_after ?? 30
-        if (await repo.settlePost(db, row.id, token, { attempts: row.attempts - 1, nextAttemptAt: new Date((now ?? new Date()).getTime() + seconds * 1000), reason: `Telegram asked to wait ${seconds} seconds.` })) report.retried++
+        if (await postRepo.settlePost(db, row.tenantId, row.id, token, { attempts: row.attempts - 1, nextAttemptAt: new Date((now ?? new Date()).getTime() + seconds * 1000), reason: `Telegram asked to wait ${seconds} seconds.` })) report.retried++
       }
       else if ((error instanceof GrammyError && error.error_code === 400) || attempt >= POST_MAX_ATTEMPTS) {
         // A 400 won't change by trying again (a caption Telegram can't read, a bad link).
-        if (await repo.settlePost(db, row.id, token, { status: 'failed', reason: error instanceof GrammyError && error.error_code === 400 ? 'Telegram refused this post.' : `Telegram didn't accept it after ${attempt} tries.` })) report.failed++
+        if (await postRepo.settlePost(db, row.tenantId, row.id, token, { status: 'failed', reason: error instanceof GrammyError && error.error_code === 400 ? 'Telegram refused this post.' : `Telegram didn't accept it after ${attempt} tries.` })) report.failed++
       }
       else {
-        if (await repo.settlePost(db, row.id, token, { nextAttemptAt: new Date((now ?? new Date()).getTime() + retryDelayMs(attempt)), reason: 'Telegram didn\'t accept it. Trying again.' })) report.retried++
+        if (await postRepo.settlePost(db, row.tenantId, row.id, token, { nextAttemptAt: new Date((now ?? new Date()).getTime() + retryDelayMs(attempt)), reason: 'Telegram didn\'t accept it. Trying again.' })) report.retried++
       }
     }
   }

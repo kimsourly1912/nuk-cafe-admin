@@ -39,7 +39,7 @@ export function matchesCharge(charge: Pick<ChargeRow, 'accountId' | 'currency' |
  */
 export async function checkKhqrCharge(db: Db, actor: BranchActor, orderId: string, chargeId: string, bakong: BakongClient | null, now = new Date()): Promise<KhqrCheck> {
   const charge = await requireOrderCharge(db, actor, orderId, chargeId)
-  const [payment] = await repo.paymentsOf(db, [orderId])
+  const [payment] = await repo.paymentsOf(db, actor.tenantId, [orderId])
   // Recorded already (by an earlier check, or the cashier's Confirm naming this QR): nothing to ask.
   if (payment?.khqrChargeId === charge.id) return { status: 'paid', order: await getCounterOrder(db, actor, orderId) }
   if (!bakong) return { status: 'unavailable', problem: 'not_set_up' }
@@ -61,7 +61,7 @@ export async function checkKhqrCharge(db: Db, actor: BranchActor, orderId: strin
       if (!isOrderChanged(error)) throw error
     }
   }
-  const [after] = await repo.paymentsOf(db, [orderId])
+  const [after] = await repo.paymentsOf(db, actor.tenantId, [orderId])
   const current = await getCounterOrder(db, actor, orderId)
   if (after?.khqrChargeId === charge.id) return { status: 'paid', order: current }
   // Paid on Bakong, but the order was paid another way, or cancelled: the customer gets it back.

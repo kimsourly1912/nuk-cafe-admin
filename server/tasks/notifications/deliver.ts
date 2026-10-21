@@ -1,6 +1,6 @@
 import { tenantById } from '#server/features/identity'
 import { deliverDue, deliverOrderReadyDue, queueBakongTokenReminder, queueClosingSummaries } from '#server/features/notifications'
-import { bakongTokenExpiries } from '#server/features/orders'
+import { bakongTokenExpiryOf } from '#server/features/orders'
 
 /**
  * Every minute (D113): sends due deliveries first, then generates closing summaries (D138) and
@@ -28,8 +28,8 @@ export default defineTask({
         const results = await Promise.allSettled([
           queueClosingSummaries(db, tenant.id, cafeUrl),
           (async () => {
-            const [token] = await bakongTokenExpiries(db, tenant.id)
-            return token?.expiresAt ? queueBakongTokenReminder(db, tenant.id, token.expiresAt, cafeUrl) : []
+            const expiresAt = await bakongTokenExpiryOf(db, tenant.id)
+            return expiresAt ? queueBakongTokenReminder(db, tenant.id, expiresAt, cafeUrl) : []
           })(),
         ])
         for (const result of results) if (result.status === 'fulfilled') queued.push(...result.value)

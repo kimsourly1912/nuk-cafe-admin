@@ -1,8 +1,10 @@
-import { and, asc, eq, inArray, max, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
 import type { ModifierStatus } from '#shared/contracts/menu-modifiers'
 import { MAX_MODIFIERS } from '#shared/contracts/menu-modifiers'
 import type { Db, Statement } from '#server/utils/batch'
-import { insertPieces, readInChunks, requireCount } from '#server/utils/batch'
+import { insertAll, readInChunks, requireCount, updateAtVersion } from '#server/utils/batch'
+import { byId, byName, firstRow, inTenant, nextPosition, withStatus } from '#server/utils/query'
 import { menuModifierGroups, menuModifiers } from './menu.schema'
 
 export interface ModifierGroupRow {
@@ -47,33 +49,55 @@ const modifierColumns = {
   status: menuModifiers.status,
 }
 
-export async function findGroup(db: Db, tenantId: string, id: string): Promise<ModifierGroupRow | undefined> {
-  const rows: ModifierGroupRow[] = await db.select(groupColumns).from(menuModifierGroups).where(and(eq(menuModifierGroups.tenantId, tenantId), eq(menuModifierGroups.id, id))).limit(1)
-  return rows[0]
+/** The cafe's add-ons of one group. */
+const modifiersOfGroup = (tenantId: string, groupId: string, ...conditions: SQL[]) =>
+  inTenant(menuModifiers, tenantId, eq(menuModifiers.groupId, groupId), ...conditions)
+
+// --- Reads ---
+
+export function findGroup(db: Db, tenantId: string, id: string): Promise<ModifierGroupRow | undefined> {
+  return firstRow(db.select(groupColumns).from(menuModifierGroups).where(byId(menuModifierGroups, tenantId, id)))
 }
 
-export async function listGroups(db: Db, tenantId: string, status: ModifierStatus | 'all'): Promise<ModifierGroupRow[]> {
-  return db.select(groupColumns).from(menuModifierGroups)
-    .where(and(eq(menuModifierGroups.tenantId, tenantId), status === 'all' ? undefined : eq(menuModifierGroups.status, status))).orderBy(asc(sql`lower(${menuModifierGroups.name})`))
+export function listGroups(db: Db, tenantId: string, status: ModifierStatus | 'all'): Promise<ModifierGroupRow[]> {
+  return db.select(groupColumns)
+    .from(menuModifierGroups)
+    .where(inTenant(menuModifierGroups, tenantId, withStatus(menuModifierGroups.status, status)))
+    .orderBy(byName(menuModifierGroups.name), asc(menuModifierGroups.id))
 }
 
-export async function modifiersOf(db: Db, groupIds: string[]): Promise<ModifierRow[]> {
-  if (!groupIds.length) return []
-  return readInChunks(groupIds, ids => db.select(modifierColumns).from(menuModifiers)
-    .where(inArray(menuModifiers.groupId, ids))
-    .orderBy(asc(menuModifiers.sortOrder), asc(menuModifiers.name)))
+/** The add-ons of these groups, each group's in order (`readInChunks` runs no query for none). */
+export function modifiersOf(db: Db, tenantId: string, groupIds: string[]): Promise<ModifierRow[]> {
+  return readInChunks(groupIds, ids => db
+    .select(modifierColumns)
+    .from(menuModifiers)
+    .where(inTenant(menuModifiers, tenantId, inArray(menuModifiers.groupId, ids)))
+    .orderBy(asc(menuModifiers.groupId), asc(menuModifiers.sortOrder), asc(menuModifiers.name)))
 }
 
-export async function findModifier(db: Db, groupId: string, modifierId: string): Promise<ModifierRow | undefined> {
-  const rows: ModifierRow[] = await db.select(modifierColumns).from(menuModifiers)
-    .where(and(eq(menuModifiers.id, modifierId), eq(menuModifiers.groupId, groupId))).limit(1)
-  return rows[0]
+export function findModifier(db: Db, tenantId: string, groupId: string, modifierId: string): Promise<ModifierRow | undefined> {
+  return firstRow(db.select(modifierColumns).from(menuModifiers).where(modifiersOfGroup(tenantId, groupId, eq(menuModifiers.id, modifierId))))
 }
 
-export async function nextModifierOrder(db: Db, groupId: string): Promise<number> {
-  const rows: { top: number | null }[] = await db.select({ top: max(menuModifiers.sortOrder) }).from(menuModifiers)
-    .where(eq(menuModifiers.groupId, groupId))
-  return (rows[0]?.top ?? 0) + 1
+export function nextModifierOrder(db: Db, tenantId: string, groupId: string): Promise<number> {
+  return nextPosition(db, menuModifiers, menuModifiers.sortOrder, modifiersOfGroup(tenantId, groupId))
+}
+
+// --- Guards ---
+
+/**
+ * Aborts the batch unless the group's rules can still be met after the change: 1 to 30 active
+ * add-ons, at least `min_select` of them, and no more active defaults than `max_select`.
+ */
+export function requireSelectionRules(db: Db, tenantId: string, groupId: string): Statement {
+  const active = eq(menuModifiers.status, 'active')
+  const activeCount = db.$count(menuModifiers, modifiersOfGroup(tenantId, groupId, active))
+  const defaultCount = db.$count(menuModifiers, modifiersOfGroup(tenantId, groupId, active, eq(menuModifiers.isDefault, true)))
+  return requireCount(db, db.$count(menuModifierGroups, and(
+    byId(menuModifierGroups, tenantId, groupId),
+    sql`${activeCount} between max(1, ${menuModifierGroups.minSelect}) and ${MAX_MODIFIERS}`,
+    or(isNull(menuModifierGroups.maxSelect), lte(defaultCount, menuModifierGroups.maxSelect)),
+  )), 1)
 }
 
 // --- Writes: statements for the service's batch ---
@@ -84,9 +108,7 @@ export async function nextModifierOrder(db: Db, groupId: string): Promise<number
  * `requireOneChange`: the group's version is the lock for all of it.
  */
 export function touchGroupStatement(db: Db, tenantId: string, id: string, version: number, now: Date, changes: Partial<Pick<ModifierGroupRow, 'name' | 'status' | 'minSelect' | 'maxSelect'>> = {}, anyStatus = false): Statement {
-  return db.update(menuModifierGroups)
-    .set({ ...changes, version: sql`${menuModifierGroups.version} + 1`, updatedAt: now })
-    .where(and(eq(menuModifierGroups.tenantId, tenantId), eq(menuModifierGroups.id, id), eq(menuModifierGroups.version, version), anyStatus ? undefined : eq(menuModifierGroups.status, 'active')))
+  return updateAtVersion(db, menuModifierGroups, { tenantId, id, version }, { ...changes, updatedAt: now }, anyStatus ? undefined : eq(menuModifierGroups.status, 'active'))
 }
 
 export function insertGroupStatement(db: Db, row: { id: string, tenantId: string, name: string, minSelect: number, maxSelect: number | null, now: Date }): Statement {
@@ -94,22 +116,11 @@ export function insertGroupStatement(db: Db, row: { id: string, tenantId: string
 }
 
 export function insertModifiersStatements(db: Db, rows: { id: string, tenantId: string, groupId: string, name: string, priceDeltaMinor: number, isDefault: boolean, sortOrder: number }[], now: Date): Statement[] {
-  return insertPieces(menuModifiers, rows).map(piece => db.insert(menuModifiers).values(piece.map(row => ({ ...row, createdAt: now, updatedAt: now }))))
+  return insertAll(db, menuModifiers, rows.map(row => ({ ...row, createdAt: now, updatedAt: now })))
 }
 
-export function updateModifierStatement(db: Db, groupId: string, modifierId: string, changes: Partial<Pick<ModifierRow, 'name' | 'priceDeltaMinor' | 'isDefault' | 'status' | 'sortOrder'>>, now: Date): Statement {
-  return db.update(menuModifiers).set({ ...changes, updatedAt: now })
-    .where(and(eq(menuModifiers.id, modifierId), eq(menuModifiers.groupId, groupId)))
-}
-
-/**
- * Aborts the batch unless the group's rules can still be met after the change: 1 to 30 active
- * add-ons, at least `min_select` of them, and no more active defaults than `max_select`.
- */
-export function requireSelectionRules(db: Db, groupId: string): Statement {
-  const active = sql`(select count(*) from ${menuModifiers} where ${menuModifiers.groupId} = ${groupId} and ${menuModifiers.status} = 'active')`
-  const defaults = sql`(select count(*) from ${menuModifiers} where ${menuModifiers.groupId} = ${groupId} and ${menuModifiers.status} = 'active' and ${menuModifiers.isDefault} = 1)`
-  return requireCount(db, sql`select count(*) from ${menuModifierGroups} where ${menuModifierGroups.id} = ${groupId}
-    and ${active} between max(1, ${menuModifierGroups.minSelect}) and ${MAX_MODIFIERS}
-    and (${menuModifierGroups.maxSelect} is null or ${defaults} <= ${menuModifierGroups.maxSelect})`, 1)
+export function updateModifierStatement(db: Db, tenantId: string, groupId: string, modifierId: string, changes: Partial<Pick<ModifierRow, 'name' | 'priceDeltaMinor' | 'isDefault' | 'status' | 'sortOrder'>>, now: Date): Statement {
+  return db.update(menuModifiers)
+    .set({ ...changes, updatedAt: now })
+    .where(modifiersOfGroup(tenantId, groupId, eq(menuModifiers.id, modifierId)))
 }

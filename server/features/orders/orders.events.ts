@@ -37,7 +37,7 @@ export interface OrderAlert {
 export async function orderAlert(db: Db, tenantId: string, orderId: string): Promise<OrderAlert | null> {
   const row = await repo.findOrder(db, tenantId, orderId)
   if (!row) return null
-  const [lines, [payment]] = await Promise.all([repo.linesOf(db, orderId), repo.paymentsOf(db, [orderId])])
+  const [lines, [payment]] = await Promise.all([repo.linesOf(db, tenantId, orderId), repo.paymentsOf(db, tenantId, [orderId])])
   return {
     orderId,
     branch: { id: row.branchId, name: row.branchName },

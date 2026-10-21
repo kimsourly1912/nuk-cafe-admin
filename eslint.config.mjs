@@ -20,6 +20,17 @@ const dynamicRestrictions = patterns => patterns.map(({ regex, message }) => ({
 }))
 const featureNames = readdirSync(new URL('./server/features/', import.meta.url), { withFileTypes: true })
   .filter(entry => entry.isDirectory()).map(entry => entry.name)
+const otherFeatureInternals = name => ({
+  regex: String.raw`^#server/features/(?!${name}(?:/|$))[^/]+/(?!index(?:\.ts)?$).+`,
+  message: 'Reach another server feature only through #server/features/<name>.',
+})
+
+// The repository standard (docs/server/repositories.md, D194), checked where a rule can be.
+const REPOSITORY_RULES = [
+  { selector: 'TSAsExpression[typeAnnotation.typeName.name="Promise"]', message: 'Don\'t cast a query\'s result: let the return type check it (repositories.md → Reads).' },
+  { selector: 'CallExpression[callee.object.name="db"][callee.property.name=/^(?:run|all|get|values)$/]', message: 'No raw statements in a repository: build it with the query builder (D53, repositories.md → Query API).' },
+  { selector: 'TaggedTemplateExpression[tag.name="sql"] CallExpression[callee.property.name="getTime"]', message: 'Don\'t write a time as a number: compare the column with an operator (gt(column, now)) (repositories.md → Conditions).' },
+]
 
 // A cafe's pages (D141): `/`, `/admin…`, `/counter…`, `/orders…`, `/checkout` live under `/c/<slug>`.
 // Links to them go through `useTenantPath()` (`tenantPath('/admin/products')`); a bare one would
@@ -119,26 +130,23 @@ export default withNuxt(
   },
   // Each feature may import its own internals; other features expose only index.ts.
   // Tests/evaluations intentionally inspect internals and fixtures.
-  ...featureNames.map(name => ({
-    files: [`server/features/${name}/**/*.ts`],
-    ignores: [`server/features/${name}/tests/**`, `server/features/${name}/eval/**`],
-    rules: {
-      'no-restricted-imports': ['error', { patterns: [
-        ...SERVER_IMPORTS,
-        {
-          regex: String.raw`^#server/features/(?!${name}(?:/|$))[^/]+/(?!index(?:\.ts)?$).+`,
-          message: 'Reach another server feature only through #server/features/<name>.',
-        },
-      ] }],
-      'no-restricted-syntax': ['error', ...dynamicRestrictions([
-        ...SERVER_IMPORTS,
-        {
-          regex: String.raw`^#server/features/(?!${name}(?:/|$))[^/]+/(?!index(?:\.ts)?$).+`,
-          message: 'Reach another server feature only through #server/features/<name>.',
-        },
-      ])],
+  ...featureNames.flatMap(name => [
+    {
+      files: [`server/features/${name}/**/*.ts`],
+      ignores: [`server/features/${name}/tests/**`, `server/features/${name}/eval/**`],
+      rules: {
+        'no-restricted-imports': ['error', { patterns: [...SERVER_IMPORTS, otherFeatureInternals(name)] }],
+        'no-restricted-syntax': ['error', ...dynamicRestrictions([...SERVER_IMPORTS, otherFeatureInternals(name)])],
+      },
     },
-  })),
+    // A later block replaces `no-restricted-syntax` as a whole, so this one repeats the imports' rules.
+    {
+      files: [`server/features/${name}/*.repository.ts`],
+      rules: {
+        'no-restricted-syntax': ['error', ...dynamicRestrictions([...SERVER_IMPORTS, otherFeatureInternals(name)]), ...REPOSITORY_RULES],
+      },
+    },
+  ]),
   // A schema may reference another feature's table for a foreign key (D134: `(tenant_id, branch_id)`
   // → branches), importing its *.schema.ts directly: a feature's index.ts reaches the database
   // through hub:db:schema, which is built from these files.

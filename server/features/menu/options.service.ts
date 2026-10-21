@@ -35,7 +35,8 @@ function toOptionSet(row: OptionSetRow, values: OptionValueRow[], itemCounts: Ma
 async function loadSet(db: Db, tenantId: string, id: string): Promise<OptionSet> {
   const row = await repo.findSet(db, tenantId, id)
   if (!row) throw optionSetNotFound()
-  return toOptionSet(row, await repo.valuesOf(db, [id]), await itemCountsBySet(db, [id]))
+  const [values, itemCounts] = await Promise.all([repo.valuesOf(db, tenantId, [id]), itemCountsBySet(db, tenantId, [id])])
+  return toOptionSet(row, values, itemCounts)
 }
 
 /** The set, checked: exists, at the version read, and active (unless restoring). */
@@ -47,8 +48,8 @@ async function openSet(db: Db, tenantId: string, id: string, version: number, al
   return set
 }
 
-async function openValue(db: Db, setId: string, valueId: string): Promise<OptionValueRow> {
-  const value = await repo.findValue(db, setId, valueId)
+async function openValue(db: Db, tenantId: string, setId: string, valueId: string): Promise<OptionValueRow> {
+  const value = await repo.findValue(db, tenantId, setId, valueId)
   if (!value) throw optionValueNotFound()
   return value
 }
@@ -75,7 +76,7 @@ async function runSetBatch(db: Db, tenantId: string, setId: string, version: num
 export async function listOptionSets(db: Db, tenantId: string, query: OptionSetListQuery): Promise<OptionSet[]> {
   const sets = await repo.listSets(db, tenantId, query.status)
   const ids = sets.map(s => s.id)
-  const [values, itemCounts] = await Promise.all([repo.valuesOf(db, ids), itemCountsBySet(db, ids)])
+  const [values, itemCounts] = await Promise.all([repo.valuesOf(db, tenantId, ids), itemCountsBySet(db, tenantId, ids)])
   return sets.map(set => toOptionSet(set, values, itemCounts))
 }
 
@@ -142,15 +143,15 @@ export async function restoreOptionSet(db: Db, actor: Actor, id: string, input: 
 export async function addOptionValue(db: Db, actor: Actor, setId: string, input: AddOptionValueInput): Promise<OptionSet> {
   const { tenantId } = actor
   await openSet(db, tenantId, setId, input.version)
-  const values = await repo.valuesOf(db, [setId])
+  const values = await repo.valuesOf(db, tenantId, [setId])
   if (values.filter(v => v.status === 'active').length >= MAX_OPTION_VALUES) throw tooManyOptionValues()
   const now = new Date()
   const valueId = newId()
   await runSetBatch(db, tenantId, setId, input.version, [
     repo.touchSetStatement(db, tenantId, setId, input.version, now),
     requireOneChange(db),
-    ...repo.insertValuesStatements(db, [{ id: valueId, tenantId, setId, name: input.name, sortOrder: await repo.nextValueOrder(db, setId) }], now),
-    repo.requireActiveValueCount(db, setId, MAX_OPTION_VALUES),
+    ...repo.insertValuesStatements(db, [{ id: valueId, tenantId, setId, name: input.name, sortOrder: await repo.nextValueOrder(db, tenantId, setId) }], now),
+    repo.requireActiveValueCount(db, tenantId, setId, MAX_OPTION_VALUES),
     audit(db, actor, 'value.add', setId, { valueId }),
   ], () => optionValueNameTaken(input.name), () => tooManyOptionValues())
   return loadSet(db, tenantId, setId)
@@ -159,13 +160,13 @@ export async function addOptionValue(db: Db, actor: Actor, setId: string, input:
 export async function renameOptionValue(db: Db, actor: Actor, setId: string, valueId: string, input: RenameOptionValueInput): Promise<OptionSet> {
   const { tenantId } = actor
   await openSet(db, tenantId, setId, input.version)
-  const value = await openValue(db, setId, valueId)
+  const value = await openValue(db, tenantId, setId, valueId)
   if (value.status !== 'active') throw optionValueArchived()
   const now = new Date()
   await runSetBatch(db, tenantId, setId, input.version, [
     repo.touchSetStatement(db, tenantId, setId, input.version, now),
     requireOneChange(db),
-    repo.updateValueStatement(db, setId, valueId, { name: input.name }, now),
+    repo.updateValueStatement(db, tenantId, setId, valueId, { name: input.name }, now),
     audit(db, actor, 'value.rename', setId, { valueId }),
   ], () => optionValueNameTaken(input.name))
   return loadSet(db, tenantId, setId)
@@ -175,16 +176,16 @@ export async function renameOptionValue(db: Db, actor: Actor, setId: string, val
 export async function archiveOptionValue(db: Db, actor: Actor, setId: string, valueId: string, input: OptionVersionInput): Promise<OptionSet> {
   const { tenantId } = actor
   await openSet(db, tenantId, setId, input.version)
-  const value = await openValue(db, setId, valueId)
+  const value = await openValue(db, tenantId, setId, valueId)
   if (value.status !== 'active') throw optionValueArchived()
-  const values = await repo.valuesOf(db, [setId])
+  const values = await repo.valuesOf(db, tenantId, [setId])
   if (values.filter(v => v.status === 'active').length <= 1) throw lastOptionValue()
   const now = new Date()
   await runSetBatch(db, tenantId, setId, input.version, [
     repo.touchSetStatement(db, tenantId, setId, input.version, now),
     requireOneChange(db),
-    repo.updateValueStatement(db, setId, valueId, { status: 'archived' }, now),
-    repo.requireActiveValueCount(db, setId, MAX_OPTION_VALUES),
+    repo.updateValueStatement(db, tenantId, setId, valueId, { status: 'archived' }, now),
+    repo.requireActiveValueCount(db, tenantId, setId, MAX_OPTION_VALUES),
     audit(db, actor, 'value.archive', setId, { valueId }),
   ], () => optionSetChanged(), () => lastOptionValue())
   return loadSet(db, tenantId, setId)
@@ -194,16 +195,16 @@ export async function archiveOptionValue(db: Db, actor: Actor, setId: string, va
 export async function restoreOptionValue(db: Db, actor: Actor, setId: string, valueId: string, input: OptionVersionInput): Promise<OptionSet> {
   const { tenantId } = actor
   await openSet(db, tenantId, setId, input.version)
-  const value = await openValue(db, setId, valueId)
+  const value = await openValue(db, tenantId, setId, valueId)
   if (value.status !== 'archived') throw optionNotArchived('value')
-  const values = await repo.valuesOf(db, [setId])
+  const values = await repo.valuesOf(db, tenantId, [setId])
   if (values.filter(v => v.status === 'active').length >= MAX_OPTION_VALUES) throw tooManyOptionValues()
   const now = new Date()
   await runSetBatch(db, tenantId, setId, input.version, [
     repo.touchSetStatement(db, tenantId, setId, input.version, now),
     requireOneChange(db),
-    repo.updateValueStatement(db, setId, valueId, { status: 'active', sortOrder: await repo.nextValueOrder(db, setId) }, now),
-    repo.requireActiveValueCount(db, setId, MAX_OPTION_VALUES),
+    repo.updateValueStatement(db, tenantId, setId, valueId, { status: 'active', sortOrder: await repo.nextValueOrder(db, tenantId, setId) }, now),
+    repo.requireActiveValueCount(db, tenantId, setId, MAX_OPTION_VALUES),
     audit(db, actor, 'value.restore', setId, { valueId }),
   ], () => optionValueNameTaken(value.name), () => tooManyOptionValues())
   return loadSet(db, tenantId, setId)
@@ -213,13 +214,13 @@ export async function restoreOptionValue(db: Db, actor: Actor, setId: string, va
 export async function reorderOptionValues(db: Db, actor: Actor, setId: string, input: ReorderOptionValuesInput): Promise<OptionSet> {
   const { tenantId } = actor
   await openSet(db, tenantId, setId, input.version)
-  const active = (await repo.valuesOf(db, [setId])).filter(v => v.status === 'active').map(v => v.id)
+  const active = (await repo.valuesOf(db, tenantId, [setId])).filter(v => v.status === 'active').map(v => v.id)
   if (active.length !== input.valueIds.length || input.valueIds.some(id => !active.includes(id))) throw optionValuesChanged()
   const now = new Date()
   await runSetBatch(db, tenantId, setId, input.version, [
     repo.touchSetStatement(db, tenantId, setId, input.version, now),
     requireOneChange(db),
-    ...input.valueIds.map((valueId, i) => repo.updateValueStatement(db, setId, valueId, { sortOrder: i + 1 }, now)),
+    ...input.valueIds.map((valueId, i) => repo.updateValueStatement(db, tenantId, setId, valueId, { sortOrder: i + 1 }, now)),
     audit(db, actor, 'value.reorder', setId, { order: input.valueIds }),
   ], () => optionSetChanged())
   return loadSet(db, tenantId, setId)

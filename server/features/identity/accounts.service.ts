@@ -1,7 +1,7 @@
 import { hashPassword } from 'better-auth/crypto'
 import type { AccountBan, AccountListQuery, AccountPasswordInput, AccountTemporaryPassword, BanAccountInput, PlatformAccountDetail, PlatformAccountSummary, UnbanAccountInput } from '#shared/contracts/accounts'
 import type { Page } from '#shared/contracts/common'
-import { totalPages } from '#shared/contracts/common'
+import { toPage } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
 import { runBatch, requireOneChange } from '#server/utils/batch'
 import { toIso } from '#server/utils/time'
@@ -51,14 +51,8 @@ function toSummary(row: PlatformAccountRow, memberships: CafeMembershipRow[]): P
 
 export async function listPlatformAccounts(db: Db, query: AccountListQuery): Promise<Page<PlatformAccountSummary>> {
   const { rows, total } = await repo.listAccounts(db, query)
-  const memberships = await repo.cafeMemberships(db, rows.map(row => row.id))
-  return {
-    items: rows.map(row => toSummary(row, memberships)),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
-    totalPages: totalPages(total, query.pageSize),
-  }
+  const memberships = await repo.membershipsOf(db, rows.map(row => row.id))
+  return toPage(rows.map(row => toSummary(row, memberships)), query, total)
 }
 
 async function loadAccount(db: Db, userId: string): Promise<PlatformAccountRow> {
@@ -68,9 +62,9 @@ async function loadAccount(db: Db, userId: string): Promise<PlatformAccountRow> 
 }
 
 async function toDetail(db: Db, row: PlatformAccountRow, now: Date): Promise<PlatformAccountDetail> {
-  const memberships = await repo.cafeMemberships(db, [row.id])
+  const memberships = await repo.membershipsOf(db, [row.id])
   const owned = memberships.filter(m => m.role === 'owner').map(m => m.tenantId)
-  const [activeOwners, sessions] = await Promise.all([repo.activeOwnerCounts(db, owned), repo.openSessions(db, row.id, now)])
+  const [activeOwners, sessions] = await Promise.all([repo.activeOwnerCounts(db, owned), repo.currentSessions(db, row.id, now)])
   return {
     ...toSummary(row, memberships),
     cafes: memberships.map(m => ({
@@ -114,7 +108,7 @@ export async function banAccount(db: Db, actor: PlatformAccountActor, userId: st
   if (until && until.getTime() <= now.getTime()) throw banEndInPast()
 
   await runBatch(db, [
-    repo.banStatement(db, userId, row.updatedAt, nextVersion(row.updatedAt, now), { reason: input.reason, until }),
+    repo.banAccountStatement(db, userId, row.updatedAt, nextVersion(row.updatedAt, now), { reason: input.reason, until }),
     requireOneChange(db),
     staffRepo.deleteSessionsStatement(db, userId),
     audit(db, actor, 'platform.account.ban', userId, { reason: input.reason, until: until ? toIso(until) : null }),
@@ -130,7 +124,7 @@ export async function unbanAccount(db: Db, actor: PlatformAccountActor, userId: 
   if (!row.banned) throw notBanned()
 
   await runBatch(db, [
-    repo.unbanStatement(db, userId, row.updatedAt, nextVersion(row.updatedAt, now)),
+    repo.unbanAccountStatement(db, userId, row.updatedAt, nextVersion(row.updatedAt, now)),
     requireOneChange(db),
     audit(db, actor, 'platform.account.unban', userId),
   ], accountChanged)
@@ -163,7 +157,7 @@ export async function setTemporaryPassword(db: Db, actor: PlatformAccountActor, 
 
   const temporaryPassword = generateTemporaryPassword()
   await runBatch(db, [
-    repo.temporaryPasswordStatement(db, userId, row.updatedAt, nextVersion(row.updatedAt, now)),
+    repo.updateTemporaryPasswordStatement(db, userId, row.updatedAt, nextVersion(row.updatedAt, now)),
     requireOneChange(db),
     staffRepo.setPasswordStatement(db, userId, await hashPassword(temporaryPassword), now, await staffRepo.hasPasswordAccount(db, userId)),
     staffRepo.deleteSessionsStatement(db, userId),
@@ -177,6 +171,6 @@ export const countBannedAccounts = repo.countBanned
 
 /** The names and emails of these accounts, by id (the console's Activity names its people, D191). */
 export async function accountIdentities(db: Db, userIds: string[]): Promise<Map<string, { id: string, name: string, email: string }>> {
-  const rows = await repo.identities(db, [...new Set(userIds)])
+  const rows = await repo.findAccountIdentities(db, [...new Set(userIds)])
   return new Map(rows.map(row => [row.id, row]))
 }

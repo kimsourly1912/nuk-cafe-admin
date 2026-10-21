@@ -2,6 +2,7 @@ import type { CancelOrderInput, CounterCommandInput, CounterFinishedOrders, Coun
 import { toRiel } from '#shared/contracts/orders'
 import type { Db } from '#server/utils/batch'
 import { toIso } from '#server/utils/time'
+import { findBranchClock } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { auditStatement, outboxStatement } from '#server/features/platform'
 import type { OrderStep } from './commands'
@@ -75,10 +76,10 @@ function counterOrders(rows: repo.OrderRow[], lines: Awaited<ReturnType<typeof r
   return rows.map(row => toCounterOrder(row, linesOf.get(row.id) ?? [], paymentOf.get(row.id)))
 }
 
-async function withDetails(db: Db, rows: repo.OrderRow[]): Promise<CounterOrder[]> {
+async function withDetails(db: Db, tenantId: string, rows: repo.OrderRow[]): Promise<CounterOrder[]> {
   if (!rows.length) return []
   const ids = rows.map(row => row.id)
-  const [lines, payments] = await Promise.all([repo.linesOfOrders(db, ids), repo.paymentsOf(db, ids)])
+  const [lines, payments] = await Promise.all([repo.linesOfOrders(db, tenantId, ids), repo.paymentsOf(db, tenantId, ids)])
   return counterOrders(rows, lines, payments)
 }
 
@@ -86,7 +87,7 @@ const toRate = (row: repo.RateRow): ExchangeRate => ({ khrPerUsd: row.perUsd, ef
 
 /** The branch's business day at `now` (it starts at 4:00 in the branch's time zone, D99). */
 async function businessDateOf(db: Db, tenantId: string, branchId: string, now: Date): Promise<string> {
-  const branch = await reportsRepo.findReportBranch(db, tenantId, branchId)
+  const branch = await findBranchClock(db, tenantId, branchId)
   if (!branch) throw orderNotFound()
   return businessDateAt(now, branch.timeZone)
 }
@@ -113,7 +114,7 @@ export async function listCounterQueue(db: Db, actor: BranchActor, now = new Dat
  */
 export async function listFinishedToday(db: Db, actor: BranchActor, now = new Date()): Promise<CounterFinishedOrders> {
   const businessDate = await businessDateOf(db, actor.tenantId, actor.branchId, now)
-  return { businessDate, orders: await withDetails(db, await repo.findFinishedOrders(db, actor.branchId, businessDate)) }
+  return { businessDate, orders: await withDetails(db, actor.tenantId, await repo.findFinishedOrders(db, actor.tenantId, actor.branchId, businessDate)) }
 }
 
 /**
@@ -124,7 +125,7 @@ export async function listFinishedToday(db: Db, actor: BranchActor, now = new Da
 export async function getCounterOrderHistory(db: Db, actor: BranchActor, orderId: string): Promise<CounterOrderHistory> {
   const row = await repo.findOrder(db, actor.tenantId, orderId)
   if (!row || row.branchId !== actor.branchId) throw orderNotFound()
-  const [[order], events, returnedBy] = await Promise.all([withDetails(db, [row]), reportsRepo.eventsOf(db, orderId), reportsRepo.returnedByName(db, orderId)])
+  const [[order], events, returnedBy] = await Promise.all([withDetails(db, actor.tenantId, [row]), reportsRepo.eventsOf(db, actor.tenantId, orderId), reportsRepo.returnedByName(db, actor.tenantId, orderId)])
   return {
     order: order!,
     timeline: events.map(event => ({
@@ -146,7 +147,7 @@ export async function getCounterOrderHistory(db: Db, actor: BranchActor, orderId
 export async function getCounterOrder(db: Db, actor: BranchActor, orderId: string): Promise<CounterOrder> {
   const row = await repo.findOrder(db, actor.tenantId, orderId)
   if (!row || row.branchId !== actor.branchId) throw orderNotFound()
-  const [order] = await withDetails(db, [row])
+  const [order] = await withDetails(db, actor.tenantId, [row])
   return order!
 }
 
@@ -282,7 +283,7 @@ export async function cancelOrderAtCounter(db: Db, actor: BranchActor, orderId: 
     return {
       to: 'cancelled',
       reason: { reason: input.reason, note: input.note },
-      statements: paid ? [repo.returnPaymentStatement(db, orderId, { returnMethod: input.returnMethod!, returnedBy: actor.userId, returnedAt: now })] : [],
+      statements: paid ? [repo.returnPaymentStatement(db, actor.tenantId, orderId, { returnMethod: input.returnMethod!, returnedBy: actor.userId, returnedAt: now })] : [],
       metadata: { reason: input.reason, returnMethod: input.returnMethod },
     }
   })

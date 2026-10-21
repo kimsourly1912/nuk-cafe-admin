@@ -15,7 +15,7 @@ import type { TelegramSettings } from '#server/features/notifications/notificati
 import { orders } from '#server/features/orders/orders.schema'
 import { placeOrder } from '#server/features/orders/orders.service'
 import { promotionResults } from '#server/features/orders/reports.service'
-import * as postRepo from '#server/features/marketing/marketing.repository'
+import * as postRepo from '#server/features/marketing/marketing.posts.repository'
 import { marketingChannelLinks, marketingPosts } from '#server/features/marketing/marketing.schema'
 import { connectCode, postUrl } from '#server/features/marketing/marketing.rules'
 import { cancelChannelLink, cancelPost, confirmChannelLink, createChannelLink, createPosts, deliverDuePosts, disconnectChannel, getChannelLink, handleChannelUpdate, listChannels, listPosts, retryPost } from '#server/features/marketing/marketing.service'
@@ -323,12 +323,12 @@ describe('delivery', () => {
 
   it('ignores a stale post claim after another worker takes it', async () => {
     const { post } = await onePost()
-    const old = (await postRepo.claimPost(db, post.id, NOW, later(2)))!
-    const current = (await postRepo.claimPost(db, post.id, later(3), later(5)))!
+    const old = (await postRepo.claimPost(db, TEST_TENANT, post.id, later(2), NOW))!
+    const current = (await postRepo.claimPost(db, TEST_TENANT, post.id, later(5), later(3)))!
     expect(current.attempts).toBe(2)
-    expect(await postRepo.settlePost(db, post.id, old.claimToken, { status: 'failed', reason: 'stale' })).toBe(false)
-    expect(await postRepo.settlePost(db, post.id, old.claimToken, { status: 'sent' })).toBe(false)
-    expect(await postRepo.settlePost(db, post.id, current.claimToken, { status: 'sent', sentAt: later(4) })).toBe(true)
+    expect(await postRepo.settlePost(db, TEST_TENANT, post.id, old.claimToken, { status: 'failed', reason: 'stale' })).toBe(false)
+    expect(await postRepo.settlePost(db, TEST_TENANT, post.id, old.claimToken, { status: 'sent' })).toBe(false)
+    expect(await postRepo.settlePost(db, TEST_TENANT, post.id, current.claimToken, { status: 'sent', sentAt: later(4) })).toBe(true)
     expect(await stateOf(post.id)).toMatchObject({ status: 'sent', attempts: 2, reason: null, claimToken: null })
   })
 

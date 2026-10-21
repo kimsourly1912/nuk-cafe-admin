@@ -1,7 +1,9 @@
-import { getTableColumns, sql } from 'drizzle-orm'
+import { and, eq, getTableColumns, inArray, sql } from 'drizzle-orm'
 import type { SQL, Table } from 'drizzle-orm'
 import type { BatchItem } from 'drizzle-orm/batch'
 import type { LibSQLDatabase } from 'drizzle-orm/libsql'
+import type { SQLiteColumn, SQLiteInsertValue, SQLiteTable, SQLiteUpdateSetSource } from 'drizzle-orm/sqlite-core'
+import type { VersionedTable } from './query'
 
 /**
  * The database that services and repositories receive. Locally and in tests it's libsql; on
@@ -13,6 +15,18 @@ export type Db = LibSQLDatabase<any>
 
 /** One statement of a batch (built by a repository, not yet executed). */
 export type Statement = BatchItem<'sqlite'>
+
+/** Runs a service's guarded batch: a lost race applies nothing and answers false; other failures throw. */
+export async function tryGuardedBatch(db: Db, statements: [Statement, ...Statement[]]): Promise<boolean> {
+  try {
+    await db.batch(statements)
+    return true
+  }
+  catch (error) {
+    if (isStaleWrite(error)) return false
+    throw error
+  }
+}
 
 /**
  * A guard: a one-row `select` that raises inside the batch unless `condition` holds, so the whole
@@ -74,6 +88,48 @@ export async function readInChunks<T>(ids: readonly string[], read: (ids: string
  */
 export function insertPieces<T>(table: Table, rows: readonly T[]): T[][] {
   return chunk(rows, Math.max(1, Math.floor(MAX_PARAMS / Object.keys(getTableColumns(table)).length)))
+}
+
+// --- Statements every repository writes the same way (docs/server/repositories.md → Shared helpers) ---
+
+/**
+ * Changes one of the cafe's rows only while it's still at `version`, and moves it to the next
+ * version. Follow it with `requireOneChange`, so a change made meanwhile stops the whole batch.
+ * `extra` narrows it further (`eq(table.status, 'active')`).
+ *
+ * @example
+ * updateAtVersion(db, menuOptionSets, { tenantId, id, version }, { name, updatedAt: now }, eq(menuOptionSets.status, 'active'))
+ */
+export function updateAtVersion<T extends VersionedTable>(
+  db: Db,
+  table: T,
+  key: { tenantId: string, id: string, version: number },
+  set: SQLiteUpdateSetSource<T>,
+  extra?: SQL,
+): Statement {
+  return db.update(table)
+    .set({ ...set, version: sql`${table.version} + 1` } as SQLiteUpdateSetSource<T>)
+    .where(and(eq(table.tenantId, key.tenantId), eq(table.id, key.id), eq(table.version, key.version), extra))
+}
+
+/** Inserts the rows in pieces under D1's limit (`insertPieces`); no statement for no rows. */
+export function insertAll<T extends SQLiteTable>(db: Db, table: T, rows: readonly SQLiteInsertValue<T>[]): Statement[] {
+  return insertPieces(table, rows).map(piece => db.insert(table).values(piece))
+}
+
+/** Deletes the rows `where` matches, then inserts `rows` (a parent's links, a rule's windows). */
+export function replaceAll<T extends SQLiteTable>(db: Db, table: T, where: SQL, rows: readonly SQLiteInsertValue<T>[]): Statement[] {
+  return [db.delete(table).where(where), ...insertAll(db, table, rows)]
+}
+
+/**
+ * A scheduled cleanup: deletes at most `limit` rows `where` matches, first by `orderBy`, and
+ * returns how many. `key` is the table's unique key (the bounded set is chosen by it).
+ */
+export async function deleteOldest(db: Db, table: SQLiteTable, key: SQLiteColumn, where: SQL, orderBy: SQL[], limit: number): Promise<number> {
+  const chosen = db.select({ key }).from(table).where(where).orderBy(...orderBy).limit(limit)
+  const removed = await db.delete(table).where(inArray(key, chosen)).returning({ key })
+  return removed.length
 }
 
 function messageChain(error: unknown): string[] {

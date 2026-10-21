@@ -111,7 +111,7 @@ A big feature splits each layer **by aggregate**, with the same suffixes: `menu/
 | **`index.ts`** | Re-exports the service functions and types that routes and other features may use | Export the repository, the schema or anything internal |
 | **`*.types.ts`** | Domain types: records (`LoyaltyAccount`), results returned to routes (`VoucherDetail`), command inputs (usually inferred from `shared/contracts`), the `Actor` it receives | Import Drizzle table objects into types the app sees |
 | **`*.schema.ts`** | Drizzle tables, indexes, checks, foreign keys for **this feature's** tables | Define another feature's tables |
-| **`*.repository.ts`** | Every query of this feature's tables. **Reads** run and return typed records. **Writes** return **batch statements** (not executed), so the service can combine them with guards, audit and other features' statements into one atomic `db.batch` | Contain business rules, throw business errors, call other features, or know about HTTP |
+| **`*.repository.ts`** | Every query of this feature's tables. **Reads** run and return typed records. **Writes** return **batch statements** (not executed), so the service can combine them with guards, audit and other features' statements into one atomic `db.batch`. Written as the [repository standard](./repositories.md) says (D194) | Contain business rules, throw business errors, call other features, or know about HTTP |
 | **`*.service.ts`** | The use cases (`exchangePoints`, `redeemVoucher`): load via repositories, apply rules, check state and versions, build the batch (with guards, audit, idempotency), run it, map the result | Write SQL or touch tables directly; read `event`, headers or cookies |
 | **`*.errors.ts`** | Error codes of this feature and small factories (`insufficientPoints(balance)`) that call `apiError` with the right status and a user-safe message | Hold messages in routes or services inline |
 | **`*.rules.ts`** | Pure functions: calculations, validations across fields, state machines | Do I/O |
@@ -122,7 +122,7 @@ Dependencies point one way: **route → service → repository → schema**. Typ
 ### Rules
 
 1. **Routes call a feature's service through its `index.ts`, nothing else.** No SQL, rule or cross-table write in a route file.
-2. **Only a feature's repository touches its tables.** Services never write SQL, and no other feature touches those tables.
+2. **Only a feature's repository writes its tables.** Services never write SQL. Another feature's repository may only **read** a few listed columns in a join (who did something, a branch's scope, a cafe's address), imported from `server/db/tables.ts` ([repositories.md → Other features' tables](./repositories.md#other-features-tables), D194); everything else goes through the owner's `index.ts`.
 3. **Features talk through `index.ts` only.** `orders` asks `menu` for current prices (`menu.priceLines(...)`), never its repository. A write that spans features stays atomic: the owner of the action (`orders.complete`) asks the other feature for its statements (`loyalty.earnStatements(...)`, a service function that validates and returns batch statements) and runs them in its own `db.batch`.
 4. **Services and repositories take `db` as their first parameter and use explicit imports** (no Nitro auto-imports), so tests run them against SQLite directly.
 5. **Nothing in a feature knows about HTTP** except by throwing errors from `*.errors.ts`. The `actor` comes in as a parameter.
@@ -337,7 +337,8 @@ All in `server/utils/`. Routes get them by auto-import; features import them exp
 | `errors.ts` | `apiError(status, code, message, { fieldErrors })`, `ErrorCodes`, `notFound`, `versionConflict`, `toErrorResponse` | Throw API errors; the error handler maps anything thrown to the response |
 | `request-body.ts` | `readLimitedBody`, `readLimitedMultipart` | Count received bytes before JSON/multipart parsing; [reliability APIs](../reference/server-reliability.md) |
 | `validation.ts` | `readValidBody`, `readValidQuery`, `readIdParam`, `parseInput`, `MAX_JSON_BYTES` | Validate every input |
-| `batch.ts` | `Db`, `Statement`, `runBatch`, `requireOneChange`, `requireCount`, `isStaleWrite`, `isForeignKeyError`, `isUniqueViolation`, `chunk`, `readInChunks`, `insertPieces` | Atomic multi-statement writes; D1's 100-parameter limit |
+| `batch.ts` | `Db`, `Statement`, `runBatch`, `requireOneChange`, `requireCount`, `requireAtMost`, `isStaleWrite`, `isForeignKeyError`, `isUniqueViolation`, `chunk`, `readInChunks`, `insertPieces`, `updateAtVersion`, `insertAll`, `replaceAll`, `deleteOldest` | Atomic multi-statement writes; D1's 100-parameter limit; the [repository standard](./repositories.md#shared-helpers)'s write helpers |
+| `query.ts` | `inTenant`, `byId`, `atVersion`, `withStatus`, `searchIn`, `byName`, `firstRow`, `withPage`, `readPage`, `hasAny`, `nextPosition`, `TenantTable`, `KeyedTable`, `VersionedTable`, `PageQuery` | Repository conditions and reads ([repository standard → Shared helpers](./repositories.md#shared-helpers), D194) |
 | `ids.ts` | `newId()` | UUID v7 for our tables |
 | `time.ts` | `toIso` | Instants in responses |
 | `log.ts` | `log(level, message, fields, event?)` | Structured logs with the request id; secret-looking keys are redacted |

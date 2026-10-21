@@ -121,7 +121,7 @@ describe('the sample menu', () => {
     expect(state.menu.run).toMatchObject({ size: 'standard', finished: false })
     // Our step lock doesn't stop theirs.
     const now = new Date()
-    expect(await claimRun(db, TEST_TENANT, now, new Date(now.getTime() + 60_000))).toBe(true)
+    expect(await claimRun(db, TEST_TENANT, new Date(now.getTime() + 60_000), now)).toBe(true)
     await expect(loadSampleMenuStep(db, theirs, { size: 'standard' }, ENV, now)).resolves.toBeTruthy()
     await expectApiError(() => loadSampleMenuStep(db, admin, { size: 'small' }, ENV, now), 409, 'SAMPLE_DATA_BUSY')
     // Their reset forgets their load only.
@@ -133,7 +133,7 @@ describe('the sample menu', () => {
   it('runs one step at a time: a step while another holds the load is refused', async () => {
     await loadSampleMenuStep(db, admin, { size: 'small' }, ENV)
     const now = new Date()
-    expect(await claimRun(db, TEST_TENANT, now, new Date(now.getTime() + 60_000))).toBe(true)
+    expect(await claimRun(db, TEST_TENANT, new Date(now.getTime() + 60_000), now)).toBe(true)
     await expectApiError(() => loadSampleMenuStep(db, admin, { size: 'small' }, ENV, now), 409, 'SAMPLE_DATA_BUSY')
     await expectApiError(() => resetSampleMenu(db, admin, { put: async () => {}, del: async () => {} }, ENV, now), 409, 'SAMPLE_DATA_BUSY')
     // A lock left by a crashed step frees itself.

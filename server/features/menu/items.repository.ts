@@ -1,9 +1,10 @@
-import { and, asc, count, eq, inArray, isNull, max, ne, sql } from 'drizzle-orm'
+import { and, asc, count, eq, exists, inArray, isNotNull, isNull, ne, notExists, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
 import type { ItemCountsQuery, ItemListQuery, ItemStatus } from '#shared/contracts/menu-items'
 import type { Db, Statement } from '#server/utils/batch'
-import { chunk, insertPieces, readInChunks, requireCount } from '#server/utils/batch'
-import { containsText } from '#server/utils/search'
+import { chunk, insertAll, readInChunks, replaceAll, requireCount, updateAtVersion } from '#server/utils/batch'
+import { byId, firstRow, inTenant, nextPosition, readPage, searchIn, withStatus } from '#server/utils/query'
+import { childrenOf } from './categories.repository'
 import { menuCategories, menuItemModifierGroups, menuItemModifierPrices, menuItemOptionSets, menuItems, menuItemVariations, menuModifierGroups, menuModifiers, menuOptionSets, menuOptionValues, menuVariationOptionValues } from './menu.schema'
 
 export interface ItemRow {
@@ -17,6 +18,12 @@ export interface ItemRow {
   version: number
   createdAt: Date
   updatedAt: Date
+}
+
+export interface ItemSummaryRow extends ItemRow {
+  categoryName: string
+  priceMin: number | null
+  priceMax: number | null
 }
 
 export interface VariationRow {
@@ -65,159 +72,239 @@ const itemColumns = {
   updatedAt: menuItems.updatedAt,
 }
 
-/** A variation is sellable when it's active, priced, and none of its values is archived. */
-export const sellable = sql`${menuItemVariations.status} = 'active' and ${menuItemVariations.priceMinor} is not null and not exists (
-  select 1 from ${menuVariationOptionValues} join ${menuOptionValues} on ${menuOptionValues.id} = ${menuVariationOptionValues.valueId}
-  where ${menuVariationOptionValues.variationId} = ${menuItemVariations.id} and ${menuOptionValues.status} = 'archived')`
-
-export async function findItem(db: Db, tenantId: string, id: string): Promise<ItemRow | undefined> {
-  const rows: ItemRow[] = await db.select(itemColumns).from(menuItems).where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, id))).limit(1)
-  return rows[0]
+const variationColumns = {
+  id: menuItemVariations.id,
+  combinationKey: menuItemVariations.combinationKey,
+  priceMinor: menuItemVariations.priceMinor,
+  status: menuItemVariations.status,
+  sortOrder: menuItemVariations.sortOrder,
 }
 
-export interface ItemSummaryRow extends ItemRow {
-  categoryName: string
-  priceMin: number | null
-  priceMax: number | null
+/** Drafts and active items: what holds a category, and what "used by N items" counts. */
+export const listedItem = ne(menuItems.status, 'archived')
+
+/** The cafe's drafts and active items of one category. */
+const listedIn = (tenantId: string, categoryId: string) => inTenant(menuItems, tenantId, eq(menuItems.categoryId, categoryId), listedItem)
+
+/**
+ * A variation is sellable when it's active, priced, and none of its values is archived. Correlated
+ * to the outer query's `menu_item_variations` row (the catalog, the price range, the guards).
+ */
+export function sellable(db: Db): SQL {
+  return and(
+    eq(menuItemVariations.status, 'active'),
+    isNotNull(menuItemVariations.priceMinor),
+    notExists(db
+      .select({ one: sql`1` })
+      .from(menuVariationOptionValues)
+      .innerJoin(menuOptionValues, and(eq(menuOptionValues.tenantId, menuVariationOptionValues.tenantId), eq(menuOptionValues.id, menuVariationOptionValues.valueId)))
+      .where(and(
+        eq(menuVariationOptionValues.tenantId, menuItemVariations.tenantId),
+        eq(menuVariationOptionValues.variationId, menuItemVariations.id),
+        eq(menuOptionValues.status, 'archived'),
+      ))),
+  )!
 }
 
-/** The tenant's items the list's shared filters match (search, category, add-on group). */
-function filterConditions(tenantId: string, query: ItemCountsQuery): SQL[] {
-  const conditions: SQL[] = [eq(menuItems.tenantId, tenantId)]
+/** The cafe's items the list's shared filters match (search, category, add-on group). */
+function filterConditions(db: Db, tenantId: string, query: ItemCountsQuery): SQL {
   // Items sit in sub-categories only, so a main category matches its sub-categories' items (two levels).
-  if (query.categoryId) {
-    conditions.push(sql`(${menuItems.categoryId} = ${query.categoryId} or ${menuItems.categoryId} in (select ${menuCategories.id} from ${menuCategories} where ${menuCategories.tenantId} = ${tenantId} and ${menuCategories.parentId} = ${query.categoryId}))`)
-  }
-  if (query.modifierGroupId) {
-    conditions.push(sql`exists (select 1 from ${menuItemModifierGroups} where ${menuItemModifierGroups.itemId} = ${menuItems.id} and ${menuItemModifierGroups.groupId} = ${query.modifierGroupId})`)
-  }
-  if (query.search) conditions.push(containsText(menuItems.name, query.search))
-  return conditions
+  const inCategory = query.categoryId
+    ? or(
+        eq(menuItems.categoryId, query.categoryId),
+        inArray(menuItems.categoryId, db.select({ id: menuCategories.id }).from(menuCategories).where(childrenOf(tenantId, query.categoryId))),
+      )
+    : undefined
+  const withGroup = query.modifierGroupId
+    ? exists(db
+        .select({ one: sql`1` })
+        .from(menuItemModifierGroups)
+        .where(and(
+          eq(menuItemModifierGroups.tenantId, menuItems.tenantId),
+          eq(menuItemModifierGroups.itemId, menuItems.id),
+          eq(menuItemModifierGroups.groupId, query.modifierGroupId),
+        )))
+    : undefined
+  return inTenant(menuItems, tenantId, inCategory, withGroup, searchIn(query.search, menuItems.name))
 }
 
-/** Items by category order, then position, with their category's name and sellable price range. */
-export async function listItems(db: Db, tenantId: string, query: ItemListQuery): Promise<{ rows: ItemSummaryRow[], total: number }> {
-  const conditions = filterConditions(tenantId, query)
-  if (query.status && query.status !== 'all') conditions.push(eq(menuItems.status, query.status))
-  else if (!query.status) conditions.push(ne(menuItems.status, 'archived'))
-  if (query.photo === 'missing') conditions.push(isNull(menuItems.imageAssetId))
-  const where = and(...conditions)
+// --- Reads ---
 
-  const prices = db.select({
-    itemId: menuItemVariations.itemId,
-    priceMin: sql<number | null>`min(${menuItemVariations.priceMinor})`.as('price_min'),
-    priceMax: sql<number | null>`max(${menuItemVariations.priceMinor})`.as('price_max'),
-  }).from(menuItemVariations).where(and(eq(menuItemVariations.tenantId, tenantId), sellable)).groupBy(menuItemVariations.itemId).as('prices')
+export function findItem(db: Db, tenantId: string, id: string): Promise<ItemRow | undefined> {
+  return firstRow(db.select(itemColumns).from(menuItems).where(byId(menuItems, tenantId, id)))
+}
 
-  const [totals, rows] = await Promise.all([
-    db.select({ total: count() }).from(menuItems).where(where) as Promise<{ total: number }[]>,
-    db.select({ ...itemColumns, categoryName: menuCategories.name, priceMin: prices.priceMin, priceMax: prices.priceMax })
+/**
+ * A page of items by category order, then position, with their category's name and sellable price
+ * range, and how many match: one batch. Without a status, archived items are left out.
+ */
+export function listItems(db: Db, tenantId: string, query: ItemListQuery): Promise<{ rows: ItemSummaryRow[], total: number }> {
+  const where = and(
+    filterConditions(db, tenantId, query),
+    query.status ? withStatus(menuItems.status, query.status) : listedItem,
+    query.photo === 'missing' ? isNull(menuItems.imageAssetId) : undefined,
+  )
+  const prices = db
+    .select({
+      itemId: menuItemVariations.itemId,
+      priceMin: sql<number | null>`min(${menuItemVariations.priceMinor})`.as('price_min'),
+      priceMax: sql<number | null>`max(${menuItemVariations.priceMinor})`.as('price_max'),
+    })
+    .from(menuItemVariations)
+    .where(inTenant(menuItemVariations, tenantId, sellable(db)))
+    .groupBy(menuItemVariations.itemId)
+    .as('prices')
+  return readPage(db,
+    db.select({
+      ...itemColumns,
+      // Its own SQL name: the item's is `name` too, and D1's batch rows are keyed by name (D170).
+      categoryName: sql<string>`${menuCategories.name}`.as('category_name'),
+      priceMin: prices.priceMin,
+      priceMax: prices.priceMax,
+    })
       .from(menuItems)
-      .innerJoin(menuCategories, eq(menuCategories.id, menuItems.categoryId))
+      .innerJoin(menuCategories, and(eq(menuCategories.tenantId, menuItems.tenantId), eq(menuCategories.id, menuItems.categoryId)))
       .leftJoin(prices, eq(prices.itemId, menuItems.id))
       .where(where)
-      .orderBy(asc(menuCategories.sortOrder), asc(menuCategories.name), asc(menuItems.sortOrder), asc(menuItems.name))
-      .limit(query.pageSize)
-      .offset((query.page - 1) * query.pageSize) as Promise<ItemSummaryRow[]>,
-  ])
-  return { rows, total: totals[0]?.total ?? 0 }
+      .orderBy(asc(menuCategories.sortOrder), asc(menuCategories.name), asc(menuItems.sortOrder), asc(menuItems.name), asc(menuItems.id))
+      .$dynamic(),
+    db.select({ total: count() }).from(menuItems).where(where),
+    query)
 }
 
 /** Per status, the items the filters match and those without a photo: one grouped read. */
-export async function countItems(db: Db, tenantId: string, query: ItemCountsQuery): Promise<{ status: ItemStatus, items: number, withoutPhoto: number }[]> {
-  return db.select({
-    status: menuItems.status,
-    items: count(),
-    withoutPhoto: sql<number>`sum(case when ${menuItems.imageAssetId} is null then 1 else 0 end)`.mapWith(Number),
-  }).from(menuItems).where(and(...filterConditions(tenantId, query))).groupBy(menuItems.status)
+export function countItems(db: Db, tenantId: string, query: ItemCountsQuery): Promise<{ status: ItemStatus, items: number, withoutPhoto: number }[]> {
+  return db
+    .select({
+      status: menuItems.status,
+      items: count(),
+      withoutPhoto: sql<number>`sum(case when ${menuItems.imageAssetId} is null then 1 else 0 end)`.mapWith(Number),
+    })
+    .from(menuItems)
+    .where(filterConditions(db, tenantId, query))
+    .groupBy(menuItems.status)
 }
 
 /** The item's option sets in grid order. */
-export async function itemSetIds(db: Db, itemId: string): Promise<string[]> {
-  const rows: { setId: string }[] = await db.select({ setId: menuItemOptionSets.setId }).from(menuItemOptionSets)
-    .where(eq(menuItemOptionSets.itemId, itemId)).orderBy(asc(menuItemOptionSets.sortOrder))
+export async function itemSetIds(db: Db, tenantId: string, itemId: string): Promise<string[]> {
+  const rows = await db
+    .select({ setId: menuItemOptionSets.setId })
+    .from(menuItemOptionSets)
+    .where(inTenant(menuItemOptionSets, tenantId, eq(menuItemOptionSets.itemId, itemId)))
+    .orderBy(asc(menuItemOptionSets.sortOrder))
   return rows.map(r => r.setId)
 }
 
-/** These option sets of the tenant with all their values, in the order of `ids` (others left out). */
+/**
+ * These option sets of the cafe with all their values, in the order of `ids` (others left out):
+ * one batch. At most MAX_ITEM_OPTION_SETS (2) sets of 20 values, so one IN list each.
+ */
 export async function setsWithValues(db: Db, tenantId: string, ids: string[]): Promise<SetWithValues[]> {
   if (!ids.length) return []
-  const sets: { id: string, name: string, status: 'active' | 'archived' }[] = await db.select({ id: menuOptionSets.id, name: menuOptionSets.name, status: menuOptionSets.status })
-    .from(menuOptionSets).where(and(eq(menuOptionSets.tenantId, tenantId), inArray(menuOptionSets.id, ids)))
-  const values: { id: string, setId: string, name: string, status: 'active' | 'archived' }[] = await db
-    .select({ id: menuOptionValues.id, setId: menuOptionValues.setId, name: menuOptionValues.name, status: menuOptionValues.status })
-    .from(menuOptionValues).where(and(eq(menuOptionValues.tenantId, tenantId), inArray(menuOptionValues.setId, ids))).orderBy(asc(menuOptionValues.sortOrder), asc(menuOptionValues.name))
+  const [sets, values] = await db.batch([
+    db.select({ id: menuOptionSets.id, name: menuOptionSets.name, status: menuOptionSets.status })
+      .from(menuOptionSets)
+      .where(inTenant(menuOptionSets, tenantId, inArray(menuOptionSets.id, ids))),
+    db.select({ id: menuOptionValues.id, setId: menuOptionValues.setId, name: menuOptionValues.name, status: menuOptionValues.status })
+      .from(menuOptionValues)
+      .where(inTenant(menuOptionValues, tenantId, inArray(menuOptionValues.setId, ids)))
+      .orderBy(asc(menuOptionValues.sortOrder), asc(menuOptionValues.name)),
+  ])
   return ids.flatMap((id) => {
     const set = sets.find(s => s.id === id)
     return set ? [{ ...set, values: values.filter(v => v.setId === id).map(({ setId: _, ...value }) => value) }] : []
   })
 }
 
-export async function variationsOf(db: Db, itemId: string): Promise<VariationRow[]> {
-  return db.select({ id: menuItemVariations.id, combinationKey: menuItemVariations.combinationKey, priceMinor: menuItemVariations.priceMinor, status: menuItemVariations.status, sortOrder: menuItemVariations.sortOrder })
-    .from(menuItemVariations).where(eq(menuItemVariations.itemId, itemId)).orderBy(asc(menuItemVariations.sortOrder))
-}
-
-export async function findCategory(db: Db, tenantId: string, id: string) {
-  const rows: { id: string, status: string, parentId: string | null }[] = await db.select({ id: menuCategories.id, status: menuCategories.status, parentId: menuCategories.parentId })
-    .from(menuCategories).where(and(eq(menuCategories.tenantId, tenantId), eq(menuCategories.id, id))).limit(1)
-  return rows[0]
-}
-
-export async function countChildCategories(db: Db, categoryId: string): Promise<number> {
-  const rows: { n: number }[] = await db.select({ n: count() }).from(menuCategories).where(eq(menuCategories.parentId, categoryId))
-  return rows[0]?.n ?? 0
+export function variationsOf(db: Db, tenantId: string, itemId: string): Promise<VariationRow[]> {
+  return db
+    .select(variationColumns)
+    .from(menuItemVariations)
+    .where(inTenant(menuItemVariations, tenantId, eq(menuItemVariations.itemId, itemId)))
+    .orderBy(asc(menuItemVariations.sortOrder))
 }
 
 /** Drafts and active items of a category, in order (what a reorder must list). */
-export async function listedItems(db: Db, tenantId: string, categoryId: string): Promise<{ id: string, version: number }[]> {
-  return db.select({ id: menuItems.id, version: menuItems.version }).from(menuItems)
-    .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.categoryId, categoryId), ne(menuItems.status, 'archived')))
-    .orderBy(asc(menuItems.sortOrder), asc(menuItems.name))
+export function listedItems(db: Db, tenantId: string, categoryId: string): Promise<{ id: string, version: number }[]> {
+  return db
+    .select({ id: menuItems.id, version: menuItems.version })
+    .from(menuItems)
+    .where(listedIn(tenantId, categoryId))
+    .orderBy(asc(menuItems.sortOrder), asc(menuItems.name), asc(menuItems.id))
 }
 
-export async function nextItemOrder(db: Db, categoryId: string): Promise<number> {
-  const rows: { top: number | null }[] = await db.select({ top: max(menuItems.sortOrder) }).from(menuItems).where(eq(menuItems.categoryId, categoryId))
-  return (rows[0]?.top ?? 0) + 1
+/** Drafts and active items in a category (archived ones don't hold it). */
+export function countListedItems(db: Db, tenantId: string, categoryId: string): Promise<number> {
+  return db.$count(menuItems, listedIn(tenantId, categoryId))
 }
 
-export async function countSellable(db: Db, itemId: string): Promise<number> {
-  const rows: { n: number }[] = await db.select({ n: count() }).from(menuItemVariations).where(and(eq(menuItemVariations.itemId, itemId), sellable))
-  return rows[0]?.n ?? 0
+/** Drafts and active items per category id (categories without any are left out). */
+export async function listedItemCounts(db: Db, tenantId: string): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ categoryId: menuItems.categoryId, n: count() })
+    .from(menuItems)
+    .where(inTenant(menuItems, tenantId, listedItem))
+    .groupBy(menuItems.categoryId)
+  return new Map(rows.map(r => [r.categoryId, r.n]))
+}
+
+export function nextItemOrder(db: Db, tenantId: string, categoryId: string): Promise<number> {
+  return nextPosition(db, menuItems, menuItems.sortOrder, inTenant(menuItems, tenantId, eq(menuItems.categoryId, categoryId)))
+}
+
+export async function countSellable(db: Db, tenantId: string, itemId: string): Promise<number> {
+  return db.$count(menuItemVariations, inTenant(menuItemVariations, tenantId, eq(menuItemVariations.itemId, itemId), sellable(db)))
 }
 
 /** Non-archived items per option set, for "used by N items". */
-export async function itemCountsBySet(db: Db, setIds: string[]): Promise<Map<string, number>> {
-  if (!setIds.length) return new Map()
-  const rows: { setId: string, n: number }[] = await readInChunks(setIds, ids => db.select({ setId: menuItemOptionSets.setId, n: count() }).from(menuItemOptionSets)
-    .innerJoin(menuItems, eq(menuItems.id, menuItemOptionSets.itemId))
-    .where(and(inArray(menuItemOptionSets.setId, ids), ne(menuItems.status, 'archived')))
+export async function itemCountsBySet(db: Db, tenantId: string, setIds: string[]): Promise<Map<string, number>> {
+  const rows = await readInChunks(setIds, ids => db
+    .select({ setId: menuItemOptionSets.setId, n: count() })
+    .from(menuItemOptionSets)
+    .innerJoin(menuItems, and(eq(menuItems.tenantId, menuItemOptionSets.tenantId), eq(menuItems.id, menuItemOptionSets.itemId)))
+    .where(inTenant(menuItemOptionSets, tenantId, inArray(menuItemOptionSets.setId, ids), listedItem))
     .groupBy(menuItemOptionSets.setId))
   return new Map(rows.map(r => [r.setId, r.n]))
 }
 
 /** The item's add-on groups in order. */
-export async function itemGroups(db: Db, itemId: string): Promise<ItemGroupRow[]> {
-  return db.select({ groupId: menuItemModifierGroups.groupId, rulesOverridden: menuItemModifierGroups.rulesOverridden, minSelect: menuItemModifierGroups.minSelect, maxSelect: menuItemModifierGroups.maxSelect })
-    .from(menuItemModifierGroups).where(eq(menuItemModifierGroups.itemId, itemId)).orderBy(asc(menuItemModifierGroups.sortOrder))
+export function itemGroups(db: Db, tenantId: string, itemId: string): Promise<ItemGroupRow[]> {
+  return db
+    .select({
+      groupId: menuItemModifierGroups.groupId,
+      rulesOverridden: menuItemModifierGroups.rulesOverridden,
+      minSelect: menuItemModifierGroups.minSelect,
+      maxSelect: menuItemModifierGroups.maxSelect,
+    })
+    .from(menuItemModifierGroups)
+    .where(inTenant(menuItemModifierGroups, tenantId, eq(menuItemModifierGroups.itemId, itemId)))
+    .orderBy(asc(menuItemModifierGroups.sortOrder))
 }
 
 /** The item's own add-on prices, by modifier id. */
-export async function itemModifierPrices(db: Db, itemId: string): Promise<Map<string, number>> {
-  const rows: { modifierId: string, priceDeltaMinor: number }[] = await db.select({ modifierId: menuItemModifierPrices.modifierId, priceDeltaMinor: menuItemModifierPrices.priceDeltaMinor })
-    .from(menuItemModifierPrices).where(eq(menuItemModifierPrices.itemId, itemId))
+export async function itemModifierPrices(db: Db, tenantId: string, itemId: string): Promise<Map<string, number>> {
+  const rows = await db
+    .select({ modifierId: menuItemModifierPrices.modifierId, priceDeltaMinor: menuItemModifierPrices.priceDeltaMinor })
+    .from(menuItemModifierPrices)
+    .where(inTenant(menuItemModifierPrices, tenantId, eq(menuItemModifierPrices.itemId, itemId)))
   return new Map(rows.map(r => [r.modifierId, r.priceDeltaMinor]))
 }
 
-/** These add-on groups of the tenant with all their add-ons, in the order of `ids` (others left out). */
+/**
+ * These add-on groups of the cafe with all their add-ons, in the order of `ids` (others left out):
+ * one batch. At most MAX_ITEM_MODIFIER_GROUPS (10) groups, so one IN list each.
+ */
 export async function groupsWithModifiers(db: Db, tenantId: string, ids: string[]): Promise<GroupWithModifiers[]> {
   if (!ids.length) return []
-  // At most 10 groups per item (the contract), so one IN list each.
-  const groups: Omit<GroupWithModifiers, 'modifiers'>[] = await db.select({ id: menuModifierGroups.id, name: menuModifierGroups.name, minSelect: menuModifierGroups.minSelect, maxSelect: menuModifierGroups.maxSelect, status: menuModifierGroups.status })
-    .from(menuModifierGroups).where(and(eq(menuModifierGroups.tenantId, tenantId), inArray(menuModifierGroups.id, ids)))
-  const modifiers: (GroupWithModifiers['modifiers'][number] & { groupId: string })[] = await db
-    .select({ id: menuModifiers.id, groupId: menuModifiers.groupId, name: menuModifiers.name, priceDeltaMinor: menuModifiers.priceDeltaMinor, isDefault: menuModifiers.isDefault, status: menuModifiers.status })
-    .from(menuModifiers).where(and(eq(menuModifiers.tenantId, tenantId), inArray(menuModifiers.groupId, ids))).orderBy(asc(menuModifiers.sortOrder), asc(menuModifiers.name))
+  const [groups, modifiers] = await db.batch([
+    db.select({ id: menuModifierGroups.id, name: menuModifierGroups.name, minSelect: menuModifierGroups.minSelect, maxSelect: menuModifierGroups.maxSelect, status: menuModifierGroups.status })
+      .from(menuModifierGroups)
+      .where(inTenant(menuModifierGroups, tenantId, inArray(menuModifierGroups.id, ids))),
+    db.select({ id: menuModifiers.id, groupId: menuModifiers.groupId, name: menuModifiers.name, priceDeltaMinor: menuModifiers.priceDeltaMinor, isDefault: menuModifiers.isDefault, status: menuModifiers.status })
+      .from(menuModifiers)
+      .where(inTenant(menuModifiers, tenantId, inArray(menuModifiers.groupId, ids)))
+      .orderBy(asc(menuModifiers.sortOrder), asc(menuModifiers.name)),
+  ])
   return ids.flatMap((id) => {
     const group = groups.find(g => g.id === id)
     return group ? [{ ...group, modifiers: modifiers.filter(m => m.groupId === id).map(({ groupId: _, ...modifier }) => modifier) }] : []
@@ -225,11 +312,12 @@ export async function groupsWithModifiers(db: Db, tenantId: string, ids: string[
 }
 
 /** Non-archived items per add-on group, for "used by N items". */
-export async function itemCountsByGroup(db: Db, groupIds: string[]): Promise<Map<string, number>> {
-  if (!groupIds.length) return new Map()
-  const rows: { groupId: string, n: number }[] = await readInChunks(groupIds, ids => db.select({ groupId: menuItemModifierGroups.groupId, n: count() }).from(menuItemModifierGroups)
-    .innerJoin(menuItems, eq(menuItems.id, menuItemModifierGroups.itemId))
-    .where(and(inArray(menuItemModifierGroups.groupId, ids), ne(menuItems.status, 'archived')))
+export async function itemCountsByGroup(db: Db, tenantId: string, groupIds: string[]): Promise<Map<string, number>> {
+  const rows = await readInChunks(groupIds, ids => db
+    .select({ groupId: menuItemModifierGroups.groupId, n: count() })
+    .from(menuItemModifierGroups)
+    .innerJoin(menuItems, and(eq(menuItems.tenantId, menuItemModifierGroups.tenantId), eq(menuItems.id, menuItemModifierGroups.itemId)))
+    .where(inTenant(menuItemModifierGroups, tenantId, inArray(menuItemModifierGroups.groupId, ids), listedItem))
     .groupBy(menuItemModifierGroups.groupId))
   return new Map(rows.map(r => [r.groupId, r.n]))
 }
@@ -238,38 +326,40 @@ export async function itemCountsByGroup(db: Db, groupIds: string[]): Promise<Map
 
 /** Aborts unless the category is still active and has no sub-categories (items go in leaves). */
 export function requireLeafCategory(db: Db, tenantId: string, categoryId: string): Statement {
-  return requireCount(db, sql`select count(*) from ${menuCategories} c where c.tenant_id = ${tenantId} and c.id = ${categoryId} and c.status = 'active'
-    and not exists (select 1 from ${menuCategories} s where s.parent_id = c.id)`, 1)
+  const active = db.$count(menuCategories, and(byId(menuCategories, tenantId, categoryId), eq(menuCategories.status, 'active')))
+  const children = db.$count(menuCategories, childrenOf(tenantId, categoryId))
+  return requireCount(db, sql`${active} = 1 and ${children} = 0`, 1)
 }
 
-/** Aborts unless every one of these option sets is still the tenant's and active. */
+/** Aborts unless every one of these option sets is still the cafe's and active (at most MAX_ITEM_OPTION_SETS, 2). */
 export function requireActiveSets(db: Db, tenantId: string, setIds: string[]): Statement {
-  return requireCount(db, sql`select count(*) from ${menuOptionSets} where ${menuOptionSets.tenantId} = ${tenantId} and ${inArray(menuOptionSets.id, setIds)} and ${menuOptionSets.status} = 'active'`, setIds.length)
+  return requireCount(db, db.$count(menuOptionSets, inTenant(menuOptionSets, tenantId, inArray(menuOptionSets.id, setIds), eq(menuOptionSets.status, 'active'))), setIds.length)
 }
 
-/** Aborts unless every one of these option values is still the tenant's and active. */
+/** Aborts unless every one of these option values is still the cafe's and active (at most 2 sets of MAX_OPTION_VALUES, 20). */
 export function requireActiveValues(db: Db, tenantId: string, valueIds: string[]): Statement {
-  return requireCount(db, sql`select count(*) from ${menuOptionValues} where ${menuOptionValues.tenantId} = ${tenantId} and ${inArray(menuOptionValues.id, valueIds)} and ${menuOptionValues.status} = 'active'`, valueIds.length)
+  return requireCount(db, db.$count(menuOptionValues, inTenant(menuOptionValues, tenantId, inArray(menuOptionValues.id, valueIds), eq(menuOptionValues.status, 'active'))), valueIds.length)
 }
 
-/** Aborts unless every one of these add-on groups is still the tenant's and active. */
+/** Aborts unless every one of these add-on groups is still the cafe's and active (at most MAX_ITEM_MODIFIER_GROUPS, 10). */
 export function requireActiveGroups(db: Db, tenantId: string, groupIds: string[]): Statement {
-  return requireCount(db, sql`select count(*) from ${menuModifierGroups} where ${menuModifierGroups.tenantId} = ${tenantId} and ${inArray(menuModifierGroups.id, groupIds)} and ${menuModifierGroups.status} = 'active'`, groupIds.length)
+  return requireCount(db, db.$count(menuModifierGroups, inTenant(menuModifierGroups, tenantId, inArray(menuModifierGroups.id, groupIds), eq(menuModifierGroups.status, 'active'))), groupIds.length)
 }
 
-/** Abort unless every one of these add-ons is still the tenant's and active (one guard per piece of the list). */
+/** Abort unless every one of these add-ons is still the cafe's and active (one guard per piece of the list). */
 export function requireActiveModifiers(db: Db, tenantId: string, modifierIds: string[]): Statement[] {
-  return chunk(modifierIds).map(ids => requireCount(db, sql`select count(*) from ${menuModifiers} where ${menuModifiers.tenantId} = ${tenantId} and ${inArray(menuModifiers.id, ids)} and ${menuModifiers.status} = 'active'`, ids.length))
+  return chunk(modifierIds).map(ids => requireCount(db, db.$count(menuModifiers, inTenant(menuModifiers, tenantId, inArray(menuModifiers.id, ids), eq(menuModifiers.status, 'active'))), ids.length))
 }
 
 /** Aborts unless the item has at least one sellable variation. */
-export function requireSellable(db: Db, itemId: string): Statement {
-  return requireCount(db, sql`select count(*) > 0 from ${menuItemVariations} where ${menuItemVariations.itemId} = ${itemId} and ${sellable}`, 1)
+export function requireSellable(db: Db, tenantId: string, itemId: string): Statement {
+  const sellableCount = db.$count(menuItemVariations, inTenant(menuItemVariations, tenantId, eq(menuItemVariations.itemId, itemId), sellable(db)))
+  return requireCount(db, sql`${sellableCount} > 0`, 1)
 }
 
 /** Aborts unless the category has exactly `n` drafts and active items. */
 export function requireListedCount(db: Db, tenantId: string, categoryId: string, n: number): Statement {
-  return requireCount(db, sql`select count(*) from ${menuItems} where ${menuItems.tenantId} = ${tenantId} and ${menuItems.categoryId} = ${categoryId} and ${menuItems.status} <> 'archived'`, n)
+  return requireCount(db, db.$count(menuItems, listedIn(tenantId, categoryId)), n)
 }
 
 // --- Writes: statements for the service's batch ---
@@ -283,56 +373,52 @@ export function insertItemStatement(db: Db, row: { tenantId: string } & Pick<Ite
  * states), applying `changes`. Follow it with `requireOneChange`.
  */
 export function touchItemStatement(db: Db, tenantId: string, id: string, version: number, now: Date, changes: Partial<Pick<ItemRow, 'categoryId' | 'name' | 'description' | 'imageAssetId' | 'status' | 'sortOrder'>> = {}, from?: ItemStatus[]): Statement {
-  return db.update(menuItems)
-    .set({ ...changes, version: sql`${menuItems.version} + 1`, updatedAt: now })
-    .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, id), eq(menuItems.version, version), from ? inArray(menuItems.status, from) : undefined))
+  return updateAtVersion(db, menuItems, { tenantId, id, version }, { ...changes, updatedAt: now }, from ? inArray(menuItems.status, from) : undefined)
 }
 
 export function replaceOptionSetsStatements(db: Db, tenantId: string, itemId: string, setIds: string[]): Statement[] {
-  return [
-    db.delete(menuItemOptionSets).where(eq(menuItemOptionSets.itemId, itemId)),
-    ...(setIds.length ? [db.insert(menuItemOptionSets).values(setIds.map((setId, i) => ({ tenantId, itemId, setId, sortOrder: i + 1 })))] : []),
-  ]
+  const rows = setIds.map((setId, i) => ({ tenantId, itemId, setId, sortOrder: i + 1 }))
+  return replaceAll(db, menuItemOptionSets, inTenant(menuItemOptionSets, tenantId, eq(menuItemOptionSets.itemId, itemId)), rows)
 }
 
-/** Replaces the item's add-on groups and its own add-on prices. */
+/** Replaces the item's add-on groups and its own add-on prices (the prices go first and come back last). */
 export function replaceModifierGroupsStatements(db: Db, tenantId: string, itemId: string, groups: { groupId: string, rules: { minSelect: number, maxSelect: number | null } | null }[], prices: { modifierId: string, priceDeltaMinor: number }[]): Statement[] {
+  const groupRows = groups.map((group, i) => ({
+    tenantId,
+    itemId,
+    groupId: group.groupId,
+    sortOrder: i + 1,
+    rulesOverridden: group.rules !== null,
+    minSelect: group.rules?.minSelect ?? null,
+    maxSelect: group.rules?.maxSelect ?? null,
+  }))
   return [
-    db.delete(menuItemModifierPrices).where(eq(menuItemModifierPrices.itemId, itemId)),
-    db.delete(menuItemModifierGroups).where(eq(menuItemModifierGroups.itemId, itemId)),
-    ...(groups.length
-      ? [db.insert(menuItemModifierGroups).values(groups.map((group, i) => ({
-          tenantId,
-          itemId,
-          groupId: group.groupId,
-          sortOrder: i + 1,
-          rulesOverridden: group.rules !== null,
-          minSelect: group.rules?.minSelect ?? null,
-          maxSelect: group.rules?.maxSelect ?? null,
-        })))]
-      : []),
-    ...insertPieces(menuItemModifierPrices, prices).map(piece => db.insert(menuItemModifierPrices).values(piece.map(price => ({ tenantId, itemId, ...price })))),
+    db.delete(menuItemModifierPrices).where(inTenant(menuItemModifierPrices, tenantId, eq(menuItemModifierPrices.itemId, itemId))),
+    ...replaceAll(db, menuItemModifierGroups, inTenant(menuItemModifierGroups, tenantId, eq(menuItemModifierGroups.itemId, itemId)), groupRows),
+    ...insertAll(db, menuItemModifierPrices, prices.map(price => ({ tenantId, itemId, ...price }))),
   ]
 }
 
 export function insertVariationStatements(db: Db, tenantId: string, itemId: string, cell: { id: string, key: string, valueIds: string[], priceMinor: number | null, status: 'active' | 'disabled', sortOrder: number }, now: Date): Statement[] {
   return [
     db.insert(menuItemVariations).values({ id: cell.id, tenantId, itemId, combinationKey: cell.key, priceMinor: cell.priceMinor, status: cell.status, sortOrder: cell.sortOrder, createdAt: now, updatedAt: now }),
-    ...(cell.valueIds.length ? [db.insert(menuVariationOptionValues).values(cell.valueIds.map(valueId => ({ tenantId, variationId: cell.id, valueId })))] : []),
+    ...insertAll(db, menuVariationOptionValues, cell.valueIds.map(valueId => ({ tenantId, variationId: cell.id, valueId }))),
   ]
 }
 
-export function updateVariationStatement(db: Db, itemId: string, variationId: string, changes: Partial<Pick<VariationRow, 'priceMinor' | 'status' | 'sortOrder'>>, now: Date): Statement {
-  return db.update(menuItemVariations).set({ ...changes, updatedAt: now })
-    .where(and(eq(menuItemVariations.id, variationId), eq(menuItemVariations.itemId, itemId)))
+export function updateVariationStatement(db: Db, tenantId: string, itemId: string, variationId: string, changes: Partial<Pick<VariationRow, 'priceMinor' | 'status' | 'sortOrder'>>, now: Date): Statement {
+  return db.update(menuItemVariations)
+    .set({ ...changes, updatedAt: now })
+    .where(inTenant(menuItemVariations, tenantId, eq(menuItemVariations.itemId, itemId), eq(menuItemVariations.id, variationId)))
 }
 
-export function retireVariationsStatements(db: Db, itemId: string, variationIds: string[], now: Date): Statement[] {
-  return chunk(variationIds).map(ids => db.update(menuItemVariations).set({ status: 'retired', updatedAt: now })
-    .where(and(eq(menuItemVariations.itemId, itemId), inArray(menuItemVariations.id, ids))))
+export function retireVariationsStatements(db: Db, tenantId: string, itemId: string, variationIds: string[], now: Date): Statement[] {
+  return chunk(variationIds).map(ids => db.update(menuItemVariations)
+    .set({ status: 'retired', updatedAt: now })
+    .where(inTenant(menuItemVariations, tenantId, eq(menuItemVariations.itemId, itemId), inArray(menuItemVariations.id, ids))))
 }
 
+/** Moves one listed item of the category to `sortOrder` if it's still at `version`. Follow it with `requireOneChange`. */
 export function positionItemStatement(db: Db, tenantId: string, categoryId: string, id: string, version: number, sortOrder: number, now: Date): Statement {
-  return db.update(menuItems).set({ sortOrder, version: sql`${menuItems.version} + 1`, updatedAt: now })
-    .where(and(eq(menuItems.tenantId, tenantId), eq(menuItems.id, id), eq(menuItems.version, version), eq(menuItems.categoryId, categoryId), ne(menuItems.status, 'archived')))
+  return updateAtVersion(db, menuItems, { tenantId, id, version }, { sortOrder, updatedAt: now }, and(eq(menuItems.categoryId, categoryId), listedItem))
 }

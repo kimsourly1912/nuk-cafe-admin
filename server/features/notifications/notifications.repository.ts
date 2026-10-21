@@ -1,16 +1,27 @@
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm'
-import type { DestinationKind, NotificationKind, TelegramLinkStatus } from '#shared/contracts/notifications'
-import { user } from '#server/db/tables'
+import { and, asc, eq, ne, sql } from 'drizzle-orm'
+import type { DestinationKind, NotificationKind } from '#shared/contracts/notifications'
 import type { Db, Statement } from '#server/utils/batch'
-import { isStaleWrite, requireOneChange } from '#server/utils/batch'
-import { newId } from '#server/utils/ids'
-import type { StoredMessage } from './notifications.schema'
-import { notificationDeliveries, notificationRules, orderReadyAlerts, telegramDestinations, telegramLinks } from './notifications.schema'
+import { updateAtVersion } from '#server/utils/batch'
+import { byId, firstRow, hasAny, inTenant } from '#server/utils/query'
+import { user } from '#server/db/tables'
+import { notificationRules, telegramDestinations } from './notifications.schema'
 
-/** All SQL of Telegram (docs/server/architecture.md → Repository). */
+// --- Row types ---
 
 export type DestinationRow = typeof telegramDestinations.$inferSelect & { connectedByName: string | null }
-export type LinkRow = typeof telegramLinks.$inferSelect
+
+export interface ConnectedChat {
+  tenantId: string
+  chatId: string
+  kind: DestinationKind
+  title: string
+  connectedBy: string
+  at: Date
+}
+
+export interface RuleRow { kind: NotificationKind, destinationId: string, attachCsv: boolean }
+
+// --- Columns and conditions ---
 
 const destinationColumns = {
   id: telegramDestinations.id,
@@ -30,44 +41,83 @@ const destinationColumns = {
 }
 
 /** The tenant's connected and blocked chats, oldest first (disconnected ones are history only). */
-export async function listDestinations(db: Db, tenantId: string): Promise<DestinationRow[]> {
+function destinationRows(db: Db, tenantId: string) {
   return db.select(destinationColumns).from(telegramDestinations)
     .leftJoin(user, eq(user.id, telegramDestinations.connectedBy))
-    .where(and(eq(telegramDestinations.tenantId, tenantId), ne(telegramDestinations.status, 'disconnected')))
-    .orderBy(asc(telegramDestinations.connectedAt))
+    .where(inTenant(telegramDestinations, tenantId, ne(telegramDestinations.status, 'disconnected')))
+    .orderBy(asc(telegramDestinations.connectedAt), asc(telegramDestinations.id))
 }
 
+function ruleRows(db: Db, tenantId: string) {
+  return db.select({ kind: notificationRules.kind, destinationId: notificationRules.destinationId, attachCsv: notificationRules.attachCsv })
+    .from(notificationRules)
+    .innerJoin(telegramDestinations, and(
+      eq(telegramDestinations.tenantId, notificationRules.tenantId),
+      eq(telegramDestinations.id, notificationRules.destinationId),
+    ))
+    .where(inTenant(notificationRules, tenantId, ne(telegramDestinations.status, 'disconnected')))
+    .orderBy(asc(notificationRules.kind), asc(notificationRules.destinationId))
+}
+
+// --- Reads ---
+
 export async function findDestination(db: Db, tenantId: string, id: string): Promise<DestinationRow | undefined> {
-  const [row] = await db.select(destinationColumns).from(telegramDestinations)
+  return firstRow(db.select(destinationColumns).from(telegramDestinations)
     .leftJoin(user, eq(user.id, telegramDestinations.connectedBy))
-    .where(and(eq(telegramDestinations.tenantId, tenantId), eq(telegramDestinations.id, id)))
-  return row
+    .where(byId(telegramDestinations, tenantId, id)))
 }
 
 /** The tenant's row for a chat (one chat can follow two cafes, D138). */
-export async function findDestinationByChat(db: Db, tenantId: string, chatId: string) {
-  const [row] = await db.select().from(telegramDestinations).where(and(eq(telegramDestinations.tenantId, tenantId), eq(telegramDestinations.chatId, chatId)))
-  return row
+export function findDestinationByChat(db: Db, tenantId: string, chatId: string): Promise<DestinationRow | undefined> {
+  return firstRow(db.select(destinationColumns).from(telegramDestinations)
+    .leftJoin(user, eq(user.id, telegramDestinations.connectedBy))
+    .where(inTenant(telegramDestinations, tenantId, eq(telegramDestinations.chatId, chatId))))
 }
 
 /**
- * Whether any tenant still has this chat connected (D138): the bot stays in a group while one cafe
+ * Across cafes: whether any tenant still has this chat connected (D138): the bot stays in a group while one cafe
  * uses it, even after another disconnects it.
  */
-export async function chatConnectedAnywhere(db: Db, chatId: string): Promise<boolean> {
-  const [row] = await db.select({ id: telegramDestinations.id }).from(telegramDestinations)
-    .where(and(eq(telegramDestinations.chatId, chatId), eq(telegramDestinations.status, 'connected'))).limit(1)
-  return !!row
+export async function hasConnectedChatAcrossCafes(db: Db, chatId: string): Promise<boolean> {
+  return hasAny(db, telegramDestinations, and(eq(telegramDestinations.chatId, chatId), eq(telegramDestinations.status, 'connected')))
 }
 
-export interface ConnectedChat {
-  tenantId: string
-  chatId: string
-  kind: DestinationKind
-  title: string
-  connectedBy: string
-  at: Date
+/** The tenant's connected chats a kind of notification goes to. */
+export function targetsOf(db: Db, tenantId: string, kind: NotificationKind): Promise<{ destinationId: string, attachCsv: boolean }[]> {
+  return db.select({ destinationId: notificationRules.destinationId, attachCsv: notificationRules.attachCsv })
+    .from(notificationRules)
+    .innerJoin(telegramDestinations, and(
+      eq(telegramDestinations.tenantId, notificationRules.tenantId),
+      eq(telegramDestinations.id, notificationRules.destinationId),
+    ))
+    .where(inTenant(
+      notificationRules,
+      tenantId,
+      eq(notificationRules.kind, kind),
+      eq(telegramDestinations.status, 'connected'),
+    ))
+    .orderBy(asc(notificationRules.destinationId))
 }
+
+export function listRules(db: Db, tenantId: string): Promise<RuleRow[]> {
+  return ruleRows(db, tenantId)
+}
+
+/** Telegram overview, one snapshot. Uses telegram_destinations_status_idx. */
+export async function overviewRows(db: Db, tenantId: string): Promise<{ destinations: DestinationRow[], rules: RuleRow[] }> {
+  const [destinations, rules] = await db.batch([
+    destinationRows(db, tenantId),
+    ruleRows(db, tenantId),
+  ])
+  return { destinations, rules }
+}
+
+/** The cafe's visible destinations. Uses telegram_destinations_status_idx. */
+export function listDestinations(db: Db, tenantId: string): Promise<DestinationRow[]> {
+  return destinationRows(db, tenantId)
+}
+
+// --- Write statements ---
 
 /**
  * Connects a chat: a new row, or the chat's existing one (reconnected after a disconnect or a
@@ -103,13 +153,38 @@ export function upsertDestinationStatement(db: Db, id: string, chat: ConnectedCh
 
 /** Disconnects a chat the admin saw at `version` (a guard follows). */
 export function disconnectStatement(db: Db, tenantId: string, id: string, version: number, at: Date): Statement {
-  return db.update(telegramDestinations)
-    .set({ status: 'disconnected', version: sql`${telegramDestinations.version} + 1`, updatedAt: at })
-    .where(and(eq(telegramDestinations.tenantId, tenantId), eq(telegramDestinations.id, id), eq(telegramDestinations.version, version), ne(telegramDestinations.status, 'disconnected')))
+  return updateAtVersion(db, telegramDestinations, { tenantId, id, version }, { status: 'disconnected', updatedAt: at }, ne(telegramDestinations.status, 'disconnected'))
 }
 
+/** Across cafes: a group became a supergroup: Telegram gave it a new id, and the old one stops working (for every tenant). */
+export function moveChatStatement(db: Db, fromChatId: string, toChatId: string, at: Date): Statement {
+  return db.update(telegramDestinations)
+    .set({ chatId: toChatId, version: sql`${telegramDestinations.version} + 1`, updatedAt: at })
+    .where(eq(telegramDestinations.chatId, fromChatId))
+}
+
+export function sentStatement(db: Db, tenantId: string, id: string, at: Date): Statement {
+  return db.update(telegramDestinations).set({ lastSentAt: at }).where(byId(telegramDestinations, tenantId, id))
+}
+
+export function upsertRuleStatement(db: Db, rule: { tenantId: string, kind: NotificationKind, destinationId: string, attachCsv: boolean, createdBy: string }): Statement {
+  return db.insert(notificationRules).values(rule)
+    .onConflictDoUpdate({ target: [notificationRules.kind, notificationRules.destinationId], set: { attachCsv: rule.attachCsv }, setWhere: inTenant(notificationRules, rule.tenantId) })
+}
+
+export function deleteRuleStatement(db: Db, tenantId: string, kind: NotificationKind, destinationId: string): Statement {
+  return db.delete(notificationRules).where(inTenant(
+    notificationRules,
+    tenantId,
+    eq(notificationRules.kind, kind),
+    eq(notificationRules.destinationId, destinationId),
+  ))
+}
+
+// --- Background-task writes ---
+
 /**
- * Marks a connected chat blocked (the bot was removed or blocked there) in every tenant that has it:
+ * Across cafes: marks a connected chat blocked (the bot was removed or blocked there) in every tenant that has it:
  * Telegram's chat is the same for all of them. Returns whether it changed.
  */
 export async function markBlocked(db: Db, chatId: string, at: Date): Promise<boolean> {
@@ -118,355 +193,4 @@ export async function markBlocked(db: Db, chatId: string, at: Date): Promise<boo
     .where(and(eq(telegramDestinations.chatId, chatId), eq(telegramDestinations.status, 'connected')))
     .returning({ id: telegramDestinations.id })
   return changed.length > 0
-}
-
-/** A group became a supergroup: Telegram gave it a new id, and the old one stops working (for every tenant). */
-export async function moveChat(db: Db, fromChatId: string, toChatId: string, at: Date): Promise<void> {
-  await db.update(telegramDestinations)
-    .set({ chatId: toChatId, version: sql`${telegramDestinations.version} + 1`, updatedAt: at })
-    .where(eq(telegramDestinations.chatId, fromChatId))
-}
-
-export function sentStatement(db: Db, id: string, at: Date): Statement {
-  return db.update(telegramDestinations).set({ lastSentAt: at }).where(eq(telegramDestinations.id, id))
-}
-
-// --- Links ---
-
-export function insertLinkStatement(db: Db, link: { id: string, tenantId: string, codeHash: string, kind: DestinationKind, createdBy: string, expiresAt: Date, createdAt: Date }): Statement {
-  return db.insert(telegramLinks).values(link)
-}
-
-export async function findLink(db: Db, tenantId: string, id: string): Promise<LinkRow | undefined> {
-  const [row] = await db.select().from(telegramLinks).where(and(eq(telegramLinks.tenantId, tenantId), eq(telegramLinks.id, id)))
-  return row
-}
-
-/** The link a code belongs to, in whichever tenant made it (the code is the only key Telegram sends). */
-export async function findLinkByCode(db: Db, codeHash: string): Promise<LinkRow | undefined> {
-  const [row] = await db.select().from(telegramLinks).where(eq(telegramLinks.codeHash, codeHash))
-  return row
-}
-
-/**
- * Moves a link from one status to the next, only if it's still in `from` and unexpired: the
- * statement that makes a code single-use (a guard follows it in the batch).
- */
-export function advanceLinkStatement(db: Db, id: string, from: TelegramLinkStatus[], set: Partial<Pick<LinkRow, 'status' | 'chatId' | 'chatTitle' | 'memberCount' | 'destinationId'>>, now: Date): Statement {
-  return db.update(telegramLinks).set(set)
-    .where(and(eq(telegramLinks.id, id), inArray(telegramLinks.status, from), sql`${telegramLinks.expiresAt} > ${now.getTime()}`))
-}
-
-/** Ends a link that is still waiting or asking for confirmation. Returns whether it did. */
-export async function cancelLink(db: Db, id: string): Promise<boolean> {
-  const changed = await db.update(telegramLinks).set({ status: 'cancelled' })
-    .where(and(eq(telegramLinks.id, id), inArray(telegramLinks.status, ['waiting', 'confirm'])))
-    .returning({ id: telegramLinks.id })
-  return changed.length > 0
-}
-
-/** Links that expired a day ago or more: nothing reads them any more. */
-export async function deleteOldLinks(db: Db, before: Date): Promise<void> {
-  await db.delete(telegramLinks).where(lt(telegramLinks.expiresAt, before))
-}
-
-// --- Notification rules (8.1d, D113) ---
-
-export async function listRules(db: Db, tenantId: string) {
-  return db.select({ kind: notificationRules.kind, destinationId: notificationRules.destinationId, attachCsv: notificationRules.attachCsv })
-    .from(notificationRules)
-    .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationRules.destinationId))
-    .where(and(eq(notificationRules.tenantId, tenantId), ne(telegramDestinations.status, 'disconnected')))
-}
-
-/** The tenant's connected chats a kind of notification goes to. */
-export async function targetsOf(db: Db, tenantId: string, kind: NotificationKind) {
-  return db.select({ destinationId: notificationRules.destinationId, attachCsv: notificationRules.attachCsv })
-    .from(notificationRules)
-    .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationRules.destinationId))
-    .where(and(eq(notificationRules.tenantId, tenantId), eq(notificationRules.kind, kind), eq(telegramDestinations.status, 'connected')))
-}
-
-export async function setRule(db: Db, rule: { tenantId: string, kind: NotificationKind, destinationId: string, attachCsv: boolean, createdBy: string }): Promise<void> {
-  await db.insert(notificationRules).values(rule)
-    .onConflictDoUpdate({ target: [notificationRules.kind, notificationRules.destinationId], set: { attachCsv: rule.attachCsv } })
-}
-
-export async function removeRule(db: Db, kind: NotificationKind, destinationId: string): Promise<void> {
-  await db.delete(notificationRules).where(and(eq(notificationRules.kind, kind), eq(notificationRules.destinationId, destinationId)))
-}
-
-// --- Deliveries ---
-
-export type DeliveryRow = typeof notificationDeliveries.$inferSelect
-
-export interface NewDelivery {
-  id: string
-  tenantId: string
-  kind: DeliveryRow['kind']
-  destinationId: string
-  dedupeKey: string
-  subject: string
-  message: StoredMessage
-  status?: DeliveryRow['status']
-  attempts?: number
-  createdAt: Date
-  nextAttemptAt: Date
-  sentAt?: Date
-}
-
-/** Saves a delivery unless the chat already has one about the same thing (the dedupe key). */
-export function insertDeliveryStatement(db: Db, delivery: NewDelivery): Statement {
-  return db.insert(notificationDeliveries).values(delivery).onConflictDoNothing()
-}
-
-/** Which of these deliveries exist (a dropped duplicate doesn't). */
-export async function deliveryIds(db: Db, ids: string[]): Promise<Set<string>> {
-  if (!ids.length) return new Set()
-  const rows = await db.select({ id: notificationDeliveries.id }).from(notificationDeliveries).where(inArray(notificationDeliveries.id, ids))
-  return new Set(rows.map(row => row.id))
-}
-
-/** Which of these chats already have a delivery with this key. */
-export async function deliveredTo(db: Db, dedupeKey: string, destinationIds: string[]): Promise<Set<string>> {
-  if (!destinationIds.length) return new Set()
-  const rows = await db.select({ destinationId: notificationDeliveries.destinationId }).from(notificationDeliveries)
-    .where(and(eq(notificationDeliveries.dedupeKey, dedupeKey), inArray(notificationDeliveries.destinationId, destinationIds)))
-  return new Set(rows.map(row => row.destinationId))
-}
-
-export async function dueDeliveries(db: Db, now: Date, limit: number, ids?: string[]): Promise<DeliveryRow[]> {
-  return db.select().from(notificationDeliveries)
-    .where(and(eq(notificationDeliveries.status, 'pending'), lte(notificationDeliveries.nextAttemptAt, now), ids ? inArray(notificationDeliveries.id, ids) : undefined))
-    .orderBy(asc(notificationDeliveries.nextAttemptAt))
-    .limit(limit)
-}
-
-/**
- * Claims a due delivery for one run: counts the try and pushes its next time out, only if it's still
- * pending and due. Two overlapping runs never send it at once.
- */
-export async function claimDelivery(db: Db, row: DeliveryRow, now: Date, until: Date): Promise<(DeliveryRow & { claimToken: string }) | undefined> {
-  const token = newId()
-  const [claimed] = await db.update(notificationDeliveries)
-    .set({ claimToken: token, attempts: sql`${notificationDeliveries.attempts} + 1`, nextAttemptAt: until })
-    .where(and(eq(notificationDeliveries.id, row.id), eq(notificationDeliveries.status, 'pending'), lte(notificationDeliveries.nextAttemptAt, now)))
-    .returning()
-  return claimed ? { ...claimed, claimToken: token } : undefined
-}
-
-const ownsDelivery = (id: string, token: string) => and(eq(notificationDeliveries.id, id), eq(notificationDeliveries.status, 'pending'), eq(notificationDeliveries.claimToken, token))
-
-export async function markDelivered(db: Db, id: string, token: string, destinationId: string, at: Date): Promise<boolean> {
-  try {
-    await db.batch([
-      db.update(notificationDeliveries).set({ status: 'sent', sentAt: at, lastError: null, claimToken: null }).where(ownsDelivery(id, token)),
-      requireOneChange(db),
-      sentStatement(db, destinationId, at),
-    ])
-    return true
-  }
-  catch (error) {
-    if (isStaleWrite(error)) return false
-    throw error
-  }
-}
-
-export async function markRetry(db: Db, id: string, token: string, next: Date, reason: string): Promise<boolean> {
-  const rows = await db.update(notificationDeliveries).set({ nextAttemptAt: next, lastError: reason, claimToken: null }).where(ownsDelivery(id, token)).returning({ id: notificationDeliveries.id })
-  return rows.length === 1
-}
-
-export async function markFailed(db: Db, id: string, token: string, reason: string): Promise<boolean> {
-  const rows = await db.update(notificationDeliveries).set({ status: 'failed', lastError: reason, claimToken: null }).where(ownsDelivery(id, token)).returning({ id: notificationDeliveries.id })
-  return rows.length === 1
-}
-
-/** Retry: a failed delivery goes back to pending, due now, with its tries counted afresh. */
-export async function requeueFailed(db: Db, id: string, now: Date): Promise<boolean> {
-  const changed = await db.update(notificationDeliveries)
-    .set({ status: 'pending', attempts: 0, nextAttemptAt: now, lastError: null, claimToken: null })
-    .where(and(eq(notificationDeliveries.id, id), eq(notificationDeliveries.status, 'failed')))
-    .returning({ id: notificationDeliveries.id })
-  return changed.length > 0
-}
-
-export async function findDelivery(db: Db, tenantId: string, id: string) {
-  const [row] = await db.select({ delivery: notificationDeliveries, title: telegramDestinations.title, destinationStatus: telegramDestinations.status })
-    .from(notificationDeliveries)
-    .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationDeliveries.destinationId))
-    .where(and(eq(notificationDeliveries.tenantId, tenantId), eq(notificationDeliveries.id, id)))
-  return row
-}
-
-export async function recentDeliveries(db: Db, tenantId: string, limit: number) {
-  return db.select({ delivery: notificationDeliveries, title: telegramDestinations.title })
-    .from(notificationDeliveries)
-    .innerJoin(telegramDestinations, eq(telegramDestinations.id, notificationDeliveries.destinationId))
-    .where(eq(notificationDeliveries.tenantId, tenantId))
-    .orderBy(desc(notificationDeliveries.createdAt))
-    .limit(limit)
-}
-
-/** Deliveries from before `cutoff` (history kept 90 days). */
-export async function deleteDeliveriesBefore(db: Db, cutoff: Date, limit: number): Promise<number> {
-  const ids = db.select({ id: notificationDeliveries.id }).from(notificationDeliveries)
-    .where(lt(notificationDeliveries.createdAt, cutoff)).orderBy(asc(notificationDeliveries.createdAt), asc(notificationDeliveries.id)).limit(limit)
-  const removed = await db.delete(notificationDeliveries).where(inArray(notificationDeliveries.id, ids)).returning({ id: notificationDeliveries.id })
-  return removed.length
-}
-
-// --- "Your order is ready" for customers (D157) ---
-
-export type OrderReadyAlertRow = typeof orderReadyAlerts.$inferSelect
-
-export async function findOrderReadyAlert(db: Db, tenantId: string, orderId: string): Promise<OrderReadyAlertRow | undefined> {
-  const [row] = await db.select().from(orderReadyAlerts).where(and(eq(orderReadyAlerts.tenantId, tenantId), eq(orderReadyAlerts.orderId, orderId)))
-  return row
-}
-
-/** The order's alert a code belongs to, in whichever tenant (the code is the only key Telegram sends). */
-export async function findOrderReadyAlertByCode(db: Db, codeHash: string): Promise<OrderReadyAlertRow | undefined> {
-  const [row] = await db.select().from(orderReadyAlerts).where(eq(orderReadyAlerts.codeHash, codeHash))
-  return row
-}
-
-/**
- * A new link for the order: a new code and expiry. A chat that already asked stays until a new one
- * uses the new code; a message already sent stays sent.
- */
-export async function saveOrderReadyLink(db: Db, link: { tenantId: string, orderId: string, codeHash: string, linkExpiresAt: Date, createdAt: Date }): Promise<void> {
-  await db.insert(orderReadyAlerts).values(link)
-    .onConflictDoUpdate({ target: orderReadyAlerts.orderId, set: { codeHash: link.codeHash, linkExpiresAt: link.linkExpiresAt } })
-}
-
-/**
- * A chat used the code: it gets the message. Only the code it was given, unexpired, once (the code
- * is cleared; a guard follows it in the batch). In the same statement the subscription gets a new
- * identity, any older send loses its claim, and the scheduled run is due now: if the order was
- * marked ready while the chat signed up, that is the durable work that sends it.
- */
-export function subscribeOrderReadyAlertStatement(db: Db, orderId: string, codeHash: string, chatId: string, subscriptionId: string, now: Date): Statement {
-  return db.update(orderReadyAlerts)
-    .set({ chatId, codeHash: null, subscribedAt: now, subscriptionId, claimToken: null, claimUntil: null, attempts: 0, retryAt: now })
-    .where(and(eq(orderReadyAlerts.orderId, orderId), eq(orderReadyAlerts.codeHash, codeHash), sql`${orderReadyAlerts.linkExpiresAt} > ${now.getTime()}`))
-}
-
-/** A send of one subscription: what it is for, and the claim that lets it complete. */
-export type OrderReadyClaim = OrderReadyAlertRow & { chatId: string, claimToken: string }
-
-/**
- * Claims the order's message for one sender (the ready event, the sign-up catch-up or the scheduled
- * run): one atomic update, only while a chat is waiting, nothing was sent and nobody else holds an
- * unexpired claim. Counts the try; the lease ends at `until` (an abandoned claim is claimable then).
- */
-export async function claimOrderReady(db: Db, tenantId: string, orderId: string, now: Date, until: Date): Promise<OrderReadyClaim | undefined> {
-  const token = newId()
-  const [claimed] = await db.update(orderReadyAlerts)
-    .set({ claimToken: token, claimUntil: until, attempts: sql`${orderReadyAlerts.attempts} + 1`, retryAt: until })
-    .where(and(
-      eq(orderReadyAlerts.tenantId, tenantId),
-      eq(orderReadyAlerts.orderId, orderId),
-      isNotNull(orderReadyAlerts.chatId),
-      isNull(orderReadyAlerts.notifiedAt),
-      or(isNull(orderReadyAlerts.claimUntil), lte(orderReadyAlerts.claimUntil, now)),
-    ))
-    .returning()
-  return claimed ? { ...claimed, chatId: claimed.chatId!, claimToken: token } : undefined
-}
-
-/** Whether a sender holds an unexpired claim on the order's message. */
-export async function orderReadyClaimed(db: Db, tenantId: string, orderId: string, now: Date): Promise<boolean> {
-  const [row] = await db.select({ orderId: orderReadyAlerts.orderId }).from(orderReadyAlerts)
-    .where(and(eq(orderReadyAlerts.tenantId, tenantId), eq(orderReadyAlerts.orderId, orderId), isNotNull(orderReadyAlerts.claimUntil), gt(orderReadyAlerts.claimUntil, now)))
-  return !!row
-}
-
-/** The claim's own subscription and token: what a sender must still hold to change the row. */
-const ownsOrderReady = (claim: OrderReadyClaim) => and(
-  eq(orderReadyAlerts.tenantId, claim.tenantId),
-  eq(orderReadyAlerts.orderId, claim.orderId),
-  sql`${orderReadyAlerts.subscriptionId} is ${claim.subscriptionId}`,
-  eq(orderReadyAlerts.claimToken, claim.claimToken),
-  isNull(orderReadyAlerts.notifiedAt),
-)
-
-/**
- * Sent (or given up on): the chat is forgotten. Only for the subscription and claim the sender
- * holds, so an old send never marks a newer chat. Returns whether it did.
- */
-export async function completeOrderReady(db: Db, claim: OrderReadyClaim, at: Date): Promise<boolean> {
-  const done = await db.update(orderReadyAlerts)
-    .set({ chatId: null, notifiedAt: at, claimToken: null, claimUntil: null, retryAt: null })
-    .where(ownsOrderReady(claim)).returning({ orderId: orderReadyAlerts.orderId })
-  return done.length === 1
-}
-
-/** A try that failed: the claim is released and the scheduled run tries again at `next`. */
-export async function retryOrderReady(db: Db, claim: OrderReadyClaim, next: Date): Promise<boolean> {
-  const done = await db.update(orderReadyAlerts)
-    .set({ claimToken: null, claimUntil: null, retryAt: next })
-    .where(ownsOrderReady(claim)).returning({ orderId: orderReadyAlerts.orderId })
-  return done.length === 1
-}
-
-/** Nothing to send yet (the order is still being prepared): releases the claim without counting the try; the ready event comes. */
-export async function parkOrderReady(db: Db, claim: OrderReadyClaim): Promise<boolean> {
-  const done = await db.update(orderReadyAlerts)
-    .set({ claimToken: null, claimUntil: null, retryAt: null, attempts: sql`max(${orderReadyAlerts.attempts} - 1, 0)` })
-    .where(ownsOrderReady(claim)).returning({ orderId: orderReadyAlerts.orderId })
-  return done.length === 1
-}
-
-/** Too many tries: the chat is forgotten without a "sent" mark (nothing was confirmed). */
-export async function abandonOrderReady(db: Db, claim: OrderReadyClaim): Promise<boolean> {
-  const done = await db.update(orderReadyAlerts)
-    .set({ chatId: null, claimToken: null, claimUntil: null, retryAt: null })
-    .where(ownsOrderReady(claim)).returning({ orderId: orderReadyAlerts.orderId })
-  return done.length === 1
-}
-
-/** Messages the scheduled run should try: a chat waiting, due now, no unexpired claim (a stopped worker's lease has ended). */
-export async function dueOrderReadyAlerts(db: Db, now: Date, limit: number): Promise<{ tenantId: string, orderId: string }[]> {
-  return db.select({ tenantId: orderReadyAlerts.tenantId, orderId: orderReadyAlerts.orderId }).from(orderReadyAlerts)
-    .where(and(
-      isNotNull(orderReadyAlerts.chatId),
-      isNull(orderReadyAlerts.notifiedAt),
-      isNotNull(orderReadyAlerts.retryAt),
-      lte(orderReadyAlerts.retryAt, now),
-      or(isNull(orderReadyAlerts.claimUntil), lte(orderReadyAlerts.claimUntil, now)),
-    ))
-    .orderBy(asc(orderReadyAlerts.retryAt))
-    .limit(limit)
-}
-
-/** Rows from before `cutoff`: their orders are long finished. */
-export async function deleteOrderReadyAlertsBefore(db: Db, cutoff: Date, limit: number): Promise<number> {
-  const ids = db.select({ id: orderReadyAlerts.orderId }).from(orderReadyAlerts)
-    .where(lt(orderReadyAlerts.createdAt, cutoff)).orderBy(asc(orderReadyAlerts.createdAt), asc(orderReadyAlerts.orderId)).limit(limit)
-  const removed = await db.delete(orderReadyAlerts).where(inArray(orderReadyAlerts.orderId, ids)).returning({ orderId: orderReadyAlerts.orderId })
-  return removed.length
-}
-
-export async function oldestDueNotification(db: Db, now: Date): Promise<Date | null> {
-  const [row] = await db.select({ at: sql<number | null>`min(${notificationDeliveries.nextAttemptAt})` }).from(notificationDeliveries)
-    .where(and(eq(notificationDeliveries.status, 'pending'), lte(notificationDeliveries.nextAttemptAt, now)))
-  return row?.at == null ? null : new Date(row.at)
-}
-
-/**
- * Telegram deliveries going wrong, per cafe (the console's System health, P4, D192): failed ones
- * made since `since`, pending ones retrying after a failed try, and the latest failed try. Counts
- * and dates only; never the message, the chat or the error. Reads `notification_deliveries_created_idx`.
- */
-export async function deliveryHealth(db: Db, since: Date): Promise<{ tenantId: string, failed: number, retrying: number, lastFailureAt: Date | null }[]> {
-  const rows = await db.select({
-    tenantId: notificationDeliveries.tenantId,
-    failed: sql<number>`sum(case when ${notificationDeliveries.status} = 'failed' then 1 else 0 end)`.mapWith(Number),
-    retrying: sql<number>`sum(case when ${notificationDeliveries.status} = 'pending' and ${notificationDeliveries.attempts} > 0 then 1 else 0 end)`.mapWith(Number),
-    lastFailureAt: sql<number | null>`max(case when ${notificationDeliveries.status} = 'failed' or ${notificationDeliveries.attempts} > 0 then ${notificationDeliveries.createdAt} end)`,
-  }).from(notificationDeliveries)
-    .where(and(gte(notificationDeliveries.createdAt, since), or(eq(notificationDeliveries.status, 'failed'), and(eq(notificationDeliveries.status, 'pending'), gt(notificationDeliveries.attempts, 0)))))
-    .groupBy(notificationDeliveries.tenantId)
-  return rows.map(row => ({ ...row, lastFailureAt: row.lastFailureAt == null ? null : new Date(row.lastFailureAt) }))
 }

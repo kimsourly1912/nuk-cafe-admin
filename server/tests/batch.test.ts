@@ -8,8 +8,21 @@ import type { Db } from '#server/utils/batch'
 import { isForeignKeyError, isStaleWrite, isUniqueViolation, requireCount, requireOneChange, runBatch } from '#server/utils/batch'
 import { versionConflict } from '#server/utils/errors'
 import { catalogRows, itemModifierGroups } from '#server/features/menu/catalog.repository'
-import * as repo from '#server/features/notifications/notifications.repository'
+import { listItems } from '#server/features/menu/items.repository'
+import { linksOf } from '#server/features/menu/promotions.repository'
+import { workspaceRoles } from '#server/features/identity/identity.repository'
+import { listAccounts } from '#server/features/identity/accounts.repository'
+import { listStaff } from '#server/features/identity/staff.repository'
+import { listTenants } from '#server/features/tenants/tenants.repository'
+import { overviewRows } from '#server/features/notifications/notifications.repository'
+import { imageRows } from '#server/features/media/media.repository'
+import { historyRows } from '#server/features/support/support.repository'
+import { listAuditEvents } from '#server/features/platform/platform.audit.repository'
+import * as repo from '#server/features/notifications/notifications.customers.repository'
 import { counterContext, counterQueueRows } from '#server/features/orders/orders.repository'
+import { orderHistory } from '#server/features/orders/reports.repository'
+import type { ItemListQuery } from '#shared/contracts/menu-items'
+import type { OrderHistoryQuery } from '#shared/contracts/reports'
 
 let db: Db
 beforeEach(async () => {
@@ -98,6 +111,75 @@ describe('on D1', () => {
 
   const things = sqliteTable('t', { v: integer() })
 
+  it('decodes the joined image source/variant snapshot through D1 objects (D194 step 7)', async () => {
+    const now = new Date('2026-10-21T03:00:00Z')
+    const edit = { focus: { x: 0.5, y: 0.5 }, card: { zoom: 1, x: 0.5, y: 0.5, adjusted: false }, detail: { zoom: 1, x: 0.5, y: 0.5, adjusted: false }, fill: '#ffffff' }
+    const { db: d1, bound } = fakeD1([
+      ['photo-a', 'cafe-a/source', 'image/webp', 17, 'temporary', now.getTime(), null, 'placeholder', JSON.stringify(edit)],
+      ['photo-a', 'card', 'cafe-a/card'],
+    ])
+    expect(await imageRows(d1, 'cafe-a', ['photo-a'])).toEqual({
+      assets: [expect.objectContaining({ id: 'photo-a', objectKey: 'cafe-a/source', stateChangedAt: now, edit })],
+      variants: [{ parentId: 'photo-a', variant: 'card', objectKey: 'cafe-a/card' }],
+    })
+    expect(bound).toHaveLength(2)
+    expect(bound.every(statement => statement.params.includes('cafe-a'))).toBe(true)
+    expect(bound[1]!.sql).toContain('"photo_source"."tenantId" = "media_assets"."tenantId"')
+  })
+
+  it('decodes support history and the audit page/total in D1 batches (D194 step 7)', async () => {
+    const now = new Date('2026-10-21T03:00:00Z')
+    const { db: d1, bound } = fakeD1([
+      ['grant-a', 'cafe-a', 'owner-a', now.getTime(), now.getTime() + 60_000, null, null],
+      ['visit-a', 'cafe-a', 'grant-a', 'support-a', 'session-a', now.getTime(), now.getTime() + 30_000, null],
+    ])
+    expect(await historyRows(d1, 'cafe-a', 10)).toEqual({
+      grants: [expect.objectContaining({ id: 'grant-a', tenantId: 'cafe-a', grantedAt: now, endedAt: null })],
+      visits: [expect.objectContaining({ id: 'visit-a', tenantId: 'cafe-a', grantId: 'grant-a', openedAt: now, closedAt: null })],
+    })
+    expect(bound).toHaveLength(2)
+    expect(bound[1]!.sql).toContain('"recent_grants"."tenantId" = "support_visits"."tenantId"')
+    const { db: auditDb } = fakeD1([['audit-a', now.getTime(), 'cafe-a', 'actor-a', 'platform.test', 'test', null, '{"changed":true}'], [1]])
+    expect(await listAuditEvents(auditDb, { actions: ['platform.test'], limit: 10, offset: 0 })).toEqual({
+      total: 1, rows: [expect.objectContaining({ id: 'audit-a', at: now, metadata: { changed: true } })],
+    })
+  })
+
+  it('decodes the joined Telegram overview batch without collapsing ids, dates or booleans (D194)', async () => {
+    const now = new Date('2026-10-20T03:00:00Z')
+    const { db: d1, bound } = fakeD1([
+      ['destination-a', 'cafe-a', 'chat-a', 'group', 'Our group', 'connected', 'person-a', now.getTime(), null, null, 2, now.getTime(), now.getTime(), 'Our owner'],
+      ['closing_summary', 'destination-a', 1],
+    ])
+    expect(await overviewRows(d1, 'cafe-a')).toEqual({
+      destinations: [expect.objectContaining({ id: 'destination-a', tenantId: 'cafe-a', title: 'Our group', connectedByName: 'Our owner', connectedAt: now, version: 2 })],
+      rules: [{ kind: 'closing_summary', destinationId: 'destination-a', attachCsv: true }],
+    })
+    expect(bound).toHaveLength(2)
+    expect(bound.every(statement => statement.params.includes('cafe-a'))).toBe(true)
+    expect(bound[1]!.sql).toContain('"telegram_destinations"."tenantId" = "notification_rules"."tenantId"')
+  })
+
+  it('maps the joined workspace batch by SQL name, keeping each cafe and role together (D194)', async () => {
+    const { db: d1, bound } = fakeD1([['cafe-a', 'owner'], ['cafe-b', 'manager']])
+    expect(await workspaceRoles(d1, 'person')).toEqual({
+      memberships: [{ tenantId: 'cafe-a', role: 'owner' }], staff: [{ tenantId: 'cafe-b', role: 'manager' }],
+    })
+    expect(bound).toHaveLength(2)
+    expect(bound.every(statement => statement.params.includes('person'))).toBe(true)
+    expect(bound[1]!.sql).toContain('"branches"."tenantId" = "branch_staff"."tenantId"')
+  })
+
+  it('reads identity and cafe pages with their totals through D1, preserving booleans and dates (D194)', async () => {
+    const now = new Date('2026-10-20T03:00:00Z')
+    const { db: accountDb } = fakeD1([['person', 'Person', 'person@example.com', 1, 'customer', 0, null, null, 0, 0, now.getTime(), now.getTime()], [1]])
+    expect(await listAccounts(accountDb, { page: 1, pageSize: 20, kind: 'owner' })).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'person', name: 'Person', emailVerified: true, banned: false, createdAt: now, updatedAt: now })] })
+    const { db: staffDb } = fakeD1([['person', 'Person', 'person@example.com', 'customer', 0, now.getTime(), now.getTime()], [1]])
+    expect(await listStaff(staffDb, 'cafe-a', { page: 1, pageSize: 20, branchId: 'branch-a' })).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'person', mustChangePassword: false, updatedAt: now, createdAt: now })] })
+    const { db: tenantDb } = fakeD1([['cafe-a', 'Cafe A', 'cafe-a', 'active', null, null, 2, now.getTime()], [1]])
+    expect(await listTenants(tenantDb, { page: 1, pageSize: 20, owner: 'none' })).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'cafe-a', name: 'Cafe A', version: 2, createdAt: now })] })
+  })
+
   it('batches every guard, with and without bound parameters', async () => {
     const { db: d1, bound } = fakeD1()
     await d1.batch([
@@ -142,14 +224,25 @@ describe('on D1', () => {
     expect(result.rows).toEqual([expect.objectContaining({ branchName: 'Branch A', customerName: 'Customer A', placedAt: now, paymentDueAt: new Date(now.getTime() + 60000), paidAt: now, version: 2 })])
   })
 
+  it('keeps the order id apart from its payment id in an order history page read in one D1 batch (D170, D194)', async () => {
+    const placed = new Date('2026-10-14T05:00:00Z')
+    const { db: d1 } = fakeD1([
+      ['order-a', 7, '2026-10-14', placed.getTime(), 'pickup', null, 'completed', 875, 'cash_usd', 'payment-a', null],
+      [1],
+    ])
+    const query = { branchId: 'branch-a', from: '2026-10-14', to: '2026-10-14', page: 1, pageSize: 20, sort: 'placed', direction: 'desc' } as OrderHistoryQuery
+    const page = await orderHistory(d1, 'cafe-a', query)
+    expect(page).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'order-a', pickupNumber: 7, paymentId: 'payment-a', placedAt: placed })] })
+  })
+
   it('executes the customer ready message subscribe, claim, completion and due query through the actual D1 adapter', async () => {
     const { db: d1, bound } = fakeD1()
     const now = new Date('2026-10-14T05:00:00Z')
-    await d1.batch([repo.subscribeOrderReadyAlertStatement(d1, 'order-a', 'hash', 'chat-1', 'sub-1', now), requireOneChange(d1)])
-    const claim = await repo.claimOrderReady(d1, 'cafe-a', 'order-a', now, new Date(now.getTime() + 120_000))
+    await d1.batch([repo.subscribeOrderReadyAlertStatement(d1, 'cafe-a', 'order-a', 'hash', 'chat-1', 'sub-1', now), requireOneChange(d1)])
+    const claim = await repo.claimOrderReady(d1, 'cafe-a', 'order-a', new Date(now.getTime() + 120_000), now)
     expect(claim).toBeUndefined()
     const fenced = { tenantId: 'cafe-a', orderId: 'order-a', chatId: 'chat-1', subscriptionId: 'sub-1', claimToken: 'token-1' } as repo.OrderReadyClaim
-    expect(await repo.completeOrderReady(d1, fenced, now)).toBe(false)
+    expect(await repo.markOrderReadyComplete(d1, fenced, now)).toBe(false)
     expect(await repo.dueOrderReadyAlerts(d1, now, 5)).toEqual([])
     expect(bound.every(statement => statement.params.length <= 100)).toBe(true)
     const complete = bound.find(statement => statement.sql.startsWith('update "order_ready_alerts" set "chatId" = ?, "notifiedAt"'))!
@@ -162,5 +255,25 @@ describe('on D1', () => {
     const { db: d1 } = fakeD1([['item-a', 'group-a', 'Extras', 1, 0, 2, 1, 3]])
     const [rows] = await d1.batch([itemModifierGroups(d1, 'cafe-a')])
     expect(rows).toEqual([{ itemId: 'item-a', groupId: 'group-a', name: 'Extras', rulesOverridden: true, ownMin: 0, ownMax: 2, groupMin: 1, groupMax: 3 }])
+  })
+
+  it('keeps the category name apart from the item name in a menu item page read in one D1 batch (D170, D194)', async () => {
+    const created = new Date('2026-10-14T05:00:00Z')
+    const { db: d1 } = fakeD1([
+      ['item-a', 'category-a', 'Iced Latte', '', null, 'active', 1, 3, created.getTime(), created.getTime(), 'Coffee', 875, 950],
+      [1],
+    ])
+    const page = await listItems(d1, 'cafe-a', { page: 1, pageSize: 20 } as ItemListQuery)
+    expect(page).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'item-a', name: 'Iced Latte', categoryName: 'Coffee', priceMin: 875, priceMax: 950, createdAt: created })] })
+  })
+
+  it('reads a promotion\'s items, categories and branches in one D1 batch, each with its own name', async () => {
+    const { db: d1, bound } = fakeD1([['promo-a', 'item-a', 'Iced Latte', 'active'], ['promo-a', 'category-a', 'Coffee', 'active'], ['promo-a', 'branch-a', 'Main']])
+    const links = await linksOf(d1, 'cafe-a', ['promo-a'])
+    expect(links.items.get('promo-a')).toEqual([{ id: 'item-a', name: 'Iced Latte', status: 'active' }])
+    expect(links.categories.get('promo-a')).toEqual([{ id: 'category-a', name: 'Coffee', status: 'active' }])
+    expect(links.branches.get('promo-a')).toEqual([{ id: 'branch-a', name: 'Main' }])
+    expect(bound).toHaveLength(3)
+    expect(bound.every(statement => statement.params.includes('cafe-a'))).toBe(true)
   })
 })

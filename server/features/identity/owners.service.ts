@@ -4,6 +4,7 @@ import { requireOneChange } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import { profileStatement } from '#server/features/customers'
 import * as accountsRepo from './accounts.repository'
+import { findTenantRole } from './identity.repository'
 import * as repo from './staff.repository'
 import { generateTemporaryPassword, isSuperadmin, nextVersion } from './staff.rules'
 
@@ -27,7 +28,7 @@ export interface OwnershipFacts {
 export async function ownershipFacts(db: Db, tenantId: string, userId: string): Promise<OwnershipFacts | undefined> {
   const account = await repo.findAccount(db, userId)
   if (!account) return undefined
-  const role = await repo.tenantRoleOf(db, tenantId, userId)
+  const role = await findTenantRole(db, tenantId, userId)
   return {
     userId,
     version: account.updatedAt,
@@ -53,9 +54,9 @@ export function planExistingOwner(db: Db, tenantId: string, facts: OwnershipFact
     userId: facts.userId,
     temporaryPassword: null,
     statements: [
-      repo.bumpVersionStatement(db, facts.userId, facts.version, nextVersion(facts.version, now)),
+      repo.touchAccountStatement(db, facts.userId, facts.version, nextVersion(facts.version, now)),
       requireOneChange(db),
-      repo.requireEligibleAccountStatement(db, facts.userId),
+      repo.requireEligibleAccount(db, facts.userId),
       ...repo.setTenantRoleStatements(db, tenantId, facts.userId, 'owner', now),
       profileStatement(db, tenantId, facts.userId),
     ],
@@ -92,7 +93,7 @@ export async function planOwnerRemoval(db: Db, tenantId: string, facts: Ownershi
   return {
     staysStaff,
     statements: [
-      repo.bumpVersionStatement(db, facts.userId, facts.version, nextVersion(facts.version, now)),
+      repo.touchAccountStatement(db, facts.userId, facts.version, nextVersion(facts.version, now)),
       requireOneChange(db),
       ...repo.setTenantRoleStatements(db, tenantId, facts.userId, staysStaff ? 'member' : null, now),
       repo.deleteSessionsStatement(db, facts.userId),
@@ -101,7 +102,7 @@ export async function planOwnerRemoval(db: Db, tenantId: string, facts: Ownershi
 }
 
 /** Aborts the batch if it would leave the cafe without an owner who can sign in. */
-export const requireAnOwner = repo.requireAnOwnerStatement
+export const requireAnOwner = repo.requireAnOwner
 
 /** Owners able to sign in (not banned), per cafe; a cafe without one is missing from the map. */
 export const activeOwnerCounts = accountsRepo.activeOwnerCounts

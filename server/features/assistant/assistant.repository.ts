@@ -1,10 +1,11 @@
-import { and, asc, count, eq, inArray, lt, sql } from 'drizzle-orm'
+import { and, asc, count, eq, lt } from 'drizzle-orm'
 import type { AiProvider, AssistantFeature, AssistantOutcome } from '#shared/contracts/assistant'
 import type { Db, Statement } from '#server/utils/batch'
-import { requireAtMost } from '#server/utils/batch'
+import { deleteOldest, requireAtMost } from '#server/utils/batch'
+import { byId, inTenant } from '#server/utils/query'
 import { assistantUsage } from './assistant.schema'
 
-/** All SQL of the assistant (docs/server/architecture.md → Repository). */
+// --- Row types ---
 
 export interface NewUsage {
   id: string
@@ -17,6 +18,27 @@ export interface NewUsage {
   at: Date
 }
 
+export interface UsageResult {
+  outcome: Exclude<AssistantOutcome, 'pending'>
+  inputTokens: number | null
+  outputTokens: number | null
+  cachedInputTokens: number | null
+}
+
+// --- Columns and conditions ---
+
+const usageOnDay = (tenantId: string, userId: string, day: string) => inTenant(assistantUsage, tenantId, eq(assistantUsage.userId, userId), eq(assistantUsage.day, day))
+
+// --- Reads ---
+
+/** The user's requests in a cafe on a local day (every outcome counts against the limit). */
+export async function countUsage(db: Db, tenantId: string, userId: string, day: string): Promise<number> {
+  const [row] = await db.select({ count: count() }).from(assistantUsage).where(usageOnDay(tenantId, userId, day))
+  return row?.count ?? 0
+}
+
+// --- Write statements ---
+
 /**
  * The request's usage row and a guard after it: the user's rows that day in this cafe, this one
  * included, at most `limit`. Two requests racing for the last slot can't both pass (SQLite runs one batch at a
@@ -25,32 +47,18 @@ export interface NewUsage {
 export function reserveUsageStatements(db: Db, usage: NewUsage, limit: number): Statement[] {
   return [
     db.insert(assistantUsage).values({ ...usage, outcome: 'pending' }),
-    requireAtMost(db, sql`select count(*) from ${assistantUsage} where ${assistantUsage.tenantId} = ${usage.tenantId} and ${assistantUsage.userId} = ${usage.userId} and ${assistantUsage.day} = ${usage.day}`, limit),
+    requireAtMost(db, db.$count(assistantUsage, usageOnDay(usage.tenantId, usage.userId, usage.day)), limit),
   ]
 }
 
-export interface UsageResult {
-  outcome: Exclude<AssistantOutcome, 'pending'>
-  inputTokens: number | null
-  outputTokens: number | null
-  cachedInputTokens: number | null
-}
-
 /** Fills in how a pending request ended. */
-export async function finishUsage(db: Db, id: string, result: UsageResult): Promise<void> {
-  await db.update(assistantUsage).set(result).where(and(eq(assistantUsage.id, id), eq(assistantUsage.outcome, 'pending')))
+export function finishUsageStatement(db: Db, tenantId: string, id: string, result: UsageResult): Statement {
+  return db.update(assistantUsage).set(result).where(and(byId(assistantUsage, tenantId, id), eq(assistantUsage.outcome, 'pending')))
 }
 
-/** The user's requests in a cafe on a local day (every outcome counts against the limit). */
-export async function countUsage(db: Db, tenantId: string, userId: string, day: string): Promise<number> {
-  const [row] = await db.select({ count: count() }).from(assistantUsage).where(and(eq(assistantUsage.tenantId, tenantId), eq(assistantUsage.userId, userId), eq(assistantUsage.day, day)))
-  return row?.count ?? 0
-}
+// --- Background-task writes ---
 
-/** Removes rows from before `cutoff`; returns how many. */
+/** Across cafes: bounded retention of usage metadata, using assistant_usage_at_idx. */
 export async function deleteUsageBefore(db: Db, cutoff: Date, limit: number): Promise<number> {
-  const ids = db.select({ id: assistantUsage.id }).from(assistantUsage)
-    .where(lt(assistantUsage.at, cutoff)).orderBy(asc(assistantUsage.at), asc(assistantUsage.id)).limit(limit)
-  const removed = await db.delete(assistantUsage).where(inArray(assistantUsage.id, ids)).returning({ id: assistantUsage.id })
-  return removed.length
+  return deleteOldest(db, assistantUsage, assistantUsage.id, lt(assistantUsage.at, cutoff), [asc(assistantUsage.at), asc(assistantUsage.id)], limit)
 }

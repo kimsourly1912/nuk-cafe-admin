@@ -1,12 +1,13 @@
 import type { ImageType, MediaAsset, MenuImage, PhotoEdit, PhotoForEdit, PhotoVariant, UploadedPhoto } from '#shared/contracts/media'
 import { IMAGE_MAX_BYTES, PHOTO_PLACEHOLDER_MAX_LENGTH, PHOTO_SIZES, PHOTO_SOURCE_MAX_EDGE } from '#shared/contracts/media'
 import type { Db, Statement } from '#server/utils/batch'
-import { requireOneChange } from '#server/utils/batch'
+import { requireOneChange, tryGuardedBatch } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import type { Actor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
 import { imageTooLarge, mediaNotAvailable, noFile, photoNotFound, photoRefused, unsupportedImage } from './media.errors'
 import * as repo from './media.repository'
+import * as objectRepo from './media.objects.repository'
 import { imageSize, isImageType, isPlaceholder, mediaUrl, objectKeyFor, sha256Hex, sniffImageType, sourceKeyFor, TEMPORARY_TTL_MS } from './media.rules'
 
 /**
@@ -47,12 +48,12 @@ export async function uploadImage(db: Db, store: ObjectStore, actor: Actor, file
   const objectKey = objectKeyFor(actor.tenantId, mimeType)
   const row = { id, tenantId: actor.tenantId, objectKey, mimeType, byteSize: data.length, sha256: await sha256Hex(data), uploadedBy: actor.userId, now: new Date() }
 
-  await repo.planObjects(db, actor.tenantId, [objectKey], new Date(Date.now() + TEMPORARY_TTL_MS))
+  await planObjects(db, actor.tenantId, [objectKey], new Date(Date.now() + TEMPORARY_TTL_MS))
   try {
     await store.put(objectKey, data, { contentType: mimeType })
     await db.batch([
       repo.insertAssetStatement(db, row),
-      repo.clearObjectPlans(db, actor.tenantId, [objectKey]),
+      ...objectRepo.deleteObjectPlansStatements(db, actor.tenantId, [objectKey]),
       auditStatement(db, actor, { action: 'media.asset.upload', targetType: 'media_asset', targetId: id, metadata: { mimeType, byteSize: data.length } }),
     ])
   }
@@ -88,13 +89,10 @@ export async function getAsset(db: Db, tenantId: string, id: string): Promise<Me
 
 /**
  * How the menu shows each of these uploads that exists, by id (D158): a menu photo's files and
- * placeholder; a single image (a photo from before D158, a logo) as every file. Two queries for
- * any number of ids.
+ * placeholder; a single image (a photo from before D158, a logo) as every file. One two-query batch per ID piece.
  */
 export async function imageSets(db: Db, tenantId: string, ids: string[]): Promise<Map<string, MenuImage>> {
-  if (!ids.length) return new Map()
-  const rows = (await repo.findAssets(db, tenantId, [...new Set(ids)])).filter(row => !row.parentId)
-  const variants = await repo.findVariants(db, tenantId, rows.filter(row => row.edit).map(row => row.id))
+  const { assets: rows, variants } = await repo.imageRows(db, tenantId, [...new Set(ids)])
   const filesOf = new Map<string, Partial<Record<PhotoVariant, string>>>()
   for (const v of variants) filesOf.set(v.parentId, { ...filesOf.get(v.parentId), [v.variant]: mediaUrl(v.objectKey) })
   return new Map(rows.map((row) => {
@@ -155,7 +153,7 @@ export async function uploadPhoto(db: Db, store: ObjectStore, actor: Actor, uplo
   }
   const stored: string[] = []
   const removeStored = () => Promise.all(stored.map(key => removeObject(db, store, actor.tenantId, key).catch(() => {})))
-  await repo.planObjects(db, actor.tenantId, rows.map(row => row.objectKey), new Date(now.getTime() + TEMPORARY_TTL_MS))
+  await planObjects(db, actor.tenantId, rows.map(row => row.objectKey), new Date(now.getTime() + TEMPORARY_TTL_MS))
   try {
     for (const [i, row] of rows.entries()) {
       const data = i === 0 ? source.data : files[i - 1]!.data
@@ -166,7 +164,7 @@ export async function uploadPhoto(db: Db, store: ObjectStore, actor: Actor, uplo
     await db.batch([
       first!,
       ...rest,
-      repo.clearObjectPlans(db, actor.tenantId, rows.map(row => row.objectKey)),
+      ...objectRepo.deleteObjectPlansStatements(db, actor.tenantId, rows.map(row => row.objectKey)),
       auditStatement(db, actor, { action: 'media.photo.upload', targetType: 'media_asset', targetId: id, metadata: { width: source.width, height: source.height } }),
     ])
   }
@@ -211,19 +209,19 @@ export async function purgeExpiredUploads(db: Db, store: ObjectStore, options: {
   const now = options.now ?? new Date()
   const before = new Date(now.getTime() - TEMPORARY_TTL_MS)
   const report: PurgeReport = { deleted: 0, kept: 0, objectErrors: [] }
-  for (const pending of await repo.dueObjectDeletions(db, now, options.limit ?? 100)) {
+  for (const pending of await objectRepo.dueObjectDeletions(db, now, options.limit ?? 100)) {
     try {
       await removeObject(db, store, pending.tenantId, pending.objectKey)
     }
     catch (error) {
       report.objectErrors.push({ objectKey: pending.objectKey, error: String(error) })
-      await repo.retryObjectDeletion(db, pending.tenantId, pending.objectKey, new Date(now.getTime() + 60_000))
+      await db.batch([objectRepo.retryObjectDeletionStatement(db, pending.tenantId, pending.objectKey, new Date(now.getTime() + 60_000))])
     }
   }
-  for (const asset of await repo.findExpiredTemporary(db, before, options.limit ?? 100)) {
+  for (const asset of await repo.dueExpiredTemporary(db, before, options.limit ?? 100)) {
     // A menu photo's files go with it (D158): their rows by the foreign key, their objects here.
-    const files = await repo.variantKeys(db, asset.id)
-    if (!await repo.deleteIfStillExpired(db, asset.tenantId, asset.id, before)) {
+    const files = await repo.variantKeysOf(db, asset.tenantId, asset.id)
+    if (!await tryGuardedBatch(db, [repo.queueExpiredAssetObjectsStatement(db, asset.tenantId, asset.id, before), repo.deleteExpiredAssetStatement(db, asset.tenantId, asset.id, before), requireOneChange(db)])) {
       report.kept++
       continue
     }
@@ -253,9 +251,9 @@ export async function countUploads(db: Db, tenantId: string): Promise<number> {
  */
 export async function deleteUploads(db: Db, tenantId: string, store: ObjectStore, limit: number): Promise<PurgeReport> {
   const report: PurgeReport = { deleted: 0, kept: 0, objectErrors: [] }
-  for (const asset of await repo.firstAssets(db, tenantId, limit)) {
-    const files = await repo.variantKeys(db, asset.id)
-    await repo.deleteAsset(db, tenantId, asset.id)
+  for (const asset of await repo.listFirstAssets(db, tenantId, limit)) {
+    const files = await repo.variantKeysOf(db, asset.tenantId, asset.id)
+    await db.batch([objectRepo.queueAssetObjectsStatement(db, tenantId, asset.id), ...repo.deleteAssetStatements(db, tenantId, asset.id)])
     report.deleted++
     for (const objectKey of [asset.objectKey, ...files]) {
       try {
@@ -272,5 +270,11 @@ export async function deleteUploads(db: Db, tenantId: string, store: ObjectStore
 /** Clear the durable reference only after R2 confirms deletion (missing objects are harmless). */
 async function removeObject(db: Db, store: ObjectStore, tenantId: string, key: string) {
   await store.del(key)
-  await repo.deletedObject(db, tenantId, key)
+  await db.batch([objectRepo.deleteObjectStatement(db, tenantId, key)])
+}
+
+/** Provisional deletion records commit together before any object is uploaded. */
+async function planObjects(db: Db, tenantId: string, keys: string[], after: Date): Promise<void> {
+  const [first, ...rest] = objectRepo.insertObjectPlansStatements(db, tenantId, keys, after)
+  if (first) await db.batch([first, ...rest])
 }

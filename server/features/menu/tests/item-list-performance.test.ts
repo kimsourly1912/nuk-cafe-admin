@@ -5,8 +5,17 @@ import { menuCategories, menuItems, menuItemVariations } from '#server/features/
 import { listItems } from '#server/features/menu/items.repository'
 
 it('prices only the named cafe using its existing index, preserving sellable ranges and pagination', async () => {
+  // The page and its total run in one batch (D194), which libsql doesn't pass to a query logger.
   const queries: { query: string, params: unknown[] }[] = []
-  const db = await createTestDb({ logger: { logQuery: (query, params) => queries.push({ query, params }) } })
+  const db = await createTestDb()
+  const batch = db.batch.bind(db)
+  db.batch = ((items) => {
+    for (const item of items) {
+      const { sql: query, params } = (item as unknown as { toSQL: () => { sql: string, params: unknown[] } }).toSQL()
+      queries.push({ query, params })
+    }
+    return batch(items)
+  }) as typeof db.batch
   for (const tenantId of ['a', 'b']) {
     await ensureTenant(db, tenantId)
     await db.insert(menuCategories).values({ id: `${tenantId}-category`, tenantId, name: 'Coffee' })

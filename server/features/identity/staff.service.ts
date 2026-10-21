@@ -1,6 +1,6 @@
 import { hashPassword } from 'better-auth/crypto'
 import type { Page } from '#shared/contracts/common'
-import { totalPages } from '#shared/contracts/common'
+import { toPage } from '#shared/contracts/common'
 import type { BranchRoleName, CreatedStaff, CreateStaffInput, DisableStaffInput, ResetStaffPasswordInput, StaffListQuery, StaffMember, StaffPasswordReset, UpdateStaffAccessInput } from '#shared/contracts/staff'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
@@ -10,6 +10,7 @@ import { profileStatement } from '#server/features/customers'
 import { auditStatement } from '#server/features/platform'
 import type { AuditActor } from '#server/features/platform'
 import type { Actor } from './identity.types'
+import { findTenantRole } from './identity.repository'
 import { lastAdmin, ownAccess, staffAlreadyExists, staffChanged, staffElsewhere, staffNotFound, unknownBranches } from './staff.errors'
 import * as repo from './staff.repository'
 import type { AccountRow, MembershipRow } from './staff.repository'
@@ -41,7 +42,7 @@ function toStaffMember(row: AccountRow, owners: Set<string>, memberships: Member
 /** A member of the tenant, else 404: another tenant's people don't exist here. */
 async function loadStaffMember(db: Db, tenantId: string, userId: string): Promise<StaffMember> {
   const row = await repo.findAccount(db, userId)
-  if (!row || !await repo.tenantRoleOf(db, tenantId, userId)) throw staffNotFound()
+  if (!row || !await findTenantRole(db, tenantId, userId)) throw staffNotFound()
   return toStaffMember(row, await repo.ownersAmong(db, tenantId, [userId]), await repo.membershipsOf(db, tenantId, [userId]))
 }
 
@@ -79,13 +80,7 @@ export async function listStaff(db: Db, actor: Actor, query: StaffListQuery): Pr
   const { rows, total } = await repo.listStaff(db, actor.tenantId, query)
   const ids = rows.map(r => r.id)
   const [owners, memberships] = await Promise.all([repo.ownersAmong(db, actor.tenantId, ids), repo.membershipsOf(db, actor.tenantId, ids)])
-  return {
-    items: rows.map(row => toStaffMember(row, owners, memberships)),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
-    totalPages: totalPages(total, query.pageSize),
-  }
+  return toPage(rows.map(row => toStaffMember(row, owners, memberships)), query, total)
 }
 
 export async function getStaffMember(db: Db, actor: Actor, userId: string): Promise<StaffMember> {
@@ -122,7 +117,7 @@ export async function planStaffCreate(db: Db, by: AuditActor, tenantId: string, 
       temporaryPassword: null,
       existingVersion: existing.updatedAt.getTime(),
       statements: [
-        repo.bumpVersionStatement(db, existing.id, existing.updatedAt, nextVersion(existing.updatedAt, now)),
+        repo.touchAccountStatement(db, existing.id, existing.updatedAt, nextVersion(existing.updatedAt, now)),
         requireOneChange(db),
         ...repo.replaceAccessStatements(db, tenantId, existing.id, tenantRole(input.admin), input.memberships, now),
         // Their profile in this cafe (D137): they're a customer here too.
@@ -152,7 +147,7 @@ export async function planStaffCreate(db: Db, by: AuditActor, tenantId: string, 
 async function createStaffAs(db: Db, by: AuditActor, tenantId: string, input: CreateStaffInput): Promise<CreatedStaff> {
   await ensureActiveBranches(db, tenantId, input.memberships)
   const existing = await repo.findAccountByEmail(db, input.email)
-  if (existing && await repo.tenantRoleOf(db, tenantId, existing.id)) throw staffAlreadyExists()
+  if (existing && await findTenantRole(db, tenantId, existing.id)) throw staffAlreadyExists()
 
   const plan = await planStaffCreate(db, by, tenantId, input)
   if (plan.existingVersion !== null) {
@@ -177,7 +172,7 @@ async function createStaffAs(db: Db, by: AuditActor, tenantId: string, input: Cr
 export async function updateStaffAccess(db: Db, actor: Actor, userId: string, input: UpdateStaffAccessInput): Promise<StaffMember> {
   const { tenantId } = actor
   const target = await repo.findAccount(db, userId)
-  if (!target || !await repo.tenantRoleOf(db, tenantId, userId)) throw staffNotFound()
+  if (!target || !await findTenantRole(db, tenantId, userId)) throw staffNotFound()
   if (target.updatedAt.getTime() !== input.version) throw staffChanged()
   const self = actor.userId === userId
   if (self && !input.admin) throw ownAccess('remove admin')
@@ -185,10 +180,10 @@ export async function updateStaffAccess(db: Db, actor: Actor, userId: string, in
 
   const now = new Date()
   const statements: Statement[] = [
-    repo.bumpVersionStatement(db, userId, target.updatedAt, nextVersion(target.updatedAt, now)),
+    repo.touchAccountStatement(db, userId, target.updatedAt, nextVersion(target.updatedAt, now)),
     requireOneChange(db),
     ...repo.replaceAccessStatements(db, tenantId, userId, tenantRole(input.admin), input.memberships, now),
-    repo.requireAnOwnerStatement(db, tenantId),
+    repo.requireAnOwner(db, tenantId),
     ...(self ? [] : [repo.deleteSessionsStatement(db, userId)]),
     staffAudit(db, actor, tenantId, 'staff.access.update', userId, accessMetadata(input.admin, input.memberships)),
   ]
@@ -205,14 +200,14 @@ export async function disableStaff(db: Db, actor: Actor, userId: string, input: 
   const { tenantId } = actor
   if (actor.userId === userId) throw ownAccess('disable')
   const target = await repo.findAccount(db, userId)
-  if (!target || !await repo.tenantRoleOf(db, tenantId, userId)) throw staffNotFound()
+  if (!target || !await findTenantRole(db, tenantId, userId)) throw staffNotFound()
   if (target.updatedAt.getTime() !== input.version) throw staffChanged()
 
   const statements: Statement[] = [
-    repo.bumpVersionStatement(db, userId, target.updatedAt, nextVersion(target.updatedAt)),
+    repo.touchAccountStatement(db, userId, target.updatedAt, nextVersion(target.updatedAt)),
     requireOneChange(db),
     ...repo.replaceAccessStatements(db, tenantId, userId, null, [], new Date()),
-    repo.requireAnOwnerStatement(db, tenantId),
+    repo.requireAnOwner(db, tenantId),
     repo.deleteSessionsStatement(db, userId),
     staffAudit(db, actor, tenantId, 'staff.disable', userId, {}),
   ]
@@ -232,14 +227,14 @@ export async function resetStaffPassword(db: Db, actor: Actor, userId: string, i
   const { tenantId } = actor
   if (actor.userId === userId) throw ownAccess('reset password')
   const target = await repo.findAccount(db, userId)
-  if (!target || !await repo.tenantRoleOf(db, tenantId, userId)) throw staffNotFound()
+  if (!target || !await findTenantRole(db, tenantId, userId)) throw staffNotFound()
   if (isSuperadmin(target.role) || await repo.hasAccessElsewhere(db, tenantId, userId)) throw staffElsewhere()
   if (target.updatedAt.getTime() !== input.version) throw staffChanged()
 
   const temporaryPassword = generateTemporaryPassword()
   const now = new Date()
   const statements: Statement[] = [
-    repo.requirePasswordChangeStatement(db, userId, target.updatedAt, nextVersion(target.updatedAt, now)),
+    repo.updatePasswordRequirementStatement(db, userId, target.updatedAt, nextVersion(target.updatedAt, now)),
     requireOneChange(db),
     repo.setPasswordStatement(db, userId, await hashPassword(temporaryPassword), now, await repo.hasPasswordAccount(db, userId)),
     repo.deleteSessionsStatement(db, userId),
@@ -314,7 +309,7 @@ export async function accountForEmail(db: Db, email: string): Promise<{ id: stri
 }
 
 /** Aborts a batch unless the account can still own a cafe (the platform console's create, D185). */
-export const requireEligibleAccount = repo.requireEligibleAccountStatement
+export const requireEligibleAccount = repo.requireEligibleAccount
 
 /**
  * The seed task (local development and disposable environments, D142): the first owner is also on

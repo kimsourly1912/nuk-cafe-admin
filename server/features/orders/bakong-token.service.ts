@@ -112,7 +112,12 @@ export async function tenantBakongClient(db: Db, tenantId: string, setup: Bakong
   }
 }
 
-/** Every cafe's token expiry, for the reminders (D132, per cafe since D148). */
-export async function bakongTokenExpiries(db: Db, tenantId?: string): Promise<{ tenantId: string, expiresAt: Date | null }[]> {
-  return khqrRepo.bakongTokenExpiries(db, tenantId)
+/** Across cafes: every saved token's expiry, for System health (D192). */
+export async function bakongTokenExpiries(db: Db): Promise<{ tenantId: string, expiresAt: Date | null }[]> {
+  return khqrRepo.bakongTokenExpiries(db)
+}
+
+/** The cafe's token expiry, for its reminder (D132, per cafe since D148); `null` without a token or a date. */
+export async function bakongTokenExpiryOf(db: Db, tenantId: string): Promise<Date | null> {
+  return (await khqrRepo.findBakongTokenExpiry(db, tenantId))?.expiresAt ?? null
 }

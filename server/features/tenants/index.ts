@@ -4,3 +4,5 @@ export type { PlatformActor } from './tenants.service'
 export { getPlatformOverview, listPlatformActivity, QUIET_DAYS } from './activity.service'
 export { TenantErrorCodes } from './tenants.errors'
 export { getPlatformHealth } from './health.service'
+
+export { activeCafe, findOldestTenant, findTenant, findTenantBySlug, listActiveTenants, listActiveTenantPage } from './tenants.repository'

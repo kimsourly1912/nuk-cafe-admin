@@ -45,7 +45,7 @@ erDiagram
   VOUCHER ||--o{ VOUCHER_REDEMPTION : "used in"
 ```
 
-Ownership: each feature's repository is the only code that touches its tables ([architecture.md → Features](./architecture.md#features)).
+Ownership: each feature's repository is the only code that writes its tables; other features may read only the columns listed in [repositories.md → Other features' tables](./repositories.md#other-features-tables) (D194).
 
 ## Identity (Better Auth)
 

@@ -5,6 +5,7 @@ How the NUK Cafe server is designed and built. Every server change follows appli
 | Page | Contents |
 |---|---|
 | [Architecture & conventions](./architecture.md) | Surfaces and routes, features and their layers (service, repository, errors, types…), the anatomy of a route, ids, money, time, errors, validation, archiving, versions, idempotency, tests |
+| [Repository standard](./repositories.md) | How a feature's SQL is written (D194): Drizzle's query builder, names, the tenant rule, reads in one batch, conditions, guards, writes as statements, D1 limits, tests |
 | [Security & hardening](./security.md) | Identity (Better Auth), roles and permissions, sessions, email verification, staff onboarding, CSRF, headers, rate limits, uploads, secrets, logging |
 | [Data model](./data-model.md) | The tables per domain (identity, branch, menu, customers & loyalty, orders), their invariants and open questions |
 | [Operations](./operations.md) | Environments, configuration, migrations, deploys, backups, scheduled jobs, email, monitoring |
@@ -35,3 +36,5 @@ Initial standard agreed with the owner on 2026-09-27 (D43; menu model D44); the 
 ## Library first
 
 Before writing server code, check whether Better Auth, `@nuxtjs/better-auth`, NuxtHub, Nitro or Cloudflare already does it ([security.md → What the libraries do](./security.md#what-the-libraries-do)). We write only the business domain: rules, services, contracts and their tests.
+
+Use a library's API as its **current official documentation** describes, checked against the installed version (its types, or its changelog when the docs are newer), never from memory or an old example (D194). When code repeats across features, make it a shared helper instead of another copy ([repositories.md → Shared helpers](./repositories.md#shared-helpers) for queries).

@@ -4,10 +4,11 @@ import { PAYMENT_METHODS } from '#shared/contracts/orders'
 import type { ReportMessageInput } from '#shared/contracts/notifications'
 import type { ItemSalesQuery, ItemSalesReport, ReportBranch, OrderHistory, OrderHistoryDetail, OrderHistoryQuery, OrderHistoryRow, ReportContext, ReportPeriodQuery, ReportSummary } from '#shared/contracts/reports'
 import { itemSalesQuerySchema, REPORT_BEST_SELLERS, reportPeriodQuerySchema } from '#shared/contracts/reports'
-import { totalPages } from '#shared/contracts/common'
+import { slicePage, toPage } from '#shared/contracts/common'
 import type { Db } from '#server/utils/batch'
 import { apiError, ErrorCodes, notFound } from '#server/utils/errors'
 import { toIso } from '#server/utils/time'
+import { findBranchClock, listActiveBranchClocks } from '#server/features/branches'
 import { parseInput } from '#server/utils/validation'
 import { orderNotFound } from './orders.errors'
 import * as orderRepo from './orders.repository'
@@ -23,24 +24,24 @@ import { averageMinor, bestSellers, businessDateAt, categoriesOf, firstName, ite
  */
 
 interface Context extends ReportContext {
-  range: { branchId: string, start: Date, end: Date }
+  range: repo.Range
 }
 
 async function context(db: Db, tenantId: string, query: ReportPeriodQuery, now: Date): Promise<Context> {
-  const branch = await repo.findReportBranch(db, tenantId, query.branchId)
+  const branch = await findBranchClock(db, tenantId, query.branchId)
   if (!branch) throw notFound('This branch')
   const { start, end } = periodInstants(query, branch.timeZone)
   return {
     branch,
     period: { from: query.from, to: query.to, start: toIso(start), end: toIso(end) },
     asOf: toIso(now),
-    range: { branchId: branch.id, start, end },
+    range: { tenantId, branchId: branch.id, start, end },
   }
 }
 
 /** The branches reports can cover, each with today's business date in its own zone. */
 export async function reportBranches(db: Db, tenantId: string, now = new Date()): Promise<ReportBranch[]> {
-  return (await repo.activeBranches(db, tenantId)).map(branch => ({ ...branch, today: businessDateAt(now, branch.timeZone) }))
+  return (await listActiveBranchClocks(db, tenantId)).map(branch => ({ ...branch, today: businessDateAt(now, branch.timeZone) }))
 }
 
 const reportContext = ({ range: _, ...rest }: Context): ReportContext => rest
@@ -50,16 +51,16 @@ export async function reportSummary(db: Db, tenantId: string, query: ReportPerio
   const previous = periodInstants(previousPeriod(query), ctx.branch.timeZone)
   const today = businessDateAt(now, ctx.branch.timeZone)
   const includesToday = query.from <= today && today <= query.to
-  const dates = { branchId: ctx.branch.id, from: query.from, to: query.to }
+  const dates = { tenantId, branchId: ctx.branch.id, from: query.from, to: query.to }
 
   const [payments, refunds, previousPaidSalesMinor, paidItems, placed, cancelled, current] = await Promise.all([
-    repo.paymentsCollected(db, tenantId, ctx.range, paymentWindows(query, ctx.branch.timeZone)),
+    repo.paymentsCollected(db, ctx.range, paymentWindows(query, ctx.branch.timeZone)),
     repo.refundsReturned(db, ctx.range),
-    repo.paidSalesTotal(db, { branchId: ctx.branch.id, ...previous }),
+    repo.paidSalesTotal(db, { tenantId, branchId: ctx.branch.id, ...previous }),
     repo.itemTotals(db, ctx.range, 'collected'),
     repo.ordersPlaced(db, dates),
     repo.cancelledUnpaid(db, dates),
-    includesToday ? repo.currentCounts(db, ctx.branch.id, now) : Promise.resolve(null),
+    includesToday ? repo.currentCounts(db, tenantId, ctx.branch.id, now) : Promise.resolve(null),
   ])
 
   const salesMinor = payments.reduce((sum, p) => sum + p.amountMinor, 0)
@@ -102,11 +103,7 @@ export async function itemSalesReport(db: Db, tenantId: string, query: ItemSales
   const { rows, totals } = itemSalesTable(all, query)
   return {
     ...reportContext(ctx),
-    items: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize),
-    page: query.page,
-    pageSize: query.pageSize,
-    total: rows.length,
-    totalPages: totalPages(rows.length, query.pageSize),
+    ...slicePage(rows, query),
     totals,
     categories: categoriesOf(all),
   }
@@ -127,15 +124,9 @@ const historyRow = (row: repo.HistoryRow): OrderHistoryRow => ({
 /** Orders placed in the business dates, with their payment and progress. */
 export async function orderHistory(db: Db, tenantId: string, query: OrderHistoryQuery, now = new Date()): Promise<OrderHistory> {
   const ctx = await context(db, tenantId, query, now)
-  const { rows, total } = await repo.orderHistory(db, query)
-  return {
-    ...reportContext(ctx),
-    orders: rows.map(historyRow),
-    page: query.page,
-    pageSize: query.pageSize,
-    total,
-    totalPages: totalPages(total, query.pageSize),
-  }
+  const { rows, total } = await repo.orderHistory(db, tenantId, query)
+  const { items, ...page } = toPage(rows.map(historyRow), query, total)
+  return { ...reportContext(ctx), orders: items, ...page }
 }
 
 /** One order as sold: its lines, payment, and every recorded step with who took it. */
@@ -143,11 +134,11 @@ export async function orderHistoryDetail(db: Db, tenantId: string, id: string): 
   const order = await orderRepo.findOrder(db, tenantId, id)
   if (!order) throw orderNotFound()
   const [branch, lines, [payment], events, returnedBy] = await Promise.all([
-    repo.findReportBranch(db, tenantId, order.branchId),
-    orderRepo.linesOf(db, id),
-    orderRepo.paymentsOf(db, [id]),
-    repo.eventsOf(db, id),
-    repo.returnedByName(db, id),
+    findBranchClock(db, tenantId, order.branchId),
+    orderRepo.linesOf(db, tenantId, id),
+    orderRepo.paymentsOf(db, tenantId, [id]),
+    repo.eventsOf(db, tenantId, id),
+    repo.returnedByName(db, tenantId, id),
   ])
   return {
     id: order.id,
@@ -221,7 +212,7 @@ export async function itemSalesExport(db: Db, tenantId: string, query: ItemSales
 
 export async function orderHistoryExport(db: Db, tenantId: string, query: OrderHistoryQuery, now = new Date()): Promise<CsvFile> {
   const ctx = await context(db, tenantId, query, now)
-  const { rows, total } = await repo.orderHistory(db, { ...query, page: 1, pageSize: ORDER_EXPORT_MAX })
+  const { rows, total } = await repo.orderHistory(db, tenantId, { ...query, page: 1, pageSize: ORDER_EXPORT_MAX })
   if (total > ORDER_EXPORT_MAX) throw apiError(422, ErrorCodes.VALIDATION_FAILED, `More than ${ORDER_EXPORT_MAX.toLocaleString('en-US')} orders match. Choose a shorter period or narrow the filters.`)
   return { filename: csvFilename(ctx.branch.name, query, 'orders'), csv: ordersCsv(rows.map(historyRow), ctx.branch.timeZone) }
 }

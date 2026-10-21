@@ -13,7 +13,7 @@ import { log } from '#server/utils/log'
 import { maintenanceLimit } from '#server/utils/maintenance'
 import { orderReadyAlertTooLate } from './notifications.errors'
 import { orderReadyMessage, orderReadySubscribedText } from './notifications.messages'
-import * as repo from './notifications.repository'
+import * as repo from './notifications.customers.repository'
 import { sendStored } from './notifications.delivery'
 import { hashLinkCode, isBlockedError, newLinkCode } from './notifications.rules'
 import type { TelegramSettings } from './notifications.settings'
@@ -56,7 +56,7 @@ export async function orderReadyAlert(db: Db, tenantId: string, orderId: string,
 export async function createOrderReadyLink(db: Db, tenantId: string, order: { id: string, status: OrderStatus }, settings: TelegramSettings, now = new Date()): Promise<OrderReadyLink> {
   if (!WAITING_FOR_READY.includes(order.status)) throw orderReadyAlertTooLate()
   const code = `${ORDER_CODE_PREFIX}${newLinkCode()}`
-  await repo.saveOrderReadyLink(db, { tenantId, orderId: order.id, codeHash: await hashLinkCode(code), linkExpiresAt: new Date(now.getTime() + ORDER_READY_LINK_MINUTES * MINUTE), createdAt: now })
+  await db.batch([repo.upsertOrderReadyLinkStatement(db, { tenantId, orderId: order.id, codeHash: await hashLinkCode(code), linkExpiresAt: new Date(now.getTime() + ORDER_READY_LINK_MINUTES * MINUTE), createdAt: now })])
   const after = await repo.findOrderReadyAlert(db, tenantId, order.id)
   return { available: true, status: statusOf(after, now), url: `https://t.me/${settings.botUsername}?start=${code}` }
 }
@@ -97,7 +97,7 @@ export async function useOrderReadyCode(db: Db, api: Api, message: Message, code
   }
   // Single use: only the code this row holds, unexpired. Telegram resending the update finds nothing.
   try {
-    await db.batch([repo.subscribeOrderReadyAlertStatement(db, row.orderId, row.codeHash!, String(chat.id), newId(), now), requireOneChange(db)])
+    await db.batch([repo.subscribeOrderReadyAlertStatement(db, row.tenantId, row.orderId, row.codeHash!, String(chat.id), newId(), now), requireOneChange(db)])
   }
   catch (error) {
     if (isStaleWrite(error)) return true
@@ -138,9 +138,9 @@ const CLAIM_MS = 2 * MINUTE
  * others leave it (the holder or the schedule follows up).
  */
 async function attemptOrderReady(db: Db, api: Api, tenantId: string, orderId: string, cafeUrl: string | undefined, now: Date, onBusy: 'throw' | 'skip'): Promise<boolean> {
-  const claim = await repo.claimOrderReady(db, tenantId, orderId, now, new Date(now.getTime() + CLAIM_MS))
+  const claim = await repo.claimOrderReady(db, tenantId, orderId, new Date(now.getTime() + CLAIM_MS), now)
   if (!claim) {
-    if (onBusy === 'throw' && await repo.orderReadyClaimed(db, tenantId, orderId, now)) throw new Error('The customer\'s ready message is being sent by another run; retrying later.')
+    if (onBusy === 'throw' && await repo.hasOrderReadyClaim(db, tenantId, orderId, now)) throw new Error('The customer\'s ready message is being sent by another run; retrying later.')
     return false
   }
   try {
@@ -148,12 +148,12 @@ async function attemptOrderReady(db: Db, api: Api, tenantId: string, orderId: st
     const cafeName = tenants.find(t => t.id === tenantId)?.name
     if (alert && cafeName && WAITING_FOR_READY.includes(alert.status)) {
       // Not ready yet (a sign-up's first look): the ready event sends it.
-      await repo.parkOrderReady(db, claim)
+      await repo.markOrderReadyParked(db, claim)
       return false
     }
     if (!alert || !cafeName || alert.status !== 'ready') {
       // Completed or cancelled before the event was handled: nothing to say any more.
-      await repo.completeOrderReady(db, claim, now)
+      await repo.markOrderReadyComplete(db, claim, now)
       return false
     }
     try {
@@ -162,16 +162,16 @@ async function attemptOrderReady(db: Db, api: Api, tenantId: string, orderId: st
     catch (error) {
       if (!isBlockedError(error)) throw error
       log('info', 'Telegram: a customer blocked the bot before their order was ready', { orderId })
-      await repo.completeOrderReady(db, claim, now)
+      await repo.markOrderReadyComplete(db, claim, now)
       return false
     }
     // False when the chat was replaced meanwhile: the new subscription is not ours to mark.
-    await repo.completeOrderReady(db, claim, now)
+    await repo.markOrderReadyComplete(db, claim, now)
     return true
   }
   catch (error) {
-    if (claim.attempts >= DELIVERY_MAX_ATTEMPTS) await repo.abandonOrderReady(db, claim)
-    else await repo.retryOrderReady(db, claim, new Date(now.getTime() + retryDelayMs(claim.attempts)))
+    if (claim.attempts >= DELIVERY_MAX_ATTEMPTS) await repo.markOrderReadyAbandoned(db, claim)
+    else await repo.markOrderReadyRetry(db, claim, new Date(now.getTime() + retryDelayMs(claim.attempts)))
     throw error
   }
 }

@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import type { Db } from '#server/utils/batch'
+import { inJsonArray } from '#server/utils/query'
 import { sellable } from './items.repository'
 import { menuAvailabilityRules, menuAvailabilityWindows, menuCategories, menuCategoryAvailability, menuItemAvailability, menuItemModifierGroups, menuItemModifierPrices, menuItemOptionSets, menuItems, menuItemVariations, menuModifierGroups, menuModifiers, menuOptionSets, menuOptionValues } from './menu.schema'
 
@@ -11,9 +12,10 @@ import { menuAvailabilityRules, menuAvailabilityWindows, menuCategories, menuCat
  */
 
 const activeItem = (tenantId: string, itemIds?: readonly string[]) => and(
-  eq(menuItems.tenantId, tenantId), eq(menuItems.status, 'active'),
+  eq(menuItems.tenantId, tenantId),
+  eq(menuItems.status, 'active'),
   // One JSON bind keeps even a large internal selection within D1's parameter limit.
-  itemIds === undefined ? undefined : sql`${menuItems.id} in (select value from json_each(${JSON.stringify([...new Set(itemIds)])}))`,
+  itemIds === undefined ? undefined : inJsonArray(menuItems.id, itemIds),
 )
 
 export function activeCategories(db: Db, tenantId: string) {
@@ -47,7 +49,7 @@ export function sellableVariations(db: Db, tenantId: string, itemIds?: readonly 
   return db.select({ id: menuItemVariations.id, itemId: menuItemVariations.itemId, combinationKey: menuItemVariations.combinationKey, priceMinor: sql<number>`${menuItemVariations.priceMinor}` })
     .from(menuItemVariations)
     .innerJoin(menuItems, eq(menuItems.id, menuItemVariations.itemId))
-    .where(and(activeItem(tenantId, itemIds), sellable))
+    .where(and(activeItem(tenantId, itemIds), sellable(db)))
     .orderBy(asc(menuItemVariations.sortOrder))
 }
 
@@ -126,12 +128,12 @@ export function itemModifierPrices(db: Db, tenantId: string, itemIds?: readonly 
 }
 
 /** Every availability rule's status of the tenant (the library is small). */
-export function allRules(db: Db, tenantId: string) {
+export function listRuleStatuses(db: Db, tenantId: string) {
   return db.select({ id: menuAvailabilityRules.id, status: menuAvailabilityRules.status }).from(menuAvailabilityRules).where(eq(menuAvailabilityRules.tenantId, tenantId))
 }
 
 /** Every availability window, with its rule. */
-export function allWindows(db: Db, tenantId: string) {
+export function listWindows(db: Db, tenantId: string) {
   return db.select({ ruleId: menuAvailabilityWindows.ruleId, weekday: menuAvailabilityWindows.weekday, startMinute: menuAvailabilityWindows.startMinute, endMinute: menuAvailabilityWindows.endMinute })
     .from(menuAvailabilityWindows).where(eq(menuAvailabilityWindows.tenantId, tenantId))
 }
@@ -144,6 +146,6 @@ export function catalogRows(db: Db, tenantId: string, itemIds?: readonly string[
     sellableVariations(db, tenantId, itemIds), itemOptionSets(db, tenantId, itemIds),
     activeOptionValues(db, tenantId, itemIds), itemModifierGroups(db, tenantId, itemIds),
     activeModifiers(db, tenantId, itemIds), itemModifierPrices(db, tenantId, itemIds),
-    allRules(db, tenantId), allWindows(db, tenantId),
+    listRuleStatuses(db, tenantId), listWindows(db, tenantId),
   ])
 }

@@ -39,7 +39,8 @@ function toGroup(row: ModifierGroupRow, modifiers: ModifierRow[], itemCounts: Ma
 async function loadGroup(db: Db, tenantId: string, id: string): Promise<ModifierGroup> {
   const row = await repo.findGroup(db, tenantId, id)
   if (!row) throw modifierGroupNotFound()
-  return toGroup(row, await repo.modifiersOf(db, [id]), await itemCountsByGroup(db, [id]))
+  const [modifiers, itemCounts] = await Promise.all([repo.modifiersOf(db, tenantId, [id]), itemCountsByGroup(db, tenantId, [id])])
+  return toGroup(row, modifiers, itemCounts)
 }
 
 async function openGroup(db: Db, tenantId: string, id: string, version: number, allowArchived = false): Promise<ModifierGroupRow> {
@@ -50,15 +51,15 @@ async function openGroup(db: Db, tenantId: string, id: string, version: number, 
   return group
 }
 
-async function openModifier(db: Db, groupId: string, modifierId: string): Promise<ModifierRow> {
-  const modifier = await repo.findModifier(db, groupId, modifierId)
+async function openModifier(db: Db, tenantId: string, groupId: string, modifierId: string): Promise<ModifierRow> {
+  const modifier = await repo.findModifier(db, tenantId, groupId, modifierId)
   if (!modifier) throw modifierNotFound()
   return modifier
 }
 
 /** The rules as they would be after the change. */
-async function currentState(db: Db, group: Pick<ModifierGroupRow, 'id' | 'minSelect' | 'maxSelect'>): Promise<SelectionState> {
-  const active = (await repo.modifiersOf(db, [group.id])).filter(m => m.status === 'active')
+async function currentState(db: Db, tenantId: string, group: Pick<ModifierGroupRow, 'id' | 'minSelect' | 'maxSelect'>): Promise<SelectionState> {
+  const active = (await repo.modifiersOf(db, tenantId, [group.id])).filter(m => m.status === 'active')
   return { minSelect: group.minSelect, maxSelect: group.maxSelect, active: active.length, defaults: active.filter(m => m.isDefault).length }
 }
 
@@ -91,7 +92,7 @@ async function runGroupBatch(db: Db, tenantId: string, groupId: string, version:
 export async function listModifierGroups(db: Db, tenantId: string, query: ModifierGroupListQuery): Promise<ModifierGroup[]> {
   const groups = await repo.listGroups(db, tenantId, query.status)
   const ids = groups.map(g => g.id)
-  const [modifiers, itemCounts] = await Promise.all([repo.modifiersOf(db, ids), itemCountsByGroup(db, ids)])
+  const [modifiers, itemCounts] = await Promise.all([repo.modifiersOf(db, tenantId, ids), itemCountsByGroup(db, tenantId, ids)])
   return groups.map(group => toGroup(group, modifiers, itemCounts))
 }
 
@@ -129,11 +130,11 @@ export async function updateModifierGroup(db: Db, actor: Actor, id: string, inpu
     ...(input.minSelect !== undefined && { minSelect: input.minSelect }),
     ...(input.maxSelect !== undefined && { maxSelect: input.maxSelect }),
   }
-  ensureSelection(await currentState(db, { ...group, ...changes }))
+  ensureSelection(await currentState(db, tenantId, { ...group, ...changes }))
   await runGroupBatch(db, tenantId, id, input.version, [
     repo.touchGroupStatement(db, tenantId, id, input.version, new Date(), changes),
     requireOneChange(db),
-    repo.requireSelectionRules(db, id),
+    repo.requireSelectionRules(db, tenantId, id),
     audit(db, actor, 'update', id, { fields: Object.keys(changes) }),
   ], () => modifierGroupNameTaken(input.name ?? group.name))
   return loadGroup(db, tenantId, id)
@@ -165,15 +166,15 @@ export async function restoreModifierGroup(db: Db, actor: Actor, id: string, inp
 export async function addModifier(db: Db, actor: Actor, groupId: string, input: AddModifierInput): Promise<ModifierGroup> {
   const { tenantId } = actor
   const group = await openGroup(db, tenantId, groupId, input.version)
-  const state = await currentState(db, group)
+  const state = await currentState(db, tenantId, group)
   ensureSelection({ ...state, active: state.active + 1, defaults: state.defaults + (input.isDefault ? 1 : 0) })
   const now = new Date()
   const modifierId = newId()
   await runGroupBatch(db, tenantId, groupId, input.version, [
     repo.touchGroupStatement(db, tenantId, groupId, input.version, now),
     requireOneChange(db),
-    ...repo.insertModifiersStatements(db, [{ id: modifierId, tenantId, groupId, name: input.name, priceDeltaMinor: input.priceDeltaMinor, isDefault: input.isDefault, sortOrder: await repo.nextModifierOrder(db, groupId) }], now),
-    repo.requireSelectionRules(db, groupId),
+    ...repo.insertModifiersStatements(db, [{ id: modifierId, tenantId, groupId, name: input.name, priceDeltaMinor: input.priceDeltaMinor, isDefault: input.isDefault, sortOrder: await repo.nextModifierOrder(db, tenantId, groupId) }], now),
+    repo.requireSelectionRules(db, tenantId, groupId),
     audit(db, actor, 'modifier.add', groupId, { modifierId, priceDeltaMinor: input.priceDeltaMinor }),
   ], () => modifierNameTaken(input.name))
   return loadGroup(db, tenantId, groupId)
@@ -183,21 +184,21 @@ export async function addModifier(db: Db, actor: Actor, groupId: string, input: 
 export async function updateModifier(db: Db, actor: Actor, groupId: string, modifierId: string, input: UpdateModifierInput): Promise<ModifierGroup> {
   const { tenantId } = actor
   const group = await openGroup(db, tenantId, groupId, input.version)
-  const modifier = await openModifier(db, groupId, modifierId)
+  const modifier = await openModifier(db, tenantId, groupId, modifierId)
   if (modifier.status !== 'active') throw modifierArchived()
   const changes = {
     ...(input.name !== undefined && { name: input.name }),
     ...(input.priceDeltaMinor !== undefined && { priceDeltaMinor: input.priceDeltaMinor }),
     ...(input.isDefault !== undefined && { isDefault: input.isDefault }),
   }
-  const state = await currentState(db, group)
+  const state = await currentState(db, tenantId, group)
   ensureSelection({ ...state, defaults: state.defaults - (modifier.isDefault ? 1 : 0) + ((changes.isDefault ?? modifier.isDefault) ? 1 : 0) })
   const now = new Date()
   await runGroupBatch(db, tenantId, groupId, input.version, [
     repo.touchGroupStatement(db, tenantId, groupId, input.version, now),
     requireOneChange(db),
-    repo.updateModifierStatement(db, groupId, modifierId, changes, now),
-    repo.requireSelectionRules(db, groupId),
+    repo.updateModifierStatement(db, tenantId, groupId, modifierId, changes, now),
+    repo.requireSelectionRules(db, tenantId, groupId),
     audit(db, actor, 'modifier.update', groupId, { modifierId, fields: Object.keys(changes), ...(changes.priceDeltaMinor !== undefined && { from: modifier.priceDeltaMinor, to: changes.priceDeltaMinor }) }),
   ], () => modifierNameTaken(input.name ?? modifier.name))
   return loadGroup(db, tenantId, groupId)
@@ -206,16 +207,16 @@ export async function updateModifier(db: Db, actor: Actor, groupId: string, modi
 export async function archiveModifier(db: Db, actor: Actor, groupId: string, modifierId: string, input: ModifierVersionInput): Promise<ModifierGroup> {
   const { tenantId } = actor
   const group = await openGroup(db, tenantId, groupId, input.version)
-  const modifier = await openModifier(db, groupId, modifierId)
+  const modifier = await openModifier(db, tenantId, groupId, modifierId)
   if (modifier.status !== 'active') throw modifierArchived()
-  const state = await currentState(db, group)
+  const state = await currentState(db, tenantId, group)
   ensureSelection({ ...state, active: state.active - 1, defaults: state.defaults - (modifier.isDefault ? 1 : 0) })
   const now = new Date()
   await runGroupBatch(db, tenantId, groupId, input.version, [
     repo.touchGroupStatement(db, tenantId, groupId, input.version, now),
     requireOneChange(db),
-    repo.updateModifierStatement(db, groupId, modifierId, { status: 'archived' }, now),
-    repo.requireSelectionRules(db, groupId),
+    repo.updateModifierStatement(db, tenantId, groupId, modifierId, { status: 'archived' }, now),
+    repo.requireSelectionRules(db, tenantId, groupId),
     audit(db, actor, 'modifier.archive', groupId, { modifierId }),
   ], () => modifierGroupChanged())
   return loadGroup(db, tenantId, groupId)
@@ -225,16 +226,16 @@ export async function archiveModifier(db: Db, actor: Actor, groupId: string, mod
 export async function restoreModifier(db: Db, actor: Actor, groupId: string, modifierId: string, input: ModifierVersionInput): Promise<ModifierGroup> {
   const { tenantId } = actor
   const group = await openGroup(db, tenantId, groupId, input.version)
-  const modifier = await openModifier(db, groupId, modifierId)
+  const modifier = await openModifier(db, tenantId, groupId, modifierId)
   if (modifier.status !== 'archived') throw modifierNotArchived('add-on')
-  const state = await currentState(db, group)
+  const state = await currentState(db, tenantId, group)
   ensureSelection({ ...state, active: state.active + 1, defaults: state.defaults + (modifier.isDefault ? 1 : 0) })
   const now = new Date()
   await runGroupBatch(db, tenantId, groupId, input.version, [
     repo.touchGroupStatement(db, tenantId, groupId, input.version, now),
     requireOneChange(db),
-    repo.updateModifierStatement(db, groupId, modifierId, { status: 'active', sortOrder: await repo.nextModifierOrder(db, groupId) }, now),
-    repo.requireSelectionRules(db, groupId),
+    repo.updateModifierStatement(db, tenantId, groupId, modifierId, { status: 'active', sortOrder: await repo.nextModifierOrder(db, tenantId, groupId) }, now),
+    repo.requireSelectionRules(db, tenantId, groupId),
     audit(db, actor, 'modifier.restore', groupId, { modifierId }),
   ], () => modifierNameTaken(modifier.name))
   return loadGroup(db, tenantId, groupId)
@@ -243,13 +244,13 @@ export async function restoreModifier(db: Db, actor: Actor, groupId: string, mod
 export async function reorderModifiers(db: Db, actor: Actor, groupId: string, input: ReorderModifiersInput): Promise<ModifierGroup> {
   const { tenantId } = actor
   await openGroup(db, tenantId, groupId, input.version)
-  const active = (await repo.modifiersOf(db, [groupId])).filter(m => m.status === 'active').map(m => m.id)
+  const active = (await repo.modifiersOf(db, tenantId, [groupId])).filter(m => m.status === 'active').map(m => m.id)
   if (active.length !== input.modifierIds.length || input.modifierIds.some(id => !active.includes(id))) throw modifiersChanged()
   const now = new Date()
   await runGroupBatch(db, tenantId, groupId, input.version, [
     repo.touchGroupStatement(db, tenantId, groupId, input.version, now),
     requireOneChange(db),
-    ...input.modifierIds.map((modifierId, i) => repo.updateModifierStatement(db, groupId, modifierId, { sortOrder: i + 1 }, now)),
+    ...input.modifierIds.map((modifierId, i) => repo.updateModifierStatement(db, tenantId, groupId, modifierId, { sortOrder: i + 1 }, now)),
     audit(db, actor, 'modifier.reorder', groupId, { order: input.modifierIds }),
   ], () => modifierGroupChanged())
   return loadGroup(db, tenantId, groupId)

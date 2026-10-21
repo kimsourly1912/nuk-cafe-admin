@@ -7,12 +7,14 @@ import type { Actor } from '#server/features/identity'
 import { orderAlert, reportBranches, reportMessage } from '#server/features/orders'
 import { auditStatement, retryDelayMs } from '#server/features/platform'
 import type { Db, Statement } from '#server/utils/batch'
+import { requireOneChange, runBatch, tryGuardedBatch } from '#server/utils/batch'
 import { apiError, ErrorCodes } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
 import { log } from '#server/utils/log'
 import { maintenanceLimit } from '#server/utils/maintenance'
 import { toIso } from '#server/utils/time'
 import { addDays } from '#server/utils/weekly-windows'
+import * as deliveryRepo from './notifications.deliveries.repository'
 import { destinationBlocked, destinationNotFound } from './notifications.errors'
 import { alertSubject, bakongReminderStage, bakongTokenMessage, CLOSING_SUMMARY_DELAY_MINUTES, CLOSING_SUMMARY_WINDOW_HOURS, closingInstant, jobFailureMessage, newOrderMessage, paymentMessage, routeOf, serverErrorMessage, supportOpenedMessage } from './notifications.messages'
 import type { JobFailureInfo, ServerErrorInfo, SupportOpenedInfo } from './notifications.messages'
@@ -62,26 +64,26 @@ export async function deliverDue(db: Db, api: Api, now: Date | undefined = undef
   const report = { sent: 0, retried: 0, failed: 0 }
   if (options.ids && !options.ids.length) return report
   const started = Date.now()
-  for (const pending of await repo.dueDeliveries(db, now ?? new Date(), options.limit ?? 25, options.ids)) {
+  for (const pending of await deliveryRepo.dueDeliveries(db, now ?? new Date(), options.limit ?? 25, options.ids)) {
     if (Date.now() - started >= (options.budgetMs ?? 20_000)) break
     const current = now ?? new Date()
-    const row = await repo.claimDelivery(db, pending, current, new Date(current.getTime() + CLAIM_MS))
+    const row = await deliveryRepo.claimDelivery(db, pending.tenantId, pending.id, new Date(current.getTime() + CLAIM_MS), current)
     if (!row) continue
     const token = row.claimToken
     const attempt = row.attempts
     const destination = await repo.findDestination(db, row.tenantId, row.destinationId)
     if (!destination || destination.status !== 'connected') {
-      if (await repo.markFailed(db, row.id, token, destination?.status === 'blocked' ? 'The bot was removed or blocked in this chat.' : 'This chat was disconnected.')) report.failed++
+      if (await deliveryRepo.markFailed(db, row.tenantId, row.id, token, destination?.status === 'blocked' ? 'The bot was removed or blocked in this chat.' : 'This chat was disconnected.')) report.failed++
       continue
     }
     try {
       await sendStored(api, destination.chatId, row.message)
-      if (await repo.markDelivered(db, row.id, token, destination.id, new Date())) report.sent++
+      if (await markDelivered(db, row.tenantId, row.id, token, destination.id, new Date())) report.sent++
     }
     catch (error) {
       log('warn', 'Telegram: a notification was not delivered', { deliveryId: row.id, attempt, error: String(error) })
       if (isBlockedError(error)) {
-        if (await repo.markFailed(db, row.id, token, 'The bot was removed or blocked in this chat.')) {
+        if (await deliveryRepo.markFailed(db, row.tenantId, row.id, token, 'The bot was removed or blocked in this chat.')) {
           await repo.markBlocked(db, destination.chatId, current)
           report.failed++
         }
@@ -89,13 +91,13 @@ export async function deliverDue(db: Db, api: Api, now: Date | undefined = undef
       else if (error instanceof GrammyError && error.error_code === 429) {
         // Telegram's flood control says when: that wait doesn't count against the tries.
         const seconds = error.parameters.retry_after ?? 30
-        if (await repo.markRetry(db, row.id, token, new Date((now ?? new Date()).getTime() + seconds * 1000), `Telegram asked to wait ${seconds} seconds.`)) report.retried++
+        if (await deliveryRepo.markRetry(db, row.tenantId, row.id, token, new Date((now ?? new Date()).getTime() + seconds * 1000), `Telegram asked to wait ${seconds} seconds.`)) report.retried++
       }
       else if (attempt >= DELIVERY_MAX_ATTEMPTS) {
-        if (await repo.markFailed(db, row.id, token, `Telegram didn't accept it after ${attempt} tries.`)) report.failed++
+        if (await deliveryRepo.markFailed(db, row.tenantId, row.id, token, `Telegram didn't accept it after ${attempt} tries.`)) report.failed++
       }
       else {
-        if (await repo.markRetry(db, row.id, token, new Date((now ?? new Date()).getTime() + retryDelayMs(attempt)), 'Telegram didn\'t accept it. Trying again.')) report.retried++
+        if (await deliveryRepo.markRetry(db, row.tenantId, row.id, token, new Date((now ?? new Date()).getTime() + retryDelayMs(attempt)), 'Telegram didn\'t accept it. Trying again.')) report.retried++
       }
     }
   }
@@ -114,9 +116,9 @@ export async function queueOrderAlert(db: Db, tenantId: string, kind: Extract<No
   const alert = await orderAlert(db, tenantId, orderId)
   if (!alert) return []
   const dedupeKey = `${kind}:${orderId}`
-  const done = await repo.deliveredTo(db, dedupeKey, targets.map(t => t.destinationId))
+  const done = await deliveryRepo.deliveredTo(db, tenantId, dedupeKey, targets.map(t => t.destinationId))
   const message = kind === 'new_order' ? newOrderMessage(alert, cafeUrl) : paymentMessage(alert, cafeUrl)
-  const deliveries = targets.filter(t => !done.has(t.destinationId)).map((target): repo.NewDelivery => ({
+  const deliveries = targets.filter(t => !done.has(t.destinationId)).map((target): deliveryRepo.NewDelivery => ({
     id: newId(),
     tenantId,
     kind,
@@ -127,7 +129,7 @@ export async function queueOrderAlert(db: Db, tenantId: string, kind: Extract<No
     createdAt: now,
     nextAttemptAt: now,
   }))
-  if (deliveries.length) await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
+  if (deliveries.length) await db.batch(deliveries.map(d => deliveryRepo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
   return deliveries.map(d => d.id)
 }
 
@@ -146,7 +148,7 @@ export async function queueServerErrorAlert(db: Db, tenantId: string, info: Serv
   const route = `${info.method} ${routeOf(info.path)}`
   const dedupeKey = `server_error:${route}:${window}`
   const message = serverErrorMessage(info, SERVER_ERROR_ALERT_WINDOW_MINUTES)
-  const deliveries = targets.map((target): repo.NewDelivery => ({
+  const deliveries = targets.map((target): deliveryRepo.NewDelivery => ({
     id: newId(),
     tenantId,
     kind: 'server_error',
@@ -157,9 +159,9 @@ export async function queueServerErrorAlert(db: Db, tenantId: string, info: Serv
     createdAt: now,
     nextAttemptAt: now,
   }))
-  await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
+  await db.batch(deliveries.map(d => deliveryRepo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
   // The ones this call saved (another request in the window may have been first).
-  const saved = await repo.deliveryIds(db, deliveries.map(d => d.id))
+  const saved = await deliveryRepo.findDeliveryIds(db, tenantId, deliveries.map(d => d.id))
   return deliveries.map(d => d.id).filter(id => saved.has(id))
 }
 
@@ -177,7 +179,7 @@ export async function queueJobFailureAlert(db: Db, tenantId: string, info: JobFa
   const window = Math.floor(now.getTime() / (SERVER_ERROR_ALERT_WINDOW_MINUTES * MINUTE))
   const dedupeKey = `job_failure:${info.job}:${window}`
   const message = jobFailureMessage(info, SERVER_ERROR_ALERT_WINDOW_MINUTES)
-  const deliveries = targets.map((target): repo.NewDelivery => ({
+  const deliveries = targets.map((target): deliveryRepo.NewDelivery => ({
     id: newId(),
     tenantId,
     kind: 'server_error',
@@ -188,8 +190,8 @@ export async function queueJobFailureAlert(db: Db, tenantId: string, info: JobFa
     createdAt: now,
     nextAttemptAt: now,
   }))
-  await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
-  const saved = await repo.deliveryIds(db, deliveries.map(d => d.id))
+  await db.batch(deliveries.map(d => deliveryRepo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
+  const saved = await deliveryRepo.findDeliveryIds(db, tenantId, deliveries.map(d => d.id))
   return deliveries.map(d => d.id).filter(id => saved.has(id))
 }
 
@@ -209,9 +211,9 @@ export async function queueBakongTokenReminder(db: Db, tenantId: string, expires
   const targets = await repo.targetsOf(db, tenantId, 'server_error')
   if (!targets.length) return []
   const dedupeKey = `bakong_token:${expiresAt.getTime()}:${stage}`
-  const done = await repo.deliveredTo(db, dedupeKey, targets.map(t => t.destinationId))
+  const done = await deliveryRepo.deliveredTo(db, tenantId, dedupeKey, targets.map(t => t.destinationId))
   const message = bakongTokenMessage(expiresAt, now, cafeUrl)
-  const deliveries = targets.filter(t => !done.has(t.destinationId)).map((target): repo.NewDelivery => ({
+  const deliveries = targets.filter(t => !done.has(t.destinationId)).map((target): deliveryRepo.NewDelivery => ({
     id: newId(),
     tenantId,
     kind: 'server_error',
@@ -223,9 +225,9 @@ export async function queueBakongTokenReminder(db: Db, tenantId: string, expires
     nextAttemptAt: now,
   }))
   if (!deliveries.length) return []
-  await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
+  await db.batch(deliveries.map(d => deliveryRepo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
   // The ones this call saved (an overlapping run may have been first: the unique index drops ours).
-  const saved = await repo.deliveryIds(db, deliveries.map(d => d.id))
+  const saved = await deliveryRepo.findDeliveryIds(db, tenantId, deliveries.map(d => d.id))
   return deliveries.map(d => d.id).filter(id => saved.has(id))
 }
 
@@ -241,7 +243,7 @@ export async function queueSupportOpenedAlert(db: Db, tenantId: string, visitId:
   if (!targets.length) return []
   const dedupeKey = `support_open:${visitId}`
   const message = supportOpenedMessage(info, cafeUrl)
-  const deliveries = targets.map((target): repo.NewDelivery => ({
+  const deliveries = targets.map((target): deliveryRepo.NewDelivery => ({
     id: newId(),
     tenantId,
     kind: 'server_error',
@@ -252,8 +254,8 @@ export async function queueSupportOpenedAlert(db: Db, tenantId: string, visitId:
     createdAt: now,
     nextAttemptAt: now,
   }))
-  await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
-  const saved = await repo.deliveryIds(db, deliveries.map(d => d.id))
+  await db.batch(deliveries.map(d => deliveryRepo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
+  const saved = await deliveryRepo.findDeliveryIds(db, tenantId, deliveries.map(d => d.id))
   return deliveries.map(d => d.id).filter(id => saved.has(id))
 }
 
@@ -279,7 +281,7 @@ export async function queueClosingSummaries(db: Db, tenantId: string, cafeUrl?: 
       if (now.getTime() < due || now.getTime() >= due + CLOSING_SUMMARY_WINDOW_HOURS * 60 * MINUTE) continue
 
       const dedupeKey = `closing_summary:${branch.id}:${date}`
-      const done = await repo.deliveredTo(db, dedupeKey, targets.map(t => t.destinationId))
+      const done = await deliveryRepo.deliveredTo(db, tenantId, dedupeKey, targets.map(t => t.destinationId))
       const missing = targets.filter(t => !done.has(t.destinationId))
       if (!missing.length) continue
 
@@ -287,7 +289,7 @@ export async function queueClosingSummaries(db: Db, tenantId: string, cafeUrl?: 
       const button = cafeUrl?.startsWith('https://')
         ? { text: 'View full report', url: `${cafeUrl}/admin/reports/summary?from=${date}&to=${date}` }
         : undefined
-      const deliveries: repo.NewDelivery[] = []
+      const deliveries: deliveryRepo.NewDelivery[] = []
       for (const target of missing) {
         deliveries.push({ id: newId(), tenantId, kind: 'closing_summary', destinationId: target.destinationId, dedupeKey, subject: report.subject, message: { html: report.html, button }, createdAt: now, nextAttemptAt: now })
         // The CSV as its own delivery: a failed file never sends the text twice.
@@ -295,7 +297,7 @@ export async function queueClosingSummaries(db: Db, tenantId: string, cafeUrl?: 
           deliveries.push({ id: newId(), tenantId, kind: 'closing_summary', destinationId: target.destinationId, dedupeKey: `${dedupeKey}:csv`, subject: `${report.subject} · CSV`, message: { html: '', document: { filename: report.csv.filename, content: report.csv.csv } }, createdAt: now, nextAttemptAt: new Date(now.getTime() + 1) })
         }
       }
-      await db.batch(deliveries.map(d => repo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
+      await db.batch(deliveries.map(d => deliveryRepo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
       queued.push(...deliveries.map(d => d.id))
     }
   }
@@ -305,20 +307,17 @@ export async function queueClosingSummaries(db: Db, tenantId: string, cafeUrl?: 
 // --- Rules ---
 
 export async function listRules(db: Db, tenantId: string): Promise<NotificationRule[]> {
-  return (await repo.listRules(db, tenantId)).map(rule => ({ kind: rule.kind, destinationId: rule.destinationId, attachCsv: rule.kind === 'closing_summary' && rule.attachCsv }))
+  return notificationRulesOf(await repo.listRules(db, tenantId))
 }
 
 /** Turns one notification on or off for one chat (and a closing summary's CSV). */
 export async function setNotificationRule(db: Db, actor: Actor, input: SetNotificationRuleInput): Promise<NotificationRule[]> {
   const destination = await repo.findDestination(db, actor.tenantId, input.destinationId)
   if (!destination || destination.status === 'disconnected') throw destinationNotFound()
-  if (input.enabled) {
-    await repo.setRule(db, { tenantId: actor.tenantId, kind: input.kind, destinationId: input.destinationId, attachCsv: input.kind === 'closing_summary' && input.attachCsv, createdBy: actor.userId })
-  }
-  else {
-    await repo.removeRule(db, input.kind, input.destinationId)
-  }
-  await db.batch([auditStatement(db, actor, { action: 'notifications.rule.set', targetType: 'telegram_destination', targetId: input.destinationId, metadata: { kind: input.kind, enabled: input.enabled, attachCsv: input.attachCsv } })])
+  const statement = input.enabled
+    ? repo.upsertRuleStatement(db, { tenantId: actor.tenantId, kind: input.kind, destinationId: input.destinationId, attachCsv: input.kind === 'closing_summary' && input.attachCsv, createdBy: actor.userId })
+    : repo.deleteRuleStatement(db, actor.tenantId, input.kind, input.destinationId)
+  await db.batch([statement, auditStatement(db, actor, { action: 'notifications.rule.set', targetType: 'telegram_destination', targetId: input.destinationId, metadata: { kind: input.kind, enabled: input.enabled, attachCsv: input.attachCsv } })])
   return listRules(db, actor.tenantId)
 }
 
@@ -326,7 +325,7 @@ export async function setNotificationRule(db: Db, actor: Actor, input: SetNotifi
 
 const HISTORY_LIMIT = 50
 
-function deliveryOf(row: repo.DeliveryRow, title: string): NotificationDelivery {
+function deliveryOf(row: deliveryRepo.DeliveryRow, title: string): NotificationDelivery {
   return {
     id: row.id,
     kind: row.kind,
@@ -343,12 +342,12 @@ function deliveryOf(row: repo.DeliveryRow, title: string): NotificationDelivery 
 
 /** The tenant's latest 50 deliveries, newest first. */
 export async function listDeliveries(db: Db, tenantId: string): Promise<NotificationDelivery[]> {
-  return (await repo.recentDeliveries(db, tenantId, HISTORY_LIMIT)).map(row => deliveryOf(row.delivery, row.title))
+  return (await deliveryRepo.listRecentDeliveries(db, tenantId, HISTORY_LIMIT)).map(row => deliveryOf(row.delivery, row.title))
 }
 
 /** A delivery's saved message as text (View snapshot). */
 export async function deliverySnapshot(db: Db, tenantId: string, id: string): Promise<DeliverySnapshot> {
-  const row = await repo.findDelivery(db, tenantId, id)
+  const row = await deliveryRepo.findDelivery(db, tenantId, id)
   if (!row) throw apiError(404, ErrorCodes.NOT_FOUND, 'This message was not found.')
   const { message } = row.delivery
   return { id, subject: row.delivery.subject, text: plainText(message.html), attachment: message.document?.filename ?? null }
@@ -356,24 +355,33 @@ export async function deliverySnapshot(db: Db, tenantId: string, id: string): Pr
 
 /** Retry: a failed delivery is sent again (its saved message, not a new one). */
 export async function retryDelivery(db: Db, api: Api, actor: Actor, id: string, now = new Date()): Promise<NotificationDelivery> {
-  const row = await repo.findDelivery(db, actor.tenantId, id)
+  const row = await deliveryRepo.findDelivery(db, actor.tenantId, id)
   if (!row) throw apiError(404, ErrorCodes.NOT_FOUND, 'This message was not found.')
   if (row.destinationStatus !== 'connected') throw destinationBlocked(row.title)
-  if (!await repo.requeueFailed(db, id, now)) throw apiError(409, ErrorCodes.INVALID_STATE, 'This message isn\'t waiting for a retry: it was sent or is being tried already.')
-  await db.batch([auditStatement(db, actor, { action: 'notifications.delivery.retry', targetType: 'notification_delivery', targetId: id })])
+  await runBatch(db, [deliveryRepo.requeueFailedStatement(db, actor.tenantId, id, now), requireOneChange(db), auditStatement(db, actor, { action: 'notifications.delivery.retry', targetType: 'notification_delivery', targetId: id })], () => apiError(409, ErrorCodes.INVALID_STATE, 'This message isn\'t waiting for a retry: it was sent or is being tried already.'))
   await deliverDue(db, api, now, { ids: [id] })
-  const after = (await repo.findDelivery(db, actor.tenantId, id))!
+  const after = (await deliveryRepo.findDelivery(db, actor.tenantId, id))!
   return deliveryOf(after.delivery, after.title)
 }
 
 /** History is kept 90 days. */
 export async function purgeDeliveries(db: Db, now = new Date(), limit = 500): Promise<number> {
-  return repo.deleteDeliveriesBefore(db, new Date(now.getTime() - 90 * 24 * 60 * MINUTE), maintenanceLimit(limit))
+  return deliveryRepo.deleteDeliveriesBefore(db, new Date(now.getTime() - 90 * 24 * 60 * MINUTE), maintenanceLimit(limit))
 }
 
-export const oldestDueNotification = repo.oldestDueNotification
+export const oldestDueNotification = deliveryRepo.oldestDueNotification
 
 /** Telegram deliveries failing per cafe since `since` (the console's System health, P4, D192): counts and dates only. */
 export async function telegramDeliveryHealth(db: Db, since: Date) {
-  return repo.deliveryHealth(db, since)
+  return deliveryRepo.deliveryHealth(db, since)
+}
+
+/** The service owns the delivery settlement, guard and destination timestamp in one atomic batch. */
+export function markDelivered(db: Db, tenantId: string, id: string, token: string, destinationId: string, at: Date): Promise<boolean> {
+  return tryGuardedBatch(db, [deliveryRepo.markDeliveredStatement(db, tenantId, id, token, at), requireOneChange(db), repo.sentStatement(db, tenantId, destinationId, at)])
+}
+
+/** The one mapping for notification rules, including the overview's batched rows. */
+export function notificationRulesOf(rows: repo.RuleRow[]): NotificationRule[] {
+  return rows.map(rule => ({ kind: rule.kind, destinationId: rule.destinationId, attachCsv: rule.kind === 'closing_summary' && rule.attachCsv }))
 }

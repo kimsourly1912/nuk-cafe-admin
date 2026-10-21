@@ -1,117 +1,80 @@
-import { and, asc, eq, gt, isNull, or } from 'drizzle-orm'
+import { and, asc, eq, exists, inArray, isNull, or } from 'drizzle-orm'
+import type { AnyColumn, SQL } from 'drizzle-orm'
 import type { Db, Statement } from '#server/utils/batch'
-import { branches, branchStaff, member, organization, user } from '#server/db/tables'
+import { firstRow, inTenant } from '#server/utils/query'
+import { branches, branchStaff, member, user } from '#server/db/tables'
+import { activeBranch } from '#server/features/branches'
 
-export interface TenantRow {
-  id: string
-  slug: string
-  name: string
-  status: string | null
-}
-
-/**
- * The tenant the request acts in, until addresses name one (T1.5, D134): the oldest tenant. Only
- * one exists before the platform console (T2).
- */
-export async function findCurrentTenant(db: Db): Promise<TenantRow | undefined> {
-  const rows: TenantRow[] = await db
-    .select({ id: organization.id, slug: organization.slug, name: organization.name, status: organization.status })
-    .from(organization)
-    .orderBy(asc(organization.createdAt), asc(organization.id))
-    .limit(1)
-  return rows[0]
-}
-
-/** The tenant a path names (`/api/c/<slug>/…`, D140); `undefined` when no tenant has that slug. */
-export async function findTenantBySlug(db: Db, slug: string): Promise<TenantRow | undefined> {
-  const rows: TenantRow[] = await db
-    .select({ id: organization.id, slug: organization.slug, name: organization.name, status: organization.status })
-    .from(organization)
-    .where(eq(organization.slug, slug))
-    .limit(1)
-  return rows[0]
-}
-
-/** Every active tenant, oldest first (platform tasks that work per tenant, D138). */
-export async function findActiveTenants(db: Db): Promise<{ id: string, slug: string, name: string }[]> {
-  const rows: TenantRow[] = await db
-    .select({ id: organization.id, slug: organization.slug, name: organization.name, status: organization.status })
-    .from(organization)
-    .orderBy(asc(organization.createdAt), asc(organization.id))
-  return rows.filter(row => (row.status ?? 'active') === 'active').map(({ status: _, ...tenant }) => tenant)
-}
-
-/** The user's role in the tenant (`owner`, `member`), `undefined` when not a member. */
-export async function findTenantRole(db: Db, tenantId: string, userId: string): Promise<string | undefined> {
-  const rows = await db.select({ role: member.role }).from(member)
-    .where(and(eq(member.organizationId, tenantId), eq(member.userId, userId)))
-    .limit(1)
-  return rows[0]?.role
-}
+// --- Row types ---
 
 export interface BranchAccessRow {
   status: string
-  /** The user's role at the branch (`branch_staff`), `null` when they don't work there. */
   staffRole: string | null
 }
 
-/** The branch's status and the user's role at it, in one query; `undefined` when the tenant has no such branch. */
-export async function findBranchAccess(db: Db, tenantId: string, branchId: string, userId: string): Promise<BranchAccessRow | undefined> {
-  const rows: BranchAccessRow[] = await db
-    .select({ status: branches.status, staffRole: branchStaff.role })
-    .from(branches)
-    .leftJoin(branchStaff, and(eq(branchStaff.branchId, branches.id), eq(branchStaff.userId, userId)))
-    .where(and(eq(branches.tenantId, tenantId), eq(branches.id, branchId)))
-    .limit(1)
-  return rows[0]
+export interface WorkspaceRoleRow {
+  tenantId: string
+  role: string
 }
 
-/** The tenant's active branches a user works at, with their role, by name. */
-export async function staffBranches(db: Db, tenantId: string, userId: string): Promise<{ id: string, name: string, role: string }[]> {
-  return db.select({ id: branches.id, name: branches.name, role: branchStaff.role })
-    .from(branchStaff)
-    .innerJoin(branches, eq(branches.id, branchStaff.branchId))
-    .where(and(eq(branchStaff.tenantId, tenantId), eq(branchStaff.userId, userId), eq(branches.status, 'active')))
-    .orderBy(asc(branches.name))
+// --- Shared conditions ---
+
+/** Better Auth's legacy null flags mean false. Ban expiry is handled at sign-in (D187). */
+export const accountCanSignIn = or(eq(user.banned, false), isNull(user.banned))!
+/** A registered account excludes anonymous carts, including legacy null flags. */
+export const registeredAccount = or(eq(user.isAnonymous, false), isNull(user.isAnonymous))!
+
+/** An owner's membership whose account can sign in; reused by reads and the last-owner guard. */
+export const ownerCanSignIn = (db: Db): SQL => and(
+  eq(member.role, 'owner'),
+  exists(db.select({ id: user.id }).from(user).where(and(eq(user.id, member.userId), accountCanSignIn))),
+)!
+
+/** Across cafes: whether this cafe has an owner who can sign in (platform console). */
+export const hasActiveOwner = (db: Db, tenant: AnyColumn): SQL =>
+  inArray(tenant, db.select({ tenantId: member.organizationId }).from(member).where(ownerCanSignIn(db)))
+
+// --- Reads ---
+
+/** The user's role in the cafe. Uses member_organizationId_idx. */
+export async function findTenantRole(db: Db, tenantId: string, userId: string): Promise<string | undefined> {
+  return (await firstRow(db.select({ role: member.role }).from(member)
+    .where(and(eq(member.organizationId, tenantId), eq(member.userId, userId)))))?.role
 }
 
-/** The tenant's active branches, by name (an owner works at all of them). */
-export async function activeBranches(db: Db, tenantId: string): Promise<{ id: string, name: string }[]> {
-  return db.select({ id: branches.id, name: branches.name }).from(branches)
-    .where(and(eq(branches.tenantId, tenantId), eq(branches.status, 'active'))).orderBy(asc(branches.name))
+/** The branch's status and the user's role there; another cafe's branch is absent. */
+export function findBranchAccess(db: Db, tenantId: string, branchId: string, userId: string): Promise<BranchAccessRow | undefined> {
+  return firstRow(db.select({ status: branches.status, staffRole: branchStaff.role }).from(branches)
+    .leftJoin(branchStaff, and(
+      eq(branchStaff.tenantId, branches.tenantId),
+      eq(branchStaff.branchId, branches.id),
+      eq(branchStaff.userId, userId),
+    ))
+    .where(inTenant(branches, tenantId, eq(branches.id, branchId))))
 }
 
-/** The tenants an account belongs to as a member, with its role there (`owner`, `member`). */
-export async function memberTenants(db: Db, userId: string): Promise<{ tenantId: string, role: string }[]> {
-  return db.select({ tenantId: member.organizationId, role: member.role }).from(member).where(eq(member.userId, userId))
+/** The cafe's active branches the user works at. Uses branch_staff_user_idx. */
+export function listStaffBranches(db: Db, tenantId: string, userId: string): Promise<{ id: string, name: string, role: string }[]> {
+  return db.select({ id: branches.id, name: branches.name, role: branchStaff.role }).from(branchStaff)
+    .innerJoin(branches, and(eq(branches.tenantId, branchStaff.tenantId), eq(branches.id, branchStaff.branchId)))
+    .where(inTenant(branchStaff, tenantId, eq(branchStaff.userId, userId), activeBranch))
+    .orderBy(asc(branches.name), asc(branches.id))
 }
 
-/** The tenants where an account works at an active branch, with each role it has there. */
-export async function staffTenants(db: Db, userId: string): Promise<{ tenantId: string, role: string }[]> {
-  return db.selectDistinct({ tenantId: branchStaff.tenantId, role: branchStaff.role })
-    .from(branchStaff)
-    .innerJoin(branches, eq(branches.id, branchStaff.branchId))
-    .where(and(eq(branchStaff.userId, userId), eq(branches.status, 'active')))
+/** Across cafes: the account's own memberships and active branch roles, in one snapshot. */
+export async function workspaceRoles(db: Db, userId: string): Promise<{ memberships: WorkspaceRoleRow[], staff: WorkspaceRoleRow[] }> {
+  const [memberships, staff] = await db.batch([
+    db.select({ tenantId: member.organizationId, role: member.role }).from(member).where(eq(member.userId, userId)),
+    db.selectDistinct({ tenantId: branchStaff.tenantId, role: branchStaff.role }).from(branchStaff)
+      .innerJoin(branches, and(eq(branches.tenantId, branchStaff.tenantId), eq(branches.id, branchStaff.branchId)))
+      .where(and(eq(branchStaff.userId, userId), activeBranch)),
+  ])
+  return { memberships, staff }
 }
 
-/**
- * A guest's name for the counter (D156): only a guest's (`is_anonymous`), never an account's, so a
- * request can't rename a real person.
- */
-export function guestNameStatement(db: Db, userId: string, name: string, now: Date): Statement {
-  return db.update(user)
-    .set({ name, updatedAt: now })
-    .where(and(eq(user.id, userId), eq(user.isAnonymous, true)))
-}
+// --- Write statements ---
 
-/** Bounded platform-task enumeration; UUIDs provide a stable cursor across runs. */
-export async function findActiveTenantPage(db: Db, after: string | null, limit: number) {
-  return db.select({ id: organization.id, slug: organization.slug, name: organization.name }).from(organization)
-    .where(and(or(eq(organization.status, 'active'), isNull(organization.status)), after ? gt(organization.id, after) : undefined))
-    .orderBy(asc(organization.id)).limit(limit)
-}
-
-export async function findTenantById(db: Db, id: string) {
-  const [row] = await db.select({ id: organization.id, slug: organization.slug, name: organization.name }).from(organization).where(eq(organization.id, id))
-  return row
+/** A guest's counter name (D156): never renames a registered account. */
+export function updateGuestNameStatement(db: Db, userId: string, name: string, now: Date): Statement {
+  return db.update(user).set({ name, updatedAt: now }).where(and(eq(user.id, userId), eq(user.isAnonymous, true)))
 }

@@ -30,6 +30,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](.
 | `useLayoutContext()` | `composables/` | `isCompact` / `isExpanded` for choices CSS can't make (full-screen modal, drawer vs dropdown); never `useMediaQuery` by hand |
 | `StatusTabs` | `components/` | Status filter as tabs with counts; each feature names its statuses |
 | `ListSkeleton` | `components/` | First-load placeholders (rows or cards) |
+| `groupBy(rows, key)` | `shared/utils/collections.ts` (app and server; Nuxt auto-imports `shared/utils`) | Rows into a `Map` by key, each group in the rows' order (D194) |
 | `previewList`, `pluralize`, `changeText` | `utils/text.ts` | "Coffee, Tea and 3 more", "3 categories", "+12%" against a previous number |
 | `usePaginatedQuery(filters)` | `composables/` | List state **kept in the URL**: 1-based `page` (UI and API), `query` with `page` + `pageSize`, resets page on filter change, strips `ANY`/'', `isFiltered`, `clearFilters` |
 | `ANY`, `toApiQuery` | `utils/query.ts` | "All" option in filter selects (`USelect` can't hold `undefined`) |

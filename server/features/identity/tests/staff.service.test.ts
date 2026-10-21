@@ -420,6 +420,14 @@ describe('list from the cafe\'s memberships', () => {
   it('looks users up by key from the memberships, never scanning every account', async () => {
     const seen: { sql: string, params: unknown[] }[] = []
     const probe = await createTestDb({ logger: { logQuery: (statement, params) => void seen.push({ sql: statement, params }) } })
+    // libsql's logger omits batches: inspect both page statements before they execute (D194).
+    const batch = probe.batch.bind(probe)
+    probe.batch = ((items) => {
+      for (const item of items) {
+        seen.push((item as unknown as { toSQL: () => { sql: string, params: unknown[] } }).toSQL())
+      }
+      return batch(items)
+    }) as typeof probe.batch
     const plan = (probe as unknown as { $client: { execute: (statement: { sql: string, args: unknown[] }) => Promise<{ rows: Record<string, unknown>[] }> } }).$client
     const probeBranch = newId()
     await insertBranch(probe, { id: probeBranch, name: 'Riverside', timezone: 'Asia/Phnom_Penh' })
