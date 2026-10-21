@@ -31,8 +31,6 @@ async function test(destination: TelegramDestination) {
   if (!result.ok && result.status === 'error' && result.error.code === 'TELEGRAM_BLOCKED') invalidate('telegram', 'reports')
 }
 
-const when = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-
 function actions(destination: TelegramDestination): DropdownMenuItem[] {
   return [
     destination.status === 'blocked'
@@ -183,7 +181,7 @@ function actions(destination: TelegramDestination): DropdownMenuItem[] {
                   </div>
                   <p class="text-sm text-muted">
                     {{ destination.kind === 'group' ? 'Group' : 'Private chat' }}
-                    · {{ destination.lastSentAt ? `Last sent ${when(destination.lastSentAt)}` : 'Nothing sent yet' }}
+                    · {{ destination.lastSentAt ? `Last sent ${formatShortDateTime(destination.lastSentAt)}` : 'Nothing sent yet' }}
                     <template v-if="destination.connectedBy">
                       · Connected by {{ destination.connectedBy }}
                     </template>

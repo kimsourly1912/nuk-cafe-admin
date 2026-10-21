@@ -433,6 +433,25 @@ Source: `app/components/ListSkeleton.vue`
 
 > Drive it with `useApiQuery`'s `loading`, and **don't give that query an empty-list `default`**: `loading` means "pending with no data yet", and `[]` counts as data, so the empty state would flash instead (a bug found by e2e, D37).
 
+## Dates and times: `formatDate`, `formatShortDate`, `formatTime`, `formatDateTime`, `formatShortDateTime`, `formatDay`
+
+Every timestamp on screen, in one style (D195): the day first, the 12-hour clock. Source: `app/utils/date-format.ts` (auto-imported; unit-tested code imports it from `~/utils/date-format`). Tests: `test/unit/date-format.test.ts`.
+
+| Helper | Output |
+|---|---|
+| `formatDate(at)` | `"21 Oct 2026"` |
+| `formatShortDate(at)` | `"21 Oct"` (this year's activity) |
+| `formatTime(at)` | `"9:05 AM"` |
+| `formatDateTime(at)` | `"21 Oct 2026, 9:05 AM"` |
+| `formatShortDateTime(at)` | `"21 Oct, 9:05 AM"` |
+| `formatDay('2026-10-21')` | `"Wed 21 Oct 2026"`: a calendar day, the same in every zone |
+
+`at` is an ISO string, epoch milliseconds or a `Date`. Pass `{ timeZone }` (a branch's or the cafe's zone) to show that zone's day and time; without it, this device's. Don't format dates with `toLocaleString` in features: a second style creeps back in.
+
+```ts
+formatDateTime(order.placedAt, { timeZone: branch.timezone }) // "21 Oct 2026, 9:05 AM"
+```
+
 ## Times of day: `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute`
 
 Weekly windows (availability rules, branch hours) are minutes after midnight in the branch's local time. These helpers show them and bind them to `<TimeInput>` (D91). Source: `app/utils/clock.ts` (auto-imported; unit-tested code imports it from `~/utils/clock`).

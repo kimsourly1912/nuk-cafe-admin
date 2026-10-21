@@ -1,6 +1,7 @@
 import type { CancelReason, CounterOrder, CounterOrderHistory, CounterTimelineStep } from '#shared/contracts/orders'
+import { formatTime } from '~/utils/date-format'
 import { formatMinor, formatRiel } from '~/utils/money'
-import { clockTime, firstName, PAYMENT_METHOD_LABELS } from './counter'
+import { firstName, PAYMENT_METHOD_LABELS } from './counter'
 
 /**
  * "Finished today" (step 10.2, D117, the owner's frames): what a row and the order panel say about
@@ -50,7 +51,7 @@ export function cancellationSummary(history: CounterOrderHistory): { title: stri
       : `Cancelled by ${firstName(step.by.name ?? 'staff')}: ${REASONS[step.reason ?? 'other']}`
   const payment = history.order.payment
   const returned = payment?.returnMethod && payment.returnedAt
-    ? `${formatMinor(payment.amountMinor)} returned ${payment.returnMethod === 'cash' ? 'in cash' : 'by KHQR'}${history.returnedBy ? ` by ${firstName(history.returnedBy)}` : ''} at ${clockTime(payment.returnedAt)}`
+    ? `${formatMinor(payment.amountMinor)} returned ${payment.returnMethod === 'cash' ? 'in cash' : 'by KHQR'}${history.returnedBy ? ` by ${firstName(history.returnedBy)}` : ''} at ${formatTime(payment.returnedAt)}`
     : null
   return { title, note: step.note, returned }
 }

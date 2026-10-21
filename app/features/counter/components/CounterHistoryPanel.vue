@@ -5,7 +5,7 @@
  * back), and the timeline with who took each step. Only Close: nothing here changes an order.
  */
 import type { CounterOrderHistory } from '#shared/contracts/orders'
-import { clockTime, orderNumber, orderTypeText, firstName } from '../utils/counter'
+import { orderNumber, orderTypeText, firstName } from '../utils/counter'
 import { cancellationSummary, timelineItems } from '../utils/finished'
 
 const props = defineProps<{
@@ -139,7 +139,7 @@ const steps = computed(() => (props.history ? timelineItems(props.history) : [])
                 {{ step.label }}
               </p>
               <p class="text-sm text-muted">
-                {{ clockTime(step.at) }}<template v-if="step.detail">
+                {{ formatTime(step.at) }}<template v-if="step.detail">
                   · {{ step.detail }}
                 </template>
               </p>

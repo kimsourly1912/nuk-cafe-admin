@@ -1,3 +1,4 @@
+import { formatDateTime } from '~/utils/date-format'
 import type { BakongTokenState, JobState } from '#shared/contracts/platform-health'
 
 /** System health in words (step P4, D192). */
@@ -44,7 +45,5 @@ export const OUTBOX_KINDS: Record<string, string> = {
 }
 export const outboxKindLabel = (kind: string) => OUTBOX_KINDS[kind] ?? kind
 
-export const dateTime = (at: string | null) => (at
-  ? new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
-  : 'Never')
-export const dateOnly = (at: string) => new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+/** "21 Oct 2026, 9:05 AM", or "Never". */
+export const lastAt = (at: string | null) => (at ? formatDateTime(at) : 'Never')

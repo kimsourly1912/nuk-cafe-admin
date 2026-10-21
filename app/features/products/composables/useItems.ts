@@ -61,10 +61,10 @@ export function useItemCounts(filters: () => ItemListFilters) {
   return { statusCounts, missingPhotos }
 }
 
-/** One item with its grid, add-ons and rules: what the form edits (the list has summaries only). */
 /** The whole item, as saved now. */
 export const fetchItem = (id: string) => apiFetch<MenuItem>(`${BASE}/${id}`)
 
+/** One item with its grid, add-ons and rules: what the form edits (the list has summaries only). */
 export function useItem(id: string) {
   return useApiQuery(`products:item:${id}`, () => fetchItem(id))
 }

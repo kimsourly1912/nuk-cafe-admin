@@ -7,7 +7,7 @@
  * payment needs its method, and an order only moves forward (the owner's review).
  */
 import type { CounterOrder } from '#shared/contracts/orders'
-import { clockTime, firstName, itemCount, itemNames, orderNumber, orderTypeText, payBySoon, timeAgo } from '../utils/counter'
+import { firstName, itemCount, itemNames, orderNumber, orderTypeText, payBySoon, timeAgo } from '../utils/counter'
 
 const props = defineProps<{
   order: CounterOrder
@@ -69,7 +69,7 @@ const action = computed(() => {
       <span
         v-if="order.status === 'awaiting_payment'"
         :class="soon ? 'font-medium text-warning' : 'text-muted'"
-      >Pay by {{ clockTime(order.paymentDueAt) }}</span>
+      >Pay by {{ formatTime(order.paymentDueAt) }}</span>
     </div>
 
     <UButton

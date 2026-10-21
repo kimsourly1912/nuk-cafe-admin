@@ -1,5 +1,6 @@
 import type { CancelReason, Order, OrderStatus, OrderSummary, PaymentMethod } from '#shared/contracts/orders'
 import { IN_PROGRESS_STATUSES } from '#shared/contracts/orders'
+import { formatDate, formatShortDate, formatTime } from '~/utils/date-format'
 import { formatMinor, formatRiel } from '~/utils/money'
 import { pluralize } from '~/utils/text'
 
@@ -127,21 +128,18 @@ export function paymentText(order: Pick<Order, 'payment'>): string | null {
   const amount = payment.method === 'cash_khr' && payment.amountKhr !== null
     ? formatRiel(payment.amountKhr)
     : formatMinor(payment.amountMinor)
-  return `Paid ${amount} · ${PAYMENT_METHOD_LABELS[payment.method]} · ${clockTime(payment.collectedAt)}`
+  return `Paid ${amount} · ${PAYMENT_METHOD_LABELS[payment.method]} · ${formatTime(payment.collectedAt)}`
 }
-
-/** "10:42 AM" on this device's clock. */
-export const clockTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 
 const dayKey = (time: number) => new Date(time).toDateString()
 
-/** "Today 10:15 AM", "Yesterday", "Sep 28" (and the year when it isn't this year). */
+/** "Today 10:15 AM", "Yesterday", "28 Sep" (and the year when it isn't this year). */
 export function placedText(placedAt: string, now: number): string {
   const time = Date.parse(placedAt)
-  if (dayKey(time) === dayKey(now)) return `Today ${clockTime(placedAt)}`
+  if (dayKey(time) === dayKey(now)) return `Today ${formatTime(placedAt)}`
   if (dayKey(time) === dayKey(now - 86_400_000)) return 'Yesterday'
   const sameYear = new Date(time).getFullYear() === new Date(now).getFullYear()
-  return new Date(time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) })
+  return sameYear ? formatShortDate(time) : formatDate(time)
 }
 
 /** "1 item", "3 items". */

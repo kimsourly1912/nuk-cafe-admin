@@ -1,5 +1,6 @@
 import type { CounterOrder, CounterPayment, OrderStatus, PaymentMethod } from '#shared/contracts/orders'
 import { ApiError } from '~/utils/api-error'
+import { formatTime } from '~/utils/date-format'
 import { formatMinor, formatRiel } from '~/utils/money'
 
 /**
@@ -59,11 +60,8 @@ export function timeAgo(iso: string, now: number): string {
 /** Less than 5 minutes left to pay: the card says so in amber. */
 export const payBySoon = (order: Pick<CounterOrder, 'paymentDueAt'>, now: number) => Date.parse(order.paymentDueAt) - now < 5 * MINUTE
 
-/** "10:42 AM" on this device's clock. */
-export const clockTime = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-
 /** "Last updated 10:42 AM (4 min ago)": when the queue last loaded, while refreshing fails (D149). */
-export const lastUpdatedText = (iso: string, now: number) => `Last updated ${clockTime(iso)} (${timeAgo(iso, now).toLowerCase()})`
+export const lastUpdatedText = (iso: string, now: number) => `Last updated ${formatTime(iso)} (${timeAgo(iso, now).toLowerCase()})`
 
 /** After this long without an update while refreshing fails, the queue warns louder (D150). */
 export const QUEUE_STALE_ALERT_MS = 2 * MINUTE
@@ -124,7 +122,7 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
 /** "Paid 10:20 AM by Sophea · Cash riel ៛29,800". */
 export function paymentText(payment: CounterPayment): string {
   const amount = payment.method === 'cash_khr' && payment.amountKhr !== null ? formatRiel(payment.amountKhr) : formatMinor(payment.amountMinor)
-  return `Paid ${clockTime(payment.collectedAt)} by ${firstName(payment.collectedBy.name)} · ${PAYMENT_METHOD_LABELS[payment.method]} ${amount}`
+  return `Paid ${formatTime(payment.collectedAt)} by ${firstName(payment.collectedBy.name)} · ${PAYMENT_METHOD_LABELS[payment.method]} ${amount}`
 }
 
 /**

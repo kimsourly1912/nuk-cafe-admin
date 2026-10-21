@@ -1,3 +1,4 @@
+import { formatDate } from '~/utils/date-format'
 import type { ActivityEntry, ActivityPerson, PlatformAction } from '#shared/contracts/platform-activity'
 
 /**
@@ -44,7 +45,7 @@ export function activitySubject(entry: ActivityEntry): string | null {
     case 'tenant.notes.update':
       return details.fields?.length ? `Changed: ${details.fields.map(field => NOTE_FIELDS[field] ?? field).join(', ')}` : 'Saved without changes'
     case 'platform.account.ban':
-      return `${personName(entry.account)}, ${details.until ? `until ${new Date(details.until).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'until unbanned'}`
+      return `${personName(entry.account)}, ${details.until ? `until ${formatDate(details.until)}` : 'until unbanned'}`
     default:
       return entry.account ? personName(entry.account) : null
   }

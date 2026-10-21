@@ -9,7 +9,7 @@
 import { TELEGRAM_HEALTH_DAYS } from '#shared/contracts/platform-health'
 import { usePlatformHealth } from '../composables/useActivity'
 import { CAFES_PATH } from '../composables/usePlatformSession'
-import { BAKONG_STATES, dateOnly, dateTime, JOB_LABELS, JOB_STATES, outboxKindLabel, scheduleLabel } from '../schemas/health'
+import { BAKONG_STATES, JOB_LABELS, lastAt, JOB_STATES, outboxKindLabel, scheduleLabel } from '../schemas/health'
 
 const { data: health, loading, refreshing, error, refresh } = usePlatformHealth()
 const cafePath = (id: string) => `${CAFES_PATH}/${id}`
@@ -59,7 +59,7 @@ const problems = computed(() => {
       >
         <div class="flex flex-wrap items-center justify-between gap-2">
           <p class="text-sm text-muted">
-            Checked {{ dateTime(health.checkedAt) }}
+            Checked {{ lastAt(health.checkedAt) }}
           </p>
           <UButton
             label="Refresh"
@@ -115,8 +115,8 @@ const problems = computed(() => {
                 </p>
               </div>
               <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-muted">
-                <span>Last success: {{ dateTime(job.lastSuccessAt) }}</span>
-                <span v-if="job.lastFailureAt">Last failure: {{ dateTime(job.lastFailureAt) }}</span>
+                <span>Last success: {{ lastAt(job.lastSuccessAt) }}</span>
+                <span v-if="job.lastFailureAt">Last failure: {{ lastAt(job.lastFailureAt) }}</span>
                 <span v-if="job.failuresInARow">{{ job.failuresInARow }} in a row</span>
                 <UBadge
                   :color="JOB_STATES[job.state].color"
@@ -176,7 +176,7 @@ const problems = computed(() => {
                     <template v-else>
                       The platform
                     </template>
-                    · oldest {{ dateTime(group.oldestAt) }}
+                    · oldest {{ lastAt(group.oldestAt) }}
                   </p>
                 </div>
                 <p class="text-muted tabular-nums">
@@ -220,7 +220,7 @@ const problems = computed(() => {
                 {{ row.cafe.name }}
               </NuxtLink>
               <p class="text-muted tabular-nums">
-                {{ row.failed }} given up · {{ row.retrying }} retrying · newest {{ dateTime(row.newestFailingAt) }}
+                {{ row.failed }} given up · {{ row.retrying }} retrying · newest {{ lastAt(row.newestFailingAt) }}
               </p>
             </li>
           </ul>
@@ -258,7 +258,7 @@ const problems = computed(() => {
                 {{ token.cafe.name }}
               </NuxtLink>
               <div class="flex items-center gap-3 text-muted">
-                <span>{{ token.expiresAt ? `Expires ${dateOnly(token.expiresAt)}` : 'No expiry in the token' }}</span>
+                <span>{{ token.expiresAt ? `Expires ${formatDate(token.expiresAt)}` : 'No expiry in the token' }}</span>
                 <UBadge
                   :color="BAKONG_STATES[token.state].color"
                   variant="subtle"
