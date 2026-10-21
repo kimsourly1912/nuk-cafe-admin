@@ -31,12 +31,6 @@ const REPOSITORY_RULES = [
   { selector: 'CallExpression[callee.object.name="db"][callee.property.name=/^(?:run|all|get|values)$/]', message: 'No raw statements in a repository: build it with the query builder (D53, repositories.md → Query API).' },
   { selector: 'TaggedTemplateExpression[tag.name="sql"] CallExpression[callee.property.name="getTime"]', message: 'Don\'t write a time as a number: compare the column with an operator (gt(column, now)) (repositories.md → Conditions).' },
 ]
-// Repositories not yet cleaned up to the standard (the audit's steps 3–7); each step removes its files.
-const REPOSITORIES_TO_CLEAN = [
-  'media/media',
-  'platform/platform',
-  'support/support',
-].map(path => `server/features/${path}.repository.ts`)
 
 // A cafe's pages (D141): `/`, `/admin…`, `/counter…`, `/orders…`, `/checkout` live under `/c/<slug>`.
 // Links to them go through `useTenantPath()` (`tenantPath('/admin/products')`); a bare one would
@@ -148,7 +142,6 @@ export default withNuxt(
     // A later block replaces `no-restricted-syntax` as a whole, so this one repeats the imports' rules.
     {
       files: [`server/features/${name}/*.repository.ts`],
-      ignores: REPOSITORIES_TO_CLEAN,
       rules: {
         'no-restricted-syntax': ['error', ...dynamicRestrictions([...SERVER_IMPORTS, otherFeatureInternals(name)]), ...REPOSITORY_RULES],
       },

@@ -2,7 +2,7 @@
 
 How a feature's `*.repository.ts` is written: the query API, names, the tenant rule, reads, conditions, guards, writes and tests. It refines [architecture → Features](./architecture.md#features) (what a repository is for) and [architecture → Atomic writes](./architecture.md#atomic-writes) (batches and D1's limits); those rules still apply.
 
-**Status (D194, 2026-10-20):** new and changed repository code follows this page. Steps 2–6 have built the shared helpers and cleaned orders, menu, identity/cafes and messages; the [repository audit](../reviews/repository-audit-2026-10-20.md) lists the remaining step 7 work.
+**Status (D194, 2026-10-21):** all seven cleanup steps are implemented and verified, awaiting owner review. Every repository follows this page; there are no lint exemptions. The [repository audit](../reviews/repository-audit-2026-10-20.md) preserves the original findings and records each completed step; [progress](../progress.md#repository-standard-and-audit-d194-2026-10-20) holds the verification evidence.
 
 **Official documentation first.** Before using a Drizzle, NuxtHub or D1 API, read its current official page ([Drizzle](https://orm.drizzle.team/docs/overview), [NuxtHub database](https://hub.nuxt.com/docs/database/query), [D1](https://developers.cloudflare.com/d1/)) and check the installed version's types: the docs can describe a newer release, and they don't always say which dialect a feature supports (`db.$count` exists for SQLite in 0.45, but isn't a batch item). Prefer the documented API to a helper of our own; cite the page in the decision or PR that introduces the use.
 
@@ -127,7 +127,7 @@ export function valuesOf(db: Db, tenantId: string, setIds: string[]): Promise<Op
   return { rows, total: counted?.total ?? 0 }
   ```
 
-  A page and its total use `readPage(db, rows, total, query)`, which does exactly this ([Shared helpers](#shared-helpers)). Columns read in a batch need unique SQL names (D170). `readInChunks` reads stay as they are: their pieces already run at once.
+  A page and its total use `readPage(db, rows, total, query)`, which does exactly this ([Shared helpers](#shared-helpers)). The existing platform audit API accepts an arbitrary `offset` and `limit`; it batches the same two reads directly, preserving that API. Do not turn an arbitrary offset into a fractional page number. Columns read in a batch need unique SQL names (D170). `readInChunks` reads stay as they are: their pieces already run at once.
 - **Order in SQL**, and always end with a unique column (`id`) so pages never overlap. `readInChunks` keeps the order only inside each piece: sort the joined rows afterwards, or group them by the id you passed.
 - **Filter in SQL.** Never load a table and filter it in JavaScript.
 - **Name the index** a list or task query depends on in its doc comment (`Uses orders_branch_date_idx`), and check new list queries with `EXPLAIN QUERY PLAN` against the test database.
@@ -202,11 +202,12 @@ Nitro auto-imports every export of `server/utils/` into routes, so a helper's na
 
 **Drizzle's own, used as documented:** [`db.$count(table, condition)`](https://orm.drizzle.team/docs/query-utils#count) for a count and inside guards (it isn't a batch item); [`.$dynamic()`](https://orm.drizzle.team/docs/dynamic-query-building) for a query a helper changes; [`alias`](https://orm.drizzle.team/docs/joins#aliases--selfjoins) for a self-join; `getTableColumns`.
 
-**The building blocks** (built in steps 2 and 6, 2026-10-20; tested in `server/tests/query.test.ts` and `server/tests/messages.repository.tenants.test.ts` on SQLite with D1's 100-parameter limit, and in `server/tests/d1-search.test.ts` on real D1):
+**The building blocks** (built in steps 2, 6 and 7, 2026-10-20–21; tested in `server/tests/query.test.ts`, `server/tests/messages.repository.tenants.test.ts` and `server/tests/remaining.repository.tenants.test.ts` on SQLite with D1's 100-parameter limit, and in `server/tests/d1-search.test.ts` on real D1):
 
 | Helper | File | Does | Replaces (uses on 2026-10-20) |
 |---|---|---|---|
 | `inTenant(table, tenantId, ...conditions)` | query | `and(eq(t.tenantId, tenantId), …)`, `undefined` conditions skipped; the table must have `tenantId` | starting each `where` by hand (167) |
+| `inJsonArray(column, strings)` | query | exact membership in a string set bound as one JSON value (`json_each`); an empty set matches nothing and duplicates have no effect | the catalog's internal item selection, audit action allow-lists and outbox event-kind filters |
 | `byId(table, tenantId, id)`, `atVersion(table, tenantId, id, version)` | query | the cafe's row by id, and by id at a version | 34, 18 |
 | `withStatus(column, status)` | query | `eq(column, status)`; none for `'all'` or no status | 5 |
 | `searchIn(search, ...columns)` | query | any column contains the search (`containsText`, D183); none without a search | 5 |
@@ -253,7 +254,7 @@ export function renameSetStatement(db: Db, tenantId: string, id: string, version
 
 ## D1 limits
 
-They are in [architecture → Atomic writes](./architecture.md#atomic-writes): 100 bound parameters per statement (D62), unique column names in batch reads (D170), no `like` patterns over 50 bytes (D183). For a repository that means: a list of ids goes through `readInChunks`, `insertPieces` or `chunk`. An `inArray` without them is allowed only when a contract bounds the list well under 90 items, and the comment names that bound (`At most MAX_ITEM_MODIFIER_GROUPS (10) groups`).
+They are in [architecture → Atomic writes](./architecture.md#atomic-writes): 100 bound parameters per statement (D62), unique column names in batch reads (D170), no `like` patterns over 50 bytes (D183). For a repository that means: a list of ids goes through `readInChunks`, `insertPieces` or `chunk`. An expanded `inArray` without them is allowed only when a contract bounds the list well under 90 items, and the comment names that bound (`At most MAX_ITEM_MODIFIER_GROUPS (10) groups`). `inJsonArray` is for a growing string filter that must remain in one query with another list or shared subquery: the catalog's cart selection and platform event-name sets. It binds the set once and uses SQLite's `json_each` through Drizzle's `inArray`; it does not make any tenant, state or permission filter optional. Other id reads/writes still use chunks. Test intersecting large sets, empty sets, duplicates and exact membership on SQLite and real D1.
 
 ## Tests
 

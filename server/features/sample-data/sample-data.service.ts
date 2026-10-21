@@ -10,6 +10,8 @@ import type { QrConfig } from '#server/features/branches'
 import type { Actor } from '#server/features/identity'
 import { countUploads, deleteUploads } from '#server/features/media'
 import type { ObjectStore } from '#server/features/media'
+import type { MenuDataCounts } from '#server/features/menu'
+import { auditStatement } from '#server/features/platform'
 import {
   archiveItem,
   countMenuData,
@@ -28,9 +30,9 @@ import {
   publishItem,
   setSoldOut,
 } from '#server/features/menu'
-import type { MenuDataCounts } from '#server/features/menu'
-import { auditStatement } from '#server/features/platform'
 import type { CategoryKey, SampleItem } from './sample-data.catalog'
+import { menuAlreadyLoaded, menuNotEmpty, otherSizeRunning, sampleDataBusy } from './sample-data.errors'
+import * as repo from './sample-data.repository'
 import {
   combinations,
   GRID_SETS,
@@ -43,8 +45,6 @@ import {
   SAMPLE_TABLES,
   versionPrice,
 } from './sample-data.catalog'
-import { menuAlreadyLoaded, menuNotEmpty, otherSizeRunning, sampleDataBusy } from './sample-data.errors'
-import * as repo from './sample-data.repository'
 
 /**
  * Sample data (D94): realistic test data, loaded through the menu's and branches' own services, so
@@ -156,20 +156,20 @@ export async function loadSampleMenuStep(db: Db, actor: Actor, input: LoadSample
   let run = await repo.findRun(db, actor.tenantId)
   if (!run) {
     if (!isEmpty(await countMenuData(db, actor.tenantId))) throw menuNotEmpty()
-    await repo.insertRun(db, actor.tenantId, { size: input.size, startedBy: actor.userId, now })
+    await repo.claimNewRun(db, actor.tenantId, { size: input.size, startedBy: actor.userId, now })
     run = await repo.findRun(db, actor.tenantId)
     if (!run) throw sampleDataBusy()
   }
   if (run.finishedAt) throw menuAlreadyLoaded()
   if (run.size !== input.size) throw otherSizeRunning(run.size)
-  if (!await repo.claimRun(db, actor.tenantId, now, new Date(now.getTime() + LOCK_MS))) throw sampleDataBusy()
+  if (!await repo.claimRun(db, actor.tenantId, new Date(now.getTime() + LOCK_MS), now)) throw sampleDataBusy()
 
   let finished = false
   try {
     finished = await nextMenuStep(db, actor, run.size)
   }
   finally {
-    await repo.releaseRun(db, actor.tenantId, finished ? new Date() : undefined)
+    await db.batch([repo.releaseRunStatement(db, actor.tenantId, finished ? new Date() : undefined)])
   }
   return getSampleDataState(db, actor.tenantId, environment)
 }

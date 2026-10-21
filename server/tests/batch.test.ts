@@ -15,6 +15,9 @@ import { listAccounts } from '#server/features/identity/accounts.repository'
 import { listStaff } from '#server/features/identity/staff.repository'
 import { listTenants } from '#server/features/tenants/tenants.repository'
 import { overviewRows } from '#server/features/notifications/notifications.repository'
+import { imageRows } from '#server/features/media/media.repository'
+import { historyRows } from '#server/features/support/support.repository'
+import { listAuditEvents } from '#server/features/platform/platform.audit.repository'
 import * as repo from '#server/features/notifications/notifications.customers.repository'
 import { counterContext, counterQueueRows } from '#server/features/orders/orders.repository'
 import { orderHistory } from '#server/features/orders/reports.repository'
@@ -107,6 +110,40 @@ describe('on D1', () => {
   }
 
   const things = sqliteTable('t', { v: integer() })
+
+  it('decodes the joined image source/variant snapshot through D1 objects (D194 step 7)', async () => {
+    const now = new Date('2026-10-21T03:00:00Z')
+    const edit = { focus: { x: 0.5, y: 0.5 }, card: { zoom: 1, x: 0.5, y: 0.5, adjusted: false }, detail: { zoom: 1, x: 0.5, y: 0.5, adjusted: false }, fill: '#ffffff' }
+    const { db: d1, bound } = fakeD1([
+      ['photo-a', 'cafe-a/source', 'image/webp', 17, 'temporary', now.getTime(), null, 'placeholder', JSON.stringify(edit)],
+      ['photo-a', 'card', 'cafe-a/card'],
+    ])
+    expect(await imageRows(d1, 'cafe-a', ['photo-a'])).toEqual({
+      assets: [expect.objectContaining({ id: 'photo-a', objectKey: 'cafe-a/source', stateChangedAt: now, edit })],
+      variants: [{ parentId: 'photo-a', variant: 'card', objectKey: 'cafe-a/card' }],
+    })
+    expect(bound).toHaveLength(2)
+    expect(bound.every(statement => statement.params.includes('cafe-a'))).toBe(true)
+    expect(bound[1]!.sql).toContain('"photo_source"."tenantId" = "media_assets"."tenantId"')
+  })
+
+  it('decodes support history and the audit page/total in D1 batches (D194 step 7)', async () => {
+    const now = new Date('2026-10-21T03:00:00Z')
+    const { db: d1, bound } = fakeD1([
+      ['grant-a', 'cafe-a', 'owner-a', now.getTime(), now.getTime() + 60_000, null, null],
+      ['visit-a', 'cafe-a', 'grant-a', 'support-a', 'session-a', now.getTime(), now.getTime() + 30_000, null],
+    ])
+    expect(await historyRows(d1, 'cafe-a', 10)).toEqual({
+      grants: [expect.objectContaining({ id: 'grant-a', tenantId: 'cafe-a', grantedAt: now, endedAt: null })],
+      visits: [expect.objectContaining({ id: 'visit-a', tenantId: 'cafe-a', grantId: 'grant-a', openedAt: now, closedAt: null })],
+    })
+    expect(bound).toHaveLength(2)
+    expect(bound[1]!.sql).toContain('"recent_grants"."tenantId" = "support_visits"."tenantId"')
+    const { db: auditDb } = fakeD1([['audit-a', now.getTime(), 'cafe-a', 'actor-a', 'platform.test', 'test', null, '{"changed":true}'], [1]])
+    expect(await listAuditEvents(auditDb, { actions: ['platform.test'], limit: 10, offset: 0 })).toEqual({
+      total: 1, rows: [expect.objectContaining({ id: 'audit-a', at: now, metadata: { changed: true } })],
+    })
+  })
 
   it('decodes the joined Telegram overview batch without collapsing ids, dates or booleans (D194)', async () => {
     const now = new Date('2026-10-20T03:00:00Z')

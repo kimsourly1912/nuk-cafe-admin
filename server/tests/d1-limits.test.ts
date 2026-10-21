@@ -22,6 +22,12 @@ import { mediaAssets } from '#server/features/media/media.schema'
 import { findTenants } from '#server/features/tenants/tenants.repository'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
+import { insertAll } from '#server/utils/batch'
+import { imageRows } from '#server/features/media/media.repository'
+import { insertObjectPlansStatements, deleteObjectPlansStatements, dueObjectDeletions } from '#server/features/media/media.objects.repository'
+import { dueMessages } from '#server/features/platform/platform.outbox.repository'
+import { listAuditEvents } from '#server/features/platform/platform.audit.repository'
+import { auditEvents, outboxMessages } from '#server/features/platform/platform.schema'
 import { addBranchStaff, createAdmin, createTestDb, createUser, D1_MAX_PARAMS, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 
 /**
@@ -38,6 +44,25 @@ beforeEach(async () => {
 })
 
 const names = (n: number, prefix: string) => Array.from({ length: n }, (_, i) => `${prefix} ${String(i + 1).padStart(3, '0')}`)
+
+it('batches 201 provisional object keys and image ids, and intersects large outbox/audit filter sets (D194)', async () => {
+  const now = new Date('2026-10-21T03:00:00Z')
+  const ids = names(201, 'asset')
+  const commit = async (statements: import('#server/utils/batch').Statement[]) => {
+    const [first, ...rest] = statements
+    if (first) await db.batch([first, ...rest])
+  }
+  await commit(insertAll(db, mediaAssets, ids.map(id => ({ id, tenantId: TEST_TENANT, objectKey: id, mimeType: 'image/png', byteSize: 1, sha256: 'a'.repeat(64) }))))
+  expect(new Set((await imageRows(db, TEST_TENANT, [...ids, 'unknown'])).assets.map(row => row.id))).toEqual(new Set(ids))
+  await commit(insertObjectPlansStatements(db, TEST_TENANT, ids, now))
+  expect(await dueObjectDeletions(db, now, 300)).toHaveLength(201)
+  await commit(deleteObjectPlansStatements(db, TEST_TENANT, ids))
+  expect(await dueObjectDeletions(db, now, 300)).toEqual([])
+  await commit(insertAll(db, outboxMessages, ids.map(id => ({ id, tenantId: TEST_TENANT, kind: 'orders.ready', payload: {}, nextAttemptAt: now }))))
+  expect(await dueMessages(db, now, 300, { ids: [...ids, 'unknown'], kinds: [...ids, 'orders.ready'] })).toHaveLength(201)
+  await db.insert(auditEvents).values({ action: 'platform.test', tenantId: TEST_TENANT, targetType: 'test', at: now })
+  expect(await listAuditEvents(db, { actions: [...ids, 'platform.test'], limit: 10, offset: 0 })).toMatchObject({ total: 1, rows: [{ action: 'platform.test' }] })
+})
 
 it('the test database refuses what D1 refuses', async () => {
   const list = (n: number) => sql.join(Array.from({ length: n }, () => sql`${1}`), sql`, `)

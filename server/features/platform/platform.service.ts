@@ -2,6 +2,9 @@ import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, isUniqueViolation } from '#server/utils/batch'
 import { idempotencyMismatch } from './platform.errors'
 import * as repo from './platform.repository'
+import * as auditRepo from './platform.audit.repository'
+import * as outboxRepo from './platform.outbox.repository'
+import * as jobsRepo from './platform.jobs.repository'
 import { describeError, hashRequest, IDEMPOTENCY_TTL_MS, OUTBOX_CLAIM_MS, OUTBOX_MAX_ATTEMPTS, retryDelayMs } from './platform.rules'
 import type { AuditActor, AuditEntry, DeliveryReport, IdempotencyScope, IdempotentWork, OutboxHandler, OutboxTarget } from './platform.types'
 
@@ -13,7 +16,7 @@ import type { AuditActor, AuditEntry, DeliveryReport, IdempotencyScope, Idempote
 
 /** An audit row, to put **in the same batch** as the change it records. */
 export function auditStatement(db: Db, actor: AuditActor, entry: AuditEntry): Statement {
-  return repo.insertAuditStatement(db, actor, entry)
+  return auditRepo.insertAuditStatement(db, actor, entry)
 }
 
 /**
@@ -24,7 +27,7 @@ export function auditStatement(db: Db, actor: AuditActor, entry: AuditEntry): St
  * (account emails). D138.
  */
 export function outboxStatement(db: Db, tenantId: string | null, kind: string, payload: Record<string, unknown>): Statement {
-  return repo.insertOutboxStatement(db, tenantId, kind, payload)
+  return outboxRepo.insertOutboxStatement(db, tenantId, kind, payload)
 }
 
 /**
@@ -76,7 +79,7 @@ export async function withIdempotency<T>(
 
 /** Removes keys past their 24 hours. Returns how many. */
 export async function expireIdempotencyKeys(db: Db, now = new Date(), limit = 500): Promise<number> {
-  return repo.deleteExpiredIdempotencyKeys(db, now, limit)
+  return repo.deleteIdempotencyKeysBefore(db, now, limit)
 }
 
 /**
@@ -98,10 +101,10 @@ export async function deliverOutbox(
 
   if (options.ids && !options.ids.length) return report
   const started = Date.now()
-  for (const message of await repo.findDueMessages(db, now, options.limit ?? 25, options)) {
+  for (const message of await outboxRepo.dueMessages(db, now, options.limit ?? 25, options)) {
     if (Date.now() - started >= (options.budgetMs ?? 20_000)) break
     const current = options.now ?? new Date()
-    const claim = await repo.claimMessage(db, message.id, new Date(current.getTime() + OUTBOX_CLAIM_MS), current)
+    const claim = await outboxRepo.claimMessage(db, message.id, new Date(current.getTime() + OUTBOX_CLAIM_MS), current)
     if (!claim) {
       report.skipped++
       continue
@@ -111,21 +114,21 @@ export async function deliverOutbox(
       const handler = handlers[message.kind]
       if (!handler) throw new Error(`No handler for outbox messages of kind "${message.kind}"`)
       await handler({ id: message.id, tenantId: message.tenantId, kind: message.kind, payload: message.payload, attempt })
-      if (await repo.markSent(db, message.id, token, new Date())) report.sent++
+      if (await outboxRepo.markSent(db, message.id, token, new Date())) report.sent++
       else report.skipped++
     }
     catch (error) {
       const text = describeError(error)
       const final = attempt >= OUTBOX_MAX_ATTEMPTS
       if (final) {
-        if (await repo.markFailed(db, message.id, token, text)) report.failed++
+        if (await outboxRepo.markFailed(db, message.id, token, text)) report.failed++
         else {
           report.skipped++
           continue
         }
       }
       else {
-        if (await repo.markRetry(db, message.id, token, new Date((options.now ?? new Date()).getTime() + retryDelayMs(attempt)), text)) report.retried++
+        if (await outboxRepo.markRetry(db, message.id, token, new Date((options.now ?? new Date()).getTime() + retryDelayMs(attempt)), text)) report.retried++
         else {
           report.skipped++
           continue
@@ -137,35 +140,38 @@ export async function deliverOutbox(
   return report
 }
 
-/** Internal scheduled-job progress, never an account/tenant preference. */
 /** Audit rows by action, newest first (the console's Activity, D191). */
-export const listAuditEvents = repo.listAuditEvents
+export const listAuditEvents = auditRepo.listAuditEvents
 
 /** System health (P4, D192): each job's latest outcome, and unsent outbox messages per kind and cafe. */
-export const recordJobRun = repo.recordJobRun
-export const jobRunRows = repo.jobRunRows
-export const outboxHealth = repo.outboxHealth
+export async function recordJobRun(db: Db, job: string, outcome: 'success' | 'failure', now: Date): Promise<void> {
+  await db.batch([jobsRepo.upsertJobRunStatement(db, job, outcome, now)])
+}
+export const jobRunRows = jobsRepo.listJobRuns
+export const outboxHealth = outboxRepo.outboxHealth
 
-export const readJobCursor = repo.readJobCursor
-export const saveJobCursor = repo.saveJobCursor
-export const jobProgress = repo.jobProgress
-export const oldestDueOutbox = repo.oldestDueOutbox
+export const readJobCursor = jobsRepo.currentJobCursor
+export async function saveJobCursor(db: Db, job: string, cursor: string | null, result: { processed?: number, failures?: number, now?: Date } = {}): Promise<void> {
+  await db.batch([jobsRepo.upsertJobCursorStatement(db, job, cursor, result, result.now ?? new Date())])
+}
+export const jobProgress = jobsRepo.findJobProgress
+export const oldestDueOutbox = outboxRepo.oldestDueOutbox
 
 /** Bounded maintenance; zero retention means keep sent metadata until policy is configured. */
 export async function maintainOutbox(db: Db, options: { now?: Date, limit?: number, sentRetentionDays?: number } = {}) {
   const now = options.now ?? new Date()
   const limit = options.limit ?? 500
-  const redacted = await repo.redactExpiredMail(db, now, limit)
+  const redacted = await outboxRepo.redactExpiredMail(db, now, limit)
   const days = options.sentRetentionDays ?? 0
   const removed = Number.isInteger(days) && days > 0
-    ? await repo.deleteSentOutboxBefore(db, new Date(now.getTime() - days * 86400_000), limit)
+    ? await outboxRepo.deleteSentOutboxBefore(db, new Date(now.getTime() - days * 86400_000), limit)
     : 0
   return { redacted, removed }
 }
 
 /** Optional production readiness signal; the deployment decides which jobs must be running. */
 export async function isJobCurrent(db: Db, job: string, maxAgeSeconds: number, now = new Date()): Promise<boolean> {
-  const progress = await repo.jobProgress(db, job)
+  const progress = await jobsRepo.findJobProgress(db, job)
   const at = progress?.succeededAt
   // A concurrent run may finish after this request captured `now`; that is fresh success.
   return Boolean(at && now.getTime() - at.getTime() <= maxAgeSeconds * 1000)

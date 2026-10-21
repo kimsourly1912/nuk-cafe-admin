@@ -26,8 +26,7 @@ const CODE_FAILED_ACTION = 'tenant.support.code-failed'
 
 // --- The owner's side (`/api/c/<slug>/admin/support`) ---
 
-async function toGrants(db: Db, tenantId: string, rows: GrantRow[], now: Date): Promise<SupportGrant[]> {
-  const visits = await repo.visitsOf(db, tenantId, rows.map(row => row.id))
+async function toGrants(db: Db, rows: GrantRow[], visits: repo.VisitRow[], now: Date): Promise<SupportGrant[]> {
   const people = await accountIdentities(db, [...rows.flatMap(row => [row.grantedBy, row.endedBy ?? '']), ...visits.map(visit => visit.userId)].filter(Boolean))
   const person = (id: string): SupportPerson => ({ id, name: people.get(id)?.name ?? null })
   return rows.map(row => ({
@@ -51,7 +50,8 @@ async function toGrants(db: Db, tenantId: string, rows: GrantRow[], now: Date): 
 
 /** The grant in force and the latest ten, with who looked and when. */
 export async function getCafeSupport(db: Db, tenantId: string, now = new Date()): Promise<CafeSupport> {
-  const history = await toGrants(db, tenantId, await repo.latestGrants(db, tenantId, 10), now)
+  const rows = await repo.historyRows(db, tenantId, 10)
+  const history = await toGrants(db, rows.grants, rows.visits, now)
   return { active: history.find(grant => grant.active) ?? null, history }
 }
 

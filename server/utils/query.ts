@@ -1,4 +1,4 @@
-import { and, asc, eq, max, or, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, max, or, sql } from 'drizzle-orm'
 import type { AnyColumn, SQL } from 'drizzle-orm'
 import type { SQLiteSelect, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import type { Db, Statement } from './batch'
@@ -24,6 +24,11 @@ export interface PageQuery {
 }
 
 // --- Conditions ---
+
+/** A chosen column in a growing string set, bound once to preserve one query/snapshot with other lists. */
+export function inJsonArray(column: AnyColumn, values: readonly string[]): SQL {
+  return inArray(column, sql`(select value from json_each(${JSON.stringify([...new Set(values)])}))`)
+}
 
 /** The cafe's rows of `table`, and every other condition given (`undefined` ones are skipped). */
 export function inTenant(table: TenantTable, tenantId: string, ...conditions: (SQL | undefined)[]): SQL {

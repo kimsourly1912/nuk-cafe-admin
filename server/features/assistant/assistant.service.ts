@@ -49,8 +49,8 @@ export function usageResult(outcome: UsageResult['outcome'], usage?: LanguageMod
   }
 }
 
-export async function finishUsage(db: Db, id: string, result: UsageResult): Promise<void> {
-  await repo.finishUsage(db, id, result)
+export async function finishUsage(db: Db, tenantId: string, id: string, result: UsageResult): Promise<void> {
+  await db.batch([repo.finishUsageStatement(db, tenantId, id, result)])
 }
 
 /** Daily: removes usage rows past their 90 days. */
@@ -144,11 +144,11 @@ export async function chatWithAssistant(db: Db, actor: Actor, settings: Assistan
     maxRetries: 1,
     abortSignal: AbortSignal.timeout(CHAT_TIMEOUT_MS),
     onFinish: ({ totalUsage }) => {
-      context.waitUntil(finishUsage(db, usageId, usageResult('ok', totalUsage)))
+      context.waitUntil(finishUsage(db, actor.tenantId, usageId, usageResult('ok', totalUsage)))
     },
     onError: ({ error }) => {
       context.onProviderError(error)
-      context.waitUntil(finishUsage(db, usageId, usageResult('error')))
+      context.waitUntil(finishUsage(db, actor.tenantId, usageId, usageResult('error')))
     },
   })
 }

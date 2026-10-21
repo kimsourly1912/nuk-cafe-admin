@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
 import type { Db } from '#server/utils/batch'
+import { inJsonArray } from '#server/utils/query'
 import { sellable } from './items.repository'
 import { menuAvailabilityRules, menuAvailabilityWindows, menuCategories, menuCategoryAvailability, menuItemAvailability, menuItemModifierGroups, menuItemModifierPrices, menuItemOptionSets, menuItems, menuItemVariations, menuModifierGroups, menuModifiers, menuOptionSets, menuOptionValues } from './menu.schema'
 
@@ -14,7 +15,7 @@ const activeItem = (tenantId: string, itemIds?: readonly string[]) => and(
   eq(menuItems.tenantId, tenantId),
   eq(menuItems.status, 'active'),
   // One JSON bind keeps even a large internal selection within D1's parameter limit.
-  itemIds === undefined ? undefined : sql`${menuItems.id} in (select value from json_each(${JSON.stringify([...new Set(itemIds)])}))`,
+  itemIds === undefined ? undefined : inJsonArray(menuItems.id, itemIds),
 )
 
 export function activeCategories(db: Db, tenantId: string) {

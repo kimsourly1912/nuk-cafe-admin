@@ -14,7 +14,7 @@ import type { Db } from '#server/utils/batch'
 import { deleteOldest, insertAll, requireCount, requireOneChange, runBatch, updateAtVersion, tryGuardedBatch } from '#server/utils/batch'
 import { byId, byName, firstRow, hasAny, inTenant, nextPosition, readPage } from '#server/utils/query'
 import { menuOptionSets, menuOptionValues, menuPromotions } from '#server/features/menu/menu.schema'
-import { migrationFiles, addBranchStaff, createUser, insertBranch } from '#server/tests/support/db'
+import { migrationFiles, addBranchStaff, createUser, ensureTenant, insertBranch } from '#server/tests/support/db'
 import type { StaffListQuery } from '#shared/contracts/staff'
 import { branches, user } from '#server/db/tables'
 import { recordJobRun } from '#server/features/platform'
@@ -33,7 +33,13 @@ import * as readyRepo from '#server/features/notifications/notifications.custome
 import * as linkRepo from '#server/features/notifications/notifications.links.repository'
 import * as channelLinkRepo from '#server/features/marketing/marketing.links.repository'
 import * as postRepo from '#server/features/marketing/marketing.posts.repository'
-import * as outboxRepo from '#server/features/platform/platform.repository'
+import * as outboxRepo from '#server/features/platform/platform.outbox.repository'
+import * as mediaRepo from '#server/features/media/media.repository'
+import { mediaAssets, mediaObjectDeletions } from '#server/features/media/media.schema'
+import * as supportRepo from '#server/features/support/support.repository'
+import { supportGrants, supportVisits } from '#server/features/support/support.schema'
+import * as usageRepo from '#server/features/assistant/assistant.repository'
+import { listAuditEvents as auditRows } from '#server/features/platform/platform.audit.repository'
 
 // Real D1 (workerd, through wrangler's platform proxy) with the app's Drizzle D1 adapter. The
 // other server tests run on libsql, which accepts a LIKE pattern of 50,000 bytes where D1 refuses
@@ -356,4 +362,44 @@ it('runs the message snapshot, shared connect codes and all four token queues on
   expect(await outboxRepo.claimMessage(db, id, until, now)).toBeUndefined()
   expect(await outboxRepo.markSent(db, id, 'stale', now)).toBe(false)
   expect(await outboxRepo.markSent(db, id, outbox.claimToken, now)).toBe(true)
+}, 60_000)
+
+it('maps media/support snapshots and typed expiry/quota guards on real D1 (D194 step 7)', async () => {
+  const now = new Date('2026-10-21T03:00:00Z')
+  const old = new Date(now.getTime() - 2 * 86400_000)
+  const until = new Date(now.getTime() + 60_000)
+  const owner = await createUser(db, 'remaining-d1@example.com', 'Remaining owner')
+  const edit = { focus: { x: 0.5, y: 0.5 }, card: { zoom: 1, x: 0.5, y: 0.5, adjusted: false }, detail: { zoom: 1, x: 0.5, y: 0.5, adjusted: false }, fill: '#ffffff' }
+  const a = 'd194-step7-a'
+  const b = 'd194-step7-b'
+  for (const tenantId of [a, b]) {
+    await ensureTenant(db, tenantId)
+    await db.batch([
+      db.insert(mediaAssets).values({ id: tenantId, tenantId, objectKey: `${tenantId}/source`, mimeType: 'image/webp', byteSize: 17, sha256: 'a'.repeat(64), edit, stateChangedAt: old }),
+      db.insert(mediaAssets).values({ id: `${tenantId}-card`, tenantId, parentId: tenantId, objectKey: `${tenantId}/card`, variant: 'card', mimeType: 'image/webp', byteSize: 5, sha256: 'b'.repeat(64) }),
+      db.insert(supportGrants).values({ id: tenantId, tenantId, grantedBy: owner.id, grantedAt: now, expiresAt: until }),
+      db.insert(supportVisits).values({ id: tenantId, tenantId, grantId: tenantId, userId: owner.id, sessionId: 'remaining-session', openedAt: now, expiresAt: until }),
+      ...usageRepo.reserveUsageStatements(db, { id: tenantId, tenantId, userId: owner.id, day: '2026-10-21', feature: 'chat', provider: 'openai', model: 'test', at: now }, 1),
+    ])
+  }
+  const images = await mediaRepo.imageRows(db, a, [a, b])
+  expect(images.assets).toMatchObject([{ id: a, edit, stateChangedAt: old }])
+  expect(images.variants).toEqual([{ parentId: a, variant: 'card', objectKey: `${a}/card` }])
+  const history = await supportRepo.historyRows(db, a, 10)
+  expect(history.grants).toMatchObject([{ id: a, grantedAt: now, expiresAt: until }])
+  expect(history.visits).toMatchObject([{ id: a, grantId: a, openedAt: now, closedAt: null }])
+  expect(await tryGuardedBatch(db, [supportRepo.requireGrantActive(db, a, b, now)])).toBe(false)
+  expect(await tryGuardedBatch(db, [supportRepo.requireGrantActive(db, a, a, until)])).toBe(false)
+  expect(await tryGuardedBatch(db, [supportRepo.requireNoActiveGrant(db, a, until)])).toBe(true)
+  const excess = usageRepo.reserveUsageStatements(db, { id: 'step7-excess', tenantId: a, userId: owner.id, day: '2026-10-21', feature: 'chat', provider: 'openai', model: 'test', at: now }, 1)
+  expect(await tryGuardedBatch(db, [excess[0]!, ...excess.slice(1)])).toBe(false)
+  await db.batch([usageRepo.finishUsageStatement(db, a, b, { outcome: 'ok', inputTokens: 5, outputTokens: 2, cachedInputTokens: null })])
+  expect(await usageRepo.countUsage(db, b, owner.id, '2026-10-21')).toBe(1)
+  expect(await tryGuardedBatch(db, [mediaRepo.queueExpiredAssetObjectsStatement(db, a, b, now), mediaRepo.deleteExpiredAssetStatement(db, a, b, now), requireOneChange(db)])).toBe(false)
+  expect(await tryGuardedBatch(db, [mediaRepo.queueExpiredAssetObjectsStatement(db, a, a, now), mediaRepo.deleteExpiredAssetStatement(db, a, a, now), requireOneChange(db)])).toBe(true)
+  expect((await db.select().from(mediaObjectDeletions)).filter(row => row.tenantId === a).map(row => row.objectKey).sort()).toEqual([`${a}/card`, `${a}/source`])
+  const actions = [...Array.from({ length: 201 }, (_, i) => `unknown-${i}`), 'tenant.create']
+  const page = await auditRows(db, { actions, limit: 1, offset: 0 })
+  expect(page.total).toBeGreaterThan(0)
+  expect(page.rows).toMatchObject([{ action: 'tenant.create', at: expect.any(Date) }])
 }, 60_000)

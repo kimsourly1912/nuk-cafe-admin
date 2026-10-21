@@ -2,7 +2,7 @@ import { and, asc, count, desc, eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Db } from '#server/utils/batch'
 import { deleteOldest, insertAll, replaceAll, requireCount, requireOneChange, runBatch, updateAtVersion } from '#server/utils/batch'
-import { atVersion, byId, byName, firstRow, hasAny, inTenant, nextPosition, readPage, searchIn, withPage, withStatus } from '#server/utils/query'
+import { atVersion, byId, byName, firstRow, hasAny, inJsonArray, inTenant, nextPosition, readPage, searchIn, withPage, withStatus } from '#server/utils/query'
 import { createTestDb, ensureTenant } from '#server/tests/support/db'
 import { menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
 
@@ -34,6 +34,12 @@ beforeEach(async () => {
 })
 
 describe('conditions', () => {
+  it('binds growing string sets once, keeping exact, empty and duplicate membership semantics', async () => {
+    const ids = [...Array.from({ length: 201 }, (_, i) => `missing-${i}`), 's1', 's1', 't1', 'S2']
+    const found = await db.select(setColumns).from(menuOptionSets).where(inTenant(menuOptionSets, 'ours', inJsonArray(menuOptionSets.id, ids)))
+    expect(found.map(row => row.id)).toEqual(['s1'])
+    expect(await db.select(setColumns).from(menuOptionSets).where(inJsonArray(menuOptionSets.id, []))).toEqual([])
+  })
   it('inTenant, byId and atVersion name the cafe: another cafe\'s id matches nothing', async () => {
     expect((await setsOf('ours')).map(row => row.id)).toEqual(['s1', 's2', 's3', 's4'])
     expect(await firstRow(db.select(setColumns).from(menuOptionSets).where(byId(menuOptionSets, 'ours', 's2')))).toMatchObject({ name: 'Milk' })

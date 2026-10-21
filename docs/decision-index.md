@@ -7,7 +7,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Domain | Search IDs / terms |
 |---|---|
 | Replaced Spring/SPA/SDK | D1–D5; superseded by D39, D43, D71, D95 |
-| API/server architecture and integrity | D39–D45, D52, D71, D116, D194; version, idempotency, guard, audit, repository, shared owner conditions, token queues and connect codes |
+| API/server architecture and integrity | D39–D45, D52, D71, D116, D194; version, idempotency, guard, audit, repository, shared owner conditions, token queues, connect codes, joined snapshots and JSON-bound sets |
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173 |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166 |
 | Tenancy and permissions | D134–D146, D186–D193; organization, tenant, branch, platform console |

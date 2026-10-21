@@ -1,5 +1,6 @@
 export { auditStatement, deliverOutbox, jobRunRows, listAuditEvents, outboxHealth, recordJobRun, expireIdempotencyKeys, isJobCurrent, jobProgress, maintainOutbox, oldestDueOutbox, outboxStatement, readJobCursor, saveJobCursor, withIdempotency } from './platform.service'
 export { idempotencyKeyRequired } from './platform.errors'
 export { OUTBOX_MAX_ATTEMPTS, retryDelayMs } from './platform.rules'
-export type { JobRunRow, OutboxHealthRow } from './platform.repository'
+export type { JobRunRow } from './platform.jobs.repository'
+export type { OutboxHealthRow } from './platform.outbox.repository'
 export type { AuditActor, AuditEntry, AuditFilter, AuditRow, DeliveryReport, IdempotencyScope, IdempotentWork, OutboxHandler } from './platform.types'

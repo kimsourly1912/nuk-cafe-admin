@@ -92,8 +92,22 @@ describe('uploading', () => {
   })
 
   it('removes the object again when the row can\'t be written', async () => {
+    let batches = 0
     const broken = new Proxy(db, {
-      get: (target, key, receiver) => key === 'batch' ? async () => { throw new Error('D1 unavailable') } : Reflect.get(target, key, receiver),
+      get(target, key, receiver) {
+        if (key === 'batch') {
+          return async (statements: Parameters<Db['batch']>[0]) => {
+            batches++
+            // The first batch makes provisional keys durable; fail the asset commit after R2 put.
+            if (batches === 2) {
+              expect(store.objects.size).toBe(1)
+              throw new Error('D1 unavailable')
+            }
+            return target.batch(statements)
+          }
+        }
+        return Reflect.get(target, key, receiver)
+      },
     })
     await expect(uploadImage(broken, store, actor, { type: 'image/png', data: PNG as Uint8Array<ArrayBuffer> })).rejects.toThrow('D1 unavailable')
     expect(store.objects.size).toBe(0)

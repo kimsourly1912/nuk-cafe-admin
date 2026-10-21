@@ -9,7 +9,7 @@ import { expectApiError } from '#server/tests/support/failure'
 import { auditEvents, idempotencyKeys, outboxMessages } from '#server/features/platform/platform.schema'
 import { auditStatement, deliverOutbox, expireIdempotencyKeys, outboxStatement, withIdempotency } from '#server/features/platform/platform.service'
 import { canonicalJson, OUTBOX_CLAIM_MS, OUTBOX_MAX_ATTEMPTS, retryDelayMs } from '#server/features/platform/platform.rules'
-import * as outboxRepo from '#server/features/platform/platform.repository'
+import * as outboxRepo from '#server/features/platform/platform.outbox.repository'
 import type { OutboxHandler } from '#server/features/platform/platform.types'
 
 let db: Db
