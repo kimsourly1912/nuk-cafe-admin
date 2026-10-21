@@ -39,11 +39,12 @@ describe('promotions on the customer menu', () => {
     expect(problems).toEqual([])
   })
 
-  it('opens an offer with its items; the item, the order and Review order show the saving', async () => {
+  it('opens an offer with its items by category; the item, the order and Review order show the saving', async () => {
     const { page } = await open()
     await page.getByRole('region', { name: 'Offers' }).getByRole('button', { name: 'Bean week' }).click()
     const offer = page.getByRole('dialog', { name: 'Bean week' })
-    await offer.getByRole('list', { name: 'Items in Bean week' }).getByRole('button', { name: new RegExp(cafe.itemName) }).click()
+    const beans = offer.getByRole('region', { name: 'Beans' })
+    await beans.getByRole('list', { name: 'Beans in Bean week' }).getByRole('button', { name: new RegExp(cafe.itemName) }).click()
     const detail = page.getByRole('dialog', { name: cafe.itemName })
     await detail.getByText('Bean week').waitFor()
     expect(await detail.locator('s').textContent()).toContain('$3.00')

@@ -25,10 +25,16 @@ const stateText = { done: 'done', current: 'now', upcoming: 'not yet' } as const
       <!-- The line to the previous step, behind the circles. -->
       <span
         v-if="index > 0"
-        class="absolute top-3.5 right-1/2 h-0.5 w-full -translate-y-1/2"
+        class="absolute top-3.5 right-1/2 h-0.5 w-full -translate-y-1/2 overflow-hidden"
         :class="step.state === 'upcoming' ? 'bg-accented' : 'bg-primary'"
         aria-hidden="true"
-      />
+      >
+        <!-- Light running along the line into the current step (off for reduced motion). -->
+        <span
+          v-if="step.state === 'current'"
+          class="absolute inset-y-0 start-0 w-1/2 bg-linear-to-r from-transparent via-primary-200 to-transparent motion-safe:animate-line-flow"
+        />
+      </span>
       <span
         class="relative z-10 flex size-7 items-center justify-center rounded-full"
         :class="{
@@ -43,10 +49,11 @@ const stateText = { done: 'done', current: 'now', upcoming: 'not yet' } as const
           name="i-lucide-check"
           class="size-4"
         />
-        <span
-          v-else-if="step.state === 'current'"
-          class="size-2 rounded-full bg-default"
-        />
+        <template v-else-if="step.state === 'current'">
+          <!-- A soft ping out of the current step (off for reduced motion). -->
+          <span class="absolute inset-0 rounded-full bg-primary/50 motion-safe:animate-soft-ping" />
+          <span class="size-2 rounded-full bg-default" />
+        </template>
       </span>
       <span
         class="text-xs"

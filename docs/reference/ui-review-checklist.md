@@ -62,6 +62,7 @@ For each screen and overlay, show and test the applicable [states](./page-patter
 - [ ] Saving (loading control, locked inputs), validation next to fields
 - [ ] Errors: each leaves as soon as it's fixed, a rule across fields too (`useFormErrorRecheck`); a checkbox or switch inside a group's field has its own `UFormField` (no shared id, no borrowed red) ([ui §17](./ui.md#forms-and-their-errors))
 - [ ] A failed submit scrolls to and focuses the first invalid field, also one out of view: `@error="focusFirstInvalid"` on the `UForm` ([ui §17](./ui.md#forms-and-their-errors))
+- [ ] A page banner stays while its action is retried (cleared on success, a new answer or a changed page, never when the request starts), and its action buttons are disabled while in flight: no layout shift on press ([ui §17](./ui.md#page-banners-and-retries))
 - [ ] A control that saves when changed moves at once, shows its own spinner, never blocks the others, and goes back if refused ([ui §17](./ui.md#controls-that-save-when-changed))
 - [ ] Conflict (Reload inside the surface, input kept)
 - [ ] Archived / read-only (why, what still works, restore)

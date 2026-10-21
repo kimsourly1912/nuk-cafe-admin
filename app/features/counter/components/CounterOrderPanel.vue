@@ -281,7 +281,7 @@ const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
           </div>
           <p
             v-if="savingsOf(order.lines)"
-            class="-mt-2 text-end text-sm text-muted"
+            class=" text-end text-sm text-muted"
           >
             Includes {{ formatMinor(savingsOf(order.lines)) }} off from promotions
           </p>
@@ -479,8 +479,8 @@ const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
         v-if="order.status === 'awaiting_payment' || order.status === 'preparing'"
         label="Cancel order"
         color="neutral"
-        variant="link"
-        class="self-center"
+        variant="ghost"
+        block
         :disabled="submitting || busy"
         @click="emit('cancel', order)"
       />

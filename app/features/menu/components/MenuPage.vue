@@ -85,7 +85,6 @@ const orderType = computed(() => {
 
 const sections = computed(() => menuSections(menu.value))
 const allItems = computed(() => menuItems(sections.value))
-const itemsById = computed(() => new Map(allItems.value.map(item => [item.id, item])))
 /** Live promotions at this branch (M1, D163): the offers above the menu. */
 const offers = computed(() => menu.value?.promotions ?? [])
 
@@ -517,7 +516,7 @@ watch(detailOpen, (open) => {
             v-if="offers.length"
             ref="offersPanel"
             :promotions="offers"
-            :items="itemsById"
+            :sections="sections"
             @open-item="openItem"
           />
           <div

@@ -94,6 +94,7 @@ Use Nuxt UI's `--ui-radius` (the default): controls and badges get the component
 - **Checkboxes, radios and switches** (16–20px boxes) get a larger **invisible** hit area below `sm`, set once in `app/app.config.ts` (a `max-sm:after:` inset on the control): 44px to tap, no visual change.
 - **Pages and components never add `min-h-*`/`min-w-*` or size props for touch** (D74), and there's no broad CSS selector for it. A size change is a theme change in `app.config.ts`, for every page.
 - **Where a target should be large, make it large by content, not by overrides:** a record's row is one button holding its name and meta line ([compact row composition](./page-patterns.md#compact-row-composition)), which is naturally 44px or taller.
+- **A choice among a few options** (an item's sizes, milks, add-ons) is a `variant="card"` `URadioGroup` or `UCheckbox` with `p-3`, rows `gap-2` apart: the whole row, price included, is the target, and the checked row is tinted. Each group is a block: a semibold heading with its rule badge, a divider between groups. Put a group's spacing on a wrapper, not the `fieldset`: its padding ignores the `legend`. Example: `MenuItemDetail.vue`.
 - Adjacent targets keep at least `gap-2` (8px) between their hit areas on compact.
 - A record in a list has **one large content target** that opens it, with its actions trigger beside it as a sibling, never inside it ([page-patterns → Compact row composition](./page-patterns.md#compact-row-composition)).
 
@@ -214,6 +215,7 @@ Pick by **where the items come from**, not by how many there are today:
 - Tabs anywhere else (a section switcher in a page body, a panel) keep Nuxt UI's `link` line, full width.
 - A page's tabs are kept in the URL with [`useUrlTab`](./ui-helpers.md#useurltab) (`?tab=tables`): a reload or a shared link opens the same tab, Back still leaves the page, and switching never asks about unsaved changes.
 - **Tabs that don't fit scroll (D128):** every `UTabs` row scrolls sideways with its scrollbar hidden; a label is never cut or shortened. The active tab is brought to the middle of the row when it changes (a tap, the keyboard, the URL) and on load ([`useCenteredTab`](./ui-helpers.md#usecenteredtab)); only the row scrolls, never the page.
+- **Lists that scroll in their own box** (the order panel's lines) use the `scrollbar-hover` utility (`tailwind.css`): the thumb fades in on hover or keyboard focus and is transparent otherwise. The thin gutter is always reserved, so content never shifts. Use it on inner scroll areas, not the page.
 - The sidebar's active item is the section the page is in, also on pages under it (`/admin/branches/<id>`, `/admin/products/new`): `withActiveItem` in `app/utils/navigation-active.ts`, used by the layout. Features add nothing.
 
 ## 16a. List toolbars and modes (owner, 2026-10-02, D129)
@@ -244,6 +246,12 @@ How controls behave, so every screen behaves the same. Each rule names what enfo
 - **A removed or moved row takes its errors with it.** A row's error is named by its position (`values.2`), so removing a row must not leave the error for the row that moves into its place. Remove and move rows with `useFormRowErrors` ([forms → Rows and their errors](./forms.md#rows-and-their-errors), D171); a list that removes rows any other way is a bug.
 - **A failed submit goes to the first error.** The first invalid field, highest on the page, scrolls into the middle of the view and takes focus, wherever it is (the 15th value of a list, a field in a scrolled modal): `@error="focusFirstInvalid"` on every `UForm` ([forms → Errors on submit](./forms.md#errors-on-submit), D178).
 - **A control inside a group's field gets its own `UFormField`.** A `UCheckbox` or `USwitch` takes the id and the error colour of the nearest field: inside the group's field (Add-ons), every label ticked the first box and every box turned red with the group's error. Give each its own `UFormField`, named after its value (`modifiers.1.isDefault`); a checkbox list that *is* the field (a promotion's branches) keeps the group's colour, with an `id` per box.
+
+### Page banners and retries
+
+- **A page banner never leaves for the length of a retry.** An error or warning banner above the content (Review order's refusal, "Pay for your waiting order first") stays on screen while the same action is sent again. Clearing it on press collapses the banner, the content below jumps up, and it jumps back when the server refuses again: the page shakes. The button's own loading state says that something is happening.
+- **It is replaced by the next answer, or dropped when it stops being true:** a success, a new failure (the text changes in place), or the page's state moving on (new prices, a fresh quote). Clear it in those places, never at the start of the request. Review order: `useCheckout.place()`.
+- **Its action buttons ("Try again", "Switch to pickup") are disabled while the action is in flight**, so a second press can't start a second request.
 
 ### Controls that save when changed
 

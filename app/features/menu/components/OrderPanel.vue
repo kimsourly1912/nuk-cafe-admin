@@ -43,7 +43,7 @@ const emit = defineEmits<{ 'set-quantity': [key: string, quantity: number], 'set
         @clear="emit('clear')"
       />
     </div>
-    <div class="min-h-0 flex-1 overflow-y-auto p-4">
+    <div class="scrollbar-hover min-h-0 flex-1 overflow-y-auto p-4">
       <OrderLines
         :cart="cart"
         @set-quantity="(key, quantity) => emit('set-quantity', key, quantity)"

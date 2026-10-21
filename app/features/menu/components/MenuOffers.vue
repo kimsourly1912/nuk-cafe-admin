@@ -8,12 +8,13 @@
 import { AppDrawer, UModal } from '#components'
 import type { PublicPromotion } from '#shared/contracts/menu-promotions'
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
-import { priceOf } from '../utils/menu'
+import type { MenuSection } from '../utils/menu'
+import { groupItemsByCategory, priceOf } from '../utils/menu'
 
 const props = defineProps<{
   promotions: PublicPromotion[]
-  /** Every item on the menu now, by id. */
-  items: ReadonlyMap<string, PublicMenuItem>
+  /** The menu now: an offer's items are grouped by the category they sit in. */
+  sections: MenuSection[]
 }>()
 const emit = defineEmits<{ 'open-item': [item: PublicMenuItem] }>()
 
@@ -24,7 +25,7 @@ const { isCompact } = useLayoutContext()
 const Shell = computed(() => (isCompact.value ? AppDrawer : UModal))
 const open = ref(false)
 const shown = shallowRef<PublicPromotion>()
-const shownItems = computed(() => (shown.value?.itemIds ?? []).flatMap(id => props.items.get(id) ?? []))
+const shownGroups = computed(() => groupItemsByCategory(props.sections, shown.value?.itemIds ?? []))
 
 function show(promotion: PublicPromotion) {
   shown.value = promotion
@@ -63,7 +64,7 @@ function openItem(item: PublicMenuItem) {
         class="w-[85%] shrink-0 snap-start sm:w-auto"
       >
         <article class="relative flex h-full gap-3 rounded-lg border border-default bg-default p-3">
-          <div class="aspect-[4/5] w-20 shrink-0 overflow-hidden rounded-md bg-elevated">
+          <div class="aspect-4/5 w-20 shrink-0 overflow-hidden rounded-md bg-elevated">
             <img
               v-if="promotion.posterUrl"
               :src="promotion.posterUrl"
@@ -141,40 +142,51 @@ function openItem(item: PublicMenuItem) {
               class="text-sm text-muted"
             >{{ until(shown.endsOn) }}</span>
           </div>
-          <ul
-            class="divide-y divide-default"
-            :aria-label="`Items in ${shown.name}`"
+          <section
+            v-for="group in shownGroups"
+            :key="group.id"
+            :aria-labelledby="`offer-group-${group.id}`"
+            class="space-y-2"
           >
-            <li
-              v-for="item in shownItems"
-              :key="item.id"
+            <h3
+              :id="`offer-group-${group.id}`"
+              class="text-sm font-semibold text-highlighted"
             >
-              <button
-                type="button"
-                class="flex w-full items-center gap-3 py-2.5 text-left"
-                @click="openItem(item)"
+              {{ group.name }}
+            </h3>
+            <ul
+              class="grid grid-cols-2 gap-3"
+              :aria-label="`${group.name} in ${shown.name}`"
+            >
+              <li
+                v-for="item in group.items"
+                :key="item.id"
               >
-                <MenuItemImage
-                  :image="item.image"
-                  :src="item.imageUrl"
-                  usage="card"
-                  class="size-12 rounded-md"
-                />
-                <span class="min-w-0 flex-1 truncate font-medium text-highlighted">{{ item.name }}</span>
-                <span class="flex shrink-0 items-baseline gap-2 tabular-nums">
-                  <span class="font-semibold text-error">{{ formatMinor(priceOf(item).minor) }}</span>
-                  <s
-                    v-if="priceOf(item).regularMinor !== null"
-                    class="text-sm text-muted"
-                  ><span class="sr-only">was </span>{{ formatMinor(priceOf(item).regularMinor) }}</s>
-                </span>
-                <UIcon
-                  name="i-lucide-chevron-right"
-                  class="size-4 shrink-0 text-dimmed"
-                />
-              </button>
-            </li>
-          </ul>
+                <button
+                  type="button"
+                  class="flex h-full w-full items-start gap-3 rounded-lg border border-default p-2 text-left focus-visible:outline-2 focus-visible:outline-primary"
+                  @click="openItem(item)"
+                >
+                  <MenuItemImage
+                    :image="item.image"
+                    :src="item.imageUrl"
+                    usage="card"
+                    class="size-10 shrink-0 rounded-md"
+                  />
+                  <span class="flex min-w-0 flex-1 flex-col">
+                    <span class="line-clamp-2 text-sm font-medium text-highlighted">{{ item.name }}</span>
+                    <span class="flex flex-wrap items-baseline gap-x-1.5 text-sm tabular-nums">
+                      <span class="font-semibold text-error">{{ formatMinor(priceOf(item).minor) }}</span>
+                      <s
+                        v-if="priceOf(item).regularMinor !== null"
+                        class="text-xs text-muted"
+                      ><span class="sr-only">was </span>{{ formatMinor(priceOf(item).regularMinor) }}</s>
+                    </span>
+                  </span>
+                </button>
+              </li>
+            </ul>
+          </section>
         </div>
       </template>
     </component>

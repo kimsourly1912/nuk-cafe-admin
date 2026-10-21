@@ -32,7 +32,7 @@ const { name: cafeName, logoUrl } = useCafe()
 
 const mounted = useMounted()
 const checkout = useCheckout()
-const { cart, quote, change, placing, failure } = checkout
+const { cart, quote, change, placing, placed, failure } = checkout
 const { account, guest, known } = useCustomerAccount()
 const route = useRoute()
 
@@ -132,10 +132,10 @@ useSeoMeta({ robots: 'noindex' })
       </h1>
 
       <div
-        v-if="!mounted"
+        v-if="!mounted || placed"
         class="mt-6 space-y-3"
         aria-busy="true"
-        aria-label="Loading your order"
+        :aria-label="placed ? 'Opening your order' : 'Loading your order'"
       >
         <USkeleton class="h-16 w-full" />
         <USkeleton class="h-40 w-full" />
@@ -179,9 +179,9 @@ useSeoMeta({ robots: 'noindex' })
               icon="i-lucide-circle-alert"
               :title="failure.message"
               :actions="failure.kind === 'table'
-                ? [{ label: 'Switch to pickup', color: 'neutral', variant: 'outline', onClick: switchToPickup }]
+                ? [{ label: 'Switch to pickup', color: 'neutral', variant: 'outline', disabled: placing, onClick: switchToPickup }]
                 : failure.kind === 'retry'
-                  ? [{ label: 'Try again', color: 'neutral', variant: 'outline', onClick: submit }]
+                  ? [{ label: 'Try again', color: 'neutral', variant: 'outline', disabled: placing, onClick: submit }]
                   : undefined"
             />
           </div>

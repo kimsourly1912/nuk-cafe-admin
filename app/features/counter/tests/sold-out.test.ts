@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SoldOutList } from '#shared/contracts/menu-sold-out'
 import type { PublicMenu, PublicMenuItem } from '#shared/contracts/public-menu'
-import { filterSoldOutRows, rowName, soldOutCategories, soldOutRows } from '../utils/sold-out'
+import { filterSoldOutRows, groupSoldOutRows, rowName, soldOutCategories, soldOutRows } from '../utils/sold-out'
 
 const item = (id: string, name: string, versions: [string, string, boolean][]): PublicMenuItem => ({
   id, name, description: '', imageUrl: null, image: null, optionSets: [], modifierGroups: [],
@@ -50,5 +50,24 @@ describe('the Sold out page\'s rows (D105)', () => {
     const stale = { ...list, variations: [] }
     expect(soldOutRows(menu, stale).map(r => r.soldOut)).toEqual([false, false, false])
     expect(soldOutRows(menu, null).map(r => r.soldOut)).toEqual([false, true, false])
+  })
+})
+
+describe('the rows grouped by item', () => {
+  const rows = soldOutRows(menu, list)
+  const summary = (all: typeof rows) => groupSoldOutRows(all).map(g => [g.itemName, g.rows.map(r => r.label), g.single])
+
+  it('versions of an item together under its name; an item without versions is a single row', () => {
+    expect(summary(rows)).toEqual([['Iced Latte', ['Small', 'Large'], false], ['Banana Bread', [''], true]])
+  })
+
+  it('groups what is shown: filtered rows only, and an item with one version left keeps its heading', () => {
+    const shown = filterSoldOutRows(rows, { search: '', category: 'all', onlySoldOut: true })
+    expect(summary(shown)).toEqual([['Iced Latte', ['Large'], false]])
+  })
+
+  it('two items with the same name stay apart', () => {
+    const twin = rows.map(r => (r.variationId === 'v3' ? { ...r, itemId: 'other', itemName: 'Iced Latte' } : r))
+    expect(groupSoldOutRows(twin).map(g => g.itemId)).toEqual(['latte', 'other'])
   })
 })

@@ -112,13 +112,15 @@ useSeoMeta({ robots: 'noindex' })
             In progress
           </h2>
           <ul class="space-y-3">
+            <!-- The card's own surface is on the item, so the link's hover tints it like a Past row's. -->
             <li
               v-for="order in list.inProgress"
               :key="order.id"
+              class="rounded-lg bg-default ring ring-default"
             >
               <NuxtLink
                 :to="link(order)"
-                class="flex items-center gap-4 rounded-lg bg-default p-4 ring ring-default transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:outline-primary"
+                class="flex items-center gap-4 rounded-lg p-4 transition-colors hover:bg-elevated/50 focus-visible:outline-2 focus-visible:outline-primary"
                 :aria-label="`Order ${formatPickupNumber(order.pickupNumber)}, ${statusBadge(order.status).label}`"
               >
                 <span

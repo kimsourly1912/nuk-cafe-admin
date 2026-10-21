@@ -62,7 +62,21 @@ export default defineAppConfig({
     switch: { slots: { base: 'max-sm:relative max-sm:after:absolute max-sm:after:-inset-x-1 max-sm:after:-inset-y-3' } },
     // Overlays (owner, 2026-10-13, D166, ui.md → Overlays): behind a modal, slide-over or drawer the
     // page is dimmed with black, in both modes (Nuxt UI's light `bg-elevated/75` barely dimmed it).
-    modal: { slots: { overlay: 'bg-black/50! dark:bg-black/60' } },
+    // A modal's header: the title and description leave room for the close button (absolutely placed,
+    // so long text ran under it), wrap long words, and grow with their lines. No minimum height (the
+    // default's centered a short title in it, and left a long one uneven padding): the text block is
+    // at least the button's height and centers within it, so a short title still lines up with the
+    // button and a long one has the header's padding all round.
+    modal: {
+      slots: {
+        overlay: 'bg-black/50! dark:bg-black/60',
+        header: 'min-h-auto items-start',
+        wrapper: 'flex min-h-8 min-w-0 flex-1 flex-col justify-center pe-10',
+        title: 'wrap-break-word',
+        description: 'wrap-break-word',
+        body: 'scrollbar-thin',
+      },
+    },
     slideover: { slots: { overlay: 'bg-black/50 dark:bg-black/60' } },
     // Drawers and sheets (D166): the spacing is each part's own padding, not the container's padding
     // and gap, so the body scrolls on its own between a fixed header and footer, its scrollbar at the
@@ -71,9 +85,11 @@ export default defineAppConfig({
       slots: {
         overlay: 'bg-black/50 dark:bg-black/60',
         container: 'gap-0 overflow-hidden p-0',
-        header: 'px-4 pt-4',
-        body: 'min-h-0 overflow-y-auto p-4',
+        header: 'p-4 min-h-auto items-start',
+        body: 'min-h-0 overflow-y-auto p-4 scrollbar-thin',
         footer: 'px-4 pb-[max(--spacing(4),env(safe-area-inset-bottom))]',
+        title: 'wrap-break-word',
+        description: 'wrap-break-word',
       },
     },
   },

@@ -4,12 +4,17 @@
 @layer base {
   button:not(:disabled),
   [role='button']:not(:disabled) {
-    cursor: pointer;
+    @apply cursor-pointer;
   }
 
   /* SearchInput has its own Clear button; Chromium would add a second one. */
   input[type='search']::-webkit-search-cancel-button {
-    appearance: none;
+    @apply appearance-none;
+  }
+
+  html,
+  body {
+    @apply scrollbar-thin;
   }
 }
 
@@ -80,9 +85,7 @@
 
   html,
   body {
-    background: #fff;
-    height: auto;
-    overflow: visible;
+    @apply bg-white h-auto overflow-visible;
   }
 }
 
@@ -123,6 +126,30 @@
 }
 
 /*
+ * A list that scrolls in its own box shows its scrollbar thumb only while hovered or focused, fading
+ * in and out. The thin gutter is always reserved (`scrollbar-gutter: stable`) and only the thumb's
+ * color changes, so nothing shifts. Keyboard focus inside shows it too. Touch and overlay scrollbars
+ * are unaffected; with reduced motion the thumb swaps without the fade.
+ */
+@utility scrollbar-hover {
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  /* The hidden thumb is the shown color with alpha 0, not `transparent` (which is black at alpha 0):
+     fading from black is what made the first hover flash dark. */
+  scrollbar-color: rgb(from var(--ui-border-accented) r g b / 0) transparent;
+  transition: scrollbar-color 250ms ease-in-out;
+
+  &:hover,
+  &:focus-within {
+    scrollbar-color: var(--ui-border-accented) transparent;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+/*
  * Reorder lists (`useReorderTransition`): a row moved by its chevrons or keys slides to its new place
  * (TransitionGroup's move class). Unlayered, so it wins over a row's own `transition-colors`; off
  * for people who ask for less motion (Vue then skips the move).
@@ -134,5 +161,37 @@
 @media (prefers-reduced-motion: reduce) {
   .reorder-move {
     transition: none;
+  }
+}
+
+/*
+ * The order tracker's current step (`motion-safe:animate-soft-ping`): a softer ping than Tailwind's
+ * `animate-ping` (1s, twice the size); `animate-line-flow` sweeps light along the line into it.
+ */
+@theme {
+  --animate-soft-ping: soft-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  --animate-line-flow: line-flow 1.8s ease-in-out infinite;
+
+  @keyframes line-flow {
+    0% {
+      transform: translateX(-100%);
+    }
+
+    100% {
+      transform: translateX(200%);
+    }
+  }
+
+  @keyframes soft-ping {
+    0% {
+      transform: scale(1);
+      opacity: 0.6;
+    }
+
+    70%,
+    100% {
+      transform: scale(1.9);
+      opacity: 0;
+    }
   }
 }
