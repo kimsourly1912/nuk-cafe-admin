@@ -1,3 +1,4 @@
+import type { FormErrorEvent } from '@nuxt/ui'
 import type { AccountField } from '../utils/account'
 import { accountFormError } from '../utils/account'
 
@@ -9,10 +10,9 @@ interface FormHandle {
 }
 
 /**
- * What every account form does with a server's refusal (page-patterns §5): a field's error on the
- * field, anything else in the alert above the fields, and focus moved to it. `fieldIds` names each
- * field's input id, for focusing it. A failed check before sending is `focusFirstInvalid`'s (forms →
- * Errors on submit).
+ * What every account form does with a failure (page-patterns §5): a field's error on the field,
+ * anything else in the alert above the fields, and focus moved to it. `fieldIds` names each
+ * field's input id, for focusing it.
  */
 export function useAccountForm(fieldIds: Partial<Record<AccountField, string>>) {
   const saving = ref(false)
@@ -25,6 +25,10 @@ export function useAccountForm(fieldIds: Partial<Record<AccountField, string>>) 
     // The form keeps its fields disabled until after its events (`loadingAuto`), and a disabled
     // field can't take focus: focus on the next frame.
     if (id) requestAnimationFrame(() => document.getElementById(id)?.focus())
+  }
+
+  function focusFirstInvalid(event: FormErrorEvent) {
+    focusField(event.errors[0]?.id)
   }
 
   async function showError(error: unknown) {
@@ -54,5 +58,5 @@ export function useAccountForm(fieldIds: Partial<Record<AccountField, string>>) 
     }
   }
 
-  return { saving, formError, submit }
+  return { saving, formError, focusFirstInvalid, submit }
 }

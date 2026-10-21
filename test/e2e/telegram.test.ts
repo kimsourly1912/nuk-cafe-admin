@@ -285,38 +285,4 @@ describe('Notifications and delivery history (8.1d)', () => {
     await toast(page, '"Closing summary · Tue 29 Sep 2026" sent to NUK Riverside Staff').waitFor()
     expect(retried).toEqual(['del-3'])
   })
-
-  it('reads the history again every 30 seconds, but not while the tab is hidden', async () => {
-    const page = await createPage()
-    await page.clock.install()
-    let loads = 0
-    await mockApi(page, {
-      'GET /admin/telegram': () => ({ enabled: true, botUsername: 'nuk_cafe_bot', destinations: [GROUP], rules: [] }),
-      'GET /admin/telegram/deliveries': () => {
-        loads++
-        return { deliveries: [] }
-      },
-    })
-    await page.goto(url('/c/nuk/admin/telegram'), { waitUntil: 'hydration' })
-    await expect.poll(() => loads).toBeGreaterThan(0)
-
-    let before = loads
-    await page.clock.fastForward(31_000)
-    await expect.poll(() => loads).toBeGreaterThan(before)
-
-    // Headless Chrome never hides the tab: fake the Page Visibility API.
-    const setVisibility = (state: 'hidden' | 'visible') => page.evaluate((state) => {
-      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
-      document.dispatchEvent(new Event('visibilitychange'))
-    }, state)
-    await setVisibility('hidden')
-    before = loads
-    await page.clock.fastForward(91_000)
-    await page.waitForTimeout(500)
-    expect(loads).toBe(before)
-
-    // Back on the tab: read again at once (the data-freshness plugin), then every 30 seconds.
-    await setVisibility('visible')
-    await expect.poll(() => loads).toBeGreaterThan(before)
-  })
 })

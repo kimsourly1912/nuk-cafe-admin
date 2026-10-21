@@ -58,6 +58,8 @@ export const orderNumber = (pickupNumber: number) => `#${String(pickupNumber).pa
 export const orderTypeText = (order: Pick<OrderHistoryRow, 'orderType' | 'tableLabel'>) =>
   order.orderType === 'dine_in' && order.tableLabel ? `Dine-in · ${order.tableLabel}` : TYPE_LABELS[order.orderType]
 
+export const formatRiel = (amount: number) => `៛${amount.toLocaleString('en-US')}`
+
 /** "9:02 AM" in the branch's zone. */
 export const clockIn = (iso: string, timeZone: string) =>
   new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone })

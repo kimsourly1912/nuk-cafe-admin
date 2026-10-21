@@ -3,22 +3,20 @@
  * The delivery history (step 8.1d, D113, the owner's frames): the latest 50 messages to Telegram,
  * newest first, with what, to whom and how it went. "Retrying at 9:05" while it's still being tried
  * (no Retry then: it could send twice); Failed only once it stopped, with the reason and Retry.
- * View shows the saved message. Refreshed every 30 seconds while the page is open and the tab is
- * visible; coming back to the tab refreshes it (the data-freshness plugin, D22).
+ * View shows the saved message. Refreshed every 30 seconds while the page is open.
  */
-import { useDocumentVisibility, useIntervalFn } from '@vueuse/core'
+import { useIntervalFn } from '@vueuse/core'
 import type { TableColumn } from '@nuxt/ui'
 import type { NotificationDelivery } from '#shared/contracts/notifications'
 import { useDeliveries, useNotificationMutations } from '../composables/useTelegram'
 import DeliverySnapshotModal from './DeliverySnapshotModal.vue'
 
-const { data, error, loading, pending, refresh } = useDeliveries()
+const { data, error, loading, refresh } = useDeliveries()
 const { retry } = useNotificationMutations()
 const { isCompact } = useLayoutContext()
 
-const visibility = useDocumentVisibility()
 useIntervalFn(() => {
-  if (visibility.value === 'visible' && !pending.value) refresh()
+  if (!loading.value) refresh()
 }, 30_000)
 
 const deliveries = computed(() => data.value?.deliveries ?? [])

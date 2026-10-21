@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { FormSubmitEvent } from '@nuxt/ui'
+import type { FormErrorEvent, FormSubmitEvent } from '@nuxt/ui'
 import * as v from 'valibot'
 import { loginRedirectTarget, useAuth } from '../composables/useAuth'
 
@@ -28,6 +28,12 @@ const { login, finishLogin } = useAuth()
 const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
 const form = useTemplateRef('form')
 useFormErrorRecheck(form)
+// The form keeps its fields disabled until after this event (`loadingAuto`, re-enabled in its
+// `finally`), and a disabled field can't take focus: focus on the next frame, once they're enabled.
+function focusFirstInvalid(event: FormErrorEvent) {
+  const id = event.errors[0]?.id
+  if (id) requestAnimationFrame(() => document.getElementById(id)?.focus())
+}
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true

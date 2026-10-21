@@ -11,7 +11,7 @@ export function useExchangeRateMutations() {
     {
       id: 'exchange-rates:set',
       lock: () => 'exchange-rate',
-      successMessage: (_, input) => `Riel rate set to ${formatRiel(input.khrPerUsd)} per $1`,
+      successMessage: (_, input) => `Riel rate set to ៛${input.khrPerUsd.toLocaleString('en-US')} per $1`,
       errorMessage: 'Could not save the riel rate',
       // The counter's queue carries the rate.
       invalidate: ['exchange-rates', 'counter'],

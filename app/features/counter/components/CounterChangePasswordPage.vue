@@ -4,7 +4,7 @@
  * middleware sends every counter page here); otherwise reached from the user menu. Changing it signs the
  * account out on its other devices.
  */
-import type { FormSubmitEvent } from '@nuxt/ui'
+import type { FormErrorEvent, FormSubmitEvent } from '@nuxt/ui'
 import { emptyPasswordForm, passwordFormSchema } from '~/features/auth'
 import type { PasswordForm } from '~/features/auth'
 import { counterRedirectTarget, useCounterSession } from '../composables/useCounterSession'
@@ -27,6 +27,12 @@ const unsaved = useUnsavedChanges(state, { paused: saving })
 const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
 const form = useTemplateRef('form')
 useFormErrorRecheck(form)
+// The form keeps its fields disabled until after this event (`loadingAuto`, re-enabled in its
+// `finally`), and a disabled field can't take focus: focus on the next frame, once they're enabled.
+function focusFirstInvalid(event: FormErrorEvent) {
+  const id = event.errors[0]?.id
+  if (id) requestAnimationFrame(() => document.getElementById(id)?.focus())
+}
 
 async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
   saving.value = true

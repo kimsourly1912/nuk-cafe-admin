@@ -1,6 +1,6 @@
 import type { CounterOrder, CounterPayment, OrderStatus, PaymentMethod } from '#shared/contracts/orders'
 import { ApiError } from '~/utils/api-error'
-import { formatMinor, formatRiel } from '~/utils/money'
+import { formatMinor } from '~/utils/money'
 
 /**
  * The counter's pure rules (step 6.3b, D102): the board's columns, what a card says, the change
@@ -94,6 +94,9 @@ export function matchesSearch(order: Pick<CounterOrder, 'pickupNumber' | 'custom
 }
 
 // --- Money at the counter ---
+
+/** "៛35,900". */
+export const formatRiel = (amount: number) => `៛${amount.toLocaleString('en-US')}`
 
 /** Quick "amount received" buttons: the next $5, $10, $20 and $50 at or above the total, three at most. */
 export function usdQuickAmounts(totalMinor: number): number[] {

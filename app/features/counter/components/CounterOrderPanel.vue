@@ -27,7 +27,7 @@ import { useCounterActions } from '../composables/useCounterActions'
 import type { Change, CommandFailure } from '../utils/counter'
 import { khqrAmountText, khqrReceivedText } from '../utils/khqr'
 import CounterKhqr from './CounterKhqr.vue'
-import { changeDue, clockTime, commandFailure, firstName, orderNumber, orderTypeText, PAYMENT_METHOD_LABELS, paymentText, rielQuickAmounts, usdQuickAmounts } from '../utils/counter'
+import { changeDue, clockTime, commandFailure, firstName, formatRiel, orderNumber, orderTypeText, PAYMENT_METHOD_LABELS, paymentText, rielQuickAmounts, usdQuickAmounts } from '../utils/counter'
 
 const props = defineProps<{
   order: CounterOrder | null

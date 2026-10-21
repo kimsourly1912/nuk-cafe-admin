@@ -36,8 +36,3 @@ export const fromMinor = (priceMinor: number) => priceMinor / 100
 
 /** Rounds dollars to cents. */
 export const roundPrice = (price: number) => fromMinor(toMinor(price))
-
-const rielFormatter = new Intl.NumberFormat('en-US')
-
-/** Whole riel → `"៛35,900"` (cash at the counter, KHQR, reports, the riel rate). */
-export const formatRiel = (amount: number) => `៛${rielFormatter.format(amount)}`

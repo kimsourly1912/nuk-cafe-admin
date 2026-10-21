@@ -12,6 +12,7 @@ import {
   eventBy,
   eventReason,
   eventTitle,
+  formatRiel,
   METHOD_LABELS,
   orderNumber,
   orderTypeText,

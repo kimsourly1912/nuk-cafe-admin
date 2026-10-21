@@ -6,6 +6,7 @@
  * (the page calls `save`, exposed) and in the bottom bar below it, while the draft has changes.
  * Leaving with changes asks first. Someone else's save (409) keeps the input and offers Reload.
  */
+import type { FormErrorEvent } from '@nuxt/ui'
 import type { BranchSettings } from '#shared/contracts/branches'
 import { useAuth } from '~/features/auth'
 import { fetchBranchSettings, useBranchMutations } from '../composables/useBranches'
@@ -84,6 +85,12 @@ async function reload() {
   saved.value = latest
   conflict.value = false
   emit('saved', latest)
+}
+
+// Focus the first invalid field, once the form has re-enabled its inputs.
+function onError(event: FormErrorEvent) {
+  const id = event.errors[0]?.id
+  if (id) requestAnimationFrame(() => document.getElementById(id)?.focus())
 }
 
 useSubmitShortcut(save)
@@ -191,7 +198,7 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
       :disabled="saving"
       class="grid items-start gap-6 lg:grid-cols-5"
       @submit="onSubmit"
-      @error="focusFirstInvalid"
+      @error="onError"
     >
       <UCard
         variant="outline"
