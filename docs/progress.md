@@ -2,6 +2,21 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Customer menu speed: measured; the hidden order panel stays empty below `lg` (2026-10-21)
+
+Branch `claude/menu-panel-phones`. Owner report: the customer menu feels slow and stuck. Measured on the e2e production build (Standard sample menu, 31 items, Chrome at 4× CPU slowdown, median of 3 runs), with a temporary script that was not kept:
+
+- **Server: not the cause.** `GET /public/menu` 17–60 ms, an uncached server render 126–188 ms; production also caches `/c/*` for 60 s.
+- **Browser: one long task while the page hydrates.** Phone: longest task 878 ms, 1147 ms blocked in total; first Add tap 344 ms, the next 176 ms. At full CPU speed: 253 ms and 80 ms.
+- **About 540 ms of that task is on every page:** Sign in has the same (567 ms). `nuxi analyze`: the entry chunk is about 350 KB before minification (Nuxt, Vue Router, the Better Auth client), and tree shaking works (23 KB of Reka UI in it). Most JS time is Vue rendering and tailwind-merge (Nuxt UI's per-component class merging), so the cost follows the number of component instances, not plugins or bundle mistakes.
+- **The menu items cost about 13–15 ms each** (the same page with no sections: longest 542 ms, 668 ms blocked), so a 100-item menu adds about 1.5 s. Rendering one add control per card instead of two (phone and `sm`) saved only about 8–14%, near the noise, so the card stays as it is.
+
+**Change:** below `lg` the order panel beside the menu (`hidden lg:block`) gets an empty order, so each tap no longer renders every order line out of sight. It is empty on the server and while hydrating anyway (the order is read after mounting), so the pages still agree (D95). Phone taps: 344 → 320 ms and 176 → 136 ms (noise about ±30 ms); load unchanged.
+
+**Follow-up, not started: lazy hydration of the menu sections** (Nuxt `hydrate-on-visible`, the one lever for the per-item cost). Not safe as-is in Vue 3.5.43: a lazily hydrated component that updates before hydrating skips its lazy hydration, and one hydrated after the stored order is read would mismatch the server's "Add" for items already in the order. A design that avoids both: the add slot shows the empty-order state on its first render, and sections get the order through `provide`/`inject` instead of props. Test a menu refresh on tab focus while sections are still unhydrated. Needs a decision record.
+
+- **Evidence (2026-10-21, local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 136 files, 1782 passed, 1 existing skip; `shop-menu.test.ts` and `shop-checkout.test.ts` 38 passed. Timings are from a laptop with throttled CPU, not a real phone or production.
+
 ## UI fix: item detail's options are card rows (2026-10-21)
 
 Branch `claude/ui-ux-fixes`. Owner report (screenshot): the options and add-ons in an item's detail were small and hard to tap, and the groups ran together. Each choice is now a Nuxt UI `variant="card"` row (`p-3`, 8px apart; the whole row, price included, is the target), and each group is a block with a semibold heading and a divider between groups. The spacing is on a wrapper `div`, not the `fieldset`, because a fieldset's padding ignores its `legend`. Rule in [ui §6](reference/ui.md#6-density-and-touch-targets). No size overrides beyond `p-3`, as D81 requires.

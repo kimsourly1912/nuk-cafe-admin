@@ -28,6 +28,7 @@ import type { PublicMenuItem } from '#shared/contracts/public-menu'
 import { usePublicMenu, useCart, useShopBranch, useTableContext } from '../composables/useShopMenu'
 import { useScrollSpy } from '../composables/useScrollSpy'
 import { useOrderSource } from '../composables/useOrderSource'
+import type { ResolvedCart } from '../utils/cart'
 import { lineKey, quantityOfItem, resolveCart } from '../utils/cart'
 import { menuItems, menuSections, searchMenu } from '../utils/menu'
 import { openingText } from '../utils/opening'
@@ -125,7 +126,14 @@ const quantityOf = (item: PublicMenuItem) => quantityOfItem(cartStore.lines.valu
 const orderOpen = ref(false)
 // The drawer's side: only its open content depends on it, never the server's page (closed there), so
 // this is the one width choice made in script (D95, D124).
-const { isCompact } = useLayoutContext()
+const { isCompact, isExpanded } = useLayoutContext()
+/**
+ * The panel beside the menu is hidden below `lg`: there it gets an empty order, so it doesn't
+ * render every line out of sight on each change. The order is empty on the server and while
+ * hydrating anyway (it's read after mounting), so the pages still agree (D95).
+ */
+const emptyCart: ResolvedCart = { lines: [], count: 0, subtotalMinor: 0, savingsMinor: 0 }
+const panelCart = computed(() => (isExpanded.value ? cart.value : emptyCart))
 const confirm = useConfirm()
 
 async function clearOrder() {
@@ -592,7 +600,7 @@ watch(detailOpen, (open) => {
       >
         <OrderPanel
           class="sticky top-[calc(var(--shop-header,7rem)+0.5rem)]"
-          :cart="cart"
+          :cart="panelCart"
           :order-type="orderType"
           :closed="closed"
           :closed-note="closedNote"
