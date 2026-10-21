@@ -455,6 +455,25 @@ describe('the counter', () => {
 
 // Coconut Coffee: published, sizes, no time rule, and no other test orders it (switching it off
 // here can't change another file's menu).
+describe('signing out of the counter', () => {
+  it('goes straight to sign-in: the counter\'s home isn\'t opened and nothing is read after the sign-out', async () => {
+    const { page } = await cashierAtCounter()
+    const after: string[] = []
+    page.on('request', (request) => {
+      const { pathname } = new URL(request.url())
+      if (pathname.startsWith('/api/')) after.push(`${request.method()} ${pathname}`)
+    })
+    await page.getByRole('button', { name: /, account: / }).click()
+    await page.getByRole('menuitem', { name: 'Sign out' }).click()
+    await expect.poll(() => page.url()).toBe(url('/c/nuk/counter/sign-in'))
+    await page.waitForTimeout(500)
+    // The queue polls on its own: only what comes after the sign-out counts.
+    const signOut = after.indexOf('POST /api/auth/sign-out')
+    expect(signOut).toBeGreaterThanOrEqual(0)
+    expect(after.slice(signOut + 1).filter(call => call.includes('/counter/'))).toEqual([])
+  })
+})
+
 describe('sold out at the counter (D105)', () => {
   const coconut = async () => {
     const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu

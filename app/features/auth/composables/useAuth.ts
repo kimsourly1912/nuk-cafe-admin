@@ -64,6 +64,8 @@ export function useAuth() {
    * in an older generation, and the session boundary clears the previous identity's data.
    */
   const generation = useState('staff-session:generation', () => 0)
+  /** A voluntary logout is on its way to the login page (see `logout`). */
+  const signingOut = useState('staff-session:signing-out', () => false)
 
   function setUser(next: SessionUser | null) {
     const changed = identityOf(next) !== identityOf(user.value)
@@ -175,10 +177,18 @@ export function useAuth() {
       // Signed out locally anyway; the cookie expires on its own.
     }
     finally {
-      // Navigate first so the session-lost watcher in plugins/api.ts doesn't also redirect.
+      // Signed out before leaving: the sign-in page's guard would send a session still here back to
+      // the home page, which then loads after the sign-out. `signingOut` keeps the session-lost
+      // watcher (plugins/api.ts) from also redirecting, with a `?redirect=` to this page.
       const slug = splitTenantUrl(nuxtApp.$router.currentRoute.value.path)?.slug ?? nuxtApp.$config.public.defaultTenant
-      await navigateTo(loginPath(slug))
+      signingOut.value = true
       clearSession()
+      try {
+        await navigateTo(loginPath(slug))
+      }
+      finally {
+        signingOut.value = false
+      }
       await nuxtApp.callHook('app:auth-changed', 'logout')
     }
   }
@@ -199,6 +209,7 @@ export function useAuth() {
     user: readonly(user),
     checked: readonly(checked),
     generation: readonly(generation),
+    signingOut: readonly(signingOut),
     isLoggedIn,
     mustChangePassword,
     fetchSession,

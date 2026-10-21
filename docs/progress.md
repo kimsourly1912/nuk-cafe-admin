@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Sign-out without a detour through the home page (2026-10-21)
+
+Branch `fix/sign-out-without-detour` (from `origin/main`). Found while CI on the account PR failed in `session.test.ts` ("a list kept after a failed refresh is never shown to the next person"): after Log out the page was left on `/c/nuk/admin`. Cause, the same in the admin, the counter and the console: `logout`/`signOut` navigated to the sign-in page **before** clearing the user, so that page's guard sent the still-signed-in user to the home page, which loaded its data (about ten admin reads after `POST /auth/sign-out`; 401s on the real server), and only the session-lost watcher's second redirect reached sign-in, as `?redirect=<home>`. On a slow runner that second redirect could lose. Now each clears the user first and sets `signingOut` while it navigates; the watcher in `plugins/api.ts` skips a voluntary sign-out (else it would redirect to sign-in with `?redirect=` to the page left, sending the next person there). Ends on the bare sign-in page; the next sign-in goes to the home page, as before.
+
+- **Evidence (2026-10-21, local):** a throwaway probe recorded every logout passing `/c/nuk/admin` with ten admin reads after the sign-out. New e2e cases: `session.test.ts`, `counter.test.ts` (real server), `platform.test.ts` "goes straight to …": the exact sign-in URL, and no admin/counter/console reads after the sign-out. With the old code all three failed (`?redirect=/c/nuk/admin`, `?redirect=/c/nuk/counter/<branch>`, `?redirect=/platform`); with only the watcher's `signingOut` check removed the admin case ended on `?redirect=/c/nuk/admin/categories`. Restored after each.
+
 ## Feature sweep: shared helpers and polling (2026-10-21)
 
 Branch `claude/focused-pasteur-aecj1a` (from `origin/main`), split from the account review on `refactor/account-button-vue` at the owner's request ("check the same thing with other features"). Independent of it: either can merge first. Searched every feature for timers, `.value` in templates, deep watchers, `v-for` keys, code split, and local copies of shared helpers; read auth and the menu's composables, utils and page in full. Changed:

@@ -58,7 +58,7 @@ export default defineNuxtPlugin({
     // Session lost mid-use (expired, signed out elsewhere, admin access removed): back to login.
     watch(auth.user, (user, previous) => {
       const route = router.currentRoute.value
-      if (!user && previous && isAdminPath(route.path) && !route.meta.public) {
+      if (!user && previous && !auth.signingOut.value && isAdminPath(route.path) && !route.meta.public) {
         nuxtApp.runWithContext(() => navigateTo({ path: loginPath(slugOf(route.path)), query: { redirect: route.fullPath } }))
       }
     })
@@ -71,7 +71,7 @@ export default defineNuxtPlugin({
     })
     watch(counter.user, (user, previous) => {
       const route = router.currentRoute.value
-      if (!user && previous && isCounterPath(route.path) && !route.meta.public) {
+      if (!user && previous && !counter.signingOut.value && isCounterPath(route.path) && !route.meta.public) {
         nuxtApp.runWithContext(() => navigateTo({ path: counterSignInPath(slugOf(route.path)), query: { redirect: route.fullPath } }))
       }
     })
@@ -83,7 +83,7 @@ export default defineNuxtPlugin({
     })
     watch(platform.user, (user, previous) => {
       const route = router.currentRoute.value
-      if (!user && previous && isPlatformPath(route.path) && !route.meta.public) {
+      if (!user && previous && !platform.signingOut.value && isPlatformPath(route.path) && !route.meta.public) {
         nuxtApp.runWithContext(() => navigateTo({ path: PLATFORM_SIGN_IN, query: { redirect: route.fullPath } }))
       }
     })

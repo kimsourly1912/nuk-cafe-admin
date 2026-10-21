@@ -146,6 +146,19 @@ describe('signing in', () => {
     expect(new URL(page.url()).pathname).toBe('/platform/sign-in')
   })
 
+  it('logging out goes straight to sign-in: nothing of the console is read after the sign-out', async () => {
+    const { page, api } = await open('/platform/cafes')
+    await page.getByText('/c/nuk', { exact: true }).waitFor()
+    const before = api.calls.length
+    await page.getByRole('button', { name: 'Ops' }).click()
+    await page.getByRole('menuitem', { name: 'Log out' }).click()
+    await expect.poll(() => page.url()).toBe(url('/platform/sign-in'))
+    await page.waitForTimeout(500)
+    const after = api.calls.slice(before)
+    expect(after[0]).toBe('POST /auth/sign-out')
+    expect(after.filter(call => call.includes('/platform/'))).toEqual([])
+  })
+
   it('on a temporary password, asks for a new one before anything else', async () => {
     const { page } = await open('/platform/cafes', signedIn({ ...SUPERADMIN, mustChangePassword: true }))
     await page.waitForURL(address => address.pathname === '/platform/change-password')
