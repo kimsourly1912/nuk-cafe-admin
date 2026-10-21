@@ -63,8 +63,7 @@ export const orderTypeText = (order: Pick<OrderHistoryRow, 'orderType' | 'tableL
 export const clockIn = (iso: string, timeZone: string) => formatTime(iso, { timeZone })
 
 /** "Tue 30 Sep, 9:02 AM" in the branch's zone. */
-export const stampIn = (iso: string, timeZone: string) =>
-  `${new Date(iso).toLocaleDateString('en-US', { weekday: 'short', timeZone })} ${formatShortDateTime(iso, { timeZone })}`
+export const stampIn = (iso: string, timeZone: string) => formatShortDateTime(iso, { timeZone, weekday: true })
 
 /** A step of the timeline, in words: "Paid", "Cancelled". */
 export function eventTitle(event: Pick<OrderHistoryEvent, 'fromStatus' | 'toStatus'>): string {

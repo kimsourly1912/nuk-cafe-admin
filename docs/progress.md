@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Date style enforced by ESLint (D195, 2026-10-21)
+
+Branch `chore/lint-date-formats`. `DATE_FORMAT_RESTRICTIONS` in `eslint.config.mjs`: `toLocaleDateString`, `toLocaleTimeString`, `toLocaleString` with date options and `new Intl.DateTimeFormat` are refused in `app/` (`no-restricted-syntax`, and `vue/no-restricted-syntax` for templates); `date-format.ts` and `timezones.ts` are exempt. The last hand-formatted dates moved to the helpers: `draftTimeText` (its unused `locale` parameter removed) and the reports' `stampIn` (`formatShortDateTime` with the new `weekday` option, same text). The two `en-CA` `YYYY-MM-DD` keys (`activity.ts`, `promotion-form.ts`) disable the rule on their line, saying why.
+
+- **Evidence (2026-10-21, local):** planted in a throwaway file, removed afterwards: every date form was refused (script and template, `.vue` and `.ts`), and `count.toLocaleString('en-US')`, `(5).toLocaleString('en-US')` and `{ minimumFractionDigits: 2 }` were not. `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 138 files, 1790 passed, 1 skipped (`date-format.test.ts` +1: the weekday option).
+
 ## One date and time style (D195, 2026-10-21)
 
 Branch `refactor/shared-date-formats`. The owner delegated the open questions from the feature sweep. **Dates:** day first, 12-hour clock, one set of helpers ([decision](decisions.md#d195-one-date-and-time-style-the-day-first-the-12-hour-clock-2026-10-21), [UI helpers](reference/ui-helpers.md#dates-and-times-formatdate-formatshortdate-formattime-formatdatetime-formatshortdatetime-formatday)); 27 files, about twenty local formatters removed. **Better Auth's share of the shared JS, measured (answered, no change):** a client source-map build (not committed) attributes the 218 KB gzipped every page loads mostly to Vue, Nuxt, Nuxt UI, `tailwind-variants` and Reka; `better-auth` with `@better-fetch/fetch` is about 8 KB (4%), not worth leaving the module for. The largest single piece outside packages is the icon client bundle (150 icons, 46 KB raw), bundled on purpose so icons are never fetched; only 3 of its icons are flags.

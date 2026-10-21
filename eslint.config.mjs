@@ -47,6 +47,16 @@ const CAFE_LINK_RESTRICTIONS = [
   `Property[key.name=/^(?:to|path)$/] > TemplateLiteral[quasis.0.value.raw=${CAFE_PAGE_START}]`,
 ].map(selector => ({ selector, message: CAFE_LINK_MESSAGE }))
 
+// One date and time style (D195): timestamps go through app/utils/date-format.ts. Formatting one by
+// hand brings a second style back ("Sept", 24-hour times, month first).
+const DATE_FORMAT_MESSAGE = 'Format dates with formatDate, formatDateTime, formatTime, … from app/utils/date-format.ts (D195).'
+const DATE_FORMAT_RESTRICTIONS = [
+  'CallExpression[callee.property.name=/^toLocale(?:Date|Time)String$/]',
+  // `toLocaleString` also formats numbers ("1,234"): only its date options are refused.
+  'CallExpression[callee.property.name="toLocaleString"] > ObjectExpression > Property[key.name=/^(?:weekday|day|month|year|hour|minute|second|dateStyle|timeStyle)$/]',
+  'NewExpression[callee.object.name="Intl"][callee.property.name="DateTimeFormat"]',
+].map(selector => ({ selector, message: DATE_FORMAT_MESSAGE }))
+
 export default withNuxt(
   {
     files: ['app/**/*.{ts,vue}'],
@@ -96,13 +106,23 @@ export default withNuxt(
         { selector: 'CallExpression[callee.name="resolveComponent"][arguments.0.value="UDrawer"]', message: 'Use AppDrawer: drawers don\'t drag (ui.md → Overlays).' },
         { selector: 'ImportSpecifier[imported.name="UDrawer"]', message: 'Use AppDrawer: drawers don\'t drag (ui.md → Overlays).' },
         ...CAFE_LINK_RESTRICTIONS,
+        ...DATE_FORMAT_RESTRICTIONS,
       ],
+      // The same in templates (`{{ new Date(at).toLocaleString(…) }}`), which the rule above doesn't read.
+      'vue/no-restricted-syntax': ['error', ...DATE_FORMAT_RESTRICTIONS],
     },
   },
   {
     files: ['app/**/*.ts'],
     // Features name their sidebar entries inside the cafe; the layout gives them its address.
     ignores: ['app/features/*/navigation.ts', 'app/utils/navigation.ts', 'app/**/tests/**'],
+    rules: {
+      'no-restricted-syntax': ['error', ...CAFE_LINK_RESTRICTIONS, ...DATE_FORMAT_RESTRICTIONS],
+    },
+  },
+  // The date helpers themselves, and a zone's UTC offset ("GMT+07:00"), which isn't a date.
+  {
+    files: ['app/utils/date-format.ts', 'app/utils/timezones.ts'],
     rules: {
       'no-restricted-syntax': ['error', ...CAFE_LINK_RESTRICTIONS],
     },

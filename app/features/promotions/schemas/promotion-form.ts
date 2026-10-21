@@ -114,6 +114,7 @@ export function addDays(date: string, days: number): string {
 export const daysBetween = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000)
 
 /** This browser's calendar date, `YYYY-MM-DD`. */
+// eslint-disable-next-line no-restricted-syntax -- a `YYYY-MM-DD` key (en-CA writes it that way), never shown
 export const localToday = (now = new Date()) => now.toLocaleDateString('en-CA')
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']

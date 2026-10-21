@@ -16,6 +16,11 @@ export interface DateFormatOptions {
   timeZone?: string
 }
 
+export interface ShortDateOptions extends DateFormatOptions {
+  /** With the weekday first: "Tue 30 Sep". */
+  weekday?: boolean
+}
+
 const formatters = new Map<string, Intl.DateTimeFormat>()
 
 function formatterOf(locale: string, options: Intl.DateTimeFormatOptions) {
@@ -46,10 +51,10 @@ export function formatDate(at: DateInput, options: DateFormatOptions = {}): stri
   return `${day} ${month} ${year}`
 }
 
-/** "21 Oct": a day of this year, where the year goes without saying. */
-export function formatShortDate(at: DateInput, options: DateFormatOptions = {}): string {
-  const { day, month } = dayParts(at, options.timeZone)
-  return `${day} ${month}`
+/** "21 Oct" ("Wed 21 Oct" with `weekday`): a day of this year, where the year goes without saying. */
+export function formatShortDate(at: DateInput, options: ShortDateOptions = {}): string {
+  const { weekday, day, month } = dayParts(at, options.timeZone)
+  return options.weekday ? `${weekday} ${day} ${month}` : `${day} ${month}`
 }
 
 /** "9:05 AM". */
@@ -62,8 +67,8 @@ export function formatDateTime(at: DateInput, options: DateFormatOptions = {}): 
   return `${formatDate(at, options)}, ${formatTime(at, options)}`
 }
 
-/** "21 Oct, 9:05 AM": recent activity, where the year goes without saying. */
-export function formatShortDateTime(at: DateInput, options: DateFormatOptions = {}): string {
+/** "21 Oct, 9:05 AM" ("Wed 21 Oct, 9:05 AM" with `weekday`): recent activity, where the year goes without saying. */
+export function formatShortDateTime(at: DateInput, options: ShortDateOptions = {}): string {
   return `${formatShortDate(at, options)}, ${formatTime(at, options)}`
 }
 
