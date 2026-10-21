@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMinor, formatPrice, roundPrice, toMinor } from '../../app/utils/money'
+import { formatMinor, formatPrice, formatRiel, roundPrice, toMinor } from '../../app/utils/money'
 
 describe('money', () => {
   it('formats US dollars with cents', () => {
@@ -8,6 +8,11 @@ describe('money', () => {
     expect(formatPrice(0)).toBe('$0.00')
     expect(formatPrice(undefined)).toBe('—')
     expect(formatMinor(620)).toBe('$6.20')
+  })
+
+  it('formats riel without decimals', () => {
+    expect(formatRiel(35_900)).toBe('៛35,900')
+    expect(formatRiel(0)).toBe('៛0')
   })
 
   it('rounds prices to whole cents', () => {

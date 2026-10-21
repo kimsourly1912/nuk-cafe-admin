@@ -9,7 +9,7 @@ import type { CancelOrderInput, CancelReason, CounterOrder, ReturnMethod } from 
 import { CANCEL_NOTE_MAX } from '#shared/contracts/orders'
 import { useCounterActions } from '../composables/useCounterActions'
 import type { CommandFailure } from '../utils/counter'
-import { commandFailure, formatRiel, orderNumber } from '../utils/counter'
+import { commandFailure, orderNumber } from '../utils/counter'
 
 const props = defineProps<{ order: CounterOrder | null, branchId: string }>()
 const open = defineModel<boolean>('open', { required: true })

@@ -393,17 +393,18 @@ Counts: a list loaded whole (Categories, the libraries) counts on the client; a 
 
 ---
 
-## Money: `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`
+## Money: `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`, `formatRiel`
 
 The API stores prices as integer cents of USD (`priceMinor`, `priceDeltaMinor`); forms and the display work in dollars. Convert only at the boundary: `toMinor` when sending, `fromMinor` when filling a form.
 
-Source: `app/utils/money.ts` (moved from the products feature when Add-ons became the second screen with prices, D68). Tests: `app/features/products/tests/product-form.test.ts`.
+Source: `app/utils/money.ts` (moved from the products feature when Add-ons became the second screen with prices, D68; `formatRiel` from the counter and reports when four features had a copy). Tests: `test/unit/money.test.ts`.
 
 ```ts
 toMinor(4.2) // 420 (half up, without floating-point noise: toMinor(1.005) is 101)
 fromMinor(420) // 4.2
 formatMinor(420) // "$4.20"; formatMinor(null) → "—"
 formatPrice(4.2) // "$4.20" (dollars)
+formatRiel(35900) // "៛35,900" (whole riel: cash at the counter, KHQR, reports)
 ```
 
 ```vue

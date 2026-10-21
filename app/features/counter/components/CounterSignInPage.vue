@@ -3,7 +3,7 @@
  * Counter sign-in (`/counter/sign-in`, D102): the admin sign-in's frame (D84), for branch staff,
  * managers and admins. An account that works at no branch is signed out again with a clear message.
  */
-import type { FormErrorEvent, FormSubmitEvent } from '@nuxt/ui'
+import type { FormSubmitEvent } from '@nuxt/ui'
 import * as v from 'valibot'
 import { counterRedirectTarget, useCounterSession } from '../composables/useCounterSession'
 
@@ -32,12 +32,6 @@ const { name, logoUrl } = useCafe()
 const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
 const form = useTemplateRef('form')
 useFormErrorRecheck(form)
-// The form keeps its fields disabled until after this event (`loadingAuto`, re-enabled in its
-// `finally`), and a disabled field can't take focus: focus on the next frame, once they're enabled.
-function focusFirstInvalid(event: FormErrorEvent) {
-  const id = event.errors[0]?.id
-  if (id) requestAnimationFrame(() => document.getElementById(id)?.focus())
-}
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true

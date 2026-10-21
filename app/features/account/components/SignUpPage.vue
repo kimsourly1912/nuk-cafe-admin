@@ -20,7 +20,7 @@ const home = useAccountHome()
 const target = computed(() => accountRedirectTarget(route.query.redirect, home.value))
 
 const state = reactive({ name: '', email: '', password: '' })
-const { saving, formError, focusFirstInvalid, submit } = useAccountForm({ name: 'sign-up-name', email: 'sign-up-email', password: 'sign-up-password' })
+const { saving, formError, submit } = useAccountForm({ name: 'sign-up-name', email: 'sign-up-email', password: 'sign-up-password' })
 const { signUp } = useAccountActions()
 
 const { account, known } = useCustomerAccount()

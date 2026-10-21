@@ -28,7 +28,7 @@ onMounted(() => {
 })
 
 const state = reactive({ password: '' })
-const { saving, formError, focusFirstInvalid, submit } = useAccountForm({ password: 'reset-password' })
+const { saving, formError, submit } = useAccountForm({ password: 'reset-password' })
 const { resetPassword } = useAccountActions()
 
 async function onSubmit(event: FormSubmitEvent<ResetPasswordForm>) {
