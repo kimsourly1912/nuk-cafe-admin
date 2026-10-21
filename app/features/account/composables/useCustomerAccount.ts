@@ -1,4 +1,4 @@
-import { useIntervalFn, useNow } from '@vueuse/core'
+import { useIntervalFn } from '@vueuse/core'
 import type { CustomerAccount, GuestCustomer, ShopMe } from '#shared/contracts/account'
 import type { ForgotPasswordForm, SignInForm, SignUpForm } from '../schemas/account-form'
 import { ACCOUNT_PATHS } from '../utils/account'
@@ -46,10 +46,7 @@ interface AuthUser {
  * another tab (one sign-in per browser, D97).
  */
 async function loadAccount(): Promise<ShopMe | null> {
-  const session = await $fetch<{ user: AuthUser } | null>('/api/auth/get-session', { retry: 0, timeout: 30_000 })
-    .catch((error: unknown) => {
-      throw ApiError.from(error)
-    })
+  const session = await fetchSession()
   if (!session?.user || session.user.mustChangePassword) return null
   try {
     return await apiFetch<ShopMe>('/shop/me')
@@ -59,6 +56,16 @@ async function loadAccount(): Promise<ShopMe | null> {
     const apiError = ApiError.from(error)
     if (apiError.kind === 'unauthorized' || apiError.code === PASSWORD_CHANGE_REQUIRED) return null
     throw error
+  }
+}
+
+/** This browser's Better Auth session, `null` when signed out. */
+async function fetchSession() {
+  try {
+    return await $fetch<{ user: AuthUser } | null>('/api/auth/get-session', { retry: 0, timeout: 30_000 })
+  }
+  catch (error) {
+    throw ApiError.from(error)
   }
 }
 
@@ -80,11 +87,11 @@ const accountChanged = () => invalidate('account')
  */
 export function useAccountActions() {
   /**
-   * Signs in. A staff account on its temporary password is refused (see `loadAccount`): signed out
-   * again, like the workspaces' sign-ins do with an account they don't let in, so the menu isn't
-   * left with a session it can't use.
+   * Signs in: the password step. `two-factor` (D188): the page asks for the code, then calls
+   * `finishSignIn`. A staff account on its temporary password is refused (see `loadAccount`):
+   * signed out again, like the workspaces' sign-ins do with an account they don't let in, so the
+   * menu isn't left with a session it can't use.
    */
-  /** The password step. `two-factor` (D188): the page asks for the code, then calls `finishSignIn`. */
   async function signIn(form: SignInForm): Promise<PasswordStep> {
     const response = await authFetch<{ user?: AuthUser, twoFactorRedirect?: boolean }>('/sign-in/email', { email: form.email, password: form.password })
     if (passwordStepOf(response) === 'two-factor') return 'two-factor'
@@ -94,7 +101,7 @@ export function useAccountActions() {
 
   /** Signed in by the code after the password: the same checks as a password-only sign-in. */
   async function finishSignIn() {
-    const session = await $fetch<{ user: AuthUser } | null>('/api/auth/get-session', { retry: 0, timeout: 30_000 })
+    const session = await fetchSession()
     if (!session) throw new ApiError('Sign in to continue.', { kind: 'unauthorized', status: 401 })
     await signedIn(session.user)
   }
@@ -156,15 +163,35 @@ export const RESEND_COOLDOWN_SECONDS = 60
 /**
  * A wait before the same email can be sent again, shared by every place that offers it (the banner,
  * the account menu, the pages) so one countdown is shown. Kept for this tab only.
+ *
+ * The clock ticks only while a wait runs: the banner is on every menu page, so an always-on timer
+ * would run for every visitor.
  */
 export function useResendCooldown(kind: 'verify' | 'reset') {
   const until = useState(`account:cooldown:${kind}`, () => 0)
-  const now = useNow({ scheduler: tick => useIntervalFn(tick, 1000) })
-  const secondsLeft = computed(() => Math.max(0, Math.ceil((until.value - now.value.getTime()) / 1000)))
-  const start = () => {
+  const now = shallowRef(Date.now())
+  const clock = useIntervalFn(() => {
+    now.value = Date.now()
+    if (now.value >= until.value) clock.pause()
+  }, 1000, { immediate: false })
+  watch(until, (value) => {
+    now.value = Date.now()
+    if (value > now.value) clock.resume()
+  }, { immediate: true })
+
+  const secondsLeft = computed(() => Math.max(0, Math.ceil((until.value - now.value) / 1000)))
+  const waiting = computed(() => secondsLeft.value > 0)
+
+  function start() {
     until.value = Date.now() + RESEND_COOLDOWN_SECONDS * 1000
   }
-  return { secondsLeft, start }
+
+  /** The send button's label: "Resend email", or "Resend email in 42 s" while waiting. */
+  function waitLabel(action: string) {
+    return waiting.value ? `${action} in ${secondsLeft.value} s` : action
+  }
+
+  return { waiting, start, waitLabel }
 }
 
 /**
@@ -180,7 +207,7 @@ export function useResendVerification() {
 
   async function resend() {
     const email = account.value?.email
-    if (!email || sending.value || cooldown.secondsLeft.value) return
+    if (!email || sending.value || cooldown.waiting.value) return
     sending.value = true
     try {
       await resendVerification(email)
@@ -195,6 +222,6 @@ export function useResendVerification() {
     }
   }
 
-  const label = computed(() => (cooldown.secondsLeft.value ? `Resend email in ${cooldown.secondsLeft.value} s` : 'Resend email'))
-  return { resend, sending, label, waiting: computed(() => cooldown.secondsLeft.value > 0) }
+  const label = computed(() => cooldown.waitLabel('Resend email'))
+  return { resend, sending, label, waiting: cooldown.waiting }
 }
