@@ -9,6 +9,7 @@ import type { PublicMenu, PublicMenuCategory } from '#shared/contracts/public-me
 
 export interface SoldOutRow {
   variationId: string
+  itemId: string
   itemName: string
   /** "Large, Iced"; `''` for an item without versions. */
   label: string
@@ -37,6 +38,7 @@ export function soldOutRows(menu: PublicMenu, list: SoldOutList | null): SoldOut
         const off = switchedOff.get(variation.id)
         rows.push({
           variationId: variation.id,
+          itemId: item.id,
           itemName: item.name,
           label: variation.label,
           categoryId: top.id,
@@ -78,4 +80,26 @@ export function filterSoldOutRows(rows: SoldOutRow[], filter: SoldOutFilter): So
     (filter.category === 'all' || row.categoryId === filter.category)
     && (!filter.onlySoldOut || row.soldOut || Boolean(filter.keep?.has(row.variationId)))
     && (!q || rowName(row).toLowerCase().includes(q)))
+}
+
+/** An item's rows as shown: its versions together under the item's name. */
+export interface SoldOutGroup {
+  itemId: string
+  itemName: string
+  categoryName: string
+  rows: SoldOutRow[]
+  /** An item without versions: one row, no heading of its own. */
+  single: boolean
+}
+
+/** Groups rows by item. Versions of an item are next to each other (the menu's order), also after filtering. */
+export function groupSoldOutRows(rows: SoldOutRow[]): SoldOutGroup[] {
+  const groups: SoldOutGroup[] = []
+  for (const row of rows) {
+    const last = groups.at(-1)
+    if (last?.itemId === row.itemId) last.rows.push(row)
+    else groups.push({ itemId: row.itemId, itemName: row.itemName, categoryName: row.categoryName, rows: [row], single: false })
+  }
+  for (const group of groups) group.single = group.rows.length === 1 && !group.rows[0]!.label
+  return groups
 }

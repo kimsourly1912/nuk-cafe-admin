@@ -21,7 +21,6 @@ const drawerUi = computed<DrawerProps['ui']>(() => ({
   ...ui,
   header: ['pb-3 border-b border-default', ui?.header].filter(Boolean).join(' '),
   footer: ['pt-3 border-t border-default', ui?.footer].filter(Boolean).join(' '),
-  body: ui?.body ?? '[scrollbar-width:thin]',
 }))
 </script>
 

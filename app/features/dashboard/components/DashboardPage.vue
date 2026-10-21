@@ -4,6 +4,7 @@ import { useAuth } from '~/features/auth'
 import { useSetupChecklist, useToday } from '../composables/useDashboard'
 import { requiredLeft } from '../utils/setup'
 import SetupChecklist from './SetupChecklist.vue'
+import TodaySkeleton from './TodaySkeleton.vue'
 
 /**
  * The admin's home (D155): today in each branch (the Reports summary: paid sales against yesterday,
@@ -85,11 +86,9 @@ const summaryLink = (branchId: string, date: string) =>
           title="Couldn't load today's numbers"
           @retry="today.refresh()"
         />
-        <ListSkeleton
+        <TodaySkeleton
           v-else-if="today.loading.value"
           label="Loading today…"
-          variant="row"
-          :count="2"
         />
         <UCard
           v-for="entry in today.data.value ?? []"

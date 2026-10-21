@@ -2,6 +2,18 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## UI fix: item detail's options are card rows (2026-10-21)
+
+Branch `claude/ui-ux-fixes`. Owner report (screenshot): the options and add-ons in an item's detail were small and hard to tap, and the groups ran together. Each choice is now a Nuxt UI `variant="card"` row (`p-3`, 8px apart; the whole row, price included, is the target), and each group is a block with a semibold heading and a divider between groups. The spacing is on a wrapper `div`, not the `fieldset`, because a fieldset's padding ignores its `legend`. Rule in [ui §6](reference/ui.md#6-density-and-touch-targets). No size overrides beyond `p-3`, as D81 requires.
+
+- **Evidence (2026-10-21, local):** `eslint`, `pnpm typecheck` clean; `shop-menu.test.ts` and `shop-promotions.test.ts` passed (31 tests) on the first version, not re-run after the `p-3` and wrapper change. Not seen at phone width by the assistant; the owner confirmed the result in the editor preview.
+
+## UI fix: Review order's banner no longer shakes the page (2026-10-21)
+
+Branch `claude/ui-ux-fixes`. Owner report (screenshot): with two unpaid orders, pressing Place order made the refusal banner disappear and reappear, moving the page. Cause: `useCheckout.place()` cleared `failure` when the request started. It now keeps the last refusal until success, a new refusal, or a changed quote; the banner's "Try again" and "Switch to pickup" are disabled while placing. Rule written in [ui §17 → Page banners and retries](reference/ui.md#page-banners-and-retries) and the review checklist. Other screens with the same pattern are not yet searched; the owner reviews this one first.
+
+- **Evidence (2026-10-21, local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit app/features/menu` 24 passed. No test of the composable's `failure` (the menu tests cover only the pure helpers), and not seen in a browser.
+
 ## Repository standard and audit (D194, 2026-10-20)
 
 [Decision](decisions.md#d194-repositories-keep-drizzles-query-builder-one-repository-standard-2026-10-20). Branch `claude/repository-standard`; steps 1–7 implemented and pushed at the owner request in [PR #150](https://github.com/kimsourly1912/nuk-cafe-admin/pull/150); compatible dependency patches clear its initial audit failure and pass full local verification (submitted for CI review; no merge or deployment). Repositories keep Drizzle's query builder: relational queries v2 needs Drizzle 1.0 (a release candidate) and NuxtHub support (nuxt-hub/core PR #825, open). New [repository standard](server/repositories.md); [audit](reviews/repository-audit-2026-10-20.md) of the 25 repositories at `0f8a81e` with findings R1–R10 and a seven-step clean-up plan.

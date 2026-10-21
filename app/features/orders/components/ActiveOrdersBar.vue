@@ -18,24 +18,30 @@ const to = computed(() => tenantPath(orders.value.length === 1 ? `/orders/${enco
 </script>
 
 <template>
-  <NuxtLink
+  <!-- The surface is on the wrapper, so the link's hover tints it instead of replacing it (on a dark page a replaced `bg-default` just looks like the page). -->
+  <div
     v-if="bar"
-    :to="to"
-    class="flex items-center gap-3 rounded-lg px-4 py-3 ring transition-colors focus-visible:outline-2 focus-visible:outline-primary"
-    :class="bar.ready ? 'bg-success/10 text-success ring-success/40 hover:bg-success/15' : 'bg-default text-highlighted ring-default hover:bg-elevated/50'"
+    class="rounded-lg ring"
+    :class="bar.ready ? 'bg-success/10 text-success ring-success/40' : 'bg-default text-highlighted ring-default'"
   >
-    <span
-      class="size-2.5 shrink-0 rounded-full"
-      :class="bar.ready ? 'bg-success' : 'bg-info'"
-      aria-hidden="true"
-    />
-    <span class="min-w-0 flex-1 truncate font-medium">{{ bar.text }}</span>
-    <span class="flex shrink-0 items-center gap-1 text-sm font-medium">
-      View
-      <UIcon
-        name="i-lucide-chevron-right"
-        class="size-4"
+    <NuxtLink
+      :to="to"
+      class="flex items-center gap-3 rounded-lg px-4 py-3 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+      :class="bar.ready ? 'hover:bg-success/5' : 'hover:bg-elevated/50'"
+    >
+      <span
+        class="size-2.5 shrink-0 rounded-full"
+        :class="bar.ready ? 'bg-success' : 'bg-info'"
+        aria-hidden="true"
       />
-    </span>
-  </NuxtLink>
+      <span class="min-w-0 flex-1 truncate font-medium">{{ bar.text }}</span>
+      <span class="flex shrink-0 items-center gap-1 text-sm font-medium">
+        View
+        <UIcon
+          name="i-lucide-chevron-right"
+          class="size-4"
+        />
+      </span>
+    </NuxtLink>
+  </div>
 </template>

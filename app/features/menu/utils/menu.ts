@@ -38,6 +38,18 @@ export const menuItems = (sections: MenuSection[]) =>
   sections.flatMap(section => [...section.items, ...section.subSections.flatMap(sub => sub.items)])
 
 /**
+ * The listed items grouped by the category they sit in (a sub-category counts as its own group),
+ * in menu order; categories with none of them are left out.
+ */
+export function groupItemsByCategory(sections: MenuSection[], itemIds: readonly string[]): { id: string, name: string, items: PublicMenuItem[] }[] {
+  const wanted = new Set(itemIds)
+  return sections
+    .flatMap(section => [section, ...section.subSections])
+    .map(({ id, name, items }) => ({ id, name, items: items.filter(item => wanted.has(item.id)) }))
+    .filter(group => group.items.length)
+}
+
+/**
  * An item with anything to choose opens its detail to add: more than one version, or any add-on
  * group (optional ones too, so they can be picked). Everything else is added in one tap.
  */

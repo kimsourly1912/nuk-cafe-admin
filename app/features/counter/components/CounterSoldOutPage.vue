@@ -9,7 +9,7 @@
  */
 import { useSoldOut } from '../composables/useSoldOut'
 import { clockTime } from '../utils/counter'
-import { filterSoldOutRows, rowName, soldOutCategories } from '../utils/sold-out'
+import { filterSoldOutRows, groupSoldOutRows, rowName, soldOutCategories } from '../utils/sold-out'
 import type { SoldOutRow } from '../utils/sold-out'
 import CounterHeader from './CounterHeader.vue'
 
@@ -32,10 +32,12 @@ watch([search, category, onlySoldOut], () => {
 const categoryRow = useTemplateRef('categoryRow')
 watch(category, () => nextTick(() => {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  categoryRow.value?.querySelector('[aria-pressed="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: reduced ? 'auto' : 'smooth' })
+  categoryRow.value?.querySelector('[data-category][aria-pressed="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: reduced ? 'auto' : 'smooth' })
 }), { flush: 'post' })
 const categories = computed(() => [{ id: 'all', name: 'All' }, ...soldOutCategories(rows.value ?? [])])
 const shown = computed(() => filterSoldOutRows(rows.value ?? [], { search: search.value, category: category.value, onlySoldOut: onlySoldOut.value, keep: keep.value }))
+const groups = computed(() => groupSoldOutRows(shown.value))
+const soldOutIn = (rows: SoldOutRow[]) => rows.filter(row => row.soldOut).length
 const soldOutCount = computed(() => (rows.value ?? []).filter(row => row.soldOut).length)
 
 function setAvailable(row: SoldOutRow, available: boolean) {
@@ -53,7 +55,7 @@ useSeoMeta({ robots: 'noindex' })
       :sold-out-button="false"
     />
 
-    <main class="mx-auto w-full max-w-7xl flex-1 space-y-4 p-4">
+    <main class="mx-auto w-full max-w-4xl flex-1 space-y-4 p-4">
       <UButton
         :to="tenantPath(`/counter/${branchId}`)"
         label="Back to queue"
@@ -62,24 +64,13 @@ useSeoMeta({ robots: 'noindex' })
         variant="link"
         class="-ms-2.5"
       />
-      <div class="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 class="text-2xl font-semibold text-highlighted">
-            Sold out
-          </h1>
-          <p class="text-sm text-muted">
-            Switch off what's run out. It stays off until you switch it back.
-          </p>
-        </div>
-        <UButton
-          :label="`${soldOutCount} sold out`"
-          :color="onlySoldOut ? 'error' : 'neutral'"
-          :variant="onlySoldOut ? 'soft' : 'outline'"
-          icon="i-lucide-ban"
-          :aria-pressed="onlySoldOut"
-          :disabled="!rows"
-          @click="onlySoldOut = !onlySoldOut"
-        />
+      <div>
+        <h1 class="text-2xl font-semibold text-highlighted">
+          Sold out
+        </h1>
+        <p class="text-sm text-muted">
+          Switch off what's run out. It stays off until you switch it back.
+        </p>
       </div>
 
       <ApiErrorAlert
@@ -100,11 +91,28 @@ useSeoMeta({ robots: 'noindex' })
             class="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0"
             aria-label="Categories"
           >
+            <!-- Beside the categories it combines with: only what's sold out, in the chosen category. -->
+            <UButton
+              :label="`${soldOutCount} sold out`"
+              size="sm"
+              :color="onlySoldOut ? 'error' : 'neutral'"
+              :variant="onlySoldOut ? 'soft' : 'outline'"
+              icon="i-lucide-ban"
+              :aria-pressed="onlySoldOut"
+              :disabled="!rows"
+              class="shrink-0"
+              @click="onlySoldOut = !onlySoldOut"
+            />
+            <span
+              class="my-1 w-px shrink-0 bg-border"
+              aria-hidden="true"
+            />
             <UButton
               v-for="c in categories"
               :key="c.id"
               :label="c.name"
               size="sm"
+              data-category
               :color="category === c.id ? 'primary' : 'neutral'"
               :variant="category === c.id ? 'soft' : 'ghost'"
               :aria-pressed="category === c.id"
@@ -131,56 +139,84 @@ useSeoMeta({ robots: 'noindex' })
           v-else
           :ui="{ root: 'shadow-sm ring-accented', body: 'p-0 sm:p-0' }"
         >
-          <ul
+          <!-- An item's versions together under its name: a few headings to scan, not one long repeated name. -->
+          <div
+            v-if="groups.length"
             class="divide-y divide-default"
-            aria-label="Menu items"
           >
-            <li
-              v-for="row in shown"
-              :key="row.variationId"
-              class="flex items-center gap-3 px-4 py-3"
-              :aria-label="rowName(row)"
+            <section
+              v-for="group in groups"
+              :key="group.itemId"
+              :aria-label="group.itemName"
             >
-              <div class="min-w-0 flex-1">
-                <p
-                  class="font-medium"
-                  :class="row.soldOut ? 'text-muted' : 'text-highlighted'"
-                >
-                  {{ rowName(row) }}
-                </p>
-                <p
-                  v-if="row.soldOut && row.since"
-                  class="text-sm text-muted"
-                >
-                  Since {{ clockTime(row.since) }}{{ row.by ? ` by ${row.by}` : '' }}
-                </p>
+              <div
+                v-if="!group.single"
+                class="flex items-baseline gap-2 bg-elevated/50 px-4 py-2"
+              >
+                <h2 class="min-w-0 font-semibold text-highlighted">
+                  {{ group.itemName }}
+                </h2>
+                <span class="shrink-0 text-sm text-muted max-sm:hidden">{{ group.categoryName }}</span>
+                <span
+                  v-if="soldOutIn(group.rows)"
+                  class="ms-auto shrink-0 text-sm font-medium text-error"
+                >{{ soldOutIn(group.rows) }} sold out</span>
               </div>
-              <span class="w-28 shrink-0 text-sm text-muted max-sm:hidden">{{ row.categoryName }}</span>
-              <UBadge
-                v-if="row.soldOut"
-                label="Sold out"
-                color="error"
-                variant="subtle"
-                class="shrink-0"
-              />
-              <USwitch
-                :model-value="!row.soldOut"
-                :label="row.soldOut ? 'Sold out' : 'Available'"
-                :loading="set.isPending(row.variationId)"
-                :disabled="set.isPending(row.variationId)"
-                :aria-label="`${rowName(row)}: available`"
-                :ui="{ label: 'max-sm:sr-only w-20' }"
-                class="shrink-0"
-                @update:model-value="value => setAvailable(row, value)"
-              />
-            </li>
-            <li
-              v-if="!shown.length"
-              class="px-4 py-10 text-center text-sm text-muted"
-            >
-              {{ onlySoldOut && !search.trim() ? 'Nothing is sold out.' : 'No items match.' }}
-            </li>
-          </ul>
+              <ul
+                class="divide-y divide-default"
+                :aria-label="group.itemName"
+              >
+                <li
+                  v-for="row in group.rows"
+                  :key="row.variationId"
+                  class="flex items-center gap-3 px-4 py-3"
+                  :class="row.soldOut && 'bg-error/5'"
+                  :aria-label="rowName(row)"
+                >
+                  <div class="min-w-0 flex-1">
+                    <p
+                      class="font-medium"
+                      :class="[row.soldOut ? 'text-muted' : 'text-highlighted', !group.single && 'ps-4']"
+                    >
+                      <template v-if="group.single">
+                        {{ row.itemName }}
+                      </template>
+                      <template v-else>
+                        <span class="sr-only">{{ row.itemName }} · </span>{{ row.label }}
+                      </template>
+                    </p>
+                    <p
+                      v-if="row.soldOut && row.since"
+                      class="text-sm text-muted"
+                      :class="!group.single && 'ps-4'"
+                    >
+                      Since {{ clockTime(row.since) }}{{ row.by ? ` by ${row.by}` : '' }}
+                    </p>
+                  </div>
+                  <span
+                    v-if="group.single"
+                    class="shrink-0 text-sm text-muted max-sm:hidden"
+                  >{{ row.categoryName }}</span>
+                  <USwitch
+                    :model-value="!row.soldOut"
+                    :label="row.soldOut ? 'Sold out' : 'Available'"
+                    :loading="set.isPending(row.variationId)"
+                    :disabled="set.isPending(row.variationId)"
+                    :aria-label="`${rowName(row)}: available`"
+                    :ui="{ label: ['max-sm:sr-only w-20', row.soldOut && 'font-medium text-error'] }"
+                    class="shrink-0"
+                    @update:model-value="value => setAvailable(row, value)"
+                  />
+                </li>
+              </ul>
+            </section>
+          </div>
+          <p
+            v-else
+            class="px-4 py-10 text-center text-sm text-muted"
+          >
+            {{ onlySoldOut && !search.trim() ? 'Nothing is sold out.' : 'No items match.' }}
+          </p>
         </UCard>
         <p class="text-sm text-muted">
           Customers see the change the next time their menu loads.

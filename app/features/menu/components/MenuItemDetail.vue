@@ -74,8 +74,9 @@ function valueItems(setIndex: number) {
 }
 
 const priceDelta = (minor: number) => (minor > 0 ? `+${formatMinor(minor)}` : 'Free')
-/** Rows are full width so the label slot can put the price at the right edge. */
-const radioUi = { wrapper: 'w-full' }
+/** Options are card rows (the whole row is the target): `p-3` inside, `gap-2` between neighbours. */
+const radioUi = { fieldset: 'gap-y-2', item: 'p-3' }
+const checkboxUi = { root: 'p-3' }
 const chosenIn = (group: PublicMenuModifierGroup) => selection.value.modifiers[group.id] ?? []
 const isRadioGroup = (group: PublicMenuModifierGroup) => group.minSelect === 1 && group.maxSelect === 1
 
@@ -148,96 +149,109 @@ function submit() {
           {{ problemOf('version') }}
         </p>
 
-        <fieldset
-          v-for="(set, setIndex) in item.optionSets"
-          :key="set.id"
-          class="space-y-2"
-        >
-          <legend class="flex w-full items-center justify-between gap-2">
-            <span class="font-medium text-highlighted">{{ set.name }}</span>
-            <UBadge
-              label="Required · choose 1"
-              color="neutral"
-              variant="subtle"
-              size="sm"
-            />
-          </legend>
-          <URadioGroup
-            :model-value="selection.values[setIndex]"
-            :items="valueItems(setIndex)"
-            :aria-label="set.name"
-            :ui="radioUi"
-            @update:model-value="value => selection = chooseValue(item, selection, setIndex, String(value))"
-          >
-            <template #label="{ item: option }">
-              <span class="flex w-full items-center justify-between gap-3">
-                <span>{{ option.label }}</span>
-                <span v-if="option.price">{{ option.price }}</span>
-              </span>
-            </template>
-          </URadioGroup>
-        </fieldset>
-
-        <fieldset
-          v-for="group in item.modifierGroups"
-          :id="`choice-${item.id}-${group.id}`"
-          :key="group.id"
-          tabindex="-1"
-          class="space-y-2 rounded-md outline-none"
-          :aria-describedby="problemOf(group.id) ? `problem-${item.id}-${group.id}` : undefined"
-        >
-          <legend class="flex w-full items-center justify-between gap-2">
-            <span class="font-medium text-highlighted">{{ group.name }}</span>
-            <UBadge
-              :label="groupRule(group)"
-              :color="problemOf(group.id) ? 'error' : 'neutral'"
-              variant="subtle"
-              size="sm"
-            />
-          </legend>
-          <p
-            v-if="problemOf(group.id)"
-            :id="`problem-${item.id}-${group.id}`"
-            class="text-sm text-error"
-          >
-            {{ problemOf(group.id) }}
-          </p>
-          <URadioGroup
-            v-if="isRadioGroup(group)"
-            :model-value="chosenIn(group)[0]"
-            :items="group.modifiers.map(m => ({ label: m.name, value: m.id, price: priceDelta(m.priceDeltaMinor) }))"
-            :aria-label="group.name"
-            :ui="radioUi"
-            @update:model-value="value => pickOne(group, String(value))"
-          >
-            <template #label="{ item: option }">
-              <span class="flex w-full items-center justify-between gap-3">
-                <span>{{ option.label }}</span>
-                <span v-if="option.price">{{ option.price }}</span>
-              </span>
-            </template>
-          </URadioGroup>
+        <!-- Each group is its own block: a divider between groups and a stronger heading. -->
+        <div class="divide-y divide-default">
+          <!-- The padding is on a wrapper: a fieldset's own padding ignores its legend. -->
           <div
-            v-else
-            class="space-y-2"
+            v-for="(set, setIndex) in item.optionSets"
+            :key="set.id"
+            class="py-5 first:pt-0 last:pb-0"
           >
-            <UCheckbox
-              v-for="modifier in group.modifiers"
-              :key="modifier.id"
-              :model-value="chosenIn(group).includes(modifier.id)"
-              :ui="radioUi"
-              :disabled="!chosenIn(group).includes(modifier.id) && group.maxSelect !== null && group.maxSelect !== 1 && chosenIn(group).length >= group.maxSelect"
-              @update:model-value="toggle(group, modifier.id)"
-            >
-              <template #label>
-                <span class="flex w-full items-center justify-between gap-3">
-                  <span>{{ modifier.name }}</span>
-                  <span v-if="priceDelta(modifier.priceDeltaMinor)">{{ priceDelta(modifier.priceDeltaMinor) }}</span>
-                </span>
-              </template>
-            </UCheckbox>
+            <fieldset class="space-y-2">
+              <legend class="flex w-full items-center justify-between gap-2">
+                <span class="font-semibold text-highlighted">{{ set.name }}</span>
+                <UBadge
+                  label="Required · choose 1"
+                  color="neutral"
+                  variant="subtle"
+                  size="sm"
+                />
+              </legend>
+              <URadioGroup
+                :model-value="selection.values[setIndex]"
+                :items="valueItems(setIndex)"
+                :aria-label="set.name"
+                variant="card"
+                :ui="radioUi"
+                @update:model-value="value => selection = chooseValue(item, selection, setIndex, String(value))"
+              >
+                <template #label="{ item: option }">
+                  <span class="flex w-full items-center justify-between gap-3">
+                    <span>{{ option.label }}</span>
+                    <span v-if="option.price">{{ option.price }}</span>
+                  </span>
+                </template>
+              </URadioGroup>
+            </fieldset>
           </div>
-        </fieldset>
+
+          <div
+            v-for="group in item.modifierGroups"
+            :key="group.id"
+            class="py-5 first:pt-0 last:pb-0"
+          >
+            <fieldset
+              :id="`choice-${item.id}-${group.id}`"
+              tabindex="-1"
+              class="space-y-2 rounded-md outline-none"
+              :aria-describedby="problemOf(group.id) ? `problem-${item.id}-${group.id}` : undefined"
+            >
+              <legend class="flex w-full items-center justify-between gap-2">
+                <span class="font-semibold text-highlighted">{{ group.name }}</span>
+                <UBadge
+                  :label="groupRule(group)"
+                  :color="problemOf(group.id) ? 'error' : 'neutral'"
+                  variant="subtle"
+                  size="sm"
+                />
+              </legend>
+              <p
+                v-if="problemOf(group.id)"
+                :id="`problem-${item.id}-${group.id}`"
+                class="text-sm text-error"
+              >
+                {{ problemOf(group.id) }}
+              </p>
+              <URadioGroup
+                v-if="isRadioGroup(group)"
+                :model-value="chosenIn(group)[0]"
+                :items="group.modifiers.map(m => ({ label: m.name, value: m.id, price: priceDelta(m.priceDeltaMinor) }))"
+                :aria-label="group.name"
+                variant="card"
+                :ui="radioUi"
+                @update:model-value="value => pickOne(group, String(value))"
+              >
+                <template #label="{ item: option }">
+                  <span class="flex w-full items-center justify-between gap-3">
+                    <span>{{ option.label }}</span>
+                    <span v-if="option.price">{{ option.price }}</span>
+                  </span>
+                </template>
+              </URadioGroup>
+              <div
+                v-else
+                class="space-y-2"
+              >
+                <UCheckbox
+                  v-for="modifier in group.modifiers"
+                  :key="modifier.id"
+                  :model-value="chosenIn(group).includes(modifier.id)"
+                  variant="card"
+                  :ui="checkboxUi"
+                  :disabled="!chosenIn(group).includes(modifier.id) && group.maxSelect !== null && group.maxSelect !== 1 && chosenIn(group).length >= group.maxSelect"
+                  @update:model-value="toggle(group, modifier.id)"
+                >
+                  <template #label>
+                    <span class="flex w-full items-center justify-between gap-3">
+                      <span>{{ modifier.name }}</span>
+                      <span v-if="priceDelta(modifier.priceDeltaMinor)">{{ priceDelta(modifier.priceDeltaMinor) }}</span>
+                    </span>
+                  </template>
+                </UCheckbox>
+              </div>
+            </fieldset>
+          </div>
+        </div>
       </div>
     </template>
 

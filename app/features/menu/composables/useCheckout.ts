@@ -68,6 +68,8 @@ export function useCheckout() {
   })
 
   const placing = ref(false)
+  /** The order was placed and the page is moving on to it. */
+  const placed = ref(false)
   const failure = ref<{ kind: PlaceFailure, message: string } | null>(null)
   const { account, guest } = useCustomerAccount()
   const { signInAsGuest } = useAccountActions()
@@ -76,13 +78,18 @@ export function useCheckout() {
   /** Places the order; resolves to it, or `null` with `failure` set. `guestName`: without an account. */
   async function place(options: { guestName?: string } = {}): Promise<Order | null> {
     if (placing.value) return null
-    failure.value = null
+    // The last refusal stays on screen while placing again: clearing it here would collapse the
+    // banner and shift the page, then bring it back when the server refuses again. It is replaced
+    // by the next refusal, or dropped on success or when the page's state moves on.
     const current = quote.data.value
     if (current && Date.now() > Date.parse(current.expiresAt)) {
       const before = change.value
       await quote.refresh()
       // New prices since: shown, and the customer places again.
-      if (change.value !== before || !quote.data.value?.orderable) return null
+      if (change.value !== before || !quote.data.value?.orderable) {
+        failure.value = null
+        return null
+      }
     }
     const body = placeBody.value
     if (!body || !quote.data.value?.orderable) return null
@@ -93,6 +100,9 @@ export function useCheckout() {
       const source = orderSource.current()
       const named = { ...(account.value ? body : { ...body, guestName: options.guestName }), ...(source ? { source } : {}) }
       const order = await apiFetch<Order>('/shop/orders', { method: 'POST', body: named, headers: { 'Idempotency-Key': idempotencyKey.value } })
+      failure.value = null
+      // Before the cart empties, so the page shows the hand-off, not "Your order is empty".
+      placed.value = true
       cart.clear()
       orderSource.clear()
       return order
@@ -117,6 +127,7 @@ export function useCheckout() {
     quote,
     change,
     placing,
+    placed,
     failure,
     place,
     dismissFailure: () => {
