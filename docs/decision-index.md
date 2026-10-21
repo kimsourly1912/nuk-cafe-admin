@@ -83,7 +83,7 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D51](decisions.md#d51-customer-accounts-account-emails-and-customer-profiles-step-16-2026-09-27) | Customer accounts, account emails and customer profiles (step 1.6), 2026-09-27 |
 | [D52](decisions.md#d52-the-admin-app-on-the-new-identity-step-17-2026-09-27) | The admin app on the new identity (step 1.7), 2026-09-27 |
 | [D53](decisions.md#d53-cloudflare-staging-step-21-2026-09-27) | Cloudflare staging (step 2.1), 2026-09-27 |
-| [D54](decisions.md#d54-ci-deploy-to-staging-step-22-2026-09-27) | CI deploy to staging (step 2.2), 2026-09-27 |
+| [D54](decisions.md#d54-ci-deploy-to-staging-step-22-2026-09-27) | CI deploy to staging (step 2.2); dependency audit and PR #150 patch follow-up, 2026-09-27 / 2026-10-21 |
 | [D55](decisions.md#d55-menu-categories-api-step-31-2026-09-27) | Menu categories API (step 3.1), 2026-09-27 |
 | [D56](decisions.md#d56-parallel-e2e-shards-in-ci-2026-09-27) | Parallel e2e shards in CI, 2026-09-27 |
 | [D57](decisions.md#d57-media-uploads-step-32-2026-09-27) | Media uploads (step 3.2), 2026-09-27 |

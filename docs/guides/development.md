@@ -11,6 +11,7 @@ pnpm dev                                  # http://localhost:3000; /api is local
 pnpm nuxt db generate                     # create a migration after changing the server schema
 pnpm nuxt db migrate                      # apply local SQLite migrations
 pnpm lint / pnpm lint:fix                 # ESLint also does formatting (no Prettier) and enforces feature boundaries; cached (D172)
+pnpm audit --audit-level high             # same dependency security gate as CI; refresh before opening/updating a PR
 pnpm typecheck                            # vue-tsc via nuxt typecheck
 pnpm test                                 # all Vitest projects
 pnpm test:unit / pnpm test:e2e            # unit + server (~30 s idle, D174) / e2e only (~7–11 min locally at 4 workers, +35 s idle when the build is stale, D177)
@@ -31,7 +32,7 @@ pnpm vitest run -t "refreshes once"
 The browser suite uses the CI runner's Google Chrome by default. In a workspace with Chromium instead, use `E2E_BROWSER_PATH=/usr/bin/chromium pnpm test:e2e`; the optional executable path changes only the test browser launcher, not application behavior.
 
 **Checks (D83):**
-- **Before opening a PR, locally:** `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, and the e2e files of the feature you changed (`pnpm vitest run --project e2e test/e2e/<feature>.test.ts`). The e2e build is reused while no build input changed (`E2E_REBUILD=1` forces one), so rerunning tests or taking screenshots costs no rebuild; after a source edit the rebuild takes about 35 s (D177).
+- **Before opening a PR, locally:** `pnpm lint`, `pnpm typecheck`, `pnpm audit --audit-level high`, `pnpm test:unit`, and the e2e files of the feature you changed (`pnpm vitest run --project e2e test/e2e/<feature>.test.ts`). Run the audit again when updating the PR: advisory data can change while the lockfile stays the same. The e2e build is reused while no build input changed (`E2E_REBUILD=1` forces one), so rerunning tests or taking screenshots costs no rebuild; after a source edit the rebuild takes about 35 s (D177).
 - **The full suite runs in CI** (`.github/workflows/ci.yml`: lint, typecheck, audit, unit/server, e2e in 3 shards) on every PR. A merge to `main` deploys to staging **without running them again** (D133): the PR already checked its code merged with `main` as it was. If `main` moved after the PR's checks ran (another PR merged meanwhile), press **Update branch** on the PR so its checks run on the new `main` before merging, or run the workflow on `main` by hand afterwards (Actions → CI → Run workflow). A shared building block or app-wide change (a root composable, `app.config.ts`, a plugin) also runs the full `pnpm test:e2e` locally first.
 - **Merge only when the PR's checks are green.** A red PR is fixed on the same PR; a failed staging deploy or a red manual run on `main` is fixed before any new work.
 - **"Remove the guard and see the test fail"** is required for new guards (locks, permissions, money, idempotency, version checks); optional elsewhere.
