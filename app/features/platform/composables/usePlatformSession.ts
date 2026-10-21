@@ -41,6 +41,8 @@ export function usePlatformSession() {
   const user = useState<PlatformSession | null>('platform-session:user', () => null)
   const checked = useState('platform-session:checked', () => false)
   const generation = useState('platform-session:generation', () => 0)
+  /** A voluntary sign-out is on its way to the sign-in page (see `signOut`). */
+  const signingOut = useState('platform-session:signing-out', () => false)
   const isSignedIn = computed(() => user.value !== null)
   const mustChangePassword = computed(() => user.value?.mustChangePassword ?? false)
   /** Two-step sign-in is set up (D188): until it is, the console's only page is its setup. */
@@ -130,8 +132,18 @@ export function usePlatformSession() {
       // Signed out here anyway; the cookie expires on its own.
     }
     finally {
-      await navigateTo(PLATFORM_SIGN_IN)
+      // Signed out before leaving: the sign-in page's guard would send a session still here back to
+      // the home page, which then loads after the sign-out. `signingOut` keeps the session-lost
+      // watcher (plugins/api.ts) from also redirecting, with a `?redirect=` to this page.
+      const target = PLATFORM_SIGN_IN
+      signingOut.value = true
       setUser(null)
+      try {
+        await navigateTo(target)
+      }
+      finally {
+        signingOut.value = false
+      }
     }
   }
 
@@ -173,6 +185,7 @@ export function usePlatformSession() {
     user: readonly(user),
     checked: readonly(checked),
     generation: readonly(generation),
+    signingOut: readonly(signingOut),
     isSignedIn,
     mustChangePassword,
     twoFactorEnabled,
