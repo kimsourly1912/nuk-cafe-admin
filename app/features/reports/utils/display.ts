@@ -1,3 +1,4 @@
+import { formatShortDateTime, formatTime } from '~/utils/date-format'
 import type { CancelReason, OrderStatus, OrderType, PaymentMethod, ReturnMethod } from '#shared/contracts/orders'
 import { BUSINESS_DAY_START_MINUTE } from '#shared/contracts/orders'
 import type { OrderHistoryEvent, OrderHistoryRow, PaymentState } from '#shared/contracts/reports'
@@ -59,12 +60,11 @@ export const orderTypeText = (order: Pick<OrderHistoryRow, 'orderType' | 'tableL
   order.orderType === 'dine_in' && order.tableLabel ? `Dine-in · ${order.tableLabel}` : TYPE_LABELS[order.orderType]
 
 /** "9:02 AM" in the branch's zone. */
-export const clockIn = (iso: string, timeZone: string) =>
-  new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone })
+export const clockIn = (iso: string, timeZone: string) => formatTime(iso, { timeZone })
 
-/** "Tue, Sep 30, 9:02 AM" in the branch's zone. */
+/** "Tue 30 Sep, 9:02 AM" in the branch's zone. */
 export const stampIn = (iso: string, timeZone: string) =>
-  new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone })
+  `${new Date(iso).toLocaleDateString('en-US', { weekday: 'short', timeZone })} ${formatShortDateTime(iso, { timeZone })}`
 
 /** A step of the timeline, in words: "Paid", "Cancelled". */
 export function eventTitle(event: Pick<OrderHistoryEvent, 'fromStatus' | 'toStatus'>): string {

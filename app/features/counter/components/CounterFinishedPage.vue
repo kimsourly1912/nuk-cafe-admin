@@ -12,7 +12,7 @@ import type { TableColumn } from '@nuxt/ui'
 import type { CounterOrder } from '#shared/contracts/orders'
 import { useCounterSession } from '../composables/useCounterSession'
 import { useFinishedToday, useOrderHistory } from '../composables/useFinishedToday'
-import { clockTime, firstName, matchesSearch, orderNumber, orderTypeText } from '../utils/counter'
+import { firstName, matchesSearch, orderNumber, orderTypeText } from '../utils/counter'
 import type { FinishedFilter } from '../utils/finished'
 import { filterFinished, finishedAt, itemSummary, paymentNote } from '../utils/finished'
 import CounterHeader from './CounterHeader.vue'
@@ -208,7 +208,7 @@ useSeoMeta({ robots: 'noindex' })
                       {{ orderNumber(order) }}
                     </p>
                     <p class="text-sm text-muted">
-                      {{ clockTime(finishedAt(order)) }}
+                      {{ formatTime(finishedAt(order)) }}
                     </p>
                   </div>
                   <div class="min-w-0 flex-1">
@@ -256,7 +256,7 @@ useSeoMeta({ robots: 'noindex' })
                 />
               </template>
               <template #finished-cell="{ row }">
-                <span class="whitespace-nowrap text-muted">{{ clockTime(finishedAt(row.original)) }}</span>
+                <span class="whitespace-nowrap text-muted">{{ formatTime(finishedAt(row.original)) }}</span>
               </template>
               <template #details-cell="{ row }">
                 <div class="min-w-0 space-y-0.5 whitespace-normal">

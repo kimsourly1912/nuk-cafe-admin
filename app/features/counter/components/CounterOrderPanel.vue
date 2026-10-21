@@ -27,7 +27,7 @@ import { useCounterActions } from '../composables/useCounterActions'
 import type { Change, CommandFailure } from '../utils/counter'
 import { khqrAmountText, khqrReceivedText } from '../utils/khqr'
 import CounterKhqr from './CounterKhqr.vue'
-import { changeDue, clockTime, commandFailure, firstName, orderNumber, orderTypeText, PAYMENT_METHOD_LABELS, paymentText, rielQuickAmounts, usdQuickAmounts } from '../utils/counter'
+import { changeDue, commandFailure, firstName, orderNumber, orderTypeText, PAYMENT_METHOD_LABELS, paymentText, rielQuickAmounts, usdQuickAmounts } from '../utils/counter'
 
 const props = defineProps<{
   order: CounterOrder | null
@@ -208,7 +208,7 @@ const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
       </span>
     </template>
     <template #description>
-      <span v-if="order">{{ firstName(order.customer.name) }} · placed {{ clockTime(order.placedAt) }}</span>
+      <span v-if="order">{{ firstName(order.customer.name) }} · placed {{ formatTime(order.placedAt) }}</span>
     </template>
 
     <template #body>
@@ -358,7 +358,7 @@ const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
                   {{ formatMinor(order.totalMinor) }} × {{ formatRiel(khrRate.khrPerUsd) }} = <span class="font-semibold">{{ formatRiel(totalKhr!) }}</span>
                 </p>
                 <p class="text-muted">
-                  Rounded up to ៛100 · rate set {{ clockTime(khrRate.effectiveFrom) }} by {{ firstName(khrRate.setBy.name) }}
+                  Rounded up to ៛100 · rate set {{ formatTime(khrRate.effectiveFrom) }} by {{ firstName(khrRate.setBy.name) }}
                 </p>
               </div>
               <UFormField label="Amount received (៛)">

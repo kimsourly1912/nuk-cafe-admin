@@ -1,3 +1,4 @@
+import { formatDateTime } from '~/utils/date-format'
 import type { AccountBan, PlatformAccountSummary } from '#shared/contracts/accounts'
 
 /** What an account does on the platform, in a few words: "Owner of 2 cafes · Staff at 1". */
@@ -9,10 +10,8 @@ export function accessLine(account: Pick<PlatformAccountSummary, 'isSuperadmin' 
   return parts.length ? parts.join(' · ') : 'Customer'
 }
 
-const dateTime = (at: string) => new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
-
 export function banLine(ban: AccountBan): string {
-  return ban.until ? `Banned until ${dateTime(ban.until)}` : 'Banned until unbanned'
+  return ban.until ? `Banned until ${formatDateTime(ban.until)}` : 'Banned until unbanned'
 }
 
 /** How long a ban lasts: the ban dialog's choices. */

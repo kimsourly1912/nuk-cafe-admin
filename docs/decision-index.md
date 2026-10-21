@@ -224,3 +224,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D192](decisions.md#d192-the-consoles-system-health-read-only-counts-and-dates-and-a-record-of-every-jobs-run-2026-10-19) | The console's System health: read-only counts and dates, and a record of every job's run, 2026-10-19 |
 | [D193](decisions.md#d193-support-access-the-owner-allows-it-a-super-admin-reads-with-a-fresh-code-read-only-every-request-audited-2026-10-19) | Support access: the owner allows it, a super admin reads with a fresh code, read-only, every request audited, 2026-10-19 |
 | [D194](decisions.md#d194-repositories-keep-drizzles-query-builder-one-repository-standard-2026-10-20) | Repositories keep Drizzle's query builder; one repository standard, 2026-10-20 |
+| [D195](decisions.md#d195-one-date-and-time-style-the-day-first-the-12-hour-clock-2026-10-21) | One date and time style: the day first, the 12-hour clock, 2026-10-21 |

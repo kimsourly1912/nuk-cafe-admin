@@ -1,3 +1,5 @@
+import { formatShortDate } from '~/utils/date-format'
+
 /**
  * Unsaved form input kept in the browser (D151), so a crash, a dead battery or a phone dropping the
  * tab doesn't lose it: the form offers it back when it opens again. Framework-free and unit-tested;
@@ -128,7 +130,7 @@ export function draftTimeText(savedAt: number, now: number = Date.now(), locale 
   yesterday.setDate(today.getDate() - 1)
   if (saved.toDateString() === today.toDateString()) return time
   if (saved.toDateString() === yesterday.toDateString()) return `Yesterday, ${time}`
-  return `${saved.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${time}`
+  return `${formatShortDate(saved)}, ${time}`
 }
 
 /** The browser's `localStorage`, or `undefined` where reading it throws (blocked site data). */

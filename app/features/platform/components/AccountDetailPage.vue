@@ -27,8 +27,6 @@ const changeable = computed(() => !!account.value && !own.value && !account.valu
 const overlay = useOverlay()
 const banModal = overlay.create(AccountBanModal)
 const passwordModal = overlay.create(AccountPasswordModal)
-
-const dateOf = (at: string) => new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 </script>
 
 <template>
@@ -145,7 +143,7 @@ const dateOf = (at: string) => new Date(at).toLocaleDateString('en-GB', { day: '
                 Joined
               </dt>
               <dd class="text-highlighted">
-                {{ dateOf(account.createdAt) }}
+                {{ formatDate(account.createdAt) }}
               </dd>
             </div>
             <div>

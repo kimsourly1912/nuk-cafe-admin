@@ -8,7 +8,6 @@
  * customer menu shows the change on its next load.
  */
 import { useSoldOut } from '../composables/useSoldOut'
-import { clockTime } from '../utils/counter'
 import { filterSoldOutRows, groupSoldOutRows, rowName, soldOutCategories } from '../utils/sold-out'
 import type { SoldOutRow } from '../utils/sold-out'
 import CounterHeader from './CounterHeader.vue'
@@ -190,7 +189,7 @@ useSeoMeta({ robots: 'noindex' })
                       class="text-sm text-muted"
                       :class="!group.single && 'ps-4'"
                     >
-                      Since {{ clockTime(row.since) }}{{ row.by ? ` by ${row.by}` : '' }}
+                      Since {{ formatTime(row.since) }}{{ row.by ? ` by ${row.by}` : '' }}
                     </p>
                   </div>
                   <span

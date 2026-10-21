@@ -10,8 +10,6 @@ const { user } = useAuth()
 const tenantPath = useTenantPath()
 const leaving = ref(false)
 
-const time = (at: string) => new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
-
 /** Closes the visit, then a full page load to the cafe's page in the console (another workspace). */
 async function leave() {
   const support = user.value?.support
@@ -29,7 +27,7 @@ async function leave() {
     class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-warning px-4 py-2 text-sm font-medium text-inverted print:hidden"
     data-testid="support-banner"
   >
-    <span>Platform support view: read-only until {{ time(user.support.visitExpiresAt) }}. Nothing can be changed.</span>
+    <span>Platform support view: read-only until {{ formatShortDateTime(user.support.visitExpiresAt) }}. Nothing can be changed.</span>
     <UButton
       label="Leave"
       size="xs"
@@ -45,7 +43,7 @@ async function leave() {
     class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-info/10 px-4 py-2 text-sm text-highlighted print:hidden"
     data-testid="support-allowed-banner"
   >
-    <span>Platform support can look at this cafe until {{ time(user.supportAllowedUntil) }}.</span>
+    <span>Platform support can look at this cafe until {{ formatShortDateTime(user.supportAllowedUntil) }}.</span>
     <ULink
       :to="tenantPath('/admin/support')"
       class="font-medium underline"

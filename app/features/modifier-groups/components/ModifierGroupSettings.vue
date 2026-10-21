@@ -35,7 +35,7 @@ const noMaximum = computed({
 const minimum = computed(() => (form.value.required ? form.value.minSelect ?? 0 : 0))
 const ruleShown = computed(() => !props.issues.minSelect && !props.issues.maxSelect)
 
-const updated = computed(() => new Date(props.group.updatedAt).toLocaleDateString('en-US', { dateStyle: 'medium' }))
+const updated = computed(() => formatDate(props.group.updatedAt))
 </script>
 
 <template>

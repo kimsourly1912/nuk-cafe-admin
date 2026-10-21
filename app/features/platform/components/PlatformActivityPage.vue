@@ -56,8 +56,6 @@ const columns: TableColumn<ActivityEntry>[] = [
   { id: 'cafe', header: 'Cafe' },
   { id: 'who', header: 'Who' },
 ]
-
-const dateTime = (at: string) => new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 </script>
 
 <template>
@@ -173,7 +171,7 @@ const dateTime = (at: string) => new Date(at).toLocaleString('en-GB', { day: 'nu
             Reason: {{ entry.details.reason }}
           </p>
           <p class="text-muted">
-            {{ actorName(entry) }} · {{ dateTime(entry.at) }}
+            {{ actorName(entry) }} · {{ formatDateTime(entry.at) }}
           </p>
         </li>
       </ul>
@@ -185,7 +183,7 @@ const dateTime = (at: string) => new Date(at).toLocaleString('en-GB', { day: 'nu
         class="shrink-0"
       >
         <template #at-cell="{ row }">
-          <span class="whitespace-nowrap text-muted">{{ dateTime(row.original.at) }}</span>
+          <span class="whitespace-nowrap text-muted">{{ formatDateTime(row.original.at) }}</span>
         </template>
         <template #what-cell="{ row }">
           <div class="min-w-0 max-w-md whitespace-normal">

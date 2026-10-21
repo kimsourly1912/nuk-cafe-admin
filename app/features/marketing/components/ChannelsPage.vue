@@ -21,7 +21,6 @@ const channels = computed(() => (data.value?.channels ?? []).filter(c => !discon
 const connectModal = useOverlay().create(ChannelConnectModal)
 const connect = () => connectModal.open()
 
-const date = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 const followers = (count: number | null) => (count === null ? null : `${count.toLocaleString('en-US')} ${count === 1 ? 'subscriber' : 'subscribers'}`)
 
 function actions(channel: MarketingChannel): DropdownMenuItem[] {
@@ -149,7 +148,7 @@ function actions(channel: MarketingChannel): DropdownMenuItem[] {
                     />
                   </div>
                   <p class="text-sm text-muted">
-                    {{ [channel.username ? `@${channel.username}` : 'Private channel', followers(channel.subscriberCount), `Connected ${date(channel.connectedAt)}${channel.connectedBy ? ` by ${channel.connectedBy}` : ''}`].filter(Boolean).join(' · ') }}
+                    {{ [channel.username ? `@${channel.username}` : 'Private channel', followers(channel.subscriberCount), `Connected ${formatDate(channel.connectedAt)}${channel.connectedBy ? ` by ${channel.connectedBy}` : ''}`].filter(Boolean).join(' · ') }}
                   </p>
                   <p
                     v-if="channel.status === 'removed'"

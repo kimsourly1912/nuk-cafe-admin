@@ -63,8 +63,8 @@ describe('the order page (D100, D114)', () => {
     const now = new Date(2026, 8, 30, 15, 0).getTime()
     expect(placedText(new Date(2026, 8, 30, 10, 15).toISOString(), now)).toBe('Today 10:15 AM')
     expect(placedText(new Date(2026, 8, 29, 18, 0).toISOString(), now)).toBe('Yesterday')
-    expect(placedText(new Date(2026, 8, 28, 9, 0).toISOString(), now)).toBe('Sep 28')
-    expect(placedText(new Date(2025, 11, 31, 9, 0).toISOString(), now)).toBe('Dec 31, 2025')
+    expect(placedText(new Date(2026, 8, 28, 9, 0).toISOString(), now)).toBe('28 Sep')
+    expect(placedText(new Date(2025, 11, 31, 9, 0).toISOString(), now)).toBe('31 Dec 2025')
   })
 
   it('the menu\'s bar: one order by number, ready in green, several as a count', () => {

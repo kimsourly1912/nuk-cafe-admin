@@ -308,7 +308,7 @@ describe('add-on group page', () => {
     expect(await page.getByRole('link', { name: /Iced latte/ }).getAttribute('href')).toBe('/c/nuk/admin/products?item=item-1')
     // Settings: derived rule, status, last updated.
     await page.getByText('Customers must choose exactly 1. Menu items can override these rules.').waitFor()
-    await page.getByText('Last updated Sep 28, 2026').waitFor()
+    await page.getByText('Last updated 28 Sep 2026').waitFor()
     expect(await page.getByRole('button', { name: 'Save changes' }).isDisabled()).toBe(true)
   })
 

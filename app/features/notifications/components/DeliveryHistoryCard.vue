@@ -23,13 +23,10 @@ useIntervalFn(() => {
 
 const deliveries = computed(() => data.value?.deliveries ?? [])
 
-const when = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-
 function status(delivery: NotificationDelivery): { label: string, color: 'success' | 'neutral' | 'warning' | 'error' } {
   if (delivery.status === 'sent') return { label: 'Sent', color: 'success' }
   if (delivery.status === 'failed') return { label: 'Failed', color: 'error' }
-  if (delivery.attempts > 0 && delivery.nextAttemptAt) return { label: `Retrying at ${clock(delivery.nextAttemptAt)}`, color: 'warning' }
+  if (delivery.attempts > 0 && delivery.nextAttemptAt) return { label: `Retrying at ${formatTime(delivery.nextAttemptAt)}`, color: 'warning' }
   return { label: 'Pending', color: 'neutral' }
 }
 
@@ -107,7 +104,7 @@ const columns: TableColumn<NotificationDelivery>[] = [
           />
         </div>
         <p class="text-sm text-muted">
-          {{ delivery.destination.title }} · {{ when(delivery.createdAt) }}
+          {{ delivery.destination.title }} · {{ formatShortDateTime(delivery.createdAt) }}
         </p>
         <p
           v-if="delivery.lastError && delivery.status !== 'sent'"
@@ -144,7 +141,7 @@ const columns: TableColumn<NotificationDelivery>[] = [
       :columns="columns"
     >
       <template #createdAt-cell="{ row }">
-        <span class="whitespace-nowrap text-muted">{{ when(row.original.createdAt) }}</span>
+        <span class="whitespace-nowrap text-muted">{{ formatShortDateTime(row.original.createdAt) }}</span>
       </template>
       <template #subject-cell="{ row }">
         <span class="font-medium text-highlighted">{{ row.original.subject }}</span>

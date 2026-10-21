@@ -13,7 +13,6 @@ const { data, loading, error, refresh } = useCafeSupport()
 const { allow, end, endVisit, busy } = useCafeSupportMutations()
 const { fetchSession } = useAuth()
 
-const dateTime = (at: string) => new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 const nameOf = (person: { name: string | null }) => person.name ?? 'Someone from the platform team'
 
 /** The sidebar's banner follows (the session carries until when support is allowed). */
@@ -76,7 +75,7 @@ function statusOf(grant: SupportGrant) {
               variant="subtle"
               icon="i-lucide-life-buoy"
               title="Platform support is allowed"
-              :description="`Until ${dateTime(data.active.expiresAt)}. Allowed by ${nameOf(data.active.grantedBy)} on ${dateTime(data.active.grantedAt)}.`"
+              :description="`Until ${formatDateTime(data.active.expiresAt)}. Allowed by ${nameOf(data.active.grantedBy)} on ${formatDateTime(data.active.grantedAt)}.`"
               data-testid="support-active"
             />
             <UButton
@@ -128,7 +127,7 @@ function statusOf(grant: SupportGrant) {
               class="space-y-2 py-3 first:pt-0 last:pb-0"
             >
               <div class="flex flex-wrap items-center gap-2">
-                <span class="font-medium text-highlighted">{{ dateTime(grant.grantedAt) }}</span>
+                <span class="font-medium text-highlighted">{{ formatDateTime(grant.grantedAt) }}</span>
                 <UBadge
                   :color="statusOf(grant).color"
                   variant="subtle"
@@ -139,16 +138,16 @@ function statusOf(grant: SupportGrant) {
               <p class="text-muted">
                 Allowed by {{ nameOf(grant.grantedBy) }}
                 <template v-if="grant.endedAt">
-                  · ended {{ dateTime(grant.endedAt) }}{{ grant.endedBy ? ` by ${nameOf(grant.endedBy)}` : '' }}
+                  · ended {{ formatDateTime(grant.endedAt) }}{{ grant.endedBy ? ` by ${nameOf(grant.endedBy)}` : '' }}
                 </template>
                 <template v-else-if="!grant.active">
-                  · expired {{ dateTime(grant.expiresAt) }}
+                  · expired {{ formatDateTime(grant.expiresAt) }}
                 </template>
               </p>
               <ul
                 v-if="grant.visits.length"
                 class="space-y-1 ps-4"
-                :aria-label="`Who looked, from ${dateTime(grant.grantedAt)}`"
+                :aria-label="`Who looked, from ${formatDateTime(grant.grantedAt)}`"
               >
                 <li
                   v-for="visit in grant.visits"
@@ -157,7 +156,7 @@ function statusOf(grant: SupportGrant) {
                 >
                   <span class="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span>
-                      {{ nameOf(visit.by) }} opened it {{ dateTime(visit.openedAt) }}<template v-if="visit.closedAt"> · closed {{ dateTime(visit.closedAt) }}</template>
+                      {{ nameOf(visit.by) }} opened it {{ formatDateTime(visit.openedAt) }}<template v-if="visit.closedAt"> · closed {{ formatDateTime(visit.closedAt) }}</template>
                     </span>
                     <template v-if="visit.active">
                       <UBadge

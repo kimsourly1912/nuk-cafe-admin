@@ -19,14 +19,12 @@ const running = computed(() => props.promotion.phase === 'live' || props.promoti
 const postModal = useOverlay().create(PostToChannelsModal)
 const post = () => postModal.open({ promotion: props.promotion })
 
-const when = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-
 function state(p: MarketingPost): { label: string, color: BadgeProps['color'], detail: string } {
-  if (p.status === 'sent') return { label: 'Sent', color: 'success', detail: `Sent ${when(p.sentAt ?? p.scheduledAt)}` }
+  if (p.status === 'sent') return { label: 'Sent', color: 'success', detail: `Sent ${formatShortDateTime(p.sentAt ?? p.scheduledAt)}` }
   if (p.status === 'failed') return { label: 'Failed', color: 'error', detail: p.reason ?? 'Telegram didn\'t accept it.' }
   if (p.status === 'cancelled') return { label: 'Cancelled', color: 'neutral', detail: p.reason ?? 'Cancelled before it went out.' }
   if (p.attempts > 0) return { label: 'Retrying', color: 'warning', detail: p.reason ?? 'Sending…' }
-  if (Date.parse(p.scheduledAt) > Date.now()) return { label: 'Scheduled', color: 'info', detail: `Goes out ${when(p.scheduledAt)}` }
+  if (Date.parse(p.scheduledAt) > Date.now()) return { label: 'Scheduled', color: 'info', detail: `Goes out ${formatShortDateTime(p.scheduledAt)}` }
   return { label: 'Sending', color: 'warning', detail: 'Going out now' }
 }
 </script>

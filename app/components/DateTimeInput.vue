@@ -46,7 +46,7 @@ const maxDay = computed(() => (props.max ? parseDate(props.max.slice(0, 10)) : u
 
 const text = computed(() => {
   if (!parts.value) return 'Choose a date and time'
-  const date = new Date(`${parts.value.day}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+  const date = formatDay(parts.value.day)
   return `${date}, ${formatClock(parts.value.time.hour * 60 + parts.value.time.minute)}`
 })
 

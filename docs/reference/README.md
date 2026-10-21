@@ -72,6 +72,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<ListEmptyState>` | component | [UI helpers](./ui-helpers.md#listemptystate) | "No X yet" vs "No X match your filters" |
 | `previewList`, `pluralize`, `changeText` | util | [UI helpers](./ui-helpers.md#previewlist-and-pluralize) | "Coffee, Tea and 3 more", "3 categories", "+12%" |
 | `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`, `formatRiel` | util | [UI helpers](./ui-helpers.md#money-tominor-fromminor-formatminor-formatprice-price_format-formatriel) | Cents ↔ dollars, "$4.20"; riel "៛35,900" |
+| `formatDate`, `formatShortDate`, `formatTime`, `formatDateTime`, `formatShortDateTime`, `formatDay` | util | [UI helpers](./ui-helpers.md#dates-and-times-formatdate-formatshortdate-formattime-formatdatetime-formatshortdatetime-formatday) | Timestamps on screen: "21 Oct 2026, 9:05 AM" (D195) |
 | `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute` | util | [UI helpers](./ui-helpers.md#times-of-day-formatclock-timerange-isovernight-minutetotime-timetominute) | Minutes after midnight ↔ "7:30 AM" and `UInputTime` |
 | `useUnsavedChanges` | composable | [Forms](./forms.md#useunsavedchanges) | Warn before a page form's input is lost |
 | `useModalUnsavedChanges` | composable | [Forms](./forms.md#usemodalunsavedchanges) | Same, plus asking before the modal closes |

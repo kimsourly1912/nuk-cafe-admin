@@ -29,8 +29,6 @@ async function save() {
   await set.execute({ khrPerUsd: state.khrPerUsd })
 }
 
-const when = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
-
 const columns: TableColumn<ExchangeRate>[] = [
   { accessorKey: 'effectiveFrom', header: 'Date' },
   { accessorKey: 'khrPerUsd', header: 'Rate' },
@@ -92,7 +90,7 @@ const columns: TableColumn<ExchangeRate>[] = [
                     <span class="text-base font-normal text-muted">per $1</span>
                   </p>
                   <p class="text-sm text-muted">
-                    Set by {{ data.current.setBy.name }} · {{ when(data.current.effectiveFrom) }}
+                    Set by {{ data.current.setBy.name }} · {{ formatDateTime(data.current.effectiveFrom) }}
                   </p>
                 </template>
                 <UAlert
@@ -160,7 +158,7 @@ const columns: TableColumn<ExchangeRate>[] = [
               empty="No rate has been set yet."
             >
               <template #effectiveFrom-cell="{ row }">
-                {{ when(row.original.effectiveFrom) }}
+                {{ formatDateTime(row.original.effectiveFrom) }}
                 <UBadge
                   v-if="row.index === 0"
                   label="Current"

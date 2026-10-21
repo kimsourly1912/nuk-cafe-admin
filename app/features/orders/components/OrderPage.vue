@@ -16,7 +16,7 @@ import { savingsOf } from '#shared/contracts/orders'
 import { accountLink, ACCOUNT_PATHS } from '~/features/account'
 import { useOrderAgain } from '~/features/menu'
 import { useOrderTracking } from '../composables/useOrders'
-import { cancellationText, clockTime, countdown, formatPickupNumber, isInProgress, nextStep, orderTypeText, paymentText, statusBadge } from '../utils/order'
+import { cancellationText, countdown, formatPickupNumber, isInProgress, nextStep, orderTypeText, paymentText, statusBadge } from '../utils/order'
 import CancelOrderSheet from './CancelOrderSheet.vue'
 import OrderReadyTelegram from './OrderReadyTelegram.vue'
 import OrdersHeader from './OrdersHeader.vue'
@@ -218,7 +218,7 @@ async function again(from: Order) {
               :color="timeLeft.urgent ? 'error' : 'warning'"
               variant="subtle"
               icon="i-lucide-clock"
-              :title="timeLeft.over ? 'Time\'s up: this order will be cancelled' : `Pay at the counter by ${clockTime(order.paymentDueAt)}`"
+              :title="timeLeft.over ? 'Time\'s up: this order will be cancelled' : `Pay at the counter by ${formatTime(order.paymentDueAt)}`"
               :description="timeLeft.over ? 'Place a new order if you still want it.' : `${timeLeft.minutes} min left. Unpaid orders are cancelled after 30 minutes.`"
             />
             <p
@@ -237,7 +237,7 @@ async function again(from: Order) {
               color="success"
               variant="subtle"
               icon="i-lucide-circle-check"
-              :title="`Picked up at ${clockTime(order.completedAt)}`"
+              :title="`Picked up at ${formatTime(order.completedAt)}`"
               description="Thanks for ordering. Enjoy!"
             />
             <p
@@ -272,7 +272,7 @@ async function again(from: Order) {
                   v-if="order.cancelledAt"
                   class="text-sm text-muted"
                 >
-                  Cancelled at {{ clockTime(order.cancelledAt) }}
+                  Cancelled at {{ formatTime(order.cancelledAt) }}
                 </p>
               </div>
             </div>
@@ -289,7 +289,7 @@ async function again(from: Order) {
             :ui="{ footer: 'max-sm:pb-[max(env(safe-area-inset-bottom),1rem)]' }"
           >
             <p class="mb-3 text-sm text-muted">
-              {{ order.branch.name }} · {{ orderTypeText(order) }} · Placed {{ clockTime(order.placedAt) }}
+              {{ order.branch.name }} · {{ orderTypeText(order) }} · Placed {{ formatTime(order.placedAt) }}
             </p>
             <ul
               class="space-y-2 text-sm"

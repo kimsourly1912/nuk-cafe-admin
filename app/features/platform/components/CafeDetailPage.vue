@@ -66,7 +66,7 @@ function ownerActions(owner: TenantOwner): DropdownMenuItem[] {
   ]
 }
 
-const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))
+const created = computed(() => cafe.value && formatDate(cafe.value.createdAt))
 </script>
 
 <template>
@@ -411,7 +411,7 @@ const created = computed(() => cafe.value && new Date(cafe.value.createdAt).toLo
             class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
           >
             <p class="text-sm">
-              The owner allows platform support until {{ new Date(cafe.support.expiresAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) }}: read-only, for up to an hour per visit.
+              The owner allows platform support until {{ formatShortDateTime(cafe.support.expiresAt) }}: read-only, for up to an hour per visit.
             </p>
             <UButton
               label="Open read-only"

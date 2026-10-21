@@ -91,7 +91,7 @@ const problemText: Record<KhqrCheckProblem, string> = {
 }
 
 const expiry = computed(() => (data.value?.token?.expiresAt ? tokenExpiry(data.value.token.expiresAt, Date.now()) : null))
-const setOn = computed(() => data.value?.token && new Date(data.value.token.setAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }))
+const setOn = computed(() => data.value?.token && formatDate(data.value.token.setAt))
 
 // --- The cafe's token (T2d, D148) ---
 const tokenModal = useOverlay().create(BakongTokenModal)

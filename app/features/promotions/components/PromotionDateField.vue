@@ -19,7 +19,7 @@ const value = computed(() => (/^\d{4}-\d{2}-\d{2}$/.test(model.value) ? parseDat
 const minValue = computed(() => (props.min ? parseDate(props.min) : undefined))
 
 const text = computed(() => (value.value
-  ? new Date(`${model.value}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+  ? formatDay(model.value)
   : 'Choose a day'))
 
 function choose(day: DateValue | DateValue[] | null | undefined | { start?: DateValue, end?: DateValue }) {
