@@ -17,6 +17,11 @@ describe('date formats: the day first, the 12-hour clock', () => {
     expect(formatDate(AT, { timeZone: 'America/Los_Angeles' })).toBe('20 Oct 2026')
   })
 
+  it('puts the weekday first when asked (the reports\' stamps)', () => {
+    expect(formatShortDate(AT, { ...PHNOM_PENH, weekday: true })).toBe('Wed 21 Oct')
+    expect(plain(formatShortDateTime(AT, { ...PHNOM_PENH, weekday: true }))).toBe('Wed 21 Oct, 9:05 AM')
+  })
+
   it('takes an ISO string, epoch milliseconds or a Date alike', () => {
     expect(formatDate(Date.parse(AT), PHNOM_PENH)).toBe('21 Oct 2026')
     expect(formatDate(new Date(AT), PHNOM_PENH)).toBe('21 Oct 2026')

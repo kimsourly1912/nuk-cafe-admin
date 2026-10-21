@@ -66,6 +66,8 @@ const addDays = (date: string, days: number) => new Date(Date.parse(`${date}T00:
 export function periodDates(period: ActivityPeriod, timeZone: string, now = new Date()): { from?: string, to?: string } {
   if (period === 'any') return {}
   // en-CA writes dates as YYYY-MM-DD.
+  // A `YYYY-MM-DD` key in the zone (en-CA writes it that way), compared, never shown.
+  // eslint-disable-next-line no-restricted-syntax
   const today = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
   switch (period) {
     case 'today': return { from: today, to: today }

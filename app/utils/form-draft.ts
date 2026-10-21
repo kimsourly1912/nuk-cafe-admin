@@ -1,4 +1,4 @@
-import { formatShortDate } from '~/utils/date-format'
+import { formatShortDate, formatTime } from '~/utils/date-format'
 
 /**
  * Unsaved form input kept in the browser (D151), so a crash, a dead battery or a phone dropping the
@@ -122,9 +122,9 @@ function parse<T>(raw: string): StoredFormDraft<T> | null {
 }
 
 /** "10:42 AM", or "Yesterday, 10:42 AM", or "3 Oct, 10:42 AM": when a draft was last typed. */
-export function draftTimeText(savedAt: number, now: number = Date.now(), locale = 'en-US'): string {
+export function draftTimeText(savedAt: number, now: number = Date.now()): string {
   const saved = new Date(savedAt)
-  const time = saved.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
+  const time = formatTime(saved)
   const today = new Date(now)
   const yesterday = new Date(now)
   yesterday.setDate(today.getDate() - 1)
