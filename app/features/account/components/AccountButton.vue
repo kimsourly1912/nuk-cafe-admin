@@ -23,6 +23,12 @@ const open = ref(false)
 const signedOutOpen = ref(false)
 
 const signInLink = computed(() => accountLink(ACCOUNT_PATHS.signIn, route.fullPath))
+/** The signed-out menu below `lg`. */
+const signedOutLinks = computed(() => [
+  ...(guest.value ? [{ label: 'Your orders', icon: 'i-lucide-receipt', to: tenantPath('/orders') }] : []),
+  { label: 'Sign in', icon: 'i-lucide-log-in', to: signInLink.value },
+  { label: 'Create account', icon: 'i-lucide-user-plus', to: accountLink(ACCOUNT_PATHS.signUp, route.fullPath) },
+])
 const initials = computed(() => (account.value ? initialsOf(account.value.name, account.value.email) : ''))
 </script>
 
@@ -65,30 +71,11 @@ const initials = computed(() => (account.value ? initialsOf(account.value.name, 
       <template #content>
         <div class="w-60 space-y-1 p-2">
           <UButton
-            v-if="guest"
-            label="Your orders"
-            icon="i-lucide-receipt"
-            :to="tenantPath('/orders')"
-            color="neutral"
-            variant="ghost"
-            block
-            class="justify-start"
-            @click="signedOutOpen = false"
-          />
-          <UButton
-            label="Sign in"
-            icon="i-lucide-log-in"
-            :to="signInLink"
-            color="neutral"
-            variant="ghost"
-            block
-            class="justify-start"
-            @click="signedOutOpen = false"
-          />
-          <UButton
-            label="Create account"
-            icon="i-lucide-user-plus"
-            :to="accountLink(ACCOUNT_PATHS.signUp, route.fullPath)"
+            v-for="link in signedOutLinks"
+            :key="link.label"
+            :label="link.label"
+            :icon="link.icon"
+            :to="link.to"
             color="neutral"
             variant="ghost"
             block

@@ -17,13 +17,13 @@ const state = reactive({ email: '' })
 const sentTo = ref<string>()
 const { saving, formError, focusFirstInvalid, submit } = useAccountForm({ email: 'forgot-email' })
 const { requestPasswordReset } = useAccountActions()
-const cooldown = useResendCooldown('reset')
+const { waiting, start: startCooldown, waitLabel } = useResendCooldown('reset')
 
 async function send(form: ForgotPasswordForm) {
   await submit(async () => {
     await requestPasswordReset(form)
     sentTo.value = form.email
-    cooldown.start()
+    startCooldown()
   })
 }
 const onSubmit = (event: FormSubmitEvent<ForgotPasswordForm>) => send(event.data)
@@ -95,12 +95,12 @@ function useAnotherEmail() {
     </div>
     <template #footer>
       <UButton
-        :label="cooldown.secondsLeft.value ? `Send again in ${cooldown.secondsLeft.value} s` : 'Send again'"
+        :label="waitLabel('Send again')"
         color="neutral"
         variant="outline"
         block
         :loading="saving"
-        :disabled="cooldown.secondsLeft.value > 0"
+        :disabled="waiting"
         @click="sendAgain"
       />
       <UButton

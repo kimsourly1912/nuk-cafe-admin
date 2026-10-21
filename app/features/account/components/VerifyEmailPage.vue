@@ -17,17 +17,18 @@ const target = computed(() => accountRedirectTarget(route.query.redirect, home.v
 
 const { account, known } = useCustomerAccount()
 const { resendVerification } = useAccountActions()
-const cooldown = useResendCooldown('verify')
+const { waiting, start: startCooldown, waitLabel } = useResendCooldown('verify')
 const { saving, formError, submit } = useAccountForm({})
 const sentAgain = ref(false)
 
 async function resend() {
-  if (!account.value) return
+  const email = account.value?.email
+  if (!email) return
   sentAgain.value = false
   await submit(async () => {
-    await resendVerification(account.value!.email)
+    await resendVerification(email)
     sentAgain.value = true
-    cooldown.start()
+    startCooldown()
   })
 }
 </script>
@@ -109,12 +110,12 @@ async function resend() {
     </div>
     <template #footer>
       <UButton
-        :label="cooldown.secondsLeft.value ? `Resend email in ${cooldown.secondsLeft.value} s` : 'Resend email'"
+        :label="waitLabel('Resend email')"
         color="neutral"
         variant="outline"
         block
         :loading="saving"
-        :disabled="cooldown.secondsLeft.value > 0"
+        :disabled="waiting"
         @click="resend"
       />
       <UButton

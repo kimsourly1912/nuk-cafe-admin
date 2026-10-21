@@ -17,19 +17,18 @@ const emit = defineEmits<{ close: [] }>()
 const tenantPath = useTenantPath()
 const notify = useNotify()
 const { signOut } = useAccountActions()
-const verification = useResendVerification()
+const { resend, sending, label: resendLabel, waiting } = useResendVerification()
 const { copy, copied } = useClipboard({ copiedDuring: 2000, legacy: true })
 
-// This cafe's workspaces (D124, D141), shown only when the server says this account may open them.
-const WORKSPACE_LINKS = {
-  counter: { label: 'Counter', icon: 'i-lucide-store', page: '/counter' },
-  admin: { label: 'Admin workspace', icon: 'i-lucide-layout-dashboard', page: '/admin' },
-} as const
-const WORKSPACE_ORDER = Object.keys(WORKSPACE_LINKS) as (keyof typeof WORKSPACE_LINKS)[]
-const workspaces = computed(() => WORKSPACE_ORDER.filter(id => props.account.workspaces.includes(id)).map((id) => {
-  const { page, ...link } = WORKSPACE_LINKS[id]
-  return { id, ...link, to: tenantPath(page) }
-}))
+// This cafe's workspaces (D124, D141), in this order, shown only when the server says this account
+// may open them.
+const WORKSPACE_LINKS = [
+  { id: 'counter', label: 'Counter', icon: 'i-lucide-store', page: '/counter' },
+  { id: 'admin', label: 'Admin workspace', icon: 'i-lucide-layout-dashboard', page: '/admin' },
+] as const
+const workspaces = computed(() => WORKSPACE_LINKS
+  .filter(link => props.account.workspaces.includes(link.id))
+  .map(link => ({ ...link, to: tenantPath(link.page) })))
 
 async function signOutNow() {
   emit('close')
@@ -67,13 +66,13 @@ async function signOutNow() {
         Verify your email so you can always get back into your account.
       </p>
       <UButton
-        :label="verification.label.value"
+        :label="resendLabel"
         color="neutral"
         variant="outline"
         block
-        :loading="verification.sending.value"
-        :disabled="verification.waiting.value"
-        @click="verification.resend"
+        :loading="sending"
+        :disabled="waiting"
+        @click="resend"
       />
     </div>
     <USeparator />

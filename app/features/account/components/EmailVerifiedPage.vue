@@ -18,16 +18,17 @@ const failed = computed(() => typeof route.query.error === 'string')
 
 const { account, known } = useCustomerAccount()
 const { resendVerification } = useAccountActions()
-const cooldown = useResendCooldown('verify')
+const { waiting, start: startCooldown, waitLabel } = useResendCooldown('verify')
 const { saving, formError, submit } = useAccountForm({})
 const sent = ref(false)
 
 async function sendNewLink() {
-  if (!account.value) return
+  const email = account.value?.email
+  if (!email) return
   await submit(async () => {
-    await resendVerification(account.value!.email)
+    await resendVerification(email)
     sent.value = true
-    cooldown.start()
+    startCooldown()
   })
 }
 </script>
@@ -74,10 +75,10 @@ async function sendNewLink() {
     <template #footer>
       <UButton
         v-if="known && account"
-        :label="cooldown.secondsLeft.value ? `Send a new link in ${cooldown.secondsLeft.value} s` : 'Send a new link'"
+        :label="waitLabel('Send a new link')"
         block
         :loading="saving"
-        :disabled="cooldown.secondsLeft.value > 0"
+        :disabled="waiting"
         @click="sendNewLink"
       />
       <UButton

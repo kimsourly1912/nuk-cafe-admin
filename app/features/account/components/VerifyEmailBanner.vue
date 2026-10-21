@@ -8,7 +8,7 @@
 import { useCustomerAccount, useResendVerification } from '../composables/useCustomerAccount'
 
 const { account } = useCustomerAccount()
-const verification = useResendVerification()
+const { resend, sending, label, waiting } = useResendVerification()
 </script>
 
 <template>
@@ -20,12 +20,12 @@ const verification = useResendVerification()
     title="Verify your email address"
     :description="`So you can always get back into your account. We sent a link to ${account.email}.`"
     :actions="[{
-      label: verification.label.value,
+      label,
       color: 'neutral',
       variant: 'outline',
-      loading: verification.sending.value,
-      disabled: verification.waiting.value,
-      onClick: verification.resend,
+      loading: sending,
+      disabled: waiting,
+      onClick: resend,
     }]"
   />
 </template>
