@@ -1,6 +1,6 @@
 import type { CancelReason, CounterOrder, CounterOrderHistory, CounterTimelineStep } from '#shared/contracts/orders'
-import { formatMinor } from '~/utils/money'
-import { clockTime, firstName, formatRiel, PAYMENT_METHOD_LABELS } from './counter'
+import { formatMinor, formatRiel } from '~/utils/money'
+import { clockTime, firstName, PAYMENT_METHOD_LABELS } from './counter'
 
 /**
  * "Finished today" (step 10.2, D117, the owner's frames): what a row and the order panel say about
