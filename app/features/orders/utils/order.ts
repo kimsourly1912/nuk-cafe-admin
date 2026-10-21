@@ -1,6 +1,6 @@
 import type { CancelReason, Order, OrderStatus, OrderSummary, PaymentMethod } from '#shared/contracts/orders'
 import { IN_PROGRESS_STATUSES } from '#shared/contracts/orders'
-import { formatMinor } from '~/utils/money'
+import { formatMinor, formatRiel } from '~/utils/money'
 import { pluralize } from '~/utils/text'
 
 /** The customer's orders (step 6.2b, D100; tracking, step 6.5b, D114). */
@@ -125,7 +125,7 @@ export function paymentText(order: Pick<Order, 'payment'>): string | null {
   const payment = order.payment
   if (!payment) return null
   const amount = payment.method === 'cash_khr' && payment.amountKhr !== null
-    ? `៛${payment.amountKhr.toLocaleString('en-US')}`
+    ? formatRiel(payment.amountKhr)
     : formatMinor(payment.amountMinor)
   return `Paid ${amount} · ${PAYMENT_METHOD_LABELS[payment.method]} · ${clockTime(payment.collectedAt)}`
 }

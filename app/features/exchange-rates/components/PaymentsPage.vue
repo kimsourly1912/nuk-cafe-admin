@@ -29,7 +29,6 @@ async function save() {
   await set.execute({ khrPerUsd: state.khrPerUsd })
 }
 
-const riel = (n: number) => `៛${n.toLocaleString('en-US')}`
 const when = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 
 const columns: TableColumn<ExchangeRate>[] = [
@@ -89,7 +88,7 @@ const columns: TableColumn<ExchangeRate>[] = [
                 />
                 <template v-else-if="data?.current">
                   <p class="text-4xl font-semibold text-highlighted tabular-nums">
-                    {{ riel(data.current.khrPerUsd) }}
+                    {{ formatRiel(data.current.khrPerUsd) }}
                     <span class="text-base font-normal text-muted">per $1</span>
                   </p>
                   <p class="text-sm text-muted">
@@ -120,7 +119,7 @@ const columns: TableColumn<ExchangeRate>[] = [
                 <UFormField
                   label="Riel per $1"
                   name="khrPerUsd"
-                  :help="`Between ${riel(KHR_PER_USD_MIN)} and ${riel(KHR_PER_USD_MAX)}. From now on; payments keep the rate they used.`"
+                  :help="`Between ${formatRiel(KHR_PER_USD_MIN)} and ${formatRiel(KHR_PER_USD_MAX)}. From now on; payments keep the rate they used.`"
                   required
                 >
                   <UInputNumber
@@ -172,7 +171,7 @@ const columns: TableColumn<ExchangeRate>[] = [
                 />
               </template>
               <template #khrPerUsd-cell="{ row }">
-                <span class="tabular-nums">{{ riel(row.original.khrPerUsd) }}</span>
+                <span class="tabular-nums">{{ formatRiel(row.original.khrPerUsd) }}</span>
               </template>
               <template #setBy-cell="{ row }">
                 {{ row.original.setBy.name }}

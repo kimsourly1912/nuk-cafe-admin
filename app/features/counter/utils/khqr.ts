@@ -1,6 +1,5 @@
 import type { KhqrCharge, KhqrCheckProblem, KhqrReceived } from '#shared/contracts/orders'
-import { formatMinor } from '~/utils/money'
-import { formatRiel } from './counter'
+import { formatMinor, formatRiel } from '~/utils/money'
 
 /** "$8.75" or "៛35,900": what the QR asks for. */
 export const khqrAmountText = (charge: Pick<KhqrCharge, 'currency' | 'amount'>) =>
