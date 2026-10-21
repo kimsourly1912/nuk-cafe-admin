@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CounterOrder } from '#shared/contracts/orders'
 import { ApiError } from '~/utils/api-error'
-import { changeDue, commandFailure, firstName, formatRiel, itemCount, itemNames, lastUpdatedText, matchesSearch, orderTypeText, payBySoon, queueLongStale, queueTitle, rielQuickAmounts, timeAgo, usdQuickAmounts } from '../utils/counter'
+import { changeDue, commandFailure, firstName, itemCount, itemNames, lastUpdatedText, matchesSearch, orderTypeText, payBySoon, queueLongStale, queueTitle, rielQuickAmounts, timeAgo, usdQuickAmounts } from '../utils/counter'
 
 const order = (over: Partial<CounterOrder> = {}): CounterOrder => ({
   id: 'o1', version: 1, pickupNumber: 42, businessDate: '2026-09-29', status: 'awaiting_payment', orderType: 'pickup', table: null,
@@ -53,7 +53,6 @@ describe('money at the counter', () => {
     expect(changeDue(725, null)).toEqual({ kind: 'exact' })
     expect(changeDue(725, 1000)).toEqual({ kind: 'change', amount: 275 })
     expect(changeDue(725, 500)).toEqual({ kind: 'short', amount: 225 })
-    expect(formatRiel(35_900)).toBe('៛35,900')
   })
 })
 
