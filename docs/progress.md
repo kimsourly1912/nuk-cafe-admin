@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Account menu split out of the header button (2026-10-21)
+
+Branch `refactor/account-button-vue` (from `origin/main`). `AccountButton.vue` keeps the trigger, the signed-out menus and the open state; the signed-in menu moved to `AccountMenuContent.vue`, which alone calls `useResendVerification` (its one-second timer) and the sign-out, clipboard and workspace code. The content mounts only while the menu is open. Behaviour and the account e2e selectors are unchanged. Not yet done: the duplicated signed-out "Sign in" and "Your orders" links, and the clipboard's `legacy` option.
+
+- **Evidence (2026-10-21, local):** `eslint` on `app/features/account/components/` and `pnpm typecheck` clean (the first typecheck caught a dropped import, fixed); `vitest --project unit app/features/account` 13 passed; `test/e2e/shop-account.test.ts` 14 passed against a production build. The reset-password page's uncommitted edits in the same working tree were not part of this step and were not committed.
+
 ## UI fix: item detail's options are card rows (2026-10-21)
 
 Branch `claude/ui-ux-fixes`. Owner report (screenshot): the options and add-ons in an item's detail were small and hard to tap, and the groups ran together. Each choice is now a Nuxt UI `variant="card"` row (`p-3`, 8px apart; the whole row, price included, is the target), and each group is a block with a semibold heading and a divider between groups. The spacing is on a wrapper `div`, not the `fieldset`, because a fieldset's padding ignores its `legend`. Rule in [ui §6](reference/ui.md#6-density-and-touch-targets). No size overrides beyond `p-3`, as D81 requires.
