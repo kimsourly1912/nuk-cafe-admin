@@ -4,7 +4,7 @@
  * platform team. An account that isn't a super admin is signed out again with a clear message. With
  * two-step sign-in (D188) the password is followed by the code from the app (`<TwoFactorCodeForm>`).
  */
-import type { FormErrorEvent, FormSubmitEvent } from '@nuxt/ui'
+import type { FormSubmitEvent } from '@nuxt/ui'
 import * as v from 'valibot'
 import { platformRedirectTarget, usePlatformSession } from '../composables/usePlatformSession'
 
@@ -29,12 +29,6 @@ const codeStep = ref(false)
 const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
 const form = useTemplateRef('form')
 useFormErrorRecheck(form)
-// The form keeps its fields disabled until after this event (`loadingAuto`, re-enabled in its
-// `finally`), and a disabled field can't take focus: focus on the next frame, once they're enabled.
-function focusFirstInvalid(event: FormErrorEvent) {
-  const id = event.errors[0]?.id
-  if (id) requestAnimationFrame(() => document.getElementById(id)?.focus())
-}
 
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true

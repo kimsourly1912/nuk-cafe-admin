@@ -22,7 +22,7 @@ const target = computed(() => accountRedirectTarget(route.query.redirect, home.v
 const afterReset = computed(() => route.query.reset === '1')
 
 const state = reactive({ email: '', password: '' })
-const { saving, formError, focusFirstInvalid, submit } = useAccountForm({ email: 'sign-in-email', password: 'sign-in-password' })
+const { saving, formError, submit } = useAccountForm({ email: 'sign-in-email', password: 'sign-in-password' })
 const { signIn, finishSignIn } = useAccountActions()
 /** After a password that needs a code: the code step replaces the form. */
 const codeStep = ref(false)

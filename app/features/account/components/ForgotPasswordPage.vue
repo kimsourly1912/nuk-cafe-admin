@@ -15,7 +15,7 @@ import FormErrorAlert from './FormErrorAlert.vue'
 const state = reactive({ email: '' })
 /** The address the link went to; set once sent. */
 const sentTo = ref<string>()
-const { saving, formError, focusFirstInvalid, submit } = useAccountForm({ email: 'forgot-email' })
+const { saving, formError, submit } = useAccountForm({ email: 'forgot-email' })
 const { requestPasswordReset } = useAccountActions()
 const { waiting, start: startCooldown, waitLabel } = useResendCooldown('reset')
 
