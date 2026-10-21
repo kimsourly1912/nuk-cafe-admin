@@ -106,6 +106,26 @@ describe('logout in another tab', () => {
 })
 
 describe('switching users in the same browser', () => {
+  it('logging out goes straight to login: the dashboard isn\'t opened and nothing is read after the sign-out', async () => {
+    const page = await createPage()
+    const api = await mockApi(page, {})
+    await page.goto(url('/c/nuk/admin/categories'), { waitUntil: 'hydration' })
+    await categoryItem(page, 'Tea').waitFor()
+    const visited: string[] = []
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) visited.push(new URL(frame.url()).pathname)
+    })
+    const before = api.calls.length
+
+    await logout(page, 'alice')
+    await expect.poll(() => page.url()).toBe(url('/c/nuk/admin/login'))
+    await page.waitForTimeout(500)
+    expect(visited).not.toContain('/c/nuk/admin')
+    // The login page reads only the cafe's public name and logo; no admin data after the sign-out.
+    expect(api.calls.slice(before).filter(call => call.includes('/admin/'))).toEqual([])
+    expect(api.calls.slice(before)[0]).toBe('POST /auth/sign-out')
+  })
+
   it('nothing from the previous user reaches the next one: data, late responses, toasts', async () => {
     const page = await createPage()
     const aliceSave = deferred()
