@@ -160,6 +160,19 @@ describe('counter surface', () => {
     await expect(authorizeBranch(db, manager, TEST_TENANT, branchId, { voucher: ['issue'] })).resolves.toMatchObject({ branchRole: 'manager' })
   })
 
+  it('gives managers their tools at their branch (D198): tables, new QR codes and reading reports', async () => {
+    const manager = await staffAt(branchId, 'manager')
+    const tools = { table: ['manage', 'rotateQr'], report: ['read'] } as const
+    await expect(authorizeBranch(db, manager, TEST_TENANT, branchId, { table: [...tools.table], report: [...tools.report] })).resolves.toMatchObject({ branchRole: 'manager' })
+    // Staff don't get them; another branch is not theirs. Exporting isn't a branch action at all
+    // (only the tenant's `report: ['export']`, owners'), so no counter route can grant it.
+    const staff = await staffAt(branchId, 'staff')
+    await expectApiError(async () => authorizeBranch(db, staff, TEST_TENANT, branchId, { table: ['manage'] }), 403, 'FORBIDDEN')
+    await expectApiError(async () => authorizeBranch(db, staff, TEST_TENANT, branchId, { table: ['rotateQr'] }), 403, 'FORBIDDEN')
+    await expectApiError(async () => authorizeBranch(db, staff, TEST_TENANT, branchId, { report: ['read'] }), 403, 'FORBIDDEN')
+    await expectApiError(async () => authorizeBranch(db, manager, TEST_TENANT, otherBranchId, { table: ['manage'] }), 404, 'NOT_FOUND')
+  })
+
   it('refuses staff without the permission with 403', async () => {
     await expectApiError(async () => authorizeBranch(db, await staffAt(branchId, 'staff'), TEST_TENANT, branchId, { voucher: ['issue'] }), 403, 'FORBIDDEN')
     await expectApiError(async () => authorizeBranch(db, await staffAt(branchId, 'manager'), TEST_TENANT, branchId, { payment: ['refund'] }), 403, 'FORBIDDEN')

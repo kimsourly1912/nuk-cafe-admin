@@ -57,6 +57,34 @@ describe('cafe routes (D140)', () => {
   })
 })
 
+// The counter (D101, D198): a branch's routes check the caller's role at the branch in the path,
+// never a tenant-wide permission (which members don't have, and which would ignore the branch).
+describe('counter routes', () => {
+  const branchDir = join(cafeDir, 'counter', '[branchId]')
+  const files = routeFiles(branchDir)
+  const name = (file: string) => file.slice(branchDir.length + 1).replaceAll('\\', '/')
+
+  it.each(files.map(file => [name(file), file]))('%s checks the role at the path\'s branch', (_name, file) => {
+    expect(calls(file, ['requireBranchPermission('])).toBe(true)
+    expect(calls(file, ['requirePermission('])).toBe(false)
+  })
+
+  it('give managers their tools with their own permissions, and the branch from the path (D198)', () => {
+    const tools = files.filter(file => /^(tables|reports)\//.test(name(file)))
+    expect(tools.map(name).sort()).toEqual([
+      'reports/branches.get.ts', 'reports/items.get.ts', 'reports/orders/[orderId].get.ts', 'reports/orders/index.get.ts', 'reports/summary.get.ts',
+      'tables/[tableId].patch.ts', 'tables/[tableId]/archive.post.ts', 'tables/[tableId]/restore.post.ts', 'tables/[tableId]/rotate-qr.post.ts', 'tables/index.get.ts', 'tables/index.post.ts',
+    ])
+    for (const file of tools) {
+      const source = readFileSync(file, 'utf8')
+      const reports = name(file).startsWith('reports/')
+      expect(source.includes(reports ? '{ report: [\'read\'] }' : '{ table: [')).toBe(true)
+      // A report query's branch is the path's, whatever the query says; a detail is scoped to it.
+      if (reports && name(file) !== 'reports/branches.get.ts') expect(source.includes('{ branchId }')).toBe(true)
+    }
+  })
+})
+
 describe('platform routes (D142)', () => {
   const files = routeFiles(platformDir)
 

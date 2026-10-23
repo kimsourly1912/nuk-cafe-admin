@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Manager tools, step 1: the server (D198, 2026-10-23)
+
+[Plan](plans/manager-tools.md), [decision](decisions.md#d198-manager-tools-on-the-counter-tables-and-qr-codes-branch-reports-step-1-the-server-2026-10-23). The owner accepted the recommendations (the counter app; tables and QR codes; reports to view and print; hours, CSV and Telegram stay with owners; no mockup round). Step 1 adds the counter routes for tables and reports, the branch always the path's. **Next:** step 2, the counter's Manage pages; step 3, the copy and help pages.
+
+- **Evidence (2026-10-23, local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 138 files, 1838 passed, 1 skipped. New: `identity.service.test.ts` (a manager's tools at their branch; staff 403 for each; another branch 404; exporting isn't a branch action, so no counter route can grant it), `routes.test.ts` (every `counter/[branchId]` route checks the role at the path's branch and never a tenant permission; the 11 tool routes, their permissions and the path's branch), `reports.service.test.ts` (the detail scoped to a branch), `validation.test.ts` (`fixed` beats the caller's query). Guards removed one at a time, each failing its test, then restored: the detail's branch check, `fixed` winning over the query, the summary route without the path's branch, a table route with a staff permission.
+
 ## Owners add branches (D197, 2026-10-23)
 
 Step B of the owner's branch plan ([decision](decisions.md#d197-owners-add-branches-at-most-10-active-per-cafe-names-unique-step-b-of-d196-2026-10-23)), after step A (merged in PR #158). `POST /api/c/<slug>/admin/branches` for owners; at most 10 active branches per cafe, a guard in the insert's batch; names unique among a cafe's active branches, ignoring case (migration `0045_branch_names`, one additive index). **Add branch** on the Branches list (several branches) and on the Branch page (one branch); the new branch's page opens to set its hours. No mockup round: a two-field dialog in the existing modal pattern. **Before staging:** the migration fails if a cafe has two active branches with the same name (none expected: one branch per cafe so far).

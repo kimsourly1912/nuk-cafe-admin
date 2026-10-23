@@ -129,10 +129,16 @@ export async function orderHistory(db: Db, tenantId: string, query: OrderHistory
   return { ...reportContext(ctx), orders: items, ...page }
 }
 
+export interface OrderDetailOptions {
+  /** Only an order of this branch (a manager's reports, D198); another branch's is not found. */
+  branchId?: string
+}
+
 /** One order as sold: its lines, payment, and every recorded step with who took it. */
-export async function orderHistoryDetail(db: Db, tenantId: string, id: string): Promise<OrderHistoryDetail> {
+export async function orderHistoryDetail(db: Db, tenantId: string, id: string, options: OrderDetailOptions = {}): Promise<OrderHistoryDetail> {
+  const { branchId } = options
   const order = await orderRepo.findOrder(db, tenantId, id)
-  if (!order) throw orderNotFound()
+  if (!order || (branchId !== undefined && order.branchId !== branchId)) throw orderNotFound()
   const [branch, lines, [payment], events, returnedBy] = await Promise.all([
     findBranchClock(db, tenantId, order.branchId),
     orderRepo.linesOf(db, tenantId, id),
