@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Manager tools, step 3: copy (D198, 2026-10-23)
+
+[Plan](plans/manager-tools.md) step 3, after step 2 (merged in PR #161): the staff form's Manager description ("Everything Staff do, plus their branches' dining tables, QR codes and reports") and the Staff help page's roles table. Manager tools are complete.
+
+- **Evidence (2026-10-23, local):** `pnpm lint`, `pnpm typecheck` clean; `app/features/staff` and assistant unit tests 32/32; `test/e2e/staff.test.ts` 19/19 (incl. axe in light and dark at 1440 and 390 for the form).
+
 ## Manager tools, step 2: the counter's Manage pages (D198, 2026-10-23)
 
 [Plan](plans/manager-tools.md) step 2, after step 1 (merged in PR #160). **Manage** in the counter header for managers and owners, with **Dining tables** and **Reports** for the branch, reusing the admin's screens on the counter's API (a report surface; a tables `surface` prop). The report period button's accessible name now starts with what it shows (an axe finding, admin reports too). Help: the counter page's new Manage section. **Next:** step 3, the staff form's Manager description, the staff help page.

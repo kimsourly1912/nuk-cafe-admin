@@ -61,10 +61,10 @@ export const staffAccessFormSchema = v.pipe(
 
 export const ROLE_LABELS: Record<BranchRoleName, string> = { manager: 'Manager', staff: 'Staff' }
 
-/** The choices as the form shows them. Manager and staff have the same counter access today (D196). */
+/** The choices as the form shows them. Managers add their tools on the counter's Manage (D198). */
 export const ACCESS_LABELS: Record<AccessChoice, { label: string, description: string }> = {
   admin: { label: 'Admin', description: 'Runs the whole cafe: menu, staff, branches, settings, refunds and reports. Works at every branch.' },
-  manager: { label: 'Manager', description: 'Leads the counter at their branches. For now, the same access as Staff.' },
+  manager: { label: 'Manager', description: 'Everything Staff do, plus their branches\' dining tables, QR codes and reports.' },
   staff: { label: 'Staff', description: 'Works the counter at their branches: orders, payments and sold out.' },
   mixed: { label: 'Different per branch', description: 'Manager at some branches, Staff at others.' },
 }

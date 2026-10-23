@@ -7,7 +7,7 @@
 | Role | What they can do |
 |---|---|
 | **Admin** | Everything: this admin portal (menu, staff, branch, payments), and the counter app at every branch, including cancelling paid orders. Only admins can sign in to the admin portal. |
-| **Manager** (per branch) | The counter app at their branches. For now the same as Staff: manager tools will come later. |
+| **Manager** (per branch) | Everything Staff do at their branches, plus **Manage** in the counter app: the branch's **Dining tables** and QR codes, and its **Reports** (view and print; no CSV or Telegram). They can't change opening hours, the menu or staff. |
 | **Staff** (per branch) | The counter app at their branches: take payments, prepare and complete orders, cancel orders, mark items sold out. |
 
 Admins work at every branch, so they need no branch. With two branches or more, a person can have **different roles per branch** (Manager at one, Staff at another).
