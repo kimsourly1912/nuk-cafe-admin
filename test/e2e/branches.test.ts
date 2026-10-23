@@ -373,7 +373,7 @@ describe('page shell (D126)', () => {
     await expect.poll(() => page.getByRole('option').count()).toBeGreaterThan(5)
     expect(await page.getByRole('option').count()).toBeLessThan(40)
     await search.fill('phnom')
-    await expect.poll(() => page.getByRole('option').allTextContents()).toEqual(['(GMT+07:00) Phnom Penh'])
+    await expect.poll(() => page.getByRole('option').allTextContents()).toEqual(['(UTC+07:00) Phnom Penh'])
   })
 })
 
