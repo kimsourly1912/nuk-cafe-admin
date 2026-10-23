@@ -27,7 +27,7 @@ branches and orders/reports services, the branch from the path, never the query 
 2. **Counter UI (built).** **Manage** in the counter header (managers and owners, by the role at this branch from `GET /counter/me`): **Dining tables** (`/counter/<branchId>/tables`) and **Reports** (`/counter/<branchId>/reports/summary|items|orders`).
    - Each feature keeps its own screens and serves both places. Reports: a **surface** (`useReportSurface`: the API, query keys, page links, `exports`) that the counter's `CounterReportsPage` provides; the admin's is the default. The header shows Back to queue, the three reports as tabs and Print, never CSV or Telegram, and the Telegram destinations are never asked for. Tables: `BranchTablesTab` and `TableFormModal` take `surface: 'admin' | 'counter'` (a prop, since overlay modals render outside the page and can't inject); the counter's `CounterTablesPage` passes `counter`. Same cache for the same tables; mutation ids per surface.
    - Found and fixed: the report period button's name ("Period: 23 Oct 2026") didn't contain what it shows ("Today"), axe `label-content-name-mismatch`, on the admin's reports too. Its name is now "Today, period: 23 Oct 2026".
-3. **Copy and docs.** The staff form's Manager description, the help pages (staff, counter), the security table.
+3. **Copy and docs (built).** The staff form's Manager description and the Staff help page say what managers get; the counter help page (step 2) and the security table (step 1) already do.
 
 ## Edge cases
 
