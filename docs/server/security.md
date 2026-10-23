@@ -65,7 +65,7 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | media | upload | ✔ | | |
 | branch | create (at most 10 active per cafe, D197) / read / update | ✔ | read | read |
 | staff | list, create / change role / disable | ✔ | | |
-| table | manage, rotate QR | ✔ | ✔ | |
+| table | manage, rotate QR (managers on the counter, D198) | ✔ | ✔ | |
 | order | read queue, ready, complete (payment starts preparation: no accept step) | ✔ | ✔ | ✔ |
 | order | cancel | ✔ | ✔ | ✔ |
 | payment | collect | ✔ | ✔ | ✔ |
@@ -75,7 +75,7 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | voucher template | manage | ✔ | | |
 | settings | KHR exchange rate, branch hours | ✔ | | |
 | loyalty | adjust points | ✔ | ✔ | |
-| report | read, export (the reports, their CSV and print, and sending them to Telegram; 8.1, D110) | ✔ | read, own branch (not used yet: managers have no admin portal, D52) | |
+| report | read, export (the reports, their CSV and print, and sending them to Telegram; 8.1, D110) | ✔ | read, own branch (on the counter, D198; no CSV or Telegram) | |
 | audit | read | ✔ | own branch | |
 | assistant | use the AI assistant (phase 9, D107, D108) | ✔ | | |
 | Better Auth `organization` / `member` / `invitation` / `ac` endpoints | update, delete, add or remove members, invite | | | |

@@ -303,6 +303,12 @@ describe('order history (D110)', () => {
     expect(e.payment.state).toBe('not_paid')
     await expectApiError(() => orderHistoryDetail(db, TEST_TENANT, newId()), 404, 'NOT_FOUND')
   })
+
+  it('a manager\'s detail names its branch: another branch\'s order is not found (D198)', async () => {
+    const o = await monday()
+    expect((await orderHistoryDetail(db, TEST_TENANT, o.a.orderId, { branchId })).id).toBe(o.a.orderId)
+    await expectApiError(() => orderHistoryDetail(db, TEST_TENANT, o.a.orderId, { branchId: newId() }), 404, 'NOT_FOUND')
+  })
 })
 
 describe('CSV (8.1b, D111)', () => {

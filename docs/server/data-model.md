@@ -430,6 +430,9 @@ placed (unpaid) ──payment recorded──► preparing ──► ready ──
 | `GET /api/counter/me` | signed in (a temporary password too) | The counter app's session (D102): the branches this account works at with its role (every active branch for an admin); 403 `NOT_STAFF` for an account at no branch |
 | `GET …/orders` | `order: ['read']` | `{ orders, khrRate, serverTime }`: to pay (not past their time), preparing and ready, oldest first, with lines, the customer's name and the payment |
 | `GET …/orders/{orderId}` | `order: ['read']` | One of the branch's orders, any status; another branch's is 404 |
+| `GET`/`POST …/tables`, `PATCH …/tables/{tableId}`, `POST …/tables/{tableId}/archive\|restore` | `table: ['manage']` (managers, owners; D198) | A manager's dining tables: the admin's table routes and rules on the counter surface |
+| `POST …/tables/{tableId}/rotate-qr` | `table: ['rotateQr']` (D198) | A new QR for the table |
+| `GET …/reports/branches\|summary\|items\|orders`, `GET …/reports/orders/{orderId}` | `report: ['read']` (managers, owners; D198) | The admin's reports for this branch only: the query's `branchId` is replaced by the path's; another branch's order is 404. No CSV or Telegram (`report: ['export']`, owners) |
 | `POST …/orders/{orderId}/pay` `{ version, method, khrPerUsd? \| reference? }` | `payment: ['collect']` | Awaiting payment → preparing. Riel: the rate must be the one in force (409 `EXCHANGE_RATE_CHANGED`, `NO_EXCHANGE_RATE`); past the 30 minutes: 409 `PAYMENT_EXPIRED` |
 | `POST …/orders/{orderId}/ready` `{ version }` | `order: ['ready']` | Preparing → ready |
 | `POST …/orders/{orderId}/complete` `{ version }` | `order: ['complete']` | Ready → completed (points: 7.1) |

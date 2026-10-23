@@ -35,9 +35,12 @@ export async function readValidBody<T extends v.GenericSchema>(event: H3Event, s
   return parseInput(schema, body ?? {})
 }
 
-/** The query string, validated (values arrive as strings: use coercing schemas). */
-export function readValidQuery<T extends v.GenericSchema>(event: H3Event, schema: T): v.InferOutput<T> {
-  return parseInput(schema, getQuery(event))
+/**
+ * The query string, validated (values arrive as strings: use coercing schemas). `fixed` values
+ * replace the caller's, e.g. the branch from the path on the counter's reports (D198).
+ */
+export function readValidQuery<T extends v.GenericSchema>(event: H3Event, schema: T, fixed: Record<string, string> = {}): v.InferOutput<T> {
+  return parseInput(schema, { ...getQuery<Record<string, unknown>>(event), ...fixed })
 }
 
 const uuidSchema = v.pipe(v.string(), v.uuid())

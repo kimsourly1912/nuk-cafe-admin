@@ -1,7 +1,7 @@
 import type { H3Event } from 'h3'
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
-import { parseInput, readIdParam } from '#server/utils/validation'
+import { parseInput, readIdParam, readValidQuery } from '#server/utils/validation'
 import { failure } from '#server/tests/support/failure'
 
 const schema = v.strictObject({
@@ -40,5 +40,16 @@ describe('readIdParam', () => {
     for (const value of ['1', 'abc', '../etc']) {
       expect(await failure(Promise.resolve().then(() => readIdParam(eventWith({ itemId: value }), 'itemId', 'The item')))).toEqual({ status: 404, code: 'NOT_FOUND' })
     }
+  })
+})
+
+describe('readValidQuery', () => {
+  const eventAt = (path: string) => ({ path, context: {} }) as unknown as H3Event
+  const query = v.object({ branchId: v.string(), from: v.string() })
+
+  it('validates the query string; `fixed` values win over the caller\'s (the path\'s branch, D198)', () => {
+    expect(readValidQuery(eventAt('/r?branchId=theirs&from=2026-09-28'), query)).toEqual({ branchId: 'theirs', from: '2026-09-28' })
+    expect(readValidQuery(eventAt('/r?branchId=theirs&from=2026-09-28'), query, { branchId: 'mine' })).toEqual({ branchId: 'mine', from: '2026-09-28' })
+    expect(readValidQuery(eventAt('/r?from=2026-09-28'), query, { branchId: 'mine' })).toEqual({ branchId: 'mine', from: '2026-09-28' })
   })
 })
