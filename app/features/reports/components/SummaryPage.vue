@@ -8,6 +8,7 @@
  */
 import type { ReportSummary } from '#shared/contracts/reports'
 import { queryText, useReportDestinations, useReportDownload, useReportScope, useReportSummary } from '../composables/useReports'
+import { useReportSurface } from '../composables/useReportSurface'
 import { METHOD_LABELS, negativeMinor } from '../utils/display'
 import { periodButtonLabel, periodLabel, previousLabel } from '../utils/period'
 import ReportDefinitions from './ReportDefinitions.vue'
@@ -16,7 +17,7 @@ import ReportHeader from './ReportHeader.vue'
 import ReportPrintHeader from './ReportPrintHeader.vue'
 import SalesChart from './SalesChart.vue'
 
-const tenantPath = useTenantPath()
+const surface = useReportSurface()
 
 const { branches, branch, period, scope, setPeriod, setBranch } = useReportScope()
 const summary = useReportSummary(scope)
@@ -58,6 +59,7 @@ const paymentsTotal = (report: ReportSummary) => ({
   >
     <template #header>
       <ReportHeader
+        report="summary"
         title="Summary"
         :branches="branches.data.value ?? []"
         :branch="branch"
@@ -335,7 +337,7 @@ const paymentsTotal = (report: ReportSummary) => ({
                   trailing-icon="i-lucide-arrow-right"
                   color="neutral"
                   variant="link"
-                  :to="{ path: tenantPath('/admin/reports/items'), query: { from: data.period.from, to: data.period.to } }"
+                  :to="{ path: surface.page('items'), query: { from: data.period.from, to: data.period.to } }"
                   class="print:hidden"
                 />
               </div>

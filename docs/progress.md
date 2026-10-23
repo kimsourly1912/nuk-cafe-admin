@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Manager tools, step 2: the counter's Manage pages (D198, 2026-10-23)
+
+[Plan](plans/manager-tools.md) step 2, after step 1 (merged in PR #160). **Manage** in the counter header for managers and owners, with **Dining tables** and **Reports** for the branch, reusing the admin's screens on the counter's API (a report surface; a tables `surface` prop). The report period button's accessible name now starts with what it shows (an axe finding, admin reports too). Help: the counter page's new Manage section. **Next:** step 3, the staff form's Manager description, the staff help page.
+
+- **Evidence (2026-10-23, local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 138 files, 1838 passed, 1 skipped. New `test/e2e/manager-tools.test.ts` on the seeded server (a new seeded manager at Riverside): a manager adds and archives a table from Manage → Dining tables, only on the counter's API (no `/admin/` request); reads the Summary and Order history with Print and without CSV or Telegram; staff see no Manage and are refused the tables page by address; over HTTP staff 403, another branch 404, a summary with another branch in its query reads the path's; axe in light and dark at 1180 and 390 for the queue with Manage, the tables and the Summary, nothing wider than the screen. With `reports.test.ts`, `branches.test.ts` and `counter.test.ts`: 68/68.
+
 ## Manager tools, step 1: the server (D198, 2026-10-23)
 
 [Plan](plans/manager-tools.md), [decision](decisions.md#d198-manager-tools-on-the-counter-tables-and-qr-codes-branch-reports-step-1-the-server-2026-10-23). The owner accepted the recommendations (the counter app; tables and QR codes; reports to view and print; hours, CSV and Telegram stay with owners; no mockup round). Step 1 adds the counter routes for tables and reports, the branch always the path's. **Next:** step 2, the counter's Manage pages; step 3, the copy and help pages.

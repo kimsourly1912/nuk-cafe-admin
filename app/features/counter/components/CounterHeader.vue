@@ -1,8 +1,9 @@
 <script setup lang="ts">
 /**
  * The counter's header (D102, the owner's frames): the cafe (D143), the branch and whether it's open, the
- * order search (on the queue), Sold out (the page that switches items off, 6.3c, D105), the color
- * mode and the user menu (the chime on or off, another branch, another cafe (D144), change password,
+ * order search (on the queue), Sold out (the page that switches items off, 6.3c, D105), Manage for
+ * managers and owners (Dining tables and Reports, D198; never shown to staff, and the server checks
+ * the role again), the color mode and the user menu (the chime on or off, another branch, another cafe (D144), change password,
  * sign out).
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
@@ -32,6 +33,13 @@ const branch = computed(() => user.value?.branches.find(b => b.id === props.bran
 const status = useApiQuery('counter:branch-status', () => apiFetch<PublicBranch[]>('/public/branches'), { server: false })
 const openNow = computed(() => status.data.value?.find(b => b.id === props.branchId)?.openNow ?? null)
 const soldOutTo = computed(() => (props.soldOutButton && branch.value ? tenantPath(`/counter/${branch.value.id}/sold-out`) : undefined))
+// A manager's tools (D198): the role is the one at this branch (an owner's is `admin`).
+const manage = computed<DropdownMenuItem[]>(() => branch.value && branch.value.role !== 'staff'
+  ? [
+      { label: 'Dining tables', icon: 'i-lucide-armchair', to: tenantPath(`/counter/${branch.value.id}/tables`) },
+      { label: 'Reports', icon: 'i-lucide-chart-column', to: tenantPath(`/counter/${branch.value.id}/reports/summary`) },
+    ]
+  : [])
 const muted = useCounterMuted()
 const { name, logoUrl } = useCafe()
 // Someone who works at more than one cafe (T2c, D144) can open another one's counter from Your cafes.
@@ -109,6 +117,19 @@ const menu = computed<DropdownMenuItem[][]>(() => [
         variant="outline"
         :ui="{ label: 'max-sm:sr-only' }"
       />
+      <UDropdownMenu
+        v-if="manage.length"
+        :items="manage"
+        :content="{ align: 'end' }"
+      >
+        <UButton
+          icon="i-lucide-settings-2"
+          label="Manage"
+          color="neutral"
+          variant="outline"
+          :ui="{ label: 'max-sm:sr-only' }"
+        />
+      </UDropdownMenu>
       <UColorModeButton class="max-sm:hidden" />
       <UDropdownMenu
         :items="menu"

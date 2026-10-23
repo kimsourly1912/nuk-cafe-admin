@@ -59,6 +59,15 @@ Switch from **Queue** to **Finished today (24)** at the top to see today's order
 
 The counter's **Sold out** page (`/counter/<branch>/sold-out`) switches individual versions sold out at this branch, for example "Iced Latte · Large". Customers see "Sold out" and can't order it. It stays sold out until staff switch it back. Each row says since when and who marked it. The switch moves as soon as you tap it; if the change can't be saved (the connection dropped), it moves back and a message says why. To remove an item from the menu for good, an admin unpublishes or archives it in **Menu items** instead.
 
+## Manage (managers and admins)
+
+Managers (and admins) have a **Manage** button in the counter's header, for the branch the counter is open at. Staff don't see it.
+
+- **Dining tables**: the branch's tables and their QR codes, as on Admin → Branch → Dining tables: **New table**, edit a table's name or area, **View QR** to print or download it, **New QR** (the printed one stops working), archive and restore.
+- **Reports**: the branch's **Summary**, **Sales by item** and **Order history**, with **Print**. Choose the period at the top. Download CSV and Send to Telegram are on the admin's Reports only.
+
+A manager at two branches sees each branch's tools when the counter is open at that branch. Opening hours are changed by an admin, on Admin → Branch.
+
 ## Common problems at the counter
 
 - **"Order 042 changed meanwhile: it's … now."**: another cashier or the customer acted first. Press **Reload**.

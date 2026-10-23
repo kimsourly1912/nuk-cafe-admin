@@ -8,19 +8,24 @@
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { DiningTable } from '#shared/contracts/branches'
 import { useBranchTables, useTableMutations } from '../composables/useBranches'
+import type { TablesSurface } from '../composables/useBranches'
 import TableCard from './TableCard.vue'
 import TableFormModal from './TableFormModal.vue'
 import TableQrModal from './TableQrModal.vue'
 
-const props = defineProps<{ branchId: string }>()
+const props = withDefaults(defineProps<{
+  branchId: string
+  /** The counter's API for a manager (D198); the admin's by default. */
+  surface?: TablesSurface
+}>(), { surface: 'admin' })
 
 const TABS = [
   { label: 'Active', value: 'active' },
   { label: 'Archived', value: 'archived' },
 ]
 
-const { data, loading, refreshing, error, refresh } = useBranchTables(props.branchId)
-const { archive, restore, rotate, isBusy } = useTableMutations()
+const { data, loading, refreshing, error, refresh } = useBranchTables(props.branchId, props.surface)
+const { archive, restore, rotate, isBusy } = useTableMutations(props.surface)
 
 const status = ref<string>('active')
 const search = ref('')
@@ -43,10 +48,10 @@ const formModal = overlay.create(TableFormModal)
 const qrModal = overlay.create(TableQrModal)
 
 function openNew() {
-  formModal.open({ branchId: props.branchId })
+  formModal.open({ branchId: props.branchId, surface: props.surface })
 }
 function openEdit(table: DiningTable) {
-  formModal.open({ branchId: props.branchId, table })
+  formModal.open({ branchId: props.branchId, table, surface: props.surface })
 }
 async function viewQr(table: DiningTable) {
   if (table.qrUrl) qrModal.open({ table: { ...table, qrUrl: table.qrUrl } })

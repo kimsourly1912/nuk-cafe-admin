@@ -40,7 +40,7 @@ export interface ShopSeed {
    * files run in any order, so no other file may rely on its state (`apiUnverified` is
    * shop-orders-api's, since shop-account verifies `unverified`).
    */
-  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'followerD' | 'a11yGuest' | 'tableGuest' | 'cafeHopper' | 'beanOwner' | 'guestLinker' | 'budgetShopper' | 'temporaryStaff', SeedCustomer>
+  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'followerD' | 'a11yGuest' | 'tableGuest' | 'cafeHopper' | 'beanOwner' | 'guestLinker' | 'budgetShopper' | 'temporaryStaff' | 'manager', SeedCustomer>
   /** A second table at Riverside (T02), for tests that archive it. */
   spareTableToken: string
   /**
@@ -94,6 +94,8 @@ const CUSTOMERS: ShopSeed['customers'] = {
   // Not a customer: staff at Riverside still on the temporary password an admin gave them, who
   // signs in on the store (shop-account.test.ts).
   temporaryStaff: { name: 'Davy Sam', email: 'davy@example.com', password: 'long-enough-password-44' },
+  // Not a customer: Riverside's manager, with the counter's Manage tools (manager-tools.test.ts, D198).
+  manager: { name: 'Mony Chan', email: 'mony@example.com', password: 'long-enough-password-45' },
 }
 
 async function addBranch(db: Db, name: string, tenantId = TEST_TENANT) {
@@ -168,11 +170,12 @@ export async function seedShop(dbFile: string, qrSecret: string, bakong: { encry
   // without the breached-password lookup (an external API). Their queued emails carry test links.
   const auth = createTestAuth(db)
   for (const customer of Object.values(CUSTOMERS)) await auth.api.signUpEmail({ body: customer })
-  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.followerD, CUSTOMERS.a11yGuest, CUSTOMERS.tableGuest, CUSTOMERS.cafeHopper, CUSTOMERS.guestLinker, CUSTOMERS.cashier, CUSTOMERS.beanOwner, CUSTOMERS.budgetShopper]) {
+  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.followerD, CUSTOMERS.a11yGuest, CUSTOMERS.tableGuest, CUSTOMERS.cafeHopper, CUSTOMERS.guestLinker, CUSTOMERS.cashier, CUSTOMERS.beanOwner, CUSTOMERS.budgetShopper, CUSTOMERS.manager]) {
     await db.update(user).set({ emailVerified: true }).where(eq(user.email, customer.email))
   }
   // An existing account keeps its password when it's given branch access (D49).
   await createStaff(db, actor, { name: CUSTOMERS.cashier.name, email: CUSTOMERS.cashier.email, admin: false, memberships: [{ branchId: openBranchId, role: 'staff' }] })
+  await createStaff(db, actor, { name: CUSTOMERS.manager.name, email: CUSTOMERS.manager.email, admin: false, memberships: [{ branchId: openBranchId, role: 'manager' }] })
   await createStaff(db, actor, { name: CUSTOMERS.temporaryStaff.name, email: CUSTOMERS.temporaryStaff.email, admin: false, memberships: [{ branchId: openBranchId, role: 'staff' }] })
   await db.update(user).set({ mustChangePassword: true }).where(eq(user.email, CUSTOMERS.temporaryStaff.email))
   // Brown Bean's owner too (the platform console adds an existing account so, D142).
