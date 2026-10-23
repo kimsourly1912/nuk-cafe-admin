@@ -41,6 +41,7 @@ const settings = (hours: BranchSettings['hours']): BranchSettings => ({
   hours,
   openNow: true,
   today: 6,
+  pause: { branchId: RIVERSIDE.id, pausedUntil: null, reason: null, pausedByName: null },
   version: 1,
 })
 
