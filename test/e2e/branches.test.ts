@@ -307,13 +307,13 @@ describe('dining tables', () => {
 describe('page shell (D126)', () => {
   const sidebarCurrent = (page: Page) => page.locator('nav a[aria-current="page"]').allTextContents()
 
-  it('keeps Branch active in the sidebar on its page, on either tab, and keeps the tab in the URL', async () => {
+  it('keeps Branches active in the sidebar on its page, on either tab, and keeps the tab in the URL', async () => {
     const { page } = await open(backend().handlers)
     await card(page, 'Current status').or(page.getByRole('heading', { name: 'Branch settings' })).first().waitFor()
-    expect((await sidebarCurrent(page)).map(text => text.trim())).toEqual(['Branch'])
+    expect((await sidebarCurrent(page)).map(text => text.trim())).toEqual(['Branches'])
     await page.getByRole('tab', { name: /Dining tables/ }).click()
     await card(page, 'Table 01').waitFor()
-    expect((await sidebarCurrent(page)).map(text => text.trim())).toEqual(['Branch'])
+    expect((await sidebarCurrent(page)).map(text => text.trim())).toEqual(['Branches'])
     expect(new URL(page.url()).searchParams.get('tab')).toBe('tables')
 
     // A reload opens the same tab; back on Settings the URL is clean again.

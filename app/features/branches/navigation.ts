@@ -1,7 +1,7 @@
 import type { NavigationMenuItem } from '@nuxt/ui'
 
 export const branchesNavigation: NavigationMenuItem = {
-  label: 'Branch',
+  label: 'Branches',
   icon: 'i-lucide-map-pin',
   to: '/admin/branches',
 }

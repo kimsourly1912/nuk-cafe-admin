@@ -8,6 +8,7 @@
  */
 import { useBranchOptions } from '../composables/useBranchOptions'
 import { useBranchSettings, useBranchTables } from '../composables/useBranches'
+import BranchSkeleton from './BranchSkeleton.vue'
 import BranchSettingsTab from './BranchSettingsTab.vue'
 import BranchTablesTab from './BranchTablesTab.vue'
 
@@ -109,11 +110,7 @@ const title = computed(() => settings.value?.name ?? 'Branch')
         title="Could not load the branch"
         @retry="refresh()"
       />
-      <ListSkeleton
-        v-else-if="!settings"
-        label="Loading the branch…"
-        variant="card"
-      />
+      <BranchSkeleton v-else-if="!settings" />
       <template v-else>
         <BranchSettingsTab
           v-show="tab === 'settings'"

@@ -6,7 +6,7 @@ import { failures, mockApi, NUK_PROFILE, setupE2e, toast } from './support/mock-
 
 await setupE2e()
 
-// Admin → Cafe profile (D143): the cafe's name and logo, shown in the sidebar, the tab title, the
+// Cafe → Cafe profile (D143): the cafe's name and logo, shown in the sidebar, the tab title, the
 // menu and the counter. The web address is read-only.
 
 const SAVED: CafeSettings = { ...NUK_PROFILE, logoAssetId: null, version: 2 }
@@ -146,7 +146,7 @@ describe('Cafe profile', () => {
     expect(saved).toHaveLength(1)
   })
 
-  it('is in the sidebar\'s Admin group', async () => {
+  it('is in the sidebar\'s Cafe group', async () => {
     const { page } = await open()
     await page.getByRole('link', { name: 'Cafe profile' }).waitFor()
   })
