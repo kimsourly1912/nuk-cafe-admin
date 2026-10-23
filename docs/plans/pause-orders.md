@@ -20,7 +20,7 @@ orderProblems → ORDERING_PAUSED "Riverside isn't taking online orders right no
 ## Steps (one PR each)
 
 1. **Server (built).** Migration `0046_branch_pause`: `branches.paused_until`, `paused_by` (→ user, set null), `pause_reason`. `branch: ['pause']` for managers (owners hold it). `GET …/pause` (`order: ['read']`: anyone at the counter sees who paused and why), `POST …/pause` `{ for, reason? }`, `POST …/resume` → `BranchPause`. `PublicBranch.pausedUntil`; `QuoteProblemCode` `ORDERING_PAUSED`.
-2. **Counter.** Manage → Pause orders… (a dialog), a banner on the queue ("Orders paused until 3:30 PM · Mony · Machine broken · Resume"), the header's badge **Paused**.
+2. **Counter (built).** Manage → **Pause online orders…** (`CounterPauseModal`: four card radios, an optional reason, the refusal shown in the dialog), or **Resume online orders** while paused; the header's badge **Paused**; on the queue a banner (`role="status"`, announced politely) "Online orders paused until 3:30 PM · By Rina Sok · Machine broken" with **Resume now** for managers and owners (staff see it without the button). `useBranchPause` reads `GET …/pause` and is refreshed with each refresh of the board, so another tablet's pause shows within 10 seconds. Tested at **Zulu Pop-up**, a seeded branch open around the clock where no other file orders (pausing Riverside would stop other files' orders).
 3. **Customers and admin.** The menu and checkout say it with the time; the Branch page's status card shows it with Resume; help pages.
 
 ## Rules and edge cases
