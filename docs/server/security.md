@@ -64,6 +64,7 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | menu | set sold out (own branch) | ✔ | ✔ | ✔ |
 | media | upload | ✔ | | |
 | branch | create (at most 10 active per cafe, D197) / read / update | ✔ | read | read |
+| branch | pause and resume online orders (on the counter, D199) | ✔ | ✔ | |
 | staff | list, create / change role / disable | ✔ | | |
 | table | manage, rotate QR (managers on the counter, D198) | ✔ | ✔ | |
 | order | read queue, ready, complete (payment starts preparation: no accept step) | ✔ | ✔ | ✔ |

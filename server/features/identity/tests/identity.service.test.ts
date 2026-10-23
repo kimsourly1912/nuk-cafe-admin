@@ -173,6 +173,11 @@ describe('counter surface', () => {
     await expectApiError(async () => authorizeBranch(db, manager, TEST_TENANT, otherBranchId, { table: ['manage'] }), 404, 'NOT_FOUND')
   })
 
+  it('lets managers pause online orders at their branch, not staff (D199)', async () => {
+    await expect(authorizeBranch(db, await staffAt(branchId, 'manager'), TEST_TENANT, branchId, { branch: ['pause'] })).resolves.toMatchObject({ branchRole: 'manager' })
+    await expectApiError(async () => authorizeBranch(db, await staffAt(branchId, 'staff'), TEST_TENANT, branchId, { branch: ['pause'] }), 403, 'FORBIDDEN')
+  })
+
   it('refuses staff without the permission with 403', async () => {
     await expectApiError(async () => authorizeBranch(db, await staffAt(branchId, 'staff'), TEST_TENANT, branchId, { voucher: ['issue'] }), 403, 'FORBIDDEN')
     await expectApiError(async () => authorizeBranch(db, await staffAt(branchId, 'manager'), TEST_TENANT, branchId, { payment: ['refund'] }), 403, 'FORBIDDEN')

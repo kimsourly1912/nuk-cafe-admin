@@ -73,6 +73,7 @@ const branchMatrix: Row[] = [
   ['menu', 'read', ['manager', 'staff']],
   ['menu', 'setSoldOut', ['manager', 'staff']],
   ['branch', 'read', ['manager', 'staff']],
+  ['branch', 'pause', ['manager']],
   ['table', 'manage', ['manager']],
   ['table', 'rotateQr', ['manager']],
   ['order', 'read', ['manager', 'staff']],

@@ -122,9 +122,10 @@ export interface QuoteLine {
 
 /**
  * Why the order as a whole can't be placed now (its lines' problems are on the lines):
- * `BRANCH_CLOSED`, or `LAST_ORDERS_PASSED` (open, but closing within `LAST_ORDERS_MINUTES`).
+ * `BRANCH_CLOSED`, `ORDERING_PAUSED` (open, but the counter paused online orders, D199), or
+ * `LAST_ORDERS_PASSED` (open, but closing within `LAST_ORDERS_MINUTES`).
  */
-export type QuoteProblemCode = 'BRANCH_CLOSED' | 'LAST_ORDERS_PASSED'
+export type QuoteProblemCode = 'BRANCH_CLOSED' | 'ORDERING_PAUSED' | 'LAST_ORDERS_PASSED'
 
 export interface CheckoutQuote {
   /** The branch, whether it's open, and when it opens next. */

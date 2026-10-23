@@ -228,3 +228,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D196](decisions.md#d196-staff-access-is-one-choice-owners-will-add-branches-at-most-10-2026-10-23) | Staff access is one choice; owners will add branches, at most 10, 2026-10-23 |
 | [D197](decisions.md#d197-owners-add-branches-at-most-10-active-per-cafe-names-unique-step-b-of-d196-2026-10-23) | Owners add branches, at most 10 active per cafe, names unique (step B of D196), 2026-10-23 |
 | [D198](decisions.md#d198-manager-tools-on-the-counter-tables-and-qr-codes-branch-reports-step-1-the-server-2026-10-23) | Manager tools on the counter: tables and QR codes, branch reports (step 1, the server), 2026-10-23 |
+| [D199](decisions.md#d199-pause-online-orders-a-branch-state-set-from-the-counter-never-past-closing-step-1-the-server-2026-10-23) | Pause online orders: a branch state set from the counter, never past closing (step 1, the server), 2026-10-23 |

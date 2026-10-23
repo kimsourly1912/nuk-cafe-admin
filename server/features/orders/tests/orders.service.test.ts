@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { CreateItemInput, MenuItem } from '#shared/contracts/menu-items'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { OrderLineInput, PlaceOrderInput } from '#shared/contracts/orders'
-import { archiveTable, createTable, updateBranchSettings } from '#server/features/branches'
+import { archiveTable, createTable, pauseBranch, resumeBranch, updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { archiveItem, createCategory, createItem, createModifierGroup, createOptionSet, publishItem, setSoldOut, updateItem } from '#server/features/menu'
 import { orders } from '#server/features/orders/orders.schema'
@@ -168,6 +168,20 @@ describe('placing an order', () => {
     await expectApiError(() => place(sokha, {}, monday('06:59')), 409, 'ORDERING_CLOSED')
     await expectApiError(() => place(sokha, {}, monday('20:45')), 409, 'ORDERING_CLOSED')
     expect((await placed(sokha, {}, monday('20:44'))).pickupNumber).toBe(1)
+  })
+
+  it('refuses while the counter paused online orders, and takes them again after it ends or is resumed (D199)', async () => {
+    const manager: Actor = { ...admin, userId: (await createUser(db, 'mony@example.com', 'Mony')).id }
+    await pauseBranch(db, manager, branchId, { for: '15m', reason: null }, NOON)
+    await expectApiError(() => place(sokha, {}, monday('12:10')), 409, 'ORDERING_CLOSED', undefined, 'Riverside isn\'t taking online orders right now. Back at 12:15 PM.')
+    // Another branch carries on.
+    expect((await placed(sokha, { branchId: otherBranch }, monday('12:10'))).pickupNumber).toBe(1)
+    expect(await orderCount()).toBe(1)
+    // The pause ends by itself.
+    expect((await placed(dara, {}, monday('12:15'))).pickupNumber).toBe(1)
+    await pauseBranch(db, manager, branchId, { for: '1h', reason: null }, monday('12:20'))
+    await resumeBranch(db, manager, branchId, monday('12:21'))
+    expect((await placed(dara, {}, monday('12:22'))).pickupNumber).toBe(2)
   })
 })
 

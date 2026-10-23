@@ -1,4 +1,4 @@
-import type { BranchSettings, CreateBranchInput, CreateTableInput, DiningTable, PublicBranch, PublicTable, ScannedTable, TableListQuery, TableVersionInput, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
+import type { BranchPause, BranchSettings, CreateBranchInput, PauseBranchInput, PauseChoice, CreateTableInput, DiningTable, PublicBranch, PublicTable, ScannedTable, TableListQuery, TableVersionInput, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
 import { MAX_BRANCH_TABLES, MAX_BRANCHES } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
@@ -9,7 +9,7 @@ import { toIso } from '#server/utils/time'
 import { isInWindow, isKnownTimeZone, localDate, localTime, minutesUntilClosed, nextStart, sortWindows, windowsProblem } from '#server/utils/weekly-windows'
 import type { Actor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
-import { branchArchived, branchChanged, branchHoursProblem, branchLimit, branchNameTaken, branchNotFound, tableArchived, tableChanged, tableLabelTaken, tableLimit, tableNotArchived, tableNotFound, unknownTimezone } from './branches.errors'
+import { branchArchived, branchChanged, branchClosedNow, branchHoursProblem, branchLimit, branchNameTaken, branchNotFound, tableArchived, tableChanged, tableLabelTaken, tableLimit, tableNotArchived, tableNotFound, unknownTimezone } from './branches.errors'
 import type { QrConfig } from './branches.qr'
 import { isTokenShaped, tableQrUrl, tableToken, tokenHash } from './branches.qr'
 import * as repo from './branches.repository'
@@ -92,7 +92,13 @@ function toPublicBranch(branch: BranchRow, hours: WeeklyWindow[], now: Date): Pu
     openNow,
     closesInMinutes: openNow ? minutesUntilClosed(hours, at) : null,
     nextOpening: openNow ? null : nextStart(hours, at),
+    pausedUntil: openNow ? activePause(branch, now) : null,
   }
+}
+
+/** The pause's end while it's still ahead (ISO); an old one means nothing (D199). */
+function activePause(branch: Pick<BranchRow, 'pausedUntil'>, now: Date): string | null {
+  return branch.pausedUntil && branch.pausedUntil > now ? toIso(branch.pausedUntil) : null
 }
 
 /** An active branch for customers (the menu's header, D93); unknown and archived ones are 404. */
@@ -112,6 +118,63 @@ export async function activeTableLabels(db: Db, tenantId: string, branchId: stri
 export async function listPublicBranches(db: Db, tenantId: string, now = new Date()): Promise<PublicBranch[]> {
   const options = await repo.listActiveBranches(db, tenantId)
   return Promise.all(options.map(option => getPublicBranch(db, tenantId, option.id, now)))
+}
+
+// --- Pausing online orders (D199) ---
+
+const PAUSE_MINUTES: Record<Exclude<PauseChoice, 'closing'>, number> = { '15m': 15, '30m': 30, '1h': 60 }
+
+/** Who paused the branch's online orders, why and until when; all `null` when it isn't paused. */
+export async function getBranchPause(db: Db, tenantId: string, branchId: string, now = new Date()): Promise<BranchPause> {
+  const pause = await repo.findPause(db, tenantId, branchId)
+  if (!pause) throw branchNotFound()
+  const pausedUntil = activePause(pause, now)
+  return { branchId, pausedUntil, reason: pausedUntil ? pause.reason : null, pausedByName: pausedUntil ? pause.pausedByName : null }
+}
+
+/**
+ * Pauses the open branch's online orders for a while (orders already placed carry on). The end is
+ * the server's: the choice from now, never past today's closing, so a pause can't outlast the day.
+ * Pausing again replaces it. A closed branch is refused. Audited; the branch's `version` stays.
+ */
+export async function pauseBranch(db: Db, actor: Actor, branchId: string, input: PauseBranchInput, now = new Date()): Promise<BranchPause> {
+  const { tenantId } = actor
+  const branch = await activeBranch(db, tenantId, branchId)
+  const closesIn = minutesUntilClosed(await repo.hoursOf(db, tenantId, branchId), localTime(now, branch.timezone))
+  if (closesIn === null) throw branchClosedNow(branch.name)
+  const minutes = input.for === 'closing' ? closesIn : Math.min(PAUSE_MINUTES[input.for], closesIn)
+  const until = new Date(now.getTime() + minutes * 60_000)
+  await runPauseBatch(db, [
+    repo.setPauseStatement(db, tenantId, branchId, { until, by: actor.userId, reason: input.reason }),
+    requireOneChange(db),
+    audit(db, actor, 'pause', 'branch', branchId, { for: input.for, until: toIso(until), reason: input.reason }),
+  ])
+  return getBranchPause(db, tenantId, branchId, now)
+}
+
+/** Takes online orders again at once. Not paused: nothing to change, nothing audited. */
+export async function resumeBranch(db: Db, actor: Actor, branchId: string, now = new Date()): Promise<BranchPause> {
+  const { tenantId } = actor
+  await activeBranch(db, tenantId, branchId)
+  const current = await getBranchPause(db, tenantId, branchId, now)
+  if (!current.pausedUntil) return current
+  await runPauseBatch(db, [
+    repo.setPauseStatement(db, tenantId, branchId, null),
+    requireOneChange(db),
+    audit(db, actor, 'resume', 'branch', branchId, { until: current.pausedUntil }),
+  ])
+  return getBranchPause(db, tenantId, branchId, now)
+}
+
+/** A pause write; the branch archived meanwhile fails the guard. */
+async function runPauseBatch(db: Db, statements: Statement[]) {
+  try {
+    await db.batch(statements as [Statement, ...Statement[]])
+  }
+  catch (error) {
+    if (isStaleWrite(error)) throw branchArchived()
+    throw error
+  }
 }
 
 // --- Settings and hours ---

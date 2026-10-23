@@ -35,6 +35,11 @@ export const branches = sqliteTable('branches', {
   status: text({ enum: BRANCH_STATUSES }).notNull().default('active'),
   // The lock for the branch's settings and hours (D41, D91): every save names it.
   version: integer().notNull().default(1),
+  // Online orders paused until then (D199): a state set by the counter, outside `version` (like
+  // sold out), so an owner's settings save never conflicts with it. Past means not paused.
+  pausedUntil: instant(),
+  pausedBy: text().references(() => authSchema!.user.id, { onDelete: 'set null' }),
+  pauseReason: text(),
   createdAt: instant().notNull().default(nowMs),
 }, t => [
   check('branches_status_check', sql`${t.status} in ('active', 'archived')`),

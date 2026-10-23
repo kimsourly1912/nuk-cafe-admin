@@ -1,6 +1,7 @@
 import type { CheckoutQuote, OrderLineInput, QuoteLine, QuoteLineProblem } from '#shared/contracts/orders'
 import { LAST_ORDERS_MINUTES, QUOTE_TTL_MINUTES, savingsOf } from '#shared/contracts/orders'
 import type { PublicMenu, PublicMenuItem } from '#shared/contracts/public-menu'
+import { localTime } from '#server/utils/weekly-windows'
 
 /**
  * Pricing (step 6.1, D98), pure: the lines read against the menu the branch sells now. The menu
@@ -61,12 +62,21 @@ export function quoteLine(items: ReadonlyMap<string, PublicMenuItem>, line: Orde
   return { ...base, name: item.name, detail, modifiers: chosen, imageUrl: item.imageUrl, unitPriceMinor, regularUnitPriceMinor, promotion: version.promotion, totalMinor: unitPriceMinor * line.quantity, problem: null }
 }
 
+/** "3:30 PM" on the branch's clock, for the pause message. */
+function clockAt(iso: string, timeZone: string): string {
+  const { minute } = localTime(new Date(iso), timeZone)
+  return `${Math.floor(minute / 60) % 12 || 12}:${String(minute % 60).padStart(2, '0')} ${minute < 720 ? 'AM' : 'PM'}`
+}
+
 /**
- * Why the branch takes no online order now: closed, or closing within `LAST_ORDERS_MINUTES` (Q40:
- * the counter can't take payment after closing).
+ * Why the branch takes no online order now: closed, paused by the counter (D199), or closing
+ * within `LAST_ORDERS_MINUTES` (Q40: the counter can't take payment after closing).
  */
 export function orderProblems(branch: PublicMenu['branch']): CheckoutQuote['problems'] {
   if (!branch.openNow) return [{ code: 'BRANCH_CLOSED', message: `${branch.name} is closed now.` }]
+  if (branch.pausedUntil) {
+    return [{ code: 'ORDERING_PAUSED', message: `${branch.name} isn't taking online orders right now. Back at ${clockAt(branch.pausedUntil, branch.timezone)}.` }]
+  }
   if (branch.closesInMinutes !== null && branch.closesInMinutes <= LAST_ORDERS_MINUTES) {
     return [{ code: 'LAST_ORDERS_PASSED', message: `Online orders close ${LAST_ORDERS_MINUTES} minutes before ${branch.name} closes.` }]
   }

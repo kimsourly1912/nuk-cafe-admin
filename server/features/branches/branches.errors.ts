@@ -4,6 +4,7 @@ import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/e
 export const BranchErrorCodes = {
   BRANCH_HOURS: 'BRANCH_HOURS',
   BRANCH_LIMIT: 'BRANCH_LIMIT',
+  BRANCH_CLOSED: 'BRANCH_CLOSED',
   BRANCH_NAME_TAKEN: 'BRANCH_NAME_TAKEN',
   UNKNOWN_TIMEZONE: 'UNKNOWN_TIMEZONE',
   TABLE_LABEL_TAKEN: 'TABLE_LABEL_TAKEN',
@@ -20,6 +21,10 @@ export const branchArchived = () =>
 
 export const branchLimit = () =>
   apiError(409, BranchErrorCodes.BRANCH_LIMIT, `A cafe can have at most ${MAX_BRANCHES} branches.`)
+
+/** Pausing a branch that's closed now (D199): nothing to pause until it opens. */
+export const branchClosedNow = (name: string) =>
+  apiError(409, BranchErrorCodes.BRANCH_CLOSED, `${name} is closed now: there are no orders to pause.`)
 
 export const branchNameTaken = (name: string) =>
   apiError(409, BranchErrorCodes.BRANCH_NAME_TAKEN, `There is already a branch named "${name}".`, {

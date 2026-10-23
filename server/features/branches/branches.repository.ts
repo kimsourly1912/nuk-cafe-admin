@@ -4,7 +4,7 @@ import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
 import { readInChunks, replaceAll, requireAtMost, updateAtVersion } from '#server/utils/batch'
 import { byId, firstRow, hasAny, inTenant, withStatus } from '#server/utils/query'
-import { organization } from '#server/db/tables'
+import { organization, user } from '#server/db/tables'
 import { branches, branchHours, diningTables } from './branches.schema'
 
 // --- Row types ---
@@ -17,6 +17,14 @@ export interface BranchRow {
   phone: string | null
   status: string | null
   version: number | null
+  /** Online orders paused until then (D199); past or `null`: not paused. */
+  pausedUntil: Date | null
+}
+
+export interface PauseRow {
+  pausedUntil: Date | null
+  reason: string | null
+  pausedByName: string | null
 }
 
 export interface BranchOptionRow {
@@ -65,6 +73,7 @@ const branchColumns = {
   phone: branches.phone,
   status: branches.status,
   version: branches.version,
+  pausedUntil: branches.pausedUntil,
 }
 
 const tableColumns = {
@@ -88,6 +97,13 @@ export async function hasAnyBranch(db: Db, tenantId: string): Promise<boolean> {
 
 export async function findBranch(db: Db, tenantId: string, id: string): Promise<BranchRow | undefined> {
   return firstRow(db.select(branchColumns).from(branches).where(byId(branches, tenantId, id)))
+}
+
+/** The branch's pause with who set it (`user.name`, readable by every feature). */
+export async function findPause(db: Db, tenantId: string, id: string): Promise<PauseRow | undefined> {
+  return firstRow(db.select({ pausedUntil: branches.pausedUntil, reason: branches.pauseReason, pausedByName: user.name })
+    .from(branches).leftJoin(user, eq(user.id, branches.pausedBy))
+    .where(byId(branches, tenantId, id)))
 }
 
 /** Active branches by name, with their clocks. Uses branches_tenant_id_unique. */
@@ -159,6 +175,16 @@ export function insertBranchStatement(db: Db, row: { id: string, tenantId: strin
     status: 'active',
     createdAt: row.now,
   })
+}
+
+/**
+ * Sets or clears the active branch's pause (D199). Not versioned: the last pause wins, like sold
+ * out; the branch's `version` (its settings) stays. Follow it with `requireOneChange`.
+ */
+export function setPauseStatement(db: Db, tenantId: string, id: string, pause: { until: Date, by: string, reason: string | null } | null): Statement {
+  return db.update(branches)
+    .set({ pausedUntil: pause?.until ?? null, pausedBy: pause?.by ?? null, pauseReason: pause?.reason ?? null })
+    .where(inTenant(branches, tenantId, eq(branches.id, id), activeBranch))
 }
 
 /** A guard for the batch that adds a branch: aborts it when the tenant would have more than `max` active branches. */

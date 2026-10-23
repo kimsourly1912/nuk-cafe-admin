@@ -2,14 +2,14 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import { MAX_BRANCH_TABLES, MAX_BRANCHES } from '#shared/contracts/branches'
-import { branches, organization } from '#server/db/tables'
+import { branches, organization, user } from '#server/db/tables'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { archiveTable, createBranch, createTable, getBranchSettings, listBranchOptions, getPublicBranch, listPublicBranches, listTables, resolveTableToken, restoreTable, rotateTableQr, scanTableToken, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
+import { archiveTable, createBranch, createTable, getBranchPause, getBranchSettings, listBranchOptions, pauseBranch, resumeBranch, getPublicBranch, listPublicBranches, listTables, resolveTableToken, restoreTable, rotateTableQr, scanTableToken, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
 import { diningTables } from '#server/features/branches/branches.schema'
 import type { QrConfig } from '#server/features/branches/branches.qr'
 import { qrConfigFrom, tableToken, tokenHash } from '#server/features/branches/branches.qr'
-import { createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -172,6 +172,71 @@ describe('adding branches (D197)', () => {
   })
 })
 
+describe('pausing online orders (D199)', () => {
+  let manager: Actor
+  /** Open 08:00 to 19:00 every day; Monday 10:00 there is MONDAY_10AM. */
+  const allDay = [1, 2, 3, 4, 5, 6, 7].map(day => w(day, 480, 1140))
+  const at = (hhmm: string) => new Date(`2026-09-28T${hhmm}:00+07:00`)
+
+  beforeEach(async () => {
+    manager = { userId: (await createUser(db, 'mony@example.com', 'Mony Chan')).id, tenantId: TEST_TENANT, role: 'member', requestId: 'req-2' }
+    await updateBranchSettings(db, actor, branch, { version: 1, hours: allDay })
+  })
+
+  it('pauses for the chosen time, shows it to customers and staff, then ends by itself', async () => {
+    const pause = await pauseBranch(db, manager, branch, { for: '30m', reason: 'Machine broken' }, MONDAY_10AM)
+    expect(pause).toEqual({ branchId: branch, pausedUntil: '2026-09-28T03:30:00.000Z', reason: 'Machine broken', pausedByName: 'Mony Chan' })
+    expect((await getPublicBranch(db, TEST_TENANT, branch, at('10:29'))).pausedUntil).toBe('2026-09-28T03:30:00.000Z')
+    // Over: customers see nothing, staff see no pause.
+    expect((await getPublicBranch(db, TEST_TENANT, branch, at('10:30'))).pausedUntil).toBeNull()
+    expect(await getBranchPause(db, TEST_TENANT, branch, at('10:30'))).toEqual({ branchId: branch, pausedUntil: null, reason: null, pausedByName: null })
+    const [row] = await auditOf(branch).then(rows => rows.filter(r => r.action === 'branch.pause'))
+    expect(row).toMatchObject({ actorId: manager.userId, requestId: 'req-2' })
+    expect(row!.metadata).toEqual({ for: '30m', until: '2026-09-28T03:30:00.000Z', reason: 'Machine broken' })
+  })
+
+  it('never lasts past closing; "until closing" ends at closing; a closed branch has nothing to pause', async () => {
+    expect((await pauseBranch(db, manager, branch, { for: '1h', reason: null }, at('18:40'))).pausedUntil).toBe(at('19:00').toISOString())
+    expect((await pauseBranch(db, manager, branch, { for: 'closing', reason: null }, at('12:00'))).pausedUntil).toBe(at('19:00').toISOString())
+    await expectApiError(() => pauseBranch(db, manager, branch, { for: '15m', reason: null }, at('19:30')), 409, 'BRANCH_CLOSED')
+    // Tomorrow morning it's open as usual.
+    expect((await getPublicBranch(db, TEST_TENANT, branch, new Date('2026-09-29T01:00:00Z'))).pausedUntil).toBeNull()
+  })
+
+  it('pausing again replaces the pause; resuming ends it at once, audited once', async () => {
+    await pauseBranch(db, manager, branch, { for: '15m', reason: 'Rush' }, MONDAY_10AM)
+    const owner: Actor = { ...actor, userId: (await createUser(db, 'owner@example.com', 'Owner')).id }
+    expect((await pauseBranch(db, owner, branch, { for: '1h', reason: null }, at('10:05'))).pausedUntil).toBe(at('11:05').toISOString())
+    expect(await resumeBranch(db, manager, branch, at('10:10'))).toMatchObject({ pausedUntil: null })
+    expect((await getPublicBranch(db, TEST_TENANT, branch, at('10:10'))).pausedUntil).toBeNull()
+    // Not paused: nothing to do, nothing audited.
+    await resumeBranch(db, manager, branch, at('10:11'))
+    expect((await auditOf(branch)).filter(r => r.action === 'branch.resume')).toHaveLength(1)
+  })
+
+  it('leaves the branch\'s version alone: an owner\'s settings save made before the pause still saves', async () => {
+    const before = await getBranchSettings(db, TEST_TENANT, branch)
+    await pauseBranch(db, manager, branch, { for: '30m', reason: null }, MONDAY_10AM)
+    await updateBranchSettings(db, actor, branch, { version: before.version, name: 'Riverside' })
+    expect((await getBranchSettings(db, TEST_TENANT, branch)).version).toBe(before.version + 1)
+  })
+
+  it('keeps the pause when the account that set it is deleted, without a name', async () => {
+    await pauseBranch(db, manager, branch, { for: '30m', reason: null }, MONDAY_10AM)
+    await db.delete(user).where(eq(user.id, manager.userId))
+    expect(await getBranchPause(db, TEST_TENANT, branch, at('10:10'))).toMatchObject({ pausedUntil: '2026-09-28T03:30:00.000Z', pausedByName: null })
+  })
+
+  it('another cafe\'s branch is not found, and an archived branch can\'t be paused', async () => {
+    const theirs = newId()
+    await insertBranch(db, { id: theirs, name: 'Their branch', timezone: 'Asia/Phnom_Penh', tenantId: 'tenant-2' })
+    await expectApiError(() => pauseBranch(db, manager, theirs, { for: '15m', reason: null }, MONDAY_10AM), 404, 'NOT_FOUND')
+    await expectApiError(() => getBranchPause(db, TEST_TENANT, theirs), 404, 'NOT_FOUND')
+    await db.update(branches).set({ status: 'archived' }).where(eq(branches.id, branch))
+    await expectApiError(() => pauseBranch(db, manager, branch, { for: '15m', reason: null }, MONDAY_10AM), 409, 'INVALID_STATE')
+  })
+})
+
 describe('table QR tokens', () => {
   it('are rebuilt the same from the same secret, table and version, and differ otherwise', async () => {
     const token = await tableToken('s', 'table-1', 1)
@@ -330,6 +395,7 @@ describe('branches for customers (D93)', () => {
       // Until 19:00 (D99: online orders stop 15 minutes before).
       closesInMinutes: 540,
       nextOpening: null,
+      pausedUntil: null,
     })
     // Saturday 23:00 there: open until 02:00, past midnight.
     expect((await getPublicBranch(db, TEST_TENANT, branch, at('2026-10-03T16:00:00Z'))).closesInMinutes).toBe(180)
