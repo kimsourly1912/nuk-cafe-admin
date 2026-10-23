@@ -2,14 +2,16 @@
 /**
  * The counter's header (D102, the owner's frames): the cafe (D143), the branch and whether it's open, the
  * order search (on the queue), Sold out (the page that switches items off, 6.3c, D105), Manage for
- * managers and owners (Dining tables and Reports, D198; never shown to staff, and the server checks
- * the role again), the color mode and the user menu (the chime on or off, another branch, another cafe (D144), change password,
+ * managers and owners (Dining tables and Reports, D198; Pause or Resume online orders, D199; never
+ * shown to staff, and the server checks the role again), the color mode and the user menu (the chime on or off, another branch, another cafe (D144), change password,
  * sign out).
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { PublicBranch } from '#shared/contracts/branches'
 import { useAccountCafes } from '~/features/cafe'
+import { useBranchPause } from '../composables/useBranchPause'
 import { useCounterMuted } from '../composables/useCounterQueue'
+import CounterPauseModal from './CounterPauseModal.vue'
 import { counterChangePasswordPath, counterHomePath, useCounterSession } from '../composables/useCounterSession'
 
 const props = withDefaults(defineProps<{
@@ -33,11 +35,20 @@ const branch = computed(() => user.value?.branches.find(b => b.id === props.bran
 const status = useApiQuery('counter:branch-status', () => apiFetch<PublicBranch[]>('/public/branches'), { server: false })
 const openNow = computed(() => status.data.value?.find(b => b.id === props.branchId)?.openNow ?? null)
 const soldOutTo = computed(() => (props.soldOutButton && branch.value ? tenantPath(`/counter/${branch.value.id}/sold-out`) : undefined))
+// Online orders paused (D199): the badge says so to everyone at the counter.
+const { pausedUntil, resume } = useBranchPause(() => props.branchId)
+const pauseModal = useOverlay().create(CounterPauseModal)
+
 // A manager's tools (D198): the role is the one at this branch (an owner's is `admin`).
-const manage = computed<DropdownMenuItem[]>(() => branch.value && branch.value.role !== 'staff'
+const manage = computed<DropdownMenuItem[][]>(() => branch.value && branch.value.role !== 'staff'
   ? [
-      { label: 'Dining tables', icon: 'i-lucide-armchair', to: tenantPath(`/counter/${branch.value.id}/tables`) },
-      { label: 'Reports', icon: 'i-lucide-chart-column', to: tenantPath(`/counter/${branch.value.id}/reports/summary`) },
+      [pausedUntil.value
+        ? { label: 'Resume online orders', icon: 'i-lucide-play', onSelect: () => void resume.execute(props.branchId) }
+        : { label: 'Pause online orders…', icon: 'i-lucide-pause', disabled: openNow.value === false, onSelect: () => void pauseModal.open({ branchId: props.branchId }) }],
+      [
+        { label: 'Dining tables', icon: 'i-lucide-armchair', to: tenantPath(`/counter/${branch.value.id}/tables`) },
+        { label: 'Reports', icon: 'i-lucide-chart-column', to: tenantPath(`/counter/${branch.value.id}/reports/summary`) },
+      ],
     ]
   : [])
 const muted = useCounterMuted()
@@ -75,7 +86,15 @@ const menu = computed<DropdownMenuItem[][]>(() => [
         </p>
       </div>
       <UBadge
-        v-if="openNow !== null"
+        v-if="openNow && pausedUntil"
+        label="Paused"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-pause"
+        class="shrink-0"
+      />
+      <UBadge
+        v-else-if="openNow !== null"
         :label="openNow ? 'Open' : 'Closed'"
         :color="openNow ? 'success' : 'neutral'"
         variant="subtle"

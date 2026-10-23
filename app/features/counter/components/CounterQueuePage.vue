@@ -15,6 +15,7 @@
 import type { PublicBranch } from '#shared/contracts/branches'
 import type { CounterOrder } from '#shared/contracts/orders'
 import { openingText } from '~/features/menu'
+import { useBranchPause } from '../composables/useBranchPause'
 import { useCounterActions } from '../composables/useCounterActions'
 import { useCounterQueue } from '../composables/useCounterQueue'
 import { useCounterSession } from '../composables/useCounterSession'
@@ -45,6 +46,12 @@ useHead({ title: () => queueTitle(queue.value?.orders ?? [], longStale.value) })
 const status = useApiQuery('counter:branch-status', () => apiFetch<PublicBranch[]>('/public/branches'), { server: false })
 const branchStatus = computed(() => status.data.value?.find(b => b.id === branchId.value) ?? null)
 const closedNote = computed(() => (branchStatus.value ? openingText(branchStatus.value) : undefined))
+// Online orders paused (D199): refreshed with the board, so another tablet's pause shows here too.
+const { query: pauseQuery, pausedUntil, resume } = useBranchPause(branchId)
+watch(updatedAt, () => void pauseQuery.refresh())
+const pause = computed(() => pauseQuery.data.value)
+const canResume = computed(() => !!branch.value && branch.value.role !== 'staff')
+const pauseDetail = computed(() => [pause.value?.pausedByName && `By ${pause.value.pausedByName}`, pause.value?.reason].filter(Boolean).join(' · ') || undefined)
 
 const { isCompact } = useLayoutContext()
 const actions = useCounterActions(branchId)
@@ -146,6 +153,22 @@ useSeoMeta({ robots: 'noindex' })
           variant="subtle"
           icon="i-lucide-clock"
           :title="closedNote ? `Closed now · ${closedNote}` : 'Closed now'"
+        />
+      </div>
+      <div
+        v-if="pausedUntil && branchStatus?.openNow !== false"
+        class="px-4 pt-3"
+      >
+        <!-- A status, announced politely: another tablet's pause appears here without a click. -->
+        <UAlert
+          role="status"
+          color="warning"
+          variant="subtle"
+          icon="i-lucide-pause"
+          :title="`Online orders paused until ${formatTime(pausedUntil)}`"
+          :description="pauseDetail ? `${pauseDetail}. Orders already placed carry on.` : 'Orders already placed carry on.'"
+          orientation="horizontal"
+          :actions="canResume ? [{ label: 'Resume now', color: 'warning', variant: 'solid', loading: resume.isPending(branchId), onClick: () => void resume.execute(branchId) }] : undefined"
         />
       </div>
       <div

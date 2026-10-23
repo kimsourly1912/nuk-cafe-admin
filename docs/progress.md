@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Pause orders, step 2: the counter (D199, 2026-10-23)
+
+[Plan](plans/pause-orders.md) step 2, after step 1 (merged in PR #163). **Manage → Pause online orders…** (dialog) or **Resume online orders**, the header's **Paused** badge, the queue's banner with **Resume now**. Help: the counter page. **Next:** step 3, the customer menu and checkout, the admin's Branch page.
+
+- **Evidence (2026-10-23, local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 138 files, 1854 passed, 1 skipped. New `test/e2e/pause-orders.test.ts` on the seeded server at Zulu Pop-up (a new seeded branch and manager): pause 30 minutes with a reason from Manage, the toast, the banner "By Rina Sok · Machine broken", the header's Paused, checkout's quote `ORDERING_PAUSED`, Manage offering Resume, **Resume now** ending it and the quote orderable again; over HTTP staff 403, another branch's manager 404, the pause read back with its name and reason while `/public/branches` gives only the end; axe in light and dark at 1180 and 390 for the dialog and the paused queue. 4/4. The banner had no role (Nuxt UI's `UAlert`): it is now `role="status"`.
+
 ## Pause orders, step 1: the server (D199, 2026-10-23)
 
 [Plan](plans/pause-orders.md), [decision](decisions.md#d199-pause-online-orders-a-branch-state-set-from-the-counter-never-past-closing-step-1-the-server-2026-10-23). The owner accepted the recommendations (managers and owners; 15m, 30m, 1h or until closing; Telegram alert later; no mockup round). Migration `0046_branch_pause` (additive). **Next:** step 2, the counter's dialog, banner and badge; step 3, customers and admin.
