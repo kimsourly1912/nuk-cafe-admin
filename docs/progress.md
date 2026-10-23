@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Pause orders, step 1: the server (D199, 2026-10-23)
+
+[Plan](plans/pause-orders.md), [decision](decisions.md#d199-pause-online-orders-a-branch-state-set-from-the-counter-never-past-closing-step-1-the-server-2026-10-23). The owner accepted the recommendations (managers and owners; 15m, 30m, 1h or until closing; Telegram alert later; no mockup round). Migration `0046_branch_pause` (additive). **Next:** step 2, the counter's dialog, banner and badge; step 3, customers and admin.
+
+- **Evidence (2026-10-23, local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 138 files, 1854 passed, 1 skipped. New: `branches.service.test.ts` 6 (the chosen time, staff and customers see it, it ends by itself, audited; capped at closing, until closing, a closed branch refused; pausing again replaces, resume once audited; the branch's version untouched by a pause; the account that paused deleted keeps the pause without a name; another cafe 404, archived refused), `quote.rules.test.ts` (paused: priced, not orderable, the end on the branch's clock, before last orders), `orders.service.test.ts` (placing refused while paused, another branch carries on, orders again after the end and after resume), `identity` (managers may pause, staff 403; the role matrix). Guards removed one at a time, each failing its tests, then restored (287/287): the end's expiry, the cap at closing, the closed-branch refusal, checkout's pause check, `ON DELETE SET NULL`, staff given `pause`.
+
 ## Manager tools, step 3: copy (D198, 2026-10-23)
 
 [Plan](plans/manager-tools.md) step 3, after step 2 (merged in PR #161): the staff form's Manager description ("Everything Staff do, plus their branches' dining tables, QR codes and reports") and the Staff help page's roles table. Manager tools are complete.

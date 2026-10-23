@@ -102,7 +102,8 @@ export const TENANT_ROLES = Object.keys(tenantRoles) as TenantRole[]
 
 export const branchStatements = {
   menu: ['read', 'setSoldOut'],
-  branch: ['read'],
+  // `pause`: pause and resume online orders (D199).
+  branch: ['read', 'pause'],
   table: ['manage', 'rotateQr'],
   order: ['read', 'ready', 'complete', 'cancel'],
   payment: ['collect', 'refund'],
@@ -118,7 +119,7 @@ export const branchRoles = {
   // Staff management and refunds stay with the tenant's owners (D45).
   manager: branchAc.newRole({
     menu: ['read', 'setSoldOut'],
-    branch: ['read'],
+    branch: ['read', 'pause'],
     table: ['manage', 'rotateQr'],
     order: ['read', 'ready', 'complete', 'cancel'],
     payment: ['collect'],

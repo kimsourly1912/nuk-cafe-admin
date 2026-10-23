@@ -31,10 +31,10 @@ const BRANCH = id(15)
 const item = (over: Partial<PublicMenuItem> & Pick<PublicMenuItem, 'id' | 'name' | 'variations'>): PublicMenuItem =>
   ({ description: '', imageUrl: null, image: null, optionSets: [], soldOut: false, modifierGroups: [], promotion: null, ...over })
 
-function menu(options: { open?: boolean, closesInMinutes?: number, largeSoldOut?: boolean } = {}): PublicMenu {
+function menu(options: { open?: boolean, closesInMinutes?: number, largeSoldOut?: boolean, pausedUntil?: string } = {}): PublicMenu {
   const open = options.open ?? true
   return {
-    branch: { id: BRANCH, name: 'Riverside', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: open, closesInMinutes: open ? options.closesInMinutes ?? 600 : null, nextOpening: null },
+    branch: { id: BRANCH, name: 'Riverside', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: open, closesInMinutes: open ? options.closesInMinutes ?? 600 : null, nextOpening: null, pausedUntil: options.pausedUntil ?? null },
     currency: 'USD',
     at: '2026-09-29T03:00:00.000Z',
     promotions: [],
@@ -161,6 +161,16 @@ describe('the order as a whole', () => {
     expect(late.problems).toEqual([{ code: 'LAST_ORDERS_PASSED', message: 'Online orders close 15 minutes before Riverside closes.' }])
     expect(late.orderable).toBe(false)
     expect(quoteOrder(menu({ closesInMinutes: 16 }), THE_ORDER).orderable).toBe(true)
+  })
+
+  it('paused by the counter (D199): priced as usual, not orderable, saying when it\'s back on the branch\'s clock', () => {
+    // 08:30 UTC is 3:30 PM in Phnom Penh (UTC+7).
+    const quote = quoteOrder(menu({ pausedUntil: '2026-09-29T08:30:00.000Z' }), THE_ORDER)
+    expect(quote.totalMinor).toBe(1375)
+    expect(quote.problems).toEqual([{ code: 'ORDERING_PAUSED', message: 'Riverside isn\'t taking online orders right now. Back at 3:30 PM.' }])
+    expect(quote.orderable).toBe(false)
+    // Paused within last orders: the pause is what customers are told.
+    expect(quoteOrder(menu({ pausedUntil: '2026-09-29T08:30:00.000Z', closesInMinutes: 10 }), THE_ORDER).problems[0]!.code).toBe('ORDERING_PAUSED')
   })
 
   it('a closed branch: priced as usual, but not orderable', () => {

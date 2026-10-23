@@ -152,4 +152,31 @@ export interface PublicBranch {
   closesInMinutes: number | null
   /** While closed: when it opens next; `null` while open, or with no opening hours at all. */
   nextOpening: NextOpening | null
+  /**
+   * While open: online orders paused until then (ISO; D199), `null` when not paused. Who paused and
+   * why are staff-only (`BranchPause`).
+   */
+  pausedUntil: string | null
+}
+
+// --- Pausing online orders (D199) ---
+
+/** How long a pause lasts: 15 or 30 minutes, an hour, or until closing; never past closing. */
+export const PAUSE_CHOICES = ['15m', '30m', '1h', 'closing'] as const
+export type PauseChoice = typeof PAUSE_CHOICES[number]
+export const PAUSE_REASON_MAX = 140
+
+export const pauseBranchSchema = v.strictObject({
+  for: v.picklist(PAUSE_CHOICES, 'Choose how long'),
+  reason: v.optional(v.nullable(v.pipe(textSchema(PAUSE_REASON_MAX), v.transform(text => text || null))), null),
+})
+export type PauseBranchInput = v.InferOutput<typeof pauseBranchSchema>
+
+/** A branch's pause as staff see it: `null` fields when it isn't paused. */
+export interface BranchPause {
+  branchId: string
+  pausedUntil: string | null
+  reason: string | null
+  /** `null` when not paused, or when the account is gone. */
+  pausedByName: string | null
 }

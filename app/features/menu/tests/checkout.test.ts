@@ -13,7 +13,7 @@ const quoteLine = (variationId: string, unitPriceMinor: number | null, quantity 
   unitPriceMinor, regularUnitPriceMinor: null, promotion: null, totalMinor: unitPriceMinor === null ? null : unitPriceMinor * quantity, problem: null,
 })
 const quote = (lines: QuoteLine[]): CheckoutQuote => ({
-  branch: { id: 'b', name: 'Riverside', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: true, closesInMinutes: 600, nextOpening: null },
+  branch: { id: 'b', name: 'Riverside', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: true, closesInMinutes: 600, nextOpening: null, pausedUntil: null },
   currency: 'USD', at: '2026-09-29T03:00:00.000Z', expiresAt: '2026-09-29T03:10:00.000Z', lines,
   subtotalMinor: lines.reduce((sum, l) => sum + (l.totalMinor ?? 0), 0), totalMinor: lines.reduce((sum, l) => sum + (l.totalMinor ?? 0), 0), savingsMinor: 0, problems: [], orderable: true,
 })

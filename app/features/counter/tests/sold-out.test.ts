@@ -11,7 +11,7 @@ const item = (id: string, name: string, versions: [string, string, boolean][]): 
 })
 
 const menu: PublicMenu = {
-  branch: { id: 'b', name: 'Riverside', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: true, closesInMinutes: 600, nextOpening: null },
+  branch: { id: 'b', name: 'Riverside', address: null, phone: null, timezone: 'Asia/Phnom_Penh', openNow: true, closesInMinutes: 600, nextOpening: null, pausedUntil: null },
   currency: 'USD',
   at: '2026-09-30T03:00:00.000Z',
   promotions: [],
