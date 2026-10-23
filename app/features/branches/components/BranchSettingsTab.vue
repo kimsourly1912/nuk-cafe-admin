@@ -30,7 +30,17 @@ const unsaved = useUnsavedChanges(state, {
   },
 })
 
-const { update } = useBranchMutations()
+const { update, resume } = useBranchMutations()
+// Online orders paused from the counter (D199): said here, and an owner can end it.
+const paused = computed(() => (saved.value.openNow && saved.value.pause.pausedUntil ? saved.value.pause : null))
+const pauseDetail = computed(() => [paused.value?.pausedByName && `By ${paused.value.pausedByName}`, paused.value?.reason].filter(Boolean).join(' · '))
+async function resumeOrders() {
+  const result = await resume.execute(saved.value.id)
+  if (result.ok) {
+    saved.value = { ...saved.value, pause: result.data }
+    emit('saved', saved.value)
+  }
+}
 const form = useTemplateRef('form')
 useFormErrorRecheck(form)
 
@@ -106,7 +116,7 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
     <dl class="divide-y divide-default rounded-lg border border-default bg-elevated/50 sm:grid sm:grid-cols-3 sm:gap-4 sm:divide-y-0 sm:border-0 sm:bg-transparent">
       <div class="flex items-center gap-3 p-4 sm:rounded-lg sm:border sm:border-default sm:bg-elevated/50">
         <UChip
-          :color="saved.openNow ? 'success' : 'neutral'"
+          :color="paused ? 'warning' : saved.openNow ? 'success' : 'neutral'"
           standalone
           inset
           size="3xl"
@@ -116,10 +126,34 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
           <dt class="text-sm text-muted">
             Current status
           </dt>
-          <dd class="font-semibold text-highlighted sm:text-lg">
+          <dd
+            v-if="paused"
+            class="font-semibold text-highlighted sm:text-lg"
+          >
+            Paused until {{ formatTime(paused.pausedUntil!, { timeZone: saved.timezone }) }}
+            <span
+              v-if="pauseDetail"
+              class="block text-sm font-normal text-muted"
+            >{{ pauseDetail }}</span>
+          </dd>
+          <dd
+            v-else
+            class="font-semibold text-highlighted sm:text-lg"
+          >
             {{ saved.openNow ? 'Open now' : 'Closed now' }}
           </dd>
         </div>
+        <UButton
+          v-if="paused"
+          label="Resume"
+          icon="i-lucide-play"
+          color="neutral"
+          variant="outline"
+          size="sm"
+          class="shrink-0"
+          :loading="resume.isPending(saved.id)"
+          @click="resumeOrders"
+        />
       </div>
       <div class="flex items-center gap-3 p-4 sm:rounded-lg sm:border sm:border-default sm:bg-elevated/50">
         <UIcon

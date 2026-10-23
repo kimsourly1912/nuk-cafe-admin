@@ -191,7 +191,7 @@ async function loadBranch(db: Db, tenantId: string, id: string): Promise<BranchR
 /** The branch's settings, and whether it's open at `now` (its hours, in its timezone). */
 export async function getBranchSettings(db: Db, tenantId: string, id: string, now = new Date()): Promise<BranchSettings> {
   const branch = await loadBranch(db, tenantId, id)
-  const hours = await repo.hoursOf(db, tenantId, id)
+  const [hours, pause] = await Promise.all([repo.hoursOf(db, tenantId, id), getBranchPause(db, tenantId, id, now)])
   const at = localTime(now, branch.timezone)
   return {
     id: branch.id,
@@ -203,6 +203,7 @@ export async function getBranchSettings(db: Db, tenantId: string, id: string, no
     hours,
     openNow: hours.some(window => isInWindow(window, at)),
     today: at.weekday,
+    pause,
     version: branch.version ?? 1,
   }
 }

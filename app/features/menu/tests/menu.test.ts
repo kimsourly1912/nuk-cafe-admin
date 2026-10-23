@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { PublicMenu, PublicMenuItem, PublicMenuModifierGroup } from '#shared/contracts/public-menu'
 import { addLine, lineKey, MAX_LINE_QUANTITY, parseLines, quantityOfItem, reorderLines, resolveCart, setLineQuantity } from '../utils/cart'
 import { hasChoices, highlightParts, menuItems, menuSections, priceOf, searchMenu } from '../utils/menu'
-import { openingText } from '../utils/opening'
+import { openingText, pausedText } from '../utils/opening'
 import { chooseValue, chosenModifierIds, defaultSelection, groupRule, isValueOrderable, selectionProblems, toggleModifier, unitPriceOf, variationOf } from '../utils/selection'
 
 function item(id: string, overrides: Partial<PublicMenuItem> = {}): PublicMenuItem {
@@ -208,6 +208,13 @@ describe('opening text', () => {
     expect(closed(7, 1)).toBe('Opens next Monday at 7:00 AM')
     expect(openingText({ openNow: true, nextOpening: null })).toBeUndefined()
     expect(openingText({ openNow: false, nextOpening: null })).toBeUndefined()
+  })
+
+  it('says when a paused branch takes orders again, on its own clock (D199)', () => {
+    // 08:30 UTC is 3:30 PM in Phnom Penh.
+    expect(pausedText({ openNow: true, pausedUntil: '2026-09-29T08:30:00.000Z', timezone: 'Asia/Phnom_Penh' })).toBe('Back at 3:30 PM')
+    expect(pausedText({ openNow: true, pausedUntil: null, timezone: 'Asia/Phnom_Penh' })).toBeUndefined()
+    expect(pausedText({ openNow: false, pausedUntil: '2026-09-29T08:30:00.000Z', timezone: 'Asia/Phnom_Penh' })).toBeUndefined()
   })
 })
 

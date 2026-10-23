@@ -1,4 +1,4 @@
-import type { BranchSettings, CreateBranchInput, CreateTableInput, DiningTable, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
+import type { BranchPause, BranchSettings, CreateBranchInput, CreateTableInput, DiningTable, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
 
 const base = (branchId: string) => `/admin/branches/${branchId}`
 
@@ -55,7 +55,19 @@ export function useBranchMutations() {
       invalidate: AFFECTED,
     },
   )
-  return { create, update }
+  // Pausing is the counter's (D199); an owner may end a pause from the Branch page.
+  const resume = useMutation(
+    (branchId: string) => apiFetch<BranchPause>(`${base(branchId)}/resume`, { method: 'POST' }),
+    {
+      id: 'branches:resume',
+      key: branchId => branchId,
+      lock: branchId => `branch-pause:${branchId}`,
+      successMessage: 'Online orders are on again',
+      errorMessage: 'Could not resume online orders',
+      invalidate: ['branches'],
+    },
+  )
+  return { create, update, resume }
 }
 
 export interface NewTable extends CreateTableInput {

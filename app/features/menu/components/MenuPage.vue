@@ -30,7 +30,7 @@ import { useScrollSpy } from '../composables/useScrollSpy'
 import { useOrderSource } from '../composables/useOrderSource'
 import { lineKey, quantityOfItem, resolveCart } from '../utils/cart'
 import { menuItems, menuSections, searchMenu } from '../utils/menu'
-import { openingText } from '../utils/opening'
+import { openingText, pausedText } from '../utils/opening'
 import MenuCategoryBar from './MenuCategoryBar.vue'
 import MenuItemDetail from './MenuItemDetail.vue'
 import MenuItemList from './MenuItemList.vue'
@@ -58,8 +58,12 @@ const branchId = computed(() => branch.value?.id)
  * another cafe (one tab, one table; D141) isn't this menu's, as checkout also decides.
  */
 const table = computed(() => (storedTable.value && storedTable.value.branchId === branchId.value ? storedTable.value : null))
-const closed = computed(() => !branch.value?.openNow)
-const closedNote = computed(() => (branch.value ? openingText(branch.value) : undefined))
+// Paused by the counter (D199): open, but taking no online orders, like closed until it ends.
+const paused = computed(() => Boolean(branch.value && pausedText(branch.value)))
+const closed = computed(() => !branch.value?.openNow || paused.value)
+const closedNote = computed(() => (branch.value ? pausedText(branch.value) ?? openingText(branch.value) : undefined))
+/** Taking online orders now: open and not paused. */
+const ordering = computed(() => Boolean(branch.value?.openNow) && !paused.value)
 const loading = computed(() => menuQuery.loading.value)
 /** No active branch at all: the server has no menu to show yet. */
 const noBranch = computed(() => menuQuery.error.value?.kind === 'not_found')
@@ -251,9 +255,9 @@ watch(detailOpen, (open) => {
         >
           <span
             class="size-2 rounded-full"
-            :class="branch.openNow ? 'bg-success' : 'bg-warning'"
+            :class="ordering ? 'bg-success' : 'bg-warning'"
           />
-          {{ branch.openNow ? 'Open now' : 'Closed now' }}
+          {{ ordering ? 'Open now' : paused ? 'Not taking online orders' : 'Closed now' }}
         </p>
       </div>
     </DefineOrderType>
@@ -298,17 +302,17 @@ watch(detailOpen, (open) => {
                 <button
                   type="button"
                   class="flex max-w-full items-center gap-1.5 text-xs text-muted sm:hidden"
-                  :aria-label="`${orderType} at ${branch.name}${branch.openNow ? '' : ', closed'}: change order type or branch`"
+                  :aria-label="`${orderType} at ${branch.name}${ordering ? '' : paused ? ', paused' : ', closed'}: change order type or branch`"
                 >
                   <span
                     class="size-1.5 shrink-0 rounded-full"
-                    :class="branch.openNow ? 'bg-success' : 'bg-warning'"
+                    :class="ordering ? 'bg-success' : 'bg-warning'"
                   />
                   <span class="truncate">{{ table ? `${orderType} · ${branch.name}` : branch.name }}</span>
                   <span
-                    v-if="!branch.openNow"
+                    v-if="!ordering"
                     class="shrink-0 font-medium text-warning"
-                  >Closed</span>
+                  >{{ paused ? 'Paused' : 'Closed' }}</span>
                   <UIcon
                     name="i-lucide-chevron-down"
                     class="size-3.5 shrink-0"
@@ -325,21 +329,21 @@ watch(detailOpen, (open) => {
               >
                 <span class="truncate">{{ branch.name }}</span>
                 <UBadge
-                  :color="branch.openNow ? 'success' : 'warning'"
+                  :color="ordering ? 'success' : 'warning'"
                   variant="subtle"
                   size="sm"
                   class="shrink-0 rounded-full"
                 >
                   <span
                     class="size-1.5 rounded-full"
-                    :class="branch.openNow ? 'bg-success' : 'bg-warning'"
+                    :class="ordering ? 'bg-success' : 'bg-warning'"
                   />
-                  <template v-if="branch.openNow">
+                  <template v-if="ordering">
                     <span class="lg:hidden">Open</span>
                     <span class="max-lg:hidden">Open now</span>
                   </template>
                   <template v-else>
-                    Closed
+                    {{ paused ? 'Paused' : 'Closed' }}
                   </template>
                 </UBadge>
               </p>
@@ -402,8 +406,8 @@ watch(detailOpen, (open) => {
           v-if="branch && closed"
           color="warning"
           variant="subtle"
-          icon="i-lucide-clock"
-          title="Closed now"
+          :icon="paused ? 'i-lucide-pause' : 'i-lucide-clock'"
+          :title="paused ? 'Not taking online orders right now' : 'Closed now'"
           :description="closedNote ?? 'Online ordering isn\'t available right now.'"
         />
         <ApiErrorAlert

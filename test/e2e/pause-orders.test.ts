@@ -111,6 +111,30 @@ describe('pausing online orders at the counter (D199)', () => {
     expect((await quote()).orderable).toBe(true)
   })
 
+  it('customers see it on the menu: not taking online orders, back at the end, adding off; then open again', async () => {
+    const popup = await cookieOf(seed.customers.popupManager)
+    expect((await post(`${branchId}/pause`, popup, { for: '15m' })).status).toBe(200)
+    try {
+      const page = await createPage()
+      await asNewVisitor(page)
+      await page.addInitScript(id => localStorage.setItem('nuk-cafe:branch', id), branchId)
+      await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
+      await page.getByText('Not taking online orders right now', { exact: true }).waitFor()
+      await page.getByText(/^Back at \d{1,2}:\d{2} (AM|PM)$/).first().waitFor()
+      const add = page.getByRole('button', { name: /^Add .+ to order$/ }).filter({ visible: true }).first()
+      expect(await add.isDisabled()).toBe(true)
+    }
+    finally {
+      expect((await post(`${branchId}/resume`, popup)).status).toBe(200)
+    }
+    const page = await createPage()
+    await asNewVisitor(page)
+    await page.addInitScript(id => localStorage.setItem('nuk-cafe:branch', id), branchId)
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
+    await page.getByRole('button', { name: /^Add .+ to order$/ }).filter({ visible: true }).first().waitFor()
+    expect(await page.getByText('Not taking online orders right now').count()).toBe(0)
+  })
+
   const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
   async function axeFindings(page: Page): Promise<string[]> {
     await page.evaluate(axeSource)

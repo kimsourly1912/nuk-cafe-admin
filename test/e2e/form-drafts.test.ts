@@ -174,6 +174,7 @@ describe('branch settings keep their unsaved input', () => {
     hours: [1, 2, 3, 4, 5].map(weekday => ({ weekday, startMinute: 480, endMinute: 1140 })),
     openNow: true,
     today: 1,
+    pause: { branchId: RIVERSIDE.id, pausedUntil: null, reason: null, pausedByName: null },
     version: 3,
   }
 
