@@ -36,6 +36,8 @@ export interface BranchSettings {
   openNow: boolean
   /** Today's ISO weekday (1 = Monday) in the branch's timezone, for "today's hours". */
   today: number
+  /** Online orders paused from the counter (D199); `null` fields when not paused. */
+  pause: BranchPause
   version: number
 }
 

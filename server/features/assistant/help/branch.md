@@ -15,7 +15,7 @@ A cafe can have up to 10 branches.
 
 ## Settings
 
-At the top: whether the branch is open now, its time zone and today's hours.
+At the top: whether the branch is open now, its time zone and today's hours. When a manager has paused online orders from the counter, it says **Paused until** a time, with who paused and why; **Resume** takes online orders again at once. Pausing is done at the counter (**Manage → Pause online orders…**).
 
 **Branch information:** **Branch name**, **Address**, **Phone**, **Time zone**.
 

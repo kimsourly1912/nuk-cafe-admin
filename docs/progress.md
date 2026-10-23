@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Pause orders, step 3: customers and admin (D199, 2026-10-23)
+
+[Plan](plans/pause-orders.md) step 3, after step 2 (merged in PR #164). The customer menu says **Not taking online orders right now · Back at …** with adding off; the admin's Branch page shows the pause with **Resume**. Pause orders is complete; a Telegram alert to owners is a later step.
+
+- **Evidence (2026-10-23, local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 138 files, 1857 passed, 1 skipped, incl. `menu.test.ts` (`pausedText`: the end on the branch's clock, nothing while not paused or closed). With `shop-menu`, `shop-checkout` and `accessibility`: 67/67. `pause-orders.test.ts` +1 on the seeded server: paused at Zulu Pop-up, the menu says it with "Back at …" and adding is off; resumed, it's orderable again. `branches.test.ts` +1 (mocked): the status card's "Paused until 3:30 PM · By Mony Chan · Machine broken", Resume posting once and the card back to Open now.
+
 ## Pause orders, step 2: the counter (D199, 2026-10-23)
 
 [Plan](plans/pause-orders.md) step 2, after step 1 (merged in PR #163). **Manage → Pause online orders…** (dialog) or **Resume online orders**, the header's **Paused** badge, the queue's banner with **Resume now**. Help: the counter page. **Next:** step 3, the customer menu and checkout, the admin's Branch page.

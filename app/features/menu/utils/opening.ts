@@ -1,5 +1,6 @@
 import type { PublicBranch } from '#shared/contracts/branches'
 import { formatClock } from '~/utils/clock'
+import { formatTime } from '~/utils/date-format'
 
 const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
@@ -16,4 +17,13 @@ export function openingText(branch: Pick<PublicBranch, 'openNow' | 'nextOpening'
   if (next.inDays === 1) return `Opens tomorrow at ${time}`
   const day = WEEKDAY_NAMES[next.weekday - 1]
   return next.inDays === 7 ? `Opens next ${day} at ${time}` : `Opens ${day} at ${time}`
+}
+
+/**
+ * While the counter paused online orders (D199): "Back at 3:30 PM", on the branch's clock.
+ * `undefined` when it isn't paused (or is closed anyway).
+ */
+export function pausedText(branch: Pick<PublicBranch, 'openNow' | 'pausedUntil' | 'timezone'>): string | undefined {
+  if (!branch.openNow || !branch.pausedUntil) return undefined
+  return `Back at ${formatTime(branch.pausedUntil, { timeZone: branch.timezone })}`
 }

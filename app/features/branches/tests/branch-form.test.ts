@@ -13,6 +13,7 @@ const settings = (hours: BranchSettings['hours']): BranchSettings => ({
   hours,
   openNow: false,
   today: 1,
+  pause: { branchId: 'b-1', pausedUntil: null, reason: null, pausedByName: null },
   version: 4,
 })
 const w = (weekday: number, startMinute: number, endMinute: number) => ({ weekday, startMinute, endMinute })

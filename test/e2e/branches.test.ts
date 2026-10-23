@@ -23,6 +23,7 @@ const SETTINGS: BranchSettings = {
   hours: [1, 2, 3, 4, 5].map(day => w(day, 480, 1140)),
   openNow: true,
   today: 1,
+  pause: { branchId: RIVERSIDE.id, pausedUntil: null, reason: null, pausedByName: null },
   version: 3,
 }
 const tableOf = (id: string, label: string, overrides: Partial<DiningTable> = {}): DiningTable => ({
@@ -188,6 +189,27 @@ describe('adding a branch (D197)', () => {
     await button.waitFor()
     const box = (await button.boundingBox())!
     expect(box.width < 60).toBe(width < 640)
+  })
+})
+
+describe('a pause from the counter (D199)', () => {
+  it('shows on the status card with who and why; Resume ends it', async () => {
+    let resumed = 0
+    const pause = { branchId: RIVERSIDE.id, pausedUntil: '2026-09-29T08:30:00.000Z', reason: 'Machine broken', pausedByName: 'Mony Chan' }
+    const { page } = await open(backend({
+      'GET /admin/branches/{id}': () => ({ ...SETTINGS, pause: resumed ? { ...pause, pausedUntil: null, reason: null, pausedByName: null } : pause }),
+      'POST /admin/branches/{id}/resume': () => {
+        resumed++
+        return { ...pause, pausedUntil: null, reason: null, pausedByName: null }
+      },
+    }).handlers)
+    await page.getByText('Paused until 3:30 PM').waitFor()
+    await page.getByText('By Mony Chan · Machine broken').waitFor()
+    await page.getByRole('button', { name: 'Resume' }).click()
+    await toast(page, 'Online orders are on again').waitFor()
+    await page.getByText('Open now').first().waitFor()
+    expect(resumed).toBe(1)
+    expect(await page.getByRole('button', { name: 'Resume' }).count()).toBe(0)
   })
 })
 
