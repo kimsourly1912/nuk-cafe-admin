@@ -3,19 +3,20 @@
  * Add a staff member, or change someone's access (D49, D52). Open via
  * `useOverlay().create(StaffFormModal)`; emits `close(true)` when saved.
  *
- * Access is the admin role plus one role per branch; saving replaces all of it and signs the person
+ * Access is one choice (D196): Admin, Manager or Staff at the ticked branches, or a different role
+ * per branch (offered with two branches or more); saving replaces all of it and signs the person
  * out on their devices. A new account's temporary password is shown once afterwards. Like the other
  * forms, it stays open while saving but can be closed: the save continues, and a failure offers
  * "Reopen" with the input restored.
  */
-import type { FormSubmitEvent, SelectItem } from '@nuxt/ui'
+import type { FormSubmitEvent, RadioGroupItem, SelectItem } from '@nuxt/ui'
 import type { StaffMember } from '#shared/contracts/staff'
 import { BRANCH_ROLES } from '#shared/contracts/staff'
 import { useAuth } from '~/features/auth'
 import { useBranchOptions } from '~/features/branches'
 import { useStaffMutations } from '../composables/useStaff'
-import { ROLE_LABELS, staffAccessFormSchema, staffCreateFormSchema, toCreateStaffBody, toStaffForm, toUpdateStaffAccessBody } from '../schemas/staff-form'
-import type { StaffForm } from '../schemas/staff-form'
+import { ACCESS_CHOICES, ACCESS_LABELS, isBranchRole, ROLE_LABELS, staffAccessFormSchema, staffCreateFormSchema, switchAccess, toCreateStaffBody, toStaffForm, toUpdateStaffAccessBody } from '../schemas/staff-form'
+import type { AccessChoice, StaffForm } from '../schemas/staff-form'
 import StaffFormModal from './StaffFormModal.vue'
 import TemporaryPasswordModal from './TemporaryPasswordModal.vue'
 
@@ -38,9 +39,29 @@ const state = reactive<StaffForm>(structuredClone(toRaw(props.draft) ?? toStaffF
 const schema = (isEdit ? staffAccessFormSchema : staffCreateFormSchema) as typeof staffCreateFormSchema
 
 const branches = useBranchOptions()
-const branchItems = computed(() => (branches.data.value ?? []).map(b => ({ label: b.name, value: b.id })))
+// A branch the person still has but that's no longer active stays listed, so it can be unticked.
+const branchItems = computed(() => {
+  const items = (branches.data.value ?? []).map(b => ({ label: b.name, value: b.id }))
+  const gone = (props.member?.memberships ?? []).filter(m => !items.some(i => i.value === m.branchId))
+  return [...items, ...gone.map(m => ({ label: m.branchName, value: m.branchId }))]
+})
 const roleItems: SelectItem[] = BRANCH_ROLES.map(role => ({ label: ROLE_LABELS[role], value: role }))
 const unusedBranch = computed(() => branches.data.value?.find(b => !state.memberships.some(m => m.branchId === b.id)))
+
+// "Different per branch" only means something with two branches (or when they already have it).
+const accessItems = computed<RadioGroupItem[]>(() => ACCESS_CHOICES
+  .filter(choice => choice !== 'mixed' || branchItems.value.length > 1 || state.access === 'mixed')
+  .map(choice => ({ value: choice, ...ACCESS_LABELS[choice], disabled: adminLocked && choice !== 'admin' })))
+
+function onAccessChange(next: AccessChoice) {
+  Object.assign(state, switchAccess(state, next))
+}
+
+function toggleBranch(branchId: string, on: boolean) {
+  state.branchIds = on ? [...state.branchIds, branchId] : state.branchIds.filter(id => id !== branchId)
+}
+// Each checkbox its own id: inside the branchIds field they'd all take the field's.
+const formId = useId()
 
 function addMembership() {
   if (unusedBranch.value) state.memberships.push({ branchId: unusedBranch.value.id, role: 'staff' })
@@ -143,27 +164,54 @@ async function onSubmit({ data }: FormSubmitEvent<StaffForm>) {
           </UFormField>
         </template>
 
-        <UFormField name="admin">
-          <USwitch
-            v-model="state.admin"
-            label="Admin"
-            :description="adminLocked ? 'You can\'t remove your own admin role.' : 'Everything in this app: menu, staff, settings, refunds, reports.'"
-            :disabled="adminLocked"
+        <UFormField
+          label="Access"
+          name="access"
+          :help="adminLocked ? 'You can\'t remove your own admin role.' : undefined"
+        >
+          <URadioGroup
+            :model-value="state.access"
+            :items="accessItems"
+            variant="card"
+            legend="Access"
+            :ui="{ legend: 'sr-only' }"
+            @update:model-value="value => onAccessChange(value as AccessChoice)"
           />
         </UFormField>
 
+        <ApiErrorAlert
+          v-if="state.access !== 'admin' && branches.error.value"
+          :error="branches.error.value"
+          title="Could not load branches"
+          @retry="branches.refresh()"
+        />
+
         <UFormField
+          v-if="isBranchRole(state.access)"
+          label="Branches"
+          name="branchIds"
+          :description="`They work the counter of these branches as ${ROLE_LABELS[state.access]}.`"
+        >
+          <div class="grid gap-2 sm:grid-cols-2">
+            <UCheckbox
+              v-for="branch in branchItems"
+              :id="`${formId}-branch-${branch.value}`"
+              :key="branch.value"
+              :model-value="state.branchIds.includes(branch.value)"
+              :label="branch.label"
+              :aria-label="branch.label"
+              @update:model-value="on => toggleBranch(branch.value, on === true)"
+            />
+          </div>
+        </UFormField>
+
+        <UFormField
+          v-else-if="state.access === 'mixed'"
           label="Branches"
           name="memberships"
-          description="Managers and staff work at the counter of these branches."
+          description="Pick each branch and their role there."
         >
           <div class="space-y-2">
-            <ApiErrorAlert
-              v-if="branches.error.value"
-              :error="branches.error.value"
-              title="Could not load branches"
-              @retry="branches.refresh()"
-            />
             <div
               v-for="(membership, index) in state.memberships"
               :key="index"
@@ -195,12 +243,6 @@ async function onSubmit({ data }: FormSubmitEvent<StaffForm>) {
                 @click="rowErrors.removeRow(state.memberships, index)"
               />
             </div>
-            <p
-              v-if="!state.memberships.length"
-              class="text-sm text-muted"
-            >
-              No branch.
-            </p>
             <UButton
               label="Add branch"
               icon="i-lucide-plus"

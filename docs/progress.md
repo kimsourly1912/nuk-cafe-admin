@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Staff access as one choice (D196, 2026-10-23)
+
+Branch `claude/vibrant-ride-y8ikuq` (from main after PR #157). Step A of the owner's branch plan ([decision](decisions.md#d196-staff-access-is-one-choice-owners-will-add-branches-at-most-10-2026-10-23)): the staff form asks **Access** first (Admin, Manager, Staff, or Different per branch), then the branches as checkboxes; admins get no branch picker. UI only: the API body, server and data are unchanged. No mockup round (the owner chose to go straight to the build). **Next: step B**, owners add branches (at most 10 per cafe, later by subscription), its own PR after review.
+
+- **Evidence (2026-10-23, local):** `pnpm lint`, `pnpm typecheck` clean; `app/features/staff/tests/staff-form.test.ts` 7 (the opening choice incl. mixed roles and an admin's old rows, only the shown list validated, switching keeps input, the unchanged body); with the "Pick at least one branch" check removed, its test failed, then restored. `test/e2e/staff.test.ts` 19/19 (Chromium at `/opt/pw-browsers/chromium`): Manager at a ticked branch, the branch required, Admin hides the branches, per-branch rows starting from the ticked branch, an edit to Admin sending no branch roles, own admin locked (other choices disabled), the phone layout, and axe in light and dark at 1440 and 390 for both single-role and per-branch layouts.
+
 ## Date style enforced by ESLint (D195, 2026-10-21)
 
 Branch `chore/lint-date-formats`. `DATE_FORMAT_RESTRICTIONS` in `eslint.config.mjs`: `toLocaleDateString`, `toLocaleTimeString`, `toLocaleString` with date options and `new Intl.DateTimeFormat` are refused in `app/` (`no-restricted-syntax`, and `vue/no-restricted-syntax` for templates); `date-format.ts` and `timezones.ts` are exempt. The last hand-formatted dates moved to the helpers: `draftTimeText` (its unused `locale` parameter removed) and the reports' `stampIn` (`formatShortDateTime` with the new `weekday` option, same text). The two `en-CA` `YYYY-MM-DD` keys (`activity.ts`, `promotion-form.ts`) disable the rule on their line, saying why.

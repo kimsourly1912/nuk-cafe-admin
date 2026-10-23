@@ -7,16 +7,18 @@
 | Role | What they can do |
 |---|---|
 | **Admin** | Everything: this admin portal (menu, staff, branch, payments), and the counter app at every branch, including cancelling paid orders. Only admins can sign in to the admin portal. |
-| **Manager** (per branch) | The counter app at their branches: take payments, prepare and complete orders, cancel orders, mark items sold out, manage dining tables. |
+| **Manager** (per branch) | The counter app at their branches. For now the same as Staff: manager tools will come later. |
 | **Staff** (per branch) | The counter app at their branches: take payments, prepare and complete orders, cancel orders, mark items sold out. |
 
-A person can have different roles at different branches.
+Admins work at every branch, so they need no branch. With two branches or more, a person can have **different roles per branch** (Manager at one, Staff at another).
+
+Branches are the locations of your cafe: they share one menu, one staff list and the same customers; each has its own hours, tables, counter and orders.
 
 ## Add a staff member
 
 1. Press **Add staff member** (or **N**).
 2. **Name** and **Email**.
-3. Tick **Admin** for full access, and/or under **Branches** press **Add branch**, pick the branch and the role (Manager or Staff).
+3. Under **Access** choose **Admin**, **Manager** or **Staff**. For a Manager or Staff, tick their **Branches**. To give someone a different role at each branch, choose **Different per branch**, then press **Add branch** and pick the branch and role for each.
 4. Press **Add**, then **Copy** the **Temporary password** that appears and give it to the person in person or through a private channel. It won't be shown again, so this step is part of adding them.
 5. At their first sign-in they must choose their own password.
 
@@ -26,7 +28,7 @@ Staff sign in to the counter app at `/counter/sign-in`; admins sign in to this p
 
 ## Change someone's access
 
-Click their name, change **Admin** or their branches and roles, then **Save**. The change applies at once.
+Click their name, change their **Access** or their branches, then **Save**. The change applies at once.
 
 ## Disable a staff member
 
@@ -42,6 +44,7 @@ You can't reset your own password here: use **Change password** in your account 
 
 - **"The cafe needs at least one admin. Make someone else an admin first."**: you can't remove or disable the last admin.
 - **"You can't remove your own admin role."**: another admin must do it.
+- **"Pick at least one branch"**: a Manager or Staff needs a branch; tick one, or choose **Admin**.
 - **"This person already has staff access. Edit them instead."**: find them in the list and change their access.
 - **A staff member forgot their password**: use **Reset password** from their row's menu (above).
 - **"You can't reset your own password here."**: use **Change password** in your account menu.
