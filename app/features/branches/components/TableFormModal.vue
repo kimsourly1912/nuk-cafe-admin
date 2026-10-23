@@ -7,11 +7,14 @@
 import type { DiningTable } from '#shared/contracts/branches'
 import { TABLE_AREA_MAX, TABLE_LABEL_MAX } from '#shared/contracts/branches'
 import { useTableMutations } from '../composables/useBranches'
+import type { TablesSurface } from '../composables/useBranches'
 
 const props = defineProps<{
   branchId: string
   /** The table to edit; omit to add one. */
   table?: DiningTable
+  /** The counter's API for a manager (D198); the admin's by default. */
+  surface?: TablesSurface
 }>()
 const emit = defineEmits<{ 'close': [saved?: DiningTable], 'update:open': [open: boolean] }>()
 
@@ -19,7 +22,7 @@ const state = reactive({ label: props.table?.label ?? '', area: props.table?.are
 const saving = ref(false)
 const { isCompact: fullscreen } = useLayoutContext()
 const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emit('close') })
-const { create, update } = useTableMutations()
+const { create, update } = useTableMutations(props.surface)
 
 const touched = ref(false)
 const labelIssue = computed(() => {

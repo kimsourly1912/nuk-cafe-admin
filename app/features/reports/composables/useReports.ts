@@ -4,16 +4,19 @@ import { csvFilename } from '#shared/contracts/reports'
 import type { ReportMessageInput, ReportMessagePreview, ReportSent, SendReportInput, TelegramDestination } from '#shared/contracts/notifications'
 import type { Period } from '../utils/period'
 import { validPeriod } from '../utils/period'
+import { useReportSurface } from './useReportSurface'
 
 /**
  * The reports' data (step 8.1b, D111): the branch and period every report page shares, kept in the
  * URL (`?from=2026-09-24&to=2026-09-30`, `&branch=` only when there are several branches) and
  * remembered in this tab, so moving between Summary, Sales by item and Order history keeps them.
  * No dates in the URL means today, in the branch's zone (the server says which date that is).
+ * Each reads the surface's API (the admin's, or a counter branch's, D198: `useReportSurface`).
  */
 
 export function useReportBranches() {
-  return useApiQuery('reports:branches', () => apiFetch<ReportBranch[]>('/admin/reports/branches'))
+  const { api, key } = useReportSurface()
+  return useApiQuery(`${key}:branches`, () => apiFetch<ReportBranch[]>(`${api}/branches`))
 }
 
 const text = (query: LocationQuery, key: string) => {
@@ -26,8 +29,8 @@ export function useReportScope() {
   const router = useRouter()
   const path = route.path
   const branches = useReportBranches()
-  // Not user data: which branch and dates this tab last looked at.
-  const remembered = useState<Partial<ReportPeriodQuery>>('report-scope', () => ({}))
+  // Not user data: which branch and dates this tab last looked at (per surface).
+  const remembered = useState<Partial<ReportPeriodQuery>>(`${useReportSurface().key}:scope`, () => ({}))
 
   const branch = computed<ReportBranch | undefined>(() => {
     const list = branches.data.value ?? []
@@ -76,32 +79,34 @@ export function useReportScope() {
  * A report's query: it waits for the scope (the branches load first), then refetches when the
  * scope or filters change, cancelling the older request (D30).
  */
-function useReportQuery<T>(key: MaybeRefOrGetter<string>, path: string, query: MaybeRefOrGetter<Record<string, unknown> | undefined>) {
+function useReportQuery<T>(report: string, query: MaybeRefOrGetter<Record<string, unknown> | undefined>) {
+  const { api, key } = useReportSurface()
   return useApiQuery(
-    key,
+    `${key}:${report}`,
     async () => {
       const current = toValue(query)
-      return current ? apiFetch<T>(path, { query: current }) : null
+      return current ? apiFetch<T>(`${api}/${report}`, { query: current }) : null
     },
     { watch: [() => JSON.stringify(toValue(query))], immediate: Boolean(toValue(query)) },
   )
 }
 
 export const useReportSummary = (scope: MaybeRefOrGetter<ReportPeriodQuery | undefined>) =>
-  useReportQuery<ReportSummary>('reports:summary', '/admin/reports/summary', scope)
+  useReportQuery<ReportSummary>('summary', scope)
 
 export const useItemSales = (query: MaybeRefOrGetter<Record<string, unknown> | undefined>) =>
-  useReportQuery<ItemSalesReport>('reports:items', '/admin/reports/items', query)
+  useReportQuery<ItemSalesReport>('items', query)
 
 export const useOrderHistory = (query: MaybeRefOrGetter<Record<string, unknown> | undefined>) =>
-  useReportQuery<OrderHistory>('reports:orders', '/admin/reports/orders', query)
+  useReportQuery<OrderHistory>('orders', query)
 
 export function useOrderHistoryDetail(id: MaybeRefOrGetter<string | undefined>) {
+  const { api, key } = useReportSurface()
   return useApiQuery(
-    () => `reports:order:${toValue(id) ?? ''}`,
+    () => `${key}:order:${toValue(id) ?? ''}`,
     async () => {
       const current = toValue(id)
-      return current ? apiFetch<OrderHistoryDetail>(`/admin/reports/orders/${current}`) : null
+      return current ? apiFetch<OrderHistoryDetail>(`${api}/orders/${current}`) : null
     },
   )
 }
@@ -152,9 +157,13 @@ function saveFile(blob: Blob, filename: string) {
 
 // --- Send to Telegram (8.1c, D112) ---
 
-/** Where a report can be sent; `enabled: false` where Telegram isn't set up. */
+/**
+ * Where a report can be sent; `enabled: false` where Telegram isn't set up. Never asked on the
+ * counter (sending is the admin's, D198): its data stays empty there.
+ */
 export function useReportDestinations() {
-  return useApiQuery('reports:destinations', () => apiFetch<{ enabled: boolean, destinations: TelegramDestination[] }>('/admin/reports/destinations'))
+  const { exports } = useReportSurface()
+  return useApiQuery('reports:destinations', () => apiFetch<{ enabled: boolean, destinations: TelegramDestination[] }>('/admin/reports/destinations'), { immediate: exports })
 }
 
 /** The page's query as the URL has it: the server checks it with the report's own schema. */

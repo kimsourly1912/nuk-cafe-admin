@@ -118,7 +118,7 @@ async function open(path: string, handlers: Record<string, MockHandler> = {}, wi
 const lastQuery = (requests: URLSearchParams[]) => Object.fromEntries(requests.at(-1)!.entries())
 
 async function choosePreset(page: Page, name: string) {
-  await page.getByRole('button', { name: /^Period:/ }).click()
+  await page.getByRole('button', { name: /period: /i }).click()
   await page.getByRole('button', { name, exact: true }).click()
 }
 
@@ -156,7 +156,7 @@ describe('Reports: Summary', () => {
     await page.waitForURL(/\/admin\/reports\/items/)
     await page.getByText('Iced Latte').first().waitFor()
     expect(lastQuery(requests)).toMatchObject({ from: '2026-09-24', to: TODAY })
-    expect(await page.getByRole('button', { name: /^Period:/ }).textContent()).toContain('Last 7 days')
+    expect(await page.getByRole('button', { name: /period: /i }).textContent()).toContain('Last 7 days')
   })
 
   it('a period in the URL is used; one no report can show falls back to today', async () => {
@@ -331,7 +331,7 @@ describe('Reports: choosing a period', () => {
   it('from sm: two months ending with today\'s; the hover lights the days from the first click to the pointer, the second click applies', async () => {
     const { page, requests } = await open('/c/nuk/admin/reports/summary')
     await page.getByText('$1,284.50').first().waitFor()
-    await page.getByRole('button', { name: /^Period:/ }).click()
+    await page.getByRole('button', { name: /period: /i }).click()
     await page.getByText('August - September 2026').first().waitFor()
 
     await day(page, 'Thursday, September 3, 2026').click()
@@ -349,7 +349,7 @@ describe('Reports: choosing a period', () => {
   it('on a phone: a sheet of presets; Custom range applies only on Apply', async () => {
     const { page, requests } = await open('/c/nuk/admin/reports/summary', {}, 390)
     await page.getByText('$1,284.50').first().waitFor()
-    await page.getByRole('button', { name: /^Period:/ }).click()
+    await page.getByRole('button', { name: /period: /i }).click()
     const sheet = page.getByRole('dialog', { name: 'Period' })
     await sheet.getByRole('button', { name: 'Custom range' }).click()
     const custom = page.getByRole('dialog', { name: 'Custom range' })

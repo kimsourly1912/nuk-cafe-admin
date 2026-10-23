@@ -92,6 +92,7 @@ const range = computed(() => {
   >
     <template #header>
       <ReportHeader
+        report="items"
         title="Sales by item"
         :branches="branches.data.value ?? []"
         :branch="branch"

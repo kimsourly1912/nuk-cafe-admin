@@ -13,9 +13,18 @@ export function useBranchSettings(branchId: string) {
 /** Fresh settings (Reload after someone else saved). */
 export const fetchBranchSettings = (branchId: string) => apiFetch<BranchSettings>(base(branchId))
 
+/**
+ * Where tables are managed (D198): the admin's Branch page, or a manager's counter, on its own API
+ * (`table: ['manage']` there). The same tables either way, so they share the cache.
+ */
+export type TablesSurface = 'admin' | 'counter'
+
+const tablesUrl = (branchId: string, surface: TablesSurface) =>
+  surface === 'counter' ? `/counter/${branchId}/tables` : `${base(branchId)}/tables`
+
 /** Every table of the branch, active and archived: a branch has few, so the page filters them itself. */
-export function useBranchTables(branchId: string) {
-  return useApiQuery(`branches:tables:${branchId}`, () => apiFetch<DiningTable[]>(`${base(branchId)}/tables`, { query: { status: 'all' } }))
+export function useBranchTables(branchId: string, surface: TablesSurface = 'admin') {
+  return useApiQuery(`branches:tables:${branchId}`, () => apiFetch<DiningTable[]>(tablesUrl(branchId, surface), { query: { status: 'all' } }))
 }
 
 export interface BranchSettingsSave {
@@ -60,14 +69,14 @@ export interface TableEdit extends TableChange {
 }
 
 const tableLock = (change: TableChange) => `dining-table:${change.table.id}`
-const tableUrl = (table: DiningTable, action = '') => `${base(table.branchId)}/tables/${table.id}${action}`
 
-/** Table mutations; each resolves to the table as it now is. */
-export function useTableMutations() {
+/** Table mutations on the admin's or the counter's API; each resolves to the table as it now is. */
+export function useTableMutations(surface: TablesSurface = 'admin') {
+  const tableUrl = (table: DiningTable, action = '') => `${tablesUrl(table.branchId, surface)}/${table.id}${action}`
   const create = useMutation(
-    (input: NewTable) => apiFetch<DiningTable>(`${base(input.branchId)}/tables`, { method: 'POST', body: { label: input.label, area: input.area } }),
+    (input: NewTable) => apiFetch<DiningTable>(tablesUrl(input.branchId, surface), { method: 'POST', body: { label: input.label, area: input.area } }),
     {
-      id: 'branches:table-create',
+      id: `branches:${surface}:table-create`,
       key: input => `${input.branchId}:${input.label.toLowerCase()}`,
       successMessage: (_, input) => `Table "${input.label}" added`,
       errorMessage: input => `Could not add "${input.label}"`,
@@ -78,7 +87,7 @@ export function useTableMutations() {
   const update = useMutation(
     (input: TableEdit) => apiFetch<DiningTable>(tableUrl(input.table), { method: 'PATCH', body: { version: input.table.version, ...input.body } }),
     {
-      id: 'branches:table-update',
+      id: `branches:${surface}:table-update`,
       key: tableLock,
       lock: tableLock,
       successMessage: (table: DiningTable) => `Table "${table.label}" saved`,
@@ -90,7 +99,7 @@ export function useTableMutations() {
   const archive = useMutation(
     (input: TableChange) => apiFetch<DiningTable>(tableUrl(input.table, '/archive'), { method: 'POST', body: { version: input.table.version } }),
     {
-      id: 'branches:table-archive',
+      id: `branches:${surface}:table-archive`,
       key: tableLock,
       lock: tableLock,
       // Undo instead of asking (D152): the same QR code works again.
@@ -104,7 +113,7 @@ export function useTableMutations() {
   const restore = useMutation(
     (input: TableChange) => apiFetch<DiningTable>(tableUrl(input.table, '/restore'), { method: 'POST', body: { version: input.table.version } }),
     {
-      id: 'branches:table-restore',
+      id: `branches:${surface}:table-restore`,
       key: tableLock,
       lock: tableLock,
       successMessage: (_, input) => `Table "${input.table.label}" restored`,
@@ -116,7 +125,7 @@ export function useTableMutations() {
   const rotate = useMutation(
     (input: TableChange) => apiFetch<DiningTable>(tableUrl(input.table, '/rotate-qr'), { method: 'POST', body: { version: input.table.version } }),
     {
-      id: 'branches:table-rotate',
+      id: `branches:${surface}:table-rotate`,
       key: tableLock,
       lock: tableLock,
       confirm: input => ({

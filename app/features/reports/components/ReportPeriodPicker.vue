@@ -38,6 +38,13 @@ watch(open, (isOpen) => {
 })
 
 const active = computed(() => presetOf(props.period, props.today))
+// The button's name starts with what it shows ("Today"), then the dates: speech input says what it
+// sees (axe: label-content-name-mismatch).
+const buttonName = computed(() => {
+  const shown = periodButtonLabel(props.period, props.today)
+  const dates = periodLabel(props.period)
+  return shown === dates ? `Period: ${dates}` : `${shown}, period: ${dates}`
+})
 const maxValue = computed(() => parseDate(props.today))
 /** While a range is half chosen, days too far from its first day can't end it. */
 const isDateDisabled = (day: DateValue) => {
@@ -84,7 +91,7 @@ function startCustom() {
       icon="i-lucide-calendar"
       trailing-icon="i-lucide-chevron-down"
       :label="periodButtonLabel(period, today)"
-      :aria-label="`Period: ${periodLabel(period)}`"
+      :aria-label="buttonName"
     />
 
     <template #body>
@@ -183,7 +190,7 @@ function startCustom() {
       icon="i-lucide-calendar"
       trailing-icon="i-lucide-chevron-down"
       :label="periodButtonLabel(period, today)"
-      :aria-label="`Period: ${periodLabel(period)}`"
+      :aria-label="buttonName"
     />
 
     <template #content>

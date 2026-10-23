@@ -146,6 +146,7 @@ const zone = computed(() => data.value?.branch.timeZone ?? branch.value?.timeZon
   >
     <template #header>
       <ReportHeader
+        report="orders"
         title="Order history"
         :branches="branches.data.value ?? []"
         :branch="branch"
