@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
@@ -91,6 +93,101 @@ describe('branch page', () => {
     const { page } = await open(backend({}, [RIVERSIDE, AIRPORT]).handlers, undefined, '/c/nuk/admin/branches')
     await page.getByRole('list', { name: 'Branches' }).getByRole('link', { name: 'Airport' }).click()
     await expect.poll(() => new URL(page.url()).pathname).toBe(`/c/nuk/admin/branches/${AIRPORT.id}`)
+  })
+})
+
+describe('adding a branch (D197)', () => {
+  const NEW: BranchSettings = { ...SETTINGS, id: 'branch-9', name: 'Airport', address: null, hours: [], openNow: false, version: 1 }
+
+  it('with one branch, adds from its page: the dialog starts on its time zone, then the new branch opens', async () => {
+    let sent: unknown
+    const branches = [RIVERSIDE]
+    const { page, api } = await open(backend({
+      'GET /admin/branches/options': () => branches,
+      'GET /admin/branches/{id}': ({ url }) => (url.pathname.endsWith(NEW.id) ? NEW : SETTINGS),
+      'POST /admin/branches': ({ body }) => {
+        sent = body
+        branches.push({ id: NEW.id, name: NEW.name })
+        return NEW
+      },
+    }).handlers)
+    await page.getByRole('button', { name: 'Add branch' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Add branch' })
+    await dialog.getByLabel('Name', { exact: true }).fill(' Airport ')
+    await expect.poll(() => dialog.locator('[aria-label="Time zone"]').textContent()).toContain('Phnom Penh')
+    await dialog.getByRole('button', { name: 'Add branch' }).click()
+    await toast(page, 'Branch "Airport" added').waitFor()
+    expect(sent).toEqual({ name: 'Airport', timezone: 'Asia/Phnom_Penh' })
+    await expect.poll(() => new URL(page.url()).pathname).toBe(`/c/nuk/admin/branches/${NEW.id}`)
+    // Its page, now with the way back to the list of two.
+    await page.getByRole('link', { name: 'All branches' }).waitFor()
+    await expect.poll(() => api.calls.filter(c => c === 'POST /admin/branches').length).toBe(1)
+  })
+
+  it('needs a name, and shows a refused save in the dialog with the input kept', async () => {
+    const { page, api } = await open(backend({
+      'POST /admin/branches': () => {
+        throw new MockFailure(409, 'BRANCH_NAME_TAKEN', 'There is already a branch named "Riverside".', { name: ['Already used by another branch'] })
+      },
+    }).handlers)
+    await page.getByRole('button', { name: 'Add branch' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Add branch' })
+    await dialog.getByRole('button', { name: 'Add branch' }).click()
+    await dialog.getByText('Name is required').waitFor()
+    expect(api.calls.filter(c => c === 'POST /admin/branches')).toEqual([])
+    await dialog.getByLabel('Name', { exact: true }).fill('Riverside')
+    await dialog.getByRole('button', { name: 'Add branch' }).click()
+    await dialog.getByText('There is already a branch named "Riverside".').waitFor()
+    expect(await dialog.getByLabel('Name', { exact: true }).inputValue()).toBe('Riverside')
+  })
+
+  it('with several, adds from the list, which explains branches; at the limit the button is off', async () => {
+    const several = Array.from({ length: 10 }, (_, i) => ({ id: `branch-${i + 1}`, name: `Branch ${i + 1}` }))
+    const { page } = await open(backend({}, [RIVERSIDE, AIRPORT]).handlers, undefined, '/c/nuk/admin/branches')
+    await page.getByText('Branches are your cafe\'s locations.', { exact: false }).waitFor()
+    await page.getByRole('button', { name: 'Add branch' }).click()
+    await page.getByRole('dialog', { name: 'Add branch' }).waitFor()
+
+    const full = await open(backend({}, several).handlers, undefined, '/c/nuk/admin/branches')
+    await full.page.getByText('A cafe can have at most 10 branches.', { exact: false }).waitFor()
+    expect(await full.page.getByRole('button', { name: 'Add branch' }).isDisabled()).toBe(true)
+  })
+
+  const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
+  async function axeFindings(page: Page): Promise<string[]> {
+    await page.evaluate(axeSource)
+    return page.evaluate(async () => {
+      const axe = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<{ violations: { id: string, nodes: { target: string[] }[] }[] }> } }).axe
+      const result = await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } })
+      return result.violations.map(violation => `${violation.id}: ${violation.nodes.map(node => node.target.join(' ')).slice(0, 4).join(', ')}`)
+    })
+  }
+  async function bothModes(page: Page) {
+    // The pointer rests where the last click was: a hovered control isn't what's measured.
+    await page.mouse.move(0, 0)
+    await page.evaluate(() => document.documentElement.classList.remove('dark'))
+    await page.waitForTimeout(500)
+    expect(await axeFindings(page)).toEqual([])
+    // Colours ease between the modes: measure once they have settled.
+    await page.evaluate(() => document.documentElement.classList.add('dark'))
+    await page.waitForTimeout(500)
+    expect(await axeFindings(page)).toEqual([])
+  }
+
+  it.each([1440, 390])('the list and the dialog meet the rules in light and dark and fit at %ipx; a phone shows the branch page\'s button as an icon', async (width) => {
+    const { page } = await open(backend({}, [RIVERSIDE, AIRPORT]).handlers, width, '/c/nuk/admin/branches')
+    await page.getByRole('list', { name: 'Branches' }).waitFor()
+    await bothModes(page)
+    await page.getByRole('button', { name: 'Add branch' }).click()
+    await page.getByRole('dialog', { name: 'Add branch' }).getByLabel('Name', { exact: true }).waitFor()
+    await bothModes(page)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+    const single = await open(backend().handlers, width)
+    const button = single.page.getByRole('button', { name: 'Add branch' })
+    await button.waitFor()
+    const box = (await button.boundingBox())!
+    expect(box.width < 60).toBe(width < 640)
   })
 })
 

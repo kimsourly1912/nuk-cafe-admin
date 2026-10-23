@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `branches_active_name_idx` ON `branches` (`tenant_id`,lower("name")) WHERE "branches"."status" = 'active';

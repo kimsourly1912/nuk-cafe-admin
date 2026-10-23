@@ -1,8 +1,10 @@
-import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
+import { MAX_BRANCH_TABLES, MAX_BRANCHES } from '#shared/contracts/branches'
 import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const BranchErrorCodes = {
   BRANCH_HOURS: 'BRANCH_HOURS',
+  BRANCH_LIMIT: 'BRANCH_LIMIT',
+  BRANCH_NAME_TAKEN: 'BRANCH_NAME_TAKEN',
   UNKNOWN_TIMEZONE: 'UNKNOWN_TIMEZONE',
   TABLE_LABEL_TAKEN: 'TABLE_LABEL_TAKEN',
   TABLE_LIMIT: 'TABLE_LIMIT',
@@ -15,6 +17,14 @@ export const branchChanged = () => versionConflict('This branch')
 
 export const branchArchived = () =>
   apiError(409, ErrorCodes.INVALID_STATE, 'This branch is archived.')
+
+export const branchLimit = () =>
+  apiError(409, BranchErrorCodes.BRANCH_LIMIT, `A cafe can have at most ${MAX_BRANCHES} branches.`)
+
+export const branchNameTaken = (name: string) =>
+  apiError(409, BranchErrorCodes.BRANCH_NAME_TAKEN, `There is already a branch named "${name}".`, {
+    fieldErrors: { name: ['Already used by another branch'] },
+  })
 
 /** Overlapping opening windows (the contract checks each window on its own). */
 export const branchHoursProblem = (problem: { field: string, message: string }) =>

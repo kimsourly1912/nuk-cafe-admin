@@ -1,5 +1,5 @@
 import * as v from 'valibot'
-import type { BranchSettings, UpdateBranchSettingsInput } from '#shared/contracts/branches'
+import type { BranchSettings, CreateBranchInput, UpdateBranchSettingsInput } from '#shared/contracts/branches'
 import { BRANCH_ADDRESS_MAX, BRANCH_NAME_MAX } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import { MINUTES_PER_DAY } from '#shared/contracts/common'
@@ -66,9 +66,12 @@ function phoneProblem(form: { phone: string, phoneCountry: PhoneCountry }): stri
   return result.ok ? undefined : result.message
 }
 
+const nameField = v.pipe(v.string(), v.trim(), v.minLength(1, 'Name is required'), v.maxLength(BRANCH_NAME_MAX, `Max ${BRANCH_NAME_MAX} characters`))
+const timezoneField = v.pipe(v.string(), v.minLength(1, 'Choose a time zone'))
+
 export const branchFormSchema = v.pipe(v.object({
-  name: v.pipe(v.string(), v.trim(), v.minLength(1, 'Name is required'), v.maxLength(BRANCH_NAME_MAX, `Max ${BRANCH_NAME_MAX} characters`)),
-  timezone: v.pipe(v.string(), v.minLength(1, 'Choose a time zone')),
+  name: nameField,
+  timezone: timezoneField,
   address: v.pipe(v.string(), v.maxLength(BRANCH_ADDRESS_MAX, `Max ${BRANCH_ADDRESS_MAX} characters`)),
   phone: v.string(),
   phoneCountry: v.picklist(PHONE_COUNTRIES.map(country => country.code)),
@@ -152,3 +155,15 @@ export function newWindow(day: DayHours): DayWindow {
 
 /** Whether the draft keeps the branch closed every day (customers can't order then, D45). */
 export const isClosedAllWeek = (form: BranchForm) => form.days.every(day => !day.open)
+
+/** Add branch (D197): only its name and clock; the rest is set on its page afterwards. */
+export interface NewBranchForm {
+  name: string
+  timezone: string
+}
+
+export const newBranchFormSchema = v.object({ name: nameField, timezone: timezoneField })
+
+export function toCreateBranchBody(form: NewBranchForm): CreateBranchInput {
+  return { name: form.name.trim(), timezone: form.timezone }
+}

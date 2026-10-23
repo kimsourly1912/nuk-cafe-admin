@@ -4,8 +4,9 @@ import { MAX_WEEKLY_WINDOWS, nameSchema, textSchema, versionSchema, weeklyWindow
 import { phoneSchema } from './phone'
 
 /**
- * Branch settings and dining tables (`/api/admin/branches/{branchId}`, step 5.1, D91). A branch is
- * edited, never created or archived here (the seed task creates branches). Its hours are weekly
+ * Branches, their settings and dining tables (`/api/admin/branches/{branchId}`, step 5.1, D91).
+ * Owners add branches (D197), at most `MAX_BRANCHES` per cafe; a branch is never archived here
+ * yet. A new cafe's first branch comes with it (D142). Its hours are weekly
  * windows in its own timezone, like availability rules; a branch with none is never open. Each
  * active table has a QR URL the admin can show at any time; rotating it makes the printed one stop
  * working. docs/plans/branch-settings.md
@@ -15,6 +16,8 @@ export const BRANCH_NAME_MAX = 60
 export const BRANCH_ADDRESS_MAX = 200
 export const TABLE_LABEL_MAX = 20
 export const TABLE_AREA_MAX = 40
+/** Active branches per cafe (D197; later the cafe's subscription sets it). */
+export const MAX_BRANCHES = 10
 /** Tables per branch, archived ones included. */
 export const MAX_BRANCH_TABLES = 200
 
@@ -36,13 +39,22 @@ export interface BranchSettings {
   version: number
 }
 
+const timezoneSchema = v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(64, 'Not a time zone'))
+
+/** A new branch: its name and clock; the rest (address, phone, hours, tables) is set on its page. */
+export const createBranchSchema = v.strictObject({
+  name: nameSchema(BRANCH_NAME_MAX),
+  timezone: timezoneSchema,
+})
+export type CreateBranchInput = v.InferOutput<typeof createBranchSchema>
+
 const optionalText = (max: number) => v.nullable(v.pipe(textSchema(max), v.transform(text => text || null)))
 
 /** Only the fields to change: absent keeps, `null` (or blank) clears address and phone. `hours` replaces the week. */
 export const updateBranchSettingsSchema = v.strictObject({
   version: versionSchema,
   name: v.optional(nameSchema(BRANCH_NAME_MAX)),
-  timezone: v.optional(v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(64, 'Not a time zone'))),
+  timezone: v.optional(timezoneSchema),
   address: v.optional(optionalText(BRANCH_ADDRESS_MAX)),
   phone: v.optional(phoneSchema),
   hours: v.optional(v.pipe(

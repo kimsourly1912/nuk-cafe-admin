@@ -1,5 +1,5 @@
-import type { BranchSettings, CreateTableInput, DiningTable, PublicBranch, PublicTable, ScannedTable, TableListQuery, TableVersionInput, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
-import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
+import type { BranchSettings, CreateBranchInput, CreateTableInput, DiningTable, PublicBranch, PublicTable, ScannedTable, TableListQuery, TableVersionInput, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
+import { MAX_BRANCH_TABLES, MAX_BRANCHES } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite, isUniqueViolation, requireOneChange } from '#server/utils/batch'
@@ -9,7 +9,7 @@ import { toIso } from '#server/utils/time'
 import { isInWindow, isKnownTimeZone, localDate, localTime, minutesUntilClosed, nextStart, sortWindows, windowsProblem } from '#server/utils/weekly-windows'
 import type { Actor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
-import { branchArchived, branchChanged, branchHoursProblem, branchNotFound, tableArchived, tableChanged, tableLabelTaken, tableLimit, tableNotArchived, tableNotFound, unknownTimezone } from './branches.errors'
+import { branchArchived, branchChanged, branchHoursProblem, branchLimit, branchNameTaken, branchNotFound, tableArchived, tableChanged, tableLabelTaken, tableLimit, tableNotArchived, tableNotFound, unknownTimezone } from './branches.errors'
 import type { QrConfig } from './branches.qr'
 import { isTokenShaped, tableQrUrl, tableToken, tokenHash } from './branches.qr'
 import * as repo from './branches.repository'
@@ -18,8 +18,9 @@ import type { BranchRow, TableRow } from './branches.repository'
 /**
  * A tenant's branches (docs/server/data-model.md → Branches, D44, D91, D134). Every function names
  * the tenant (from the actor, or the request for public reads); another tenant's branch is "not
- * found". The seed task creates them; the admin edits their settings and hours (one `version` on the branch covers both) and their dining tables
- * (each with its own `version`). QR tokens: `branches.qr.ts`.
+ * found". A new cafe comes with its first branch (D142); owners add more, at most `MAX_BRANCHES`
+ * (D197). The admin edits their settings and hours (one `version` on the branch covers both) and
+ * their dining tables (each with its own `version`). QR tokens: `branches.qr.ts`.
  */
 
 export interface SeededBranch {
@@ -143,6 +144,30 @@ export async function getBranchSettings(db: Db, tenantId: string, id: string, no
   }
 }
 
+/**
+ * Adds a branch to the actor's cafe, never open until its hours are set. The limit is a guard in the
+ * insert's batch (two owners adding the last branch at once: one gets `branchLimit`); a name used
+ * by another active branch, ignoring case, is `branchNameTaken` (the database's unique index).
+ */
+export async function createBranch(db: Db, actor: Actor, input: CreateBranchInput): Promise<BranchSettings> {
+  const { tenantId } = actor
+  if (!isKnownTimeZone(input.timezone)) throw unknownTimezone(input.timezone)
+  const id = newId()
+  try {
+    await db.batch([
+      repo.insertBranchStatement(db, { id, tenantId, name: input.name, timezone: input.timezone, now: new Date() }),
+      repo.activeBranchesAtMost(db, tenantId, MAX_BRANCHES),
+      audit(db, actor, 'create', 'branch', id, { name: input.name, timezone: input.timezone }),
+    ])
+  }
+  catch (error) {
+    if (isUniqueViolation(error)) throw branchNameTaken(input.name)
+    if (isStaleWrite(error)) throw branchLimit()
+    throw error
+  }
+  return getBranchSettings(db, tenantId, id)
+}
+
 /** Saves the fields sent, from the version read: details and hours together, audited. */
 export async function updateBranchSettings(db: Db, actor: Actor, id: string, input: UpdateBranchSettingsInput): Promise<BranchSettings> {
   const { tenantId } = actor
@@ -177,6 +202,7 @@ export async function updateBranchSettings(db: Db, actor: Actor, id: string, inp
     ] as [Statement, ...Statement[]])
   }
   catch (error) {
+    if (isUniqueViolation(error)) throw branchNameTaken(input.name ?? branch.name)
     if (isStaleWrite(error)) throw branchChanged()
     throw error
   }

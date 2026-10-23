@@ -226,3 +226,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D194](decisions.md#d194-repositories-keep-drizzles-query-builder-one-repository-standard-2026-10-20) | Repositories keep Drizzle's query builder; one repository standard, 2026-10-20 |
 | [D195](decisions.md#d195-one-date-and-time-style-the-day-first-the-12-hour-clock-2026-10-21) | One date and time style: the day first, the 12-hour clock, 2026-10-21 |
 | [D196](decisions.md#d196-staff-access-is-one-choice-owners-will-add-branches-at-most-10-2026-10-23) | Staff access is one choice; owners will add branches, at most 10, 2026-10-23 |
+| [D197](decisions.md#d197-owners-add-branches-at-most-10-active-per-cafe-names-unique-step-b-of-d196-2026-10-23) | Owners add branches, at most 10 active per cafe, names unique (step B of D196), 2026-10-23 |

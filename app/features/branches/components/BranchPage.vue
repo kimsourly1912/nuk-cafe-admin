@@ -6,6 +6,7 @@
  * is kept in the URL (`?tab=tables`, `useUrlTab`) without a route change, so switching never asks
  * about unsaved changes.
  */
+import { useAddBranch } from '../composables/useAddBranch'
 import { useBranchOptions } from '../composables/useBranchOptions'
 import { useBranchSettings, useBranchTables } from '../composables/useBranches'
 import BranchSkeleton from './BranchSkeleton.vue'
@@ -35,6 +36,8 @@ const tabs = computed(() => [
 const settingsTab = useTemplateRef('settingsTab')
 const tablesTab = useTemplateRef('tablesTab')
 const several = computed(() => (branches.value?.length ?? 0) > 1)
+// With one branch there is no list to add from (it opens this page): Add branch is here (D197).
+const { addBranch } = useAddBranch()
 const title = computed(() => settings.value?.name ?? 'Branch')
 </script>
 
@@ -66,6 +69,15 @@ const title = computed(() => settings.value?.name ?? 'Branch')
           </span>
         </template>
         <template #right>
+          <UButton
+            v-if="branches?.length === 1 && settings"
+            label="Add branch"
+            icon="i-lucide-plus"
+            color="neutral"
+            variant="outline"
+            :ui="{ label: 'max-sm:sr-only' }"
+            @click="addBranch(settings.timezone)"
+          />
           <UTooltip
             v-if="tab === 'settings' && settings"
             text="Save changes"

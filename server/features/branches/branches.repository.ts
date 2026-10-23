@@ -2,7 +2,7 @@ import { and, asc, count, eq, inArray } from 'drizzle-orm'
 import type { DiningTableStatus } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
-import { readInChunks, replaceAll, updateAtVersion } from '#server/utils/batch'
+import { readInChunks, replaceAll, requireAtMost, updateAtVersion } from '#server/utils/batch'
 import { byId, firstRow, hasAny, inTenant, withStatus } from '#server/utils/query'
 import { organization } from '#server/db/tables'
 import { branches, branchHours, diningTables } from './branches.schema'
@@ -159,6 +159,11 @@ export function insertBranchStatement(db: Db, row: { id: string, tenantId: strin
     status: 'active',
     createdAt: row.now,
   })
+}
+
+/** A guard for the batch that adds a branch: aborts it when the tenant would have more than `max` active branches. */
+export function activeBranchesAtMost(db: Db, tenantId: string, max: number): Statement {
+  return requireAtMost(db, db.$count(branches, inTenant(branches, tenantId, activeBranch)), max)
 }
 
 /**

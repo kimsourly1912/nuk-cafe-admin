@@ -2,6 +2,17 @@
 
 **Cafe → Branches** opens the branch (with more than one branch, choose it from the list). It has two tabs: **Settings** and **Dining tables**.
 
+Branches are your cafe's locations. They share one menu, one staff list and the same customers; each branch has its own opening hours, dining tables, counter and orders. A different business (another owner, brand or menu) is a separate cafe, set up by the platform team, not a branch.
+
+## Add a branch
+
+1. Press **Add branch**: on the branch's page when the cafe has one branch, or on the **Branches** list when it has more.
+2. Enter its **Name** (unique among your branches) and choose its **Time zone** (it starts on your branch's).
+3. Press **Add branch**. Its page opens: set its **Weekly hours** (it takes no orders until then) and add its **Dining tables**.
+4. Under **Staff**, give managers and staff the new branch. Admins already work at every branch.
+
+A cafe can have up to 10 branches.
+
 ## Settings
 
 At the top: whether the branch is open now, its time zone and today's hours.
@@ -40,3 +51,5 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - **"Someone else changed these settings"**: press **Reload**; your input stays. Check it and save again.
 - **A customer says the table QR doesn't work**: the table may be archived, or someone pressed **New QR**. Check the table and print its current code.
 - **"There is already a table named … in this branch."**
+- **"There is already a branch named …"**: another branch uses that name (in any capitals). Choose another name.
+- **"A cafe can have at most 10 branches."**: **Add branch** is off at 10 branches.

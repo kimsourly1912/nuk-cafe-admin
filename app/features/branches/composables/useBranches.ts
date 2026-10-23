@@ -1,4 +1,4 @@
-import type { BranchSettings, CreateTableInput, DiningTable, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
+import type { BranchSettings, CreateBranchInput, CreateTableInput, DiningTable, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
 
 const base = (branchId: string) => `/admin/branches/${branchId}`
 
@@ -24,6 +24,17 @@ export interface BranchSettingsSave {
 }
 
 export function useBranchMutations() {
+  const create = useMutation(
+    (input: CreateBranchInput) => apiFetch<BranchSettings>('/admin/branches', { method: 'POST', body: input }),
+    {
+      id: 'branches:create',
+      key: input => input.name.toLowerCase(),
+      successMessage: (branch: BranchSettings) => `Branch "${branch.name}" added`,
+      errorMessage: input => `Could not add "${input.name}"`,
+      invalidate: AFFECTED,
+    },
+  )
+
   const update = useMutation(
     (input: BranchSettingsSave) => apiFetch<BranchSettings>(base(input.branchId), { method: 'PATCH', body: input.body }),
     {
@@ -35,7 +46,7 @@ export function useBranchMutations() {
       invalidate: AFFECTED,
     },
   )
-  return { update }
+  return { create, update }
 }
 
 export interface NewTable extends CreateTableInput {

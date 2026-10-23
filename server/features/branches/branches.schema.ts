@@ -40,6 +40,8 @@ export const branches = sqliteTable('branches', {
   check('branches_status_check', sql`${t.status} in ('active', 'archived')`),
   // The target of every `(tenant_id, branch_id)` foreign key.
   unique('branches_tenant_id_unique').on(t.tenantId, t.id),
+  // Names are unique among a cafe's active branches, ignoring case (D197).
+  uniqueIndex('branches_active_name_idx').on(t.tenantId, sql`lower(${t.name})`).where(sql`${t.status} = 'active'`),
 ])
 
 /**

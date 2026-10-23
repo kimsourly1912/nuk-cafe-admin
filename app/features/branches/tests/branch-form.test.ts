@@ -1,7 +1,7 @@
 import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import type { BranchSettings } from '#shared/contracts/branches'
-import { branchFormSchema, copyDay, formFieldOf, isClosedAllWeek, newWindow, toBranchForm, toHours, toUpdateBranchBody } from '../schemas/branch-form'
+import { branchFormSchema, copyDay, formFieldOf, isClosedAllWeek, newBranchFormSchema, newWindow, toBranchForm, toCreateBranchBody, toHours, toUpdateBranchBody } from '../schemas/branch-form'
 
 const settings = (hours: BranchSettings['hours']): BranchSettings => ({
   id: 'b-1',
@@ -95,5 +95,13 @@ describe('branch form', () => {
     expect(newWindow({ open: true, windows: [{ start: 1320, end: 1380 }] })).toEqual({ start: 1380, end: 1439 })
     expect(isClosedAllWeek(toBranchForm(settings([])))).toBe(true)
     expect(isClosedAllWeek(toBranchForm(settings([w(2, 0, 60)])))).toBe(false)
+  })
+})
+
+describe('add branch form (D197)', () => {
+  it('needs a name and a time zone, and sends the name trimmed', () => {
+    const result = v.safeParse(newBranchFormSchema, { name: ' ', timezone: '' })
+    expect(result.success ? {} : v.flatten(result.issues).nested).toEqual({ name: ['Name is required'], timezone: ['Choose a time zone'] })
+    expect(toCreateBranchBody({ name: ' Riverside ', timezone: 'Asia/Phnom_Penh' })).toEqual({ name: 'Riverside', timezone: 'Asia/Phnom_Penh' })
   })
 })
