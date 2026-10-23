@@ -1,15 +1,15 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { WeeklyWindow } from '#shared/contracts/common'
-import { MAX_BRANCH_TABLES } from '#shared/contracts/branches'
+import { MAX_BRANCH_TABLES, MAX_BRANCHES } from '#shared/contracts/branches'
 import { branches, organization } from '#server/db/tables'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { archiveTable, createTable, getBranchSettings, getPublicBranch, listPublicBranches, listTables, resolveTableToken, restoreTable, rotateTableQr, scanTableToken, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
+import { archiveTable, createBranch, createTable, getBranchSettings, listBranchOptions, getPublicBranch, listPublicBranches, listTables, resolveTableToken, restoreTable, rotateTableQr, scanTableToken, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
 import { diningTables } from '#server/features/branches/branches.schema'
 import type { QrConfig } from '#server/features/branches/branches.qr'
 import { qrConfigFrom, tableToken, tokenHash } from '#server/features/branches/branches.qr'
-import { createTestDb, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -108,6 +108,67 @@ describe('branch settings', () => {
 
   it('404s an unknown branch', async () => {
     await expectApiError(() => getBranchSettings(db, TEST_TENANT, newId()), 404, 'NOT_FOUND')
+  })
+})
+
+describe('adding branches (D197)', () => {
+  const OTHER = 'tenant-2'
+  /** Active branches of the test cafe up to `total` (the one from `beforeEach` included). */
+  async function fillTo(total: number, tenantId = TEST_TENANT) {
+    const have = tenantId === TEST_TENANT ? 1 : 0
+    for (let i = have; i < total; i++) await insertBranch(db, { id: newId(), name: `Filled ${i}`, timezone: 'Asia/Phnom_Penh', tenantId })
+  }
+
+  it('adds an active branch in the cafe: closed until its hours are set, listed, audited', async () => {
+    const added = await createBranch(db, actor, { name: 'Riverside', timezone: 'Asia/Bangkok' })
+    expect(added).toMatchObject({ name: 'Riverside', timezone: 'Asia/Bangkok', status: 'active', hours: [], openNow: false, address: null, phone: null, version: 1 })
+    expect((await listBranchOptions(db, TEST_TENANT)).map(b => b.name)).toContain('Riverside')
+    const [row] = await auditOf(added.id)
+    expect(row).toMatchObject({ action: 'branch.create', actorId: 'admin-1', tenantId: TEST_TENANT, requestId: 'req-1' })
+    expect(row!.metadata).toEqual({ name: 'Riverside', timezone: 'Asia/Bangkok' })
+  })
+
+  it('refuses an unknown time zone on its field, writing nothing', async () => {
+    await expectApiError(() => createBranch(db, actor, { name: 'Riverside', timezone: 'Mars/Olympus' }), 422, 'UNKNOWN_TIMEZONE', ['timezone'])
+    expect(await listBranchOptions(db, TEST_TENANT)).toHaveLength(1)
+  })
+
+  it('refuses a name another active branch of the cafe has, in any case, also on a rename', async () => {
+    await createBranch(db, actor, { name: 'Riverside', timezone: 'Asia/Phnom_Penh' })
+    await expectApiError(() => createBranch(db, actor, { name: 'RIVERSIDE', timezone: 'Asia/Phnom_Penh' }), 409, 'BRANCH_NAME_TAKEN', ['name'])
+    await expectApiError(() => updateBranchSettings(db, actor, branch, { version: 1, name: 'riverside' }), 409, 'BRANCH_NAME_TAKEN', ['name'])
+    // An archived branch's name and another cafe's don't count.
+    await insertBranch(db, { id: newId(), name: 'Old Town', timezone: 'Asia/Phnom_Penh', status: 'archived' })
+    await insertBranch(db, { id: newId(), name: 'Airport', timezone: 'Asia/Phnom_Penh', tenantId: OTHER })
+    await createBranch(db, actor, { name: 'Old Town', timezone: 'Asia/Phnom_Penh' })
+    await createBranch(db, actor, { name: 'Airport', timezone: 'Asia/Phnom_Penh' })
+  })
+
+  it(`allows at most ${MAX_BRANCHES} active branches per cafe; archived ones and other cafes' don't count`, async () => {
+    await fillTo(MAX_BRANCHES - 1)
+    await insertBranch(db, { id: newId(), name: 'Closed down', timezone: 'Asia/Phnom_Penh', status: 'archived' })
+    await fillTo(MAX_BRANCHES, OTHER)
+    const last = await createBranch(db, actor, { name: 'Tenth', timezone: 'Asia/Phnom_Penh' })
+    await expectApiError(() => createBranch(db, actor, { name: 'Eleventh', timezone: 'Asia/Phnom_Penh' }), 409, 'BRANCH_LIMIT')
+    expect(await listBranchOptions(db, TEST_TENANT)).toHaveLength(MAX_BRANCHES)
+    expect((await listBranchOptions(db, TEST_TENANT)).map(b => b.name)).not.toContain('Eleventh')
+    expect((await db.select().from(auditEvents).where(eq(auditEvents.action, 'branch.create'))).map(r => r.targetId)).toEqual([last.id])
+  })
+
+  it('the limit holds when another branch is added between the check and the write', async () => {
+    await fillTo(MAX_BRANCHES - 1)
+    const racing = interleaved(db, () => insertBranch(db, { id: newId(), name: 'Meanwhile', timezone: 'Asia/Phnom_Penh' }))
+    await expectApiError(() => createBranch(racing, actor, { name: 'Tenth', timezone: 'Asia/Phnom_Penh' }), 409, 'BRANCH_LIMIT')
+    expect((await listBranchOptions(db, TEST_TENANT)).map(b => b.name)).not.toContain('Tenth')
+  })
+
+  it('adds to the actor\'s cafe only', async () => {
+    const theirOwner: Actor = { userId: 'their-owner', tenantId: OTHER, role: 'owner' }
+    await ensureTenant(db, OTHER)
+    const theirs = await createBranch(db, theirOwner, { name: 'Their branch', timezone: 'Asia/Phnom_Penh' })
+    await expectApiError(() => getBranchSettings(db, TEST_TENANT, theirs.id), 404, 'NOT_FOUND')
+    expect((await listBranchOptions(db, TEST_TENANT)).map(b => b.id)).toEqual([branch])
+    expect((await db.select({ tenantId: branches.tenantId }).from(branches).where(eq(branches.id, theirs.id)))).toEqual([{ tenantId: OTHER }])
   })
 })
 

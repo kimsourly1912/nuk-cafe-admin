@@ -86,7 +86,7 @@ let coffee: string
 
 async function setUpMenu(actor: Actor, categoryName = 'Coffee') {
   const branchId = newId()
-  await insertBranch(db, { id: branchId, name: 'Riverside', timezone: 'Asia/Phnom_Penh', tenantId: actor.tenantId })
+  await insertBranch(db, { id: branchId, name: `Riverside ${categoryName}`, timezone: 'Asia/Phnom_Penh', tenantId: actor.tenantId })
   const category = await createCategory(db, actor, { name: categoryName, description: '', parentId: null, availabilityRuleIds: [] })
   const draft = await createItem(db, actor, { categoryId: category.id, name: 'Latte', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 350, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
   const item = await publishItem(db, actor, draft.id, { version: draft.version })
