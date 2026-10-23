@@ -1,6 +1,6 @@
 # Branch
 
-**Admin → Branch** opens the branch (with more than one branch, choose it from the list). It has two tabs: **Settings** and **Dining tables**.
+**Cafe → Branches** opens the branch (with more than one branch, choose it from the list). It has two tabs: **Settings** and **Dining tables**.
 
 ## Settings
 

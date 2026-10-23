@@ -154,36 +154,37 @@ const ownPrice = (addOn: FormAddOnGroup['addOns'][number]) => toMinor(addOn.pric
           <li
             v-for="(addOn, j) in group.addOns"
             :key="addOn.id"
-            class="flex items-center justify-between gap-3 py-2"
+            class="flex items-start justify-between gap-3 py-2"
           >
-            <span class="text-sm">
-              {{ addOn.name }}
-              <span
-                v-if="addOn.isDefault"
-                class="text-muted"
-              >(pre-selected)</span>
-              <span
-                v-if="addOn.status === 'archived'"
-                class="text-muted"
-              >(archived)</span>
-            </span>
-            <UFormField :name="`addOnGroups.${i}.addOns.${j}.price`">
-              <div class="flex items-center gap-2">
+            <!-- The name, and under it the library's price when this item's own differs. The input's column holds only the input and its error, so the error sits right under it. -->
+            <div class="flex min-h-8 flex-col justify-center">
+              <span class="text-sm">
+                {{ addOn.name }}
                 <span
-                  v-if="ownPrice(addOn)"
-                  class="text-xs text-muted"
-                >Library: {{ formatMinor(addOn.defaultPriceMinor) }}</span>
-                <UInputNumber
-                  :model-value="addOn.price ?? null"
-                  :format-options="PRICE_FORMAT"
-                  :min="0"
-                  :step="0.01"
-                  :disabled="disabled"
-                  :aria-label="`Price of ${addOn.name} in ${group.name}`"
-                  class="w-28"
-                  @update:model-value="value => addOn.price = value ?? undefined"
-                />
-              </div>
+                  v-if="addOn.isDefault"
+                  class="text-muted"
+                >(pre-selected)</span>
+                <span
+                  v-if="addOn.status === 'archived'"
+                  class="text-muted"
+                >(archived)</span>
+              </span>
+              <span
+                v-if="ownPrice(addOn)"
+                class="text-xs text-muted"
+              >Library price: {{ formatMinor(addOn.defaultPriceMinor) }}</span>
+            </div>
+            <UFormField :name="`addOnGroups.${i}.addOns.${j}.price`">
+              <UInputNumber
+                :model-value="addOn.price ?? null"
+                :format-options="PRICE_FORMAT"
+                :min="0"
+                :step="0.01"
+                :disabled="disabled"
+                :aria-label="`Price of ${addOn.name} in ${group.name}`"
+                class="w-36"
+                @update:model-value="value => addOn.price = value ?? undefined"
+              />
             </UFormField>
           </li>
         </ul>

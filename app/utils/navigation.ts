@@ -43,10 +43,13 @@ export function navigationItems(options: { sampleData: boolean }): NavigationMen
       ...reportsNavigation,
     ],
     [
-      { label: 'Admin', type: 'label' },
+      { label: 'Cafe', type: 'label' },
       cafeNavigation,
-      staffNavigation,
       branchesNavigation,
+    ],
+    [
+      { label: 'Admin', type: 'label' },
+      staffNavigation,
       exchangeRatesNavigation,
       notificationsNavigation,
       supportNavigation,

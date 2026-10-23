@@ -25,7 +25,7 @@ The two loyalty rows (points awarded once, exchanging points for a voucher, the 
 
 What the tests can't see: real phones, the real Worker and D1, two real devices. Use a verified customer account (staging's test email sender delivers only to the Resend account's own address, so sign up with that one) and the counter on a second device or window.
 
-1. **Table QR, signed out (row 1).** On a phone in a private tab, scan a table's QR (Admin → Branch → Dining tables → View QR). Add an item, Review order, Sign in. After signing in, Review order still says **Dine-in · Table …**. Place the order: its page says the table.
+1. **Table QR, signed out (row 1).** On a phone in a private tab, scan a table's QR (Cafe → Branches → Dining tables → View QR). Add an item, Review order, Sign in. After signing in, Review order still says **Dine-in · Table …**. Place the order: its page says the table.
 2. **Price changed underneath (row 3).** Open Review order with an item. In another window, change that item's price in Admin → Menu items and save. Back on Review order, Place order: it's refused, the new price is shown next to the old one, and placing again charges the new price.
 3. **Two cashiers (row 5).** Open the same unpaid order on the counter in two windows (or a phone and a computer). Press Take payment → Cash USD in both, close together. One succeeds; the other is refused with the order's new state (already paid). The order shows one payment.
 4. **Ready twice (row 7).** On the paid order, press Mark ready in both windows. One succeeds; the other says it changed and offers Reload.
@@ -45,6 +45,6 @@ Write the date and anything odd into `docs/progress.md` (step 10.5).
 
 **Blocker found: Cloudflare Error 1102, "Worker exceeded resource limits"** (Ray a43c2ce298723fad, 14:32 UTC): the customer menu and saving the branch hours failed. The Workers **Free** plan allows **10 ms of CPU per request**; server rendering, sessions and password hashing use more, and under steady use Cloudflare starts stopping the Worker. None of these failures reached our error handler (no server-error alert was queued), which fits a stop by Cloudflare rather than an error in the app. To confirm: dashboard → Workers → nuk-cafe-staging → Metrics → Errors → "Exceeded CPU Time Limits". The fix is the Workers Paid plan (5 USD a month), which production needs anyway (Q24).
 
-**Left on staging:** Thursday closes at 23:20 (checked in D1: minute 1400); set it back to 21:20 in Admin → Branch once saves work. Test orders 002–004 are Ready at Table T08, one payment each.
+**Left on staging:** Thursday closes at 23:20 (checked in D1: minute 1400); set it back to 21:20 in Cafe → Branches once saves work. Test orders 002–004 are Ready at Table T08, one payment each.
 
 **Still to do before sign-off:** checks 1 (signed out, a real phone) and 4 by two people on two devices, after the 1102 fix.

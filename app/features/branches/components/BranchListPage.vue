@@ -4,6 +4,7 @@
  * several (staging has a second test branch). Branches are created by the seed task, not here.
  */
 import { useBranchOptions } from '../composables/useBranchOptions'
+import BranchSkeleton from './BranchSkeleton.vue'
 
 const tenantPath = useTenantPath()
 
@@ -14,12 +15,19 @@ const route = useRoute()
 watch(branches, (list) => {
   if (list?.length === 1) navigateTo({ path: tenantPath(`/admin/branches/${list[0]!.id}`), query: route.query }, { replace: true })
 }, { immediate: true })
+
+// Until we know there are several, this page looks like the Branch page it usually hands over to
+// (no "Branches" title, the branch skeleton), so the redirect doesn't flash a list first.
+const opening = computed(() => !error.value && (loading.value || branches.value?.length === 1))
 </script>
 
 <template>
-  <UDashboardPanel id="branches">
+  <UDashboardPanel
+    id="branches"
+    :class="{ 'page-narrow': opening }"
+  >
     <template #header>
-      <UDashboardNavbar title="Branches">
+      <UDashboardNavbar :title="opening ? undefined : 'Branches'">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
@@ -33,10 +41,7 @@ watch(branches, (list) => {
         title="Could not load the branches"
         @retry="refresh()"
       />
-      <ListSkeleton
-        v-else-if="loading || branches?.length === 1"
-        label="Loading branches…"
-      />
+      <BranchSkeleton v-else-if="opening" />
       <ListEmptyState
         v-else-if="!branches?.length"
         noun="branches"

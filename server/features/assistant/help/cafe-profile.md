@@ -1,6 +1,6 @@
 # Cafe profile
 
-**Admin → Cafe profile** sets the cafe's **name** and **logo**. Customers see them at the top of the menu, on Review order and on their orders; staff see them on the counter and in the admin's sidebar. The browser tab shows the name too.
+**Cafe → Cafe profile** sets the cafe's **name** and **logo**. Customers see them at the top of the menu, on Review order and on their orders; staff see them on the counter and in the admin's sidebar. The browser tab shows the name too.
 
 ## Change the name or the logo
 

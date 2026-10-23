@@ -1,5 +1,5 @@
 /**
- * Time zones as people pick them: "(GMT+07:00) Phnom Penh", by offset, then name. The browser's
+ * Time zones as people pick them: "(UTC+07:00) Phnom Penh", by offset, then name. The browser's
  * list (`Intl.supportedValuesOf`), plus the current zone if the browser doesn't list it. Used by
  * the branch form and a new cafe's first branch (D142).
  */
@@ -42,7 +42,7 @@ export function timezoneOptions(current?: string, at = new Date()): TimezoneOpti
   return [...zones]
     .map((zone) => {
       const gmt = gmtOffset(zone, at)
-      return { value: zone, label: `(${gmt === 'GMT' ? 'GMT+00:00' : gmt}) ${cityOf(zone)}`, offset: offsetMinutes(gmt) }
+      return { value: zone, label: `(${gmt === 'GMT' ? 'UTC+00:00' : gmt.replace('GMT', 'UTC')}) ${cityOf(zone)}`, offset: offsetMinutes(gmt) }
     })
     .sort((a, b) => a.offset - b.offset || a.label.localeCompare(b.label))
 }

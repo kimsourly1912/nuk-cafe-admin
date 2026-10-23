@@ -8,7 +8,8 @@ The admin portal is where admins set up their cafe (its profile, the menu, staff
 - **Menu**: Menu items, Categories, Options, Add-ons, Availability.
 - **Marketing**: Promotions.
 - **Reports**: Summary, Sales by item, Order history.
-- **Admin**: Cafe profile, Staff, Branch, Payments, Telegram, and Sample data (test environments only).
+- **Cafe**: Cafe profile (the business: name and logo) and Branches (each location: hours, time zone, tables).
+- **Admin**: Staff, Payments, Telegram, and Sample data (test environments only).
 
 On a phone, open the sidebar with the menu button at the top left.
 
