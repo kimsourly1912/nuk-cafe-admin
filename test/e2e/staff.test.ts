@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
@@ -75,30 +77,60 @@ describe('adding staff', () => {
     const form = page.getByRole('dialog', { name: 'Add staff member' })
     await form.getByLabel('Name', { exact: true }).fill('Dara')
     await form.getByLabel(/^Email/).fill(' Dara@Example.com ')
-    await form.getByRole('button', { name: 'Add branch' }).click()
-    await form.getByRole('combobox', { name: 'Role at branch 1' }).click()
-    await page.getByRole('option', { name: 'Manager' }).click()
+    // Staff by default; one role for the ticked branches.
+    await expect.poll(() => form.getByRole('radio', { name: 'Staff', exact: true }).isChecked()).toBe(true)
+    await form.getByRole('radio', { name: 'Manager', exact: true }).click()
+    await form.getByRole('checkbox', { name: AIRPORT.name }).check()
     await form.getByRole('button', { name: 'Add', exact: true }).click()
 
     const passwordModal = page.getByRole('dialog', { name: 'Temporary password' })
     await passwordModal.getByTestId('temporary-password').filter({ hasText: 'Hq7x-3mPa-kR9t-Wz2c' }).waitFor()
     await toast(page, 'Account for Dara created').waitFor()
-    // The first unused branch, by name: Airport.
     expect(sent).toEqual({ name: 'Dara', email: 'dara@example.com', admin: false, memberships: [{ branchId: AIRPORT.id, role: 'manager' }] })
     await passwordModal.getByRole('button', { name: 'Done' }).click()
     await passwordModal.waitFor({ state: 'hidden' })
     expect(writes(api.calls)).toEqual(['POST /admin/staff'])
   })
 
-  it('needs some access before sending anything', async () => {
+  it('needs a branch before sending anything', async () => {
     const { page, api } = await open()
     await page.getByRole('button', { name: 'Add staff member' }).first().click()
     const form = page.getByRole('dialog', { name: 'Add staff member' })
     await form.getByLabel('Name', { exact: true }).fill('Dara')
     await form.getByLabel(/^Email/).fill('dara@example.com')
     await form.getByRole('button', { name: 'Add', exact: true }).click()
-    await form.getByText('Make them an admin or give them a role in at least one branch').waitFor()
+    await form.getByText('Pick at least one branch').waitFor()
     expect(writes(api.calls)).toEqual([])
+  })
+
+  it('hides the branches for an admin, and offers a role per branch', async () => {
+    let sent: unknown
+    const { page } = await open(undefined, {
+      'POST /admin/staff': ({ body }) => {
+        sent = body
+        return { staff: staffOf('staff-9', 'Dara'), temporaryPassword: null }
+      },
+    })
+    await page.getByRole('button', { name: 'Add staff member' }).first().click()
+    const form = page.getByRole('dialog', { name: 'Add staff member' })
+    await form.getByLabel('Name', { exact: true }).fill('Dara')
+    await form.getByLabel(/^Email/).fill('dara@example.com')
+    await form.getByRole('checkbox', { name: RIVERSIDE.name }).check()
+    await form.getByRole('radio', { name: 'Admin', exact: true }).click()
+    await form.getByText('Branches', { exact: true }).waitFor({ state: 'hidden' })
+    // Into "different per branch": the ticked branch is its first row, at the role it had.
+    await form.getByRole('radio', { name: 'Different per branch' }).click()
+    await form.getByRole('button', { name: 'Add branch' }).click()
+    await form.getByRole('combobox', { name: 'Role at branch 2' }).click()
+    await page.getByRole('option', { name: 'Manager' }).click()
+    await form.getByRole('button', { name: 'Add', exact: true }).click()
+    await toast(page, 'Dara already had an account and now has staff access').waitFor()
+    expect(sent).toEqual({
+      name: 'Dara',
+      email: 'dara@example.com',
+      admin: false,
+      memberships: [{ branchId: RIVERSIDE.id, role: 'staff' }, { branchId: AIRPORT.id, role: 'manager' }],
+    })
   })
 
   it('says when an existing account got the access (no temporary password)', async () => {
@@ -109,7 +141,7 @@ describe('adding staff', () => {
     const form = page.getByRole('dialog', { name: 'Add staff member' })
     await form.getByLabel('Name', { exact: true }).fill('Dara')
     await form.getByLabel(/^Email/).fill('dara@example.com')
-    await form.getByRole('switch', { name: 'Admin' }).click()
+    await form.getByRole('radio', { name: 'Admin', exact: true }).click()
     await form.getByRole('button', { name: 'Add', exact: true }).click()
     await toast(page, 'Dara already had an account and now has staff access').waitFor()
     expect(await page.getByRole('dialog', { name: 'Temporary password' }).count()).toBe(0)
@@ -127,8 +159,10 @@ describe('changing access', () => {
     })
     await openMember(page, 'Sophea')
     const form = page.getByRole('dialog', { name: 'Access of Sophea' })
-    await form.getByRole('switch', { name: 'Admin' }).click()
-    await form.getByRole('button', { name: 'Remove branch 1' }).click()
+    // Each branch named by its own label, ticked or not.
+    await expect.poll(() => form.getByRole('checkbox', { name: RIVERSIDE.name }).isChecked()).toBe(true)
+    expect(await form.getByRole('checkbox', { name: AIRPORT.name }).isChecked()).toBe(false)
+    await form.getByRole('radio', { name: 'Admin', exact: true }).click()
     await form.getByRole('button', { name: 'Save' }).click()
     await toast(page, 'Access of Sophea updated').waitFor()
     expect(sent).toEqual({ version: SOPHEA.version, admin: true, memberships: [] })
@@ -138,7 +172,7 @@ describe('changing access', () => {
     const { page } = await open()
     await openMember(page, 'alice')
     const form = page.getByRole('dialog', { name: 'Access of alice' })
-    await expect.poll(() => form.getByRole('switch', { name: 'Admin' }).isDisabled()).toBe(true)
+    await expect.poll(() => form.getByRole('radio', { name: 'Staff', exact: true }).isDisabled()).toBe(true)
     await form.getByText('You can\'t remove your own admin role.').waitFor()
   })
 })
@@ -242,7 +276,7 @@ describe('staff on a phone', () => {
 
     await target.click()
     const form = page.getByRole('dialog', { name: 'Access of Sophea' })
-    await form.getByRole('switch', { name: 'Admin' }).waitFor()
+    await form.getByRole('radio', { name: 'Admin', exact: true }).waitFor()
     await expect.poll(async () => Math.round((await form.boundingBox())!.width)).toBe(390)
   })
 
@@ -252,5 +286,39 @@ describe('staff on a phone', () => {
     await expect.poll(() => item.getAttribute('data-disabled')).not.toBeNull()
     await page.getByRole('menuitem', { name: 'Edit access' }).click()
     await page.getByRole('dialog', { name: 'Access of alice' }).waitFor()
+  })
+})
+
+describe('accessibility', () => {
+  const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
+  async function axeFindings(page: Page): Promise<string[]> {
+    await page.evaluate(axeSource)
+    return page.evaluate(async () => {
+      const axe = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<{ violations: { id: string, nodes: { target: string[] }[] }[] }> } }).axe
+      const result = await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } })
+      return result.violations.map(violation => `${violation.id}: ${violation.nodes.map(node => node.target.join(' ')).slice(0, 4).join(', ')}`)
+    })
+  }
+
+  it.each([1440, 390])('the access form, with one role and with a role per branch, meets the rules in light and dark at %ipx', async (width) => {
+    const { page } = await open(undefined, {}, width)
+    // A table on a desktop, a list on a phone: the name is the record's button in both.
+    await page.getByRole('button', { name: 'Sophea', exact: true }).click()
+    const form = page.getByRole('dialog', { name: 'Access of Sophea' })
+    await form.getByRole('checkbox', { name: RIVERSIDE.name }).waitFor()
+    for (const access of ['Staff', 'Different per branch']) {
+      await form.getByRole('radio', { name: access, exact: true }).click()
+      await form.getByText('Branches', { exact: true }).waitFor()
+      // The pointer rests where the last click was: a hovered control isn't what's measured.
+      await page.mouse.move(0, 0)
+      await page.evaluate(() => document.documentElement.classList.remove('dark'))
+      await page.waitForTimeout(500)
+      expect(await axeFindings(page)).toEqual([])
+      // Colours ease between the modes: measure once they have settled.
+      await page.evaluate(() => document.documentElement.classList.add('dark'))
+      await page.waitForTimeout(500)
+      expect(await axeFindings(page)).toEqual([])
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   })
 })
