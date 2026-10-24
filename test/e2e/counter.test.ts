@@ -501,7 +501,7 @@ describe('sold out at the counter (D105)', () => {
 
     // Only the sold-out ones.
     await page.getByRole('searchbox', { name: 'Find an item' }).fill('')
-    await page.getByRole('button', { name: /^\d+ sold out$/ }).click()
+    await page.getByRole('button', { name: /^Sold out \d+$/ }).click()
     await row.waitFor()
     expect(await page.getByRole('listitem').filter({ hasText: 'Coconut Coffee' }).count()).toBe(1)
 
@@ -511,8 +511,8 @@ describe('sold out at the counter (D105)', () => {
     expect(await row.getByText('Available', { exact: true }).isVisible()).toBe(true)
     await expect.poll(async () => (await coconut()).variations.find(v => v.id === first!.id)!.soldOut).toBe(false)
     // Showing everything and then only the sold-out ones again: it's gone from them.
-    await page.getByRole('button', { name: /^\d+ sold out$/ }).click()
-    await page.getByRole('button', { name: /^\d+ sold out$/ }).click()
+    await page.getByRole('button', { name: 'All items' }).click()
+    await page.getByRole('button', { name: /^Sold out \d+$/ }).click()
     await expect.poll(() => row.count()).toBe(0)
     expect(problems).toEqual([])
   })

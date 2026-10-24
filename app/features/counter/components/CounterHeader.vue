@@ -44,10 +44,10 @@ const manage = computed<DropdownMenuItem[][]>(() => branch.value && branch.value
   ? [
       [pausedUntil.value
         ? { label: 'Resume online orders', icon: 'i-lucide-play', onSelect: () => void resume.execute(props.branchId) }
-        : { label: 'Pause online orders…', icon: 'i-lucide-pause', disabled: openNow.value === false, onSelect: () => void pauseModal.open({ branchId: props.branchId }) }],
+        : { label: 'Pause online orders', icon: 'i-lucide-pause', disabled: openNow.value === false, onSelect: () => void pauseModal.open({ branchId: props.branchId }) }],
       [
-        { label: 'Dining tables', icon: 'i-lucide-armchair', to: tenantPath(`/counter/${branch.value.id}/tables`) },
         { label: 'Reports', icon: 'i-lucide-chart-column', to: tenantPath(`/counter/${branch.value.id}/reports/summary`) },
+        { label: 'Dining tables', icon: 'i-lucide-armchair', to: tenantPath(`/counter/${branch.value.id}/tables`) },
       ],
     ]
   : [])
@@ -61,10 +61,10 @@ const initials = computed(() => (user.value?.name || user.value?.email || '?').s
 const menu = computed<DropdownMenuItem[][]>(() => [
   [{ label: user.value?.name || user.value?.email, description: user.value?.email, type: 'label' }],
   [
-    { label: muted.value ? 'Turn on the new-order sound' : 'Mute the new-order sound', icon: muted.value ? 'i-lucide-bell' : 'i-lucide-bell-off', onSelect: () => { muted.value = !muted.value } },
     ...((user.value?.branches.length ?? 0) > 1 ? [{ label: 'Another branch', icon: 'i-lucide-store', to: counterHomePath(slug.value) }] : []),
     ...(elsewhere.value ? [{ label: 'Another cafe', icon: 'i-lucide-arrow-left-right', to: CAFES_PATH }] : []),
     { label: 'Change password', icon: 'i-lucide-key-round', to: counterChangePasswordPath(slug.value) },
+    { label: muted.value ? 'Turn on the new-order sound' : 'Mute the new-order sound', icon: muted.value ? 'i-lucide-bell' : 'i-lucide-bell-off', onSelect: () => { muted.value = !muted.value } },
   ],
   [{ label: 'Sign out', icon: 'i-lucide-log-out', onSelect: () => signOut() }],
 ])
