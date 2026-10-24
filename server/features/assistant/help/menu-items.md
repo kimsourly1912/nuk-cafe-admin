@@ -35,7 +35,7 @@ On a phone the editor shows one section at a time (Details, Prices, Add-ons, Ava
 - By default the group's rules (At least / At most) and prices come from the library. Turn on **Own rules for this item** to set different rules for this item only.
 - Change an add-on's price here to charge a different price on this item only.
 
-## Publish, unpublish, archive, restore
+## Publish, unpublish, archive, restore, delete
 
 From the item's **⋮** menu in the list:
 
@@ -44,6 +44,7 @@ From the item's **⋮** menu in the list:
 - **Archive**: hides it and makes it read-only. Past orders keep it. Several at once: **Select**, tick the items, **Archive selected**.
 - **Publish several at once**: **Select**, tick the items, **Publish selected** (only drafts are published; the button says how many). Items that can't be published stay ticked, and the message says why.
 - **Restore** (on an archived item): back to draft, editable again.
+- **Delete permanently** (on an archived item, or a draft): removes it for good, with its versions, prices and photo. It asks first, and it can't be undone or restored. Only an item that was **never ordered** and isn't in any promotion can be deleted. Otherwise an archived item's action is greyed out and says why ("it was ordered", "it is in a promotion"), a draft only offers Archive, and the item stays so your order history and reports keep it. To delete a published item, archive it first.
 
 **Undo:** Archive and Unpublish happen at once, without a question. The message that appears has **Undo** for a few seconds: it puts the item back exactly as it was (published or draft, in the same place in its category). Missed it? Restore the item from the **Archived** tab (it comes back as a draft).
 
@@ -91,5 +92,6 @@ If someone saves the item while you have it open, your **Save** is refused: "Som
 - **"That category has sub-categories; put the item in one of them."**: choose one of its subcategories as the category.
 - **"Choose an active option set / add-on group / category"**: something the item uses was archived. Remove it from the item or restore it in its library.
 - **"This menu item is archived. Restore it from the list to edit it."**: archived items are read-only; **Restore** first.
+- **"This menu item was ordered, so it stays archived"**: an item customers ordered is never deleted; keep it archived (it's hidden from the menu and pickers).
 - **An option set can't be added**: the item already has 2, or the set is archived.
 - **The item doesn't show on the customer menu**: see "When does a customer see an item?" in the menu overview.

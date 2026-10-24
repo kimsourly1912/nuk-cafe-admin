@@ -27,7 +27,7 @@ Initial standard agreed with the owner on 2026-09-27 (D43; menu model D44); the 
 | Staff and customer | **One account can be both.** Staff never act on their own points or vouchers |
 | Customer sign-up | Guests and unverified accounts may order (D156); sign-up sends a verification email; password reset by email ([Customers](./security.md#customers)) |
 | Ids | **UUID v7** for our tables |
-| Deleting | **Archive by default**; hard delete only for never-used records and privacy erasure; orders and ledgers are never deleted |
+| Deleting | **Archive by default**; delete permanently only without history (D200) and for privacy erasure; orders and ledgers are never deleted |
 | Errors | h3's standard error shape + our `data.code` (+ `data.fieldErrors`) |
 | Concurrent edits | **Version check** on every edit (409 when stale); **idempotency keys** on money, points and voucher actions |
 | Environments | Local, staging (every merge to `main`), production (manual deploy) |

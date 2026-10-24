@@ -226,13 +226,14 @@ Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/c
 
 | Route | Permission | Does |
 |---|---|---|
-| `GET /api/admin/menu/items?page&pageSize&search&categoryId&status` | `menu:read` | Summaries by category, then position: category name, image, the sellable price range. Default status: drafts and active (`status=archived` or `all` on request) |
+| `GET /api/admin/menu/items?page&pageSize&search&categoryId&status` | `menu:read` | Summaries by category, then position: category name, image, the sellable price range, what blocks a permanent delete (`deleteBlocker`). Default status: drafts and active (`status=archived` or `all` on request) |
 | `GET /api/admin/menu/items/counts?search&categoryId&modifierGroupId` | `menu:read` | `{ draft, active, archived }`, each `{ items, withoutPhoto }`, with the list's filters: the status tabs and the "No photo" hint in one grouped read (request-reduction plan step 4) |
 | `GET /api/admin/menu/items/{itemId}` | `menu:read` | The item with its option sets and variations |
 | `POST /api/admin/menu/items` | `menu:write` | `{ categoryId, name, description?, imageId?, optionSetIds?, variations, modifierGroups? }` → 201, a **draft** at the end of its category |
 | `PATCH /api/admin/menu/items/{itemId}` | `menu:write` | `{ version, categoryId?, name?, description?, imageId?, optionSetIds?, variations?, modifierGroups? }`: absent keeps; `imageId: null` removes; `optionSetIds` needs `variations`; `modifierGroups` replaces the whole list |
 | `POST …/{itemId}/publish`, `…/unpublish` | `menu:publish` | draft ↔ active |
 | `POST …/{itemId}/archive`, `…/restore` | `menu:write` | draft/active → archived; archived → draft (at the end of its category) |
+| `DELETE /api/admin/menu/items/{itemId}` | `menu:write` | `{ version }` → 204: a draft or archived item **no order line and no promotion names** is deleted for good, with its versions and links (D200); its image is released |
 | `PUT /api/admin/menu/items/order` | `menu:write` | `{ categoryId, items: [{ id, version }] }`: every draft and active item of the category |
 
 **The price grid:** `variations` is always the whole grid, every combination of the chosen option sets' **active** values exactly once, each `{ valueIds, priceMinor, status: 'active' | 'disabled' }`. A variation's id never changes: it's matched by its combination, so changing prices keeps ids, removing an option set **retires** its variations (kept for history and orders), and adding it back revives them. A variation that uses an archived value is kept but hidden from the grid and not sellable; restoring the value brings it back. Sellable = active, priced, no archived value.
@@ -249,6 +250,7 @@ Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/c
 | Stale version (before or during the write) | 409 `VERSION_CONFLICT` | ✔ (incl. the race) |
 | Editing an archived item; publishing a non-draft; restoring a non-archived one | 409 `INVALID_STATE` | ✔ |
 | Publishing with nothing sellable | 422 `NOTHING_TO_SELL` | ✔ |
+| Deleting a published item / one an order line or any promotion names (also if one arrives meanwhile) | 409 `INVALID_STATE` / `ITEM_HAS_HISTORY`; summaries say which (`deleteBlocker`) | ✔ (incl. both races) |
 | Restoring into a category that has since got sub-categories | 422 `CATEGORY_NOT_A_LEAF` | ✔ |
 
 Option sets now report `itemCount` (drafts and active items using them).

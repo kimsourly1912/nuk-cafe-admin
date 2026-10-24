@@ -217,9 +217,9 @@ Every editable record has `version`. An edit sends the version it read; the writ
 ### Archiving
 
 - Business records (menu items, categories, option sets, add-on groups, voucher templates, tables, staff access) are **archived**: `status = 'archived'` (or `archived_at`), hidden from lists and pickers by default, kept for history and reports, restorable.
-- **Hard delete** only when nothing ever referenced the record (e.g. a draft item never published or ordered), and for privacy erasure (customers, see security.md).
+- **Delete permanently** only while a record has no history (D200): nothing that must stay explainable refers to it (an order line, a promotion, a ledger), checked inside the delete statement, since order lines name menu records without foreign keys. Also for privacy erasure (customers, see security.md). Archive stays the bin: there's no recycle-bin page and no `deleted` state.
 - **Never deleted:** orders and their lines, payments, ledgers, voucher redemptions, audit events. Corrections are new records (reversals).
-- `DELETE` on a resource archives it when it has history, and deletes it when it has none. The response says which (`{ archived: true }`).
+- Archive and Delete permanently are separate actions. `DELETE` on a resource deletes it (204) or refuses (409 with the reason, e.g. `ITEM_HAS_HISTORY`); it never archives. Lists say what blocks each record (`deleteBlocker`), so the UI can explain a disabled action.
 
 ### Atomic writes
 

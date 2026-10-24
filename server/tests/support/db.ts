@@ -10,6 +10,7 @@ import { inject } from 'vitest'
 import { trackClient } from './clients'
 import { branches, branchStaff, member, organization, user } from '#server/db/tables'
 import { tenantSlugs } from '#server/features/tenants/tenants.schema'
+import { orderLines, orders } from '#server/features/orders/orders.schema'
 
 const migrationsDir = fileURLToPath(new URL('../../../server/db/migrations/sqlite', import.meta.url))
 
@@ -154,6 +155,22 @@ export async function ensureTenant(db: Db, id = TEST_TENANT, slug = id) {
 export async function insertBranch(db: Db, values: { id: string, name: string, timezone: string, status?: string | null, tenantId?: string, address?: string | null, phone?: string | null }) {
   const tenantId = await ensureTenant(db, values.tenantId)
   await db.insert(branches).values({ ...values, tenantId, status: (values.status ?? 'active') as 'active' | 'archived', createdAt: new Date() })
+}
+
+let soldLines = 0
+
+/**
+ * A paid-for order of the tenant (`TEST_TENANT` unless named) whose one line sold `itemId`, at a
+ * branch of its own. Lines name menu items without a foreign key, as orders keep what was sold.
+ */
+export async function insertSoldLine(db: Db, itemId: string, tenantId = TEST_TENANT) {
+  const id = `sold-${++soldLines}`
+  await insertBranch(db, { id: `${id}-branch`, name: id, timezone: 'Asia/Phnom_Penh', tenantId })
+  const customer = await createUser(db)
+  const now = new Date()
+  await db.insert(orders).values({ id, tenantId, branchId: `${id}-branch`, customerId: customer.id, businessDate: '2026-10-24', pickupNumber: 1, orderType: 'pickup', subtotalMinor: 350, totalMinor: 350, placedAt: now, paymentDueAt: now, status: 'completed' })
+  await db.insert(orderLines).values({ tenantId, orderId: id, position: 0, itemId, variationId: 'variation', itemName: 'Latte', detail: '', modifiers: [], unitPriceMinor: 350, quantity: 1, totalMinor: 350 })
+  return id
 }
 
 /** An owner of the tenant (`TEST_TENANT` unless named): the admin app's user (D52, D134). */

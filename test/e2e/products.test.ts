@@ -418,6 +418,71 @@ describe('menu item states', () => {
   })
 })
 
+describe('deleting permanently (D200)', () => {
+  it('deletes a never-ordered archived item after asking, from the version read, and the row goes', async () => {
+    const OLD = menuItemSummaryOf('item-3', 'Old chai', { status: 'archived', version: 9 })
+    const rows = [LATTE_ROW, MATCHA_ROW, OLD]
+    const bodies: unknown[] = []
+    const { page } = await open({
+      ...backend(rows),
+      'DELETE /admin/menu/items/{id}': ({ url: u, body }) => {
+        bodies.push({ id: u.pathname.split('/').pop(), body })
+        rows.splice(rows.indexOf(OLD), 1)
+        return null
+      },
+    })
+    await page.getByRole('button', { name: 'Actions for Old chai' }).click()
+    await page.getByRole('menuitem', { name: 'Delete permanently' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Delete "Old chai" permanently?' })
+    await dialog.getByText('It was never ordered.', { exact: false }).waitFor()
+    await dialog.getByRole('button', { name: 'Delete permanently' }).click()
+    await toast(page, 'Menu item "Old chai" deleted').waitFor()
+    await cardOf(page, 'Old chai').waitFor({ state: 'detached' })
+    expect(bodies).toEqual([{ id: 'item-3', body: { version: 9 } }])
+  })
+
+  it('says why an archived item with history can\'t go, and offers a draft\'s delete only without history', async () => {
+    const SOLD = menuItemSummaryOf('item-3', 'Old chai', { status: 'archived', deleteBlocker: 'ordered' })
+    const PROMOTED = menuItemSummaryOf('item-4', 'Old mocha', { status: 'archived', deleteBlocker: 'promotion' })
+    const SOLD_DRAFT = summaryOf(MATCHA, { deleteBlocker: 'ordered' })
+    const { page } = await open(backend([LATTE_ROW, SOLD_DRAFT, SOLD, PROMOTED]))
+    const menuOf = async (name: string) => {
+      await page.getByRole('button', { name: `Actions for ${name}` }).click()
+      const menu = page.getByRole('menu')
+      await menu.waitFor()
+      return menu
+    }
+    let menu = await menuOf('Old chai')
+    expect(await menu.getByRole('menuitem', { name: 'Delete permanently (it was ordered)' }).isDisabled()).toBe(true)
+    await page.keyboard.press('Escape')
+    menu = await menuOf('Old mocha')
+    expect(await menu.getByRole('menuitem', { name: 'Delete permanently (it is in a promotion)' }).isDisabled()).toBe(true)
+    await page.keyboard.press('Escape')
+    // Published: archive first.
+    menu = await menuOf('Latte')
+    expect(await menu.getByRole('menuitem', { name: /Delete/ }).count()).toBe(0)
+    await page.keyboard.press('Escape')
+    menu = await menuOf('Matcha')
+    expect(await menu.getByRole('menuitem', { name: /Delete/ }).count()).toBe(0)
+  })
+
+  it('shows the server\'s refusal when the item got history meanwhile, and keeps the row', async () => {
+    const OLD = menuItemSummaryOf('item-3', 'Old chai', { status: 'archived' })
+    const { page } = await open({
+      ...backend([LATTE_ROW, OLD]),
+      'DELETE /admin/menu/items/{id}': () => {
+        throw failures.conflict('ITEM_HAS_HISTORY', 'This menu item was ordered, so it stays archived to keep your order history.')
+      },
+    })
+    await page.getByRole('button', { name: 'Actions for Old chai' }).click()
+    await page.getByRole('menuitem', { name: 'Delete permanently' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete permanently' }).click()
+    await toast(page, 'Could not delete "Old chai"').waitFor()
+    await page.getByText('This menu item was ordered, so it stays archived', { exact: false }).first().waitFor()
+    await cardOf(page, 'Old chai').waitFor()
+  })
+})
+
 describe('menu item form', () => {
   it('creates a draft with an uploaded image, a leaf category, a price in cents and a rule', async () => {
     let body: unknown

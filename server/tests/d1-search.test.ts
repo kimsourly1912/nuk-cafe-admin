@@ -8,13 +8,13 @@ import type { Actor } from '#server/features/identity'
 import { createStaff, listStaff, seedFirstOwner } from '#server/features/identity/staff.service'
 import { getPlatformAccount, listPlatformAccounts } from '#server/features/identity/accounts.service'
 import { createCategory } from '#server/features/menu/categories.service'
-import { createItem, listItems } from '#server/features/menu/items.service'
+import { createItem, deleteItem, listItems } from '#server/features/menu/items.service'
 import { addOwner, createTenant, getPlatformHealth, getPlatformOverview, getTenant, listPlatformActivity, listTenants, removeOwner, seedTenant, updateTenantNotes } from '#server/features/tenants'
 import type { Db } from '#server/utils/batch'
 import { deleteOldest, insertAll, requireCount, requireOneChange, runBatch, updateAtVersion, tryGuardedBatch } from '#server/utils/batch'
 import { byId, byName, firstRow, hasAny, inTenant, nextPosition, readPage } from '#server/utils/query'
-import { menuOptionSets, menuOptionValues, menuPromotions } from '#server/features/menu/menu.schema'
-import { migrationFiles, addBranchStaff, createUser, ensureTenant, insertBranch } from '#server/tests/support/db'
+import { menuItemVariations, menuOptionSets, menuOptionValues, menuPromotions } from '#server/features/menu/menu.schema'
+import { migrationFiles, addBranchStaff, createUser, ensureTenant, insertBranch, insertSoldLine } from '#server/tests/support/db'
 import type { StaffListQuery } from '#shared/contracts/staff'
 import { branches, user } from '#server/db/tables'
 import { recordJobRun } from '#server/features/platform'
@@ -55,6 +55,9 @@ let proxy: Awaited<ReturnType<typeof getPlatformProxy>>
 let db: Db
 let ours: string
 let theirs: string
+/** Our owner, and our cafe's leaf category. */
+let ourOwner: Actor
+let ourHot: string
 
 beforeAll(async () => {
   proxy = await getPlatformProxy({ configPath: fileURLToPath(new URL('./support/d1-wrangler.json', import.meta.url)), persist: false })
@@ -82,6 +85,7 @@ beforeAll(async () => {
     const itemActor: Actor = { ...actor, tenantId }
     const top = await createCategory(db, itemActor, { name: 'Drinks', description: '', parentId: null, availabilityRuleIds: [] })
     const sub = await createCategory(db, itemActor, { name: 'Hot', description: '', parentId: top.id, availabilityRuleIds: [] })
+    if (tenantId === ours) [ourOwner, ourHot] = [itemActor, sub.id]
     for (const name of [KHMER_17, ASCII_49, SYMBOLS, 'm'.repeat(80)]) {
       await createItem(db, itemActor, { categoryId: sub.id, name, description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 100, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
     }
@@ -122,6 +126,22 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
       // The page and its total are one batch: the category's name keeps its own column (D170, D194).
       expect(page.items.every(i => i.categoryName === 'Hot' && i.priceMinMinor === 100), search).toBe(true)
     }
+  })
+
+  it('deletes a never-ordered item with its versions by cascade, and refuses a sold one, also mid-batch (D200)', async () => {
+    const draft = (name: string) => createItem(db, ourOwner, { categoryId: ourHot, name, description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 100, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
+    const versionsOf = async (itemId: string) => (await db.select({ n: count() }).from(menuItemVariations).where(eq(menuItemVariations.itemId, itemId)))[0]!.n
+    const gone = await draft('Gone tea')
+    expect(await versionsOf(gone.id)).toBe(1)
+    await deleteItem(db, ourOwner, gone.id, { version: gone.version })
+    expect(await versionsOf(gone.id)).toBe(0)
+
+    const sold = await draft('Sold tea')
+    await insertSoldLine(db, sold.id, ours)
+    await expectApiError(() => deleteItem(db, ourOwner, sold.id, { version: sold.version }), 409, 'ITEM_HAS_HISTORY')
+    const racing = await draft('Racing tea')
+    await expectApiError(() => deleteItem(interleaved(db, () => insertSoldLine(db, racing.id, ours)), ourOwner, racing.id, { version: racing.version }), 409, 'ITEM_HAS_HISTORY')
+    expect(await versionsOf(racing.id)).toBe(1)
   })
 
   it('lists people for every boundary search', async () => {

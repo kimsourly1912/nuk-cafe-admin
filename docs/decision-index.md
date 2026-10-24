@@ -7,7 +7,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Domain | Search IDs / terms |
 |---|---|
 | Replaced Spring/SPA/SDK | D1–D5; superseded by D39, D43, D71, D95 |
-| API/server architecture and integrity | D39–D45, D52, D71, D116, D194; version, idempotency, guard, audit, repository, shared owner conditions, token queues, connect codes, joined snapshots and JSON-bound sets |
+| API/server architecture and integrity | D39–D45, D52, D71, D116, D194, D200; version, idempotency, guard, audit, repository, shared owner conditions, token queues, connect codes, joined snapshots and JSON-bound sets, archive and permanent delete |
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173 |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166 |
 | Tenancy and permissions | D134–D146, D186–D193; organization, tenant, branch, platform console |
@@ -229,3 +229,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D197](decisions.md#d197-owners-add-branches-at-most-10-active-per-cafe-names-unique-step-b-of-d196-2026-10-23) | Owners add branches, at most 10 active per cafe, names unique (step B of D196), 2026-10-23 |
 | [D198](decisions.md#d198-manager-tools-on-the-counter-tables-and-qr-codes-branch-reports-step-1-the-server-2026-10-23) | Manager tools on the counter: tables and QR codes, branch reports (step 1, the server), 2026-10-23 |
 | [D199](decisions.md#d199-pause-online-orders-a-branch-state-set-from-the-counter-never-past-closing-step-1-the-server-2026-10-23) | Pause online orders: a branch state set from the counter, never past closing (step 1, the server), 2026-10-23 |
+| [D200](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24) | Delete permanently only without history; Archive stays the bin; menu items first, 2026-10-24 |

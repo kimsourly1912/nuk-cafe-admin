@@ -21,7 +21,7 @@ import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import type { ItemStatus, MenuItemSummary } from '#shared/contracts/menu-items'
 import { useEventListener, useLocalStorage } from '@vueuse/core'
 import { CategorySelect } from '~/features/categories'
-import { useItemCounts, useItemList, useItemMutations } from '../composables/useItems'
+import { DELETE_BLOCKED, useItemCounts, useItemList, useItemMutations } from '../composables/useItems'
 import { itemOnMenuPath, ITEM_STATUS_LABELS, priceRange } from '../utils/item-display'
 import ProductCard from './ProductCard.vue'
 import ProductGroupFilter from './ProductGroupFilter.vue'
@@ -61,9 +61,9 @@ const listQuery = computed(() => ({ ...query.value, photo: query.value.photo as 
 const { data, loading, refreshing, error, refresh } = useItemList(listQuery)
 /** Tab counts, and items the filters show without a photo (archived ones only on their own tab, where it's hidden). */
 const { statusCounts: counts, missingPhotos } = useItemCounts(() => listQuery.value)
-const { publish, unpublish, archive, restore, isBusy } = useItemMutations()
+const { publish, unpublish, archive, restore, remove, isBusy } = useItemMutations()
 
-const rows = computed(() => data.value?.items ?? [])
+const rows = computed(() => (data.value?.items ?? []).filter(item => !remove.isRemoved(item.id)))
 
 // Archiving the last items of the last page (on a tab without archived ones): step back.
 watch(() => data.value?.totalPages, (totalPages) => {
@@ -133,10 +133,16 @@ const columns = computed<TableColumn<MenuItemSummary>[]>(() => [
 ])
 
 function rowActions(item: MenuItemSummary): DropdownMenuItem[] {
+  // Only an item with no history can go for good (D200); an archived one says why it can't.
+  const deleteForGood: DropdownMenuItem = item.deleteBlocker
+    ? { label: DELETE_BLOCKED[item.deleteBlocker], icon: 'i-lucide-trash-2', disabled: true }
+    : { label: 'Delete permanently', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => remove.execute(item) }
   if (item.status === 'archived') {
     return [
       { label: 'View', icon: 'i-lucide-eye', onSelect: () => openForm(item) },
       { label: 'Restore', icon: 'i-lucide-archive-restore', onSelect: () => restore.execute(item) },
+      { type: 'separator' },
+      deleteForGood,
     ]
   }
   return [
@@ -148,6 +154,8 @@ function rowActions(item: MenuItemSummary): DropdownMenuItem[] {
     // Published items are on the menu: open it there, in a new tab (D145).
     ...(item.status === 'active' ? [{ label: 'View on menu', icon: 'i-lucide-external-link', to: itemOnMenuPath(tenantPath('/'), item.id), target: '_blank' }] : []),
     { label: 'Archive', icon: 'i-lucide-archive', color: 'error', onSelect: () => archive.execute(item) },
+    // A draft nobody ordered can also go for good; one with history only archives.
+    ...(item.status === 'draft' && !item.deleteBlocker ? [deleteForGood] : []),
   ]
 }
 

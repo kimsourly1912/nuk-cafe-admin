@@ -1,3 +1,4 @@
+import type { ItemDeleteBlocker } from '#shared/contracts/menu-items'
 import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const ItemErrorCodes = {
@@ -9,6 +10,7 @@ export const ItemErrorCodes = {
   MODIFIER_GROUP_NOT_AVAILABLE: 'MODIFIER_GROUP_NOT_AVAILABLE',
   MODIFIER_NOT_AVAILABLE: 'MODIFIER_NOT_AVAILABLE',
   ITEM_SELECTION_RULES: 'ITEM_SELECTION_RULES',
+  ITEM_HAS_HISTORY: 'ITEM_HAS_HISTORY',
 } as const
 
 export const itemNotFound = () => notFound('This menu item')
@@ -47,3 +49,12 @@ export const itemInWrongState = (message: string) => apiError(409, ErrorCodes.IN
 
 export const itemsChanged = () =>
   apiError(409, ErrorCodes.VERSION_CONFLICT, 'The items of this category changed. Reload them and try again.')
+
+const HISTORY: Record<ItemDeleteBlocker, string> = {
+  ordered: 'This menu item was ordered, so it stays archived to keep your order history.',
+  promotion: 'A promotion includes this menu item, so it can\'t be deleted. Keep it archived, or remove it from the promotion if that is still a draft.',
+}
+
+/** A permanent delete of an item with history (D200): it can only stay archived. */
+export const itemHasHistory = (blocker: ItemDeleteBlocker) =>
+  apiError(409, ItemErrorCodes.ITEM_HAS_HISTORY, HISTORY[blocker])
