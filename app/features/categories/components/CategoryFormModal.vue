@@ -111,7 +111,7 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="isEdit ? 'Edit category' : parentId === undefined ? 'New category' : 'New subcategory'"
     :fullscreen="fullscreen"
     @update:open="unsaved.onOpenChange"
@@ -217,5 +217,5 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
         </UTooltip>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

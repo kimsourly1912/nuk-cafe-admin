@@ -7,7 +7,7 @@ withDefaults(defineProps<{
 </script>
 
 <template>
-  <UModal title="Keyboard shortcuts">
+  <AppModal title="Keyboard shortcuts">
     <template #body>
       <ul class="divide-y divide-default">
         <li
@@ -26,5 +26,5 @@ withDefaults(defineProps<{
         </li>
       </ul>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -66,7 +66,7 @@ useSubmitShortcut(save)
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="modifier ? 'Edit add-on' : 'Add add-on'"
     :description="`In “${group.name}”. Menu items can set their own price.`"
     :fullscreen="fullscreen"
@@ -153,5 +153,5 @@ useSubmitShortcut(save)
         </UTooltip>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

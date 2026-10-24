@@ -39,6 +39,7 @@ Check every changed screen at **320, 390, 768, 1024 and 1440 px** wide, plus one
 - [ ] The list toolbar doesn't scroll sideways at 320, 680 and 1024 px; a mode's button also leaves it; the bulk bar has no ✕ ([ui §16a](./ui.md#16a-list-toolbars-and-modes-owner-2026-10-02-d129)).
 - [ ] A paginated list ends with `<ListPagination>`; a quantity is a `<QuantityStepper>` ([ui §16](./ui.md#16-pagination-and-quantities-owner-2026-10-02-d128)).
 - [ ] Drawers and bottom sheets are `<AppDrawer>`: no handle, no dragging, an X ([ui §8](./ui.md#8-surface-hierarchy)); only the body scrolls, with spacing from `app.config.ts` (the page adds borders, never padding or gaps) ([ui §17](./ui.md#overlays)).
+- [ ] Modals and slide-overs are `<AppModal>` / `<AppSlideover>`, and a phone's Back closes the one on top and stays on the page ([ui → Overlays](./ui.md#overlays), D201); an overlay kept in the address passes `routed`
 - [ ] Reorder lists: chevrons for Move up / Move down, and moved rows slide (`useReorderTransition`) ([ui §17](./ui.md#reordering)).
 - [ ] A time of day is a `<TimeInput>` ([ui §17](./ui.md#times-of-day)).
 

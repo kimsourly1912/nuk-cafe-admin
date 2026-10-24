@@ -56,6 +56,11 @@ function clear() {
   input.value = ''
 }
 
+// Below `lg` it's a slide-over: Back closes it (D201). Beside the page, Back is the page's.
+useOverlayBack(() => open.value && !isExpanded.value, () => {
+  open.value = false
+})
+
 /** A link on a phone leaves the slide-over for the page. */
 function followed() {
   if (!isExpanded.value) open.value = false

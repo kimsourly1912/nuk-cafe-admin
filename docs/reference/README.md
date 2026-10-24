@@ -52,7 +52,9 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `<StatCard>` | component | [UI helpers](./ui-helpers.md#statcard) | One number on a page, in a soft card |
 | `<OrderLinePromotion>` | component | [UI helpers](./ui-helpers.md#orderlinepromotion) | An order line's promotion as sold: "20% off · Coffee week · was $7.00" (D163) |
 | `<RecordSelect>` | component | [UI helpers](./ui-helpers.md#recordselect) | A searchable, virtualized dropdown of records |
-| `<AppDrawer>` | component | [UI helpers](./ui-helpers.md#appdrawer) | `UDrawer` without dragging: every drawer and bottom sheet |
+| `<AppDrawer>` | component | [UI helpers](./ui-helpers.md#appdrawer) | `UDrawer` without dragging: every drawer and bottom sheet; Back closes it |
+| `<AppModal>`, `<AppSlideover>` | component | [UI helpers](./ui-helpers.md#appmodal-and-appslideover) | `UModal` / `USlideover` that Back closes (D201): every modal and slide-over |
+| `useOverlayBack` | composable | [UI helpers](./ui-helpers.md#useoverlayback) | Back closes one of Nuxt UI's own overlays (sidebar menu, search palette) |
 | `<TimeInput>` | component | [UI helpers](./ui-helpers.md#times-of-day-formatclock-timerange-isovernight-minutetotime-timetominute) | `UInputTime` with AM/PM switched by a tap (phones) |
 | `useFormErrorRecheck` | composable | [Forms](./forms.md#useformerrorrecheck) | Every `UForm`: an error leaves as soon as it's fixed, a rule across fields too |
 | `useReorderTransition` | composable | [UI helpers](./ui-helpers.md#usereordertransition) | Reorder rows slide to their new place when moved by a button or key |

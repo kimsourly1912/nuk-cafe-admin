@@ -190,7 +190,7 @@ function onOpenChange(open: boolean) {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="title"
     :description="description"
     :fullscreen="isCompact"
@@ -396,5 +396,5 @@ function onOpenChange(open: boolean) {
         @click="usePhoto"
       />
     </template>
-  </UModal>
+  </AppModal>
 </template>

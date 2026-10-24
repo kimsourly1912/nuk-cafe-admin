@@ -14,6 +14,10 @@ const route = useRoute()
 const shortcutsHelp = useOverlay().create(ShortcutsHelp)
 const showShortcuts = () => shortcutsHelp.open({ shortcuts: PLATFORM_SHORTCUTS })
 const { open, collapsed: sidebarCollapsed } = useSidebarShortcut({ '?': showShortcuts })
+// The sidebar's phone menu is Nuxt UI's own slide-over: Back closes it (D201).
+useOverlayBack(open, () => {
+  open.value = false
+})
 
 // A cafe's own page is still under Cafes, an account's under Accounts.
 const items = computed<NavigationMenuItem[]>(() => [

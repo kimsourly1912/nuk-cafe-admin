@@ -26,6 +26,11 @@ async function openNewForm(page: Page, name?: string) {
   if (name !== undefined) await nameInput(page).fill(name)
 }
 
+/** A long press on Back, choosing the page before this one: past the modal's own entry (D201). */
+async function jumpBack(page: Page) {
+  await page.evaluate(() => window.history.go(-2))
+}
+
 async function answer(page: Page, label: 'Keep editing' | 'Discard') {
   await page.getByRole('button', { name: label }).click()
   await discardDialog(page).waitFor({ state: 'hidden' })
@@ -119,7 +124,7 @@ describe('unsaved changes: leaving the page', () => {
     expect(await beforeUnloadPrevented(page)).toBe(true)
   })
 
-  it('asks on back; Keep editing stays with the form open', async () => {
+  it('Back closes the form first: asks, Keep editing stays with the form open (D201)', async () => {
     const { page } = await openCategories()
     await openNewForm(page, 'Latte')
     await page.goBack()
@@ -129,22 +134,22 @@ describe('unsaved changes: leaving the page', () => {
     await expect(nameInput(page).inputValue()).resolves.toBe('Latte')
   })
 
-  it('back + Discard leaves the page and closes the modal', async () => {
+  it('Back past the page (a long press) + Discard leaves the page and closes the modal', async () => {
     const { page } = await openCategories()
     await openNewForm(page, 'Latte')
-    await page.goBack()
+    await jumpBack(page)
     await answer(page, 'Discard')
     await expect.poll(() => page.url()).not.toMatch(/\/admin\/categories$/)
     await form(page).waitFor({ state: 'hidden' })
     expect(await beforeUnloadPrevented(page)).toBe(false)
   })
 
-  it('shows one dialog when back is pressed twice', async () => {
+  it('shows one dialog when Back past the page comes twice', async () => {
     const { page } = await openCategories()
     await openNewForm(page, 'Latte')
-    await page.goBack()
+    await jumpBack(page)
     await discardDialog(page).waitFor()
-    await page.goBack()
+    await jumpBack(page)
     await page.waitForTimeout(300)
     expect(await discardDialog(page).count()).toBe(1)
     await answer(page, 'Discard')
@@ -159,7 +164,7 @@ describe('unsaved changes: leaving the page', () => {
   })
 })
 
-describe('unsaved changes: failed saves and forward', () => {
+describe('unsaved changes: failed saves and Back past the page', () => {
   it('a failed save keeps the form open with the input and the reason, and still guards it', async () => {
     const { page, api } = await openCategories()
     api.set({
@@ -181,20 +186,16 @@ describe('unsaved changes: failed saves and forward', () => {
     await expect.poll(() => api.calls.filter(c => c === 'POST /admin/menu/categories').length).toBe(2)
   })
 
-  it('asks on browser forward; Keep editing stays on the page', async () => {
+  // Opening a modal drops the browser's Forward history (its own entry, D201): a route change with a
+  // form modal open comes from Back past the page instead.
+  it('asks on Back past the page; Keep editing stays on the page', async () => {
     const { page } = await openCategories()
-    // History: /admin → /admin/categories → /admin → /admin/categories. Go back twice, then forward is available.
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
-    await page.goBack()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin')
-    await page.goBack()
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
     await openNewForm(page, 'Latte')
-
-    await page.goForward()
+    await jumpBack(page)
     await discardDialog(page).waitFor()
     await answer(page, 'Keep editing')
     await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
     await expect(nameInput(page).inputValue()).resolves.toBe('Latte')
   })
+
 })

@@ -10,7 +10,7 @@ const snapshot = useApiQuery(() => `telegram:snapshot:${props.id}`, () => fetchS
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="subject"
     description="The message as it was saved when it was queued."
     :fullscreen="isCompact"
@@ -44,5 +44,5 @@ const snapshot = useApiQuery(() => `telegram:snapshot:${props.id}`, () => fetchS
         </p>
       </template>
     </template>
-  </UModal>
+  </AppModal>
 </template>

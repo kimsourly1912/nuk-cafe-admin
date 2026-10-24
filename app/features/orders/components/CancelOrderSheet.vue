@@ -15,7 +15,7 @@ const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{ cancelled: [order: Order], changed: [] }>()
 
 const { isCompact } = useLayoutContext()
-const Modal = resolveComponent('UModal')
+const Modal = resolveComponent('AppModal')
 const Drawer = resolveComponent('AppDrawer')
 
 const number = computed(() => formatPickupNumber(props.order.pickupNumber))

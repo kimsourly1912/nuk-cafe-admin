@@ -25,8 +25,8 @@ const props = defineProps<{ orderId?: string }>()
 const open = defineModel<boolean>('open', { required: true })
 
 const { isCompact } = useLayoutContext()
-const Slideover = resolveComponent('USlideover')
-const Modal = resolveComponent('UModal')
+const Slideover = resolveComponent('AppSlideover')
+const Modal = resolveComponent('AppModal')
 const overlayProps = computed(() => (isCompact.value ? { fullscreen: true } : { side: 'right' as const }))
 
 const detail = useOrderHistoryDetail(() => props.orderId)
@@ -49,6 +49,7 @@ const timeline = computed(() => (order.value?.timeline ?? []).map((event, index)
   <component
     :is="isCompact ? Modal : Slideover"
     v-model:open="open"
+    routed
     v-bind="overlayProps"
     :title="order ? `Order ${orderNumber(order.pickupNumber)}` : 'Order'"
     :description="order ? `${orderTypeText(order)} · ${order.customerFirstName}` : 'Loading…'"

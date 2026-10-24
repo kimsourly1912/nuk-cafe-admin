@@ -64,7 +64,7 @@ useSubmitShortcut(save)
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="table ? 'Edit table' : 'New table'"
     :description="table ? 'Its QR code stays the same.' : 'It gets its QR code at once.'"
     :fullscreen="fullscreen"
@@ -136,5 +136,5 @@ useSubmitShortcut(save)
         </UTooltip>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

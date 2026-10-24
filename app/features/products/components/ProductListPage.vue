@@ -204,7 +204,7 @@ function nextWithoutPhoto(itemId: string) {
 async function showPanel(itemId: string) {
   openFor = itemId
   const next = nextWithoutPhoto(itemId)
-  const saved = await openPanel({ itemId, saveAndNext: Boolean(next) }).result
+  const saved = await openPanel({ itemId, saveAndNext: Boolean(next), routed: true }).result
   if (openFor !== itemId) return
   openFor = undefined
   // Closed by the user (not by Back): remove `item` and nothing else from the URL.

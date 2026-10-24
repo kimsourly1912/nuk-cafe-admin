@@ -119,7 +119,7 @@ async function onSubmit({ data }: FormSubmitEvent<StaffForm>) {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="isEdit ? `Access of ${member!.name}` : 'Add staff member'"
     :description="isEdit ? member!.email : undefined"
     :fullscreen="isCompact"
@@ -291,5 +291,5 @@ async function onSubmit({ data }: FormSubmitEvent<StaffForm>) {
         </UTooltip>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

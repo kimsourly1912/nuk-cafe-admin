@@ -123,7 +123,7 @@ From the page outwards:
 1. **Page** (`UDashboardPanel` body, `bg-default`).
 2. **Section**: a heading plus content, separated by space or `USeparator`. Prefer sections to boxes.
 3. **Card** (`UCard`, `variant="outline"`): one record in a collection, or one group of settings. **No card inside a card.** Rows inside a card use `divide-y`. A card's header is a quiet `bg-elevated/25` strip (`app.config.ts`, D126), so a group's title reads as its heading.
-4. **Overlays**: `UModal`, `USlideover`, `AppDrawer` (never `UDrawer` itself, below), menus and popovers. They're the only surfaces with shadows (Nuxt UI's own).
+4. **Overlays**: `AppModal`, `AppSlideover`, `AppDrawer` (never `UModal`, `USlideover` or `UDrawer` themselves, below and [Overlays](#overlays)), menus and popovers. They're the only surfaces with shadows (Nuxt UI's own).
 
 **Which surface (owner, 2026-10-02, D126):**
 
@@ -136,7 +136,7 @@ From the page outwards:
 | A group of settings (Branch information, Weekly hours) | Outline card with a header; the strip comes from `app.config.ts` |
 | A table header row, a main-category row | `bg-elevated/50` |
 
-**Drawers and bottom sheets don't drag (owner, 2026-10-02, D126).** A sheet that moves under a finger closes by accident while its content scrolls or a stepper is tapped. `<AppDrawer>` is `UDrawer` with no handle and no dragging, its X on by default; it closes with X, a tap outside, Escape or Back. `UDrawer` is a lint error anywhere else (`eslint.config.mjs`).
+**Drawers and bottom sheets don't drag (owner, 2026-10-02, D126).** A sheet that moves under a finger closes by accident while its content scrolls or a stepper is tapped. `<AppDrawer>` is `UDrawer` with no handle and no dragging, its X on by default; it closes with X, a tap outside, Escape or Back (D201). `UDrawer` is a lint error anywhere else (`eslint.config.mjs`).
 
 **Overlay layout and backdrop (owner, 2026-10-13, D165, D166):** see [§17 → Overlays](#overlays).
 
@@ -235,6 +235,7 @@ How controls behave, so every screen behaves the same. Each rule names what enfo
 
 ### Overlays
 
+- **Back closes the overlay on top and stays on the page (D201).** A phone's Back (Android's button or edge swipe, iOS's edge swipe) is a history back, so every open modal, slide-over and drawer has a history entry of its own (`app/utils/overlay-history.ts`). Back works like Escape on the top one only: unsaved input asks first, an overlay that can't be dismissed stays, and the confirm dialog takes Back as Cancel. The next Back leaves the page. Closing it another way (X, Save) leaves no entry behind. Use `<AppModal>` / `<AppSlideover>` / `<AppDrawer>`: `UModal`, `USlideover` and `UDrawer` are lint errors elsewhere. Nuxt UI's own overlays (the sidebar's phone menu, the search palette, the assistant's phone sheet) call `useOverlayBack`. An overlay the page keeps in its address (`?item=`, `?order=`) passes `routed`: Back is already its route change. No custom swipe gestures: the system's own edge swipe is the gesture. Menus and popovers don't take Back.
 - **The backdrop is black** behind every modal, slide-over and drawer: `bg-black/50` (`/60` in dark mode), set once in `app.config.ts`. Nuxt UI's light `bg-elevated/75` left the page almost as bright as the dialog.
 - **A drawer's spacing is each part's own padding**, never the container's padding or gap (`app.config.ts` → `drawer`): the header `px-4 pt-4`, the body `p-4`, the footer `px-4` with the safe area at the bottom. **Only the body scrolls**, between a header and footer that stay in view; its scrollbar is at the drawer's edge, and the padding is inside the scrolling area, so the first and last content is never cut against the header or footer. A page adds borders or a footer's layout (`flex-row`), never spacing.
 

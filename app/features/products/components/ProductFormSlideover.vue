@@ -26,6 +26,8 @@ const props = defineProps<{
   copyOf?: string
   /** Menu items' "No photo" filter (D160): Save says it opens the next item (the list does that). */
   saveAndNext?: boolean
+  /** Opened from the list's address (`?item=`, D90): Back is the list's route change (D201). */
+  routed?: boolean
 }>()
 
 // `update:open` is declared so closing (X, Esc, outside click) goes through `unsaved` instead of
@@ -77,7 +79,8 @@ async function onSubmit() {
 </script>
 
 <template>
-  <USlideover
+  <AppSlideover
+    :routed="routed"
     :title="isEdit ? (archived ? 'Archived menu item' : 'Edit menu item') : 'New menu item'"
     :description="editor.summary.value"
     :ui="{ content: 'sm:max-w-2xl' }"
@@ -168,5 +171,5 @@ async function onSubmit() {
         </UTooltip>
       </div>
     </template>
-  </USlideover>
+  </AppSlideover>
 </template>

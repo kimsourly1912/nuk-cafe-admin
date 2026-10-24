@@ -5,7 +5,7 @@
  * and the items at its price, each opening the item to add it. Rendered on the server like the
  * rest of the menu; the sheet or dialog is chosen by width only when opened.
  */
-import { AppDrawer, UModal } from '#components'
+import { AppDrawer, AppModal } from '#components'
 import type { PublicPromotion } from '#shared/contracts/menu-promotions'
 import type { PublicMenuItem } from '#shared/contracts/public-menu'
 import type { MenuSection } from '../utils/menu'
@@ -22,7 +22,7 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const until = (endsOn: string | null) => (endsOn ? `Until ${Number(endsOn.slice(8, 10))} ${MONTHS[Number(endsOn.slice(5, 7)) - 1]}` : null)
 
 const { isCompact } = useLayoutContext()
-const Shell = computed(() => (isCompact.value ? AppDrawer : UModal))
+const Shell = computed(() => (isCompact.value ? AppDrawer : AppModal))
 const open = ref(false)
 const shown = shallowRef<PublicPromotion>()
 const shownGroups = computed(() => groupItemsByCategory(props.sections, shown.value?.itemIds ?? []))

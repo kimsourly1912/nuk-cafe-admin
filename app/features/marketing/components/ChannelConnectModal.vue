@@ -65,7 +65,7 @@ const subscribers = (count: number | null) => (count === null ? '' : `${count.to
 </script>
 
 <template>
-  <UModal
+  <AppModal
     title="Connect a Telegram channel"
     :fullscreen="isCompact"
     :dismissible="false"
@@ -202,5 +202,5 @@ const subscribers = (count: number | null) => (count === null ? '' : `${count.to
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

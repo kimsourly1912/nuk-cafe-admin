@@ -3,7 +3,7 @@
 Warn the user before input they haven't saved is lost.
 
 - [`useUnsavedChanges`](#useunsavedchanges): page forms
-- [`useModalUnsavedChanges`](#usemodalunsavedchanges): forms in `UModal` / `USlideover` / `AppDrawer`
+- [`useModalUnsavedChanges`](#usemodalunsavedchanges): forms in `AppModal` / `AppSlideover` / `AppDrawer`
 - [`useLeaveGuard`](#useleaveguard): the app-wide check
 - [`isSameFormValue` and `cloneFormValue`](#issameformvalue-and-cloneformvalue)
 - [Drafts kept in the browser](#drafts-kept-in-the-browser): the `draft` option and `<FormDraftAlert>` (D151)
@@ -19,7 +19,7 @@ Every form that uses one of these composables registers itself app-wide while it
 
 | The user… | What happens |
 |---|---|
-| Closes a modal (X, Esc, outside click, Cancel) | "Discard unsaved changes?" with **Keep editing** / **Discard** (`useModalUnsavedChanges`) |
+| Closes a modal (X, Esc, outside click, Cancel, Back: D201) | "Discard unsaved changes?" with **Keep editing** / **Discard** (`useModalUnsavedChanges`) |
 | Changes route: sidebar link, `navigateTo`, back/forward, same page with other params | The same dialog (global middleware). On **Discard** every open form is discarded and modals close |
 | Logs out | The same dialog, **before** the backend logout (`useAuth().logout`) |
 | Reloads, closes the tab, types a URL | The browser's own "Leave site?" dialog (text can't be customized) |
@@ -53,7 +53,8 @@ Every case below is handled. **Keep this table and the tests in sync when changi
 | 2 | Nothing unsaved | No `beforeunload` listener at all | VueUse `useEventListener` with a reactive target. A permanent listener would disable the browser's back/forward cache | e2e |
 | 3 | Sidebar link, `navigateTo`, browser back/forward | Our dialog. Keep editing: the URL is restored (Vue Router undoes the popstate) | Global middleware `unsaved-changes.global.ts` | e2e (back) |
 | 4 | Same page, other params (`/products/1/edit` → `/2/edit`) | Our dialog (the middleware runs on every route change) | Global middleware | **Not tested**: no such page yet. The page must reset its form on param change (see caveats) |
-| 5 | Modal open while the route changes (back button) | Asks. On Discard the modal **closes** too: overlay modals are app-level and would otherwise stay open over the next page | `onDiscard` → `close` | e2e |
+| 5 | Modal open while the route changes (Back past the page with a long press, `navigateTo`) | Asks. On Discard the modal **closes** too: overlay modals are app-level and would otherwise stay open over the next page | `onDiscard` → `close` | e2e (Back past the page) |
+| 5b | Back with a modal open (D201) | Back closes the modal, not the page: unsaved input asks as on X; Keep editing keeps it open (and Back asks again); Back on the question is Keep editing | The overlay's history entry (`useOverlayBack`) → `update:open` | e2e (`overlay-back.test.ts`) |
 | 6 | Logout | Asks **before** the backend call. Keep editing: stays logged in | `useAuth().logout` calls `confirmLeave()` first | **Not tested in a browser**: a modal blocks the user menu, and no page form exists yet. Logout **from another tab** with unsaved input: e2e (`session.test.ts`, no dialog) |
 | 7 | Session expired → forced redirect to login | No dialog; the form modal closes and its input is discarded | Middleware skips when logged out; the session boundary discards forms and closes overlays | e2e (`session.test.ts`: expiry during a save) |
 | 8 | Modal: X, Esc, outside click, Cancel | Our dialog | `update:open` → `onOpenChange`, Cancel → `requestClose` | e2e (all four) |
@@ -63,7 +64,7 @@ Every case below is handled. **Keep this table and the tests in sync when changi
 | 12 | Typed then undone; `''` vs `undefined`; `[]` vs missing | Not unsaved | `isSameFormValue` | unit + e2e |
 | 13 | List refetches while an edit form is open (invalidate, tab focus) | Input untouched; baseline unchanged | The form keeps its own copy (`reactive({...})`), the baseline is a snapshot | By design |
 | 14 | Input not in the values yet: a menu item's photo uploading or failed to upload (D160) | Unsaved: closing or leaving asks; Save waits for the photo (or its Cancel) | `pending: photoPending` | e2e (`products.test.ts`, checked to fail without it) |
-| 14 | Several forms (modal over a page form); back pressed twice | **One** dialog; Discard discards all | One registry, one in-flight `confirmLeave` promise | e2e (double back) |
+| 14 | Several forms (modal over a page form); a route change while asking (Back past the page twice) | **One** dialog; Discard discards all | One registry, one in-flight `confirmLeave` promise | e2e (Back past the page twice) |
 | 15 | Esc / outside click on the discard dialog itself | Nothing (it's "Keep editing" only by button). Never discards by accident | `ConfirmDialog` is `dismissible: false` | By design |
 | 16 | Successful save then redirect (page forms) | No dialog | Call `markClean()` before `navigateTo` | e2e (`products.test.ts`: the Menu item page saves and returns to the list, D90) |
 | 17 | Filter/search change on a list (URL `replace`) | No dialog unless a form is unsaved (none can be: modals block the list) | Middleware runs but finds nothing dirty | e2e (list-page) |
@@ -151,7 +152,7 @@ async function onSubmit() {
 
 ## `useModalUnsavedChanges`
 
-`useUnsavedChanges` plus asking before the modal closes. It works for `UModal`, `USlideover` and `AppDrawer` (they share the `update:open` API).
+`useUnsavedChanges` plus asking before the modal closes. It works for `AppModal`, `AppSlideover` and `AppDrawer` (they share the `update:open` API). Back reaches it through the same `update:open` (D201).
 
 ```ts
 function useModalUnsavedChanges<T extends object>(

@@ -16,7 +16,7 @@ const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{ cancelled: [], reload: [] }>()
 
 const { isCompact } = useLayoutContext()
-const Modal = resolveComponent('UModal')
+const Modal = resolveComponent('AppModal')
 const Drawer = resolveComponent('AppDrawer')
 const actions = useCounterActions(() => props.branchId)
 const toast = useToast()

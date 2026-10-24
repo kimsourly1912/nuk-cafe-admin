@@ -29,7 +29,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="`Pause ${cafe.name}?`"
     description="Its customers can't order and its staff can't use the admin or the counter until you resume it. Nothing is deleted."
   >
@@ -78,5 +78,5 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

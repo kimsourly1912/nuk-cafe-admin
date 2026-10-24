@@ -172,7 +172,7 @@ function done() {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :fullscreen="fullscreen"
     title="Choose what's included"
     :ui="{ content: 'sm:max-w-xl', body: 'p-0 sm:p-0' }"
@@ -312,5 +312,5 @@ function done() {
         </div>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

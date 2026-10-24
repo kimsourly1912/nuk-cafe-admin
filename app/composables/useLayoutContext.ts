@@ -1,7 +1,7 @@
 import { useMediaQuery } from '@vueuse/core'
 
 /**
- * The viewport width class, for the choices CSS can't make: a full-screen `UModal`, a `UDrawer`
+ * The viewport width class, for the choices CSS can't make: a full-screen `AppModal`, an `AppDrawer`
  * instead of a dropdown, which URL a list opens (D77, docs/reference/responsive-layout.md §1).
  * Layout that CSS can express uses Tailwind's `sm:` / `lg:` variants (or container queries) instead.
  *
@@ -11,7 +11,7 @@ import { useMediaQuery } from '@vueuse/core'
  *
  * @example
  * const { isCompact } = useLayoutContext()
- * <UModal :fullscreen="isCompact">
+ * <AppModal :fullscreen="isCompact">
  */
 export function useLayoutContext() {
   /** Compact: narrower than `sm` (< 640px at the default font size). Phones. */

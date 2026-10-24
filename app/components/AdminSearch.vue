@@ -17,6 +17,10 @@ const props = defineProps<{
 const emit = defineEmits<{ shortcuts: [] }>()
 /** Whether the palette is open, so the shell can react to it closing. */
 const open = defineModel<boolean>('open', { default: false })
+// Nuxt UI's own modal: Back closes it (D201).
+useOverlayBack(open, () => {
+  open.value = false
+})
 
 const tenantPath = useTenantPath()
 const sources = adminSearchSources()
