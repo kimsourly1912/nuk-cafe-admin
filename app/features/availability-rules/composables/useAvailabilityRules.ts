@@ -89,7 +89,7 @@ export function useAvailabilityRuleMutations() {
    * server refuses one items or categories still name (409 `AVAILABILITY_RULE_HAS_USES`).
    */
   const remove = useMutation(
-    (rule: AvailabilityRule) => apiFetch<null>(`${BASE}/${rule.id}`, { method: 'DELETE', body: { version: rule.version } }),
+    (rule: AvailabilityRule) => apiFetch<null>(`${BASE}/${rule.id}`, { method: 'DELETE', query: { version: rule.version } }),
     {
       id: 'availability-rules:delete',
       key: rule => rule.id,

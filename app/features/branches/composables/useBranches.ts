@@ -157,7 +157,7 @@ export function useTableMutations(surface: TablesSurface = 'admin') {
    * API has it, the counter's doesn't. The server refuses a table with orders (409 `TABLE_HAS_ORDERS`).
    */
   const remove = useMutation(
-    (input: TableChange) => apiFetch<null>(tableUrl(input.table), { method: 'DELETE', body: { version: input.table.version } }),
+    (input: TableChange) => apiFetch<null>(tableUrl(input.table), { method: 'DELETE', query: { version: input.table.version } }),
     {
       id: `branches:${surface}:table-delete`,
       key: tableLock,

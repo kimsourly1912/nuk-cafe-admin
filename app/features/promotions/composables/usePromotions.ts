@@ -103,7 +103,7 @@ export function usePromotionMutations() {
   )
 
   const remove = useMutation(
-    (promotion: Promotion) => apiFetch<null>(`${BASE}/${promotion.id}`, { method: 'DELETE', body: { version: promotion.version } }),
+    (promotion: Promotion) => apiFetch<null>(`${BASE}/${promotion.id}`, { method: 'DELETE', query: { version: promotion.version } }),
     {
       id: 'promotions:delete',
       key: p => promotionKey(p.id),

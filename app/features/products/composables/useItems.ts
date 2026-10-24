@@ -174,7 +174,7 @@ export function useItemMutations() {
    * there's no Undo. The server refuses an item with history (409 `ITEM_HAS_HISTORY`).
    */
   const remove = useMutation(
-    (item: ItemRef & { status: ItemStatus }) => apiFetch<null>(`${BASE}/${item.id}`, { method: 'DELETE', body: { version: item.version } }),
+    (item: ItemRef & { status: ItemStatus }) => apiFetch<null>(`${BASE}/${item.id}`, { method: 'DELETE', query: { version: item.version } }),
     {
       id: 'products:delete',
       key: item => item.id,

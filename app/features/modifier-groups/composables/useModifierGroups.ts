@@ -163,7 +163,7 @@ export function useModifierGroupMutations() {
   /** Deletes an archived add-on no item prices for good (D200): asks first, it can't be restored. */
   const deleteModifier = change(
     'modifier-delete',
-    ({ group, modifier }: ModifierChange) => apiFetch<ModifierGroup>(`${BASE}/${group.id}/modifiers/${modifier.id}`, { method: 'DELETE', body: { version: group.version } }),
+    ({ group, modifier }: ModifierChange) => apiFetch<ModifierGroup>(`${BASE}/${group.id}/modifiers/${modifier.id}`, { method: 'DELETE', query: { version: group.version } }),
     {
       success: ({ modifier }) => `"${modifier.name}" deleted`,
       error: ({ modifier }) => `Could not delete "${modifier.name}"`,
@@ -181,7 +181,7 @@ export function useModifierGroupMutations() {
    * The server refuses one items still use (409 `MODIFIER_IN_USE`).
    */
   const remove = useMutation(
-    ({ group }: GroupChange) => apiFetch<null>(`${BASE}/${group.id}`, { method: 'DELETE', body: { version: group.version } }),
+    ({ group }: GroupChange) => apiFetch<null>(`${BASE}/${group.id}`, { method: 'DELETE', query: { version: group.version } }),
     {
       id: 'modifier-groups:delete',
       key: ({ group }) => groupKey(group.id),

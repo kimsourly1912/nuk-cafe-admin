@@ -99,7 +99,7 @@ async function open(path: string, options: Options = {}) {
       return next
     },
     'DELETE /admin/menu/promotions/{id}': ({ url: u, body }) => {
-      sent.push({ method: 'DELETE', path: idOf(u), body })
+      sent.push({ method: 'DELETE', path: idOf(u), version: u.searchParams.get('version'), body })
       store.delete(idOf(u))
       return null
     },
@@ -283,7 +283,7 @@ describe('Promotions', () => {
     await page.getByRole('menuitem', { name: 'Delete draft' }).click()
     await page.getByRole('dialog').getByRole('button', { name: 'Delete draft' }).click()
     await toast(page, 'Draft "Tea time" deleted').waitFor()
-    expect(sent).toEqual([{ method: 'DELETE', path: 'promo-3', body: { version: 1 } }])
+    expect(sent).toEqual([{ method: 'DELETE', path: 'promo-3', version: '1', body: null }])
     await expect.poll(() => card(page, 'Tea time').count()).toBe(0)
   })
 

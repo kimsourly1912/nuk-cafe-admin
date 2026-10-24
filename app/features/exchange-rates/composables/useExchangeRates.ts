@@ -50,7 +50,7 @@ export function useKhqrSettingsMutations() {
     },
   )
   const removeToken = useMutation(
-    (input: RemoveBakongTokenInput) => apiFetch<KhqrSettings>('/admin/khqr/token', { method: 'DELETE', body: input }),
+    (input: RemoveBakongTokenInput) => apiFetch<KhqrSettings>('/admin/khqr/token', { method: 'DELETE', query: { version: input.version } }),
     {
       id: 'exchange-rates:bakong-token-remove',
       lock: () => 'bakong-token',

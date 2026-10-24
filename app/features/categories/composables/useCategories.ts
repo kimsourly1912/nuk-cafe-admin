@@ -132,7 +132,7 @@ export function useCategoryMutations() {
    * restored. The server refuses one that isn't empty or has history (409 `CATEGORY_HAS_HISTORY`).
    */
   const remove = useMutation(
-    (category: MenuCategory) => apiFetch<null>(`${BASE}/${category.id}`, { method: 'DELETE', body: { version: category.version } }),
+    (category: MenuCategory) => apiFetch<null>(`${BASE}/${category.id}`, { method: 'DELETE', query: { version: category.version } }),
     {
       id: 'categories:delete',
       key: category => category.id,

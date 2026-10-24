@@ -219,7 +219,7 @@ Every editable record has `version`. An edit sends the version it read; the writ
 - Business records (menu items, categories, option sets, add-on groups, voucher templates, tables, staff access) are **archived**: `status = 'archived'` (or `archived_at`), hidden from lists and pickers by default, kept for history and reports, restorable.
 - **Delete permanently** only while a record has no history (D200): nothing that must stay explainable refers to it (an order line, a promotion, a ledger), checked inside the delete statement, since order lines name menu records without foreign keys. Also for privacy erasure (customers, see security.md). Archive stays the bin: there's no recycle-bin page and no `deleted` state.
 - **Never deleted:** orders and their lines, payments, ledgers, voucher redemptions, audit events. Corrections are new records (reversals).
-- Archive and Delete permanently are separate actions. `DELETE` on a resource deletes it (204) or refuses (409 with the reason, e.g. `ITEM_HAS_HISTORY`); it never archives. Lists say what blocks each record (`deleteBlocker`), so the UI can explain a disabled action.
+- Archive and Delete permanently are separate actions. `DELETE` on a resource deletes it (204) or refuses (409 with the reason, e.g. `ITEM_HAS_HISTORY`); it never archives. **A `DELETE` names its version in the query** (`?version=`, `deleteVersionQuerySchema`), never in a body: Nitro 2 on Cloudflare Workers forwards a body only for POST, PUT and PATCH, so a body works on Node and is empty when deployed (D200). `server/tests/routes.test.ts` refuses a `*.delete.ts` that reads one. Lists say what blocks each record (`deleteBlocker`), so the UI can explain a disabled action.
 
 ### Atomic writes
 

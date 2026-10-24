@@ -146,7 +146,7 @@ Feature `server/features/menu/` (`categories.*`), contract `shared/contracts/men
 | `PATCH /api/admin/menu/categories/{id}` | `{ version, name?, description?, parentId? }`: absent keeps; a new `parentId` moves it (`null`: to the top level) to the end of its new siblings |
 | `POST /api/admin/menu/categories/{id}/archive` | `{ version }`: archives it and its active sub-categories |
 | `POST /api/admin/menu/categories/{id}/restore` | `{ version }`: restores this one only, at the end of its level |
-| `DELETE /api/admin/menu/categories/{id}` | `{ version }` → 204: an archived category with **no items or sub-categories (of any status), no order line sold under it and no promotion naming it** is deleted for good with its rule links (D200). Every category says what blocks it (`deleteBlocker`: `items`, `subcategories`, `ordered`, `promotion`) |
+| `DELETE /api/admin/menu/categories/{id}` | `?version=` → 204: an archived category with **no items or sub-categories (of any status), no order line sold under it and no promotion naming it** is deleted for good with its rule links (D200). Every category says what blocks it (`deleteBlocker`: `items`, `subcategories`, `ordered`, `promotion`) |
 | `PUT /api/admin/menu/categories/order` | `{ parentId, items: [{ id, version }] }`: every active child of that parent, in the new order |
 
 | Case | Result | Test |
@@ -178,8 +178,8 @@ Same feature (`options.*`), contract `shared/contracts/menu-options.ts`, permiss
 | `POST …/{setId}/values` | `{ version, name }` → 201, at the end |
 | `PATCH …/{setId}/values/{valueId}` | `{ version, name }` |
 | `POST …/{setId}/values/{valueId}/archive`, `…/restore` | `{ version }` (restore puts it at the end) |
-| `DELETE …/{setId}` | `{ version }` → 204: an archived set **no item of any status uses, and none of whose values an item version uses**, is deleted for good with its values (D200) |
-| `DELETE …/{setId}/values/{valueId}` | `{ version }` (the set's, which moves): an archived value of an active set that **no item version uses** (retired versions and archived items count) is deleted for good (D200). Sets and values say what blocks them (`deleteBlocker: 'items'`) |
+| `DELETE …/{setId}` | `?version=` → 204: an archived set **no item of any status uses, and none of whose values an item version uses**, is deleted for good with its values (D200) |
+| `DELETE …/{setId}/values/{valueId}` | `?version=` (the set's, which moves): an archived value of an active set that **no item version uses** (retired versions and archived items count) is deleted for good (D200). Sets and values say what blocks them (`deleteBlocker: 'items'`) |
 | `PUT …/{setId}/values/order` | `{ version, valueIds }`: every active value, once |
 
 | Case | Result | Test |
@@ -210,8 +210,8 @@ Same feature (`modifiers.*`), contract `shared/contracts/menu-modifiers.ts`. The
 | `POST …/{groupId}/modifiers` | `{ version, name, priceDeltaMinor?, isDefault? }` → 201, at the end |
 | `PATCH …/{groupId}/modifiers/{modifierId}` | `{ version, name?, priceDeltaMinor?, isDefault? }` |
 | `POST …/{groupId}/modifiers/{modifierId}/archive`, `…/restore` | `{ version }` |
-| `DELETE …/{groupId}` | `{ version }` → 204: an archived group **no item of any status offers, and none of whose add-ons an item prices**, is deleted for good with its add-ons (D200) |
-| `DELETE …/{groupId}/modifiers/{modifierId}` | `{ version }` (the group's, which moves): an archived add-on of an active group that **no item (archived ones too) has its own price for** is deleted for good (D200). Order lines keep add-ons as name and price, read by nothing through their ids, so they don't count. Groups and add-ons say what blocks them (`deleteBlocker: 'items'`) |
+| `DELETE …/{groupId}` | `?version=` → 204: an archived group **no item of any status offers, and none of whose add-ons an item prices**, is deleted for good with its add-ons (D200) |
+| `DELETE …/{groupId}/modifiers/{modifierId}` | `?version=` (the group's, which moves): an archived add-on of an active group that **no item (archived ones too) has its own price for** is deleted for good (D200). Order lines keep add-ons as name and price, read by nothing through their ids, so they don't count. Groups and add-ons say what blocks them (`deleteBlocker: 'items'`) |
 | `PUT …/{groupId}/modifiers/order` | `{ version, modifierIds }` |
 
 **Selection rules** (`modifiers.rules.ts`, checked before every write with a precise message and again inside the batch): 1–30 active add-ons; `minSelect` ≤ active add-ons; `maxSelect` is `null` or ≥ 1 and ≥ `minSelect`; pre-selected (default) add-ons ≤ `maxSelect`. Prices are whole cents, 0 to $100.
@@ -241,7 +241,7 @@ Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/c
 | `PATCH /api/admin/menu/items/{itemId}` | `menu:write` | `{ version, categoryId?, name?, description?, imageId?, optionSetIds?, variations?, modifierGroups? }`: absent keeps; `imageId: null` removes; `optionSetIds` needs `variations`; `modifierGroups` replaces the whole list |
 | `POST …/{itemId}/publish`, `…/unpublish` | `menu:publish` | draft ↔ active |
 | `POST …/{itemId}/archive`, `…/restore` | `menu:write` | draft/active → archived; archived → draft (at the end of its category) |
-| `DELETE /api/admin/menu/items/{itemId}` | `menu:write` | `{ version }` → 204: a draft or archived item **no order line and no promotion names** is deleted for good, with its versions and links (D200); its image is released |
+| `DELETE /api/admin/menu/items/{itemId}` | `menu:write` | `?version=` → 204: a draft or archived item **no order line and no promotion names** is deleted for good, with its versions and links (D200); its image is released |
 | `PUT /api/admin/menu/items/order` | `menu:write` | `{ categoryId, items: [{ id, version }] }`: every draft and active item of the category |
 
 **The price grid:** `variations` is always the whole grid, every combination of the chosen option sets' **active** values exactly once, each `{ valueIds, priceMinor, status: 'active' | 'disabled' }`. A variation's id never changes: it's matched by its combination, so changing prices keeps ids, removing an option set **retires** its variations (kept for history and orders), and adding it back revives them. A variation that uses an archived value is kept but hidden from the grid and not sellable; restoring the value brings it back. Sellable = active, priced, no archived value.
@@ -329,7 +329,7 @@ Same feature (`availability.*`, the window rules in `availability.rules.ts`), co
 | `POST /api/admin/menu/availability-rules` | `{ name, windows: [{ weekday, startMinute, endMinute }] }` (1–21) → 201 |
 | `PATCH …/{ruleId}` | `{ version, name?, windows? }`: `windows` replaces them all |
 | `POST …/{ruleId}/archive`, `…/restore` | `{ version }` |
-| `DELETE …/{ruleId}` | `{ version }` → 204: an archived rule **no item or category of any status names** is deleted for good with its windows (D200). Every rule says what blocks it (`deleteBlocker`: `items`, `categories`) |
+| `DELETE …/{ruleId}` | `?version=` → 204: an archived rule **no item or category of any status names** is deleted for good with its windows (D200). Every rule says what blocks it (`deleteBlocker`: `items`, `categories`) |
 
 Items and categories choose their rules with `availabilityRuleIds` (at most 5, each once) on create and update (absent keeps, `[]` removes), and return `availabilityRules: [{ id, name, status }]` by name.
 

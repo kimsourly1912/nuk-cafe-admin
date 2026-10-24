@@ -426,7 +426,7 @@ describe('deleting permanently (D200)', () => {
     const { page } = await open({
       ...backend(rows),
       'DELETE /admin/menu/items/{id}': ({ url: u, body }) => {
-        bodies.push({ id: u.pathname.split('/').pop(), body })
+        bodies.push({ id: u.pathname.split('/').pop(), version: u.searchParams.get('version'), body })
         rows.splice(rows.indexOf(OLD), 1)
         return null
       },

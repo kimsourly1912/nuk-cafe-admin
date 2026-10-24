@@ -52,6 +52,12 @@ export const intParam = (min: number, max: number) => v.pipe(
   v.maxValue(max),
 )
 
+/**
+ * A delete's version, as `?version=` (D200). Nitro 2 on Cloudflare Workers forwards a body only
+ * for POST, PUT and PATCH, so a DELETE's body never reaches the route there (it does on Node).
+ */
+export const deleteVersionQuerySchema = v.strictObject({ version: intParam(1, Number.MAX_SAFE_INTEGER) })
+
 /** An optional query-string filter: '' counts as absent. */
 export const optionalParam = <T extends v.GenericSchema<string, unknown>>(schema: T) =>
   v.optional(v.pipe(v.string(), v.transform(value => value || undefined), v.optional(schema)))
