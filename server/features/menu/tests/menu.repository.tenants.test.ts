@@ -7,7 +7,7 @@ import { archiveCategory, createCategory } from '#server/features/menu/categorie
 import * as items from '#server/features/menu/items.repository'
 import { createItem, publishItem } from '#server/features/menu/items.service'
 import * as modifiers from '#server/features/menu/modifiers.repository'
-import { createModifierGroup } from '#server/features/menu/modifiers.service'
+import { archiveModifier, archiveModifierGroup, createModifierGroup } from '#server/features/menu/modifiers.service'
 import * as options from '#server/features/menu/options.repository'
 import { archiveOptionSet, archiveOptionValue, createOptionSet } from '#server/features/menu/options.service'
 import * as promotions from '#server/features/menu/promotions.repository'
@@ -248,6 +248,24 @@ describe('a permanent option delete (D200): another cafe\'s with our cafe\'s id'
     await stopped(...options.deleteSetStatements(db, TEST_TENANT, unused.id, archived.version))
     await run(...options.deleteSetStatements(db, OTHER, unused.id, archived.version))
     expect(await options.findSet(db, OTHER, unused.id)).toBeUndefined()
+  })
+})
+
+describe('a permanent add-on delete (D200): another cafe\'s with our cafe\'s id', () => {
+  it('reads and deletes none of their groups or add-ons', async () => {
+    const unused = await createModifierGroup(db, owner, { name: 'Toppings', minSelect: 0, maxSelect: null, modifiers: [{ name: 'Foam', priceDeltaMinor: 0, isDefault: false }, { name: 'Cocoa', priceDeltaMinor: 0, isDefault: false }] })
+    const foam = unused.modifiers[0]!.id
+    const addOnGone = await archiveModifier(db, owner, unused.id, foam, { version: unused.version })
+    expect(await modifiers.findModifier(db, TEST_TENANT, unused.id, foam)).toBeUndefined()
+    expect(await modifiers.findModifier(db, OTHER, unused.id, foam)).toMatchObject({ deleteBlocker: null })
+    expect((await modifiers.findModifier(db, OTHER, menu.milk.id, menu.oat.id))?.deleteBlocker).toBe('items')
+    await run(modifiers.deleteModifierStatement(db, TEST_TENANT, unused.id, foam))
+    expect(await modifiers.findModifier(db, OTHER, unused.id, foam)).toBeDefined()
+    const archived = await archiveModifierGroup(db, owner, unused.id, { version: addOnGone.version })
+    expect(await modifiers.findGroup(db, TEST_TENANT, unused.id)).toBeUndefined()
+    await stopped(...modifiers.deleteGroupStatements(db, TEST_TENANT, unused.id, archived.version))
+    await run(...modifiers.deleteGroupStatements(db, OTHER, unused.id, archived.version))
+    expect(await modifiers.findGroup(db, OTHER, unused.id)).toBeUndefined()
   })
 })
 

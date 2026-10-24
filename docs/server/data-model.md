@@ -210,6 +210,8 @@ Same feature (`modifiers.*`), contract `shared/contracts/menu-modifiers.ts`. The
 | `POST …/{groupId}/modifiers` | `{ version, name, priceDeltaMinor?, isDefault? }` → 201, at the end |
 | `PATCH …/{groupId}/modifiers/{modifierId}` | `{ version, name?, priceDeltaMinor?, isDefault? }` |
 | `POST …/{groupId}/modifiers/{modifierId}/archive`, `…/restore` | `{ version }` |
+| `DELETE …/{groupId}` | `{ version }` → 204: an archived group **no item of any status offers, and none of whose add-ons an item prices**, is deleted for good with its add-ons (D200) |
+| `DELETE …/{groupId}/modifiers/{modifierId}` | `{ version }` (the group's, which moves): an archived add-on of an active group that **no item (archived ones too) has its own price for** is deleted for good (D200). Order lines keep add-ons as name and price, read by nothing through their ids, so they don't count. Groups and add-ons say what blocks them (`deleteBlocker: 'items'`) |
 | `PUT …/{groupId}/modifiers/order` | `{ version, modifierIds }` |
 
 **Selection rules** (`modifiers.rules.ts`, checked before every write with a precise message and again inside the batch): 1–30 active add-ons; `minSelect` ≤ active add-ons; `maxSelect` is `null` or ≥ 1 and ≥ `minSelect`; pre-selected (default) add-ons ≤ `maxSelect`. Prices are whole cents, 0 to $100.
@@ -222,6 +224,7 @@ Same feature (`modifiers.*`), contract `shared/contracts/menu-modifiers.ts`. The
 | Duplicate names (groups; add-ons within a group), also two creates at once | 409 `MODIFIER_GROUP_NAME_TAKEN` / `MODIFIER_NAME_TAKEN` | ✔ (incl. the race) |
 | Stale version, or two edits of one group at once | 409 `VERSION_CONFLICT` | ✔ (incl. both races) |
 | Editing an archived group or add-on; restoring what isn't archived | 409 `INVALID_STATE` | ✔ |
+| Deleting an active group or add-on / one items still offer or price (also if an offer arrives meanwhile) | 409 `INVALID_STATE` / `MODIFIER_IN_USE`; the guards sit in the delete statements, the group's first so its add-ons never hit a foreign key | ✔ (incl. the race) |
 | An add-on of another group in the path | 404 | ✔ |
 
 

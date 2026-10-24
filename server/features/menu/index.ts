@@ -2,7 +2,7 @@ export { archiveCategory, createCategory, deleteCategory, getCategory, listCateg
 export { CategoryErrorCodes } from './categories.errors'
 export { addOptionValue, archiveOptionSet, archiveOptionValue, createOptionSet, deleteOptionSet, deleteOptionValue, getOptionSet, listOptionSets, renameOptionSet, renameOptionValue, reorderOptionValues, restoreOptionSet, restoreOptionValue } from './options.service'
 export { OptionErrorCodes } from './options.errors'
-export { addModifier, archiveModifier, archiveModifierGroup, createModifierGroup, getModifierGroup, listModifierGroups, reorderModifiers, restoreModifier, restoreModifierGroup, updateModifier, updateModifierGroup } from './modifiers.service'
+export { addModifier, archiveModifier, archiveModifierGroup, createModifierGroup, deleteModifier, deleteModifierGroup, getModifierGroup, listModifierGroups, reorderModifiers, restoreModifier, restoreModifierGroup, updateModifier, updateModifierGroup } from './modifiers.service'
 export { ModifierErrorCodes } from './modifiers.errors'
 export { archiveItem, countItems, createItem, deleteItem, getItem, listItems, publishItem, reorderItems, restoreItem, unpublishItem, updateItem } from './items.service'
 export { ItemErrorCodes } from './items.errors'

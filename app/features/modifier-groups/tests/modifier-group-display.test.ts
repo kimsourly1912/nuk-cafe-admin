@@ -39,8 +39,8 @@ describe('prices and usage', () => {
 })
 
 describe('searching groups', () => {
-  const mod = (name: string, status: Modifier['status'] = 'active'): Modifier => ({ id: name, name, priceDeltaMinor: 0, isDefault: false, sortOrder: 1, status })
-  const SYRUPS: ModifierGroup = { id: 'g', name: 'Syrups', minSelect: 0, maxSelect: 3, status: 'active', modifiers: [mod('Vanilla'), mod('Vanilla bean'), mod('Caramel'), mod('Hazelnut', 'archived')], itemCount: 0, version: 1, createdAt: '', updatedAt: '' }
+  const mod = (name: string, status: Modifier['status'] = 'active'): Modifier => ({ id: name, name, priceDeltaMinor: 0, isDefault: false, sortOrder: 1, status, deleteBlocker: null })
+  const SYRUPS: ModifierGroup = { id: 'g', name: 'Syrups', minSelect: 0, maxSelect: 3, status: 'active', modifiers: [mod('Vanilla'), mod('Vanilla bean'), mod('Caramel'), mod('Hazelnut', 'archived')], itemCount: 0, version: 1, createdAt: '', updatedAt: '', deleteBlocker: null }
 
   it('matches everything without a search, the group name, or active add-on names', () => {
     expect(searchModifierGroup(SYRUPS, ' ')).toEqual({ addOns: [] })

@@ -8,7 +8,7 @@
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
-import { useModifierGroupList, useModifierGroupMutations } from '../composables/useModifierGroups'
+import { MODIFIER_IN_USE, useModifierGroupList, useModifierGroupMutations } from '../composables/useModifierGroups'
 import { searchModifierGroup } from '../schemas/modifier-group-display'
 import ModifierGroupCard from './ModifierGroupCard.vue'
 import ModifierGroupCreateModal from './ModifierGroupCreateModal.vue'
@@ -26,10 +26,11 @@ const { filters, isFiltered, clearFilters } = usePaginatedQuery({
 })
 
 const { data, loading, refreshing, error, refresh } = useModifierGroupList()
-const { archive, restore, isBusy } = useModifierGroupMutations()
+const { archive, restore, remove, isBusy, isRemoved } = useModifierGroupMutations()
 
 /** Groups matching the search, with the add-ons that matched (for the card's "Matches" line). */
-const matching = computed(() => (data.value ?? []).flatMap((group) => {
+// A deleted group goes at once, before the refetch arrives.
+const matching = computed(() => (data.value ?? []).filter(group => !isRemoved(group.id)).flatMap((group) => {
   const match = searchModifierGroup(group, filters.search)
   return match ? [{ group, addOns: match.addOns }] : []
 }))
@@ -49,10 +50,20 @@ async function create() {
 }
 
 function actions(group: ModifierGroup): DropdownMenuItem[] {
-  // The card's own button opens the group; the menu only changes its status.
-  return group.status === 'archived'
-    ? [{ label: 'Restore', icon: 'i-lucide-archive-restore', onSelect: () => restore.execute({ group }) }]
-    : [{ label: 'Archive', icon: 'i-lucide-archive', onSelect: () => archive.execute({ group }) }]
+  // The card's own button opens the group; the menu only changes its status, or deletes an unused archived one (D200).
+  if (group.status === 'active') return [{ label: 'Archive', icon: 'i-lucide-archive', onSelect: () => archive.execute({ group }) }]
+  return [
+    { label: 'Restore', icon: 'i-lucide-archive-restore', onSelect: () => restore.execute({ group }) },
+    { type: 'separator' },
+    {
+      label: 'Delete permanently',
+      icon: 'i-lucide-trash-2',
+      color: 'error',
+      disabled: group.deleteBlocker !== null,
+      description: group.deleteBlocker ? MODIFIER_IN_USE : undefined,
+      onSelect: () => remove.execute({ group }),
+    },
+  ]
 }
 
 usePageShortcuts({ n: () => create() })
