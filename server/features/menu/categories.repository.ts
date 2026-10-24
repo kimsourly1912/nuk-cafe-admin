@@ -1,10 +1,12 @@
-import { and, asc, count, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, eq, exists, inArray, isNotNull, isNull, not, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
-import type { CategoryStatus } from '#shared/contracts/menu-categories'
+import { alias } from 'drizzle-orm/sqlite-core'
+import type { CategoryDeleteBlocker, CategoryStatus } from '#shared/contracts/menu-categories'
 import type { Db, Statement } from '#server/utils/batch'
 import { readInChunks, requireCount, updateAtVersion } from '#server/utils/batch'
-import { byId, firstRow, inTenant, nextPosition, withStatus } from '#server/utils/query'
-import { menuCategories } from './menu.schema'
+import { atVersion, byId, firstRow, inTenant, nextPosition, withStatus } from '#server/utils/query'
+import { categoryOnAnOrder } from '#server/features/orders'
+import { menuCategories, menuItems, menuPromotionCategories } from './menu.schema'
 
 export interface CategoryRow {
   id: string
@@ -16,6 +18,11 @@ export interface CategoryRow {
   version: number
   createdAt: Date
   updatedAt: Date
+}
+
+/** A category with what keeps it from being deleted permanently (D200). */
+export interface CategoryListRow extends CategoryRow {
+  deleteBlocker: CategoryDeleteBlocker | null
 }
 
 const columns = {
@@ -41,20 +48,51 @@ export const childrenOf = (tenantId: string, parentId: string): SQL => inTenant(
 /** The cafe's active categories under one parent (the top level for `null`). */
 const activeSiblingsOf = (tenantId: string, parentId: string | null): SQL => inTenant(menuCategories, tenantId, underParent(parentId), activeCategory)
 
+const child = alias(menuCategories, 'child')
+
+/** The outer query's category holds menu items of any status (`menu_items_category_fk` restricts). */
+const holdsItems = (db: Db) => exists(db.select({ one: sql`1` }).from(menuItems)
+  .where(and(eq(menuItems.tenantId, menuCategories.tenantId), eq(menuItems.categoryId, menuCategories.id))))
+
+/** The outer query's category has sub-categories of any status (`menu_categories_parent_fk` restricts). */
+const holdsChildren = (db: Db) => exists(db.select({ one: sql`1` }).from(child)
+  .where(and(eq(child.tenantId, menuCategories.tenantId), eq(child.parentId, menuCategories.id))))
+
+/** A promotion of any status names the outer query's category (deleting it would change that promotion). */
+const inAPromotion = (db: Db) => exists(db.select({ one: sql`1` }).from(menuPromotionCategories)
+  .where(and(eq(menuPromotionCategories.tenantId, menuCategories.tenantId), eq(menuPromotionCategories.categoryId, menuCategories.id))))
+
+/**
+ * What keeps the outer query's category from being deleted permanently (D200), the first that
+ * applies: its items, its sub-categories (both must go first), an order line sold under it, a
+ * promotion; `null` when nothing does. Its own SQL name (D170).
+ */
+const deleteBlocker = (db: Db) => sql<CategoryDeleteBlocker | null>`case
+  when ${holdsItems(db)} then 'items'
+  when ${holdsChildren(db)} then 'subcategories'
+  when ${categoryOnAnOrder(db, menuCategories)} then 'ordered'
+  when ${inAPromotion(db)} then 'promotion'
+end`.as('delete_blocker')
+
 // --- Reads ---
 
 export function findCategory(db: Db, tenantId: string, id: string): Promise<CategoryRow | undefined> {
   return firstRow(db.select(columns).from(menuCategories).where(byId(menuCategories, tenantId, id)))
 }
 
-export function findCategoriesByIds(db: Db, tenantId: string, ids: string[]): Promise<CategoryRow[]> {
-  return readInChunks(ids, piece => db.select(columns).from(menuCategories).where(inTenant(menuCategories, tenantId, inArray(menuCategories.id, piece))))
+export function findCategoriesByIds(db: Db, tenantId: string, ids: string[]): Promise<CategoryListRow[]> {
+  return readInChunks(ids, piece => db.select({ ...columns, deleteBlocker: deleteBlocker(db) }).from(menuCategories).where(inTenant(menuCategories, tenantId, inArray(menuCategories.id, piece))))
+}
+
+/** The category with what keeps it from being deleted permanently (what the API answers, and the delete's refusal). */
+export function findCategoryWithBlocker(db: Db, tenantId: string, id: string): Promise<CategoryListRow | undefined> {
+  return firstRow(db.select({ ...columns, deleteBlocker: deleteBlocker(db) }).from(menuCategories).where(byId(menuCategories, tenantId, id)))
 }
 
 /** Every category with the given status (or all), ordered by position, then name. */
-export function listCategories(db: Db, tenantId: string, status: CategoryStatus | 'all'): Promise<CategoryRow[]> {
+export function listCategories(db: Db, tenantId: string, status: CategoryStatus | 'all'): Promise<CategoryListRow[]> {
   return db
-    .select(columns)
+    .select({ ...columns, deleteBlocker: deleteBlocker(db) })
     .from(menuCategories)
     .where(inTenant(menuCategories, tenantId, withStatus(menuCategories.status, status)))
     .orderBy(asc(menuCategories.sortOrder), asc(menuCategories.name), asc(menuCategories.id))
@@ -127,6 +165,22 @@ export function updateCategoryStatement(db: Db, tenantId: string, id: string, ve
 }
 
 /** Archives the active children of a parent (archiving a parent archives its sub-categories). */
+/**
+ * Deletes an archived category still at `version` that holds no items or sub-categories, sold
+ * nothing and no promotion names (D200), checked in the statement itself: follow it with
+ * `requireOneChange`. Its availability links go with it (cascade).
+ */
+export function deleteCategoryStatement(db: Db, tenantId: string, id: string, version: number): Statement {
+  return db.delete(menuCategories).where(and(
+    atVersion(menuCategories, tenantId, id, version),
+    eq(menuCategories.status, 'archived'),
+    not(holdsItems(db)),
+    not(holdsChildren(db)),
+    not(categoryOnAnOrder(db, menuCategories)),
+    not(inAPromotion(db)),
+  ))
+}
+
 export function archiveChildrenStatement(db: Db, tenantId: string, parentId: string, now: Date): Statement {
   return setChildrenStatus(db, tenantId, parentId, 'active', 'archived', now)
 }

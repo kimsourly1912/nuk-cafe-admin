@@ -29,8 +29,11 @@ const SNACKS = main('cat-3', 'Snacks', 3, { itemCount: 3, description: 'Chips an
 /** A backend whose list reflects archives and restores. Out of order on purpose: the page sorts. */
 function backend(initial: Row[] = [TOAST, FOOD, TEA, JUICE, COFFEE, DRINKS], extra: Record<string, MockHandler> = {}) {
   let rows = [...initial]
+  // Like the server (D200): an archived category holding subcategories or items can't be deleted.
+  const blockerOf = (r: Row): Row['deleteBlocker'] => r.status !== 'archived' ? null : rows.some(c => c.parentId === r.id) ? 'subcategories' : r.itemCount ? 'items' : null
   const setStatus = (id: string, status: Row['status']) => {
     rows = rows.map(r => (r.id === id || (status === 'archived' && r.parentId === id) ? { ...r, status, version: r.version + 1 } : r))
+    rows = rows.map(r => (r.id === id || r.parentId === id ? { ...r, deleteBlocker: blockerOf(r) } : r))
     return rows.find(r => r.id === id)
   }
   return {
@@ -227,7 +230,7 @@ describe('categories tree', () => {
 
     await tab(page, /Archived/).click()
     await page.getByRole('button', { name: 'Actions for Food' }).click()
-    expect(await page.getByRole('menuitem').allInnerTexts()).toEqual(['Restore'])
+    expect(await page.getByRole('menuitem').allInnerTexts()).toEqual(['Restore', 'Delete permanently (it has subcategories)'])
     await page.getByRole('menuitem', { name: 'Restore' }).click()
     // Toast was archived with Food: the dialog asks whether it comes back too.
     const dialog = page.getByRole('dialog', { name: 'Restore "Food"?' })
@@ -243,6 +246,60 @@ describe('categories tree', () => {
     const restore = page.getByRole('menuitem', { name: 'Restore (restore "Drinks" first)' })
     await restore.waitFor()
     expect(await restore.getAttribute('data-disabled')).not.toBeNull()
+  })
+})
+
+describe('deleting permanently (D200)', () => {
+  it('deletes an empty archived category after asking, from the version read, and the row goes', async () => {
+    const bodies: unknown[] = []
+    const rows = [TOAST, FOOD, { ...TEA, version: 7 }, JUICE, COFFEE, DRINKS]
+    const { page } = await open({
+      ...backend(rows),
+      'GET /admin/menu/categories': () => rows,
+      'DELETE /admin/menu/categories/{id}': ({ url: u, body }) => {
+        bodies.push({ id: u.pathname.split('/').pop(), body })
+        rows.splice(rows.findIndex(r => r.id === TEA.id), 1)
+        return null
+      },
+    }, '/c/nuk/admin/categories?status=archived')
+    await page.getByRole('button', { name: 'Actions for Tea' }).click()
+    await page.getByRole('menuitem', { name: 'Delete permanently' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Delete "Tea" permanently?' })
+    await dialog.getByText('It can\'t be restored.', { exact: false }).waitFor()
+    await dialog.getByRole('button', { name: 'Delete permanently' }).click()
+    await toast(page, 'Category "Tea" deleted').waitFor()
+    await item(page, 'Tea').waitFor({ state: 'detached' })
+    expect(bodies).toEqual([{ id: TEA.id, body: { version: 7 } }])
+  })
+
+  it('says why an archived category can\'t go, and active ones have no delete', async () => {
+    const OLD = main('cat-4', 'Old', 4, { status: 'archived', deleteBlocker: 'items' })
+    const SOLD = main('cat-5', 'Sold', 5, { status: 'archived', deleteBlocker: 'ordered' })
+    const { page } = await open(backend([OLD, SOLD, DRINKS, COFFEE]), '/c/nuk/admin/categories?status=all')
+    for (const [name, label] of [['Old', 'Delete permanently (it has menu items)'], ['Sold', 'Delete permanently (items were ordered from it)']]) {
+      await page.getByRole('button', { name: `Actions for ${name}` }).click()
+      const action = page.getByRole('menuitem', { name: label })
+      await action.waitFor()
+      expect(await action.getAttribute('data-disabled')).not.toBeNull()
+      await page.keyboard.press('Escape')
+    }
+    await page.getByRole('button', { name: 'Actions for Coffee' }).click()
+    await page.getByRole('menuitem', { name: 'Archive' }).waitFor()
+    expect(await page.getByRole('menuitem', { name: /Delete/ }).count()).toBe(0)
+  })
+
+  it('shows the server\'s refusal and keeps the row', async () => {
+    const { page } = await open(backend(undefined, {
+      'DELETE /admin/menu/categories/{id}': () => {
+        throw failures.conflict('CATEGORY_HAS_HISTORY', 'Menu items were ordered from this category, so it stays archived to keep your reports.')
+      },
+    }), '/c/nuk/admin/categories?status=archived')
+    await page.getByRole('button', { name: 'Actions for Tea' }).click()
+    await page.getByRole('menuitem', { name: 'Delete permanently' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete permanently' }).click()
+    await toast(page, 'Could not delete "Tea"').waitFor()
+    await page.getByText('so it stays archived to keep your reports', { exact: false }).first().waitFor()
+    await item(page, 'Tea').waitFor()
   })
 })
 

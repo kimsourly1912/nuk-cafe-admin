@@ -18,6 +18,15 @@ export function itemOnAnOrder(db: Db, item: { tenantId: AnyColumn, id: AnyColumn
   return exists(db.select({ one: sql`1` }).from(orderLines).where(and(eq(orderLines.tenantId, item.tenantId), eq(orderLines.itemId, item.id))))
 }
 
+/**
+ * Whether an order line of the cafe was sold under this menu category, correlated to the outer
+ * query's category columns (D200). Lines keep the category as sold, without a foreign key. Uses
+ * `order_lines_category_idx`.
+ */
+export function categoryOnAnOrder(db: Db, category: { tenantId: AnyColumn, id: AnyColumn }): SQL {
+  return exists(db.select({ one: sql`1` }).from(orderLines).where(and(eq(orderLines.tenantId, category.tenantId), eq(orderLines.categoryId, category.id))))
+}
+
 export interface NewOrder {
   id: string
   tenantId: string

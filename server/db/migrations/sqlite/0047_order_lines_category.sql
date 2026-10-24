@@ -1,0 +1,1 @@
+CREATE INDEX `order_lines_category_idx` ON `order_lines` (`category_id`) WHERE "order_lines"."category_id" is not null;

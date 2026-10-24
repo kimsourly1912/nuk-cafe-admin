@@ -1,3 +1,4 @@
+import type { CategoryDeleteBlocker } from '#shared/contracts/menu-categories'
 import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const CategoryErrorCodes = {
@@ -6,6 +7,7 @@ export const CategoryErrorCodes = {
   CATEGORY_DEPTH: 'CATEGORY_DEPTH',
   PARENT_NOT_AVAILABLE: 'PARENT_NOT_AVAILABLE',
   PARENT_ARCHIVED: 'PARENT_ARCHIVED',
+  CATEGORY_HAS_HISTORY: 'CATEGORY_HAS_HISTORY',
 } as const
 
 export const categoryNotFound = () => notFound('This category')
@@ -41,8 +43,19 @@ export const parentNotAvailable = () =>
 export const categoryArchived = () =>
   apiError(409, ErrorCodes.INVALID_STATE, 'This category is archived. Restore it first.')
 
-export const categoryNotArchived = () =>
-  apiError(409, ErrorCodes.INVALID_STATE, 'This category isn\'t archived.')
+export const categoryNotArchived = (message = 'This category isn\'t archived.') =>
+  apiError(409, ErrorCodes.INVALID_STATE, message)
 
 export const parentArchived = () =>
   apiError(409, CategoryErrorCodes.PARENT_ARCHIVED, 'Its parent category is archived. Restore the parent first.')
+
+const HISTORY: Record<CategoryDeleteBlocker, string> = {
+  items: 'This category still has menu items (archived ones count too). Delete or move them first.',
+  subcategories: 'This category still has subcategories (archived ones count too). Delete them first.',
+  ordered: 'Menu items were ordered from this category, so it stays archived to keep your reports.',
+  promotion: 'A promotion includes this category, so it can\'t be deleted. Keep it archived, or remove it from the promotion if that is still a draft.',
+}
+
+/** A permanent delete of a category that isn't empty or has history (D200). */
+export const categoryHasHistory = (blocker: CategoryDeleteBlocker) =>
+  apiError(409, CategoryErrorCodes.CATEGORY_HAS_HISTORY, HISTORY[blocker])

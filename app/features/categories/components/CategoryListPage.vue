@@ -14,7 +14,7 @@ import type { MenuCategory } from '#shared/contracts/menu-categories'
 import { useEventListener, useLocalStorage } from '@vueuse/core'
 import { insertNodeAt, removeNode, useSortable } from '@vueuse/integrations/useSortable'
 import { describeWindows, useAvailabilityRuleOptions } from '~/features/availability-rules'
-import { useCategoryMutations } from '../composables/useCategories'
+import { DELETE_BLOCKED, useCategoryMutations } from '../composables/useCategories'
 import { useCategoryTree } from '../composables/useCategoryTree'
 import CategoryFormModal from './CategoryFormModal.vue'
 import CategoryRestoreModal from './CategoryRestoreModal.vue'
@@ -36,8 +36,9 @@ const view = computed<'all' | MenuCategory['status']>(() => (filters.status === 
 /** Status badges only where statuses differ or aren't obvious: not repeated on every Active row. */
 const showStatus = computed(() => view.value !== 'active')
 
-const { archive, restore, isBusy } = useCategoryMutations()
-const tree = useCategoryTree(filters)
+const { archive, restore, remove, isBusy } = useCategoryMutations()
+// A deleted row goes at once, before the refetch arrives.
+const tree = useCategoryTree(filters, id => remove.isRemoved(id))
 const groups = computed(() => tree.tree.value.groups)
 
 // Every category shown, in order.
@@ -171,12 +172,20 @@ function rowActions(category: MenuCategory): DropdownMenuItem[] {
     // A subcategory comes back only under an active parent.
     const parent = category.parentId ? byId.value.get(category.parentId) : undefined
     const blocked = parent !== undefined && parent.status !== 'active'
-    return [{
-      label: blocked ? `Restore (restore "${parent.name}" first)` : 'Restore',
-      icon: 'i-lucide-archive-restore',
-      disabled: blocked,
-      onSelect: () => restoreOne(category),
-    }]
+    // Only an empty category without history can go for good (D200); otherwise it says why.
+    const deleteForGood: DropdownMenuItem = category.deleteBlocker
+      ? { label: DELETE_BLOCKED[category.deleteBlocker], icon: 'i-lucide-trash-2', disabled: true }
+      : { label: 'Delete permanently', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => remove.execute(category) }
+    return [
+      {
+        label: blocked ? `Restore (restore "${parent.name}" first)` : 'Restore',
+        icon: 'i-lucide-archive-restore',
+        disabled: blocked,
+        onSelect: () => restoreOne(category),
+      },
+      { type: 'separator' },
+      deleteForGood,
+    ]
   }
   return [
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openForm(category) },

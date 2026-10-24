@@ -189,9 +189,9 @@ describe('a permanent delete (D200): another cafe\'s with our cafe\'s id', () =>
     const draft = await theirDraft()
     expect(await items.findItemForDelete(db, TEST_TENANT, draft.id)).toBeUndefined()
     // Our cafe's line naming their item's id is not their history.
-    await insertSoldLine(db, draft.id, TEST_TENANT)
+    await insertSoldLine(db, { itemId: draft.id }, TEST_TENANT)
     expect(await items.findItemForDelete(db, OTHER, draft.id)).toMatchObject({ id: draft.id, deleteBlocker: null })
-    await insertSoldLine(db, draft.id, OTHER)
+    await insertSoldLine(db, { itemId: draft.id }, OTHER)
     expect(await items.findItemForDelete(db, OTHER, draft.id)).toMatchObject({ deleteBlocker: 'ordered' })
     expect((await items.findItemForDelete(db, OTHER, menu.item.id))?.deleteBlocker).toBe('promotion')
   })
@@ -202,6 +202,20 @@ describe('a permanent delete (D200): another cafe\'s with our cafe\'s id', () =>
     expect(await items.findItem(db, OTHER, draft.id)).toBeDefined()
     await run(items.deleteItemStatement(db, OTHER, draft.id, draft.version))
     expect(await items.findItem(db, OTHER, draft.id)).toBeUndefined()
+  })
+})
+
+describe('a permanent category delete (D200): another cafe\'s with our cafe\'s id', () => {
+  it('reads and deletes none of their categories, and counts none of our orders against theirs', async () => {
+    const empty = await createCategory(db, owner, { name: 'Herbal', description: '', parentId: null, availabilityRuleIds: [] })
+    const archived = await archiveCategory(db, owner, empty.id, { version: empty.version })
+    expect(await categories.findCategoryWithBlocker(db, TEST_TENANT, empty.id)).toBeUndefined()
+    await insertSoldLine(db, { itemId: 'ours', categoryId: empty.id }, TEST_TENANT)
+    expect(await categories.findCategoryWithBlocker(db, OTHER, empty.id)).toMatchObject({ deleteBlocker: null })
+    await run(categories.deleteCategoryStatement(db, TEST_TENANT, empty.id, archived.version))
+    expect(await categories.findCategory(db, OTHER, empty.id)).toBeDefined()
+    await run(categories.deleteCategoryStatement(db, OTHER, empty.id, archived.version))
+    expect(await categories.findCategory(db, OTHER, empty.id)).toBeUndefined()
   })
 })
 

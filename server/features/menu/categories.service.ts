@@ -8,10 +8,10 @@ import type { Actor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
 import * as availabilityRepo from './availability.repository'
 import { planRuleLinks, ruleLinksFailure } from './availability.service'
-import { categoryArchived, categoryChanged, categoryNameTaken, categoryNotArchived, categoryNotFound, parentArchived, parentHasItems, parentNotAvailable, siblingsChanged, tooDeep } from './categories.errors'
+import { categoryArchived, categoryChanged, categoryHasHistory, categoryNameTaken, categoryNotArchived, categoryNotFound, parentArchived, parentHasItems, parentNotAvailable, siblingsChanged, tooDeep } from './categories.errors'
 import * as repo from './categories.repository'
 import * as itemsRepo from './items.repository'
-import type { CategoryRow } from './categories.repository'
+import type { CategoryListRow } from './categories.repository'
 
 /**
  * Menu categories (docs/server/data-model.md → Menu, D44, D55). Every write is one batch with its
@@ -23,7 +23,7 @@ interface Counts {
   items: Map<string, number>
 }
 
-function toCategory(row: CategoryRow, counts: Counts, rules: Map<string, AvailabilityRuleRef[]>): MenuCategory {
+function toCategory(row: CategoryListRow, counts: Counts, rules: Map<string, AvailabilityRuleRef[]>): MenuCategory {
   return {
     id: row.id,
     parentId: row.parentId,
@@ -37,11 +37,12 @@ function toCategory(row: CategoryRow, counts: Counts, rules: Map<string, Availab
     version: row.version,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
+    deleteBlocker: row.deleteBlocker,
   }
 }
 
 async function loadCategory(db: Db, tenantId: string, id: string): Promise<MenuCategory> {
-  const row = await repo.findCategory(db, tenantId, id)
+  const row = await repo.findCategoryWithBlocker(db, tenantId, id)
   if (!row) throw categoryNotFound()
   const [children, items, rules] = await Promise.all([repo.countChildren(db, tenantId, id, 'active'), itemsRepo.countListedItems(db, tenantId, id), availabilityRepo.categoryRules(db, tenantId, [id])])
   return toCategory(row, { children: new Map([[id, children]]), items: new Map([[id, items]]) }, rules)
@@ -79,7 +80,7 @@ async function ensureParent(db: Db, tenantId: string, parentId: string) {
  */
 export async function listCategories(db: Db, tenantId: string, query: CategoryListQuery): Promise<MenuCategory[]> {
   const [rows, children, items] = await Promise.all([repo.listCategories(db, tenantId, query.status), repo.activeChildCounts(db, tenantId), itemsRepo.listedItemCounts(db, tenantId)])
-  const byParent = new Map<string | null, CategoryRow[]>()
+  const byParent = new Map<string | null, CategoryListRow[]>()
   for (const row of rows) byParent.set(row.parentId, [...(byParent.get(row.parentId) ?? []), row])
   const ids = new Set(rows.map(r => r.id))
   // Children whose parent isn't in the list (an archived sub-category of an active parent, when
@@ -217,6 +218,30 @@ export async function restoreCategory(db: Db, actor: Actor, id: string, input: R
   ]
   await runCategoryBatch(db, statements, current.name, () => current.parentId ? parentArchived() : categoryChanged())
   return loadCategory(db, tenantId, id)
+}
+
+/**
+ * Deletes an archived category for good (D200), only while it holds no items or sub-categories,
+ * sold nothing and no promotion names it: checked first for the refusal and again in the batch.
+ * The audit row keeps its name.
+ */
+export async function deleteCategory(db: Db, actor: Actor, id: string, input: CategoryStatusChangeInput): Promise<void> {
+  const { tenantId } = actor
+  const current = await repo.findCategoryWithBlocker(db, tenantId, id)
+  if (!current) throw categoryNotFound()
+  if (current.version !== input.version) throw categoryChanged()
+  if (current.status !== 'archived') throw categoryNotArchived('Archive this category before deleting it.')
+  if (current.deleteBlocker) throw categoryHasHistory(current.deleteBlocker)
+  await runCategoryBatch(db, [
+    repo.deleteCategoryStatement(db, tenantId, id, input.version),
+    requireOneChange(db),
+    audit(db, actor, 'delete', id, { name: current.name, parentId: current.parentId }),
+  ], current.name, async () => {
+    const now = await repo.findCategoryWithBlocker(db, tenantId, id)
+    if (!now) return categoryNotFound()
+    if (now.version === input.version && now.deleteBlocker) return categoryHasHistory(now.deleteBlocker)
+    return categoryChanged()
+  })
 }
 
 /**
