@@ -1,11 +1,12 @@
-import { and, asc, count, eq, exists, inArray, isNotNull, isNull, ne, notExists, or, sql } from 'drizzle-orm'
+import { and, asc, count, eq, exists, inArray, isNotNull, isNull, ne, not, notExists, or, sql } from 'drizzle-orm'
 import type { SQL } from 'drizzle-orm'
-import type { ItemCountsQuery, ItemListQuery, ItemStatus } from '#shared/contracts/menu-items'
+import type { ItemCountsQuery, ItemDeleteBlocker, ItemListQuery, ItemStatus } from '#shared/contracts/menu-items'
 import type { Db, Statement } from '#server/utils/batch'
 import { chunk, insertAll, readInChunks, replaceAll, requireCount, updateAtVersion } from '#server/utils/batch'
-import { byId, firstRow, inTenant, nextPosition, readPage, searchIn, withStatus } from '#server/utils/query'
+import { atVersion, byId, firstRow, inTenant, nextPosition, readPage, searchIn, withStatus } from '#server/utils/query'
+import { itemOnAnOrder } from '#server/features/orders'
 import { childrenOf } from './categories.repository'
-import { menuCategories, menuItemModifierGroups, menuItemModifierPrices, menuItemOptionSets, menuItems, menuItemVariations, menuModifierGroups, menuModifiers, menuOptionSets, menuOptionValues, menuVariationOptionValues } from './menu.schema'
+import { menuCategories, menuItemModifierGroups, menuItemModifierPrices, menuItemOptionSets, menuItems, menuItemVariations, menuModifierGroups, menuModifiers, menuOptionSets, menuOptionValues, menuPromotionItems, menuVariationOptionValues } from './menu.schema'
 
 export interface ItemRow {
   id: string
@@ -24,6 +25,7 @@ export interface ItemSummaryRow extends ItemRow {
   categoryName: string
   priceMin: number | null
   priceMax: number | null
+  deleteBlocker: ItemDeleteBlocker | null
 }
 
 export interface VariationRow {
@@ -106,6 +108,21 @@ export function sellable(db: Db): SQL {
   )!
 }
 
+/** Whether a promotion of any status names the item (deleting it would change that promotion). */
+const inAPromotion = (db: Db) => exists(db
+  .select({ one: sql`1` })
+  .from(menuPromotionItems)
+  .where(and(eq(menuPromotionItems.tenantId, menuItems.tenantId), eq(menuPromotionItems.itemId, menuItems.id))))
+
+/**
+ * What keeps the outer query's item from being deleted permanently (D200): an order line sold it,
+ * or a promotion names it; `null` when nothing does. Its own SQL name (D170).
+ */
+const deleteBlocker = (db: Db) => sql<ItemDeleteBlocker | null>`case
+  when ${itemOnAnOrder(db, menuItems)} then 'ordered'
+  when ${inAPromotion(db)} then 'promotion'
+end`.as('delete_blocker')
+
 /** The cafe's items the list's shared filters match (search, category, add-on group). */
 function filterConditions(db: Db, tenantId: string, query: ItemCountsQuery): SQL {
   // Items sit in sub-categories only, so a main category matches its sub-categories' items (two levels).
@@ -132,6 +149,11 @@ function filterConditions(db: Db, tenantId: string, query: ItemCountsQuery): SQL
 
 export function findItem(db: Db, tenantId: string, id: string): Promise<ItemRow | undefined> {
   return firstRow(db.select(itemColumns).from(menuItems).where(byId(menuItems, tenantId, id)))
+}
+
+/** The item with what keeps it from being deleted permanently, for the delete's precise refusal. */
+export function findItemForDelete(db: Db, tenantId: string, id: string): Promise<(ItemRow & { deleteBlocker: ItemDeleteBlocker | null }) | undefined> {
+  return firstRow(db.select({ ...itemColumns, deleteBlocker: deleteBlocker(db) }).from(menuItems).where(byId(menuItems, tenantId, id)))
 }
 
 /**
@@ -161,6 +183,7 @@ export function listItems(db: Db, tenantId: string, query: ItemListQuery): Promi
       categoryName: sql<string>`${menuCategories.name}`.as('category_name'),
       priceMin: prices.priceMin,
       priceMax: prices.priceMax,
+      deleteBlocker: deleteBlocker(db),
     })
       .from(menuItems)
       .innerJoin(menuCategories, and(eq(menuCategories.tenantId, menuItems.tenantId), eq(menuCategories.id, menuItems.categoryId)))
@@ -374,6 +397,21 @@ export function insertItemStatement(db: Db, row: { tenantId: string } & Pick<Ite
  */
 export function touchItemStatement(db: Db, tenantId: string, id: string, version: number, now: Date, changes: Partial<Pick<ItemRow, 'categoryId' | 'name' | 'description' | 'imageAssetId' | 'status' | 'sortOrder'>> = {}, from?: ItemStatus[]): Statement {
   return updateAtVersion(db, menuItems, { tenantId, id, version }, { ...changes, updatedAt: now }, from ? inArray(menuItems.status, from) : undefined)
+}
+
+/**
+ * Deletes a draft or archived item still at `version` that no order line sold and no promotion
+ * names (D200), checked in the statement itself: follow it with `requireOneChange`. Its option
+ * sets, versions (with their sold-out switches), add-on groups and prices, and availability links
+ * go with it (cascade).
+ */
+export function deleteItemStatement(db: Db, tenantId: string, id: string, version: number): Statement {
+  return db.delete(menuItems).where(and(
+    atVersion(menuItems, tenantId, id, version),
+    inArray(menuItems.status, ['draft', 'archived']),
+    not(itemOnAnOrder(db, menuItems)),
+    not(inAPromotion(db)),
+  ))
 }
 
 export function replaceOptionSetsStatements(db: Db, tenantId: string, itemId: string, setIds: string[]): Statement[] {

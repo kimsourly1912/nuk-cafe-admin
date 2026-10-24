@@ -1,5 +1,5 @@
 import type { Page } from '#shared/contracts/common'
-import type { CreateItemInput, ItemCounts, ItemCountsQuery, ItemListQuery, ItemStatus, MenuItem, MenuItemSummary, UpdateItemInput } from '#shared/contracts/menu-items'
+import type { CreateItemInput, ItemCounts, ItemCountsQuery, ItemDeleteBlocker, ItemListQuery, ItemStatus, MenuItem, MenuItemSummary, UpdateItemInput } from '#shared/contracts/menu-items'
 import type { MutationOptions } from '~/utils/mutation'
 
 const BASE = '/admin/menu/items'
@@ -169,6 +169,29 @@ export function useItemMutations() {
     batch: { noun: NOUN, verb: ['Archiving', 'archived'] },
   })
 
+  /**
+   * Deletes a never-ordered draft or archived item for good (D200). Asks first: unlike Archive
+   * there's no Undo. The server refuses an item with history (409 `ITEM_HAS_HISTORY`).
+   */
+  const remove = useMutation(
+    (item: ItemRef & { status: ItemStatus }) => apiFetch<null>(`${BASE}/${item.id}`, { method: 'DELETE', body: { version: item.version } }),
+    {
+      id: 'products:delete',
+      key: item => item.id,
+      lock: item => lockOf(item.id),
+      removes: true,
+      confirm: item => ({
+        title: `Delete "${item.name}" permanently?`,
+        description: `It was never ordered. Its versions, prices and photo are removed too, and it can't be restored.${item.status === 'draft' ? ' To keep it, archive it instead.' : ''}`,
+        confirmLabel: 'Delete permanently',
+        danger: true,
+      }),
+      successMessage: (_, item) => `Menu item "${item.name}" deleted`,
+      errorMessage: item => `Could not delete "${item.name}"`,
+      invalidate: AFFECTED,
+    },
+  )
+
   return {
     create,
     update,
@@ -176,9 +199,16 @@ export function useItemMutations() {
     unpublish,
     archive,
     restore,
+    remove,
     /** Any operation in flight for this item: its card shows a spinner instead of its actions. */
-    isBusy: (id: string) => [update, publish, unpublish, archive, restore].some(m => m.isPending(id)),
+    isBusy: (id: string) => [update, publish, unpublish, archive, restore, remove].some(m => m.isPending(id)),
   }
+}
+
+/** Why Delete permanently is off for an item with history (D200), as its menu says. */
+export const DELETE_BLOCKED: Record<ItemDeleteBlocker, string> = {
+  ordered: 'Delete permanently (it was ordered)',
+  promotion: 'Delete permanently (it is in a promotion)',
 }
 
 /**

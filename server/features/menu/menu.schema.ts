@@ -394,7 +394,7 @@ export const menuPromotionItems = sqliteTable('menu_promotion_items', {
 }, t => [
   primaryKey({ columns: [t.promotionId, t.itemId] }),
   foreignKey({ name: 'menu_promotion_items_promotion_fk', columns: [t.tenantId, t.promotionId], foreignColumns: [menuPromotions.tenantId, menuPromotions.id] }).onDelete('cascade'),
-  // Items are archived, not deleted; only a sample-data reset deletes them, and the link goes too.
+  // A permanent delete refuses an item a promotion names (D200); a sample-data reset deletes them, and the link goes too.
   foreignKey({ name: 'menu_promotion_items_item_fk', columns: [t.tenantId, t.itemId], foreignColumns: [menuItems.tenantId, menuItems.id] }).onDelete('cascade'),
   index('menu_promotion_items_item_idx').on(t.itemId),
 ])

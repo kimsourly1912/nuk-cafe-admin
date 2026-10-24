@@ -14,7 +14,7 @@ import * as promotions from '#server/features/menu/promotions.repository'
 import { createPromotion } from '#server/features/menu/promotions.service'
 import * as soldout from '#server/features/menu/soldout.repository'
 import { setSoldOut } from '#server/features/menu/soldout.service'
-import { createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, insertBranch, insertSoldLine, TEST_TENANT } from '#server/tests/support/db'
 import type { Db, Statement } from '#server/utils/batch'
 import { isStaleWrite } from '#server/utils/batch'
 
@@ -179,6 +179,29 @@ describe('categories and items: another cafe\'s with our cafe\'s id', () => {
     expect(await items.itemGroups(db, OTHER, item.id)).toHaveLength(1)
     expect((await items.itemModifierPrices(db, OTHER, item.id)).size).toBe(1)
     expect((await items.variationsOf(db, OTHER, item.id)).find(v => v.id === variation.id)).toEqual(expect.objectContaining({ priceMinor: 350, status: 'active' }))
+  })
+})
+
+describe('a permanent delete (D200): another cafe\'s with our cafe\'s id', () => {
+  const theirDraft = () => createItem(db, owner, { categoryId: menu.coffee.id, name: 'Mocha', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 400, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
+
+  it('reads none of their items, and counts none of our orders against theirs', async () => {
+    const draft = await theirDraft()
+    expect(await items.findItemForDelete(db, TEST_TENANT, draft.id)).toBeUndefined()
+    // Our cafe's line naming their item's id is not their history.
+    await insertSoldLine(db, draft.id, TEST_TENANT)
+    expect(await items.findItemForDelete(db, OTHER, draft.id)).toMatchObject({ id: draft.id, deleteBlocker: null })
+    await insertSoldLine(db, draft.id, OTHER)
+    expect(await items.findItemForDelete(db, OTHER, draft.id)).toMatchObject({ deleteBlocker: 'ordered' })
+    expect((await items.findItemForDelete(db, OTHER, menu.item.id))?.deleteBlocker).toBe('promotion')
+  })
+
+  it('deletes none of them', async () => {
+    const draft = await theirDraft()
+    await run(items.deleteItemStatement(db, TEST_TENANT, draft.id, draft.version))
+    expect(await items.findItem(db, OTHER, draft.id)).toBeDefined()
+    await run(items.deleteItemStatement(db, OTHER, draft.id, draft.version))
+    expect(await items.findItem(db, OTHER, draft.id)).toBeUndefined()
   })
 })
 

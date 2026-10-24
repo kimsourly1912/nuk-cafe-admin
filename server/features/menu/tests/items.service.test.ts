@@ -7,10 +7,12 @@ import type { Actor } from '#server/features/identity'
 import { mediaAssets } from '#server/features/media/media.schema'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import { archiveCategory, createCategory, updateCategory } from '#server/features/menu/categories.service'
-import { archiveItem, countItems, createItem, getItem, listItems, publishItem, reorderItems, restoreItem, unpublishItem, updateItem } from '#server/features/menu/items.service'
-import { menuCategories, menuItemVariations, menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
+import { archiveItem, countItems, createItem, deleteItem, getItem, listItems, publishItem, reorderItems, restoreItem, unpublishItem, updateItem } from '#server/features/menu/items.service'
+import { deleteItemStatement } from '#server/features/menu/items.repository'
+import { menuCategories, menuItems, menuItemVariations, menuOptionSets, menuOptionValues, menuPromotionItems } from '#server/features/menu/menu.schema'
+import { createPromotion } from '#server/features/menu/promotions.service'
 import { addOptionValue, archiveOptionSet, archiveOptionValue, createOptionSet, getOptionSet, restoreOptionValue } from '#server/features/menu/options.service'
-import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, ensureTenant, insertSoldLine, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -426,5 +428,104 @@ describe('the category side of "items only in leaves"', () => {
     const food = await topLevelWithToast()
     await archiveItem(db, actor, food.item.id, { version: 1 })
     await expect(createCategory(db, actor, { name: 'Sandwiches', description: '', parentId: food.id, availabilityRuleIds: [] })).resolves.toMatchObject({ parentId: food.id })
+  })
+})
+
+describe('deleting permanently (D200)', () => {
+  const exists = async (id: string) => (await db.select({ id: menuItems.id }).from(menuItems).where(eq(menuItems.id, id))).length === 1
+  const archived = async () => {
+    const item = await latte()
+    return archiveItem(db, actor, item.id, { version: item.version })
+  }
+  /** A draft promotion naming `itemId`, which must be published to be chosen. */
+  async function promote(itemId: string) {
+    return createPromotion(db, actor, { name: 'Coffee week', description: '', discount: { kind: 'percent', percent: 20 }, scope: 'selected', itemIds: [itemId], categoryIds: [], branchIds: [], startsOn: '2026-10-25', endsOn: '2026-10-30', posterId: null, publish: false }, new Date('2026-10-24T03:00:00Z'))
+  }
+
+  it('deletes a draft with its versions and links, releases its image and keeps its name in the audit', async () => {
+    const image = await upload()
+    const item = await latte({ imageId: image })
+    await deleteItem(db, actor, item.id, { version: item.version })
+    expect(await exists(item.id)).toBe(false)
+    expect(await db.select().from(menuItemVariations).where(eq(menuItemVariations.itemId, item.id))).toEqual([])
+    expect(await assetState(image)).toBe('temporary')
+    const [audit] = await db.select().from(auditEvents).where(eq(auditEvents.action, 'menu.item.delete'))
+    expect(audit).toMatchObject({ targetId: item.id, actorId: 'admin-1', metadata: { name: 'Latte', status: 'draft' } })
+    await expectApiError(() => getItem(db, TEST_TENANT, item.id), 404, 'NOT_FOUND')
+  })
+
+  it('deletes an archived item', async () => {
+    const item = await archived()
+    await deleteItem(db, actor, item.id, { version: item.version })
+    expect(await exists(item.id)).toBe(false)
+  })
+
+  it('refuses a published item: it is archived first', async () => {
+    const draft = await latte()
+    const item = await publishItem(db, actor, draft.id, { version: draft.version })
+    await expectApiError(() => deleteItem(db, actor, item.id, { version: item.version }), 409, 'INVALID_STATE')
+    expect(await exists(item.id)).toBe(true)
+  })
+
+  it('refuses an item that was ordered: it stays archived', async () => {
+    const item = await archived()
+    await insertSoldLine(db, item.id)
+    await expectApiError(() => deleteItem(db, actor, item.id, { version: item.version }), 409, 'ITEM_HAS_HISTORY')
+    expect(await exists(item.id)).toBe(true)
+  })
+
+  it('refuses an item a promotion names, even a draft promotion', async () => {
+    const draft = await latte()
+    const item = await publishItem(db, actor, draft.id, { version: draft.version })
+    await promote(item.id)
+    const gone = await archiveItem(db, actor, item.id, { version: item.version })
+    await expectApiError(() => deleteItem(db, actor, item.id, { version: gone.version }), 409, 'ITEM_HAS_HISTORY')
+    expect(await db.select().from(menuPromotionItems).where(eq(menuPromotionItems.itemId, item.id))).toHaveLength(1)
+  })
+
+  it('refuses a stale version and an unknown item', async () => {
+    const item = await archived()
+    await expectApiError(() => deleteItem(db, actor, item.id, { version: item.version - 1 }), 409, 'VERSION_CONFLICT')
+    await expectApiError(() => deleteItem(db, actor, newId(), { version: 1 }), 404, 'NOT_FOUND')
+    expect(await exists(item.id)).toBe(true)
+  })
+
+  it('refuses when an order sells it meanwhile (the guard in the batch)', async () => {
+    const item = await latte()
+    const racing = interleaved(db, () => insertSoldLine(db, item.id))
+    await expectApiError(() => deleteItem(racing, actor, item.id, { version: item.version }), 409, 'ITEM_HAS_HISTORY')
+    expect(await exists(item.id)).toBe(true)
+    expect(await db.select().from(auditEvents).where(eq(auditEvents.action, 'menu.item.delete'))).toEqual([])
+  })
+
+  it('refuses when a promotion names it meanwhile (the guard in the batch)', async () => {
+    const other = await croissant()
+    const promotion = await promote((await publishItem(db, actor, other.id, { version: other.version })).id)
+    const item = await latte()
+    const racing = interleaved(db, () => db.insert(menuPromotionItems).values({ tenantId: TEST_TENANT, promotionId: promotion.id, itemId: item.id }))
+    await expectApiError(() => deleteItem(racing, actor, item.id, { version: item.version }), 409, 'ITEM_HAS_HISTORY')
+    expect(await exists(item.id)).toBe(true)
+  })
+
+  it('refuses when someone publishes it meanwhile', async () => {
+    const item = await latte()
+    const racing = interleaved(db, () => publishItem(db, actor, item.id, { version: item.version }))
+    await expectApiError(() => deleteItem(racing, actor, item.id, { version: item.version }), 409, 'VERSION_CONFLICT')
+    expect(await exists(item.id)).toBe(true)
+  })
+
+  it('never deletes a published item, even at its version (the statement\'s own status guard)', async () => {
+    const draft = await latte()
+    const item = await publishItem(db, actor, draft.id, { version: draft.version })
+    await db.batch([deleteItemStatement(db, TEST_TENANT, item.id, item.version)])
+    expect(await exists(item.id)).toBe(true)
+  })
+
+  it('says in the list what keeps each item', async () => {
+    const free = await latte()
+    const sold = await croissant()
+    await insertSoldLine(db, sold.id)
+    const page = await listItems(db, TEST_TENANT, { page: 1, pageSize: 20, status: 'all' } as never)
+    expect(Object.fromEntries(page.items.map(i => [i.id, i.deleteBlocker]))).toEqual({ [free.id]: null, [sold.id]: 'ordered' })
   })
 })

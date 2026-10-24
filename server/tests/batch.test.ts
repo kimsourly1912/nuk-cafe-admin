@@ -87,6 +87,24 @@ describe('on D1', () => {
    * D1 answered the old raw-SQL guards with "Cannot read properties of undefined (reading 'bind')"
    * as soon as a guard had a bound parameter (staging, D53); libsql never showed it.
    */
+  /** A read's selected columns: up to its own `from`, split on its own commas (a subquery column has both). */
+  function selectList(text: string): string[] {
+    const columns: string[] = []
+    let depth = 0
+    let start = 'select '.length
+    let i = start
+    for (; i < text.length; i++) {
+      if (text[i] === '(') depth++
+      else if (text[i] === ')') depth--
+      else if (depth === 0 && text.startsWith(' from ', i)) break
+      else if (depth === 0 && text.startsWith(', ', i)) {
+        columns.push(text.slice(start, i))
+        start = i + 2
+      }
+    }
+    return [...columns, text.slice(start, i)]
+  }
+
   function fakeD1(batchValues?: (unknown[] | undefined)[]) {
     const bound: { sql: string, params: unknown[] }[] = []
     const statement = (text: string) => ({
@@ -102,7 +120,7 @@ describe('on D1', () => {
         const values = batchValues?.[i]
         // D1 batch objects use SQL column names, not Drizzle's property names. Duplicate names
         // collapse, unlike individual .raw() reads. These fixtures contain simple selected columns.
-        const columns = values ? statement.sql.slice(7, statement.sql.indexOf(' from ')).split(', ').map(column => column.match(/"([^"]+)"$/)?.[1] ?? column) : []
+        const columns = values ? selectList(statement.sql).map(column => column.match(/"([^"]+)"$/)?.[1] ?? column) : []
         return { results: values ? [Object.fromEntries(columns.map((column, index) => [column, values[index]]))] : [], success: true, meta: {} }
       }),
     }
@@ -260,11 +278,11 @@ describe('on D1', () => {
   it('keeps the category name apart from the item name in a menu item page read in one D1 batch (D170, D194)', async () => {
     const created = new Date('2026-10-14T05:00:00Z')
     const { db: d1 } = fakeD1([
-      ['item-a', 'category-a', 'Iced Latte', '', null, 'active', 1, 3, created.getTime(), created.getTime(), 'Coffee', 875, 950],
+      ['item-a', 'category-a', 'Iced Latte', '', null, 'archived', 1, 3, created.getTime(), created.getTime(), 'Coffee', 875, 950, 'ordered'],
       [1],
     ])
     const page = await listItems(d1, 'cafe-a', { page: 1, pageSize: 20 } as ItemListQuery)
-    expect(page).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'item-a', name: 'Iced Latte', categoryName: 'Coffee', priceMin: 875, priceMax: 950, createdAt: created })] })
+    expect(page).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'item-a', name: 'Iced Latte', categoryName: 'Coffee', priceMin: 875, priceMax: 950, createdAt: created, deleteBlocker: 'ordered' })] })
   })
 
   it('reads a promotion\'s items, categories and branches in one D1 batch, each with its own name', async () => {

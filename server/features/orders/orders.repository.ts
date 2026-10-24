@@ -1,4 +1,5 @@
-import { and, asc, count, desc, eq, gt, gte, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, exists, gt, gte, inArray, lte, or, sql } from 'drizzle-orm'
+import type { AnyColumn, SQL } from 'drizzle-orm'
 import type { OrderSource } from '#shared/contracts/marketing'
 import type { CancelReason, OrderStatus, OrderType, PaymentMethod, QuotedModifier, ReturnMethod } from '#shared/contracts/orders'
 import { branches, user } from '#server/db/tables'
@@ -7,6 +8,15 @@ import { insertAll, readInChunks, requireAtMost } from '#server/utils/batch'
 import type { PageQuery } from '#server/utils/query'
 import { byId, firstRow, inTenant, readPage } from '#server/utils/query'
 import { bakongTokens, counterPayments, exchangeRates, khqrSettings, orderEvents, orderLines, orders } from './orders.schema'
+
+/**
+ * Whether an order line of the cafe sold this menu item, correlated to the outer query's item
+ * columns. Lines name items without a foreign key (they keep what was sold), so a permanent delete
+ * must ask (D200). Uses `order_lines_item_idx`.
+ */
+export function itemOnAnOrder(db: Db, item: { tenantId: AnyColumn, id: AnyColumn }): SQL {
+  return exists(db.select({ one: sql`1` }).from(orderLines).where(and(eq(orderLines.tenantId, item.tenantId), eq(orderLines.itemId, item.id))))
+}
 
 export interface NewOrder {
   id: string

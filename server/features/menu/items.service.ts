@@ -13,7 +13,7 @@ import { attachStatements, imageSets, mediaNotAvailable, releaseStatement } from
 import { auditStatement } from '#server/features/platform'
 import * as availabilityRepo from './availability.repository'
 import { planRuleLinks, ruleLinksFailure } from './availability.service'
-import { categoryNotALeaf, categoryNotAvailable, itemChanged, itemInWrongState, itemNotFound, itemSelectionRules, itemsChanged, modifierGroupNotAvailable, modifierNotAvailable, nothingToSell, optionSetNotAvailable, priceGrid } from './items.errors'
+import { categoryNotALeaf, categoryNotAvailable, itemChanged, itemHasHistory, itemInWrongState, itemNotFound, itemSelectionRules, itemsChanged, modifierGroupNotAvailable, modifierNotAvailable, nothingToSell, optionSetNotAvailable, priceGrid } from './items.errors'
 import * as categoriesRepo from './categories.repository'
 import * as repo from './items.repository'
 import type { GroupWithModifiers, ItemGroupRow, ItemRow, SetWithValues, VariationRow } from './items.repository'
@@ -147,6 +147,7 @@ export async function listItems(db: Db, tenantId: string, query: ItemListQuery):
       sortOrder: row.sortOrder,
       version: row.version,
       updatedAt: toIso(row.updatedAt),
+      deleteBlocker: row.deleteBlocker,
     })),
     page: query.page,
     pageSize: query.pageSize,
@@ -460,6 +461,36 @@ export async function restoreItem(db: Db, actor: Actor, id: string, input: Resto
     audit(db, actor, 'restore', id, input.undo ? { undo: true, status } : {}),
   ], { itemId: id, version: input.version, categoryId: item.categoryId })
   return loadItem(db, tenantId, id)
+}
+
+/**
+ * Deletes a draft or archived item for good (D200), only while no order line sold it and no
+ * promotion names it, checked first for the refusal and again in the batch (an order placed
+ * meanwhile). Its image is released (purged after 24 hours); the audit row keeps its name.
+ */
+export async function deleteItem(db: Db, actor: Actor, id: string, input: ItemVersionInput): Promise<void> {
+  const { tenantId } = actor
+  const item = await repo.findItemForDelete(db, tenantId, id)
+  if (!item) throw itemNotFound()
+  if (item.version !== input.version) throw itemChanged()
+  if (item.status === 'active') throw itemInWrongState('Archive this menu item before deleting it.')
+  if (item.deleteBlocker) throw itemHasHistory(item.deleteBlocker)
+  try {
+    await db.batch([
+      repo.deleteItemStatement(db, tenantId, id, input.version),
+      requireOneChange(db),
+      ...(item.imageAssetId ? [releaseStatement(db, tenantId, item.imageAssetId)] : []),
+      audit(db, actor, 'delete', id, { name: item.name, status: item.status }),
+    ])
+  }
+  catch (error) {
+    if (!isStaleWrite(error)) throw error
+    const now = await repo.findItemForDelete(db, tenantId, id)
+    if (!now) throw itemNotFound()
+    if (now.version !== input.version) throw itemChanged()
+    if (now.deleteBlocker) throw itemHasHistory(now.deleteBlocker)
+    throw itemChanged()
+  }
 }
 
 async function openForAction(db: Db, tenantId: string, id: string, version: number, from: ItemRow['status'][], wrongState: string): Promise<ItemRow> {

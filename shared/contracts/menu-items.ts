@@ -42,7 +42,15 @@ export interface MenuItemSummary {
   sortOrder: number
   version: number
   updatedAt: string
+  /**
+   * What keeps a draft or archived item from being deleted permanently (D200): it was `ordered`,
+   * or a promotion names it. `null` when nothing does (a published item is archived first).
+   */
+  deleteBlocker: ItemDeleteBlocker | null
 }
+
+export const ITEM_DELETE_BLOCKERS = ['ordered', 'promotion'] as const
+export type ItemDeleteBlocker = typeof ITEM_DELETE_BLOCKERS[number]
 
 export interface ItemOptionSet {
   id: string
