@@ -6,7 +6,7 @@ export { addModifier, archiveModifier, archiveModifierGroup, createModifierGroup
 export { ModifierErrorCodes } from './modifiers.errors'
 export { archiveItem, countItems, createItem, deleteItem, getItem, listItems, publishItem, reorderItems, restoreItem, unpublishItem, updateItem } from './items.service'
 export { ItemErrorCodes } from './items.errors'
-export { archiveAvailabilityRule, createAvailabilityRule, getAvailabilityRule, listAvailabilityRules, restoreAvailabilityRule, updateAvailabilityRule } from './availability.service'
+export { archiveAvailabilityRule, createAvailabilityRule, deleteAvailabilityRule, getAvailabilityRule, listAvailabilityRules, restoreAvailabilityRule, updateAvailabilityRule } from './availability.service'
 export { AvailabilityErrorCodes } from './availability.errors'
 export { listSoldOut, setSoldOut } from './soldout.service'
 export { SoldOutErrorCodes } from './soldout.errors'

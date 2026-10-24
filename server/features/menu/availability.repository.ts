@@ -1,8 +1,8 @@
-import { and, asc, count, eq, exists, inArray, sql } from 'drizzle-orm'
-import type { AvailabilityRuleRef, AvailabilityStatus, AvailabilityWindow } from '#shared/contracts/menu-availability'
+import { and, asc, count, eq, exists, inArray, not, sql } from 'drizzle-orm'
+import type { AvailabilityRuleRef, AvailabilityStatus, AvailabilityWindow, RuleDeleteBlocker } from '#shared/contracts/menu-availability'
 import type { Db, Statement } from '#server/utils/batch'
 import { chunk, readInChunks, replaceAll, requireCount, updateAtVersion } from '#server/utils/batch'
-import { byId, byName, firstRow, inTenant, withStatus } from '#server/utils/query'
+import { atVersion, byId, byName, firstRow, inTenant, withStatus } from '#server/utils/query'
 import { groupBy } from '#shared/utils/collections'
 import { activeCategory } from './categories.repository'
 import { listedItem } from './items.repository'
@@ -15,6 +15,11 @@ export interface RuleRow {
   version: number
   createdAt: Date
   updatedAt: Date
+}
+
+/** A rule with what keeps it from being deleted permanently (D200). */
+export interface RuleListRow extends RuleRow {
+  deleteBlocker: RuleDeleteBlocker | null
 }
 
 const ruleColumns = {
@@ -43,15 +48,40 @@ const categoryUses = (db: Db, tenantId: string, ruleIds: string[]) => inTenant(m
   .from(menuCategories)
   .where(and(eq(menuCategories.tenantId, menuCategoryAvailability.tenantId), eq(menuCategories.id, menuCategoryAvailability.categoryId), activeCategory))))
 
+/** An item of any status names the outer query's rule (`menu_item_availability_rule_fk` restricts). */
+const linkedToItems = (db: Db) => exists(db.select({ one: sql`1` }).from(menuItemAvailability)
+  .where(and(eq(menuItemAvailability.tenantId, menuAvailabilityRules.tenantId), eq(menuItemAvailability.ruleId, menuAvailabilityRules.id))))
+
+/** A category of any status names the outer query's rule (`menu_category_availability_rule_fk` restricts). */
+const linkedToCategories = (db: Db) => exists(db.select({ one: sql`1` }).from(menuCategoryAvailability)
+  .where(and(eq(menuCategoryAvailability.tenantId, menuAvailabilityRules.tenantId), eq(menuCategoryAvailability.ruleId, menuAvailabilityRules.id))))
+
+/**
+ * What keeps the outer query's rule from being deleted permanently (D200): an item or a category,
+ * archived ones too, still names it (dropping the link would make one sell at any hour once
+ * restored); `null` when nothing does. Its own SQL name (D170).
+ */
+const deleteBlocker = (db: Db) => sql<RuleDeleteBlocker | null>`case
+  when ${linkedToItems(db)} then 'items'
+  when ${linkedToCategories(db)} then 'categories'
+end`.as('delete_blocker')
+
+const withBlocker = (db: Db) => ({ ...ruleColumns, deleteBlocker: deleteBlocker(db) })
+
 // --- Reads ---
 
 export function findRule(db: Db, tenantId: string, id: string): Promise<RuleRow | undefined> {
   return firstRow(db.select(ruleColumns).from(menuAvailabilityRules).where(byId(menuAvailabilityRules, tenantId, id)))
 }
 
-export function listRules(db: Db, tenantId: string, status: AvailabilityStatus | 'all'): Promise<RuleRow[]> {
+/** The rule with what keeps it from being deleted permanently (what the API answers, and the delete's refusal). */
+export function findRuleWithBlocker(db: Db, tenantId: string, id: string): Promise<RuleListRow | undefined> {
+  return firstRow(db.select(withBlocker(db)).from(menuAvailabilityRules).where(byId(menuAvailabilityRules, tenantId, id)))
+}
+
+export function listRules(db: Db, tenantId: string, status: AvailabilityStatus | 'all'): Promise<RuleListRow[]> {
   return db
-    .select(ruleColumns)
+    .select(withBlocker(db))
     .from(menuAvailabilityRules)
     .where(inTenant(menuAvailabilityRules, tenantId, withStatus(menuAvailabilityRules.status, status)))
     .orderBy(byName(menuAvailabilityRules.name), asc(menuAvailabilityRules.id))
@@ -138,6 +168,19 @@ export function insertRuleStatement(db: Db, row: { id: string, tenantId: string,
  */
 export function touchRuleStatement(db: Db, tenantId: string, id: string, version: number, now: Date, changes: Partial<Pick<RuleRow, 'name' | 'status'>> = {}, anyStatus = false): Statement {
   return updateAtVersion(db, menuAvailabilityRules, { tenantId, id, version }, { ...changes, updatedAt: now }, anyStatus ? undefined : eq(menuAvailabilityRules.status, 'active'))
+}
+
+/**
+ * Deletes an archived rule still at `version` that no item or category names (D200), checked in
+ * the statement itself: follow it with `requireOneChange`. Its windows go with it (cascade).
+ */
+export function deleteRuleStatement(db: Db, tenantId: string, id: string, version: number): Statement {
+  return db.delete(menuAvailabilityRules).where(and(
+    atVersion(menuAvailabilityRules, tenantId, id, version),
+    eq(menuAvailabilityRules.status, 'archived'),
+    not(linkedToItems(db)),
+    not(linkedToCategories(db)),
+  ))
 }
 
 export function replaceWindowsStatements(db: Db, tenantId: string, ruleId: string, windows: AvailabilityWindow[]): Statement[] {

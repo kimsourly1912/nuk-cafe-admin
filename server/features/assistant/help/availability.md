@@ -21,15 +21,17 @@
 
 **Overnight**: if **Until** is earlier than **From** (for example 9:00 PM to 1:00 AM), the time continues into the next day; the form notes "next day".
 
-## Edit, archive, restore
+## Edit, archive, restore, delete
 
 - **Manage** on a card opens the rule. Change it and **Save**. Items using it follow the new times at once.
 - **⋮ → Archive**: only when nothing uses it. Remove it from its items and categories first; the card lists them.
 - **Restore** on an archived rule.
+- **⋮ → Delete permanently** (on an archived rule): removes it and its times for good. It asks first, and it can't be restored. Only a rule that **no menu item or category uses**, archived ones too, can be deleted: an archived item keeps its rules, and would sell at any hour if it came back without them. Otherwise the action is greyed out and says what still uses it: remove the rule from those (restore, edit, archive again) or delete them first.
 
 ## Common problems
 
 - **"This rule is used by …. Remove it from them first."**: archive is blocked while items or categories use the rule.
+- **"Menu items still use this availability rule (archived ones count too)."**: delete is blocked while any item or category, archived or not, still has the rule.
 - **Two times overlap on the same day**: the error shows on the row; change the times or days so they don't overlap.
 - **"There is already an availability rule named …"**
 - **An item disappeared at a certain time**: check its rules and its category's rules here.

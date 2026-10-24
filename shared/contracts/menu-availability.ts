@@ -37,7 +37,15 @@ export interface AvailabilityRule {
   version: number
   createdAt: string
   updatedAt: string
+  /**
+   * What keeps an archived rule from being deleted permanently (D200): menu items or categories,
+   * archived ones too, that still name it. `null` when nothing does (an active rule is archived first).
+   */
+  deleteBlocker: RuleDeleteBlocker | null
 }
+
+export const RULE_DELETE_BLOCKERS = ['items', 'categories'] as const
+export type RuleDeleteBlocker = typeof RULE_DELETE_BLOCKERS[number]
 
 /** A rule as an item or category shows it. An archived rule never matches (D63). */
 export interface AvailabilityRuleRef {

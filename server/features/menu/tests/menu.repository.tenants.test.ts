@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Actor, BranchActor } from '#server/features/identity'
 import * as availability from '#server/features/menu/availability.repository'
-import { createAvailabilityRule } from '#server/features/menu/availability.service'
+import { archiveAvailabilityRule, createAvailabilityRule } from '#server/features/menu/availability.service'
 import * as categories from '#server/features/menu/categories.repository'
 import { archiveCategory, createCategory } from '#server/features/menu/categories.service'
 import * as items from '#server/features/menu/items.repository'
@@ -216,6 +216,20 @@ describe('a permanent category delete (D200): another cafe\'s with our cafe\'s i
     expect(await categories.findCategory(db, OTHER, empty.id)).toBeDefined()
     await run(categories.deleteCategoryStatement(db, OTHER, empty.id, archived.version))
     expect(await categories.findCategory(db, OTHER, empty.id)).toBeUndefined()
+  })
+})
+
+describe('a permanent rule delete (D200): another cafe\'s with our cafe\'s id', () => {
+  it('reads and deletes none of their rules', async () => {
+    const unused = await createAvailabilityRule(db, owner, { name: 'Evenings', windows: [{ weekday: 2, startMinute: 1080, endMinute: 1320 }] })
+    const archived = await archiveAvailabilityRule(db, owner, unused.id, { version: unused.version })
+    expect(await availability.findRuleWithBlocker(db, TEST_TENANT, unused.id)).toBeUndefined()
+    expect(await availability.findRuleWithBlocker(db, OTHER, unused.id)).toMatchObject({ deleteBlocker: null })
+    expect((await availability.findRuleWithBlocker(db, OTHER, menu.rule.id))?.deleteBlocker).toBe('items')
+    await run(availability.deleteRuleStatement(db, TEST_TENANT, unused.id, archived.version))
+    expect(await availability.findRule(db, OTHER, unused.id)).toBeDefined()
+    await run(availability.deleteRuleStatement(db, OTHER, unused.id, archived.version))
+    expect(await availability.findRule(db, OTHER, unused.id)).toBeUndefined()
   })
 })
 

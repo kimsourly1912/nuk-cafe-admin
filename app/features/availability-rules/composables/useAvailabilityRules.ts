@@ -1,4 +1,4 @@
-import type { AvailabilityRule, CreateAvailabilityRuleInput, UpdateAvailabilityRuleInput } from '#shared/contracts/menu-availability'
+import type { AvailabilityRule, CreateAvailabilityRuleInput, RuleDeleteBlocker, UpdateAvailabilityRuleInput } from '#shared/contracts/menu-availability'
 
 const BASE = '/admin/menu/availability-rules'
 
@@ -84,12 +84,42 @@ export function useAvailabilityRuleMutations() {
     },
   )
 
+  /**
+   * Deletes an archived rule nothing uses for good (D200). Asks first: it can't be restored. The
+   * server refuses one items or categories still name (409 `AVAILABILITY_RULE_HAS_USES`).
+   */
+  const remove = useMutation(
+    (rule: AvailabilityRule) => apiFetch<null>(`${BASE}/${rule.id}`, { method: 'DELETE', body: { version: rule.version } }),
+    {
+      id: 'availability-rules:delete',
+      key: rule => rule.id,
+      lock: rule => lockOf(rule.id),
+      removes: true,
+      confirm: rule => ({
+        title: `Delete "${rule.name}" permanently?`,
+        description: 'No menu item or category uses it. Its times are removed too, and it can\'t be restored.',
+        confirmLabel: 'Delete permanently',
+        danger: true,
+      }),
+      successMessage: (_, rule) => `Rule "${rule.name}" deleted`,
+      errorMessage: rule => `Could not delete "${rule.name}"`,
+      invalidate: AFFECTED,
+    },
+  )
+
   return {
     create,
     update,
     archive,
     restore,
+    remove,
     /** Any operation in flight for this rule: disable its card actions. */
-    isBusy: (id: string) => update.isPending(id) || archive.isPending(id) || restore.isPending(id),
+    isBusy: (id: string) => update.isPending(id) || archive.isPending(id) || restore.isPending(id) || remove.isPending(id),
   }
+}
+
+/** Why Delete permanently is off for an archived rule (D200), under the action. */
+export const DELETE_BLOCKED: Record<RuleDeleteBlocker, string> = {
+  items: 'Menu items still use it (archived ones too)',
+  categories: 'Categories still use it (archived ones too)',
 }

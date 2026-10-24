@@ -4,10 +4,11 @@ import type { AvailabilityRule, AvailabilityWindow } from '#shared/contracts/men
 import type { CreateItemInput } from '#shared/contracts/menu-items'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { archiveAvailabilityRule, createAvailabilityRule, getAvailabilityRule, listAvailabilityRules, restoreAvailabilityRule, updateAvailabilityRule } from '#server/features/menu/availability.service'
+import { archiveAvailabilityRule, createAvailabilityRule, deleteAvailabilityRule, getAvailabilityRule, listAvailabilityRules, restoreAvailabilityRule, updateAvailabilityRule } from '#server/features/menu/availability.service'
 import { archiveCategory, createCategory, listCategories, updateCategory } from '#server/features/menu/categories.service'
-import { archiveItem, createItem, getItem, restoreItem, updateItem } from '#server/features/menu/items.service'
-import { menuAvailabilityRules } from '#server/features/menu/menu.schema'
+import { archiveItem, createItem, deleteItem, getItem, restoreItem, updateItem } from '#server/features/menu/items.service'
+import { deleteRuleStatement } from '#server/features/menu/availability.repository'
+import { menuAvailabilityRules, menuAvailabilityWindows, menuCategoryAvailability, menuItemAvailability } from '#server/features/menu/menu.schema'
 import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
@@ -238,5 +239,73 @@ describe('rules on categories', () => {
     const c = await createAvailabilityRule(db, actor, { name: 'Lunch', windows: [w(1, 660, 840)] })
     const racingUpdate = interleaved(db, () => db.update(menuAvailabilityRules).set({ status: 'archived' }).where(eq(menuAvailabilityRules.id, c.id)))
     await expectApiError(() => updateCategory(racingUpdate, actor, hot, { version: 1, availabilityRuleIds: [c.id] }), 422, 'AVAILABILITY_RULE_NOT_AVAILABLE', ['availabilityRuleIds.0'])
+  })
+})
+
+describe('deleting permanently (D200)', () => {
+  const exists = async (id: string) => (await db.select({ id: menuAvailabilityRules.id }).from(menuAvailabilityRules).where(eq(menuAvailabilityRules.id, id))).length === 1
+  const archive = (rule: AvailabilityRule) => archiveAvailabilityRule(db, actor, rule.id, { version: rule.version })
+
+  it('deletes an unused archived rule with its windows, and keeps its name in the audit', async () => {
+    const rule = await archive(await breakfast())
+    expect(rule.deleteBlocker).toBeNull()
+    await deleteAvailabilityRule(db, actor, rule.id, { version: rule.version })
+    expect(await exists(rule.id)).toBe(false)
+    expect(await db.select().from(menuAvailabilityWindows).where(eq(menuAvailabilityWindows.ruleId, rule.id))).toEqual([])
+    const [audit] = await db.select().from(auditEvents).where(eq(auditEvents.action, 'menu.availability_rule.delete'))
+    expect(audit).toMatchObject({ targetId: rule.id, metadata: { name: 'Breakfast' } })
+    await expectApiError(() => getAvailabilityRule(db, TEST_TENANT, rule.id), 404, 'NOT_FOUND')
+  })
+
+  it('refuses an active rule, a stale version and an unknown one', async () => {
+    const active = await breakfast()
+    await expectApiError(() => deleteAvailabilityRule(db, actor, active.id, { version: active.version }), 409, 'INVALID_STATE')
+    const rule = await archive(active)
+    await expectApiError(() => deleteAvailabilityRule(db, actor, rule.id, { version: active.version }), 409, 'VERSION_CONFLICT')
+    await expectApiError(() => deleteAvailabilityRule(db, actor, 'missing', { version: 1 }), 404, 'NOT_FOUND')
+    expect(await exists(rule.id)).toBe(true)
+  })
+
+  it('refuses one an archived item still names, until that item is deleted', async () => {
+    const active = await breakfast()
+    const item = await latte([active.id])
+    const gone = await archiveItem(db, actor, item.id, { version: item.version })
+    const rule = await archive(active)
+    expect(rule.deleteBlocker).toBe('items')
+    await expectApiError(() => deleteAvailabilityRule(db, actor, rule.id, { version: rule.version }), 409, 'AVAILABILITY_RULE_HAS_USES')
+    await deleteItem(db, actor, item.id, { version: gone.version })
+    await deleteAvailabilityRule(db, actor, rule.id, { version: rule.version })
+    expect(await exists(rule.id)).toBe(false)
+  })
+
+  it('refuses one an archived category still names', async () => {
+    const active = await breakfast()
+    const tea = await createCategory(db, actor, { name: 'Tea', description: '', parentId: null, availabilityRuleIds: [active.id] })
+    await archiveCategory(db, actor, tea.id, { version: tea.version })
+    const rule = await archive(active)
+    expect(rule.deleteBlocker).toBe('categories')
+    await expectApiError(() => deleteAvailabilityRule(db, actor, rule.id, { version: rule.version }), 409, 'AVAILABILITY_RULE_HAS_USES')
+  })
+
+  it('the delete statement itself refuses an active rule and each use', async () => {
+    const run = (rule: AvailabilityRule) => db.batch([deleteRuleStatement(db, TEST_TENANT, rule.id, rule.version)])
+    const active = await breakfast()
+    await run(active)
+    const forItem = await archive(await lateNight())
+    const forCategory = await archive(await createAvailabilityRule(db, actor, { name: 'Lunch', windows: weekdays(660, 840) }))
+    const item = await latte([])
+    await db.insert(menuItemAvailability).values({ tenantId: TEST_TENANT, itemId: item.id, ruleId: forItem.id })
+    await db.insert(menuCategoryAvailability).values({ tenantId: TEST_TENANT, categoryId: hot, ruleId: forCategory.id })
+    await run(forItem)
+    await run(forCategory)
+    for (const rule of [active, forItem, forCategory]) expect(await exists(rule.id), rule.name).toBe(true)
+  })
+
+  it('refuses when a use arrives meanwhile (the guard in the batch)', async () => {
+    const rule = await archive(await breakfast())
+    const item = await latte([])
+    const racing = interleaved(db, () => db.insert(menuItemAvailability).values({ tenantId: TEST_TENANT, itemId: item.id, ruleId: rule.id }))
+    await expectApiError(() => deleteAvailabilityRule(racing, actor, rule.id, { version: rule.version }), 409, 'AVAILABILITY_RULE_HAS_USES')
+    expect(await exists(rule.id)).toBe(true)
   })
 })
