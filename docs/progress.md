@@ -2,6 +2,19 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Installable counter and admin (D202, 2026-10-24)
+
+[Decision](decisions.md#d202-the-counter-and-admin-are-installable-apps-a-manifest-per-cafe-no-service-worker-yet-2026-10-24), [plan](plans/installable-app.md). The owner asked for a PWA; accepted scope: the counter and the admin installable from a manifest per cafe (`/c/<slug>/counter.webmanifest`, `…/admin.webmanifest`), generic icons, no service worker, no offline work, no Web Push. A service worker is a later step with its own trigger.
+
+| Step | Status | Evidence |
+|---|---|---|
+| 1. Manifest routes, `webManifest` builder, head tags in `app.vue`, icons, help page | built, PR | below |
+| 2. Service worker (static files only) | not scheduled (D202 trigger) | |
+
+- **Evidence (2026-10-24, local, Chromium 1243):** `pnpm lint`, `pnpm typecheck`, `pnpm audit --audit-level high` clean; `pnpm test:unit` 140 files, 1953 passed, 1 skipped, incl. `web-manifest.test.ts` 4 (fields per workspace, icons, nothing but the public name, the linked path). E2E `cafes.test.ts` 15 on the real server, incl. 3 new: each cafe's counter and admin manifest by its own name only (two-cafe isolation), its icons served, `application/manifest+json` and `no-cache`; unknown cafe 404, another file name 404, paused 403, former address 302; the counter's and admin's sign-in pages link their own cafe's manifest and title, the menu none. Guards removed together and restored: the admin route reading `nuk`'s profile failed the isolation test, the manifest linked on every page failed the menu test. Full `pnpm test:e2e` at 4 workers: 705 passed, 7 failed (6 timeouts in categories and add-ons reorder, three platform, the products photo editor; the counter's sold-out switch poll), the same files as D201's load timeouts; those five files again at 2 workers: 202 passed.
+- **Not covered:** installing on a real Android tablet and iPad (manual, on staging after deploy; also which page iOS's Add to Home Screen starts on).
+- **Open:** QW1 (the cafe's logo as the app icon). Rollout to cafes waits on Q4 (installs belong to the domain).
+
 ## Back closes the overlay on top (D201, 2026-10-24)
 
 [Decision](decisions.md#d201-back-closes-the-overlay-on-top-not-the-page-2026-10-24). On a phone, Back (Android's button or edge swipe, iOS's edge swipe) closed the page under an open modal or sheet. Every modal, slide-over and drawer now has a history entry of its own, kept out of Vue Router; Back closes the one on top like Escape, and the next Back leaves the page. `<AppModal>` / `<AppSlideover>` join `<AppDrawer>` (all 41 files moved, `UModal`/`USlideover` lint errors elsewhere); `useOverlayBack` covers the sidebar's phone menu, the search palette and the assistant's phone sheet. Owner review waived.
@@ -740,6 +753,7 @@ Business decisions the build still needs, with the step each blocks. All are for
 | Q24 | Acceptable data loss and downtime (RPO/RTO), who receives alerts and when, data retention and erasure periods; **the Workers plan** (the Free plan's 10 ms CPU per request stops the app under use: Error 1102 on staging, 10.5) | 8.2 | Workers Paid (5 USD a month): CPU, 30-day Time Travel. **The plan, deferred by the owner (2026-10-02):** staging stays on the Free plan while the app is still being built; upgrade before real use (Error 1102 under load is expected meanwhile) |
 | QT3 | **One Bakong token for every cafe, managed by the platform** instead of each cafe's own (the owner, 2026-10-09: cafe owners aren't technical; one token renewed once, on one day). Idea: a Platform → Bakong page (one sealed token, its expiry, Test connection, Replace; reminders to the super admins), Payments shows "Automatic check: On (managed by the platform team)", the per-cafe token UI of D148 removed. The server already checks a payment went to the cafe's own account and amount, so a shared token can't confirm another cafe's payment. **To verify first:** (1) can one token look up payments to any Bakong account (test: give Brown Bean another Bakong account, pay a small order, see whether NUK's token confirms it); (2) Bakong's rate limits with many cafes on one token | Changing D148 | If (1) holds: one platform token. If tokens are tied to one account: keep a token per cafe, but the platform team pastes it from the cafe's page in the console and the reminders go to the platform |
 | Q44 | The refund rule when an order paid by KHQR on the customer's phone is cancelled (who returns the money, how, and how it is recorded) | KHQR payment on the customer's phone | |
+| QW1 | The installed app's icon: the generic coffee cup for every cafe, or each cafe's own logo (D202; needs PNGs made when a logo is saved) | Per-cafe icons only; step 1 ships with the generic icon | The generic coffee cup |
 | QM1 | **Facebook posting for every cafe** (M2): a Meta app owned by the platform, its **App Review** (`pages_manage_posts`), **Business Verification**, a privacy policy page, and our own domain (Q4). Until then Facebook posting works only for the Meta app's testers (the owner's own Page) | M2 for other cafes | Telegram channels first (no approval needed), Facebook for NUK Cafe as a tester |
 
 ## Known limitations

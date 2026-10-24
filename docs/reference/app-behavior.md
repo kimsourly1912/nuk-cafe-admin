@@ -34,6 +34,7 @@ await navigateTo(tenantPath(`/admin/add-ons/${group.id}`)) // /c/nuk/admin/add-o
 - [Offline banner](#offline-banner)
 - [A new version deployed](#a-new-version-deployed): Reload offered, the next page loads it (D149)
 - [Browser errors reported](#browser-errors-reported): into Workers Logs (D149)
+- [Installable counter and admin](#installable-counter-and-admin): a manifest per cafe (D202)
 - [Leaving with unsaved or in-flight work](#leaving-with-unsaved-or-in-flight-work)
 - [Session loss](#session-loss): including login/logout across tabs
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -142,6 +143,23 @@ Source: `app/plugins/new-version.client.ts` (records Nuxt's `app:manifest:update
 | No newer build | Nothing; route changes stay in the app |
 | Offline at the same time | Both notices, stacked |
 | A test build | Nuxt's check is compiled out (`import.meta.test`); the e2e tests call `app:manifest:update` as the check would |
+
+---
+
+## Installable counter and admin
+
+The counter and the admin install as the cafe's own apps (D202, [plan](../plans/installable-app.md)): a home-screen icon, full screen, no address bar. Their pages link `/c/<slug>/counter.webmanifest` or `/c/<slug>/admin.webmanifest` (`webManifestPath`), built from the cafe's public profile by `webManifest` in the tenants feature. No service worker: nothing is cached, and the new-version notice above works as in a tab.
+
+Source: `app/app.vue` (the manifest link, `apple-touch-icon`, `apple-mobile-web-app-title`, `theme-color` from the chosen color mode), `server/routes/c/[slug]/{counter,admin}.webmanifest.get.ts`, `server/features/tenants/web-manifest.ts`, icons in `public/pwa/`. Tests: server `web-manifest.test.ts`, e2e `cafes.test.ts`.
+
+| Case | Behavior |
+|---|---|
+| A counter or admin page (its sign-in too) | Links its own cafe's manifest; the customer site and the platform console link none |
+| The manifest | `id` and `start_url` `/c/<slug>/<counter or admin>`, `name` "<cafe> Counter" / "<cafe> Admin", scope `/` (Your cafes and the account pages stay in the app), `standalone`, generic coffee-cup icons (QW1); `application/manifest+json`, `no-cache` |
+| Unknown cafe · paused cafe · former address | 404 · 403 (can't be installed; an installed app opens on the paused page) · 302 to the current address (the cafe-pages middleware) |
+| Two cafes, or a cafe's counter and admin, on one tablet | Separate apps (distinct ids) |
+| The cafe renamed | The next manifest check picks it up on Android; iOS keeps the name given at install |
+| Offline at start | The browser's own offline page; once loaded, the offline banner |
 
 ---
 
