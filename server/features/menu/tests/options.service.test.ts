@@ -4,12 +4,16 @@ import { MAX_OPTION_VALUES } from '#shared/contracts/menu-options'
 import type { OptionSet } from '#shared/contracts/menu-options'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
-import { addOptionValue, archiveOptionSet, archiveOptionValue, createOptionSet, listOptionSets, renameOptionSet, renameOptionValue, reorderOptionValues, restoreOptionSet, restoreOptionValue } from '#server/features/menu/options.service'
+import { menuItemOptionSets, menuOptionSets, menuOptionValues } from '#server/features/menu/menu.schema'
+import { deleteSetStatements, deleteValueStatement } from '#server/features/menu/options.repository'
+import { createCategory } from '#server/features/menu/categories.service'
+import { archiveItem, createItem, deleteItem, updateItem } from '#server/features/menu/items.service'
+import { addOptionValue, archiveOptionSet, archiveOptionValue, createOptionSet, deleteOptionSet, deleteOptionValue, getOptionSet, listOptionSets, renameOptionSet, renameOptionValue, reorderOptionValues, restoreOptionSet, restoreOptionValue } from '#server/features/menu/options.service'
 import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
-import type { Db } from '#server/utils/batch'
+import type { Db, Statement } from '#server/utils/batch'
+import { isStaleWrite } from '#server/utils/batch'
 
 let db: Db
 const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', requestId: 'req-1' }
@@ -163,5 +167,116 @@ describe('option values', () => {
     ])
     expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1)
     expect((results.find(r => r.status === 'rejected') as PromiseRejectedResult).reason).toMatchObject({ statusCode: 409, data: { code: 'VERSION_CONFLICT' } })
+  })
+})
+
+describe('deleting permanently (D200)', () => {
+  const setExists = async (id: string) => (await db.select({ id: menuOptionSets.id }).from(menuOptionSets).where(eq(menuOptionSets.id, id))).length === 1
+  const valueExists = async (id: string) => (await db.select({ id: menuOptionValues.id }).from(menuOptionValues).where(eq(menuOptionValues.id, id))).length === 1
+  const archive = (set: OptionSet) => archiveOptionSet(db, actor, set.id, { version: set.version })
+  /** A draft item whose versions come from `set`'s active values. */
+  async function itemWith(set: OptionSet) {
+    const top = await createCategory(db, actor, { name: `Drinks ${set.id}`, description: '', parentId: null, availabilityRuleIds: [] })
+    return createItem(db, actor, { categoryId: top.id, name: 'Latte', description: '', imageId: null, optionSetIds: [set.id], variations: set.values.filter(v => v.status === 'active').map(v => ({ valueIds: [v.id], priceMinor: 350, status: 'active' as const })), modifierGroups: [], availabilityRuleIds: [] })
+  }
+
+  describe('a set', () => {
+    it('deletes an unused archived set with its values, and keeps its name in the audit', async () => {
+      const set = await archive(await size())
+      expect(set.deleteBlocker).toBeNull()
+      await deleteOptionSet(db, actor, set.id, { version: set.version })
+      expect(await setExists(set.id)).toBe(false)
+      expect(await db.select().from(menuOptionValues).where(eq(menuOptionValues.setId, set.id))).toEqual([])
+      const [audit] = await db.select().from(auditEvents).where(eq(auditEvents.action, 'menu.option_set.delete'))
+      expect(audit).toMatchObject({ targetId: set.id, metadata: { name: 'Size' } })
+      await expectApiError(() => getOptionSet(db, TEST_TENANT, set.id), 404, 'NOT_FOUND')
+    })
+
+    it('refuses an active set, a stale version and an unknown one', async () => {
+      const active = await size()
+      await expectApiError(() => deleteOptionSet(db, actor, active.id, { version: active.version }), 409, 'INVALID_STATE')
+      const set = await archive(active)
+      await expectApiError(() => deleteOptionSet(db, actor, set.id, { version: active.version }), 409, 'VERSION_CONFLICT')
+      await expectApiError(() => deleteOptionSet(db, actor, 'missing', { version: 1 }), 404, 'NOT_FOUND')
+      expect(await setExists(set.id)).toBe(true)
+    })
+
+    it('refuses one an archived item uses, until that item is deleted', async () => {
+      const active = await size()
+      const item = await itemWith(active)
+      const gone = await archiveItem(db, actor, item.id, { version: item.version })
+      const set = await archive(active)
+      expect(set.deleteBlocker).toBe('items')
+      await expectApiError(() => deleteOptionSet(db, actor, set.id, { version: set.version }), 409, 'OPTION_IN_USE')
+      await deleteItem(db, actor, item.id, { version: gone.version })
+      await deleteOptionSet(db, actor, set.id, { version: set.version })
+      expect(await setExists(set.id)).toBe(false)
+    })
+
+    it('refuses one an item no longer offers but whose retired versions keep its values', async () => {
+      const active = await size()
+      const item = await itemWith(active)
+      await updateItem(db, actor, item.id, { version: item.version, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 300, status: 'active' }] })
+      expect(await db.select().from(menuItemOptionSets).where(eq(menuItemOptionSets.setId, active.id))).toEqual([])
+      const set = await archive(active)
+      expect(set.deleteBlocker).toBe('items')
+      await expectApiError(() => deleteOptionSet(db, actor, set.id, { version: set.version }), 409, 'OPTION_IN_USE')
+    })
+
+    it('the delete statements themselves refuse an active set, an item link and a version using a value', async () => {
+      const run = (set: OptionSet) => db.batch(deleteSetStatements(db, TEST_TENANT, set.id, set.version) as [Statement, ...Statement[]])
+      const active = await size()
+      await expect(run(active)).rejects.toSatisfy(isStaleWrite)
+      const linked = await createOptionSet(db, actor, { name: 'Milk', values: ['Whole'] })
+      const used = await createOptionSet(db, actor, { name: 'Temperature', values: ['Hot', 'Iced'] })
+      const item = await itemWith(used)
+      await db.insert(menuItemOptionSets).values({ tenantId: TEST_TENANT, itemId: item.id, setId: linked.id, sortOrder: 2 })
+      await db.delete(menuItemOptionSets).where(eq(menuItemOptionSets.setId, used.id))
+      for (const set of [await archive(linked), await archive(used)]) await expect(run(set), set.name).rejects.toSatisfy(isStaleWrite)
+      for (const set of [active, linked, used]) expect(await setExists(set.id), set.name).toBe(true)
+    })
+
+    it('refuses when an item starts using it meanwhile (the guard in the batch)', async () => {
+      const set = await archive(await size())
+      const item = await itemWith(await createOptionSet(db, actor, { name: 'Milk', values: ['Whole'] }))
+      const racing = interleaved(db, () => db.insert(menuItemOptionSets).values({ tenantId: TEST_TENANT, itemId: item.id, setId: set.id, sortOrder: 2 }))
+      await expectApiError(() => deleteOptionSet(racing, actor, set.id, { version: set.version }), 409, 'OPTION_IN_USE')
+      expect(await setExists(set.id)).toBe(true)
+    })
+  })
+
+  describe('a value', () => {
+    it('deletes an unused archived value under the set\'s lock, audited', async () => {
+      const set = await size()
+      const gone = await archiveOptionValue(db, actor, set.id, valueId(set, 'Large'), { version: set.version })
+      expect(gone.values.find(v => v.name === 'Large')?.deleteBlocker).toBeNull()
+      const after = await deleteOptionValue(db, actor, set.id, valueId(set, 'Large'), { version: gone.version })
+      expect(after.version).toBe(gone.version + 1)
+      expect(after.values.map(v => v.name)).toEqual(['Small', 'Regular'])
+      const [audit] = await db.select().from(auditEvents).where(eq(auditEvents.action, 'menu.option_set.value.delete'))
+      expect(audit).toMatchObject({ targetId: set.id, metadata: { valueId: valueId(set, 'Large'), name: 'Large' } })
+    })
+
+    it('refuses an active value, a stale version, and one an item version uses', async () => {
+      const set = await size()
+      await expectApiError(() => deleteOptionValue(db, actor, set.id, valueId(set, 'Small'), { version: set.version }), 409, 'INVALID_STATE')
+      await itemWith(set)
+      const gone = await archiveOptionValue(db, actor, set.id, valueId(set, 'Small'), { version: set.version })
+      await expectApiError(() => deleteOptionValue(db, actor, set.id, valueId(set, 'Small'), { version: set.version }), 409, 'VERSION_CONFLICT')
+      expect(gone.values.find(v => v.name === 'Small')?.deleteBlocker).toBe('items')
+      await expectApiError(() => deleteOptionValue(db, actor, set.id, valueId(set, 'Small'), { version: gone.version }), 409, 'OPTION_IN_USE')
+      expect(await valueExists(valueId(set, 'Small'))).toBe(true)
+    })
+
+    it('the delete statement itself refuses an active value and one in use', async () => {
+      const set = await size()
+      await itemWith(set)
+      const archived = await archiveOptionValue(db, actor, set.id, valueId(set, 'Small'), { version: set.version })
+      // Added after the item: active, and no version uses it.
+      const added = await addOptionValue(db, actor, set.id, { version: archived.version, name: 'Extra large' })
+      await db.batch([deleteValueStatement(db, TEST_TENANT, set.id, valueId(set, 'Small')), deleteValueStatement(db, TEST_TENANT, set.id, valueId(added, 'Extra large'))])
+      expect(await valueExists(valueId(set, 'Small'))).toBe(true)
+      expect(await valueExists(valueId(added, 'Extra large'))).toBe(true)
+    })
   })
 })

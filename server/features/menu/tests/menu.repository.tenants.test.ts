@@ -9,7 +9,7 @@ import { createItem, publishItem } from '#server/features/menu/items.service'
 import * as modifiers from '#server/features/menu/modifiers.repository'
 import { createModifierGroup } from '#server/features/menu/modifiers.service'
 import * as options from '#server/features/menu/options.repository'
-import { createOptionSet } from '#server/features/menu/options.service'
+import { archiveOptionSet, archiveOptionValue, createOptionSet } from '#server/features/menu/options.service'
 import * as promotions from '#server/features/menu/promotions.repository'
 import { createPromotion } from '#server/features/menu/promotions.service'
 import * as soldout from '#server/features/menu/soldout.repository'
@@ -230,6 +230,24 @@ describe('a permanent rule delete (D200): another cafe\'s with our cafe\'s id', 
     expect(await availability.findRule(db, OTHER, unused.id)).toBeDefined()
     await run(availability.deleteRuleStatement(db, OTHER, unused.id, archived.version))
     expect(await availability.findRule(db, OTHER, unused.id)).toBeUndefined()
+  })
+})
+
+describe('a permanent option delete (D200): another cafe\'s with our cafe\'s id', () => {
+  it('reads and deletes none of their sets or values', async () => {
+    const unused = await createOptionSet(db, owner, { name: 'Ice', values: ['Less', 'Normal'] })
+    const less = unused.values[0]!.id
+    const valueGone = await archiveOptionValue(db, owner, unused.id, less, { version: unused.version })
+    expect(await options.findValue(db, TEST_TENANT, unused.id, less)).toBeUndefined()
+    expect(await options.findValue(db, OTHER, unused.id, less)).toMatchObject({ deleteBlocker: null })
+    await run(options.deleteValueStatement(db, TEST_TENANT, unused.id, less))
+    expect(await options.findValue(db, OTHER, unused.id, less)).toBeDefined()
+    const archived = await archiveOptionSet(db, owner, unused.id, { version: valueGone.version })
+    expect(await options.findSet(db, TEST_TENANT, unused.id)).toBeUndefined()
+    expect((await options.findSet(db, OTHER, menu.size.id))?.deleteBlocker).toBe('items')
+    await stopped(...options.deleteSetStatements(db, TEST_TENANT, unused.id, archived.version))
+    await run(...options.deleteSetStatements(db, OTHER, unused.id, archived.version))
+    expect(await options.findSet(db, OTHER, unused.id)).toBeUndefined()
   })
 })
 

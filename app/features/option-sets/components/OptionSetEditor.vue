@@ -22,7 +22,7 @@ import type { OptionSet, OptionValue } from '#shared/contracts/menu-options'
 import { MAX_OPTION_VALUES } from '#shared/contracts/menu-options'
 import { insertNodeAt, removeNode, useSortable } from '@vueuse/integrations/useSortable'
 import * as v from 'valibot'
-import { activeValues, archivedValues, fetchOptionSet, useOptionSetMutations } from '../composables/useOptionSets'
+import { activeValues, archivedValues, fetchOptionSet, OPTION_IN_USE, useOptionSetMutations } from '../composables/useOptionSets'
 import { archiveSetDescription, moveEntry, usageLabel } from '../schemas/option-set-display'
 import { setNameSchema, valueNameSchema } from '../schemas/option-set-form'
 import { createOrderAutosave } from '../utils/order-autosave'
@@ -165,6 +165,14 @@ async function archiveValue(value: OptionValue) {
 
 async function restoreValue(value: OptionValue) {
   const result = checked(await mutations.restoreValue.execute({ set: current.value, value }))
+  if (!result.ok) return
+  current.value = result.data
+  syncOrder()
+}
+
+/** An archived value no item version uses can go for good (D200); the editor keeps the set's new version. */
+async function deleteValue(value: OptionValue) {
+  const result = checked(await mutations.deleteValue.execute({ set: current.value, value }))
   if (!result.ok) return
   current.value = result.data
   syncOrder()
@@ -569,17 +577,32 @@ function onEscape(event: KeyboardEvent) {
                   class="flex items-center justify-between gap-2 py-2"
                 >
                   <span class="min-w-0 break-words text-muted">{{ value.name }}</span>
-                  <UButton
+                  <div
                     v-if="!archived"
-                    label="Restore"
-                    icon="i-lucide-archive-restore"
-                    color="neutral"
-                    variant="outline"
-                    size="sm"
-                    :disabled="busy || full"
-                    :aria-label="`Restore ${value.name}`"
-                    @click="restoreValue(value)"
-                  />
+                    class="flex shrink-0 items-center gap-1"
+                  >
+                    <UButton
+                      label="Restore"
+                      icon="i-lucide-archive-restore"
+                      color="neutral"
+                      variant="outline"
+                      size="sm"
+                      :disabled="busy || full"
+                      :aria-label="`Restore ${value.name}`"
+                      @click="restoreValue(value)"
+                    />
+                    <UTooltip :text="value.deleteBlocker ? OPTION_IN_USE : 'Delete permanently'">
+                      <UButton
+                        icon="i-lucide-trash-2"
+                        color="error"
+                        variant="ghost"
+                        size="sm"
+                        :disabled="busy || value.deleteBlocker !== null"
+                        :aria-label="`Delete ${value.name} permanently`"
+                        @click="deleteValue(value)"
+                      />
+                    </UTooltip>
+                  </div>
                 </li>
               </ul>
             </div>
