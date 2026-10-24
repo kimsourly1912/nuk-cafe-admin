@@ -87,7 +87,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof ownerForm
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="password ? 'Temporary password' : title"
     :description="password ? undefined : description"
     :dismissible="!password && !saving"
@@ -250,5 +250,5 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof ownerForm
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

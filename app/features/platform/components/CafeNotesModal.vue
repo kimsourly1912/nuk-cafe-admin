@@ -39,7 +39,7 @@ async function onSubmit() {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     title="Internal notes"
     :description="`For the platform team about ${cafe.name}: never shown to the cafe.`"
     @update:open="unsaved.onOpenChange"
@@ -105,5 +105,5 @@ async function onSubmit() {
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

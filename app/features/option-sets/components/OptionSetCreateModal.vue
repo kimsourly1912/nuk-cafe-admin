@@ -70,7 +70,7 @@ async function onSubmit({ data }: FormSubmitEvent<OptionSetForm>) {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     title="New option set"
     description="Names only: each menu item sets its own price per version."
     :fullscreen="fullscreen"
@@ -195,5 +195,5 @@ async function onSubmit({ data }: FormSubmitEvent<OptionSetForm>) {
         </UTooltip>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

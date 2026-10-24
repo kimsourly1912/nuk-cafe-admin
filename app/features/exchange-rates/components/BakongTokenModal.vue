@@ -48,7 +48,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="version ? 'Replace the Bakong token' : 'Add the Bakong token'"
     description="With a token, the counter records a KHQR payment as soon as Bakong confirms it."
     @update:open="unsaved.onOpenChange"
@@ -100,5 +100,5 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -31,7 +31,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="`Remove ${owner.name} as an owner?`"
     :description="`${removalLine(owner)} They're signed out everywhere, in every cafe.`"
   >
@@ -80,5 +80,5 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

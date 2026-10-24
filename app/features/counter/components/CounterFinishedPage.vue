@@ -49,8 +49,8 @@ const panelOpen = computed({
     if (!value) openId.value = null
   },
 })
-const Slideover = resolveComponent('USlideover')
-const Modal = resolveComponent('UModal')
+const Slideover = resolveComponent('AppSlideover')
+const Modal = resolveComponent('AppModal')
 const overlayProps = computed(() => (isCompact.value ? { fullscreen: true } : { side: 'right' as const }))
 const openOrder = (order: CounterOrder) => {
   openId.value = order.id

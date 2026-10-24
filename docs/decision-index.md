@@ -230,3 +230,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D198](decisions.md#d198-manager-tools-on-the-counter-tables-and-qr-codes-branch-reports-step-1-the-server-2026-10-23) | Manager tools on the counter: tables and QR codes, branch reports (step 1, the server), 2026-10-23 |
 | [D199](decisions.md#d199-pause-online-orders-a-branch-state-set-from-the-counter-never-past-closing-step-1-the-server-2026-10-23) | Pause online orders: a branch state set from the counter, never past closing (step 1, the server), 2026-10-23 |
 | [D200](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24) | Delete permanently only without history; Archive stays the bin; menu items first, 2026-10-24 |
+| [D201](decisions.md#d201-back-closes-the-overlay-on-top-not-the-page-2026-10-24) | Back closes the overlay on top, not the page, 2026-10-24 |

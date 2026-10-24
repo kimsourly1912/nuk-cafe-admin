@@ -89,7 +89,7 @@ watch(categoryId, () => {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     title="Reorder menu items"
     description="Customers see a category's items in this order."
     :fullscreen="isCompact"
@@ -189,5 +189,5 @@ watch(categoryId, () => {
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

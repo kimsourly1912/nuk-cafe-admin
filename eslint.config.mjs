@@ -88,14 +88,17 @@ export default withNuxt(
     },
   },
   // Drawers and bottom sheets don't drag (ui.md → Overlays): AppDrawer wraps UDrawer, nothing else uses it.
+  // Back closes the overlay on top (D201): AppModal and AppSlideover wrap UModal and USlideover.
   // A time of day is a TimeInput: AM/PM changes with a tap, which a phone's keyboard can't type (D165).
   // A cafe's pages live under its address (D141): links go through `useTenantPath()`.
   {
     files: ['app/**/*.vue'],
-    ignores: ['app/components/AppDrawer.vue', 'app/components/TimeInput.vue'],
+    ignores: ['app/components/AppDrawer.vue', 'app/components/AppModal.vue', 'app/components/AppSlideover.vue', 'app/components/TimeInput.vue'],
     rules: {
       'vue/no-restricted-html-elements': ['error',
         { element: ['UDrawer'], message: 'Use <AppDrawer>: drawers don\'t drag (ui.md → Overlays).' },
+        { element: ['UModal'], message: 'Use <AppModal>: Back closes it (D201).' },
+        { element: ['USlideover'], message: 'Use <AppSlideover>: Back closes it (D201).' },
         { element: ['UInputTime'], message: 'Use <TimeInput>: AM/PM changes with a tap on phones (D165).' },
       ],
       'vue/no-restricted-static-attribute': ['error',
@@ -105,6 +108,8 @@ export default withNuxt(
       'no-restricted-syntax': ['error',
         { selector: 'CallExpression[callee.name="resolveComponent"][arguments.0.value="UDrawer"]', message: 'Use AppDrawer: drawers don\'t drag (ui.md → Overlays).' },
         { selector: 'ImportSpecifier[imported.name="UDrawer"]', message: 'Use AppDrawer: drawers don\'t drag (ui.md → Overlays).' },
+        { selector: 'CallExpression[callee.name="resolveComponent"][arguments.0.value=/^U(Modal|Slideover)$/]', message: 'Use AppModal / AppSlideover: Back closes them (D201).' },
+        { selector: 'ImportSpecifier[imported.name=/^U(Modal|Slideover)$/]', message: 'Use AppModal / AppSlideover: Back closes them (D201).' },
         ...CAFE_LINK_RESTRICTIONS,
         ...DATE_FORMAT_RESTRICTIONS,
       ],

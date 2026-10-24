@@ -64,7 +64,7 @@ async function submit() {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="`Send ${title}`"
     description="To a Telegram chat connected on the Telegram page."
     :fullscreen="isCompact"
@@ -161,5 +161,5 @@ async function submit() {
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

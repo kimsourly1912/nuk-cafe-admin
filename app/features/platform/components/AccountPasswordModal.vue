@@ -33,7 +33,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="password ? 'Temporary password' : `Set a temporary password for ${account.name}?`"
     :description="password ? undefined : 'Their current password stops working and every device they use is signed out. They choose a new password at their next sign-in.'"
     :dismissible="!password && !saving"
@@ -121,5 +121,5 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

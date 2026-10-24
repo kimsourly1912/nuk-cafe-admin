@@ -17,6 +17,10 @@ const sidebarItems = computed(() => withActiveItem(allItems, splitTenantUrl(rout
   .map(group => group.map(item => (typeof item.to === 'string' ? { ...item, to: tenantPath(item.to) } : item))))
 // Ctrl/⌘+B collapses the desktop sidebar; below `lg` it opens or closes the phone menu.
 const { open, collapsed: sidebarCollapsed } = useSidebarShortcut()
+// The sidebar's phone menu is Nuxt UI's own slide-over: Back closes it (D201).
+useOverlayBack(open, () => {
+  open.value = false
+})
 // The desktop sidebar and the phone menu both render the nav, so pick the copy that is on screen.
 function scrollParent(el: HTMLElement) {
   let parent = el.parentElement

@@ -280,7 +280,7 @@ async function usePhoto() {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="photoId || photo ? 'Edit photo' : 'Add photo'"
     description="Adjust how your photo looks to customers, then use it."
     :fullscreen="isCompact"
@@ -672,5 +672,5 @@ async function usePhoto() {
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -36,7 +36,7 @@ async function onSubmit({ data }: FormSubmitEvent<{ code: string }>) {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="`Open ${cafe.name} as support`"
     description="Read-only: you'll see its admin as the owner does, but nothing can be changed. Every page you open is recorded in the cafe's history."
   >
@@ -85,5 +85,5 @@ async function onSubmit({ data }: FormSubmitEvent<{ code: string }>) {
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

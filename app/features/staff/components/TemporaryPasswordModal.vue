@@ -18,7 +18,7 @@ const { copy, copied, isSupported } = useClipboard({ source: () => props.passwor
 </script>
 
 <template>
-  <UModal
+  <AppModal
     title="Temporary password"
     :dismissible="false"
     :close="false"
@@ -60,5 +60,5 @@ const { copy, copied, isSupported } = useClipboard({ source: () => props.passwor
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -1,5 +1,8 @@
 <script setup lang="ts">
-/** Generic confirmation modal. Open it with `useConfirm()` rather than mounting it directly. */
+/**
+ * Generic confirmation modal. Open it with `useConfirm()` rather than mounting it directly.
+ * Only its buttons answer it; Back is Cancel, as on a phone's own dialogs (D201).
+ */
 withDefaults(defineProps<{
   title: string
   description?: string
@@ -15,11 +18,12 @@ const emit = defineEmits<{ close: [confirmed: boolean] }>()
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="title"
     :description="description"
     :close="false"
     :dismissible="false"
+    @back="emit('close', false)"
   >
     <template #footer>
       <div class="flex w-full justify-end gap-2">
@@ -36,5 +40,5 @@ const emit = defineEmits<{ close: [confirmed: boolean] }>()
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

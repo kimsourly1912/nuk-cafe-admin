@@ -59,6 +59,8 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](.
 | `adminSetupSteps()`, `AdminSetupStep` | `utils/admin-setup.ts`, `types/admin-setup.ts` | The home page's "Set up your cafe": each feature exports its step from its index.ts, listed here in order (D155) |
 | `adminSearchSources()`, `AdminSearch`, `AdminSearchSource` | `utils/admin-search.ts`, `components/`, `types/admin-search.ts` | Ctrl/⌘+K search in the admin: each feature exports a source from its index.ts, listed here like the sidebar (D152) |
 | `AppDrawer` | `components/` | Every drawer and bottom sheet: `UDrawer` without a handle or dragging (`UDrawer` is a lint error elsewhere) |
+| `AppModal`, `AppSlideover` | `components/` | Every modal and slide-over: Back closes the one on top (D201; `UModal`/`USlideover` are lint errors elsewhere) |
+| `useOverlayBack` | `composables/` | Back closes one of Nuxt UI's own overlays (D201) |
 | `ToolbarTabs`, `useUrlTab` | `components/`, `composables/` | Tabs on a toolbar's line; a page's tab in the URL (`?tab=`) |
 | `ListPagination` | `components/` | The pager of every paginated list: "Page [n] of N · Rows per page", page numbers; `pageSize` in the URL (D128) |
 | `QuantityStepper` | `components/` | Every quantity: − n + in a pill, no keyboard on touch screens (D128) |

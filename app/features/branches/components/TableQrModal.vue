@@ -15,7 +15,7 @@ const { copy, copied } = useClipboard({ legacy: true })
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="`QR code: ${table.label}`"
     :description="table.area ?? 'Scan it to order for this table.'"
     :fullscreen="fullscreen"
@@ -64,5 +64,5 @@ const { copy, copied } = useClipboard({ legacy: true })
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

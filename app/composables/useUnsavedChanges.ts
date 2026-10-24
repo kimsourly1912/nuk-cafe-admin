@@ -222,14 +222,14 @@ function useStoredDraft<T extends object>(state: MaybeRefOrGetter<T>, baseline: 
 }
 
 /**
- * `useUnsavedChanges` for a form in a `UModal` (or `USlideover`/`UDrawer`). Bind `onOpenChange` to
+ * `useUnsavedChanges` for a form in an `<AppModal>` (or `<AppSlideover>`/`<AppDrawer>`). Bind `onOpenChange` to
  * the modal's `update:open` (catches X, Esc and outside click) and call `requestClose()` from Cancel.
  * The component must declare the `update:open` emit so the overlay's own listener doesn't close it.
  *
  * @example
  * const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: boolean] }>()
  * const unsaved = useModalUnsavedChanges(state, { paused: saving, close: () => emit('close', false) })
- * // <UModal @update:open="unsaved.onOpenChange"> ... <UButton label="Cancel" @click="unsaved.requestClose()" />
+ * // <AppModal @update:open="unsaved.onOpenChange"> ... <UButton label="Cancel" @click="unsaved.requestClose()" />
  */
 export function useModalUnsavedChanges<T extends object>(
   state: MaybeRefOrGetter<T>,

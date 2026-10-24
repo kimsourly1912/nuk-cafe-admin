@@ -37,7 +37,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="`Ban ${account.name}?`"
     description="They can't sign in anywhere, and every device they use is signed out now. Nothing is deleted."
   >
@@ -107,5 +107,5 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

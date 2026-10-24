@@ -27,7 +27,7 @@ async function openCafe() {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="`${cafe.name} is ready`"
     :dismissible="false"
     :close="false"
@@ -117,5 +117,5 @@ async function openCafe() {
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

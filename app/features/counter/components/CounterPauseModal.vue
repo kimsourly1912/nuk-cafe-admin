@@ -43,7 +43,7 @@ useSubmitShortcut(submit)
 </script>
 
 <template>
-  <UModal
+  <AppModal
     title="Pause online orders"
     description="Customers can't order online until then. Orders already placed carry on, and ordering starts again by itself."
     :fullscreen="fullscreen"
@@ -108,5 +108,5 @@ useSubmitShortcut(submit)
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

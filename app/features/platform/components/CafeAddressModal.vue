@@ -37,7 +37,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
 </script>
 
 <template>
-  <UModal
+  <AppModal
     title="Change web address"
     :description="`${cafe.name} is at /c/${cafe.slug}.`"
   >
@@ -93,5 +93,5 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

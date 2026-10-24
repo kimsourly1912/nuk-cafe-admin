@@ -323,7 +323,7 @@ function onEscape(event: KeyboardEvent) {
 </script>
 
 <template>
-  <USlideover
+  <AppSlideover
     :title="current.name"
     :content="{ onEscapeKeyDown: onEscape }"
     :ui="{ footer: 'pb-[max(env(safe-area-inset-bottom),1rem)] sm:hidden' }"
@@ -649,5 +649,5 @@ function onEscape(event: KeyboardEvent) {
         @click="finishReorder()"
       />
     </template>
-  </USlideover>
+  </AppSlideover>
 </template>

@@ -47,7 +47,7 @@ async function onSubmit({ data }: FormSubmitEvent<NewBranchForm>) {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     title="Add branch"
     description="It shares the cafe's menu, staff and customers. Set its opening hours next: it takes no orders until then."
     :fullscreen="fullscreen"
@@ -125,5 +125,5 @@ async function onSubmit({ data }: FormSubmitEvent<NewBranchForm>) {
         </UTooltip>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

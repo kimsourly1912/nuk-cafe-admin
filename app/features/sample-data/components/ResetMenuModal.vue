@@ -35,7 +35,7 @@ const confirmed = computed(() => typed.value.trim() === 'RESET')
 </script>
 
 <template>
-  <UModal
+  <AppModal
     v-model:open="open"
     title="Reset menu data?"
     :fullscreen="isCompact"
@@ -117,5 +117,5 @@ const confirmed = computed(() => typed.value.trim() === 'RESET')
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

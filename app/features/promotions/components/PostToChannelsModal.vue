@@ -79,7 +79,7 @@ const previewChannel = computed(() => connected.value.find(c => form.channelIds.
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="`Post “${promotion.name}”`"
     description="To your channels, with an Order now button that opens your menu with this offer."
     :fullscreen="isCompact"
@@ -260,5 +260,5 @@ const previewChannel = computed(() => connected.value.find(c => form.channelIds.
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

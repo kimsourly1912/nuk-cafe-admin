@@ -42,8 +42,8 @@ const open = defineModel<boolean>('open', { required: true })
 const emit = defineEmits<{ cancel: [order: CounterOrder], reload: [] }>()
 
 const { isCompact } = useLayoutContext()
-const Slideover = resolveComponent('USlideover')
-const Modal = resolveComponent('UModal')
+const Slideover = resolveComponent('AppSlideover')
+const Modal = resolveComponent('AppModal')
 const overlayProps = computed(() => (isCompact.value ? { fullscreen: true } : { side: 'right' as const }))
 
 const actions = useCounterActions(() => props.branchId)

@@ -76,7 +76,7 @@ const steps = computed(() => props.kind === 'group'
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="title"
     :fullscreen="isCompact"
     :dismissible="false"
@@ -177,5 +177,5 @@ const steps = computed(() => props.kind === 'group'
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

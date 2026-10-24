@@ -570,7 +570,7 @@ Source: `app/components/RecordSelect.vue`. Used by `CategorySelect`, `Availabili
 
 ## `<AppDrawer>`
 
-`UDrawer` without dragging (ui.md §8, D126): no handle, `handle-only`, so the sheet never moves under a finger; its X is on unless `:close="false"`. Every other prop, event and slot is `UDrawer`'s, also through `<component :is>` (`resolveComponent('AppDrawer')`). `UDrawer` itself is a lint error outside this file.
+`UDrawer` without dragging (ui.md §8, D126): no handle, `handle-only`, so the sheet never moves under a finger; its X is on unless `:close="false"`. Back closes it (D201), with `routed` and `@back` as [`<AppModal>`](#appmodal-and-appslideover)'s. Every other prop, event and slot is `UDrawer`'s, also through `<component :is>` (`resolveComponent('AppDrawer')`). `UDrawer` itself is a lint error outside this file.
 
 Source: `app/components/AppDrawer.vue`
 
@@ -580,6 +580,37 @@ Source: `app/components/AppDrawer.vue`
   <template #body>…</template>
 </AppDrawer>
 ```
+
+---
+
+## `<AppModal>` and `<AppSlideover>`
+
+`UModal` and `USlideover` that Back closes (ui.md → Overlays, D201): a phone's Back or edge swipe closes the one on top like Escape and stays on the page. Every prop, event and slot is Nuxt UI's, also through `<component :is>` (`resolveComponent('AppModal')`); `UModal` and `USlideover` are lint errors elsewhere. Two additions:
+
+- `routed`: the page keeps the overlay in its address (`?item=` on Menu items, `?order=` on Order history), so Back is already the route change that closes it: no entry of its own (two would need two Backs).
+- `@back`: what Back does instead. Without it Back closes a dismissible overlay and does nothing to one with `:dismissible="false"` (a password shown once). `ConfirmDialog` takes it as Cancel.
+
+Sources: `app/components/AppModal.vue`, `app/components/AppSlideover.vue`
+
+```vue
+<AppModal v-model:open="open" title="New table">
+  <template #body>…</template>
+</AppModal>
+```
+
+### `useOverlayBack`
+
+For Nuxt UI's own overlays, which the wrappers can't reach: `useOverlayBack(open, onBack)` gives the overlay an entry while `open` is true and calls `onBack` on Back. The layouts use it for the sidebar's phone menu, `AdminSearch` for the search palette, `AssistantPanel` below `lg`.
+
+Source: `app/composables/useOverlayBack.ts`
+
+```ts
+useOverlayBack(open, () => {
+  open.value = false
+})
+```
+
+**How it works and its edges** (`app/utils/overlay-history.ts`, unit `test/unit/overlay-history.test.ts`, e2e `test/e2e/overlay-back.test.ts`): the entry is a copy of the page's history state, so its position is the page's. Vue Router's entries never share a position, so a `popstate` between equal positions is ours, kept from the router (a custom history in `app/router.options.ts`). Back puts the top overlay's entry back at once, then calls `onBack`: an overlay that stays open (unsaved input, Keep editing) still has one. A route change steps back over our entries before the router writes its own (`plugins/overlay-history.client.ts`, after the other guards); overlays still open get new ones. Every traversal, `router.back()` included, goes through one queue. An entry left behind (a reload with an overlay open, Forward after closing one) is stepped off. Opening an overlay drops the browser's Forward history, like any navigation. Chrome skips entries pushed without a recent tap: an overlay opened on load, or one kept open after Back, may be skipped by a later Back, which then leaves the page and the unsaved-changes guard asks.
 
 ---
 

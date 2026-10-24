@@ -142,7 +142,7 @@ async function onSubmit({ data }: FormSubmitEvent<AvailabilityRuleForm>) {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="readOnly ? rule!.name : isEdit ? 'Edit availability rule' : 'New availability rule'"
     :description="readOnly ? 'Archived: restore it to edit its times.' : undefined"
     :fullscreen="fullscreen"
@@ -374,5 +374,5 @@ async function onSubmit({ data }: FormSubmitEvent<AvailabilityRuleForm>) {
         </template>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

@@ -22,7 +22,7 @@ const subs = computed(() => pluralize(props.archivedSubs, ['archived subcategory
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :title="title"
     description="Customers will see it again, at the end of its level."
     @update:open="open => !open && emit('close', false)"
@@ -50,5 +50,5 @@ const subs = computed(() => pluralize(props.archivedSubs, ['archived subcategory
         />
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>

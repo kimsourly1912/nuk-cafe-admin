@@ -56,7 +56,7 @@ async function onSubmit({ data }: FormSubmitEvent<ModifierGroupForm>) {
 </script>
 
 <template>
-  <UModal
+  <AppModal
     :fullscreen="fullscreen"
     title="New add-on group"
     description="Extras customers can add, like milk or syrups, with default prices. Items can set their own."
@@ -220,5 +220,5 @@ async function onSubmit({ data }: FormSubmitEvent<ModifierGroupForm>) {
         </UTooltip>
       </div>
     </template>
-  </UModal>
+  </AppModal>
 </template>
