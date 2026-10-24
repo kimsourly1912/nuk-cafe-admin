@@ -40,9 +40,9 @@ describe('new add-on group form', () => {
   })
 })
 
-const mod = (id: string, name: string, overrides: Partial<Modifier> = {}): Modifier => ({ id, name, priceDeltaMinor: 0, isDefault: false, sortOrder: 1, status: 'active', ...overrides })
+const mod = (id: string, name: string, overrides: Partial<Modifier> = {}): Modifier => ({ id, name, priceDeltaMinor: 0, isDefault: false, sortOrder: 1, status: 'active', deleteBlocker: null, ...overrides })
 const groupOf = (minSelect: number, maxSelect: number | null, modifiers: Modifier[]): ModifierGroup =>
-  ({ id: 'g', name: 'Milk', minSelect, maxSelect, status: 'active', modifiers, itemCount: 0, version: 1, createdAt: '', updatedAt: '' })
+  ({ id: 'g', name: 'Milk', minSelect, maxSelect, status: 'active', modifiers, itemCount: 0, version: 1, createdAt: '', updatedAt: '', deleteBlocker: null })
 const MILK = groupOf(1, 1, [mod('a', 'Whole', { isDefault: true }), mod('b', 'Oat', { priceDeltaMinor: 50 }), mod('c', 'Soy', { status: 'archived' })])
 
 describe('group settings', () => {

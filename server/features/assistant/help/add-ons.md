@@ -24,6 +24,7 @@ Open a group from its card (**Manage**). On a phone, use the tabs to switch betw
 - **Add add-on**, or click an add-on's name to edit its name and default price.
 - **Preselected**: tick or untick; saved at once. You can tick several quickly: each box changes straight away and a small spinner shows until it's saved. If a change can't be saved, its box goes back and a message says why.
 - **Archive add-on** from its row's menu: customers stop seeing it; **Show archived** lists archived ones to restore.
+- **Delete** an archived add-on for good: the bin button beside its **Restore**. It asks first, and it can't be restored. Only an add-on **no menu item has its own price for** can go (archived items count too); otherwise the button is greyed out. Past orders keep its name and price.
 - **Reorder**: move add-ons, then **Save order**.
 - **Settings**: group name, **Selection** (Minimum and Maximum selections, **No maximum**). Press **Save changes**.
 - **Used by**: the menu items that offer this group, each a link to the item.
@@ -32,9 +33,11 @@ Open a group from its card (**Manage**). On a phone, use the tabs to switch betw
 
 The library's prices and rules are defaults. On a menu item you can set a different price for an add-on, or turn on **Own rules for this item**. Those stay on the item when the library changes.
 
-## Archive or restore a group
+## Archive, restore or delete a group
 
 **Archive group** (in the group's ⋮ menu): items that offer it keep it, but it can't be added to other items, and it's read-only until **Restore group**.
+
+**⋮ → Delete permanently** (on an archived group's card in the library): removes the group and its add-ons for good. It asks first, and it can't be restored. Only a group that **no menu item offers** and none of whose add-ons an item prices, archived items too, can be deleted; otherwise the action is greyed out and says so. Past orders keep the add-ons' names and prices.
 
 ## Common problems
 

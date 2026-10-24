@@ -160,6 +160,45 @@ export function useModifierGroupMutations() {
     { success: ({ modifier }) => `"${modifier.name}" restored`, error: ({ modifier }) => `Could not restore "${modifier.name}"` },
   )
 
+  /** Deletes an archived add-on no item prices for good (D200): asks first, it can't be restored. */
+  const deleteModifier = change(
+    'modifier-delete',
+    ({ group, modifier }: ModifierChange) => apiFetch<ModifierGroup>(`${BASE}/${group.id}/modifiers/${modifier.id}`, { method: 'DELETE', body: { version: group.version } }),
+    {
+      success: ({ modifier }) => `"${modifier.name}" deleted`,
+      error: ({ modifier }) => `Could not delete "${modifier.name}"`,
+      confirm: ({ modifier }) => ({
+        title: `Delete “${modifier.name}” permanently?`,
+        description: 'No menu item has its own price for it. It can\'t be restored.',
+        confirmLabel: 'Delete permanently',
+        danger: true,
+      }),
+    },
+  )
+
+  /**
+   * Deletes an archived group and its add-ons for good (D200). Asks first: it can't be restored.
+   * The server refuses one items still use (409 `MODIFIER_IN_USE`).
+   */
+  const remove = useMutation(
+    ({ group }: GroupChange) => apiFetch<null>(`${BASE}/${group.id}`, { method: 'DELETE', body: { version: group.version } }),
+    {
+      id: 'modifier-groups:delete',
+      key: ({ group }) => groupKey(group.id),
+      lock: ({ group }) => groupKey(group.id),
+      removes: true,
+      confirm: ({ group }) => ({
+        title: `Delete “${group.name}” permanently?`,
+        description: 'No menu item offers it or prices its add-ons. Its add-ons are removed too, and it can\'t be restored.',
+        confirmLabel: 'Delete permanently',
+        danger: true,
+      }),
+      successMessage: (_, { group }) => `Add-on group "${group.name}" deleted`,
+      errorMessage: ({ group }) => `Could not delete "${group.name}"`,
+      invalidate: AFFECTED,
+    },
+  )
+
   const reorderModifiers = change(
     'modifier-reorder',
     ({ group, modifierIds }: GroupChange & { modifierIds: string[] }) =>
@@ -167,7 +206,7 @@ export function useModifierGroupMutations() {
     { success: () => 'Order saved', error: () => 'Could not save the order' },
   )
 
-  const changes = [update, archive, restore, addModifier, updateModifier, setDefault, archiveModifier, restoreModifier, reorderModifiers]
+  const changes = [update, archive, restore, remove, addModifier, updateModifier, setDefault, archiveModifier, restoreModifier, deleteModifier, reorderModifiers]
 
   return {
     create,
@@ -179,8 +218,15 @@ export function useModifierGroupMutations() {
     setDefault,
     archiveModifier,
     restoreModifier,
+    deleteModifier,
+    remove,
     reorderModifiers,
     /** Any change to this group in flight: disable its actions. */
     isBusy: (groupId: string) => changes.some(m => m.isPending(groupKey(groupId))),
+    /** Deleted: hidden until the refetch arrives. */
+    isRemoved: (groupId: string) => remove.isRemoved(groupKey(groupId)),
   }
 }
+
+/** Why Delete permanently is off for an archived group or add-on (D200), under or beside the action. */
+export const MODIFIER_IN_USE = 'Menu items still use it (archived ones too)'

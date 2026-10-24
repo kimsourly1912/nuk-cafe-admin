@@ -4,6 +4,7 @@ export const ModifierErrorCodes = {
   MODIFIER_GROUP_NAME_TAKEN: 'MODIFIER_GROUP_NAME_TAKEN',
   MODIFIER_NAME_TAKEN: 'MODIFIER_NAME_TAKEN',
   SELECTION_RULES: 'SELECTION_RULES',
+  MODIFIER_IN_USE: 'MODIFIER_IN_USE',
 } as const
 
 export const modifierGroupNotFound = () => notFound('This add-on group')
@@ -37,3 +38,12 @@ export const modifierNotArchived = (what: 'group' | 'add-on') =>
 
 export const modifiersChanged = () =>
   apiError(409, ErrorCodes.VERSION_CONFLICT, 'The add-ons of this group changed. Reload it and try again.')
+
+export const modifierGroupArchivedFirst = () =>
+  apiError(409, ErrorCodes.INVALID_STATE, 'Archive this add-on group before deleting it.')
+
+/** A permanent delete of a group or add-on menu items (archived ones too) still use (D200). */
+export const modifierInUse = (what: 'group' | 'add-on') =>
+  apiError(409, ModifierErrorCodes.MODIFIER_IN_USE, what === 'group'
+    ? 'Menu items still offer this add-on group or price its add-ons (archived ones count too). Remove it from them, or delete those items, first.'
+    : 'Menu items still have their own price for this add-on (archived items count too). Remove the price, or delete those items, first.')

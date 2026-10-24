@@ -17,6 +17,10 @@ export const MAX_MODIFIERS = 30
 /** An add-on's price, in cents: a typo guard ($100). */
 export const MAX_MODIFIER_PRICE_MINOR = 10_000
 
+/** What keeps an archived group or add-on from being deleted permanently (D200): menu items, archived ones too, use it. */
+export const MODIFIER_DELETE_BLOCKERS = ['items'] as const
+export type ModifierDeleteBlocker = typeof MODIFIER_DELETE_BLOCKERS[number]
+
 export interface Modifier {
   id: string
   name: string
@@ -25,6 +29,8 @@ export interface Modifier {
   isDefault: boolean
   sortOrder: number
   status: ModifierStatus
+  /** `items` while an item (archived ones too) has its own price for it; else `null` (D200). */
+  deleteBlocker: ModifierDeleteBlocker | null
 }
 
 export interface ModifierGroup {
@@ -42,6 +48,8 @@ export interface ModifierGroup {
   version: number
   createdAt: string
   updatedAt: string
+  /** `items` while an item (archived ones too) offers the group or prices one of its add-ons; else `null` (D200). */
+  deleteBlocker: ModifierDeleteBlocker | null
 }
 
 // --- Selection rules: checked by the server before every write (and again in the batch), and by

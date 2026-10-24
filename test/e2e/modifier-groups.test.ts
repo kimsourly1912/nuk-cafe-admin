@@ -10,10 +10,10 @@ await setupE2e()
 
 const STAMP = '2026-09-28T00:00:00.000Z'
 const addOn = (id: string, name: string, priceDeltaMinor: number, overrides: Partial<Modifier> = {}): Modifier =>
-  ({ id, name, priceDeltaMinor, isDefault: false, sortOrder: 1, status: 'active', ...overrides })
+  ({ id, name, priceDeltaMinor, isDefault: false, sortOrder: 1, status: 'active', deleteBlocker: null, ...overrides })
 
 function groupOf(id: string, name: string, modifiers: Modifier[], overrides: Partial<ModifierGroup> = {}): ModifierGroup {
-  return { id, name, minSelect: 0, maxSelect: null, status: 'active', modifiers, itemCount: 0, version: 1, createdAt: STAMP, updatedAt: STAMP, ...overrides }
+  return { id, name, minSelect: 0, maxSelect: null, status: 'active', modifiers, itemCount: 0, version: 1, createdAt: STAMP, updatedAt: STAMP, deleteBlocker: null, ...overrides }
 }
 
 const MILK = groupOf('grp-1', 'Milk choices', [addOn('mod-1', 'Whole milk', 0, { isDefault: true }), addOn('mod-2', 'Oat milk', 50), addOn('mod-3', 'Almond milk', 75), addOn('mod-9', 'Soy milk', 50, { status: 'archived' })], { minSelect: 1, maxSelect: 1, itemCount: 18 })
@@ -76,6 +76,52 @@ function answering(group: ModifierGroup, change: (group: ModifierGroup, body: Re
   }
   return { bodies, handler }
 }
+
+describe('deleting permanently (D200)', () => {
+  it('deletes an unused archived group after asking, from the version read, and the card goes', async () => {
+    const groups = [MILK, SYRUPS, OLD]
+    const bodies: unknown[] = []
+    const { page } = await open(backend(groups, {
+      'DELETE /admin/menu/modifier-groups/{id}': ({ url: u, body }) => {
+        bodies.push({ id: u.pathname.split('/').pop(), body })
+        groups.splice(groups.indexOf(OLD), 1)
+        return null
+      },
+    }))
+    await page.getByRole('tab', { name: /Archived/ }).click()
+    await page.getByRole('button', { name: 'Actions for Seasonal extras' }).click()
+    await page.getByRole('menuitem', { name: 'Delete permanently' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Delete “Seasonal extras” permanently?' })
+    await dialog.getByText('No menu item offers it or prices its add-ons.', { exact: false }).waitFor()
+    await dialog.getByRole('button', { name: 'Delete permanently' }).click()
+    await toast(page, 'Add-on group "Seasonal extras" deleted').waitFor()
+    await card(page, 'Seasonal extras').waitFor({ state: 'detached' })
+    expect(bodies).toEqual([{ id: OLD.id, body: { version: 2 } }])
+  })
+
+  it('says why an archived group items still use can\'t go', async () => {
+    const USED = groupOf('grp-7', 'Old toppings', [addOn('mod-20', 'Foam', 0)], { status: 'archived', deleteBlocker: 'items' })
+    const { page } = await open(backend([MILK, USED]))
+    await page.getByRole('tab', { name: /Archived/ }).click()
+    await page.getByRole('button', { name: 'Actions for Old toppings' }).click()
+    const action = page.getByRole('menuitem', { name: 'Delete permanently' })
+    expect(await action.getAttribute('aria-disabled')).toBe('true')
+    await action.getByText('Menu items still use it (archived ones too)').waitFor()
+  })
+
+  it('deletes an unused archived add-on on the group page with the group\'s version, and keeps a priced one', async () => {
+    const GROUP = groupOf('grp-8', 'Milk', [addOn('mod-30', 'Whole', 0), addOn('mod-31', 'Rice', 40, { status: 'archived' }), addOn('mod-32', 'Hemp', 60, { status: 'archived', deleteBlocker: 'items' })], { version: 5 })
+    const answer = answering(GROUP, group => ({ modifiers: group.modifiers.filter(m => m.id !== 'mod-31') }))
+    const { page } = await openGroup(backend([GROUP], { 'DELETE /admin/menu/modifier-groups/{id}/modifiers/{id}': answer.handler }), 'grp-8')
+    await page.getByRole('button', { name: 'Archived add-ons (2)' }).click()
+    expect(await page.getByRole('button', { name: 'Delete Hemp permanently' }).isDisabled()).toBe(true)
+    await page.getByRole('button', { name: 'Delete Rice permanently' }).click()
+    await page.getByRole('dialog', { name: 'Delete “Rice” permanently?' }).getByRole('button', { name: 'Delete permanently' }).click()
+    await toast(page, '"Rice" deleted').waitFor()
+    await page.getByRole('button', { name: 'Archived add-ons (1)' }).waitFor()
+    expect(answer.bodies).toEqual([{ version: 5 }])
+  })
+})
 
 describe('add-ons library', () => {
   it('shows each group\'s rule, add-on rows with prices, preselection and usage', async () => {
@@ -156,7 +202,7 @@ describe('add-ons library', () => {
 
     await page.getByRole('tab', { name: /Archived/ }).click()
     await page.getByRole('button', { name: 'Actions for Seasonal extras' }).click()
-    expect(await page.getByRole('menuitem').allInnerTexts()).toEqual(['Restore'])
+    expect(await page.getByRole('menuitem').allInnerTexts()).toEqual(['Restore', 'Delete permanently'])
     await page.getByRole('menuitem', { name: 'Restore' }).click()
     await toast(page, 'Add-on group "Seasonal extras" restored').waitFor()
     expect(await page.getByText('Delete', { exact: true }).count()).toBe(0)

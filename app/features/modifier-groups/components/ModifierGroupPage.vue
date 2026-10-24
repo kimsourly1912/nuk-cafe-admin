@@ -16,7 +16,7 @@ import type { Modifier, ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { FormPart } from '~/utils/form-value'
 import { MAX_MODIFIERS } from '#shared/contracts/menu-modifiers'
 import type { AddOnAction } from './AddOnActions.vue'
-import { activeModifiers, archiveGroupConfirm, archivedModifiers, useModifierGroup, useModifierGroupMutations } from '../composables/useModifierGroups'
+import { activeModifiers, archiveGroupConfirm, archivedModifiers, MODIFIER_IN_USE, useModifierGroup, useModifierGroupMutations } from '../composables/useModifierGroups'
 import { usePreselectQueue } from '../composables/usePreselectQueue'
 import { describeRules } from '../schemas/modifier-group-display'
 import type { GroupSettingsForm, SettingsIssues } from '../schemas/modifier-group-form'
@@ -170,6 +170,13 @@ async function archiveAddOn(modifier: Modifier) {
 async function restoreAddOn(modifier: Modifier) {
   if (!group.value) return
   const result = checked(await mutations.restoreModifier.execute({ group: group.value, modifier }))
+  if (result.ok) take(result.data)
+}
+
+/** An archived add-on no item prices can go for good (D200); the page keeps the group's new version. */
+async function deleteAddOn(modifier: Modifier) {
+  if (!group.value) return
+  const result = checked(await mutations.deleteModifier.execute({ group: group.value, modifier }))
   if (result.ok) take(result.data)
 }
 
@@ -560,17 +567,32 @@ const headerActions = computed(() => archived.value
                           class="flex items-center justify-between gap-2 py-2"
                         >
                           <span class="min-w-0 break-words text-muted">{{ modifier.name }}</span>
-                          <UButton
+                          <div
                             v-if="!archived"
-                            label="Restore"
-                            icon="i-lucide-archive-restore"
-                            color="neutral"
-                            variant="outline"
-                            size="sm"
-                            :disabled="busy || full"
-                            :aria-label="`Restore ${modifier.name}`"
-                            @click="restoreAddOn(modifier)"
-                          />
+                            class="flex shrink-0 items-center gap-1"
+                          >
+                            <UButton
+                              label="Restore"
+                              icon="i-lucide-archive-restore"
+                              color="neutral"
+                              variant="outline"
+                              size="sm"
+                              :disabled="busy || full"
+                              :aria-label="`Restore ${modifier.name}`"
+                              @click="restoreAddOn(modifier)"
+                            />
+                            <UTooltip :text="modifier.deleteBlocker ? MODIFIER_IN_USE : 'Delete permanently'">
+                              <UButton
+                                icon="i-lucide-trash-2"
+                                color="error"
+                                variant="ghost"
+                                size="sm"
+                                :disabled="busy || modifier.deleteBlocker !== null"
+                                :aria-label="`Delete ${modifier.name} permanently`"
+                                @click="deleteAddOn(modifier)"
+                              />
+                            </UTooltip>
+                          </div>
                         </li>
                       </ul>
                     </div>

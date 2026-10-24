@@ -6,7 +6,7 @@ import { toIso } from '#server/utils/time'
 import type { Actor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
 import { itemCountsByGroup } from './items.repository'
-import { modifierArchived, modifierGroupArchived, modifierGroupChanged, modifierGroupNameTaken, modifierGroupNotFound, modifierNameTaken, modifierNotArchived, modifierNotFound, modifiersChanged, selectionRules } from './modifiers.errors'
+import { modifierArchived, modifierGroupArchived, modifierGroupArchivedFirst, modifierGroupChanged, modifierInUse, modifierGroupNameTaken, modifierGroupNotFound, modifierNameTaken, modifierNotArchived, modifierNotFound, modifiersChanged, selectionRules } from './modifiers.errors'
 import * as repo from './modifiers.repository'
 import type { ModifierGroupRow, ModifierRow } from './modifiers.repository'
 import type { SelectionState } from './modifiers.rules'
@@ -28,11 +28,12 @@ function toGroup(row: ModifierGroupRow, modifiers: ModifierRow[], itemCounts: Ma
     maxSelect: row.maxSelect,
     status: row.status,
     modifiers: [...own.filter(m => m.status === 'active'), ...own.filter(m => m.status !== 'active')]
-      .map(m => ({ id: m.id, name: m.name, priceDeltaMinor: m.priceDeltaMinor, isDefault: m.isDefault, sortOrder: m.sortOrder, status: m.status })),
+      .map(m => ({ id: m.id, name: m.name, priceDeltaMinor: m.priceDeltaMinor, isDefault: m.isDefault, sortOrder: m.sortOrder, status: m.status, deleteBlocker: m.deleteBlocker })),
     itemCount: itemCounts.get(row.id) ?? 0,
     version: row.version,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
+    deleteBlocker: row.deleteBlocker,
   }
 }
 
@@ -77,7 +78,7 @@ const audit = (db: Db, actor: Actor, action: string, groupId: string, metadata: 
  * Runs a write on one group. A unique-index failure is `onNameTaken()`. A failed guard is either the
  * group changed meanwhile (its version moved) or the selection rules no longer fit.
  */
-async function runGroupBatch(db: Db, tenantId: string, groupId: string, version: number, statements: Statement[], onNameTaken: () => Error) {
+async function runGroupBatch(db: Db, tenantId: string, groupId: string, version: number, statements: Statement[], onNameTaken: () => Error, onGuard: () => Error = () => selectionRules(RULES_CHANGED)) {
   try {
     await db.batch(statements as [Statement, ...Statement[]])
   }
@@ -85,7 +86,7 @@ async function runGroupBatch(db: Db, tenantId: string, groupId: string, version:
     if (isUniqueViolation(error)) throw onNameTaken()
     if (!isStaleWrite(error)) throw error
     const current = await repo.findGroup(db, tenantId, groupId)
-    throw current?.version === version ? selectionRules(RULES_CHANGED) : modifierGroupChanged()
+    throw current?.version === version ? onGuard() : modifierGroupChanged()
   }
 }
 
@@ -163,6 +164,22 @@ export async function restoreModifierGroup(db: Db, actor: Actor, id: string, inp
   return loadGroup(db, tenantId, id)
 }
 
+/**
+ * Deletes an archived group and its add-ons for good (D200), only while no item (archived ones too)
+ * offers it or prices one of its add-ons: checked first for the refusal and again in the batch.
+ */
+export async function deleteModifierGroup(db: Db, actor: Actor, id: string, input: ModifierVersionInput): Promise<void> {
+  const { tenantId } = actor
+  const group = await openGroup(db, tenantId, id, input.version, true)
+  if (group.status !== 'archived') throw modifierGroupArchivedFirst()
+  if (group.deleteBlocker) throw modifierInUse('group')
+  await runGroupBatch(db, tenantId, id, input.version, [
+    ...repo.deleteGroupStatements(db, tenantId, id, input.version),
+    requireOneChange(db),
+    audit(db, actor, 'delete', id, { name: group.name }),
+  ], () => modifierGroupChanged(), () => modifierInUse('group'))
+}
+
 export async function addModifier(db: Db, actor: Actor, groupId: string, input: AddModifierInput): Promise<ModifierGroup> {
   const { tenantId } = actor
   const group = await openGroup(db, tenantId, groupId, input.version)
@@ -219,6 +236,26 @@ export async function archiveModifier(db: Db, actor: Actor, groupId: string, mod
     repo.requireSelectionRules(db, tenantId, groupId),
     audit(db, actor, 'modifier.archive', groupId, { modifierId }),
   ], () => modifierGroupChanged())
+  return loadGroup(db, tenantId, groupId)
+}
+
+/**
+ * Deletes an archived add-on of an active group for good (D200), only while no item (archived ones
+ * too) has its own price for it. The group's version is the lock, as for every add-on write.
+ */
+export async function deleteModifier(db: Db, actor: Actor, groupId: string, modifierId: string, input: ModifierVersionInput): Promise<ModifierGroup> {
+  const { tenantId } = actor
+  await openGroup(db, tenantId, groupId, input.version)
+  const modifier = await openModifier(db, tenantId, groupId, modifierId)
+  if (modifier.status !== 'archived') throw modifierNotArchived('add-on')
+  if (modifier.deleteBlocker) throw modifierInUse('add-on')
+  await runGroupBatch(db, tenantId, groupId, input.version, [
+    repo.touchGroupStatement(db, tenantId, groupId, input.version, new Date()),
+    requireOneChange(db),
+    repo.deleteModifierStatement(db, tenantId, groupId, modifierId),
+    requireOneChange(db),
+    audit(db, actor, 'modifier.delete', groupId, { modifierId, name: modifier.name }),
+  ], () => modifierGroupChanged(), () => modifierInUse('add-on'))
   return loadGroup(db, tenantId, groupId)
 }
 

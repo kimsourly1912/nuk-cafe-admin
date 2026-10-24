@@ -3,13 +3,17 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { menuModifierGroups, menuModifiers } from '#server/features/menu/menu.schema'
-import { addModifier, archiveModifier, archiveModifierGroup, createModifierGroup, listModifierGroups, reorderModifiers, restoreModifier, restoreModifierGroup, updateModifier, updateModifierGroup } from '#server/features/menu/modifiers.service'
+import { menuItemModifierGroups, menuModifierGroups, menuModifiers } from '#server/features/menu/menu.schema'
+import { deleteGroupStatements, deleteModifierStatement } from '#server/features/menu/modifiers.repository'
+import { createCategory } from '#server/features/menu/categories.service'
+import { archiveItem, createItem, deleteItem } from '#server/features/menu/items.service'
+import { addModifier, archiveModifier, archiveModifierGroup, createModifierGroup, deleteModifier, deleteModifierGroup, getModifierGroup, listModifierGroups, reorderModifiers, restoreModifier, restoreModifierGroup, updateModifier, updateModifierGroup } from '#server/features/menu/modifiers.service'
 import { selectionProblem } from '#server/features/menu/modifiers.rules'
 import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
-import type { Db } from '#server/utils/batch'
+import type { Db, Statement } from '#server/utils/batch'
+import { isStaleWrite } from '#server/utils/batch'
 
 let db: Db
 const actor: Actor = { userId: 'admin-1', tenantId: TEST_TENANT, role: 'owner', requestId: 'req-1' }
@@ -186,5 +190,107 @@ describe('selection rules', () => {
     expect(selectionProblem({ minSelect: 0, maxSelect: null, active: 31, defaults: 0 })?.message).toMatch(/at most 30/)
     expect(selectionProblem({ minSelect: 2, maxSelect: null, active: 1, defaults: 0 })?.message).toBe('Customers must choose 2, but only 1 add-on is active.')
     expect(selectionProblem({ minSelect: 0, maxSelect: 1, active: 3, defaults: 2 })?.message).toBe('2 add-ons are pre-selected, but customers may choose at most 1.')
+  })
+})
+
+describe('deleting permanently (D200)', () => {
+  const groupExists = async (id: string) => (await db.select({ id: menuModifierGroups.id }).from(menuModifierGroups).where(eq(menuModifierGroups.id, id))).length === 1
+  const addOnExists = async (id: string) => (await db.select({ id: menuModifiers.id }).from(menuModifiers).where(eq(menuModifiers.id, id))).length === 1
+  const archive = (group: ModifierGroup) => archiveModifierGroup(db, actor, group.id, { version: group.version })
+  const addOn = (group: ModifierGroup, name: string) => group.modifiers.find(m => m.name === name)!
+  /** A draft item offering `group`, with its own prices for these add-ons. */
+  async function itemWith(group: ModifierGroup, prices: { modifierId: string, priceDeltaMinor: number }[] = []) {
+    const top = await createCategory(db, actor, { name: `Drinks ${group.id}`, description: '', parentId: null, availabilityRuleIds: [] })
+    return createItem(db, actor, { categoryId: top.id, name: 'Latte', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 350, status: 'active' }], modifierGroups: [{ groupId: group.id, rules: null, prices }], availabilityRuleIds: [] })
+  }
+
+  describe('a group', () => {
+    it('deletes an unused archived group with its add-ons, and keeps its name in the audit', async () => {
+      const group = await archive(await milk())
+      expect(group.deleteBlocker).toBeNull()
+      await deleteModifierGroup(db, actor, group.id, { version: group.version })
+      expect(await groupExists(group.id)).toBe(false)
+      expect(await db.select().from(menuModifiers).where(eq(menuModifiers.groupId, group.id))).toEqual([])
+      const [audit] = await db.select().from(auditEvents).where(eq(auditEvents.action, 'menu.modifier_group.delete'))
+      expect(audit).toMatchObject({ targetId: group.id, metadata: { name: 'Milk' } })
+      await expectApiError(() => getModifierGroup(db, TEST_TENANT, group.id), 404, 'NOT_FOUND')
+    })
+
+    it('refuses an active group, a stale version and an unknown one', async () => {
+      const active = await milk()
+      await expectApiError(() => deleteModifierGroup(db, actor, active.id, { version: active.version }), 409, 'INVALID_STATE')
+      const group = await archive(active)
+      await expectApiError(() => deleteModifierGroup(db, actor, group.id, { version: active.version }), 409, 'VERSION_CONFLICT')
+      await expectApiError(() => deleteModifierGroup(db, actor, 'missing', { version: 1 }), 404, 'NOT_FOUND')
+      expect(await groupExists(group.id)).toBe(true)
+    })
+
+    it('refuses one an archived item offers, until that item is deleted', async () => {
+      const active = await milk()
+      const item = await itemWith(active)
+      const gone = await archiveItem(db, actor, item.id, { version: item.version })
+      const group = await archive(active)
+      expect(group.deleteBlocker).toBe('items')
+      await expectApiError(() => deleteModifierGroup(db, actor, group.id, { version: group.version }), 409, 'MODIFIER_IN_USE')
+      await deleteItem(db, actor, item.id, { version: gone.version })
+      await deleteModifierGroup(db, actor, group.id, { version: group.version })
+      expect(await groupExists(group.id)).toBe(false)
+    })
+
+    it('the delete statements themselves stop on their guard for an active group, an offer and an own price', async () => {
+      const run = (group: ModifierGroup) => db.batch(deleteGroupStatements(db, TEST_TENANT, group.id, group.version) as [Statement, ...Statement[]])
+      const active = await milk()
+      await expect(run(active)).rejects.toSatisfy(isStaleWrite)
+      const offered = await extras()
+      const priced = await createModifierGroup(db, actor, { name: 'Syrups', minSelect: 0, maxSelect: null, modifiers: [{ name: 'Vanilla', priceDeltaMinor: 50, isDefault: false }] })
+      await itemWith(offered)
+      await itemWith(priced, [{ modifierId: addOn(priced, 'Vanilla').id, priceDeltaMinor: 60 }])
+      // Only the own price stays (no offer), as an item's links could leave it.
+      await db.delete(menuItemModifierGroups).where(eq(menuItemModifierGroups.groupId, priced.id))
+      for (const group of [await archive(offered), await archive(priced)]) await expect(run(group), group.name).rejects.toSatisfy(isStaleWrite)
+      for (const group of [active, offered, priced]) expect(await groupExists(group.id), group.name).toBe(true)
+    })
+
+    it('refuses when an item starts offering it meanwhile (the guard in the batch)', async () => {
+      const group = await archive(await milk())
+      const item = await itemWith(await extras())
+      const racing = interleaved(db, () => db.insert(menuItemModifierGroups).values({ tenantId: TEST_TENANT, itemId: item.id, groupId: group.id, sortOrder: 2, rulesOverridden: false }))
+      await expectApiError(() => deleteModifierGroup(racing, actor, group.id, { version: group.version }), 409, 'MODIFIER_IN_USE')
+      expect(await groupExists(group.id)).toBe(true)
+    })
+  })
+
+  describe('an add-on', () => {
+    it('deletes an archived add-on no item prices, under the group\'s lock, audited', async () => {
+      const group = await milk()
+      await itemWith(group)
+      const gone = await archiveModifier(db, actor, group.id, addOn(group, 'Soy').id, { version: group.version })
+      expect(addOn(gone, 'Soy').deleteBlocker).toBeNull()
+      const after = await deleteModifier(db, actor, group.id, addOn(group, 'Soy').id, { version: gone.version })
+      expect(after.version).toBe(gone.version + 1)
+      expect(after.modifiers.map(m => m.name)).toEqual(['Whole', 'Oat'])
+      const [audit] = await db.select().from(auditEvents).where(eq(auditEvents.action, 'menu.modifier_group.modifier.delete'))
+      expect(audit).toMatchObject({ targetId: group.id, metadata: { modifierId: addOn(group, 'Soy').id, name: 'Soy' } })
+    })
+
+    it('refuses an active add-on, a stale version, and one an item has its own price for', async () => {
+      const group = await milk()
+      await expectApiError(() => deleteModifier(db, actor, group.id, addOn(group, 'Oat').id, { version: group.version }), 409, 'INVALID_STATE')
+      await itemWith(group, [{ modifierId: addOn(group, 'Oat').id, priceDeltaMinor: 75 }])
+      const gone = await archiveModifier(db, actor, group.id, addOn(group, 'Oat').id, { version: group.version })
+      await expectApiError(() => deleteModifier(db, actor, group.id, addOn(group, 'Oat').id, { version: group.version }), 409, 'VERSION_CONFLICT')
+      expect(addOn(gone, 'Oat').deleteBlocker).toBe('items')
+      await expectApiError(() => deleteModifier(db, actor, group.id, addOn(group, 'Oat').id, { version: gone.version }), 409, 'MODIFIER_IN_USE')
+      expect(await addOnExists(addOn(group, 'Oat').id)).toBe(true)
+    })
+
+    it('the delete statement itself refuses an active add-on and a priced one', async () => {
+      const group = await milk()
+      await itemWith(group, [{ modifierId: addOn(group, 'Oat').id, priceDeltaMinor: 75 }])
+      await archiveModifier(db, actor, group.id, addOn(group, 'Oat').id, { version: group.version })
+      await db.batch([deleteModifierStatement(db, TEST_TENANT, group.id, addOn(group, 'Oat').id), deleteModifierStatement(db, TEST_TENANT, group.id, addOn(group, 'Soy').id)])
+      expect(await addOnExists(addOn(group, 'Oat').id)).toBe(true)
+      expect(await addOnExists(addOn(group, 'Soy').id)).toBe(true)
+    })
   })
 })

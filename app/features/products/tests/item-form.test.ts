@@ -20,13 +20,14 @@ const MILK: ModifierGroup = {
   maxSelect: 1,
   status: 'active',
   modifiers: [
-    { id: 'oat', name: 'Oat', priceDeltaMinor: 50, isDefault: false, sortOrder: 1, status: 'active' },
-    { id: 'soy', name: 'Soy', priceDeltaMinor: 40, isDefault: false, sortOrder: 2, status: 'archived' },
+    { id: 'oat', name: 'Oat', priceDeltaMinor: 50, isDefault: false, sortOrder: 1, status: 'active', deleteBlocker: null },
+    { id: 'soy', name: 'Soy', priceDeltaMinor: 40, isDefault: false, sortOrder: 2, status: 'archived', deleteBlocker: null },
   ],
   itemCount: 0,
   version: 1,
   createdAt: STAMP,
   updatedAt: STAMP,
+  deleteBlocker: null,
 }
 
 /** Latte: Size × Temperature, with Large/Iced switched off; a Milk group with its own rules. */

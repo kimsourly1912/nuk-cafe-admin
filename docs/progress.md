@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Delete permanently, step 5: add-on groups and add-ons (D200, 2026-10-24)
+
+[Decision, step 5](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24), after step 4 (merged in PR #170). The owner delegated the remaining choices: order lines' add-on copies (name and price, ids read by nothing) don't block a delete. **Delete permanently** in an archived group's ⋮ menu (off with the reason while items offer or price it), and a bin button beside an archived add-on's Restore on the group page. No migration. Help: the Add-ons page. **Next:** dining tables, the last step.
+
+- **Evidence (2026-10-24, local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 138 files, 1921 passed, 1 skipped. New: `modifiers.service.test.ts` 8 (an unused archived group deleted with its add-ons, audited; active, stale and unknown refused; an archived item's group refused until the item is deleted; the delete statements stopping on their guard (not a foreign key) for an active group, an offer and an own price alone; an offer arriving mid-batch; an unpriced archived add-on deleted under the group's lock, audited; an active, a stale and a priced add-on refused; the add-on statement refusing an active and a priced one), `menu.repository.tenants.test.ts` +1. Guards removed one at a time, each failing a test, then restored: group status, group in use, its offer part, its price part, add-on status, add-on priced. `test/e2e/modifier-groups.test.ts` 44/44, 3 new; the archived group's menu now lists Delete permanently after Restore.
+
 ## Delete permanently, step 4: option sets and values (D200, 2026-10-24)
 
 [Decision, step 4](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24), after step 3 (merged in PR #169). **Delete permanently** in an archived set's ⋮ menu (off with the reason while items use it or its values), and a bin button beside an archived value's Restore in the editor. No migration. Help: the Options page. **Next:** add-on groups, then dining tables.
