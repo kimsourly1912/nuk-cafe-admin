@@ -109,6 +109,10 @@ A generic coffee-cup icon, the same mark `CafeLogo` shows for a cafe without a l
 
 Installing ties the app to the domain. Staging installs are for testing only; cafes are asked to install once the production domain exists (Q4). Help: a short page for the assistant ("Install the counter as an app"), steps for Android and iPad.
 
+## Step 1b: Install app in the user menus (D203, built)
+
+**Install app** in the counter's and the admin's user menus, hidden inside the installed app: the browser's own dialog when it offered one, else a modal with the steps for this device (`useInstallApp`, `InstallAppModal`). See D203.
+
 ## Later: a service worker (step 2, not scheduled)
 
 Only when slow loads on cafe Wi-Fi are a real complaint, or the install prompt (which still needs a fetch handler in Chrome) is wanted. Precache the build's static files only; never HTML or `/api/**`; updates go through `NewVersionBanner` (D149). Library: `@vite-pwa/nuxt` (vite-pwa organization) once its announced rebuild on `unplugin-pwa` ships; `@serwist/nuxt` if that doesn't work with our Nuxt and Cloudflare build. Comparison in D202.

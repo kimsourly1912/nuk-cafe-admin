@@ -160,6 +160,7 @@ Source: `app/app.vue` (the manifest link, `apple-touch-icon`, `apple-mobile-web-
 | Two cafes, or a cafe's counter and admin, on one tablet | Separate apps (distinct ids) |
 | The cafe renamed | The next manifest check picks it up on Android; iOS keeps the name given at install |
 | Offline at start | The browser's own offline page; once loaded, the offline banner |
+| **Install app** in the user menu (D203) | The browser's own install dialog when it offered one; else a modal with the steps for this device. Hidden inside the installed app (`useInstallApp`) |
 
 ---
 

@@ -63,11 +63,15 @@ usePageShortcuts({ '?': showShortcuts })
 // Ctrl/⌘+/ works while typing too (in a form, or in the assistant's own question box).
 defineShortcuts({ 'meta_/': { usingInput: true, handler: assistant.toggle } })
 
+const cafe = useCafe()
+const installApp = useInstallApp()
 const userMenu = computed<DropdownMenuItem[]>(() => [
   { label: user.value?.email, type: 'label' },
   { type: 'separator' },
   { label: 'Change password', icon: 'i-lucide-key-round', to: tenantPath('/admin/change-password') },
   { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
+  // Not inside the installed app itself (D203).
+  ...(installApp.installed.value ? [] : [{ label: 'Install app', icon: 'i-lucide-monitor-smartphone', onSelect: () => void installApp.install(cafe.name.value ? `${cafe.name.value} Admin` : 'Admin') }]),
   { label: 'Log out', icon: 'i-lucide-log-out', onSelect: () => logout() },
 ])
 </script>

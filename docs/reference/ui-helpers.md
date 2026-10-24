@@ -614,6 +614,19 @@ useOverlayBack(open, () => {
 
 ---
 
+## `useInstallApp`
+
+"Install app" in the counter's and the admin's user menus (D203). `installed` is true inside the installed app (`display-mode: standalone`, or Safari's `navigator.standalone`): hide the item then. `install(appName)` opens the browser's own install dialog when Chrome or Edge offered one (`beforeinstallprompt`, kept by `plugins/install-prompt.client.ts`; Chrome doesn't offer it to a site without a service worker, D202), else `<InstallAppModal>` with the steps for this device (`installPlatform`, `INSTALL_STEPS` in `app/utils/install-app.ts`: Android, iPhone/iPad, computer). The device only changes the text, never a layout.
+
+Source: `app/composables/useInstallApp.ts`, `app/components/InstallAppModal.vue`. Tests: unit `install-app.test.ts`, e2e `install-app.test.ts`.
+
+```ts
+const installApp = useInstallApp()
+const items = computed(() => installApp.installed.value
+  ? []
+  : [{ label: 'Install app', icon: 'i-lucide-monitor-smartphone', onSelect: () => void installApp.install('NUK Cafe Counter') }])
+```
+
 ## `<ToolbarTabs>`
 
 Tabs in a `UDashboardToolbar` (ui.md §15, D126): the tabs drop their own line and sit on the toolbar's, the active underline right above it.
