@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Delete permanently, step 6: dining tables (D200, 2026-10-24)
+
+[Decision, step 6](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24), after step 5 (merged in PR #171); the last step, so D200 is complete. **Delete permanently** in an archived table's ⋮ menu on the admin's Branch page (off, "it has orders", when an order was placed at it); owners only, not on the counter. Migration `0048_orders_table` (a partial index, additive; applied by the staging deploy before the Worker). Help: the Branch page.
+
+- **Evidence (2026-10-24, local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 138 files, 1929 passed, 1 skipped. New: `branches.service.test.ts` 6 (an archived table without orders deleted, audited with its label; active, stale, another branch's and unknown refused; one with an order refused and read as `ordered`; an order arriving mid-batch; the delete statement refusing an active table and another branch's; another cafe's table neither deleted with our id nor blocked by our order). Guards removed one at a time, each failing a test, then restored: status, orders, branch, the tenant filter, the order check's tenant correlation. `test/e2e/branches.test.ts` 2 new (delete after asking with the version read and the card gone; the disabled reason), `manager-tools.test.ts` +1 assertion on the seeded server (a manager's archived table offers Restore only). Locally `manager-tools.test.ts`'s two axe tests fail (`scrollable-region-focusable`) with this change reverted too, so not from it: local Chromium, where CI runs Chrome and passed that file on PR #171; the CI run is the evidence.
+
 ## Delete permanently, step 5: add-on groups and add-ons (D200, 2026-10-24)
 
 [Decision, step 5](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24), after step 4 (merged in PR #170). The owner delegated the remaining choices: order lines' add-on copies (name and price, ids read by nothing) don't block a delete. **Delete permanently** in an archived group's ⋮ menu (off with the reason while items offer or price it), and a bin button beside an archived add-on's Restore on the group page. No migration. Help: the Add-ons page. **Next:** dining tables, the last step.

@@ -27,6 +27,15 @@ export function categoryOnAnOrder(db: Db, category: { tenantId: AnyColumn, id: A
   return exists(db.select({ one: sql`1` }).from(orderLines).where(and(eq(orderLines.tenantId, category.tenantId), eq(orderLines.categoryId, category.id))))
 }
 
+/**
+ * Whether an order of the cafe was placed at this dining table, correlated to the outer query's
+ * table columns (D200). Orders keep the table's id and label, without a foreign key. Uses
+ * `orders_table_idx`.
+ */
+export function tableOnAnOrder(db: Db, table: { tenantId: AnyColumn, id: AnyColumn }): SQL {
+  return exists(db.select({ one: sql`1` }).from(orders).where(and(eq(orders.tenantId, table.tenantId), eq(orders.tableId, table.id))))
+}
+
 export interface NewOrder {
   id: string
   tenantId: string

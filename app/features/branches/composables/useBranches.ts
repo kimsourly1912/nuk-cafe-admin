@@ -152,7 +152,32 @@ export function useTableMutations(surface: TablesSurface = 'admin') {
     },
   )
 
-  const isBusy = (tableId: string) => [update, archive, restore, rotate].some(m => m.isPending(`dining-table:${tableId}`))
+  /**
+   * Deletes an archived table no order was placed at for good (D200). Owners only: the admin's
+   * API has it, the counter's doesn't. The server refuses a table with orders (409 `TABLE_HAS_ORDERS`).
+   */
+  const remove = useMutation(
+    (input: TableChange) => apiFetch<null>(tableUrl(input.table), { method: 'DELETE', body: { version: input.table.version } }),
+    {
+      id: `branches:${surface}:table-delete`,
+      key: tableLock,
+      lock: tableLock,
+      removes: true,
+      confirm: input => ({
+        title: `Delete "${input.table.label}" permanently?`,
+        description: 'No order was placed at it. Its QR code never works again, and it can\'t be restored.',
+        confirmLabel: 'Delete permanently',
+        danger: true,
+      }),
+      successMessage: (_, input) => `Table "${input.table.label}" deleted`,
+      errorMessage: input => `Could not delete "${input.table.label}"`,
+      invalidate: ['branches'],
+    },
+  )
 
-  return { create, update, archive, restore, rotate, isBusy }
+  const isBusy = (tableId: string) => [update, archive, restore, rotate, remove].some(m => m.isPending(`dining-table:${tableId}`))
+  /** Deleted: hidden until the refetch arrives. */
+  const isRemoved = (tableId: string) => remove.isRemoved(`dining-table:${tableId}`)
+
+  return { create, update, archive, restore, rotate, remove, isBusy, isRemoved }
 }

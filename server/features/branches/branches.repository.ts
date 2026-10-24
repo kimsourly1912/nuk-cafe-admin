@@ -1,10 +1,11 @@
-import { and, asc, count, eq, inArray } from 'drizzle-orm'
-import type { DiningTableStatus } from '#shared/contracts/branches'
+import { and, asc, count, eq, inArray, not, sql } from 'drizzle-orm'
+import type { DiningTableStatus, TableDeleteBlocker } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
 import { readInChunks, replaceAll, requireAtMost, updateAtVersion } from '#server/utils/batch'
-import { byId, firstRow, hasAny, inTenant, withStatus } from '#server/utils/query'
+import { atVersion, byId, firstRow, hasAny, inTenant, withStatus } from '#server/utils/query'
 import { organization, user } from '#server/db/tables'
+import { tableOnAnOrder } from '#server/features/orders'
 import { branches, branchHours, diningTables } from './branches.schema'
 
 // --- Row types ---
@@ -44,6 +45,8 @@ export interface TableRow {
   version: number
   createdAt: Date
   updatedAt: Date
+  /** What keeps it from being deleted permanently (D200). */
+  deleteBlocker: TableDeleteBlocker | null
 }
 
 type TableChanges = Partial<Pick<TableRow, 'label' | 'area' | 'status' | 'qrVersion' | 'qrRotatedAt'>> & { qrTokenHash?: string }
@@ -76,7 +79,10 @@ const branchColumns = {
   pausedUntil: branches.pausedUntil,
 }
 
-const tableColumns = {
+/** `'ordered'` while an order (any status) was placed at the outer query's table, else `null`. Its own SQL name (D170). */
+const tableBlocker = (db: Db) => sql<TableDeleteBlocker | null>`case when ${tableOnAnOrder(db, diningTables)} then 'ordered' end`.as('delete_blocker')
+
+const tableColumns = (db: Db) => ({
   id: diningTables.id,
   branchId: diningTables.branchId,
   label: diningTables.label,
@@ -87,7 +93,8 @@ const tableColumns = {
   version: diningTables.version,
   createdAt: diningTables.createdAt,
   updatedAt: diningTables.updatedAt,
-}
+  deleteBlocker: tableBlocker(db),
+})
 
 // --- Reads ---
 
@@ -122,12 +129,12 @@ export async function hoursOf(db: Db, tenantId: string, branchId: string): Promi
 
 /** A branch's tables; the service sorts labels in natural order. Uses dining_tables_branch_idx. */
 export async function listTables(db: Db, tenantId: string, branchId: string, status: DiningTableStatus | 'all'): Promise<TableRow[]> {
-  return db.select(tableColumns).from(diningTables)
+  return db.select(tableColumns(db)).from(diningTables)
     .where(inTenant(diningTables, tenantId, eq(diningTables.branchId, branchId), withStatus(diningTables.status, status)))
 }
 
 export async function findTable(db: Db, tenantId: string, branchId: string, tableId: string): Promise<TableRow | undefined> {
-  return firstRow(db.select(tableColumns).from(diningTables)
+  return firstRow(db.select(tableColumns(db)).from(diningTables)
     .where(inTenant(diningTables, tenantId, eq(diningTables.id, tableId), eq(diningTables.branchId, branchId))))
 }
 
@@ -214,4 +221,17 @@ export function insertTableStatement(db: Db, row: { id: string, tenantId: string
  */
 export function touchTableStatement(db: Db, tenantId: string, id: string, version: number, changes: TableChanges, now: Date, anyStatus = false): Statement {
   return updateAtVersion(db, diningTables, { tenantId, id, version }, { ...changes, updatedAt: now }, anyStatus ? undefined : eq(diningTables.status, 'active'))
+}
+
+/**
+ * Deletes an archived table of this branch still at `version` at which no order was placed (D200),
+ * checked in the statement itself: follow it with `requireOneChange`.
+ */
+export function deleteTableStatement(db: Db, tenantId: string, branchId: string, id: string, version: number): Statement {
+  return db.delete(diningTables).where(and(
+    atVersion(diningTables, tenantId, id, version),
+    eq(diningTables.branchId, branchId),
+    eq(diningTables.status, 'archived'),
+    not(tableOnAnOrder(db, diningTables)),
+  ))
 }

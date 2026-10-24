@@ -66,6 +66,12 @@ describe('manager tools on the counter (D198)', () => {
     await card.getByRole('button', { name: `Actions for ${label}` }).click()
     await page.getByRole('menuitem', { name: 'Archive' }).click()
     await toast(page, `Table "${label}" archived`).waitFor()
+    // Delete permanently is the owners' (D200): a manager's archived table offers Restore only.
+    await page.getByRole('tab', { name: /Archived/ }).click()
+    await page.getByRole('article', { name: label, exact: true }).getByRole('button', { name: `Actions for ${label}` }).click()
+    await page.getByRole('menuitem', { name: 'Restore' }).waitFor()
+    expect(await page.getByRole('menuitem', { name: /Delete/ }).count()).toBe(0)
+    await page.keyboard.press('Escape')
 
     expect(api.filter(path => path.includes('/tables'))).not.toEqual([])
     expect(api.filter(path => path.startsWith('/admin/'))).toEqual([])

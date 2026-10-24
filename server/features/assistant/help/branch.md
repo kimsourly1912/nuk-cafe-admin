@@ -42,6 +42,7 @@ Each table has a QR code. A customer who scans it orders for that table (dine-in
 - **Edit**: change the name or area; the QR code stays the same.
 - **New QR**: makes a new code and **stops the old one at once**. Use it if a code was copied or misused, then print the new one and replace it on the table.
 - **Archive**: the table's QR code stops working until you **Restore** it.
+- **⋮ → Delete permanently** (on an archived table, owners only): removes it for good; its QR code never works again. It asks first, and it can't be restored. Only a table **no order was ever placed at** can be deleted; otherwise the action is greyed out ("it has orders") and it stays archived for your order history. Managers archive and restore from the counter, but can't delete.
 - Up to 200 tables per branch, archived ones included.
 
 ## Common problems

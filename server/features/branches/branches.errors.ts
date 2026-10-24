@@ -10,6 +10,7 @@ export const BranchErrorCodes = {
   TABLE_LABEL_TAKEN: 'TABLE_LABEL_TAKEN',
   TABLE_LIMIT: 'TABLE_LIMIT',
   QR_NOT_CONFIGURED: 'QR_NOT_CONFIGURED',
+  TABLE_HAS_ORDERS: 'TABLE_HAS_ORDERS',
 } as const
 
 export const branchNotFound = () => notFound('This branch')
@@ -55,8 +56,12 @@ export const tableLimit = () =>
 export const tableArchived = () =>
   apiError(409, ErrorCodes.INVALID_STATE, 'This table is archived. Restore it first.')
 
-export const tableNotArchived = () =>
-  apiError(409, ErrorCodes.INVALID_STATE, 'This table isn\'t archived.')
+export const tableNotArchived = (message = 'This table isn\'t archived.') =>
+  apiError(409, ErrorCodes.INVALID_STATE, message)
+
+/** A permanent delete of a table orders were placed at (D200): it stays archived. */
+export const tableHasOrders = () =>
+  apiError(409, BranchErrorCodes.TABLE_HAS_ORDERS, 'Orders were placed at this table, so it stays archived to keep your order history.')
 
 /** A deployed server without `NUXT_QR_SECRET` (docs/server/operations.md → Configuration). */
 export const qrNotConfigured = () =>

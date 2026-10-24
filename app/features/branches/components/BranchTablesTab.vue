@@ -25,12 +25,15 @@ const TABS = [
 ]
 
 const { data, loading, refreshing, error, refresh } = useBranchTables(props.branchId, props.surface)
-const { archive, restore, rotate, isBusy } = useTableMutations(props.surface)
+const { archive, restore, rotate, remove, isBusy, isRemoved } = useTableMutations(props.surface)
+/** Delete permanently is the owners' (D200): the counter's managers archive only. */
+const canDelete = computed(() => props.surface === 'admin')
 
 const status = ref<string>('active')
 const search = ref('')
 
-const tables = computed(() => data.value ?? [])
+// A deleted table goes at once, before the refetch arrives.
+const tables = computed(() => (data.value ?? []).filter(t => !isRemoved(t.id)))
 const matching = computed(() => {
   const query = search.value.trim().toLowerCase()
   return query ? tables.value.filter(t => t.label.toLowerCase().includes(query) || t.area?.toLowerCase().includes(query)) : tables.value
@@ -64,7 +67,16 @@ async function rotateQr(table: DiningTable) {
 
 function actions(table: DiningTable): DropdownMenuItem[] {
   if (table.status === 'archived') {
-    return [{ label: 'Restore', icon: 'i-lucide-archive-restore', onSelect: () => restore.execute({ table }) }]
+    const restoreItem: DropdownMenuItem = { label: 'Restore', icon: 'i-lucide-archive-restore', onSelect: () => restore.execute({ table }) }
+    if (!canDelete.value) return [restoreItem]
+    // Only a table no order was placed at can go for good (D200); otherwise it says why.
+    return [
+      restoreItem,
+      { type: 'separator' },
+      table.deleteBlocker
+        ? { label: 'Delete permanently (it has orders)', icon: 'i-lucide-trash-2', disabled: true }
+        : { label: 'Delete permanently', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => remove.execute({ table }) },
+    ]
   }
   return [
     { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openEdit(table) },
