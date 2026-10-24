@@ -113,6 +113,51 @@ describe('each cafe by its own name (D143)', () => {
   })
 })
 
+describe('each cafe\'s installable apps (D202)', () => {
+  const manifest = async (path: string) => {
+    const response = await fetch(url(path), { redirect: 'manual' })
+    return { status: response.status, type: response.headers.get('content-type'), cache: response.headers.get('cache-control'), location: response.headers.get('location'), body: response.status === 200 ? await response.json() : null }
+  }
+
+  it('describe its own counter and admin, by its own name', async () => {
+    const nuk = await manifest('/c/nuk/counter.webmanifest')
+    expect(nuk).toMatchObject({ status: 200, cache: 'no-cache', body: { id: '/c/nuk/counter', name: 'NUK Cafe Counter', start_url: '/c/nuk/counter', scope: '/', display: 'standalone' } })
+    expect(nuk.type).toMatch(/^application\/manifest\+json/)
+    const brown = await manifest(`/c/${cafe.slug}/admin.webmanifest`)
+    expect(brown.body).toMatchObject({ id: `/c/${cafe.slug}/admin`, name: 'Brown Bean Admin', start_url: `/c/${cafe.slug}/admin` })
+    expect(JSON.stringify(brown.body)).not.toContain('NUK Cafe')
+    expect(JSON.stringify(nuk.body)).not.toContain('Brown Bean')
+    // The icons it names are served.
+    for (const icon of nuk.body.icons as { src: string }[]) expect((await fetch(url(icon.src))).status).toBe(200)
+  })
+
+  it('an unknown cafe has none, a paused one can\'t be installed, a former address redirects', async () => {
+    expect((await manifest('/c/nowhere/counter.webmanifest')).status).toBe(404)
+    expect((await manifest('/c/nuk/orders.webmanifest')).status).toBe(404)
+    expect((await manifest('/c/quiet-corner/admin.webmanifest')).status).toBe(403)
+    const client = e2eDatabase(seed.dbFile)
+    try {
+      await client.execute({ sql: 'insert or ignore into tenant_slugs (slug, tenant_id) values (?, ?)', args: ['brown-bean-old', 'tenant-2'] })
+    }
+    finally {
+      client.close()
+    }
+    expect(await manifest('/c/brown-bean-old/counter.webmanifest')).toMatchObject({ status: 302, location: `/c/${cafe.slug}/counter.webmanifest` })
+  })
+
+  it('are linked from the counter and the admin, not from the menu', async () => {
+    const page = await createPage()
+    const manifestLink = () => page.locator('link[rel="manifest"]').getAttribute('href', { timeout: 5000 }).catch(() => null)
+    await page.goto(url(`/c/${cafe.slug}/counter/sign-in`), { waitUntil: 'hydration' })
+    await expect.poll(manifestLink).toBe(`/c/${cafe.slug}/counter.webmanifest`)
+    await expect.poll(() => page.locator('meta[name="apple-mobile-web-app-title"]').getAttribute('content')).toBe('Brown Bean Counter')
+    await page.goto(url('/c/nuk/admin/login'), { waitUntil: 'hydration' })
+    await expect.poll(manifestLink).toBe('/c/nuk/admin.webmanifest')
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
+    expect(await page.locator('link[rel="manifest"]').count()).toBe(0)
+  })
+})
+
 describe('one account, two cafes', () => {
   it('sees each cafe\'s own orders only', async () => {
     const cookie = await signIn(seed.customers.cafeHopper)

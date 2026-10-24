@@ -51,3 +51,12 @@ export const TENANT_SUSPENDED = 'TENANT_SUSPENDED'
 export interface AccountCafe extends CafeProfile {
   workspaces: Workspace[]
 }
+
+/**
+ * Where a cafe's installable app is described (D202): one web app manifest per workspace,
+ * `/c/<slug>/counter.webmanifest` and `/c/<slug>/admin.webmanifest`, linked from that workspace's
+ * pages. Public: it holds only the cafe's name, like its profile.
+ */
+export function webManifestPath(slug: string, workspace: Workspace): string {
+  return `/c/${slug}/${workspace}.webmanifest`
+}

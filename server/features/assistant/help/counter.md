@@ -70,6 +70,16 @@ Managers (and admins) have a **Manage** button in the counter's header, for the 
 
 A manager at two branches sees each branch's tools when the counter is open at that branch. Opening hours are changed by an admin, on Admin → Branch.
 
+## Install the counter as an app
+
+The counter can be installed on the tablet like an app: it opens from its own icon, full screen, without the browser's address bar or tabs, so it can't be closed by accident. Open the counter in the browser first, then:
+
+- **Android tablet or phone (Chrome):** the browser menu (⋮) → **Install app** (or **Add to Home screen**).
+- **iPad or iPhone (Safari):** the Share button → **Add to Home Screen**.
+- **Computer (Chrome or Edge):** the install icon at the end of the address bar, or the menu → **Install**.
+
+The app is named after the cafe ("<cafe> Counter") with a coffee cup icon, and opens at the counter. Everything works as in the browser: sign-in, the chime (tap the screen once after it opens), keeping the screen on. It still needs the internet: without a connection nothing can be saved. The admin installs the same way from any admin page ("<cafe> Admin"). After the cafe's web address changes, install it again.
+
 ## Common problems at the counter
 
 - **"Order 042 changed meanwhile: it's … now."**: another cashier or the customer acted first. Press **Reload**.
