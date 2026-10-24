@@ -23,6 +23,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo({ path: PLATFORM_CHANGE_PASSWORD, query: to.fullPath === PLATFORM_HOME ? {} : { redirect: to.fullPath } })
   }
 
-  // TEMP: 2FA enforcement disabled. Restore the redirect to PLATFORM_TWO_FACTOR when `!twoFactorEnabled.value`.
-  void [twoFactorEnabled, PLATFORM_TWO_FACTOR]
+  if (!mustChangePassword.value && !twoFactorEnabled.value && to.path !== PLATFORM_TWO_FACTOR) {
+    return navigateTo({ path: PLATFORM_TWO_FACTOR, query: to.fullPath === PLATFORM_HOME ? {} : { redirect: to.fullPath } })
+  }
 })

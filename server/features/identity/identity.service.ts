@@ -97,8 +97,7 @@ export async function authorizeTenant(db: Db, user: SessionUser | null | undefin
 export function authorizePlatform(user: SessionUser | null | undefined, permissions: PlatformPermission): { userId: string } {
   const { id } = signedIn(user)
   if (!platformRolesOf(user!).some(role => platformRoles[role].authorize(permissions).success)) throw forbidden()
-  // TEMP: 2FA enforcement disabled. Restore: `if (!user!.twoFactorEnabled) throw twoFactorRequired()`
-  void twoFactorRequired
+  if (!user!.twoFactorEnabled) throw twoFactorRequired()
   return { userId: id }
 }
 
