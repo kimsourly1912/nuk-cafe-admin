@@ -72,7 +72,7 @@ A manager at two branches sees each branch's tools when the counter is open at t
 
 ## Install the counter as an app
 
-The counter can be installed on the tablet like an app: it opens from its own icon, full screen, without the browser's address bar or tabs, so it can't be closed by accident. Open the counter in the browser first, then:
+The counter can be installed on the tablet like an app: it opens from its own icon, full screen, without the browser's address bar or tabs, so it can't be closed by accident. Open the counter in the browser and choose **Install app** in the user menu (your initials, top right): it shows the steps for your device, or installs at once where the browser allows it. The steps are:
 
 - **Android tablet or phone (Chrome):** the browser menu (⋮) → **Install app** (or **Add to Home screen**).
 - **iPad or iPhone (Safari):** the Share button → **Add to Home Screen**.

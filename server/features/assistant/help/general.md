@@ -63,6 +63,7 @@ Press **?** to see them all. The main ones: **Ctrl+K** search everything, **/** 
 - **A new version of the app is ready**: the app was updated while your tab was open. Press **Reload** (it asks first if you have unsaved changes), or **Later**: it updates by itself the next time you open another page.
 - **Another tab**: signing in or out in one tab applies to every open tab. Saving in one tab refreshes the same lists in your other tabs.
 - **Light and dark mode**: the sun/moon button in the sidebar.
+- **Install app**: from the user menu at the bottom of the sidebar. The admin opens from its own icon, full screen, like an app ("<cafe> Admin"); the menu shows the steps for your device. Not shown once you're in the installed app.
 - **Change password**: from the user menu at the bottom of the sidebar. A new staff account must change its temporary password at the first sign-in.
 - **Signed out suddenly**: your session ended (expired, or your access changed). Sign in again.
 

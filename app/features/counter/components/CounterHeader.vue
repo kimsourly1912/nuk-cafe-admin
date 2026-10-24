@@ -4,7 +4,7 @@
  * order search (on the queue), Sold out (the page that switches items off, 6.3c, D105), Manage for
  * managers and owners (Dining tables and Reports, D198; Pause or Resume online orders, D199; never
  * shown to staff, and the server checks the role again), the color mode and the user menu (the chime on or off, another branch, another cafe (D144), change password,
- * sign out).
+ * install app (D203), sign out).
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { PublicBranch } from '#shared/contracts/branches'
@@ -56,6 +56,7 @@ const { name, logoUrl } = useCafe()
 // Someone who works at more than one cafe (T2c, D144) can open another one's counter from Your cafes.
 const { data: cafes } = useAccountCafes()
 const elsewhere = computed(() => otherCafes(cafes.value, slug.value, 'counter').length > 0)
+const installApp = useInstallApp()
 const initials = computed(() => (user.value?.name || user.value?.email || '?').split(/\s+/).map(part => part[0]).slice(0, 2).join('').toUpperCase())
 
 const menu = computed<DropdownMenuItem[][]>(() => [
@@ -65,6 +66,8 @@ const menu = computed<DropdownMenuItem[][]>(() => [
     ...(elsewhere.value ? [{ label: 'Another cafe', icon: 'i-lucide-arrow-left-right', to: CAFES_PATH }] : []),
     { label: 'Change password', icon: 'i-lucide-key-round', to: counterChangePasswordPath(slug.value) },
     { label: muted.value ? 'Turn on the new-order sound' : 'Mute the new-order sound', icon: muted.value ? 'i-lucide-bell' : 'i-lucide-bell-off', onSelect: () => { muted.value = !muted.value } },
+    // Not inside the installed app itself (D203).
+    ...(installApp.installed.value ? [] : [{ label: 'Install app', icon: 'i-lucide-monitor-smartphone', onSelect: () => void installApp.install(name.value ? `${name.value} Counter` : 'Counter') }]),
   ],
   [{ label: 'Sign out', icon: 'i-lucide-log-out', onSelect: () => signOut() }],
 ])
