@@ -17,6 +17,7 @@ describe('category form', () => {
     version: 4,
     createdAt: '2026-09-26T00:00:00.000Z',
     updatedAt: '2026-09-26T00:00:00.000Z',
+    deleteBlocker: null,
   }
 
   it('starts a new category as a main one, with no description or rules', () => {

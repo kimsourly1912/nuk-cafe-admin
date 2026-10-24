@@ -1,4 +1,4 @@
-import type { CreateCategoryInput, MenuCategory, ReorderCategoriesInput, UpdateCategoryInput } from '#shared/contracts/menu-categories'
+import type { CategoryDeleteBlocker, CreateCategoryInput, MenuCategory, ReorderCategoriesInput, UpdateCategoryInput } from '#shared/contracts/menu-categories'
 
 const BASE = '/admin/menu/categories'
 const NOUN: [string, string] = ['category', 'categories']
@@ -127,13 +127,45 @@ export function useCategoryMutations() {
     },
   )
 
+  /**
+   * Deletes an empty archived category without history for good (D200). Asks first: it can't be
+   * restored. The server refuses one that isn't empty or has history (409 `CATEGORY_HAS_HISTORY`).
+   */
+  const remove = useMutation(
+    (category: MenuCategory) => apiFetch<null>(`${BASE}/${category.id}`, { method: 'DELETE', body: { version: category.version } }),
+    {
+      id: 'categories:delete',
+      key: category => category.id,
+      lock: category => lockOf(category.id),
+      removes: true,
+      confirm: category => ({
+        title: `Delete "${category.name}" permanently?`,
+        description: 'It\'s empty and nothing was ordered from it. It can\'t be restored.',
+        confirmLabel: 'Delete permanently',
+        danger: true,
+      }),
+      successMessage: (_, category) => `Category "${category.name}" deleted`,
+      errorMessage: category => `Could not delete "${category.name}"`,
+      invalidate: AFFECTED,
+    },
+  )
+
   return {
     create,
     update,
     archive,
     restore,
+    remove,
     reorder,
     /** Any operation in flight for this category: disable its row actions. */
-    isBusy: (id: string) => update.isPending(id) || archive.isPending(id) || restore.isPending(id),
+    isBusy: (id: string) => update.isPending(id) || archive.isPending(id) || restore.isPending(id) || remove.isPending(id),
   }
+}
+
+/** Why Delete permanently is off for an archived category (D200), as its menu says. */
+export const DELETE_BLOCKED: Record<CategoryDeleteBlocker, string> = {
+  items: 'Delete permanently (it has menu items)',
+  subcategories: 'Delete permanently (it has subcategories)',
+  ordered: 'Delete permanently (items were ordered from it)',
+  promotion: 'Delete permanently (it is in a promotion)',
 }

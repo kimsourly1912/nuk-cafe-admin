@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { MenuCategory } from '#shared/contracts/menu-categories'
 import { auditEvents } from '#server/features/platform/platform.schema'
 import type { Actor } from '#server/features/identity'
-import { menuCategories } from '#server/features/menu/menu.schema'
-import { archiveCategory, createCategory, listCategories, reorderCategories, restoreCategory, updateCategory } from '#server/features/menu/categories.service'
-import { archiveItem, createItem } from '#server/features/menu/items.service'
-import { createTestDb, ensureTenant, TEST_TENANT } from '#server/tests/support/db'
+import { menuCategories, menuCategoryAvailability, menuPromotionCategories } from '#server/features/menu/menu.schema'
+import { deleteCategoryStatement } from '#server/features/menu/categories.repository'
+import { createAvailabilityRule } from '#server/features/menu/availability.service'
+import { createPromotion } from '#server/features/menu/promotions.service'
+import { archiveCategory, createCategory, deleteCategory, getCategory, listCategories, reorderCategories, restoreCategory, updateCategory } from '#server/features/menu/categories.service'
+import { archiveItem, createItem, deleteItem, updateItem } from '#server/features/menu/items.service'
+import { createTestDb, ensureTenant, insertSoldLine, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -263,5 +266,107 @@ describe('reordering', () => {
     const iced = await create('Iced', coffee.id)
     await reorderCategories(db, actor, { parentId: coffee.id, items: [iced, hot].map(c => ({ id: c.id, version: c.version })) })
     expect(names(await listCategories(db, TEST_TENANT, { status: 'active' }))).toEqual(['Coffee', '  Iced', '  Hot'])
+  })
+})
+
+describe('deleting permanently (D200)', () => {
+  const exists = async (id: string) => (await db.select({ id: menuCategories.id }).from(menuCategories).where(eq(menuCategories.id, id))).length === 1
+  const archive = (category: MenuCategory) => archiveCategory(db, actor, category.id, { version: category.version })
+  const itemIn = (categoryId: string) => createItem(db, actor, { categoryId, name: 'Latte', description: '', imageId: null, optionSetIds: [], variations: [{ valueIds: [], priceMinor: 350, status: 'active' }], modifierGroups: [], availabilityRuleIds: [] })
+
+  it('deletes an empty archived category with its rule links, and keeps its name in the audit', async () => {
+    const rule = await createAvailabilityRule(db, actor, { name: 'Mornings', windows: [{ weekday: 1, startMinute: 0, endMinute: 600 }] })
+    const tea = await createCategory(db, actor, { name: 'Tea', description: '', parentId: null, availabilityRuleIds: [rule.id] })
+    const archived = await archive(tea)
+    expect(archived.deleteBlocker).toBeNull()
+    await deleteCategory(db, actor, tea.id, { version: archived.version })
+    expect(await exists(tea.id)).toBe(false)
+    expect(await db.select().from(menuCategoryAvailability).where(eq(menuCategoryAvailability.categoryId, tea.id))).toEqual([])
+    const [audit] = await db.select().from(auditEvents).where(eq(auditEvents.action, 'menu.category.delete'))
+    expect(audit).toMatchObject({ targetId: tea.id, metadata: { name: 'Tea', parentId: null } })
+    await expectApiError(() => getCategory(db, TEST_TENANT, tea.id), 404, 'NOT_FOUND')
+  })
+
+  it('refuses an active category, a stale version and an unknown one', async () => {
+    const tea = await create('Tea')
+    await expectApiError(() => deleteCategory(db, actor, tea.id, { version: tea.version }), 409, 'INVALID_STATE')
+    const archived = await archive(tea)
+    await expectApiError(() => deleteCategory(db, actor, tea.id, { version: tea.version }), 409, 'VERSION_CONFLICT')
+    await expectApiError(() => deleteCategory(db, actor, 'missing', { version: 1 }), 404, 'NOT_FOUND')
+    expect(await exists(archived.id)).toBe(true)
+  })
+
+  it('refuses one that holds items, archived ones too, until they are deleted', async () => {
+    const tea = await create('Tea')
+    const item = await itemIn(tea.id)
+    const gone = await archiveItem(db, actor, item.id, { version: item.version })
+    const archived = await archive(tea)
+    expect(archived.deleteBlocker).toBe('items')
+    await expectApiError(() => deleteCategory(db, actor, tea.id, { version: archived.version }), 409, 'CATEGORY_HAS_HISTORY')
+    await deleteItem(db, actor, item.id, { version: gone.version })
+    await deleteCategory(db, actor, tea.id, { version: archived.version })
+    expect(await exists(tea.id)).toBe(false)
+  })
+
+  it('refuses a main category with subcategories, archived ones too', async () => {
+    const coffee = await create('Coffee')
+    const espresso = await create('Espresso', coffee.id)
+    const archived = await archiveCategory(db, actor, coffee.id, { version: (await getCategory(db, TEST_TENANT, coffee.id)).version })
+    expect(archived.deleteBlocker).toBe('subcategories')
+    await expectApiError(() => deleteCategory(db, actor, coffee.id, { version: archived.version }), 409, 'CATEGORY_HAS_HISTORY')
+    // The subcategory was archived with it and is empty: it goes, then the main one.
+    const sub = await getCategory(db, TEST_TENANT, espresso.id)
+    await deleteCategory(db, actor, espresso.id, { version: sub.version })
+    await deleteCategory(db, actor, coffee.id, { version: archived.version })
+    expect(await exists(coffee.id)).toBe(false)
+  })
+
+  it('refuses an empty category something was sold under (the item moved away)', async () => {
+    const tea = await create('Tea')
+    const other = await create('Other')
+    const item = await itemIn(tea.id)
+    await insertSoldLine(db, { itemId: item.id, categoryId: tea.id })
+    await updateItem(db, actor, item.id, { version: item.version, categoryId: other.id })
+    const archived = await archive(tea)
+    expect(archived.deleteBlocker).toBe('ordered')
+    await expectApiError(() => deleteCategory(db, actor, tea.id, { version: archived.version }), 409, 'CATEGORY_HAS_HISTORY')
+  })
+
+  it('refuses one a promotion names, even a draft promotion', async () => {
+    const herbal = await create('Herbal')
+    const draft = await createPromotion(db, actor, { name: 'Herbal week', description: '', discount: { kind: 'percent', percent: 10 }, scope: 'selected', itemIds: [], categoryIds: [herbal.id], branchIds: [], startsOn: '2026-10-25', endsOn: '2026-10-30', posterId: null, publish: false }, new Date('2026-10-24T03:00:00Z'))
+    const archived = await archive(herbal)
+    expect(archived.deleteBlocker).toBe('promotion')
+    await expectApiError(() => deleteCategory(db, actor, herbal.id, { version: archived.version }), 409, 'CATEGORY_HAS_HISTORY')
+    expect(await db.select().from(menuPromotionCategories).where(eq(menuPromotionCategories.promotionId, draft.id))).toHaveLength(1)
+  })
+
+  it('the delete statement itself refuses each blocker, and an active category', async () => {
+    const run = (category: MenuCategory) => db.batch([deleteCategoryStatement(db, TEST_TENANT, category.id, category.version)])
+    const active = await create('Active')
+    await run(active)
+    const items = await create('Items')
+    await itemIn(items.id)
+    const main = await create('Main')
+    await create('Sub', main.id)
+    const sold = await create('Sold')
+    await insertSoldLine(db, { itemId: 'gone', categoryId: sold.id })
+    const promoted = await create('Promoted')
+    await createPromotion(db, actor, { name: 'Week', description: '', discount: { kind: 'percent', percent: 10 }, scope: 'selected', itemIds: [], categoryIds: [promoted.id], branchIds: [], startsOn: '2026-10-25', endsOn: '2026-10-30', posterId: null, publish: false }, new Date('2026-10-24T03:00:00Z'))
+    for (const category of [items, main, sold, promoted]) {
+      const archived = await getCategory(db, TEST_TENANT, category.id).then(c => c.status === 'archived' ? c : archive(c))
+      await run(archived)
+    }
+    for (const category of [active, items, main, sold, promoted]) expect(await exists(category.id), category.name).toBe(true)
+  })
+
+  it('refuses when a promotion names it meanwhile (the guard in the batch)', async () => {
+    const tea = await create('Tea')
+    const other = await create('Other')
+    const draft = await createPromotion(db, actor, { name: 'Week', description: '', discount: { kind: 'percent', percent: 10 }, scope: 'selected', itemIds: [], categoryIds: [other.id], branchIds: [], startsOn: '2026-10-25', endsOn: '2026-10-30', posterId: null, publish: false }, new Date('2026-10-24T03:00:00Z'))
+    const archived = await archive(tea)
+    const racing = interleaved(db, () => db.insert(menuPromotionCategories).values({ tenantId: TEST_TENANT, promotionId: draft.id, categoryId: tea.id }))
+    await expectApiError(() => deleteCategory(racing, actor, tea.id, { version: archived.version }), 409, 'CATEGORY_HAS_HISTORY')
+    expect(await exists(tea.id)).toBe(true)
   })
 })

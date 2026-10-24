@@ -112,6 +112,8 @@ export const orderLines = sqliteTable('order_lines', {
   uniqueIndex('order_lines_position_idx').on(t.orderId, t.position),
   // Sales by item groups the lines of paid orders by item (8.1, D110).
   index('order_lines_item_idx').on(t.itemId),
+  // A category's history (D200): whether a line was sold under it.
+  index('order_lines_category_idx').on(t.categoryId).where(sql`${t.categoryId} is not null`),
   // A promotion's results (M1, D163).
   index('order_lines_promotion_idx').on(t.promotionId).where(sql`${t.promotionId} is not null`),
 ])

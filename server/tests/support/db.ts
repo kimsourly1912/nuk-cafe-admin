@@ -160,16 +160,17 @@ export async function insertBranch(db: Db, values: { id: string, name: string, t
 let soldLines = 0
 
 /**
- * A paid-for order of the tenant (`TEST_TENANT` unless named) whose one line sold `itemId`, at a
- * branch of its own. Lines name menu items without a foreign key, as orders keep what was sold.
+ * A paid-for order of the tenant (`TEST_TENANT` unless named) whose one line sold `itemId`, under
+ * `categoryId` when given, at a branch of its own. Lines name menu records without foreign keys,
+ * as orders keep what was sold.
  */
-export async function insertSoldLine(db: Db, itemId: string, tenantId = TEST_TENANT) {
+export async function insertSoldLine(db: Db, sold: { itemId: string, categoryId?: string }, tenantId = TEST_TENANT) {
   const id = `sold-${++soldLines}`
   await insertBranch(db, { id: `${id}-branch`, name: id, timezone: 'Asia/Phnom_Penh', tenantId })
   const customer = await createUser(db)
   const now = new Date()
   await db.insert(orders).values({ id, tenantId, branchId: `${id}-branch`, customerId: customer.id, businessDate: '2026-10-24', pickupNumber: 1, orderType: 'pickup', subtotalMinor: 350, totalMinor: 350, placedAt: now, paymentDueAt: now, status: 'completed' })
-  await db.insert(orderLines).values({ tenantId, orderId: id, position: 0, itemId, variationId: 'variation', itemName: 'Latte', detail: '', modifiers: [], unitPriceMinor: 350, quantity: 1, totalMinor: 350 })
+  await db.insert(orderLines).values({ tenantId, orderId: id, position: 0, itemId: sold.itemId, variationId: 'variation', itemName: 'Latte', categoryId: sold.categoryId ?? null, categoryName: sold.categoryId ? 'Coffee' : null, detail: '', modifiers: [], unitPriceMinor: 350, quantity: 1, totalMinor: 350 })
   return id
 }
 

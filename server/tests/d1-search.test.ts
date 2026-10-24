@@ -7,7 +7,7 @@ import { getPlatformProxy } from 'wrangler'
 import type { Actor } from '#server/features/identity'
 import { createStaff, listStaff, seedFirstOwner } from '#server/features/identity/staff.service'
 import { getPlatformAccount, listPlatformAccounts } from '#server/features/identity/accounts.service'
-import { createCategory } from '#server/features/menu/categories.service'
+import { archiveCategory, createCategory, deleteCategory, getCategory } from '#server/features/menu/categories.service'
 import { createItem, deleteItem, listItems } from '#server/features/menu/items.service'
 import { addOwner, createTenant, getPlatformHealth, getPlatformOverview, getTenant, listPlatformActivity, listTenants, removeOwner, seedTenant, updateTenantNotes } from '#server/features/tenants'
 import type { Db } from '#server/utils/batch'
@@ -137,11 +137,23 @@ describe('searching on real D1', { timeout: 60_000, tags: ['slow'] }, () => {
     expect(await versionsOf(gone.id)).toBe(0)
 
     const sold = await draft('Sold tea')
-    await insertSoldLine(db, sold.id, ours)
+    await insertSoldLine(db, { itemId: sold.id }, ours)
     await expectApiError(() => deleteItem(db, ourOwner, sold.id, { version: sold.version }), 409, 'ITEM_HAS_HISTORY')
     const racing = await draft('Racing tea')
-    await expectApiError(() => deleteItem(interleaved(db, () => insertSoldLine(db, racing.id, ours)), ourOwner, racing.id, { version: racing.version }), 409, 'ITEM_HAS_HISTORY')
+    await expectApiError(() => deleteItem(interleaved(db, () => insertSoldLine(db, { itemId: racing.id }, ours)), ourOwner, racing.id, { version: racing.version }), 409, 'ITEM_HAS_HISTORY')
     expect(await versionsOf(racing.id)).toBe(1)
+  })
+
+  it('deletes an empty archived category, and refuses a main one whose archived subcategory remains (D200)', async () => {
+    const main = await createCategory(db, ourOwner, { name: 'Gone main', description: '', parentId: null, availabilityRuleIds: [] })
+    await createCategory(db, ourOwner, { name: 'Gone sub', description: '', parentId: main.id, availabilityRuleIds: [] })
+    const archived = await archiveCategory(db, ourOwner, main.id, { version: main.version })
+    expect(archived.deleteBlocker).toBe('subcategories')
+    await expectApiError(() => deleteCategory(db, ourOwner, main.id, { version: archived.version }), 409, 'CATEGORY_HAS_HISTORY')
+    const empty = await createCategory(db, ourOwner, { name: 'Empty', description: '', parentId: null, availabilityRuleIds: [] })
+    const gone = await archiveCategory(db, ourOwner, empty.id, { version: empty.version })
+    await deleteCategory(db, ourOwner, empty.id, { version: gone.version })
+    await expectApiError(() => getCategory(db, ours, empty.id), 404, 'NOT_FOUND')
   })
 
   it('lists people for every boundary search', async () => {

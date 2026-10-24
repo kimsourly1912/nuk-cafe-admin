@@ -469,7 +469,7 @@ describe('deleting permanently (D200)', () => {
 
   it('refuses an item that was ordered: it stays archived', async () => {
     const item = await archived()
-    await insertSoldLine(db, item.id)
+    await insertSoldLine(db, { itemId: item.id })
     await expectApiError(() => deleteItem(db, actor, item.id, { version: item.version }), 409, 'ITEM_HAS_HISTORY')
     expect(await exists(item.id)).toBe(true)
   })
@@ -492,7 +492,7 @@ describe('deleting permanently (D200)', () => {
 
   it('refuses when an order sells it meanwhile (the guard in the batch)', async () => {
     const item = await latte()
-    const racing = interleaved(db, () => insertSoldLine(db, item.id))
+    const racing = interleaved(db, () => insertSoldLine(db, { itemId: item.id }))
     await expectApiError(() => deleteItem(racing, actor, item.id, { version: item.version }), 409, 'ITEM_HAS_HISTORY')
     expect(await exists(item.id)).toBe(true)
     expect(await db.select().from(auditEvents).where(eq(auditEvents.action, 'menu.item.delete'))).toEqual([])
@@ -524,7 +524,7 @@ describe('deleting permanently (D200)', () => {
   it('says in the list what keeps each item', async () => {
     const free = await latte()
     const sold = await croissant()
-    await insertSoldLine(db, sold.id)
+    await insertSoldLine(db, { itemId: sold.id })
     const page = await listItems(db, TEST_TENANT, { page: 1, pageSize: 20, status: 'all' } as never)
     expect(Object.fromEntries(page.items.map(i => [i.id, i.deleteBlocker]))).toEqual({ [free.id]: null, [sold.id]: 'ordered' })
   })

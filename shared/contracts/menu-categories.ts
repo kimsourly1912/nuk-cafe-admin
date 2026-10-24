@@ -39,7 +39,16 @@ export interface MenuCategory {
   version: number
   createdAt: string
   updatedAt: string
+  /**
+   * What keeps an archived category from being deleted permanently (D200): menu items or
+   * sub-categories in it (of any status: delete or move them first), an order line sold under it,
+   * or a promotion naming it. `null` when nothing does (an active category is archived first).
+   */
+  deleteBlocker: CategoryDeleteBlocker | null
 }
+
+export const CATEGORY_DELETE_BLOCKERS = ['items', 'subcategories', 'ordered', 'promotion'] as const
+export type CategoryDeleteBlocker = typeof CATEGORY_DELETE_BLOCKERS[number]
 
 const parentIdSchema = v.nullable(idSchema)
 

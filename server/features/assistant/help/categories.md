@@ -36,16 +36,19 @@ Published items stay on the customer menu the whole time, under the temporary ca
 3. Press **Save order**, or **Discard** to cancel.
 4. Press **Done** (the Reorder button) to leave.
 
-## Archive and restore
+## Archive, restore and delete
 
 - **⋮ → Archive**: customers stop seeing it and its items. The items stay and come back with it. Archiving a main category also archives its active subcategories.
 - **Restore**: brings it back at the end of its level. Restoring a main category asks whether to restore its subcategories too.
 - A subcategory can't be restored while its main category is archived: restore the main category first.
 - Several at once: **Select** (or **S**), tick rows, then **Archive selected** or **Restore selected**.
+- **⋮ → Delete permanently** (on an archived category): removes it for good. It asks first, and it can't be restored. Only an **empty** category nothing was ordered from can be deleted: no menu items and no subcategories in it (archived ones count too: delete them first, in **Menu items** and here), never used for an order, and in no promotion. Otherwise the action is greyed out and says why, and the category stays archived so your reports keep it.
 
 ## Common problems
 
 - **"That category has menu items. Move them to a sub-category first, or pick another parent."**: see "Turn a category with items into one with subcategories" above.
 - **"There is already a category named … here."**: names are unique among categories with the same parent.
 - **"Its parent category is archived. Restore the parent first."**
+- **"This category still has menu items (archived ones count too)."**: delete or move those items first (Menu items → Archived tab), then delete the category.
+- **"Menu items were ordered from this category, so it stays archived"**: a category customers ordered from is never deleted; keep it archived.
 - **"These categories were changed by someone else."** (when saving the order): press **Reload**. Your order stays on screen; check it and save again.
