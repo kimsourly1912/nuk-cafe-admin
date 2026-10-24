@@ -323,6 +323,7 @@ Same feature (`availability.*`, the window rules in `availability.rules.ts`), co
 | `POST /api/admin/menu/availability-rules` | `{ name, windows: [{ weekday, startMinute, endMinute }] }` (1–21) → 201 |
 | `PATCH …/{ruleId}` | `{ version, name?, windows? }`: `windows` replaces them all |
 | `POST …/{ruleId}/archive`, `…/restore` | `{ version }` |
+| `DELETE …/{ruleId}` | `{ version }` → 204: an archived rule **no item or category of any status names** is deleted for good with its windows (D200). Every rule says what blocks it (`deleteBlocker`: `items`, `categories`) |
 
 Items and categories choose their rules with `availabilityRuleIds` (at most 5, each once) on create and update (absent keeps, `[]` removes), and return `availabilityRules: [{ id, name, status }]` by name.
 
@@ -336,6 +337,7 @@ Items and categories choose their rules with `availabilityRuleIds` (at most 5, e
 | Stale version (before or during the write) | 409 `VERSION_CONFLICT` | ✔ (incl. the race) |
 | Editing or archiving an archived rule; restoring an active one | 409 `INVALID_STATE` | ✔ |
 | Archiving a rule a draft, active item or active category uses (also if one starts using it meanwhile) | 409 `AVAILABILITY_RULE_IN_USE`; archived items and categories don't count | ✔ (incl. both races) |
+| Deleting an active rule / one an item or category names, archived ones too (also if one arrives meanwhile) | 409 `INVALID_STATE` / `AVAILABILITY_RULE_HAS_USES`; each guard sits in the delete statement | ✔ (incl. the race) |
 | An item or category choosing an unknown or archived rule (also if archived meanwhile, on create and update) | 422 `AVAILABILITY_RULE_NOT_AVAILABLE` on `availabilityRuleIds.<i>` | ✔ (incl. the races) |
 | An archived rule an item or category already uses (it was archived while they were) | Stays, shown with `status: 'archived'`, never matches; the form can send it back | ✔ |
 

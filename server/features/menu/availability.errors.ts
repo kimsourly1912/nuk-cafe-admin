@@ -1,3 +1,4 @@
+import type { RuleDeleteBlocker } from '#shared/contracts/menu-availability'
 import { apiError, ErrorCodes, notFound, versionConflict } from '#server/utils/errors'
 
 export const AvailabilityErrorCodes = {
@@ -5,6 +6,7 @@ export const AvailabilityErrorCodes = {
   AVAILABILITY_WINDOWS: 'AVAILABILITY_WINDOWS',
   AVAILABILITY_RULE_IN_USE: 'AVAILABILITY_RULE_IN_USE',
   AVAILABILITY_RULE_NOT_AVAILABLE: 'AVAILABILITY_RULE_NOT_AVAILABLE',
+  AVAILABILITY_RULE_HAS_USES: 'AVAILABILITY_RULE_HAS_USES',
 } as const
 
 export const availabilityRuleNotFound = () => notFound('This availability rule')
@@ -41,5 +43,14 @@ export const availabilityRuleNotAvailable = (index: number) =>
 export const availabilityRuleArchived = () =>
   apiError(409, ErrorCodes.INVALID_STATE, 'This availability rule is archived. Restore it first.')
 
-export const availabilityRuleNotArchived = () =>
-  apiError(409, ErrorCodes.INVALID_STATE, 'This availability rule isn\'t archived.')
+export const availabilityRuleNotArchived = (message = 'This availability rule isn\'t archived.') =>
+  apiError(409, ErrorCodes.INVALID_STATE, message)
+
+const USES: Record<RuleDeleteBlocker, string> = {
+  items: 'Menu items still use this availability rule (archived ones count too). Remove it from them, or delete those items, first.',
+  categories: 'Categories still use this availability rule (archived ones count too). Remove it from them, or delete those categories, first.',
+}
+
+/** A permanent delete of a rule that items or categories still name (D200). */
+export const availabilityRuleHasUses = (blocker: RuleDeleteBlocker) =>
+  apiError(409, AvailabilityErrorCodes.AVAILABILITY_RULE_HAS_USES, USES[blocker])

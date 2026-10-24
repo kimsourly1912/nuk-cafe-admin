@@ -7,7 +7,7 @@
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { AvailabilityRule } from '#shared/contracts/menu-availability'
-import { inUse, usageLabel, useAvailabilityRuleList, useAvailabilityRuleMutations } from '../composables/useAvailabilityRules'
+import { DELETE_BLOCKED, inUse, usageLabel, useAvailabilityRuleList, useAvailabilityRuleMutations } from '../composables/useAvailabilityRules'
 import AvailabilityRuleCard from './AvailabilityRuleCard.vue'
 import AvailabilityRuleFormModal from './AvailabilityRuleFormModal.vue'
 
@@ -22,11 +22,12 @@ const { filters, isFiltered, clearFilters } = usePaginatedQuery({
 })
 
 const { data, loading, refreshing, error, refresh } = useAvailabilityRuleList()
-const { archive, restore, isBusy } = useAvailabilityRuleMutations()
+const { archive, restore, remove, isBusy } = useAvailabilityRuleMutations()
 
 const matching = computed(() => {
   const search = filters.search.trim().toLowerCase()
-  return (data.value ?? []).filter(rule => !search || rule.name.toLowerCase().includes(search))
+  // A deleted rule goes at once, before the refetch arrives.
+  return (data.value ?? []).filter(rule => !remove.isRemoved(rule.id) && (!search || rule.name.toLowerCase().includes(search)))
 })
 const rows = computed(() => matching.value.filter(rule => filters.status === ANY || rule.status === filters.status))
 const counts = computed(() => data.value && {
@@ -37,7 +38,19 @@ const counts = computed(() => data.value && {
 
 function actions(rule: AvailabilityRule): DropdownMenuItem[] {
   if (rule.status === 'archived') {
-    return [{ label: 'Restore', icon: 'i-lucide-archive-restore', onSelect: () => restore.execute(rule) }]
+    return [
+      { label: 'Restore', icon: 'i-lucide-archive-restore', onSelect: () => restore.execute(rule) },
+      { type: 'separator' },
+      // Only a rule nothing names can go for good (D200); otherwise it says why.
+      {
+        label: 'Delete permanently',
+        icon: 'i-lucide-trash-2',
+        color: 'error',
+        disabled: rule.deleteBlocker !== null,
+        description: rule.deleteBlocker ? DELETE_BLOCKED[rule.deleteBlocker] : undefined,
+        onSelect: () => remove.execute(rule),
+      },
+    ]
   }
   const used = inUse(rule)
   return [

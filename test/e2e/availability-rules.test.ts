@@ -10,7 +10,7 @@ const STAMP = '2026-09-27T00:00:00.000Z'
 const w = (weekday: number, startMinute: number, endMinute: number): AvailabilityWindow => ({ weekday, startMinute, endMinute })
 
 function ruleOf(id: string, name: string, overrides: Partial<AvailabilityRule> = {}): AvailabilityRule {
-  return { id, name, status: 'active', windows: [1, 2, 3, 4, 5].map(d => w(d, 420, 660)), itemCount: 0, categoryCount: 0, version: 1, createdAt: STAMP, updatedAt: STAMP, ...overrides }
+  return { id, name, status: 'active', windows: [1, 2, 3, 4, 5].map(d => w(d, 420, 660)), itemCount: 0, categoryCount: 0, version: 1, createdAt: STAMP, updatedAt: STAMP, deleteBlocker: null, ...overrides }
 }
 
 const BREAKFAST = ruleOf('rule-1', 'Breakfast', { itemCount: 3, categoryCount: 1 })
@@ -94,6 +94,52 @@ describe('availability rules list', () => {
     await toast(page, 'Rule "Old brunch" restored').waitFor()
     expect(restored).toEqual([{ version: 4 }])
     expect(writes(api.calls)).toEqual(['POST /admin/menu/availability-rules/rule-2/archive', 'POST /admin/menu/availability-rules/rule-3/restore'])
+  })
+})
+
+describe('deleting permanently (D200)', () => {
+  it('deletes an unused archived rule after asking, from the version read, and the card goes', async () => {
+    const rules = [BREAKFAST, LATE, OLD]
+    const bodies: unknown[] = []
+    const { page } = await open(rules, {
+      'DELETE /admin/menu/availability-rules/{id}': ({ url: u, body }) => {
+        bodies.push({ id: u.pathname.split('/').pop(), body })
+        rules.splice(rules.indexOf(OLD), 1)
+        return null
+      },
+    })
+    await page.getByRole('tab', { name: /Archived/ }).click()
+    await (await cardAction(page, 'Old brunch', 'Delete permanently')).click()
+    const dialog = page.getByRole('dialog', { name: 'Delete "Old brunch" permanently?' })
+    await dialog.getByText('No menu item or category uses it.', { exact: false }).waitFor()
+    await dialog.getByRole('button', { name: 'Delete permanently' }).click()
+    await toast(page, 'Rule "Old brunch" deleted').waitFor()
+    await card(page, 'Old brunch').waitFor({ state: 'detached' })
+    expect(bodies).toEqual([{ id: OLD.id, body: { version: 4 } }])
+  })
+
+  it('says why an archived rule still in use can\'t go', async () => {
+    const USED = ruleOf('rule-4', 'Old lunch', { status: 'archived', deleteBlocker: 'items' })
+    const { page } = await open([BREAKFAST, USED])
+    await page.getByRole('tab', { name: /Archived/ }).click()
+    const action = await cardAction(page, 'Old lunch', 'Delete permanently')
+    await action.waitFor()
+    expect(await action.getAttribute('data-disabled')).not.toBeNull()
+    await action.getByText('Menu items still use it (archived ones too)').waitFor()
+  })
+
+  it('shows the server\'s refusal and keeps the card', async () => {
+    const { page } = await open(undefined, {
+      'DELETE /admin/menu/availability-rules/{id}': () => {
+        throw failures.conflict('AVAILABILITY_RULE_HAS_USES', 'Menu items still use this availability rule (archived ones count too). Remove it from them, or delete those items, first.')
+      },
+    })
+    await page.getByRole('tab', { name: /Archived/ }).click()
+    await (await cardAction(page, 'Old brunch', 'Delete permanently')).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete permanently' }).click()
+    await toast(page, 'Could not delete "Old brunch"').waitFor()
+    await page.getByText('Menu items still use this availability rule', { exact: false }).first().waitFor()
+    await card(page, 'Old brunch').waitFor()
   })
 })
 

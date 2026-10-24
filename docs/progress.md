@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Delete permanently, step 3: availability rules (D200, 2026-10-24)
+
+[Decision, step 3](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24), after step 2 (merged in PR #168). **Delete permanently** in an archived rule's ⋮ menu, off with what still uses it (items or categories, archived ones too). No migration. Help: the Availability page. **Next:** option sets and values, add-on groups, dining tables.
+
+- **Evidence (2026-10-24, local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 138 files, 1894 passed, 1 skipped. New: `availability.service.test.ts` 6 (an unused archived rule deleted with its windows, audited; active, stale and unknown refused; an archived item's rule refused until the item is deleted; an archived category's rule refused; the delete statement itself refusing an active rule and each use; a use arriving mid-batch), `menu.repository.tenants.test.ts` +1 (another cafe's rule neither read nor deleted with our id). Guards removed one at a time, each failing a test, then restored: status, item uses, category uses. `test/e2e/availability-rules.test.ts` 20/20, 3 new (delete after asking with the version read and the card gone; the disabled action with what still uses it; the server's refusal kept on the card).
+
 ## Delete permanently, step 2: categories (D200, 2026-10-24)
 
 [Decision, step 2](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24), after step 1 (merged in PR #167). **Delete permanently** in an archived category's ⋮ menu, off with the reason while it holds items or subcategories (archived ones too), something was ordered from it, or a promotion names it. Migration `0047_order_lines_category` (a partial index, additive; applied by the staging deploy before the Worker). Help: the Categories page. **Next:** availability rules, then option sets and values, add-on groups, dining tables.

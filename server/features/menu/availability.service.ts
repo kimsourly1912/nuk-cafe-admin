@@ -5,9 +5,9 @@ import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
 import type { Actor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
-import { availabilityRuleArchived, availabilityRuleChanged, availabilityRuleInUse, availabilityRuleNameTaken, availabilityRuleNotArchived, availabilityRuleNotAvailable, availabilityRuleNotFound, availabilityWindows } from './availability.errors'
+import { availabilityRuleArchived, availabilityRuleChanged, availabilityRuleHasUses, availabilityRuleInUse, availabilityRuleNameTaken, availabilityRuleNotArchived, availabilityRuleNotAvailable, availabilityRuleNotFound, availabilityWindows } from './availability.errors'
 import * as repo from './availability.repository'
-import type { RuleRow } from './availability.repository'
+import type { RuleListRow, RuleRow } from './availability.repository'
 import { sortWindows, windowsProblem } from './availability.rules'
 
 /**
@@ -16,7 +16,7 @@ import { sortWindows, windowsProblem } from './availability.rules'
  * `version` is the lock for the rule and its windows.
  */
 
-function toRule(row: RuleRow, windows: Map<string, AvailabilityWindow[]>, usage: Awaited<ReturnType<typeof repo.usageCounts>>): AvailabilityRule {
+function toRule(row: RuleListRow, windows: Map<string, AvailabilityWindow[]>, usage: Awaited<ReturnType<typeof repo.usageCounts>>): AvailabilityRule {
   return {
     id: row.id,
     name: row.name,
@@ -27,11 +27,12 @@ function toRule(row: RuleRow, windows: Map<string, AvailabilityWindow[]>, usage:
     version: row.version,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
+    deleteBlocker: row.deleteBlocker,
   }
 }
 
 async function loadRule(db: Db, tenantId: string, id: string): Promise<AvailabilityRule> {
-  const row = await repo.findRule(db, tenantId, id)
+  const row = await repo.findRuleWithBlocker(db, tenantId, id)
   if (!row) throw availabilityRuleNotFound()
   const [windows, usage] = await Promise.all([repo.windowsOf(db, tenantId, [id]), repo.usageCounts(db, tenantId, [id])])
   return toRule(row, windows, usage)
@@ -149,6 +150,28 @@ export async function restoreAvailabilityRule(db: Db, actor: Actor, id: string, 
     audit(db, actor, 'restore', id, {}),
   ], () => availabilityRuleNameTaken(rule.name))
   return loadRule(db, actor.tenantId, id)
+}
+
+/**
+ * Deletes an archived rule for good (D200), only while no item or category (archived ones too)
+ * names it: checked first for the refusal and again in the batch. The audit row keeps its name.
+ */
+export async function deleteAvailabilityRule(db: Db, actor: Actor, id: string, input: AvailabilityRuleVersionInput): Promise<void> {
+  const { tenantId } = actor
+  const rule = await repo.findRuleWithBlocker(db, tenantId, id)
+  if (!rule) throw availabilityRuleNotFound()
+  if (rule.version !== input.version) throw availabilityRuleChanged()
+  if (rule.status !== 'archived') throw availabilityRuleNotArchived('Archive this availability rule before deleting it.')
+  if (rule.deleteBlocker) throw availabilityRuleHasUses(rule.deleteBlocker)
+  await runRuleBatch(db, tenantId, id, input.version, [
+    repo.deleteRuleStatement(db, tenantId, id, input.version),
+    requireOneChange(db),
+    audit(db, actor, 'delete', id, { name: rule.name }),
+  ], () => availabilityRuleChanged(), async () => {
+    const now = await repo.findRuleWithBlocker(db, tenantId, id)
+    if (!now) return availabilityRuleNotFound()
+    return now.deleteBlocker ? availabilityRuleHasUses(now.deleteBlocker) : availabilityRuleChanged()
+  })
 }
 
 // --- Used by the item and category writes ---

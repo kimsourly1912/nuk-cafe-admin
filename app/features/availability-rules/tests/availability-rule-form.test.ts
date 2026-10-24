@@ -14,6 +14,7 @@ const rule = (windows: AvailabilityRule['windows']): AvailabilityRule => ({
   version: 3,
   createdAt: '',
   updatedAt: '',
+  deleteBlocker: null,
 })
 const w = (weekday: number, startMinute: number, endMinute: number) => ({ weekday, startMinute, endMinute })
 
