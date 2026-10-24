@@ -44,7 +44,7 @@ const manage = computed<DropdownMenuItem[][]>(() => branch.value && branch.value
   ? [
       [pausedUntil.value
         ? { label: 'Resume online orders', icon: 'i-lucide-play', onSelect: () => void resume.execute(props.branchId) }
-        : { label: 'Pause online orders', icon: 'i-lucide-pause', disabled: openNow.value === false, onSelect: () => void pauseModal.open({ branchId: props.branchId }) }],
+        : { label: 'Pause online orders…', icon: 'i-lucide-pause', disabled: openNow.value === false, onSelect: () => void pauseModal.open({ branchId: props.branchId }) }],
       [
         { label: 'Reports', icon: 'i-lucide-chart-column', to: tenantPath(`/counter/${branch.value.id}/reports/summary`) },
         { label: 'Dining tables', icon: 'i-lucide-armchair', to: tenantPath(`/counter/${branch.value.id}/tables`) },
