@@ -78,7 +78,7 @@ The counter can be installed on the tablet like an app: it opens from its own ic
 - **iPad or iPhone (Safari):** the Share button → **Add to Home Screen**.
 - **Computer (Chrome or Edge):** the install icon at the end of the address bar, or the menu → **Install**.
 
-The app is named after the cafe ("<cafe> Counter") with a coffee cup icon, and opens at the counter. Everything works as in the browser: sign-in, the chime (tap the screen once after it opens), keeping the screen on. It still needs the internet: without a connection nothing can be saved. The admin installs the same way from any admin page ("<cafe> Admin"). After the cafe's web address changes, install it again.
+The app is named after the cafe ("<cafe> Counter") with a coffee cup icon, and opens at the counter. Everything works as in the browser: sign-in, the chime (tap the screen once after it opens), keeping the screen on. It still needs the internet: without a connection nothing can be saved. The admin installs the same way from any admin page ("<cafe> Admin"): the counter and the admin are separate apps, and so is each cafe's, so one phone or tablet can have several. Your cafes and the account pages open inside the app with a thin address bar; ✕ goes back. After the cafe's web address changes, install it again.
 
 ## Common problems at the counter
 

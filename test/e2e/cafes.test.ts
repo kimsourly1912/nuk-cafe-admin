@@ -121,7 +121,7 @@ describe('each cafe\'s installable apps (D202)', () => {
 
   it('describe its own counter and admin, by its own name', async () => {
     const nuk = await manifest('/c/nuk/counter.webmanifest')
-    expect(nuk).toMatchObject({ status: 200, cache: 'no-cache', body: { id: '/c/nuk/counter', name: 'NUK Cafe Counter', start_url: '/c/nuk/counter', scope: '/', display: 'standalone' } })
+    expect(nuk).toMatchObject({ status: 200, cache: 'no-cache', body: { id: '/c/nuk/counter', name: 'NUK Cafe Counter', start_url: '/c/nuk/counter', scope: '/c/nuk/counter', display: 'standalone' } })
     expect(nuk.type).toMatch(/^application\/manifest\+json/)
     const brown = await manifest(`/c/${cafe.slug}/admin.webmanifest`)
     expect(brown.body).toMatchObject({ id: `/c/${cafe.slug}/admin`, name: 'Brown Bean Admin', start_url: `/c/${cafe.slug}/admin` })
