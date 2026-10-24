@@ -197,5 +197,4 @@ describe('unsaved changes: failed saves and Back past the page', () => {
     await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/categories')
     await expect(nameInput(page).inputValue()).resolves.toBe('Latte')
   })
-
 })
