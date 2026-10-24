@@ -167,7 +167,7 @@ describe('deleting permanently (D200)', () => {
     const bodies: unknown[] = []
     const { page } = await open(sets, {
       'DELETE /admin/menu/option-sets/{id}': ({ url: u, body }) => {
-        bodies.push({ id: u.pathname.split('/').pop(), body })
+        bodies.push({ id: u.pathname.split('/').pop(), version: u.searchParams.get('version'), body })
         sets.splice(sets.indexOf(OLD), 1)
         return null
       },
@@ -180,7 +180,7 @@ describe('deleting permanently (D200)', () => {
     await dialog.getByRole('button', { name: 'Delete permanently' }).click()
     await toast(page, 'Option set "Syrup (old)" deleted').waitFor()
     await card(page, 'Syrup (old)').waitFor({ state: 'detached' })
-    expect(bodies).toEqual([{ id: OLD.id, body: { version: 3 } }])
+    expect(bodies).toEqual([{ id: OLD.id, version: '3', body: null }])
   })
 
   it('says why an archived set items still use can\'t go', async () => {
@@ -196,7 +196,7 @@ describe('deleting permanently (D200)', () => {
   it('deletes an unused archived value in the editor with the set\'s version, and keeps a used one', async () => {
     const SET = setOf('set-8', 'Size', [value('val-1', 'Small', 1), value('val-30', 'Kids', 4, 'archived'), value('val-31', 'Jumbo', 5, 'archived', 'items')], { version: 6 })
     const answer = answering(SET, set => ({ values: set.values.filter(v => v.id !== 'val-30') }))
-    const { page } = await open([SET], { 'DELETE /admin/menu/option-sets/{id}/values/{id}': answer.handler })
+    const { page } = await open([SET], { 'DELETE /admin/menu/option-sets/{id}/values/{id}': request => answer.handler({ ...request, body: { version: request.url.searchParams.get('version'), body: request.body } }) })
     const editor = await openEditor(page, 'Size')
     await editor.getByRole('button', { name: 'Archived values (2)' }).click()
     expect(await editor.getByRole('button', { name: 'Delete Jumbo permanently' }).isDisabled()).toBe(true)
@@ -204,7 +204,7 @@ describe('deleting permanently (D200)', () => {
     await page.getByRole('dialog', { name: 'Delete “Kids” permanently?' }).getByRole('button', { name: 'Delete permanently' }).click()
     await toast(page, '"Kids" deleted').waitFor()
     await editor.getByRole('button', { name: 'Archived values (1)' }).waitFor()
-    expect(answer.bodies).toEqual([{ version: 6 }])
+    expect(answer.bodies).toEqual([{ version: '6', body: null }])
   })
 })
 

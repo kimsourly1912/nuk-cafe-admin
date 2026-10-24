@@ -426,7 +426,7 @@ describe('deleting permanently (D200)', () => {
     const { page } = await open({
       ...backend(rows),
       'DELETE /admin/menu/items/{id}': ({ url: u, body }) => {
-        bodies.push({ id: u.pathname.split('/').pop(), body })
+        bodies.push({ id: u.pathname.split('/').pop(), version: u.searchParams.get('version'), body })
         rows.splice(rows.indexOf(OLD), 1)
         return null
       },
@@ -438,7 +438,7 @@ describe('deleting permanently (D200)', () => {
     await dialog.getByRole('button', { name: 'Delete permanently' }).click()
     await toast(page, 'Menu item "Old chai" deleted').waitFor()
     await cardOf(page, 'Old chai').waitFor({ state: 'detached' })
-    expect(bodies).toEqual([{ id: 'item-3', body: { version: 9 } }])
+    expect(bodies).toEqual([{ id: 'item-3', version: '9', body: null }])
   })
 
   it('says why an archived item with history can\'t go, and offers a draft\'s delete only without history', async () => {

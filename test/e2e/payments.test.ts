@@ -45,8 +45,8 @@ async function open(start: ExchangeRates, khqr: KhqrSettings = KHQR_OFF, options
       khqrState = { ...khqrState, automaticCheck: true, token: { version: version + 1, expiresAt: new Date(Date.now() + 90 * 86_400_000).toISOString(), setAt: '2026-10-09T05:00:00.000Z', setBy: { name: 'Admin' } } }
       return khqrState
     },
-    'DELETE /admin/khqr/token': ({ body }) => {
-      tokenCalls.push(`DELETE ${JSON.stringify(body)}`)
+    'DELETE /admin/khqr/token': ({ url: u, body }) => {
+      tokenCalls.push(`DELETE ?version=${u.searchParams.get('version')} ${JSON.stringify(body)}`)
       khqrState = { ...khqrState, automaticCheck: false, token: null }
       return khqrState
     },
@@ -179,7 +179,7 @@ describe('Payments', () => {
     await page.getByRole('button', { name: 'Remove token' }).click({ timeout: 10_000 })
     await page.getByRole('alertdialog').or(page.getByRole('dialog')).getByRole('button', { name: 'Remove token' }).click({ timeout: 10_000 })
     await toast(page, 'Bakong token removed: cashiers confirm KHQR payments by hand').waitFor({ timeout: 10_000 })
-    expect(tokenCalls).toEqual([`DELETE ${JSON.stringify({ version: 3 })}`])
+    expect(tokenCalls).toEqual(['DELETE ?version=3 null'])
     await page.getByRole('button', { name: 'Add token' }).waitFor({ timeout: 10_000 })
   })
 

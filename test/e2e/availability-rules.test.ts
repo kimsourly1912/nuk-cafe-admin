@@ -103,7 +103,7 @@ describe('deleting permanently (D200)', () => {
     const bodies: unknown[] = []
     const { page } = await open(rules, {
       'DELETE /admin/menu/availability-rules/{id}': ({ url: u, body }) => {
-        bodies.push({ id: u.pathname.split('/').pop(), body })
+        bodies.push({ id: u.pathname.split('/').pop(), version: u.searchParams.get('version'), body })
         rules.splice(rules.indexOf(OLD), 1)
         return null
       },
@@ -115,7 +115,7 @@ describe('deleting permanently (D200)', () => {
     await dialog.getByRole('button', { name: 'Delete permanently' }).click()
     await toast(page, 'Rule "Old brunch" deleted').waitFor()
     await card(page, 'Old brunch').waitFor({ state: 'detached' })
-    expect(bodies).toEqual([{ id: OLD.id, body: { version: 4 } }])
+    expect(bodies).toEqual([{ id: OLD.id, version: '4', body: null }])
   })
 
   it('says why an archived rule still in use can\'t go', async () => {

@@ -97,3 +97,20 @@ describe('platform routes (D142)', () => {
     expect(calls(file, TENANT_HELPERS)).toBe(false)
   })
 })
+
+// Nitro 2 on Cloudflare Workers forwards a request body only for POST, PUT and PATCH
+// (`requestHasBody`), so a DELETE's body is empty on staging and production while Node keeps it:
+// a delete read its version from the body and failed only when deployed (D200). Deletes name
+// their version in the query.
+describe('DELETE routes (D200)', () => {
+  const deletes = routeFiles(apiDir).filter(file => file.endsWith('.delete.ts'))
+
+  it('are found', () => {
+    expect(deletes.length).toBeGreaterThan(5)
+  })
+
+  it.each(deletes.map(file => [file.slice(apiDir.length + 1), file]))('%s reads no body', (_name, file) => {
+    const source = readFileSync(file, 'utf8')
+    expect(source).not.toMatch(/readValidBody|readBody|readRawBody|readLimitedBody|readMultipart/)
+  })
+})

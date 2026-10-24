@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Delete permanently: fix deletes on staging (D200, 2026-10-24)
+
+[Decision, the fix](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24). The owner found every permanent delete failing on staging. Nitro 2's Cloudflare handler drops a `DELETE`'s body, so the version never arrived (400); Node keeps it, which is why local tests passed. Every `DELETE` (the ten routes, the draft promotion's and the Bakong token's included) now sends `?version=`.
+
+- **Evidence (2026-10-24, local):** reproduced locally that the server deletes (HTTP and a real browser on the seeded server: 204), then found the cause in `nitropack/dist/presets/cloudflare/runtime/_module-handler.mjs` (`requestHasBody`: `/post|put|patch/i`). `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 138 files, 1940 passed, 1 skipped, incl. the new `routes.test.ts` guard (every `*.delete.ts` reads no body: 10 failed before the fix, all pass after). E2E, each file alone (`E2E_WORKERS=1`; all eight at once timed out unrelated tests on this machine): products 64, categories 43, availability-rules 20, option-sets 27, modifier-groups 44, branches 32, promotions 10, payments 9, all passing; each delete now checks `?version=` and no body.
+
 ## Delete permanently, step 6: dining tables (D200, 2026-10-24)
 
 [Decision, step 6](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24), after step 5 (merged in PR #171); the last step, so D200 is complete. **Delete permanently** in an archived table's ⋮ menu on the admin's Branch page (off, "it has orders", when an order was placed at it); owners only, not on the counter. Migration `0048_orders_table` (a partial index, additive; applied by the staging deploy before the Worker). Help: the Branch page.

@@ -83,7 +83,7 @@ describe('deleting permanently (D200)', () => {
     const bodies: unknown[] = []
     const { page } = await open(backend(groups, {
       'DELETE /admin/menu/modifier-groups/{id}': ({ url: u, body }) => {
-        bodies.push({ id: u.pathname.split('/').pop(), body })
+        bodies.push({ id: u.pathname.split('/').pop(), version: u.searchParams.get('version'), body })
         groups.splice(groups.indexOf(OLD), 1)
         return null
       },
@@ -96,7 +96,7 @@ describe('deleting permanently (D200)', () => {
     await dialog.getByRole('button', { name: 'Delete permanently' }).click()
     await toast(page, 'Add-on group "Seasonal extras" deleted').waitFor()
     await card(page, 'Seasonal extras').waitFor({ state: 'detached' })
-    expect(bodies).toEqual([{ id: OLD.id, body: { version: 2 } }])
+    expect(bodies).toEqual([{ id: OLD.id, version: '2', body: null }])
   })
 
   it('says why an archived group items still use can\'t go', async () => {
@@ -112,14 +112,14 @@ describe('deleting permanently (D200)', () => {
   it('deletes an unused archived add-on on the group page with the group\'s version, and keeps a priced one', async () => {
     const GROUP = groupOf('grp-8', 'Milk', [addOn('mod-30', 'Whole', 0), addOn('mod-31', 'Rice', 40, { status: 'archived' }), addOn('mod-32', 'Hemp', 60, { status: 'archived', deleteBlocker: 'items' })], { version: 5 })
     const answer = answering(GROUP, group => ({ modifiers: group.modifiers.filter(m => m.id !== 'mod-31') }))
-    const { page } = await openGroup(backend([GROUP], { 'DELETE /admin/menu/modifier-groups/{id}/modifiers/{id}': answer.handler }), 'grp-8')
+    const { page } = await openGroup(backend([GROUP], { 'DELETE /admin/menu/modifier-groups/{id}/modifiers/{id}': request => answer.handler({ ...request, body: { version: request.url.searchParams.get('version'), body: request.body } }) }), 'grp-8')
     await page.getByRole('button', { name: 'Archived add-ons (2)' }).click()
     expect(await page.getByRole('button', { name: 'Delete Hemp permanently' }).isDisabled()).toBe(true)
     await page.getByRole('button', { name: 'Delete Rice permanently' }).click()
     await page.getByRole('dialog', { name: 'Delete “Rice” permanently?' }).getByRole('button', { name: 'Delete permanently' }).click()
     await toast(page, '"Rice" deleted').waitFor()
     await page.getByRole('button', { name: 'Archived add-ons (1)' }).waitFor()
-    expect(answer.bodies).toEqual([{ version: 5 }])
+    expect(answer.bodies).toEqual([{ version: '5', body: null }])
   })
 })
 

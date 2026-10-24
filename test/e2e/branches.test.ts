@@ -431,7 +431,7 @@ describe('deleting a table permanently (D200)', () => {
     const { page } = await open(backend({
       'GET /admin/branches/{id}/tables': () => rows,
       'DELETE /admin/branches/{id}/tables/{id}': ({ url: u, body }) => {
-        bodies.push({ id: u.pathname.split('/').pop(), body })
+        bodies.push({ id: u.pathname.split('/').pop(), version: u.searchParams.get('version'), body })
         rows.splice(rows.indexOf(OLD), 1)
         return null
       },
@@ -445,7 +445,7 @@ describe('deleting a table permanently (D200)', () => {
     await dialog.getByRole('button', { name: 'Delete permanently' }).click()
     await toast(page, 'Table "Old bar" deleted').waitFor()
     await card(page, 'Old bar').waitFor({ state: 'detached' })
-    expect(bodies).toEqual([{ id: OLD.id, body: { version: 2 } }])
+    expect(bodies).toEqual([{ id: OLD.id, version: '2', body: null }])
   })
 
   it('says why a table with orders can\'t go', async () => {

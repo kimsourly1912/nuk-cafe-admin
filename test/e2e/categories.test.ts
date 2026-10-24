@@ -257,7 +257,7 @@ describe('deleting permanently (D200)', () => {
       ...backend(rows),
       'GET /admin/menu/categories': () => rows,
       'DELETE /admin/menu/categories/{id}': ({ url: u, body }) => {
-        bodies.push({ id: u.pathname.split('/').pop(), body })
+        bodies.push({ id: u.pathname.split('/').pop(), version: u.searchParams.get('version'), body })
         rows.splice(rows.findIndex(r => r.id === TEA.id), 1)
         return null
       },
@@ -269,7 +269,7 @@ describe('deleting permanently (D200)', () => {
     await dialog.getByRole('button', { name: 'Delete permanently' }).click()
     await toast(page, 'Category "Tea" deleted').waitFor()
     await item(page, 'Tea').waitFor({ state: 'detached' })
-    expect(bodies).toEqual([{ id: TEA.id, body: { version: 7 } }])
+    expect(bodies).toEqual([{ id: TEA.id, version: '7', body: null }])
   })
 
   it('says why an archived category can\'t go, and active ones have no delete', async () => {

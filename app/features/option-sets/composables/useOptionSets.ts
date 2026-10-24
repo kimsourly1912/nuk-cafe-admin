@@ -123,7 +123,7 @@ export function useOptionSetMutations() {
   /** Deletes an archived value no item version uses for good (D200): asks first, it can't be restored. */
   const deleteValue = change(
     'value-delete',
-    ({ set, value }: ValueChange) => apiFetch<OptionSet>(`${BASE}/${set.id}/values/${value.id}`, { method: 'DELETE', body: { version: set.version } }),
+    ({ set, value }: ValueChange) => apiFetch<OptionSet>(`${BASE}/${set.id}/values/${value.id}`, { method: 'DELETE', query: { version: set.version } }),
     {
       success: ({ value }) => `"${value.name}" deleted`,
       error: ({ value }) => `Could not delete "${value.name}"`,
@@ -141,7 +141,7 @@ export function useOptionSetMutations() {
    * server refuses one items still use (409 `OPTION_IN_USE`).
    */
   const remove = useMutation(
-    ({ set }: SetChange) => apiFetch<null>(`${BASE}/${set.id}`, { method: 'DELETE', body: { version: set.version } }),
+    ({ set }: SetChange) => apiFetch<null>(`${BASE}/${set.id}`, { method: 'DELETE', query: { version: set.version } }),
     {
       id: 'option-sets:delete',
       key: ({ set }) => setKey(set.id),
