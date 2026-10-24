@@ -8,9 +8,11 @@
 
 | Step | Status | Evidence |
 |---|---|---|
-| 1. Manifest route, `webManifest` builder, head tags in `app.vue`, icons, help page | planned | |
+| 1. Manifest routes, `webManifest` builder, head tags in `app.vue`, icons, help page | built, PR | below |
 | 2. Service worker (static files only) | not scheduled (D202 trigger) | |
 
+- **Evidence (2026-10-24, local, Chromium 1243):** `pnpm lint`, `pnpm typecheck`, `pnpm audit --audit-level high` clean; `pnpm test:unit` 140 files, 1953 passed, 1 skipped, incl. `web-manifest.test.ts` 4 (fields per workspace, icons, nothing but the public name, the linked path). E2E `cafes.test.ts` 15 on the real server, incl. 3 new: each cafe's counter and admin manifest by its own name only (two-cafe isolation), its icons served, `application/manifest+json` and `no-cache`; unknown cafe 404, another file name 404, paused 403, former address 302; the counter's and admin's sign-in pages link their own cafe's manifest and title, the menu none. Guards removed together and restored: the admin route reading `nuk`'s profile failed the isolation test, the manifest linked on every page failed the menu test. Full `pnpm test:e2e` at 4 workers: 705 passed, 7 failed (6 timeouts in categories and add-ons reorder, three platform, the products photo editor; the counter's sold-out switch poll), the same files as D201's load timeouts; those five files again at 2 workers: 202 passed.
+- **Not covered:** installing on a real Android tablet and iPad (manual, on staging after deploy; also which page iOS's Add to Home Screen starts on).
 - **Open:** QW1 (the cafe's logo as the app icon). Rollout to cafes waits on Q4 (installs belong to the domain).
 
 ## Back closes the overlay on top (D201, 2026-10-24)
