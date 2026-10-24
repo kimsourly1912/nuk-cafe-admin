@@ -37,6 +37,7 @@ const tableOf = (id: string, label: string, overrides: Partial<DiningTable> = {}
   version: 1,
   createdAt: STAMP,
   updatedAt: STAMP,
+  deleteBlocker: null,
   ...overrides,
 })
 const T1 = tableOf('table-1', 'Table 01')
@@ -423,6 +424,42 @@ describe('dining tables', () => {
 
 // The admin page shell (D126): the sidebar's active item, the tab in the URL, one line under
 // toolbar tabs, the page width, and the time zone list drawn only where it's seen.
+describe('deleting a table permanently (D200)', () => {
+  it('deletes an archived table no order was placed at, after asking, from the version read', async () => {
+    const rows = [T1, T2, OLD]
+    const bodies: unknown[] = []
+    const { page } = await open(backend({
+      'GET /admin/branches/{id}/tables': () => rows,
+      'DELETE /admin/branches/{id}/tables/{id}': ({ url: u, body }) => {
+        bodies.push({ id: u.pathname.split('/').pop(), body })
+        rows.splice(rows.indexOf(OLD), 1)
+        return null
+      },
+    }).handlers, undefined, `/c/nuk/admin/branches/${RIVERSIDE.id}?tab=tables`)
+    await card(page, 'Table 01').waitFor()
+    await page.getByRole('tab', { name: /Archived/ }).click()
+    await card(page, 'Old bar').getByRole('button', { name: 'Actions for Old bar' }).click()
+    await page.getByRole('menuitem', { name: 'Delete permanently' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Delete "Old bar" permanently?' })
+    await dialog.getByText('No order was placed at it.', { exact: false }).waitFor()
+    await dialog.getByRole('button', { name: 'Delete permanently' }).click()
+    await toast(page, 'Table "Old bar" deleted').waitFor()
+    await card(page, 'Old bar').waitFor({ state: 'detached' })
+    expect(bodies).toEqual([{ id: OLD.id, body: { version: 2 } }])
+  })
+
+  it('says why a table with orders can\'t go', async () => {
+    const USED = tableOf('table-4', 'Old patio', { status: 'archived', qrUrl: null, deleteBlocker: 'ordered' })
+    const { page } = await open(backend({ 'GET /admin/branches/{id}/tables': () => [T1, USED] }).handlers, undefined, `/c/nuk/admin/branches/${RIVERSIDE.id}?tab=tables`)
+    await card(page, 'Table 01').waitFor()
+    await page.getByRole('tab', { name: /Archived/ }).click()
+    await card(page, 'Old patio').getByRole('button', { name: 'Actions for Old patio' }).click()
+    const action = page.getByRole('menuitem', { name: 'Delete permanently (it has orders)' })
+    await action.waitFor()
+    expect(await action.getAttribute('data-disabled')).not.toBeNull()
+  })
+})
+
 describe('page shell (D126)', () => {
   const sidebarCurrent = (page: Page) => page.locator('nav a[aria-current="page"]').allTextContents()
 

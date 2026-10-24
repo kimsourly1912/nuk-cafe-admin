@@ -5,11 +5,12 @@ import { MAX_BRANCH_TABLES, MAX_BRANCHES } from '#shared/contracts/branches'
 import { branches, organization, user } from '#server/db/tables'
 import type { Actor } from '#server/features/identity'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { archiveTable, createBranch, createTable, getBranchPause, getBranchSettings, listBranchOptions, pauseBranch, resumeBranch, getPublicBranch, listPublicBranches, listTables, resolveTableToken, restoreTable, rotateTableQr, scanTableToken, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
+import { archiveTable, createBranch, createTable, deleteTable, getBranchPause, getBranchSettings, listBranchOptions, pauseBranch, resumeBranch, getPublicBranch, listPublicBranches, listTables, resolveTableToken, restoreTable, rotateTableQr, scanTableToken, updateBranchSettings, updateTable } from '#server/features/branches/branches.service'
 import { diningTables } from '#server/features/branches/branches.schema'
+import { deleteTableStatement } from '#server/features/branches/branches.repository'
 import type { QrConfig } from '#server/features/branches/branches.qr'
 import { qrConfigFrom, tableToken, tokenHash } from '#server/features/branches/branches.qr'
-import { createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { createTestDb, createUser, ensureTenant, insertBranch, insertSoldLine, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -467,5 +468,71 @@ describe('tenants', () => {
     const table = await createTable(db, theirOwner, theirs, { label: 'T1', area: null }, qr)
     await expectApiError(() => resolveTableToken(db, TEST_TENANT, tokenOf(table.qrUrl)), 404, 'NOT_FOUND')
     expect((await resolveTableToken(db, OTHER, tokenOf(table.qrUrl))).table.id).toBe(table.id)
+  })
+})
+
+describe('deleting a table permanently (D200)', () => {
+  const exists = async (id: string) => (await db.select({ id: diningTables.id }).from(diningTables).where(eq(diningTables.id, id))).length === 1
+  const archived = async (label: string) => {
+    const table = await createTable(db, actor, branch, { label, area: null }, qr)
+    return archiveTable(db, actor, branch, table.id, { version: table.version }, qr)
+  }
+
+  it('deletes an archived table no order was placed at, and keeps its label in the audit', async () => {
+    const table = await archived('Table 9')
+    expect(table.deleteBlocker).toBeNull()
+    await deleteTable(db, actor, branch, table.id, { version: table.version })
+    expect(await exists(table.id)).toBe(false)
+    expect(await auditOf(table.id)).toContainEqual(expect.objectContaining({ action: 'branch.table.delete', metadata: { branchId: branch, label: 'Table 9' } }))
+  })
+
+  it('refuses an active table, a stale version, another branch and an unknown one', async () => {
+    const active = await createTable(db, actor, branch, { label: 'Table 1', area: null }, qr)
+    await expectApiError(() => deleteTable(db, actor, branch, active.id, { version: active.version }), 409, 'INVALID_STATE')
+    const table = await archiveTable(db, actor, branch, active.id, { version: active.version }, qr)
+    await expectApiError(() => deleteTable(db, actor, branch, table.id, { version: active.version }), 409, 'VERSION_CONFLICT')
+    const other = await addBranch()
+    await expectApiError(() => deleteTable(db, actor, other, table.id, { version: table.version }), 404, 'NOT_FOUND')
+    await expectApiError(() => deleteTable(db, actor, branch, newId(), { version: 1 }), 404, 'NOT_FOUND')
+    expect(await exists(table.id)).toBe(true)
+  })
+
+  it('refuses a table an order was placed at: it stays archived', async () => {
+    const table = await archived('Table 2')
+    await insertSoldLine(db, { itemId: 'item', tableId: table.id })
+    const read = (await listTables(db, TEST_TENANT, branch, { status: 'archived' }, qr)).find(t => t.id === table.id)
+    expect(read?.deleteBlocker).toBe('ordered')
+    await expectApiError(() => deleteTable(db, actor, branch, table.id, { version: table.version }), 409, 'TABLE_HAS_ORDERS')
+    expect(await exists(table.id)).toBe(true)
+  })
+
+  it('refuses when an order arrives meanwhile (the guard in the batch)', async () => {
+    const table = await archived('Table 3')
+    const racing = interleaved(db, () => insertSoldLine(db, { itemId: 'item', tableId: table.id }))
+    await expectApiError(() => deleteTable(racing, actor, branch, table.id, { version: table.version }), 409, 'TABLE_HAS_ORDERS')
+    expect(await exists(table.id)).toBe(true)
+  })
+
+  it('the delete statement itself refuses an active table, and another branch\'s', async () => {
+    const active = await createTable(db, actor, branch, { label: 'Table 4', area: null }, qr)
+    const gone = await archived('Table 5')
+    const other = await addBranch()
+    await db.batch([deleteTableStatement(db, TEST_TENANT, branch, active.id, active.version), deleteTableStatement(db, TEST_TENANT, other, gone.id, gone.version)])
+    expect(await exists(active.id)).toBe(true)
+    expect(await exists(gone.id)).toBe(true)
+  })
+
+  it('reads and deletes none of another cafe\'s tables, and counts none of our orders against theirs', async () => {
+    const theirBranch = 'their-branch'
+    await insertBranch(db, { id: theirBranch, name: 'Theirs', timezone: 'Asia/Phnom_Penh', tenantId: 'tenant-2' })
+    const owner: Actor = { ...actor, tenantId: 'tenant-2', userId: 'their-owner' }
+    const created = await createTable(db, owner, theirBranch, { label: 'Table 1', area: null }, qr)
+    const table = await archiveTable(db, owner, theirBranch, created.id, { version: created.version }, qr)
+    await insertSoldLine(db, { itemId: 'ours', tableId: table.id })
+    expect((await listTables(db, 'tenant-2', theirBranch, { status: 'archived' }, qr))[0]?.deleteBlocker).toBeNull()
+    await db.batch([deleteTableStatement(db, TEST_TENANT, theirBranch, table.id, table.version)])
+    expect(await exists(table.id)).toBe(true)
+    await deleteTable(db, owner, theirBranch, table.id, { version: table.version })
+    expect(await exists(table.id)).toBe(false)
   })
 })

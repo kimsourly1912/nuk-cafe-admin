@@ -1,0 +1,1 @@
+CREATE INDEX `orders_table_idx` ON `orders` (`table_id`) WHERE "orders"."table_id" is not null;

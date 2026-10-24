@@ -9,7 +9,7 @@ import { toIso } from '#server/utils/time'
 import { isInWindow, isKnownTimeZone, localDate, localTime, minutesUntilClosed, nextStart, sortWindows, windowsProblem } from '#server/utils/weekly-windows'
 import type { Actor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
-import { branchArchived, branchChanged, branchClosedNow, branchHoursProblem, branchLimit, branchNameTaken, branchNotFound, tableArchived, tableChanged, tableLabelTaken, tableLimit, tableNotArchived, tableNotFound, unknownTimezone } from './branches.errors'
+import { branchArchived, branchChanged, branchClosedNow, branchHoursProblem, branchLimit, branchNameTaken, branchNotFound, tableArchived, tableChanged, tableHasOrders, tableLabelTaken, tableLimit, tableNotArchived, tableNotFound, unknownTimezone } from './branches.errors'
 import type { QrConfig } from './branches.qr'
 import { isTokenShaped, tableQrUrl, tableToken, tokenHash } from './branches.qr'
 import * as repo from './branches.repository'
@@ -290,6 +290,7 @@ async function toTable(row: TableRow, qr: QrConfig): Promise<DiningTable> {
     version: row.version,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
+    deleteBlocker: row.deleteBlocker,
   }
 }
 
@@ -390,6 +391,30 @@ export async function restoreTable(db: Db, actor: Actor, branchId: string, table
     audit(db, actor, 'table.restore', 'dining_table', tableId, {}),
   ], current.label)
   return loadTable(db, actor.tenantId, branchId, tableId, qr)
+}
+
+/**
+ * Deletes an archived table for good (D200), only while no order (any status) was placed at it:
+ * checked first for the refusal and again in the batch. Owners only (the admin route); the audit
+ * row keeps its label.
+ */
+export async function deleteTable(db: Db, actor: Actor, branchId: string, tableId: string, input: TableVersionInput): Promise<void> {
+  const current = await openTable(db, actor.tenantId, branchId, tableId, input.version, true)
+  if (current.status !== 'archived') throw tableNotArchived('Archive this table before deleting it.')
+  if (current.deleteBlocker) throw tableHasOrders()
+  try {
+    await db.batch([
+      repo.deleteTableStatement(db, actor.tenantId, branchId, tableId, input.version),
+      requireOneChange(db),
+      audit(db, actor, 'table.delete', 'dining_table', tableId, { branchId, label: current.label }),
+    ])
+  }
+  catch (error) {
+    if (!isStaleWrite(error)) throw error
+    const now = await repo.findTable(db, actor.tenantId, branchId, tableId)
+    if (!now) throw tableNotFound()
+    throw now.version === input.version && now.deleteBlocker ? tableHasOrders() : tableChanged()
+  }
 }
 
 /** Gives the table a new QR: the printed one stops working at once. */

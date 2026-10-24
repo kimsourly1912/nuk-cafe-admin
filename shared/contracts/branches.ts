@@ -84,7 +84,12 @@ export interface DiningTable {
   version: number
   createdAt: string
   updatedAt: string
+  /** `ordered` while an order (any status) was placed at it, so it stays archived; else `null` (D200). */
+  deleteBlocker: TableDeleteBlocker | null
 }
+
+export const TABLE_DELETE_BLOCKERS = ['ordered'] as const
+export type TableDeleteBlocker = typeof TABLE_DELETE_BLOCKERS[number]
 
 export const tableListQuerySchema = v.object({
   status: v.optional(v.picklist(['active', 'archived', 'all']), 'active'),

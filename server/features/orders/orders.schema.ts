@@ -66,6 +66,8 @@ export const orders = sqliteTable('orders', {
   index('orders_branch_status_idx').on(t.branchId, t.status),
   // The counter's finished orders of a business day (step 10.2).
   index('orders_branch_date_idx').on(t.branchId, t.businessDate),
+  // A dining table's history (D200): whether an order was placed at it.
+  index('orders_table_idx').on(t.tableId).where(sql`${t.tableId} is not null`),
   // The expiry task's question every minute: unpaid orders past their time (6.6, D104).
   index('orders_status_due_idx').on(t.status, t.paymentDueAt),
   // The platform console's usage numbers per cafe: orders in the last 30 days, the last one (D142).
