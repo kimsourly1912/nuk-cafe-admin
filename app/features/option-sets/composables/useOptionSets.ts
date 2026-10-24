@@ -120,6 +120,45 @@ export function useOptionSetMutations() {
     { success: ({ value }) => `"${value.name}" restored`, error: ({ value }) => `Could not restore "${value.name}"` },
   )
 
+  /** Deletes an archived value no item version uses for good (D200): asks first, it can't be restored. */
+  const deleteValue = change(
+    'value-delete',
+    ({ set, value }: ValueChange) => apiFetch<OptionSet>(`${BASE}/${set.id}/values/${value.id}`, { method: 'DELETE', body: { version: set.version } }),
+    {
+      success: ({ value }) => `"${value.name}" deleted`,
+      error: ({ value }) => `Could not delete "${value.name}"`,
+      confirm: ({ value }) => ({
+        title: `Delete “${value.name}” permanently?`,
+        description: 'No menu-item version uses it. It can\'t be restored.',
+        confirmLabel: 'Delete permanently',
+        danger: true,
+      }),
+    },
+  )
+
+  /**
+   * Deletes an archived set and its values for good (D200). Asks first: it can't be restored. The
+   * server refuses one items still use (409 `OPTION_IN_USE`).
+   */
+  const remove = useMutation(
+    ({ set }: SetChange) => apiFetch<null>(`${BASE}/${set.id}`, { method: 'DELETE', body: { version: set.version } }),
+    {
+      id: 'option-sets:delete',
+      key: ({ set }) => setKey(set.id),
+      lock: ({ set }) => setKey(set.id),
+      removes: true,
+      confirm: ({ set }) => ({
+        title: `Delete “${set.name}” permanently?`,
+        description: 'No menu item uses it or its values. Its values are removed too, and it can\'t be restored.',
+        confirmLabel: 'Delete permanently',
+        danger: true,
+      }),
+      successMessage: (_, { set }) => `Option set "${set.name}" deleted`,
+      errorMessage: ({ set }) => `Could not delete "${set.name}"`,
+      invalidate: AFFECTED,
+    },
+  )
+
   const reorderValues = change(
     'value-reorder',
     ({ set, valueIds }: SetChange & { valueIds: string[] }) => apiFetch<OptionSet>(`${BASE}/${set.id}/values/order`, { method: 'PUT', body: { version: set.version, valueIds } }),
@@ -127,7 +166,7 @@ export function useOptionSetMutations() {
     { success: false, error: () => 'Could not save the order' },
   )
 
-  const changes = [rename, archive, restore, addValue, renameValue, archiveValue, restoreValue, reorderValues]
+  const changes = [rename, archive, restore, remove, addValue, renameValue, archiveValue, restoreValue, deleteValue, reorderValues]
 
   return {
     create,
@@ -138,8 +177,15 @@ export function useOptionSetMutations() {
     renameValue,
     archiveValue,
     restoreValue,
+    deleteValue,
+    remove,
     reorderValues,
     /** Any change to this set in flight: disable its actions. */
     isBusy: (setId: string) => changes.some(m => m.isPending(setKey(setId))),
+    /** Deleted: hidden until the refetch arrives. */
+    isRemoved: (setId: string) => remove.isRemoved(setKey(setId)),
   }
 }
+
+/** Why Delete permanently is off for an archived set or value (D200), under the action. */
+export const OPTION_IN_USE = 'Menu items still use it (archived ones too)'

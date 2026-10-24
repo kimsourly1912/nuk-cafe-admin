@@ -178,6 +178,8 @@ Same feature (`options.*`), contract `shared/contracts/menu-options.ts`, permiss
 | `POST …/{setId}/values` | `{ version, name }` → 201, at the end |
 | `PATCH …/{setId}/values/{valueId}` | `{ version, name }` |
 | `POST …/{setId}/values/{valueId}/archive`, `…/restore` | `{ version }` (restore puts it at the end) |
+| `DELETE …/{setId}` | `{ version }` → 204: an archived set **no item of any status uses, and none of whose values an item version uses**, is deleted for good with its values (D200) |
+| `DELETE …/{setId}/values/{valueId}` | `{ version }` (the set's, which moves): an archived value of an active set that **no item version uses** (retired versions and archived items count) is deleted for good (D200). Sets and values say what blocks them (`deleteBlocker: 'items'`) |
 | `PUT …/{setId}/values/order` | `{ version, valueIds }`: every active value, once |
 
 | Case | Result | Test |
@@ -189,6 +191,7 @@ Same feature (`options.*`), contract `shared/contracts/menu-options.ts`, permiss
 | Archiving the last active value (also if another is archived meanwhile) | 422 `LAST_OPTION_VALUE`: archive the set instead | ✔ (incl. the race) |
 | More than 20 active values (also if one is added meanwhile) | 422 `TOO_MANY_OPTION_VALUES` | ✔ (incl. the race) |
 | A value of another set in the path | 404 | ✔ |
+| Deleting an active set or value / one items still use (an item that dropped the set keeps its retired versions' values) (also if a use arrives meanwhile) | 409 `INVALID_STATE` / `OPTION_IN_USE`; the guards sit in the delete statements, the set's first so its values never hit a foreign key | ✔ (incl. the race) |
 | Reorder that isn't exactly the active values | 409 `VERSION_CONFLICT` | ✔ |
 
 **Not yet:** "used by N items" and what archiving a set or value does to items (hiding their versions) come with menu items in step 3.5.

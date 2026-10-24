@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest'
 import type { OptionSet, OptionValue } from '#shared/contracts/menu-options'
 import { archiveSetDescription, moveEntry, searchOptionSet, usageLabel, valueCountLabel } from '../schemas/option-set-display'
 
-const value = (name: string, status: OptionValue['status'] = 'active'): OptionValue => ({ id: name, name, sortOrder: 1, status })
+const value = (name: string, status: OptionValue['status'] = 'active'): OptionValue => ({ id: name, name, sortOrder: 1, status, deleteBlocker: null })
 const MILK: OptionSet = {
   id: 'set-1',
   name: 'Milk',
   status: 'active',
   values: [value('Whole'), value('Oat'), value('Oat milk'), value('Almond', 'archived')],
   itemCount: 0,
+  deleteBlocker: null,
   version: 1,
   createdAt: '',
   updatedAt: '',

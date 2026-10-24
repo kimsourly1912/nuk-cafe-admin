@@ -16,12 +16,18 @@ export const OPTION_VALUE_NAME_MAX = 40
 /** Values per set: a price grid of 2 sets stays readable. */
 export const MAX_OPTION_VALUES = 20
 
+/** What keeps an archived set or value from being deleted permanently (D200): menu items, archived ones too, use it. */
+export const OPTION_DELETE_BLOCKERS = ['items'] as const
+export type OptionDeleteBlocker = typeof OPTION_DELETE_BLOCKERS[number]
+
 export interface OptionValue {
   id: string
   name: string
   /** Position within the set, ascending (gaps are normal after archiving). */
   sortOrder: number
   status: OptionStatus
+  /** `items` while an item version (any item, retired versions too) uses it; else `null` (D200). */
+  deleteBlocker: OptionDeleteBlocker | null
 }
 
 export interface OptionSet {
@@ -35,6 +41,8 @@ export interface OptionSet {
   version: number
   createdAt: string
   updatedAt: string
+  /** `items` while an item (archived ones too) uses the set or one of its values; else `null` (D200). */
+  deleteBlocker: OptionDeleteBlocker | null
 }
 
 const setName = nameSchema(OPTION_SET_NAME_MAX)

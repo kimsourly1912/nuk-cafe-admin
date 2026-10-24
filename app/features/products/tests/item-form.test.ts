@@ -135,7 +135,7 @@ describe('item form from an item', () => {
 
 describe('item form from the libraries', () => {
   it('takes an option set\'s active values, and an add-on group\'s active add-ons at their prices', () => {
-    const set: OptionSet = { id: 'size', name: 'Size', status: 'active', values: [{ id: 's', name: 'Small', sortOrder: 1, status: 'active' }, { id: 'x', name: 'Old', sortOrder: 2, status: 'archived' }], itemCount: 0, version: 1, createdAt: STAMP, updatedAt: STAMP }
+    const set: OptionSet = { id: 'size', name: 'Size', status: 'active', values: [{ id: 's', name: 'Small', sortOrder: 1, status: 'active', deleteBlocker: null }, { id: 'x', name: 'Old', sortOrder: 2, status: 'archived', deleteBlocker: null }], itemCount: 0, deleteBlocker: null, version: 1, createdAt: STAMP, updatedAt: STAMP }
     expect(optionSetFromLibrary(set).values).toEqual([{ id: 's', name: 'Small' }])
     const group = addOnGroupFromLibrary(MILK)
     expect(group).toMatchObject({ ownRules: false, minSelect: 0, maxSelect: 1 })

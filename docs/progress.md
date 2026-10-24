@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Delete permanently, step 4: option sets and values (D200, 2026-10-24)
+
+[Decision, step 4](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24), after step 3 (merged in PR #169). **Delete permanently** in an archived set's ⋮ menu (off with the reason while items use it or its values), and a bin button beside an archived value's Restore in the editor. No migration. Help: the Options page. **Next:** add-on groups, then dining tables.
+
+- **Evidence (2026-10-24, local):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 138 files, 1908 passed, 1 skipped. New: `options.service.test.ts` 9 (an unused archived set deleted with its values, audited; active, stale and unknown refused; an archived item's set refused until the item is deleted; a set an item dropped but whose retired versions keep its values refused; the delete statements themselves stopping on their guard (not a foreign key) for an active set, an item link and a version using a value; an item link arriving mid-batch; an unused archived value deleted under the set's lock, audited; an active, a stale and a used value refused; the value statement refusing an active unused value and a used one), `menu.repository.tenants.test.ts` +1 (another cafe's set and value neither read nor deleted with our id). Guards removed one at a time, each failing a test, then restored: set status, set in use, its link part, its values part, value status, value in use. `test/e2e/option-sets.test.ts` 27/27, 3 new (a set deleted after asking with the version read and the card gone; the disabled action with the reason; a value deleted in the editor with the set's version, a used one's button off); the archived set's menu now lists Delete permanently after Restore.
+
 ## Delete permanently, step 3: availability rules (D200, 2026-10-24)
 
 [Decision, step 3](decisions.md#d200-delete-permanently-only-without-history-archive-stays-the-bin-menu-items-first-2026-10-24), after step 2 (merged in PR #168). **Delete permanently** in an archived rule's ⋮ menu, off with what still uses it (items or categories, archived ones too). No migration. Help: the Availability page. **Next:** option sets and values, add-on groups, dining tables.

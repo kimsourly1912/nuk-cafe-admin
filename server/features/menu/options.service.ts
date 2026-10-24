@@ -6,7 +6,7 @@ import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
 import type { Actor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
-import { lastOptionValue, optionNotArchived, optionSetArchived, optionSetChanged, optionSetNameTaken, optionSetNotFound, optionValueArchived, optionValueNameTaken, optionValueNotFound, optionValuesChanged, tooManyOptionValues } from './options.errors'
+import { lastOptionValue, optionInUse, optionNotArchived, optionSetArchived, optionSetArchivedFirst, optionSetChanged, optionSetNameTaken, optionSetNotFound, optionValueArchived, optionValueNameTaken, optionValueNotFound, optionValuesChanged, tooManyOptionValues } from './options.errors'
 import { itemCountsBySet } from './items.repository'
 import * as repo from './options.repository'
 import type { OptionSetRow, OptionValueRow } from './options.repository'
@@ -24,11 +24,12 @@ function toOptionSet(row: OptionSetRow, values: OptionValueRow[], itemCounts: Ma
     name: row.name,
     status: row.status,
     values: [...own.filter(v => v.status === 'active'), ...own.filter(v => v.status !== 'active')]
-      .map(v => ({ id: v.id, name: v.name, sortOrder: v.sortOrder, status: v.status })),
+      .map(v => ({ id: v.id, name: v.name, sortOrder: v.sortOrder, status: v.status, deleteBlocker: v.deleteBlocker })),
     itemCount: itemCounts.get(row.id) ?? 0,
     version: row.version,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
+    deleteBlocker: row.deleteBlocker,
   }
 }
 
@@ -139,6 +140,22 @@ export async function restoreOptionSet(db: Db, actor: Actor, id: string, input: 
   return loadSet(db, tenantId, id)
 }
 
+/**
+ * Deletes an archived set and its values for good (D200), only while no item (archived ones too)
+ * uses the set or any of its values: checked first for the refusal and again in the batch.
+ */
+export async function deleteOptionSet(db: Db, actor: Actor, id: string, input: OptionVersionInput): Promise<void> {
+  const { tenantId } = actor
+  const set = await openSet(db, tenantId, id, input.version, true)
+  if (set.status !== 'archived') throw optionSetArchivedFirst()
+  if (set.deleteBlocker) throw optionInUse('set')
+  await runSetBatch(db, tenantId, id, input.version, [
+    ...repo.deleteSetStatements(db, tenantId, id, input.version),
+    requireOneChange(db),
+    audit(db, actor, 'delete', id, { name: set.name }),
+  ], () => optionSetChanged(), () => optionInUse('set'))
+}
+
 /** A new value at the end of the set. Existing items don't change (they price it when they want it). */
 export async function addOptionValue(db: Db, actor: Actor, setId: string, input: AddOptionValueInput): Promise<OptionSet> {
   const { tenantId } = actor
@@ -188,6 +205,26 @@ export async function archiveOptionValue(db: Db, actor: Actor, setId: string, va
     repo.requireActiveValueCount(db, tenantId, setId, MAX_OPTION_VALUES),
     audit(db, actor, 'value.archive', setId, { valueId }),
   ], () => optionSetChanged(), () => lastOptionValue())
+  return loadSet(db, tenantId, setId)
+}
+
+/**
+ * Deletes an archived value of an active set for good (D200), only while no item version (archived
+ * items and retired versions too) uses it. The set's version is the lock, as for every value write.
+ */
+export async function deleteOptionValue(db: Db, actor: Actor, setId: string, valueId: string, input: OptionVersionInput): Promise<OptionSet> {
+  const { tenantId } = actor
+  await openSet(db, tenantId, setId, input.version)
+  const value = await openValue(db, tenantId, setId, valueId)
+  if (value.status !== 'archived') throw optionNotArchived('value')
+  if (value.deleteBlocker) throw optionInUse('value')
+  await runSetBatch(db, tenantId, setId, input.version, [
+    repo.touchSetStatement(db, tenantId, setId, input.version, new Date()),
+    requireOneChange(db),
+    repo.deleteValueStatement(db, tenantId, setId, valueId),
+    requireOneChange(db),
+    audit(db, actor, 'value.delete', setId, { valueId, name: value.name }),
+  ], () => optionSetChanged(), () => optionInUse('value'))
   return loadSet(db, tenantId, setId)
 }
 

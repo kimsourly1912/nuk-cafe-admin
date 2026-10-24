@@ -8,7 +8,7 @@
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { OptionSet } from '#shared/contracts/menu-options'
-import { useOptionSetList, useOptionSetMutations } from '../composables/useOptionSets'
+import { OPTION_IN_USE, useOptionSetList, useOptionSetMutations } from '../composables/useOptionSets'
 import { searchOptionSet } from '../schemas/option-set-display'
 import OptionSetCard from './OptionSetCard.vue'
 import OptionSetCreateModal from './OptionSetCreateModal.vue'
@@ -25,10 +25,11 @@ const { filters, isFiltered, clearFilters } = usePaginatedQuery({
 })
 
 const { data, loading, refreshing, error, refresh } = useOptionSetList()
-const { archive, restore, isBusy } = useOptionSetMutations()
+const { archive, restore, remove, isBusy, isRemoved } = useOptionSetMutations()
 
 /** Sets matching the search, with the values that matched (for the card's "Matches" line). */
-const matching = computed(() => (data.value ?? []).flatMap((set) => {
+// A deleted set goes at once, before the refetch arrives.
+const matching = computed(() => (data.value ?? []).filter(set => !isRemoved(set.id)).flatMap((set) => {
   const match = searchOptionSet(set, filters.search)
   return match ? [{ set, values: match.values }] : []
 }))
@@ -54,10 +55,20 @@ async function create() {
 }
 
 function actions(set: OptionSet): DropdownMenuItem[] {
-  // The card's own button opens the set; the menu only changes its status.
-  return set.status === 'archived'
-    ? [{ label: 'Restore', icon: 'i-lucide-archive-restore', onSelect: () => restore.execute({ set }) }]
-    : [{ label: 'Archive', icon: 'i-lucide-archive', onSelect: () => archive.execute({ set }) }]
+  // The card's own button opens the set; the menu only changes its status, or deletes an unused archived one (D200).
+  if (set.status === 'active') return [{ label: 'Archive', icon: 'i-lucide-archive', onSelect: () => archive.execute({ set }) }]
+  return [
+    { label: 'Restore', icon: 'i-lucide-archive-restore', onSelect: () => restore.execute({ set }) },
+    { type: 'separator' },
+    {
+      label: 'Delete permanently',
+      icon: 'i-lucide-trash-2',
+      color: 'error',
+      disabled: set.deleteBlocker !== null,
+      description: set.deleteBlocker ? OPTION_IN_USE : undefined,
+      onSelect: () => remove.execute({ set }),
+    },
+  ]
 }
 
 usePageShortcuts({ n: () => create() })
