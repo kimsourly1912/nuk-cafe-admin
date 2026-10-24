@@ -46,7 +46,7 @@ Browser menu → Install app / Add to Home Screen
 | `name` | `<Cafe> Counter` | `<Cafe> Admin` | The cafe's own name, as the tab title already reads (`app.vue`). No hardcoded cafe name |
 | `short_name` | `Counter` | `Admin` | Under the home-screen icon the cafe name is usually cut |
 | `start_url` | `/c/<slug>/counter` | `/c/<slug>/admin` | The counter's branch picker; the admin's dashboard. A signed-out start goes to sign-in as today |
-| `scope` | `/` | `/` | Your cafes (`/cafes`) and the account pages live outside `/c/<slug>/`; a narrower scope would show a browser bar (or leave the app on iOS) on a cafe switch or an account page |
+| `scope` | `/c/<slug>/counter` | `/c/<slug>/admin` | The workspace (D204): Chrome offers Install only outside every installed app's scope, so `/` let a device hold one app from the site. Sign-in is inside; Your cafes and account pages open with the browser's bar |
 | `display` | `standalone` | `standalone` | Full screen with the system status bar; `fullscreen` hides the clock and battery staff rely on |
 | `icons` | generic set | generic set | See Icons |
 | `background_color`, `theme_color` | the app's light background and primary | same | The splash screen; one value only (the manifest has no dark variant) |
@@ -76,7 +76,7 @@ The builder sits in the tenants feature because it's a view of the cafe profile,
 
 A generic coffee-cup icon, the same mark `CafeLogo` shows for a cafe without a logo, on the primary colour: `192.png`, `512.png`, `maskable-512.png` (safe zone), `apple-touch-icon-180.png`. Drawn once as an SVG (lucide's `coffee` in white on amber-800, 60 % of the side, 50 % for the maskable one) and rendered to PNG with the pre-installed Chromium through Playwright, no project dependency; the PNGs are committed. To redraw: render the same SVG at each size (any SVG-to-PNG tool works).
 
-**Not the cafe's logo (QW1):** a manifest icon must be a PNG at the size it declares. Logos are WebP up to 1600 px (`IMAGE_MAX_EDGE`), square only since the crop (D185), and the Worker can't resize images (no `sharp` on Workers). Using logos means making 192/512 PNGs when the logo is saved: a separate step if the owner wants it.
+**Not the cafe's logo (QW1, answered in D204: one platform icon for every cafe, replaced by the platform's logo once QT1 names it):** a manifest icon must be a PNG at the size it declares. Logos are WebP up to 1600 px (`IMAGE_MAX_EDGE`), square only since the crop (D185), and the Worker can't resize images (no `sharp` on Workers). Using logos means making 192/512 PNGs when the logo is saved: a separate step if the owner wants it.
 
 ## Security and integrity
 
@@ -96,7 +96,7 @@ A generic coffee-cup icon, the same mark `CafeLogo` shows for a cafe without a l
 | Any other `/c/<slug>/<x>.webmanifest` | 404 (no route) |
 | Signed out at start | The start page sends to sign-in as in a tab (counter: `/c/<slug>/counter/sign-in`; admin: `/c/<slug>/admin/login`), inside the app |
 | Offline at start | The browser's own offline page (Chrome has a default one); once loaded, the offline banner as today |
-| Two cafes on one tablet | Two apps, two ids, two names |
+| Two cafes, or a cafe's counter and admin, on one tablet | Separate apps: no scope covers another's start page (D204) |
 
 ## Tests
 

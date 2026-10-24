@@ -155,9 +155,9 @@ Source: `app/app.vue` (the manifest link, `apple-touch-icon`, `apple-mobile-web-
 | Case | Behavior |
 |---|---|
 | A counter or admin page (its sign-in too) | Links its own cafe's manifest; the customer site and the platform console link none |
-| The manifest | `id` and `start_url` `/c/<slug>/<counter or admin>`, `name` "<cafe> Counter" / "<cafe> Admin", scope `/` (Your cafes and the account pages stay in the app), `standalone`, generic coffee-cup icons (QW1); `application/manifest+json`, `no-cache` |
+| The manifest | `id` and `start_url` `/c/<slug>/<counter or admin>`, `name` "<cafe> Counter" / "<cafe> Admin", scope the workspace itself (D204; Your cafes and the account pages open with the browser's bar), `standalone`, one platform icon for every cafe (D204); `application/manifest+json`, `no-cache` |
 | Unknown cafe · paused cafe · former address | 404 · 403 (can't be installed; an installed app opens on the paused page) · 302 to the current address (the cafe-pages middleware) |
-| Two cafes, or a cafe's counter and admin, on one tablet | Separate apps (distinct ids) |
+| Two cafes, or a cafe's counter and admin, on one tablet | Separate apps: no app's scope covers another's start page (D204). An app installed before D204 (scope `/`) blocks the others until reinstalled |
 | The cafe renamed | The next manifest check picks it up on Android; iOS keeps the name given at install |
 | Offline at start | The browser's own offline page; once loaded, the offline banner |
 | **Install app** in the user menu (D203) | The browser's own install dialog when it offered one; else a modal with the steps for this device. Hidden inside the installed app (`useInstallApp`) |
