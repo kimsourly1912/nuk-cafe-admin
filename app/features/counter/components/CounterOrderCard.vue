@@ -29,7 +29,7 @@ const action = computed(() => {
 
 <template>
   <article
-    class="rounded-lg bg-default p-3 shadow-sm ring ring-default transition-opacity dark:bg-elevated dark:ring-accented"
+    class="rounded-lg bg-default p-4 shadow-sm ring ring-default transition-opacity dark:bg-elevated dark:ring-accented"
     :class="[isNew && 'ring-2 ring-primary', busy && 'opacity-60']"
     :aria-label="`Order ${orderNumber(order)}`"
     :aria-busy="busy"
@@ -38,13 +38,13 @@ const action = computed(() => {
     <div class="relative -m-1 flex w-[calc(100%+0.5rem)] items-start gap-3 rounded-md p-1">
       <button
         type="button"
-        class="text-start text-3xl font-bold tabular-nums text-highlighted after:absolute after:inset-0 after:rounded-md focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-primary"
+        class="text-start text-4xl font-bold tabular-nums text-highlighted after:absolute after:inset-0 after:rounded-md focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-primary"
         @click="emit('open')"
       >
         <span class="sr-only">Open order </span>{{ orderNumber(order) }}
       </button>
       <span class="min-w-0 flex-1">
-        <span class="flex flex-wrap items-center gap-x-2 text-sm">
+        <span class="flex flex-wrap items-center gap-x-2 text-base">
           <span class="font-medium text-highlighted">{{ orderTypeText(order) }}</span>
           <UBadge
             v-if="isNew"
@@ -54,16 +54,16 @@ const action = computed(() => {
             size="sm"
           />
         </span>
-        <span class="block truncate text-sm text-muted">{{ firstName(order.customer.name) }}</span>
+        <span class="block truncate text-base text-muted">{{ firstName(order.customer.name) }}</span>
       </span>
     </div>
 
-    <p class="mt-2 truncate text-sm">
+    <p class="mt-3 truncate text-base">
       <span class="font-medium text-highlighted">{{ itemCount(order) }}</span>
       <span class="text-muted"> · {{ itemNames(order) }}</span>
     </p>
 
-    <div class="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
+    <div class="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-base">
       <span class="font-semibold text-highlighted">{{ formatMinor(order.totalMinor) }}</span>
       <span class="text-muted">{{ timeAgo(order.placedAt, now) }}</span>
       <span
@@ -80,7 +80,8 @@ const action = computed(() => {
       :loading="busy"
       :disabled="busy"
       block
-      class="mt-3"
+      size="lg"
+      class="mt-4"
       :aria-label="`${action.label}: order ${orderNumber(order)}`"
       @click="emit('action')"
     />

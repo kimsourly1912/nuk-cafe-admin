@@ -167,7 +167,7 @@ useSeoMeta({ robots: 'noindex' })
           icon="i-lucide-pause"
           :title="`Online orders paused until ${formatTime(pausedUntil)}`"
           :description="pauseDetail ? `${pauseDetail}. Orders already placed carry on.` : 'Orders already placed carry on.'"
-          orientation="horizontal"
+          :orientation="isCompact ? 'vertical' : 'horizontal'"
           :actions="canResume ? [{ label: 'Resume now', color: 'warning', variant: 'solid', loading: resume.isPending(branchId), onClick: () => void resume.execute(branchId) }] : undefined"
         />
       </div>

@@ -54,7 +54,8 @@ watchEffect(() => {
         <UButton
           label="Sign out"
           color="neutral"
-          variant="link"
+          variant="ghost"
+          block
           @click="signOut()"
         />
       </div>

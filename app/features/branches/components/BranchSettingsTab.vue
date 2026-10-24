@@ -102,7 +102,7 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="@container space-y-6">
     <div>
       <h2 class="text-lg font-semibold text-highlighted">
         Branch settings
@@ -112,23 +112,23 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
       </p>
     </div>
 
-    <!-- What's saved. Phones: one card, a row each (it would fill the first screen as three); from sm: three cards -->
-    <dl class="divide-y divide-default rounded-lg border border-default bg-elevated/50 sm:grid sm:grid-cols-3 sm:gap-4 sm:divide-y-0 sm:border-0 sm:bg-transparent">
-      <div class="flex items-center gap-3 p-4 sm:rounded-lg sm:border sm:border-default sm:bg-elevated/50">
+    <!-- What's saved. Phones: one card, a row each (it would fill the first screen as three; label over value until @md, Resume under the text); from @lg: cards, the status one across the row until there is room for three (@3xl) -->
+    <dl class="divide-y divide-default rounded-lg border border-default bg-elevated/50 @lg:grid @lg:grid-cols-2 @3xl:grid-cols-3 @lg:gap-4 @lg:divide-y-0 @lg:border-0 @lg:bg-transparent">
+      <div class="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2 p-4 @md:flex @md:items-center @lg:col-span-2 @lg:grid @lg:grid-cols-[auto_1fr] @3xl:col-span-1 @lg:rounded-lg @lg:border @lg:border-default @lg:bg-elevated/50">
         <UChip
           :color="paused ? 'warning' : saved.openNow ? 'success' : 'neutral'"
           standalone
           inset
           size="3xl"
-          class="shrink-0"
+          class="mt-1 shrink-0 @md:mt-0"
         />
-        <div class="flex flex-1 items-baseline justify-between gap-2 sm:block">
+        <div class="min-w-0 flex-1 @md:flex @md:items-baseline @md:justify-between @md:gap-2 @lg:block">
           <dt class="text-sm text-muted">
             Current status
           </dt>
           <dd
             v-if="paused"
-            class="font-semibold text-highlighted sm:text-lg"
+            class="font-semibold text-highlighted @lg:text-lg"
           >
             Paused until {{ formatTime(paused.pausedUntil!, { timeZone: saved.timezone }) }}
             <span
@@ -138,7 +138,7 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
           </dd>
           <dd
             v-else
-            class="font-semibold text-highlighted sm:text-lg"
+            class="font-semibold text-highlighted @lg:text-lg"
           >
             {{ saved.openNow ? 'Open now' : 'Closed now' }}
           </dd>
@@ -150,36 +150,36 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
           color="neutral"
           variant="outline"
           size="sm"
-          class="shrink-0"
+          class="shrink-0 col-start-2 justify-self-start @md:justify-self-auto @lg:justify-self-start"
           :loading="resume.isPending(saved.id)"
           @click="resumeOrders"
         />
       </div>
-      <div class="flex items-center gap-3 p-4 sm:rounded-lg sm:border sm:border-default sm:bg-elevated/50">
+      <div class="flex items-start gap-3 p-4 @md:items-center @lg:rounded-lg @lg:border @lg:border-default @lg:bg-elevated/50">
         <UIcon
           name="i-lucide-clock"
-          class="size-5 shrink-0 text-muted sm:size-6"
+          class="size-5 shrink-0 text-muted @lg:size-6"
         />
-        <div class="flex min-w-0 flex-1 items-baseline justify-between gap-2 sm:block">
+        <div class="min-w-0 flex-1 @md:flex @md:items-baseline @md:justify-between @md:gap-2 @lg:block">
           <dt class="text-sm text-muted">
             Time zone
           </dt>
-          <dd class="truncate font-semibold text-highlighted sm:text-lg">
+          <dd class="truncate font-semibold text-highlighted @lg:text-lg">
             {{ utcOffset(saved.timezone) }}
-            <span class="text-sm font-normal text-muted sm:block">{{ cityOf(saved.timezone) }}</span>
+            <span class="text-sm font-normal text-muted @lg:block">{{ cityOf(saved.timezone) }}</span>
           </dd>
         </div>
       </div>
-      <div class="flex items-center gap-3 p-4 sm:rounded-lg sm:border sm:border-default sm:bg-elevated/50">
+      <div class="flex items-start gap-3 p-4 @md:items-center @lg:rounded-lg @lg:border @lg:border-default @lg:bg-elevated/50">
         <UIcon
           name="i-lucide-calendar"
-          class="size-5 shrink-0 text-muted sm:size-6"
+          class="size-5 shrink-0 text-muted @lg:size-6"
         />
-        <div class="flex min-w-0 flex-1 items-baseline justify-between gap-2 sm:block">
+        <div class="min-w-0 flex-1 @md:flex @md:items-baseline @md:justify-between @md:gap-2 @lg:block">
           <dt class="text-sm text-muted">
             Today's hours
           </dt>
-          <dd class="font-semibold text-highlighted sm:text-lg">
+          <dd class="font-semibold text-highlighted @lg:text-lg">
             {{ todaysHours }}
           </dd>
         </div>
