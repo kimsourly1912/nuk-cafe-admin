@@ -19,5 +19,12 @@ useSeoMeta({ robots: 'noindex' })
 </script>
 
 <template>
-  <component :is="pages[props.report]" />
+  <!-- The counter layout has no dashboard shell, which the report panels expect: it pins the header
+       and scrolls the body inside, and gives the white page the cards sit on. -->
+  <UDashboardGroup
+    unit="rem"
+    class="bg-default print:static print:block print:overflow-visible"
+  >
+    <component :is="pages[props.report]" />
+  </UDashboardGroup>
 </template>

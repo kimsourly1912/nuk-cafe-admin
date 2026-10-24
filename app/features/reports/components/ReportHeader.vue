@@ -74,6 +74,8 @@ const actions = computed<DropdownMenuItem[]>(() => [
       <UDashboardSidebarCollapse v-else />
     </template>
     <template #right>
+      <!-- The counter has no sidebar to hold it (the admin's is there). -->
+      <UColorModeButton v-if="surface.counterBranchId" />
       <UDropdownMenu
         v-if="isCompact"
         :items="actions"

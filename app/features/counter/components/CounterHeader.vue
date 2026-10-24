@@ -46,8 +46,8 @@ const manage = computed<DropdownMenuItem[][]>(() => branch.value && branch.value
         ? { label: 'Resume online orders', icon: 'i-lucide-play', onSelect: () => void resume.execute(props.branchId) }
         : { label: 'Pause online orders…', icon: 'i-lucide-pause', disabled: openNow.value === false, onSelect: () => void pauseModal.open({ branchId: props.branchId }) }],
       [
-        { label: 'Dining tables', icon: 'i-lucide-armchair', to: tenantPath(`/counter/${branch.value.id}/tables`) },
         { label: 'Reports', icon: 'i-lucide-chart-column', to: tenantPath(`/counter/${branch.value.id}/reports/summary`) },
+        { label: 'Dining tables', icon: 'i-lucide-armchair', to: tenantPath(`/counter/${branch.value.id}/tables`) },
       ],
     ]
   : [])
@@ -61,10 +61,10 @@ const initials = computed(() => (user.value?.name || user.value?.email || '?').s
 const menu = computed<DropdownMenuItem[][]>(() => [
   [{ label: user.value?.name || user.value?.email, description: user.value?.email, type: 'label' }],
   [
-    { label: muted.value ? 'Turn on the new-order sound' : 'Mute the new-order sound', icon: muted.value ? 'i-lucide-bell' : 'i-lucide-bell-off', onSelect: () => { muted.value = !muted.value } },
     ...((user.value?.branches.length ?? 0) > 1 ? [{ label: 'Another branch', icon: 'i-lucide-store', to: counterHomePath(slug.value) }] : []),
     ...(elsewhere.value ? [{ label: 'Another cafe', icon: 'i-lucide-arrow-left-right', to: CAFES_PATH }] : []),
     { label: 'Change password', icon: 'i-lucide-key-round', to: counterChangePasswordPath(slug.value) },
+    { label: muted.value ? 'Turn on the new-order sound' : 'Mute the new-order sound', icon: muted.value ? 'i-lucide-bell' : 'i-lucide-bell-off', onSelect: () => { muted.value = !muted.value } },
   ],
   [{ label: 'Sign out', icon: 'i-lucide-log-out', onSelect: () => signOut() }],
 ])
@@ -74,8 +74,9 @@ const menu = computed<DropdownMenuItem[][]>(() => [
   <header class="sticky top-0 z-10 border-b border-accented bg-default shadow-xs">
     <!-- Below sm the search drops to its own full-width row so nothing is squeezed; from sm it sits inline. -->
     <div class="mx-auto flex min-h-16 w-full max-w-7xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:flex-nowrap sm:py-0">
-      <div class="min-w-0">
-        <p class="flex items-center gap-2 font-semibold text-highlighted">
+      <!-- One block that may shrink (the name truncates), so the buttons stay on the first row on a phone. -->
+      <div class="flex min-w-0 items-center gap-2 max-sm:flex-1">
+        <p class="flex min-w-0 items-center gap-2 font-semibold text-highlighted">
           <CafeLogo
             :url="logoUrl"
             class="size-5 shrink-0"
@@ -84,22 +85,23 @@ const menu = computed<DropdownMenuItem[][]>(() => [
           <span class="text-muted max-lg:hidden">·</span>
           <span class="truncate">{{ branch?.name ?? 'Branch' }}</span>
         </p>
+        <UBadge
+          v-if="openNow && pausedUntil"
+          label="Paused"
+          color="warning"
+          variant="subtle"
+          icon="i-lucide-pause"
+          class="shrink-0"
+          :ui="{ label: 'max-sm:sr-only' }"
+        />
+        <UBadge
+          v-else-if="openNow !== null"
+          :label="openNow ? 'Open' : 'Closed'"
+          :color="openNow ? 'success' : 'neutral'"
+          variant="subtle"
+          class="shrink-0 max-sm:hidden"
+        />
       </div>
-      <UBadge
-        v-if="openNow && pausedUntil"
-        label="Paused"
-        color="warning"
-        variant="subtle"
-        icon="i-lucide-pause"
-        class="shrink-0"
-      />
-      <UBadge
-        v-else-if="openNow !== null"
-        :label="openNow ? 'Open' : 'Closed'"
-        :color="openNow ? 'success' : 'neutral'"
-        variant="subtle"
-        class="shrink-0"
-      />
       <div class="ms-auto" />
       <UInput
         v-if="search !== undefined"
@@ -108,7 +110,7 @@ const menu = computed<DropdownMenuItem[][]>(() => [
         icon="i-lucide-search"
         placeholder="Order number"
         aria-label="Search orders by number or name"
-        class="order-last w-full sm:order-0 sm:w-44 lg:w-72"
+        class="order-last w-full sm:order-0 sm:w-auto sm:min-w-0 sm:max-w-72 sm:flex-1"
         :ui="{ trailing: 'pe-1' }"
       >
         <template #trailing>
@@ -134,7 +136,7 @@ const menu = computed<DropdownMenuItem[][]>(() => [
         label="Sold out"
         color="neutral"
         variant="outline"
-        :ui="{ label: 'max-sm:sr-only' }"
+        :ui="{ label: 'max-lg:sr-only' }"
       />
       <UDropdownMenu
         v-if="manage.length"
@@ -146,7 +148,7 @@ const menu = computed<DropdownMenuItem[][]>(() => [
           label="Manage"
           color="neutral"
           variant="outline"
-          :ui="{ label: 'max-sm:sr-only' }"
+          :ui="{ label: 'max-lg:sr-only' }"
         />
       </UDropdownMenu>
       <UColorModeButton class="max-sm:hidden" />

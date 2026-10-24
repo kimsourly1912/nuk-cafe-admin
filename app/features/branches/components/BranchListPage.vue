@@ -26,7 +26,7 @@ const { addBranch, full, limit } = useAddBranch()
 <template>
   <UDashboardPanel
     id="branches"
-    :class="{ 'page-narrow': opening }"
+    class="page-narrow"
   >
     <template #header>
       <UDashboardNavbar :title="opening ? undefined : 'Branches'">
