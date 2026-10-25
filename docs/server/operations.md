@@ -28,6 +28,16 @@
 
 Nothing crosses environments: no production data in staging, no shared secrets, no shared buckets.
 
+### Build toolchain
+
+`package.json` declares patched Node 24 (`engines.node: ^24.22.1`) and exact pnpm (`packageManager: pnpm@12.15.0`). The checked-in staging pipeline builds in **GitHub Actions**, using both declarations, then uploads the Worker through Wrangler. No Cloudflare dashboard Node setting is needed for this pipeline. Workers runs Cloudflare's runtime, not the build machine's Node binary; upgrading build-time Node is not a Workers runtime security patch. Keep `compatibilityDate` and Workers compatibility flags independent of the Node upgrade.
+
+If an additional **Workers Builds** project is enabled in the dashboard, its Node selection does not inherit `engines.node`. Under **Settings → Build → Build Variables and Secrets**, set the nonsecret build variable `NODE_VERSION=24.22.1` (or a later patched Node 24 satisfying the manifest), for each applicable build environment. Workers Builds reads exact pnpm from `packageManager`; remove any conflicting `PNPM_VERSION` override, or align it with the manifest if that integration requires one. This is a build setting, not a Worker runtime variable in `nuxt.config.ts` or Wrangler `vars`. Recheck these external overrides when changing the manifest.
+
+For a separately configured Pages build, inspect its own build-image configuration and set `NODE_VERSION` and, where needed, `PNPM_VERSION` to the manifest's versions. This repository's deploy target is Workers, not Pages. Live dashboard settings were not inspected or changed in this audit; the dashboard actions above are conditional on those additional build integrations existing.
+
+Sources: [Workers build image and overrides](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/), [Pages build image](https://developers.cloudflare.com/pages/configuration/build-image/), [toolchain audit](../reviews/toolchain-audit-2026-10-25.md).
+
 ### Staging (step 2.1, D53)
 
 | | |

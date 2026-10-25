@@ -6,6 +6,16 @@ Task-specific instructions extracted from the former root guide. Read applicable
 
 Package manager is **pnpm**.
 
+### Node.js and pnpm (D205)
+
+`package.json` owns `engines.node` (`^24.22.1`, patched Node 24 only) and `packageManager` (exactly `pnpm@12.15.0`). Install a matching Node release, enable Corepack's pnpm shim, and use `pnpm install --frozen-lockfile`; see the [Windows setup](../../README.md#windows-11-powershell). These declarations do not automatically switch the machine's Node installation. Check `node --version` and `pnpm --version` before running checks; do not assume a successful install enforces the root project's Node requirement (reproduced with pnpm 12).
+
+All three CI setup jobs read `engines.node` from the checked-out manifest and pass it to the existing pinned `pnpm/setup` action. That action reads `packageManager` and performs the frozen install in CI. The Node range permits later Node 24 patches without permitting another major. No additional version files or runtime download configuration are needed. The lockfile's first YAML document pins pnpm's bootstrap binaries; its second document locks application dependencies. A pnpm-only upgrade can change the first while leaving the second untouched.
+
+Node.js is for local development, tests, and builds. Deployed environments run on Workers. Optional Cloudflare-hosted builds need their own `NODE_VERSION` build setting; see [operations](../server/operations.md#build-toolchain). Toolchain changes never authorize a deployment. Security findings and verification: [audit](../reviews/toolchain-audit-2026-10-25.md).
+
+### Application commands
+
 ```bash
 pnpm dev                                  # http://localhost:3000; /api is local Nitro/Better Auth
 pnpm nuxt db generate                     # create a migration after changing the server schema

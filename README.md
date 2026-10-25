@@ -1,75 +1,45 @@
-# Nuxt Minimal Starter
+# NUK Cafe
 
-Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+One Nuxt full-stack application for customer ordering, cafe administration, the counter and the platform console. Deployed environments run on Cloudflare Workers with D1 and R2; local development uses Node.js and SQLite.
 
-## Setup
+## Toolchain and setup
 
-Make sure to install dependencies:
+The source of truth is [`package.json`](package.json):
 
-```bash
-# npm
-npm install
+- `engines.node`: Node.js **24.22.1 or newer within Node 24** (`^24.22.1`).
+- `packageManager`: exactly **pnpm 12.15.0**.
 
-# pnpm
-pnpm install
+Install a matching Node.js release from [Node.js downloads](https://nodejs.org/en/download). The minimum includes the [October 21, 2026 security fixes](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases). Keep Node 24 patched as new security releases arrive.
 
-# yarn
-yarn install
+### Windows 11 (PowerShell)
 
-# bun
-bun install
-```
+Install the Node 24 Windows installer matching your CPU, then reopen VS Code and its terminal so PATH is refreshed. Inside the cloned repository:
 
-## Development Server
-
-Start the development server on `http://localhost:3000`:
-
-```bash
-# npm
-npm run dev
-
-# pnpm
+```powershell
+node --version
+corepack enable pnpm
+pnpm --version
+pnpm install --frozen-lockfile
 pnpm dev
-
-# yarn
-yarn dev
-
-# bun
-bun run dev
 ```
 
-## Production
+`node --version` must satisfy `engines.node`; `pnpm --version` must match `packageManager`. Corepack reads the pnpm pin automatically. If enabling its shim is denied in the protected Node installation directory, run `corepack enable pnpm` once in an Administrator terminal, then use an ordinary terminal for development. If Corepack is missing or reports a signature error, follow its [installation instructions](https://github.com/nodejs/corepack#installation) to install/update it.
 
-Build the application for production:
+If the wrong executable is selected, inspect `Get-Command node, pnpm -All` and correct the old installation or PATH entry. Avoid overlapping global pnpm installations and Corepack shims. These package.json declarations do **not** install or automatically switch your computer's Node.js version. If other projects need different Node majors, use a Windows-compatible version manager and select a version satisfying each project's manifest; no extra version file is required by this repository.
+
+The same Corepack and pnpm commands work on other supported systems after installing Node 24. The repository also supports a directly installed pnpm matching `packageManager`; CI uses the existing pinned `pnpm/setup` action rather than Corepack.
+
+## Development and checks
 
 ```bash
-# npm
-npm run build
-
-# pnpm
-pnpm build
-
-# yarn
-yarn build
-
-# bun
-bun run build
+pnpm dev                      # http://localhost:3000
+pnpm lint
+pnpm typecheck
+pnpm audit --audit-level high
+pnpm test:unit
+pnpm test:e2e                 # needs Google Chrome; see the development guide
+pnpm build                   # production-mode local Node build
+pnpm build:staging           # Cloudflare Worker build only; does not deploy
 ```
 
-Locally preview production build:
-
-```bash
-# npm
-npm run preview
-
-# pnpm
-pnpm preview
-
-# yarn
-yarn preview
-
-# bun
-bun run preview
-```
-
-Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+See the [development guide](docs/guides/development.md) for testing and first-admin setup, [operations](docs/server/operations.md) for environment configuration, and the [toolchain audit](docs/reviews/toolchain-audit-2026-10-25.md) for security findings and Cloudflare build settings. Never use `deploy:staging` for a build-only check: it also applies remote migrations and deploys.

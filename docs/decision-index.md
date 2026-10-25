@@ -234,3 +234,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D202](decisions.md#d202-the-counter-and-admin-are-installable-apps-a-manifest-per-cafe-no-service-worker-yet-2026-10-24) | The counter and admin are installable apps; a manifest per cafe, no service worker yet, 2026-10-24 |
 | [D203](decisions.md#d203-install-app-in-the-counters-and-the-admins-user-menus-2026-10-24) | "Install app" in the counter's and the admin's user menus, 2026-10-24 |
 | [D204](decisions.md#d204-each-installed-apps-scope-is-its-own-workspace-one-platform-icon-for-every-cafe-2026-10-24) | Each installed app's scope is its own workspace; one platform icon for every cafe, 2026-10-24 |
+| [D205](decisions.md#d205-patched-node-24-and-exact-pnpm-from-packagejson-2026-10-25) | Patched Node 24 and exact pnpm from package.json, 2026-10-25 |
