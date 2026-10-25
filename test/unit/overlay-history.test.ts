@@ -90,6 +90,16 @@ describe('overlay history (D201)', () => {
     expect(routed).toEqual(['/list'])
   })
 
+  it('settled() waits for the step back over a closed overlay\'s entry (a smooth scroll started sooner stops)', async () => {
+    const { history, at, settle } = setup()
+    const close = history.open(() => {})
+    await settle()
+    close()
+    expect(at().overlay).toBeTypeOf('string')
+    await history.settled()
+    expect(at()).toMatchObject({ index: 1, overlay: undefined })
+  })
+
   it('an overlay that stays open on Back keeps an entry for the next Back', async () => {
     const { history, at, back, routed, settle } = setup()
     const onBack = vi.fn()

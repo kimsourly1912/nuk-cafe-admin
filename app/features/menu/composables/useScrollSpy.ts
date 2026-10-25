@@ -86,13 +86,23 @@ export function useScrollSpy(ids: MaybeRefOrGetter<string[]>, offset: MaybeRefOr
   })
   watch(() => toValue(ids), () => nextTick(schedule), { immediate: true })
 
-  function scrollTo(id: string) {
+  let latest = 0
+  async function scrollTo(id: string) {
     const element = document.getElementById(id)
     if (!element) return
     active.value = id
-    const top = element.getBoundingClientRect().top + window.scrollY - toValue(offset)
     clearTimeout(hold?.timer)
     hold = {}
+    // Chosen in the categories sheet: closing it steps back over its history entry (D201), which
+    // would stop the smooth scroll, and on Safari the sheet puts the page back where it was in the
+    // next frame (vaul fixes the body while open). Scroll after both.
+    const run = ++latest
+    await nextTick()
+    await overlayHistory().settled()
+    await new Promise(resolve => requestAnimationFrame(resolve))
+    // Chosen again since, or the customer scrolled themselves.
+    if (run !== latest || !hold) return
+    const top = element.getBoundingClientRect().top + window.scrollY - toValue(offset)
     // Settles even if the page doesn't move (already there, or at the end).
     settleLater()
     window.scrollTo({ top: Math.max(0, top), behavior: motion.value === 'reduce' ? 'auto' : 'smooth' })
