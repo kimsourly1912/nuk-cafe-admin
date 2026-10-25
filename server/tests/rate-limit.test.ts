@@ -52,7 +52,7 @@ describe('public API rate limits (D121)', () => {
   it('the quote rule comes before the general prefix, so it wins over it', () => {
     const prefixes = RATE_LIMIT_RULES.map(rule => rule.prefix)
     expect(prefixes.indexOf('/api/public/checkout/quote')).toBeLessThan(prefixes.indexOf('/api/public/'))
-    expect(prefixes.every(prefix => prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/', '/api/client-errors', '/api/shop/orders'].includes(prefix))).toBe(true)
+    expect(prefixes.every(prefix => prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/', '/api/client-errors', '/api/password-ranges/', '/api/shop/orders'].includes(prefix))).toBe(true)
   })
 
   it('placing an order has its own limit (D156); the order page polling its order never counts', async () => {
@@ -85,6 +85,13 @@ describe('public API rate limits (D121)', () => {
     const limiters = { RATE_LIMIT_PUBLIC: general.limiter }
     expect((await checkRateLimit({ path: '/api/client-errors', address: '203.0.113.7', limiters })).limited).toBeNull()
     expect((await checkRateLimit({ path: '/api/client-errors', address: '203.0.113.7', limiters })).limited).toBe('RATE_LIMIT_PUBLIC')
+  })
+
+  it('the leaked-password ranges share the public limit (D210)', async () => {
+    const general = fakeLimiter(1)
+    const limiters = { RATE_LIMIT_PUBLIC: general.limiter }
+    expect((await checkRateLimit({ path: '/api/password-ranges/5BAA6', address: '203.0.113.7', limiters })).limited).toBeNull()
+    expect((await checkRateLimit({ path: '/api/password-ranges/21BD1', address: '203.0.113.7', limiters })).limited).toBe('RATE_LIMIT_PUBLIC')
   })
 
   it('refuses with 429 RATE_LIMITED and a message safe to show', () => {

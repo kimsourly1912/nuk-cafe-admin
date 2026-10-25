@@ -64,7 +64,7 @@ describe('accountFormError', () => {
 
   it('puts field problems on their field', () => {
     expect(accountFormError(betterAuthError(422, 'USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL')).field).toBe('email')
-    expect(accountFormError(betterAuthError(400, 'PASSWORD_COMPROMISED'))).toEqual({ field: 'password', message: 'This password has appeared in a data breach. Choose another one.' })
+    expect(accountFormError(betterAuthError(400, 'PASSWORD_COMPROMISED'))).toEqual({ field: 'password', message: 'This password is too common. Choose another one.' })
     expect(accountFormError(betterAuthError(400, 'PASSWORD_TOO_SHORT')).field).toBe('password')
   })
 

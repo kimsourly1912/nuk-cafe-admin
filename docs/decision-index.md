@@ -239,3 +239,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D207](decisions.md#d207-the-summarys-sales-chart-uses-nuxt-uis-uchart-2026-10-25) | The Summary's sales chart uses Nuxt UI's UChart, 2026-10-25 |
 | [D208](decisions.md#d208-one-address-per-page-without-a-trailing-slash-2026-10-25) | One address per page, without a trailing slash, 2026-10-25 |
 | [D209](decisions.md#d209-test-accounts-for-every-role-on-the-dev-server-one-known-password-2026-10-25) | Test accounts for every role on the dev server, one known password, 2026-10-25 |
+| [D210](decisions.md#d210-the-password-rules-as-a-live-checklist-under-every-new-password-field-2026-10-25) | The password rules as a live checklist under every new-password field, 2026-10-25 |

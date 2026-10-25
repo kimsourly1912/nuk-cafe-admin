@@ -26,6 +26,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](.
 | `useMutation(fn, opts)` | `composables/`, engine in `utils/mutation.ts` | Every create/update/delete, single or batch |
 | `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Selection for tables, cards and trees (`isSelected`, `toggle`, `toggleAll`); the Select mode bar |
 | `TaskFrame` | `components/` | A task-flow page's frame (sign-in, change password, the account pages): a card from `sm`, the full screen with the action at the bottom on phones; CSS only (D84, D97) |
+| `PasswordRequirements`, `GeneratePasswordButton`, `usePasswordLeakCheck`, `passwordRequirements`, `isBreachedPassword`, `generatePassword`, `fillInput` | `components/`, `composables/`, `utils/password-requirements.ts` | The password rules as a live checklist under every new-password field, the Generate button inside it, a breached-password refusal (D210) |
 | `BottomActionBar` | `components/` | The one bottom bar for a page's mode, Save or bulk actions (fixed below `lg`, one at a time, steps aside for the keyboard) |
 | `useLayoutContext()` | `composables/` | `isCompact` / `isExpanded` for choices CSS can't make (full-screen modal, drawer vs dropdown); never `useMediaQuery` by hand |
 | `StatusTabs` | `components/` | Status filter as tabs with counts; each feature names its statuses |

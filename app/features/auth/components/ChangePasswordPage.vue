@@ -21,6 +21,10 @@ const state = reactive<PasswordForm>(emptyPasswordForm())
 const saving = ref(false)
 const error = ref<string>()
 const showPasswords = ref(false)
+/** The new password the server refused as breached, for the checklist (D210). */
+const refusedPassword = ref<string>()
+/** The last password Generate made: random, so the checklist skips its leaked-password check. */
+const generatedPassword = ref<string>()
 const unsaved = useUnsavedChanges(state, { paused: saving })
 
 // A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
@@ -35,8 +39,15 @@ async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
     await changePassword(data.currentPassword, data.newPassword)
   }
   catch (e) {
-    error.value = getErrorMessage(e)
     saving.value = false
+    // A breached password is the new password's own error, and the checklist's red line.
+    if (isBreachedPassword(e)) {
+      refusedPassword.value = data.newPassword
+      form.value?.setErrors([{ name: 'newPassword', message: BREACHED_PASSWORD_MESSAGE }])
+      requestAnimationFrame(() => document.querySelector<HTMLElement>('#password-form [name="newPassword"]')?.focus())
+      return
+    }
+    error.value = getErrorMessage(e)
     await nextTick()
     errorAlert.value?.focus()
     return
@@ -53,9 +64,18 @@ async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
   }
 }
 
+/** The Generate button (D210): the new password in both fields, shown so it can be saved. */
+function fillGenerated(password: string) {
+  generatedPassword.value = password
+  showPasswords.value = true
+  for (const name of ['newPassword', 'confirmPassword']) {
+    fillInput(document.querySelector<HTMLInputElement>(`#password-form [name="${name}"]`), password)
+  }
+}
+
 const fields = [
   { name: 'currentPassword', label: forced ? 'Temporary password' : 'Current password', autocomplete: 'current-password' },
-  { name: 'newPassword', label: 'New password', autocomplete: 'new-password', hint: 'At least 8 characters. Passwords found in known data breaches are refused.' },
+  { name: 'newPassword', label: 'New password', autocomplete: 'new-password' },
   { name: 'confirmPassword', label: 'Repeat new password', autocomplete: 'new-password' },
 ] as const
 </script>
@@ -103,21 +123,39 @@ const fields = [
         />
       </div>
 
-      <UFormField
+      <div
         v-for="field in fields"
         :key="field.name"
-        :label="field.label"
-        :name="field.name"
-        :help="'hint' in field ? field.hint : undefined"
-        required
+        class="space-y-2"
       >
-        <UInput
-          v-model="state[field.name]"
-          :type="showPasswords ? 'text' : 'password'"
-          :autocomplete="field.autocomplete"
-          class="w-full"
+        <UFormField
+          :label="field.label"
+          :name="field.name"
+          required
+        >
+          <UInput
+            v-model="state[field.name]"
+            :type="showPasswords ? 'text' : 'password'"
+            :autocomplete="field.autocomplete"
+            class="w-full"
+            :ui="field.name === 'newPassword' ? { trailing: 'pe-1' } : undefined"
+          >
+            <template
+              v-if="field.name === 'newPassword'"
+              #trailing
+            >
+              <GeneratePasswordButton @generate="fillGenerated" />
+            </template>
+          </UInput>
+        </UFormField>
+        <PasswordRequirements
+          v-if="field.name === 'newPassword'"
+          :password="state.newPassword"
+          :confirm="state.confirmPassword"
+          :refused="refusedPassword"
+          :generated="generatedPassword"
         />
-      </UFormField>
+      </div>
 
       <USwitch
         v-model="showPasswords"

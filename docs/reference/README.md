@@ -18,7 +18,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | [Data fetching](./data-fetching.md) | `apiFetch`, `useApiQuery`, `usePaginatedQuery` (URL sync), `ANY` / `toApiQuery`, `invalidate` (also other tabs), `invalidateInThisTab`, `invalidateAll` |
 | [Mutations](./mutations.md) | `useMutation` (create/update/delete, single and batch), `usePendingMutationCount` |
 | [Errors](./errors.md) | `ApiError`, `getErrorMessage`, `isSilentError`, error codes, `<ApiErrorAlert>`, `useNotify` |
-| [UI helpers](./ui-helpers.md) | `useConfirm`, `useTableSelection`, `<TaskFrame>`, `<BottomActionBar>`, `<BulkActionsBar>`, `useLayoutContext`, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, money (`toMinor`, `formatMinor`, `formatRiel`, …), `<ListSkeleton>`, `<StatCard>`, `<RecordSelect>`, `<AppDrawer>`, `<TimeInput>`, `useReorderTransition`, `<ToolbarTabs>`, `useUrlTab`, `useCenteredTab`, `<ListPagination>`, `<QuantityStepper>` |
+| [UI helpers](./ui-helpers.md) | `useConfirm`, `useTableSelection`, `<TaskFrame>`, `<PasswordRequirements>`, `<GeneratePasswordButton>`, `<BottomActionBar>`, `<BulkActionsBar>`, `useLayoutContext`, `previewList`, `pluralize`, `<SearchInput>`, `<ListEmptyState>`, `<StatusTabs>`, money (`toMinor`, `formatMinor`, `formatRiel`, …), `<ListSkeleton>`, `<StatCard>`, `<RecordSelect>`, `<AppDrawer>`, `<TimeInput>`, `useReorderTransition`, `<ToolbarTabs>`, `useUrlTab`, `useCenteredTab`, `<ListPagination>`, `<QuantityStepper>` |
 | [App-wide behavior](./app-behavior.md) | Tab titles, refresh on tab focus/reconnect, offline banner, leave guards, session loss: every case handled |
 | [Forms: unsaved changes](./forms.md) | `useUnsavedChanges`, `useModalUnsavedChanges`, `useLeaveGuard`, `isSameFormValue` |
 | [Auth](./auth.md) | `useAuth`, public pages |
@@ -45,6 +45,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `useConfirm` | composable | [UI helpers](./ui-helpers.md#useconfirm) | `await confirm({...})` → boolean |
 | `useTableSelection` | composable | [UI helpers](./ui-helpers.md#usetableselection) | Selection for tables, card grids and trees |
 | `<TaskFrame>` | component | [UI helpers](./ui-helpers.md#taskframe) | A task-flow page's frame: a card from `sm`, the full screen with the action at the bottom on phones |
+| `<PasswordRequirements>`, `<GeneratePasswordButton>`, `usePasswordLeakCheck` | component, composable | [UI helpers](./ui-helpers.md#passwordrequirements-and-generatepasswordbutton) | The password rules as a live checklist under a new-password field, the leaked-password check while typing, the Generate button inside it (D210) |
 | `<BottomActionBar>` | component | [UI helpers](./ui-helpers.md#bottomactionbar) | The one bottom bar: mode, Save and bulk bars |
 | `<BulkActionsBar>` | component | [UI helpers](./ui-helpers.md#bulkactionsbar) | The Select mode bar: "5 selected · Select all" and the actions; Select mode left from its toolbar toggle (D129) (a `BottomActionBar`) |
 | `useLayoutContext` | composable | [UI helpers](./ui-helpers.md#uselayoutcontext) | `isCompact` / `isExpanded` for choices CSS can't make |

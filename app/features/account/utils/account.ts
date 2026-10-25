@@ -1,4 +1,5 @@
 import { ApiError } from '~/utils/api-error'
+import { BREACHED_PASSWORD_MESSAGE } from '~/utils/password-requirements'
 import { splitTenantUrl, tenantUrl } from '~/utils/tenant-path'
 
 /** The customer's account pages (step 5.2, D97). */
@@ -90,7 +91,7 @@ export function accountFormError(error: unknown): AccountFormError {
     case 'INVALID_EMAIL':
       return { field: 'email', message: 'Enter a valid email address' }
     case 'PASSWORD_COMPROMISED':
-      return { field: 'password', message: 'This password has appeared in a data breach. Choose another one.' }
+      return { field: 'password', message: BREACHED_PASSWORD_MESSAGE }
     case 'PASSWORD_TOO_SHORT':
       return { field: 'password', message: 'At least 8 characters' }
     case 'PASSWORD_TOO_LONG':

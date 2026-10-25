@@ -2,7 +2,7 @@
 /**
  * Choose a new password (step 5.2, D97), where the reset link lands: Better Auth checked the link
  * and sent `?token=`, or `?error=INVALID_TOKEN` (expired or used; the page doesn't tell them apart,
- * the server doesn't either). One password field with a show button, no "confirm". Saving signs the
+ * the server doesn't either). One password field with a show button and the rules' checklist (D210), no "confirm". Saving signs the
  * account out everywhere and goes to sign-in, which says the password changed.
  *
  * The token leaves the address bar once read, so it isn't kept in the history or sent on as a
@@ -30,6 +30,10 @@ onMounted(() => {
 const state = reactive({ password: '' })
 const { saving, formError, submit } = useAccountForm({ password: 'reset-password' })
 const { resetPassword } = useAccountActions()
+/** The password the server refused as breached, for the checklist. */
+const refusedPassword = ref<string>()
+/** The last password Generate made: random, so the checklist skips its leaked-password check. */
+const generatedPassword = ref<string>()
 
 async function onSubmit(event: FormSubmitEvent<ResetPasswordForm>) {
   let deadNow = false
@@ -38,6 +42,7 @@ async function onSubmit(event: FormSubmitEvent<ResetPasswordForm>) {
       await resetPassword(token.value!, event.data.password)
     }
     catch (error) {
+      if (isBreachedPassword(error)) refusedPassword.value = event.data.password
       if (!isDeadLink(error)) throw error
       deadNow = true
       return
@@ -82,17 +87,24 @@ async function onSubmit(event: FormSubmitEvent<ResetPasswordForm>) {
       @error="focusFirstInvalid"
     >
       <FormErrorAlert :message="formError" />
-      <UFormField
-        label="New password"
-        name="password"
-        help="At least 8 characters"
-      >
-        <PasswordInput
-          id="reset-password"
-          v-model="state.password"
-          autocomplete="new-password"
+      <div class="space-y-2">
+        <UFormField
+          label="New password"
+          name="password"
+        >
+          <PasswordInput
+            id="reset-password"
+            v-model="state.password"
+            autocomplete="new-password"
+            @generate="generatedPassword = $event"
+          />
+        </UFormField>
+        <PasswordRequirements
+          :password="state.password"
+          :refused="refusedPassword"
+          :generated="generatedPassword"
         />
-      </UFormField>
+      </div>
       <UAlert
         color="neutral"
         variant="subtle"

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
@@ -91,6 +92,101 @@ describe('temporary password', () => {
     // Signed in normally; the Availability list is the first request to meet the refusal.
     await gotoViaSidebar(page, ['Availability'])
     await expect.poll(() => path(page)).toBe('/c/nuk/admin/change-password')
+  })
+})
+
+describe('the password rules\' checklist (D210)', () => {
+  const lines = (page: Page) => page.getByRole('list', { name: 'Password requirements' }).getByRole('listitem')
+  const states = (page: Page) => lines(page).evaluateAll(items => items.map(item => item.getAttribute('data-state')))
+
+  it('ticks each rule while typing, checking for a leaked password once typing pauses', async () => {
+    const page = await createPage()
+    await mockApi(page, temporaryPasswordBackend().handlers)
+    await page.goto(url('/c/nuk/admin/change-password'), { waitUntil: 'hydration' })
+
+    expect(await lines(page).allInnerTexts()).toEqual([
+      expect.stringContaining('At least 8 characters'),
+      expect.stringContaining('Repeat new password matches'),
+      expect.stringContaining('Not a commonly used password'),
+    ])
+    expect(await states(page)).toEqual(['pending', 'pending', 'pending'])
+    await page.getByLabel(/^New password/).fill('short')
+    expect(await states(page)).toEqual(['pending', 'pending', 'pending'])
+    expect(await lines(page).last().innerText()).toContain('Checked against passwords leaked from other websites')
+    await page.getByLabel(/^New password/).fill('my own password')
+    await expect.poll(() => states(page)).toEqual(['met', 'pending', 'met'])
+    await page.getByLabel(/^Repeat new password/).fill('my own password')
+    await expect.poll(() => states(page)).toEqual(['met', 'met', 'met'])
+  })
+
+  it('puts a breached password\'s refusal on the field and the checklist, until it is changed', async () => {
+    const page = await createPage()
+    const backend = temporaryPasswordBackend()
+    await mockApi(page, {
+      ...backend.handlers,
+      'POST /auth/change-password': () => {
+        throw new MockFailure(400, 'PASSWORD_COMPROMISED', 'The password you entered has been compromised.')
+      },
+    })
+    await page.goto(url('/c/nuk/admin/change-password'), { waitUntil: 'hydration' })
+
+    await fillPasswords(page, 'Temp-1234-abcd', 'password123')
+    await page.getByRole('button', { name: 'Change password' }).click()
+    await page.getByText('This password is too common. Choose another one.').waitFor()
+    await expect.poll(() => states(page)).toEqual(['met', 'met', 'failed'])
+    await expect.poll(() => page.getByLabel(/^New password/).evaluate(el => el === document.activeElement)).toBe(true)
+    expect(await page.getByRole('alert').count()).toBe(0)
+
+    await page.getByLabel(/^New password/).fill('a much better password')
+    await expect.poll(() => states(page)).toEqual(['met', 'pending', 'met'])
+    await page.getByText('This password is too common. Choose another one.').waitFor({ state: 'hidden' })
+  })
+
+  it('marks a leaked password red while typing, sending only the hash\'s first 5 characters', async () => {
+    const page = await createPage()
+    const sha1 = createHash('sha1').update('password123').digest('hex').toUpperCase()
+    const asked: string[] = []
+    await mockApi(page, {
+      ...temporaryPasswordBackend().handlers,
+      'GET /password-ranges/{prefix}': ({ url: requestUrl }) => {
+        asked.push(requestUrl.pathname)
+        return { suffixes: requestUrl.pathname.endsWith(sha1.slice(0, 5)) ? [sha1.slice(5)] : [] }
+      },
+    })
+    await page.goto(url('/c/nuk/admin/change-password'), { waitUntil: 'hydration' })
+
+    await page.getByLabel(/^New password/).fill('password123')
+    await expect.poll(() => states(page)).toEqual(['met', 'pending', 'failed'])
+    expect(asked).toEqual([`/api/password-ranges/${sha1.slice(0, 5)}`])
+    await page.getByLabel(/^New password/).fill('a much better password')
+    await expect.poll(() => states(page)).toEqual(['met', 'pending', 'met'])
+  })
+
+  it('Generate puts a strong password in both fields, shown, ticked without a check, and it is what gets sent', async () => {
+    const page = await createPage()
+    const backend = temporaryPasswordBackend()
+    const api = await mockApi(page, backend.handlers)
+    await page.goto(url('/c/nuk/admin/change-password'), { waitUntil: 'hydration' })
+
+    await page.getByLabel(/^Temporary password/).fill('Temp-1234-abcd')
+    await page.getByRole('button', { name: 'Generate a strong password' }).click()
+    const generated = await page.getByLabel(/^New password/).inputValue()
+    expect(generated).toMatch(/^[a-km-zA-HJ-NP-Z2-9]{5}(-[a-km-zA-HJ-NP-Z2-9]{5}){3}$/)
+    expect(await page.getByLabel(/^Repeat new password/).inputValue()).toBe(generated)
+    expect(await page.getByLabel(/^New password/).getAttribute('type')).toBe('text')
+    await expect.poll(() => states(page)).toEqual(['met', 'met', 'met'])
+    await page.getByRole('status').filter({ hasText: 'A strong password was filled in.' }).waitFor({ state: 'attached' })
+    // Random, so never looked up, however often it's pressed.
+    await page.getByRole('button', { name: 'Generate a strong password' }).click()
+    await page.getByRole('button', { name: 'Generate a strong password' }).click()
+    await page.waitForTimeout(800)
+    expect(api.calls.filter(call => call.includes('/password-ranges/'))).toEqual([])
+    expect(await states(page)).toEqual(['met', 'met', 'met'])
+    const sent = await page.getByLabel(/^New password/).inputValue()
+
+    await page.getByRole('button', { name: 'Change password' }).click()
+    await toast(page, 'Password changed').waitFor()
+    expect(backend.bodies).toEqual([{ currentPassword: 'Temp-1234-abcd', newPassword: sent, revokeOtherSessions: true }])
   })
 })
 

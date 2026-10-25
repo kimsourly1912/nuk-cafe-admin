@@ -64,7 +64,7 @@ Press **?** to see them all. The main ones: **Ctrl+K** search everything, **/** 
 - **Another tab**: signing in or out in one tab applies to every open tab. Saving in one tab refreshes the same lists in your other tabs.
 - **Light and dark mode**: the sun/moon button in the sidebar.
 - **Install app**: from the user menu at the bottom of the sidebar. The admin opens from its own icon, full screen, like an app ("<cafe> Admin"); the menu shows the steps for your device. Not shown once you're in the installed app.
-- **Change password**: from the user menu at the bottom of the sidebar. A new staff account must change its temporary password at the first sign-in.
+- **Change password**: from the user menu at the bottom of the sidebar. A new staff account must change its temporary password at the first sign-in. The list under **New password** shows the rules and ticks each one as you type: at least 8 characters, the repeat matching, and not a commonly used password (one leaked from other websites; it turns red if it is, so choose another one). The magic-wand button in the field makes a strong password for you, fills both fields and shows it: save it in your password manager or write it down before pressing **Change password**.
 - **Signed out suddenly**: your session ended (expired, or your access changed). Sign in again.
 
 ## This assistant
