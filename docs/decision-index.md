@@ -236,3 +236,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D204](decisions.md#d204-each-installed-apps-scope-is-its-own-workspace-one-platform-icon-for-every-cafe-2026-10-24) | Each installed app's scope is its own workspace; one platform icon for every cafe, 2026-10-24 |
 | [D205](decisions.md#d205-patched-node-24-and-exact-pnpm-from-packagejson-2026-10-25) | Patched Node 24 and exact pnpm from package.json, 2026-10-25 |
 | [D206](decisions.md#d206-a-refetch-shows-a-bar-on-the-headers-edge-and-dims-the-content-not-a-toolbar-spinner-2026-10-25) | A refetch shows a bar on the header's edge and dims the content, not a toolbar spinner, 2026-10-25 |
+| [D207](decisions.md#d207-the-summarys-sales-chart-uses-nuxt-uis-uchart-2026-10-25) | The Summary's sales chart uses Nuxt UI's UChart, 2026-10-25 |

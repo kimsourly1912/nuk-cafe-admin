@@ -138,6 +138,10 @@ describe('Reports: Summary', () => {
     await page.getByText('Expired unpaid').waitFor()
     // The hour chart is trimmed to the hours with sales (7 AM, 8 AM), as the screen-reader table says.
     expect(await page.locator('table.sr-only tbody tr').count()).toBe(2)
+    // UChart (D207): the chart is named for screen readers, and a bar's tooltip adds its orders.
+    const chart = page.getByRole('img', { name: 'Paid sales by hour' })
+    await chart.hover()
+    await page.getByText(/· \d+ orders?$/).waitFor()
     await expect.poll(() => page.url()).toContain(`from=${TODAY}&to=${TODAY}`)
   })
 

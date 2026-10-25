@@ -12,7 +12,7 @@ A **business day runs from 4:00 AM to 4:00 AM** in the branch's time zone (Asia/
 
 - **Paid sales**: payments taken in the period, whenever the order was placed; with the change against the period before ("vs yesterday").
 - **Paid orders**, **Average order** (paid sales ÷ paid orders), **Refunds** (money returned in the period for cancelled paid orders), and **Net sales** = paid sales − refunds.
-- **Paid sales by hour** for one day, **by day** for longer periods.
+- **Paid sales by hour** for one day, **by day** for longer periods. Point at or tap a bar (or Tab to the chart and use the arrow keys) to see its sales and number of orders.
 - **Payments**: Cash USD, Cash riel (the riel taken, each at the rate used that day, and its dollar value), KHQR, and the total.
 - **Current orders** (only when the period includes today; live): waiting for payment, preparing, ready. Otherwise **Orders placed in this period**.
 - **Best sellers**: the top 5 items by quantity sold.

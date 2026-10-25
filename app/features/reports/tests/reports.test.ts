@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chartPoints, niceScale } from '../utils/chart'
+import { chartPoints } from '../utils/chart'
 import { changeText } from '~/utils/text'
 import { eventBy, eventTitle, hourLabel, orderTypeText, paymentBadge } from '../utils/display'
 import { addDays, beyondRangeLimit, periodButtonLabel, periodLabel, presetOf, presetPeriod, previousLabel, validPeriod } from '../utils/period'
@@ -56,12 +56,6 @@ describe('report display', () => {
     expect(chartPoints({ unit: 'hour', points: [{ key: '04', salesMinor: 0, orders: 0 }] })).toEqual([])
     const days = { unit: 'day' as const, points: [{ key: '2026-09-29', salesMinor: 0, orders: 0 }] }
     expect(chartPoints(days)).toHaveLength(1)
-  })
-
-  it('picks round axis steps', () => {
-    expect(niceScale(24_950)).toEqual({ top: 30_000, step: 10_000 })
-    expect(niceScale(875)).toEqual({ top: 1000, step: 500 })
-    expect(niceScale(0)).toEqual({ top: 100, step: 100 })
   })
 
   it('labels payment, type, hours and the change', () => {

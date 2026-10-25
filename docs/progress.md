@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Summary sales chart on UChart (D207, 2026-10-25)
+
+[Decision](decisions.md#d207-the-summarys-sales-chart-uses-nuxt-uis-uchart-2026-10-25). Owner request. Branch `feat/sales-chart-uchart` from main `8ef85bb`. `SalesChart.vue` renders Nuxt UI's `UChart` from a TanStack Charts definition (bars keyed by hour or date, labelled by the tick format, tooltip with sales and orders); `niceScale` and its unit test removed; `@tanstack/charts` 1.1.0 added.
+
+- **Evidence (local, Windows):** lint, typecheck and `pnpm test:unit` (1962 passed, 1 skipped) passed; e2e `reports.test.ts` 17 passed on the production build, now also hovering the chart (named "Paid sales by hour") for its tooltip's order count. Checked by eye in screenshots: 1440 and 390 px, one day and 31 days (labels thinned), print media (black bars, redrawn to the wider print layout). Dark mode not checked by eye (the bars use `--ui-primary`). Full `pnpm test:e2e` not run (feature-only change).
+
 ## Refresh indicator: a bar on the header's edge, the content dimmed (D206, 2026-10-25)
 
 [Decision](decisions.md#d206-a-refetch-shows-a-bar-on-the-headers-edge-and-dims-the-content-not-a-toolbar-spinner-2026-10-25), [reference](reference/ui-helpers.md#refreshbar-and-userefreshindicator). Owner request (Sales by item on a phone: the toolbar spinner wrapped onto its own line). Branch `fix/menu-category-drawer-scrollspy` (owner's choice, alongside its scroll-spy work). `<RefreshBar>` + `useRefreshIndicator` replace the toolbar spinner on the three reports, menu items, categories, add-on groups, option sets, availability rules, promotions, staff, the platform's cafes, accounts and activity; the branch's Tables tab uses the composable (search box spinner + dimmed cards).

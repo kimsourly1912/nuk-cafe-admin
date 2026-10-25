@@ -1,76 +1,58 @@
 <script setup lang="ts">
 /**
- * Paid sales by hour or by day (D111): plain bars with dollar gridlines, no chart library (at most
- * 24 or 93 bars). Hours are trimmed to the first and last hour with sales. Screen readers get the
- * same numbers as a table.
+ * Paid sales by hour or by day (D111, D207): Nuxt UI's `UChart` with our own TanStack Charts
+ * definition, because the bars are keyed by hour or date ("Mon 1" repeats across months) and labelled
+ * through the tick format, which UChart's generated bar chart can't do. Hours are trimmed to the
+ * first and last hour with sales. Screen readers also get the same numbers as a table.
  */
-import type { ReportSummary } from '#shared/contracts/reports'
-import { chartPoints, niceScale } from '../utils/chart'
+import { barY, defineChart, ruleY } from '@tanstack/charts'
+import { scaleBand } from '@tanstack/charts/scales/band'
+import { scaleLinear } from '@tanstack/charts/scales/linear'
+import type { ReportSummary, TrendPoint } from '#shared/contracts/reports'
+import { chartPoints } from '../utils/chart'
 import { dayLabel, hourLabel } from '../utils/display'
 
 const props = defineProps<{ trend: ReportSummary['trend'] }>()
 
 const points = computed(() => chartPoints(props.trend))
-const scale = computed(() => niceScale(Math.max(0, ...points.value.map(p => p.salesMinor))))
-const ticks = computed(() => {
-  const list: number[] = []
-  for (let value = scale.value.top; value >= 0; value -= scale.value.step) list.push(value)
-  return list
-})
 const label = (key: string) => (props.trend.unit === 'hour' ? hourLabel(key) : dayLabel(key))
-/** Every bar is labelled up to 16 bars; beyond that every nth, so labels never overlap. */
-const labelEvery = computed(() => Math.max(1, Math.ceil(points.value.length / 16)))
 const axis = (minor: number) => formatMinor(minor).replace(/\.00$/, '')
+const title = computed(() => (props.trend.unit === 'hour' ? 'Paid sales by hour' : 'Paid sales by day'))
+
+const definition = computed(() => defineChart({
+  marks: [
+    barY(points.value, { x: 'key', y: 'salesMinor', fill: 'var(--ui-primary)', inset: 1, maxThickness: 48, radius: { end: 4 } }),
+    ruleY([0]),
+  ],
+  scales: {
+    x: { scale: () => scaleBand().padding(0.2), axis: { ticks: { format: (key: string) => label(key) } } },
+    y: { scale: scaleLinear, nice: true, grid: true, axis: { ticks: { count: 4, format: axis } } },
+  },
+  // The default only focuses a bar within 48 pixels of the pointer; any spot over the chart should.
+  maxFocusDistance: Number.POSITIVE_INFINITY,
+}))
 </script>
 
 <template>
   <div>
-    <div
-      class="flex gap-2"
-      aria-hidden="true"
+    <UChart
+      :definition="definition"
+      :aria-label="title"
+      :height="192"
     >
-      <!-- The dollar axis -->
-      <div class="flex h-48 flex-col justify-between text-right text-xs text-muted tabular-nums print:h-36">
-        <span
-          v-for="tick in ticks"
-          :key="tick"
-          class="-my-2 leading-4"
-        >{{ axis(tick) }}</span>
-      </div>
-      <div class="min-w-0 flex-1">
-        <div class="relative h-48 print:h-36">
-          <div
-            v-for="tick in ticks"
-            :key="tick"
-            class="absolute inset-x-0 border-t border-default"
-            :style="{ top: `${100 - (tick / scale.top) * 100}%` }"
-          />
-          <div class="absolute inset-0 flex items-end gap-px sm:gap-1">
-            <div
-              v-for="point in points"
-              :key="point.key"
-              class="flex h-full min-w-0 flex-1 items-end justify-center"
-              :title="`${label(point.key)}: ${formatMinor(point.salesMinor)} · ${point.orders} ${point.orders === 1 ? 'order' : 'orders'}`"
-            >
-              <div
-                class="w-full max-w-12 rounded-t-sm bg-primary print:bg-neutral-700"
-                :style="{ height: `${(point.salesMinor / scale.top) * 100}%` }"
-              />
-            </div>
-          </div>
-        </div>
-        <div class="mt-1 flex gap-px sm:gap-1">
-          <span
-            v-for="(point, index) in points"
-            :key="point.key"
-            class="min-w-0 flex-1 overflow-visible whitespace-nowrap text-center text-xs text-muted"
-          >{{ index % labelEvery === 0 ? label(point.key) : '' }}</span>
-        </div>
-      </div>
-    </div>
+      <template #tooltip="{ primaryPoint }">
+        <p class="font-medium text-highlighted">
+          {{ label((primaryPoint.datum as TrendPoint).key) }}
+        </p>
+        <p class="tabular-nums">
+          <span class="font-medium text-highlighted">{{ formatMinor((primaryPoint.datum as TrendPoint).salesMinor) }}</span>
+          · {{ (primaryPoint.datum as TrendPoint).orders }} {{ (primaryPoint.datum as TrendPoint).orders === 1 ? 'order' : 'orders' }}
+        </p>
+      </template>
+    </UChart>
 
     <table class="sr-only">
-      <caption>{{ trend.unit === 'hour' ? 'Paid sales by hour' : 'Paid sales by day' }}</caption>
+      <caption>{{ title }}</caption>
       <thead>
         <tr>
           <th scope="col">
