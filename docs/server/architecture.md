@@ -80,7 +80,7 @@ server/
 │   └── platform/      # audit events, idempotency keys, outbox
 ├── api/               # thin route files, grouped by surface; api/[...].ts answers unknown paths with 404
 ├── tasks/             # scheduled jobs (Nitro tasks)
-├── middleware/        # 00.request-id.ts, 10.origin-check.ts (run in file-name order)
+├── middleware/        # 00.request-id.ts, 10.origin-check.ts, 25.trailing-slash.ts (run in file-name order)
 ├── utils/             # shared glue (auto-imported in routes; imported explicitly in features)
 ├── tests/             # tests of the shared utils; tests/support: the SQLite test harness
 └── error-handler.ts   # the /api error responses (registered in nuxt.config.ts)

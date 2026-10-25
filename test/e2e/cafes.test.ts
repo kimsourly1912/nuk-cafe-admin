@@ -53,6 +53,28 @@ describe('each cafe at its own address', () => {
     expect(await moved('/checkout')).toBe('/c/nuk/checkout')
   })
 
+  it('a page has one address, without a trailing slash (D208)', async () => {
+    const moved = async (path: string) => {
+      const response = await fetch(url(path), { redirect: 'manual' })
+      return [response.status, response.headers.get('location')]
+    }
+    expect(await moved('/c/nuk/')).toEqual([301, '/c/nuk'])
+    expect(await moved('/c/nuk/?table=1')).toEqual([301, '/c/nuk?table=1'])
+    expect(await moved('/c/nuk/admin/login/?redirect=/c/nuk/admin')).toEqual([301, '/c/nuk/admin/login?redirect=/c/nuk/admin'])
+    expect(await moved('/c/nuk')).toEqual([200, null])
+    // Never towards another site, and the API answers as it is.
+    expect((await moved('//evil.example/'))[1]).toBeNull()
+    expect((await fetch(url('/api/c/nuk/public/branches/'), { redirect: 'manual' })).status).not.toBe(301)
+
+    // A link inside the app to the slashed form lands on the same address.
+    const page = await createPage()
+    await page.goto(url('/c/nuk/'), { waitUntil: 'hydration' })
+    expect(new URL(page.url()).pathname).toBe('/c/nuk')
+    await page.evaluate(() => (document.querySelector('#__nuxt') as unknown as { __vue_app__: { config: { globalProperties: { $router: { push: (to: string) => Promise<unknown> } } } } }).__vue_app__.config.globalProperties.$router.push('/c/nuk/orders/'))
+    await page.waitForURL(address => address.pathname === '/c/nuk/orders')
+    await page.close()
+  })
+
   it('an address a cafe had before redirects to its current one (D142)', async () => {
     const client = e2eDatabase(seed.dbFile)
     try {
