@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## One address per page, without a trailing slash (D208, 2026-10-25)
+
+[Decision](decisions.md#d208-one-address-per-page-without-a-trailing-slash-2026-10-25). Owner report: `/c/nuk/` and `/c/nuk` behaved as different pages. Branch `fix/cafe-url-trailing-slash` from main `b728008`. `withoutTrailingSlash` (`shared/utils/address.ts`), a 301 from the server (`server/middleware/25.trailing-slash.ts`) and the same for links inside the app (`app/middleware/00.trailing-slash.global.ts`).
+
+- **Evidence (local, Windows):** lint, typecheck, audit (high/critical: only the existing suppressions) and `pnpm test:unit` (1965 passed, 1 skipped) passed, incl. `trailing-slash.test.ts` 3 (query and hash kept; root, API, `/_nuxt`, `/@vite` untouched; `//host/`, `/\host/`, whitespace never redirected). E2e `cafes.test.ts` 16 passed on the production build, incl. the new test: `/c/nuk/` → 301 `/c/nuk` with the query kept, `/c/nuk` 200, `//evil.example/` and the API not redirected, and an in-app `router.push('/c/nuk/orders/')` landing on `/c/nuk/orders`. Guards removed one at a time and restored: without the client middleware the in-app step timed out; without the server middleware `/c/nuk/` answered 200. Checked against the dev server with curl. Full `pnpm test:e2e` not run yet: its setup couldn't delete `.data/e2e/db` (EPERM, `sqlite.db` held open by another process on this machine).
+
 ## Summary sales chart on UChart (D207, 2026-10-25)
 
 [Decision](decisions.md#d207-the-summarys-sales-chart-uses-nuxt-uis-uchart-2026-10-25). Owner request. Branch `feat/sales-chart-uchart` from main `8ef85bb`. `SalesChart.vue` renders Nuxt UI's `UChart` from a TanStack Charts definition (bars keyed by hour or date, labelled by the tick format, tooltip with sales and orders); `niceScale` and its unit test removed; `@tanstack/charts` 1.1.0 added.
