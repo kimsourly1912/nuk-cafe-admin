@@ -25,3 +25,6 @@ logs
 .env.*
 !.env.example
 upgrade/logs/
+
+# The dev server's test accounts (pnpm dev:accounts, D209)
+dev-accounts.local.md

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lt, lte, min, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, lt, lte, min, or, sql } from 'drizzle-orm'
 import type { Db, Statement } from '#server/utils/batch'
 import { deleteOldest, readInChunks } from '#server/utils/batch'
 import type { WorkClaim } from '#server/utils/claims'
@@ -82,6 +82,15 @@ export async function outboxHealth(db: Db): Promise<OutboxHealthRow[]> {
     .where(inArray(outboxMessages.status, ['pending', 'failed']))
     .groupBy(outboxMessages.kind, outboxMessages.tenantId)
   return rows
+}
+
+/** Across cafes: the newest messages of these kinds, sent or not (`outbox_messages_expiry_idx`); the dev mail task's (D209). */
+export async function recentMessages(db: Db, kinds: string[], limit: number): Promise<{ kind: string, payload: Record<string, unknown>, status: string, createdAt: Date }[]> {
+  return db.select({ kind: outboxMessages.kind, payload: outboxMessages.payload, status: outboxMessages.status, createdAt: outboxMessages.createdAt })
+    .from(outboxMessages)
+    .where(inArray(outboxMessages.kind, kinds))
+    .orderBy(desc(outboxMessages.createdAt))
+    .limit(limit)
 }
 
 // --- Write statements ---

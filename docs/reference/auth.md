@@ -6,6 +6,7 @@
 - [Public pages and the change-password page](#public-pages-and-the-change-password-page)
 - [How the session works](#how-the-session-works)
 - [First admin (local setup)](#first-admin-local-setup)
+- [Test accounts (local dev)](#test-accounts-local-dev)
 
 Source: `app/features/auth/`. Import it from `~/features/auth` (feature code isn't auto-imported). Paths here are inside a cafe (D141): `/admin/login` means `/c/<slug>/admin/login`; the paths are functions of the cafe (`loginPath(slug)`, `changePasswordPath(slug)`, `adminHomePath(slug)`, `loginRedirectTarget(redirect, slug)`).
 
@@ -103,6 +104,30 @@ curl http://localhost:3000/_nitro/tasks/db:seed
 ```
 
 creates the cafe (a tenant, D135), prints its first owner's temporary password (and creates a demo branch). Sign in at `/admin/login`; the app asks for a new password first. More staff: the **Staff** page. See [operations → Seed data](../server/operations.md).
+
+## Test accounts (local dev)
+
+For trying every role without onboarding each one (D209). With `pnpm dev` running:
+
+| Command | Does |
+|---|---|
+| `pnpm dev:accounts` | Creates or resets the test accounts below and writes them, with their sign-in links, to `dev-accounts.local.md` (git-ignored). Creates NUK Cafe and Second Cafe (`/c/second`) with a Main branch when missing. |
+| `pnpm dev:reset <email>` | Any account (one made in the app too) back to the test password, keeping its roles. |
+| `pnpm dev:mail` | The 10 newest password reset and email confirmation links from the outbox, sent or not, to follow the real "Forgot password" flow without a mail account. |
+
+| Email | Role | Signs in at |
+|---|---|---|
+| `superadmin@nuk.test` | Platform super admin, no cafe access | `/platform/sign-in` |
+| `owner@nuk.test` | Owner of NUK Cafe | `/c/nuk/admin/login` |
+| `manager@nuk.test` / `staff@nuk.test` | Manager / staff at NUK's Main branch | `/c/nuk/counter/sign-in` |
+| `customer@nuk.test` | Customer with a member profile at NUK | `/sign-in` |
+| `owner@second.test` | Owner of Second Cafe, for checking cafe isolation by hand | `/c/second/admin/login` |
+
+- **Password:** `nuk-dev-password` for all, or `NUXT_DEV_ACCOUNTS_PASSWORD`. Written straight to the database, so the breached-password check (sign-up, change password) doesn't apply to it.
+- **Reset:** each run sets the password, the role and exactly that role's access in its cafe (a test account given other access there loses it), and clears a forced password change, two-step sign-in, a ban; it signs the account out everywhere and bumps its version (an open admin form gets a conflict). Audited as `dev.account.reset`.
+- **Super admin:** the console still requires two-step sign-in (D188), so after a reset it asks to set it up again (any authenticator app).
+- **Dev server only:** the tasks refuse outside `import.meta.dev`, and the services refuse without `dev: true`; Nitro's `/_nitro/tasks` endpoint exists only in dev anyway. The `.test` domain is reserved: these addresses never reach anyone.
+- Source: `server/tasks/dev/`, `server/features/identity/dev-accounts.service.ts`, `scripts/dev-accounts.mjs` (`NUXT_DEV_URL` for another address than `http://localhost:3000`). Tests: `server/features/identity/tests/dev-accounts.test.ts`.
 
 ## `loginRedirectTarget`
 

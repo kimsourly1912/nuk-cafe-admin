@@ -14,6 +14,8 @@ export type { OwnerAccount, StaffCreatePlan } from './staff.service'
 export { StaffErrorCodes } from './staff.errors'
 export { activeOwnerCounts, ownershipFacts, planExistingOwner, planNewOwner, planOwnerRemoval, requireAnOwner } from './owners.service'
 export type { OwnerAddPlan, OwnershipFacts } from './owners.service'
+export { DEV_PASSWORD, resetDevAccount, resetDevSignIn } from './dev-accounts.service'
+export type { DevAccount, DevAccountRole, DevAccountSpec } from './dev-accounts.service'
 export { accountMailHandlers, consoleSender, MAIL_KINDS, resendSender } from './identity.mail'
 export type { MailMessage, MailSender } from './identity.mail'
 

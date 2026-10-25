@@ -157,6 +157,8 @@ export default defineNuxtConfig({
     maintenance: { outboxRetentionDays: 0, notificationMaxAgeSeconds: 0, deliveryMaxAgeSeconds: 0 },
     // The seed task's first admin (server/tasks/db/seed.ts): NUXT_SEED_ADMIN_EMAIL, NUXT_SEED_ADMIN_NAME.
     seed: { adminEmail: '', adminName: 'Admin' },
+    // The dev server's test accounts (server/tasks/dev/, D209): NUXT_DEV_ACCOUNTS_PASSWORD, else DEV_PASSWORD.
+    devAccounts: { password: '' },
     // Account emails (docs/server/operations.md → Email): NUXT_MAIL_RESEND_API_KEY, NUXT_MAIL_FROM
     // ("NUK Cafe <no-reply@…>", a domain verified in Resend; Q4). Without a key the dev server
     // prints mail to the console; a production build refuses to (the links are secrets).

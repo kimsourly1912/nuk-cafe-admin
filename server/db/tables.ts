@@ -8,9 +8,9 @@
  */
 // Better Auth's tables (plugins included) as NuxtHub merges them; '#auth/schema' types only the core ones.
 // An organization is a tenant (D134), written by tenants. `user`, `member`, `session`, `account`
-// are written by identity. Others may read `user.id`, `user.name` and `organization.id`, `.slug`,
-// `.name`, `.status`.
-export { account, member, organization, session, user } from 'hub:db:schema'
+// are written by identity; so is `twoFactor`, by the dev accounts task only (D209). Others may read
+// `user.id`, `user.name` and `organization.id`, `.slug`, `.name`, `.status`.
+export { account, member, organization, session, twoFactor, user } from 'hub:db:schema'
 // Owned by the platform feature (D50); others add rows through `platform.auditStatement`.
 export { auditEvents } from '#server/features/platform/platform.schema'
 // Owned by the branches feature. Others may read `branches.id`, `.tenantId`, `.name`, `.timezone`,
