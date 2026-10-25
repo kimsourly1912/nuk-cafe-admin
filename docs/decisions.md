@@ -1192,7 +1192,7 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
   - **Print:** the browser's print (`window.print()`). A print-only header (cafe, branch, report, period with business day and zone, figures as of, printed at and by), toolbars and the shell hidden (`print:hidden`), the dashboard's fixed scrolling frame released, A4 portrait, black on white in either color mode (the color tokens restated under `@media print` in `tailwind.css`), cards kept whole (`break-inside-avoid`). Page numbers are the browser's.
   - **The help assistant** knows the reports: `help/reports.md`, and the three pages in its link list.
 - **Alternatives:**
-  - A chart library (`@unovis/vue`, Nuxt UI's dashboard template): a dependency for two bar charts.
+  - A chart library (`@unovis/vue`, Nuxt UI's dashboard template): a dependency for two bar charts. Superseded by D207: the chart is now Nuxt UI's `UChart`.
   - A plain `<a href="….csv">` download: a refusal (over 20,000 orders, a lost session) would open a JSON page instead of a message.
   - A server-rendered PDF: printing to PDF from the browser already gives one.
   - Dates from the browser's clock: wrong between midnight and 04:00, and for a browser in another zone.
@@ -2352,3 +2352,15 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Applied to:** the three reports, menu items, categories, add-on groups, option sets, availability rules, promotions, staff, the branch's Tables tab, and the platform's cafes, accounts and activity. Pages that filter on the client (counter Finished and Sold out, the customer menu) don't refetch and have none.
 - **Alternatives:** the spinner inside the search box only (it doesn't cover period, branch, category, sort or page changes); a skeleton on every refetch (throws away rows the person is reading; the page jumps); keep the spinner and stop it wrapping (still unclear, still flashing, stale numbers still look final).
 - **Verification:** unit `test/unit/refresh-indicator.test.ts` (no flash, minimum time, no blink between requests, scope cleanup). The e2e list tests keep checking that the refetch happens; the bar's look is checked by eye in light and dark, phone and desktop.
+
+### D207: The Summary's sales chart uses Nuxt UI's UChart (2026-10-25)
+
+- **Context:** D111 drew the Summary's bars as `div`s because a chart library (`@unovis/vue`) was a dependency for two bar charts. Nuxt UI 4.12 now ships `UChart`, themed with our tokens, with keyboard focus and a tooltip; its only addition is the optional peer `@tanstack/charts`. The owner asked to replace the hand-made chart with it.
+- **Decision:**
+  - `SalesChart.vue` renders `<UChart>` with our own TanStack Charts `definition`, not UChart's `data`/`index`/`categories` props: the bars are keyed by hour (`'07'`) or date (`'2026-09-30'`) and labelled through the x axis tick format. Day labels repeat across months ("Mon 1" is both 1 Feb and 1 Mar 2027), and a repeated label would merge two bars on the band scale; UChart's generated bar chart has no x tick format.
+  - One series in `--ui-primary` (neutral in print, from the print tokens), bars at most 48px wide, dollar ticks without `.00`, `nice` y domain about 4 ticks (replaces our `niceScale`). Crowded day labels are thinned by TanStack's default collision thinning (replaces "every nth label").
+  - The tooltip slot shows the hour or day, the paid sales and the order count (the old bars' `title`). The chart is named "Paid sales by hour/day"; the screen-reader table with the same numbers stays.
+  - Print: the chart follows its container, and the SVG is `width="100%"` with a `viewBox`, so it redraws, or at worst scales, to the A4 width.
+  - `@tanstack/charts` `^1.1.0` added as a dependency. Adding it made pnpm re-resolve a few floating peers in the lockfile (`srvx` 0.11.22 → 1.0.5 under `crossws`/`nitropack`, `magic-string` 1.4.2 → 1.4.3, `@oxc-project/types` 0.151 → 0.154); main's lockfile alone is stable, so the drift comes with any new dependency.
+- **Alternatives:** UChart's `data` props with labels as the index (merges repeated day labels, no tick format); keep the `div` bars (the owner asked for UChart; no tooltip or keyboard focus).
+- **Verification:** see [progress](progress.md#summary-sales-chart-on-uchart-d207-2026-10-25).
