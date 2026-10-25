@@ -2,6 +2,12 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Test accounts for every role (D209, 2026-10-25)
+
+[Decision](decisions.md#d209-test-accounts-for-every-role-on-the-dev-server-one-known-password-2026-10-25), [reference](reference/auth.md#test-accounts-local-dev). Owner request: an easy local way to make accounts for every role and reset their passwords. Branch `feat/dev-accounts` from main `eb942cb`. Dev-only tasks `dev:accounts`, `dev:reset-password`, `dev:mail` (`server/tasks/dev/`), identity's `resetDevAccount` / `resetDevSignIn`, tenants' `seedTenantAt`, platform's `recentOutboxMessages`, `scripts/dev-accounts.mjs` writing the git-ignored `dev-accounts.local.md`.
+
+- **Evidence (local, Windows):** lint, typecheck and `pnpm test:unit` (1971 passed, 1 skipped) passed, incl. `dev-accounts.test.ts` 6 (each role's sign-in and exact access, the super admin refused cafe data, the second cafe's owner refused NUK, a reset clearing a forced change, two-step, a ban and sessions with a newer version, roles kept by `resetDevSignIn`). Guard removed and restored: both "refuses outside the dev server" tests failed. Against the dev server: `pnpm dev:accounts` twice (created, then reset), owner signed in over HTTP (`/api/c/nuk/admin/me` 200, `/api/c/second/admin/me` 403), a "Forgot password" request's link listed by `pnpm dev:mail`, `pnpm dev:reset STAFF@nuk.test` ok and an unknown email refused (exit 1). Not run in the browser; no e2e change (dev server only).
+
 ## One address per page, without a trailing slash (D208, 2026-10-25)
 
 [Decision](decisions.md#d208-one-address-per-page-without-a-trailing-slash-2026-10-25). Owner report: `/c/nuk/` and `/c/nuk` behaved as different pages. Branch `fix/cafe-url-trailing-slash` from main `b728008`. `withoutTrailingSlash` (`shared/utils/address.ts`), a 301 from the server (`server/middleware/25.trailing-slash.ts`) and the same for links inside the app (`app/middleware/00.trailing-slash.global.ts`).

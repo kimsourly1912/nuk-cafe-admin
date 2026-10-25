@@ -426,6 +426,15 @@ export async function seedTenant(db: Db, input: { name: string, slug: string }):
   return { id: tenant.id, name: tenant.name, slug: tenant.slug, created: true }
 }
 
+/** The dev accounts task's other cafe (D209): the one at this address, or a new one. */
+export async function seedTenantAt(db: Db, input: { name: string, slug: string }): Promise<{ id: string, name: string, slug: string, created: boolean }> {
+  const existing = await repo.findTenantBySlug(db, input.slug)
+  if (existing) return { id: existing.id, name: existing.name, slug: existing.slug, created: false }
+  const tenant = { id: newId(), name: input.name, slug: input.slug, now: new Date() }
+  await db.batch([repo.insertTenantStatement(db, tenant), repo.insertSlugStatement(db, { slug: tenant.slug, tenantId: tenant.id, now: tenant.now })])
+  return { id: tenant.id, name: tenant.name, slug: tenant.slug, created: true }
+}
+
 // --- The cafe's profile (step T2b, D143): its name and logo ---
 
 async function profileOf(db: Db, row: TenantRow): Promise<CafeSettings> {

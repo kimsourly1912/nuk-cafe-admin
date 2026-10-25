@@ -149,6 +149,7 @@ export async function recordJobRun(db: Db, job: string, outcome: 'success' | 'fa
 }
 export const jobRunRows = jobsRepo.listJobRuns
 export const outboxHealth = outboxRepo.outboxHealth
+export const recentOutboxMessages = outboxRepo.recentMessages
 
 export const readJobCursor = jobsRepo.currentJobCursor
 export async function saveJobCursor(db: Db, job: string, cursor: string | null, result: { processed?: number, failures?: number, now?: Date } = {}): Promise<void> {
