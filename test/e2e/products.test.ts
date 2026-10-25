@@ -1386,6 +1386,23 @@ describe('the toolbar and Select mode at every width (D129)', () => {
     await page.getByRole('button', { name: 'More actions' }).waitFor()
   })
 
+  it('on a 320 px phone the category menu stays on screen, however long a category\'s path', async () => {
+    const page = await createPage()
+    await page.setViewportSize({ width: 320, height: 800 })
+    const long = menuCategoryOf('cat-12', 'Seasonal single-origin pour-over specials', { parentId: 'cat-10' })
+    await mockApi(page, { ...backend(), 'GET /admin/menu/categories': () => [MENU_TEA, { ...DRINKS, childCount: 2 }, ESPRESSO, long] })
+    await page.goto(url('/c/nuk/admin/products'), { waitUntil: 'hydration' })
+    await cardOf(page, 'Latte').waitFor()
+    await page.getByRole('combobox', { name: 'Category', exact: true }).click()
+    const menu = page.getByRole('listbox')
+    await menu.getByRole('option', { name: 'Drinks › Seasonal single-origin pour-over specials' }).waitFor()
+    // The menu's box (the listbox's popper), not the listbox: the search box sits above it.
+    const box = await menu.evaluate(el => el.closest('[data-reka-popper-content-wrapper]')!.firstElementChild!.getBoundingClientRect().toJSON() as DOMRect)
+    expect(box.left).toBeGreaterThanOrEqual(0)
+    expect(box.right).toBeLessThanOrEqual(320)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  })
+
   for (const width of [320, 680, 768, 1024, 1440]) {
     it(`nothing scrolls sideways at ${width} px, in Select mode too`, async () => {
       const page = await openAt(width)

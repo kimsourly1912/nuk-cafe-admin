@@ -102,13 +102,9 @@ usePageShortcuts({ n: () => create() })
             placeholder="Search sets or values…"
             class="w-full sm:w-64"
           />
-          <UIcon
-            v-if="refreshing"
-            name="i-lucide-loader-circle"
-            class="size-4 animate-spin text-muted"
-          />
         </template>
       </UDashboardToolbar>
+      <RefreshBar :active="refreshing" />
     </template>
 
     <template #body>

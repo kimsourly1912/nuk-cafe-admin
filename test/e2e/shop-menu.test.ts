@@ -327,6 +327,7 @@ describe('the customer menu on a phone', () => {
     await dialog(page).getByRole('button', { name: /^Frappé/ }).click()
     await expect.poll(() => dialog(page).count()).toBe(0)
     await expect.poll(() => tab(page, 'Frappé').getAttribute('aria-current')).toBe('true')
+    await expect.poll(() => inViewBelowHeader(page, 'Frappé')).toBe(true)
   })
 
   it('search takes over the header, Back leaves it', async () => {

@@ -44,9 +44,18 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
       v-model:collapsed="sidebarCollapsed"
       collapsible
       resizable
-      class="bg-elevated/25"
+      class="bg-elevated/25 transition-[width] duration-200 ease-out motion-reduce:transition-none data-[dragging=true]:transition-none"
       :ui="{ footer: 'lg:border-t lg:border-default' }"
     >
+      <template #resize-handle="{ onMouseDown, onTouchStart, ui }">
+        <SidebarResizeHandle
+          v-model:collapsed="sidebarCollapsed"
+          :handle-class="ui.handle()"
+          :on-mouse-down="onMouseDown"
+          :on-touch-start="onTouchStart"
+        />
+      </template>
+
       <template #header="{ collapsed }">
         <NuxtLink
           :to="PLATFORM_HOME"

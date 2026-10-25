@@ -166,7 +166,7 @@ Not wanted in the app: generic CRUD engines, repository or service layers (the s
 | Layout | The [resource index pattern](reference/page-patterns.md#2-resource-index): the collection chosen by the job (D37), and grouped rows instead of tables on compact | the feature | e2e per page |
 | Status filter | `<StatusTabs>` with counts | client counts, or one grouped counts read (`useItemCounts`, `GET …/counts`) | e2e |
 | First load | `<ListSkeleton>` placeholders, never the empty state. **No empty-list `default`** on the list query (it hides `loading`) | `ListSkeleton` + `useApiQuery().loading` | e2e |
-| Refetch with rows shown | Rows stay, small spinner (`refreshing`) | `useApiQuery` | e2e checks that the refetch happens, not the spinner |
+| Refetch with rows shown | Rows stay, dimmed, with a thin bar on the header's edge (D206) | `useApiQuery().refreshing` + `<RefreshBar>` | e2e checks that the refetch happens; the bar's timing by unit test (`refresh-indicator.test.ts`), not e2e |
 | No records | "No <items> yet" + create button | `ListEmptyState` | e2e |
 | Filters match nothing | "No <items> match your filters" + Clear filters | `ListEmptyState` + `isFiltered` | e2e |
 | Load fails | Alert with the safe message + Retry | `ApiErrorAlert` | e2e |

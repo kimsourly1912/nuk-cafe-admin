@@ -150,6 +150,23 @@
 }
 
 /*
+ * A refetch behind the content (`RefreshBar` in a `UDashboardPanel` header): the panel's body dims
+ * until the new data arrives, so old numbers never pass for the answer. It stays usable. The fade
+ * is the app's state-feedback motion (≤200ms); none with reduced motion.
+ */
+[data-slot='root']:has(> [data-slot='refresh-bar']) > [data-slot='body'] {
+  transition: opacity 150ms ease-out;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+[data-slot='root']:has(> [data-slot='refresh-bar'][data-active]) > [data-slot='body'] {
+  opacity: 0.6;
+}
+
+/*
  * Reorder lists (`useReorderTransition`): a row moved by its chevrons or keys slides to its new place
  * (TransitionGroup's move class). Unlayered, so it wins over a row's own `transition-colors`; off
  * for people who ask for less motion (Vue then skips the move).

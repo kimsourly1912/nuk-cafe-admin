@@ -28,7 +28,7 @@ function scrollParent(el: HTMLElement) {
   return parent
 }
 // Centre the current page's link in the sidebar, so a page below the fold (Telegram) is not left hidden.
-function revealActiveItem() {
+function revealActiveItem(instant = false) {
   const to = sidebarItems.value.flat().find(item => item.active)?.to
   if (typeof to !== 'string') return
   const link = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-sidebar-nav] a'))
@@ -38,17 +38,18 @@ function revealActiveItem() {
   const linkRect = link.getBoundingClientRect()
   const offset = linkRect.top - scroller.getBoundingClientRect().top - (scroller.clientHeight - linkRect.height) / 2
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
-  scroller.scrollTo({ top: scroller.scrollTop + offset, behavior: reduceMotion ? 'auto' : 'smooth' })
+  scroller.scrollTo({ top: scroller.scrollTop + offset, behavior: instant || reduceMotion ? 'auto' : 'smooth' })
 }
-onMounted(revealActiveItem)
-watch(() => route.path, revealActiveItem, { flush: 'post' })
-// The phone menu mounts when it opens, so centre the current page once it is on screen.
-watch(open, isOpen => isOpen && nextTick(revealActiveItem))
+onMounted(() => revealActiveItem(true))
+watch(() => route.path, () => revealActiveItem(), { flush: 'post' })
+// The phone menu mounts when it opens, so centre the current page once it is on screen. It jumps
+// there: a smooth scroll would play from the top on every open.
+watch(open, isOpen => isOpen && nextTick(() => revealActiveItem(true)))
 // Closing the search hands focus back to its button at the top of the sidebar, which scrolls the
 // sidebar up and undoes the centring done on navigation; centre again once the palette has gone.
 const searchOpen = ref(false)
 watch(searchOpen, (isOpen) => {
-  if (!isOpen) setTimeout(revealActiveItem, 300)
+  if (!isOpen) setTimeout(() => revealActiveItem(), 300)
 })
 /** Every page in the sidebar, for the search (Ctrl/⌘+K, D152). */
 const searchPages = computed(() => sidebarItems.value.flat()
@@ -68,10 +69,11 @@ const installApp = useInstallApp()
 const userMenu = computed<DropdownMenuItem[]>(() => [
   { label: user.value?.email, type: 'label' },
   { type: 'separator' },
-  { label: 'Change password', icon: 'i-lucide-key-round', to: tenantPath('/admin/change-password') },
-  { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
   // Not inside the installed app itself (D203).
   ...(installApp.installed.value ? [] : [{ label: 'Install app', icon: 'i-lucide-monitor-smartphone', onSelect: () => void installApp.install(cafe.name.value ? `${cafe.name.value} Admin` : 'Admin') }]),
+  { label: 'Change password', icon: 'i-lucide-key-round', to: tenantPath('/admin/change-password') },
+  { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
+  { type: 'separator' },
   { label: 'Log out', icon: 'i-lucide-log-out', onSelect: () => logout() },
 ])
 </script>
@@ -91,9 +93,19 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
         v-model:collapsed="sidebarCollapsed"
         collapsible
         resizable
-        class="bg-elevated/25 print:hidden"
+        class="bg-elevated/25 transition-[width] duration-200 ease-out motion-reduce:transition-none data-[dragging=true]:transition-none print:hidden"
         :ui="{ body: '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden', footer: 'lg:border-t lg:border-default' }"
       >
+        <!-- Drag resizes; a click on the edge collapses or expands. -->
+        <template #resize-handle="{ onMouseDown, onTouchStart, ui }">
+          <SidebarResizeHandle
+            v-model:collapsed="sidebarCollapsed"
+            :handle-class="ui.handle()"
+            :on-mouse-down="onMouseDown"
+            :on-touch-start="onTouchStart"
+          />
+        </template>
+
         <template #header="{ collapsed }">
           <CafeSwitcher
             workspace="admin"

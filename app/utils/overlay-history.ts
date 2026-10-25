@@ -163,6 +163,12 @@ export function createOverlayHistory(api: HistoryApi) {
     if (api.state?.[ENTRY_KEY] && trail.length === 0) enqueue(() => traverse(-1))
   }
 
+  /**
+   * Resolves once every history step queued so far is done. A history step stops a smooth scroll
+   * that has started (Chromium): a page scrolling as an overlay closes waits for this first.
+   */
+  const settled = () => queue
+
   /** The router's history, with our `popstate`s kept from it and its traversals in our queue. */
   function wrap(history: RouterHistory): RouterHistory {
     const { listen, go } = history
@@ -175,7 +181,7 @@ export function createOverlayHistory(api: HistoryApi) {
     return history
   }
 
-  return { open, onPop, beforeNavigate, afterNavigate, leaveStaleEntry, wrap }
+  return { open, onPop, beforeNavigate, afterNavigate, leaveStaleEntry, settled, wrap }
 }
 
 /** The browser's history: `popstate` ends a traversal (or a second, for one that goes nowhere). */

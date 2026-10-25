@@ -37,10 +37,16 @@ const model = defineModel<string | string[] | undefined>()
  * The menu is at least as wide as its longest label, not just its button. Virtual rows are
  * positioned absolutely, so the browser can't size the menu to them (`min-w-fit` measures nothing):
  * the width is estimated from the label length (`ch`) plus room for the padding and check mark.
+ * On a phone the menu never grows past the screen less a 1rem gutter each side; longer labels truncate.
+ * The cap sits inside `min-width` too, because CSS lets `min-width` win over `max-width`.
  */
 const contentProps = computed<SelectMenuProps['content']>(() => ({
+  collisionPadding: 16,
   // `style` isn't in the content prop's type, but falls through to the menu's element.
-  style: { minWidth: `calc(${Math.max(0, ...props.items.map(item => item.label.length))}ch + 3.5rem)`, maxWidth: '90vw' },
+  style: {
+    minWidth: `min(${Math.max(0, ...props.items.map(item => item.label.length))}ch + 3.5rem, 100vw - 2rem)`,
+    maxWidth: 'calc(100vw - 2rem)',
+  },
 } as object))
 
 /** The empty trigger keeps its line height. */

@@ -74,6 +74,7 @@ const paymentsTotal = (report: ReportSummary) => ({
         @print="printPage"
         @send="openSend"
       />
+      <RefreshBar :active="summary.refreshing.value" />
     </template>
 
     <template #body>

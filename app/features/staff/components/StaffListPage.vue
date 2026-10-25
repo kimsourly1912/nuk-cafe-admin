@@ -133,13 +133,9 @@ usePageShortcuts({ n: () => openForm() })
             aria-label="Branch"
             class="min-w-0 flex-1 sm:w-44 sm:flex-none"
           />
-          <UIcon
-            v-if="refreshing"
-            name="i-lucide-loader-circle"
-            class="size-4 animate-spin text-muted"
-          />
         </template>
       </UDashboardToolbar>
+      <RefreshBar :active="refreshing" />
     </template>
 
     <template #body>

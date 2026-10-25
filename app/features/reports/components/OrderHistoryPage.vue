@@ -221,6 +221,7 @@ const zone = computed(() => data.value?.branch.timeZone ?? branch.value?.timeZon
           </template>
         </template>
       </UDashboardToolbar>
+      <RefreshBar :active="history.refreshing.value" />
     </template>
 
     <template #body>
