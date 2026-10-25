@@ -77,7 +77,7 @@ function useApiQuery<T, DefaultT = undefined>(
 | `data` | `Ref<T \| DefaultT>` | The result. Kept while refreshing. |
 | `pending` | `ComputedRef<boolean>` | Any request in flight (first load or refresh). |
 | `loading` | `ComputedRef<boolean>` | **First load**: pending with no data yet. Use it for table skeletons and spinners. |
-| `refreshing` | `ComputedRef<boolean>` | Reloading while previous data is shown. Use it for a small inline spinner. |
+| `refreshing` | `ComputedRef<boolean>` | Reloading while previous data is shown. Pass it to [`<RefreshBar>`](./ui-helpers.md#refreshbar-and-userefreshindicator) (D206). |
 | `error` | `ComputedRef<ApiError \| undefined>` | Already normalized. Pass it to [`<ApiErrorAlert>`](./errors.md#apierroralert). |
 | `status` | `Ref<'idle' \| 'pending' \| 'success' \| 'error'>` | Raw `useAsyncData` status. |
 | `refresh()` / `execute()` | `() => Promise<void>` | Refetch. Cancels a load already running for the key (pass `{ dedupe: 'defer' }` to join it instead). |
@@ -113,7 +113,8 @@ A key can also be a getter for a parameterized query (``() => `products:list:${t
 ```vue
 <ApiErrorAlert v-if="error" :error="error" title="Could not load categories" @retry="refresh()" />
 <UTable v-else :data="rows" :loading="loading" />
-<UIcon v-if="refreshing" name="i-lucide-loader-circle" class="animate-spin" />
+<!-- In the panel's #header slot, last: -->
+<RefreshBar :active="refreshing" />
 ```
 
 ### Caveats

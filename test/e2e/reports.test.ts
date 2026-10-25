@@ -250,6 +250,36 @@ describe('Reports: Sales by item', () => {
     await expect.poll(() => page.url()).toContain('categoryId=cat-2')
     await page.getByText('The CSV includes all matching items.', { exact: false }).waitFor()
   })
+
+  it('on a phone, a slow search shows the header\'s bar and dims the rows; nothing moves (D206)', async () => {
+    let release = () => {}
+    let held = false
+    const { page } = await open('/c/nuk/admin/reports/items', {
+      'GET /admin/reports/items': async ({ url: u }) => {
+        if (held) await new Promise<void>(resolve => (release = resolve))
+        return itemsOf(params(u))
+      },
+    }, 390)
+    await page.getByText('Totals for 2 items').waitFor()
+    const search = page.getByRole('searchbox', { name: 'Find an item…' })
+    const top = (await search.boundingBox())!.y
+    const bodyOpacity = () => page.locator('[id$="-panel-report-items"] > [data-slot="body"]').evaluate(el => getComputedStyle(el).opacity)
+
+    held = true
+    await search.fill('latte')
+    // The bar's box has no height (its progress overlays the header's edge): attached, not visible.
+    await page.locator('[data-slot="refresh-bar"][data-active] [role="progressbar"]').waitFor({ state: 'attached' })
+    await page.getByRole('status').filter({ hasText: 'Updating…' }).waitFor({ state: 'attached' })
+    await page.getByText('· Updating…').waitFor()
+    await expect.poll(bodyOpacity).toBe('0.6')
+    expect((await search.boundingBox())!.y).toBe(top)
+
+    held = false
+    release()
+    await page.locator('[data-slot="refresh-bar"]:not([data-active])').waitFor({ state: 'attached' })
+    await expect.poll(bodyOpacity).toBe('1')
+    await page.getByText('· Updated', { exact: false }).waitFor()
+  })
 })
 
 describe('Reports: Order history', () => {

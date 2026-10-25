@@ -219,7 +219,7 @@ Every page and overlay handles the states that can occur for it. This table is t
 | State | What the user sees | Built with |
 |---|---|---|
 | **Loading (first)** | Placeholder rows or cards shaped like the content; never the empty state | `ListSkeleton`, `useApiQuery().loading` ([ui-helpers](./ui-helpers.md#listskeleton)) |
-| **Refreshing** | Existing content stays; a small spinner in the toolbar | `refreshing` ([data-fetching](./data-fetching.md)) |
+| **Refreshing** | Existing content stays, dimmed; a thin moving bar on the header's bottom edge (nothing moves; nothing for a refresh under 150ms). Never a spinner in the toolbar: on phones it wrapped onto a line of its own (D206) | `<RefreshBar :active="refreshing">` ([ui-helpers](./ui-helpers.md#refreshbar-and-userefreshindicator)) |
 | **Initial empty** | A title naming the resource ("No availability rules yet", "No staff yet"), one sentence of why it matters, and the create action (if the user may create) | `ListEmptyState` |
 | **Filtered empty** | A title naming the resource ("No availability rules match your filters", "No menu items match your search") + Clear filters. Say it when everything is archived ("Every add-on group is archived" + Show archived) | `ListEmptyState`, a feature-specific variant |
 | **Load error** | The safe message + Retry, in place of the content | `ApiErrorAlert` ([errors](./errors.md)) |

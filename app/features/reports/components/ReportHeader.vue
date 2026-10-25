@@ -24,6 +24,7 @@ const props = defineProps<{
   period?: Period
   /** When the shown numbers were read (`asOf`). */
   asOf?: string
+  /** A refetch is running: "Updated 2:35 PM" reads "Updating…" (the page's `RefreshBar` shows the bar). */
   refreshing?: boolean
   downloading?: boolean
   /** Send to Telegram (Summary and Sales by item, where Telegram is set up; D112). */
@@ -32,6 +33,7 @@ const props = defineProps<{
 const emit = defineEmits<{ period: [period: Period], branch: [id: string], download: [], print: [], send: [] }>()
 
 const { isCompact } = useLayoutContext()
+const updating = useRefreshIndicator(() => props.refreshing ?? false)
 const surface = useReportSurface()
 const tenantPath = useTenantPath()
 const route = useRoute()
@@ -158,16 +160,12 @@ const actions = computed<DropdownMenuItem[]>(() => [
           @update:model-value="emit('branch', String($event))"
         />
         <p class="text-xs text-muted">
-          {{ branch.name }} · {{ branch.timeZone }} · {{ BUSINESS_DAY_TEXT }}<template v-if="asOf">
+          {{ branch.name }} · {{ branch.timeZone }} · {{ BUSINESS_DAY_TEXT }}<template v-if="updating">
+            · Updating…
+          </template><template v-else-if="asOf">
             · Updated {{ clockIn(asOf, branch.timeZone) }}
           </template>
         </p>
-        <UIcon
-          v-if="refreshing"
-          name="i-lucide-loader-circle"
-          class="size-4 animate-spin text-muted"
-          aria-label="Updating…"
-        />
       </template>
     </template>
   </UDashboardToolbar>

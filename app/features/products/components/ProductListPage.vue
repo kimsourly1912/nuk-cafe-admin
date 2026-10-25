@@ -316,11 +316,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             aria-label="No photo: remove this filter"
             @click="filters.photo = ''"
           />
-          <UIcon
-            v-if="refreshing"
-            name="i-lucide-loader-circle"
-            class="size-4 shrink-0 animate-spin text-muted"
-          />
         </div>
         <div class="ms-auto flex shrink-0 items-center gap-2">
           <!-- Phones: Reorder and Select in one menu; while selecting, Cancel in its place. -->
@@ -399,6 +394,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           </UFieldGroup>
         </div>
       </UDashboardToolbar>
+      <RefreshBar :active="refreshing" />
     </template>
 
     <template #body>

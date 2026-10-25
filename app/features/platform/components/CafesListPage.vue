@@ -78,7 +78,6 @@ usePageShortcuts({ n: openForm })
           <SearchInput
             v-model="filters.search"
             placeholder="Search name or address…"
-            :loading="refreshing"
             class="w-full sm:w-64"
           />
           <USelect
@@ -89,6 +88,7 @@ usePageShortcuts({ n: openForm })
           />
         </template>
       </UDashboardToolbar>
+      <RefreshBar :active="refreshing" />
     </template>
 
     <template #body>

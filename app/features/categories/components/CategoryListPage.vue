@@ -258,11 +258,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             :disabled="filtersLocked"
             class="w-64 min-w-0 shrink"
           />
-          <UIcon
-            v-if="tree.refreshing.value"
-            name="i-lucide-loader-circle"
-            class="size-4 animate-spin text-muted"
-          />
         </template>
         <template #right>
           <UButton
@@ -308,6 +303,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           </UTooltip>
         </template>
       </UDashboardToolbar>
+      <RefreshBar :active="tree.refreshing.value" />
     </template>
 
     <template #body>

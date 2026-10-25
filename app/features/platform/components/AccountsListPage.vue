@@ -56,11 +56,11 @@ const columns: TableColumn<PlatformAccountSummary>[] = [
           <SearchInput
             v-model="filters.search"
             placeholder="Search name or email…"
-            :loading="refreshing"
             class="w-full sm:w-64"
           />
         </template>
       </UDashboardToolbar>
+      <RefreshBar :active="refreshing" />
     </template>
 
     <template #body>

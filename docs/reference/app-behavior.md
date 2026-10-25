@@ -98,7 +98,7 @@ Source: `app/plugins/data-freshness.client.ts` (VueUse `useBroadcastChannel`, `u
 | Quick tab switch (data < 5s old) | No refetch |
 | Tab visible again while offline | Nothing now; the reconnect refetch covers it |
 | Connection lost → back | Every loaded query refetches (and the offline banner hides) |
-| Refetch while rows are shown | Old rows stay on screen; `refreshing` is true (small spinner), not `loading` |
+| Refetch while rows are shown | Old rows stay on screen, dimmed under the header's moving bar (`<RefreshBar>`, D206); `refreshing` is true, not `loading` |
 | Refetch while a form is open | Form input is untouched (forms copy data into their own state). The list behind it updates |
 | Session expired while away | The refetch gets 401 → redirect to login (see [Session loss](#session-loss)) |
 | Browser without `BroadcastChannel` | Only return-to-tab and reconnect refetches (every supported browser has it: Safari ≥ 15.4) |
@@ -396,6 +396,8 @@ For staff who use the portal all day. Press **`?`** (or user menu → Keyboard s
 | `?` | Admin and platform pages | Show the shortcut list (also in the user menu). Each shell has its own list: `SHORTCUTS` (admin) and `PLATFORM_SHORTCUTS` (platform: `N` new cafe, `Ctrl`+`Enter`, `Esc`, `Ctrl`+`B`, `?`) |
 
 Source: `app/composables/useShortcuts.ts` (`usePageShortcuts`, `useSubmitShortcut`, `useSidebarShortcut`, `SHORTCUTS`, `PLATFORM_SHORTCUTS`) on Nuxt UI `defineShortcuts`, `app/components/ShortcutsHelp.vue` (takes the shell's list as its `shortcuts` prop). A new shortcut goes in its shell's list so the dialog stays true. E2E: `test/e2e/shortcuts.test.ts`.
+
+**The sidebar's edge** (from `lg` up, `components/SidebarResizeHandle.vue` in both shells' `resize-handle` slot): a click collapses or expands the sidebar, a drag resizes it (dragging below the rail snaps it shut, dragging a collapsed rail out opens it). It sets the same `collapsed` model as `Ctrl`+`B`, so the two stay in step. A press becomes a drag only after 4 px; until then Nuxt UI's resize is not started, since it resizes from the first pixel and a click with a little sideways movement on the collapsed rail used to expand it mid-press and collapse it again on release. A drag that returns to where it began is still a drag. No double-click width reset (it would toggle twice first). The width animates (200 ms) except while dragging or with reduced motion. E2E: `app-shell.test.ts` → "sidebar edge".
 
 | Case | Behavior |
 |---|---|

@@ -25,6 +25,9 @@ const TABS = [
 ]
 
 const { data, loading, refreshing, error, refresh } = useBranchTables(props.branchId, props.surface)
+// A tab inside the branch page has no panel header for `RefreshBar`: the search box's icon spins
+// and the cards dim instead.
+const showRefreshing = useRefreshIndicator(refreshing)
 const { archive, restore, rotate, remove, isBusy, isRemoved } = useTableMutations(props.surface)
 /** Delete permanently is the owners' (D200): the counter's managers archive only. */
 const canDelete = computed(() => props.surface === 'admin')
@@ -110,12 +113,8 @@ defineExpose({ openNew, activeCount: computed(() => tables.value.filter(t => t.s
         <SearchInput
           v-model="search"
           placeholder="Search tables…"
+          :loading="showRefreshing"
           class="w-full sm:w-64"
-        />
-        <UIcon
-          v-if="refreshing"
-          name="i-lucide-loader-circle"
-          class="size-4 shrink-0 animate-spin text-muted"
         />
       </div>
       <StatusTabs
@@ -149,7 +148,9 @@ defineExpose({ openNew, activeCount: computed(() => tables.value.filter(t => t.s
 
     <div
       v-else
-      class="@container"
+      class="@container transition-opacity duration-150 motion-reduce:transition-none"
+      :class="showRefreshing && 'opacity-60'"
+      :aria-busy="showRefreshing"
     >
       <div class="grid gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
         <TableCard

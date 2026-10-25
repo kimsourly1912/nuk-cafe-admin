@@ -124,6 +124,7 @@ const range = computed(() => {
           />
         </template>
       </UDashboardToolbar>
+      <RefreshBar :active="report.refreshing.value" />
     </template>
 
     <template #body>

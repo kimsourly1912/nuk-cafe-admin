@@ -165,7 +165,7 @@ Alerts (`UAlert`, `variant="subtle"`) are for states that need action or explain
 
 ## 11. Motion
 
-- Use Nuxt UI's transitions (overlays, menus, collapsibles). App-level motion is limited to state feedback: a moved row sliding to its place (`useReorderTransition`, [§17](#reordering)), a moved row's brief highlight, a spinner, a fade of a bulk bar. It lasts ≤200ms, or ≤1.5s for a highlight that fades.
+- Use Nuxt UI's transitions (overlays, menus, collapsibles). App-level motion is limited to state feedback: a moved row sliding to its place (`useReorderTransition`, [§17](#reordering)), a moved row's brief highlight, a spinner, the refresh bar and its dimming (`<RefreshBar>`), a fade of a bulk bar. It lasts ≤200ms, or ≤1.5s for a highlight that fades.
 - Wrap app-level transitions in `motion-safe:`; nothing essential depends on motion (`prefers-reduced-motion`).
 - No decorative or looping animation, no animated status indicators.
 

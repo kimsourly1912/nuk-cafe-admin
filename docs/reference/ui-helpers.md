@@ -10,6 +10,7 @@
 - [`useLayoutContext`](#uselayoutcontext)
 - [`previewList` and `pluralize`](#previewlist-and-pluralize) (and `changeText`)
 - [`<SearchInput>`](#searchinput)
+- [`<RefreshBar>` and `useRefreshIndicator`](#refreshbar-and-userefreshindicator) (D206)
 - [`<ListEmptyState>`](#listemptystate)
 - [Keyboard shortcuts: `usePageShortcuts`, `useSubmitShortcut`, `<ShortcutsHelp>`](#keyboard-shortcuts)
 - [`<StatCard>`](#statcard), [`<RecordSelect>`](#recordselect), [`<AppDrawer>`](#appdrawer), [`<ToolbarTabs>`](#toolbartabs), [`useUrlTab`](#useurltab) (D126), [`<PhoneInput>`](#phoneinput) (D127), [`useCenteredTab`](#usecenteredtab), [`<ListPagination>`](#listpagination), [`<QuantityStepper>`](#quantitystepper) (D128), [`<QrCode>`](#qrcode) (D130), [`<ImageInput>`](#imageinput), [`<MenuItemImage>`](#menuitemimage) (D158), [`useCafe` and `<CafeLogo>`](#usecafe-and-cafelogo) (D143), [Your cafes and the switcher](#your-cafes-and-the-switcher) (D144)
@@ -433,6 +434,30 @@ Source: `app/components/ListSkeleton.vue`
 
 > Drive it with `useApiQuery`'s `loading`, and **don't give that query an empty-list `default`**: `loading` means "pending with no data yet", and `[]` counts as data, so the empty state would flash instead (a bug found by e2e, D37).
 
+---
+
+## `<RefreshBar>` and `useRefreshIndicator`
+
+A refetch behind content already shown (`useApiQuery().refreshing`: a filter, search, sort, page or period changed, or the data went stale). A thin moving bar (indeterminate `UProgress`) overlays the header's bottom edge, and the panel's body fades to 60% until the new data arrives. It stays usable. Screen readers hear "Updating…" (D206).
+
+Source: `app/components/RefreshBar.vue`, `app/composables/useRefreshIndicator.ts`, the dimming in `app/assets/css/tailwind.css`. Unit: `test/unit/refresh-indicator.test.ts`.
+
+```vue
+<UDashboardPanel id="staff">
+  <template #header>
+    <UDashboardNavbar title="Staff" />
+    <UDashboardToolbar>…</UDashboardToolbar>
+    <RefreshBar :active="refreshing" />
+  </template>
+  …
+```
+
+- **Last in the `#header` slot**, a direct child of the panel, never inside a toolbar. The dimming is CSS that looks for a panel (`[data-slot=root]`) with an active bar as a direct child, and dims that panel's `[data-slot=body]`. Nothing to wire on the body.
+- **Timing** (`useRefreshIndicator`): nothing for a refresh under 150ms (`REFRESH_SHOW_DELAY`); once shown, at least 300ms (`REFRESH_MIN_SHOWN`); a new refresh while it's showing keeps it on, so typing in the search box doesn't make it blink.
+- **Where there's no panel header** (a tab's content, like the branch's Tables tab), use the composable directly: `const showRefreshing = useRefreshIndicator(refreshing)`, then `<SearchInput :loading="showRefreshing">` and `opacity-60` + `aria-busy` on the list.
+- **Reports** also pass `refreshing` to `ReportHeader`: "Updated 2:35 PM" reads "Updating…" in place.
+- Not for a button the person pressed (Refresh, Save): that button shows its own `loading`. Not for the first load: that's `<ListSkeleton>`.
+
 ## Dates and times: `formatDate`, `formatShortDate`, `formatTime`, `formatDateTime`, `formatShortDateTime`, `formatDay`
 
 Every timestamp on screen, in one style (D195): the day first, the 12-hour clock. Source: `app/utils/date-format.ts` (auto-imported; unit-tested code imports it from `~/utils/date-format`). Tests: `test/unit/date-format.test.ts`.
@@ -554,6 +579,8 @@ Source: `app/components/StatCard.vue`
 A dropdown of the cafe's records (ui.md §14, D126): `USelectMenu` with a search box and virtual scroll. Search matches anywhere in the label; `pinned` values stay first and are never filtered out; no match says "No {noun} match “…”" (a row of its own when pinned rows remain). Attributes (`aria-label`, `placeholder`, `loading`, `disabled`, `multiple`, …) go to the select. Its trigger is a button (`aria-haspopup="listbox"`): in e2e, `getByRole('button', { name, exact: true })`, and wait for the `listbox` to close after picking before typing elsewhere (it hands focus back to its button as it closes).
 
 Source: `app/components/RecordSelect.vue`. Used by `CategorySelect`, `AvailabilityRuleSelect`, and the branch and category filters. Its trigger has `role="combobox"` (D152): find it in tests with `getByRole('combobox', { name })`.
+
+Width: the menu is at least as wide as its longest label (estimated in `ch`, since virtual rows can't size it), but never wider than the screen less a 1rem gutter each side; longer labels truncate. The cap goes inside `min-width` (`min(…, 100vw - 2rem)`), because CSS lets `min-width` win over `max-width`. Tested at 320 px with a long category path (`products.test.ts`, toolbar at every width).
 
 ```vue
 <RecordSelect v-model="filters.branchId" :items="branchItems" noun="branches" :pinned="[ANY]" aria-label="Branch" />
