@@ -37,6 +37,23 @@ export const newPasswordSchema = v.pipe(
 )
 
 /**
+ * `GET /api/password-ranges/{prefix}` (D210): the leaked-password list's entries whose SHA-1 starts
+ * with these 5 hex characters, so a new-password field can say "Not easy to guess" while typing.
+ * Only the hash's first 5 characters leave the browser (Have I Been Pwned's k-anonymity); the
+ * browser compares the rest itself. Advisory: Better Auth checks again when the password is saved.
+ */
+export const passwordRangePrefixSchema = v.pipe(
+  v.string(),
+  v.regex(/^[0-9a-f]{5}$/i, 'Five hexadecimal characters'),
+  v.toUpperCase(),
+)
+
+export interface PasswordRange {
+  /** The other 35 characters of each leaked password's SHA-1, upper case. */
+  suffixes: string[]
+}
+
+/**
  * `GET /api/counter/me`: the signed-in staff member, for the counter app (step 6.3b, D102): the
  * branches they work at (every active branch for a platform admin). Answers while a temporary
  * password is in place, like `/admin/me`, so the app can ask for a new one. A customer with no

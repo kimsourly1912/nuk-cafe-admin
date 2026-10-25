@@ -5,6 +5,7 @@
 - [`useConfirm`](#useconfirm)
 - [`useTableSelection`](#usetableselection)
 - [`<TaskFrame>`](#taskframe)
+- [`<PasswordRequirements>` and `<GeneratePasswordButton>`](#passwordrequirements-and-generatepasswordbutton) (D210)
 - [`<BottomActionBar>`](#bottomactionbar)
 - [`<BulkActionsBar>`](#bulkactionsbar)
 - [`useLayoutContext`](#uselayoutcontext)
@@ -153,6 +154,52 @@ Source: `app/components/TaskFrame.vue`. Slots: `header`, default, `footer` (each
 The submit button is outside the form, joined with `form="<id>"`: Enter still submits.
 
 `wide` lifts the card from `sm:max-w-sm` to `sm:max-w-3xl` for a step with side-by-side parts (the platform two-factor setup: QR code and backup codes in two columns from `md`); still one column on phones.
+
+## `<PasswordRequirements>` and `<GeneratePasswordButton>`
+
+The password rules as a checklist under every new-password field, and a Generate button inside it (D210): sign-up, reset password and the three change-password pages. Only the rules the server enforces, in this order: "At least 8 characters" (`PASSWORD_MIN`), "Repeat new password matches" on forms with a repeat, and last "Not a commonly used password" with its reason underneath ("Checked against passwords leaked from other websites, the first ones attackers try."): Better Auth's `haveIBeenPwned`. No composition rules (digits, capitals): those would be a new policy, an owner decision.
+
+Source: `app/components/PasswordRequirements.vue`, `app/components/GeneratePasswordButton.vue`, `app/composables/usePasswordLeakCheck.ts`, and `app/utils/password-requirements.ts` (`passwordRequirements`, `isBreachedPassword`, `BREACHED_PASSWORD_MESSAGE`, `generatePassword`, `fillInput`). `<PasswordRequirements>` props: `password`, `confirm?` (leave out without a repeat field), `refused?` (the password the server refused as leaked), `generated?` (the last password Generate made). `<GeneratePasswordButton>` emits `generate` with a new password.
+
+```vue
+<script setup lang="ts">
+const refusedPassword = ref<string>()
+const generatedPassword = ref<string>()
+// in the submit's catch:
+if (isBreachedPassword(error)) refusedPassword.value = data.password
+
+function fillGenerated(password: string) {
+  showPassword.value = true
+  generatedPassword.value = password
+  fillInput(document.getElementById('new-password') as HTMLInputElement | null, password)
+}
+</script>
+
+<template>
+  <div class="space-y-2">
+    <UFormField label="New password" name="password">
+      <UInput id="new-password" v-model="state.password" :ui="{ trailing: 'pe-1' }">
+        <template #trailing><GeneratePasswordButton @generate="fillGenerated" /></template>
+      </UInput>
+    </UFormField>
+    <PasswordRequirements :password="state.password" :refused="refusedPassword" :generated="generatedPassword" />
+  </div>
+</template>
+```
+
+The account pages' `PasswordInput` (`autocomplete="new-password"`) has the button built in, beside its show button.
+
+- **States:** pending (`i-lucide-circle`, muted), checking (`i-lucide-loader-circle`, spinning, muted), met (`i-lucide-circle-check`, success), failed (`i-lucide-circle-x`, error). A short password is the field's own error (on blur or submit), so its line never turns red.
+- **The leaked-password line is checked while typing** (`usePasswordLeakCheck`): 400 ms after typing pauses, from 8 characters, the browser hashes the password (SHA-1, `crypto.subtle`) and asks [`GET /api/password-ranges/{prefix}`](../server/architecture.md#surfaces-and-routes) with only the hash's first 5 characters; the server asks Have I Been Pwned's range API (padded) and answers the matching suffixes; the browser compares the rest. The password never leaves the browser for this (Have I Been Pwned's k-anonymity, as Better Auth's own check). One `useApiQuery` key (`password:range`) with `watch`, so a newer prefix cancels an older request, and each answer carries its prefix, so an old answer never shows for a newer password.
+- **A generated password is never looked up.** It's random (116 bits), so it can't be on the list: while the field holds exactly the `generated` one, the line is ticked at once and nothing is requested, however often Generate is pressed (each lookup is about 2,000 suffixes, some 75 KB before compression). An edit to it is checked as usual. Pages keep it in a `generatedPassword` ref, set before the field is filled (`PasswordInput` emits `generate` first).
+- **No answer stays pending** ("checked when you save"): offline, the service down (503 `PASSWORD_CHECK_UNAVAILABLE`), rate limited, or a page without `crypto.subtle` (only https and localhost have it: a phone on `http://<LAN address>` doesn't check live). The server checks again on save either way; the live check is advice.
+- **The server's refusal** (`PASSWORD_COMPROMISED`) is red while the field holds the refused password, also when it's typed back, whatever the live check said. The field's error reads "This password is too common. Choose another one."
+- **Over 128 characters** is the field's error only; no line of its own.
+- **Generate** makes four groups of five letters and digits without look-alikes (0/O, 1/l/I), like `k7Rmq-Xa3vT-9pWez-Hn4Ld`: about 116 bits from `crypto.getRandomValues`, without modulo bias. The page fills the new password (and its repeat) with `fillInput` and shows it, so it can be saved in a password manager or written down. `fillInput` sets the value and fires `input`, as typing does: the `v-model`, the checklist and the form's validation follow, and a server's error on the field clears.
+- **Pressing Generate keeps the focus in the field** (`@mousedown.prevent`). A blur re-checked the field first; when that removed an error line, the centered card shrank and moved the button away before the mouse came up, and the click was lost (sign-up after a refusal; caught by `shop-account.test.ts`).
+- **Screen readers:** the checklist is a list named "Password requirements", a polite live region; each line ends with a hidden ": done", ": checking", ": not yet" or ": refused". It isn't in the input's `aria-describedby`: Nuxt UI's field sets that attribute itself and replaces it with the error's id. Generate is an icon button named "Generate a strong password" with that tooltip, and says "A strong password was filled in…" through a `role="status"`.
+- Group the field and the list in `space-y-2`, so the list sits under its field, not a form gap away.
+- **E2e:** `mockApi` answers `GET /password-ranges/{prefix}` with nothing leaked by default; a test that wants a leaked password returns its SHA-1 suffix (`password.test.ts`).
 
 ## `<BottomActionBar>`
 

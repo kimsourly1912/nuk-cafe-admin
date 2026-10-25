@@ -14,7 +14,12 @@ export const IdentityErrorCodes = {
   NOT_PLATFORM_ADMIN: 'NOT_PLATFORM_ADMIN',
   /** A super admin without two-step sign-in: the console asks them to set it up first (P1b, D188). */
   TWO_FACTOR_REQUIRED: 'TWO_FACTOR_REQUIRED',
+  /** Have I Been Pwned didn't answer: the new-password field's live check waits for the save (D210). */
+  PASSWORD_CHECK_UNAVAILABLE: 'PASSWORD_CHECK_UNAVAILABLE',
 } as const
+
+export const passwordCheckUnavailable = () =>
+  apiError(503, IdentityErrorCodes.PASSWORD_CHECK_UNAVAILABLE, 'The password can\'t be checked right now. It\'s checked when you save.')
 
 /** Signed in, but not an owner of the cafe: the admin app is owners only for now (D52, D134). */
 export const notAdmin = () =>

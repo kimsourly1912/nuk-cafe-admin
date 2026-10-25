@@ -4,7 +4,7 @@ import { log } from '#server/utils/log'
 
 /**
  * Rate limits for the public API and placing orders (a cafe's `/api/c/<slug>/public/**`, the global table scan
- * `/api/tables/**`, a cafe's profile `/api/cafes/**` and browser error reports `/api/client-errors`, D121, D140, D143, D149), counted per client address with
+ * `/api/tables/**`, a cafe's profile `/api/cafes/**` browser error reports `/api/client-errors` and the leaked-password ranges `/api/password-ranges/**`, D121, D140, D143, D149, D210), counted per client address with
  * Cloudflare's Workers rate-limit bindings. The first rule whose prefix matches applies. Limits are
  * generous on purpose: customers in the cafe share its Wi-Fi, so one address can be many people.
  * A rule's numbers live in the Worker's configuration (nuxt.config.ts → `ratelimits`).
@@ -23,6 +23,8 @@ export const RATE_LIMIT_RULES = [
   { prefix: '/api/cafes/', binding: 'RATE_LIMIT_PUBLIC' },
   // Browser error reports (D149): anyone can send them, so they share the public limit.
   { prefix: '/api/client-errors', binding: 'RATE_LIMIT_PUBLIC' },
+  // The new-password checklist's leaked-password ranges (D210): public, and each one calls Have I Been Pwned.
+  { prefix: '/api/password-ranges/', binding: 'RATE_LIMIT_PUBLIC' },
 ] as const satisfies readonly { prefix: string, method?: string, binding: string }[]
 
 /** The rule for a request: the first whose prefix (and method, when it names one) matches. */

@@ -83,7 +83,9 @@ definePageMeta({ public: true, layout: 'auth' })
 | Repeat doesn't match, or same as the current one | Field errors; nothing sent | e2e, unit `password-form.test.ts` |
 | A route answers 403 `PASSWORD_CHANGE_REQUIRED` mid-session | Goes to the change-password page (not a lost session) | e2e, unit `api-fetch.test.ts` |
 | Password changed | Other devices are signed out (`revokeOtherSessions`), this one continues | e2e (request body); real-server |
-| Breached new password | Better Auth refuses (`PASSWORD_COMPROMISED`), message shown | real-server (step 1.2) |
+| Typing a new password | The rules' checklist under the field ticks "At least 8 characters" and "Repeat new password matches"; "Not a commonly used password" (last, with why) is checked once typing pauses: a spinner, then ticked or red; no answer leaves it pending until the save ([`<PasswordRequirements>`](./ui-helpers.md#passwordrequirements-and-generatepasswordbutton), D210) | e2e `password.test.ts`, unit `password-requirements.test.ts` |
+| Generate a strong password | The button in the New password field fills both new fields with a random `xxxxx-xxxxx-xxxxx-xxxxx` password, turns Show passwords on, and that is what is sent; its leaked-password line ticks | e2e `password.test.ts`, unit `password-requirements.test.ts` |
+| Breached new password | Better Auth refuses (`PASSWORD_COMPROMISED`): "This password is too common. Choose another one." on the New password field (focused), the checklist's breach line red until the password is changed, no alert (D210) | e2e `password.test.ts` (mocked answer); real-server (step 1.2) |
 
 ---
 

@@ -235,11 +235,19 @@ describe('creating an account', () => {
     await page.getByLabel('Email').fill('new@example.com')
     await page.getByLabel('Password', { exact: true }).fill('password123')
     await button(page, 'Create account').click()
-    await page.getByText('This password has appeared in a data breach. Choose another one.').waitFor({ timeout: 10000 })
+    await page.getByText('This password is too common. Choose another one.').waitFor({ timeout: 10000 })
+    // The rules' checklist (D210) shows the refusal on its breach line.
+    const breachLine = page.getByRole('list', { name: 'Password requirements' }).getByRole('listitem').last()
+    await expect.poll(() => breachLine.getAttribute('data-state')).toBe('failed')
     await expect.poll(() => page.getByLabel('Password', { exact: true }).evaluate(el => el === document.activeElement)).toBe(true)
-    await page.getByLabel('Password', { exact: true }).fill('another-long-password')
+    // Generate (D210) fills the field like typing: shown, ticked, and the refusal cleared.
+    await button(page, 'Generate a strong password').click()
+    expect(await page.getByLabel('Password', { exact: true }).inputValue()).toMatch(/^[a-km-zA-HJ-NP-Z2-9]{5}(-[a-km-zA-HJ-NP-Z2-9]{5}){3}$/)
+    expect(await page.getByLabel('Password', { exact: true }).getAttribute('type')).toBe('text')
+    // A generated password is ticked without a lookup.
+    await expect.poll(() => breachLine.getAttribute('data-state')).toBe('met')
     // Typing clears the field's error after UForm's debounce; the button moves up then, so wait first.
-    await page.getByText('This password has appeared in a data breach. Choose another one.').waitFor({ state: 'hidden', timeout: 5000 })
+    await page.getByText('This password is too common. Choose another one.').waitFor({ state: 'hidden', timeout: 5000 })
     await button(page, 'Create account').click()
     await page.getByText('An account with this email already exists. Sign in instead.').waitFor({ timeout: 10000 })
     expect(problems.filter(p => !/status of 4\d\d/.test(p))).toEqual([])

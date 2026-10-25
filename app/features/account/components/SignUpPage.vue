@@ -31,10 +31,21 @@ watch(known, (isKnown) => {
   if (account.value) navigateTo(target.value, { replace: true })
 }, { immediate: true })
 
+/** The password the server refused as breached, for the checklist. */
+const refusedPassword = ref<string>()
+/** The last password Generate made: random, so the checklist skips its leaked-password check. */
+const generatedPassword = ref<string>()
+
 async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
   arrived = true
   await submit(async () => {
-    await signUp(event.data)
+    try {
+      await signUp(event.data)
+    }
+    catch (error) {
+      if (isBreachedPassword(error)) refusedPassword.value = event.data.password
+      throw error
+    }
     await navigateTo(accountLink(ACCOUNT_PATHS.verifyEmail, route.query.redirect))
   })
 }
@@ -82,17 +93,24 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
         />
       </UFormField>
 
-      <UFormField
-        label="Password"
-        name="password"
-        help="At least 8 characters"
-      >
-        <PasswordInput
-          id="sign-up-password"
-          v-model="state.password"
-          autocomplete="new-password"
+      <div class="space-y-2">
+        <UFormField
+          label="Password"
+          name="password"
+        >
+          <PasswordInput
+            id="sign-up-password"
+            v-model="state.password"
+            autocomplete="new-password"
+            @generate="generatedPassword = $event"
+          />
+        </UFormField>
+        <PasswordRequirements
+          :password="state.password"
+          :refused="refusedPassword"
+          :generated="generatedPassword"
         />
-      </UFormField>
+      </div>
     </UForm>
 
     <template #footer>
