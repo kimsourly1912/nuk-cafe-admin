@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Secure Node and pnpm toolchain (D205, 2026-10-25)
+
+[Decision](decisions.md#d205-patched-node-24-and-exact-pnpm-from-packagejson-2026-10-25), [audit and verification](reviews/toolchain-audit-2026-10-25.md). Branch `chore/secure-node-toolchain`, based on `e607648`: declare Node `^24.22.1`, update pnpm 12.3.4 → 12.15.0 for upstream security fixes, read Node from the manifest in CI, and replace starter setup instructions. Application dependency lockfile document unchanged byte-for-byte; no app code, Worker runtime settings, secrets or deploy behavior changed. No merge or deployment.
+
+- **Initial evidence:** Node 24.22.1 / pnpm 12.3.4 frozen install, lint and typecheck passed; unit/server 141 files, 1,956 passed and 1 skipped. Corepack 0.34.6 selected both pnpm pins. Node engine scan matches the locked dependencies on supported 64-bit platforms. Dependency audit passes the existing high/critical gate with existing suppressions; 13 total findings remain (2 low, 6 moderate, 3 high and 2 critical; all high/critical suppressed). See audit for scope and limits.
+- **Final evidence (Linux x64, Node 24.22.1 / pnpm 12.15.0, Corepack 0.34.6):** frozen install, lint, typecheck, unit/server (141 files, 1,956 passed, 1 skipped), Node production build (53.6 s), Worker build (58.1 s, 4 GB heap) and Wrangler packaging dry run passed. Audit exit 0 under the unchanged policy: 8 unignored low/moderate findings, 5 ignored high/critical. DNS NUL/TLS hostname smoke probes passed; workflow extraction, unchanged application lockfile and `git diff --check` verified. Local e2e built/seeded, then all 717 cases skipped across 58 browser setup failures: Chrome absent; Chromium download empty/truncated. A temporary Corepack shim outside the repository corrected this workspace's pnpm 11 PATH fallback for the final Worker build/dry run. See report for limits. Full browser runner evidence belongs to the review PR checks. Prepared for review; no merge/deployment.
+
 ## Installable counter and admin (D202, 2026-10-24)
 
 [Decision](decisions.md#d202-the-counter-and-admin-are-installable-apps-a-manifest-per-cafe-no-service-worker-yet-2026-10-24), [plan](plans/installable-app.md). The owner asked for a PWA; accepted scope: the counter and the admin installable from a manifest per cafe (`/c/<slug>/counter.webmanifest`, `…/admin.webmanifest`), generic icons, no service worker, no offline work, no Web Push. A service worker is a later step with its own trigger.

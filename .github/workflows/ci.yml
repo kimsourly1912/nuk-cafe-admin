@@ -28,12 +28,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # Installs pnpm (version from package.json → packageManager), Node, and runs `pnpm install`
+      - name: Read the project's Node.js requirement
+        id: node
+        run: |
+          version=$(jq -er '.engines.node' package.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Installs pnpm (packageManager) and Node (engines.node) from package.json, then `pnpm install`
       # (frozen lockfile in CI) with the store cached. Pinned by commit: v2.0.0.
       - name: Install pnpm, Node.js and dependencies
         uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
         with:
-          runtime: node@24
+          runtime: node@${{ steps.node.outputs.version }}
           cache: true
 
       - name: Lint
@@ -65,10 +71,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Read the project's Node.js requirement
+        id: node
+        run: |
+          version=$(jq -er '.engines.node' package.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Install pnpm, Node.js and dependencies
         uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
         with:
-          runtime: node@24
+          runtime: node@${{ steps.node.outputs.version }}
           cache: true
 
       - name: E2E tests
@@ -97,10 +109,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Read the project's Node.js requirement
+        id: node
+        run: |
+          version=$(jq -er '.engines.node' package.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Install pnpm, Node.js and dependencies
         uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
         with:
-          runtime: node@24
+          runtime: node@${{ steps.node.outputs.version }}
           cache: true
 
       - name: Build the staging Worker
