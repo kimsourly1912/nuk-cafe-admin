@@ -540,7 +540,7 @@ describe('sold out at the counter (D105)', () => {
     // Switched back on: it stays in view (a slip can be undone there) until the filter changes.
     await available.click()
     await expect.poll(() => available.isChecked()).toBe(true)
-    expect(await row.getByText('Available', { exact: true }).isVisible()).toBe(true)
+    await expect.poll(() => row.getByText('Available', { exact: true }).isVisible()).toBe(true)
     await expect.poll(async () => (await coconut()).variations.find(v => v.id === first!.id)!.soldOut).toBe(false)
     // Showing everything and then only the sold-out ones again: it's gone from them.
     await page.getByRole('button', { name: 'All items' }).click()

@@ -31,12 +31,12 @@ function copyLibsqlNativeBinary(serverDir: string) {
  * Response headers for every route in production (D48). Scripts still allow `'unsafe-inline'`: the
  * SPA shell carries Nuxt's inline config script and the color-mode script, whose content changes
  * per environment. A nonce-based script policy comes with server rendering (step 5.2). Everything
- * else is locked to this origin: no framing, no plugins, no requests or form posts elsewhere.
+ * else is locked to this origin; only public menu documents allow the automatic analytics script.
  */
-function securityHeaders(): Record<string, string> {
+function securityHeaders(publicMenu = false): Record<string, string> {
   const csp = [
     `default-src 'self'`,
-    `script-src 'self' 'unsafe-inline'`,
+    `script-src 'self' 'unsafe-inline'${publicMenu ? ' https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/' : ''}`,
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' data: blob:`,
     `font-src 'self' data:`,
@@ -51,9 +51,22 @@ function securityHeaders(): Record<string, string> {
     'strict-transport-security': 'max-age=31536000; includeSubDomains',
     'x-content-type-options': 'nosniff',
     'x-frame-options': 'DENY',
-    'referrer-policy': 'strict-origin-when-cross-origin',
+    'referrer-policy': 'strict-origin',
     'cross-origin-opener-policy': 'same-origin',
     'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+  }
+}
+
+/** Automatic Cloudflare analytics stays on-origin and is allowed only on public menu documents. */
+function deployedSecurityRules() {
+  // Cloudflare must not inject analytics into documents whose address can carry a bearer token.
+  const tokenEntryHeaders = { ...securityHeaders(), 'cache-control': 'no-store, no-transform' }
+  return {
+    '/**': { headers: securityHeaders() },
+    '/c/*': { headers: securityHeaders(true) },
+    '/table/**': { headers: tokenEntryHeaders },
+    '/reset-password': { headers: tokenEntryHeaders },
+    '/verify-email': { headers: tokenEntryHeaders },
   }
 }
 
@@ -133,7 +146,7 @@ export default defineNuxtConfig({
     // Worker. `--envName prod` replaces `$production`, so the security headers are repeated here.
     // Never the Sample data variables (D94), and no AI variables until the provider is chosen (Q43).
     prod: {
-      routeRules: { '/**': { headers: securityHeaders() } },
+      routeRules: deployedSecurityRules(),
       nitro: {
         preset: 'cloudflare_module',
         cloudflare: {
@@ -161,7 +174,7 @@ export default defineNuxtConfig({
     staging: {
       // `--envName staging` replaces `$production` (one environment block applies), so the security
       // headers are repeated here.
-      routeRules: { '/**': { headers: securityHeaders() } },
+      routeRules: deployedSecurityRules(),
       nitro: {
         preset: 'cloudflare_module',
         cloudflare: {
@@ -205,7 +218,7 @@ export default defineNuxtConfig({
   $production: {
     // Security headers (docs/server/security.md → Request protection). Production builds only: the
     // Vite dev server needs inline scripts and a websocket. The e2e suite runs a production build.
-    routeRules: { '/**': { headers: securityHeaders() } },
+    routeRules: deployedSecurityRules(),
   },
   // The customer site is server-rendered (D45, D95); the admin workspace stays a SPA
   // (`routeRules` below). Counter screens will be SPAs too.

@@ -1,23 +1,39 @@
-# Independent of the Worker, D1, and Telegram. Configure the URL to enable monitoring.
+# Independent of the Worker, D1, and Telegram. Production by default; false explicitly pauses it.
 name: Platform health
 on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      target:
+        description: Environment to check (does not deploy or change data)
+        type: choice
+        options: [production, staging]
+        default: production
 permissions: {}
 concurrency:
   group: platform-health
   cancel-in-progress: false
 jobs:
   health:
-    if: vars.PLATFORM_HEALTH_URL != ''
+    if: vars.PLATFORM_HEALTH_ENABLED != 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - name: Check the platform database health
         env:
-          PLATFORM_HEALTH_URL: ${{ vars.PLATFORM_HEALTH_URL }}
+          PLATFORM_HEALTH_URL: ${{ inputs.target == 'staging' && 'https://staging.angder.app/api/health' || vars.PLATFORM_HEALTH_URL || 'https://angder.app/api/health' }}
         run: |
           set -eu
-          curl --proto '=https' --fail --silent --show-error --max-time 10 --retry 2 --retry-delay 5 --output health.json "$PLATFORM_HEALTH_URL"
-          python3 -c 'import json; assert json.load(open("health.json")).get("status") == "ok", "Platform health is unavailable"'
+          curl --proto '=https' --fail --silent --show-error --max-time 10 --max-filesize 4096 --retry 2 --retry-delay 5 --output health.json --write-out '%{http_code} %{time_total}' "$PLATFORM_HEALTH_URL" > health-timing.txt
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          status, elapsed = Path('health-timing.txt').read_text().split()
+          assert status == '200', 'Platform health did not return HTTP 200'
+          assert json.loads(Path('health.json').read_text()).get('status') == 'ok', 'Platform health is unavailable'
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f'Platform database health: **OK**. Request duration: {float(elapsed):.3f} s.\n')
+          PY
