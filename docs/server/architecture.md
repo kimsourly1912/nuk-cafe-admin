@@ -29,7 +29,7 @@ Browser ──► Nuxt app (customer site · /admin · /counter)
               ├──► features ──────► D1 (NuxtHub db, Drizzle)
               │                   ──► R2 (NuxtHub blob)
               │                   ──► KV (NuxtHub cache)
-              └──► Resend (email), after the write has committed
+              └──► Email Sending (email), after the write has committed
 ```
 
 - The server owns every rule: prices, availability, order state, points, voucher use, permissions. A client asks; it never decides.

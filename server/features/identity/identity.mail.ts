@@ -19,30 +19,40 @@ export interface MailMessage {
 }
 
 /**
- * Sends one email. `idempotencyKey` is the outbox message id: a repeat delivery (at least once)
- * must not send twice.
+ * Sends one email. Delivery is at least once (the outbox retries): Cloudflare Email Sending takes no
+ * idempotency key, so a send whose answer was lost can arrive twice, with the same link (D212).
  */
-export type MailSender = (message: MailMessage, idempotencyKey: string) => Promise<void>
-
-const APP = 'NUK Cafe'
+export type MailSender = (message: MailMessage) => Promise<void>
 
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c]!)
 
-function render(to: string, subject: string, intro: string, action: string, url: string, outro: string): MailMessage {
+interface MailParts {
+  to: string
+  subject: string
+  intro: string
+  action: string
+  url: string
+  outro: string
+  /** The platform's name (`NUXT_MAIL_APP_NAME`): account emails are the platform's, not a cafe's (D138, D213). */
+  appName: string
+}
+
+function render(parts: MailParts): MailMessage {
+  const { to, subject, intro, action, url, outro, appName } = parts
   return {
     to,
     subject,
-    text: `${intro}\n\n${action}: ${url}\n\n${outro}\n\n${APP}`,
-    html: `<p>${escapeHtml(intro)}</p><p><a href="${escapeHtml(url)}">${escapeHtml(action)}</a></p><p>${escapeHtml(outro)}</p><p>${APP}</p>`,
+    text: `${intro}\n\n${action}: ${url}\n\n${outro}\n\n${appName}`,
+    html: `<p>${escapeHtml(intro)}</p><p><a href="${escapeHtml(url)}">${escapeHtml(action)}</a></p><p>${escapeHtml(outro)}</p><p>${escapeHtml(appName)}</p>`,
   }
 }
 
-export function verificationMail(to: string, url: string): MailMessage {
-  return render(to, `Confirm your email for ${APP}`, `Confirm that ${to} is your email address to start ordering.`, 'Confirm my email', url, 'If you didn\'t sign up, you can ignore this email.')
+export function verificationMail(to: string, url: string, appName: string): MailMessage {
+  return render({ to, url, appName, subject: `Confirm your email for ${appName}`, intro: `Confirm that ${to} is your email address to start ordering.`, action: 'Confirm my email', outro: 'If you didn\'t sign up, you can ignore this email.' })
 }
 
-export function resetPasswordMail(to: string, url: string): MailMessage {
-  return render(to, `Reset your ${APP} password`, 'Someone asked to reset the password of this account. The link works once and expires in 1 hour.', 'Choose a new password', url, 'If it wasn\'t you, ignore this email: your password stays the same.')
+export function resetPasswordMail(to: string, url: string, appName: string): MailMessage {
+  return render({ to, url, appName, subject: `Reset your ${appName} password`, intro: 'Someone asked to reset the password of this account. The link works once and expires in 1 hour.', action: 'Choose a new password', outro: 'If it wasn\'t you, ignore this email: your password stays the same.' })
 }
 
 interface LinkPayload {
@@ -56,37 +66,65 @@ function linkPayload(payload: Record<string, unknown>): LinkPayload {
 }
 
 /** The outbox handlers for account emails, for the delivery task's registry. */
-export function accountMailHandlers(send: MailSender): Record<string, OutboxHandler> {
+export function accountMailHandlers(send: MailSender, options: { appName: string }): Record<string, OutboxHandler> {
+  const { appName } = options
   return {
-    [MAIL_KINDS.verifyEmail]: async ({ id, payload }) => {
+    [MAIL_KINDS.verifyEmail]: async ({ payload }) => {
       const { to, url } = linkPayload(payload)
-      await send(verificationMail(to, url), id)
+      await send(verificationMail(to, url, appName))
     },
-    [MAIL_KINDS.resetPassword]: async ({ id, payload }) => {
+    [MAIL_KINDS.resetPassword]: async ({ payload }) => {
       const { to, url } = linkPayload(payload)
-      await send(resetPasswordMail(to, url), id)
+      await send(resetPasswordMail(to, url, appName))
     },
   }
 }
 
-/** Resend's HTTP API. A non-2xx answer throws, so the outbox retries. */
-export function resendSender(options: { apiKey: string, from: string, fetch?: typeof fetch }): MailSender {
-  const doFetch = options.fetch ?? fetch
-  return async (message, idempotencyKey) => {
-    const response = await doFetch('https://api.resend.com/emails', {
-      method: 'POST',
-      signal: AbortSignal.timeout(10_000),
-      headers: {
-        'Authorization': `Bearer ${options.apiKey}`,
-        'Content-Type': 'application/json',
-        // Resend keeps it 24 h: a repeated delivery of this message isn't sent again.
-        'Idempotency-Key': idempotencyKey,
-      },
-      body: JSON.stringify({ from: options.from, to: [message.to], subject: message.subject, text: message.text, html: message.html }),
+/** Cloudflare's `send_email` binding (Email Sending), as much of it as we use. */
+export interface EmailBinding {
+  send: (message: {
+    to: string
+    from: string | { email: string, name: string }
+    subject: string
+    text: string
+    html: string
+  }) => Promise<{ messageId: string }>
+}
+
+/**
+ * Cloudflare Email Sending through the Worker's `EMAIL` binding (D212). A refusal throws, so the
+ * outbox retries; the error names only Cloudflare's code (e.g. `E_RATE_LIMIT_EXCEEDED`), never the
+ * address, since its message can carry it.
+ */
+export function cloudflareEmailSender(options: { binding: EmailBinding, from: string, fromName: string, timeoutMs?: number }): MailSender {
+  const { binding, from, fromName, timeoutMs = 10_000 } = options
+  return async (message) => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    // The binding takes no abort signal: the deadline keeps one stuck send from holding the
+    // outbox run (docs/reference/server-reliability.md). A late success can still arrive.
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error('timed out'), { code: 'TIMEOUT' })), timeoutMs)
     })
-    if (!response.ok) {
-      await response.body?.cancel().catch(() => {})
-      throw new Error(`Resend answered ${response.status}`)
+    try {
+      await Promise.race([
+        binding.send({
+          to: message.to,
+          from: fromName ? { email: from, name: fromName } : from,
+          subject: message.subject,
+          text: message.text,
+          html: message.html,
+        }),
+        deadline,
+      ])
+    }
+    catch (error) {
+      const code = (error as { code?: unknown } | null)?.code
+      // No `cause`: the log prints it, and Cloudflare's message can carry the recipient's address.
+      // eslint-disable-next-line preserve-caught-error
+      throw new Error(`Email Sending refused the message: ${typeof code === 'string' ? code : 'unknown error'}`)
+    }
+    finally {
+      clearTimeout(timer)
     }
   }
 }

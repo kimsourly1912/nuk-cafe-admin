@@ -2391,3 +2391,37 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Verification:** see [progress](progress.md#password-rules-checklist-d210-2026-10-25).
 
 ---
+
+### D211: Production at angder.app, staging at staging.angder.app, deployed by hand behind a reviewer (2026-10-26)
+
+- **Context:** step 8.2 waited on the domains (Q4) and the Workers plan (Q24). The owner bought `angder.app` (active on Cloudflare) and Workers Paid (5 USD a month), which also ends staging's Error 1102 (10 ms CPU on Free).
+- **Decision:**
+  - Production `https://angder.app` (Worker `nuk-cafe-production`), staging `https://staging.angder.app`, both as Workers Custom Domains with `workers_dev` and preview URLs off, so each environment has one origin (Better Auth trusts only `NUXT_PUBLIC_SITE_URL`). The root domain because printed table QRs carry it: it is chosen once.
+  - Production has its own D1 and R2 (Asia-Pacific), rate-limit namespaces (2001–2003), secrets and Telegram bot (`@angders_bot`; staging keeps `@nuk_cafe_bot`: a bot has one webhook). No Sample data and no AI variables (Q43).
+  - `$env.production` with `--envName production`: c12 applies `$env.<name>` and `$<name>`, so `$production`'s headers apply without repeating them. **Follow-up (2026-10-26, PR CI):** wrong: without `--envName`, c12's env name is `NODE_ENV`, so every plain production build (the e2e suite) became the Worker and its server didn't start. Renamed `$env.prod` (`--envName prod`), with the security headers repeated as for staging.
+  - Mail from `no-reply@mail.angder.app`: a sending subdomain keeps the main domain's reputation apart. The sender's name "Angder" follows the domain until the platform's name is decided (QT1).
+  - Deploy: CI run by hand on `main` with **production** ticked → `check` + `e2e` → `verified-release` → `deploy-production`, waiting for the GitHub environment's required reviewer; records the D1 bookmark, migrates, deploys, smoke-checks. No by-hand deploy script for production.
+- **Alternatives:** `app.angder.app` (keeps the root for a marketing site; longer QR addresses); staging on another domain (more isolation, a second domain to pay for and set up; Cloudflare Access covers most of it); a production deploy on every merge (no human gate before real data).
+- **Consequences:** the owner creates the resources, secrets and GitHub environment; API tokens need the zone `angder.app`. Changing the production domain later breaks printed QRs. Alerts and RPO/RTO remain Q24.
+- **Verification:** see [progress](progress.md#production-environment-and-domains-d211-2026-10-26).
+
+### D212: Account email through Cloudflare Email Sending instead of Resend (2026-10-26)
+
+- **Context:** the owner asked to use Cloudflare's own email (owner, 2026-10-26). Cloudflare Email Sending (public beta since 2026-04-16) sends to any recipient from a Worker binding once the sending domain is onboarded, on Workers Paid (which the account has, D211): 3,000 emails a month included, then 0.35 USD per 1,000. One vendor, account and secret fewer.
+- **Decision:**
+  - `cloudflareEmailSender` (`identity.mail.ts`) sends through the Worker's `EMAIL` binding, found in `globalThis.__env__` (Nitro sets it for requests and cron runs; NuxtHub reads its bindings the same way). Resend's sender, `NUXT_MAIL_RESEND_API_KEY` and the CI steps that re-sent it are removed.
+  - Each environment's binding may send only from its own address (`allowed_sender_addresses`): production `no-reply@mail.angder.app` ("Angder"), staging `staging@mail.angder.app` ("Angder (staging)"), on the onboarded subdomain `mail.angder.app`. `NUXT_MAIL_FROM` is the bare address, `NUXT_MAIL_FROM_NAME` the display name.
+  - A refusal throws with Cloudflare's code only: the binding's message can carry the recipient's address and the log prints a `cause`, so none is attached. Each send has a 10-second deadline (the binding takes no abort signal).
+  - Staging sends to anyone now (Resend's test sender reached only one address): it holds test accounts only.
+- **Alternatives:** keep Resend (an idempotency key, a mature product; another vendor and secret); Cloudflare's REST API or SMTP (needs an API token as a secret, where the binding needs none).
+- **Consequences:** no idempotency key: a lost answer can send the same email twice (the same one-time link; accepted, as for Telegram). The product is in beta and new accounts start with a small daily quota. The owner onboards `mail.angder.app` once and deletes the old Resend secrets. Local dev still prints mail.
+- **Verification:** see [progress](progress.md#production-environment-and-domains-d211-2026-10-26).
+
+### D213: Account emails name the platform, from configuration (2026-10-26)
+
+- **Context:** the verification and password-reset emails said "NUK Cafe" (a constant) to every cafe's customers, against the rule of no hardcoded cafe name; account emails are the platform's, not a cafe's (D138), and since D212 their sender is "Angder".
+- **Decision:** the emails' subject, closing line and HTML use `NUXT_MAIL_APP_NAME` (`runtimeConfig.mail.appName`, default "Angder": the owner's choice, 2026-10-26), passed to `accountMailHandlers(send, { appName })`; the name is escaped in the HTML now that it is configurable. Only the emails: "NUK Platform" stays in the console, its tab title and the two-step sign-in label for now (owner).
+- **Alternatives:** the cafe's own name (the outbox message has no tenant, D138, and one account spans cafes); the sender's display name (staging's says "(staging)"); renaming "NUK Platform" everywhere now (deferred by the owner; existing authenticator entries would keep the old label).
+- **Consequences:** QT1 is partly answered; the console's name is a later step. Other hardcoded "NUK Cafe" text (Telegram replies, the assistant's prompt, the origin check's message) is outside this step.
+- **Verification:** see [progress](progress.md#production-environment-and-domains-d211-2026-10-26).
+

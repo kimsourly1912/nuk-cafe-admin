@@ -4,7 +4,7 @@
 # two pull requests back to back.
 # E2E runs against a production build in the runner's preinstalled Google Chrome
 # (test/e2e/support/global-setup.ts); the backend is mocked, so the checks need no secrets.
-# Setup follows https://pnpm.io/continuous-integration (decision D24). Deploy: D54.
+# Setup follows https://pnpm.io/continuous-integration (decision D24). Deploy: D54; production: D211.
 name: CI
 
 on:
@@ -12,6 +12,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      production:
+        description: Deploy this main revision to production after every check passes (asks the production environment's reviewer first)
+        type: boolean
+        default: false
 
 # A newer push to a pull request cancels its older run. On main, never: the deploy starts right
 # away (D133), and a cancel between the migrations and the Worker would leave staging half done.
@@ -97,7 +102,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: staging
-      url: https://nuk-cafe-staging.kimsur61.workers.dev
+      url: https://staging.angder.app
     # One deploy at a time, and a newer push never cancels one halfway (migrations then Worker).
     concurrency:
       group: deploy-staging
@@ -105,7 +110,7 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      STAGING_URL: https://nuk-cafe-staging.kimsur61.workers.dev
+      STAGING_URL: https://staging.angder.app
     steps:
       - uses: actions/checkout@v6
 
@@ -135,16 +140,6 @@ jobs:
 
       - name: Deploy the Worker
         run: pnpm exec wrangler deploy --config .output/server/wrangler.json
-
-      # From the GitHub environment's secret; skipped while it isn't set. Re-sent on every deploy so
-      # the Worker always has the current value.
-      - name: Update the Resend key
-        env:
-          NUXT_MAIL_RESEND_API_KEY: ${{ secrets.NUXT_MAIL_RESEND_API_KEY }}
-        run: |
-          if [ -n "$NUXT_MAIL_RESEND_API_KEY" ]; then
-            printf '%s' "$NUXT_MAIL_RESEND_API_KEY" | pnpm exec wrangler secret put NUXT_MAIL_RESEND_API_KEY --config .output/server/wrangler.json
-          fi
 
       - name: Smoke check
         run: |
@@ -187,3 +182,64 @@ jobs:
           name: verified-release-${{ github.sha }}
           path: verified-release.json
           retention-days: 30
+
+  deploy-production:
+    # By hand only (Actions → CI → Run workflow on main, "production" ticked), after this exact
+    # revision passed every check (D211). The `production` environment's required reviewer approves
+    # it, after checking the same revision on staging.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.production
+    needs: [verified-release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://angder.app
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PRODUCTION_URL: https://angder.app
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read the project's Node.js requirement
+        id: node
+        run: |
+          version=$(jq -er '.engines.node' package.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install pnpm, Node.js and dependencies
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        with:
+          runtime: node@${{ steps.node.outputs.version }}
+          cache: true
+
+      - name: Build the production Worker
+        run: pnpm build:production
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      # The point to restore to if the migrations go wrong (D1 Time Travel, operations.md → Backups).
+      - name: Record the database bookmark
+        run: |
+          set -eu
+          pnpm exec wrangler d1 time-travel info DB --json --config .output/server/wrangler.json > bookmark.json
+          echo "D1 Time Travel before this deploy: \`$(jq -r '.bookmark' bookmark.json)\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply database migrations
+        run: pnpm db:migrate:production
+
+      - name: Deploy the Worker
+        run: pnpm exec wrangler deploy --config .output/server/wrangler.json
+
+      # No cafe-specific address: production may have no cafe yet.
+      - name: Smoke check
+        run: |
+          set -eu
+          curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors "$PRODUCTION_URL/api/health" | grep -q '"ok"'
+          curl --fail --silent --show-error --head "$PRODUCTION_URL/sign-in" | grep -qi '^content-security-policy:'
+          curl --fail --silent --show-error --head "$PRODUCTION_URL/platform/sign-in" | grep -qi '^strict-transport-security:'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$PRODUCTION_URL/api/does-not-exist")" = 404
+          echo "Production is up: $PRODUCTION_URL"

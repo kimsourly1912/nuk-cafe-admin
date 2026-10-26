@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
-import { accountMailHandlers, consoleSender, resendSender, tenantById } from '#server/features/identity'
-import type { MailSender } from '#server/features/identity'
+import { accountMailHandlers, cloudflareEmailSender, consoleSender, tenantById } from '#server/features/identity'
+import type { EmailBinding, MailSender } from '#server/features/identity'
 import { deliverDue, queueOrderAlert, sendOrderReadyAlert } from '#server/features/notifications'
 import { ORDER_EVENTS } from '#server/features/orders'
 import { deliverOutbox } from '#server/features/platform'
@@ -8,18 +8,20 @@ import type { OutboxHandler } from '#server/features/platform'
 import { log } from '#server/utils/log'
 
 /**
- * Resend when a key is set. Without one, the dev server prints mail to the console; anything else
- * throws, so the messages stay queued (and are logged as failing) rather than put one-time links
- * into production logs.
+ * Cloudflare Email Sending when the Worker has its `EMAIL` binding (D212; Nitro keeps the Worker's
+ * env in `globalThis.__env__` for requests and cron runs alike, as NuxtHub's bindings do). Without
+ * one, the dev server prints mail to the console; anything else throws, so the messages stay queued
+ * (and are logged as failing) rather than put one-time links into production logs.
  */
 function mailSender(): MailSender {
   const { mail } = useRuntimeConfig()
-  if (mail.resendApiKey) {
-    if (!mail.from) throw new Error('Set NUXT_MAIL_FROM ("NUK Cafe <no-reply@…>") to send mail.')
-    return resendSender({ apiKey: mail.resendApiKey, from: mail.from })
+  const binding = (globalThis as { __env__?: { EMAIL?: EmailBinding } }).__env__?.EMAIL
+  if (binding) {
+    if (!mail.from) throw new Error('Set NUXT_MAIL_FROM (an address on the onboarded sending domain) to send mail.')
+    return cloudflareEmailSender({ binding, from: mail.from, fromName: mail.fromName })
   }
   if (import.meta.dev) return consoleSender()
-  throw new Error('Set NUXT_MAIL_RESEND_API_KEY to send mail.')
+  throw new Error('No EMAIL binding (Cloudflare Email Sending) to send mail.')
 }
 
 /**
@@ -56,9 +58,9 @@ async function orderReady(tenantId: string | null, orderId: unknown) {
  * losing messages silently. Used by `platform:deliver-outbox` and by `sendOrderEventsNow`.
  */
 export function outboxHandlers(): Record<string, OutboxHandler> {
-  const send: MailSender = (message, key) => mailSender()(message, key)
+  const send: MailSender = message => mailSender()(message)
   return {
-    ...accountMailHandlers(send),
+    ...accountMailHandlers(send, { appName: useRuntimeConfig().mail.appName }),
     [ORDER_EVENTS.placed]: message => orderAlert(message.tenantId, 'new_order', message.payload.orderId),
     [ORDER_EVENTS.paid]: message => orderAlert(message.tenantId, 'payment', message.payload.orderId),
     [ORDER_EVENTS.ready]: message => orderReady(message.tenantId, message.payload.orderId),

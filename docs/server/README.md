@@ -31,7 +31,7 @@ Initial standard agreed with the owner on 2026-09-27 (D43; menu model D44); the 
 | Errors | h3's standard error shape + our `data.code` (+ `data.fieldErrors`) |
 | Concurrent edits | **Version check** on every edit (409 when stale); **idempotency keys** on money, points and voucher actions |
 | Environments | Local, staging (every merge to `main`), production (manual deploy) |
-| Email | **Resend** |
+| Email | **Cloudflare Email Sending** (D212) |
 
 ## Library first
 

@@ -6,8 +6,8 @@ import { normalizeMemberCode } from '#server/features/customers/customers.rules'
 import { ensureProfile } from '#server/features/customers/customers.service'
 import { outboxMessages } from '#server/features/platform/platform.schema'
 import { deliverOutbox } from '#server/features/platform/platform.service'
-import { accountMailHandlers, consoleSender, MAIL_KINDS, resendSender } from '#server/features/identity/identity.mail'
-import type { MailMessage } from '#server/features/identity/identity.mail'
+import { accountMailHandlers, cloudflareEmailSender, consoleSender, MAIL_KINDS } from '#server/features/identity/identity.mail'
+import type { EmailBinding, MailMessage } from '#server/features/identity/identity.mail'
 import { authorizeCustomer } from '#server/features/identity/identity.service'
 import type { SessionUser } from '#server/features/identity/identity.types'
 import { createStaff, seedFirstOwner } from '#server/features/identity/staff.service'
@@ -163,16 +163,16 @@ describe('password reset', () => {
 describe('delivery', () => {
   it('sends queued account emails through the outbox, then forgets the link', async () => {
     await signUp()
-    const sent: { message: MailMessage, key: string }[] = []
+    const sent: MailMessage[] = []
     // A second later: the row's due time comes from SQLite's clock, which can round 1 ms ahead of
     // a JavaScript Date taken right after the insert.
-    const report = await deliverOutbox(db, accountMailHandlers(async (message, key) => {
-      sent.push({ message, key })
-    }), { now: new Date(Date.now() + 1000) })
+    const report = await deliverOutbox(db, accountMailHandlers(async (message) => {
+      sent.push(message)
+    }, { appName: 'Angder' }), { now: new Date(Date.now() + 1000) })
     expect(report).toMatchObject({ sent: 1 })
     const [row] = await queued(MAIL_KINDS.verifyEmail)
-    expect(sent).toEqual([{ message: expect.objectContaining({ to: 'dara@example.com', subject: 'Confirm your email for NUK Cafe' }), key: row!.id }])
-    expect(sent[0]!.message.text).toContain('/api/auth/verify-email?token=')
+    expect(sent).toEqual([expect.objectContaining({ to: 'dara@example.com', subject: 'Confirm your email for Angder' })])
+    expect(sent[0]!.text).toContain('/api/auth/verify-email?token=')
     expect(row).toMatchObject({ status: 'sent', payload: {} })
   })
 
@@ -180,32 +180,72 @@ describe('delivery', () => {
     const sent: MailMessage[] = []
     await accountMailHandlers(async (m) => {
       sent.push(m)
-    })[MAIL_KINDS.resetPassword]!({ id: 'm1', tenantId: null, kind: MAIL_KINDS.resetPassword, attempt: 1, payload: { to: 'a@example.com', url: 'https://cafe.example/x?a=1&b="2"' } })
+    }, { appName: 'Angder' })[MAIL_KINDS.resetPassword]!({ id: 'm1', tenantId: null, kind: MAIL_KINDS.resetPassword, attempt: 1, payload: { to: 'a@example.com', url: 'https://cafe.example/x?a=1&b="2"' } })
     expect(sent[0]!.html).toContain('href="https://cafe.example/x?a=1&amp;b=&quot;2&quot;"')
   })
 
-  it('calls Resend with the message id as idempotency key, and throws on a refusal', async () => {
-    const calls: { url: string, init: RequestInit }[] = []
-    let status = 200
-    const fakeFetch = (async (url: string, init: RequestInit) => {
-      calls.push({ url, init })
-      return new Response('{"message":"nope"}', { status })
-    }) as unknown as typeof fetch
-    const send = resendSender({ apiKey: 're_test', from: 'NUK Cafe <no-reply@cafe.example>', fetch: fakeFetch })
+  it('names the configured platform, never a cafe, and escapes the name in the HTML', async () => {
+    const sent: MailMessage[] = []
+    const handlers = accountMailHandlers(async (m) => {
+      sent.push(m)
+    }, { appName: 'Brew & <Co>' })
+    const base = { tenantId: null, attempt: 1, payload: { to: 'a@example.com', url: 'https://cafe.example/x' } }
+    await handlers[MAIL_KINDS.verifyEmail]!({ ...base, id: 'm1', kind: MAIL_KINDS.verifyEmail })
+    await handlers[MAIL_KINDS.resetPassword]!({ ...base, id: 'm2', kind: MAIL_KINDS.resetPassword })
+    expect(sent.map(m => m.subject)).toEqual(['Confirm your email for Brew & <Co>', 'Reset your Brew & <Co> password'])
+    for (const message of sent) {
+      expect(message.text).toMatch(/\n\nBrew & <Co>$/)
+      expect(message.html).toContain('<p>Brew &amp; &lt;Co&gt;</p>')
+      expect(message.html).not.toContain('<Co>')
+      expect(`${message.subject}${message.text}${message.html}`).not.toContain('NUK Cafe')
+    }
+  })
+
+  it('sends through Cloudflare\'s binding from the configured sender, and throws on a refusal without the address', async () => {
+    const calls: Parameters<EmailBinding['send']>[0][] = []
+    let refusal: Error | null = null
+    const binding: EmailBinding = {
+      send: async (message) => {
+        calls.push(message)
+        if (refusal) throw refusal
+        return { messageId: 'cf-1' }
+      },
+    }
+    const send = cloudflareEmailSender({ binding, from: 'no-reply@mail.cafe.example', fromName: 'Cafe' })
     const message = { to: 'a@example.com', subject: 'S', text: 'T', html: '<p>T</p>' }
 
-    await send(message, 'message-1')
-    expect(calls[0]!.url).toBe('https://api.resend.com/emails')
-    expect(calls[0]!.init.headers).toMatchObject({ 'Authorization': 'Bearer re_test', 'Idempotency-Key': 'message-1' })
-    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ from: 'NUK Cafe <no-reply@cafe.example>', to: ['a@example.com'], subject: 'S', text: 'T', html: '<p>T</p>' })
+    await send(message)
+    expect(calls[0]).toEqual({ to: 'a@example.com', from: { email: 'no-reply@mail.cafe.example', name: 'Cafe' }, subject: 'S', text: 'T', html: '<p>T</p>' })
 
-    status = 422
-    await expect(send(message, 'message-2')).rejects.toThrow('Resend answered 422')
+    refusal = Object.assign(new Error('Recipient a@example.com is suppressed'), { code: 'E_RECIPIENT_SUPPRESSED' })
+    const error = await send(message).catch((e: Error) => e)
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toBe('Email Sending refused the message: E_RECIPIENT_SUPPRESSED')
+    expect((error as Error).message).not.toContain('a@example.com')
+  })
+
+  it('sends from the bare address when no sender name is set', async () => {
+    const calls: Parameters<EmailBinding['send']>[0][] = []
+    const binding: EmailBinding = {
+      send: async (message) => {
+        calls.push(message)
+        return { messageId: 'cf-2' }
+      },
+    }
+    const send = cloudflareEmailSender({ binding, from: 'no-reply@mail.cafe.example', fromName: '' })
+    await send({ to: 'a@example.com', subject: 'S', text: 'T', html: '' })
+    expect(calls[0]!.from).toBe('no-reply@mail.cafe.example')
+  })
+
+  it('gives up on a send that never answers', async () => {
+    const binding: EmailBinding = { send: () => new Promise(() => {}) }
+    const send = cloudflareEmailSender({ binding, from: 'no-reply@mail.cafe.example', fromName: '', timeoutMs: 20 })
+    await expect(send({ to: 'a@example.com', subject: 'S', text: 'T', html: '' })).rejects.toThrow('Email Sending refused the message: TIMEOUT')
   })
 
   it('prints mail locally instead of sending it', async () => {
     const printed: string[] = []
-    await consoleSender(text => printed.push(text))({ to: 'a@example.com', subject: 'S', text: 'Link: https://x', html: '' }, 'k')
+    await consoleSender(text => printed.push(text))({ to: 'a@example.com', subject: 'S', text: 'Link: https://x', html: '' })
     expect(printed[0]).toContain('Link: https://x')
   })
 })

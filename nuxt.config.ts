@@ -58,15 +58,42 @@ function securityHeaders(): Record<string, string> {
 }
 
 /**
- * Staging on Cloudflare (D53): `nuxt build --envName staging` builds a Worker for
- * `nuk-cafe-staging.<account>.workers.dev` with its own D1 database and R2 bucket. Secrets
- * (`NUXT_BETTER_AUTH_SECRET`, later the Resend key) are Worker secrets, never in this file.
+ * Staging on Cloudflare (D53, D211): `nuxt build --envName staging` builds a Worker for
+ * `staging.angder.app` with its own D1 database and R2 bucket. Secrets
+ * (`NUXT_BETTER_AUTH_SECRET`, the Resend key, …) are Worker secrets, never in this file.
  */
 const STAGING = {
   worker: 'nuk-cafe-staging',
-  siteUrl: 'https://nuk-cafe-staging.kimsur61.workers.dev',
+  domain: 'staging.angder.app',
+  siteUrl: 'https://staging.angder.app',
   d1DatabaseId: '33752107-bc40-4c31-8ff0-d3c50dc6a3a2',
   r2Bucket: 'nuk-cafe-staging-media',
+  mail: { from: 'staging@mail.angder.app', fromName: 'Angder (staging)' },
+}
+
+/**
+ * Production on Cloudflare (D211): `nuxt build --envName prod` builds a Worker for
+ * `angder.app`. Nothing is shared with staging: its own D1, R2, rate-limit namespaces and secrets.
+ */
+const PRODUCTION = {
+  worker: 'nuk-cafe-production',
+  domain: 'angder.app',
+  siteUrl: 'https://angder.app',
+  d1DatabaseId: '1ba21c84-75fa-4498-aacc-44ea6b53ea95',
+  r2Bucket: 'nuk-cafe-production-media',
+  mail: { from: 'no-reply@mail.angder.app', fromName: 'Angder' },
+}
+
+/**
+ * Cloudflare Email Sending (D212): the Worker's `EMAIL` binding, allowed to send only from the
+ * environment's own address on the onboarded domain `mail.angder.app`.
+ */
+function mailConfig(mail: { from: string, fromName: string }) {
+  return {
+    vars: { NUXT_MAIL_FROM: mail.from, NUXT_MAIL_FROM_NAME: mail.fromName },
+    // Nitro's Wrangler type predates the sender allowlist; Wrangler 4 reads it.
+    binding: { send_email: [{ name: 'EMAIL', allowed_sender_addresses: [mail.from] }] } as Record<string, unknown>,
+  }
 }
 
 /**
@@ -81,6 +108,11 @@ const RATE_LIMITS = [
   // Placing orders (D156): a busy cafe's Wi-Fi places a few a minute; a script, hundreds.
   { name: 'RATE_LIMIT_ORDERS', namespace_id: '1003', simple: { limit: 20, period: 60 as const } },
 ]
+/** The same limits in production's own namespaces (2001…), so the two environments never share a counter. */
+const PRODUCTION_RATE_LIMITS = RATE_LIMITS.map(limit => ({
+  ...limit,
+  namespace_id: String(Number(limit.namespace_id) + 1000),
+}))
 
 /** How long one render of the customer menu page is reused (D122). */
 const MENU_PAGE_CACHE_SECONDS = 60
@@ -92,6 +124,36 @@ export default defineNuxtConfig({
     runtimeConfig: { public: { sampleData: { enabled: true, environment: 'Local' } } },
   },
   $env: {
+    // Named `prod`, not `production`: without `--envName`, c12 uses NODE_ENV, so a block named
+    // `production` would turn every plain production build (the e2e suite's Node server) into this
+    // Worker. `--envName prod` replaces `$production`, so the security headers are repeated here.
+    // Never the Sample data variables (D94), and no AI variables until the provider is chosen (Q43).
+    prod: {
+      routeRules: { '/**': { headers: securityHeaders() } },
+      nitro: {
+        preset: 'cloudflare_module',
+        cloudflare: {
+          wrangler: {
+            name: PRODUCTION.worker,
+            routes: [{ pattern: PRODUCTION.domain, custom_domain: true }],
+            workers_dev: false,
+            preview_urls: false,
+            observability: { enabled: true },
+            vars: {
+              NUXT_PUBLIC_SITE_URL: PRODUCTION.siteUrl,
+              ...mailConfig(PRODUCTION.mail).vars,
+            },
+            ...mailConfig(PRODUCTION.mail).binding,
+            triggers: { crons: Object.keys(SCHEDULED_TASKS) },
+            ...({ ratelimits: PRODUCTION_RATE_LIMITS } as Record<string, unknown>),
+          },
+        },
+      },
+      hub: {
+        db: { dialect: 'sqlite', casing: 'snake_case', connection: { databaseId: PRODUCTION.d1DatabaseId } },
+        blob: { driver: 'cloudflare-r2', binding: 'BLOB', bucketName: PRODUCTION.r2Bucket },
+      },
+    },
     staging: {
       // `--envName staging` replaces `$production` (one environment block applies), so the security
       // headers are repeated here.
@@ -101,14 +163,17 @@ export default defineNuxtConfig({
         cloudflare: {
           wrangler: {
             name: STAGING.worker,
+            // Served only at its own domain (D211): no second `workers.dev` or preview origin.
+            routes: [{ pattern: STAGING.domain, custom_domain: true }],
+            workers_dev: false,
+            preview_urls: false,
             // Workers Logs: the structured logs (docs/server/operations.md → Monitoring).
             observability: { enabled: true },
             // Public, not secret: Better Auth's base URL and the only trusted origin.
             vars: {
               NUXT_PUBLIC_SITE_URL: STAGING.siteUrl,
-              // Resend's test sender until the sending domain is set up (Q4): it delivers only to the
-              // Resend account's own address, so staging can't mail anyone else.
-              NUXT_MAIL_FROM: 'NUK Cafe <onboarding@resend.dev>',
+              // Its own sender, so staging's mail is never mistaken for production's.
+              ...mailConfig(STAGING.mail).vars,
               // The Sample data page (D94): test data can be loaded and reset here.
               NUXT_PUBLIC_SAMPLE_DATA_ENABLED: 'true',
               NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT: 'Staging',
@@ -117,6 +182,7 @@ export default defineNuxtConfig({
               NUXT_AI_PROVIDER: 'openai',
               NUXT_AI_MODEL: 'gpt-5.4-mini',
             },
+            ...mailConfig(STAGING.mail).binding,
             // Cloudflare calls the Worker on these; Nitro runs the matching tasks.
             triggers: { crons: Object.keys(SCHEDULED_TASKS) },
             // Nitro's Wrangler type predates rate-limit bindings; Wrangler 4 reads them (checked in the
@@ -160,10 +226,11 @@ export default defineNuxtConfig({
     seed: { adminEmail: '', adminName: 'Admin' },
     // The dev server's test accounts (server/tasks/dev/, D209): NUXT_DEV_ACCOUNTS_PASSWORD, else DEV_PASSWORD.
     devAccounts: { password: '' },
-    // Account emails (docs/server/operations.md → Email): NUXT_MAIL_RESEND_API_KEY, NUXT_MAIL_FROM
-    // ("NUK Cafe <no-reply@…>", a domain verified in Resend; Q4). Without a key the dev server
-    // prints mail to the console; a production build refuses to (the links are secrets).
-    mail: { resendApiKey: '', from: '' },
+    // Account emails (docs/server/operations.md → Email, D212): sent through the Worker's `EMAIL`
+    // binding (Cloudflare Email Sending) from NUXT_MAIL_FROM, named NUXT_MAIL_FROM_NAME. Without the
+    // binding the dev server prints mail to the console; a production build refuses to (the links are secrets).
+    // NUXT_MAIL_APP_NAME: the platform's name in the emails' text (owner, 2026-10-26, D213).
+    mail: { from: '', fromName: '', appName: 'Angder' },
     // Table QR codes (D91, docs/server/operations.md → Configuration): NUXT_QR_SECRET, a long random
     // secret per environment. Changing it invalidates every printed QR. Deployed builds refuse to
     // serve table QRs without it; the dev server uses a local one.
