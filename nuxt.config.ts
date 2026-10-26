@@ -78,7 +78,7 @@ const PRODUCTION = {
   worker: 'nuk-cafe-production',
   domain: 'angder.app',
   siteUrl: 'https://angder.app',
-  d1DatabaseId: 'PENDING_PRODUCTION_D1_ID',
+  d1DatabaseId: '1ba21c84-75fa-4498-aacc-44ea6b53ea95',
   r2Bucket: 'nuk-cafe-production-media',
 }
 

@@ -96,7 +96,7 @@ A super admin sees each cafe's usage numbers, never its menu, orders or customer
 |---|---|
 | URL | https://angder.app (Workers Custom Domain; `workers_dev` and preview URLs off) |
 | Worker | `nuk-cafe-production`, same Cloudflare account (Workers Paid) |
-| D1 | `nuk-cafe-production` (Asia-Pacific), binding `DB` |
+| D1 | `nuk-cafe-production` (`1ba21c84-75fa-4498-aacc-44ea6b53ea95`, Asia-Pacific), binding `DB` |
 | R2 | `nuk-cafe-production-media` (Asia-Pacific), binding `BLOB` |
 | Rate limits | namespaces 2001–2003 (staging's are 1001–1003) |
 | Config | `$env.production` in `nuxt.config.ts`; `--envName production` also applies `$production` (c12 merges both), so the security headers come from there. No Sample data variables, ever. No AI variables until Q43 |
