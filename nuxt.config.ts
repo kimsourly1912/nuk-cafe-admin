@@ -68,6 +68,7 @@ const STAGING = {
   siteUrl: 'https://staging.angder.app',
   d1DatabaseId: '33752107-bc40-4c31-8ff0-d3c50dc6a3a2',
   r2Bucket: 'nuk-cafe-staging-media',
+  mail: { from: 'staging@mail.angder.app', fromName: 'Angder (staging)' },
 }
 
 /**
@@ -80,6 +81,19 @@ const PRODUCTION = {
   siteUrl: 'https://angder.app',
   d1DatabaseId: '1ba21c84-75fa-4498-aacc-44ea6b53ea95',
   r2Bucket: 'nuk-cafe-production-media',
+  mail: { from: 'no-reply@mail.angder.app', fromName: 'Angder' },
+}
+
+/**
+ * Cloudflare Email Sending (D212): the Worker's `EMAIL` binding, allowed to send only from the
+ * environment's own address on the onboarded domain `mail.angder.app`.
+ */
+function mailConfig(mail: { from: string, fromName: string }) {
+  return {
+    vars: { NUXT_MAIL_FROM: mail.from, NUXT_MAIL_FROM_NAME: mail.fromName },
+    // Nitro's Wrangler type predates the sender allowlist; Wrangler 4 reads it.
+    binding: { send_email: [{ name: 'EMAIL', allowed_sender_addresses: [mail.from] }] } as Record<string, unknown>,
+  }
 }
 
 /**
@@ -125,9 +139,9 @@ export default defineNuxtConfig({
             observability: { enabled: true },
             vars: {
               NUXT_PUBLIC_SITE_URL: PRODUCTION.siteUrl,
-              // A domain verified in Resend, with SPF, DKIM and DMARC (D211).
-              NUXT_MAIL_FROM: 'Angder <no-reply@mail.angder.app>',
+              ...mailConfig(PRODUCTION.mail).vars,
             },
+            ...mailConfig(PRODUCTION.mail).binding,
             triggers: { crons: Object.keys(SCHEDULED_TASKS) },
             ...({ ratelimits: PRODUCTION_RATE_LIMITS } as Record<string, unknown>),
           },
@@ -156,9 +170,8 @@ export default defineNuxtConfig({
             // Public, not secret: Better Auth's base URL and the only trusted origin.
             vars: {
               NUXT_PUBLIC_SITE_URL: STAGING.siteUrl,
-              // Resend's test sender until the sending domain is set up (Q4): it delivers only to the
-              // Resend account's own address, so staging can't mail anyone else.
-              NUXT_MAIL_FROM: 'NUK Cafe <onboarding@resend.dev>',
+              // Its own sender, so staging's mail is never mistaken for production's.
+              ...mailConfig(STAGING.mail).vars,
               // The Sample data page (D94): test data can be loaded and reset here.
               NUXT_PUBLIC_SAMPLE_DATA_ENABLED: 'true',
               NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT: 'Staging',
@@ -167,6 +180,7 @@ export default defineNuxtConfig({
               NUXT_AI_PROVIDER: 'openai',
               NUXT_AI_MODEL: 'gpt-5.4-mini',
             },
+            ...mailConfig(STAGING.mail).binding,
             // Cloudflare calls the Worker on these; Nitro runs the matching tasks.
             triggers: { crons: Object.keys(SCHEDULED_TASKS) },
             // Nitro's Wrangler type predates rate-limit bindings; Wrangler 4 reads them (checked in the
@@ -210,10 +224,10 @@ export default defineNuxtConfig({
     seed: { adminEmail: '', adminName: 'Admin' },
     // The dev server's test accounts (server/tasks/dev/, D209): NUXT_DEV_ACCOUNTS_PASSWORD, else DEV_PASSWORD.
     devAccounts: { password: '' },
-    // Account emails (docs/server/operations.md → Email): NUXT_MAIL_RESEND_API_KEY, NUXT_MAIL_FROM
-    // ("NUK Cafe <no-reply@…>", a domain verified in Resend; Q4). Without a key the dev server
-    // prints mail to the console; a production build refuses to (the links are secrets).
-    mail: { resendApiKey: '', from: '' },
+    // Account emails (docs/server/operations.md → Email, D212): sent through the Worker's `EMAIL`
+    // binding (Cloudflare Email Sending) from NUXT_MAIL_FROM, named NUXT_MAIL_FROM_NAME. Without the
+    // binding the dev server prints mail to the console; a production build refuses to (the links are secrets).
+    mail: { from: '', fromName: '' },
     // Table QR codes (D91, docs/server/operations.md → Configuration): NUXT_QR_SECRET, a long random
     // secret per environment. Changing it invalidates every printed QR. Deployed builds refuse to
     // serve table QRs without it; the dev server uses a local one.

@@ -2405,3 +2405,15 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Consequences:** the owner creates the resources, secrets and GitHub environment; API tokens need the zone `angder.app`. Changing the production domain later breaks printed QRs. Alerts and RPO/RTO remain Q24.
 - **Verification:** see [progress](progress.md#production-environment-and-domains-d211-2026-10-26).
 
+### D212: Account email through Cloudflare Email Sending instead of Resend (2026-10-26)
+
+- **Context:** the owner asked to use Cloudflare's own email (owner, 2026-10-26). Cloudflare Email Sending (public beta since 2026-04-16) sends to any recipient from a Worker binding once the sending domain is onboarded, on Workers Paid (which the account has, D211): 3,000 emails a month included, then 0.35 USD per 1,000. One vendor, account and secret fewer.
+- **Decision:**
+  - `cloudflareEmailSender` (`identity.mail.ts`) sends through the Worker's `EMAIL` binding, found in `globalThis.__env__` (Nitro sets it for requests and cron runs; NuxtHub reads its bindings the same way). Resend's sender, `NUXT_MAIL_RESEND_API_KEY` and the CI steps that re-sent it are removed.
+  - Each environment's binding may send only from its own address (`allowed_sender_addresses`): production `no-reply@mail.angder.app` ("Angder"), staging `staging@mail.angder.app` ("Angder (staging)"), on the onboarded subdomain `mail.angder.app`. `NUXT_MAIL_FROM` is the bare address, `NUXT_MAIL_FROM_NAME` the display name.
+  - A refusal throws with Cloudflare's code only: the binding's message can carry the recipient's address and the log prints a `cause`, so none is attached. Each send has a 10-second deadline (the binding takes no abort signal).
+  - Staging sends to anyone now (Resend's test sender reached only one address): it holds test accounts only.
+- **Alternatives:** keep Resend (an idempotency key, a mature product; another vendor and secret); Cloudflare's REST API or SMTP (needs an API token as a secret, where the binding needs none).
+- **Consequences:** no idempotency key: a lost answer can send the same email twice (the same one-time link; accepted, as for Telegram). The product is in beta and new accounts start with a small daily quota. The owner onboards `mail.angder.app` once and deletes the old Resend secrets. Local dev still prints mail.
+- **Verification:** see [progress](progress.md#production-environment-and-domains-d211-2026-10-26).
+

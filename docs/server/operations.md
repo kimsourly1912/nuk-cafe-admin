@@ -25,7 +25,7 @@
 | Deployed | | on every merge to `main` | manually, from a commit that passed staging |
 | Data | disposable, seeded | test data only, reset freely | real |
 | Address | `http://localhost:3000` | https://staging.angder.app | https://angder.app |
-| Email | logged to the console, not sent | Resend's test sender `onboarding@resend.dev`: delivers only to the Resend account's own address | Resend, from `no-reply@mail.angder.app` |
+| Email | logged to the console, not sent | Cloudflare Email Sending from `staging@mail.angder.app` (any recipient: staging holds test accounts only) | Cloudflare Email Sending from `no-reply@mail.angder.app` |
 
 Nothing crosses environments: no production data in staging, no shared secrets, no shared buckets.
 
@@ -49,7 +49,7 @@ Sources: [Workers build image and overrides](https://developers.cloudflare.com/w
 | R2 | `nuk-cafe-staging-media` (created in eastern North America: the tool had no location option), binding `BLOB` |
 | Config | `$env.staging` in `nuxt.config.ts` (preset `cloudflare_module`, bindings, `NUXT_PUBLIC_SITE_URL` as a plain var, cron triggers, Workers Logs, security headers) |
 | Telegram | `@nuk_cafe_bot` (production has its own bot) |
-| Secrets | `NUXT_BETTER_AUTH_SECRET` (set once with `wrangler secret put`; generated, never written down); `NUXT_MAIL_RESEND_API_KEY` (from the GitHub environment `staging`, re-sent by every deploy). `NUXT_MAIL_FROM` is a plain var. The AI assistant: `NUXT_AI_API_KEY` (a Worker secret the owner sets; an OpenAI key), `NUXT_AI_PROVIDER` = `openai` and `NUXT_AI_MODEL` = `gpt-5.4-mini` as plain vars in `nuxt.config.ts` (owner, 2026-09-30, D108) |
+| Secrets | `NUXT_BETTER_AUTH_SECRET` (set once with `wrangler secret put`; generated, never written down); Email needs no secret: the Worker's `EMAIL` binding sends (D212); `NUXT_MAIL_FROM` and `NUXT_MAIL_FROM_NAME` are plain vars. The AI assistant: `NUXT_AI_API_KEY` (a Worker secret the owner sets; an OpenAI key), `NUXT_AI_PROVIDER` = `openai` and `NUXT_AI_MODEL` = `gpt-5.4-mini` as plain vars in `nuxt.config.ts` (owner, 2026-09-30, D108) |
 
 **Deploy by hand only what is on `main`** (or the branch about to be merged next): a branch deploy runs its migrations ahead of `main`, and the next deploy from `main` then runs older code against a newer database. (Happened in step 3.1: fixed by merging it right after.)
 
@@ -101,13 +101,13 @@ A super admin sees each cafe's usage numbers, never its menu, orders or customer
 | Rate limits | namespaces 2001–2003 (staging's are 1001–1003) |
 | Config | `$env.production` in `nuxt.config.ts`; `--envName production` also applies `$production` (c12 merges both), so the security headers come from there. No Sample data variables, ever. No AI variables until Q43 |
 | Telegram | `@angders_bot` |
-| Secrets | each set once with `npx wrangler secret put <NAME> --name nuk-cafe-production`, generated on the owner's machine, **never copied from staging**: `NUXT_BETTER_AUTH_SECRET`, `NUXT_QR_SECRET` (before any QR is printed), `NUXT_BAKONG_ENCRYPTION_KEY` (kept in a password manager), the three `NUXT_TELEGRAM_…`; `NUXT_MAIL_RESEND_API_KEY` from the GitHub environment `production` |
+| Secrets | each set once with `npx wrangler secret put <NAME> --name nuk-cafe-production`, generated on the owner's machine, **never copied from staging**: `NUXT_BETTER_AUTH_SECRET`, `NUXT_QR_SECRET` (before any QR is printed), `NUXT_BAKONG_ENCRYPTION_KEY` (kept in a password manager), the three `NUXT_TELEGRAM_…`. Email needs none: the `EMAIL` binding (D212) |
 
 **Setting it up once** (the owner):
 1. `npx wrangler d1 create nuk-cafe-production --location apac` and `npx wrangler r2 bucket create nuk-cafe-production-media --location apac`; the D1 id goes into `PRODUCTION.d1DatabaseId` in `nuxt.config.ts`.
 2. The secrets above. A deploy before them works, but sign-in, table QRs, Bakong tokens and Telegram stay off or refuse until they're set.
-3. GitHub → Settings → Environments → `production`: **Required reviewers** (the owner), deployment branches `main` only, secrets `CLOUDFLARE_API_TOKEN` (its own token: "Edit Cloudflare Workers" plus **Account → D1 → Edit**, zone `angder.app`), `CLOUDFLARE_ACCOUNT_ID`, `NUXT_MAIL_RESEND_API_KEY`.
-4. Resend: add the domain `mail.angder.app` and its SPF, DKIM and DMARC records in Cloudflare DNS.
+3. GitHub → Settings → Environments → `production`: **Required reviewers** (the owner), deployment branches `main` only, secrets `CLOUDFLARE_API_TOKEN` (its own token: "Edit Cloudflare Workers" plus **Account → D1 → Edit**, zone `angder.app`), `CLOUDFLARE_ACCOUNT_ID`.
+4. Email (once, for both environments): Cloudflare dashboard → Compute → Email Service → Email Sending → **Onboard Domain** → `mail.angder.app`. Cloudflare adds its `cf-bounce` MX, SPF, DKIM and DMARC records itself. Until it's verified, sends fail with `E_SENDER_DOMAIN_NOT_AVAILABLE` and the messages stay queued.
 5. After the first deploy: the first super admin and cafe owner as for staging (First owner, Super admins above, with `nuk-cafe-production`), and the Telegram webhook of `@angders_bot` pointed at `https://angder.app/api/webhooks/telegram` ([Telegram](#telegram)).
 
 **Custom domains:** a deploy creates the domain's DNS record and certificate itself; the API token needs the zone `angder.app` (Workers Routes edit). The zone uses SSL **Full (strict)**, Always Use HTTPS and no Rocket Loader or Auto Minify (they rewrite scripts and break the CSP). `.app` is HTTPS-only for every browser anyway. If staging is put behind Cloudflare Access, `/api/health` (the deploy's smoke check) and `/api/webhooks/telegram` must stay reachable without it.
@@ -120,8 +120,7 @@ Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudf
 |---|---|---|---|
 | `NUXT_BETTER_AUTH_SECRET` | Signs sessions and tokens | `.env` | secret |
 | `NUXT_PUBLIC_SITE_URL` | The app's origin (trusted origins, links in emails) | `http://localhost:3000` | the environment's URL |
-| `NUXT_MAIL_RESEND_API_KEY` | Sending email | unset (console mail) | secret |
-| `NUXT_MAIL_FROM` | Sender address | | e.g. `NUK Cafe <no-reply@…>` |
+| `NUXT_MAIL_FROM` / `NUXT_MAIL_FROM_NAME` | Sender address on the onboarded sending domain, and its display name (D212) | unset (console mail: no `EMAIL` binding) | plain vars from `nuxt.config.ts`; the `EMAIL` binding may send only from that address |
 | `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` / `_ENVIRONMENT` | The Sample data page and its routes (D94), and the environment's name on it | on (`Local`, the dev server only) | `true` / `Staging` (`wrangler.vars` in `nuxt.config.ts`); **never set in production** (the routes answer 404) |
 | `NUXT_QR_SECRET` | Signs table QR tokens (D91). **Changing it invalidates every printed QR** | unset (the dev server uses a local secret) | secret, set once per environment (`wrangler secret put NUXT_QR_SECRET`); without it the table routes answer 500 `QR_NOT_CONFIGURED` |
 | `NUXT_AI_PROVIDER`, `NUXT_AI_MODEL`, `NUXT_AI_API_KEY`, `NUXT_AI_BASE_URL`, `NUXT_AI_DAILY_LIMIT` | The AI assistant (D107, D108): the provider (`anthropic` \| `openai` \| `google` \| `openai-compatible`), its model id, the key, a base URL (required for `openai-compatible`; optional for a proxy), requests per admin per day (default 100) | unset (the assistant is off: its routes answer 404) | the key is a secret (`wrangler secret put NUXT_AI_API_KEY`), the rest plain variables; a key with an unknown provider, no model or (for `openai-compatible`) no URL answers 500 `AI_NOT_CONFIGURED`. Set a spending cap on the provider's account (Q43) |
@@ -158,12 +157,11 @@ On push to `main` (a merged pull request, already checked there: D133), the `dep
 1. `pnpm build:staging`;
 2. `pnpm db:migrate:staging` (migrations before the Worker: expand, then contract);
 3. `wrangler deploy`;
-4. re-sends `NUXT_MAIL_RESEND_API_KEY` from the environment's secret (skipped when unset);
-5. smoke check: `GET /api/health` is ok (the database answers), NUK Cafe's `/c/nuk/admin/login` has the CSP header and `/admin/login` redirects there (D141), an unknown `/api` path is 404, NUK Cafe's `/api/c/nuk/admin/me` without a session is 401 (D140). Later: sign in, read the menu, place and complete a test order once orders exist.
+4. smoke check: `GET /api/health` is ok (the database answers), NUK Cafe's `/c/nuk/admin/login` has the CSP header and `/admin/login` redirects there (D141), an unknown `/api` path is 404, NUK Cafe's `/api/c/nuk/admin/me` without a session is 401 (D140). Later: sign in, read the menu, place and complete a test order once orders exist.
 
-GitHub environment `staging` secrets: `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers" plus **Account → D1 → Edit**, this account only, and the zone `angder.app` for the custom domain, D211), `CLOUDFLARE_ACCOUNT_ID`, `NUXT_MAIL_RESEND_API_KEY`.
+GitHub environment `staging` secrets: `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers" plus **Account → D1 → Edit**, this account only, and the zone `angder.app` for the custom domain, D211), `CLOUDFLARE_ACCOUNT_ID`. The old `NUXT_MAIL_RESEND_API_KEY` (GitHub secret and Worker secret) is no longer read since D212: delete both.
 
-Production (D211): Actions → CI → Run workflow on `main` with **production** ticked. After `check` and all `e2e` shards pass, `verified-release` publishes `verified-release-<sha>`, then `deploy-production` waits for the `production` environment's reviewer. Approve only after that same revision is on staging and the release checklist holds. The job: `pnpm build:production` → records the D1 Time Travel bookmark in the run's summary → `pnpm db:migrate:production` → `wrangler deploy` → the Resend key → smoke check (health, CSP and HSTS headers, the JSON 404; no cafe-specific address, since production may have no cafe yet). Without **production** ticked, the run only checks and records the candidate, as before.
+Production (D211): Actions → CI → Run workflow on `main` with **production** ticked. After `check` and all `e2e` shards pass, `verified-release` publishes `verified-release-<sha>`, then `deploy-production` waits for the `production` environment's reviewer. Approve only after that same revision is on staging and the release checklist holds. The job: `pnpm build:production` → records the D1 Time Travel bookmark in the run's summary → `pnpm db:migrate:production` → `wrangler deploy` → smoke check (health, CSP and HSTS headers, the JSON 404; no cafe-specific address, since production may have no cafe yet). Without **production** ticked, the run only checks and records the candidate, as before.
 
 Never deploy production by hand from a laptop: the job above is the one path. Rollback = redeploy the previous Worker version (possible because migrations are backwards compatible).
 
@@ -218,9 +216,10 @@ Notification generation uses a persistent 25-cafe page, catches per-cafe errors,
 
 ## Email
 
-- **Resend**, called only by outbox handlers (`identity.mail.ts`: verification, password reset), never inside a request. Each send passes the outbox message id as Resend's `Idempotency-Key`, so a repeated delivery isn't sent twice.
-- Config: `NUXT_MAIL_RESEND_API_KEY` and `NUXT_MAIL_FROM` (production: `Angder <no-reply@mail.angder.app>`, the subdomain verified in Resend with SPF, DKIM and DMARC, so the main domain's reputation is kept apart; D211).
-- **Locally**, without a key, the dev server prints each email (with its link) to the console. A production build without a key **refuses** to send (the messages stay queued and are logged as failing), so one-time links never land in production logs.
+- **Cloudflare Email Sending** (D212, beta; Workers Paid: 3,000 emails a month included, then 0.35 USD per 1,000), through the Worker's `EMAIL` binding, called only by outbox handlers (`identity.mail.ts`: verification, password reset), never inside a request. Each send has a 10-second deadline; a refusal throws with Cloudflare's code only (never the address), so the outbox retries.
+- **At least once:** Cloudflare takes no idempotency key, so a send whose answer was lost can arrive twice (the same link; both work until one is used).
+- Config: `NUXT_MAIL_FROM` and `NUXT_MAIL_FROM_NAME` in `nuxt.config.ts` (`mailConfig`), the `send_email` binding allowed only that sender. The domain `mail.angder.app` is onboarded once in Email Service (Production → Setting it up once); new accounts start with a small daily quota that grows with good sending. Delivery, bounces and suppressions are in the dashboard's Email Sending logs.
+- **Locally** there is no binding: the dev server prints each email (with its link) to the console. A deployed build without the binding **refuses** to send (the messages stay queued and are logged as failing), so one-time links never land in production logs.
 - Delivery takes up to a minute (the outbox task's schedule).
 - Templates: plain, short, the app's name, one link; no tracking pixels. English only until translations are decided (Q21).
 

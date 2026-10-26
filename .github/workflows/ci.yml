@@ -141,16 +141,6 @@ jobs:
       - name: Deploy the Worker
         run: pnpm exec wrangler deploy --config .output/server/wrangler.json
 
-      # From the GitHub environment's secret; skipped while it isn't set. Re-sent on every deploy so
-      # the Worker always has the current value.
-      - name: Update the Resend key
-        env:
-          NUXT_MAIL_RESEND_API_KEY: ${{ secrets.NUXT_MAIL_RESEND_API_KEY }}
-        run: |
-          if [ -n "$NUXT_MAIL_RESEND_API_KEY" ]; then
-            printf '%s' "$NUXT_MAIL_RESEND_API_KEY" | pnpm exec wrangler secret put NUXT_MAIL_RESEND_API_KEY --config .output/server/wrangler.json
-          fi
-
       - name: Smoke check
         run: |
           set -eu
@@ -243,14 +233,6 @@ jobs:
 
       - name: Deploy the Worker
         run: pnpm exec wrangler deploy --config .output/server/wrangler.json
-
-      - name: Update the Resend key
-        env:
-          NUXT_MAIL_RESEND_API_KEY: ${{ secrets.NUXT_MAIL_RESEND_API_KEY }}
-        run: |
-          if [ -n "$NUXT_MAIL_RESEND_API_KEY" ]; then
-            printf '%s' "$NUXT_MAIL_RESEND_API_KEY" | pnpm exec wrangler secret put NUXT_MAIL_RESEND_API_KEY --config .output/server/wrangler.json
-          fi
 
       # No cafe-specific address: production may have no cafe yet.
       - name: Smoke check

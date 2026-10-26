@@ -23,7 +23,7 @@ The two loyalty rows (points awarded once, exchanging points for a voucher, the 
 
 ## The hand check on staging (the owner, about 20 minutes)
 
-What the tests can't see: real phones, the real Worker and D1, two real devices. Use a verified customer account (staging's test email sender delivers only to the Resend account's own address, so sign up with that one) and the counter on a second device or window.
+What the tests can't see: real phones, the real Worker and D1, two real devices. Use a verified customer account (staging sends real email from `staging@mail.angder.app`, D212) and the counter on a second device or window.
 
 1. **Table QR, signed out (row 1).** On a phone in a private tab, scan a table's QR (Cafe → Branches → Dining tables → View QR). Add an item, Review order, Sign in. After signing in, Review order still says **Dine-in · Table …**. Place the order: its page says the table.
 2. **Price changed underneath (row 3).** Open Review order with an item. In another window, change that item's price in Admin → Menu items and save. Back on Review order, Place order: it's refused, the new price is shown next to the old one, and placing again charges the new price.

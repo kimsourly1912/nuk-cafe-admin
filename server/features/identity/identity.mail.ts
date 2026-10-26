@@ -19,10 +19,10 @@ export interface MailMessage {
 }
 
 /**
- * Sends one email. `idempotencyKey` is the outbox message id: a repeat delivery (at least once)
- * must not send twice.
+ * Sends one email. Delivery is at least once (the outbox retries): Cloudflare Email Sending takes no
+ * idempotency key, so a send whose answer was lost can arrive twice, with the same link (D212).
  */
-export type MailSender = (message: MailMessage, idempotencyKey: string) => Promise<void>
+export type MailSender = (message: MailMessage) => Promise<void>
 
 const APP = 'NUK Cafe'
 
@@ -58,35 +58,62 @@ function linkPayload(payload: Record<string, unknown>): LinkPayload {
 /** The outbox handlers for account emails, for the delivery task's registry. */
 export function accountMailHandlers(send: MailSender): Record<string, OutboxHandler> {
   return {
-    [MAIL_KINDS.verifyEmail]: async ({ id, payload }) => {
+    [MAIL_KINDS.verifyEmail]: async ({ payload }) => {
       const { to, url } = linkPayload(payload)
-      await send(verificationMail(to, url), id)
+      await send(verificationMail(to, url))
     },
-    [MAIL_KINDS.resetPassword]: async ({ id, payload }) => {
+    [MAIL_KINDS.resetPassword]: async ({ payload }) => {
       const { to, url } = linkPayload(payload)
-      await send(resetPasswordMail(to, url), id)
+      await send(resetPasswordMail(to, url))
     },
   }
 }
 
-/** Resend's HTTP API. A non-2xx answer throws, so the outbox retries. */
-export function resendSender(options: { apiKey: string, from: string, fetch?: typeof fetch }): MailSender {
-  const doFetch = options.fetch ?? fetch
-  return async (message, idempotencyKey) => {
-    const response = await doFetch('https://api.resend.com/emails', {
-      method: 'POST',
-      signal: AbortSignal.timeout(10_000),
-      headers: {
-        'Authorization': `Bearer ${options.apiKey}`,
-        'Content-Type': 'application/json',
-        // Resend keeps it 24 h: a repeated delivery of this message isn't sent again.
-        'Idempotency-Key': idempotencyKey,
-      },
-      body: JSON.stringify({ from: options.from, to: [message.to], subject: message.subject, text: message.text, html: message.html }),
+/** Cloudflare's `send_email` binding (Email Sending), as much of it as we use. */
+export interface EmailBinding {
+  send: (message: {
+    to: string
+    from: string | { email: string, name: string }
+    subject: string
+    text: string
+    html: string
+  }) => Promise<{ messageId: string }>
+}
+
+/**
+ * Cloudflare Email Sending through the Worker's `EMAIL` binding (D212). A refusal throws, so the
+ * outbox retries; the error names only Cloudflare's code (e.g. `E_RATE_LIMIT_EXCEEDED`), never the
+ * address, since its message can carry it.
+ */
+export function cloudflareEmailSender(options: { binding: EmailBinding, from: string, fromName: string, timeoutMs?: number }): MailSender {
+  const { binding, from, fromName, timeoutMs = 10_000 } = options
+  return async (message) => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    // The binding takes no abort signal: the deadline keeps one stuck send from holding the
+    // outbox run (docs/reference/server-reliability.md). A late success can still arrive.
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error('timed out'), { code: 'TIMEOUT' })), timeoutMs)
     })
-    if (!response.ok) {
-      await response.body?.cancel().catch(() => {})
-      throw new Error(`Resend answered ${response.status}`)
+    try {
+      await Promise.race([
+        binding.send({
+          to: message.to,
+          from: fromName ? { email: from, name: fromName } : from,
+          subject: message.subject,
+          text: message.text,
+          html: message.html,
+        }),
+        deadline,
+      ])
+    }
+    catch (error) {
+      const code = (error as { code?: unknown } | null)?.code
+      // No `cause`: the log prints it, and Cloudflare's message can carry the recipient's address.
+      // eslint-disable-next-line preserve-caught-error
+      throw new Error(`Email Sending refused the message: ${typeof code === 'string' ? code : 'unknown error'}`)
+    }
+    finally {
+      clearTimeout(timer)
     }
   }
 }
