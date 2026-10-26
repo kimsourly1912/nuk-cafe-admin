@@ -82,6 +82,7 @@ async function onSubmit(event: FormSubmitEvent<ResetPasswordForm>) {
       ref="form"
       :schema="resetPasswordSchema"
       :state="state"
+      :validate-on="['input', 'change']"
       class="space-y-4"
       @submit="onSubmit"
       @error="focusFirstInvalid"
@@ -91,6 +92,7 @@ async function onSubmit(event: FormSubmitEvent<ResetPasswordForm>) {
         <UFormField
           label="New password"
           name="password"
+          required
         >
           <PasswordInput
             id="reset-password"

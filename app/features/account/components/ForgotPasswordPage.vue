@@ -47,6 +47,7 @@ function useAnotherEmail() {
       ref="form"
       :schema="forgotPasswordSchema"
       :state="state"
+      :validate-on="['input', 'change']"
       class="space-y-4"
       @submit="onSubmit"
       @error="focusFirstInvalid"
@@ -55,6 +56,7 @@ function useAnotherEmail() {
       <UFormField
         label="Email"
         name="email"
+        required
       >
         <UInput
           id="forgot-email"

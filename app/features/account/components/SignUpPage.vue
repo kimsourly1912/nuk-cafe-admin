@@ -62,6 +62,7 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
       ref="form"
       :schema="signUpSchema"
       :state="state"
+      :validate-on="['input', 'change']"
       class="space-y-4"
       @submit="onSubmit"
       @error="focusFirstInvalid"
@@ -71,6 +72,7 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
       <UFormField
         label="Name"
         name="name"
+        required
       >
         <UInput
           id="sign-up-name"
@@ -83,6 +85,7 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
       <UFormField
         label="Email"
         name="email"
+        required
       >
         <UInput
           id="sign-up-email"
@@ -97,6 +100,7 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
         <UFormField
           label="Password"
           name="password"
+          required
         >
           <PasswordInput
             id="sign-up-password"

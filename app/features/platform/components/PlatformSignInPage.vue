@@ -105,6 +105,7 @@ async function restart(message?: string) {
       ref="form"
       :schema="schema"
       :state="state"
+      :validate-on="['input', 'change']"
       class="space-y-4"
       @submit="onSubmit"
       @error="focusFirstInvalid"
