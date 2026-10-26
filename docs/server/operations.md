@@ -92,6 +92,8 @@ A super admin sees each cafe's usage numbers, never its menu, orders or customer
 
 ### Production (step 8.2, D211)
 
+**Live since 2026-10-26** (CI run 431, commit `91bdf1d`, the same as staging).
+
 | | |
 |---|---|
 | URL | https://angder.app (Workers Custom Domain; `workers_dev` and preview URLs off) |
@@ -105,12 +107,20 @@ A super admin sees each cafe's usage numbers, never its menu, orders or customer
 
 **Setting it up once** (the owner):
 1. `npx wrangler d1 create nuk-cafe-production --location apac` and `npx wrangler r2 bucket create nuk-cafe-production-media --location apac`; the D1 id goes into `PRODUCTION.d1DatabaseId` in `nuxt.config.ts`.
-2. The secrets above. A deploy before them works, but sign-in, table QRs, Bakong tokens and Telegram stay off or refuse until they're set.
+2. The secrets above, with Wrangler or in the dashboard (how production was set up): Workers & Pages → Create application → **Start with Hello World!** (never "Import a repository": that starts Cloudflare's own builds beside ours) → name `nuk-cafe-production` → Deploy; then the Worker → Settings → Variables and Secrets → Add, type **Secret** for every one (a Text variable set there is replaced by the next deploy) → Deploy. The first CI deploy replaces the placeholder's code and keeps the secrets; add nothing else there (bindings, domain, crons and vars come from `nuxt.config.ts`). A deploy before the secrets works, but sign-in, table QRs, Bakong tokens and Telegram stay off or refuse until they're set.
 3. GitHub → Settings → Environments → `production`: **Required reviewers** (the owner), deployment branches `main` only, secrets `CLOUDFLARE_API_TOKEN` (its own token: "Edit Cloudflare Workers" plus **Account → D1 → Edit**, zone `angder.app`), `CLOUDFLARE_ACCOUNT_ID`.
 4. Email (once, for both environments): Cloudflare dashboard → Compute → Email Service → Email Sending → **Onboard Domain** → `mail.angder.app`. Cloudflare adds its `cf-bounce` MX, SPF, DKIM and DMARC records itself. Until it's verified, sends fail with `E_SENDER_DOMAIN_NOT_AVAILABLE` and the messages stay queued.
 5. After the first deploy: the first super admin and cafe owner as for staging (First owner, Super admins above, with `nuk-cafe-production`), and the Telegram webhook of `@angders_bot` pointed at `https://angder.app/api/webhooks/telegram` ([Telegram](#telegram)).
 
 **Custom domains:** a deploy creates the domain's DNS record and certificate itself; the API token needs the zone `angder.app` (Workers Routes edit). The zone uses SSL **Full (strict)**, Always Use HTTPS and no Rocket Loader or Auto Minify (they rewrite scripts and break the CSP). `.app` is HTTPS-only for every browser anyway. If staging is put behind Cloudflare Access, `/api/health` (the deploy's smoke check) and `/api/webhooks/telegram` must stay reachable without it.
+
+**Bot Fight Mode stays off on `angder.app` (D214).** It challenges every request that looks automated, across the whole zone, and on the Free zone plan it can't be skipped by any rule. Turned on, it answered 403 to the deploys' smoke checks from GitHub (production launch, 2026-10-26) and would do the same to Telegram's webhook calls and the platform health check. DDoS protection stays on regardless; the app limits its public API itself (D121). If bot protection is ever needed: Super Bot Fight Mode (Pro zone plan) with a skip rule for `/api/health` and `/api/webhooks/telegram`. A deploy whose smoke check gets 403 while a browser gets `ok`: look in Security → Events for the blocking service.
+
+**Accounts on a deployed environment.** Nobody types passwords into the database: Better Auth stores them hashed, in its own `account` table. So every account is made by signing up, or by the app:
+- **The first super admin:** sign up on the site (`/sign-up`), then in the Cloudflare dashboard → Storage & databases → D1 → `nuk-cafe-production` (or `nuk-cafe-staging`) → **Console**, run `SELECT id, email, role FROM user;` to check the email, then `UPDATE user SET role = 'superadmin' WHERE email = 'you@example.com';` and sign in at `/platform/sign-in` (two-step sign-in is set up there first). The same with Wrangler: Super admins above.
+- **A cafe and its owner:** the platform console → Cafes → **New cafe** (a new owner's temporary password is shown once; an existing account is made the owner instead, D146). Never by hand in production: the console writes the cafe, its address history, its first branch and the audit in one batch.
+- **Staff:** the cafe's admin → Staff. **Customers:** they sign up themselves.
+- **Taking super admin away:** `UPDATE user SET role = 'customer' WHERE email = '…';`.
 
 ## Configuration
 

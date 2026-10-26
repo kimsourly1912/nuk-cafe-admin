@@ -14,7 +14,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109 |
-| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212; production, domains, email |
+| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212, D214; production, domains, email, bot protection |
 | Documentation loading | D167 |
 
 ## Entries by ID
@@ -243,3 +243,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D211](decisions.md#d211-production-at-angderapp-staging-at-stagingangderapp-deployed-by-hand-behind-a-reviewer-2026-10-26) | Production at angder.app, staging at staging.angder.app, deployed by hand behind a reviewer, 2026-10-26 |
 | [D212](decisions.md#d212-account-email-through-cloudflare-email-sending-instead-of-resend-2026-10-26) | Account email through Cloudflare Email Sending instead of Resend, 2026-10-26 |
 | [D213](decisions.md#d213-account-emails-name-the-platform-from-configuration-2026-10-26) | Account emails name the platform, from configuration, 2026-10-26 |
+| [D214](decisions.md#d214-bot-fight-mode-stays-off-on-angderapp-2026-10-26) | Bot Fight Mode stays off on angder.app, 2026-10-26 |

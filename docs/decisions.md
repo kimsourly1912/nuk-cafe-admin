@@ -2425,3 +2425,11 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Consequences:** QT1 is partly answered; the console's name is a later step. Other hardcoded "NUK Cafe" text (Telegram replies, the assistant's prompt, the origin check's message) is outside this step.
 - **Verification:** see [progress](progress.md#production-environment-and-domains-d211-2026-10-26).
 
+### D214: Bot Fight Mode stays off on angder.app (2026-10-26)
+
+- **Context:** the owner turned on Cloudflare's Bot Fight Mode for the zone. The production launch's smoke checks from GitHub Actions then got 403 on `/api/health` while browsers got `ok`. Bot Fight Mode challenges automated-looking requests across the whole zone and, on the Free zone plan, runs outside the rule engine: no skip, allow or bypass rule exempts a path.
+- **Decision:** Bot Fight Mode off for `angder.app` (staging and production share the zone). Abuse is bounded by Cloudflare's always-on DDoS protection and the app's own controls: per-address rate limits on the public API (D121), Better Auth's sign-in limits, sessions, permissions and the origin check on writes.
+- **Alternatives:** keep it on (every deploy's smoke check fails; Telegram's webhook calls and the platform health check, both from datacenter servers, would be refused); Super Bot Fight Mode on the Pro zone plan with a skip rule for `/api/health` and `/api/webhooks/telegram` (about 20–25 USD a month; reconsider if Security → Events shows real bot abuse).
+- **Consequences:** documented in operations → Production so it isn't turned back on; a smoke check answered 403 while a browser gets `ok` points at zone security first.
+- **Verification:** see [progress](progress.md#production-environment-and-domains-d211-2026-10-26).
+
