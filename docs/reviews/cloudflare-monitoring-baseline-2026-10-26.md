@@ -103,6 +103,8 @@ Lint, typecheck, 1,986 unit/server tests (one existing skip), staging/production
 
 After restoration, a reuse-only rerun still failed those assertions, and later clean reruns hit local generated-database migration/seed errors and a server-start timeout. No final recovery pass is claimed. Full e2e was attempted but blocked in local setup; Chrome is also absent, confirmed with a direct Playwright launch, and the earlier browser download failed. Existing local database files were preserved and restored. No test-harness, migration or dependency change was made to bypass these issues. Keep the PR in draft pending CI and deployed browser verification.
 
+CI follow-up: PR #189's first run passed all eleven HTTP header tests (shard 1), shard 2, and lint/types/audit/unit. Shard 3 failed one existing counter test's immediate Available-label visibility check. That assertion now uses bounded polling for the same visible state, alongside its unchanged API-state check. See the latest PR checks for rerun results.
+
 ## Remaining rollout checks
 
 After merge, confirm the staging menu loads exactly one beacon without a CSP violation, token entry HTML has no injected beacon and preserves no-store/no-transform, and a fresh harmless public-menu visit eventually appears in RUM. Exercise menu → checkout → account navigation and verify that query secrets are absent from collected metadata. Deploy production only through its normal review gate.
