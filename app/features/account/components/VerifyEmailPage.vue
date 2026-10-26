@@ -98,15 +98,18 @@ async function resend() {
       <p class="text-sm text-muted">
         Open it to verify your email. It works for 24 hours. It can take a minute to arrive; check your spam folder too.
       </p>
-      <FormErrorAlert :message="formError" />
-      <UAlert
-        v-if="sentAgain && !formError"
-        color="success"
-        variant="subtle"
-        icon="i-lucide-circle-check"
-        title="Sent again."
-        role="status"
-      />
+      <div class="space-y-4 text-left">
+        <FormErrorAlert :message="formError" />
+        <UAlert
+          v-if="sentAgain && !formError"
+          color="success"
+          variant="subtle"
+          icon="i-lucide-circle-check"
+          title="New link sent"
+          description="A fresh link is on its way to your inbox."
+          role="status"
+        />
+      </div>
     </div>
     <template #footer>
       <UButton

@@ -82,6 +82,7 @@ function restart(message?: string) {
       ref="form"
       :schema="signInSchema"
       :state="state"
+      :validate-on="['input', 'change']"
       class="space-y-4"
       @submit="onSubmit"
       @error="focusFirstInvalid"
@@ -98,6 +99,7 @@ function restart(message?: string) {
       <UFormField
         label="Email"
         name="email"
+        required
       >
         <UInput
           id="sign-in-email"
@@ -111,6 +113,7 @@ function restart(message?: string) {
       <UFormField
         label="Password"
         name="password"
+        required
       >
         <PasswordInput
           id="sign-in-password"
