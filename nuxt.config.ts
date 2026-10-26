@@ -117,6 +117,10 @@ const PRODUCTION_RATE_LIMITS = RATE_LIMITS.map(limit => ({
 /** How long one render of the customer menu page is reused (D122). */
 const MENU_PAGE_CACHE_SECONDS = 60
 
+// Nitro's older Wrangler type lacks query redaction; Wrangler 4.141 supports it (D215).
+// Keep the schema-validated settings together for both environment builds.
+const WORKER_OBSERVABILITY = { enabled: true, redact_query_string: true }
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ['@nuxt/eslint', '@nuxt/ui', '@nuxt/test-utils/module', '@nuxthub/core', '@nuxtjs/better-auth'],
@@ -138,7 +142,7 @@ export default defineNuxtConfig({
             routes: [{ pattern: PRODUCTION.domain, custom_domain: true }],
             workers_dev: false,
             preview_urls: false,
-            observability: { enabled: true },
+            observability: WORKER_OBSERVABILITY,
             vars: {
               NUXT_PUBLIC_SITE_URL: PRODUCTION.siteUrl,
               ...mailConfig(PRODUCTION.mail).vars,
@@ -168,7 +172,7 @@ export default defineNuxtConfig({
             workers_dev: false,
             preview_urls: false,
             // Workers Logs: the structured logs (docs/server/operations.md → Monitoring).
-            observability: { enabled: true },
+            observability: WORKER_OBSERVABILITY,
             // Public, not secret: Better Auth's base URL and the only trusted origin.
             vars: {
               NUXT_PUBLIC_SITE_URL: STAGING.siteUrl,

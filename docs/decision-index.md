@@ -244,3 +244,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D212](decisions.md#d212-account-email-through-cloudflare-email-sending-instead-of-resend-2026-10-26) | Account email through Cloudflare Email Sending instead of Resend, 2026-10-26 |
 | [D213](decisions.md#d213-account-emails-name-the-platform-from-configuration-2026-10-26) | Account emails name the platform, from configuration, 2026-10-26 |
 | [D214](decisions.md#d214-bot-fight-mode-stays-off-on-angderapp-2026-10-26) | Bot Fight Mode stays off on angder.app, 2026-10-26 |
+| [D215](decisions.md#d215-cloudflare-improvements-within-the-existing-plan-domain-security-and-log-privacy-first-2026-10-26) | Cloudflare improvements within the existing plan, domain security and log privacy first, 2026-10-26 |
