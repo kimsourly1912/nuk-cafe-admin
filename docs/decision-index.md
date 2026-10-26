@@ -245,3 +245,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D213](decisions.md#d213-account-emails-name-the-platform-from-configuration-2026-10-26) | Account emails name the platform, from configuration, 2026-10-26 |
 | [D214](decisions.md#d214-bot-fight-mode-stays-off-on-angderapp-2026-10-26) | Bot Fight Mode stays off on angder.app, 2026-10-26 |
 | [D215](decisions.md#d215-cloudflare-improvements-within-the-existing-plan-domain-security-and-log-privacy-first-2026-10-26) | Cloudflare improvements within the existing plan, domain security and log privacy first, 2026-10-26 |
+| [D216](decisions.md#d216-measure-public-menu-performance-with-privacy-boundaries-and-independent-health-checks-2026-10-26) | Measure public menu performance with privacy boundaries and independent health checks, 2026-10-26 |

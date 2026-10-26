@@ -28,6 +28,14 @@ Targets for the shared `angder.app` zone:
 
 Keep log sampling and retention unchanged in this step. No new paid service, data migration or business behavior change. The source change must survive later deployments; a live settings change alone is not the source of truth.
 
+### Step 2: monitoring, privacy and usage baseline (D216)
+
+Step 1 merged in PR #188 with successful main CI/staging deployment. Step 2 branch `codex/cloudflare-monitoring-baseline`, based on main `4b681e9`. [Baseline](../reviews/cloudflare-monitoring-baseline-2026-10-26.md), [progress](../progress.md#cloudflare-monitoring-baseline-d216-2026-10-26).
+
+Reuse free automatic Web Analytics with a public-menu document CSP allowance and same-origin reporting. Token entry documents receive no-store/no-transform; referrers omit paths. Narrow the existing Free rule rather than purchasing more rules. API read-back did not prove injection exclusion, and an already loaded beacon can observe later SPA paths: validate the deployed boundaries before calling browser analytics complete.
+
+Record app-scoped Worker/D1/R2/RUM measurements before optimizing. Enable the existing independent health workflow by default on production after merge, with staging selectable manually and an explicit pause switch. Validate HTTP status and JSON, bound output/retries, preserve existing notification preferences. Actual failure receipt and Q24's responsible owner remain open. No new subscription, collector or dependency; no polling, SQL or cache freshness change.
+
 ## Verification and rollback
 
 1. Read the current zone and Worker settings, preserving nonsecret before/after evidence.

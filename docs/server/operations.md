@@ -305,9 +305,17 @@ Both environment builds keep Workers Logs enabled and set `observability.redact_
 
 ### Independent platform health (D168)
 
-`.github/workflows/platform-health.yml` checks HTTPS health every five minutes from GitHub Actions, independently of the Worker/D1/Telegram alert path. **Disabled until repository variable `PLATFORM_HEALTH_URL` is configured**, e.g. the production `/api/health` URL. Select the platform's recipients in GitHub Actions notification settings; verify a deliberately failed manual run reaches the responsible person. Scheduled GitHub runs can be delayed: use a dedicated uptime/paging provider if Q24 requires a tighter guarantee. No destination or account setting was changed by D168.
+`.github/workflows/platform-health.yml` checks HTTPS health every five minutes from GitHub Actions, independently of the Worker/D1/Telegram alert path (D216). It defaults to `https://angder.app/api/health`; `PLATFORM_HEALTH_URL` can override that address, and `PLATFORM_HEALTH_ENABLED=false` explicitly pauses the job. A manual run can choose staging. The check requires HTTP 200 and JSON `status: ok`, bounds the body to 4 KB and records elapsed time in the run summary. It becomes scheduled only after the workflow reaches main. Select/verify the responsible owner's existing GitHub Actions notification preferences; no new recipient or chat is selected by the workflow. Scheduled runs can be delayed, so this is not an uptime/paging guarantee. Q24 still owns alert delivery and recovery targets.
+
 
 Enable `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS` after the notification cron is running to detect missing/stale useful generation success (D169), as well as a database outage. Configure `NUXT_MAINTENANCE_DELIVERY_MAX_AGE_SECONDS` separately to detect overdue pending outbox/notification work; generation success alone does not prove delivery. Defaults preserve database-only health. Test total generation failure, dispatcher backlog and database outage before enabling production traffic. Worker exception alerts and a platform-owned operational destination still require Cloudflare/account configuration under Q24; the app's existing tenant Telegram alerts remain supplemental.
+
+### Browser performance and usage (D216)
+
+Use the existing Cloudflare Web Analytics automatic installation; do not add a second manual beacon. Public menu documents permit only the official beacon file/version path, and collection stays at same-origin `/cdn-cgi/rum`. Direct account/workspace/order pages retain the restrictive CSP. Token entry documents (`/table/**`, `/reset-password`, `/verify-email`) use `no-store, no-transform` to prevent automatic injection; `strict-origin` referrers omit prior paths. These are document controls, not an SPA route firewall: an already loaded beacon can still observe subsequent SPA paths. Never put secrets or PII into analytics dimensions; review future internal navigation to token-bearing routes.
+
+The live free analytics rule was narrowed from `*` to `/c/*`, but a rule read-back alone did not prove HTML exclusion. Verify both the beacon and response headers after deployment. See the [dated baseline](../reviews/cloudflare-monitoring-baseline-2026-10-26.md) for actual observations, sampling semantics, SQL examples, budget limits and rollout checks. Keep Worker logging sampling unchanged until measured volume justifies tuning it. Early RUM samples are not a capacity or mobile performance verdict.
+
 
 ## Platform facts
 
