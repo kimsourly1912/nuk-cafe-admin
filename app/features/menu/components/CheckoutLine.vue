@@ -16,6 +16,8 @@ const props = defineProps<{
   quoted?: QuoteLine
   /** The unit price the customer saw before it changed. */
   previousUnitPriceMinor?: number
+  /** The quote for this line is on its way: placeholders where the photo, detail and price go. */
+  loading?: boolean
   disabled?: boolean
 }>()
 const emit = defineEmits<{
@@ -34,8 +36,12 @@ const noteOpen = ref(Boolean(props.line.note))
     :aria-label="name"
   >
     <div class="flex gap-3">
+      <USkeleton
+        v-if="loading"
+        class="size-14 shrink-0 rounded-md"
+      />
       <MenuItemImage
-        v-if="quoted?.imageUrl"
+        v-else-if="quoted?.imageUrl"
         :src="quoted.imageUrl"
         usage="card"
         class="size-14 rounded-md"
@@ -49,8 +55,12 @@ const noteOpen = ref(Boolean(props.line.note))
             >
               {{ name }}
             </p>
+            <USkeleton
+              v-if="loading"
+              class="mt-1.5 h-4 w-40 max-w-full"
+            />
             <p
-              v-if="quoted?.detail"
+              v-else-if="quoted?.detail"
               class="text-sm text-muted"
             >
               {{ quoted.detail }}
@@ -64,8 +74,12 @@ const noteOpen = ref(Boolean(props.line.note))
               class="mt-1"
             />
           </div>
+          <USkeleton
+            v-if="loading"
+            class="h-5 w-12 shrink-0"
+          />
           <div
-            v-if="quoted && quoted.totalMinor !== null"
+            v-else-if="quoted && quoted.totalMinor !== null"
             class="shrink-0 text-end"
           >
             <p class="font-medium text-highlighted">
@@ -105,7 +119,7 @@ const noteOpen = ref(Boolean(props.line.note))
          the quantity on the right; lined up under the name, past the photo when there is one. -->
     <div
       class="flex items-center justify-between gap-2"
-      :class="{ 'sm:ps-17': quoted?.imageUrl }"
+      :class="{ 'sm:ps-17': loading || quoted?.imageUrl }"
     >
       <UButton
         v-if="!problem && !noteOpen"
@@ -142,7 +156,7 @@ const noteOpen = ref(Boolean(props.line.note))
 
     <div
       v-if="!problem && noteOpen"
-      :class="{ 'sm:ps-17': quoted?.imageUrl }"
+      :class="{ 'sm:ps-17': loading || quoted?.imageUrl }"
     >
       <UFormField
         :label="`Note for ${name}`"

@@ -23,6 +23,7 @@ import { GUEST_NAME_MAX } from '#shared/contracts/orders'
 import { ACCOUNT_PATHS, AccountButton, accountLink, useCustomerAccount } from '~/features/account'
 import { tableName } from '~/features/orders'
 import { useCheckout } from '../composables/useCheckout'
+import type { CartLine } from '../utils/cart'
 import { lineKey } from '../utils/cart'
 import { openingText } from '../utils/opening'
 import CheckoutLine from './CheckoutLine.vue'
@@ -32,18 +33,18 @@ const { name: cafeName, logoUrl } = useCafe()
 
 const mounted = useMounted()
 const checkout = useCheckout()
-const { cart, quote, change, placing, placed, failure } = checkout
+const { cart, quote, quoteSettling, change, placing, placed, failure } = checkout
 const { account, guest, known } = useCustomerAccount()
 const route = useRoute()
 
 const lines = computed(() => cart.lines.value)
 const quoted = computed(() => quote.data.value ?? null)
-const quotedLine = (index: number) => {
-  const line = quoted.value?.lines[index]
-  const cartLine = lines.value[index]
-  // Only while the quote is for these lines (a newer one is on its way otherwise).
-  return line && cartLine && lineKey(line.variationId, line.modifierIds) === cartLine.key ? line : undefined
-}
+// By key, not position: removing a line keeps the others' prices while the new quote comes.
+const quotedLine = (cartLine: CartLine) =>
+  quoted.value?.lines.find(line => lineKey(line.variationId, line.modifierIds) === cartLine.key)
+// No price for a line yet means its quote is on its way, unless the quote failed (said above).
+const lineLoading = (cartLine: CartLine) => !quotedLine(cartLine) && !quote.error.value
+const linesLoading = computed(() => lines.value.some(lineLoading))
 const branch = computed(() => quoted.value?.branch)
 const orderProblem = computed(() => quoted.value?.problems[0])
 const closedNote = computed(() => (branch.value ? openingText(branch.value) : undefined))
@@ -75,7 +76,7 @@ const action = computed(() => {
   const total = quoted.value ? ` · ${formatMinor(quoted.value.totalMinor)}` : ''
   return {
     label: placing.value ? 'Placing order…' : `Place order${total}`,
-    disabled: !quoted.value?.orderable || quote.pending.value || placing.value,
+    disabled: !quoted.value?.orderable || quoteSettling.value || quote.pending.value || placing.value,
     loading: placing.value,
   }
 })
@@ -266,12 +267,14 @@ useSeoMeta({ robots: 'noindex' })
               <ul
                 class="divide-y divide-default"
                 aria-label="Your order"
+                :aria-busy="linesLoading"
               >
                 <CheckoutLine
-                  v-for="(line, index) in lines"
+                  v-for="line in lines"
                   :key="line.key"
                   :line="line"
-                  :quoted="quotedLine(index)"
+                  :quoted="quotedLine(line)"
+                  :loading="lineLoading(line)"
                   :previous-unit-price-minor="change?.previousUnitPrices.get(line.key)"
                   :disabled="placing"
                   @set-quantity="value => cart.setQuantity(line.key, value)"
@@ -358,7 +361,14 @@ useSeoMeta({ robots: 'noindex' })
       <div class="w-full space-y-2">
         <div class="flex items-baseline justify-between">
           <span class="text-sm text-muted">Total</span>
-          <span class="font-semibold text-highlighted">{{ quoted ? formatMinor(quoted.totalMinor) : '…' }}</span>
+          <USkeleton
+            v-if="!quoted"
+            class="h-5 w-16"
+          />
+          <span
+            v-else
+            class="font-semibold text-highlighted"
+          >{{ formatMinor(quoted.totalMinor) }}</span>
         </div>
         <UButton
           :label="action.label"

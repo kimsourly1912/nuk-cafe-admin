@@ -1,3 +1,4 @@
+import { refDebounced } from '@vueuse/core'
 import type { CheckoutQuote, Order } from '#shared/contracts/orders'
 import { useAccountActions, useCustomerAccount } from '~/features/account'
 import type { PlaceFailure, PriceChange } from '../utils/checkout'
@@ -5,13 +6,18 @@ import { orderLines, placeFailure, priceChange } from '../utils/checkout'
 import { useOrderSource } from './useOrderSource'
 import { useCart, useShopBranch, useTableContext } from './useShopMenu'
 
+/** How long the order must stay unchanged before it is priced again. */
+const QUOTE_SETTLE_MS = 400
+
 /**
  * Review order (step 6.2b, D100): the order kept in this browser, priced by the server
  * (`POST /api/public/checkout/quote`, D98) and placed (`POST /api/shop/orders`, D99).
  *
  * - **The branch** is the menu's: the one the customer picked or a table's, else the first.
- * - **The quote** is asked again whenever a line or quantity changes (not a note: it never changes
- *   a price) and when it's more than 10 minutes old at "Place order".
+ * - **The quote** is asked again when a line or quantity changes (not a note: it never changes a
+ *   price), once the changes stop for a moment (`QUOTE_SETTLE_MS`), so tapping + five times asks
+ *   once; and when it's more than 10 minutes old at "Place order". Until then `quoteSettling` is on
+ *   and the order can't be placed.
  * - **Price changes** the customer didn't cause (a new quote with other unit prices) are kept
  *   until the order is placed, so the page can show the old prices struck through.
  * - **Placing** sends the total the page shows and an `Idempotency-Key` that stays the same until
@@ -34,12 +40,24 @@ export function useCheckout() {
     ? { branchId: branchId.value, lines: orderLines(cart.lines.value, { withNotes: false }) }
     : null))
   const quoteKey = computed(() => JSON.stringify(quoteBody.value))
+  // Tapping + or − several times asks once, after the last tap. The first quote (the cart just
+  // loaded) and an emptied cart don't wait.
+  const settledKey = ref(quoteKey.value)
+  const debouncedKey = refDebounced(quoteKey, QUOTE_SETTLE_MS)
+  watch(debouncedKey, (next) => {
+    settledKey.value = next
+  })
+  watch(quoteKey, (next) => {
+    if (next === 'null' || settledKey.value === 'null') settledKey.value = next
+  })
+  /** The order changed and its new quote hasn't been asked for yet. */
+  const quoteSettling = computed(() => quoteKey.value !== settledKey.value)
   const quote = useApiQuery(
     'menu:checkout-quote',
     () => (quoteBody.value
       ? apiFetch<CheckoutQuote>('/public/checkout/quote', { method: 'POST', body: quoteBody.value })
       : Promise.resolve(null)),
-    { server: false, watch: [quoteKey] },
+    { server: false, watch: [settledKey] },
   )
 
   /** The quote the customer has seen, and what changed since (not by them). */
@@ -77,7 +95,8 @@ export function useCheckout() {
 
   /** Places the order; resolves to it, or `null` with `failure` set. `guestName`: without an account. */
   async function place(options: { guestName?: string } = {}): Promise<Order | null> {
-    if (placing.value) return null
+    // The total on screen is for the order before the last change: wait for its quote.
+    if (placing.value || quoteSettling.value) return null
     // The last refusal stays on screen while placing again: clearing it here would collapse the
     // banner and shift the page, then bring it back when the server refuses again. It is replaced
     // by the next refusal, or dropped on success or when the page's state moves on.
@@ -125,6 +144,7 @@ export function useCheckout() {
     table: tableHere,
     clearTable,
     quote,
+    quoteSettling,
     change,
     placing,
     placed,
