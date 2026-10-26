@@ -60,7 +60,7 @@ async function orderReady(tenantId: string | null, orderId: unknown) {
 export function outboxHandlers(): Record<string, OutboxHandler> {
   const send: MailSender = message => mailSender()(message)
   return {
-    ...accountMailHandlers(send),
+    ...accountMailHandlers(send, { appName: useRuntimeConfig().mail.appName }),
     [ORDER_EVENTS.placed]: message => orderAlert(message.tenantId, 'new_order', message.payload.orderId),
     [ORDER_EVENTS.paid]: message => orderAlert(message.tenantId, 'payment', message.payload.orderId),
     [ORDER_EVENTS.ready]: message => orderReady(message.tenantId, message.payload.orderId),

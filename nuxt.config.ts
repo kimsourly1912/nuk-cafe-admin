@@ -227,7 +227,8 @@ export default defineNuxtConfig({
     // Account emails (docs/server/operations.md → Email, D212): sent through the Worker's `EMAIL`
     // binding (Cloudflare Email Sending) from NUXT_MAIL_FROM, named NUXT_MAIL_FROM_NAME. Without the
     // binding the dev server prints mail to the console; a production build refuses to (the links are secrets).
-    mail: { from: '', fromName: '' },
+    // NUXT_MAIL_APP_NAME: the platform's name in the emails' text (owner, 2026-10-26, D213).
+    mail: { from: '', fromName: '', appName: 'Angder' },
     // Table QR codes (D91, docs/server/operations.md → Configuration): NUXT_QR_SECRET, a long random
     // secret per environment. Changing it invalidates every printed QR. Deployed builds refuse to
     // serve table QRs without it; the dev server uses a local one.

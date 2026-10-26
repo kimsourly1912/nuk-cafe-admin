@@ -121,6 +121,7 @@ Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudf
 | `NUXT_BETTER_AUTH_SECRET` | Signs sessions and tokens | `.env` | secret |
 | `NUXT_PUBLIC_SITE_URL` | The app's origin (trusted origins, links in emails) | `http://localhost:3000` | the environment's URL |
 | `NUXT_MAIL_FROM` / `NUXT_MAIL_FROM_NAME` | Sender address on the onboarded sending domain, and its display name (D212) | unset (console mail: no `EMAIL` binding) | plain vars from `nuxt.config.ts`; the `EMAIL` binding may send only from that address |
+| `NUXT_MAIL_APP_NAME` | The platform's name in account emails' subject and text (D213) | `Angder` | the same default; set it to rename the emails |
 | `NUXT_PUBLIC_SAMPLE_DATA_ENABLED` / `_ENVIRONMENT` | The Sample data page and its routes (D94), and the environment's name on it | on (`Local`, the dev server only) | `true` / `Staging` (`wrangler.vars` in `nuxt.config.ts`); **never set in production** (the routes answer 404) |
 | `NUXT_QR_SECRET` | Signs table QR tokens (D91). **Changing it invalidates every printed QR** | unset (the dev server uses a local secret) | secret, set once per environment (`wrangler secret put NUXT_QR_SECRET`); without it the table routes answer 500 `QR_NOT_CONFIGURED` |
 | `NUXT_AI_PROVIDER`, `NUXT_AI_MODEL`, `NUXT_AI_API_KEY`, `NUXT_AI_BASE_URL`, `NUXT_AI_DAILY_LIMIT` | The AI assistant (D107, D108): the provider (`anthropic` \| `openai` \| `google` \| `openai-compatible`), its model id, the key, a base URL (required for `openai-compatible`; optional for a proxy), requests per admin per day (default 100) | unset (the assistant is off: its routes answer 404) | the key is a secret (`wrangler secret put NUXT_AI_API_KEY`), the rest plain variables; a key with an unknown provider, no model or (for `openai-compatible`) no URL answers 500 `AI_NOT_CONFIGURED`. Set a spending cap on the provider's account (Q43) |
@@ -221,7 +222,7 @@ Notification generation uses a persistent 25-cafe page, catches per-cafe errors,
 - Config: `NUXT_MAIL_FROM` and `NUXT_MAIL_FROM_NAME` in `nuxt.config.ts` (`mailConfig`), the `send_email` binding allowed only that sender. The domain `mail.angder.app` is onboarded once in Email Service (Production → Setting it up once); new accounts start with a small daily quota that grows with good sending. Delivery, bounces and suppressions are in the dashboard's Email Sending logs.
 - **Locally** there is no binding: the dev server prints each email (with its link) to the console. A deployed build without the binding **refuses** to send (the messages stay queued and are logged as failing), so one-time links never land in production logs.
 - Delivery takes up to a minute (the outbox task's schedule).
-- Templates: plain, short, the app's name, one link; no tracking pixels. English only until translations are decided (Q21).
+- Templates: plain, short, the platform's name (`NUXT_MAIL_APP_NAME`, default "Angder", D213: account emails are the platform's, never a cafe's), one link; no tracking pixels. English only until translations are decided (Q21).
 
 ## Telegram
 

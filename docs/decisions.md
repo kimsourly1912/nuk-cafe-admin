@@ -2417,3 +2417,11 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Consequences:** no idempotency key: a lost answer can send the same email twice (the same one-time link; accepted, as for Telegram). The product is in beta and new accounts start with a small daily quota. The owner onboards `mail.angder.app` once and deletes the old Resend secrets. Local dev still prints mail.
 - **Verification:** see [progress](progress.md#production-environment-and-domains-d211-2026-10-26).
 
+### D213: Account emails name the platform, from configuration (2026-10-26)
+
+- **Context:** the verification and password-reset emails said "NUK Cafe" (a constant) to every cafe's customers, against the rule of no hardcoded cafe name; account emails are the platform's, not a cafe's (D138), and since D212 their sender is "Angder".
+- **Decision:** the emails' subject, closing line and HTML use `NUXT_MAIL_APP_NAME` (`runtimeConfig.mail.appName`, default "Angder": the owner's choice, 2026-10-26), passed to `accountMailHandlers(send, { appName })`; the name is escaped in the HTML now that it is configurable. Only the emails: "NUK Platform" stays in the console, its tab title and the two-step sign-in label for now (owner).
+- **Alternatives:** the cafe's own name (the outbox message has no tenant, D138, and one account spans cafes); the sender's display name (staging's says "(staging)"); renaming "NUK Platform" everywhere now (deferred by the owner; existing authenticator entries would keep the old label).
+- **Consequences:** QT1 is partly answered; the console's name is a later step. Other hardcoded "NUK Cafe" text (Telegram replies, the assistant's prompt, the origin check's message) is outside this step.
+- **Verification:** see [progress](progress.md#production-environment-and-domains-d211-2026-10-26).
+

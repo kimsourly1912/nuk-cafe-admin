@@ -242,3 +242,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D210](decisions.md#d210-the-password-rules-as-a-live-checklist-under-every-new-password-field-2026-10-25) | The password rules as a live checklist under every new-password field, 2026-10-25 |
 | [D211](decisions.md#d211-production-at-angderapp-staging-at-stagingangderapp-deployed-by-hand-behind-a-reviewer-2026-10-26) | Production at angder.app, staging at staging.angder.app, deployed by hand behind a reviewer, 2026-10-26 |
 | [D212](decisions.md#d212-account-email-through-cloudflare-email-sending-instead-of-resend-2026-10-26) | Account email through Cloudflare Email Sending instead of Resend, 2026-10-26 |
+| [D213](decisions.md#d213-account-emails-name-the-platform-from-configuration-2026-10-26) | Account emails name the platform, from configuration, 2026-10-26 |

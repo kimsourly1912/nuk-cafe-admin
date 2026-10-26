@@ -168,10 +168,10 @@ describe('delivery', () => {
     // a JavaScript Date taken right after the insert.
     const report = await deliverOutbox(db, accountMailHandlers(async (message) => {
       sent.push(message)
-    }), { now: new Date(Date.now() + 1000) })
+    }, { appName: 'Angder' }), { now: new Date(Date.now() + 1000) })
     expect(report).toMatchObject({ sent: 1 })
     const [row] = await queued(MAIL_KINDS.verifyEmail)
-    expect(sent).toEqual([expect.objectContaining({ to: 'dara@example.com', subject: 'Confirm your email for NUK Cafe' })])
+    expect(sent).toEqual([expect.objectContaining({ to: 'dara@example.com', subject: 'Confirm your email for Angder' })])
     expect(sent[0]!.text).toContain('/api/auth/verify-email?token=')
     expect(row).toMatchObject({ status: 'sent', payload: {} })
   })
@@ -180,8 +180,25 @@ describe('delivery', () => {
     const sent: MailMessage[] = []
     await accountMailHandlers(async (m) => {
       sent.push(m)
-    })[MAIL_KINDS.resetPassword]!({ id: 'm1', tenantId: null, kind: MAIL_KINDS.resetPassword, attempt: 1, payload: { to: 'a@example.com', url: 'https://cafe.example/x?a=1&b="2"' } })
+    }, { appName: 'Angder' })[MAIL_KINDS.resetPassword]!({ id: 'm1', tenantId: null, kind: MAIL_KINDS.resetPassword, attempt: 1, payload: { to: 'a@example.com', url: 'https://cafe.example/x?a=1&b="2"' } })
     expect(sent[0]!.html).toContain('href="https://cafe.example/x?a=1&amp;b=&quot;2&quot;"')
+  })
+
+  it('names the configured platform, never a cafe, and escapes the name in the HTML', async () => {
+    const sent: MailMessage[] = []
+    const handlers = accountMailHandlers(async (m) => {
+      sent.push(m)
+    }, { appName: 'Brew & <Co>' })
+    const base = { tenantId: null, attempt: 1, payload: { to: 'a@example.com', url: 'https://cafe.example/x' } }
+    await handlers[MAIL_KINDS.verifyEmail]!({ ...base, id: 'm1', kind: MAIL_KINDS.verifyEmail })
+    await handlers[MAIL_KINDS.resetPassword]!({ ...base, id: 'm2', kind: MAIL_KINDS.resetPassword })
+    expect(sent.map(m => m.subject)).toEqual(['Confirm your email for Brew & <Co>', 'Reset your Brew & <Co> password'])
+    for (const message of sent) {
+      expect(message.text).toMatch(/\n\nBrew & <Co>$/)
+      expect(message.html).toContain('<p>Brew &amp; &lt;Co&gt;</p>')
+      expect(message.html).not.toContain('<Co>')
+      expect(`${message.subject}${message.text}${message.html}`).not.toContain('NUK Cafe')
+    }
   })
 
   it('sends through Cloudflare\'s binding from the configured sender, and throws on a refusal without the address', async () => {

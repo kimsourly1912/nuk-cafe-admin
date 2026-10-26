@@ -24,25 +24,35 @@ export interface MailMessage {
  */
 export type MailSender = (message: MailMessage) => Promise<void>
 
-const APP = 'NUK Cafe'
-
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' })[c]!)
 
-function render(to: string, subject: string, intro: string, action: string, url: string, outro: string): MailMessage {
+interface MailParts {
+  to: string
+  subject: string
+  intro: string
+  action: string
+  url: string
+  outro: string
+  /** The platform's name (`NUXT_MAIL_APP_NAME`): account emails are the platform's, not a cafe's (D138, D213). */
+  appName: string
+}
+
+function render(parts: MailParts): MailMessage {
+  const { to, subject, intro, action, url, outro, appName } = parts
   return {
     to,
     subject,
-    text: `${intro}\n\n${action}: ${url}\n\n${outro}\n\n${APP}`,
-    html: `<p>${escapeHtml(intro)}</p><p><a href="${escapeHtml(url)}">${escapeHtml(action)}</a></p><p>${escapeHtml(outro)}</p><p>${APP}</p>`,
+    text: `${intro}\n\n${action}: ${url}\n\n${outro}\n\n${appName}`,
+    html: `<p>${escapeHtml(intro)}</p><p><a href="${escapeHtml(url)}">${escapeHtml(action)}</a></p><p>${escapeHtml(outro)}</p><p>${escapeHtml(appName)}</p>`,
   }
 }
 
-export function verificationMail(to: string, url: string): MailMessage {
-  return render(to, `Confirm your email for ${APP}`, `Confirm that ${to} is your email address to start ordering.`, 'Confirm my email', url, 'If you didn\'t sign up, you can ignore this email.')
+export function verificationMail(to: string, url: string, appName: string): MailMessage {
+  return render({ to, url, appName, subject: `Confirm your email for ${appName}`, intro: `Confirm that ${to} is your email address to start ordering.`, action: 'Confirm my email', outro: 'If you didn\'t sign up, you can ignore this email.' })
 }
 
-export function resetPasswordMail(to: string, url: string): MailMessage {
-  return render(to, `Reset your ${APP} password`, 'Someone asked to reset the password of this account. The link works once and expires in 1 hour.', 'Choose a new password', url, 'If it wasn\'t you, ignore this email: your password stays the same.')
+export function resetPasswordMail(to: string, url: string, appName: string): MailMessage {
+  return render({ to, url, appName, subject: `Reset your ${appName} password`, intro: 'Someone asked to reset the password of this account. The link works once and expires in 1 hour.', action: 'Choose a new password', outro: 'If it wasn\'t you, ignore this email: your password stays the same.' })
 }
 
 interface LinkPayload {
@@ -56,15 +66,16 @@ function linkPayload(payload: Record<string, unknown>): LinkPayload {
 }
 
 /** The outbox handlers for account emails, for the delivery task's registry. */
-export function accountMailHandlers(send: MailSender): Record<string, OutboxHandler> {
+export function accountMailHandlers(send: MailSender, options: { appName: string }): Record<string, OutboxHandler> {
+  const { appName } = options
   return {
     [MAIL_KINDS.verifyEmail]: async ({ payload }) => {
       const { to, url } = linkPayload(payload)
-      await send(verificationMail(to, url))
+      await send(verificationMail(to, url, appName))
     },
     [MAIL_KINDS.resetPassword]: async ({ payload }) => {
       const { to, url } = linkPayload(payload)
-      await send(resetPasswordMail(to, url))
+      await send(resetPasswordMail(to, url, appName))
     },
   }
 }
