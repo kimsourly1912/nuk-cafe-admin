@@ -2391,3 +2391,20 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Verification:** see [progress](progress.md#password-rules-checklist-d210-2026-10-25).
 
 ---
+
+### D211: Menu import from a PDF or photos, replaces step 9.2 (2026-10-26)
+
+- **Context:** the owner wants AI to turn a menu file into menu items, categories, options and add-ons instead of entering items one by one. Researched Lightspeed (O-Series and Kounta), Wix Restaurants, Square, Joe Coffee and Google Business Profile: all keep a person between the AI and the live menu, and Lightspeed limits its importer to empty menus because merging is the hard part. Step 9.2 (one item drafted from a description, D107) wasn't built and is the same pipeline with a smaller input. Owner: "use your defaults".
+- **Decision:** the plan in [plans/menu-import.md](plans/menu-import.md), steps 9.2 (plan and mockups), 9.2a (server), 9.2b (app), 9.2c (a description read by the same pipeline into the item editor, the old 9.2). Its rules:
+  - **The AI only reads** (D107 holds): a fixed shape of names and amounts, no ids, no tools, no writes. Normalizing (cents, riel converted with the cafe's rate and flagged, limits, warnings) and matching names to this cafe's records are server code.
+  - **Matching is computed on every read and again inside the import**, never stored, so the review follows the menu as it is now.
+  - **Review before import; items saved as drafts; only adds.** Existing records are never changed, except new values added to an existing option set, shown and switchable (D44: a value changes no item). An add-on group is reused only when it already holds every add-on found; otherwise a new group, because changing a group changes every item using it.
+  - **One atomic import** through the menu feature's statements (`importStatements`), guarded by the import's status, `version` and an idempotency key; at most 200 items. Whether D1 takes that in one batch is checked in 9.2a; if not, one category per batch, each all-or-nothing, with progress on the import.
+  - **Boundaries:** the assistant stays the only AI caller (`readMenu`); the menu feature owns every menu write; a new `menu-import` feature owns the import row (`menu_imports`), its private files (`t/<tenant>/imports/`), normalizing, matching and the import batch.
+  - **Kept 7 days**, then purged with its files. The review's edits stay in the browser (D151).
+  - **Separate daily limit:** 10 readings per admin and cafe (`assistant_usage.kind`), 120 s per reading, no automatic retry. Permissions `menu:write` and `assistant:use`.
+- **Alternatives:** keeping 9.2 and building import later (two AI drafting paths with the same matching); writing straight to the menu without review (every product researched avoids it); publishing imported items (a misread price would reach customers); storing matches (stale when the menu changes during review); keeping the reading only in the browser (a refresh loses a slow, paid reading); updating existing items from the file (a sync feature with its own review, [ai-later.md](plans/ai-later.md)); spreadsheets through AI (structured data needs none, a later importer); pdf.js for page previews (the browser's own viewer on desktop, Open file on phones); reading in the background with Queues and an email (more infrastructure; a streamed request with Try again first).
+- **Open:** none new. Q43 (the production provider and cap) also covers this. Real menus for the quality check come from the owner.
+- **Verification:** the mockup round; then each step's checks in the plan.
+
+---

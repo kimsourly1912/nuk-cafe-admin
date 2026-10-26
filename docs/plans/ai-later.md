@@ -72,9 +72,18 @@ Each entry: **What**, **Why not now**, **What it takes**, **Build it when**.
 - **Build it when:** single-item Improve is used a lot.
 
 ### Draft from a photo of a paper menu
-- **What:** upload a photo of an old menu; the assistant proposes drafts for every item.
-- **What it takes:** image input (most supported models read images), a review list of drafts, and the same mapping to existing categories and add-ons.
-- **Build it when:** a new branch or a menu rebuild needs many items entered at once.
+- **Planned (2026-10-26, D211):** step 9.2, menu import from a PDF or photos, [menu-import.md](menu-import.md).
+
+### Update a menu from a new file ("sync")
+- **What:** a new menu file changes prices, names or option values of items already on the menu.
+- **Why not now:** the first import only adds (D211). Changing live items needs a diff per item, each item's `version`, and a clear view of what customers will see change.
+- **What it takes:** the import's matching, a "changed" state per item with before and after, updates through `updateItem` with each item's version.
+- **Build it when:** cafes import once and then ask to re-import a printed menu after a price change.
+
+### Spreadsheet import (CSV/XLSX)
+- **What:** a menu exported from another POS or typed in a spreadsheet, imported without AI.
+- **What it takes:** a column mapping step, then the same normalize, match, review and import as D211.
+- **Build it when:** a cafe moves from a POS that exports its menu.
 
 ## Doing, not just suggesting
 

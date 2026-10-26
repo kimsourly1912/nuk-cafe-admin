@@ -13,7 +13,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Tenancy and permissions | D134–D146, D186–D193; organization, tenant, branch, platform console |
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
-| AI assistant | D107–D109 |
+| AI assistant | D107–D109, D211 |
 | Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177 |
 | Documentation loading | D167 |
 
@@ -240,3 +240,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D208](decisions.md#d208-one-address-per-page-without-a-trailing-slash-2026-10-25) | One address per page, without a trailing slash, 2026-10-25 |
 | [D209](decisions.md#d209-test-accounts-for-every-role-on-the-dev-server-one-known-password-2026-10-25) | Test accounts for every role on the dev server, one known password, 2026-10-25 |
 | [D210](decisions.md#d210-the-password-rules-as-a-live-checklist-under-every-new-password-field-2026-10-25) | The password rules as a live checklist under every new-password field, 2026-10-25 |
+| [D211](decisions.md#d211-menu-import-from-a-pdf-or-photos-replaces-step-92-2026-10-26) | Menu import from a PDF or photos, replaces step 9.2, 2026-10-26 |

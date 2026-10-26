@@ -2,7 +2,7 @@
 
 _2026-09-30. Owner decisions (this session, "use your defaults"): an assistant for **admins** in the admin portal first; it answers questions about the portal and guides through existing workflows, drafts menu items from a description, and improves menu wording; translation later. **Any AI provider** with the owner's own API key; **the AI suggests, a person saves**; the panel is Nuxt UI's `USidebar` (owner's choice over a slide-over). Built before 6.5b at the owner's request. Decision record: D107. Options decided against for now, and what would bring them back: [ai-later.md](ai-later.md)._
 
-Four steps, each its own PR: **9.0** groundwork, **9.1** the help assistant, **9.2** menu drafts from a description, **9.3** improve wording. 9.1–9.3 have screens, so each starts with the mockup round ([feature-standard.md](../feature-standard.md#designing-a-ui-step-with-mockups-the-owners-workflow)).
+Four steps, each its own PR: **9.0** groundwork, **9.1** the help assistant, **9.2** menu drafts from a description, **9.3** improve wording. **9.2 was replaced on 2026-10-26 (D211)** by the menu import ([menu-import.md](menu-import.md)): a PDF or photos read into drafts for a whole menu, with the description draft as its step 9.2c on the same pipeline; the 9.2 notes below are kept as the earlier design. 9.1–9.3 have screens, so each starts with the mockup round ([feature-standard.md](../feature-standard.md#designing-a-ui-step-with-mockups-the-owners-workflow)).
 
 ## Purpose and scope
 
