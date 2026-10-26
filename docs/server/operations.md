@@ -99,7 +99,7 @@ A super admin sees each cafe's usage numbers, never its menu, orders or customer
 | D1 | `nuk-cafe-production` (`1ba21c84-75fa-4498-aacc-44ea6b53ea95`, Asia-Pacific), binding `DB` |
 | R2 | `nuk-cafe-production-media` (Asia-Pacific), binding `BLOB` |
 | Rate limits | namespaces 2001–2003 (staging's are 1001–1003) |
-| Config | `$env.production` in `nuxt.config.ts`; `--envName production` also applies `$production` (c12 merges both), so the security headers come from there. No Sample data variables, ever. No AI variables until Q43 |
+| Config | `$env.prod` in `nuxt.config.ts`, built with `--envName prod` (`pnpm build:production`). **Not** named `production`: without `--envName`, c12 uses `NODE_ENV`, so a `production` block would turn every plain production build (the e2e suite's Node server) into this Worker. `--envName prod` replaces `$production`, so the security headers are repeated there, as for staging. No Sample data variables, ever. No AI variables until Q43 |
 | Telegram | `@angders_bot` |
 | Secrets | each set once with `npx wrangler secret put <NAME> --name nuk-cafe-production`, generated on the owner's machine, **never copied from staging**: `NUXT_BETTER_AUTH_SECRET`, `NUXT_QR_SECRET` (before any QR is printed), `NUXT_BAKONG_ENCRYPTION_KEY` (kept in a password manager), the three `NUXT_TELEGRAM_…`. Email needs none: the `EMAIL` binding (D212) |
 

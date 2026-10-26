@@ -72,7 +72,7 @@ const STAGING = {
 }
 
 /**
- * Production on Cloudflare (D211): `nuxt build --envName production` builds a Worker for
+ * Production on Cloudflare (D211): `nuxt build --envName prod` builds a Worker for
  * `angder.app`. Nothing is shared with staging: its own D1, R2, rate-limit namespaces and secrets.
  */
 const PRODUCTION = {
@@ -124,10 +124,12 @@ export default defineNuxtConfig({
     runtimeConfig: { public: { sampleData: { enabled: true, environment: 'Local' } } },
   },
   $env: {
-    // `--envName production` applies this block and `$production` too (c12 merges both), so the
-    // security headers come from `$production` and aren't repeated here. Never the Sample data
-    // variables (D94), and no AI variables until the production provider is chosen (Q43).
-    production: {
+    // Named `prod`, not `production`: without `--envName`, c12 uses NODE_ENV, so a block named
+    // `production` would turn every plain production build (the e2e suite's Node server) into this
+    // Worker. `--envName prod` replaces `$production`, so the security headers are repeated here.
+    // Never the Sample data variables (D94), and no AI variables until the provider is chosen (Q43).
+    prod: {
+      routeRules: { '/**': { headers: securityHeaders() } },
       nitro: {
         preset: 'cloudflare_module',
         cloudflare: {
