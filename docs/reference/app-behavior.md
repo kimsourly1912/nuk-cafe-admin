@@ -216,7 +216,7 @@ Source: `app/utils/api-fetch.ts`, `app/plugins/api.ts`, `app/plugins/auth-sync.c
 
 ### Session-transition contract
 
-Any identity change (login, logout, expiry, a different staff member via another tab) increments `useAuth().generation` synchronously and fires `app:session-changed` (D29). Then:
+Any identity change (login, logout, expiry, a different staff member via another tab) increments `useAuth().generation` synchronously and fires `app:session-changed` (D29). A workspace's **first** session check in a tab (admin, counter, platform) is not a change: the tab knew no staff identity before it, and what it had loaded (the customer site's account and menu) came with the same browser session (D97). Counting it cleared and re-read the menu being left, and its header flashed "Sign in" (e2e `counter.test.ts`, "opening the counter from the menu…"). Then, for a change:
 
 | Left over from the previous identity | What happens | How |
 |---|---|---|

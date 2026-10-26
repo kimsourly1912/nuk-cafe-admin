@@ -49,7 +49,8 @@ export function useCounterSession() {
   const mustChangePassword = computed(() => user.value?.mustChangePassword ?? false)
 
   function setUser(next: CounterSession | null) {
-    const changed = (next?.userId ?? null) !== (user.value?.userId ?? null)
+    // The first check isn't a change (see the admin's useAuth `setUser`).
+    const changed = checked.value && (next?.userId ?? null) !== (user.value?.userId ?? null)
     user.value = next
     checked.value = true
     if (changed) {

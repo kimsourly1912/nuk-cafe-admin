@@ -10,13 +10,16 @@ import { ACCOUNT_PATHS } from '../utils/account'
  *
  * Read in the browser only (`server: false`): server-rendered pages are the same for everyone, and
  * the header shows a placeholder until the browser knows (D97). Signed out is `null`, not an error.
+ * A session change (sign-out, another account) clears it like every query (D29).
  *
  * `account` is a real account; a guest (D156: signed in by Place order, no email or password) is
  * `guest` instead, so everything account-shaped (the initials, the member code, the verify banner)
  * treats a guest as signed out.
  */
 export function useCustomerAccount() {
-  const query = useApiQuery('account:me', loadAccount, { server: false, default: () => null })
+  // Kept between pages (D173): back from a workspace without the header, it shows the account at
+  // once instead of "Sign in" until a reload answers. Its own changes refresh it (`invalidate`).
+  const query = useApiQuery('account:me', loadAccount, { server: false, default: () => null, staleTime: REFERENCE_STALE_TIME })
   const account = computed<CustomerAccount | null>(() => (query.data.value && !query.data.value.guest ? query.data.value : null))
   const guest = computed<GuestCustomer | null>(() => (query.data.value?.guest ? query.data.value : null))
   /** The first answer arrived (signed in or not); stays true while it's refetched. */

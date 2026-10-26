@@ -451,6 +451,38 @@ describe('the counter', () => {
     await counter.click()
     await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}`)
   })
+
+  it('opening the counter from the menu and coming back never shows the menu\'s header signed out', async () => {
+    const { page } = await cashierAtCounter(1440)
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
+    const account = page.getByRole('button', { name: `Account: ${seed.customers.cashier.name}` })
+    await account.waitFor()
+    // Watches the header from here on: "Sign in" must never appear, even for a frame.
+    await page.evaluate(() => {
+      const state = window as unknown as { signInShown: boolean }
+      state.signInShown = false
+      new MutationObserver(() => {
+        if ([...document.querySelectorAll('header a')].some(link => link.textContent?.trim() === 'Sign in')) state.signInShown = true
+      }).observe(document.body, { childList: true, subtree: true, characterData: true })
+    })
+    const reads: string[] = []
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname
+      if (path === '/api/c/nuk/shop/me' || path === '/api/c/nuk/public/menu') reads.push(path)
+    })
+
+    await account.click()
+    await page.getByRole('link', { name: 'Counter' }).click()
+    await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}`)
+    // The counter's first session check isn't an identity change: the page being left isn't
+    // cleared and read again (D29).
+    expect(reads).toEqual([])
+
+    await page.goBack()
+    await page.waitForURL(u => u.pathname === '/c/nuk')
+    await account.waitFor()
+    expect(await page.evaluate(() => (window as unknown as { signInShown: boolean }).signInShown)).toBe(false)
+  })
 })
 
 // Coconut Coffee: published, sizes, no time rule, and no other test orders it (switching it off

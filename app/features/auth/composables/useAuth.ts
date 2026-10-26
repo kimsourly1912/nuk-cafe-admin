@@ -68,7 +68,10 @@ export function useAuth() {
   const signingOut = useState('staff-session:signing-out', () => false)
 
   function setUser(next: SessionUser | null) {
-    const changed = identityOf(next) !== identityOf(user.value)
+    // The first check isn't a change: this tab knew no staff identity before it, and what it loaded
+    // (the customer site's account and menu) came with the same browser session (D97). Counting it
+    // cleared and refetched the page being left, so its header flashed "Sign in".
+    const changed = checked.value && identityOf(next) !== identityOf(user.value)
     user.value = next
     checked.value = true
     if (changed) sessionChanged()
