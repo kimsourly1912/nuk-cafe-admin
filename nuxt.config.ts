@@ -58,15 +58,28 @@ function securityHeaders(): Record<string, string> {
 }
 
 /**
- * Staging on Cloudflare (D53): `nuxt build --envName staging` builds a Worker for
- * `nuk-cafe-staging.<account>.workers.dev` with its own D1 database and R2 bucket. Secrets
- * (`NUXT_BETTER_AUTH_SECRET`, later the Resend key) are Worker secrets, never in this file.
+ * Staging on Cloudflare (D53, D211): `nuxt build --envName staging` builds a Worker for
+ * `staging.angder.app` with its own D1 database and R2 bucket. Secrets
+ * (`NUXT_BETTER_AUTH_SECRET`, the Resend key, …) are Worker secrets, never in this file.
  */
 const STAGING = {
   worker: 'nuk-cafe-staging',
-  siteUrl: 'https://nuk-cafe-staging.kimsur61.workers.dev',
+  domain: 'staging.angder.app',
+  siteUrl: 'https://staging.angder.app',
   d1DatabaseId: '33752107-bc40-4c31-8ff0-d3c50dc6a3a2',
   r2Bucket: 'nuk-cafe-staging-media',
+}
+
+/**
+ * Production on Cloudflare (D211): `nuxt build --envName production` builds a Worker for
+ * `angder.app`. Nothing is shared with staging: its own D1, R2, rate-limit namespaces and secrets.
+ */
+const PRODUCTION = {
+  worker: 'nuk-cafe-production',
+  domain: 'angder.app',
+  siteUrl: 'https://angder.app',
+  d1DatabaseId: 'PENDING_PRODUCTION_D1_ID',
+  r2Bucket: 'nuk-cafe-production-media',
 }
 
 /**
@@ -81,6 +94,11 @@ const RATE_LIMITS = [
   // Placing orders (D156): a busy cafe's Wi-Fi places a few a minute; a script, hundreds.
   { name: 'RATE_LIMIT_ORDERS', namespace_id: '1003', simple: { limit: 20, period: 60 as const } },
 ]
+/** The same limits in production's own namespaces (2001…), so the two environments never share a counter. */
+const PRODUCTION_RATE_LIMITS = RATE_LIMITS.map(limit => ({
+  ...limit,
+  namespace_id: String(Number(limit.namespace_id) + 1000),
+}))
 
 /** How long one render of the customer menu page is reused (D122). */
 const MENU_PAGE_CACHE_SECONDS = 60
@@ -92,6 +110,34 @@ export default defineNuxtConfig({
     runtimeConfig: { public: { sampleData: { enabled: true, environment: 'Local' } } },
   },
   $env: {
+    // `--envName production` applies this block and `$production` too (c12 merges both), so the
+    // security headers come from `$production` and aren't repeated here. Never the Sample data
+    // variables (D94), and no AI variables until the production provider is chosen (Q43).
+    production: {
+      nitro: {
+        preset: 'cloudflare_module',
+        cloudflare: {
+          wrangler: {
+            name: PRODUCTION.worker,
+            routes: [{ pattern: PRODUCTION.domain, custom_domain: true }],
+            workers_dev: false,
+            preview_urls: false,
+            observability: { enabled: true },
+            vars: {
+              NUXT_PUBLIC_SITE_URL: PRODUCTION.siteUrl,
+              // A domain verified in Resend, with SPF, DKIM and DMARC (D211).
+              NUXT_MAIL_FROM: 'Angder <no-reply@mail.angder.app>',
+            },
+            triggers: { crons: Object.keys(SCHEDULED_TASKS) },
+            ...({ ratelimits: PRODUCTION_RATE_LIMITS } as Record<string, unknown>),
+          },
+        },
+      },
+      hub: {
+        db: { dialect: 'sqlite', casing: 'snake_case', connection: { databaseId: PRODUCTION.d1DatabaseId } },
+        blob: { driver: 'cloudflare-r2', binding: 'BLOB', bucketName: PRODUCTION.r2Bucket },
+      },
+    },
     staging: {
       // `--envName staging` replaces `$production` (one environment block applies), so the security
       // headers are repeated here.
@@ -101,6 +147,10 @@ export default defineNuxtConfig({
         cloudflare: {
           wrangler: {
             name: STAGING.worker,
+            // Served only at its own domain (D211): no second `workers.dev` or preview origin.
+            routes: [{ pattern: STAGING.domain, custom_domain: true }],
+            workers_dev: false,
+            preview_urls: false,
             // Workers Logs: the structured logs (docs/server/operations.md → Monitoring).
             observability: { enabled: true },
             // Public, not secret: Better Auth's base URL and the only trusted origin.

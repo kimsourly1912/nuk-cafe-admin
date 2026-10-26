@@ -11,6 +11,8 @@
     "build:staging": "nuxt build --envName staging",
     "db:migrate:staging": "wrangler d1 migrations apply DB --remote --config .output/server/wrangler.json",
     "deploy:staging": "pnpm build:staging && pnpm db:migrate:staging && wrangler deploy --config .output/server/wrangler.json",
+    "build:production": "nuxt build --envName production",
+    "db:migrate:production": "wrangler d1 migrations apply DB --remote --config .output/server/wrangler.json",
     "dev": "nuxt dev",
     "dev:accounts": "node scripts/dev-accounts.mjs accounts",
     "dev:reset": "node scripts/dev-accounts.mjs reset",

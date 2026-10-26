@@ -2391,3 +2391,17 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Verification:** see [progress](progress.md#password-rules-checklist-d210-2026-10-25).
 
 ---
+
+### D211: Production at angder.app, staging at staging.angder.app, deployed by hand behind a reviewer (2026-10-26)
+
+- **Context:** step 8.2 waited on the domains (Q4) and the Workers plan (Q24). The owner bought `angder.app` (active on Cloudflare) and Workers Paid (5 USD a month), which also ends staging's Error 1102 (10 ms CPU on Free).
+- **Decision:**
+  - Production `https://angder.app` (Worker `nuk-cafe-production`), staging `https://staging.angder.app`, both as Workers Custom Domains with `workers_dev` and preview URLs off, so each environment has one origin (Better Auth trusts only `NUXT_PUBLIC_SITE_URL`). The root domain because printed table QRs carry it: it is chosen once.
+  - Production has its own D1 and R2 (Asia-Pacific), rate-limit namespaces (2001–2003), secrets and Telegram bot (`@angders_bot`; staging keeps `@nuk_cafe_bot`: a bot has one webhook). No Sample data and no AI variables (Q43).
+  - `$env.production` with `--envName production`: c12 applies `$env.<name>` and `$<name>`, so `$production`'s headers apply without repeating them.
+  - Mail from `no-reply@mail.angder.app`: a sending subdomain keeps the main domain's reputation apart. The sender's name "Angder" follows the domain until the platform's name is decided (QT1).
+  - Deploy: CI run by hand on `main` with **production** ticked → `check` + `e2e` → `verified-release` → `deploy-production`, waiting for the GitHub environment's required reviewer; records the D1 bookmark, migrates, deploys, smoke-checks. No by-hand deploy script for production.
+- **Alternatives:** `app.angder.app` (keeps the root for a marketing site; longer QR addresses); staging on another domain (more isolation, a second domain to pay for and set up; Cloudflare Access covers most of it); a production deploy on every merge (no human gate before real data).
+- **Consequences:** the owner creates the resources, secrets and GitHub environment; API tokens need the zone `angder.app`. Changing the production domain later breaks printed QRs. Alerts and RPO/RTO remain Q24.
+- **Verification:** see [progress](progress.md#production-environment-and-domains-d211-2026-10-26).
+

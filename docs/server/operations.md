@@ -24,7 +24,8 @@
 | Cache | local | its own KV (when a feature needs it) | its own KV |
 | Deployed | | on every merge to `main` | manually, from a commit that passed staging |
 | Data | disposable, seeded | test data only, reset freely | real |
-| Email | logged to the console, not sent | Resend's test sender `onboarding@resend.dev`: delivers only to the Resend account's own address (until the domain, Q4) | Resend, from our domain |
+| Address | `http://localhost:3000` | https://staging.angder.app | https://angder.app |
+| Email | logged to the console, not sent | Resend's test sender `onboarding@resend.dev`: delivers only to the Resend account's own address | Resend, from `no-reply@mail.angder.app` |
 
 Nothing crosses environments: no production data in staging, no shared secrets, no shared buckets.
 
@@ -42,11 +43,12 @@ Sources: [Workers build image and overrides](https://developers.cloudflare.com/w
 
 | | |
 |---|---|
-| URL | https://nuk-cafe-staging.kimsur61.workers.dev (a `workers.dev` address until a domain is chosen, Q4) |
+| URL | https://staging.angder.app (a Workers Custom Domain, D211; the old `nuk-cafe-staging.kimsur61.workers.dev` is turned off) |
 | Worker | `nuk-cafe-staging`, account `Kimsur61@gmail.com's Account` |
 | D1 | `nuk-cafe-staging` (`33752107-bc40-4c31-8ff0-d3c50dc6a3a2`, Asia-Pacific), binding `DB` |
 | R2 | `nuk-cafe-staging-media` (created in eastern North America: the tool had no location option), binding `BLOB` |
 | Config | `$env.staging` in `nuxt.config.ts` (preset `cloudflare_module`, bindings, `NUXT_PUBLIC_SITE_URL` as a plain var, cron triggers, Workers Logs, security headers) |
+| Telegram | `@nuk_cafe_bot` (production has its own bot) |
 | Secrets | `NUXT_BETTER_AUTH_SECRET` (set once with `wrangler secret put`; generated, never written down); `NUXT_MAIL_RESEND_API_KEY` (from the GitHub environment `staging`, re-sent by every deploy). `NUXT_MAIL_FROM` is a plain var. The AI assistant: `NUXT_AI_API_KEY` (a Worker secret the owner sets; an OpenAI key), `NUXT_AI_PROVIDER` = `openai` and `NUXT_AI_MODEL` = `gpt-5.4-mini` as plain vars in `nuxt.config.ts` (owner, 2026-09-30, D108) |
 
 **Deploy by hand only what is on `main`** (or the branch about to be merged next): a branch deploy runs its migrations ahead of `main`, and the next deploy from `main` then runs older code against a newer database. (Happened in step 3.1: fixed by merging it right after.)
@@ -87,6 +89,28 @@ A super admin sees each cafe's usage numbers, never its menu, orders or customer
 **Migration `0030_platform_console` (D142)** adds `tenant_slugs` (every cafe's current address copied in), `organization.suspended_reason` and an index on orders by cafe and time. Nothing is rebuilt; afterwards `/c/nuk` and the admin work as before.
 
 **Migration `0028_platform_tenants` (D139)** rebuilds `idempotency_keys`, `assistant_usage` and `sample_data_runs` with the tenant and gives `audit_events` a tenant column (every existing event NUK Cafe's). Same routine; afterwards: an admin change (a menu item saved), the assistant (a question, "used today" as before), Sample data (the page's state as before), and an order placed and paid at the counter.
+
+### Production (step 8.2, D211)
+
+| | |
+|---|---|
+| URL | https://angder.app (Workers Custom Domain; `workers_dev` and preview URLs off) |
+| Worker | `nuk-cafe-production`, same Cloudflare account (Workers Paid) |
+| D1 | `nuk-cafe-production` (Asia-Pacific), binding `DB` |
+| R2 | `nuk-cafe-production-media` (Asia-Pacific), binding `BLOB` |
+| Rate limits | namespaces 2001–2003 (staging's are 1001–1003) |
+| Config | `$env.production` in `nuxt.config.ts`; `--envName production` also applies `$production` (c12 merges both), so the security headers come from there. No Sample data variables, ever. No AI variables until Q43 |
+| Telegram | `@angders_bot` |
+| Secrets | each set once with `npx wrangler secret put <NAME> --name nuk-cafe-production`, generated on the owner's machine, **never copied from staging**: `NUXT_BETTER_AUTH_SECRET`, `NUXT_QR_SECRET` (before any QR is printed), `NUXT_BAKONG_ENCRYPTION_KEY` (kept in a password manager), the three `NUXT_TELEGRAM_…`; `NUXT_MAIL_RESEND_API_KEY` from the GitHub environment `production` |
+
+**Setting it up once** (the owner):
+1. `npx wrangler d1 create nuk-cafe-production --location apac` and `npx wrangler r2 bucket create nuk-cafe-production-media --location apac`; the D1 id goes into `PRODUCTION.d1DatabaseId` in `nuxt.config.ts`.
+2. The secrets above. A deploy before them works, but sign-in, table QRs, Bakong tokens and Telegram stay off or refuse until they're set.
+3. GitHub → Settings → Environments → `production`: **Required reviewers** (the owner), deployment branches `main` only, secrets `CLOUDFLARE_API_TOKEN` (its own token: "Edit Cloudflare Workers" plus **Account → D1 → Edit**, zone `angder.app`), `CLOUDFLARE_ACCOUNT_ID`, `NUXT_MAIL_RESEND_API_KEY`.
+4. Resend: add the domain `mail.angder.app` and its SPF, DKIM and DMARC records in Cloudflare DNS.
+5. After the first deploy: the first super admin and cafe owner as for staging (First owner, Super admins above, with `nuk-cafe-production`), and the Telegram webhook of `@angders_bot` pointed at `https://angder.app/api/webhooks/telegram` ([Telegram](#telegram)).
+
+**Custom domains:** a deploy creates the domain's DNS record and certificate itself; the API token needs the zone `angder.app` (Workers Routes edit). The zone uses SSL **Full (strict)**, Always Use HTTPS and no Rocket Loader or Auto Minify (they rewrite scripts and break the CSP). `.app` is HTTPS-only for every browser anyway. If staging is put behind Cloudflare Access, `/api/health` (the deploy's smoke check) and `/api/webhooks/telegram` must stay reachable without it.
 
 ## Configuration
 
@@ -137,11 +161,11 @@ On push to `main` (a merged pull request, already checked there: D133), the `dep
 4. re-sends `NUXT_MAIL_RESEND_API_KEY` from the environment's secret (skipped when unset);
 5. smoke check: `GET /api/health` is ok (the database answers), NUK Cafe's `/c/nuk/admin/login` has the CSP header and `/admin/login` redirects there (D141), an unknown `/api` path is 404, NUK Cafe's `/api/c/nuk/admin/me` without a session is 401 (D140). Later: sign in, read the menu, place and complete a test order once orders exist.
 
-GitHub environment `staging` secrets: `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers" plus **Account → D1 → Edit**, this account only), `CLOUDFLARE_ACCOUNT_ID`, `NUXT_MAIL_RESEND_API_KEY`.
+GitHub environment `staging` secrets: `CLOUDFLARE_API_TOKEN` (template "Edit Cloudflare Workers" plus **Account → D1 → Edit**, this account only, and the zone `angder.app` for the custom domain, D211), `CLOUDFLARE_ACCOUNT_ID`, `NUXT_MAIL_RESEND_API_KEY`.
 
-Production: first run CI manually on `main`. After `check` and all `e2e` shards pass, `verified-release` publishes `verified-release-<sha>` with the exact checked commit/run. Use that exact revision, verify its staging deployment and finish the release checklist. This is a checked promotion candidate, not a production deployment workflow; production configuration and enforceable promotion remain phase 8.2.
+Production (D211): Actions → CI → Run workflow on `main` with **production** ticked. After `check` and all `e2e` shards pass, `verified-release` publishes `verified-release-<sha>`, then `deploy-production` waits for the `production` environment's reviewer. Approve only after that same revision is on staging and the release checklist holds. The job: `pnpm build:production` → records the D1 Time Travel bookmark in the run's summary → `pnpm db:migrate:production` → `wrangler deploy` → the Resend key → smoke check (health, CSP and HSTS headers, the JSON 404; no cafe-specific address, since production may have no cafe yet). Without **production** ticked, the run only checks and records the candidate, as before.
 
-Production deployment from that checked commit: export the database (Time Travel bookmark), apply migrations, deploy, smoke check. Rollback = redeploy the previous Worker version (possible because migrations are backwards compatible).
+Never deploy production by hand from a laptop: the job above is the one path. Rollback = redeploy the previous Worker version (possible because migrations are backwards compatible).
 
 ## Backups and restore
 
@@ -159,7 +183,7 @@ D1 Time Travel is Cloudflare's, always on, no code of ours: every change is kept
 2. **A minute later, make a change you can see:** on staging, Admin → Categories → add a category named **Restore drill**.
 3. **Restore, and time it:** Restore database → **Date** → the time from step 1 (a minute or two before the change) → **Restore database**. The page then shows the bookmark from just before the restore, **once**: copy it; **Undo** (or Bookmark → that id) puts the change back.
 4. **Check the app:**
-   - `https://nuk-cafe-staging.kimsur61.workers.dev/api/health` answers 200;
+   - `https://staging.angder.app/api/health` answers 200;
    - the **Restore drill** category is gone;
    - you can sign in to the admin, the customer menu loads, and the counter queue opens.
 5. **Write it down** in `docs/progress.md` (step 10.4): the date, how long step 3 took, and anything that didn't work.
@@ -195,7 +219,7 @@ Notification generation uses a persistent 25-cafe page, catches per-cafe errors,
 ## Email
 
 - **Resend**, called only by outbox handlers (`identity.mail.ts`: verification, password reset), never inside a request. Each send passes the outbox message id as Resend's `Idempotency-Key`, so a repeated delivery isn't sent twice.
-- Config: `NUXT_MAIL_RESEND_API_KEY` and `NUXT_MAIL_FROM` (`"NUK Cafe <no-reply@…>"`, a domain verified in Resend, with SPF, DKIM and DMARC; the domain waits on Q4).
+- Config: `NUXT_MAIL_RESEND_API_KEY` and `NUXT_MAIL_FROM` (production: `Angder <no-reply@mail.angder.app>`, the subdomain verified in Resend with SPF, DKIM and DMARC, so the main domain's reputation is kept apart; D211).
 - **Locally**, without a key, the dev server prints each email (with its link) to the console. A production build without a key **refuses** to send (the messages stay queued and are logged as failing), so one-time links never land in production logs.
 - Delivery takes up to a minute (the outbox task's schedule).
 - Templates: plain, short, the app's name, one link; no tracking pixels. English only until translations are decided (Q21).
@@ -252,7 +276,7 @@ The counter shows a KHQR made for each order (D130), set up on **Admin → Payme
    - **Connected**: Bakong answered. Try one real order at the counter (a small one: the money goes to the cafe's own account).
    - **Bakong didn't accept the token**: it was mistyped or has expired: **Replace token**.
    - **The saved token can't be read on this server any more**: the server's key changed: **Replace token** with the same token.
-   - **Bakong refused this server**: Bakong reportedly answers only servers in Cambodia in production, and a Worker runs in Cloudflare's data center nearest the request (often Singapore for Phnom Penh). Cashiers confirm by hand meanwhile. The free way around it is a small relay inside Cambodia (a Cloudflare Tunnel to a device at the cafe, which needs a domain, Q4) with `NUXT_BAKONG_API_URL` pointing at it.
+   - **Bakong refused this server**: Bakong reportedly answers only servers in Cambodia in production, and a Worker runs in Cloudflare's data center nearest the request (often Singapore for Phnom Penh). Cashiers confirm by hand meanwhile. The free way around it is a small relay inside Cambodia (a Cloudflare Tunnel to a device at the cafe, on a subdomain of `angder.app`) with `NUXT_BAKONG_API_URL` pointing at it.
 
 **Renewing:** **Replace token** on Payments before the 90 days end. The app reads the expiry date from the token (D132): **Payments** shows it ("Token expires 21 Dec 2026 · 80 days left", amber within 14 days), and Telegram reminds that cafe's chats with **Server errors and reminders** on 14, 7, 3 and 1 days before and on the day; a new token's date replaces the old one by itself. An expired token shows at the counter as "Automatic check unavailable" and on Payments as "Bakong didn't accept the token"; payments are never lost meanwhile, they are confirmed by hand. **Remove token** turns the check off.
 
