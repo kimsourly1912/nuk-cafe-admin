@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">NUK Cafe</title>
+  <desc id="desc">A warm brown coffee cup with an N cutout, two rising steam strokes, and a saucer.</desc>
+  <g fill="#6F4433">
+    <path fill-rule="evenodd" d="M165 104h23c22 0 36 12 36 31s-14 32-36 32h-23v-15h23c13 0 21-6 21-17s-8-16-21-16h-23v-15Z" clip-rule="evenodd"/>
+    <path fill-rule="evenodd" d="M53 97h126v51c0 29-23 51-52 51h-22c-29 0-52-22-52-51V97Zm31 71v-48h13l34 29v-29h14v48h-13l-34-29v29H84Z" clip-rule="evenodd"/>
+    <rect x="48" y="210" width="145" height="12" rx="6"/>
+  </g>
+  <g stroke="#6F4433" stroke-width="12" stroke-linecap="round">
+    <path d="M94 75c-19-17 19-26 0-44"/>
+    <path d="M135 75c-19-17 19-26 0-44"/>
+  </g>
+</svg>

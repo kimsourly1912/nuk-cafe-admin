@@ -145,6 +145,7 @@ export default defineNuxtConfig({
     head: {
       title: 'NUK Cafe',
       htmlAttrs: { lang: 'en' },
+      link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
     },
   },
   css: ['@/assets/css/tailwind.css'],
@@ -257,6 +258,12 @@ export default defineNuxtConfig({
       // on staging and in production, has no file lock and ignores it.
       connection: { timeout: 5000 },
     },
+  },
+  vite: {
+    // Pre-bundle deps that Vite's start-up scan can't see: imports reached only through Nuxt's
+    // auto-imports (a transform) are found late, which re-bundles and reloads the dev page.
+    // valibot: shared contracts via auto-imported app/utils (e.g. client-errors.ts).
+    optimizeDeps: { include: ['valibot'] },
   },
   hooks: {
     // Added through nitro:init, not `nitro.hooks`: a `compiled` key there replaces the Cloudflare
