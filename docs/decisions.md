@@ -2433,3 +2433,11 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Consequences:** documented in operations → Production so it isn't turned back on; a smoke check answered 403 while a browser gets `ok` points at zone security first.
 - **Verification:** see [progress](progress.md#production-environment-and-domains-d211-2026-10-26).
 
+### D215: Cloudflare improvements within the existing plan, domain security and log privacy first (2026-10-26)
+
+- **Context:** the owner approved implementing improvements using Workers Paid and free services, on a new branch from main. Live reads showed DNSSEC disabled, TLS 1.0 allowed, HTTPS redirection off, Full mode and unredacted query metadata in both Workers; the operations guide had described stricter zone settings as already active.
+- **Decision:** follow the [Cloudflare plan](plans/cloudflare-improvements.md), one step per branch/PR. Step 1 aligns the shared domain baseline and sets `observability.redact_query_string: true` for staging and production in `nuxt.config.ts`, preserving every existing resource, binding, header, cron and sampling setting. Infrastructure state is recorded separately from source validation and live ingestion evidence.
+- **Alternatives:** add paid security/image/realtime subscriptions immediately (no measured need); rely on the app logger alone (it does not control automatic invocation metadata); change dashboard logging without source config (a later deploy can undo it).
+- **Consequences:** no extra subscription or business behavior change; $5 remains a minimum subject to usage. DNSSEC chain publication may lag signing. Query redaction does not cover URL paths, arbitrary log text or old logs. D214, tenant isolation, authoritative payment checks and the existing release process remain in force.
+- **Verification:** see [progress](progress.md#cloudflare-security-baseline-d215-2026-10-26).
+
