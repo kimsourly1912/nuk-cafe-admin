@@ -151,8 +151,9 @@ jobs:
           if [ "$code" != 200 ]; then echo "GET /api/c/nuk/public/branches answered $code:"; cat cafe.json; echo; exit 1; fi
           # The app shell loads at NUK Cafe's address (D141), with the security headers.
           curl --fail --silent --show-error --head "$STAGING_URL/c/nuk/admin/login" | grep -qi '^content-security-policy:'
-          # Addresses from before cafe addresses move to NUK Cafe's.
-          test "$(curl --silent --output /dev/null --write-out '%{redirect_url}' "$STAGING_URL/admin/login")" = "$STAGING_URL/c/nuk/admin/login"
+          # The site's root is the platform's, and addresses from before cafe addresses lead into no cafe (D221).
+          test "$(curl --silent --output /dev/null --write-out '%{redirect_url}' "$STAGING_URL/")" = "$STAGING_URL/cafes"
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/admin/login")" = 404
           # An unknown API path is our JSON 404, not the app's HTML.
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/api/does-not-exist")" = 404
           # A cafe's admin routes refuse without a session (NUK Cafe's address, D140).
