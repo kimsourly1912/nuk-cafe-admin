@@ -98,7 +98,7 @@ definePageMeta({ public: true, layout: 'auth' })
 
 ## Test accounts (local dev)
 
-The local setup on a fresh database, and for trying every role without onboarding each one (D209, D219). Staging and production: [operations → Setting up an empty environment](../server/operations.md#setting-up-an-empty-environment-d219). With `pnpm dev` running:
+The local setup on a fresh database, and for trying every role without onboarding each one (D209, D220). Staging and production: [operations → Setting up an empty environment](../server/operations.md#setting-up-an-empty-environment-d220). With `pnpm dev` running:
 
 | Command | Does |
 |---|---|

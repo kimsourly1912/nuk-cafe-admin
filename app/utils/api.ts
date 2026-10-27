@@ -9,7 +9,7 @@ let tenantOf: (() => string | null) | undefined
 /**
  * Set once by plugins/api.ts: the fetch, and the cafe of the page on screen (D140; read there,
  * inside Nuxt's context, since `apiFetch` also runs from click handlers outside it). `null` on the
- * platform's pages, where a cafe's API throws (`apiPath`, D220).
+ * platform's pages, where a cafe's API throws (`apiPath`, D221).
  */
 export function configureApi(fetch: ApiFetch, tenant: () => string | null) {
   client = fetch

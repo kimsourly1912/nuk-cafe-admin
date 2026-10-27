@@ -58,7 +58,7 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
     },
     // No customer profile at sign-up: an account is the platform's, and Better Auth's request names
     // no cafe. Each cafe's profile (member code) is made when the account first uses that cafe
-    // (`ensureProfile` on `/api/c/<slug>/shop/me`, D137, D220), never in a cafe it didn't visit.
+    // (`ensureProfile` on `/api/c/<slug>/shop/me`, D137, D221), never in a cafe it didn't visit.
     // UUID v7 like every other table, so Better Auth's ids (users, tenants) pass readIdParam.
     advanced: {
       database: { generateId: () => newId() },

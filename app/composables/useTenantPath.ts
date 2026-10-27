@@ -1,7 +1,7 @@
 /**
  * The cafe of the page on screen (its address, D141), and addresses inside it:
  * `const tenantPath = useTenantPath()`, then `tenantPath('/admin/products')` → `/c/nuk/admin/products`.
- * Nothing guesses a cafe (D220): on the platform's pages (no cafe in the address) `useTenantSlug`
+ * Nothing guesses a cafe (D221): on the platform's pages (no cafe in the address) `useTenantSlug`
  * and `tenantPath` throw, so a cafe's screen or link can't quietly act in a cafe nobody opened.
  * Code that also runs on the platform's pages (the app shell, `useCafe`) reads
  * `useOptionalTenantSlug`, which is `null` there.

@@ -49,7 +49,7 @@ async function sessionUser(headers: Headers) {
 }
 
 describe('sign-up', () => {
-  it('queues one verification email and makes no customer profile in any cafe (D220)', async () => {
+  it('queues one verification email and makes no customer profile in any cafe (D221)', async () => {
     // Two cafes: the account must not become a member of the oldest one, or of either.
     await ensureTenant(db, 'tenant-2')
     const { userId } = await signUp()

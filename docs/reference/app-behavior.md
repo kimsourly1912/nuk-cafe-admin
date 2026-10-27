@@ -15,19 +15,19 @@ const tenantPath = useTenantPath()
 await navigateTo(tenantPath(`/admin/add-ons/${group.id}`)) // /c/nuk/admin/add-ons/…
 ```
 
-`useTenantSlug()` is the cafe of the page on screen and throws on a page without one; shared shell code (the app shell, `useCafe`, drafts) reads `useOptionalTenantSlug()`, `null` there. Nothing guesses a cafe (D220): `tenantPath` throws on the platform's pages too; `tenantUrl(slug, path)` and `splitTenantUrl(url)` (`app/utils/tenant-path.ts`) are the pure versions. Features' sidebar entries (`navigation.ts`) stay inside the cafe; the layout gives them the address. A lint rule refuses a bare cafe page in a link (`to="/admin…"`, `navigateTo('/checkout')`, `{ to: '/orders' }`); API paths (`apiFetch('/admin/…')`) aren't links and get the cafe from `apiFetch` itself ([data fetching](./data-fetching.md#apifetch)).
+`useTenantSlug()` is the cafe of the page on screen and throws on a page without one; shared shell code (the app shell, `useCafe`, drafts) reads `useOptionalTenantSlug()`, `null` there. Nothing guesses a cafe (D221): `tenantPath` throws on the platform's pages too; `tenantUrl(slug, path)` and `splitTenantUrl(url)` (`app/utils/tenant-path.ts`) are the pure versions. Features' sidebar entries (`navigation.ts`) stay inside the cafe; the layout gives them the address. A lint rule refuses a bare cafe page in a link (`to="/admin…"`, `navigateTo('/checkout')`, `{ to: '/orders' }`); API paths (`apiFetch('/admin/…')`) aren't links and get the cafe from `apiFetch` itself ([data fetching](./data-fetching.md#apifetch)).
 
 | Case | Handled | Test |
 |---|---|---|
 | A page of a cafe | Its API calls go to `/api/c/<slug>/…`: the browser reads the cafe from its own address (not the router's, which a route middleware runs ahead of), server rendering from the request's | e2e `cafes.test.ts` (both checked to fail with the default cafe instead) |
 | An address that names no cafe (`/c/nowhere`), or a paused cafe | 404 / 403 page, from the server before rendering (`server/middleware/31.cafe-pages.ts`); their own pages come in T2 | e2e `cafes.test.ts` |
-| The site's root (`/`) | The platform's, never a cafe's (D220): a route redirect to Your cafes (`app/pages/index.vue`) until the platform's own page is approved | e2e `cafes.test.ts` |
-| An address from before cafe addresses (`/admin/…`, `/counter/…`, `/checkout`, `/orders/…`) | Not found (D220): they no longer redirect to a default cafe; production never had them | e2e `cafes.test.ts` |
+| The site's root (`/`) | The platform's, never a cafe's (D221): a route redirect to Your cafes (`app/pages/index.vue`) until the platform's own page is approved | e2e `cafes.test.ts` |
+| An address from before cafe addresses (`/admin/…`, `/counter/…`, `/checkout`, `/orders/…`) | Not found (D221): they no longer redirect to a default cafe; production never had them | e2e `cafes.test.ts` |
 | A table's QR code | `/table/<token>` asks `/api/tables/<token>`, which names the cafe; the tab keeps the table and opens that cafe's menu | e2e `cafes.test.ts` |
 | A table scanned at another cafe or branch, still in this tab | Shown and used only at its own branch (branch ids are unique across cafes); the menu shows Pickup elsewhere | e2e `shop-checkout.test.ts` |
-| The account pages (no cafe in their address) | Return to `?redirect=` when it's a cafe's customer page or a table link (never a workspace, another site or a sign-in page); "Back to the menu" is that page's cafe, else the platform's page `/` (`useAccountHome`, D220). They read who is signed in from Better Auth's session (`useAccountSession`), never a cafe's `/shop/me`, which would make the person that cafe's member. Email links carry `?redirect=` back to the cafe | unit `account.test.ts`, e2e `shop-account.test.ts` |
-| A table QR that doesn't work | Says so; no link to any cafe's menu, since its cafe is unknown (D220) | e2e `shop-menu.test.ts` |
-| A cafe's API called from a page without a cafe | Throws in `apiPath` (D220) instead of calling a default cafe's API | unit `api-path.test.ts` |
+| The account pages (no cafe in their address) | Return to `?redirect=` when it's a cafe's customer page or a table link (never a workspace, another site or a sign-in page); "Back to the menu" is that page's cafe, else the platform's page `/` (`useAccountHome`, D221). They read who is signed in from Better Auth's session (`useAccountSession`), never a cafe's `/shop/me`, which would make the person that cafe's member. Email links carry `?redirect=` back to the cafe | unit `account.test.ts`, e2e `shop-account.test.ts` |
+| A table QR that doesn't work | Says so; no link to any cafe's menu, since its cafe is unknown (D221) | e2e `shop-menu.test.ts` |
+| A cafe's API called from a page without a cafe | Throws in `apiPath` (D221) instead of calling a default cafe's API | unit `api-path.test.ts` |
 | Moving to another cafe | A full page load (the address changes before the app starts again); no in-app switch until T2 | — |
 | Telegram's buttons | Built on the server with the cafe's address (`cafeSiteUrl`) | server `notifications.delivery.test.ts` |
 

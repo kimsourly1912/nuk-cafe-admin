@@ -417,7 +417,7 @@ export async function currentSlugFor(db: Db, formerSlug: string): Promise<string
   return row && row.slug !== formerSlug ? row.slug : undefined
 }
 
-/** A cafe for dev accounts and tests (D209): the one at this address, or a new one. Never "the oldest" (D220). */
+/** A cafe for dev accounts and tests (D209): the one at this address, or a new one. Never "the oldest" (D221). */
 export async function seedTenant(db: Db, input: { name: string, slug: string }): Promise<{ id: string, name: string, slug: string, created: boolean }> {
   const existing = await repo.findTenantBySlug(db, input.slug)
   if (existing) return { id: existing.id, name: existing.name, slug: existing.slug, created: false }

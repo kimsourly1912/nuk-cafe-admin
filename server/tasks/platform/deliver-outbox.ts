@@ -4,7 +4,7 @@ import { deliverOutbox } from '#server/features/platform'
  * Every minute (nuxt.config.ts → nitro.scheduledTasks; docs/server/operations.md → Scheduled jobs).
  * Order events are usually sent by their own request already (`sendOrderEventsNow`, D150); this run
  * sends the rest (account emails) and retries whatever failed. A message given up on is logged as an
- * error; the run failing is recorded for System health (`runJob`, D150, D220).
+ * error; the run failing is recorded for System health (`runJob`, D150, D221).
  */
 export default defineTask({
   meta: { name: 'platform:deliver-outbox', description: 'Deliver pending outbox messages, with retries' },

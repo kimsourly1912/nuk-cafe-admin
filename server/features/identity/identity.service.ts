@@ -26,7 +26,7 @@ const tenantRoleOf = (role: string | undefined): TenantRole | undefined =>
 
 /**
  * The tenant a request's path names (`/api/c/<slug>/…`, D140). The only way a request gets a
- * tenant: nothing falls back to a default or the oldest cafe (D220). Unknown: 404 (nothing says whether
+ * tenant: nothing falls back to a default or the oldest cafe (D221). Unknown: 404 (nothing says whether
  * a cafe ever had that address); suspended: 403 `TENANT_SUSPENDED`.
  */
 export async function tenantBySlug(db: Db, slug: string): Promise<{ id: string, slug: string, name: string }> {

@@ -5,7 +5,7 @@
  * `/tables/<token>`, `/health`) is the platform's and goes as it is.
  *
  * A cafe's route from a page without a cafe (`tenant` `null`: the platform's pages) throws instead
- * of guessing one (D220): a request to the wrong cafe would succeed for someone with access there.
+ * of guessing one (D221): a request to the wrong cafe would succeed for someone with access there.
  *
  * @example
  * apiPath('/admin/menu/items', 'nuk') // '/c/nuk/admin/menu/items'

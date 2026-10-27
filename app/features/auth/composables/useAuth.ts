@@ -180,7 +180,7 @@ export function useAuth() {
       // Signed out before leaving: the sign-in page's guard would send a session still here back to
       // the home page, which then loads after the sign-out. `signingOut` keeps the session-lost
       // watcher (plugins/api.ts) from also redirecting, with a `?redirect=` to this page.
-      // Signing out happens in a cafe's admin; without a cafe (never expected) the cafe list, not a guess (D220).
+      // Signing out happens in a cafe's admin; without a cafe (never expected) the cafe list, not a guess (D221).
       const slug = splitTenantUrl(nuxtApp.$router.currentRoute.value.path)?.slug
       signingOut.value = true
       clearSession()

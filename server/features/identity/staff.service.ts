@@ -253,7 +253,7 @@ export async function resetStaffPassword(db: Db, actor: Actor, userId: string, i
 
 /**
  * Test setup: the tenant's first owner, with a temporary password. Does nothing (returns `null`)
- * when the tenant has an owner. Real cafes get theirs from the platform console (D142, D219).
+ * when the tenant has an owner. Real cafes get theirs from the platform console (D142, D220).
  */
 export async function seedFirstOwner(db: Db, tenantId: string, input: { name: string, email: string }): Promise<CreatedStaff | null> {
   if (await repo.countOwners(db, tenantId) > 0) return null

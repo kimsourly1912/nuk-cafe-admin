@@ -206,7 +206,7 @@ describe('signing in with two-step sign-in', () => {
     let signedIn = false
     const user = { id: 'cust-1', email: 'ops@example.com', name: 'Ops', emailVerified: true, mustChangePassword: false }
     const menu = deferred()
-    // From a cafe's menu, as customers arrive (D220: the account pages name no cafe of their own).
+    // From a cafe's menu, as customers arrive (D221: the account pages name no cafe of their own).
     const { page } = await open('/sign-in?redirect=/c/nuk', {
       'GET /auth/get-session': () => (signedIn ? { user, session: { id: 's1' } } : null),
       'POST /auth/sign-in/email': TWO_FACTOR_REDIRECT,

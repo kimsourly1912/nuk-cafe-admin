@@ -5,7 +5,7 @@ import type { CafeProfile } from '#shared/contracts/cafe'
  * cafe of the page's address (`useOptionalTenantSlug`), or another one by its address (the account pages
  * name the cafe they came from). Read from `GET /api/cafes/{slug}`, on the server for the
  * server-rendered menu. `name` is '' until it's loaded; `logoUrl` is `null` without a logo. No
- * cafe (the platform's pages, D220): nothing is read, `name` stays '' and `logoUrl` `null`.
+ * cafe (the platform's pages, D221): nothing is read, `name` stays '' and `logoUrl` `null`.
  *
  * @example
  * const { name, logoUrl } = useCafe()

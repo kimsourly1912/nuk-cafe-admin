@@ -39,7 +39,7 @@ describe('accountLink', () => {
 })
 
 describe('accountHome (D141)', () => {
-  it('is the menu of the cafe to come back to, else the platform\'s page, never a guessed cafe (D220)', () => {
+  it('is the menu of the cafe to come back to, else the platform\'s page, never a guessed cafe (D221)', () => {
     expect(accountHome('/c/brown-bean/checkout')).toBe('/c/brown-bean')
     expect(accountHome('/table/abc')).toBe('/')
     expect(accountHome(undefined)).toBe('/')

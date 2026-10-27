@@ -20,7 +20,7 @@ describe('apiPath (D140)', () => {
     expect(apiPath('/cafes/nuk', null)).toBe('/cafes/nuk')
   })
 
-  it('refuses a cafe\'s route from a page without a cafe, instead of guessing one (D220)', () => {
+  it('refuses a cafe\'s route from a page without a cafe, instead of guessing one (D221)', () => {
     for (const path of ['/shop/me', '/admin/menu/items', '/counter/b1/orders', '/public/menu?branchId=b1']) {
       expect(() => apiPath(path, null), path).toThrow(/without a cafe/)
     }

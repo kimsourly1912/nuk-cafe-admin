@@ -21,7 +21,7 @@ export default defineNuxtPlugin({
     // The cafe whose API this app calls (D140, D141): the one in the page's address. Read from the
     // browser's address, not the router's: a route middleware calls the API before the router has
     // moved (its first page included). Moving to another cafe is a full page load (D141). The
-    // platform's pages have none: a cafe's API called there throws (`apiPath`, D220).
+    // platform's pages have none: a cafe's API called there throws (`apiPath`, D221).
     const tenant = () => splitTenantUrl(window.location.pathname)?.slug ?? null
 
     configureApi(createApiFetch({

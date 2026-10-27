@@ -39,7 +39,7 @@ export interface AccountIdentity {
 
 /**
  * The signed-in account on the platform's account pages (`/sign-in`, `/sign-up`, `/verify-email`,
- * `/email-verified`; D220). Their address names no cafe, so they read Better Auth's session only,
+ * `/email-verified`; D221). Their address names no cafe, so they read Better Auth's session only,
  * never a cafe's `/shop/me`: reading that would make the person a member of a cafe they didn't
  * open. `null` when signed out, for a guest (D156) and on a temporary password, as on the store.
  */
@@ -108,7 +108,7 @@ async function fetchSession() {
 /**
  * Where the verification link lands (`?error=` when it doesn't work), carrying the cafe page the
  * person came from (`?redirect=`, checked again on arrival): "Back to the menu" there goes back to
- * that cafe, never to a guessed one (D220).
+ * that cafe, never to a guessed one (D221).
  */
 function verifyCallback(from?: unknown): string {
   const link = accountLink(ACCOUNT_PATHS.emailVerified, from)

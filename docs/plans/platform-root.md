@@ -1,6 +1,6 @@
-# Plan: no default cafe (D220)
+# Plan: no default cafe (D221)
 
-Owner request, 2026-10-27: a fresh environment (no cafe yet) must work, and nothing may guess a cafe. Decision: [D220](../decisions.md#d220-nothing-guesses-a-cafe-the-sites-root-is-the-platforms-2026-10-27). Setup order per environment: [operations → Setting up an empty environment](../server/operations.md#setting-up-an-empty-environment-d219).
+Owner request, 2026-10-27: a fresh environment (no cafe yet) must work, and nothing may guess a cafe. Decision: [D221](../decisions.md#d221-nothing-guesses-a-cafe-the-sites-root-is-the-platforms-2026-10-27). Setup order per environment: [operations → Setting up an empty environment](../server/operations.md#setting-up-an-empty-environment-d220).
 
 ## Rule
 

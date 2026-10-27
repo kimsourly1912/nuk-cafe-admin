@@ -45,7 +45,7 @@ describe('each cafe at its own address', () => {
     expect((await fetch(url(`/api/c/nuk/public/menu?branchId=${cafe.branchId}`))).status).toBe(404)
   })
 
-  it('the site\'s root is the platform\'s; no address leads into a default cafe (D220)', async () => {
+  it('the site\'s root is the platform\'s; no address leads into a default cafe (D221)', async () => {
     const answer = async (path: string) => {
       const response = await fetch(url(path), { redirect: 'manual' })
       return [response.status, response.headers.get('location')]
@@ -65,7 +65,7 @@ describe('each cafe at its own address', () => {
     expect(await moved('/c/nuk/?table=1')).toEqual([301, '/c/nuk?table=1'])
     expect(await moved('/c/nuk/admin/login/?redirect=/c/nuk/admin')).toEqual([301, '/c/nuk/admin/login?redirect=/c/nuk/admin'])
     expect(await moved('/c/nuk')).toEqual([200, null])
-    // Never towards another site (the root's own redirect stays on this site, D220), and the API answers as it is.
+    // Never towards another site (the root's own redirect stays on this site, D221), and the API answers as it is.
     expect(String((await moved('//evil.example/'))[1] ?? '')).not.toContain('evil.example')
     expect((await fetch(url('/api/c/nuk/public/branches/'), { redirect: 'manual' })).status).not.toBe(301)
 

@@ -455,7 +455,7 @@ describe('seed', () => {
     expect(tenant).toMatchObject({ name: 'NUK Cafe', slug: 'nuk', created: true })
     expect(await fresh.select({ slug: tenantSlugs.slug }).from(tenantSlugs)).toEqual([{ slug: 'nuk' }])
     expect(await seedTenant(fresh, { name: 'NUK Cafe', slug: 'nuk' })).toEqual({ ...tenant, created: false })
-    // Another address is another cafe, never the oldest one (D220).
+    // Another address is another cafe, never the oldest one (D221).
     expect(await seedTenant(fresh, { name: 'Other', slug: 'other' })).toMatchObject({ slug: 'other', created: true })
   })
 })

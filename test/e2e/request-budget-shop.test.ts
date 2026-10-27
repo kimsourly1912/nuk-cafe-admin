@@ -118,7 +118,7 @@ describe('request budget: customer site', () => {
   }, 90_000)
 
   it('a signed-in customer: sign in, the menu, Your orders, back, Review order, back', async () => {
-    // From the cafe's menu, as customers arrive (D220: the account pages name no cafe of their own).
+    // From the cafe's menu, as customers arrive (D221: the account pages name no cafe of their own).
     const { page, calls } = await open('/sign-in?redirect=/c/nuk')
     const customer = seed.customers.budgetShopper
     const steps: Record<string, Record<string, number>> = {}
@@ -155,7 +155,7 @@ describe('request budget: customer site', () => {
     console.info('[request-budget] shop signed in', JSON.stringify(steps, null, 2))
     expect(steps).toEqual({
       // Signing in leaves the server-rendered sign-in page: the menu loads in the browser. Two
-      // sessions: the sign-in page's own (Better Auth's, no cafe, D220) and the menu's account.
+      // sessions: the sign-in page's own (Better Auth's, no cafe, D221) and the menu's account.
       'sign in, to the menu': {
         'POST /auth/sign-in/email': 1,
         'GET /auth/get-session': 2,

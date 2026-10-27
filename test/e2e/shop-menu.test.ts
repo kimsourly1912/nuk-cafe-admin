@@ -14,7 +14,7 @@ await setupE2e()
 const seed = inject('shopSeed')
 
 /** Opens a page; collects errors, and Vue's "Hydration completed but contains mismatches". */
-// The cafe's own address: the site's root is the platform's (D220).
+// The cafe's own address: the site's root is the platform's (D221).
 async function open(width = 1440, path = '/c/nuk') {
   const page = await createPage()
   const problems: string[] = []
@@ -358,7 +358,7 @@ describe('branches and table QR codes', () => {
     expect(await visible(card(page, 'Banana Bread').getByRole('button', { name: 'Add Banana Bread to order' })).isDisabled()).toBe(true)
   })
 
-  it('a QR code that doesn\'t work says so, with no link into a guessed cafe (D220)', async () => {
+  it('a QR code that doesn\'t work says so, with no link into a guessed cafe (D221)', async () => {
     const page = await createPage()
     await page.goto(url('/table/Zz9zZz9zZz9zZz9zZz9zZz'), { waitUntil: 'hydration' })
     await page.getByText('This table\'s QR code doesn\'t work').waitFor()

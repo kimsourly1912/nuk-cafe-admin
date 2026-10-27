@@ -48,7 +48,7 @@ The browser suite uses the CI runner's Google Chrome by default. In a workspace 
 - **"Remove the guard and see the test fail"** is required for new guards (locks, permissions, money, idempotency, version checks); optional elsewhere.
 - **Docs per step:** one `decisions.md` entry and the step's line in `progress.md`; reference pages only when a shared building block or a rule changes.
 
-Local setup on a fresh database (D219): `pnpm dev:accounts`. Accounts for every role (super admin, owner, manager, staff, customer, a second cafe's owner) and password resets: `pnpm dev:accounts`, `pnpm dev:reset <email>`, `pnpm dev:mail` ([Test accounts](../reference/auth.md#test-accounts-local-dev)).
+Local setup on a fresh database (D220): `pnpm dev:accounts`. Accounts for every role (super admin, owner, manager, staff, customer, a second cafe's owner) and password resets: `pnpm dev:accounts`, `pnpm dev:reset <email>`, `pnpm dev:mail` ([Test accounts](../reference/auth.md#test-accounts-local-dev)).
 
 Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix open redirect after login`), not `new`. The history is how the team finds when something broke. If lint or typecheck complains about missing `.nuxt/*` files, run `pnpm nuxt prepare`.
 

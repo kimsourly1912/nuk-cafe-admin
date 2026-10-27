@@ -20,7 +20,7 @@ const code = computed(() => {
 })
 const cafeNotFound = computed(() => Boolean(slug) && code.value === CAFE_NOT_FOUND)
 const paused = computed(() => Boolean(slug) && code.value === TENANT_SUSPENDED)
-// A paused cafe's profile still answers, so its page names it. No cafe in the address: none (D220).
+// A paused cafe's profile still answers, so its page names it. No cafe in the address: none (D221).
 const cafe = useCafe(slug && !cafeNotFound.value ? slug : null)
 
 function safeParse(text: string): unknown {
@@ -35,7 +35,7 @@ function safeParse(text: string): unknown {
 const isNotFound = computed(() => props.error.statusCode === 404)
 // The admin workspace goes back to its dashboard, the customer site to the menu (D93), in the cafe of
 // the address. The platform's pages have no cafe: they go to the platform's page, never a guessed
-// cafe's (D220).
+// cafe's (D221).
 const inAdmin = isAdminPath(route.path)
 const inCounter = isCounterPath(route.path)
 const homePage = '/'

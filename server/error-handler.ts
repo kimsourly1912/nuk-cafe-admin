@@ -9,7 +9,7 @@ import { log } from '#server/utils/log'
  * - 5xx never carry details to the client; the cause is logged with the request id, and chats that
  *   want server errors on Telegram get an alert naming the route and the request id (step 10.4,
  *   D119): only the chats of the cafe the request resolved (D138). An error outside a cafe (the
- *   platform's routes, sign-in) stays in the logs: a cafe never hears about the platform (D220).
+ *   platform's routes, sign-in) stays in the logs: a cafe never hears about the platform (D221).
  *   The alert is queued in the background and can't fail the response.
  */
 /**

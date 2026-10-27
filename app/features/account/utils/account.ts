@@ -55,7 +55,7 @@ export function accountLink(path: string, from?: unknown) {
 
 /**
  * Where the account pages go back to (D141): the menu of the cafe of the page to come back to, else
- * the platform's own page (`/`). Never a cafe the person didn't come from (D220).
+ * the platform's own page (`/`). Never a cafe the person didn't come from (D221).
  */
 export function accountHome(redirect: unknown): string {
   const slug = typeof redirect === 'string' ? splitTenantUrl(redirect)?.slug : undefined

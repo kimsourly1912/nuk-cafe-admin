@@ -4,7 +4,7 @@
  * and the table (`GET /api/tables/{token}`, global: D140); this tab then orders for that table and
  * goes to the menu. A token that doesn't work (rotated, archived table or branch, mistyped) says so:
  * the reason is never told (the server answers 404 for all of them). Its cafe is unknown then, so
- * there's no link to any cafe's menu (D220): the staff help, or the cafe's own link.
+ * there's no link to any cafe's menu (D221): the staff help, or the cafe's own link.
  */
 import type { ScannedTable } from '#shared/contracts/branches'
 import { useTableContext } from '../composables/useShopMenu'

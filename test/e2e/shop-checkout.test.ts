@@ -50,7 +50,7 @@ async function signIn(page: Page, customer: Pick<SeedCustomer, 'email' | 'passwo
 
 /** Signs in from the sign-in page and comes back to the menu. */
 async function signedIn(customer: SeedCustomer, width = 1440) {
-  // From the cafe's menu, as customers arrive: the account pages name no cafe of their own (D220).
+  // From the cafe's menu, as customers arrive: the account pages name no cafe of their own (D221).
   const opened = await open('/sign-in?redirect=/c/nuk', width)
   await signIn(opened.page, customer)
   await opened.page.waitForURL(at('/c/nuk'))

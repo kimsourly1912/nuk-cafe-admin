@@ -85,7 +85,7 @@ describe('Your cafes', () => {
   it('says so for an account that works at no cafe', async () => {
     const page = await open([])
     await page.getByText('This account doesn\'t work at a cafe').waitFor()
-    // No link into a guessed cafe (D220).
+    // No link into a guessed cafe (D221).
     expect(await page.locator('a[href^="/c/"]').count()).toBe(0)
   })
 

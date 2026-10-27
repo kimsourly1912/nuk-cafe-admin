@@ -6,7 +6,7 @@ import { log } from '#server/utils/log'
 /**
  * Runs a scheduled job's work (D150): a failure is logged with its stack, recorded for System health
  * and thrown again, so the job still reports it failed. Jobs belong to no cafe, so no cafe's chats
- * hear about them (D220). Until the platform has an alert channel of its own (Q24), the independent
+ * hear about them (D221). Until the platform has an alert channel of its own (Q24), the independent
  * health check reports work that stops moving, where its NUXT_MAINTENANCE_* ages are set (D168).
  */
 export async function runJob<T>(job: string, work: () => Promise<T>): Promise<T> {

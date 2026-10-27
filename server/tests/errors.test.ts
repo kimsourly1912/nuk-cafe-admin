@@ -48,7 +48,7 @@ describe('toErrorResponse', () => {
   })
 })
 
-describe('alertTenantOf (D220)', () => {
+describe('alertTenantOf (D221)', () => {
   it('is the cafe the request resolved, and nothing for a request outside a cafe', () => {
     expect(alertTenantOf({ tenant: { id: 'tenant-2', slug: 'b', name: 'B' } })).toBe('tenant-2')
     // The platform's routes, sign-in, an unknown cafe address: no cafe hears about them.

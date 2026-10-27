@@ -98,7 +98,7 @@ export function toErrorResponse(error: unknown, requestId?: string): ErrorRespon
 }
 
 /**
- * The cafe a server error's alert may go to (D119, D220): the one the request resolved from its
+ * The cafe a server error's alert may go to (D119, D221): the one the request resolved from its
  * address (`requireTenant`), else none. Never a default or the oldest cafe: an error on the
  * platform's routes is the platform's, and a cafe's chats never hear about it.
  */
