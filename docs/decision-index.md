@@ -248,3 +248,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D216](decisions.md#d216-measure-public-menu-performance-with-privacy-boundaries-and-independent-health-checks-2026-10-26) | Measure public menu performance with privacy boundaries and independent health checks, 2026-10-26 |
 | [D217](decisions.md#d217-verify-account-actions-with-free-turnstile-before-the-existing-auth-handler-2026-10-27) | Verify account actions with free Turnstile before the existing auth handler, 2026-10-27 |
 | [D218](decisions.md#d218-cache-public-image-bytes-at-the-edge-while-keeping-current-request-security-2026-10-27) | Cache public image bytes at the edge while keeping current request security, 2026-10-27 |
+| [D219](decisions.md#d219-index-active-counter-orders-without-caching-their-state-2026-10-27) | Index active counter orders without caching their state, 2026-10-27 |

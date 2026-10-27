@@ -435,6 +435,8 @@ placed (unpaid) ──payment recorded──► preparing ──► ready ──
 - **Q36 (owner, 2026-09-29, D101):** staff and managers may also cancel a **paid order before it's ready**, recording how the money went back (cash or KHQR, the full amount). A ready or completed order needs an admin refund.
 - An unpaid order past its 30 minutes can't be paid (409 `PAYMENT_EXPIRED`) and leaves the queue; within a minute the expiry task (`orders:expire-unpaid`, D104) marks it cancelled: an `order_events` row with no actor and the note "Not paid within 30 minutes". Index `orders_status_due_idx` (status, `payment_due_at`) answers the task's query.
 
+**Counter read index (D219):** migration `0049_orders_active_queue` adds `orders_active_queue_idx (tenant_id, branch_id, placed_at, id)` for awaiting-payment/preparing/ready orders. All three active queue reads use its matching literal status term, then exclude expired unpaid orders. Reads stay fresh; old preparing/ready orders are retained. The index adds storage and status-transition maintenance; existing indexes and the finished-day count remain. [Measurement](../reviews/cloudflare-d1-queue-2026-10-27.md).
+
 **The counter** (`/api/counter/{branchId}/orders`, branch members and admins, D101). Every command takes `{ version, … }` and an `Idempotency-Key`, answers the order as it is now, and writes the change (guarded by status and version), its event, the payment and an audit entry in one batch. A stale version or a status that moved on is 409 `ORDER_CHANGED` ("Order 042 changed meanwhile: it's paid and being prepared now."); the same key again returns the first answer.
 
 | Route | Permission | Does |

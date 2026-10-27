@@ -1,0 +1,1 @@
+CREATE INDEX `orders_active_queue_idx` ON `orders` (`tenant_id`,`branch_id`,`placed_at`,`id`) WHERE "orders"."status" in ('awaiting_payment', 'preparing', 'ready');
