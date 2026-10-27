@@ -33,7 +33,7 @@ async function start() {
       'sitekey': config.siteKey,
       'action': props.action,
       'theme': colorMode.value === 'dark' ? 'dark' : 'light',
-      'size': 'flexible',
+      'size': container.value.clientWidth < 300 ? 'compact' : 'flexible',
       'retry': 'never',
       'refresh-expired': 'never',
       'refresh-timeout': 'never',

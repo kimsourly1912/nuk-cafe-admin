@@ -99,8 +99,8 @@ describe('public API rate limits (D121)', () => {
     const orders = fakeLimiter(20)
     const limiters = { RATE_LIMIT_PUBLIC: general.limiter, RATE_LIMIT_QUOTE: quote.limiter, RATE_LIMIT_ORDERS: orders.limiter }
     for (let person = 0; person < 50; person++) {
-      for (const path of ['/api/c/nuk/public/menu', '/api/c/nuk/public/checkout/quote']) {
-        expect((await checkRateLimit({ path, method: 'POST', address: '203.0.113.7', limiters })).limited).toBeNull()
+      for (const [path, method] of [['/api/c/nuk/public/menu', 'GET'], ['/api/c/nuk/public/checkout/quote', 'POST']] as const) {
+        expect((await checkRateLimit({ path, method, address: '203.0.113.7', limiters })).limited).toBeNull()
       }
     }
     for (const path of ['/api/health', '/api/webhooks/telegram', '/api/c/nuk/shop/orders/0191', '/api/c/nuk/counter/branch/queue']) {

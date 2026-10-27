@@ -5,7 +5,7 @@ export interface TurnstileApi {
     'sitekey': string
     'action': HumanCheckAction
     'theme': 'light' | 'dark'
-    'size': 'flexible'
+    'size': 'flexible' | 'compact'
     'retry': 'never'
     'refresh-expired': 'never'
     'refresh-timeout': 'never'

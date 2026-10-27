@@ -13,6 +13,7 @@ const widgets = new Map();
 window.turnstile = {
   render(element, options) {
     const id = String(++sequence);
+    element.dataset.checkSize = options.size;
     const done = document.createElement('button');
     done.textContent = 'Complete test check';
     done.onclick = () => options.callback('test-browser-token-' + id);
@@ -71,6 +72,14 @@ describe('on-demand account browser check', () => {
     }
     expect(new Set(tokens).size).toBe(2)
     expect(tokens.every(Boolean)).toBe(true)
+  })
+
+  it('uses the compact widget on a 320px phone', async () => {
+    const { page } = await signInPage()
+    await page.setViewportSize({ width: 320, height: 720 })
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    await expect.poll(() => page.locator('[data-check-size]').getAttribute('data-check-size')).toBe('compact')
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
   })
 
   it('a blocked script and an expired challenge can be retried without sending an auth request', async () => {
