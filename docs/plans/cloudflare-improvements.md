@@ -60,6 +60,14 @@ The cache is per data center, not a globally replicated or tiered cache. A hit s
 
 Completion requires focused cache/tenant/replacement/failure tests, the real HTTP photo journey, a Workers-runtime cache check, environment builds/dry runs and post-merge staging MISS/HIT checks. [Evidence](../progress.md#cloudflare-public-image-delivery-d218-2026-10-27), [operations](../server/operations.md#public-image-delivery-d218).
 
+### Step 5: measured D1 counter queue (D219)
+
+Owner authorized the next step after PR #191 merged. Branch `codex/cloudflare-d1-query-performance` from main `e2b5380`; staging deployment run `40444162955` passed. [Measurement](../reviews/cloudflare-d1-queue-2026-10-27.md), [evidence](../progress.md#cloudflare-d1-counter-queue-d219-2026-10-27).
+
+Add the partial `orders_active_queue_idx (tenant_id, branch_id, placed_at, id)` for active statuses, and use its fixed literal status predicate in all three active counter reads. This skips finished history while retaining fresh reads, deadline checks, earlier-day active orders, stable ordering, tenant isolation and the existing batch. No polling/cache policy, financial write or paid service changes. Migration `0049_orders_active_queue` is additive and runs before the Worker through the existing deployment process. Account for index storage and transition writes; keep the old indexes.
+
+Compare actual local D1 plans and rows read with the old predicate, both before and after ANALYZE; statistics can already make the old query cheaper. Do not infer a universal speedup from a cold-plan fixture. Require boundary/tenant/freshness tests, mutation checks, standard checks and full CI browser tests before review. Verify staging migration and representative D1/route measurements after merge. Production's manual gate remains.
+
 ## Verification and rollback
 
 1. Read the current zone and Worker settings, preserving nonsecret before/after evidence.

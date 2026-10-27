@@ -64,6 +64,9 @@ export const orders = sqliteTable('orders', {
   uniqueIndex('orders_pickup_number_idx').on(t.branchId, t.businessDate, t.pickupNumber),
   index('orders_customer_idx').on(t.customerId, t.placedAt),
   index('orders_branch_status_idx').on(t.branchId, t.status),
+  // Queue polls skip finished history and return active orders in their display order (D219).
+  index('orders_active_queue_idx').on(t.tenantId, t.branchId, t.placedAt, t.id)
+    .where(sql`${t.status} in ('awaiting_payment', 'preparing', 'ready')`),
   // The counter's finished orders of a business day (step 10.2).
   index('orders_branch_date_idx').on(t.branchId, t.businessDate),
   // A dining table's history (D200): whether an order was placed at it.

@@ -2472,6 +2472,15 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Verification:** [plan](plans/cloudflare-improvements.md#step-4-public-image-edge-delivery-d218), [progress](progress.md#cloudflare-public-image-delivery-d218-2026-10-27), [operations](server/operations.md#public-image-delivery-d218). One branch/PR; normal review and production release process.
 
 
+### D219: Index active counter orders without caching their state (2026-10-27)
+
+Cloudflare improvement step 5 uses an additive partial index `orders_active_queue_idx (tenant_id, branch_id, placed_at, id)` over awaiting-payment/preparing/ready orders. The counter's shared active predicate includes that literal status set and retains the strict unpaid deadline check. SQLite requires a query term it can prove implies the partial index condition; parameterizing the fixed status set loses this plan in the regression test. Tenant, branch and deadline stay bound; no user input enters literal SQL.
+
+This is a narrow exception to preferring builder operators for every expressible condition: the literal term is needed to select this SQLite partial index. The schema's index condition and repository term must stay aligned. One fresh batch still returns queue, lines, payments and today's finished count; no menu/checkout/payment freshness or authorization changes. Migration `0049_orders_active_queue` keeps existing indexes and rows, adds storage and active-order write maintenance, and is compatible with the previous Worker. Reverting the application predicate needs no destructive rollback.
+
+[Measurement](reviews/cloudflare-d1-queue-2026-10-27.md) records local workerd plans/rows read with and without ANALYZE; the old query is already cheaper with statistics, so this is not a production latency or capacity guarantee. [Progress](progress.md#cloudflare-d1-counter-queue-d219-2026-10-27) owns checks and rollout limits. No new paid service; one PR, no automatic merge.
+
+
 ### D220: One setup path per environment; the db:seed task is retired (2026-10-27)
 
 - **Context:** the owner asked how a fresh environment becomes ready to serve. Locally there were two overlapping paths: `db:seed` (one cafe, one owner with a temporary password from `NUXT_SEED_ADMIN_EMAIL`, who was also made a super admin) and `pnpm dev:accounts` (D209: every role, two cafes, a super admin without cafe access). `db:seed` mixed the platform and cafe roles on one account, against D135's separation. The staging runbook still made a cafe and its owner with hand-written SQL that skipped `tenant_slugs` (D142), the first branch and the audit, while the production runbook said the console does it. The super admin promotion matched on email alone, although sign-up doesn't require a confirmed email (D156).
