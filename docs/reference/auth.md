@@ -146,3 +146,10 @@ Where to go after login: the `?redirect=` value if it's a path on this site (`/c
 ## Identity generation
 
 `useAuth().generation` (read-only) increments whenever the signed-in identity changes: login, logout, expiry, or another staff member through another tab. It fires the runtime hook `app:session-changed` (`{ signedIn }`). The API layer uses it to discard responses from an earlier identity, and `plugins/session-boundary.client.ts` clears that identity's data, toasts, overlays and forms. Features don't use it directly. Contract: [App-wide behavior → Session-transition contract](./app-behavior.md#session-transition-contract) (D29).
+
+
+## Account browser verification (D217)
+
+`useAuthRequest()` is the shared transport behind the four account/session composables. It captures Nuxt context during setup and returns the existing typed POST helper. With the deployed public configuration enabled, sign-in, sign-up, reset-email requests and verification-email resends open `HumanCheckModal`; cancel/Back preserves input and sends no request. Each submit uses a fresh single-use token header, with automatic HTTP retries disabled. The server independently requires strict action/hostname verification; changing client configuration cannot bypass it. Other auth actions retain their original behavior.
+
+The modal loads Cloudflare's official script only on demand, removes each widget on close, and offers retry after load/network/expiry failure. Do not store tokens in state, localStorage, analytics or logs. See [operations](../server/operations.md#account-browser-verification-d217) and [verification evidence](../progress.md#cloudflare-account-bot-protection-d217-2026-10-27).

@@ -30,13 +30,11 @@ export function counterRedirectTarget(redirect: unknown, slug: string): string {
 
 const NO_COUNTER_ACCESS = 'This account doesn\'t work at any branch, so it can\'t use the counter.'
 
-const authFetch = <T>(path: string, body: Record<string, unknown> = {}) =>
-  $fetch<T>(`/api/auth${path}`, { method: 'POST', body, retry: 0, timeout: 30_000 })
-
 /** 403 from `/counter/me`: signed in, but at no branch (a customer). */
 const isNoAccess = (error: ApiError) => error.status === 403
 
 export function useCounterSession() {
+  const authFetch = useAuthRequest()
   // Captured now: the hooks below run after an `await`, where the Nuxt context is gone.
   const nuxtApp = useNuxtApp()
   // Not `auth:*` (Better Auth's module owns those) and not the admin's `staff-session:*`.

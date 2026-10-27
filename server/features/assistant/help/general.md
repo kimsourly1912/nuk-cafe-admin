@@ -70,3 +70,8 @@ Press **?** to see them all. The main ones: **Ctrl+K** search everything, **/** 
 ## This assistant
 
 The assistant answers questions about this portal and links to its pages. It can't change anything for you, and it can make mistakes: check before you act. It has a daily limit per admin; when it's reached, it's available again after midnight (cafe time).
+
+
+## Browser check when signing in
+
+Signing in may open **Browser check** before the password is submitted. Complete the check to continue. If it cannot load or expires, use **Try again**; **Cancel** or your phone's Back returns to the form with its input kept. Submit again after a failed attempt to get a fresh check. This does not replace your password or two-step code.

@@ -28,13 +28,11 @@ export function platformRedirectTarget(redirect: unknown): string {
 
 const NO_PLATFORM_ACCESS = 'This account doesn\'t have access to the platform console.'
 
-const authFetch = <T>(path: string, body: Record<string, unknown> = {}) =>
-  $fetch<T>(`/api/auth${path}`, { method: 'POST', body, retry: 0, timeout: 30_000 })
-
 /** 403 from `/platform/me`: signed in, but not on the platform team. */
 const isNoAccess = (error: ApiError) => error.status === 403
 
 export function usePlatformSession() {
+  const authFetch = useAuthRequest()
   // Captured now: the hooks below run after an `await`, where the Nuxt context is gone.
   const nuxtApp = useNuxtApp()
   // Not `auth:*` (Better Auth's module owns those), nor the admin's or the counter's keys.

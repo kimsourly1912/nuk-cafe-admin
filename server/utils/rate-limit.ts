@@ -14,7 +14,7 @@ import { log } from '#server/utils/log'
  */
 export const RATE_LIMIT_RULES = [
   // Placing an order, now that a guest can (D156): only the POST, never the order page's polling.
-  { prefix: '/api/shop/orders', method: 'POST', binding: 'RATE_LIMIT_ORDERS' },
+  { prefix: '/api/shop/orders', exact: true, method: 'POST', binding: 'RATE_LIMIT_ORDERS' },
   // Prices the whole order from the catalog: the costliest public call.
   { prefix: '/api/public/checkout/quote', binding: 'RATE_LIMIT_QUOTE' },
   { prefix: '/api/public/', binding: 'RATE_LIMIT_PUBLIC' },
@@ -25,12 +25,12 @@ export const RATE_LIMIT_RULES = [
   { prefix: '/api/client-errors', binding: 'RATE_LIMIT_PUBLIC' },
   // The new-password checklist's leaked-password ranges (D210): public, and each one calls Have I Been Pwned.
   { prefix: '/api/password-ranges/', binding: 'RATE_LIMIT_PUBLIC' },
-] as const satisfies readonly { prefix: string, method?: string, binding: string }[]
+] as const satisfies readonly { prefix: string, exact?: boolean, method?: string, binding: string }[]
 
 /** The rule for a request: the first whose prefix (and method, when it names one) matches. */
 export function rateLimitRule(path: string, method: string) {
   const named = rateLimitPath(path)
-  return RATE_LIMIT_RULES.find(rule => named.startsWith(rule.prefix) && (!('method' in rule) || rule.method === method))
+  return RATE_LIMIT_RULES.find(rule => ('exact' in rule && rule.exact ? named === rule.prefix : named.startsWith(rule.prefix)) && (!('method' in rule) || rule.method === method))
 }
 
 /**
@@ -38,7 +38,7 @@ export function rateLimitRule(path: string, method: string) {
  * so every cafe shares one set of rules and each address's count covers them all.
  */
 export function rateLimitPath(path: string): string {
-  return path.replace(/^\/api\/c\/[^/]+(?=\/)/, '/api')
+  return path.split(/[?#]/, 1)[0]!.replace(/\/+$/, '').replace(/^\/api\/c\/[^/]+(?=\/)/, '/api')
 }
 
 export type RateLimitBinding = (typeof RATE_LIMIT_RULES)[number]['binding']

@@ -31,7 +31,8 @@ describe('analytics and sensitive-page headers', () => {
   ])('keeps the third-party beacon blocked on a direct visit to %s', async (path) => {
     const response = await fetch(`${host}${path}`, { redirect: 'manual' })
     const csp = directives(response.headers.get('content-security-policy')!)
-    expect(csp['script-src']).toEqual(['\'self\'', '\'unsafe-inline\''])
+    expect(csp['script-src']).toEqual(['\'self\'', '\'unsafe-inline\'', 'https://challenges.cloudflare.com'])
+    expect(csp['frame-src']).toEqual(['https://challenges.cloudflare.com'])
     expect(csp['connect-src']).toEqual(['\'self\''])
     expect(response.headers.get('referrer-policy')).toBe('strict-origin')
   })

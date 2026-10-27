@@ -36,6 +36,18 @@ Reuse free automatic Web Analytics with a public-menu document CSP allowance and
 
 Record app-scoped Worker/D1/R2/RUM measurements before optimizing. Enable the existing independent health workflow by default on production after merge, with staging selectable manually and an explicit pause switch. Validate HTTP status and JSON, bound output/retries, preserve existing notification preferences. Actual failure receipt and Q24's responsible owner remain open. No new subscription, collector or dependency; no polling, SQL or cache freshness change.
 
+### Step 3: account bot protection (D217)
+
+Owner authorized the next step after PR #189 merged; main `1611b28` CI/staging passed. Branch `codex/cloudflare-bot-protection`.
+
+- **[Choice] Surfaces:** email/password sign-in (customer/admin/counter/platform), sign-up, password-reset requests and verification-email resends. Stable actions: sign_in, sign_up, password_reset, verify_email. Existing Better Auth handlers remain authoritative; verify before password work/account email. Guest ordering, 2FA, OAuth, password-reset token redemption, health and Telegram are outside this challenge scope.
+- **[Choice] UI:** an on-demand browser-check modal using the existing AppModal, after form validation. Cancel/Back preserves the form and sends no request. Retry after script/network/expiry failure. Each attempt creates/removes its own widget; no token persists between requests. No new screen/layout redesign or dependency.
+- **[Choice] Server:** reuse Better Auth's before hook with canonical Siteverify, strict success/action/exact hostname validation, 2048-character token cap and ten-second deadline. Native captcha options provide one expected action per plugin; this hook preserves distinct endpoint actions and safe failure handling without duplicating auth handlers. Missing configuration and upstream failures fail closed when enabled.
+- **[Choice] Environments:** separate free managed widgets; no pre-clearance or paid product. Exact frontend hostname comes from each environment's site URL. Local/e2e remains disabled by default; test fixtures never become production bypasses. Public keys in configuration, secrets only in existing Worker secret bindings.
+- **[Choice] API limits:** preserve current limits, check exact order-placement matching and verify public/shared-connection behavior without a load test or real order/payment mutation. Existing low per-IP auth/guest caps remain a known shared-Wi-Fi constraint; this step does not promise 50 concurrent sign-ins or a new capacity policy.
+- **Acceptance:** reject missing, forged, expired/replayed, wrong-action and wrong-host tokens; preserve successful auth/email/2FA flows; cancellation, retry and script failure work; correct CSP; unrelated routes stay unchallenged; guard-removal checks fail. Real browser/token/replay verification is required on deployed staging before calling rollout complete.
+- **Rollout:** one PR; main deploys staging, production remains behind its normal manual reviewer gate. Document every unverified item rather than silently disabling protection.
+
 ## Verification and rollback
 
 1. Read the current zone and Worker settings, preserving nonsecret before/after evidence.

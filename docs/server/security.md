@@ -206,6 +206,12 @@ Built in step 1.6 (D51).
 
 Request limits count received bytes before parsing, including chunked input and unused multipart fields. The Cloudflare entry applies them before Nitro buffers the body (D168); route readers apply them again after authorization. See [server reliability](../reference/server-reliability.md#request-bodies).
 
+### Account bot verification (D217)
+
+The four password/account-email actions use canonical Turnstile Siteverify in Better Auth's before hook, with strict success/action/exact deployment-hostname checks, a 2048-character token cap and ten-second timeout. Failures never attach upstream exceptions or keys/tokens. Keys stay in the existing Worker secret binding. The browser's public flag is not server authorization. New requests always use new tokens; expiry and replay are rejected by Cloudflare. Guest, 2FA, OAuth, health, webhook and order flows are not gated by this check. See [operations](operations.md#account-browser-verification-d217) for rollout and remaining real-token verification.
+
+CSP permits only `https://challenges.cloudflare.com` for Turnstile scripts/frames; `connect-src` stays same-origin and referrers use `strict-origin`. The SDK loads on protected submission, not ordinary menu loads. The order-placement limiter matches only the normalized collection POST (query/trailing slash included), so order cancellation/Telegram actions do not consume creation slots. Existing auth/guest limits remain unchanged.
+
 ## Uploads
 
 - Only `media:upload` holders. Images only: JPEG, PNG, WebP (no SVG: it can carry script). The file's **first bytes** must be one of those and match the type the browser claimed; the size is checked from `Content-Length` before the body is read and again after. (NuxtHub's `ensureBlob` checks only the claimed type and the size, with a generic 400; our checks cover both with 413/415 and add the bytes, D57.)
