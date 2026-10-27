@@ -247,3 +247,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D215](decisions.md#d215-cloudflare-improvements-within-the-existing-plan-domain-security-and-log-privacy-first-2026-10-26) | Cloudflare improvements within the existing plan, domain security and log privacy first, 2026-10-26 |
 | [D216](decisions.md#d216-measure-public-menu-performance-with-privacy-boundaries-and-independent-health-checks-2026-10-26) | Measure public menu performance with privacy boundaries and independent health checks, 2026-10-26 |
 | [D217](decisions.md#d217-verify-account-actions-with-free-turnstile-before-the-existing-auth-handler-2026-10-27) | Verify account actions with free Turnstile before the existing auth handler, 2026-10-27 |
+| [D218](decisions.md#d218-cache-public-image-bytes-at-the-edge-while-keeping-current-request-security-2026-10-27) | Cache public image bytes at the edge while keeping current request security, 2026-10-27 |
