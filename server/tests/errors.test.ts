@@ -1,6 +1,6 @@
 import { createError } from 'h3'
 import { describe, expect, it } from 'vitest'
-import { apiError, ErrorCodes, toErrorResponse } from '#server/utils/errors'
+import { alertTenantOf, apiError, ErrorCodes, toErrorResponse } from '#server/utils/errors'
 
 describe('apiError', () => {
   it('carries the status, code, user message and field errors', () => {
@@ -45,5 +45,14 @@ describe('toErrorResponse', () => {
   it('treats anything that isn\'t an HTTP error as a 500', () => {
     expect(toErrorResponse('boom').status).toBe(500)
     expect(toErrorResponse(undefined).status).toBe(500)
+  })
+})
+
+describe('alertTenantOf (D220)', () => {
+  it('is the cafe the request resolved, and nothing for a request outside a cafe', () => {
+    expect(alertTenantOf({ tenant: { id: 'tenant-2', slug: 'b', name: 'B' } })).toBe('tenant-2')
+    // The platform's routes, sign-in, an unknown cafe address: no cafe hears about them.
+    expect(alertTenantOf({})).toBeUndefined()
+    expect(alertTenantOf({ tenant: {} })).toBeUndefined()
   })
 })

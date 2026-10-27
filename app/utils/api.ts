@@ -4,13 +4,14 @@ import { ApiError } from './api-error'
 import { apiPath } from './api-path'
 
 let client: ApiFetch | undefined
-let tenantOf: (() => string) | undefined
+let tenantOf: (() => string | null) | undefined
 
 /**
- * Set once by plugins/api.ts: the fetch, and the cafe the app works in (D140; read there, inside
- * Nuxt's context, since `apiFetch` also runs from click handlers outside it).
+ * Set once by plugins/api.ts: the fetch, and the cafe of the page on screen (D140; read there,
+ * inside Nuxt's context, since `apiFetch` also runs from click handlers outside it). `null` on the
+ * platform's pages, where a cafe's API throws (`apiPath`, D220).
  */
-export function configureApi(fetch: ApiFetch, tenant: () => string) {
+export function configureApi(fetch: ApiFetch, tenant: () => string | null) {
   client = fetch
   tenantOf = tenant
 }
@@ -25,7 +26,7 @@ export function configureApi(fetch: ApiFetch, tenant: () => string) {
  */
 export function apiFetch<T>(path: string, options?: ApiFetchOptions): Promise<T> {
   // Rendering on the server runs inside the page request's context: its address names the cafe.
-  if (import.meta.server) return serverFetch<T>(apiPath(path, splitTenantUrl(useRequestURL().pathname)?.slug ?? useRuntimeConfig().public.defaultTenant), options)
+  if (import.meta.server) return serverFetch<T>(apiPath(path, splitTenantUrl(useRequestURL().pathname)?.slug ?? null), options)
   if (!client || !tenantOf) throw new Error('apiFetch was called before plugins/api.ts configured it.')
   return client<T>(apiPath(path, tenantOf()), options)
 }

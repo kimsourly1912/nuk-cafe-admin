@@ -833,7 +833,7 @@ Source: `app/components/MenuItemImage.vue` (auto-imported).
 
 ## `useCafe` and `<CafeLogo>`
 
-A cafe's name and logo (D143), wherever the app names the cafe: `useCafe()` reads the cafe of the page's address (`useTenantSlug`); `useCafe(slug)` another one (the account pages name the cafe they came from). It is `useApiQuery` on `GET /api/cafes/{slug}` (key `cafe:profile:<slug>`, server-rendered on the menu; invalidated by `cafe`) plus `name` (`''` until loaded) and `logoUrl` (`null` without a logo). A paused cafe still answers (its paused page names it). `<CafeLogo :url>` is the logo, or the coffee icon without one; decorative, so the name is always beside it.
+A cafe's name and logo (D143), wherever the app names the cafe: `useCafe()` reads the cafe of the page's address (`useOptionalTenantSlug`); `useCafe(slug)` another one (the account pages name the cafe they came from). No cafe (`null`, the platform's pages): nothing is read, `name` stays `''` (D220). It is `useApiQuery` on `GET /api/cafes/{slug}` (key `cafe:profile:<slug>`, server-rendered on the menu; invalidated by `cafe`) plus `name` (`''` until loaded) and `logoUrl` (`null` without a logo). A paused cafe still answers (its paused page names it). `<CafeLogo :url>` is the logo, or the coffee icon without one; decorative, so the name is always beside it.
 
 Source: `app/composables/useCafe.ts`, `app/components/CafeLogo.vue`.
 

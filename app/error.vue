@@ -20,9 +20,8 @@ const code = computed(() => {
 })
 const cafeNotFound = computed(() => Boolean(slug) && code.value === CAFE_NOT_FOUND)
 const paused = computed(() => Boolean(slug) && code.value === TENANT_SUSPENDED)
-// A paused cafe's profile still answers, so its page names it.
-const defaultSlug = useTenantSlug().value
-const cafe = useCafe(slug && !cafeNotFound.value ? slug : defaultSlug)
+// A paused cafe's profile still answers, so its page names it. No cafe in the address: none (D220).
+const cafe = useCafe(slug && !cafeNotFound.value ? slug : null)
 
 function safeParse(text: string): unknown {
   try {
@@ -35,11 +34,14 @@ function safeParse(text: string): unknown {
 
 const isNotFound = computed(() => props.error.statusCode === 404)
 // The admin workspace goes back to its dashboard, the customer site to the menu (D93), in the cafe of
-// the address (the default cafe's on the platform's pages, D141).
+// the address. The platform's pages have no cafe: they go to the platform's page, never a guessed
+// cafe's (D220).
 const inAdmin = isAdminPath(route.path)
 const inCounter = isCounterPath(route.path)
-const tenantPath = useTenantPath()
-const home = inAdmin ? { label: 'Back to dashboard', path: tenantPath('/admin') } : { label: 'Back to the menu', path: tenantPath('/') }
+const homePage = '/'
+const home = !slug
+  ? { label: 'Go to home', path: homePage }
+  : inAdmin ? { label: 'Back to dashboard', path: tenantUrl(slug, '/admin') } : { label: 'Back to the menu', path: tenantUrl(slug, '/') }
 
 const view = computed(() => {
   if (cafeNotFound.value) {
@@ -56,10 +58,8 @@ const view = computed(() => {
     ? { icon: 'i-lucide-map-pin-off', title: 'Page not found', description: 'The page you are looking for doesn\'t exist.' }
     : { icon: 'i-lucide-triangle-alert', title: 'Something went wrong', description: getErrorMessage(props.error) }
 })
-// No way back into a cafe that isn't there, or that is paused; an address with no cafe leaves for the
-// default cafe's menu, like the account pages do.
+// No way back into a cafe that isn't there, or that is paused: those leave for the platform's page.
 const showHome = computed(() => !cafeNotFound.value && !paused.value)
-const homePage = tenantUrl(defaultSlug, '/')
 
 // Rendered instead of app.vue, so it sets its own tab title.
 const siteName = computed(() => {

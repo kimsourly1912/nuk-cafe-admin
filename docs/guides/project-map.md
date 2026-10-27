@@ -21,7 +21,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](.
 | What | Where | Use for |
 |---|---|---|
 | `apiFetch<T>(path, opts)` | `utils/api.ts`, engine `utils/api-fetch.ts` | Every call to our API (`/api` + path; a cafe's surfaces under the page's cafe, `apiPath`): `ApiError` on failure, no retries, session loss and required password change handled |
-| `useTenantPath()`, `useTenantSlug()`, `tenantUrl`, `splitTenantUrl` | `composables/`, `utils/tenant-path.ts` | A cafe page's address: `tenantPath('/admin/products')` → `/c/nuk/admin/products` (D141) |
+| `useTenantPath()`, `useTenantSlug()`, `useOptionalTenantSlug()`, `tenantUrl`, `splitTenantUrl` | `composables/`, `utils/tenant-path.ts` | A cafe page's address: `tenantPath('/admin/products')` → `/c/nuk/admin/products` (D141); no cafe guessed on the platform's pages (D220) |
 | `useApiQuery(key, handler, opts)` | `composables/` | Every read (see "CRUD state") |
 | `useMutation(fn, opts)` | `composables/`, engine in `utils/mutation.ts` | Every create/update/delete, single or batch |
 | `useTableSelection`, `BulkActionsBar` | `composables/`, `components/` | Selection for tables, cards and trees (`isSelected`, `toggle`, `toggleAll`); the Select mode bar |

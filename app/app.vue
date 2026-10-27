@@ -24,7 +24,7 @@ const isWorkspace = computed(() => isAdminPath(route.path) || isCounterPath(rout
 
 // The counter and the admin install as the cafe's own apps (D202): each links its manifest. The
 // customer site and the platform console don't.
-const slug = useTenantSlug()
+const slug = useOptionalTenantSlug()
 const colorMode = useColorMode()
 const installable = computed<Workspace | null>(() => isCounterPath(route.path) ? 'counter' : isAdminPath(route.path) ? 'admin' : null)
 
@@ -38,7 +38,7 @@ useHead(computed(() => {
     titleTemplate: (title?: string) => (title && site ? `${title} · ${site}` : title || site),
     link: app
       ? [
-          { rel: 'manifest', href: webManifestPath(slug.value, app) },
+          { rel: 'manifest', href: webManifestPath(slug.value!, app) },
           { rel: 'apple-touch-icon', href: '/pwa/apple-touch-icon-180.png' },
         ]
       : [],

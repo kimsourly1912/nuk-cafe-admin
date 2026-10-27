@@ -98,11 +98,6 @@ export async function findTenantBySlug(db: Db, slug: string): Promise<TenantRow 
   return firstRow(db.select(tenantColumns).from(organization).where(eq(organization.slug, slug)))
 }
 
-/** Across cafes: the oldest cafe, for the seed task and the unchanged D140 fallback. */
-export async function findOldestTenant(db: Db): Promise<TenantRow | undefined> {
-  return firstRow(db.select(tenantColumns).from(organization).orderBy(asc(organization.createdAt), asc(organization.id)))
-}
-
 /** Across cafes: the cafe that has (or had) this address; `undefined` when no cafe ever used it. */
 export async function findSlugOwner(db: Db, slug: string): Promise<string | undefined> {
   return (await firstRow(db.select({ tenantId: tenantSlugs.tenantId }).from(tenantSlugs).where(eq(tenantSlugs.slug, slug))))?.tenantId

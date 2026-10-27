@@ -50,7 +50,8 @@ async function signIn(page: Page, customer: Pick<SeedCustomer, 'email' | 'passwo
 
 /** Signs in from the sign-in page and comes back to the menu. */
 async function signedIn(customer: SeedCustomer, width = 1440) {
-  const opened = await open('/sign-in', width)
+  // From the cafe's menu, as customers arrive: the account pages name no cafe of their own (D220).
+  const opened = await open('/sign-in?redirect=/c/nuk', width)
   await signIn(opened.page, customer)
   await opened.page.waitForURL(at('/c/nuk'))
   return opened
@@ -166,7 +167,7 @@ describe('placing an order', () => {
     await page.waitForURL(onOrderPage)
     const orderPath = new URL(page.url()).pathname
 
-    await page.goto(url('/sign-in'), { waitUntil: 'hydration' })
+    await page.goto(url('/sign-in?redirect=/c/nuk'), { waitUntil: 'hydration' })
     await signIn(page, seed.customers.guestLinker)
     await page.waitForURL(at('/c/nuk'), { timeout: 8000 })
     await page.goto(url(orderPath), { waitUntil: 'hydration' })

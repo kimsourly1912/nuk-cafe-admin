@@ -3,7 +3,7 @@ import type { AdminSession, CounterSession } from '#shared/contracts/identity'
 import type { PlatformSession } from '#shared/contracts/tenants'
 import type { Db } from '#server/utils/batch'
 import { listBranchOptions } from '#server/features/branches'
-import { findOldestTenant, findTenant, findTenantBySlug, listActiveTenants, listActiveTenantPage } from '#server/features/tenants'
+import { findTenant, findTenantBySlug, listActiveTenants, listActiveTenantPage } from '#server/features/tenants'
 import { branchNotFound, forbidden, notAdmin, notPlatformAdmin, notStaff, passwordChangeRequired, tenantNotFound, tenantSuspended, twoFactorRequired, unauthenticated } from './identity.errors'
 import { branchRoles, platformRoles, tenantRoles, tenantStatements } from './identity.permissions'
 import type { BranchPermission, BranchRole, PlatformPermission, PlatformRole, TenantPermission, TenantRole } from './identity.permissions'
@@ -25,19 +25,8 @@ const tenantRoleOf = (role: string | undefined): TenantRole | undefined =>
   role && role in tenantRoles ? role as TenantRole : undefined
 
 /**
- * The platform's first tenant (the oldest; NUK Cafe), for work that has no request path naming one
- * (D140): a sign-up's first customer profile, a server error outside `/api/c/<slug>/`, the Bakong
- * token's reminders (until each cafe has its own token, T2). Requests take theirs from the path
- * (`tenantBySlug`). None (an empty database) or a suspended one: 404.
- */
-export async function currentTenant(db: Db): Promise<{ id: string, slug: string, name: string }> {
-  const tenant = await findOldestTenant(db)
-  if (!tenant || (tenant.status ?? 'active') !== 'active') throw tenantNotFound()
-  return { id: tenant.id, slug: tenant.slug, name: tenant.name }
-}
-
-/**
- * The tenant a request's path names (`/api/c/<slug>/…`, D140). Unknown: 404 (nothing says whether
+ * The tenant a request's path names (`/api/c/<slug>/…`, D140). The only way a request gets a
+ * tenant: nothing falls back to a default or the oldest cafe (D220). Unknown: 404 (nothing says whether
  * a cafe ever had that address); suspended: 403 `TENANT_SUSPENDED`.
  */
 export async function tenantBySlug(db: Db, slug: string): Promise<{ id: string, slug: string, name: string }> {

@@ -97,8 +97,10 @@ describe('signing in and out', () => {
   it('returns to the page it was sent from, never to another site or the admin', async () => {
     const { page } = await open('/sign-in?redirect=//evil.example')
     await signIn(page, seed.customers.verified)
-    await page.waitForURL(url('/c/nuk'))
-    // Already signed in: the sign-in page moves on by itself.
+    // A refused target goes to the platform's page, never a guessed cafe (D220): Your cafes for now.
+    await page.waitForURL(u => u.origin === new URL(url('/')).origin && u.pathname === '/cafes')
+    // Already signed in: the sign-in page moves on by itself. A refused admin target still names its
+    // cafe: that cafe's menu.
     await page.goto(url('/sign-in?redirect=/c/nuk/admin'), { waitUntil: 'hydration' })
     await page.waitForURL(url('/c/nuk'))
   })
@@ -133,7 +135,8 @@ describe('signing in and out', () => {
 describe('verifying the email', () => {
   it('an unverified account sees the banner, resends the email, opens the link and is verified', async () => {
     const customer = seed.customers.unverified
-    const { page } = await open('/sign-in')
+    // From the cafe's menu: the email's link comes back to it (D220), not to a guessed cafe.
+    const { page } = await open('/sign-in?redirect=/c/nuk')
     await signIn(page, customer)
     await page.waitForURL(url('/c/nuk'))
     const banner = page.getByText('Verify your email address')
@@ -146,7 +149,8 @@ describe('verifying the email', () => {
     expect(await button(page, /^Resend email in \d+ s$/).isDisabled()).toBe(true)
 
     await page.goto(await mailLink(customer.email, 'identity.verify-email', sentAt), { waitUntil: 'hydration' })
-    await page.waitForURL(/\/email-verified$/)
+    // The link carries the menu it was sent from (D220).
+    await page.waitForURL(u => u.pathname === '/email-verified' && u.searchParams.get('redirect') === '/c/nuk')
     await heading(page, 'Email verified').waitFor()
     await page.getByText(`You're signed in as ${customer.name}.`).waitFor()
     await page.getByRole('link', { name: 'Back to the menu' }).last().click()

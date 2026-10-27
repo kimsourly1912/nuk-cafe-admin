@@ -5,7 +5,7 @@
  * says "doesn't work anymore" for all of them). A new link comes from here when signed in, else
  * after signing in.
  */
-import { useAccountActions, useCustomerAccount, useResendCooldown } from '../composables/useCustomerAccount'
+import { useAccountActions, useAccountSession, useResendCooldown } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
 import { ACCOUNT_PATHS, accountLink } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
@@ -16,7 +16,7 @@ const route = useRoute()
 const home = useAccountHome()
 const failed = computed(() => typeof route.query.error === 'string')
 
-const { account, known } = useCustomerAccount()
+const { account, known } = useAccountSession()
 const { resendVerification } = useAccountActions()
 const { waiting, start: startCooldown, waitLabel } = useResendCooldown('verify')
 const { saving, formError, submit } = useAccountForm({})
@@ -26,7 +26,7 @@ async function sendNewLink() {
   const email = account.value?.email
   if (!email) return
   await submit(async () => {
-    await resendVerification(email)
+    await resendVerification(email, route.query.redirect)
     sent.value = true
     startCooldown()
   })

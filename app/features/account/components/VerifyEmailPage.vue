@@ -4,7 +4,7 @@
  * where the link went, how long it works, and "Resend email" with a 60 s wait between sends.
  * Already verified says so; signed out offers sign-in (the page is about the signed-in account).
  */
-import { useAccountActions, useCustomerAccount, useResendCooldown } from '../composables/useCustomerAccount'
+import { useAccountActions, useAccountSession, useResendCooldown } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
 import { ACCOUNT_PATHS, accountLink, accountRedirectTarget } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
@@ -15,7 +15,7 @@ const route = useRoute()
 const home = useAccountHome()
 const target = computed(() => accountRedirectTarget(route.query.redirect, home.value))
 
-const { account, known } = useCustomerAccount()
+const { account, known } = useAccountSession()
 const { resendVerification } = useAccountActions()
 const { waiting, start: startCooldown, waitLabel } = useResendCooldown('verify')
 const { saving, formError, submit } = useAccountForm({})
@@ -26,7 +26,7 @@ async function resend() {
   if (!email) return
   sentAgain.value = false
   await submit(async () => {
-    await resendVerification(email)
+    await resendVerification(email, route.query.redirect)
     sentAgain.value = true
     startCooldown()
   })

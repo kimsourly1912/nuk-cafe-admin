@@ -32,7 +32,7 @@ later now, sign-up and billing only once the commercial plan is confirmed._
 <host>/c/<slug>/admin/…             the tenant's owner and admins (SPA)    API /api/c/<slug>/admin/**
 <host>/c/<slug>/counter/<branchId>  the tenant's cashiers (SPA)            API /api/c/<slug>/counter/<branchId>/**
 <host>/table/<token>                table QR: global, finds the tenant from the token, redirects
-<host>/                             redirects to /c/nuk for now; later the platform's landing page
+<host>/                             the platform's, never a cafe's (D220): Your cafes for now; later the platform's page
 ```
 
 - **The path names the tenant; the server decides access.** `requireTenant` (which every access

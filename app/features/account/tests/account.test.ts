@@ -39,10 +39,11 @@ describe('accountLink', () => {
 })
 
 describe('accountHome (D141)', () => {
-  it('is the menu of the cafe to come back to, else the default cafe\'s', () => {
-    expect(accountHome('/c/brown-bean/checkout', 'nuk')).toBe('/c/brown-bean')
-    expect(accountHome('/table/abc', 'nuk')).toBe('/c/nuk')
-    expect(accountHome(undefined, 'nuk')).toBe('/c/nuk')
+  it('is the menu of the cafe to come back to, else the platform\'s page, never a guessed cafe (D220)', () => {
+    expect(accountHome('/c/brown-bean/checkout')).toBe('/c/brown-bean')
+    expect(accountHome('/table/abc')).toBe('/')
+    expect(accountHome(undefined)).toBe('/')
+    expect(accountHome(['/c/nuk'])).toBe('/')
   })
 })
 

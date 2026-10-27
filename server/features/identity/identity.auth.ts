@@ -3,7 +3,6 @@ import { admin, anonymous, haveIBeenPwned, organization, twoFactor } from 'bette
 import type { ServerAuthConfig } from '@nuxtjs/better-auth/config'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
-import { log } from '#server/utils/log'
 import { outboxStatement } from '#server/features/platform'
 import { MAIL_KINDS } from './identity.mail'
 import { platformAc, platformRoles, tenantAc, tenantRoles } from './identity.permissions'
@@ -57,29 +56,9 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
       expiresIn: DAY,
       sendVerificationEmail: async ({ user, url }) => queueMail(db, MAIL_KINDS.verifyEmail, user.email, url),
     },
-    databaseHooks: {
-      user: {
-        create: {
-          // Every account gets a customer profile (member code) in the cafe it signed up at (the
-          // only one until T1.5 names it in the path; D137). D1 has no transactions, so this runs
-          // after the account is stored; if it fails, the account still works and `ensureProfile`
-          // creates the profile on first use. Loaded lazily: the module loads this file at build
-          // time, before the schemas' imports exist.
-          after: async (user) => {
-            // A guest (D156) is not a member: no profile or member code until they make an account.
-            if ((user as { isAnonymous?: boolean | null }).isAnonymous) return
-            try {
-              const [{ ensureProfile }, { currentTenant }] = await Promise.all([import('#server/features/customers'), import('./identity.service')])
-              const tenant = await currentTenant(db).catch(() => null)
-              if (tenant) await ensureProfile(db, tenant.id, user.id)
-            }
-            catch (error) {
-              log('error', 'Customer profile not created at sign-up; created on first use instead', { userId: user.id, error: String(error) })
-            }
-          },
-        },
-      },
-    },
+    // No customer profile at sign-up: an account is the platform's, and Better Auth's request names
+    // no cafe. Each cafe's profile (member code) is made when the account first uses that cafe
+    // (`ensureProfile` on `/api/c/<slug>/shop/me`, D137, D220), never in a cafe it didn't visit.
     // UUID v7 like every other table, so Better Auth's ids (users, tenants) pass readIdParam.
     advanced: {
       database: { generateId: () => newId() },

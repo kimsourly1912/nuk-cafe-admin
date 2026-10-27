@@ -16,5 +16,13 @@ describe('apiPath (D140)', () => {
     expect(apiPath('/health', 'nuk')).toBe('/health')
     expect(apiPath('/administrator', 'nuk')).toBe('/administrator')
     expect(apiPath('/publicity', 'nuk')).toBe('/publicity')
+    expect(apiPath('/auth/get-session', null)).toBe('/auth/get-session')
+    expect(apiPath('/cafes/nuk', null)).toBe('/cafes/nuk')
+  })
+
+  it('refuses a cafe\'s route from a page without a cafe, instead of guessing one (D220)', () => {
+    for (const path of ['/shop/me', '/admin/menu/items', '/counter/b1/orders', '/public/menu?branchId=b1']) {
+      expect(() => apiPath(path, null), path).toThrow(/without a cafe/)
+    }
   })
 })

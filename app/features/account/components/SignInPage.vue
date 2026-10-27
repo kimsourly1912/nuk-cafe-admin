@@ -8,7 +8,7 @@
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { SignInForm } from '../schemas/account-form'
 import { signInSchema } from '../schemas/account-form'
-import { useAccountActions, useCustomerAccount } from '../composables/useCustomerAccount'
+import { useAccountActions, useAccountSession } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
 import { ACCOUNT_PATHS, accountLink, accountRedirectTarget } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
@@ -27,7 +27,7 @@ const { signIn, finishSignIn } = useAccountActions()
 /** After a password that needs a code: the code step replaces the form. */
 const codeStep = ref(false)
 
-const { account, known } = useCustomerAccount()
+const { account, known } = useAccountSession()
 let arrived = false
 watch(known, (isKnown) => {
   if (!isKnown || arrived) return

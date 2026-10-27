@@ -82,7 +82,7 @@ Reference for the shared building blocks of the NUK Cafe admin portal: the compo
 | `useModalUnsavedChanges` | composable | [Forms](./forms.md#usemodalunsavedchanges) | Same, plus asking before the modal closes |
 | `useLeaveGuard` | composable | [Forms](./forms.md#useleaveguard) | App-wide "discard unsaved changes?" check |
 | `usePageShortcuts`, `useSubmitShortcut` | composable | [UI helpers](./ui-helpers.md#keyboard-shortcuts) | Keyboard shortcuts; Ctrl/⌘+Enter to save |
-| `useTenantPath`, `useTenantSlug`, `tenantUrl`, `splitTenantUrl` | composable, util | [App-wide behavior](./app-behavior.md#cafe-addresses) | A cafe's page address: `tenantPath('/admin/products')` → `/c/nuk/admin/products` (D141) |
+| `useTenantPath`, `useTenantSlug`, `useOptionalTenantSlug`, `tenantUrl`, `splitTenantUrl` | composable, util | [App-wide behavior](./app-behavior.md#cafe-addresses) | A cafe's page address: `tenantPath('/admin/products')` → `/c/nuk/admin/products` (D141) |
 | `loginRedirectTarget` | util (auth) | [Auth](./auth.md#loginredirecttarget) | Safe post-login redirect (this cafe's admin pages only) |
 | `useAuth` | composable | [Auth](./auth.md#useauth) | Session user, login, logout |
 

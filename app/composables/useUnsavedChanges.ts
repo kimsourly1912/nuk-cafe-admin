@@ -129,7 +129,9 @@ export function useUnsavedChanges<T extends object>(state: MaybeRefOrGetter<T>, 
 function useStoredDraft<T extends object>(state: MaybeRefOrGetter<T>, baseline: Ref<T>, options: UnsavedDraftOptions | undefined) {
   const store = createFormDraftStore(import.meta.client ? browserDraftStorage() : undefined)
   // Read once: a modal closing after a route change still writes to its own cafe's draft.
-  const tenant = useTenantSlug().value
+  // The platform's own forms (no cafe in the address, D220) keep drafts under a key no cafe address
+  // can be (slugs are a-z, 0-9 and -), never under a cafe's.
+  const tenant = useOptionalTenantSlug().value ?? '_platform'
   const storageKey = computed(() => {
     const key = options && toValue(options.key)
     return key ? formDraftKey({ tenant, ...key }) : null

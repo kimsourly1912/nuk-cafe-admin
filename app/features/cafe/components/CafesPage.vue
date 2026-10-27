@@ -19,7 +19,6 @@ const WORKSPACES: { workspace: Workspace, label: string, icon: string }[] = [
   { workspace: 'admin', label: 'Admin', icon: 'i-lucide-layout-dashboard' },
   { workspace: 'counter', label: 'Counter', icon: 'i-lucide-receipt' },
 ]
-const menu = tenantUrl(useRuntimeConfig().public.defaultTenant, '/')
 </script>
 
 <template>
@@ -59,13 +58,6 @@ const menu = tenantUrl(useRuntimeConfig().public.defaultTenant, '/')
       <p class="text-sm text-muted">
         Sign in with the account your cafe's owner added, or ask them to add you.
       </p>
-      <UButton
-        label="Go to the menu"
-        :to="menu"
-        color="neutral"
-        variant="outline"
-        class="mt-2"
-      />
     </div>
     <ul
       v-else

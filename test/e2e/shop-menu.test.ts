@@ -14,7 +14,8 @@ await setupE2e()
 const seed = inject('shopSeed')
 
 /** Opens a page; collects errors, and Vue's "Hydration completed but contains mismatches". */
-async function open(width = 1440, path = '/') {
+// The cafe's own address: the site's root is the platform's (D220).
+async function open(width = 1440, path = '/c/nuk') {
   const page = await createPage()
   const problems: string[] = []
   page.on('console', (message) => {
@@ -357,13 +358,12 @@ describe('branches and table QR codes', () => {
     expect(await visible(card(page, 'Banana Bread').getByRole('button', { name: 'Add Banana Bread to order' })).isDisabled()).toBe(true)
   })
 
-  it('a QR code that doesn\'t work says so and offers pickup', async () => {
+  it('a QR code that doesn\'t work says so, with no link into a guessed cafe (D220)', async () => {
     const page = await createPage()
     await page.goto(url('/table/Zz9zZz9zZz9zZz9zZz9zZz'), { waitUntil: 'hydration' })
     await page.getByText('This table\'s QR code doesn\'t work').waitFor()
-    await page.getByRole('link', { name: 'Order for pickup' }).click()
-    await heading(page, 'Coffee').waitFor()
-    expect(await page.getByRole('button', { name: 'Order type: Pickup' }).isVisible()).toBe(true)
+    await page.getByText('Ask the staff for help, or open the cafe\'s menu from its own link.').waitFor()
+    expect(await page.locator('a[href^="/c/"]').count()).toBe(0)
   })
 })
 

@@ -2,6 +2,23 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## No default cafe (D220, 2026-10-27)
+
+Owner approved the recommendation: nothing guesses a cafe; platform alerts in logs and health only (Q24); pre-D141 redirects removed; the platform's page at `/` after a mockup. Uncommitted, on `fix/account-avatar-trigger-6479` at the owner's request. [Decision](decisions.md#d220-nothing-guesses-a-cafe-the-sites-root-is-the-platforms-2026-10-27), [plan and leak list](plans/platform-root.md).
+
+- **Server:** `currentTenant`, `findOldestTenant` removed; server errors alert only the request's resolved cafe (`alertTenantOf`); job failures and outbox give-ups log and record for System health only (`queueJobFailureAlert` removed); no customer profile at sign-up; `seedTenant` finds by address.
+- **App:** `defaultTenant` removed. `apiPath` throws for a cafe's route without a cafe; `useTenantSlug`/`useTenantPath` throw on a page without one, `useOptionalTenantSlug` for shell code; `useCafe` reads nothing without a cafe and keeps profiles between pages (`REFERENCE_STALE_TIME`, found by e2e: the shell no longer held the key open). Account pages read the session (`useAccountSession`); verification links carry `?redirect=`; account "Back" goes to `?redirect=`'s cafe else `/`; broken table QR and Your cafes lose their NUK links; `/` is a route redirect to Your cafes (`app/pages/index.vue`); pre-D141 addresses 404; platform drafts under `_platform`.
+- **Evidence (local, Windows):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 147 files, 2012 passed, 1 skipped; full `pnpm test:e2e` 60 files, 742 passed (run alone, after `E2E_REBUILD=1`: an earlier run overlapped `pnpm typecheck` and read the dev database, see How to verify). Guard removal: restoring the old sign-up hook fails 2 tests in `identity.accounts.test.ts` (no profile in any cafe; only the joined cafe's). e2e expectations updated where tests relied on a default cafe: customers sign in from `?redirect=/c/nuk`, `/` and pre-D141 addresses, the broken-QR and no-cafe pages; the signed-in sign-in step reads the session twice (sign-in page and menu, budget updated).
+- **Owner actions:** set `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS` / `NUXT_MAINTENANCE_DELIVERY_MAX_AGE_SECONDS` in production so stuck jobs are reported; approve a mockup for `/`.
+
+## One setup path per environment (D219, 2026-10-27)
+
+Owner asked how a fresh environment becomes ready to serve. Uncommitted, on branch `fix/account-avatar-trigger-6479` at the owner's request. [Decision](decisions.md#d219-one-setup-path-per-environment-the-dbseed-task-is-retired-2026-10-27).
+
+- **Source:** `db:seed` retired (task, `seedSuperadmin`, `grantSuperadminStatement`, `seed` runtime config, `NUXT_SEED_ADMIN_*`); `pnpm dev:accounts` is the local setup. `seedFirstOwner` kept as server test setup, no longer exported from `#server/features/identity`.
+- **Docs:** [operations → Setting up an empty environment](server/operations.md#setting-up-an-empty-environment-d219) replaces the staging hand-SQL cafe/owner steps and the production account list; the super admin promotion requires `email_verified = 1` and one changed row. Auth reference, development guide and documentation inventory point there.
+- **Evidence:** `pnpm lint` and `pnpm typecheck` passed; identity, tenants and D1 search server tests passed (17 files, 349 tests). Full `pnpm test:unit` and e2e not run. No deployed database touched.
+
 ## Cloudflare account bot protection (D217, 2026-10-27)
 
 Owner authorized the next real improvement. Branch `codex/cloudflare-bot-protection` from merged main `1611b28`; CI/staging run `40360207908` succeeded. [Decision](decisions.md#d217-verify-account-actions-with-free-turnstile-before-the-existing-auth-handler-2026-10-27), [plan](plans/cloudflare-improvements.md#step-3-account-bot-protection-d217).
@@ -879,9 +896,10 @@ Business decisions the build still needs, with the step each blocks. All are for
   - Pitfall: a new icon name shows blank on a running `pnpm dev` ("[Icon] failed to load icon" in the browser console): the client bundle holds the icons found when the dev server started and nothing is fetched (`provider: 'none'`). Restart the dev server; builds and e2e scan afresh (D210).
   - Pitfall: `pnpm test:changed` (`--changed`) ignores **untracked** files: `git add` a new test before relying on it (D175).
   - Pitfall: a libsql client left open crashes the test worker when it is freed (exit code 3221225477, D176). Get databases from `createTestDb()` / `createTestClient()`, which close them; close any client you open yourself.
+  - Pitfall: don't run `pnpm typecheck` (or anything that runs `nuxt prepare`, e.g. `pnpm dev`) while local e2e runs or before reusing its build. It rewrites `node_modules/@nuxthub/db/db.mjs` with the dev database (`.data/db`), and the untraced e2e server imports that file: cafes it seeded answer 404 ("Cafe not found") and most tests time out (D220 work, 2026-10-27). Fix: `E2E_REBUILD=1` on the next e2e run.
   - Pitfall: the `.output` a local e2e run leaves is untraced (D177): it imports from this checkout's `node_modules` and can't be copied elsewhere or deployed. A real build is `pnpm build` / `pnpm build:staging`. For a suspected tracing-only bug: `E2E_TRACE=1 pnpm vitest run --project e2e <file>`.
   - Pitfall: a Vitest glob starting `**/` doesn't match through a dot folder, so in a checkout under `.claude/worktrees/` it matches nothing. Anchor such globs at the project root, as `forceRerunTriggers` in `vitest.config.ts` does (D175).
-- **real-server (a first admin locally):** start `NUXT_SEED_ADMIN_EMAIL=you@example.com pnpm dev`, run `curl http://localhost:3000/_nitro/tasks/db:seed` (prints a temporary password), sign in at `/login` and choose your own password. More staff: the Staff page. `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
+- **real-server (accounts locally):** start `pnpm dev`, then `pnpm dev:accounts` (every role, one password, written to `dev-accounts.local.md`; D209, D219). `.data/db/sqlite.db` is the local database (stop the dev server before touching it: Windows locks it).
   - Pitfall: `@nuxtjs/better-auth` owns the `useState` keys `auth:*`. Don't name app state `auth:…`.
   - **Test data:** open **Sample data** in the admin sidebar (on for the dev server; D94): load a sample menu (Small, Standard or Large), branch hours and tables, and reset it all from there. No scripts.
   - Pitfall: sign-up checks the password against Have I Been Pwned (network needed): `password123` is refused with `PASSWORD_COMPROMISED`. Use a long random one. In a Claude Code cloud container the network policy blocks `api.pwnedpasswords.com`, so sign-up, change-password and reset-password answer 500; for a local smoke test, clear the seeded admin's flag in the throwaway `.data/db/sqlite.db` (`update user set must_change_password = 0 …`) instead of changing the password.

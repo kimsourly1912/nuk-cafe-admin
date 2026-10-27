@@ -154,13 +154,12 @@ describe('identity and cafes: the repository isolation layer (D194 step 5)', () 
     expect(details.some(detail => /SEARCH user.*\(id=\?\)/.test(detail)), details.join(' | ')).toBe(true)
   })
 
-  it('filters active cafes in SQL, keeps oldest-cafe fallback and pages by stable id', async () => {
+  it('filters active cafes in SQL, and pages by stable id', async () => {
     await db.update(organization).set({ status: null, createdAt: new Date(0) }).where(eq(organization.id, OTHER))
     await db.update(organization).set({ status: 'suspended' }).where(eq(organization.id, TEST_TENANT))
     expect(await tenants.listActiveTenants(db)).toEqual([{ id: OTHER, slug: OTHER, name: `Cafe ${OTHER}` }])
     expect(await tenants.listActiveTenantPage(db, null, 1)).toEqual(await tenants.listActiveTenants(db))
     expect(await tenants.listActiveTenantPage(db, OTHER, 1)).toEqual([])
-    expect(await tenants.findOldestTenant(db)).toMatchObject({ id: OTHER })
     expect(await tenants.findTenantBySlug(db, OTHER)).toMatchObject({ id: OTHER })
     expect(await tenants.listActiveTenantIds(db)).toEqual([OTHER])
   })
