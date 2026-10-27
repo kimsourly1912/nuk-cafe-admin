@@ -27,6 +27,6 @@ Checked and fine: `/api/cafes/{slug}` (name and logo only), `/api/tables/{token}
 ## Next steps
 
 1. **The platform's page at `/`** (new screen: owner mockup first). Content: the platform's name; for customers "scan the QR on your table or open your cafe's link"; for owners and staff Sign in → Your cafes; a contact line for cafes. No public list of cafes. Static, no session read on the server. Then "Back to the menu" on the account pages without a cafe reads "Back to home".
-2. **Platform alert channel (Q24).** Until then set `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS` and `NUXT_MAINTENANCE_DELIVERY_MAX_AGE_SECONDS` in production so the independent health check reports stuck work.
+2. **Platform alert channel (Q24).** Until then the independent health check reports stuck work: production sets `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS=300` and `NUXT_MAINTENANCE_DELIVERY_MAX_AGE_SECONDS=900` (done, 2026-10-27).
 3. **Membership by choice (step 7.1).** Opening a cafe's menu signed in makes a profile there. No cafe screen shows profiles today; when loyalty or a customer list does, joining must be the customer's explicit action.
 4. **The platform's name** ("NUK Platform" in the console, two-step setup and tab titles) is a working name until the owner names it; emails already use `NUXT_MAIL_APP_NAME`.

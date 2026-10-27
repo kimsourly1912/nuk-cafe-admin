@@ -164,6 +164,11 @@ export default defineNuxtConfig({
               NUXT_PUBLIC_HUMAN_CHECK_ENABLED: 'true',
               NUXT_PUBLIC_HUMAN_CHECK_SITE_KEY: '0x4AAAAAAFm5duhYy7YUelxB',
               ...mailConfig(PRODUCTION.mail).vars,
+              // Job failures reach no chat (D221), so the independent health check (D168) reports
+              // notification generation stale for 5 minutes and deliveries overdue for 15. Needs
+              // the Telegram secrets: without a bot, generation never runs and health stays 503.
+              NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS: '300',
+              NUXT_MAINTENANCE_DELIVERY_MAX_AGE_SECONDS: '900',
             },
             ...mailConfig(PRODUCTION.mail).binding,
             triggers: { crons: Object.keys(SCHEDULED_TASKS) },
