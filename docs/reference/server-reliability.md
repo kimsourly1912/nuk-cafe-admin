@@ -31,6 +31,8 @@ D194 step 6 gives all four queues the shared SQL shape in `server/utils/claims.t
 
 ## Durable media cleanup
 
+Public delivery (D218): `media.servePublicImage(request, read, { waitUntil })` wraps only canonical public GET image reads with optional Workers Cache API storage. Its `read` callback returns a full image Response with NuxtHub's type/length/ETag and `PUBLIC_IMAGE_BROWSER_CACHE`; cache errors fall back to that callback. It does not authorize private sources. Only representation headers persist; the route's normal current security/request-id headers apply on every hit. New photo keys avoid replacement staleness; deletion does not revoke previously cached public bytes. [Operational limits and verification](../server/operations.md#public-image-delivery-d218).
+
 Media APIs keep their existing signatures. Before uploading, `media_object_deletions` records provisional keys with a 24-hour grace period. The successful asset batch removes those provisional entries. Crashes and failed compensation leave recoverable deletion work.
 
 Purge and sample-data reset enqueue the source and variant keys in the same batch that removes asset rows. R2 deletion happens afterwards. Successful deletion clears its queue entry; failure leaves the key for a later hourly run. Keys are never reused. The platform purge visits all cafes; per-cafe resets and object operations carry the tenant explicitly.
