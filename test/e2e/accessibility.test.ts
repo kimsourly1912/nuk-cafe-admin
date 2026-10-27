@@ -98,6 +98,14 @@ describe('accessibility (axe, WCAG 2.1 AA)', () => {
       })
     }
 
+    it(`the platform's page at ${width}px`, async () => {
+      const page = await createPage()
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(url('/'), { waitUntil: 'hydration' })
+      await page.getByRole('heading', { level: 1, name: 'Angder' }).waitFor()
+      expect(await findings(page)).toEqual([])
+    })
+
     it(`the customer menu at ${width}px`, async () => {
       const page = await createPage()
       await page.setViewportSize({ width, height: 900 })

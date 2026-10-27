@@ -62,6 +62,11 @@ export function accountHome(redirect: unknown): string {
   return slug ? tenantUrl(slug, '/') : '/'
 }
 
+/** The account pages' Back link for `accountHome`'s target: a cafe's menu, or the platform's page. */
+export function accountBackLabel(to: string): string {
+  return to === '/' ? 'Back to home' : 'Back to the menu'
+}
+
 /** "SC" for "Sokha Chan", "S" for "Sokha", the email's first letter without a name. */
 export function initialsOf(name: string, email: string) {
   const words = name.trim().split(/\s+/).filter(Boolean)

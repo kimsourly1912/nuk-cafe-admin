@@ -50,7 +50,8 @@ describe('each cafe at its own address', () => {
       const response = await fetch(url(path), { redirect: 'manual' })
       return [response.status, response.headers.get('location')]
     }
-    expect(await answer('/')).toEqual([302, '/cafes'])
+    // The platform's own page (platform-home.test.ts), not a redirect.
+    expect(await answer('/')).toEqual([200, null])
     for (const path of ['/admin/products?item=i1', `/counter/${seed.openBranchId}?order=o1`, '/checkout', '/orders']) {
       expect((await answer(path))[0], path).toBe(404)
     }

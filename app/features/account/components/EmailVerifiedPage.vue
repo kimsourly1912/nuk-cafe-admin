@@ -7,7 +7,7 @@
  */
 import { useAccountActions, useAccountSession, useResendCooldown } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
-import { ACCOUNT_PATHS, accountLink } from '../utils/account'
+import { ACCOUNT_PATHS, accountBackLabel, accountLink } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
@@ -44,7 +44,7 @@ async function sendNewLink() {
     <template #footer>
       <UButton
         :to="home"
-        label="Back to the menu"
+        :label="accountBackLabel(home)"
         block
       />
     </template>
@@ -56,7 +56,7 @@ async function sendNewLink() {
     description="Verification links work for 24 hours, and only the newest one works."
     icon="i-lucide-link-2-off"
     icon-color="warning"
-    :back="{ label: 'Back to the menu', to: home }"
+    :back="{ label: accountBackLabel(home), to: home }"
   >
     <div
       v-if="sent || formError"
