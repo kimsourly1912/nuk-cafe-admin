@@ -2,7 +2,7 @@ import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '~/utils/api-error'
 import { signInSchema, signUpSchema } from '../schemas/account-form'
-import { accountFormError, accountHome, accountLink, accountRedirectTarget, initialsOf, isDeadLink } from '../utils/account'
+import { accountBackLabel, accountFormError, accountHome, accountLink, accountRedirectTarget, initialsOf, isDeadLink } from '../utils/account'
 
 describe('accountRedirectTarget (D141)', () => {
   const HOME = '/c/nuk'
@@ -44,6 +44,15 @@ describe('accountHome (D141)', () => {
     expect(accountHome('/table/abc')).toBe('/')
     expect(accountHome(undefined)).toBe('/')
     expect(accountHome(['/c/nuk'])).toBe('/')
+  })
+})
+
+describe('accountBackLabel (D221)', () => {
+  it('names the platform\'s page as home and anything else as the menu', () => {
+    expect(accountBackLabel('/')).toBe('Back to home')
+    expect(accountBackLabel('/c/nuk')).toBe('Back to the menu')
+    expect(accountBackLabel('/c/nuk/checkout?x=1')).toBe('Back to the menu')
+    expect(accountBackLabel(accountHome(undefined))).toBe('Back to home')
   })
 })
 

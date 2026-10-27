@@ -6,7 +6,7 @@
  */
 import { useAccountActions, useAccountSession, useResendCooldown } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
-import { ACCOUNT_PATHS, accountLink, accountRedirectTarget } from '../utils/account'
+import { ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
@@ -56,7 +56,7 @@ async function resend() {
     title="Sign in to verify your email"
     description="Sign in to the account you created, then we can send a new link."
     icon="i-lucide-mail"
-    :back="{ label: 'Back to the menu', to: home }"
+    :back="{ label: accountBackLabel(home), to: home }"
   >
     <template #footer>
       <UButton
@@ -77,7 +77,7 @@ async function resend() {
     <template #footer>
       <UButton
         :to="target"
-        label="Back to the menu"
+        :label="accountBackLabel(target)"
         block
       />
     </template>
@@ -87,7 +87,7 @@ async function resend() {
     v-else
     title="Check your email"
     icon="i-lucide-mail"
-    :back="{ label: 'Back to the menu', to: target }"
+    :back="{ label: accountBackLabel(target), to: target }"
   >
     <template #description>
       <p class="mt-1 text-highlighted">
@@ -123,7 +123,7 @@ async function resend() {
       />
       <UButton
         :to="target"
-        label="Back to the menu"
+        :label="accountBackLabel(target)"
         block
       />
     </template>

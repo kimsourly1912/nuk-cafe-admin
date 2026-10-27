@@ -9,7 +9,7 @@ import type { SignUpForm } from '../schemas/account-form'
 import { signUpSchema } from '../schemas/account-form'
 import { useAccountActions, useAccountSession } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
-import { ACCOUNT_PATHS, accountLink, accountRedirectTarget } from '../utils/account'
+import { ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
@@ -55,7 +55,7 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
   <AccountFrame
     title="Create your account"
     description="Order ahead and collect points. It takes a minute."
-    :back="{ label: 'Back to the menu', to: home }"
+    :back="{ label: accountBackLabel(home), to: home }"
   >
     <UForm
       id="sign-up-form"

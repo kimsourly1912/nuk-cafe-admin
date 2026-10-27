@@ -10,7 +10,7 @@ import type { SignInForm } from '../schemas/account-form'
 import { signInSchema } from '../schemas/account-form'
 import { useAccountActions, useAccountSession } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
-import { ACCOUNT_PATHS, accountLink, accountRedirectTarget } from '../utils/account'
+import { ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
@@ -66,7 +66,7 @@ function restart(message?: string) {
   <AccountFrame
     title="Sign in"
     description="Sign in to order ahead and collect points."
-    :back="{ label: 'Back to the menu', to: home }"
+    :back="{ label: accountBackLabel(home), to: home }"
   >
     <TwoFactorCodeForm
       v-if="codeStep"

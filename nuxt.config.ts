@@ -130,6 +130,8 @@ const PRODUCTION_RATE_LIMITS = RATE_LIMITS.map(limit => ({
 
 /** How long one render of the customer menu page is reused (D122). */
 const MENU_PAGE_CACHE_SECONDS = 60
+/** How long one render of the platform's page at `/` is reused (D221). */
+const PLATFORM_HOME_CACHE_SECONDS = 3600
 
 // Nitro's older Wrangler type lacks query redaction; Wrangler 4.141 supports it (D215).
 // Keep the schema-validated settings together for both environment builds.
@@ -164,6 +166,11 @@ export default defineNuxtConfig({
               NUXT_PUBLIC_HUMAN_CHECK_ENABLED: 'true',
               NUXT_PUBLIC_HUMAN_CHECK_SITE_KEY: '0x4AAAAAAFm5duhYy7YUelxB',
               ...mailConfig(PRODUCTION.mail).vars,
+              // Job failures reach no chat (D221), so the independent health check (D168) reports
+              // notification generation stale for 5 minutes and deliveries overdue for 15. Needs
+              // the Telegram secrets: without a bot, generation never runs and health stays 503.
+              NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS: '300',
+              NUXT_MAINTENANCE_DELIVERY_MAX_AGE_SECONDS: '900',
             },
             ...mailConfig(PRODUCTION.mail).binding,
             triggers: { crons: Object.keys(SCHEDULED_TASKS) },
@@ -312,6 +319,9 @@ export default defineNuxtConfig({
     // up to a minute; checkout checks everything again. Off in the e2e build, whose tests change the
     // menu and reload at once.
     ...(process.env.E2E_HUB_DIR ? {} : { '/c/*': { swr: MENU_PAGE_CACHE_SECONDS } }),
+    // The platform's page (D221): the same for everyone, no session and no data, so one render
+    // serves every visitor; it changes only with a deploy, which starts a new cache.
+    '/': { swr: PLATFORM_HOME_CACHE_SECONDS },
     // Session gate per surface (@nuxtjs/better-auth), a second line behind each route's own
     // requirePermission / requireBranchPermission / requireCustomer (docs/server/security.md). A
     // session only: who may use the admin is a role in the tenant (D135), which the gate can't see.
