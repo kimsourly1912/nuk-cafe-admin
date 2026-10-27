@@ -48,6 +48,18 @@ Owner authorized the next step after PR #189 merged; main `1611b28` CI/staging p
 - **Acceptance:** reject missing, forged, expired/replayed, wrong-action and wrong-host tokens; preserve successful auth/email/2FA flows; cancellation, retry and script failure work; correct CSP; unrelated routes stay unchallenged; guard-removal checks fail. Real browser/token/replay verification is required on deployed staging before calling rollout complete.
 - **Rollout:** one PR; main deploys staging, production remains behind its normal manual reviewer gate. Document every unverified item rather than silently disabling protection.
 
+### Step 4: public image edge delivery (D218)
+
+Branch `codex/cloudflare-public-image-cache` from merged main `a486b7e`; PR #190's staging deployment succeeded (run `40432803581`). Reuse Workers Cache API and the existing private R2 binding, without a new subscription, public bucket, image transformation service or dependency.
+
+Only canonical HTTPS GETs for `/media/menu/<key>.<jpg|png|webp>` and `/media/t/<tenant>/menu/<key>.<jpg|png|webp>` are eligible. A complete origin and tenant path identify each entry. Query-bearing, authorization, conditional and range requests stay on the existing read path. Ordinary session cookies do not fragment these deliberately public bytes and never enter stored keys.
+
+Successful bounded image responses keep the existing one-year immutable browser policy; edge copies expire after one hour. Photo edits already create new keys (D158), so replacements do not wait for expiry. Only representation headers are stored: current Nitro security headers and request ids still run on each request. Errors, redirects, private sources, non-images, Set-Cookie, Vary and partial responses are never stored. Cache failures fall back to NuxtHub; writes use the request's `waitUntil`.
+
+The cache is per data center, not a globally replicated or tiered cache. A hit skips NuxtHub's R2 body and metadata reads; it still invokes the Worker. Concurrent cold requests may each read R2. Removing an object does not revoke already downloaded browser copies; an old edge copy can remain for up to an hour. The existing browser lifetime is unchanged. Do not describe object deletion as immediate cache revocation.
+
+Completion requires focused cache/tenant/replacement/failure tests, the real HTTP photo journey, a Workers-runtime cache check, environment builds/dry runs and post-merge staging MISS/HIT checks. [Evidence](../progress.md#cloudflare-public-image-delivery-d218-2026-10-27), [operations](../server/operations.md#public-image-delivery-d218).
+
 ## Verification and rollback
 
 1. Read the current zone and Worker settings, preserving nonsecret before/after evidence.

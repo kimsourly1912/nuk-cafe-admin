@@ -6,6 +6,9 @@ import { newId } from '#server/utils/ids'
 
 export const TEMPORARY_TTL_MS = 24 * 60 * 60 * 1000
 
+/** Public files only; photo sources and encoded/nested paths are never eligible. */
+export const isPublicMediaKey = (key: string) => /^(?:t\/[\w-]+\/)?menu\/[\w-]+\.(?:jpg|png|webp)$/.test(key)
+
 const EXTENSIONS: Record<ImageType, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
 
 /** Where an object is served (`server/routes/media/[...key].get.ts`). */

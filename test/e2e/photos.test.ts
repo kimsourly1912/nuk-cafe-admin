@@ -76,6 +76,16 @@ describe('a menu photo, end to end (D158)', () => {
       const served = await fetch(url(file))
       expect(served.status).toBe(200)
       expect(served.headers.get('content-type')).toBe('image/webp')
+      expect(served.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+      expect(served.headers.get('x-content-type-options')).toBe('nosniff')
+      expect(served.headers.get('etag')).toBeTruthy()
+    }
+    // Neither missing public files nor private sources may acquire the public image lifetime.
+    for (const path of ['/media/menu/image-cache-missing.webp', '/media/t/tenant-2/source/private.webp']) {
+      const missing = await fetch(url(path))
+      expect(missing.status).toBe(404)
+      expect(missing.headers.get('cache-control')).not.toContain('public')
+      expect(missing.headers.get('cache-control')).not.toContain('immutable')
     }
     // The source: to the cafe's admins only, never under /media.
     const source = await api(`/admin/media/photos/${photo.id}/source`, cookie)
