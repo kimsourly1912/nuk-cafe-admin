@@ -424,5 +424,11 @@ export default defineNuxtConfig({
         globExclude: ['app/generated/**', 'node_modules', '.*'],
       },
     },
+    customCollections: [
+      {
+        prefix: 'app',
+        dir: './app/assets/icons',
+      },
+    ],
   },
 })

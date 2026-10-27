@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="620" viewBox="0 0 650 570" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Cafe not found</title>
+  <desc id="desc">A softly colored cafe storefront with an unfinished dashed roof, potted plants, and a peach-colored X badge.</desc>
+  <defs>
+    <radialGradient id="blob" cx="0" cy="0" r="1" gradientTransform="matrix(305 150 -155 315 308 300)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FBF3EB" stop-opacity=".86"/>
+      <stop offset=".73" stop-color="#FBF6F0" stop-opacity=".8"/>
+      <stop offset="1" stop-color="#FCF9F5" stop-opacity=".1"/>
+    </radialGradient>
+    <linearGradient id="cloud" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#F2F1F2"/><stop offset="1" stop-color="#F6F5F4"/>
+    </linearGradient>
+    <linearGradient id="cream" x1="0" y1="0" x2=".95" y2="1">
+      <stop stop-color="#FFF7EE"/><stop offset=".53" stop-color="#F5E9DB"/><stop offset="1" stop-color="#E9D2BD"/>
+    </linearGradient>
+    <linearGradient id="wood" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#BD814D"/><stop offset=".43" stop-color="#9C6236"/><stop offset="1" stop-color="#754B31"/>
+    </linearGradient>
+    <linearGradient id="awningDark" x1="0" y1="0" x2=".25" y2="1">
+      <stop stop-color="#AB6A38"/><stop offset=".7" stop-color="#AB7242"/><stop offset="1" stop-color="#85502E"/>
+    </linearGradient>
+    <linearGradient id="awningLight" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#FFF4E6"/><stop offset=".76" stop-color="#FAE6D2"/><stop offset="1" stop-color="#DFC1A4"/>
+    </linearGradient>
+    <linearGradient id="door" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#76543E"/><stop offset=".55" stop-color="#634934"/><stop offset="1" stop-color="#977256"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#6D5A4B"/><stop offset=".55" stop-color="#8F7A66"/><stop offset="1" stop-color="#6E5A49"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#A1A77D"/><stop offset=".5" stop-color="#6F7E55"/><stop offset="1" stop-color="#475D3F"/>
+    </linearGradient>
+    <linearGradient id="pot" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#E2B68B"/><stop offset=".55" stop-color="#BF8453"/><stop offset="1" stop-color="#94582E"/>
+    </linearGradient>
+    <radialGradient id="badge" cx="0" cy="0" r="1" gradientTransform="matrix(70 70 -70 70 468 198)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FDE7DE"/><stop offset="1" stop-color="#FBECE6"/>
+    </radialGradient>
+    <linearGradient id="cross" x1="422" y1="142" x2="492" y2="216" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D9957B"/><stop offset="1" stop-color="#B95E47"/>
+    </linearGradient>
+    <filter id="groundBlur" x="-20%" y="-100%" width="140%" height="300%"><feGaussianBlur stdDeviation="9"/></filter>
+    <filter id="softShadow" x="-25%" y="-25%" width="150%" height="170%"><feGaussianBlur stdDeviation="5"/></filter>
+    <clipPath id="facadeClip"><path d="M166 286H492V506H166Z"/></clipPath>
+  </defs>
+
+  <!-- Pale organic background, kept transparent beyond the artwork. -->
+  <path d="M102 396C54 339 68 253 112 203C138 173 152 143 158 101C168 35 222 8 286 12C347 16 392 53 418 110C469 122 530 161 568 221C612 290 587 385 531 428C483 466 427 477 365 483C266 493 174 472 102 396Z" fill="url(#blob)"/>
+  <path d="M44 440C12 400 16 352 42 326C54 314 66 319 69 337C72 286 85 279 99 292C117 306 127 363 121 426M545 448C566 390 571 331 591 324C612 315 623 343 614 385C632 352 648 367 643 401C639 435 608 453 545 448Z" fill="#F9F0E4" opacity=".55"/>
+  <path d="M20 193C18 174 35 160 54 165C60 143 82 132 102 141C116 147 123 157 124 170C138 167 151 177 153 193H20Z" fill="url(#cloud)" opacity=".9"/>
+  <path d="M444 104C445 88 457 79 472 81C480 61 496 56 511 64C520 69 524 77 525 87C541 81 556 91 559 104H444Z" fill="url(#cloud)" opacity=".9"/>
+  <ellipse cx="324" cy="514" rx="286" ry="22" fill="#E6D1BA" opacity=".20" filter="url(#groundBlur)"/>
+  <ellipse cx="322" cy="520" rx="306" ry="27" fill="#F9F4EF" opacity=".85"/>
+  <ellipse cx="326" cy="512" rx="230" ry="9" fill="#DDC5AB" opacity=".26"/>
+
+  <!-- Outlined, incomplete upper floor / missing cafe roof. -->
+  <path d="M142 344V250C142 239 150 233 161 233H168V213C168 203 174 198 184 198H228V171C228 161 235 155 245 155H327V125C327 115 333 109 344 109H384C395 109 400 115 400 125V151C400 158 406 162 413 162" stroke="#AB927B" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="10 12" opacity=".96"/>
+  <path d="M492 290V471" stroke="#BBA38D" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="9 11" opacity=".6"/>
+  <path d="M157 368V475" stroke="#BBA38D" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="9 12" opacity=".6"/>
+
+  <!-- Rays of attention -->
+  <path d="M453 111L460 87" stroke="#E5A360" stroke-width="9" stroke-linecap="round"/>
+  <path d="M486 122L502 108" stroke="#E5A360" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- Building facade -->
+  <path d="M167 292H494V500H167Z" fill="url(#cream)"/>
+  <g clip-path="url(#facadeClip)">
+    <rect x="167" y="290" width="32" height="220" fill="#EAD4BF" opacity=".64"/>
+    <rect x="199" y="290" width="16" height="220" fill="#FFFAF3" opacity=".68"/>
+    <rect x="455" y="290" width="17" height="220" fill="#FBECDD" opacity=".74"/>
+    <rect x="477" y="290" width="17" height="220" fill="#E3C7AA" opacity=".70"/>
+    <path d="M167 350H494V376C455 357 413 372 377 371C285 373 221 357 167 375V350Z" fill="#F9EDDE" opacity=".47"/>
+    <path d="M199 335V497M472 335V497" stroke="#DCC1A4" stroke-width="3" opacity=".42"/>
+  </g>
+
+  <!-- Door with dimensional molding -->
+  <rect x="190" y="329" width="125" height="181" rx="19" fill="#C8AA8D" opacity=".65"/>
+  <rect x="198" y="336" width="112" height="170" rx="17" fill="#E5CDB6"/>
+  <rect x="208" y="341" width="94" height="165" rx="12" fill="#9C7454"/>
+  <path d="M219 505V359C219 353 224 348 230 348H279C286 348 291 353 291 359V505" fill="url(#door)"/>
+  <rect x="225" y="361" width="60" height="119" rx="9" fill="#9B8A77" opacity=".57"/>
+  <path d="M226 377C243 374 254 372 284 374V365C284 363 281 360 279 360H230C228 360 226 362 226 365V377Z" fill="#B5A38E" opacity=".2"/>
+  <rect x="215" y="421" width="5" height="19" rx="2.5" fill="#B67C48"/>
+  <rect x="287" y="421" width="5" height="19" rx="2.5" fill="#B67C48"/>
+
+  <!-- Small blank hanging closed sign -->
+  <path d="M243 393L254 376L264 393" stroke="#F2D9BA" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="237" y="392" width="34" height="22" rx="3.6" fill="#F1E0C7"/>
+  <path d="M241 395H266" stroke="#FFF9ED" stroke-width="1.6" opacity=".7"/>
+
+  <!-- Window, with a muted reflection and silhouettes of cups -->
+  <rect x="323" y="335" width="141" height="125" rx="11" fill="#E7CDB2" opacity=".53"/>
+  <rect x="331" y="343" width="129" height="111" rx="9" fill="#805B42"/>
+  <rect x="340" y="352" width="111" height="99" rx="5" fill="url(#glass)"/>
+  <path d="M396 353V451" stroke="#644A37" stroke-width="5" opacity=".72"/>
+  <path d="M341 405L391 355H420L341 431V405ZM411 451L451 403V422L425 451H411Z" fill="#C7AD91" opacity=".13"/>
+  <path d="M359 420H379L376 442H362L359 420Z" fill="#D9C4A9" opacity=".38"/>
+  <path d="M361 416C360 408 365 407 369 407C376 407 377 414 375 418" fill="#D9C4A9" opacity=".28"/>
+  <path d="M411 421H435L431 443H415L411 421Z" fill="#C8B39A" opacity=".20"/>
+  <path d="M409 396C416 386 428 386 432 396L438 401L432 408H412L406 401Z" fill="#CCB69D" opacity=".15"/>
+  <path d="M325 446C325 443 327 441 330 441H462C465 441 468 444 468 447V450C468 454 464 456 461 456H332C328 456 325 453 325 450V446Z" fill="url(#wood)"/>
+  <path d="M328 444H465" stroke="#D3A074" stroke-width="2" opacity=".35"/>
+
+  <!-- Awning backing and top border -->
+  <path d="M166 229H475C478 229 482 233 482 238V250H160V237C160 232 163 229 166 229Z" fill="#EBD4BE"/>
+  <rect x="160" y="226" width="324" height="13" rx="6.5" fill="#D8B99B"/>
+  <path d="M165 229H477" stroke="#FFF3E4" stroke-width="4" stroke-linecap="round" opacity=".74"/>
+  <path d="M174 246H467L515 296V307C515 324 505 333 489 333C473 333 464 326 461 315C458 325 449 333 434 333C417 333 407 326 405 315C401 327 391 333 379 333C363 333 356 326 353 316C349 328 341 333 327 333C313 333 303 326 300 315C296 327 287 333 273 333C259 333 250 326 247 315C243 327 234 333 220 333C206 333 198 325 193 316C190 328 180 333 167 333C153 333 143 323 143 308V297L174 246Z" fill="#F5E2CE"/>
+  <!-- Alternating scalloped fabric. Individual paths remain easy to recolor. -->
+  <path d="M175 246H220L193 300V307C193 323 184 333 167 333C151 333 143 322 143 307V298L175 246Z" fill="url(#awningDark)"/>
+  <path d="M220 246H261L247 300V307C247 324 238 333 220 333C203 333 193 323 193 307V300L220 246Z" fill="url(#awningLight)"/>
+  <path d="M261 246H304L300 300V307C300 323 290 333 273 333C256 333 247 323 247 307V300L261 246Z" fill="url(#awningDark)"/>
+  <path d="M304 246H344L353 300V307C353 323 342 333 327 333C311 333 300 323 300 307V300L304 246Z" fill="url(#awningLight)"/>
+  <path d="M344 246H387L405 300V307C405 323 394 333 379 333C364 333 353 323 353 307V300L344 246Z" fill="url(#awningDark)"/>
+  <path d="M387 246H427L461 300V307C461 324 450 333 434 333C417 333 405 323 405 307V300L387 246Z" fill="url(#awningLight)"/>
+  <path d="M427 246H467L515 298V307C515 323 505 333 489 333C472 333 461 324 461 307V300L427 246Z" fill="url(#awningDark)"/>
+  <path d="M143 303H515" stroke="#895E40" stroke-opacity=".13" stroke-width="1.5"/>
+  <path d="M145 314C151 338 181 337 193 317C204 339 235 339 247 317C258 339 289 339 300 317C313 339 340 339 353 317C366 339 391 339 405 317C416 339 448 339 461 317C473 337 505 339 514 313" stroke="#7F583D" stroke-opacity=".08" stroke-width="7"/>
+  <rect x="166" y="496" width="331" height="13" rx="4" fill="#E0C5A9"/>
+  <path d="M173 497H489" stroke="#F9EDE0" stroke-width="3" opacity=".8"/>
+
+  <!-- Decorative oversized leaves behind the pots -->
+  <g fill="#D9CDB0" opacity=".34">
+    <path d="M108 491C77 464 64 425 74 398C99 408 110 447 108 491Z"/>
+    <path d="M115 485C101 432 108 376 126 365C148 397 138 452 115 485Z"/>
+    <path d="M116 490C128 449 154 429 174 439C170 468 150 485 116 490Z"/>
+    <path d="M523 491C519 439 532 389 554 386C565 423 547 467 523 491Z"/>
+    <path d="M524 496C541 454 566 437 585 449C581 477 560 492 524 496Z"/>
+  </g>
+  <!-- Left potted plant -->
+  <g stroke-linejoin="round">
+    <path d="M144 478C130 446 123 429 125 402" stroke="#647A50" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M144 477C151 449 157 438 167 426" stroke="#647A50" stroke-width="2.1" stroke-linecap="round"/>
+    <path d="M143 475C125 460 116 455 103 449" stroke="#647A50" stroke-width="2.1" stroke-linecap="round"/>
+    <path d="M130 447C110 434 110 400 124 396C140 400 146 428 130 447Z" fill="url(#leaf)"/>
+    <path d="M150 469C151 448 164 431 179 431C184 455 171 473 150 469Z" fill="#64784E"/>
+    <path d="M136 473C114 471 103 457 108 444C128 443 141 456 136 473Z" fill="#708355"/>
+    <path d="M145 473C136 457 140 443 149 437C162 451 159 464 145 473Z" fill="#93A176"/>
+    <path d="M122 474H167L161 508C160 512 156 514 151 514H137C132 514 130 511 129 507L122 474Z" fill="url(#pot)"/>
+    <rect x="119" y="470" width="51" height="12" rx="4.5" fill="#D1A176"/>
+    <path d="M124 473H165" stroke="#F0D1A8" stroke-width="2" opacity=".8"/>
+  </g>
+  <!-- Right potted plant -->
+  <g stroke-linejoin="round">
+    <path d="M505 475C504 434 516 407 534 385" stroke="#546D44" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M505 478C514 458 527 449 542 438" stroke="#546D44" stroke-width="2.3" stroke-linecap="round"/>
+    <path d="M505 476C493 460 490 450 490 439" stroke="#546D44" stroke-width="2.3" stroke-linecap="round"/>
+    <path d="M503 451C499 427 512 394 535 383C551 407 536 439 503 451Z" fill="url(#leaf)"/>
+    <path d="M507 477C512 448 529 435 551 437C551 459 533 480 507 477Z" fill="#6B8052"/>
+    <path d="M502 473C484 459 481 446 486 431C504 437 510 453 502 473Z" fill="#849168"/>
+    <path d="M481 473H532L526 507C525 512 521 514 516 514H496C490 514 488 511 487 506L481 473Z" fill="url(#pot)"/>
+    <rect x="479" y="468" width="55" height="13" rx="4.5" fill="#BC8654"/>
+    <path d="M484 472H530" stroke="#ECC297" stroke-width="2" opacity=".7"/>
+  </g>
+
+  <!-- Raised missing / error badge -->
+  <circle cx="451" cy="189" r="68" fill="#FFFFFF" opacity=".35" filter="url(#softShadow)"/>
+  <circle cx="451" cy="189" r="66" fill="#FFF9F5" opacity=".97"/>
+  <circle cx="451" cy="189" r="56" fill="url(#badge)"/>
+  <path d="M430 168L472 210M472 168L430 210" stroke="url(#cross)" stroke-width="11" stroke-linecap="round"/>
+</svg>

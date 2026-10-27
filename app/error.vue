@@ -43,7 +43,7 @@ const home = inAdmin ? { label: 'Back to dashboard', path: tenantPath('/admin') 
 
 const view = computed(() => {
   if (cafeNotFound.value) {
-    return { icon: 'i-lucide-store', title: 'Cafe not found', description: 'There\'s no cafe at this address. Check the link, or scan the cafe\'s QR code again.' }
+    return { icon: 'i-lucide-store', title: 'Cafe not found', heading: 'This cafe doesn\'t exist', description: 'We couldn\'t find a cafe at this address. Check the link or scan the cafe\'s QR code again.' }
   }
   if (paused.value) {
     const who = cafe.name.value || 'This cafe'
@@ -56,8 +56,10 @@ const view = computed(() => {
     ? { icon: 'i-lucide-map-pin-off', title: 'Page not found', description: 'The page you are looking for doesn\'t exist.' }
     : { icon: 'i-lucide-triangle-alert', title: 'Something went wrong', description: getErrorMessage(props.error) }
 })
-// No way back into a cafe that isn't there, or that is paused.
+// No way back into a cafe that isn't there, or that is paused; an address with no cafe leaves for the
+// default cafe's menu, like the account pages do.
 const showHome = computed(() => !cafeNotFound.value && !paused.value)
+const homePage = tenantUrl(defaultSlug, '/')
 
 // Rendered instead of app.vue, so it sets its own tab title.
 const siteName = computed(() => {
@@ -71,37 +73,78 @@ useHead({ title: () => (siteName.value ? `${view.value.title} · ${siteName.valu
 
 <template>
   <UApp>
-    <div class="flex min-h-dvh flex-col items-center justify-center gap-4 p-4 text-center">
-      <CafeLogo
-        v-if="paused && cafe.logoUrl.value"
-        :url="cafe.logoUrl.value"
-        class="size-12"
-      />
-      <UIcon
-        v-else
-        :name="view.icon"
-        class="size-10 text-muted"
-      />
-      <h1 class="text-xl font-semibold">
-        {{ view.title }}
-      </h1>
-      <p class="max-w-md text-muted">
-        {{ view.description }}
-      </p>
-      <UButton
-        v-if="showHome"
-        :label="home.label"
-        icon="i-lucide-arrow-left"
-        @click="clearError({ redirect: home.path })"
-      />
-      <UButton
-        v-else-if="paused"
-        label="Try again"
-        icon="i-lucide-rotate-cw"
-        color="neutral"
-        variant="outline"
-        @click="reloadNuxtApp({ force: true })"
-      />
+    <div class="flex min-h-dvh items-center justify-center p-4 bg-muted">
+      <div
+        class="grid w-full max-w-5xl items-center gap-8"
+        :class="{ 'lg:grid-cols-2': cafeNotFound }"
+      >
+        <section class="relative flex w-fit mx-auto">
+          <div class="absolute top-0 right-0">
+            <UColorModeButton />
+          </div>
+          <UIcon
+            v-if="cafeNotFound"
+            name="i-app-cafe-shop"
+            class="size-64 lg:size-96"
+          />
+        </section>
+        <div
+          class="flex flex-col gap-4"
+          :class="cafeNotFound ? 'items-center text-center lg:items-start lg:text-left' : 'items-center text-center'"
+        >
+          <UBadge
+            v-if="cafeNotFound"
+            :label="view.title"
+            color="primary"
+            variant="subtle"
+          />
+          <CafeLogo
+            v-else-if="paused && cafe.logoUrl.value"
+            :url="cafe.logoUrl.value"
+            class="size-12"
+          />
+          <UIcon
+            v-else
+            :name="view.icon"
+            class="size-10 text-muted"
+          />
+          <h1 class="text-xl font-semibold text-highlighted">
+            {{ view.heading ?? view.title }}
+          </h1>
+          <p class="max-w-md text-muted">
+            {{ view.description }}
+          </p>
+          <UAlert
+            v-if="cafeNotFound"
+            icon="i-lucide-info"
+            color="warning"
+            variant="subtle"
+            title="Are you at the cafe?"
+            description="Please make sure you're using the correct QR code or link from this cafe."
+            class="text-left max-lg:max-w-lg"
+          />
+          <UButton
+            v-if="showHome"
+            :label="home.label"
+            icon="i-lucide-arrow-left"
+            @click="clearError({ redirect: home.path })"
+          />
+          <UButton
+            v-else-if="paused"
+            label="Try again"
+            icon="i-lucide-rotate-cw"
+            color="neutral"
+            variant="outline"
+            @click="reloadNuxtApp({ force: true })"
+          />
+          <UButton
+            v-else
+            label="Go to home"
+            icon="i-lucide-house"
+            @click="clearError({ redirect: homePage })"
+          />
+        </div>
+      </div>
     </div>
   </UApp>
 </template>

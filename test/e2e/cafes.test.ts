@@ -118,7 +118,7 @@ describe('each cafe by its own name (D143)', () => {
     const page = await createPage()
     for (const path of ['/c/nowhere', '/c/nowhere/admin']) {
       await page.goto(url(path))
-      await page.getByRole('heading', { name: 'Cafe not found' }).waitFor()
+      await page.getByRole('heading', { name: 'This cafe doesn't exist' }).waitFor()
       expect(await page.getByRole('button', { name: /Back to/ }).count()).toBe(0)
     }
   })

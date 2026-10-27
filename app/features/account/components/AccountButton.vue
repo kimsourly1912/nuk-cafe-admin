@@ -103,6 +103,7 @@ const initials = computed(() => (account.value ? initialsOf(account.value.name, 
       <UAvatar
         :text="initials"
         size="sm"
+        :ui="{ fallback: 'text-xs' }"
       />
     </UButton>
     <template #content>
