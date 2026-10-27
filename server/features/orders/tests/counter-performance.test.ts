@@ -86,3 +86,43 @@ it('counts finished orders in the branch local business day and rejects a foreig
   expect(await counterContext(db, 'b', 'a-main', NOW)).toBeUndefined()
   expect(await counterQueueRows(db, 'b', 'a-main', '2026-10-14', NOW)).toMatchObject({ rows: [], lines: [], payments: [], finishedToday: 0 })
 })
+
+it('seeks active statuses instead of reading a branch history on every queue poll', async () => {
+  const { db, u } = await fixture()
+  const history = Array.from({ length: 2000 }, (_, i) => ({ id: `history-${i}`, tenantId: 'a', branchId: 'a-main', customerId: u.id, businessDate: '2026-10-13', pickupNumber: i + 1, orderType: 'pickup' as const, subtotalMinor: 100, totalMinor: 100, placedAt: NOW, paymentDueAt: NOW, status: 'completed' as const }))
+  for (const piece of insertPieces(orders, history)) await db.insert(orders).values(piece)
+  const reads: { sql: string, params: unknown[] }[] = []
+  const batch = db.batch.bind(db)
+  vi.spyOn(db, 'batch').mockImplementation((items) => {
+    for (const item of items) reads.push((item as unknown as { toSQL: () => { sql: string, params: unknown[] } }).toSQL())
+    return batch(items)
+  })
+  const client = (db as unknown as { $client: { execute: (statement: { sql: string, args: unknown[] } | string) => Promise<{ rows: Record<string, unknown>[] }> } }).$client
+  for (const analyze of [false, true]) {
+    if (analyze) await client.execute('ANALYZE')
+    reads.length = 0
+    expect((await counterQueueRows(db, 'a', 'a-main', '2026-10-14', NOW)).rows.map(row => row.id)).toEqual(['own'])
+    // The queue, its lines and its payments all repeat the active-order predicate.
+    for (const read of reads.slice(0, 3)) {
+      const plan = (await client.execute({ sql: `EXPLAIN QUERY PLAN ${read.sql}`, args: read.params })).rows.map(row => String(row.detail))
+      expect(plan.some(detail => detail.includes('orders_active_queue_idx') && detail.includes('tenant_id=? AND branch_id=?')), plan.join(' | ')).toBe(true)
+    }
+  }
+})
+
+it('keeps deadline boundaries, old preparing/ready orders and stable order when history is excluded', async () => {
+  const { db, u } = await fixture()
+  const statuses = ['awaiting_payment', 'awaiting_payment', 'preparing', 'ready', 'completed', 'cancelled'] as const
+  for (const [i, status] of statuses.entries()) {
+    await db.insert(orders).values({
+      id: `boundary-${i}`, tenantId: 'a', branchId: 'a-main', customerId: u.id,
+      businessDate: '2026-10-13', pickupNumber: i + 1, orderType: 'pickup',
+      subtotalMinor: 100, totalMinor: 100, placedAt: new Date(NOW.getTime() - 1),
+      paymentDueAt: new Date(NOW.getTime() + (i === 1 ? 1 : 0)), status,
+    })
+  }
+  const queue = await counterQueueRows(db, 'a', 'a-main', '2026-10-14', NOW)
+  expect(queue.rows.map(row => row.id)).toEqual(['boundary-1', 'boundary-2', 'boundary-3', 'own'])
+  expect(queue.finishedToday).toBe(0)
+  expect((await counterQueueRows(db, 'a', 'a-main', '2026-10-14', new Date(NOW.getTime() + 1))).rows.map(row => row.id)).toEqual(['boundary-2', 'boundary-3', 'own'])
+})

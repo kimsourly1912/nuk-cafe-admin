@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, exists, gt, gte, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, exists, gt, gte, inArray, lte, ne, or, sql } from 'drizzle-orm'
 import type { AnyColumn, SQL } from 'drizzle-orm'
 import type { OrderSource } from '#shared/contracts/marketing'
 import type { CancelReason, OrderStatus, OrderType, PaymentMethod, QuotedModifier, ReturnMethod } from '#shared/contracts/orders'
@@ -162,7 +162,9 @@ const activeOrdersWhere = (tenantId: string, branchId: string, now: Date) => inT
   orders,
   tenantId,
   eq(orders.branchId, branchId),
-  or(and(eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now)), inArray(orders.status, ['preparing', 'ready'])),
+  // Fixed literals let SQLite prove this predicate matches the partial queue index.
+  sql`${orders.status} in ('awaiting_payment', 'preparing', 'ready')`,
+  or(ne(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now)),
 )
 
 export interface CounterQueueRows {
@@ -172,7 +174,7 @@ export interface CounterQueueRows {
   finishedToday: number
 }
 
-/** One fresh snapshot of the queue and its details/count, without building an unbounded ID list. */
+/** One fresh snapshot of the queue and its details/count, without building an unbounded ID list. Uses `orders_active_queue_idx` for all three active reads. */
 export async function counterQueueRows(db: Db, tenantId: string, branchId: string, businessDate: string, now: Date): Promise<CounterQueueRows> {
   const activeIds = db.select({ id: orders.id }).from(orders).where(activeOrdersWhere(tenantId, branchId, now))
   const [rows, lines, payments, [counted]] = await db.batch([
