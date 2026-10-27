@@ -16,8 +16,8 @@ import { toIso } from '#server/utils/time'
 import { addDays } from '#server/utils/weekly-windows'
 import * as deliveryRepo from './notifications.deliveries.repository'
 import { destinationBlocked, destinationNotFound } from './notifications.errors'
-import { alertSubject, bakongReminderStage, bakongTokenMessage, CLOSING_SUMMARY_DELAY_MINUTES, CLOSING_SUMMARY_WINDOW_HOURS, closingInstant, jobFailureMessage, newOrderMessage, paymentMessage, routeOf, serverErrorMessage, supportOpenedMessage } from './notifications.messages'
-import type { JobFailureInfo, ServerErrorInfo, SupportOpenedInfo } from './notifications.messages'
+import { alertSubject, bakongReminderStage, bakongTokenMessage, CLOSING_SUMMARY_DELAY_MINUTES, CLOSING_SUMMARY_WINDOW_HOURS, closingInstant, newOrderMessage, paymentMessage, routeOf, serverErrorMessage, supportOpenedMessage } from './notifications.messages'
+import type { ServerErrorInfo, SupportOpenedInfo } from './notifications.messages'
 import * as repo from './notifications.repository'
 import { isBlockedError, plainText } from './notifications.rules'
 import type { StoredMessage } from './notifications.schema'
@@ -165,37 +165,7 @@ export async function queueServerErrorAlert(db: Db, tenantId: string, info: Serv
   return deliveries.map(d => d.id).filter(id => saved.has(id))
 }
 
-// --- Scheduled jobs that fail (D150) ---
-
-/**
- * Queues a "scheduled job failed" alert for the chats that get server errors (D150): a job that
- * throws (the unpaid-order expiry, a delivery run) or an outbox message given up on. At most one per
- * job and chat in each `SERVER_ERROR_ALERT_WINDOW_MINUTES` window, like server errors. Sent by
- * `notifications:deliver` within a minute; never throws there (the caller catches).
- */
-export async function queueJobFailureAlert(db: Db, tenantId: string, info: JobFailureInfo, now = new Date()): Promise<string[]> {
-  const targets = await repo.targetsOf(db, tenantId, 'server_error')
-  if (!targets.length) return []
-  const window = Math.floor(now.getTime() / (SERVER_ERROR_ALERT_WINDOW_MINUTES * MINUTE))
-  const dedupeKey = `job_failure:${info.job}:${window}`
-  const message = jobFailureMessage(info, SERVER_ERROR_ALERT_WINDOW_MINUTES)
-  const deliveries = targets.map((target): deliveryRepo.NewDelivery => ({
-    id: newId(),
-    tenantId,
-    kind: 'server_error',
-    destinationId: target.destinationId,
-    dedupeKey,
-    subject: `Scheduled job failed · ${info.job}`,
-    message,
-    createdAt: now,
-    nextAttemptAt: now,
-  }))
-  await db.batch(deliveries.map(d => deliveryRepo.insertDeliveryStatement(db, d)) as [Statement, ...Statement[]])
-  const saved = await deliveryRepo.findDeliveryIds(db, tenantId, deliveries.map(d => d.id))
-  return deliveries.map(d => d.id).filter(id => saved.has(id))
-}
-
-// --- The Bakong token's reminders (step 10.16, D132) ---
+/// --- The Bakong token's reminders (step 10.16, D132) ---
 
 /**
  * Reminds the chats of the token's tenant that get server errors (operational alerts) that the

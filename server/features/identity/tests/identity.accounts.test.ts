@@ -49,15 +49,20 @@ async function sessionUser(headers: Headers) {
 }
 
 describe('sign-up', () => {
-  it('queues one verification email and creates the customer profile in the cafe', async () => {
+  it('queues one verification email and makes no customer profile in any cafe (D221)', async () => {
+    // Two cafes: the account must not become a member of the oldest one, or of either.
+    await ensureTenant(db, 'tenant-2')
     const { userId } = await signUp()
     const mails = await queued(MAIL_KINDS.verifyEmail)
     expect(mails).toHaveLength(1)
     expect(mails[0]!.payload).toMatchObject({ to: 'dara@example.com', url: expect.stringContaining('/api/auth/verify-email?token=') })
+    expect(await db.select().from(customerProfiles).where(eq(customerProfiles.userId, userId))).toEqual([])
+  })
 
-    const [profile] = await db.select().from(customerProfiles).where(eq(customerProfiles.userId, userId))
-    expect(profile!.memberCode).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/)
-    expect(profile!.tenantId).toBe(TEST_TENANT)
+  it('works on a platform with no cafe at all', async () => {
+    const empty = createTestAuth(await createTestDb())
+    const { response } = await empty.api.signUpEmail({ body: { email: 'first@example.com', password: PASSWORD, name: 'First' }, returnHeaders: true })
+    expect(response.user.email).toBe('first@example.com')
   })
 
   it('lets an unverified customer sign in and order (D156: verification no longer gates ordering)', async () => {
@@ -77,10 +82,10 @@ describe('sign-up', () => {
 })
 
 describe('customer profile', () => {
-  it('is created on first use when the sign-up hook didn\'t manage to', async () => {
+  it('is created on first use in a cafe, once', async () => {
     const { userId } = await signUp()
-    await db.delete(customerProfiles).where(eq(customerProfiles.userId, userId))
     const profile = await ensureProfile(db, TEST_TENANT, userId)
+    expect(profile.memberCode).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/)
     expect(profile.memberCode).toMatch(/^.{4}-.{4}$/)
     expect(await ensureProfile(db, TEST_TENANT, userId)).toEqual(profile)
   })
@@ -112,7 +117,7 @@ describe('customer profile', () => {
     const branchId = newId()
     await insertBranch(db, { id: branchId, name: 'Their branch', timezone: 'Asia/Phnom_Penh', tenantId: other })
     await createStaff(db, { userId: 'their-owner', tenantId: other, role: 'owner' }, { name: 'Sophea', email: 'sophea@example.com', admin: false, memberships: [{ branchId, role: 'staff' }] })
-    expect((await db.select().from(customerProfiles).where(eq(customerProfiles.userId, userId))).map(p => p.tenantId).sort()).toEqual([TEST_TENANT, other])
+    expect((await db.select().from(customerProfiles).where(eq(customerProfiles.userId, userId))).map(p => p.tenantId)).toEqual([other])
   })
 
   it('reads member codes the way people type them', () => {

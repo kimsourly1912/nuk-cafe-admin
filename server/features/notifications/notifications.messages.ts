@@ -48,28 +48,7 @@ export function serverErrorMessage(info: ServerErrorInfo, windowMinutes: number)
   return { html: lines.join('\n') }
 }
 
-// --- Scheduled jobs that fail (D150) ---
-
-export interface JobFailureInfo {
-  /** The task's name: `orders:expire-unpaid`. */
-  job: string
-  /** What failed, in our own words (never an error's text: it can hold internal details). */
-  detail?: string
-}
-
-/** "⚠️ Scheduled job failed · orders:expire-unpaid". The error's text stays in Workers Logs. */
-export function jobFailureMessage(info: JobFailureInfo, windowMinutes: number): StoredMessage {
-  const lines = [
-    '⚠️ <b>Scheduled job failed</b>',
-    `<code>${escapeHtml(info.job)}</code>`,
-    ...(info.detail ? [escapeHtml(info.detail)] : []),
-    '',
-    `Find it in Workers Logs by the job's name. The same job failing again in the next ${windowMinutes} minutes isn't sent again.`,
-  ]
-  return { html: lines.join('\n') }
-}
-
-// --- The Bakong token's reminders (step 10.16, D132) ---
+/// --- The Bakong token's reminders (step 10.16, D132) ---
 
 const DAY = 24 * 60 * 60_000
 /** The reminders before the token stops working (days left), and one on the day (0). */

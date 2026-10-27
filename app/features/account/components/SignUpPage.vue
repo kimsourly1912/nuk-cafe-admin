@@ -7,7 +7,7 @@
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { SignUpForm } from '../schemas/account-form'
 import { signUpSchema } from '../schemas/account-form'
-import { useAccountActions, useCustomerAccount } from '../composables/useCustomerAccount'
+import { useAccountActions, useAccountSession } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
 import { ACCOUNT_PATHS, accountLink, accountRedirectTarget } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
@@ -23,7 +23,7 @@ const state = reactive({ name: '', email: '', password: '' })
 const { saving, formError, submit } = useAccountForm({ name: 'sign-up-name', email: 'sign-up-email', password: 'sign-up-password' })
 const { signUp } = useAccountActions()
 
-const { account, known } = useCustomerAccount()
+const { account, known } = useAccountSession()
 let arrived = false
 watch(known, (isKnown) => {
   if (!isKnown || arrived) return
@@ -40,7 +40,7 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
   arrived = true
   await submit(async () => {
     try {
-      await signUp(event.data)
+      await signUp(event.data, route.query.redirect)
     }
     catch (error) {
       if (isBreachedPassword(error)) refusedPassword.value = event.data.password

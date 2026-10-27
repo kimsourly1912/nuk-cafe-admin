@@ -453,7 +453,9 @@ describe('seed', () => {
     const fresh = await createTestDb()
     const tenant = await seedTenant(fresh, { name: 'NUK Cafe', slug: 'nuk' })
     expect(tenant).toMatchObject({ name: 'NUK Cafe', slug: 'nuk', created: true })
-    expect(await seedTenant(fresh, { name: 'Other', slug: 'other' })).toEqual({ ...tenant, created: false })
+    expect(await seedTenant(fresh, { name: 'NUK Cafe', slug: 'nuk' })).toEqual({ ...tenant, created: false })
+    // Another address is another cafe, never the oldest one (D221).
+    expect(await seedTenant(fresh, { name: 'Other', slug: 'other' })).toMatchObject({ slug: 'other', created: true })
   })
 
   it('creates the cafe\'s first owner once, then does nothing', async () => {

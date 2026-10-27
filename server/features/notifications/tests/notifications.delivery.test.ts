@@ -1,4 +1,4 @@
-import { markDelivered, deliverDue, listDeliveries, purgeDeliveries, queueBakongTokenReminder, queueClosingSummaries, queueJobFailureAlert, queueOrderAlert, queueServerErrorAlert, queueSupportOpenedAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
+import { markDelivered, deliverDue, listDeliveries, purgeDeliveries, queueBakongTokenReminder, queueClosingSummaries, queueOrderAlert, queueServerErrorAlert, queueSupportOpenedAlert, retryDelivery, setNotificationRule } from '#server/features/notifications/notifications.delivery'
 import { Api } from 'grammy'
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
@@ -346,34 +346,6 @@ describe('server errors (step 10.4, D119)', () => {
     await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
     await db.update(telegramDestinations).set({ status: 'blocked' }).where(eq(telegramDestinations.id, owner))
     expect(await queueServerErrorAlert(db, TEST_TENANT, failed('/api/shop/orders'), at(MON, '10:00'))).toEqual([])
-  })
-})
-
-describe('scheduled jobs that fail (D150)', () => {
-  it('go to the chats that get server errors: the job and our own words, never the error\'s text', async () => {
-    expect(await queueJobFailureAlert(db, TEST_TENANT, { job: 'orders:expire-unpaid' }, at(MON, '10:00'))).toEqual([])
-    await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
-    const ids = await queueJobFailureAlert(db, TEST_TENANT, { job: 'platform:deliver-outbox', detail: 'A "order.placed" message was given up on after 8 tries.' }, at(MON, '10:00'))
-    expect(ids).toHaveLength(1)
-    const [row] = await deliveries()
-    expect(row).toMatchObject({ kind: 'server_error', destinationId: owner, subject: 'Scheduled job failed · platform:deliver-outbox' })
-    expect(row!.message.html).toContain('<code>platform:deliver-outbox</code>')
-    expect(row!.message.html).toContain('A "order.placed" message was given up on after 8 tries.')
-    await deliverDue(db, telegram.api, at(MON, '10:00'), { ids })
-    expect(telegram.sent()).toHaveLength(1)
-  })
-
-  it('at most one per job and chat in 15 minutes, even when two runs fail at once', async () => {
-    await setNotificationRule(db, admin, { kind: 'server_error', destinationId: owner, enabled: true, attachCsv: false })
-    const [first, second] = await Promise.all([
-      queueJobFailureAlert(db, TEST_TENANT, { job: 'orders:expire-unpaid' }, at(MON, '10:01')),
-      queueJobFailureAlert(db, TEST_TENANT, { job: 'orders:expire-unpaid' }, at(MON, '10:02')),
-    ])
-    expect(first!.length + second!.length).toBe(1)
-    // Another job is its own alert; the same job in the next window alerts again.
-    expect(await queueJobFailureAlert(db, TEST_TENANT, { job: 'notifications:deliver' }, at(MON, '10:03'))).toHaveLength(1)
-    expect(await queueJobFailureAlert(db, TEST_TENANT, { job: 'orders:expire-unpaid' }, at(MON, '10:16'))).toHaveLength(1)
-    expect(await deliveries()).toHaveLength(3)
   })
 })
 

@@ -252,9 +252,8 @@ export async function resetStaffPassword(db: Db, actor: Actor, userId: string, i
 }
 
 /**
- * The seed task: the tenant's first owner, with a temporary password printed once. Does nothing
- * (returns `null`) when the tenant has an owner, so it can run on every deploy of a disposable
- * environment.
+ * Test setup: the tenant's first owner, with a temporary password. Does nothing (returns `null`)
+ * when the tenant has an owner. Real cafes get theirs from the platform console (D142, D220).
  */
 export async function seedFirstOwner(db: Db, tenantId: string, input: { name: string, email: string }): Promise<CreatedStaff | null> {
   if (await repo.countOwners(db, tenantId) > 0) return null
@@ -310,15 +309,3 @@ export async function accountForEmail(db: Db, email: string): Promise<{ id: stri
 
 /** Aborts a batch unless the account can still own a cafe (the platform console's create, D185). */
 export const requireEligibleAccount = repo.requireEligibleAccount
-
-/**
- * The seed task (local development and disposable environments, D142): the first owner is also on
- * the platform team, so the platform console can be tried. Elsewhere a super admin is made by hand
- * (docs/server/operations.md → Super admins).
- */
-export async function seedSuperadmin(db: Db, userId: string): Promise<void> {
-  await db.batch([
-    repo.grantSuperadminStatement(db, userId),
-    auditStatement(db, { userId: null, tenantId: null }, { action: 'platform.superadmin.grant', targetType: 'user', targetId: userId, metadata: { by: 'seed' } }),
-  ])
-}

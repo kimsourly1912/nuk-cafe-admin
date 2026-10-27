@@ -54,11 +54,12 @@ export function accountLink(path: string, from?: unknown) {
 }
 
 /**
- * The menu the account pages go back to (D141): the cafe of the page to come back to, else
- * `fallbackSlug`'s (the default cafe's).
+ * Where the account pages go back to (D141): the menu of the cafe of the page to come back to, else
+ * the platform's own page (`/`). Never a cafe the person didn't come from (D221).
  */
-export function accountHome(redirect: unknown, fallbackSlug: string): string {
-  return tenantUrl((typeof redirect === 'string' && splitTenantUrl(redirect)?.slug) || fallbackSlug, '/')
+export function accountHome(redirect: unknown): string {
+  const slug = typeof redirect === 'string' ? splitTenantUrl(redirect)?.slug : undefined
+  return slug ? tenantUrl(slug, '/') : '/'
 }
 
 /** "SC" for "Sokha Chan", "S" for "Sokha", the email's first letter without a name. */

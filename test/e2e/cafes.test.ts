@@ -45,12 +45,15 @@ describe('each cafe at its own address', () => {
     expect((await fetch(url(`/api/c/nuk/public/menu?branchId=${cafe.branchId}`))).status).toBe(404)
   })
 
-  it('addresses from before cafe addresses go to NUK Cafe\'s, the query kept', async () => {
-    const moved = async (path: string) => (await fetch(url(path), { redirect: 'manual' })).headers.get('location')
-    expect(await moved('/')).toBe('/c/nuk')
-    expect(await moved('/admin/products?item=i1')).toBe('/c/nuk/admin/products?item=i1')
-    expect(await moved(`/counter/${seed.openBranchId}?order=o1`)).toBe(`/c/nuk/counter/${seed.openBranchId}?order=o1`)
-    expect(await moved('/checkout')).toBe('/c/nuk/checkout')
+  it('the site\'s root is the platform\'s; no address leads into a default cafe (D221)', async () => {
+    const answer = async (path: string) => {
+      const response = await fetch(url(path), { redirect: 'manual' })
+      return [response.status, response.headers.get('location')]
+    }
+    expect(await answer('/')).toEqual([302, '/cafes'])
+    for (const path of ['/admin/products?item=i1', `/counter/${seed.openBranchId}?order=o1`, '/checkout', '/orders']) {
+      expect((await answer(path))[0], path).toBe(404)
+    }
   })
 
   it('a page has one address, without a trailing slash (D208)', async () => {
@@ -62,8 +65,8 @@ describe('each cafe at its own address', () => {
     expect(await moved('/c/nuk/?table=1')).toEqual([301, '/c/nuk?table=1'])
     expect(await moved('/c/nuk/admin/login/?redirect=/c/nuk/admin')).toEqual([301, '/c/nuk/admin/login?redirect=/c/nuk/admin'])
     expect(await moved('/c/nuk')).toEqual([200, null])
-    // Never towards another site, and the API answers as it is.
-    expect((await moved('//evil.example/'))[1]).toBeNull()
+    // Never towards another site (the root's own redirect stays on this site, D221), and the API answers as it is.
+    expect(String((await moved('//evil.example/'))[1] ?? '')).not.toContain('evil.example')
     expect((await fetch(url('/api/c/nuk/public/branches/'), { redirect: 'manual' })).status).not.toBe(301)
 
     // A link inside the app to the slashed form lands on the same address.
@@ -118,7 +121,7 @@ describe('each cafe by its own name (D143)', () => {
     const page = await createPage()
     for (const path of ['/c/nowhere', '/c/nowhere/admin']) {
       await page.goto(url(path))
-      await page.getByRole('heading', { name: 'Cafe not found' }).waitFor()
+      await page.getByRole('heading', { name: 'This cafe doesn\'t exist' }).waitFor()
       expect(await page.getByRole('button', { name: /Back to/ }).count()).toBe(0)
     }
   })

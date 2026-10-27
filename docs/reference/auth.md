@@ -5,7 +5,6 @@
 - [`useAuth`](#useauth)
 - [Public pages and the change-password page](#public-pages-and-the-change-password-page)
 - [How the session works](#how-the-session-works)
-- [First admin (local setup)](#first-admin-local-setup)
 - [Test accounts (local dev)](#test-accounts-local-dev)
 
 Source: `app/features/auth/`. Import it from `~/features/auth` (feature code isn't auto-imported). Paths here are inside a cafe (D141): `/admin/login` means `/c/<slug>/admin/login`; the paths are functions of the cafe (`loginPath(slug)`, `changePasswordPath(slug)`, `adminHomePath(slug)`, `loginRedirectTarget(redirect, slug)`).
@@ -97,19 +96,9 @@ definePageMeta({ public: true, layout: 'auth' })
 - When any request answers 401 or 403 `NOT_ADMIN`, `apiFetch` clears the user and `plugins/api.ts` redirects to `/admin/login?redirect=…`. No retry. (Removing someone's admin role also deletes their sessions, so they usually get a 401.)
 - Session-expiry errors are never toasted ([`isSilentError`](./errors.md#issilenterror)).
 
-## First admin (local setup)
-
-With the dev server running and `NUXT_SEED_ADMIN_EMAIL` set:
-
-```bash
-curl http://localhost:3000/_nitro/tasks/db:seed
-```
-
-creates the cafe (a tenant, D135), prints its first owner's temporary password (and creates a demo branch). Sign in at `/admin/login`; the app asks for a new password first. More staff: the **Staff** page. See [operations → Seed data](../server/operations.md).
-
 ## Test accounts (local dev)
 
-For trying every role without onboarding each one (D209). With `pnpm dev` running:
+The local setup on a fresh database, and for trying every role without onboarding each one (D209, D220). Staging and production: [operations → Setting up an empty environment](../server/operations.md#setting-up-an-empty-environment-d220). With `pnpm dev` running:
 
 | Command | Does |
 |---|---|

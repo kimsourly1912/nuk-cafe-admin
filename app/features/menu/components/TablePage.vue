@@ -2,13 +2,12 @@
 /**
  * `/table/<token>`: where a table's QR code leads (D91, D93). The token names the cafe, the branch
  * and the table (`GET /api/tables/{token}`, global: D140); this tab then orders for that table and
- * goes to the menu. A token that doesn't work (rotated, archived table or branch, mistyped) says so and offers
- * pickup instead: the reason is never told (the server answers 404 for all of them).
+ * goes to the menu. A token that doesn't work (rotated, archived table or branch, mistyped) says so:
+ * the reason is never told (the server answers 404 for all of them). Its cafe is unknown then, so
+ * there's no link to any cafe's menu (D221): the staff help, or the cafe's own link.
  */
 import type { ScannedTable } from '#shared/contracts/branches'
 import { useTableContext } from '../composables/useShopMenu'
-
-const tenantPath = useTenantPath()
 
 const route = useRoute()
 const { setTable } = useTableContext()
@@ -36,12 +35,8 @@ const notFound = computed(() => error.value?.kind === 'not_found')
         This table's QR code doesn't work
       </h1>
       <p class="max-w-sm text-muted">
-        Ask the staff for help, or order for pickup instead.
+        Ask the staff for help, or open the cafe's menu from its own link.
       </p>
-      <UButton
-        label="Order for pickup"
-        :to="tenantPath('/')"
-      />
     </template>
     <div
       v-else-if="error"

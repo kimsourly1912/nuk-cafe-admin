@@ -1,7 +1,7 @@
 import { listBranchOptions, seedDemoBranch } from '#server/features/branches'
 import { DEV_PASSWORD, resetDevAccount } from '#server/features/identity'
 import type { DevAccountSpec } from '#server/features/identity'
-import { seedTenant, seedTenantAt } from '#server/features/tenants'
+import { seedTenant } from '#server/features/tenants'
 import type { Db } from '#server/utils/batch'
 
 /**
@@ -27,7 +27,7 @@ export default defineTask({
 
     const nuk = await cafeWithBranch(db, await seedTenant(db, { name: 'NUK Cafe', slug: 'nuk' }), timezone)
     // A second cafe, to see by hand that one cafe's people can't reach the other's data.
-    const second = await cafeWithBranch(db, await seedTenantAt(db, { name: 'Second Cafe', slug: 'second' }), timezone)
+    const second = await cafeWithBranch(db, await seedTenant(db, { name: 'Second Cafe', slug: 'second' }), timezone)
 
     const specs: (DevAccountSpec & { signIn: string })[] = [
       { email: 'superadmin@nuk.test', name: 'Super Admin', role: 'superadmin', signIn: '/platform/sign-in' },

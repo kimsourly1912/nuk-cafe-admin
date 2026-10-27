@@ -1,7 +1,7 @@
 import { useIntervalFn } from '@vueuse/core'
 import type { CustomerAccount, GuestCustomer, ShopMe } from '#shared/contracts/account'
 import type { ForgotPasswordForm, SignInForm, SignUpForm } from '../schemas/account-form'
-import { ACCOUNT_PATHS } from '../utils/account'
+import { ACCOUNT_PATHS, accountLink } from '../utils/account'
 
 /**
  * The customer's account on the customer site (step 5.2, D97): who is signed in, from
@@ -30,11 +30,44 @@ export function useCustomerAccount() {
   return { account, guest, known, error: query.error, refresh: query.refresh }
 }
 
+/** Who is signed in, without any cafe's profile: what the platform's account pages show. */
+export interface AccountIdentity {
+  name: string
+  email: string
+  emailVerified: boolean
+}
+
+/**
+ * The signed-in account on the platform's account pages (`/sign-in`, `/sign-up`, `/verify-email`,
+ * `/email-verified`; D221). Their address names no cafe, so they read Better Auth's session only,
+ * never a cafe's `/shop/me`: reading that would make the person a member of a cafe they didn't
+ * open. `null` when signed out, for a guest (D156) and on a temporary password, as on the store.
+ */
+export function useAccountSession() {
+  const query = useApiQuery('account:session', loadIdentity, { server: false, default: () => null, staleTime: REFERENCE_STALE_TIME })
+  const known = useState('account:session-known', () => false)
+  watch(query.status, (status) => {
+    if (status === 'success' || status === 'error') known.value = true
+  }, { immediate: true })
+  return { account: query.data, known, error: query.error, refresh: query.refresh }
+}
+
+async function loadIdentity(): Promise<AccountIdentity | null> {
+  const user = (await fetchSession())?.user
+  if (!user || user.mustChangePassword || user.isAnonymous) return null
+  return { name: user.name, email: user.email, emailVerified: Boolean(user.emailVerified) }
+}
+
 /** The server's code for an account that must replace its temporary password first. */
 const PASSWORD_CHANGE_REQUIRED = 'PASSWORD_CHANGE_REQUIRED'
 
 /** The part of Better Auth's user (sign-in, `get-session`) the store reads. */
 interface AuthUser {
+  name: string
+  email: string
+  emailVerified?: boolean | null
+  /** A guest (D156): signed in by Place order, no email or password of their own. */
+  isAnonymous?: boolean | null
   /** A staff account on its temporary password (security.md → Staff onboarding). */
   mustChangePassword?: boolean | null
 }
@@ -72,8 +105,15 @@ async function fetchSession() {
   }
 }
 
-/** Where the verification link lands (`?error=` when it doesn't work). */
-const VERIFY_CALLBACK = ACCOUNT_PATHS.emailVerified
+/**
+ * Where the verification link lands (`?error=` when it doesn't work), carrying the cafe page the
+ * person came from (`?redirect=`, checked again on arrival): "Back to the menu" there goes back to
+ * that cafe, never to a guessed one (D221).
+ */
+function verifyCallback(from?: unknown): string {
+  const link = accountLink(ACCOUNT_PATHS.emailVerified, from)
+  return typeof link === 'string' ? link : `${link.path}?${new URLSearchParams(link.query)}`
+}
 /** Where the reset link lands (`?token=`, or `?error=INVALID_TOKEN`). */
 const RESET_CALLBACK = ACCOUNT_PATHS.resetPassword
 
@@ -86,6 +126,17 @@ const accountChanged = () => invalidate('account')
  */
 export function useAccountActions() {
   const authFetch = useAuthRequest()
+  const known = useState('account:known', () => false)
+  /**
+   * Someone else (or nobody) is signed in now. The account pages read no cafe's account (D221), so
+   * one loaded before is still someone else's: until the next load, a cafe's page shows itself as
+   * loading, not with the previous person's account (Review order asked a signed-in customer for a
+   * name). Not for a guest made by Place order: that page is mid-order and stays on screen.
+   */
+  const identityChanged = () => {
+    known.value = false
+    return accountChanged()
+  }
   /**
    * Signs in: the password step. `two-factor` (D188): the page asks for the code, then calls
    * `finishSignIn`. A staff account on its temporary password is refused (see `loadAccount`):
@@ -109,16 +160,19 @@ export function useAccountActions() {
   async function signedIn(user: AuthUser) {
     if (user.mustChangePassword) {
       await authFetch('/sign-out').catch(() => {})
-      await accountChanged()
+      await identityChanged()
       throw new ApiError('Change your temporary password to continue.', { kind: 'forbidden', status: 403, code: PASSWORD_CHANGE_REQUIRED })
     }
-    await accountChanged()
+    await identityChanged()
   }
 
-  /** Creates the account and signs in; Better Auth sends the verification email (via the outbox). */
-  async function signUp(form: SignUpForm) {
-    await authFetch('/sign-up/email', { name: form.name, email: form.email, password: form.password, callbackURL: VERIFY_CALLBACK })
-    await accountChanged()
+  /**
+   * Creates the account and signs in; Better Auth sends the verification email (via the outbox).
+   * `from`: the cafe page the email's link comes back to.
+   */
+  async function signUp(form: SignUpForm, from?: unknown) {
+    await authFetch('/sign-up/email', { name: form.name, email: form.email, password: form.password, callbackURL: verifyCallback(from) })
+    await identityChanged()
   }
 
   /**
@@ -135,12 +189,12 @@ export function useAccountActions() {
       await authFetch('/sign-out')
     }
     finally {
-      await accountChanged()
+      await identityChanged()
     }
   }
 
-  async function resendVerification(email: string) {
-    await authFetch('/send-verification-email', { email, callbackURL: VERIFY_CALLBACK })
+  async function resendVerification(email: string, from?: unknown) {
+    await authFetch('/send-verification-email', { email, callbackURL: verifyCallback(from) })
   }
 
   /** Answers the same whether or not the email has an account. */
@@ -151,7 +205,7 @@ export function useAccountActions() {
   /** Sets the new password; Better Auth signs the account out everywhere (D51). */
   async function resetPassword(token: string, newPassword: string) {
     await authFetch('/reset-password', { token, newPassword })
-    await accountChanged()
+    await identityChanged()
   }
 
   return { signIn, finishSignIn, signUp, signInAsGuest, signOut, resendVerification, requestPasswordReset, resetPassword }
@@ -199,6 +253,7 @@ export function useResendCooldown(kind: 'verify' | 'reset') {
  * header's banner and account menu): a toast, and the shared 60 s wait.
  */
 export function useResendVerification() {
+  const route = useRoute()
   const { account } = useCustomerAccount()
   const { resendVerification } = useAccountActions()
   const cooldown = useResendCooldown('verify')
@@ -210,7 +265,8 @@ export function useResendVerification() {
     if (!email || sending.value || cooldown.waiting.value) return
     sending.value = true
     try {
-      await resendVerification(email)
+      // The header's banner and account menu are on a cafe's pages: the link comes back to this one.
+      await resendVerification(email, route.fullPath)
       cooldown.start()
       notify.success('Verification email sent', `We sent a new link to ${email}.`)
     }

@@ -250,8 +250,6 @@ export default defineNuxtConfig({
     humanCheck: { enabled: false, secret: '' },
     // NUXT_MAINTENANCE_OUTBOX_RETENTION_DAYS: 0 keeps metadata until retention is agreed.
     maintenance: { outboxRetentionDays: 0, notificationMaxAgeSeconds: 0, deliveryMaxAgeSeconds: 0 },
-    // The seed task's first admin (server/tasks/db/seed.ts): NUXT_SEED_ADMIN_EMAIL, NUXT_SEED_ADMIN_NAME.
-    seed: { adminEmail: '', adminName: 'Admin' },
     // The dev server's test accounts (server/tasks/dev/, D209): NUXT_DEV_ACCOUNTS_PASSWORD, else DEV_PASSWORD.
     devAccounts: { password: '' },
     // Account emails (docs/server/operations.md → Email, D212): sent through the Worker's `EMAIL`
@@ -281,9 +279,6 @@ export default defineNuxtConfig({
       humanCheck: { enabled: false, siteKey: '' },
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',
-      // NUXT_PUBLIC_DEFAULT_TENANT: the cafe address (slug) the app works in until its pages carry
-      // one (`/c/<slug>/…`, T1.5b): NUK Cafe, `nuk` (D140). Its API is `/api/c/<slug>/…`.
-      defaultTenant: 'nuk',
       // The Sample data page (D94): on for the dev server and staging (NUXT_PUBLIC_SAMPLE_DATA_ENABLED,
       // NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT names the environment on the page). Off everywhere else:
       // production never gets it, and its routes answer 404.
@@ -424,5 +419,11 @@ export default defineNuxtConfig({
         globExclude: ['app/generated/**', 'node_modules', '.*'],
       },
     },
+    customCollections: [
+      {
+        prefix: 'app',
+        dir: './app/assets/icons',
+      },
+    ],
   },
 })

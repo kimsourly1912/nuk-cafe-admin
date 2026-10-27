@@ -21,9 +21,8 @@ export default defineNuxtPlugin({
     // The cafe whose API this app calls (D140, D141): the one in the page's address. Read from the
     // browser's address, not the router's: a route middleware calls the API before the router has
     // moved (its first page included). Moving to another cafe is a full page load (D141). The
-    // platform's pages (no cafe) use NUK Cafe's until a cafe can be chosen (T2).
-    const defaultTenant = useRuntimeConfig().public.defaultTenant
-    const tenant = () => splitTenantUrl(window.location.pathname)?.slug ?? defaultTenant
+    // platform's pages have none: a cafe's API called there throws (`apiPath`, D221).
+    const tenant = () => splitTenantUrl(window.location.pathname)?.slug ?? null
 
     configureApi(createApiFetch({
       // Same engine as Nuxt's $fetch; created from ofetch directly for its types.
@@ -44,15 +43,17 @@ export default defineNuxtPlugin({
       sessionGeneration: () => auth.generation.value + counter.generation.value + platform.generation.value,
     }), tenant)
 
-    // The cafe of the page on screen, for the redirects below (D141).
-    const slugOf = (path: string) => splitTenantUrl(path)?.slug ?? defaultTenant
+    // The cafe of the page on screen, for the redirects below (D141). They act only on a cafe's
+    // admin or counter pages, whose address always names one.
+    const slugOf = (path: string) => splitTenantUrl(path)!.slug
 
     // A temporary password (at login, or reported by a route): only the change-password page. The
     // customer site (outside the admin) never reads the admin session, so it's left alone (D93).
     watch(auth.mustChangePassword, (must) => {
       const path = router.currentRoute.value.path
+      if (!must || !isAdminPath(path)) return
       const target = changePasswordPath(slugOf(path))
-      if (must && isAdminPath(path) && path !== target) nuxtApp.runWithContext(() => navigateTo(target))
+      if (path !== target) nuxtApp.runWithContext(() => navigateTo(target))
     })
 
     // Session lost mid-use (expired, signed out elsewhere, admin access removed): back to login.
@@ -66,8 +67,9 @@ export default defineNuxtPlugin({
     // The same for the counter workspace: a temporary password, or a session lost mid-use.
     watch(counter.mustChangePassword, (must) => {
       const path = router.currentRoute.value.path
+      if (!must || !isCounterPath(path)) return
       const target = counterChangePasswordPath(slugOf(path))
-      if (must && isCounterPath(path) && path !== target) nuxtApp.runWithContext(() => navigateTo(target))
+      if (path !== target) nuxtApp.runWithContext(() => navigateTo(target))
     })
     watch(counter.user, (user, previous) => {
       const route = router.currentRoute.value

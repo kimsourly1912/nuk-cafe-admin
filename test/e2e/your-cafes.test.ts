@@ -85,7 +85,8 @@ describe('Your cafes', () => {
   it('says so for an account that works at no cafe', async () => {
     const page = await open([])
     await page.getByText('This account doesn\'t work at a cafe').waitFor()
-    expect(await page.getByRole('link', { name: 'Go to the menu' }).getAttribute('href')).toBe('/c/nuk')
+    // No link into a guessed cafe (D221).
+    expect(await page.locator('a[href^="/c/"]').count()).toBe(0)
   })
 
   it('sends a signed-out visitor to sign in, and back here afterwards', async () => {

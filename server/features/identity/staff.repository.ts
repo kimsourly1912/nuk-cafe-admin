@@ -296,8 +296,3 @@ export function setTenantRoleStatements(db: Db, tenantId: string, userId: string
   if (role) statements.push(db.insert(member).values({ id: newId(), organizationId: tenantId, userId, role, createdAt: now }))
   return statements
 }
-
-/** Makes an account a super admin, unless it already is (the seed task, D142). */
-export function grantSuperadminStatement(db: Db, userId: string): Statement {
-  return db.update(user).set({ role: 'superadmin' }).where(and(eq(user.id, userId), sql`coalesce(${user.role}, 'customer') <> 'superadmin'`))
-}

@@ -249,3 +249,5 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D217](decisions.md#d217-verify-account-actions-with-free-turnstile-before-the-existing-auth-handler-2026-10-27) | Verify account actions with free Turnstile before the existing auth handler, 2026-10-27 |
 | [D218](decisions.md#d218-cache-public-image-bytes-at-the-edge-while-keeping-current-request-security-2026-10-27) | Cache public image bytes at the edge while keeping current request security, 2026-10-27 |
 | [D219](decisions.md#d219-index-active-counter-orders-without-caching-their-state-2026-10-27) | Index active counter orders without caching their state, 2026-10-27 |
+| [D220](decisions.md#d220-one-setup-path-per-environment-the-dbseed-task-is-retired-2026-10-27) | One setup path per environment; the db:seed task is retired, 2026-10-27 |
+| [D221](decisions.md#d221-nothing-guesses-a-cafe-the-sites-root-is-the-platforms-2026-10-27) | Nothing guesses a cafe; the site's root is the platform's, 2026-10-27 |

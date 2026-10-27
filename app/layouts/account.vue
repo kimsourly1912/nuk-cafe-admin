@@ -6,9 +6,8 @@
 import { useAccountHome } from '~/features/account'
 
 const home = useAccountHome()
-// The cafe the person came from (D143): its name and logo above the form.
-const fallback = useRuntimeConfig().public.defaultTenant
-const { name, logoUrl } = useCafe(() => splitTenantUrl(home.value)?.slug ?? fallback)
+// The cafe the person came from (D143): its name and logo above the form; none without one (D221).
+const { name, logoUrl } = useCafe(() => splitTenantUrl(home.value)?.slug ?? null)
 </script>
 
 <template>
