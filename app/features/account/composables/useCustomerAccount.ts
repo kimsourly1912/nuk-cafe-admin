@@ -126,6 +126,17 @@ const accountChanged = () => invalidate('account')
  */
 export function useAccountActions() {
   const authFetch = useAuthRequest()
+  const known = useState('account:known', () => false)
+  /**
+   * Someone else (or nobody) is signed in now. The account pages read no cafe's account (D221), so
+   * one loaded before is still someone else's: until the next load, a cafe's page shows itself as
+   * loading, not with the previous person's account (Review order asked a signed-in customer for a
+   * name). Not for a guest made by Place order: that page is mid-order and stays on screen.
+   */
+  const identityChanged = () => {
+    known.value = false
+    return accountChanged()
+  }
   /**
    * Signs in: the password step. `two-factor` (D188): the page asks for the code, then calls
    * `finishSignIn`. A staff account on its temporary password is refused (see `loadAccount`):
@@ -149,10 +160,10 @@ export function useAccountActions() {
   async function signedIn(user: AuthUser) {
     if (user.mustChangePassword) {
       await authFetch('/sign-out').catch(() => {})
-      await accountChanged()
+      await identityChanged()
       throw new ApiError('Change your temporary password to continue.', { kind: 'forbidden', status: 403, code: PASSWORD_CHANGE_REQUIRED })
     }
-    await accountChanged()
+    await identityChanged()
   }
 
   /**
@@ -161,7 +172,7 @@ export function useAccountActions() {
    */
   async function signUp(form: SignUpForm, from?: unknown) {
     await authFetch('/sign-up/email', { name: form.name, email: form.email, password: form.password, callbackURL: verifyCallback(from) })
-    await accountChanged()
+    await identityChanged()
   }
 
   /**
@@ -178,7 +189,7 @@ export function useAccountActions() {
       await authFetch('/sign-out')
     }
     finally {
-      await accountChanged()
+      await identityChanged()
     }
   }
 
@@ -194,7 +205,7 @@ export function useAccountActions() {
   /** Sets the new password; Better Auth signs the account out everywhere (D51). */
   async function resetPassword(token: string, newPassword: string) {
     await authFetch('/reset-password', { token, newPassword })
-    await accountChanged()
+    await identityChanged()
   }
 
   return { signIn, finishSignIn, signUp, signInAsGuest, signOut, resendVerification, requestPasswordReset, resetPassword }
