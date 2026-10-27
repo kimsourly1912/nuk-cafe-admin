@@ -72,10 +72,6 @@ async function fetchSession() {
   }
 }
 
-/** Better Auth's routes (`/api/auth`): same origin, so the session cookie is set and sent. */
-const authFetch = <T>(path: string, body: Record<string, unknown> = {}) =>
-  $fetch<T>(`/api/auth${path}`, { method: 'POST', body, retry: 0, timeout: 30_000 })
-
 /** Where the verification link lands (`?error=` when it doesn't work). */
 const VERIFY_CALLBACK = ACCOUNT_PATHS.emailVerified
 /** Where the reset link lands (`?token=`, or `?error=INVALID_TOKEN`). */
@@ -89,6 +85,7 @@ const accountChanged = () => invalidate('account')
  * (`accountFormError`) and keep their own `saving` state, like the admin's sign-in (D84).
  */
 export function useAccountActions() {
+  const authFetch = useAuthRequest()
   /**
    * Signs in: the password step. `two-factor` (D188): the page asks for the code, then calls
    * `finishSignIn`. A staff account on its temporary password is refused (see `loadAccount`):

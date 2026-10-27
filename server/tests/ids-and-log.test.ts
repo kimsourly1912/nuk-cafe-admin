@@ -68,4 +68,13 @@ describe('log', () => {
     expect(line.values).toHaveLength(50)
     expect(line.values[0]).toHaveLength(4000)
   })
+
+  it('redacts browser-verification tokens from nested headers and diagnostic text', () => {
+    const write = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    log('warn', 'Provider response', { headers: { 'x-captcha-response': 'private-widget-token' }, detail: 'x-captcha-response=private-header-token' })
+    const line = JSON.parse(write.mock.calls[0]![0] as string)
+    expect(line.headers['x-captcha-response']).toBe('[redacted]')
+    expect(line.detail).toBe('x-captcha-response=[redacted]')
+    expect(JSON.stringify(line)).not.toMatch(/private-widget-token|private-header-token/)
+  })
 })

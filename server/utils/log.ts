@@ -3,7 +3,7 @@ import type { H3Event } from 'h3'
 type Level = 'debug' | 'info' | 'warn' | 'error'
 
 /** Keys that must never reach a log line (docs/server/security.md → Logging and privacy). */
-const SECRET_KEY = /pass(word)?|secret|token|cookie|authorization|session|api[-_]?key|signature/i
+const SECRET_KEY = /pass(word)?|secret|token|cookie|authorization|session|api[-_]?key|signature|captcha[-_]?response/i
 const MAX_STRING = 4000
 const MAX_ENTRIES = 50
 const MAX_DEPTH = 6
@@ -30,7 +30,7 @@ function safeText(text: string): string {
     .replace(/\/[^\s"'<>]*[?#][^\s"'<>]*/g, safePath)
     .replace(/\/(tables?|reset-password|verify-email)\/[^\s/"'<>?#]+/g, '/$1/[redacted]')
     .replace(/\b(Bearer|Basic)\s+[^\s,"';}]+/gi, '$1 [redacted]')
-    .replace(/\b(password|secret|[\w-]*token|api[-_]?key|authorization|cookie|session|signature)["']?\s*[:=]\s*["']?[^\s,;"'}]+/gi, '$1=[redacted]')
+    .replace(/\b(password|secret|[\w-]*token|api[-_]?key|authorization|cookie|session|signature|[\w-]*captcha[-_]?response)["']?\s*[:=]\s*["']?[^\s,;"'}]+/gi, '$1=[redacted]')
 }
 
 function redact(value: unknown, seen = new WeakSet<object>(), depth = 0): unknown {

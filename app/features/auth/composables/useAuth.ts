@@ -40,14 +40,11 @@ export function loginRedirectTarget(redirect: unknown, slug: string): string {
 
 const NO_ADMIN_ACCESS = 'This account doesn\'t have access to the admin app.'
 
-/** Better Auth's routes (`/api/auth`): same origin, so the session cookie is set and sent. */
-const authFetch = <T>(path: string, body: Record<string, unknown> = {}) =>
-  $fetch<T>(`/api/auth${path}`, { method: 'POST', body, retry: 0, timeout: 30_000 })
-
 /** 403 from `/admin/me`: signed in, but not an admin (NOT_ADMIN, or the route gate's FORBIDDEN). */
 const isNoAccess = (error: ApiError) => error.status === 403
 
 export function useAuth() {
+  const authFetch = useAuthRequest()
   // Captured now: login/logout call hooks after an `await`, where the Nuxt context is gone.
   const nuxtApp = useNuxtApp()
   // Not `auth:*`: @nuxtjs/better-auth keeps its own session in `auth:user` / `auth:session` and

@@ -36,11 +36,12 @@ function copyLibsqlNativeBinary(serverDir: string) {
 function securityHeaders(publicMenu = false): Record<string, string> {
   const csp = [
     `default-src 'self'`,
-    `script-src 'self' 'unsafe-inline'${publicMenu ? ' https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/' : ''}`,
+    `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com${publicMenu ? ' https://static.cloudflareinsights.com/beacon.min.js https://static.cloudflareinsights.com/beacon.min.js/' : ''}`,
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' data: blob:`,
     `font-src 'self' data:`,
     `connect-src 'self'`,
+    `frame-src https://challenges.cloudflare.com`,
     `object-src 'none'`,
     `base-uri 'self'`,
     `form-action 'self'`,
@@ -146,6 +147,7 @@ export default defineNuxtConfig({
     // Worker. `--envName prod` replaces `$production`, so the security headers are repeated here.
     // Never the Sample data variables (D94), and no AI variables until the provider is chosen (Q43).
     prod: {
+      runtimeConfig: { humanCheck: { enabled: true }, public: { humanCheck: { enabled: true, siteKey: '0x4AAAAAAFm5duhYy7YUelxB' } } },
       routeRules: deployedSecurityRules(),
       nitro: {
         preset: 'cloudflare_module',
@@ -158,6 +160,9 @@ export default defineNuxtConfig({
             observability: WORKER_OBSERVABILITY,
             vars: {
               NUXT_PUBLIC_SITE_URL: PRODUCTION.siteUrl,
+              NUXT_HUMAN_CHECK_ENABLED: 'true',
+              NUXT_PUBLIC_HUMAN_CHECK_ENABLED: 'true',
+              NUXT_PUBLIC_HUMAN_CHECK_SITE_KEY: '0x4AAAAAAFm5duhYy7YUelxB',
               ...mailConfig(PRODUCTION.mail).vars,
             },
             ...mailConfig(PRODUCTION.mail).binding,
@@ -172,6 +177,7 @@ export default defineNuxtConfig({
       },
     },
     staging: {
+      runtimeConfig: { humanCheck: { enabled: true }, public: { humanCheck: { enabled: true, siteKey: '0x4AAAAAAFm5caeAd9ORYnJa' } } },
       // `--envName staging` replaces `$production` (one environment block applies), so the security
       // headers are repeated here.
       routeRules: deployedSecurityRules(),
@@ -189,6 +195,9 @@ export default defineNuxtConfig({
             // Public, not secret: Better Auth's base URL and the only trusted origin.
             vars: {
               NUXT_PUBLIC_SITE_URL: STAGING.siteUrl,
+              NUXT_HUMAN_CHECK_ENABLED: 'true',
+              NUXT_PUBLIC_HUMAN_CHECK_ENABLED: 'true',
+              NUXT_PUBLIC_HUMAN_CHECK_SITE_KEY: '0x4AAAAAAFm5caeAd9ORYnJa',
               // Its own sender, so staging's mail is never mistaken for production's.
               ...mailConfig(STAGING.mail).vars,
               // The Sample data page (D94): test data can be loaded and reset here.
@@ -237,6 +246,8 @@ export default defineNuxtConfig({
   // the first paint by the color-mode script, on server-rendered and browser-only pages alike.
   colorMode: { preference: 'light', fallback: 'light' },
   runtimeConfig: {
+    // Only deployed environments enable the account browser gate (D217).
+    humanCheck: { enabled: false, secret: '' },
     // NUXT_MAINTENANCE_OUTBOX_RETENTION_DAYS: 0 keeps metadata until retention is agreed.
     maintenance: { outboxRetentionDays: 0, notificationMaxAgeSeconds: 0, deliveryMaxAgeSeconds: 0 },
     // The seed task's first admin (server/tasks/db/seed.ts): NUXT_SEED_ADMIN_EMAIL, NUXT_SEED_ADMIN_NAME.
@@ -267,6 +278,7 @@ export default defineNuxtConfig({
     // hand. NUXT_BAKONG_API_URL: Bakong's own unless a relay stands in front of it.
     bakong: { encryptionKey: '', apiUrl: 'https://api-bakong.nbc.gov.kh' },
     public: {
+      humanCheck: { enabled: false, siteKey: '' },
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',
       // NUXT_PUBLIC_DEFAULT_TENANT: the cafe address (slug) the app works in until its pages carry

@@ -80,6 +80,35 @@ describe('public API rate limits (D121)', () => {
     expect((await request('/api/c/other/public/menu')).limited).toBe('RATE_LIMIT_PUBLIC')
   })
 
+  it('order actions do not consume creation slots; query/trailing slash forms still count', async () => {
+    const orders = fakeLimiter(2)
+    const limiters = { RATE_LIMIT_ORDERS: orders.limiter }
+    const request = (path: string) => checkRateLimit({ path, method: 'POST', address: '203.0.113.7', limiters })
+    for (const path of ['/api/c/nuk/shop/orders/0191/cancel', '/api/c/nuk/shop/orders/0191/telegram', '/api/c/nuk/shop/orders-other']) {
+      expect((await request(path)).checked).toBe(false)
+    }
+    expect((await request('/api/c/nuk/shop/orders?retry=1')).limited).toBeNull()
+    expect((await request('/api/c/other/shop/orders/')).limited).toBeNull()
+    expect((await request('/api/c/nuk/shop/orders')).limited).toBe('RATE_LIMIT_ORDERS')
+    expect(orders.keys).toHaveLength(3)
+  })
+
+  it('a simulated shared connection can browse and quote while health, callbacks and polling stay outside the rules', async () => {
+    const general = fakeLimiter(600)
+    const quote = fakeLimiter(120)
+    const orders = fakeLimiter(20)
+    const limiters = { RATE_LIMIT_PUBLIC: general.limiter, RATE_LIMIT_QUOTE: quote.limiter, RATE_LIMIT_ORDERS: orders.limiter }
+    for (let person = 0; person < 50; person++) {
+      for (const path of ['/api/c/nuk/public/menu', '/api/c/nuk/public/checkout/quote']) {
+        expect((await checkRateLimit({ path, method: 'POST', address: '203.0.113.7', limiters })).limited).toBeNull()
+      }
+    }
+    for (const path of ['/api/health', '/api/webhooks/telegram', '/api/c/nuk/shop/orders/0191', '/api/c/nuk/counter/branch/queue']) {
+      expect((await checkRateLimit({ path, method: 'GET', address: '203.0.113.7', limiters })).checked).toBe(false)
+    }
+    expect(orders.keys).toEqual([])
+  })
+
   it('browser error reports share the public limit (D149)', async () => {
     const general = fakeLimiter(1)
     const limiters = { RATE_LIMIT_PUBLIC: general.limiter }

@@ -7,6 +7,9 @@ import { log } from '#server/utils/log'
 import { outboxStatement } from '#server/features/platform'
 import { MAIL_KINDS } from './identity.mail'
 import { platformAc, platformRoles, tenantAc, tenantRoles } from './identity.permissions'
+import { HUMAN_CHECK_HEADER, humanCheckAction } from '#shared/utils/human-check'
+import { verifyHumanCheck } from './human-check'
+import type { HumanCheckSettings } from './human-check'
 
 const MINUTE = 60
 const DAY = 24 * 60 * MINUTE
@@ -18,6 +21,7 @@ export interface IdentityAuthSettings {
   siteUrl?: string
   /** Check new passwords against Have I Been Pwned. Off only in tests (it calls an external API). */
   checkBreachedPasswords?: boolean
+  humanCheck?: HumanCheckSettings
 }
 
 /** Queues an account email (verification, reset); `platform:deliver-outbox` sends it. */
@@ -37,7 +41,7 @@ const resetFor = new WeakMap<object, string>()
  * Our Better Auth configuration (docs/server/security.md, D45, D47). `server/auth.config.ts` passes
  * it to `defineServerAuth`; the identity tests run it against the real migration.
  */
-export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true }: IdentityAuthSettings) {
+export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true, humanCheck }: IdentityAuthSettings) {
   return {
     emailAndPassword: {
       enabled: true,
@@ -99,6 +103,16 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        const action = humanCheckAction(ctx.path)
+        if (humanCheck?.enabled && action) {
+          await verifyHumanCheck({
+            action,
+            token: ctx.headers?.get(HUMAN_CHECK_HEADER),
+            address: ctx.headers?.get('cf-connecting-ip'),
+            secret: humanCheck.secret,
+            siteUrl,
+          })
+        }
         if (ctx.path !== '/reset-password' || typeof ctx.body?.token !== 'string') return
         const verification = await ctx.context.internalAdapter.findVerificationValue(`reset-password:${ctx.body.token}`)
         if (verification?.value) resetFor.set(ctx.context, verification.value)

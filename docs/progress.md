@@ -2,6 +2,16 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Cloudflare account bot protection (D217, 2026-10-27)
+
+Owner authorized the next real improvement. Branch `codex/cloudflare-bot-protection` from merged main `1611b28`; CI/staging run `40360207908` succeeded. [Decision](decisions.md#d217-verify-account-actions-with-free-turnstile-before-the-existing-auth-handler-2026-10-27), [plan](plans/cloudflare-improvements.md#step-3-account-bot-protection-d217).
+
+- **Source:** four stable account actions verified in Better Auth's existing before hook. Shared on-demand transport serves customer/admin/counter/platform and email resends without changing existing handlers, sessions or payment rules. Script/network/expiry failures have Retry/Cancel; each retry gets a new widget/token. Cloudflare script/frame CSP allowances are explicit; analytics remains restricted to public-menu documents.
+- **Infrastructure:** two Free managed widgets (staging sitekey `0x4AAAAAAFm5caeAd9ORYnJa`, production `0x4AAAAAAFm5duhYy7YUelxB`), no pre-clearance. Creation and secret writes happened in one connector operation; no private key entered source, disk, shell arguments or chat. Existing Worker target and absent binding were checked before each write, and the binding name was read back. Configuration alone does not establish actual token validation or enable the unmerged feature code.
+- **Abuse/privacy:** only collection POSTs consume placement slots, including query/trailing-slash forms. Cancellation and per-order Telegram actions no longer consume them. Auth rate-limit policy and guest checkout are retained; simulated shared-connection browsing/quote checks are not a rush/load-test or real Cloudflare quota guarantee. The log redactor recognizes captcha response headers/text.
+- **Initial evidence:** 42 targeted server checks passed, including actual Better Auth HTTP handlers, one successful signup followed by a refused replay, wrong-host/action cases, safe failures, rate-limit matching and token-log redaction. External Siteverify responses are controlled fixtures here; this does not prove a real Cloudflare token. New UI fixture tests use the real app with a stub external SDK and public test configuration.
+- **Pending:** final lint/types/unit, negative guard checks, builds/dry runs and changed browser checks; a fresh real token and replay against deployed staging; normal production review. No new subscription, schema/migration, business authorization or production feature-code deployment.
+
 ## Cloudflare monitoring baseline (D216, 2026-10-26)
 
 Owner authorized the next step after D215. Branch `codex/cloudflare-monitoring-baseline`, from merged main `4b681e9`; main CI/staging succeeded (run `40347706519`). [Decision](decisions.md#d216-measure-public-menu-performance-with-privacy-boundaries-and-independent-health-checks-2026-10-26), [baseline with metrics, privacy limits and repeatable queries](reviews/cloudflare-monitoring-baseline-2026-10-26.md), [plan](plans/cloudflare-improvements.md).
