@@ -37,7 +37,11 @@ useSeoMeta({ robots: 'noindex' })
     <OrdersHeader />
 
     <main class="mx-auto max-w-2xl space-y-6 px-4 py-6">
-      <h1 class="text-2xl font-semibold text-highlighted">
+      <!-- Signed out, the sign-in card's title is the page's heading. -->
+      <h1
+        v-if="errorKind !== 'unauthorized'"
+        class="text-2xl font-semibold text-highlighted"
+      >
         Your orders
       </h1>
       <UAlert
@@ -61,17 +65,20 @@ useSeoMeta({ robots: 'noindex' })
         <USkeleton class="h-14 w-full" />
       </div>
 
-      <UCard v-else-if="errorKind === 'unauthorized'">
-        <div class="space-y-3 text-center">
-          <p class="font-medium text-highlighted">
-            Sign in to see your orders
-          </p>
-          <UButton
-            label="Sign in"
-            :to="accountLink(ACCOUNT_PATHS.signIn, route.fullPath)"
-          />
-        </div>
-      </UCard>
+      <UEmpty
+        v-else-if="errorKind === 'unauthorized'"
+        :as="{ title: 'h1' }"
+        size="xl"
+        icon="i-lucide-receipt"
+        title="Sign in to view your orders"
+        description="See your order history and track your current orders."
+        :actions="[
+          { label: 'Sign in', icon: 'i-lucide-log-in', size: 'md', block: true, to: accountLink(ACCOUNT_PATHS.signIn, route.fullPath) },
+          { label: 'Back to menu', color: 'neutral', variant: 'link', size: 'md', to: tenantPath('/') },
+        ]"
+        class="mt-6 py-10 sm:mt-10 sm:py-12"
+        :ui="{ avatar: 'size-16 text-3xl', title: 'text-xl font-semibold', body: 'w-full', actions: 'w-full flex-col items-center' }"
+      />
 
       <ApiErrorAlert
         v-else-if="!list && query.error.value"
