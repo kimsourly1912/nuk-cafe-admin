@@ -8,6 +8,12 @@
 
 - **Evidence (2026-10-28, local Linux, Node 24 / pnpm 12.15.0):** `pnpm install --frozen-lockfile` passes the supply-chain policy; `pnpm audit --audit-level high` passes (three low, six moderate; the existing owner-approved ignores unchanged); `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 149 files, 2049 passed, 1 skipped. Full `pnpm test:e2e` (`E2E_BROWSER_PATH=/opt/pw-browsers/chromium`): running at commit time; CI's sharded run is the proof. Not re-verified: [security](server/security.md)'s "checked against better-auth 1.7.3" facility list (no API used there changed in the module diff 0.3.5 → 0.3.7 as far as the tests show).
 
+## Staging smoke check for the new platform page (PR #197 follow-up, 2026-10-28)
+
+The staging deploy after [PR #197](https://github.com/kimsourly1912/nuk-cafe-admin/pull/197) failed at its smoke check twice (run 40645852008); the Worker itself deployed. PR #197 rewrote `PlatformHomePage.vue`, and the check still looked for the old page's "Scan the QR on your table". It now looks for "scan the QR code shared by your cafe", the text `platform-home.test.ts` checks in the server's HTML (a comment in `ci.yml` ties them).
+
+- **Evidence (local, Linux):** `main` (`31e8197`) built and served by the e2e setup; the smoke step's requests against it: health `ok`, branches 200, `/c/nuk/admin/login` 200 with a CSP header, `/admin/login` 404, `/api/does-not-exist` 404, `/api/c/nuk/admin/me` 401. Home: the old text absent, the new text present, so this was the only failing check. Staging itself isn't reachable from this workspace; the next deploy's smoke check is the proof.
+
 ## Two flaky e2e tests (PR #198 CI follow-up, 2026-10-28)
 
 PR #198's e2e shard 2 failed on two tests in turn, both timing in the test, not the app; both also fail on main. Pitfalls recorded under How to verify.
