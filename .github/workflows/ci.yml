@@ -152,7 +152,8 @@ jobs:
           # The app shell loads at NUK Cafe's address (D141), with the security headers.
           curl --fail --silent --show-error --head "$STAGING_URL/c/nuk/admin/login" | grep -qi '^content-security-policy:'
           # The site's root is the platform's, and addresses from before cafe addresses lead into no cafe (D221).
-          curl --fail --silent --show-error "$STAGING_URL/" | grep -q 'Scan the QR on your table'
+          # Same text as platform-home.test.ts checks in the server's HTML: change both together.
+          curl --fail --silent --show-error "$STAGING_URL/" | grep -q 'scan the QR code shared by your cafe'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/admin/login")" = 404
           # An unknown API path is our JSON 404, not the app's HTML.
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/api/does-not-exist")" = 404
