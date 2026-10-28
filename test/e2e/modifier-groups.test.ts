@@ -312,9 +312,14 @@ describe('new add-on group', () => {
     await form.getByRole('spinbutton', { name: 'At least' }).fill('2')
     await form.getByRole('spinbutton', { name: 'At least' }).blur()
     // Unticking No limit set At most to 1 already: change it, so the field is checked.
+    const atMost = form.getByRole('spinbutton', { name: 'At most' })
     for (const value of ['3', '1']) {
-      await form.getByRole('spinbutton', { name: 'At most' }).fill(value)
-      await form.getByRole('spinbutton', { name: 'At most' }).blur()
+      await atMost.fill(value)
+      await atMost.blur()
+      // Reka's number field resets the input to its value one frame after `change`; typing again
+      // within that frame (only a test is that fast) is overwritten, so wait for it.
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)))
+      expect(await atMost.getAttribute('aria-valuenow')).toBe(value)
     }
     const tooFew = form.getByText(/less than the minimum/)
     await tooFew.waitFor({ timeout: 5000 })
