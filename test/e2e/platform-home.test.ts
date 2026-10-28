@@ -30,7 +30,7 @@ describe('the platform\'s page (D221)', () => {
       expect(response.status).toBe(200)
       expect(response.headers.getSetCookie()).toEqual([])
       expect(html).toContain('Angder')
-      expect(html).toContain('Scan the QR on your table')
+      expect(html).toContain('scan the QR code shared by your cafe')
       expect(html).toContain('href="/cafes"')
       // No address of any cafe, and nothing of the account that sent the cookie.
       expect(html).not.toMatch(/href="\/c\//)
@@ -44,14 +44,14 @@ describe('the platform\'s page (D221)', () => {
     await asNewVisitor(page)
     await page.goto(url('/'), { waitUntil: 'hydration' })
     expect(await page.title()).toBe('Angder')
-    await page.getByRole('heading', { level: 1, name: 'Angder' }).waitFor()
+    await page.getByRole('heading', { level: 1, name: 'A better way to order from your cafe' }).waitFor()
     expect((await linksOf(page)).filter(href => href.startsWith('/c/'))).toEqual([])
 
     await page.getByRole('link', { name: 'Sign in' }).click()
     await page.waitForURL(u => u.pathname === '/sign-in' && u.searchParams.get('redirect') === '/cafes')
     await page.getByRole('link', { name: 'Back to home' }).first().click()
     await page.waitForURL(u => u.pathname === '/')
-    await page.getByRole('heading', { level: 1, name: 'Angder' }).waitFor()
+    await page.getByRole('heading', { level: 1, name: 'A better way to order from your cafe' }).waitFor()
     await page.close()
   })
 
@@ -66,7 +66,7 @@ describe('the platform\'s page (D221)', () => {
     await page.waitForURL(u => u.pathname === '/cafes')
 
     await page.goto(url('/'), { waitUntil: 'hydration' })
-    await page.getByRole('heading', { level: 1, name: 'Angder' }).waitFor()
+    await page.getByRole('heading', { level: 1, name: 'A better way to order from your cafe' }).waitFor()
     expect((await linksOf(page)).filter(href => href.startsWith('/c/'))).toEqual([])
     await page.getByRole('link', { name: 'Sign in' }).click()
     await page.waitForURL(u => u.pathname === '/cafes')
@@ -78,7 +78,7 @@ describe('the platform\'s page (D221)', () => {
     const page = await createPage()
     await page.setViewportSize({ width: 320, height: 640 })
     await page.goto(url('/'), { waitUntil: 'hydration' })
-    await page.getByRole('heading', { level: 1, name: 'Angder' }).waitFor()
+    await page.getByRole('heading', { level: 1, name: 'A better way to order from your cafe' }).waitFor()
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320)
     const signIn = await page.getByRole('link', { name: 'Sign in' }).boundingBox()
     expect(signIn).not.toBeNull()

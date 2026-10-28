@@ -253,4 +253,19 @@ describe('finding an order again', () => {
     await page.getByRole('link', { name: 'Sign in' }).first().waitFor()
     expect(requests).toEqual([])
   })
+
+  it('signed out, Your orders asks to sign in (coming back here) or go back to the menu', async () => {
+    const page = await createPage()
+    await asNewVisitor(page)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(url('/c/nuk/orders'), { waitUntil: 'hydration' })
+
+    // The sign-in card's title is the page's only heading.
+    await page.getByRole('heading', { level: 1, name: 'Sign in to view your orders' }).waitFor()
+    expect(await page.getByRole('heading', { name: 'Your orders', exact: true }).count()).toBe(0)
+    expect(await page.getByRole('link', { name: 'Back to menu' }).getAttribute('href')).toBe('/c/nuk')
+
+    await visible(page.getByRole('link', { name: 'Sign in', exact: true })).last().click()
+    await page.waitForURL(u => u.pathname === '/sign-in' && u.searchParams.get('redirect') === '/c/nuk/orders')
+  })
 })

@@ -102,7 +102,7 @@ describe('accessibility (axe, WCAG 2.1 AA)', () => {
       const page = await createPage()
       await page.setViewportSize({ width, height: 900 })
       await page.goto(url('/'), { waitUntil: 'hydration' })
-      await page.getByRole('heading', { level: 1, name: 'Angder' }).waitFor()
+      await page.getByRole('heading', { level: 1, name: 'A better way to order from your cafe' }).waitFor()
       expect(await findings(page)).toEqual([])
     })
 

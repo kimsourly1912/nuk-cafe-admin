@@ -99,7 +99,7 @@ describe('signing in and out', () => {
     await signIn(page, seed.customers.verified)
     // A refused target goes to the platform's page, never a guessed cafe (D221).
     await page.waitForURL(u => u.origin === new URL(url('/')).origin && u.pathname === '/')
-    await page.getByRole('heading', { level: 1, name: 'Angder' }).waitFor()
+    await page.getByRole('heading', { level: 1, name: 'A better way to order from your cafe' }).waitFor()
     // Already signed in: the sign-in page moves on by itself. A refused admin target still names its
     // cafe: that cafe's menu.
     await page.goto(url('/sign-in?redirect=/c/nuk/admin'), { waitUntil: 'hydration' })
