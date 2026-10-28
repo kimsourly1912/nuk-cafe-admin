@@ -477,6 +477,9 @@ describe('reordering values', () => {
   it('moves with the arrow buttons, keeps focus, announces, and saves once after the moves', async () => {
     const order = answering(SIZE, reordered)
     const { page } = await open([SIZE], { 'PUT /admin/menu/option-sets/{id}/values/order': order.handler })
+    // Each move slides its row for 200 ms and a click waits for the row to stand still; on a slow
+    // runner the second move then came after the 500 ms save delay, and both moves saved separately.
+    await page.emulateMedia({ reducedMotion: 'reduce' })
     const editor = await openEditor(page, 'Size')
     await editor.getByRole('button', { name: 'Reorder' }).click()
     await editor.getByText('Drag values or use the arrow buttons. Every move saves automatically.').waitFor()
