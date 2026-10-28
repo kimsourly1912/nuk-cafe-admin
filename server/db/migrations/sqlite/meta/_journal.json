@@ -351,6 +351,13 @@
       "when": 1793082110751,
       "tag": "0049_orders_active_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1793101437171,
+      "tag": "0050_orders_customer_status",
+      "breakpoints": true
     }
   ]
 }

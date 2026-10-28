@@ -251,3 +251,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D219](decisions.md#d219-index-active-counter-orders-without-caching-their-state-2026-10-27) | Index active counter orders without caching their state, 2026-10-27 |
 | [D220](decisions.md#d220-one-setup-path-per-environment-the-dbseed-task-is-retired-2026-10-27) | One setup path per environment; the db:seed task is retired, 2026-10-27 |
 | [D221](decisions.md#d221-nothing-guesses-a-cafe-the-sites-root-is-the-platforms-2026-10-27) | Nothing guesses a cafe; the site's root is the platform's, 2026-10-27 |
+| [D222](decisions.md#d222-index-customer-order-status-and-unpaid-deadlines-within-each-cafe-2026-10-27) | Index customer order status and unpaid deadlines within each cafe, 2026-10-27 |

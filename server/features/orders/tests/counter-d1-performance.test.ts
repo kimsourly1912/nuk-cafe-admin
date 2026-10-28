@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/d1'
 import { expect, it, vi } from 'vitest'
 import { getPlatformProxy } from 'wrangler'
 import type { Db } from '#server/utils/batch'
-import { insertPieces } from '#server/utils/batch'
+import { chunk, insertPieces } from '#server/utils/batch'
 import { createUser, insertBranch, migrationFiles } from '#server/tests/support/db'
 import { counterQueueRows } from '#server/features/orders/orders.repository'
 import { orders } from '#server/features/orders/orders.schema'
@@ -12,6 +12,7 @@ import { orders } from '#server/features/orders/orders.schema'
 it('reduces active queue reads on local D1 without changing the snapshot', { tags: ['slow'] }, async () => {
   const proxy = await getPlatformProxy({ configPath: fileURLToPath(new URL('../../../tests/support/d1-wrangler.json', import.meta.url)), persist: false })
   const d1 = proxy.env.DB as {
+    batch: (statements: unknown[]) => Promise<unknown>
     prepare: (sql: string) => {
       bind: (...params: unknown[]) => { all: () => Promise<{ results: unknown[], meta: { rows_read: number } }> }
       run: () => Promise<unknown>
@@ -20,9 +21,7 @@ it('reduces active queue reads on local D1 without changing the snapshot', { tag
   try {
     for (const file of migrationFiles()) {
       const source = readFileSync(fileURLToPath(new URL(`../../../db/migrations/sqlite/${file}`, import.meta.url)), 'utf8')
-      for (const statement of source.split('--> statement-breakpoint')) {
-        if (statement.trim()) await d1.prepare(statement).run()
-      }
+      await d1.batch(source.split('--> statement-breakpoint').filter(statement => statement.trim()).map(statement => d1.prepare(statement)))
     }
     const db = drizzle(d1 as never, { casing: 'snake_case' }) as unknown as Db
     const person = await createUser(db, 'queue@example.com', 'Customer')
@@ -34,7 +33,8 @@ it('reduces active queue reads on local D1 without changing the snapshot', { tag
       businessDate: '2026-10-26', pickupNumber: i + 1, orderType: 'pickup' as const,
       subtotalMinor: 100, totalMinor: 100, placedAt: now, paymentDueAt: now, status: 'completed' as const,
     }))
-    for (const piece of insertPieces(orders, records)) await db.insert(orders).values(piece)
+    const inserts = insertPieces(orders, records).map(piece => db.insert(orders).values(piece))
+    for (const [first, ...rest] of chunk(inserts, 50)) if (first) await db.batch([first, ...rest])
     for (const [i, status] of (['awaiting_payment', 'preparing', 'ready', 'cancelled', 'completed'] as const).entries()) {
       await db.insert(orders).values({ ...records[0]!, id: `own-${status}`, pickupNumber: i + 1, businessDate: '2026-10-27', paymentDueAt: new Date(now.getTime() + 1), status })
       await db.insert(orders).values({ ...records[0]!, id: `other-${status}`, tenantId: 'queue-b', branchId: 'queue-b', pickupNumber: i + 1, status })

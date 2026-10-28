@@ -68,6 +68,10 @@ Add the partial `orders_active_queue_idx (tenant_id, branch_id, placed_at, id)` 
 
 Compare actual local D1 plans and rows read with the old predicate, both before and after ANALYZE; statistics can already make the old query cheaper. Do not infer a universal speedup from a cold-plan fixture. Require boundary/tenant/freshness tests, mutation checks, standard checks and full CI browser tests before review. Verify staging migration and representative D1/route measurements after merge. Production's manual gate remains.
 
+### Full-query follow-up audit (27 October 2026)
+
+After D219 / PR #192 merged, the owner requested an application-wide query audit. [The report](../reviews/full-query-audit-2026-10-27.md) inventories all 35 repositories and ranks eleven follow-ups using 19 local D1 experiments. Q1 is now implemented locally as D222: one customer/status/deadline index and post-index planner optimization; [current checks](../progress.md#customer-order-query-index-d222-2026-10-27). The other findings remain recommendations. Customer read/guard indexing and the active bar come first; report batching, known-cafe notification lookup and maintenance eligibility follow. Keep one bounded implementation per PR, preserve fresh authoritative reads and financial/tenant guards, and use the report's per-finding acceptance checks.
+
 ## Verification and rollback
 
 1. Read the current zone and Worker settings, preserving nonsecret before/after evidence.

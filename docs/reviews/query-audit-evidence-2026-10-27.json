@@ -1,0 +1,585 @@
+{
+  "baseline": "ac1b659c3e91455f91acbccce692214eec706a98",
+  "runtime": "local workerd/D1; synthetic data only",
+  "statistics": "ANALYZE before candidate comparisons; no cold-plan speedup claim",
+  "experiments": [
+    {
+      "name": "membership point lookup (candidate may be unnecessary)",
+      "sql": "select \"role\" from \"member\" where (\"member\".\"organization_id\" = ? and \"member\".\"user_id\" = ?) limit ?",
+      "parameters": 3,
+      "observations": [
+        {
+          "analyzed": true,
+          "before": {
+            "rowsRead": 1,
+            "plan": [
+              "SEARCH member USING INDEX member_userId_idx (user_id=?)"
+            ]
+          },
+          "after": {
+            "rowsRead": 1,
+            "plan": [
+              "SEARCH member USING INDEX audit_member_pair (organization_id=? AND user_id=?)"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "customer active orders with ordinary unpaid index",
+      "sql": "select \"orders\".\"id\", \"orders\".\"tenant_id\", \"orders\".\"branch_id\", \"branches\".\"name\" as \"branch_name\", \"orders\".\"customer_id\", \"user\".\"name\" as \"customer_name\", \"orders\".\"pickup_number\", \"orders\".\"business_date\", \"orders\".\"status\", \"orders\".\"order_type\", \"orders\".\"table_label\", \"orders\".\"subtotal_minor\", \"orders\".\"total_minor\", \"orders\".\"placed_at\", \"orders\".\"payment_due_at\", \"orders\".\"paid_at\", \"orders\".\"ready_at\", \"orders\".\"completed_at\", \"orders\".\"cancelled_at\", \"orders\".\"version\" from \"orders\" inner join \"branches\" on (\"branches\".\"tenant_id\" = \"orders\".\"tenant_id\" and \"branches\".\"id\" = \"orders\".\"branch_id\") inner join \"user\" on \"user\".\"id\" = \"orders\".\"customer_id\" where (\"orders\".\"tenant_id\" = ? and \"orders\".\"customer_id\" = ? and \"orders\".\"status\" in (?, ?, ?)) order by \"orders\".\"placed_at\" desc, \"orders\".\"id\" desc limit ?",
+      "parameters": 6,
+      "observations": [
+        {
+          "analyzed": true,
+          "before": {
+            "rowsRead": 6010,
+            "plan": [
+              "SCAN branches",
+              "SEARCH user USING INDEX sqlite_autoindex_user_1 (id=?)",
+              "SEARCH orders USING INDEX orders_customer_idx (customer_id=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          "after": {
+            "rowsRead": 14,
+            "plan": [
+              "SCAN branches",
+              "SEARCH user USING INDEX sqlite_autoindex_user_1 (id=?)",
+              "SEARCH orders USING INDEX audit_customer_unpaid (tenant_id=? AND customer_id=? AND status=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "customer active orders",
+      "sql": "select \"orders\".\"id\", \"orders\".\"tenant_id\", \"orders\".\"branch_id\", \"branches\".\"name\" as \"branch_name\", \"orders\".\"customer_id\", \"user\".\"name\" as \"customer_name\", \"orders\".\"pickup_number\", \"orders\".\"business_date\", \"orders\".\"status\", \"orders\".\"order_type\", \"orders\".\"table_label\", \"orders\".\"subtotal_minor\", \"orders\".\"total_minor\", \"orders\".\"placed_at\", \"orders\".\"payment_due_at\", \"orders\".\"paid_at\", \"orders\".\"ready_at\", \"orders\".\"completed_at\", \"orders\".\"cancelled_at\", \"orders\".\"version\" from \"orders\" inner join \"branches\" on (\"branches\".\"tenant_id\" = \"orders\".\"tenant_id\" and \"branches\".\"id\" = \"orders\".\"branch_id\") inner join \"user\" on \"user\".\"id\" = \"orders\".\"customer_id\" where (\"orders\".\"tenant_id\" = ? and \"orders\".\"customer_id\" = ? and \"orders\".\"status\" in (?, ?, ?)) order by \"orders\".\"placed_at\" desc, \"orders\".\"id\" desc limit ?",
+      "parameters": 6,
+      "observations": [
+        {
+          "analyzed": true,
+          "before": {
+            "rowsRead": 6010,
+            "plan": [
+              "SCAN branches",
+              "SEARCH user USING INDEX sqlite_autoindex_user_1 (id=?)",
+              "SEARCH orders USING INDEX orders_customer_idx (customer_id=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          "after": {
+            "rowsRead": 12,
+            "plan": [
+              "SCAN branches",
+              "SEARCH orders USING INDEX audit_customer_active (tenant_id=? AND customer_id=?)",
+              "SEARCH user USING INDEX sqlite_autoindex_user_1 (id=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "unpaid-order guard",
+      "sql": "select case when ((select count(*) from \"orders\" where (\"orders\".\"tenant_id\" = ? and \"orders\".\"customer_id\" = ? and \"orders\".\"status\" = ? and \"orders\".\"payment_due_at\" > ?))) <= ? then 1 else json('stale write') end from (select 1)",
+      "parameters": 5,
+      "observations": [
+        {
+          "analyzed": true,
+          "before": {
+            "rowsRead": 6004,
+            "plan": [
+              "CO-ROUTINE (subquery-2)",
+              "SCAN CONSTANT ROW",
+              "SCAN (subquery-2)",
+              "SCALAR SUBQUERY 1",
+              "SEARCH orders USING INDEX orders_customer_idx (customer_id=?)"
+            ]
+          },
+          "after": {
+            "rowsRead": 2,
+            "plan": [
+              "CO-ROUTINE (subquery-2)",
+              "SCAN CONSTANT ROW",
+              "SCAN (subquery-2)",
+              "SCALAR SUBQUERY 1",
+              "SEARCH orders USING COVERING INDEX audit_customer_unpaid (tenant_id=? AND customer_id=? AND status=? AND payment_due_at>?)"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "expired mail scrub on already-redacted history",
+      "sql": "update \"outbox_messages\" set \"payload\" = ?, \"status\" = ?, \"locked_until\" = ?, \"claim_token\" = ?, \"last_error\" = ? where \"outbox_messages\".\"id\" in (select \"id\" from \"outbox_messages\" where (((\"outbox_messages\".\"kind\" = ? and \"outbox_messages\".\"created_at\" < ?) or (\"outbox_messages\".\"kind\" = ? and \"outbox_messages\".\"created_at\" < ?)) and \"outbox_messages\".\"payload\" <> '{}' and (\"outbox_messages\".\"locked_until\" is null or \"outbox_messages\".\"locked_until\" <= ?)) order by \"outbox_messages\".\"created_at\" asc, \"outbox_messages\".\"id\" asc limit ?) returning \"id\"",
+      "parameters": 11,
+      "observations": [
+        {
+          "analyzed": true,
+          "before": {
+            "rowsRead": 4005,
+            "plan": [
+              "SEARCH outbox_messages USING COVERING INDEX sqlite_autoindex_outbox_messages_1 (id=?)",
+              "LIST SUBQUERY 1",
+              "MULTI-INDEX OR",
+              "INDEX 1",
+              "SEARCH outbox_messages USING INDEX outbox_messages_expiry_idx (kind=? AND created_at<?)",
+              "INDEX 2",
+              "SEARCH outbox_messages USING INDEX outbox_messages_expiry_idx (kind=? AND created_at<?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          "after": {
+            "rowsRead": 5,
+            "plan": [
+              "SEARCH outbox_messages USING COVERING INDEX sqlite_autoindex_outbox_messages_1 (id=?)",
+              "LIST SUBQUERY 1",
+              "SCAN outbox_messages USING INDEX audit_unredacted_mail",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "platform cafe recent count and last-order lookup",
+      "before": {
+        "rowsRead": 8005,
+        "plan": [
+          "SEARCH orders USING COVERING INDEX orders_tenant_placed_idx (tenant_id=?)"
+        ]
+      },
+      "after": {
+        "rowsRead": 2007,
+        "plan": [
+          "SEARCH cafe USING COVERING INDEX sqlite_autoindex_organization_1 (id=?)",
+          "CORRELATED SCALAR SUBQUERY 1",
+          "SEARCH o USING COVERING INDEX orders_tenant_placed_idx (tenant_id=? AND placed_at>?)",
+          "CORRELATED SCALAR SUBQUERY 2",
+          "SEARCH o USING COVERING INDEX orders_tenant_placed_idx (tenant_id=?)"
+        ]
+      },
+      "note": "same existing tenant/placed index; no new index"
+    },
+    {
+      "name": "known cafe in customer ready messages",
+      "before": {
+        "rowsRead": 500,
+        "rowsReturned": 250,
+        "plan": [
+          "SCAN organization",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      "after": {
+        "rowsRead": 1,
+        "rowsReturned": 1,
+        "plan": [
+          "SEARCH organization USING INDEX sqlite_autoindex_organization_1 (id=?)"
+        ]
+      }
+    },
+    {
+      "name": "platform accounts first page",
+      "sql": "select \"id\", \"name\", \"email\", \"email_verified\", \"role\", \"banned\", \"ban_reason\", \"ban_expires\", \"must_change_password\", \"is_anonymous\", \"created_at\", \"updated_at\" from \"user\" where (\"user\".\"is_anonymous\" = ? or \"user\".\"is_anonymous\" is null) order by \"user\".\"created_at\" desc, \"user\".\"id\" desc limit ?",
+      "parameters": 2,
+      "observations": [
+        {
+          "analyzed": true,
+          "before": {
+            "rowsRead": 4000,
+            "plan": [
+              "SCAN user",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          "after": {
+            "rowsRead": 20,
+            "plan": [
+              "SCAN user USING INDEX audit_account_created"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "platform accounts exact count",
+      "plan": [
+        "SCAN user"
+      ],
+      "rowsRead": 2000,
+      "rowsWritten": 0
+    },
+    {
+      "name": "customer active bar uses full order list",
+      "sqlStatements": 4,
+      "batchCalls": 1,
+      "databaseCalls": 3,
+      "rowsReadByStatement": [
+        11007,
+        6004,
+        6010,
+        23
+      ],
+      "sql": [
+        "select \"orders\".\"id\", \"orders\".\"tenant_id\", \"orders\".\"branch_id\", \"branches\".\"name\" as \"branch_name\", \"orders\".\"customer_id\", \"user\".\"name\" as \"customer_name\", \"orders\".\"pickup_number\", \"orders\".\"business_date\", \"orders\".\"status\", \"orders\".\"order_type\", \"orders\".\"table_label\", \"orders\".\"subtotal_minor\", \"orders\".\"total_minor\", \"orders\".\"placed_at\", \"orders\".\"payment_due_at\", \"orders\".\"paid_at\", \"orders\".\"ready_at\", \"orders\".\"completed_at\", \"orders\".\"cancelled_at\", \"orders\".\"version\" from \"orders\" inner join \"branches\" on (\"branches\".\"tenant_id\" = \"orders\".\"tenant_id\" and \"branches\".\"id\" = \"orders\".\"branch_id\") inner join \"user\" on \"user\".\"id\" = \"orders\".\"customer_id\" where (\"orders\".\"tenant_id\" = ? and \"orders\".\"customer_id\" = ? and \"orders\".\"status\" in (?, ?)) order by \"orders\".\"placed_at\" desc, \"orders\".\"id\" desc limit ?",
+        "select count(*) from \"orders\" where (\"orders\".\"tenant_id\" = ? and \"orders\".\"customer_id\" = ? and \"orders\".\"status\" in (?, ?))",
+        "select \"orders\".\"id\", \"orders\".\"tenant_id\", \"orders\".\"branch_id\", \"branches\".\"name\" as \"branch_name\", \"orders\".\"customer_id\", \"user\".\"name\" as \"customer_name\", \"orders\".\"pickup_number\", \"orders\".\"business_date\", \"orders\".\"status\", \"orders\".\"order_type\", \"orders\".\"table_label\", \"orders\".\"subtotal_minor\", \"orders\".\"total_minor\", \"orders\".\"placed_at\", \"orders\".\"payment_due_at\", \"orders\".\"paid_at\", \"orders\".\"ready_at\", \"orders\".\"completed_at\", \"orders\".\"cancelled_at\", \"orders\".\"version\" from \"orders\" inner join \"branches\" on (\"branches\".\"tenant_id\" = \"orders\".\"tenant_id\" and \"branches\".\"id\" = \"orders\".\"branch_id\") inner join \"user\" on \"user\".\"id\" = \"orders\".\"customer_id\" where (\"orders\".\"tenant_id\" = ? and \"orders\".\"customer_id\" = ? and \"orders\".\"status\" in (?, ?, ?)) order by \"orders\".\"placed_at\" desc, \"orders\".\"id\" desc limit ?",
+        "select \"order_id\", sum(\"quantity\") from \"order_lines\" where (\"order_lines\".\"tenant_id\" = ? and \"order_lines\".\"order_id\" in (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)) group by \"order_lines\".\"order_id\""
+      ],
+      "note": "raw batch equality in static fixture; context/dependency and service mapping still need implementation tests"
+    },
+    {
+      "name": "customer single order tracking",
+      "sqlStatements": 3,
+      "batchCalls": 0,
+      "databaseCalls": 3,
+      "rowsReadByStatement": [
+        3,
+        0,
+        0
+      ],
+      "sql": [
+        "select \"orders\".\"id\", \"orders\".\"tenant_id\", \"orders\".\"branch_id\", \"branches\".\"name\" as \"branch_name\", \"orders\".\"customer_id\", \"user\".\"name\" as \"customer_name\", \"orders\".\"pickup_number\", \"orders\".\"business_date\", \"orders\".\"status\", \"orders\".\"order_type\", \"orders\".\"table_label\", \"orders\".\"subtotal_minor\", \"orders\".\"total_minor\", \"orders\".\"placed_at\", \"orders\".\"payment_due_at\", \"orders\".\"paid_at\", \"orders\".\"ready_at\", \"orders\".\"completed_at\", \"orders\".\"cancelled_at\", \"orders\".\"version\" from \"orders\" inner join \"branches\" on (\"branches\".\"tenant_id\" = \"orders\".\"tenant_id\" and \"branches\".\"id\" = \"orders\".\"branch_id\") inner join \"user\" on \"user\".\"id\" = \"orders\".\"customer_id\" where (\"orders\".\"tenant_id\" = ? and \"orders\".\"id\" = ?) limit ?",
+        "select \"counter_payments\".\"order_id\", \"counter_payments\".\"method\", \"counter_payments\".\"amount_minor\", \"counter_payments\".\"amount_khr\", \"counter_payments\".\"khr_per_usd\", \"counter_payments\".\"reference\", \"counter_payments\".\"khqr_charge_id\", \"counter_payments\".\"collected_at\", \"user\".\"name\", \"counter_payments\".\"return_method\", \"counter_payments\".\"returned_at\" from \"counter_payments\" inner join \"user\" on \"user\".\"id\" = \"counter_payments\".\"collected_by\" where (\"counter_payments\".\"tenant_id\" = ? and \"counter_payments\".\"order_id\" in (?))",
+        "select \"id\", \"tenant_id\", \"order_id\", \"position\", \"item_id\", \"variation_id\", \"item_name\", \"category_id\", \"category_name\", \"detail\", \"modifiers\", \"unit_price_minor\", \"quantity\", \"total_minor\", \"note\", \"regular_unit_price_minor\", \"promotion_id\", \"promotion_name\", \"promotion_label\" from \"order_lines\" where (\"order_lines\".\"tenant_id\" = ? and \"order_lines\".\"order_id\" = ?) order by \"order_lines\".\"position\" asc"
+      ],
+      "note": "raw batch equality in static fixture; context/dependency and service mapping still need implementation tests"
+    },
+    {
+      "name": "report live counts reuse merged active queue index",
+      "before": {
+        "rowsRead": 7003,
+        "plan": [
+          "SEARCH orders USING INDEX orders_branch_status_idx (branch_id=?)"
+        ]
+      },
+      "after": {
+        "rowsRead": 4004,
+        "plan": [
+          "SEARCH orders USING INDEX orders_active_queue_idx (tenant_id=? AND branch_id=?)",
+          "USE TEMP B-TREE FOR GROUP BY"
+        ]
+      }
+    },
+    {
+      "name": "report summary",
+      "sqlStatements": 8,
+      "batchCalls": 0,
+      "databaseCalls": 8,
+      "rowsReadByStatement": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        2003,
+        2004,
+        7003
+      ],
+      "sql": [
+        "select \"id\", \"name\", \"timezone\", \"address\", \"phone\", \"status\", \"version\", \"paused_until\" from \"branches\" where (\"branches\".\"tenant_id\" = ? and \"branches\".\"id\" = ?) limit ?",
+        "select \"counter_payments\".\"method\", sum(\"counter_payments\".\"amount_minor\"), sum(\"counter_payments\".\"amount_khr\"), min(\"counter_payments\".\"collected_at\"), count(*) from \"counter_payments\" inner join json_each(?) as bucket on \"counter_payments\".\"collected_at\" >= json_extract(bucket.value, '$.start') and \"counter_payments\".\"collected_at\" < json_extract(bucket.value, '$.end') where (\"counter_payments\".\"tenant_id\" = ? and \"counter_payments\".\"branch_id\" = ? and \"counter_payments\".\"collected_at\" >= ? and \"counter_payments\".\"collected_at\" < ?) group by \"counter_payments\".\"method\", bucket.key",
+        "select coalesce(sum(\"amount_minor\"), 0), count(*) from \"counter_payments\" where (\"counter_payments\".\"tenant_id\" = ? and \"counter_payments\".\"branch_id\" = ? and \"counter_payments\".\"returned_at\" >= ? and \"counter_payments\".\"returned_at\" < ?) limit ?",
+        "select coalesce(sum(\"amount_minor\"), 0) from \"counter_payments\" where (\"counter_payments\".\"tenant_id\" = ? and \"counter_payments\".\"branch_id\" = ? and \"counter_payments\".\"collected_at\" >= ? and \"counter_payments\".\"collected_at\" < ?) limit ?",
+        "select \"order_lines\".\"item_id\", max(\"orders\".\"placed_at\"), \"order_lines\".\"item_name\", \"order_lines\".\"category_id\", \"order_lines\".\"category_name\", sum(\"order_lines\".\"quantity\"), sum(\"order_lines\".\"total_minor\") from \"order_lines\" inner join \"counter_payments\" on (\"counter_payments\".\"tenant_id\" = \"order_lines\".\"tenant_id\" and \"counter_payments\".\"order_id\" = \"order_lines\".\"order_id\") inner join \"orders\" on (\"orders\".\"tenant_id\" = \"order_lines\".\"tenant_id\" and \"orders\".\"id\" = \"order_lines\".\"order_id\") where (\"counter_payments\".\"tenant_id\" = ? and \"counter_payments\".\"branch_id\" = ? and \"counter_payments\".\"collected_at\" >= ? and \"counter_payments\".\"collected_at\" < ?) group by \"order_lines\".\"item_id\"",
+        "select count(*) from \"orders\" where (\"orders\".\"tenant_id\" = ? and \"orders\".\"branch_id\" = ? and \"orders\".\"business_date\" >= ? and \"orders\".\"business_date\" <= ?)",
+        "select case when \"order_events\".\"actor_id\" is null then 'system' when \"order_events\".\"actor_id\" = \"orders\".\"customer_id\" then 'customer' else 'cafe' end, count(*) from \"orders\" inner join \"order_events\" on (\"order_events\".\"tenant_id\" = \"orders\".\"tenant_id\" and \"order_events\".\"order_id\" = \"orders\".\"id\" and \"order_events\".\"to_status\" = ?) left join \"counter_payments\" on (\"counter_payments\".\"tenant_id\" = \"orders\".\"tenant_id\" and \"counter_payments\".\"order_id\" = \"orders\".\"id\") where ((\"orders\".\"tenant_id\" = ? and \"orders\".\"branch_id\" = ? and \"orders\".\"business_date\" >= ? and \"orders\".\"business_date\" <= ?) and \"orders\".\"status\" = ? and \"counter_payments\".\"id\" is null) group by case when \"order_events\".\"actor_id\" is null then 'system' when \"order_events\".\"actor_id\" = \"orders\".\"customer_id\" then 'customer' else 'cafe' end",
+        "select \"status\", count(*) from \"orders\" where (\"orders\".\"tenant_id\" = ? and \"orders\".\"branch_id\" = ? and (\"orders\".\"status\" in (?, ?) or (\"orders\".\"status\" = ? and \"orders\".\"payment_due_at\" > ?))) group by \"orders\".\"status\""
+      ],
+      "note": "raw batch equality in static fixture; context/dependency and service mapping still need implementation tests"
+    },
+    {
+      "name": "admin item page",
+      "statements": [
+        {
+          "rowsRead": 4000,
+          "plan": [
+            "MATERIALIZE prices",
+            "SCAN menu_item_variations USING INDEX menu_item_variations_combination_idx",
+            "CORRELATED SCALAR SUBQUERY 3",
+            "SEARCH menu_variation_option_values USING INDEX sqlite_autoindex_menu_variation_option_values_1 (variation_id=?)",
+            "SEARCH menu_option_values USING INDEX menu_option_values_tenant_id_unique (tenant_id=? AND id=?)",
+            "SEARCH menu_categories USING INDEX menu_categories_tenant_id_unique (tenant_id=?)",
+            "SCAN menu_items",
+            "SEARCH prices USING AUTOMATIC COVERING INDEX (item_id=?) LEFT-JOIN",
+            "CORRELATED SCALAR SUBQUERY 1",
+            "SEARCH order_lines USING INDEX order_lines_item_idx (item_id=?)",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH menu_promotion_items USING INDEX menu_promotion_items_item_idx (item_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "rowsRead": 500,
+          "plan": [
+            "SEARCH menu_items USING COVERING INDEX menu_items_tenant_status_idx (tenant_id=? AND status=?)"
+          ]
+        }
+      ],
+      "rowsReturned": 20
+    },
+    {
+      "name": "admin price aggregate restricted to already-selected page ids",
+      "before": {
+        "rowsRead": 4000,
+        "plan": [
+          "MATERIALIZE prices",
+          "SCAN menu_item_variations USING INDEX menu_item_variations_combination_idx",
+          "CORRELATED SCALAR SUBQUERY 3",
+          "SEARCH menu_variation_option_values USING INDEX sqlite_autoindex_menu_variation_option_values_1 (variation_id=?)",
+          "SEARCH menu_option_values USING INDEX menu_option_values_tenant_id_unique (tenant_id=? AND id=?)",
+          "SEARCH menu_categories USING INDEX menu_categories_tenant_id_unique (tenant_id=?)",
+          "SCAN menu_items",
+          "SEARCH prices USING AUTOMATIC COVERING INDEX (item_id=?) LEFT-JOIN",
+          "CORRELATED SCALAR SUBQUERY 1",
+          "SEARCH order_lines USING INDEX order_lines_item_idx (item_id=?)",
+          "CORRELATED SCALAR SUBQUERY 2",
+          "SEARCH menu_promotion_items USING INDEX menu_promotion_items_item_idx (item_id=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      "after": {
+        "rowsRead": 1660,
+        "plan": [
+          "MATERIALIZE prices",
+          "SEARCH menu_item_variations USING INDEX menu_item_variations_combination_idx (item_id=?)",
+          "LIST SUBQUERY 3",
+          "SCAN json_each VIRTUAL TABLE INDEX 1:",
+          "CORRELATED SCALAR SUBQUERY 4",
+          "SEARCH menu_variation_option_values USING INDEX sqlite_autoindex_menu_variation_option_values_1 (variation_id=?)",
+          "SEARCH menu_option_values USING INDEX menu_option_values_tenant_id_unique (tenant_id=? AND id=?)",
+          "SEARCH menu_categories USING INDEX menu_categories_tenant_id_unique (tenant_id=?)",
+          "SCAN menu_items",
+          "SEARCH prices USING AUTOMATIC COVERING INDEX (item_id=?) LEFT-JOIN",
+          "CORRELATED SCALAR SUBQUERY 1",
+          "SEARCH order_lines USING INDEX order_lines_item_idx (item_id=?)",
+          "CORRELATED SCALAR SUBQUERY 2",
+          "SEARCH menu_promotion_items USING INDEX menu_promotion_items_item_idx (item_id=?)",
+          "USE TEMP B-TREE FOR ORDER BY"
+        ]
+      },
+      "note": "prototype excludes cost of obtaining page ids; implementation needs one-statement page CTE or a measured extra read, with unchanged filters and count"
+    },
+    {
+      "name": "two-item checkout catalog",
+      "batchCalls": 1,
+      "statements": [
+        {
+          "rowsRead": 2,
+          "rowsReturned": 1,
+          "plan": [
+            "SCAN menu_categories",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "rowsRead": 1,
+          "rowsReturned": 0,
+          "plan": [
+            "SCAN menu_categories",
+            "SEARCH menu_category_availability USING INDEX sqlite_autoindex_menu_category_availability_1 (category_id=?)"
+          ]
+        },
+        {
+          "rowsRead": 8,
+          "rowsReturned": 2,
+          "plan": [
+            "SEARCH menu_items USING INDEX menu_items_tenant_id_unique (tenant_id=? AND id=?)",
+            "LIST SUBQUERY 1",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "rowsRead": 6,
+          "rowsReturned": 0,
+          "plan": [
+            "SEARCH menu_items USING INDEX menu_items_tenant_id_unique (tenant_id=? AND id=?)",
+            "LIST SUBQUERY 1",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH menu_item_availability USING COVERING INDEX sqlite_autoindex_menu_item_availability_1 (item_id=?)"
+          ]
+        },
+        {
+          "rowsRead": 20,
+          "rowsReturned": 6,
+          "plan": [
+            "SEARCH menu_items USING INDEX menu_items_tenant_id_unique (tenant_id=? AND id=?)",
+            "LIST SUBQUERY 1",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH menu_item_variations USING INDEX menu_item_variations_combination_idx (item_id=?)",
+            "CORRELATED SCALAR SUBQUERY 2",
+            "SEARCH menu_variation_option_values USING INDEX sqlite_autoindex_menu_variation_option_values_1 (variation_id=?)",
+            "SEARCH menu_option_values USING INDEX menu_option_values_tenant_id_unique (tenant_id=? AND id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "rowsRead": 1,
+          "rowsReturned": 0,
+          "plan": [
+            "SEARCH menu_items USING INDEX menu_items_tenant_id_unique (tenant_id=? AND id=?)",
+            "LIST SUBQUERY 1",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH menu_item_option_sets USING INDEX sqlite_autoindex_menu_item_option_sets_1 (item_id=?)",
+            "SEARCH menu_option_sets USING INDEX sqlite_autoindex_menu_option_sets_1 (id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "rowsRead": 8,
+          "rowsReturned": 0,
+          "plan": [
+            "SEARCH menu_option_values USING INDEX menu_option_values_active_name_idx (set_id=?)",
+            "LIST SUBQUERY 2",
+            "SEARCH menu_items USING INDEX menu_items_tenant_id_unique (tenant_id=? AND id=?)",
+            "LIST SUBQUERY 1",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH menu_item_option_sets USING INDEX sqlite_autoindex_menu_item_option_sets_1 (item_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "rowsRead": 2,
+          "rowsReturned": 0,
+          "plan": [
+            "SCAN menu_modifier_groups USING INDEX menu_modifier_groups_active_name_idx",
+            "SEARCH menu_item_modifier_groups USING INDEX sqlite_autoindex_menu_item_modifier_groups_1 (item_id=? AND group_id=?)",
+            "LIST SUBQUERY 1",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH menu_items USING INDEX menu_items_tenant_id_unique (tenant_id=? AND id=?)",
+            "REUSE LIST SUBQUERY 1",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "rowsRead": 8,
+          "rowsReturned": 0,
+          "plan": [
+            "SEARCH menu_modifiers USING INDEX menu_modifiers_active_name_idx (group_id=?)",
+            "LIST SUBQUERY 2",
+            "SEARCH menu_items USING INDEX menu_items_tenant_id_unique (tenant_id=? AND id=?)",
+            "LIST SUBQUERY 1",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH menu_item_modifier_groups USING INDEX sqlite_autoindex_menu_item_modifier_groups_1 (item_id=?)",
+            "USE TEMP B-TREE FOR ORDER BY"
+          ]
+        },
+        {
+          "rowsRead": 6,
+          "rowsReturned": 0,
+          "plan": [
+            "SEARCH menu_items USING INDEX menu_items_tenant_id_unique (tenant_id=? AND id=?)",
+            "LIST SUBQUERY 1",
+            "SCAN json_each VIRTUAL TABLE INDEX 1:",
+            "SEARCH menu_item_modifier_prices USING INDEX sqlite_autoindex_menu_item_modifier_prices_1 (item_id=?)"
+          ]
+        },
+        {
+          "rowsRead": 0,
+          "rowsReturned": 0,
+          "plan": [
+            "SEARCH menu_availability_rules USING INDEX menu_availability_rules_tenant_id_unique (tenant_id=?)"
+          ]
+        },
+        {
+          "rowsRead": 1,
+          "rowsReturned": 0,
+          "plan": [
+            "SCAN menu_availability_windows"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "public branch selector with ten active branches",
+      "branches": 10,
+      "databaseCalls": 21,
+      "sqlStatements": 21,
+      "note": "current 1 + 2N reads; proposed bulk branch/hour read requires public mapper tests"
+    },
+    {
+      "name": "photo cleanup partial root index candidate not selected",
+      "sql": "select \"id\", \"tenant_id\", \"object_key\" from \"media_assets\" where ((\"media_assets\".\"state\" = ? and \"media_assets\".\"state_changed_at\" < ?) and \"media_assets\".\"parent_id\" is null) order by \"media_assets\".\"state_changed_at\" asc, \"media_assets\".\"id\" asc limit ?",
+      "parameters": 3,
+      "observations": [
+        {
+          "analyzed": true,
+          "before": {
+            "rowsRead": 503,
+            "plan": [
+              "SEARCH media_assets USING INDEX media_assets_parent_idx (parent_id=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          "after": {
+            "rowsRead": 503,
+            "plan": [
+              "SEARCH media_assets USING INDEX media_assets_parent_idx (parent_id=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "temporary photo source cleanup compound eligibility index",
+      "sql": "select \"id\", \"tenant_id\", \"object_key\" from \"media_assets\" where ((\"media_assets\".\"state\" = ? and \"media_assets\".\"state_changed_at\" < ?) and \"media_assets\".\"parent_id\" is null) order by \"media_assets\".\"state_changed_at\" asc, \"media_assets\".\"id\" asc limit ?",
+      "parameters": 3,
+      "observations": [
+        {
+          "analyzed": true,
+          "before": {
+            "rowsRead": 503,
+            "plan": [
+              "SEARCH media_assets USING INDEX media_assets_parent_idx (parent_id=?)",
+              "USE TEMP B-TREE FOR ORDER BY"
+            ]
+          },
+          "after": {
+            "rowsRead": 2,
+            "plan": [
+              "SEARCH media_assets USING INDEX audit_media_roots (state=? AND parent_id=? AND state_changed_at<?)"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "fixture": {
+    "cafes": 250,
+    "users": 2000,
+    "memberships": 2000,
+    "finishedOrdersA": 5000,
+    "finishedOrdersB": 1000,
+    "otherCustomerUnpaid": 1999,
+    "ownActive": 3,
+    "sentMailMetadata": 4000,
+    "menuItems": 500,
+    "variations": 1500
+  },
+  "mediaFixture": {
+    "attachedSources": 500,
+    "temporaryStateVariants": 1500,
+    "expiredTemporarySources": 1,
+    "objectStoreOperations": 0
+  },
+  "internalTables": [
+    {
+      "name": "sqlite_stat1"
+    }
+  ],
+  "schema": [
+    {
+      "type": "index",
+      "n": 176
+    },
+    {
+      "type": "table",
+      "n": 65
+    }
+  ]
+}

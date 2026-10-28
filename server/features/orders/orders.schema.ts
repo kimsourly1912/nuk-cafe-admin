@@ -63,6 +63,8 @@ export const orders = sqliteTable('orders', {
   // The final guard against two orders sharing a number on a busy day.
   uniqueIndex('orders_pickup_number_idx').on(t.branchId, t.businessDate, t.pickupNumber),
   index('orders_customer_idx').on(t.customerId, t.placedAt),
+  // Customer active reads and the atomic unpaid guard skip other cafes and finished history (D222).
+  index('orders_tenant_customer_status_due_idx').on(t.tenantId, t.customerId, t.status, t.paymentDueAt),
   index('orders_branch_status_idx').on(t.branchId, t.status),
   // Queue polls skip finished history and return active orders in their display order (D219).
   index('orders_active_queue_idx').on(t.tenantId, t.branchId, t.placedAt, t.id)

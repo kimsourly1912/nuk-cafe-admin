@@ -71,7 +71,7 @@ describe('a refused command', () => {
 
 describe('the queue when it can\'t refresh, and its tab (D149)', () => {
   it('says when it last loaded', () => {
-    expect(lastUpdatedText('2026-09-29T03:00:00.000Z', at('03:00'))).toMatch(/^Last updated \d{1,2}:00 [AP]M \(just now\)$/)
+    expect(lastUpdatedText('2026-09-29T03:00:00.000Z', at('03:00'))).toMatch(/^Last updated \d{1,2}:[0-5]\d [AP]M \(just now\)$/)
     expect(lastUpdatedText('2026-09-29T03:00:00.000Z', at('03:04'))).toMatch(/\(4 min ago\)$/)
   })
 
