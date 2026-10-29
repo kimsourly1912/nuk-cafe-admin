@@ -2,6 +2,10 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Current-state refreshed (2026-10-29)
+
+Docs only. [Current-state](current-state.md) listed about fifteen items as "Active, awaiting review" that were already merged. Checked against GitHub (no PR open, main `2721713` CI green) and the source: it now separates owner tasks, open code follow-ups, audit status and recently merged work. Found while checking: PR #196 (customer order index) and PR #119 (unique membership per person and cafe) were closed unmerged and their changes are not on main; audit S1–S8 and N1–N8 are fixed in the code, N9 partly. No code change.
+
 ## Nuxt 4.6.2 (security patch, 2026-10-29)
 
 `pnpm audit` listed a moderate advisory for nuxt and @nuxt/nitro-server `<4.6.2`: server route rules (`headers`, `ssr`, `redirect`, `proxy`) were skipped for case-variant paths. Upgraded through the `/upgrade-*` workflow (run `nuxt-4-6-2`; [record](upgrades/2026-10-29-nuxt-4-6-2.md)).
