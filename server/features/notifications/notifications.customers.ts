@@ -3,7 +3,7 @@ import type { Message } from 'grammy/types'
 import type { OrderReadyAlert, OrderReadyAlertStatus, OrderReadyLink } from '#shared/contracts/notifications'
 import { DELIVERY_MAX_ATTEMPTS, ORDER_READY_LINK_MINUTES } from '#shared/contracts/notifications'
 import type { OrderStatus } from '#shared/contracts/orders'
-import { activeTenants } from '#server/features/identity'
+import { activeTenantById } from '#server/features/identity'
 import { orderAlert } from '#server/features/orders'
 import { retryDelayMs } from '#server/features/platform'
 import type { Db } from '#server/utils/batch'
@@ -84,8 +84,8 @@ export async function useOrderReadyCode(db: Db, api: Api, message: Message, code
     await reply(api, chat.id, 'Open this link in your own chat with the bot, not in a group.')
     return true
   }
-  const [alert, tenants] = await Promise.all([orderAlert(db, row.tenantId, row.orderId), activeTenants(db)])
-  const cafeName = tenants.find(t => t.id === row.tenantId)?.name
+  const [alert, cafe] = await Promise.all([orderAlert(db, row.tenantId, row.orderId), activeTenantById(db, row.tenantId)])
+  const cafeName = cafe?.name
   if (!alert || !cafeName || row.linkExpiresAt <= now) {
     await reply(api, chat.id, EXPIRED_REPLY)
     return true
@@ -144,8 +144,8 @@ async function attemptOrderReady(db: Db, api: Api, tenantId: string, orderId: st
     return false
   }
   try {
-    const [alert, tenants] = await Promise.all([orderAlert(db, tenantId, orderId), activeTenants(db)])
-    const cafeName = tenants.find(t => t.id === tenantId)?.name
+    const [alert, cafe] = await Promise.all([orderAlert(db, tenantId, orderId), activeTenantById(db, tenantId)])
+    const cafeName = cafe?.name
     if (alert && cafeName && WAITING_FOR_READY.includes(alert.status)) {
       // Not ready yet (a sign-up's first look): the ready event sends it.
       await repo.markOrderReadyParked(db, claim)

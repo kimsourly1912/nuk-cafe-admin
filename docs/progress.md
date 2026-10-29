@@ -2,6 +2,14 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Ready message reads only its cafe (audit N6, 2026-10-29)
+
+Fourth step of the 2026-10-29 review. [Audit N6](reviews/server-followup-audit-2026-10-14.md#n6-one-customer-ready-message-reads-all-cafes), still open on main `83e3ec4`: redeeming a customer's Telegram code and sending their ready message each loaded every active cafe (`activeTenants`) to find one by id in JavaScript, so a message's cost grew with the platform's cafe count. Branch `claude/laughing-fermat-cu04no`. No migration, contract or UI change.
+
+- **Server:** `findActiveTenant(db, id)` (tenants repository: primary key plus the existing `activeCafe` rule) behind the identity API `activeTenantById`; `notifications.customers.ts` uses it in both places. The unbounded `activeTenants` / `listActiveTenants` had no other users and are removed; jobs already page with `activeTenantPage`. Behavior kept: a missing or suspended cafe sends nothing and its link says it no longer works. [Shared API](reference/server-reliability.md#bounded-tenant-jobs).
+- **Tests:** `notifications.customers.test.ts`: with a second cafe present, every cafe read while redeeming a code and sending the catch-up message names the cafe's id; a suspended cafe's customer gets no ready message and its link answers that it doesn't work. `identity-cafes.repository.tenants.test.ts`: active (null status counts), suspended and unknown ids.
+- **Evidence (2026-10-29, local Linux, Node 22.22 / pnpm 12.15.0; package.json asks for Node 24):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 150 files, 2067 passed, 1 skipped. Guards removed: `activeTenantById` listing every active cafe fails the cafe-reads test; the lookup without `activeCafe` fails the suspended-cafe and repository tests.
+
 ## One question to Bakong per QR (audit S5, D222, 2026-10-29)
 
 Third step of the 2026-10-29 review. [Audit S5](reviews/server-audit-2026-10-14.md#s5-each-unpaid-khqr-check-calls-bakong-again), still open on main `703b61e`: every counter check of an unpaid QR asked Bakong, so several counters, or a client asking faster than every 5 s, multiplied the calls and risked Bakong throttling the cafe's token. [Decision](decisions.md#d222-one-question-to-bakong-per-qr-every-4-seconds-2026-10-29). Branch `claude/laughing-fermat-cu04no`.

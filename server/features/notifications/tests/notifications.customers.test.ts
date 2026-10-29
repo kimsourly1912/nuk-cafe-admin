@@ -7,13 +7,14 @@ import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { completeOrder, markOrderReady, payOrder, placeOrder } from '#server/features/orders'
 import { outboxMessages } from '#server/features/platform/platform.schema'
+import { organization } from '#server/db/tables'
 import { createOrderReadyLink, deliverOrderReadyDue, orderReadyAlert, purgeOrderReadyAlerts, sendOrderReadyAlert } from '#server/features/notifications/notifications.customers'
 import * as repo from '#server/features/notifications/notifications.customers.repository'
 import { hashLinkCode } from '#server/features/notifications/notifications.rules'
 import { orderReadyAlerts } from '#server/features/notifications/notifications.schema'
 import { handleUpdate } from '#server/features/notifications/notifications.service'
 import type { TelegramSettings } from '#server/features/notifications/notifications.settings'
-import { createAdmin, createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
+import { createAdmin, createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
@@ -48,6 +49,8 @@ class FakeTelegram {
 }
 
 let db: Db
+/** Every SQL statement the test database ran. */
+let queries: string[]
 let telegram: FakeTelegram
 let admin: Actor
 let cashier: BranchActor
@@ -89,7 +92,8 @@ async function subscribe(orderId: string) {
 const status = (orderId: string, now = later(2)) => orderReadyAlert(db, TEST_TENANT, orderId, SETTINGS, now)
 
 beforeEach(async () => {
-  db = await createTestDb()
+  queries = []
+  db = await createTestDb({ logger: { logQuery: query => void queries.push(query) } })
   telegram = new FakeTelegram()
   admin = { userId: (await createAdmin(db)).userId, tenantId: TEST_TENANT, role: 'owner' }
   branchId = newId()
@@ -424,6 +428,36 @@ describe('the ready message\'s delivery: one claim, durable recovery', () => {
     expect(await deliverOrderReadyDue(db, telegram.api, noUrl, later(7))).toEqual({ sent: 0, failed: 0 })
     expect(telegram.calls).toEqual([])
     expect(await row()).toMatchObject({ chatId: null, retryAt: null })
+  })
+
+  it('a suspended cafe\'s customers get no ready message, and its link answers that it no longer works', async () => {
+    const orderId = await place()
+    await subscribe(orderId)
+    await pay(orderId)
+    await ready(orderId)
+    const link = await createOrderReadyLink(db, TEST_TENANT, { id: await place(), status: 'awaiting_payment' }, SETTINGS, NOON)
+    await db.update(organization).set({ status: 'suspended' }).where(eq(organization.id, TEST_TENANT))
+    telegram.calls = []
+
+    expect(await sendOrderReadyAlert(db, telegram.api, TEST_TENANT, orderId, CAFE_URL, later(6))).toBe(false)
+    expect(telegram.texts()).toEqual([])
+    expect(await row()).toMatchObject({ chatId: null })
+    await handleUpdate(db, telegram.api, SETTINGS, start(codeOf(link.url)), later(6))
+    expect(telegram.texts()).toEqual([{ chatId: 777, text: expect.stringMatching(/doesn't work anymore/) }])
+  })
+
+  it('reads only the order\'s own cafe, by id, never every cafe (audit N6)', async () => {
+    await ensureTenant(db, 'another-cafe')
+    const orderId = await place()
+    const link = await createOrderReadyLink(db, TEST_TENANT, { id: orderId, status: 'awaiting_payment' }, SETTINGS, NOON)
+    await pay(orderId)
+    await ready(orderId)
+    queries = []
+    await handleUpdate(db, telegram.api, SETTINGS, start(codeOf(link.url)), later(6))
+    expect(telegram.texts().at(-1)?.text).toMatch(/is ready/)
+    const cafeReads = queries.filter(query => /from "organization"/.test(query))
+    expect(cafeReads.length).toBeGreaterThan(0)
+    for (const query of cafeReads) expect(query).toMatch(/"organization"\."id" = \?/)
   })
 
   it('a message still being prepared is parked by the scheduled run, then sent by the ready event', async () => {

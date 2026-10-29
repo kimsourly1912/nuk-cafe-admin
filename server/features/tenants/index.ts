@@ -7,4 +7,4 @@ export { getPlatformHealth } from './health.service'
 export { webManifest } from './web-manifest'
 export type { WebManifest } from './web-manifest'
 
-export { activeCafe, findTenant, findTenantBySlug, listActiveTenants, listActiveTenantPage } from './tenants.repository'
+export { activeCafe, findTenant, findTenantBySlug, findActiveTenant, listActiveTenantPage } from './tenants.repository'

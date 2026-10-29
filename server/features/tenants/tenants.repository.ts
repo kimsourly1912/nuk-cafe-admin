@@ -128,10 +128,10 @@ export async function findNotes(db: Db, tenantId: string): Promise<TenantNotesRo
   }).from(tenantNotes).where(inTenant(tenantNotes, tenantId)))
 }
 
-/** Across cafes: active cafes oldest first, for scheduled tasks. Uses organization's primary key as a tie-break. */
-export function listActiveTenants(db: Db): Promise<{ id: string, slug: string, name: string }[]> {
-  return db.select({ id: organization.id, slug: organization.slug, name: organization.name }).from(organization)
-    .where(activeCafe).orderBy(asc(organization.createdAt), asc(organization.id))
+/** This cafe while it is active (by primary key); `undefined` when it's missing or suspended. */
+export function findActiveTenant(db: Db, id: string): Promise<{ id: string, slug: string, name: string } | undefined> {
+  return firstRow(db.select({ id: organization.id, slug: organization.slug, name: organization.name }).from(organization)
+    .where(and(eq(organization.id, id), activeCafe)))
 }
 
 /** Across cafes: bounded platform-task enumeration; UUIDs provide a stable cursor. */

@@ -3,7 +3,7 @@ import type { AdminSession, CounterSession } from '#shared/contracts/identity'
 import type { PlatformSession } from '#shared/contracts/tenants'
 import type { Db } from '#server/utils/batch'
 import { listBranchOptions } from '#server/features/branches'
-import { findTenant, findTenantBySlug, listActiveTenants, listActiveTenantPage } from '#server/features/tenants'
+import { findActiveTenant, findTenant, findTenantBySlug, listActiveTenantPage } from '#server/features/tenants'
 import { branchNotFound, forbidden, notAdmin, notPlatformAdmin, notStaff, passwordChangeRequired, tenantNotFound, tenantSuspended, twoFactorRequired, unauthenticated } from './identity.errors'
 import { branchRoles, platformRoles, tenantRoles, tenantStatements } from './identity.permissions'
 import type { BranchPermission, BranchRole, PlatformPermission, PlatformRole, TenantPermission, TenantRole } from './identity.permissions'
@@ -36,9 +36,12 @@ export async function tenantBySlug(db: Db, slug: string): Promise<{ id: string, 
   return { id: tenant.id, slug: tenant.slug, name: tenant.name }
 }
 
-/** Every active tenant, oldest first: the scheduled tasks that work per tenant go through them (D138). */
-export async function activeTenants(db: Db): Promise<{ id: string, slug: string, name: string }[]> {
-  return listActiveTenants(db)
+/**
+ * One cafe by id while it is active; `undefined` when it's missing or suspended. Reads that cafe
+ * only, never every cafe (audit N6). Grants no permission to its data.
+ */
+export async function activeTenantById(db: Db, id: string): Promise<{ id: string, slug: string, name: string } | undefined> {
+  return findActiveTenant(db, id)
 }
 
 /**
