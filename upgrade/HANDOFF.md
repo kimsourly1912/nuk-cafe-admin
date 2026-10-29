@@ -10,8 +10,8 @@ Branch: ccr-ef1e4d51-15633w (this cloud session may push only to its own branch,
 Package manager: pnpm 12.15.0
 Started: 2026-10-29
 
-Current phase: 3 done (approved)
-Next: /upgrade-4-execute S1-S4 (Sonnet; this Opus session continues, owner's choice)
+Current phase: 4 done (S1–S4)
+Next: /upgrade-5-review (Opus; optional for a patch run, see README "Small upgrade"), then /upgrade-6-finish
 
 ## Why
 
@@ -88,7 +88,7 @@ S3 (4188b80): all three checks pass.
 (2) Profile #8: `pnpm build:staging`; `.output/server/wrangler.json` identical to the baseline copy (JSON, sorted keys); `wrangler deploy --dry-run` 10218.09 KiB / gzip 2044.82 KiB (baseline 10209.45 / 2043.07, +0.08%: the new route-rules plugin); local `wrangler dev` of the staging Worker on a migrated local D1: `/api/health` 200, `/c/no-such-cafe` 404 "Cafe not found", `/table/abc` and `/TABLE/abc` `no-store, no-transform`, `/api/c/x/admin/me` 401 (`upgrade/logs/S3/worker-smoke.txt`).
 (3) Full e2e (`E2E_BROWSER_PATH` = Playwright's Chromium, Node 22): 743 passed, 6 failed of 749 (`upgrade/logs/S3/e2e.log`). Re-running the 5 affected files: 157/159, the 2 left being `counter` "switches one version off from the queue's Sold out button…" (switch not re-checked in time) and `shop-account` "shows the server's answer on its field…" (a 503 from `/api/password-ranges`, which calls Have I Been Pwned: blocked by this sandbox's proxy). Same 5 files on 4.6.1 (a worktree at `ac67917`, since removed): the **same 2 tests fail** (`upgrade/logs/S3/e2e-461-five.log`); on 4.6.2 the next same-load run passed 159/159 (`upgrade/logs/S3/e2e-462-five.log`); the 2 tests alone and their whole files pass on both versions (2 runs each). Conclusion: intermittent under local load and the blocked network, present before the upgrade; not caused by it. CI's full e2e on Node 24 is the authority.
 
-S4 (pending hash): `docs/progress.md` entry "Nuxt 4.6.2 (security patch, 2026-10-29)" (change, before/after, evidence, follow-ups) and a How-to-verify pitfall for the two load-intermittent e2e tests; `docs/current-state.md` active line. `pnpm lint` clean. Phase 6 must repoint the progress entry's links from `upgrade/` to the archived record.
+S4 (d30333d): `docs/progress.md` entry "Nuxt 4.6.2 (security patch, 2026-10-29)" (change, before/after, evidence, follow-ups) and a How-to-verify pitfall for the two load-intermittent e2e tests; `docs/current-state.md` active line. `pnpm lint` clean. Phase 6 must repoint the progress entry's links from `upgrade/` to the archived record.
 
 ## Blocked
 
