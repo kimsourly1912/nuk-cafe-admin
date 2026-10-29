@@ -60,7 +60,7 @@ No installed module declares a nuxt peer range that excludes 4.6.2.
 
 ## Decisions
 
-Q1: target 4.6.2 (owner's request, the advisory's fixed version, 13 days old) or 4.6.3 (released 2026-10-27, 2 days old)? — pending; this run uses 4.6.2 unless the owner says otherwise.
+Q1: target 4.6.2 (owner's request, the advisory's fixed version, 13 days old) or 4.6.3 (released 2026-10-27, 2 days old)? — **4.6.2** (owner approved the recommendation; 4.6.3 later in its own small run) — decided on 2026-10-29
 
 ## Done
 
