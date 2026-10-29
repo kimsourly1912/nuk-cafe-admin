@@ -187,6 +187,8 @@ export const menuItemOptionSets = sqliteTable('menu_item_option_sets', {
   primaryKey({ columns: [t.itemId, t.setId] }),
   foreignKey({ name: 'menu_item_option_sets_item_fk', columns: [t.tenantId, t.itemId], foreignColumns: [menuItems.tenantId, menuItems.id] }).onDelete('cascade'),
   foreignKey({ name: 'menu_item_option_sets_set_fk', columns: [t.tenantId, t.setId], foreignColumns: [menuOptionSets.tenantId, menuOptionSets.id] }).onDelete('restrict'),
+  // A set's items: its "in use" check and the foreign-key check when it's deleted (D200).
+  index('menu_item_option_sets_set_idx').on(t.setId),
 ])
 
 /**
@@ -259,6 +261,8 @@ export const menuItemModifierPrices = sqliteTable('menu_item_modifier_prices', {
   foreignKey({ name: 'menu_item_modifier_prices_item_fk', columns: [t.tenantId, t.itemId], foreignColumns: [menuItems.tenantId, menuItems.id] }).onDelete('cascade'),
   foreignKey({ name: 'menu_item_modifier_prices_modifier_fk', columns: [t.tenantId, t.modifierId], foreignColumns: [menuModifiers.tenantId, menuModifiers.id] }).onDelete('restrict'),
   check('menu_item_modifier_prices_price_check', sql`${t.priceDeltaMinor} >= 0`),
+  // An add-on's item prices: its "in use" check and the foreign-key check when it's deleted (D200).
+  index('menu_item_modifier_prices_modifier_idx').on(t.modifierId),
 ])
 
 export const AVAILABILITY_STATUSES = ['active', 'archived'] as const

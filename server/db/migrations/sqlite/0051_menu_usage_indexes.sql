@@ -1,0 +1,2 @@
+CREATE INDEX `menu_item_modifier_prices_modifier_idx` ON `menu_item_modifier_prices` (`modifier_id`);--> statement-breakpoint
+CREATE INDEX `menu_item_option_sets_set_idx` ON `menu_item_option_sets` (`set_id`);

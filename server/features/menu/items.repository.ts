@@ -279,7 +279,7 @@ export async function countSellable(db: Db, tenantId: string, itemId: string): P
   return db.$count(menuItemVariations, inTenant(menuItemVariations, tenantId, eq(menuItemVariations.itemId, itemId), sellable(db)))
 }
 
-/** Non-archived items per option set, for "used by N items". */
+/** Non-archived items per option set, for "used by N items". Uses `menu_item_option_sets_set_idx`. */
 export async function itemCountsBySet(db: Db, tenantId: string, setIds: string[]): Promise<Map<string, number>> {
   const rows = await readInChunks(setIds, ids => db
     .select({ setId: menuItemOptionSets.setId, n: count() })

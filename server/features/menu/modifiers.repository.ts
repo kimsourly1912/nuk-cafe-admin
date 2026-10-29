@@ -33,7 +33,7 @@ export interface ModifierRow {
   deleteBlocker: ModifierDeleteBlocker | null
 }
 
-/** An item of any status has its own price for the outer query's add-on (`menu_item_modifier_prices_modifier_fk` restricts). */
+/** An item of any status has its own price for the outer query's add-on (`menu_item_modifier_prices_modifier_fk` restricts). Uses `menu_item_modifier_prices_modifier_idx`. */
 const modifierPriced = (db: Db) => exists(db.select({ one: sql`1` }).from(menuItemModifierPrices)
   .where(and(eq(menuItemModifierPrices.tenantId, menuModifiers.tenantId), eq(menuItemModifierPrices.modifierId, menuModifiers.id))))
 
@@ -42,7 +42,8 @@ const groupModifier = alias(menuModifiers, 'group_modifier')
 /**
  * An item of any status offers the outer query's group, or has its own price for one of its
  * add-ons (both foreign keys restrict). Order lines keep add-ons as name and price, read by
- * nothing through their ids, so they don't count (D200).
+ * nothing through their ids, so they don't count (D200). Uses `menu_item_modifier_groups_group_idx`
+ * and `menu_item_modifier_prices_modifier_idx`.
  */
 const groupInUse = (db: Db) => sql`(${exists(db.select({ one: sql`1` }).from(menuItemModifierGroups)
   .where(and(eq(menuItemModifierGroups.tenantId, menuModifierGroups.tenantId), eq(menuItemModifierGroups.groupId, menuModifierGroups.id))))} or ${exists(db.select({ one: sql`1` }).from(menuItemModifierPrices)

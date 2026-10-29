@@ -2,6 +2,15 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Indexes for option-set and add-on uses (2026-10-29)
+
+Found by the 2026-10-29 review (every foreign key checked against the migrated schema for an index). `menu_item_option_sets` and `menu_item_modifier_prices` have primary keys that start with the item, so finding where a set or an add-on is used had no index: the option-set and add-on group lists' "in use" checks (D200's `deleteBlocker`) scanned the whole table, every cafe's rows, once per set or add-on (or built an automatic index per query), and so did each permanent delete's foreign-key check and `itemCountsBySet`. Cost grew with the platform, not the cafe.
+
+- **Server:** migration `0051_menu_usage_indexes` (two `CREATE INDEX`, expand only): `menu_item_option_sets_set_idx (set_id)` and `menu_item_modifier_prices_modifier_idx (modifier_id)`, one column like their siblings `menu_item_modifier_groups_group_idx` and `menu_variation_option_values_value_idx` (ids are unique across cafes; every query still names the cafe). No query changed; the repository doc comments name the indexes.
+- **Test:** `server/features/menu/tests/usage-index-performance.test.ts` runs the real repository reads (`listSets`, `itemCountsBySet`, `listGroups`, `modifiersOf`) and the delete statements (set, add-on, group) and checks each plan uses the new index and never `SCAN`s the usage table. Both tests failed before the migration (`SCAN menu_item_option_sets`; `AUTOMATIC COVERING INDEX` on `menu_item_modifier_prices`).
+- **Generated** with the `#auth/schema` workaround below (`drizzle-kit generate --config .nuxt/hub/db/drizzle.config.ts`); the second run said "No schema changes".
+- **Evidence (2026-10-29, local Linux, Node 22.22 / pnpm 12.15.0; package.json asks for Node 24):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 152 files, 2084 passed, 1 skipped; e2e `option-sets` and `modifier-groups` 71 passed with `E2E_BROWSER_PATH` set to Playwright's Chromium (these mock the API: they show the screens unchanged, not the server). Not measured on D1 or staging.
+
 ## The watchdog's log line (D224 follow-up, 2026-10-29)
 
 After the first deploy the owner saw a check every minute, all successful, but no "Watchdog started" in Telegram and no "Watchdog:" log lines. Each check took about 9.8 seconds, the 10-second limit of one outside call. The Durable Object's own log lines weren't visible, so the cause couldn't be told. Branch `claude/laughing-fermat-cu04no` from main `1d43e60`.
