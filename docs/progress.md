@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## The watchdog's log line (D224 follow-up, 2026-10-29)
+
+After the first deploy the owner saw a check every minute, all successful, but no "Watchdog started" in Telegram and no "Watchdog:" log lines. Each check took about 9.8 seconds, the 10-second limit of one outside call. The Durable Object's own log lines weren't visible, so the cause couldn't be told. Branch `claude/laughing-fermat-cu04no` from main `1d43e60`.
+
+- **Change:** `runCheck` returns a report (secrets present; health result and time; each message with what Telegram did: `sent`, `refused <status>: <Telegram's reason>` or `no answer (<error>)`, and its time); the Durable Object answers it and the cron handler logs it as one line, **Watchdog: checked** (a warning when a message didn't go through). No change to when messages are sent. [Operations → Alerts](server/operations.md#alerts-d223-d224) explains the line.
+- **Evidence (2026-10-29, local Linux):** `tsc -p ops/watchdog`, ESLint clean; 11 watchdog tests (the report for sent, refused with the reason, no answer; no token or chat id in it). `wrangler dev --test-scheduled` with a stand-in Telegram: one that never answers logged `result: 'no answer (TimeoutError)', ms: 10007` (the production timing), one that refuses `refused 400: Bad Request: chat not found`, then `sent`, then `messages: []`; no token or chat id in the log. Production's cause still to read from this line after the next **Deploy watchdog**.
+
 ## The watchdog Worker (D224, 2026-10-29)
 
 The owner set up D223's ops bot, group and secrets; the test alert arrived. Then: the alarm must not depend on the repository staying public. [Decision](decisions.md#d224-the-alarm-is-a-watchdog-worker-not-a-github-schedule-2026-10-29), [operations → Alerts](server/operations.md#alerts-d223-d224). Branch `claude/laughing-fermat-cu04no` from main `c2a7a12`.

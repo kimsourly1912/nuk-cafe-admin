@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { cambodiaTime, FAILURES_BEFORE_ALERT, healthProblem, INITIAL_STATE, runCheck } from '../src/watchdog'
 import type { WatchState } from '../src/watchdog'
 
@@ -22,7 +22,9 @@ function world(health: Health, telegram: 'ok' | 'refuses' | 'unreachable' = 'ok'
     if (url.includes('api.telegram.org')) {
       if (telegram === 'unreachable') throw new TypeError('fetch failed')
       sent.push((JSON.parse(String(init!.body)) as { text: string }).text)
-      return new Response('{"ok":true}', { status: telegram === 'ok' ? 200 : 401 })
+      return telegram === 'ok'
+        ? Response.json({ ok: true })
+        : Response.json({ ok: false, error_code: 400, description: 'Bad Request: chat not found' }, { status: 400 })
     }
     if (health === 'timeout') throw Object.assign(new Error('timed out'), { name: 'TimeoutError' })
     if (health === 'unreachable') throw new TypeError('fetch failed')
@@ -34,13 +36,9 @@ function world(health: Health, telegram: 'ok' | 'refuses' | 'unreachable' = 'ok'
 
 async function check(state: WatchState, now: number, health: Health, telegram?: 'ok' | 'refuses' | 'unreachable') {
   const w = world(health, telegram)
-  const next = await runCheck({ state, env, now, version: 'v1', fetch: w.fetchFn })
-  return { state: next, sent: w.sent, urls: w.urls }
+  const { state: next, report } = await runCheck({ state, env, now, version: 'v1', fetch: w.fetchFn })
+  return { state: next, report, sent: w.sent, urls: w.urls }
 }
-
-afterEach(() => {
-  vi.restoreAllMocks()
-})
 
 describe('down and recovered (D224)', () => {
   it('one failed check is a blip: no message, and the next good check forgets it', async () => {
@@ -117,7 +115,7 @@ describe('started, weekly and secrets (D224)', () => {
     const w = world('ok')
     const redeployed = await runCheck({ state: fresh.state, env, now: minutes(2), version: 'v2', fetch: w.fetchFn })
     expect(w.sent).toHaveLength(1)
-    expect(redeployed.version).toBe('v2')
+    expect(redeployed.state.version).toBe('v2')
     // Not told: asks again next time.
     expect((await check(INITIAL_STATE, minutes(0), 'ok', 'refuses')).state.version).toBeNull()
   })
@@ -136,17 +134,26 @@ describe('started, weekly and secrets (D224)', () => {
 
   it('without the secrets it checks nothing and sends nothing, and keeps its state', async () => {
     const w = world('error')
-    const state = await runCheck({ state: RUNNING, env: { HEALTH_URL: env.HEALTH_URL }, now: minutes(0), version: 'v1', fetch: w.fetchFn })
+    const { state, report } = await runCheck({ state: RUNNING, env: { HEALTH_URL: env.HEALTH_URL }, now: minutes(0), version: 'v1', fetch: w.fetchFn })
     expect(state).toEqual(RUNNING)
+    expect(report).toEqual({ secrets: false, health: null, healthMs: null, messages: [], status: 'up' })
     expect(w.urls).toEqual([])
   })
 
-  it('never writes the bot token to the logs', async () => {
-    const logs: unknown[] = []
-    for (const level of ['log', 'warn', 'error'] as const) vi.spyOn(console, level).mockImplementation((...args) => void logs.push(args))
-    await check(RUNNING, minutes(0), 'error', 'refuses')
-    await check({ ...RUNNING, failures: 1, failingSince: minutes(0) }, minutes(1), 'error', 'unreachable')
-    expect(logs.length).toBeGreaterThan(0)
-    expect(JSON.stringify(logs)).not.toContain('secret-token')
+  it('reports what it did: the health answer, and for each message what Telegram said, with timings', async () => {
+    const ok = await check(INITIAL_STATE, minutes(0), 'ok')
+    expect(ok.report).toEqual({ secrets: true, health: 'ok', healthMs: expect.any(Number), messages: [{ kind: 'started', result: 'sent', ms: expect.any(Number) }], status: 'up' })
+    const refused = await check({ ...RUNNING, failures: 1, failingSince: minutes(0) }, minutes(1), 'error', 'refuses')
+    expect(refused.report).toMatchObject({ health: 'it answered HTTP 500', messages: [{ kind: 'down', result: 'refused 400: Bad Request: chat not found' }], status: 'up' })
+    const silent = await check({ ...RUNNING, failures: 1, failingSince: minutes(0) }, minutes(1), 'error', 'unreachable')
+    expect(silent.report.messages).toEqual([{ kind: 'down', result: 'no answer (TypeError)', ms: expect.any(Number) }])
+  })
+
+  it('never puts the bot token or the chat id in its report', async () => {
+    const reports = [
+      (await check(INITIAL_STATE, minutes(0), 'error', 'refuses')).report,
+      (await check({ ...RUNNING, failures: 1, failingSince: minutes(0) }, minutes(1), 'error', 'unreachable')).report,
+    ]
+    expect(JSON.stringify(reports)).not.toMatch(/secret-token|-100/)
   })
 })

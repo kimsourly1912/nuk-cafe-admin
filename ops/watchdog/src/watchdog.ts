@@ -85,8 +85,23 @@ export async function healthProblem(fetchFn: typeof fetch, url: string): Promise
   }
 }
 
-/** Sends one message to the ops chat; `false` when Telegram didn't take it. Never logs the token. */
-export async function sendToOpsChat(fetchFn: typeof fetch, env: WatchEnv, text: string): Promise<boolean> {
+/** What one check did, logged as one line by the Worker. Never holds the token or the chat id. */
+export interface CheckReport {
+  /** Both Telegram secrets reached the Worker. */
+  secrets: boolean
+  /** `ok`, or why production is unhealthy; `null` when nothing was checked. */
+  health: string | null
+  healthMs: number | null
+  /** Each message this check tried, and what Telegram did with it. */
+  messages: { kind: string, result: string, ms: number }[]
+  status: WatchState['status']
+}
+
+/**
+ * Sends one message to the ops chat. `result` says what Telegram did: `sent`, `refused <status>:
+ * <Telegram's reason>` (a wrong chat id or token, a bot removed from the group), or `no answer`.
+ */
+export async function sendToOpsChat(fetchFn: typeof fetch, env: WatchEnv, text: string): Promise<{ ok: boolean, result: string }> {
   try {
     const response = await fetchFn(`${env.TELEGRAM_API_URL ?? 'https://api.telegram.org'}/bot${env.OPS_TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
@@ -94,44 +109,60 @@ export async function sendToOpsChat(fetchFn: typeof fetch, env: WatchEnv, text: 
       body: JSON.stringify({ chat_id: env.OPS_TELEGRAM_CHAT_ID, text }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
-    await response.body?.cancel()
-    if (!response.ok) console.error('Watchdog: Telegram refused the message', { status: response.status })
-    return response.ok
+    if (response.ok) {
+      await response.body?.cancel()
+      return { ok: true, result: 'sent' }
+    }
+    // Telegram's reason ("Bad Request: chat not found"); its answer never repeats the token.
+    const answer = (await response.text().catch(() => '')).slice(0, 1000)
+    let reason = 'no reason given'
+    try {
+      reason = String((JSON.parse(answer) as { description?: unknown }).description ?? reason).slice(0, 200)
+    }
+    catch {
+      // Not JSON (a proxy's page): the status alone says enough.
+    }
+    return { ok: false, result: `refused ${response.status}: ${reason}` }
   }
   catch (error) {
-    console.error('Watchdog: Telegram did not answer', { error: error instanceof Error ? error.name : 'unknown' })
-    return false
+    return { ok: false, result: `no answer (${error instanceof Error ? error.name : 'unknown'})` }
   }
 }
 
-/** One check: asks production, tells the chat what changed, and returns the state to keep. */
-export async function runCheck(options: CheckOptions): Promise<WatchState> {
+/** One check: asks production, tells the chat what changed; returns the state to keep and a report. */
+export async function runCheck(options: CheckOptions): Promise<{ state: WatchState, report: CheckReport }> {
   const { env, now, version, fetch: fetchFn } = options
-  if (!env.OPS_TELEGRAM_BOT_TOKEN || !env.OPS_TELEGRAM_CHAT_ID) {
-    console.warn('Watchdog: OPS_TELEGRAM_BOT_TOKEN or OPS_TELEGRAM_CHAT_ID is not set; nothing checked')
-    return options.state
+  const report: CheckReport = { secrets: false, health: null, healthMs: null, messages: [], status: options.state.status }
+  if (!env.OPS_TELEGRAM_BOT_TOKEN || !env.OPS_TELEGRAM_CHAT_ID) return { state: options.state, report }
+  report.secrets = true
+  const send = async (kind: string, text: string) => {
+    const started = Date.now()
+    const { ok, result } = await sendToOpsChat(fetchFn, env, text)
+    report.messages.push({ kind, result, ms: Date.now() - started })
+    return ok
   }
-  const send = (text: string) => sendToOpsChat(fetchFn, env, text)
   const site = new URL(env.HEALTH_URL).host
   let state = { ...options.state }
 
-  if (state.version !== version && await send(`Watchdog started: checking ${site} every minute. You'll get one message when it goes down, one when it recovers, and a weekly "still watching" on Mondays.`)) {
+  if (state.version !== version && await send('started', `Watchdog started: checking ${site} every minute. You'll get one message when it goes down, one when it recovers, and a weekly "still watching" on Mondays.`)) {
     state.version = version
   }
 
+  const checkedAt = Date.now()
   const problem = await healthProblem(fetchFn, env.HEALTH_URL)
+  report.health = problem ?? 'ok'
+  report.healthMs = Date.now() - checkedAt
   if (problem === null) {
     const recovered = state.status === 'down'
     const minutes = state.failingSince === null ? 0 : Math.max(1, Math.round((now - state.failingSince) / 60_000))
-    if (!recovered || await send(`RECOVERED: ${site} is healthy again at ${cambodiaTime(now).label}, after about ${minutes} minute${minutes === 1 ? '' : 's'}.`)) {
+    if (!recovered || await send('recovered', `RECOVERED: ${site} is healthy again at ${cambodiaTime(now).label}, after about ${minutes} minute${minutes === 1 ? '' : 's'}.`)) {
       state = { ...state, status: 'up', failures: 0, failingSince: null }
     }
   }
   else {
-    console.warn('Watchdog: health check failed', { problem })
     state = { ...state, failures: state.failures + 1, failingSince: state.failingSince ?? now, failedThisWeek: state.failedThisWeek + 1 }
     if (state.status === 'up' && state.failures >= FAILURES_BEFORE_ALERT
-      && await send(`DOWN: ${site} failed its health check ${state.failures} times in a row since ${cambodiaTime(state.failingSince!).label}: ${problem}. The site, its database or its background jobs are not working. ${RUNBOOK}`)) {
+      && await send('down', `DOWN: ${site} failed its health check ${state.failures} times in a row since ${cambodiaTime(state.failingSince!).label}: ${problem}. The site, its database or its background jobs are not working. ${RUNBOOK}`)) {
       state.status = 'down'
     }
   }
@@ -139,8 +170,9 @@ export async function runCheck(options: CheckOptions): Promise<WatchState> {
   // Mondays from 09:00 Cambodia time, once.
   const local = cambodiaTime(now)
   if (local.weekday === 1 && local.hour >= 9 && state.weeklySentOn !== local.date
-    && await send(`Weekly check (${local.date}): the watchdog is running. ${site} is ${state.status === 'up' ? 'UP' : 'DOWN'}. Failed checks in the last week: ${state.failedThisWeek}.`)) {
+    && await send('weekly', `Weekly check (${local.date}): the watchdog is running. ${site} is ${state.status === 'up' ? 'UP' : 'DOWN'}. Failed checks in the last week: ${state.failedThisWeek}.`)) {
     state = { ...state, weeklySentOn: local.date, failedThisWeek: 0 }
   }
-  return state
+  report.status = state.status
+  return { state, report }
 }
