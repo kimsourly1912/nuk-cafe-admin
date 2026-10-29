@@ -82,6 +82,9 @@ S1 (ac67917): probe of the 4.6.1 production node build (`E2E_HUB_DIR=.data/upgra
 
 S2 (93531ac): `pnpm add nuxt@4.6.2 vue@3.5.44`, then the ranges set back to the repo's caret style (`^4.6.2`, `^3.5.44`; pnpm 12 saved exact). Lockfile: one `nuxt@4.6.2`, one `vue@3.5.44`, no 4.6.1/3.5.43 left; no direct dependency changed. Nuxt's own tree moved too: `@nuxt/devtools` 3.4.2 → 3.4.4 (no longer uses `simple-git`), `@vitejs/plugin-vue` 6.0.9 → 6.0.10, `diff` 8 → 9, `image-meta` 0.2 → 0.3, `ws` added. `bash scripts/upgrade-verify.sh S2` = baseline (typecheck, lint, test:unit 2104 passed/1 skipped, build on "Nuxt 4.6.2 with Nitro 2.13.4, Vite 8.3.4 and Vue 3.5.44"). `pnpm audit --audit-level high` passes; `--prod` advisories 8 → 5: all three nuxt/@nuxt/nitro-server ones gone (route rules, server-island `useHeadSafe`). Follow-up (not in scope): the four `simple-git` audit exemptions in `pnpm-workspace.yaml` (D54) are no longer needed.
 
+
+S3 (in progress): checks 1 and 2 passed. (1) The S1 probe on the 4.6.2 production build: only `/TABLE/abc` and `/Reset-Password` changed, now with `cache-control: no-store, no-transform`; every other line identical to 4.6.1 (`upgrade/logs/S3/probe.txt`). (2) `pnpm build:staging`: `.output/server/wrangler.json` identical to the baseline copy (JSON, sorted keys); `wrangler deploy --dry-run` 10218.09 KiB / gzip 2044.82 KiB (baseline 10209.45 / 2043.07); local `wrangler dev` of the staging Worker on a migrated local D1: `/api/health` 200, `/c/no-such-cafe` 404 "Cafe not found", `/table/abc` and `/TABLE/abc` `no-store, no-transform`, `/api/c/x/admin/me` 401 (`upgrade/logs/S3/worker-smoke.txt`). (3) Full e2e: running.
+
 ## Blocked
 
 ## Plan issues

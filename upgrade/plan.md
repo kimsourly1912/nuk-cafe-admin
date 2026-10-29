@@ -27,7 +27,7 @@ A patch release with no breaking changes, deprecations, codemods or required con
 - done when: verify matches baseline and the version checks above hold.
 
 ### S3 — Prove the fix and the Worker (no code change)
-- status: todo
+- status: in-progress
 - covers: C1, C2, C4, C7, C11, C14
 - executor: sonnet
 - risk: high (profile #1, #5, #8)
