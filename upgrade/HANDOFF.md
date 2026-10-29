@@ -65,7 +65,7 @@ Q2: review of breaking-changes.md and approval of plan.md — the owner delegate
 
 ## Done
 
-S1 (pending hash): probe of the 4.6.1 production node build (`E2E_HUB_DIR=.data/upgrade-probe`, `node .output/server/index.mjs`; script in `upgrade/logs/S1/`, output `upgrade/logs/S1/probe.txt`). Confirms the advisory here: case-variant **page** paths are served (Vue's router matches any case) without their specific rule; case-variant **API** paths are 404 (Nitro's handler router is case-sensitive), so the `auth: 'user'` gates were not reachable that way. `/**` headers apply to every path.
+S1 (ac67917): probe of the 4.6.1 production node build (`E2E_HUB_DIR=.data/upgrade-probe`, `node .output/server/index.mjs`; script in `upgrade/logs/S1/`, output `upgrade/logs/S1/probe.txt`). Confirms the advisory here: case-variant **page** paths are served (Vue's router matches any case) without their specific rule; case-variant **API** paths are 404 (Nitro's handler router is case-sensitive), so the `auth: 'user'` gates were not reachable that way. `/**` headers apply to every path.
 
 | Path | 4.6.1 status | CSP | X-Frame-Options | cache-control |
 |---|---|---|---|---|
