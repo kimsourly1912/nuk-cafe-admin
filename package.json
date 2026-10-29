@@ -27,7 +27,7 @@
     "test:changed": "vitest run --project unit --project server --changed origin/main",
     "test:fast": "vitest run --project unit --project server --tags-filter=!slow",
     "test:e2e": "vitest run --project e2e",
-    "typecheck": "nuxt typecheck && tsc -p ops/watchdog"
+    "typecheck": "nuxt typecheck && tsc -p ops/watchdog && tsc -p ops/backup"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.68",
@@ -67,6 +67,8 @@
     "@nuxt/test-utils": "^4.3.2",
     "@types/sortablejs": "^1.15.9",
     "@vue/test-utils": "^2.5.1",
+    "age-encryption": "0.3.1",
+    "aws4fetch": "1.0.20",
     "axe-core": "^4.14.0",
     "drizzle-kit": "^0.31.11",
     "eslint": "^10.11.0",

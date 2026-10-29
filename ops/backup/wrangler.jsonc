@@ -1,0 +1,27 @@
+// The nightly backup (D225, docs/server/operations.md → Backups and restore). Deployed by hand with
+// the "Deploy backup" workflow, which gives it its secrets (D1_ACCOUNT_ID, D1_EXPORT_TOKEN,
+// BACKUP_R2_ENDPOINT, BACKUP_R2_ACCESS_KEY_ID, BACKUP_R2_SECRET_ACCESS_KEY, BACKUP_AGE_RECIPIENTS,
+// OPS_TELEGRAM_BOT_TOKEN, OPS_TELEGRAM_CHAT_ID). No route, no public address: only the schedule.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "angder-backup",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-07-15",
+  "workers_dev": false,
+  "preview_urls": false,
+  "workflows": [
+    {
+      "name": "angder-backup",
+      "binding": "BACKUP",
+      "class_name": "BackupWorkflow",
+      // 20:17 UTC = 03:17 Cambodia time: cafes are closed, and off the hour's busy minute.
+      "schedules": ["17 20 * * *"]
+    }
+  ],
+  "vars": {
+    // Production's database (nuxt.config.ts → PRODUCTION) and the backup account's bucket.
+    "D1_DATABASE_ID": "1ba21c84-75fa-4498-aacc-44ea6b53ea95",
+    "BACKUP_R2_BUCKET": "angder-backups"
+  },
+  "observability": { "enabled": true }
+}
