@@ -41,7 +41,8 @@ _2026-10-02. The owner's choice after the KHQR research: a dynamic KHQR shown **
 | The riel rate changes after the QR was made | The QR keeps its riel; the payment records the charge | server |
 | A name with Khmer letters | Refused on the settings form (the QR's name is ASCII; a Khmer name tag is later) | unit |
 | Bakong confirms the QR (10.15b) | Recorded as the cashier who asked, once; the panel closes | server, e2e |
-| Two cashiers' counters check the same QR at once | One payment; both answer paid | server (race, checked without the read-back) |
+| Two cashiers' counters check the same QR at once | Bakong asked once (one turn per QR every 4 s, D222); the other answers "waiting" and sees it paid on its next round; one payment | server |
+| Two checks 4 s apart while Bakong is slow (both ask) | One payment; both answer paid | server (race, checked without the read-back) |
 | Something else arrived on the QR (amount, currency, account) | "Doesn't match", nothing recorded; the cashier settles it | server, e2e |
 | Paid after the pay-by time, before the expiry ran | Recorded (the money arrived) | server |
 | Paid on a QR of an order already paid in cash, or cancelled | "Give it back to the customer", a toast that stays | server |

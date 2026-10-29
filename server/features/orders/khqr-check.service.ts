@@ -3,6 +3,7 @@ import type { Db } from '#server/utils/batch'
 import type { BranchActor } from '#server/features/identity'
 import type { BakongClient, BakongTransaction } from './bakong'
 import { getCounterOrder, recordCheckedKhqrPayment } from './counter.service'
+import * as khqrRepo from './khqr.repository'
 import type { ChargeRow } from './khqr.repository'
 import { requireOrderCharge } from './khqr.service'
 import { OrderErrorCodes } from './orders.errors'
@@ -15,6 +16,12 @@ import * as repo from './orders.repository'
  * they had pressed Confirm. Anything else records nothing and says why; Confirm stays as the
  * fallback (Bakong down, its token expired, or Bakong refusing a server outside Cambodia).
  */
+
+/**
+ * At most one question to Bakong per QR in this time (audit S5), however many counters show it or
+ * how often they ask. Under the counter's 5 s round, so one counter alone is never held back.
+ */
+export const BAKONG_CHECK_GAP_MS = 4_000
 
 const toReceived = (transaction: BakongTransaction): KhqrReceived => ({
   currency: transaction.currency,
@@ -43,6 +50,9 @@ export async function checkKhqrCharge(db: Db, actor: BranchActor, orderId: strin
   // Recorded already (by an earlier check, or the cashier's Confirm naming this QR): nothing to ask.
   if (payment?.khqrChargeId === charge.id) return { status: 'paid', order: await getCounterOrder(db, actor, orderId) }
   if (!bakong) return { status: 'unavailable', problem: 'not_set_up' }
+  // Another counter asked Bakong about this QR moments ago (or is asking now): don't ask again. Its
+  // answer is recorded by then or soon; this counter asks again on its next round.
+  if (!await khqrRepo.claimBakongCheck(db, actor.tenantId, charge.id, new Date(now.getTime() + BAKONG_CHECK_GAP_MS), now)) return { status: 'waiting' }
 
   const answer = await bakong.checkByMd5(charge.md5)
   if (answer.kind === 'not_found') return { status: 'waiting' }

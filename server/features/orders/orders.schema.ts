@@ -240,6 +240,8 @@ export const khqrCharges = sqliteTable('khqr_charges', {
   createdBy: text().notNull().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
   createdAt: instant().notNull(),
   expiresAt: instant().notNull(),
+  /** Bakong isn't asked about this QR again before this moment, however many counters ask (audit S5). */
+  bakongCheckUntil: instant(),
 }, t => [
   foreignKey({ name: 'khqr_charges_order_fk', columns: [t.tenantId, t.orderId], foreignColumns: [orders.tenantId, orders.id] }).onDelete('restrict'),
   foreignKey({ name: 'khqr_charges_branch_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }).onDelete('restrict'),

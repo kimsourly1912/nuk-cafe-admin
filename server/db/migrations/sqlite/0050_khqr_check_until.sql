@@ -1,0 +1,1 @@
+ALTER TABLE `khqr_charges` ADD `bakong_check_until` integer;
