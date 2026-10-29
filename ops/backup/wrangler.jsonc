@@ -19,7 +19,7 @@
     }
   ],
   "vars": {
-    // Production's database (nuxt.config.ts → PRODUCTION) and the backup account's bucket.
+    // Production's database (nuxt.config.ts → PRODUCTION) and the backup bucket (production account for now, D225 follow-up).
     "D1_DATABASE_ID": "1ba21c84-75fa-4498-aacc-44ea6b53ea95",
     "BACKUP_R2_BUCKET": "angder-backups"
   },

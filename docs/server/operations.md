@@ -181,7 +181,7 @@ Never deploy production by hand from a laptop: the job above is the one path. Ro
 ## Backups and restore
 
 - **D1 Time Travel**: point-in-time restore for the retention window of the Cloudflare plan (checked on staging: `wrangler d1 time-travel info nuk-cafe-staging` gives the current bookmark). Note the bookmark before every production migration.
-- **Nightly backups outside the production account (D225)**: production's database, encrypted for the owner's key, every night in a separate Cloudflare account; kept 30 nights and 12 months, and nothing can delete them early. For what Time Travel can't undo: a deleted database, a lost or compromised account, damage found after 30 days. [Below](#nightly-backups-d225).
+- **Nightly backups (D225)**: production's database, encrypted for the owner's key, every night in the R2 bucket `angder-backups`; kept 30 nights and 12 months, and no key can delete them early. For what Time Travel can't undo: a deleted database, damage found after 30 days. **For now the bucket is in the production account (owner, 2026-10-29), so the backups don't survive losing that account**; a separate account comes later. [Below](#nightly-backups-d225).
 - **R2**: menu images are re-uploadable; no separate backup at launch.
 - **Restore drill** on staging before launch and then yearly: restore to a bookmark, check the app works, write down how long it took. Runbook below (step 10.4, D119).
 
@@ -209,18 +209,18 @@ For production (8.2): note the bookmark before every migration (see Deploys); a 
 
 ### Nightly backups (D225)
 
-`angder-backup` (`ops/backup`), a Worker beside the app, runs a Cloudflare Workflow every night at **03:17 Cambodia time**: it exports production's D1 database as SQL, encrypts it with **age** for the owner's public key, and stores it in the R2 bucket **`angder-backups` of a separate Cloudflare account**:
+`angder-backup` (`ops/backup`), a Worker beside the app, runs a Cloudflare Workflow every night at **03:17 Cambodia time**: it exports production's D1 database as SQL, encrypts it with **age** for the owner's public key, and stores it in the R2 bucket **`angder-backups`**, for now **in the production account** (owner, 2026-10-29; [moving it later](#moving-the-backups-to-a-separate-account-later)):
 
 - `daily/angder-<YYYY-MM-DD>.sql.age` every night, kept **30 days**;
 - `monthly/angder-<YYYY-MM>.sql.age` on the 1st, kept **365 days**.
 
-The bucket's **lock rules** stop anyone, the Worker's own key included, from deleting or overwriting a copy before then; its **lifecycle rules** delete them a day after. The Worker holds only the public key: **only the owner's private key can read a backup.** Lose that key and every backup is unreadable. A failed night sends **🔴 Angder backup FAILED** to Angder Ops (D223's bot); every Monday it sends **🟢 Angder backups are running**: a Monday without it means the backup has stopped. Runs: Workers & Pages → Workflows → `angder-backup` (production account).
+The bucket's **lock rules** stop a key, the Worker's own included, from deleting or overwriting a copy before then (an account administrator can still remove the rules: that's the gap a separate account closes); its **lifecycle rules** delete them a day after. The Worker holds only the public key: **only the owner's private key can read a backup.** Lose that key and every backup is unreadable. A failed night sends **🔴 Angder backup FAILED** to Angder Ops (D223's bot); every Monday it sends **🟢 Angder backups are running**: a Monday without it means the backup has stopped. Runs: Workers & Pages → Workflows → `angder-backup` (production account).
 
 #### Setting it up
 
-Once, by the owner, about 30 minutes. Steps 1–4 are in the **new account**, step 5 in production.
+Once, by the owner, about 20 minutes, all in the **production account** except step 4.
 
-1. **A separate Cloudflare account** for backups only: its own login (not the production account's email), two-step sign-in on, nobody else invited. Enable R2 there when the dashboard asks (the free allowance covers these backups).
+1. **Protect the login**, since it now guards the backups too: two-step sign-in with an **authenticator app** (not SMS) on Cloudflare **and** on the email it uses, a unique password in the password manager, nobody else invited.
 2. **The bucket:** R2 → Create bucket → `angder-backups`. Then its **Settings**:
    - **Bucket lock rules → Add rule:** name `daily-30-days`, prefix `daily/`, retain **30 days**; and `monthly-365-days`, prefix `monthly/`, retain **365 days**.
    - **Object lifecycle rules → Add rule:** prefix `daily/`, delete objects after **31 days**; prefix `monthly/`, delete after **366 days**.
@@ -228,15 +228,15 @@ Once, by the owner, about 30 minutes. Steps 1–4 are in the **new account**, st
 4. **The owner's key** (on the owner's computer, with [age](https://age-encryption.org): `brew install age`, `winget install FiloSottile.age`, or the `age` package on Linux): `age-keygen -o angder-backup-key.txt`. It prints the **public key** (`age1…`). Keep `angder-backup-key.txt` in the password manager **and** an offline copy (USB stick or printed): it is the only way to read the backups, and it must not be lost with the laptop. Optionally make a second key the same way for a trusted spare; both public keys go in the secret below, separated by a space.
 5. **The export token** (production account): My Profile → API Tokens → Create Custom Token → permission **Account · D1 · Read**, account resources: the production account. (Cloudflare doesn't say which permission the export needs: if the test backup fails with an authentication or permission error, edit the token to **D1 · Edit**.)
 6. **GitHub → Settings → Secrets and variables → Actions → New repository secret:** `BACKUP_D1_EXPORT_TOKEN` (step 5), `BACKUP_R2_ENDPOINT`, `BACKUP_R2_ACCESS_KEY_ID`, `BACKUP_R2_SECRET_ACCESS_KEY` (step 3), `BACKUP_AGE_RECIPIENTS` (step 4's public key or keys). `CLOUDFLARE_ACCOUNT_ID` and the `OPS_TELEGRAM_*` secrets already exist.
-7. **Actions → Deploy backup → Run workflow** (on main), and approve it. Its last step takes a backup: **🟢 Angder backup stored** arrives in Angder Ops within a few minutes, and the file appears under `daily/` in the backup account.
-8. **Check the key works:** download that file (backup account → R2 → `angder-backups` → `daily/`) and run `age -d -i angder-backup-key.txt angder-<date>.sql.age | head`: the first lines of SQL prove the key reads it.
+7. **Actions → Deploy backup → Run workflow** (on main), and approve it. Its last step takes a backup: **🟢 Angder backup stored** arrives in Angder Ops within a few minutes, and the file appears under R2 → `angder-backups` → `daily/`.
+8. **Check the key works:** download that file (R2 → `angder-backups` → `daily/`) and run `age -d -i angder-backup-key.txt angder-<date>.sql.age | head`: the first lines of SQL prove the key reads it.
 
 #### When "Angder backup FAILED" arrives
 
 Earlier copies are untouched; the next run is the following night. Read the **Reason**:
 
 - *D1's export answered HTTP 401/403*: the export token was revoked, expired or lacks permission (setup step 5); replace `BACKUP_D1_EXPORT_TOKEN`.
-- *The backup bucket refused … HTTP 403*: the backup account's R2 key changed (step 3); replace the three `BACKUP_R2_*` secrets.
+- *The backup bucket refused … HTTP 403*: the bucket's R2 key changed (step 3); replace the three `BACKUP_R2_*` secrets.
 - *Settings not set*: a secret is missing; add it.
 - *larger than 40 MB*: the database outgrew the in-memory backup: the code needs a streamed upload (D225).
 - Anything else (a Cloudflare or Telegram outage): wait for the next night, or take one now.
@@ -247,13 +247,22 @@ After fixing, **Deploy backup** again: it redeploys and takes a backup now (a ni
 
 Into a **new** database first, never over production:
 
-1. **Download** the night's file: backup account → R2 → `angder-backups` → `daily/` (or `monthly/`) → Download.
+1. **Download** the night's file: R2 → `angder-backups` → `daily/` (or `monthly/`) → Download.
 2. **Decrypt:** `age -d -i angder-backup-key.txt -o angder.sql angder-<date>.sql.age`.
 3. **Load it into a new D1 database** (production account): `npx wrangler d1 create angder-restore`, then `npx wrangler d1 execute angder-restore --remote --file angder.sql`.
 4. **Check** it: `npx wrangler d1 execute angder-restore --remote --command "select count(*) from orders"`, and the newest order's time.
 5. **Use it:** to replace production (the database is gone or ruined), set `PRODUCTION.d1DatabaseId` in `nuxt.config.ts` (and `ops/backup/wrangler.jsonc`) to the new database's id and deploy. To recover a few rows, copy them from it instead. Anything written after that night's backup is lost; Time Travel may still have it if the old database exists.
 
-The off-account restore is not drilled yet (next step): until it is, treat these steps as untested.
+This restore is not drilled yet (next step): until it is, treat these steps as untested.
+
+#### Moving the backups to a separate account (later)
+
+The owner's plan once the app has many users (D225 follow-up). No code changes: the Worker uploads through R2's S3 address, so only the bucket and three secrets move.
+
+1. A new Cloudflare account for backups only: a **new mailbox** used for nothing else (not a `+alias` of the current one: a password reset would reach the same inbox), its own unique password, two-step sign-in with an authenticator app on both, nobody else invited.
+2. In it, setup steps 2 and 3 above (bucket `angder-backups` with the same lock and lifecycle rules, its R2 key).
+3. Replace `BACKUP_R2_ENDPOINT`, `BACKUP_R2_ACCESS_KEY_ID` and `BACKUP_R2_SECRET_ACCESS_KEY`, then **Deploy backup**: 🟢 means the new bucket works.
+4. Leave the old bucket until its copies expire (30 days for `daily/`, a year for `monthly/`), then remove its lock rules and delete it.
 
 ## Scheduled jobs
 

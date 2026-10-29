@@ -2,10 +2,10 @@ import { Encrypter } from 'age-encryption'
 
 /**
  * The nightly backup (D225): production's D1 database exported as SQL, encrypted with age for the
- * owner's public key (this Worker can't read a backup), and stored in an R2 bucket in a separate
- * Cloudflare account, so a lost, deleted or compromised production account doesn't take the backups
- * with it. That bucket's lock rules keep each copy for its full period: nothing, not even this
- * Worker's own key, can delete or overwrite one early. Each step's work lives here with `fetch`
+ * owner's public key (this Worker can't read a backup), and stored in an R2 bucket reached through
+ * its S3 address: in the production account for now, a separate account later (the owner's choice,
+ * D225 follow-up), with only the endpoint and key changing. That bucket's lock rules keep each copy
+ * for its full period: no key, not even this Worker's own, can delete or overwrite one early. Each step's work lives here with `fetch`
  * passed in; `index.ts` runs them as Workflow steps.
  */
 
@@ -15,10 +15,10 @@ export interface BackupEnv {
   D1_DATABASE_ID: string
   /** A production API token that may export D1 (D1 Read, or D1 Edit if the export refuses Read). */
   D1_EXPORT_TOKEN?: string
-  /** The backup account's R2 S3 endpoint, `https://<backup-account-id>.r2.cloudflarestorage.com`. */
+  /** The backup bucket's R2 S3 endpoint, `https://<account id>.r2.cloudflarestorage.com`. */
   BACKUP_R2_ENDPOINT?: string
   BACKUP_R2_BUCKET: string
-  /** The backup account's R2 API token (Object Read & Write on that bucket only). */
+  /** The backup bucket's R2 API token (Object Read & Write on that bucket only). */
   BACKUP_R2_ACCESS_KEY_ID?: string
   BACKUP_R2_SECRET_ACCESS_KEY?: string
   /** The owner's age public keys (`age1…`), separated by spaces or commas. */
@@ -180,7 +180,7 @@ export async function encryptDump(dump: Uint8Array, recipients: string): Promise
   return encrypted.buffer instanceof ArrayBuffer ? new Uint8Array(encrypted.buffer, encrypted.byteOffset, encrypted.byteLength) : encrypted.slice()
 }
 
-/** A request signed for the backup account's R2 (aws4fetch's `AwsClient.fetch` in the Worker). */
+/** A request signed for the backup bucket's R2 (aws4fetch's `AwsClient.fetch` in the Worker). */
 export type SignedFetch = (url: string, init: RequestInit) => Promise<Response>
 
 /**
@@ -233,7 +233,7 @@ export function successText(backup: StoredBackup, weekly: boolean): string {
   return [
     weekly ? '🟢 Angder backups are running' : '🟢 Angder backup stored',
     ...backup.keys.map((key, i) => `${key}: ${backup.results[i] === 'stored' ? 'stored' : 'already there'} (${formatSize(backup.bytes)})`),
-    weekly ? 'This message comes every Monday; a missing one means the backup has stopped.' : 'Encrypted for the owner\'s key, kept in the backup account.',
+    weekly ? 'This message comes every Monday; a missing one means the backup has stopped.' : 'Encrypted for the owner\'s key, kept in the backup bucket.',
   ].join('\n')
 }
 

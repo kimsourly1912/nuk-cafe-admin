@@ -1,5 +1,5 @@
 # Deploys the nightly backup (D225, ops/backup): a separate Worker whose Workflow exports production's
-# D1 database every night, encrypts it for the owner's age key and stores it in the backup account's
+# D1 database every night, encrypts it for the owner's age key and stores it in the backup
 # R2 bucket. By hand only (Actions → Deploy backup → Run workflow, on main), when ops/backup changes,
 # a secret changes, or to take a backup now; the `production` environment's reviewer approves it.
 # Every run ends with a test backup that reports to the Angder Ops chat: that message is the proof.
