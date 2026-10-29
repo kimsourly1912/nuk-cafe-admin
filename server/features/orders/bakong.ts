@@ -1,3 +1,5 @@
+import * as v from 'valibot'
+
 /**
  * The Bakong Open API (step 10.15b, D131): the National Bank of Cambodia's API that says whether a
  * dynamic KHQR was paid, asked by the QR text's MD5 (`check_transaction_by_md5`). Bakong sends no
@@ -23,7 +25,8 @@ export interface BakongClientOptions {
 }
 
 export interface BakongTransaction {
-  hash: string
+  /** Bakong's transaction hash, when it gives one. */
+  hash: string | null
   fromAccountId: string | null
   toAccountId: string
   currency: string
@@ -45,48 +48,104 @@ export interface BakongClient {
   checkByMd5: (md5: string) => Promise<BakongAnswer>
 }
 
-interface BakongBody {
-  responseCode?: number
-  responseMessage?: string | null
-  errorCode?: number | null
-  data?: {
-    hash?: string
-    fromAccountId?: string | null
-    toAccountId?: string
-    currency?: string
-    amount?: number | string
-    externalRef?: string | null
-    createdDateMs?: number | null
-  } | null
-}
+/** Bakong's answers are a few hundred bytes: a longer body is not an answer to read. */
+const ANSWER_MAX_BYTES = 16 * 1024
+
+/** The answer's envelope. Anything else (a field of the wrong type) is an answer we can't read. */
+const answerSchema = v.object({
+  responseCode: v.optional(v.number()),
+  responseMessage: v.optional(v.nullable(v.string())),
+  errorCode: v.optional(v.nullable(v.number())),
+  data: v.optional(v.unknown()),
+})
+
+/** Text Bakong may leave out; empty counts as left out. */
+const optionalText = (max: number) =>
+  v.optional(v.pipe(v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(max))), v.transform(text => text || null)), null)
+
+/**
+ * A paid transaction: only these fields decide that money arrived and where, so each is checked
+ * (an object for an account, an amount that isn't a number) before anything reads it (audit S6).
+ */
+const transactionSchema = v.object({
+  hash: optionalText(128),
+  fromAccountId: optionalText(64),
+  toAccountId: v.pipe(v.string(), v.trim(), v.nonEmpty(), v.maxLength(64)),
+  currency: v.pipe(v.string(), v.trim(), v.nonEmpty(), v.maxLength(8)),
+  amount: v.pipe(v.union([v.number(), v.pipe(v.string(), v.regex(/^\d+(\.\d+)?$/), v.transform(Number))]), v.finite(), v.minValue(0)),
+  externalRef: optionalText(128),
+  createdDateMs: v.optional(v.unknown()),
+})
 
 const DEFAULT_TIMEOUT = 8_000
 
-/** Reads one answer of `check_transaction_by_md5` (pure, for the tests). */
-export function readBakongAnswer(status: number, body: BakongBody | null): BakongAnswer {
+/** Bakong's words in a problem's detail, kept short: they reach the logs and the Payments page. */
+const shortMessage = (message: string | null | undefined) => (message ?? '').slice(0, 200)
+
+/** Reads one answer of `check_transaction_by_md5` (pure, for the tests). `body` is the parsed JSON, `null` when there was none. */
+export function readBakongAnswer(status: number, body: unknown): BakongAnswer {
   if (status === 401) return { kind: 'unavailable', problem: 'token', detail: 'Bakong did not accept the token (401)' }
   if (status === 403) return { kind: 'unavailable', problem: 'refused', detail: 'Bakong refused this server (403)' }
   if (status < 200 || status >= 300 || !body) return { kind: 'unavailable', problem: 'error', detail: `Bakong answered ${status}` }
-  const message = body.responseMessage ?? ''
-  if (body.errorCode === 6) return { kind: 'unavailable', problem: 'token', detail: `Bakong did not accept the token: ${message}` }
-  if (body.responseCode === 1 && body.errorCode === 1) return { kind: 'not_found' }
-  const data = body.data
-  const amount = Number(data?.amount)
-  if (body.responseCode === 0 && data?.toAccountId && data.currency && Number.isFinite(amount)) {
+  const answer = v.safeParse(answerSchema, body)
+  if (!answer.success) return { kind: 'unavailable', problem: 'error', detail: 'Bakong\'s answer could not be read' }
+  const { responseCode, errorCode, data } = answer.output
+  const message = shortMessage(answer.output.responseMessage)
+  if (errorCode === 6) return { kind: 'unavailable', problem: 'token', detail: `Bakong did not accept the token: ${message}` }
+  if (responseCode === 1 && errorCode === 1) return { kind: 'not_found' }
+  const transaction = responseCode === 0 ? v.safeParse(transactionSchema, data) : undefined
+  if (transaction?.success) {
+    const paid = transaction.output
     return {
       kind: 'paid',
       transaction: {
-        hash: data.hash ?? '',
-        fromAccountId: data.fromAccountId ?? null,
-        toAccountId: data.toAccountId,
-        currency: data.currency,
-        amount,
-        externalRef: data.externalRef ?? null,
-        createdAt: typeof data.createdDateMs === 'number' ? new Date(data.createdDateMs) : null,
+        hash: paid.hash,
+        fromAccountId: paid.fromAccountId,
+        toAccountId: paid.toAccountId,
+        currency: paid.currency,
+        amount: paid.amount,
+        externalRef: paid.externalRef,
+        createdAt: typeof paid.createdDateMs === 'number' && Number.isFinite(paid.createdDateMs) ? new Date(paid.createdDateMs) : null,
       },
     }
   }
-  return { kind: 'unavailable', problem: 'error', detail: `Bakong answered code ${body.responseCode ?? '?'}/${body.errorCode ?? '?'}: ${message}` }
+  return { kind: 'unavailable', problem: 'error', detail: `Bakong answered code ${responseCode ?? '?'}/${errorCode ?? '?'}: ${message}` }
+}
+
+/**
+ * The answer's JSON, counting the bytes as they arrive: never more than `ANSWER_MAX_BYTES` read
+ * (a stand-in in front of Bakong could send anything). `null` for a body too long, cut off or not JSON.
+ */
+async function readAnswerBody(response: Response): Promise<unknown> {
+  const reader = response.body?.getReader()
+  if (!reader) return null
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    while (true) {
+      const next = await reader.read()
+      if (next.done) break
+      size += next.value.byteLength
+      if (size > ANSWER_MAX_BYTES) {
+        await reader.cancel()
+        return null
+      }
+      chunks.push(next.value)
+    }
+    const bytes = new Uint8Array(size)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.byteLength
+    }
+    return JSON.parse(new TextDecoder().decode(bytes)) as unknown
+  }
+  catch {
+    return null
+  }
+  finally {
+    reader.releaseLock()
+  }
 }
 
 export function bakongClient(options: BakongClientOptions): BakongClient {
@@ -106,8 +165,12 @@ export function bakongClient(options: BakongClientOptions): BakongClient {
     catch (error) {
       return { kind: 'unavailable', problem: 'error', detail: `Bakong did not answer: ${error instanceof Error ? error.message : String(error)}` }
     }
-    const body = await response.json().catch(() => null) as BakongBody | null
-    return readBakongAnswer(response.status, body)
+    // A refusal or error is read from its status alone: its body (often a proxy's HTML page) isn't read.
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {})
+      return readBakongAnswer(response.status, null)
+    }
+    return readBakongAnswer(response.status, await readAnswerBody(response))
   }
 
   return { checkByMd5 }

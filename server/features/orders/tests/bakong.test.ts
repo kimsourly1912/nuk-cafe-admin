@@ -41,6 +41,67 @@ describe('reading Bakong\'s answer', () => {
   })
 })
 
+describe('reading only what Bakong should send (audit S6)', () => {
+  const unreadable = { kind: 'unavailable', problem: 'error' }
+
+  it('a "paid" answer whose fields aren\'t what they should be is never taken as paid', () => {
+    for (const patch of [
+      { toAccountId: { id: 'nukcafe@aclb' } },
+      { toAccountId: '  ' },
+      { toAccountId: 'x'.repeat(65) },
+      { currency: 840 },
+      { currency: 'U'.repeat(9) },
+      { amount: null },
+      { amount: '' },
+      { amount: '-8.75' },
+      { amount: '8.75 USD' },
+      { amount: Number.NaN },
+      { amount: -1 },
+      { externalRef: { ref: 'x' } },
+      { hash: 'h'.repeat(129) },
+    ]) {
+      expect(readBakongAnswer(200, { ...PAID, data: { ...PAID.data, ...patch } }), JSON.stringify(patch)).toMatchObject(unreadable)
+    }
+    expect(readBakongAnswer(200, { ...PAID, data: 'paid' })).toMatchObject(unreadable)
+  })
+
+  it('an envelope of the wrong shape is an answer it can\'t read', () => {
+    expect(readBakongAnswer(200, { ...PAID, responseCode: '0' })).toEqual({ kind: 'unavailable', problem: 'error', detail: 'Bakong\'s answer could not be read' })
+    expect(readBakongAnswer(200, { responseCode: 1, errorCode: '1' })).toMatchObject(unreadable)
+    expect(readBakongAnswer(200, ['paid'])).toMatchObject(unreadable)
+  })
+
+  it('references Bakong leaves empty are left out; text is trimmed; Bakong\'s message is kept short', () => {
+    expect(readBakongAnswer(200, { ...PAID, data: { ...PAID.data, hash: '', externalRef: null, fromAccountId: undefined, toAccountId: ' nukcafe@aclb ', createdDateMs: 'soon' } })).toMatchObject({
+      kind: 'paid',
+      transaction: { hash: null, externalRef: null, fromAccountId: null, toAccountId: 'nukcafe@aclb', createdAt: null },
+    })
+    const answer = readBakongAnswer(200, { responseCode: 1, errorCode: 3, responseMessage: 'x'.repeat(5000) })
+    expect(answer.kind === 'unavailable' && answer.detail.length).toBeLessThan(260)
+  })
+
+  it('reads at most 16 KB of the body, and stops reading there', async () => {
+    let sent = 0
+    let cancelled = false
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        sent += 4096
+        controller.enqueue(new TextEncoder().encode(' '.repeat(4096)))
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+    const client = bakongClient({ apiUrl: 'https://bakong.test', token: 't', fetch: async () => new Response(endless) })
+    expect(await client.checkByMd5('x')).toMatchObject(unreadable)
+    expect(cancelled).toBe(true)
+    // The stream fills a chunk or two ahead of the reader; it is cancelled, never read to the end.
+    expect(sent).toBeLessThanOrEqual(32 * 1024)
+    const exactly = JSON.stringify(PAID).padEnd(16 * 1024, ' ')
+    expect(await bakongClient({ apiUrl: 'https://bakong.test', token: 't', fetch: async () => new Response(exactly) }).checkByMd5('x')).toMatchObject({ kind: 'paid' })
+  })
+})
+
 describe('the client', () => {
   it('posts the MD5 with the token to /v1/check_transaction_by_md5', async () => {
     const sent: { url: string, init: RequestInit }[] = []
@@ -69,6 +130,14 @@ describe('the client', () => {
     expect(await slow.checkByMd5('x')).toMatchObject({ kind: 'unavailable', problem: 'error' })
     const html = bakongClient({ apiUrl: 'https://bakong.test', token: 't', fetch: async () => new Response('<html>Forbidden</html>', { status: 403 }) })
     expect(await html.checkByMd5('x')).toMatchObject({ kind: 'unavailable', problem: 'refused' })
+    // A refusal's body is cancelled, not read.
+    let cancelled = false
+    const page = new ReadableStream<Uint8Array>({ cancel: () => {
+      cancelled = true
+    } })
+    const refused = bakongClient({ apiUrl: 'https://bakong.test', token: 't', fetch: async () => new Response(page, { status: 403 }) })
+    expect(await refused.checkByMd5('x')).toMatchObject({ kind: 'unavailable', problem: 'refused' })
+    expect(cancelled).toBe(true)
   })
 })
 
