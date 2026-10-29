@@ -27,6 +27,8 @@ P1 means before production use of the affected feature; P2 means the next server
 
 ### S1. The text help assistant accepts file URLs
 
+_Addressed 2026-10-29 on branch `claude/laughing-fermat-cu04no` ([progress](../progress.md#help-assistant-input-limits-audit-s1-2026-10-29)); the text below is the original finding._
+
 Evidence: [assistant.service.ts](../../server/features/assistant/assistant.service.ts), `checkConversation` and `chatWithAssistant`. The SDK's general UI-message validation permits file parts; our checks limit user text but do not reject files. `convertToModelMessages` preserves them. AI SDK `7.0.122` downloads URLs unsupported by the chosen model; provider-utils `5.0.51` defaults to a **2 GiB** download limit. A [Worker isolate has 128 MB of memory](https://developers.cloudflare.com/workers/platform/limits/#memory).
 
 A probe passed a text question plus a `text/plain` URL through the real service. With Worker-style fetch selection and local fetch/model stubs, the SDK fetched the URL and called the model. No large download or actual Worker crash was used. The 64 KB incoming body cap limits the URL, not the remote content. This requires an authorized cafe owner, an enabled AI configuration and a daily usage slot.

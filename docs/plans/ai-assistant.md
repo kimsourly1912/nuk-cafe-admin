@@ -58,6 +58,7 @@ menu feature's public API      AI provider (through the AI SDK)
 - **Only the assistant feature knows AI exists.** No other feature imports it on the server. In the app, screens (the item editor, the Menu items list) use its public building blocks (`index.ts`), like any cross-feature picker.
 - **The assistant never writes menu data** and has no tool that writes anything. Saving goes through the existing menu service: validation, `version`, draft status, audit.
 - **The model remembers nothing.** Each request carries everything it needs (below).
+- **The browser's copy of the conversation is not trusted.** The server keeps only what this product sends (text and its own links) and bounds its size before anything reaches a provider (audit S1).
 
 ## Where the answers come from
 
@@ -79,7 +80,7 @@ All `POST`, admin surface, `assistant: ['use']`; 404 when the assistant is off. 
 
 | Route | Request | Answer |
 |---|---|---|
-| `/api/admin/assistant/chat` (9.1) | `{ messages, page }`: the AI SDK's chat messages (last 20, each at most 2,000 characters), `page` an admin path | The AI SDK's UI message stream: text, and `link_to_page` tool results |
+| `/api/admin/assistant/chat` (9.1) | `{ messages, page }`: the AI SDK's chat messages (last 20, each question at most 2,000 characters, all text together at most 24,000: the browser drops its oldest messages to fit), `page` an admin path. Rebuilt on the server before a daily slot is taken (audit S1): questions are text only; earlier answers keep their text, step markers and finished links (title and path from our page list, never the browser's); reasoning, unfinished links and anything the browser attached (provider options, metadata) are left out; files, sources, data and other tools are refused (400). No reasoning is streamed to the browser | The AI SDK's UI message stream: text, and `link_to_page` tool results |
 | `/api/admin/assistant/menu-item-draft` (9.2) | `{ description }` (10–1,000 characters) | `MenuItemDraft` (below) |
 | `/api/admin/assistant/rewrite` (9.3) | `{ field: 'name' \| 'description', text, itemName }` | `{ suggestions: string[] }` (2–3, within the field's limit) |
 
