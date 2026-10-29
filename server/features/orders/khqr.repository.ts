@@ -2,6 +2,7 @@ import { and, desc, eq, gt } from 'drizzle-orm'
 import type { KhqrCurrency } from '#shared/contracts/orders'
 import { user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
+import { availableLease } from '#server/utils/claims'
 import { byId, firstRow, inTenant } from '#server/utils/query'
 import { bakongTokens, khqrCharges, khqrSettings } from './orders.schema'
 
@@ -148,6 +149,18 @@ export function findOpenCharge(db: Db, tenantId: string, orderId: string, curren
 
 export function findCharge(db: Db, tenantId: string, id: string): Promise<ChargeRow | undefined> {
   return firstRow(db.select(chargeColumns).from(khqrCharges).where(byId(khqrCharges, tenantId, id)))
+}
+
+/**
+ * The turn to ask Bakong about this QR until `until` (audit S5): one conditional update, so of the
+ * counters asking at once only one wins, on every Worker. False while another's turn lasts.
+ */
+export async function claimBakongCheck(db: Db, tenantId: string, id: string, until: Date, now: Date): Promise<boolean> {
+  const claimed = await db.update(khqrCharges)
+    .set({ bakongCheckUntil: until })
+    .where(inTenant(khqrCharges, tenantId, eq(khqrCharges.id, id), availableLease(khqrCharges.bakongCheckUntil, now)))
+    .returning({ id: khqrCharges.id })
+  return claimed.length > 0
 }
 
 export type NewCharge = ChargeRow & { tenantId: string, createdBy: string }

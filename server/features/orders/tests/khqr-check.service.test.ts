@@ -10,6 +10,7 @@ import type { BakongAnswer, BakongClient, BakongTransaction } from '#server/feat
 import { cancelOrderAtCounter, listCounterQueue, payOrder, setExchangeRate } from '#server/features/orders/counter.service'
 import { expireUnpaidOrders } from '#server/features/orders/expiry.service'
 import { checkKhqrCharge, matchesCharge, testBakongConnection } from '#server/features/orders/khqr-check.service'
+import { claimBakongCheck } from '#server/features/orders/khqr.repository'
 import { createKhqrCharge, getKhqrSettings, saveKhqrSettings } from '#server/features/orders/khqr.service'
 import { counterPayments, khqrCharges, orders } from '#server/features/orders/orders.schema'
 import { placeOrder } from '#server/features/orders/orders.service'
@@ -35,6 +36,8 @@ let owner: Actor
 /** Monday 2026-09-28, local time in Phnom Penh (UTC+7). */
 const monday = (hhmm: string) => new Date(`2026-09-28T${hhmm}:00+07:00`)
 const NOON = monday('12:00')
+/** The counter's rounds: 12:04, then every 5 seconds (each past the 4 s between questions to Bakong). */
+const round = (n: number) => new Date(monday('12:04').getTime() + n * 5_000)
 const allWeek = [1, 2, 3, 4, 5, 6, 7].map(weekday => ({ weekday, startMinute: 420, endMinute: 1260 }))
 
 async function addBranch(name: string) {
@@ -146,8 +149,8 @@ describe('checking a QR with Bakong', () => {
   it('something else arrived (another amount, currency or account): says what, records nothing', async () => {
     const orderId = await place()
     const charge = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:02'))
-    for (const patch of [{ amount: 8 }, { currency: 'KHR', amount: 875 }, { toAccountId: 'someone@aclb' }]) {
-      const result = await checkKhqrCharge(db, cashier, orderId, charge.id, fakeBakong(paid(patch)).client, monday('12:04'))
+    for (const [n, patch] of [{ amount: 8 }, { currency: 'KHR', amount: 875 }, { toAccountId: 'someone@aclb' }].entries()) {
+      const result = await checkKhqrCharge(db, cashier, orderId, charge.id, fakeBakong(paid(patch)).client, round(n))
       expect(result).toEqual({ status: 'mismatch', received: { currency: patch.currency ?? 'USD', amount: patch.amount ?? 8.75, toAccountId: patch.toAccountId ?? 'nukcafe@aclb' } })
     }
     expect(await paymentsOf(orderId)).toHaveLength(0)
@@ -158,8 +161,8 @@ describe('checking a QR with Bakong', () => {
     const orderId = await place()
     const charge = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:02'))
     expect(await checkKhqrCharge(db, cashier, orderId, charge.id, null, monday('12:04'))).toEqual({ status: 'unavailable', problem: 'not_set_up' })
-    for (const problem of ['token', 'refused', 'error'] as const) {
-      const result = await checkKhqrCharge(db, cashier, orderId, charge.id, fakeBakong({ kind: 'unavailable', problem, detail: 'x' }).client, monday('12:04'))
+    for (const [n, problem] of (['token', 'refused', 'error'] as const).entries()) {
+      const result = await checkKhqrCharge(db, cashier, orderId, charge.id, fakeBakong({ kind: 'unavailable', problem, detail: 'x' }).client, round(n))
       expect(result).toEqual({ status: 'unavailable', problem })
     }
     expect(await paymentsOf(orderId)).toHaveLength(0)
@@ -174,9 +177,9 @@ describe('checking a QR with Bakong', () => {
       JSON.stringify({ responseCode: 0, data: { ...data, amount: null } }),
       JSON.stringify({ responseCode: 0, data: { ...data, description: 'x'.repeat(20_000) } }),
     ]
-    for (const body of bodies) {
+    for (const [n, body] of bodies.entries()) {
       const client = bakongClient({ apiUrl: 'https://bakong.test', token: 't', fetch: async () => new Response(body) })
-      expect(await checkKhqrCharge(db, cashier, orderId, charge.id, client, monday('12:04'))).toEqual({ status: 'unavailable', problem: 'error' })
+      expect(await checkKhqrCharge(db, cashier, orderId, charge.id, client, round(n))).toEqual({ status: 'unavailable', problem: 'error' })
     }
     expect(await paymentsOf(orderId)).toHaveLength(0)
     expect(await statusOf(orderId)).toBe('awaiting_payment')
@@ -218,10 +221,11 @@ describe('checking a QR with Bakong', () => {
     expect(await checkKhqrCharge(db, cashier, cancelled, cancelledCharge.id, fakeBakong(paid()).client, monday('12:04'))).toMatchObject({ status: 'refund_needed', order: { status: 'cancelled' } })
   })
 
-  it('two cashiers asking at once: one payment; both see it paid', async () => {
+  it('two cashiers whose questions overlap (Bakong slow): one payment; both see it paid', async () => {
     const orderId = await place()
     const charge = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:02'))
     // Bakong answers both only once both have asked, so both go on to record at the same moment.
+    // Their rounds are 5 s apart, so each has its turn to ask: the recording is what races here.
     let release!: () => void
     const bothAsked = new Promise<void>((resolve) => {
       release = resolve
@@ -233,12 +237,53 @@ describe('checking a QR with Bakong', () => {
       return paid()
     })
     const [first, second] = await Promise.all([
-      checkKhqrCharge(db, cashier, orderId, charge.id, bakong.client, monday('12:04')),
-      checkKhqrCharge(db, colleague, orderId, charge.id, bakong.client, monday('12:04')),
+      checkKhqrCharge(db, cashier, orderId, charge.id, bakong.client, round(0)),
+      checkKhqrCharge(db, colleague, orderId, charge.id, bakong.client, round(1)),
     ])
     expect(first).toMatchObject({ status: 'paid', order: { status: 'preparing' } })
     expect(second).toMatchObject({ status: 'paid', order: { status: 'preparing' } })
     expect(await paymentsOf(orderId)).toHaveLength(1)
+  })
+
+  it('many checks at once of one QR: Bakong is asked once; the others wait and see it paid on their next round (audit S5)', async () => {
+    const orderId = await place()
+    const charge = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:02'))
+    const bakong = fakeBakong(paid())
+    const results = await Promise.all(Array.from({ length: 10 }, (_, i) =>
+      checkKhqrCharge(db, i % 2 ? colleague : cashier, orderId, charge.id, bakong.client, round(0))))
+    expect(bakong.asked).toHaveLength(1)
+    expect(results.filter(result => result.status === 'paid')).toHaveLength(1)
+    expect(results.filter(result => result.status === 'waiting')).toHaveLength(9)
+    expect(await paymentsOf(orderId)).toHaveLength(1)
+    // The next round sees the payment without asking Bakong again.
+    expect(await checkKhqrCharge(db, colleague, orderId, charge.id, bakong.client, round(1))).toMatchObject({ status: 'paid' })
+    expect(bakong.asked).toHaveLength(1)
+  })
+
+  it('asks Bakong again only after 4 seconds, whatever the last answer; another QR has its own turn', async () => {
+    const orderId = await place()
+    const usd = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:02'))
+    const bakong = fakeBakong({ kind: 'unavailable', problem: 'error', detail: 'down' })
+    const at = (ms: number) => new Date(round(0).getTime() + ms)
+    expect(await checkKhqrCharge(db, cashier, orderId, usd.id, bakong.client, at(0))).toEqual({ status: 'unavailable', problem: 'error' })
+    expect(await checkKhqrCharge(db, colleague, orderId, usd.id, bakong.client, at(3_999))).toEqual({ status: 'waiting' })
+    expect(bakong.asked).toHaveLength(1)
+    expect(await checkKhqrCharge(db, colleague, orderId, usd.id, bakong.client, at(4_000))).toEqual({ status: 'unavailable', problem: 'error' })
+    expect(bakong.asked).toHaveLength(2)
+
+    await setExchangeRate(db, owner, { khrPerUsd: 4100 }, monday('11:00'))
+    const khr = await createKhqrCharge(db, cashier, orderId, { currency: 'KHR' }, monday('12:02'))
+    expect(await checkKhqrCharge(db, cashier, orderId, khr.id, bakong.client, at(4_001))).toEqual({ status: 'unavailable', problem: 'error' })
+    expect(bakong.asked).toHaveLength(3)
+  })
+
+  it('the turn is per cafe: the same QR id in another cafe is never touched', async () => {
+    const orderId = await place()
+    const charge = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:02'))
+    expect(await claimBakongCheck(db, 'another-cafe', charge.id, round(1), round(0))).toBe(false)
+    const [row] = await db.select({ until: khqrCharges.bakongCheckUntil }).from(khqrCharges).where(eq(khqrCharges.id, charge.id))
+    expect(row!.until).toBeNull()
+    expect(await claimBakongCheck(db, TEST_TENANT, charge.id, round(1), round(0))).toBe(true)
   })
 
   it('refuses another order\'s QR, and an unknown one', async () => {

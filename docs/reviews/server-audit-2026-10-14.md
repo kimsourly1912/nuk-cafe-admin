@@ -67,6 +67,8 @@ Acceptance: persistent failure/backlog is distinguishable from healthy progress,
 
 ### S5. Each unpaid KHQR check calls Bakong again
 
+_Addressed 2026-10-29 by [D222](../decisions.md#d222-one-question-to-bakong-per-qr-every-4-seconds-2026-10-29) (one question per QR every 4 seconds, across Workers); the text below is the original finding._
+
 Evidence: [khqr-check.service.ts](../../server/features/orders/khqr-check.service.ts), lines 40–48, and [rate-limit.ts](../../server/utils/rate-limit.ts). A still-unpaid charge triggers an upstream call on every authorized request. Public/order-placement limits do not cover this counter route. Several cashiers/tabs can duplicate polling; a staff client can call faster than the UI's five-second interval.
 
 Enforce a server cadence and coalesce by tenant/charge, with a short waiting/unavailable-result lifetime if appropriate. Choose freshness/backoff from payment UX and provider limits. Cross-isolate coordination cannot rely on module-local mutable promises. Preserve matching, atomic payment recording, versions, manual confirmation and refund-needed behavior.

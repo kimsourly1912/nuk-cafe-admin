@@ -11,7 +11,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173, D202–D204; installable app, PWA, manifest, service worker |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166 |
 | Tenancy and permissions | D134–D146, D186–D193; organization, tenant, branch, platform console |
-| Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157 |
+| Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109 |
 | Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212, D214; production, domains, email, bot protection |
@@ -251,3 +251,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D219](decisions.md#d219-index-active-counter-orders-without-caching-their-state-2026-10-27) | Index active counter orders without caching their state, 2026-10-27 |
 | [D220](decisions.md#d220-one-setup-path-per-environment-the-dbseed-task-is-retired-2026-10-27) | One setup path per environment; the db:seed task is retired, 2026-10-27 |
 | [D221](decisions.md#d221-nothing-guesses-a-cafe-the-sites-root-is-the-platforms-2026-10-27) | Nothing guesses a cafe; the site's root is the platform's, 2026-10-27 |
+| [D222](decisions.md#d222-one-question-to-bakong-per-qr-every-4-seconds-2026-10-29) | One question to Bakong per QR every 4 seconds, 2026-10-29 |
