@@ -74,6 +74,7 @@ and how migrations are applied, every import from `drizzle-orm/*`.
 - Better Auth: better-auth.com/docs, github.com/better-auth/better-auth/releases
 - Drizzle: orm.drizzle.team/docs, github.com/drizzle-team/drizzle-orm/releases
 - Anything else: the package's own repo releases and CHANGELOG
+- When the notes don't say whether a fix or change reaches this app: compare the published code, `npm pack <pkg>@<old> <pkg>@<new>` into an empty scratch folder, then `diff -r` and read only (never run it). The `nuxt-4-6-2` run settled its main unknown this way (`docs/upgrades/2026-10-29-nuxt-4-6-2.md`).
 
 ## High-risk areas (always `risk: high`, reviewed first in Phase 5)
 
@@ -96,3 +97,5 @@ and how migrations are applied, every import from `drizzle-orm/*`.
 login, logout, session refresh, expired session, one protected route as an
 unauthorized user, one CRUD flow, one stale edit (expect 409), main dashboard
 pages, one form with validation, dark mode.
+
+For an upgrade that fixes a security advisory, also probe the built server (`pnpm build`, `node .output/server/index.mjs`) for the advisory's case before the bump and again after it: the before result proves the gap applied here, and the after result shows that only the expected paths changed.
