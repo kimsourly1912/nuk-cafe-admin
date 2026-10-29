@@ -79,6 +79,8 @@ Acceptance: current search/role/branch/count/pagination behavior and two-cafe is
 
 ## N6. One customer ready message reads all cafes
 
+_Addressed 2026-10-29 on branch `claude/laughing-fermat-cu04no` ([progress](../progress.md#ready-message-reads-only-its-cafe-audit-n6-2026-10-29)); the text below is the original finding._
+
 Both code redemption and [ready delivery](../../server/features/notifications/notifications.customers.ts#L119) call `activeTenants()` and find the named cafe in JavaScript. [findActiveTenants](../../server/features/identity/identity.repository.ts#L36) selects all organization rows, sorts and filters activity in JavaScript. The overlap probe captured two organization queries without a WHERE clause for two messages about the same cafe.
 
 Replace enumeration with a lookup for the known tenant ID that also preserves the active/suspended rule. The existing public `tenantById` lookup returns identity without checking status, so substituting it without a status check would change behavior. Cafe identity can be read in the alert query or through an explicit active-tenant helper.
