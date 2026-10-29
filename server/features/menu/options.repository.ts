@@ -36,7 +36,8 @@ const setValue = alias(menuOptionValues, 'set_value')
 
 /**
  * An item of any status uses the outer query's set, or an item version uses one of its values
- * (`menu_item_option_sets_set_fk` and `menu_variation_option_values_value_fk` restrict).
+ * (`menu_item_option_sets_set_fk` and `menu_variation_option_values_value_fk` restrict). Uses
+ * `menu_item_option_sets_set_idx` and `menu_variation_option_values_value_idx`.
  */
 const setInUse = (db: Db) => sql`(${exists(db.select({ one: sql`1` }).from(menuItemOptionSets)
   .where(and(eq(menuItemOptionSets.tenantId, menuOptionSets.tenantId), eq(menuItemOptionSets.setId, menuOptionSets.id))))} or ${exists(db.select({ one: sql`1` }).from(menuVariationOptionValues)
