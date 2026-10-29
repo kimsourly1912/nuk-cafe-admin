@@ -17,7 +17,7 @@ A patch release with no breaking changes, deprecations, codemods or required con
 - done when: the before-table is in HANDOFF.
 
 ### S2 — Bump nuxt to 4.6.2 and vue to 3.5.44
-- status: todo
+- status: done
 - covers: C1–C15 (all arrive with the bump)
 - executor: sonnet
 - risk: high (framework runtime: route rules/auth gates C1, server bundle C7)

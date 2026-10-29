@@ -80,8 +80,12 @@ S1 (ac67917): probe of the 4.6.1 production node build (`E2E_HUB_DIR=.data/upgra
 | `/api/me/cafes` (no session) | 401 | yes | DENY | `no-store` |
 | `/API/ME/cafes` | 404 | yes | DENY | `no-cache` |
 
+S2 (pending hash): `pnpm add nuxt@4.6.2 vue@3.5.44`, then the ranges set back to the repo's caret style (`^4.6.2`, `^3.5.44`; pnpm 12 saved exact). Lockfile: one `nuxt@4.6.2`, one `vue@3.5.44`, no 4.6.1/3.5.43 left; no direct dependency changed. Nuxt's own tree moved too: `@nuxt/devtools` 3.4.2 → 3.4.4 (no longer uses `simple-git`), `@vitejs/plugin-vue` 6.0.9 → 6.0.10, `diff` 8 → 9, `image-meta` 0.2 → 0.3, `ws` added. `bash scripts/upgrade-verify.sh S2` = baseline (typecheck, lint, test:unit 2104 passed/1 skipped, build on "Nuxt 4.6.2 with Nitro 2.13.4, Vite 8.3.4 and Vue 3.5.44"). `pnpm audit --audit-level high` passes; `--prod` advisories 8 → 5: all three nuxt/@nuxt/nitro-server ones gone (route rules, server-island `useHeadSafe`). Follow-up (not in scope): the four `simple-git` audit exemptions in `pnpm-workspace.yaml` (D54) are no longer needed.
+
 ## Blocked
 
 ## Plan issues
 
 ## Manual tests to do
+
+From S2 (risk: high), on staging after merge: the profile's smoke test (login, logout, session refresh, expired session, a protected route without a session, one CRUD flow, one stale edit → 409, dashboard pages, one form's validation, dark mode); `https://staging.angder.app/TABLE/<any>` answers with `cache-control: no-store, no-transform`; the customer menu `/c/<slug>` loads server-rendered; a deep link like `/c/<slug>/admin/products` opens after sign-in; the counter queue's reorder motion.
