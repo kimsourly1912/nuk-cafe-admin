@@ -10,8 +10,8 @@ Branch: ccr-ef1e4d51-15633w (this cloud session may push only to its own branch,
 Package manager: pnpm 12.15.0
 Started: 2026-10-29
 
-Current phase: 2 done (waiting for review)
-Next: /upgrade-3-plan (new OPUS session)
+Current phase: 3 done (approved)
+Next: /upgrade-4-execute S1-S4 (Sonnet; this Opus session continues, owner's choice)
 
 ## Why
 
@@ -61,6 +61,7 @@ No installed module declares a nuxt peer range that excludes 4.6.2.
 ## Decisions
 
 Q1: target 4.6.2 (owner's request, the advisory's fixed version, 13 days old) or 4.6.3 (released 2026-10-27, 2 days old)? — **4.6.2** (owner approved the recommendation; 4.6.3 later in its own small run) — decided on 2026-10-29
+Q2: review of breaking-changes.md and approval of plan.md — the owner delegated both ("I rely on you to help me decide and continue with what you think it should go"); plan approved as written (S1–S4), no open questions — decided on 2026-10-29
 
 ## Done
 
