@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Session check not rate limited (2026-10-29)
+
+Second step of the 2026-10-29 review (after audit S6). In production Better Auth counts every `/api/auth/**` request in the `rate_limit` table (`storage: 'database'`), so the browser's `GET /api/auth/get-session`, made on every page load (`useCustomerAccount`), cost a D1 read and write per visit. It also fell under Better Auth's default 100 per 10 s per address: a busy cafe's shared Wi-Fi could have its session checks refused (429). `customRules` now has `'/get-session': false` (Better Auth 1.7.7 skips the limiter for a rule that is `false`). Sign-in, sign-up, reset, verification, change-password, guest and two-step limits unchanged. No migration, contract or UI change.
+
+- **Tests:** `identity.auth.test.ts` → rate limits, with Better Auth's limiting turned on: 105 session checks from one address all answer 200 and leave no `rate_limit` row; the sixth sign-in in a minute is still 429.
+- **Evidence (2026-10-29, local Linux, Node 22.22 / pnpm 12.15.0; package.json asks for Node 24):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 150 files, 2062 passed, 1 skipped (on main `0eff442`). Guard removed (the rule deleted): the session test fails, the 101st check answering 429.
+
 ## Bakong answers checked before use (audit S6, 2026-10-29)
 
 [Audit S6](reviews/server-audit-2026-10-14.md#s6-bakong-response-parsing-has-no-byte-cap), still open on main `6e5c262`: `checkByMd5` read Bakong's whole body with `response.json()` and cast it. A "paid" answer whose `toAccountId` wasn't text counted as paid, then `matchesCharge` threw (`trim is not a function`), so the counter's check answered 500 instead of "unavailable"; a paid answer without `externalRef` or `hash` was recorded with an empty reference. Branch `claude/laughing-fermat-cu04no`. No migration, no contract or write change.
