@@ -48,7 +48,8 @@ export default defineConfig({
         resolve: { alias },
         test: {
           name: 'unit',
-          include: ['test/unit/**/*.test.ts', 'app/features/*/tests/**/*.test.ts'],
+          // ops/*: small Workers deployed beside the app, such as the watchdog (D224).
+          include: ['test/unit/**/*.test.ts', 'app/features/*/tests/**/*.test.ts', 'ops/*/tests/**/*.test.ts'],
           exclude: ['**/*.nuxt.test.ts'],
           environment: 'node',
         },

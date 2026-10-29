@@ -27,7 +27,7 @@
     "test:changed": "vitest run --project unit --project server --changed origin/main",
     "test:fast": "vitest run --project unit --project server --tags-filter=!slow",
     "test:e2e": "vitest run --project e2e",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck && tsc -p ops/watchdog"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.68",
