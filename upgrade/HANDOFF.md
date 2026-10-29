@@ -10,8 +10,8 @@ Branch: ccr-ef1e4d51-15633w (this cloud session may push only to its own branch,
 Package manager: pnpm 12.15.0
 Started: 2026-10-29
 
-Current phase: 4 done (S1–S4)
-Next: /upgrade-5-review (Opus; optional for a patch run, see README "Small upgrade"), then /upgrade-6-finish
+Current phase: 5 done
+Next: manual test, then /upgrade-6-finish (no Critical/Important findings; I1–I3 are follow-ups, I3 in phase 6)
 
 ## Why
 
