@@ -1,5 +1,5 @@
 import { INITIAL_STATE, runCheck } from './watchdog'
-import type { WatchEnv, WatchState } from './watchdog'
+import type { CheckReport, WatchEnv, WatchState } from './watchdog'
 
 /**
  * The watchdog Worker (D224), deployed separately from the app as `angder-watchdog`: a Cron Trigger
@@ -36,19 +36,28 @@ export class Watchdog {
     this.env = env
   }
 
-  /** One check. Runs are a minute apart and take at most about 40 s, so they never overlap. */
+  /** One check, answering its report. Runs are a minute apart and take at most about 40 s, so they never overlap. */
   async fetch(): Promise<Response> {
     const before = await this.state.storage.get<WatchState>('state') ?? INITIAL_STATE
-    const after = await runCheck({ state: before, env: this.env, now: Date.now(), version: this.env.VERSION.id, fetch })
-    await this.state.storage.put('state', after)
-    return new Response(null, { status: 204 })
+    const { state, report } = await runCheck({ state: before, env: this.env, now: Date.now(), version: this.env.VERSION.id, fetch })
+    await this.state.storage.put('state', state)
+    return Response.json(report)
   }
 }
 
 export default {
+  /** Logs one line per check (Workers & Pages → angder-watchdog → Observability): what it found and what Telegram did. */
   async scheduled(_controller: unknown, env: Env): Promise<void> {
     const watchdog = env.WATCHDOG.get(env.WATCHDOG.idFromName('production'))
-    await watchdog.fetch('https://watchdog/check', { method: 'POST' })
+    const response = await watchdog.fetch('https://watchdog/check', { method: 'POST' })
+    if (!response.ok) {
+      console.error('Watchdog: the check failed', { status: response.status, error: (await response.text()).slice(0, 500) })
+      return
+    }
+    const report = await response.json() as CheckReport
+    const line = report.secrets ? 'Watchdog: checked' : 'Watchdog: OPS_TELEGRAM_BOT_TOKEN or OPS_TELEGRAM_CHAT_ID is not set; nothing checked'
+    const failed = !report.secrets || report.messages.some(message => message.result !== 'sent')
+    console[failed ? 'warn' : 'log'](line, report)
   },
   fetch: (): Response => new Response('Not found', { status: 404 }),
 }

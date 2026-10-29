@@ -339,7 +339,16 @@ Q24's alert part, answered by the owner (2026-10-29): the owner alone receives t
    - **Budget alerts** (Manage Account → Billing → Billable Usage): keep the default one Cloudflare may have created and add one at $25. Budget alerts are daily and informational: they never cap usage.
    - **Monitors** (Beta): **Create a Monitor → Threshold**. If a Workers dataset is listed for the account: production script `nuk-cafe-production`, HTTP status ≥ 500, count over 15 minutes, alert at **10 or more**, email. If no Workers dataset is listed, skip it and record that here; the fallback is a platform-level server-error alert from the app to the ops chat (a code change).
 
-**Check it's alive:** the Monday message. Its logs: Workers & Pages → `angder-watchdog` → Logs ("Watchdog: health check failed" with the reason; "Telegram refused the message" with the status, never the token).
+**Check it's alive:** the Monday message. **Its logs:** Workers & Pages → `angder-watchdog` → Observability: one line per minute, **Watchdog: checked** (a warning when a message didn't go through), never the token or the chat id:
+
+| In the line | Meaning |
+|---|---|
+| `health: 'ok'`, `healthMs: 120` | Production answered healthy in 120 ms; otherwise the reason (`it answered HTTP 503`, `it did not answer within 10 seconds`) |
+| `messages: []` | Nothing to say this minute (normal) |
+| `result: 'sent'` | Telegram took the message |
+| `result: 'refused 400: Bad Request: chat not found'` | Wrong chat id (the group became a supergroup: new id from getUpdates) — `401`: wrong token — `403`: the bot was removed from the group. Update the secret, run **Deploy watchdog** |
+| `result: 'no answer (TimeoutError)'`, `ms: 10000` | Telegram didn't answer within 10 seconds; it's retried next minute |
+| "OPS_TELEGRAM_BOT_TOKEN or OPS_TELEGRAM_CHAT_ID is not set" | The secrets didn't reach it: run **Deploy watchdog** again |
 
 #### When an alert arrives
 
