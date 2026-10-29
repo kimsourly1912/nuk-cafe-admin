@@ -252,3 +252,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D220](decisions.md#d220-one-setup-path-per-environment-the-dbseed-task-is-retired-2026-10-27) | One setup path per environment; the db:seed task is retired, 2026-10-27 |
 | [D221](decisions.md#d221-nothing-guesses-a-cafe-the-sites-root-is-the-platforms-2026-10-27) | Nothing guesses a cafe; the site's root is the platform's, 2026-10-27 |
 | [D222](decisions.md#d222-one-question-to-bakong-per-qr-every-4-seconds-2026-10-29) | One question to Bakong per QR every 4 seconds, 2026-10-29 |
+| [D223](decisions.md#d223-platform-alerts-one-down-and-one-recovered-message-to-a-private-ops-chat-2026-10-29) | Platform alerts: one DOWN and one RECOVERED message to a private ops chat, 2026-10-29 |
