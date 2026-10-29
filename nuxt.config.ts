@@ -248,6 +248,10 @@ export default defineNuxtConfig({
     },
   },
   css: ['@/assets/css/tailwind.css'],
+  // Page addresses match their exact case (D226): `/C/nuk` is a 404, not the menu. The cafe check
+  // (server/middleware/31.cafe-pages.ts), splitTenantUrl and the route rules all read lowercase
+  // paths; a router that also opened other spellings let them skip those checks.
+  router: { options: { sensitive: true } },
   // Light unless the person picks dark with the color-mode button (D96): the system setting is
   // ignored. The choice is kept in this browser (localStorage `nuxt-color-mode`) and applied before
   // the first paint by the color-mode script, on server-rendered and browser-only pages alike.

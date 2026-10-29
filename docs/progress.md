@@ -2,6 +2,14 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Page addresses match their exact case (D226, 2026-10-29)
+
+Branch `ccr-c6503e1b-4fiibm`. Follow-up from the Nuxt 4.6.2 run: the router opened `/C/<slug>` while the cafe check (`31.cafe-pages.ts`) reads `/c/` only. Probe on the built server before the change: `/C/nowhere` 200 (an empty cafe shell, not 404 "Cafe not found"), the paused `/C/quiet-corner` 200 with the cafe's name (not 403 "Ordering is paused"), `/C/nuk` and `/C/nuk/admin` 200; `/c/NUK` already 404. Cafe APIs unaffected (case-sensitive, `requireTenant`). [Decision](decisions.md#d226-page-addresses-match-their-exact-case-2026-10-29).
+
+- **Change:** `router: { options: { sensitive: true } }` in `nuxt.config.ts` (Nuxt applies it to Vue Router, route rules and early 404s). No migration, contract or UI change.
+- **Evidence (2026-10-29, local Linux, Node 22.22 / pnpm 12.15.0, Playwright's Chromium):** new e2e `cafes.test.ts` → "page addresses match their exact case" failed before the change (`/C/nuk: expected 200 to be 404`) and passes after it; `cafes.test.ts` 17/17. `pnpm lint`, `pnpm typecheck`, `pnpm audit --audit-level high` clean; `pnpm test:unit` 153 files, 2104 passed, 1 skipped (= baseline). Full local e2e: running at commit time; result recorded in the next commit.
+- **Owner, after merge (staging):** the 4.6.2 smoke check `curl -sI https://staging.angder.app/TABLE/x` now expects **404**, not the token page's header.
+
 ## Current-state refreshed (2026-10-29)
 
 Docs only. [Current-state](current-state.md) listed about fifteen items as "Active, awaiting review" that were already merged. Checked against GitHub (no PR open, main `2721713` CI green) and the source: it now separates owner tasks, open code follow-ups, audit status and recently merged work. Found while checking: PR #196 (customer order index) and PR #119 (unique membership per person and cafe) were closed unmerged and their changes are not on main; audit S1–S8 and N1–N8 are fixed in the code, N9 partly. No code change.

@@ -79,6 +79,26 @@ describe('each cafe at its own address', () => {
     await page.close()
   })
 
+  it('page addresses match their exact case, so no check is skipped by changing it (D226)', async () => {
+    // The cafe check (server/middleware/31.cafe-pages.ts) and the browser's splitTenantUrl read
+    // `/c/` in lowercase; the router must not open a cafe's page under any other spelling.
+    for (const path of ['/C/nuk', '/C/nowhere', '/C/quiet-corner', '/C/nuk/admin', '/TABLE/x']) {
+      const response = await fetch(url(path), { redirect: 'manual' })
+      expect(response.status, path).toBe(404)
+      // Before D226, `/C/quiet-corner` rendered the paused cafe by name with 200 instead of its 403 page.
+      expect(await response.text(), path).not.toContain('Quiet Corner')
+    }
+    // A slug is lowercase only (slugSchema), so another spelling names no cafe.
+    expect((await fetch(url('/c/NUK'))).status).toBe(404)
+    expect((await fetch(url('/c/nuk'))).status).toBe(200)
+
+    const page = await createPage()
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
+    const matched = await page.evaluate(() => (document.querySelector('#__nuxt') as unknown as { __vue_app__: { config: { globalProperties: { $router: { resolve: (to: string) => { matched: unknown[] } } } } } }).__vue_app__.config.globalProperties.$router.resolve('/C/nuk/admin').matched.length)
+    expect(matched).toBe(0)
+    await page.close()
+  })
+
   it('an address a cafe had before redirects to its current one (D142)', async () => {
     const client = e2eDatabase(seed.dbFile)
     try {
