@@ -254,3 +254,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D222](decisions.md#d222-one-question-to-bakong-per-qr-every-4-seconds-2026-10-29) | One question to Bakong per QR every 4 seconds, 2026-10-29 |
 | [D223](decisions.md#d223-platform-alerts-one-down-and-one-recovered-message-to-a-private-ops-chat-2026-10-29) | Platform alerts: one DOWN and one RECOVERED message to a private ops chat, 2026-10-29 |
 | [D224](decisions.md#d224-the-alarm-is-a-watchdog-worker-not-a-github-schedule-2026-10-29) | The alarm is a watchdog Worker, not a GitHub schedule, 2026-10-29 |
+| [D225](decisions.md#d225-nightly-encrypted-backups-in-a-separate-cloudflare-account-2026-10-29) | Nightly encrypted backups in a separate Cloudflare account, 2026-10-29 |

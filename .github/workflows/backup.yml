@@ -1,0 +1,85 @@
+# Deploys the nightly backup (D225, ops/backup): a separate Worker whose Workflow exports production's
+# D1 database every night, encrypts it for the owner's age key and stores it in the backup account's
+# R2 bucket. By hand only (Actions → Deploy backup → Run workflow, on main), when ops/backup changes,
+# a secret changes, or to take a backup now; the `production` environment's reviewer approves it.
+# Every run ends with a test backup that reports to the Angder Ops chat: that message is the proof.
+name: Deploy backup
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-backup
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read the project's Node.js requirement
+        id: node
+        run: |
+          version=$(jq -er '.engines.node' package.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install pnpm, Node.js and dependencies
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        with:
+          runtime: node@${{ steps.node.outputs.version }}
+          cache: true
+
+      # Before deploying: without them every night would fail.
+      - name: Check the backup's secrets are set
+        env:
+          BACKUP_D1_EXPORT_TOKEN: ${{ secrets.BACKUP_D1_EXPORT_TOKEN }}
+          BACKUP_R2_ENDPOINT: ${{ secrets.BACKUP_R2_ENDPOINT }}
+          BACKUP_R2_ACCESS_KEY_ID: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID }}
+          BACKUP_R2_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY }}
+          BACKUP_AGE_RECIPIENTS: ${{ secrets.BACKUP_AGE_RECIPIENTS }}
+          OPS_TELEGRAM_BOT_TOKEN: ${{ secrets.OPS_TELEGRAM_BOT_TOKEN }}
+          OPS_TELEGRAM_CHAT_ID: ${{ secrets.OPS_TELEGRAM_CHAT_ID }}
+        run: |
+          missing=""
+          for name in CLOUDFLARE_ACCOUNT_ID BACKUP_D1_EXPORT_TOKEN BACKUP_R2_ENDPOINT BACKUP_R2_ACCESS_KEY_ID BACKUP_R2_SECRET_ACCESS_KEY BACKUP_AGE_RECIPIENTS OPS_TELEGRAM_BOT_TOKEN OPS_TELEGRAM_CHAT_ID; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Add the repository secrets$missing first (docs/server/operations.md → Backups and restore → Setting it up)."
+            exit 1
+          fi
+
+      - name: Deploy the backup Worker
+        run: pnpm exec wrangler deploy --config ops/backup/wrangler.jsonc
+
+      # Read from stdin, never written to a file or the log.
+      - name: Give the backup its secrets
+        env:
+          BACKUP_D1_EXPORT_TOKEN: ${{ secrets.BACKUP_D1_EXPORT_TOKEN }}
+          BACKUP_R2_ENDPOINT: ${{ secrets.BACKUP_R2_ENDPOINT }}
+          BACKUP_R2_ACCESS_KEY_ID: ${{ secrets.BACKUP_R2_ACCESS_KEY_ID }}
+          BACKUP_R2_SECRET_ACCESS_KEY: ${{ secrets.BACKUP_R2_SECRET_ACCESS_KEY }}
+          BACKUP_AGE_RECIPIENTS: ${{ secrets.BACKUP_AGE_RECIPIENTS }}
+          OPS_TELEGRAM_BOT_TOKEN: ${{ secrets.OPS_TELEGRAM_BOT_TOKEN }}
+          OPS_TELEGRAM_CHAT_ID: ${{ secrets.OPS_TELEGRAM_CHAT_ID }}
+        run: |
+          set -eu
+          jq -n \
+            --arg account "$CLOUDFLARE_ACCOUNT_ID" --arg d1 "$BACKUP_D1_EXPORT_TOKEN" \
+            --arg endpoint "$BACKUP_R2_ENDPOINT" --arg keyId "$BACKUP_R2_ACCESS_KEY_ID" --arg key "$BACKUP_R2_SECRET_ACCESS_KEY" \
+            --arg age "$BACKUP_AGE_RECIPIENTS" --arg bot "$OPS_TELEGRAM_BOT_TOKEN" --arg chat "$OPS_TELEGRAM_CHAT_ID" \
+            '{D1_ACCOUNT_ID: $account, D1_EXPORT_TOKEN: $d1, BACKUP_R2_ENDPOINT: $endpoint, BACKUP_R2_ACCESS_KEY_ID: $keyId,
+              BACKUP_R2_SECRET_ACCESS_KEY: $key, BACKUP_AGE_RECIPIENTS: $age, OPS_TELEGRAM_BOT_TOKEN: $bot, OPS_TELEGRAM_CHAT_ID: $chat}' \
+            | pnpm exec wrangler secret bulk --config ops/backup/wrangler.jsonc
+
+      # A backup now, which reports to the ops chat either way: "stored" (or "already there" if
+      # tonight's copy exists) is the proof that export, encryption, the backup bucket and the chat work.
+      - name: Take a test backup
+        run: pnpm exec wrangler workflows trigger angder-backup '{"report":true}' --config ops/backup/wrangler.jsonc
