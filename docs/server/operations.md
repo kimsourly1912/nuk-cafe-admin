@@ -302,7 +302,7 @@ Both environment builds keep Workers Logs enabled and set `observability.redact_
 - **Browser errors** (D149): an error nobody caught in a customer's, cashier's or admin's browser is posted to `/api/client-errors` and logged as **"Browser error"** with the page (no query), the build id, the message and stack and the browser. Search Workers Logs for that message; the build id tells whether it started with a deploy. Not sent to Telegram (the text comes from the browser).
 - **After a deploy**, open tabs of the admin, the counter and the platform console say "A new version of the app is ready" within about 5 minutes (D149); to check it on staging, keep a tab open across a deploy.
 - **Server error alerts on Telegram** (step 10.4, D119): Admin → Telegram → Notifications → **Server errors**, per chat. Every unexpected failure (a 500 on `/api/**`) queues an alert with the route, the status and the request id (never the error's text: it stays in Workers Logs, found by the request id); at most one per route and chat every 15 minutes; sent by `notifications:deliver` within a minute. Not covered: a failure the Worker can't answer at all (it never reaches the handler). Scheduled tasks have their own alert since D150.
-- **Platform alerts** (D223): who is told when production breaks, and what to do: [Alerts](#alerts-d223).
+- **Platform alerts** (D223, D224): who is told when production breaks, and what to do: [Alerts](#alerts-d223-d224).
 
 ### Independent platform health (D168)
 
@@ -311,30 +311,35 @@ Both environment builds keep Workers Logs enabled and set `observability.redact_
 
 **On in production since D221's follow-up (2026-10-27):** both ages; a red run of the health workflow means the database, generation or delivery is stuck. Enable `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS` after the notification cron is running to detect missing/stale useful generation success (D169), as well as a database outage. Configure `NUXT_MAINTENANCE_DELIVERY_MAX_AGE_SECONDS` separately to detect overdue pending outbox/notification work; generation success alone does not prove delivery. Defaults preserve database-only health. Test total generation failure, dispatcher backlog and database outage before enabling production traffic. Worker exception alerts and a platform-owned operational destination still require Cloudflare/account configuration under Q24; the app's existing tenant Telegram alerts remain supplemental.
 
-### Alerts (D223)
+### Alerts (D223, D224)
 
-Q24's alert part, answered by the owner (2026-10-29): the owner alone receives them for now (add a second person to the chat when there is one); a private Telegram group **Angder Ops** with its own small bot, never `@angders_bot` (a leaked ops token can only post alerts); email as the backup; always sent (silence the phone at night: cafes are closed). Data loss/downtime targets (RPO/RTO) and retention stay open in Q24.
+Q24's alert part, answered by the owner (2026-10-29): the owner alone receives them for now (add a second person to the chat when there is one); a private Telegram group **Angder Ops** with its own small bot, never `@angders_bot` (a leaked ops token can only post alerts); email as the backup; always sent (silence the phone at night: cafes are closed). Nothing here may depend on the repository being public (D224). Data loss/downtime targets (RPO/RTO) and retention stay open in Q24.
 
 | Level | What | Where it comes from | Channel | Look within |
 |---|---|---|---|---|
-| Critical | Production down: `/api/health` fails (the Worker, D1, stuck jobs or deliveries) | [Platform health](#independent-platform-health-d168), every 5 minutes from GitHub, outside Cloudflare | Telegram **Angder Ops** (one DOWN message, one RECOVERED message) + GitHub's failed-run email | 15–30 minutes in cafe hours |
+| Critical | Production down: `/api/health` fails (the Worker, D1, stuck jobs or deliveries) | The **watchdog** Worker `angder-watchdog`, every minute (below) | Telegram **Angder Ops**: one DOWN, one RECOVERED | 15–30 minutes in cafe hours |
+| Critical | All of Cloudflare down (the watchdog with it) | **cloudflarestatus.com** subscription, sent from outside Cloudflare | Email | When it arrives |
 | Warning | Server errors rising while health is OK | Cloudflare **Monitor** (Beta) on production 5xx, when the account's datasets allow it (below) | Email | The same day |
-| Warning | Cloudflare itself has an incident | Cloudflare **Incident Alerts** | Email | The same day (nothing of ours to fix: check before debugging) |
+| Warning | Cloudflare has an incident in a product we use | Cloudflare **Incident Alerts** | Email | The same day (nothing of ours to fix: check before debugging) |
 | Info | Usage spend crosses a threshold | Cloudflare **Budget alerts** | Email | This week |
+| Info | The watchdog is alive | The watchdog's **weekly** message, Mondays 09:00 Cambodia time | Telegram | No Monday message: the watchdog itself is broken |
 
-**How the Telegram alert works:** a scheduled run compares its health with the previous finished scheduled run (`actions: read`): healthy → failed sends **DOWN**, failed → healthy sends **RECOVERED**, no change sends nothing (an outage is one message, not one every 5 minutes). Manual runs never alert, except **test_alert**. Without the two secrets the run warns and sends nothing. A failed send doesn't change the run's result (the next run compares health, not alerts); it isn't retried, so GitHub's email stays the backup. GitHub can delay scheduled runs: expect about 5–15 minutes from failure to message.
+**The watchdog** (`ops/watchdog`, D224) is a separate Worker with no database, no app code and no public address, so it keeps running when the app breaks. A Cron Trigger every minute asks one Durable Object to check `https://angder.app/api/health` (HTTP 200 with `{"status":"ok"}`, 10-second timeout). Two failed checks in a row send **DOWN** with the reason (one failure is a blip and says nothing); the first good check after that sends **RECOVERED** with how long it lasted; nothing is sent while nothing changes. A message Telegram doesn't take is sent again a minute later: the state only moves on once the chat has been told. It also says **"Watchdog started"** after every deploy (the delivery test) and sends the weekly message. The Durable Object keeps the up/down state, because cron runs land in different Cloudflare locations and KV could hand the next run an old state. Cost: included in Workers Paid (about 43,000 checks a month against 10 million requests and 1 million Durable Object requests included). It runs on Cloudflare, so a Cloudflare-wide outage silences it: that is the status page subscription's job.
 
-#### Setting it up (owner, about 30 minutes)
+**The GitHub check** ([Platform health](#independent-platform-health-d168)) stays as a free second opinion from outside Cloudflare while the repository is public; a red run only sends GitHub's email. If the repository becomes private (each run would then use paid minutes), pause it: repository variable `PLATFORM_HEALTH_ENABLED` = `false`. GitHub also disables scheduled workflows in a public repository after 60 days without activity: Actions shows a banner; Enable to restart it.
 
-1. **The ops bot:** in Telegram, open **@BotFather** → `/newbot` → name "Angder Ops", a username ending in `bot`. Copy the token it gives; it goes only into GitHub's secrets, never into the repository, a chat or a document. If it ever leaks: @BotFather → `/revoke`, then replace the secret.
-2. **The chat:** create a private group **Angder Ops**, add the bot, and send `/start@<the bot's username>` in it. Open `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser and copy the group's `"chat":{"id":…}` (a negative number such as `-100…`).
-3. **GitHub:** repository → Settings → Secrets and variables → Actions → **New repository secret**: `OPS_TELEGRAM_BOT_TOKEN` (the token) and `OPS_TELEGRAM_CHAT_ID` (the id).
-4. **Test it:** Actions → **Platform health** → Run workflow → tick **test_alert** → Run. The group gets "Test alert from Angder's platform health check". No message: open the run's alert step (a warning says which secret is missing; an error from Telegram means a wrong token or id).
-5. **GitHub's email backup:** GitHub emails a failed scheduled run to the person who created the workflow, or who last changed its `cron` line, or who last re-enabled it ([GitHub: notifications for workflow runs](https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs)). If that isn't you, re-enable the workflow yourself once (Actions → Platform health → … → Disable, then Enable). Check Settings → Notifications → Actions (email, failed workflows only).
-6. **Cloudflare** (Observability → Alerts; email destination is your account email):
+#### Setting it up (owner)
+
+1. **The ops bot and group** (done 2026-10-29, D223): @BotFather → `/newbot`; a private group **Angder Ops** with the bot; the group's chat id from `https://api.telegram.org/bot<TOKEN>/getUpdates`. If the token ever leaks: @BotFather → `/revoke`, then update the GitHub secret and run **Deploy watchdog** again.
+2. **Repository secrets** (done): Settings → Secrets and variables → Actions → **Repository secrets** (not an environment's): `OPS_TELEGRAM_BOT_TOKEN`, `OPS_TELEGRAM_CHAT_ID`.
+3. **Deploy the watchdog:** Actions → **Deploy watchdog** → Run workflow (branch `main`) → approve the `production` environment → within about a minute **Angder Ops** gets "Watchdog started: checking angder.app every minute…". That message is the test. Run it again whenever `ops/watchdog` changes, the secrets change, or you want to re-check delivery; a deploy takes about a minute of GitHub Actions time.
+4. **Cloudflare status by email:** `https://www.cloudflarestatus.com` → **Subscribe to updates** → email; choose Workers, D1, R2 and DNS if it asks for components.
+5. **Cloudflare alerts** (Observability → Alerts; email destination is your account email):
    - **Platform Notifications → Incident Alerts**: add, filter to Workers, D1, R2 and DNS.
    - **Budget alerts** (Manage Account → Billing → Billable Usage): keep the default one Cloudflare may have created and add one at $25. Budget alerts are daily and informational: they never cap usage.
    - **Monitors** (Beta): **Create a Monitor → Threshold**. If a Workers dataset is listed for the account: production script `nuk-cafe-production`, HTTP status ≥ 500, count over 15 minutes, alert at **10 or more**, email. If no Workers dataset is listed, skip it and record that here; the fallback is a platform-level server-error alert from the app to the ops chat (a code change).
+
+**Check it's alive:** the Monday message. Its logs: Workers & Pages → `angder-watchdog` → Logs ("Watchdog: health check failed" with the reason; "Telegram refused the message" with the status, never the token).
 
 #### When an alert arrives
 

@@ -1,0 +1,17 @@
+// The production watchdog (D224, docs/server/operations.md → Alerts). Deployed by hand with the
+// "Deploy watchdog" workflow; its secrets OPS_TELEGRAM_BOT_TOKEN and OPS_TELEGRAM_CHAT_ID come from
+// the repository's secrets in that workflow. No route, no public address: only the Cron Trigger.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "angder-watchdog",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-07-15",
+  "workers_dev": false,
+  "preview_urls": false,
+  "triggers": { "crons": ["* * * * *"] },
+  "durable_objects": { "bindings": [{ "name": "WATCHDOG", "class_name": "Watchdog" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Watchdog"] }],
+  "version_metadata": { "binding": "VERSION" },
+  "vars": { "HEALTH_URL": "https://angder.app/api/health" },
+  "observability": { "enabled": true }
+}

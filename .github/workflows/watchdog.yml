@@ -1,0 +1,62 @@
+# Deploys the production watchdog (D224, ops/watchdog): a separate Worker that checks angder.app every
+# minute and tells the Angder Ops Telegram chat when it goes down and recovers. By hand only
+# (Actions → Deploy watchdog → Run workflow, on main), when ops/watchdog changes or to send its
+# "started" message again; the `production` environment's reviewer approves it.
+name: Deploy watchdog
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-watchdog
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read the project's Node.js requirement
+        id: node
+        run: |
+          version=$(jq -er '.engines.node' package.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install pnpm, Node.js and dependencies
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        with:
+          runtime: node@${{ steps.node.outputs.version }}
+          cache: true
+
+      # Before deploying: without them the watchdog would run and say nothing.
+      - name: Check the ops chat's secrets are set
+        env:
+          OPS_TELEGRAM_BOT_TOKEN: ${{ secrets.OPS_TELEGRAM_BOT_TOKEN }}
+          OPS_TELEGRAM_CHAT_ID: ${{ secrets.OPS_TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$OPS_TELEGRAM_BOT_TOKEN" ] || [ -z "$OPS_TELEGRAM_CHAT_ID" ]; then
+            echo '::error::Add the repository secrets OPS_TELEGRAM_BOT_TOKEN and OPS_TELEGRAM_CHAT_ID first (docs/server/operations.md → Alerts).'
+            exit 1
+          fi
+
+      - name: Deploy the watchdog Worker
+        run: pnpm exec wrangler deploy --config ops/watchdog/wrangler.jsonc
+
+      # Read from stdin, never written to a file or the log. Saving them makes a new version, so
+      # the watchdog says "started" in the chat within a minute: the proof that alerts arrive.
+      - name: Give the watchdog the ops chat's bot token and chat id
+        env:
+          OPS_TELEGRAM_BOT_TOKEN: ${{ secrets.OPS_TELEGRAM_BOT_TOKEN }}
+          OPS_TELEGRAM_CHAT_ID: ${{ secrets.OPS_TELEGRAM_CHAT_ID }}
+        run: |
+          set -eu
+          jq -n --arg token "$OPS_TELEGRAM_BOT_TOKEN" --arg chat "$OPS_TELEGRAM_CHAT_ID" \
+            '{OPS_TELEGRAM_BOT_TOKEN: $token, OPS_TELEGRAM_CHAT_ID: $chat}' \
+            | pnpm exec wrangler secret bulk --config ops/watchdog/wrangler.jsonc

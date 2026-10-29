@@ -1,5 +1,6 @@
 # Independent of the Worker, D1, and Telegram. Production by default; false explicitly pauses it.
-# A scheduled run that turns red or green again tells the ops Telegram chat (D223).
+# A second opinion from outside Cloudflare, free while the repository is public: a failed run only
+# emails GitHub's notification. The Telegram alarm is the watchdog Worker (D224, ops/watchdog).
 name: Platform health
 on:
   schedule:
@@ -11,13 +12,7 @@ on:
         type: choice
         options: [production, staging]
         default: production
-      test_alert:
-        description: Also send a test message to the ops Telegram chat
-        type: boolean
-        default: false
-# Read only: the previous scheduled run's result, so the chat hears of a change once, not every 5 minutes.
-permissions:
-  actions: read
+permissions: {}
 concurrency:
   group: platform-health
   cancel-in-progress: false
@@ -25,12 +20,9 @@ jobs:
   health:
     if: vars.PLATFORM_HEALTH_ENABLED != 'false'
     runs-on: ubuntu-24.04
-    timeout-minutes: 3
+    timeout-minutes: 2
     steps:
       - name: Check the platform database health
-        id: check
-        # The run still fails below; the alert step needs to see this outcome first.
-        continue-on-error: true
         env:
           PLATFORM_HEALTH_URL: ${{ inputs.target == 'staging' && 'https://staging.angder.app/api/health' || vars.PLATFORM_HEALTH_URL || 'https://angder.app/api/health' }}
         run: |
@@ -47,50 +39,3 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write(f'Platform database health: **OK**. Request duration: {float(elapsed):.3f} s.\n')
           PY
-
-      # Scheduled runs only (production); a manual run sends just the test message when asked.
-      # A failed send never changes the run's result: the next run compares health, not alerts.
-      - name: Tell the ops chat when production goes down or recovers
-        if: github.event_name == 'schedule' || inputs.test_alert
-        continue-on-error: true
-        env:
-          OPS_TELEGRAM_BOT_TOKEN: ${{ secrets.OPS_TELEGRAM_BOT_TOKEN }}
-          OPS_TELEGRAM_CHAT_ID: ${{ secrets.OPS_TELEGRAM_CHAT_ID }}
-          GH_TOKEN: ${{ github.token }}
-          HEALTH: ${{ steps.check.outcome }}
-          TEST_ALERT: ${{ inputs.test_alert && 'true' || 'false' }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -eu
-          if [ -z "$OPS_TELEGRAM_BOT_TOKEN" ] || [ -z "$OPS_TELEGRAM_CHAT_ID" ]; then
-            echo '::warning::OPS_TELEGRAM_BOT_TOKEN or OPS_TELEGRAM_CHAT_ID is not set: no Telegram alert (docs/server/operations.md → Alerts).'
-            exit 0
-          fi
-          at="$(TZ=Asia/Phnom_Penh date '+%Y-%m-%d %H:%M') Cambodia time"
-          if [ "$TEST_ALERT" = true ]; then
-            kind=test
-            text="Test alert from Angder's platform health check ($at). Alerts reach this chat."
-          else
-            # The latest finished scheduled run (this one is still running); none yet counts as healthy.
-            previous="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/platform-health.yml/runs?event=schedule&status=completed&per_page=1" --jq '.workflow_runs[0].conclusion // "success"')"
-            if [ "$HEALTH" = failure ] && [ "$previous" != failure ]; then
-              kind=down
-              text="DOWN: angder.app failed its health check at $at. The site, its database or its background jobs are not working. Details: $RUN_URL — what to do: docs/server/operations.md → When an alert arrives."
-            elif [ "$HEALTH" = success ] && [ "$previous" = failure ]; then
-              kind=recovered
-              text="RECOVERED: angder.app passed its health check again at $at."
-            else
-              echo "No change (health: $HEALTH, previous run: $previous): no message."
-              exit 0
-            fi
-          fi
-          curl --proto '=https' --fail --silent --show-error --max-time 10 --retry 2 --retry-delay 5 \
-            --data-urlencode "chat_id=$OPS_TELEGRAM_CHAT_ID" --data-urlencode "text=$text" \
-            "https://api.telegram.org/bot$OPS_TELEGRAM_BOT_TOKEN/sendMessage" > /dev/null
-          echo "Sent the $kind message."
-
-      - name: Fail the run when the platform is unhealthy
-        if: steps.check.outcome == 'failure'
-        run: |
-          echo '::error::Platform health failed: see the check step above.'
-          exit 1
