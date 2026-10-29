@@ -332,7 +332,7 @@ Q24's alert part, answered by the owner (2026-10-29): the owner alone receives t
 
 1. **The ops bot and group** (done 2026-10-29, D223): @BotFather → `/newbot`; a private group **Angder Ops** with the bot; the group's chat id from `https://api.telegram.org/bot<TOKEN>/getUpdates`. If the token ever leaks: @BotFather → `/revoke`, then update the GitHub secret and run **Deploy watchdog** again.
 2. **Repository secrets** (done): Settings → Secrets and variables → Actions → **Repository secrets** (not an environment's): `OPS_TELEGRAM_BOT_TOKEN`, `OPS_TELEGRAM_CHAT_ID`.
-3. **Deploy the watchdog:** Actions → **Deploy watchdog** → Run workflow (branch `main`) → approve the `production` environment → within about a minute **Angder Ops** gets "Watchdog started: checking angder.app every minute…". That message is the test. Run it again whenever `ops/watchdog` changes, the secrets change, or you want to re-check delivery; a deploy takes about a minute of GitHub Actions time.
+3. **Deploy the watchdog** (done 2026-10-29: "Watchdog started" arrived, the owner confirmed it working): Actions → **Deploy watchdog** → Run workflow (branch `main`) → approve the `production` environment → within about a minute **Angder Ops** gets "Watchdog started: checking angder.app every minute…". That message is the test. Run it again whenever `ops/watchdog` changes, the secrets change, or you want to re-check delivery; a deploy takes about a minute of GitHub Actions time.
 4. **Cloudflare status by email:** `https://www.cloudflarestatus.com` → **Subscribe to updates** → email; choose Workers, D1, R2 and DNS if it asks for components.
 5. **Cloudflare alerts** (Observability → Alerts; email destination is your account email):
    - **Platform Notifications → Incident Alerts**: add, filter to Workers, D1, R2 and DNS.
@@ -344,11 +344,61 @@ Q24's alert part, answered by the owner (2026-10-29): the owner alone receives t
 | In the line | Meaning |
 |---|---|
 | `health: 'ok'`, `healthMs: 120` | Production answered healthy in 120 ms; otherwise the reason (`it answered HTTP 503`, `it did not answer within 10 seconds`) |
-| `messages: []` | Nothing to say this minute (normal) |
+| No `messages` field (Cloudflare leaves out an empty list) | Nothing to say this minute: the normal line |
 | `result: 'sent'` | Telegram took the message |
 | `result: 'refused 400: Bad Request: chat not found'` | Wrong chat id (the group became a supergroup: new id from getUpdates) — `401`: wrong token — `403`: the bot was removed from the group. Update the secret, run **Deploy watchdog** |
 | `result: 'no answer (TimeoutError)'`, `ms: 10000` | Telegram didn't answer within 10 seconds; it's retried next minute |
 | "OPS_TELEGRAM_BOT_TOKEN or OPS_TELEGRAM_CHAT_ID is not set" | The secrets didn't reach it: run **Deploy watchdog** again |
+
+#### Routine checks (owner)
+
+| When | What | Normal |
+|---|---|---|
+| Every Monday | The **Weekly check** message in Angder Ops (09:00 Cambodia time) | It arrives. **No message by Monday noon:** the watchdog itself is broken: open its Observability and read the newest line |
+| Every few months, and after any change to `ops/watchdog` or the secrets | The fire drill below | DOWN, then RECOVERED |
+| Monthly | Cloudflare → Manage Account → Billing → **Billable Usage** | Nothing unexpected; the $25 budget alert stays quiet |
+| Any time you wonder | Workers & Pages → `angder-watchdog` → **Observability**, newest **Watchdog: checked** line | `secrets: true`, `health: "ok"`, no `messages` |
+
+#### Fire drill: test DOWN and RECOVERED without affecting customers
+
+The drill points only the watchdog at an address that doesn't exist; the site keeps working. About 5 minutes.
+
+1. Cloudflare → Workers & Pages → `angder-watchdog` → **Settings → Variables and Secrets** → `HEALTH_URL` → Edit → `https://angder.app/api/health-drill` → Deploy (a warning that Wrangler manages the Worker is expected).
+2. Within 2–3 minutes Angder Ops gets "Watchdog started…" (a setting change is a new version), then one **DOWN** "…2 times in a row…: it answered HTTP 404…" (HTTP 404 is the drill; a real outage reads `HTTP 500`/`503` or `did not answer within 10 seconds`). Then nothing more while it stays "down".
+3. Restore from the repository: Actions → **Deploy watchdog** → Run workflow → approve. Within 1–2 minutes: "Watchdog started…" and **RECOVERED** "…after about N minutes".
+4. Check `HEALTH_URL` is `https://angder.app/api/health` again.
+
+No DOWN after 5 minutes, several DOWNs, or no RECOVERED: read the Observability lines (table above). Never test by breaking production itself.
+
+#### Changing things later
+
+| To… | Do |
+|---|---|
+| Re-test delivery | Actions → **Deploy watchdog** → Run → approve: a new "Watchdog started" message |
+| Add a second person | Add them to the **Angder Ops** group; nothing else changes |
+| Move alerts to another group | Add the bot there, `/start@<bot>` in it, its id from getUpdates → update `OPS_TELEGRAM_CHAT_ID` (repository secret) → **Deploy watchdog** |
+| The token leaked | @BotFather → `/revoke` → update `OPS_TELEGRAM_BOT_TOKEN` → **Deploy watchdog** |
+| Silence it at night | Mute the group in Telegram (messages still arrive; nothing in the watchdog changes) |
+| Make the repository private | Repository variable `PLATFORM_HEALTH_ENABLED` = `false` (stops the GitHub check, which would use paid minutes); the watchdog is unaffected. A **Deploy watchdog** run uses about a minute of the private quota |
+| Stop the watchdog for planned maintenance | Workers & Pages → `angder-watchdog` → Settings → Triggers → remove the cron (or expect one DOWN and one RECOVERED); **Deploy watchdog** restores it |
+| Change the check or the messages | Edit `ops/watchdog/src/watchdog.ts` (tests in `ops/watchdog/tests`), PR, merge, **Deploy watchdog** |
+
+#### What it costs
+
+Included in Workers Paid; nothing extra (checked against Cloudflare's pricing on 2026-10-29). About 43,200 checks a month use roughly 0.4% of the included Worker requests and CPU, 4% of the included 1 million Durable Object requests, under 2% of their included duration, and under 1% of the included log events (20 million a month; from 1 December 2026, logs are counted in GB: 50 GB included, the watchdog writes about 0.1 GB). The included amounts are shared with the app's Workers; the app itself uses no Durable Objects. Calls to Telegram and to the site are not billed.
+
+#### Where everything lives
+
+| What | Where |
+|---|---|
+| The check and its messages | `ops/watchdog/src/watchdog.ts` (`runCheck`, the report) |
+| The cron handler, the Durable Object, the log line | `ops/watchdog/src/index.ts` |
+| Name, schedule, health address, bindings | `ops/watchdog/wrangler.jsonc` (Worker `angder-watchdog`, cron `* * * * *`, Durable Object `Watchdog` named `production`) |
+| Tests | `ops/watchdog/tests/watchdog.test.ts` (unit project); `pnpm typecheck` runs `tsc -p ops/watchdog` |
+| Deploy | `.github/workflows/watchdog.yml` (by hand, `production` environment; deploys, then `wrangler secret bulk`) |
+| Secrets | GitHub repository secrets `OPS_TELEGRAM_BOT_TOKEN`, `OPS_TELEGRAM_CHAT_ID` → copied to the Worker's secrets by each deploy |
+| The free outside check | `.github/workflows/platform-health.yml` (email only) |
+| Why it's built this way | [D223](../decisions.md#d223-platform-alerts-one-down-and-one-recovered-message-to-a-private-ops-chat-2026-10-29), [D224](../decisions.md#d224-the-alarm-is-a-watchdog-worker-not-a-github-schedule-2026-10-29) |
 
 #### When an alert arrives
 
