@@ -1,13 +1,19 @@
 import type { UIMessage } from 'ai'
 import type { AssistantPageLink } from '#shared/contracts/assistant'
-import { ASSISTANT_CHAT_MAX_MESSAGES } from '#shared/contracts/assistant'
+import { ASSISTANT_CHAT_MAX_MESSAGES, ASSISTANT_CONVERSATION_MAX, conversationTextLength } from '#shared/contracts/assistant'
 
 /** The chat's messages: text, and `link_to_page` buttons (step 9.1, D109). */
 export type AssistantMessage = UIMessage<never, never, { link_to_page: { input: { page: string }, output: AssistantPageLink } }>
 
-/** What goes to the server: the latest messages only (the rest stays on screen). */
-export function latestMessages<T>(messages: T[]): T[] {
-  return messages.slice(-ASSISTANT_CHAT_MAX_MESSAGES)
+/**
+ * What goes to the server: the latest messages only, at most `ASSISTANT_CHAT_MAX_MESSAGES` and
+ * `ASSISTANT_CONVERSATION_MAX` characters of text (the rest stays on screen). The question asked
+ * is always sent.
+ */
+export function latestMessages<T extends { parts: { type: string, text?: string }[] }>(messages: T[]): T[] {
+  const latest = messages.slice(-ASSISTANT_CHAT_MAX_MESSAGES)
+  while (latest.length > 1 && conversationTextLength(latest) > ASSISTANT_CONVERSATION_MAX) latest.shift()
+  return latest
 }
 
 /** The links an answer gives, once each, in order. */

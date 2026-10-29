@@ -1,7 +1,7 @@
 import type { LanguageModel, LanguageModelUsage, SystemModelMessage, UIMessage } from 'ai'
 import { convertToModelMessages, isStepCount, jsonSchema, safeValidateUIMessages, streamText, tool } from 'ai'
 import type { AssistantChatInput, AssistantFeature, AssistantPageLink, AssistantStatus } from '#shared/contracts/assistant'
-import { ASSISTANT_QUESTION_MAX, ASSISTANT_TIME_ZONE, ASSISTANT_USAGE_RETENTION_DAYS } from '#shared/contracts/assistant'
+import { ASSISTANT_CONVERSATION_MAX, ASSISTANT_QUESTION_MAX, ASSISTANT_TIME_ZONE, ASSISTANT_USAGE_RETENTION_DAYS, conversationTextLength } from '#shared/contracts/assistant'
 import type { Db } from '#server/utils/batch'
 import { runBatch } from '#server/utils/batch'
 import { apiError, ErrorCodes } from '#server/utils/errors'
@@ -103,19 +103,55 @@ const invalidConversation = (message: string) => apiError(400, ErrorCodes.VALIDA
  * link tool's inputs and outputs), ending with the admin's question. Only the latest
  * `ASSISTANT_CHAT_MAX_MESSAGES` reach the model (the contract refuses more).
  */
+const unreadable = () => invalidConversation('The conversation couldn\'t be read. Clear the chat and ask again.')
+
+type UIPart = UIMessage['parts'][number]
+
+/**
+ * An earlier answer as the model will see it, rebuilt from what this product sends (audit S1): its
+ * text, its step markers, and its finished links, each link's page taken from our own list, never
+ * from the browser. Reasoning is left out (the chat never shows it). Anything else (a file, a
+ * source, another tool) is refused. Nothing the browser attached (provider options) is kept.
+ */
+function answerParts(parts: UIPart[]): UIPart[] {
+  const kept: UIPart[] = []
+  for (const part of parts) {
+    if (part.type === 'text') kept.push({ type: 'text', text: part.text })
+    else if (part.type === 'step-start') kept.push({ type: 'step-start' })
+    else if (part.type === 'reasoning') continue
+    else if (part.type === 'tool-link_to_page') {
+      // Unfinished or failed: nothing the model needs. Its input was checked against the tool's schema.
+      if (part.state !== 'output-available') continue
+      const page = (part.input as { page: AssistantPageKey }).page
+      kept.push({ type: 'tool-link_to_page', toolCallId: `link_${kept.length}`, state: 'output-available', input: { page }, output: { ...ASSISTANT_PAGES[page] } })
+    }
+    else throw unreadable()
+  }
+  return kept
+}
+
+/**
+ * The conversation the browser sent, checked with the SDK's own validation (message shapes, the
+ * link tool's inputs), ending with the admin's question, then rebuilt from what the product allows:
+ * questions are text only, answers as `answerParts` keeps them, and all of it together at most
+ * `ASSISTANT_CONVERSATION_MAX` characters. Runs before a daily slot is taken, so a refused
+ * conversation costs nothing and reaches no provider.
+ */
 async function checkConversation(messages: unknown[], tools: ReturnType<typeof chatTools>): Promise<UIMessage[]> {
   const checked = await safeValidateUIMessages({ messages, tools })
-  if (!checked.success) throw invalidConversation('The conversation couldn\'t be read. Clear the chat and ask again.')
-  const conversation = checked.data
-  const last = conversation.at(-1)
-  if (last?.role !== 'user') throw invalidConversation('Ask a question.')
-  for (const message of conversation) {
-    if (message.role === 'system') throw invalidConversation('The conversation couldn\'t be read. Clear the chat and ask again.')
-    if (message.role !== 'user') continue
+  if (!checked.success) throw unreadable()
+  const lastIndex = checked.data.length - 1
+  if (checked.data[lastIndex]?.role !== 'user') throw invalidConversation('Ask a question.')
+  const conversation = checked.data.map((message, index): UIMessage => {
+    if (message.role === 'system') throw unreadable()
+    if (message.role === 'assistant') return { id: String(index), role: 'assistant', parts: answerParts(message.parts) }
+    if (message.parts.some(part => part.type !== 'text')) throw invalidConversation('Questions can only be text.')
     const text = message.parts.map(part => (part.type === 'text' ? part.text : '')).join('')
     if (text.length > ASSISTANT_QUESTION_MAX) throw invalidConversation(`A question can have at most ${ASSISTANT_QUESTION_MAX.toLocaleString('en-US')} characters.`)
-    if (message === last && !text.trim()) throw invalidConversation('Ask a question.')
-  }
+    if (index === lastIndex && !text.trim()) throw invalidConversation('Ask a question.')
+    return { id: String(index), role: 'user', parts: [{ type: 'text', text }] }
+  })
+  if (conversationTextLength(conversation) > ASSISTANT_CONVERSATION_MAX) throw invalidConversation('The conversation is too long. Clear the chat and ask again.')
   return conversation
 }
 

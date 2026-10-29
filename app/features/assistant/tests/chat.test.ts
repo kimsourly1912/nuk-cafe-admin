@@ -10,9 +10,20 @@ function answer(parts: AssistantMessage['parts']): AssistantMessage {
 
 describe('the help chat (D109)', () => {
   it('sends only the latest 20 messages', () => {
-    const messages = Array.from({ length: 25 }, (_, i) => i)
+    const messages = Array.from({ length: 25 }, (_, i) => ({ id: String(i), parts: [{ type: 'text', text: 'Hi' }] }))
     expect(latestMessages(messages)).toEqual(messages.slice(5))
-    expect(latestMessages([1, 2])).toEqual([1, 2])
+    expect(latestMessages(messages.slice(0, 2))).toEqual(messages.slice(0, 2))
+  })
+
+  it('drops the oldest messages to stay within 24,000 characters of text, always keeping the question', () => {
+    const text = (length: number) => ({ parts: [{ type: 'text', text: 'x'.repeat(length) }] })
+    const link = { parts: [{ type: 'tool-link_to_page' }] }
+    const messages = [text(10_000), text(10_000), link, text(4_000), text(1)]
+    // 24,001 characters: the oldest goes; the link counts nothing.
+    expect(latestMessages(messages)).toEqual(messages.slice(1))
+    expect(latestMessages([text(10_000), text(10_000), text(4_000)])).toHaveLength(3)
+    // A question alone is sent even past the budget: the server says it is too long.
+    expect(latestMessages([text(30_000)])).toHaveLength(1)
   })
 
   it('shows each page an answer links to once, and only finished links', () => {

@@ -14,5 +14,6 @@ export default defineEventHandler(async (event) => {
     waitUntil: promise => event.waitUntil(promise),
     onProviderError: error => log('error', 'AI provider failed', { provider: settings.provider, model: settings.model, error: String(error) }, event),
   })
-  return result.toUIMessageStreamResponse({ onError: () => AI_UNAVAILABLE_MESSAGE })
+  // No reasoning to the browser: the chat never shows it, and it would come back in the history (audit S1).
+  return result.toUIMessageStreamResponse({ sendReasoning: false, onError: () => AI_UNAVAILABLE_MESSAGE })
 })

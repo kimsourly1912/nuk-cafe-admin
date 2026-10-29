@@ -34,6 +34,24 @@ export interface AssistantStatus {
 export const ASSISTANT_CHAT_MAX_MESSAGES = 20
 /** Longest question, in characters. */
 export const ASSISTANT_QUESTION_MAX = 2000
+/**
+ * The most text one request sends the model, in characters: every question's and answer's text
+ * together (audit S1). The browser drops its oldest messages to stay under it; the server refuses more.
+ * An answer is at most about 12,000 characters (3 steps of 1,000 tokens), so the latest answer and a
+ * question always fit.
+ */
+export const ASSISTANT_CONVERSATION_MAX = 24_000
+
+/** The text a conversation sends, as counted against `ASSISTANT_CONVERSATION_MAX`: every text part of every message. */
+export function conversationTextLength(messages: { parts: { type: string, text?: string }[] }[]): number {
+  let length = 0
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.type === 'text') length += part.text?.length ?? 0
+    }
+  }
+  return length
+}
 
 /**
  * `POST /api/admin/assistant/chat` (9.1): the AI SDK's chat messages (checked on the server with
