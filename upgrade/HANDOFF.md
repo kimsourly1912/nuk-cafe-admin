@@ -65,6 +65,21 @@ Q2: review of breaking-changes.md and approval of plan.md — the owner delegate
 
 ## Done
 
+S1 (pending hash): probe of the 4.6.1 production node build (`E2E_HUB_DIR=.data/upgrade-probe`, `node .output/server/index.mjs`; script in `upgrade/logs/S1/`, output `upgrade/logs/S1/probe.txt`). Confirms the advisory here: case-variant **page** paths are served (Vue's router matches any case) without their specific rule; case-variant **API** paths are 404 (Nitro's handler router is case-sensitive), so the `auth: 'user'` gates were not reachable that way. `/**` headers apply to every path.
+
+| Path | 4.6.1 status | CSP | X-Frame-Options | cache-control |
+|---|---|---|---|---|
+| `/table/abc` | 200 | yes | DENY | `no-store, no-transform` |
+| `/TABLE/abc` | 200 | yes | DENY | **none** |
+| `/reset-password` | 200 | yes | DENY | `no-store, no-transform` |
+| `/Reset-Password` | 200 | yes | DENY | **none** |
+| `/api/health` | 200 | yes | DENY | `no-store` |
+| `/API/health` | 404 | yes | DENY | `no-cache` |
+| `/api/c/x/admin/me` (no session) | 401 | yes | DENY | `no-store` |
+| `/API/c/x/admin/me` | 404 | yes | DENY | `no-cache` |
+| `/api/me/cafes` (no session) | 401 | yes | DENY | `no-store` |
+| `/API/ME/cafes` | 404 | yes | DENY | `no-cache` |
+
 ## Blocked
 
 ## Plan issues

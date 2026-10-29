@@ -7,7 +7,7 @@ A patch release with no breaking changes, deprecations, codemods or required con
 ## Steps
 
 ### S1 — Record the advisory's behavior on 4.6.1 (no code change)
-- status: todo
+- status: done
 - covers: C1
 - executor: sonnet
 - risk: low (read-only probe; nothing committed except evidence in HANDOFF)
