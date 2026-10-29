@@ -4,7 +4,7 @@
 
 ## The watchdog in production (D224, 2026-10-29)
 
-Owner, after the log-line deploy: `Watchdog: checked` showed `secrets: true`, `health: "ok"`, `healthMs: 173`, no messages; the "Watchdog started" message had been delivered once at the deploy; the owner then reported everything working. The earlier ~10-second checks were the first version retrying a message each minute; the site answers in under 0.2 s. [Operations → Alerts](server/operations.md#alerts-d223-d224) now holds the routine checks, the fire drill, how to change things later, the cost and a map of the files; AGENTS.md routes alert and incident work there. Docs only.
+Owner, after the log-line deploy: `Watchdog: checked` showed `secrets: true`, `health: "ok"`, `healthMs: 173`, no messages; the "Watchdog started" message had been delivered once at the deploy; the owner then reported everything working. The earlier ~10-second checks were the first version retrying a message each minute; the site answers in under 0.2 s. [Operations → Alerts](server/operations.md#alerts-d223-d224) now holds the routine checks, the fire drill, how to change things later, the cost and a map of the files; AGENTS.md routes alert and incident work there. The owner also set up the cloudflarestatus.com email subscription and the Cloudflare email alerts (Incident Alerts, Budget alerts, the 5xx Monitor where available), 2026-10-29. Docs only.
 
 ## The watchdog's log line (D224 follow-up, 2026-10-29)
 
