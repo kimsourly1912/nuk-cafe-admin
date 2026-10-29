@@ -27,6 +27,7 @@ Classify the change **before editing** and read applicable sections below. Combi
 | Authentication/permissions/tenancy | [Security](docs/server/security.md), [auth](docs/reference/auth.md), shell session rules; [multi-tenant plan](docs/plans/multi-tenant.md) for boundary changes |
 | Database/migrations/payments | Data-model domain, architecture write rules, [operations migrations](docs/server/operations.md#migrations), security permissions and domain plan |
 | Testing/deployment | [Development checks/tests](docs/guides/development.md); deployment also needs operations and [release check](docs/plans/release-check.md) |
+| Production alerts/watchdog/incidents | [Operations → Alerts](docs/server/operations.md#alerts-d223-d224): what alerts, routine checks, fire drill, changes, the incident checklist |
 | New feature/new screens | [Feature standard](docs/feature-standard.md), domain plan, applicable routes above. Preserve its owner mockup/approval workflow for new screens unless already waived by the owner |
 | Resume work | [Current-state navigation](docs/current-state.md), then relevant progress phase, open question and plan |
 | Investigate/change old pattern | Search [decision index](docs/decision-index.md), read matching decision and follow-ups before changing it |
