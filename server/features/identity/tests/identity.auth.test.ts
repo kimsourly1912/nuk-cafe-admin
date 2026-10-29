@@ -1,4 +1,6 @@
 import { eq } from 'drizzle-orm'
+import { betterAuth } from 'better-auth'
+import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { beforeEach, describe, expect, it } from 'vitest'
 import * as authSchema from '#auth/schema'
 import { identityAuthOptions } from '#server/features/identity/identity.auth'
@@ -153,5 +155,43 @@ describe('platform permissions', () => {
     expect(await can(superadmin.userId, { tenant: ['create'] })).toBe(true)
     expect(await can(superadmin.userId, { user: ['impersonate'] })).toBe(false)
     expect(await can(customer.userId, { tenant: ['read'] })).toBe(false)
+  })
+})
+
+describe('rate limits (production only, counted in the database)', () => {
+  /** Our configuration with Better Auth's production rate limiting on. */
+  function limitedAuth() {
+    const options = identityAuthOptions({ db, siteUrl: SITE, checkBreachedPasswords: false })
+    return betterAuth({
+      ...options,
+      rateLimit: { ...options.rateLimit, enabled: true },
+      baseURL: SITE,
+      secret: 'test-secret-that-is-at-least-32-characters-long',
+      database: drizzleAdapter(db, { provider: 'sqlite', schema: authSchema }),
+    })
+  }
+  const from = (address: string) => ({ 'cf-connecting-ip': address, 'origin': SITE })
+  const counted = async (path: string) => (await db.select().from(authSchema.rateLimit)).filter(row => row.key.endsWith(path))
+
+  it('never counts get-session: no database write per page load, and no limit on it', async () => {
+    const limited = limitedAuth()
+    // Past Better Auth's default limit (100 per 10 s) from one address, like a busy cafe's Wi-Fi.
+    for (let i = 0; i < 105; i++) {
+      const response = await limited.handler(new Request(`${SITE}/api/auth/get-session`, { headers: from('203.0.113.7') }))
+      expect(response.status).toBe(200)
+    }
+    expect(await counted('/get-session')).toEqual([])
+  })
+
+  it('still counts sign-in: the sixth try in a minute is refused', async () => {
+    const limited = limitedAuth()
+    const signInTry = () => limited.handler(new Request(`${SITE}/api/auth/sign-in/email`, {
+      method: 'POST',
+      headers: { ...from('203.0.113.8'), 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'nobody@example.com', password: 'a wrong password' }),
+    }))
+    for (let i = 0; i < 5; i++) expect((await signInTry()).status).toBe(401)
+    expect((await signInTry()).status).toBe(429)
+    expect(await counted('/sign-in/email')).toHaveLength(1)
   })
 })

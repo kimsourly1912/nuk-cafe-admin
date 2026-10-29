@@ -131,6 +131,9 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
         // A guest is made only when Place order is pressed signed out (D156). Generous: the cafe's
         // customers share its Wi-Fi, so one address is many people.
         '/sign-in/anonymous': { window: 10 * MINUTE, max: 30 },
+        // Asked on every page load (signed in or not), and nothing to guess: the cookie's token is
+        // long and random. Counting it would cost a D1 read and write per visit (D1 has one writer).
+        '/get-session': false,
       },
     },
     plugins: [
