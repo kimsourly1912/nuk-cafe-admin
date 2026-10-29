@@ -46,3 +46,5 @@ _2026-10-02. The owner's choice after the KHQR research: a dynamic KHQR shown **
 | Paid after the pay-by time, before the expiry ran | Recorded (the money arrived) | server |
 | Paid on a QR of an order already paid in cash, or cancelled | "Give it back to the customer", a toast that stays | server |
 | No token, token expired, Bakong refuses this server or is down | "Automatic check unavailable": Confirm by hand; Try again (not for a blip, which retries by itself) | server, unit |
+| Bakong's answer has a field of the wrong type or length (an account that isn't text, no amount), or is longer than 16 KB (audit S6) | "Automatic check unavailable", nothing recorded; at most 16 KB is read, then the body is cancelled | server, unit |
+| Paid, but Bakong leaves out the bank's reference and the hash | Recorded without a reference (`null`, never empty) | server |

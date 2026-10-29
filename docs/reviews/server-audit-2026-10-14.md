@@ -75,6 +75,8 @@ Acceptance: concurrent checks produce bounded upstream calls, tenant scopes neve
 
 ### S6. Bakong response parsing has no byte cap
 
+_Addressed 2026-10-29 on branch `claude/laughing-fermat-cu04no` ([progress](../progress.md#bakong-answers-checked-before-use-audit-s6-2026-10-29)); the text below is the original finding._
+
 Evidence: [bakong.ts](../../server/features/orders/bakong.ts), `checkByMd5`: an eight-second default timeout is followed by whole-body `response.json()`. Duration does not bound bytes. A claimed Content-Length alone would not cover streamed data. Parsed response string fields also need explicit shape validation before use.
 
 Cap actual received bytes, cancel unnecessary non-success bodies and validate the JSON shape. Preserve receiver/currency/amount checks. The upstream is configured and trusted; no oversized real response was observed, so this is provider-failure hardening.

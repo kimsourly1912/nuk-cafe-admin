@@ -5,6 +5,7 @@ import { updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { auditEvents } from '#server/features/platform/platform.schema'
+import { bakongClient } from '#server/features/orders/bakong'
 import type { BakongAnswer, BakongClient, BakongTransaction } from '#server/features/orders/bakong'
 import { cancelOrderAtCounter, listCounterQueue, payOrder, setExchangeRate } from '#server/features/orders/counter.service'
 import { expireUnpaidOrders } from '#server/features/orders/expiry.service'
@@ -162,6 +163,30 @@ describe('checking a QR with Bakong', () => {
       expect(result).toEqual({ status: 'unavailable', problem })
     }
     expect(await paymentsOf(orderId)).toHaveLength(0)
+  })
+
+  it('an answer it can\'t read (an account that isn\'t text, no amount, too long): unavailable, nothing recorded (audit S6)', async () => {
+    const orderId = await place()
+    const charge = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:02'))
+    const data = { hash: 'hash-1', toAccountId: 'nukcafe@aclb', currency: 'USD', amount: 8.75 }
+    const bodies = [
+      JSON.stringify({ responseCode: 0, data: { ...data, toAccountId: { id: 'nukcafe@aclb' } } }),
+      JSON.stringify({ responseCode: 0, data: { ...data, amount: null } }),
+      JSON.stringify({ responseCode: 0, data: { ...data, description: 'x'.repeat(20_000) } }),
+    ]
+    for (const body of bodies) {
+      const client = bakongClient({ apiUrl: 'https://bakong.test', token: 't', fetch: async () => new Response(body) })
+      expect(await checkKhqrCharge(db, cashier, orderId, charge.id, client, monday('12:04'))).toEqual({ status: 'unavailable', problem: 'error' })
+    }
+    expect(await paymentsOf(orderId)).toHaveLength(0)
+    expect(await statusOf(orderId)).toBe('awaiting_payment')
+  })
+
+  it('paid without the bank\'s references: recorded without a reference, never an empty one', async () => {
+    const orderId = await place()
+    const charge = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:02'))
+    const client = bakongClient({ apiUrl: 'https://bakong.test', token: 't', fetch: async () => Response.json({ responseCode: 0, data: { hash: '', toAccountId: 'nukcafe@aclb', currency: 'USD', amount: 8.75 } }) })
+    expect(await checkKhqrCharge(db, cashier, orderId, charge.id, client, monday('12:04'))).toMatchObject({ status: 'paid', order: { payment: { khqrChargeId: charge.id, reference: null } } })
   })
 
   it('paid after the time to pay, before the expiry ran: still recorded (the money arrived)', async () => {
