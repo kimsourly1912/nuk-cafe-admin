@@ -40,7 +40,7 @@ A patch release with no breaking changes, deprecations, codemods or required con
 - done when: results recorded in HANDOFF → Done.
 
 ### S4 — Record the upgrade in the project docs
-- status: todo
+- status: done
 - covers: —
 - executor: sonnet
 - risk: low
