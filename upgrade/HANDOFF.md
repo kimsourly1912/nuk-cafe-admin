@@ -10,8 +10,8 @@ Branch: ccr-ef1e4d51-15633w (this cloud session may push only to its own branch,
 Package manager: pnpm 12.15.0
 Started: 2026-10-29
 
-Current phase: 0 done
-Next: /upgrade-1-inventory (Sonnet session — this one is fine)
+Current phase: 1 done
+Next: /upgrade-2-changes (Sonnet)
 
 ## Why
 
