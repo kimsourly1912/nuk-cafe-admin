@@ -2,6 +2,15 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Owner checks: smoke test, release hand check, DNSSEC (2026-10-30)
+
+Reported by the owner; recorded as reported (no screenshots or logs kept here).
+
+- **Nuxt 4.6.2 smoke test on staging:** done, works ([upgrade record → Left for later](upgrades/2026-10-29-nuxt-4-6-2.md#left-for-later)). With D226 merged, `/TABLE/x` answers 404.
+- **Release hand check (step 10.5), the two checks left on 2026-10-01:** check 1 (a table QR while signed out, on a real phone) and check 4 (Mark ready on two devices): done, work. With checks 2, 3 and 5 passed on 2026-10-01, the hand check is complete ([release check](plans/release-check.md)).
+- **DNSSEC on `angder.app` (D215):** done, works; it was "pending" on 2026-10-26.
+- **Not done:** the nightly backups. D228 deployed (Deploy backup run 4, 03:00 UTC) still sends nothing; the owner paused it. The restore drill waits on it.
+
 ## The backup polls D1's export like Wrangler (D228, 2026-10-30)
 
 Branch `ccr-c6503e1b-4fiibm` (from main `5f31021`, after PR #216). The owner's Workflows page showed why the first test backups stored nothing: attempt #1 "The export isn't ready yet", then "D1's export failed: Not currently exporting anything." on every retry (30 s … 16 min). The export token works; the polling didn't. [Decision](decisions.md#d228-the-backup-polls-d1s-export-without-pause-with-the-newest-bookmark-2026-10-30).
