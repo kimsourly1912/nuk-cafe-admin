@@ -174,6 +174,30 @@ describe('placing an order', () => {
     expect(problems).toEqual([])
   })
 
+  it('a changed quantity: Place order shows a spinner while the order is priced again, never only greyed out', async () => {
+    const { page, problems } = await signedIn(seed.customers.shopperA)
+    await addToOrder(page, 'Banana Bread')
+    await reviewOrder(page)
+    await button(page, 'Place order · $2.25').waitFor()
+    let answer!: () => void
+    const held = new Promise<void>(resolve => (answer = resolve))
+    await page.route('**/checkout/quote', async (route) => {
+      await held
+      await route.continue()
+    })
+
+    await page.getByRole('listitem', { name: 'Banana Bread' }).getByRole('button', { name: 'Increase quantity of Banana Bread' }).click()
+    const place = button(page, /^Place order/)
+    await expect.poll(() => place.locator('[data-slot="leadingIcon"]').count()).toBe(1)
+    expect(await place.isDisabled()).toBe(true)
+
+    answer()
+    await expect.poll(() => place.locator('[data-slot="leadingIcon"]').count()).toBe(0)
+    expect(await place.isEnabled()).toBe(true)
+    expect(await place.textContent()).not.toContain('$2.25')
+    expect(problems).toEqual([])
+  })
+
   it('an account whose email isn\'t verified orders straight away (D156)', async () => {
     const { page } = await signedIn(seed.customers.shopperUnverified)
     await addToOrder(page, 'Banana Bread')

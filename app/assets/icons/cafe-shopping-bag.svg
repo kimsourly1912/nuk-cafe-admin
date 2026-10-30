@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="340" viewBox="0 0 440 340" fill="none" role="img" aria-labelledby="title description">
+  <title id="title">Cafe shopping bag</title>
+  <desc id="description">A cream paper shopping bag with a coffee cup emblem, olive leaves, a floating heart, a pale beige backdrop, and a soft ground shadow. Editable vector recreation of the reference illustration.</desc>
+  <defs>
+    <linearGradient id="backdrop-fill" x1="116" y1="34" x2="324" y2="291" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FBF3EB"/>
+      <stop offset="0.58" stop-color="#FCF5EE"/>
+      <stop offset="1" stop-color="#FBF2E8"/>
+    </linearGradient>
+    <radialGradient id="ground-fill" cx="0" cy="0" r="1" gradientTransform="translate(222 298) scale(194 29)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E7D2C1" stop-opacity="0.78"/>
+      <stop offset="1" stop-color="#EBDACD" stop-opacity="0.72"/>
+    </radialGradient>
+    <linearGradient id="bag-front-fill" x1="146" y1="146" x2="268" y2="292" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FCEBDD"/>
+      <stop offset="0.5" stop-color="#FBE9D9"/>
+      <stop offset="1" stop-color="#FDEFE2"/>
+    </linearGradient>
+    <linearGradient id="bag-side-fill" x1="270" y1="158" x2="308" y2="279" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E9C3A7"/>
+      <stop offset="0.48" stop-color="#F5D8BF"/>
+      <stop offset="1" stop-color="#E1B899"/>
+    </linearGradient>
+    <linearGradient id="leaf-fill" x1="54" y1="196" x2="86" y2="258" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#A39C70"/>
+      <stop offset="0.56" stop-color="#B1A97E"/>
+      <stop offset="1" stop-color="#9A956E"/>
+    </linearGradient>
+    <linearGradient id="heart-fill" x1="383" y1="57" x2="407" y2="78" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#CE9168"/>
+      <stop offset="1" stop-color="#B9754D"/>
+    </linearGradient>
+  </defs>
+
+  <g id="beige-backdrop">
+    <path d="M104 41C141 18 185 9 221 14C262 18 283 44 302 84C317 117 327 128 354 143C384 160 414 173 416 199C422 231 399 262 366 279C332 295 287 296 246 291L108 290C95 275 96 246 87 221C81 203 65 184 57 162C41 124 58 80 104 41Z" fill="url(#backdrop-fill)"/>
+  </g>
+
+  <g id="ground-shadow">
+    <ellipse cx="222.5" cy="298" rx="190.5" ry="26.5" fill="url(#ground-fill)"/>
+    <ellipse cx="231" cy="292.5" rx="110" ry="9" fill="#CBA98F" opacity="0.25"/>
+  </g>
+
+  <g id="leaves">
+    <path d="M84 258C68 254 55 239 52 219C49 206 53 190 60 191C70 191 79 206 84 220C89 235 89 249 84 258Z" fill="url(#leaf-fill)"/>
+    <path d="M67 268C53 269 39 262 29 251C21 242 18 233 23 229C29 224 42 229 51 239C60 248 66 260 67 268Z" fill="url(#leaf-fill)"/>
+    <path d="M89.5 286.5C89 268 80.5 243 68.5 217.5" stroke="#796149" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M66 264C56 257 48 250 39.5 244" stroke="#84704F" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+
+  <g id="heart-trail" stroke-width="1.9" stroke-linecap="round" stroke-dasharray="6 5">
+    <path d="M321 161C335 154 345 140 344 124C343 114 337 104 328 106C317 107 315 117 321 124C330 136 349 130 360 121C369 113 376 101 380 91" stroke="#CBA183"/>
+    <path d="M356 125C368 117 375 103 380 91" stroke="#855C45"/>
+  </g>
+
+  <g id="floating-heart">
+    <path d="M383.4 81.8C382.7 75.2 381 67.5 383.7 59.6C385.2 55.2 388.5 51.7 392 53C395.8 54.1 397.4 57.3 397.2 61.1C402 59.3 406.5 61.3 408.3 65C412.8 74.2 394.1 81 383.4 81.8Z" fill="url(#heart-fill)" stroke="#5B3827" stroke-width="2.8" stroke-linejoin="round"/>
+    <path d="M386.7 67.2C386.1 62.4 387.5 58.5 389.7 57" stroke="#E4B28E" stroke-width="2.1" stroke-linecap="round" opacity="0.65"/>
+  </g>
+
+  <g id="accent-rays" stroke="#C67B49" stroke-linecap="round">
+    <path d="M227.2 49V73.8" stroke-width="6"/>
+    <path d="M183.1 73.7L190.1 83.2" stroke-width="4.5"/>
+    <path d="M275.5 91.5L286 81.2" stroke-width="5.5"/>
+  </g>
+
+  <g id="bag-handles" stroke="#573523" stroke-width="3.3" stroke-linecap="round">
+    <path id="rear-handle" d="M198 137C199 98 252 98 254 137"/>
+    <path id="front-handle" d="M177 149.5V137C178 97 232 98 233 137V149.5"/>
+  </g>
+
+  <g id="bag-side" stroke="#583724" stroke-linejoin="round">
+    <path d="M265 137H280.5C284.9 137 286.5 139.7 287.4 144.9L309.6 281.4C310.2 285.2 308.7 286.8 304.7 287.7L276.3 294L265 137Z" fill="url(#bag-side-fill)" stroke-width="2.9"/>
+    <path d="M280.3 141.5L294 271.7L308 284" stroke="#FCEDDD" stroke-width="4" opacity="0.6"/>
+    <path d="M276.3 294L292.3 271.9L308.3 284.8" stroke-width="2.8"/>
+    <path d="M292.3 271.9L289.5 285.9" stroke="#B98866" stroke-width="1.4" opacity="0.5"/>
+  </g>
+
+  <g id="bag-front">
+    <path d="M151.5 137H263.1C268.5 137 270 140 270.4 145L278.8 284.3C279.2 291.4 276.4 294.3 270.5 294.2L132.4 291.9C126.2 291.8 122.7 289.1 123.5 282.9L144.8 145.2C145.6 139.8 147.2 137 151.5 137Z" fill="url(#bag-front-fill)" stroke="#593624" stroke-width="3.1" stroke-linejoin="round"/>
+    <path d="M149.2 146L129 281.5" stroke="#FFF8EE" stroke-width="2.7" stroke-linecap="round" opacity="0.6"/>
+    <path d="M268.4 145.8L276.4 282.9" stroke="#DDB28F" stroke-width="2.2" opacity="0.75"/>
+    <g id="handle-ends" stroke="#CF9268" stroke-width="3.5" stroke-linecap="round">
+      <path d="M177.2 148.8V151.6"/>
+      <path d="M232.8 148.8V151.6"/>
+    </g>
+  </g>
+
+  <g id="coffee-cup-emblem" stroke="#CB8558" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round">
+    <g id="coffee-steam" stroke-width="3.5">
+      <path d="M190.8 186.5C186.7 192 194.4 192.6 189.9 197.9"/>
+      <path d="M202 181.4C196 187.6 205.4 190.8 200.2 197.9"/>
+      <path d="M212.8 185.9C208.3 191.7 216 192.8 211 198.5"/>
+    </g>
+    <path id="cup-handle" d="M225.2 211.1C241 206 240.2 228.8 223 229.1"/>
+    <path id="cup" d="M177.4 207.4H226.2C225.6 220.2 224 234.5 215.5 242.1C212.5 244.5 208 245.2 202.4 245.2C196.4 245.2 191.7 244.1 188.3 241.1C180.8 234.2 177.6 219.5 177.4 207.4Z" fill="#FCEBDC"/>
+    <path id="saucer" d="M180.6 245.3H220.9"/>
+    <path d="M219.4 213L218.4 218.3" stroke="#F5D2B8" stroke-width="3.1"/>
+  </g>
+</svg>

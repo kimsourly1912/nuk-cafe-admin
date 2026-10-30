@@ -82,10 +82,12 @@ async function submit() {
 const action = computed(() => {
   if (loading.value) return { label: 'Place order', disabled: true, loading: true }
   const total = quoted.value ? ` · ${formatMinor(quoted.value.totalMinor)}` : ''
+  // Pricing a changed order again: a spinner (which also blocks it), not greyed out as if refused.
+  const repricing = quoteSettling.value || quote.pending.value
   return {
     label: placing.value ? 'Placing order…' : `Place order${total}`,
-    disabled: !quoted.value?.orderable || quoteSettling.value || quote.pending.value || placing.value,
-    loading: placing.value,
+    disabled: !quoted.value?.orderable || placing.value,
+    loading: placing.value || repricing,
   }
 })
 
@@ -190,22 +192,30 @@ useSeoMeta({ robots: 'noindex' })
         />
       </div>
 
-      <div
+      <UCard
         v-else-if="!lines.length"
-        class="flex flex-col items-center gap-3 py-16 text-center"
+        class="mx-auto mt-4 w-full max-w-lg"
+        variant="soft"
+        :ui="{ body: 'py-10 sm:py-12' }"
       >
-        <UIcon
-          name="i-lucide-shopping-bag"
-          class="size-10 text-dimmed"
-        />
-        <p class="font-medium text-highlighted">
-          Your order is empty
-        </p>
-        <UButton
-          :to="tenantPath('/')"
-          label="Back to the menu"
-        />
-      </div>
+        <div class="flex flex-col items-center gap-4 text-center">
+          <UIcon
+            name="i-app-cafe-shopping-bag"
+            class="size-64 sm:size-80"
+          />
+          <h2 class="text-3xl font-semibold text-highlighted">
+            Your order is empty
+          </h2>
+          <p class="max-w-sm text-muted">
+            Add some delicious items from our menu to get started.
+          </p>
+          <UButton
+            :to="tenantPath('/')"
+            icon="i-lucide-arrow-left"
+            label="Back to the menu"
+          />
+        </div>
+      </UCard>
 
       <template v-else>
         <div class="mt-4 space-y-3">
