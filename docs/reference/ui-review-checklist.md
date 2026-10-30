@@ -57,6 +57,7 @@ Check every changed screen at **320, 390, 768, 1024 and 1440 px** wide, plus one
 For each screen and overlay, show and test the applicable [states](./page-patterns.md#8-states):
 
 - [ ] First load (skeleton, no empty-state flash) and refresh (content stays)
+- [ ] Reload on a slow network (DevTools throttling): nothing shown is later removed or switched. Every query, the account's `known` and every browser-stored value that decides a section is in one first-load gate ([page-patterns §8](./page-patterns.md#first-load-waits-for-everything-that-decides-the-layout-d235))
 - [ ] Initial empty and filtered empty (with Clear filters)
 - [ ] Load error with Retry; not found (detail routes)
 - [ ] Unauthorized / forbidden; offline

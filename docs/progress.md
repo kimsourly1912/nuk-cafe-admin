@@ -2,6 +2,14 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Review order's first load, and the first-load rule (D235, 2026-10-30)
+
+Branch `claude/checkout-loading-state`, after PR #219. Found by the owner: after a reload, Review order showed the guest name field, "Your order is empty" and "Pickup" before the data arrived. [Decision](decisions.md#d235-a-pages-first-load-waits-for-everything-that-decides-its-layout-2026-10-30).
+
+- **Change:** `CheckoutPage.vue`: one `loading` (mounted, the account's `known`, the branches, the first quote or its error) drives a skeleton shaped like the page, the bottom bar and the button; a branches error shows "Couldn't load your order" with Retry. `useCheckout` returns `shop`. Docs: [page-patterns §8](reference/page-patterns.md#first-load-waits-for-everything-that-decides-the-layout-d235) and a UI review checklist item. No server change.
+- **Evidence (2026-10-30, local Windows, Node 24.22 / pnpm 12.15.0, Playwright's Chromium):** e2e `shop-checkout.test.ts` 11/11 against the seeded server, incl. the new test (signed in, `/shop/me` held: only the skeleton, no name field, empty order or Pickup; then the page). With `!known.value` removed from the gate the new test failed. `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 154 files, 2124 passed, 1 skipped. Not run: full local e2e (only the checkout page and its composable changed).
+- **Next:** check other pages against the new checklist item, one page per branch.
+
 ## The customer sees a completed order's refund (D234, 2026-10-30)
 
 Merged as PR #219 (`4832310`), deployed (owner, 2026-10-30). The owner's answer to D233's open question: show it. [Decision](decisions.md#d234-the-customer-sees-the-owners-refund-of-a-completed-order-2026-10-30).

@@ -218,7 +218,7 @@ Every page and overlay handles the states that can occur for it. This table is t
 
 | State | What the user sees | Built with |
 |---|---|---|
-| **Loading (first)** | Placeholder rows or cards shaped like the content; never the empty state | `ListSkeleton`, `useApiQuery().loading` ([ui-helpers](./ui-helpers.md#listskeleton)) |
+| **Loading (first)** | Placeholder rows or cards shaped like the content; never the empty state. On a page built from several sources, one skeleton until all that decide its layout have answered ([below](#first-load-waits-for-everything-that-decides-the-layout-d235)) | `ListSkeleton`, `useApiQuery().loading` ([ui-helpers](./ui-helpers.md#listskeleton)) |
 | **Refreshing** | Existing content stays, dimmed; a thin moving bar on the header's bottom edge (nothing moves; nothing for a refresh under 150ms). Never a spinner in the toolbar: on phones it wrapped onto a line of its own (D206) | `<RefreshBar :active="refreshing">` ([ui-helpers](./ui-helpers.md#refreshbar-and-userefreshindicator)) |
 | **Initial empty** | A title naming the resource ("No availability rules yet", "No staff yet"), one sentence of why it matters, and the create action (if the user may create) | `ListEmptyState` |
 | **Filtered empty** | A title naming the resource ("No availability rules match your filters", "No menu items match your search") + Clear filters. Say it when everything is archived ("Every add-on group is archived" + Show archived) | `ListEmptyState`, a feature-specific variant |
@@ -233,3 +233,18 @@ Every page and overlay handles the states that can occur for it. This table is t
 | **Busy record** | The row dims with a spinner; its actions are unavailable | `isBusy` ([mutations](./mutations.md)) |
 
 **Errors inside overlays** appear in the overlay, not only as toasts: toasts behind a modal are unreachable (they're `aria-hidden`).
+
+### First load waits for everything that decides the layout (D235)
+
+A page whose sections depend on more than one source shows **one** skeleton, shaped like the page, until every source that decides *which* sections, fields or states appear has answered. One query's `loading`, or `useMounted()`, isn't enough: the rest of the page draws with defaults, then changes in front of the user. Review order did this after a reload: "Your name" showed to signed-in customers, "Your order is empty" showed until the branches answered, and "Pickup" showed before it switched to "Dine-in".
+
+- **List the sources first.** Every `useApiQuery` whose answer adds, removes or switches a section; the account (`useCustomerAccount().known`: `account` is `null` until then, which looks like signed out); browser-stored values (`useLocalStorage`/`useSessionStorage` with `initOnMounted` are empty until mounted, D95); and queries that other values hang from (Review order's cart is kept per branch, so it is empty until the branches answer).
+- **Combine them in one `loading` computed** that drives the skeleton, the bottom bar and the primary action. Data that only fills a value already in place (a price, a count, a name in a header) may keep its own small `USkeleton` instead.
+- **Only the first answer.** Use `loading` (pending with no data), not `pending`, so a refetch or a changed filter keeps the content (the Refreshing state above).
+- **A failed source that decides the layout shows its `ApiErrorAlert` with Retry**, never the empty state or a default it would have replaced.
+- **Test it** with an e2e test that holds the slowest deciding request (`page.route` awaiting a promise), checks that only the skeleton is shown (no field, empty state or default text it would replace), then releases it. Remove a source from the gate and check that the test fails. Example: `shop-checkout.test.ts` → "a reload shows one skeleton until the account is known".
+
+```ts
+const loading = computed(() => !mounted.value || !known.value || checkout.shop.loading.value
+  || (lines.value.length > 0 && !quoted.value && !quote.error.value))
+```

@@ -139,6 +139,8 @@ export function useCheckout() {
   }
 
   return {
+    /** The branches: until they're known, so isn't the order (kept per branch) nor its table. */
+    shop,
     branchId,
     cart,
     table: tableHere,

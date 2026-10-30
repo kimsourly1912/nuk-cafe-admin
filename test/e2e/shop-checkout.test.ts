@@ -149,6 +149,31 @@ describe('placing an order', () => {
     expect(problems).toEqual([])
   })
 
+  it('a reload shows one skeleton until the account is known: an account never sees "Your name" or an empty order', async () => {
+    const { page, problems } = await signedIn(seed.customers.shopperA)
+    await addToOrder(page, 'Banana Bread')
+    let answer!: () => void
+    const held = new Promise<void>(resolve => (answer = resolve))
+    await page.route('**/api/c/nuk/shop/me', async (route) => {
+      await held
+      await route.continue()
+    })
+    // The prices answer while the account is held: the page still waits for it.
+    const priced = page.waitForResponse(response => response.url().includes('/public/checkout/quote'))
+    await reviewOrder(page)
+    await priced
+    await page.getByRole('status', { name: 'Loading your order' }).waitFor()
+    expect(await page.getByLabel('Your name').count()).toBe(0)
+    expect(await page.getByText('Your order is empty').count()).toBe(0)
+    expect(await page.getByText(/^Pickup/).count()).toBe(0)
+
+    answer()
+    await button(page, 'Place order · $2.25').waitFor()
+    await page.getByText('Pickup at Riverside').waitFor()
+    expect(await page.getByLabel('Your name').count()).toBe(0)
+    expect(problems).toEqual([])
+  })
+
   it('an account whose email isn\'t verified orders straight away (D156)', async () => {
     const { page } = await signedIn(seed.customers.shopperUnverified)
     await addToOrder(page, 'Banana Bread')
