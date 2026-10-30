@@ -2,6 +2,14 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## The backup polls D1's export like Wrangler (D228, 2026-10-30)
+
+Branch `ccr-c6503e1b-4fiibm` (from main `5f31021`, after PR #216). The owner's Workflows page showed why the first test backups stored nothing: attempt #1 "The export isn't ready yet", then "D1's export failed: Not currently exporting anything." on every retry (30 s … 16 min). The export token works; the polling didn't. [Decision](decisions.md#d228-the-backup-polls-d1s-export-without-pause-with-the-newest-bookmark-2026-10-30).
+
+- **Change:** `exportDump` starts the export and asks every second with the newest bookmark until the download address (5 minutes at most), as `wrangler d1 export` does; one step, **export, encrypt and store**, so a retry starts a new export. `startExport`/`exportedDump` and the separate start step removed. Operations → When FAILED arrives names the old error.
+- **Evidence (2026-10-30, local Linux, Node 22.22 / pnpm 12.15.0):** `ops/backup` tests 26 (the export rewritten against a stand-in D1 that forgets a stale bookmark); sending the first bookmark again failed "asks again every second with the newest bookmark"; dropping the wait made the file never finish (worker aborted). **Local Workflow runs** against that stand-in (`wrangler dev --local`): main's code reproduced the owner's error (not ready, then "forgotten" at +30 s and +90 s); this code: start, b0 → b1 → b2 → complete in 3 s, dump, `PUT daily/angder-2026-10-30.sql.age` with `If-None-Match: *`, 🟢 "Angder backup stored", and the stored copy decrypted with a test age key to the exact dump. Not run against real Cloudflare: the owner's next Deploy backup.
+- **Owner, after merge:** terminate the waiting instances (Workflows → `angder-backup`, the red square), then **Deploy backup** once: 🟢 in Angder Ops and a file under `angder-backups/daily/`.
+
 ## A backup failure no retry can fix reports at once (D227, 2026-10-30)
 
 Branch `ccr-c6503e1b-4fiibm` (from main `70c227d`). The owner set up the nightly backup and ran **Deploy backup** three times (runs 1–3, 2026-10-30 01:52–01:58 UTC, all green): no message in Angder Ops and no copy in R2. The green run only triggers the test backup; every error was then retried for about 15 minutes (export) or 8.5 hours (storing) before FAILED. [Decision](decisions.md#d227-a-backup-failure-no-retry-can-fix-reports-at-once-2026-10-30). The owner's actual error isn't known yet: it is on the Workflows page of those instances.

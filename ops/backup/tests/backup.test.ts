@@ -1,6 +1,6 @@
 import { Decrypter, generateIdentity, identityToRecipient } from 'age-encryption'
 import { describe, expect, it, vi } from 'vitest'
-import { backupKeys, downloadDump, encryptDump, exportedDump, failureText, MAX_DUMP_BYTES, missingSettings, PermanentError, sendOps, startExport, storeCopy, successText } from '../src/backup'
+import { backupKeys, downloadDump, encryptDump, exportDump, failureText, MAX_DUMP_BYTES, missingSettings, PermanentError, sendOps, storeCopy, successText } from '../src/backup'
 import type { BackupEnv } from '../src/backup'
 
 // The nightly backup's steps (D225) with stand-ins for Cloudflare's API, the backup bucket and Telegram.
@@ -52,37 +52,83 @@ describe('settings', () => {
 })
 
 describe('the export', () => {
-  it('starts one for production\'s database with the token, and answers its bookmark', async () => {
-    const { fetchFn, calls } = stub(() => exportAnswer({ at_bookmark: 'bm-1', status: 'active' }))
-    expect(await startExport(fetchFn, env)).toBe('bm-1')
+  /** Waits nothing; counts the waits. */
+  const noWait = () => {
+    const waits: number[] = []
+    const wait = async (ms: number) => {
+      waits.push(ms)
+    }
+    return { waits, wait }
+  }
+  const body = (call: { init?: RequestInit }) => JSON.parse(String(call.init!.body)) as Record<string, unknown>
+
+  /**
+   * D1 as it behaves (D228): each answer names a new bookmark; asked about any other bookmark, it has
+   * forgotten the export. Ready after `readyAfter` questions.
+   */
+  function d1(readyAfter: number) {
+    let current = 'bm-0'
+    let asked = 0
+    return stub((_url, init) => {
+      const { current_bookmark: bookmark } = JSON.parse(String(init!.body)) as { current_bookmark?: string }
+      if (bookmark !== undefined && bookmark !== current) return exportAnswer({ error: 'Not currently exporting anything.' })
+      asked += 1
+      if (asked > readyAfter) return exportAnswer({ status: 'complete', signed_url: 'https://dump.example/x.sql' })
+      current = `bm-${asked}`
+      return exportAnswer({ at_bookmark: current, status: 'active' })
+    })
+  }
+
+  it('starts one for production\'s database with the token', async () => {
+    const { fetchFn, calls } = d1(0)
+    expect(await exportDump(fetchFn, env, noWait())).toBe('https://dump.example/x.sql')
     expect(calls[0]!.url).toBe('https://api.cloudflare.com/client/v4/accounts/prod-account/d1/database/prod-db/export')
     expect(new Headers(calls[0]!.init!.headers).get('authorization')).toBe('Bearer d1-secret-token')
-    expect(JSON.parse(String(calls[0]!.init!.body))).toEqual({ output_format: 'polling' })
+    expect(body(calls[0]!)).toEqual({ output_format: 'polling' })
+  })
+
+  it('asks again every second with the newest bookmark until D1 gives the download address', async () => {
+    const { fetchFn, calls } = d1(3)
+    const { waits, wait } = noWait()
+    expect(await exportDump(fetchFn, env, { wait })).toBe('https://dump.example/x.sql')
+    expect(calls.map(body)).toEqual([
+      { output_format: 'polling' },
+      { output_format: 'polling', current_bookmark: 'bm-1' },
+      { output_format: 'polling', current_bookmark: 'bm-2' },
+      { output_format: 'polling', current_bookmark: 'bm-3' },
+    ])
+    expect(waits).toEqual([1000, 1000, 1000])
+  })
+
+  it('gives up after five minutes, as a failure the step retries with a new export', async () => {
+    let clock = 0
+    const { fetchFn } = stub(() => exportAnswer({ at_bookmark: 'bm-1', status: 'active' }))
+    const wait = async (ms: number) => {
+      clock += ms
+    }
+    const error = await exportDump(fetchFn, env, { wait, now: () => clock }).catch((e: Error) => e)
+    expect(String(error)).toContain('wasn\'t ready after 5 minutes')
+    expect(error).not.toBeInstanceOf(PermanentError)
+    expect(clock).toBe(5 * 60_000)
   })
 
   it('fails with Cloudflare\'s reason, not the token, when refused', async () => {
     const { fetchFn } = stub(() => Response.json({ success: false, errors: [{ code: 10000, message: 'Authentication error' }] }, { status: 403 }))
-    const error = await startExport(fetchFn, env).catch((e: Error) => e)
+    const error = await exportDump(fetchFn, env, noWait()).catch((e: Error) => e)
     expect(String(error)).toContain('HTTP 403: Authentication error')
     for (const secret of SECRETS) expect(String(error)).not.toContain(secret)
   })
 
   it('fails on an answer that isn\'t Cloudflare\'s JSON', async () => {
     const { fetchFn } = stub(() => new Response('<html>Bad gateway</html>', { status: 502 }))
-    await expect(startExport(fetchFn, env)).rejects.toThrow('HTTP 502: <html>Bad gateway</html>')
+    await expect(exportDump(fetchFn, env, noWait())).rejects.toThrow('HTTP 502: <html>Bad gateway</html>')
   })
 
-  it('answers null while D1 is still writing it, then its download address', async () => {
-    const pending = stub(() => exportAnswer({ at_bookmark: 'bm-1', status: 'active' }))
-    expect(await exportedDump(pending.fetchFn, env, 'bm-1')).toBeNull()
-    expect(JSON.parse(String(pending.calls[0]!.init!.body))).toEqual({ output_format: 'polling', current_bookmark: 'bm-1' })
-    const ready = stub(() => exportAnswer({ status: 'complete', signed_url: 'https://dump.example/x.sql' }))
-    expect(await exportedDump(ready.fetchFn, env, 'bm-1')).toBe('https://dump.example/x.sql')
-  })
-
-  it('fails when D1 reports the export failed', async () => {
-    const { fetchFn } = stub(() => exportAnswer({ status: 'error', error: 'Database too busy' }))
-    await expect(exportedDump(fetchFn, env, 'bm-1')).rejects.toThrow('D1\'s export failed: Database too busy')
+  it('fails when D1 reports the export failed, or forgot it, or gives no bookmark', async () => {
+    await expect(exportDump(stub(() => exportAnswer({ status: 'error', error: 'Database too busy' })).fetchFn, env, noWait())).rejects.toThrow('D1\'s export failed: Database too busy')
+    await expect(exportDump(stub(() => exportAnswer({ error: 'Not currently exporting anything.' })).fetchFn, env, noWait())).rejects.toThrow('Not currently exporting anything')
+    await expect(exportDump(stub(() => exportAnswer({ status: 'error' })).fetchFn, env, noWait())).rejects.toThrow('without a reason')
+    await expect(exportDump(stub(() => exportAnswer({ status: 'active' })).fetchFn, env, noWait())).rejects.toThrow('no bookmark')
   })
 })
 
@@ -170,15 +216,15 @@ describe('failures no retry can fix end the run at once (D227)', () => {
 
   it('a refused export token, account or request is permanent; a busy or failing service retries', async () => {
     for (const status of [400, 401, 403, 404]) {
-      await expect(startExport(exportRefused(status), env), String(status)).rejects.toBeInstanceOf(PermanentError)
+      await expect(exportDump(exportRefused(status), env), String(status)).rejects.toBeInstanceOf(PermanentError)
     }
     for (const status of [429, 500, 502, 503]) {
-      const error = await startExport(exportRefused(status), env).catch((e: Error) => e)
+      const error = await exportDump(exportRefused(status), env).catch((e: Error) => e)
       expect(error, String(status)).toBeInstanceOf(Error)
       expect(error, String(status)).not.toBeInstanceOf(PermanentError)
     }
     // An answer that isn't ok but says nothing about the request (D1's own failure) retries too.
-    await expect(exportedDump(stub(() => exportAnswer({ error: 'internal' })).fetchFn, env, 'bm-1')).rejects.not.toBeInstanceOf(PermanentError)
+    await expect(exportDump(stub(() => exportAnswer({ error: 'internal' })).fetchFn, env)).rejects.not.toBeInstanceOf(PermanentError)
   })
 
   it('a refused bucket key, signature or bucket is permanent; anything else from R2 retries', async () => {

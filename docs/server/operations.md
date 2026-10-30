@@ -237,6 +237,7 @@ Earlier copies are untouched; the next run is the following night. A setup mista
 
 - *D1's export answered HTTP 401/403*: the export token was revoked, expired or lacks permission (setup step 5); replace `BACKUP_D1_EXPORT_TOKEN`.
 - *The backup bucket refused … HTTP 403*: the bucket's R2 key changed (step 3); replace the three `BACKUP_R2_*` secrets.
+- *D1's export failed: Not currently exporting anything*: the backup code before D228 (2026-10-30) asked about the export too slowly; deploy the current main with **Deploy backup**.
 - *Settings not set*: a secret is missing; add it.
 - *larger than 40 MB*: the database outgrew the in-memory backup: the code needs a streamed upload (D225).
 - Anything else (a Cloudflare or Telegram outage): wait for the next night, or take one now.
