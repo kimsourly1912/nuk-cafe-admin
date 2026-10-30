@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AvailabilityRuleListPage from '~/features/availability-rules/components/AvailabilityRuleListPage.vue'
 
-definePageMeta({ title: 'Availability' })
+definePageMeta({ title: 'Availability', permission: 'menu:read' })
 </script>
 
 <template>

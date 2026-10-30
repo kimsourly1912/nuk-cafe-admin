@@ -18,15 +18,17 @@ const kind = computed(() => classifyError(props.error, slug))
 // A paused cafe's profile still answers, so its page names it. No cafe in the address: none (D221).
 const cafe = useCafe(slug && kind.value !== 'cafe-not-found' ? slug : null)
 
-// The admin workspace goes back to its dashboard, the customer site to the menu (D93), in the cafe of
-// the address. The platform's pages have no cafe: they go to the platform's page, never a guessed
+// The admin workspace goes back to its dashboard, the counter to its home (D240), the customer site to
+// the menu (D93), in the cafe of the address. The platform's pages have no cafe: they go to the platform's page, never a guessed
 // cafe's (D221).
 const inAdmin = isAdminPath(route.path)
 const inCounter = isCounterPath(route.path)
 const homePage = '/'
 const home = !slug
   ? { label: 'Go to home', path: homePage }
-  : inAdmin ? { label: 'Back to dashboard', path: tenantUrl(slug, '/admin') } : { label: 'Back to the menu', path: tenantUrl(slug, '/') }
+  : inAdmin
+    ? { label: 'Back to dashboard', path: tenantUrl(slug, '/admin') }
+    : inCounter ? { label: 'Back to the counter', path: tenantUrl(slug, '/counter') } : { label: 'Back to the menu', path: tenantUrl(slug, '/') }
 
 const context = computed(() => ({
   workspace: inAdmin || inCounter,

@@ -64,5 +64,10 @@ export interface CounterSession {
   email: string
   name: string
   mustChangePassword: boolean
-  branches: { id: string, name: string, role: 'admin' | 'manager' | 'staff' }[]
+  /**
+   * `permissions`: what the session may do at that branch, as `resource:action` (`table:manage`); an
+   * owner's are all of them (D240). For the app to show only what opens: the server checks every
+   * request itself.
+   */
+  branches: { id: string, name: string, role: 'admin' | 'manager' | 'staff', permissions: string[] }[]
 }

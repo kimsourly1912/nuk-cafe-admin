@@ -1,6 +1,6 @@
 import { CAFE_NOT_FOUND, TENANT_SUSPENDED } from '#shared/contracts/cafe'
 import { describe, expect, it } from 'vitest'
-import { classifyError } from '../utils/classify-error'
+import { classifyError, PAGE_FORBIDDEN } from '../utils/classify-error'
 import { errorCopy } from '../utils/error-copy'
 
 describe('classifyError', () => {
@@ -14,6 +14,12 @@ describe('classifyError', () => {
   it('reads the code from JSON text, as after a server render', () => {
     expect(classifyError({ statusCode: 404, data: JSON.stringify({ code: CAFE_NOT_FOUND }) }, 'nuk')).toBe('cafe-not-found')
     expect(classifyError({ statusCode: 404, data: 'not json' }, 'nuk')).toBe('page-not-found')
+  })
+
+  it('names the app\'s own refusal of a page, with or without a cafe (D240)', () => {
+    expect(classifyError({ statusCode: 403, data: { code: PAGE_FORBIDDEN } }, 'nuk')).toBe('page-forbidden')
+    expect(classifyError({ statusCode: 403, data: JSON.stringify({ code: PAGE_FORBIDDEN }) }, undefined)).toBe('page-forbidden')
+    expect(classifyError({ statusCode: 403 }, 'nuk')).toBe('generic')
   })
 
   it('treats any other 404 as an unknown page and anything else as generic', () => {

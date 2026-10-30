@@ -2,8 +2,8 @@
 /**
  * The counter's header (D102, the owner's frames): the cafe (D143), the branch and whether it's open, the
  * order search (on the queue), Sold out (the page that switches items off, 6.3c, D105), Manage for
- * managers and owners (Dining tables and Reports, D198; Pause or Resume online orders, D199; never
- * shown to staff, and the server checks the role again), the color mode and the user menu (the chime on or off, another branch, another cafe (D144), change password,
+ * managers and owners (Dining tables and Reports, D198; Pause or Resume online orders, D199;
+ * each by the session's permissions at the branch, D240, and the server checks again), the color mode and the user menu (the chime on or off, another branch, another cafe (D144), change password,
  * install app (D203), sign out).
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
@@ -27,7 +27,8 @@ const searchInput = useTemplateRef('searchInput')
 // Only where the header has the search: the Finished and Sold out pages bring their own.
 if (search.value !== undefined) usePageShortcuts({ '/': () => searchInput.value?.inputRef?.focus() })
 
-const { user, signOut } = useCounterSession()
+const { user, signOut, can } = useCounterSession()
+const router = useRouter()
 const slug = useTenantSlug()
 const tenantPath = useTenantPath()
 // The branch, whether it's open and the chime setting come from here, so every page passes only the branch.
@@ -39,18 +40,25 @@ const soldOutTo = computed(() => (props.soldOutButton && branch.value ? tenantPa
 const { pausedUntil, resume } = useBranchPause(() => props.branchId)
 const pauseModal = useOverlay().create(CounterPauseModal)
 
-// A manager's tools (D198): the role is the one at this branch (an owner's is `admin`).
-const manage = computed<DropdownMenuItem[][]>(() => branch.value && branch.value.role !== 'staff'
-  ? [
-      [pausedUntil.value
+// A manager's tools (D198), by what the session may do at this branch (D240): pausing by `branch:pause`,
+// the pages by their own `branchPermission` meta, the one the route middleware checks.
+const opens = (to: string) => {
+  const permission = router.resolve(to).meta.branchPermission
+  return !permission || can(props.branchId, permission)
+}
+const manage = computed<DropdownMenuItem[][]>(() => {
+  if (!branch.value) return []
+  const pause: DropdownMenuItem[] = !can(props.branchId, 'branch:pause')
+    ? []
+    : [pausedUntil.value
         ? { label: 'Resume online orders', icon: 'i-lucide-play', onSelect: () => void resume.execute(props.branchId) }
-        : { label: 'Pause online orders…', icon: 'i-lucide-pause', disabled: openNow.value === false, onSelect: () => void pauseModal.open({ branchId: props.branchId }) }],
-      [
-        { label: 'Reports', icon: 'i-lucide-chart-column', to: tenantPath(`/counter/${branch.value.id}/reports/summary`) },
-        { label: 'Dining tables', icon: 'i-lucide-armchair', to: tenantPath(`/counter/${branch.value.id}/tables`) },
-      ],
-    ]
-  : [])
+        : { label: 'Pause online orders…', icon: 'i-lucide-pause', disabled: openNow.value === false, onSelect: () => void pauseModal.open({ branchId: props.branchId }) }]
+  const pages: DropdownMenuItem[] = [
+    { label: 'Reports', icon: 'i-lucide-chart-column', to: tenantPath(`/counter/${branch.value.id}/reports/summary`) },
+    { label: 'Dining tables', icon: 'i-lucide-armchair', to: tenantPath(`/counter/${branch.value.id}/tables`) },
+  ].filter(item => opens(item.to))
+  return [pause, pages].filter(group => group.length > 0)
+})
 const muted = useCounterMuted()
 const { name, logoUrl } = useCafe()
 // Someone who works at more than one cafe (T2c, D144) can open another one's counter from Your cafes.

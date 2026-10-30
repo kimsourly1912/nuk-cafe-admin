@@ -63,7 +63,12 @@ export const ADMIN: AdminSession = {
   email: 'admin@nukcafe.test',
   name: 'alice',
   role: 'admin',
-  permissions: ['menu:read', 'menu:write', 'media:upload', 'branch:read', 'staff:read', 'staff:create', 'staff:update', 'staff:disable'],
+  // An owner's, as the server grants them (tenantRoles.owner): pages check them (D240).
+  permissions: [
+    'menu:read', 'menu:write', 'menu:publish', 'media:upload', 'branch:create', 'branch:read', 'branch:update',
+    'staff:read', 'staff:create', 'staff:update', 'staff:disable', 'staff:reset-password', 'voucherTemplate:manage',
+    'loyalty:adjust', 'settings:manage', 'report:read', 'report:export', 'audit:read', 'assistant:use', 'support:grant',
+  ],
   mustChangePassword: false,
   supportAllowedUntil: null,
 }

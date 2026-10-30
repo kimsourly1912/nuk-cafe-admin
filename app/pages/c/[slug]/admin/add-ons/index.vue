@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ModifierGroupListPage from '~/features/modifier-groups/components/ModifierGroupListPage.vue'
 
-definePageMeta({ title: 'Add-ons' })
+definePageMeta({ title: 'Add-ons', permission: 'menu:read' })
 </script>
 
 <template>

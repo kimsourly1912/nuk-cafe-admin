@@ -230,6 +230,23 @@ describe('counter surface', () => {
       expect(session.branches.map(b => b.role)).toEqual(['admin', 'admin'])
     })
 
+    it('lists what each branch\'s role grants there; an owner holds everything, also where they are staff (D240)', async () => {
+      const staff = await staffAt(branchId, 'staff')
+      await addBranchStaff(db, otherBranchId, staff.id, 'manager')
+      const byBranch = Object.fromEntries((await counterSession(db, staff, TEST_TENANT)).branches.map(b => [b.id, b.permissions]))
+      expect(byBranch[branchId]).toContain('order:cancel')
+      expect(byBranch[branchId]).not.toContain('table:manage')
+      expect(byBranch[branchId]).not.toContain('report:read')
+      expect(byBranch[otherBranchId]).toEqual(expect.arrayContaining(['table:manage', 'report:read', 'branch:pause']))
+      expect(byBranch[otherBranchId]).not.toContain('payment:refund')
+
+      const owner = await person('owner')
+      await addBranchStaff(db, branchId, owner.id, 'staff')
+      const ownerBranch = (await counterSession(db, owner, TEST_TENANT)).branches.find(b => b.id === branchId)!
+      expect(ownerBranch.role).toBe('staff')
+      expect(ownerBranch.permissions).toEqual(expect.arrayContaining(['table:manage', 'report:read', 'payment:refund']))
+    })
+
     it('answers on a temporary password; refuses no session (401) and someone with no branch here (403 NOT_STAFF)', async () => {
       const staff = { ...(await staffAt(branchId, 'staff')), mustChangePassword: true }
       expect((await counterSession(db, staff, TEST_TENANT)).mustChangePassword).toBe(true)

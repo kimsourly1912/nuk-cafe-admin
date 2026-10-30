@@ -154,11 +154,20 @@ export function useCounterSession() {
     if (user.value && !user.value.mustChangePassword) user.value = { ...user.value, mustChangePassword: true }
   }
 
+  /**
+   * Whether the session may take an action at a branch, as `resource:action` (`table:manage`, D240).
+   * A branch it doesn't work at: no. For the app only: the server checks every request.
+   */
+  function can(branchId: string, permission: string) {
+    return user.value?.branches.find(branch => branch.id === branchId)?.permissions.includes(permission) ?? false
+  }
+
   return {
     user: readonly(user),
     checked: readonly(checked),
     generation: readonly(generation),
     signingOut: readonly(signingOut),
+    can,
     isSignedIn,
     mustChangePassword,
     fetchSession,

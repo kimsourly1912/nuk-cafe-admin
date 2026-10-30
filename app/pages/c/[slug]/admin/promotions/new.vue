@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import PromotionEditorPage from '~/features/promotions/components/PromotionEditorPage.vue'
 
-definePageMeta({ title: 'New promotion' })
+definePageMeta({ title: 'New promotion', permission: 'menu:read' })
 
 const route = useRoute()
 /** Run again: a new promotion filled from an earlier one. */

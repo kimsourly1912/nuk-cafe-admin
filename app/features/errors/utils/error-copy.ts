@@ -38,6 +38,12 @@ export function errorCopy(kind: ErrorKind, { workspace, cafeName, message }: Err
     }
     case 'page-not-found':
       return { icon: 'i-app-coffee-cup-not-found', title: 'Page not found', description: 'The page you\'re looking for doesn\'t exist or may have moved.' }
+    case 'page-forbidden':
+      return {
+        icon: 'i-app-cafe-error',
+        title: 'No access to this page',
+        description: 'This account doesn\'t have permission to open this page.',
+      }
     case 'generic':
       return { icon: 'i-app-cafe-error', title: 'Something went wrong', description: message }
   }

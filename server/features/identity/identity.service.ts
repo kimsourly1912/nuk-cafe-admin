@@ -5,7 +5,7 @@ import type { Db } from '#server/utils/batch'
 import { listBranchOptions } from '#server/features/branches'
 import { findActiveTenant, findTenant, findTenantBySlug, listActiveTenantPage } from '#server/features/tenants'
 import { branchNotFound, forbidden, notAdmin, notPlatformAdmin, notStaff, passwordChangeRequired, tenantNotFound, tenantSuspended, twoFactorRequired, unauthenticated } from './identity.errors'
-import { branchRoles, platformRoles, tenantRoles, tenantStatements } from './identity.permissions'
+import { branchRoles, branchStatements, platformRoles, tenantRoles, tenantStatements } from './identity.permissions'
 import type { BranchPermission, BranchRole, PlatformPermission, PlatformRole, TenantPermission, TenantRole } from './identity.permissions'
 import * as repo from './identity.repository'
 import type { Actor, BranchActor, SessionUser } from './identity.types'
@@ -120,6 +120,18 @@ function grantedPermissions(role: TenantRole): string[] {
 }
 
 /**
+ * Every `resource:action` a branch role grants at a branch, for the counter to show only what opens
+ * there (D240). A tenant's owner holds them all, whatever role they also have at the branch, as
+ * `authorizeBranch` decides.
+ */
+function grantedBranchPermissions(role: BranchRole | 'owner'): string[] {
+  return Object.entries(branchStatements).flatMap(([resource, actions]) =>
+    (actions as readonly string[])
+      .filter(action => role === 'owner' || branchRoles[role].authorize({ [resource]: [action] } as BranchPermission).success)
+      .map(action => `${resource}:${action}`))
+}
+
+/**
  * The admin app's session check (`GET /api/admin/me`): an owner of the tenant, **including one still
  * on a temporary password** (the app then shows the change-password page; every other admin route
  * refuses). Not signed in or banned: 401. Signed in, not an owner: 403 `NOT_ADMIN`.
@@ -150,8 +162,8 @@ export async function counterSession(db: Db, user: SessionUser | null | undefine
   const staff = await repo.listStaffBranches(db, tenantId, user.id)
   const roleOf = new Map(staff.filter(m => m.role in branchRoles).map(m => [m.id, m.role as BranchRole]))
   const branches = owner
-    ? (await listBranchOptions(db, tenantId)).map(branch => ({ ...branch, role: roleOf.get(branch.id) ?? 'admin' as const }))
-    : staff.filter(m => roleOf.has(m.id)).map(m => ({ id: m.id, name: m.name, role: roleOf.get(m.id)! }))
+    ? (await listBranchOptions(db, tenantId)).map(branch => ({ ...branch, role: roleOf.get(branch.id) ?? 'admin' as const, permissions: grantedBranchPermissions('owner') }))
+    : staff.filter(m => roleOf.has(m.id)).map(m => ({ id: m.id, name: m.name, role: roleOf.get(m.id)!, permissions: grantedBranchPermissions(roleOf.get(m.id)!) }))
   if (!branches.length && !owner) throw notStaff()
   return {
     userId: user.id,
