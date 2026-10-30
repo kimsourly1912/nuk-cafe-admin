@@ -101,6 +101,45 @@ export async function accessInstead(currentSlug: string, workspace: WorkspaceDoo
   return otherAccess(cafes, currentSlug, workspace, workspace !== 'console' && isPlatformTeam(account))
 }
 
+/**
+ * Whether this browser's account is on the platform team, for Your cafes' link to the console (Q5,
+ * D241). Signed out: `false`. Throws on a failed request. Only for what to show: the console checks
+ * the role itself.
+ */
+export async function isPlatformTeamSession(): Promise<boolean> {
+  return isPlatformTeam(await sessionAccount())
+}
+
+/** Where a staff account replaces its temporary password, and the place's name for the message. */
+export interface ChangePasswordTarget {
+  path: string
+  /** "NUK Cafe's admin app", "the platform console". */
+  name: string
+}
+
+/**
+ * The change-password page of a workspace the account opens (Q3, D241): the first active cafe's
+ * admin app, else its counter, else the platform console for the team; `null` when none opens. One is
+ * enough: the password is the account's, wherever it's changed.
+ */
+export function changePasswordTargetOf(cafes: readonly AccountCafe[], platform: boolean): ChangePasswordTarget | null {
+  const cafe = cafes.find(c => c.status === 'active' && c.workspaces.length > 0)
+  if (cafe) {
+    const admin = cafe.workspaces.includes('admin')
+    return {
+      path: tenantUrl(cafe.slug, admin ? '/admin/change-password' : '/counter/change-password'),
+      name: `${cafe.name}'s ${admin ? 'admin app' : 'counter'}`,
+    }
+  }
+  return platform ? { path: `${PLATFORM_CONSOLE_PATH}/change-password`, name: 'the platform console' } : null
+}
+
+/** `changePasswordTargetOf` for the signed-in account (`/api/me/cafes` answers on a temporary password). Throws on a failed request. */
+export async function changePasswordTarget(): Promise<ChangePasswordTarget | null> {
+  const [cafes, account] = await Promise.all([fetchAccountCafes(), sessionAccount()])
+  return changePasswordTargetOf(cafes, isPlatformTeam(account))
+}
+
 /** A session the workspace refused, met on arriving at its sign-in: whose it is and where it may go. */
 export interface RefusedSession {
   email: string

@@ -62,10 +62,13 @@ describe('the cafe switcher', () => {
 })
 
 describe('Your cafes', () => {
-  async function open(cafes: AccountCafe[] | (() => never)) {
+  async function open(cafes: AccountCafe[] | (() => never), role?: string) {
     const page = await createPage()
     await page.setViewportSize({ width: 390, height: 844 })
-    await mockApi(page, { 'GET /me/cafes': typeof cafes === 'function' ? cafes : () => cafes })
+    await mockApi(page, {
+      'GET /me/cafes': typeof cafes === 'function' ? cafes : () => cafes,
+      'GET /auth/get-session': () => (role ? { user: { email: 'pat@example.com', role } } : null),
+    })
     await page.goto(url('/cafes'), { waitUntil: 'hydration' })
     return page
   }
@@ -85,8 +88,19 @@ describe('Your cafes', () => {
   it('says so for an account that works at no cafe', async () => {
     const page = await open([])
     await page.getByText('This account doesn\'t work at a cafe').waitFor()
-    // No link into a guessed cafe (D221).
+    // No link into a guessed cafe (D221), nor to the console for an account off the platform team.
     expect(await page.locator('a[href^="/c/"]').count()).toBe(0)
+    expect(await page.getByRole('link', { name: 'Open the platform console' }).count()).toBe(0)
+  })
+
+  it('links a platform team account to the console, first when it works at no cafe (Q5)', async () => {
+    const page = await open([], 'superadmin')
+    await page.getByText('This is a platform team account', { exact: false }).waitFor()
+    expect(await page.getByRole('link', { name: 'Open the platform console' }).getAttribute('href')).toBe('/platform')
+
+    const owner = await open([NUK], 'superadmin')
+    await owner.getByRole('link', { name: 'Admin, NUK Cafe' }).waitFor()
+    await owner.getByRole('link', { name: 'Open the platform console' }).waitFor()
   })
 
   it('sends a signed-out visitor to sign in, and back here afterwards', async () => {
