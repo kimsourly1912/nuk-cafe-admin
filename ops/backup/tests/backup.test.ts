@@ -1,6 +1,6 @@
 import { Decrypter, generateIdentity, identityToRecipient } from 'age-encryption'
 import { describe, expect, it, vi } from 'vitest'
-import { backupKeys, downloadDump, encryptDump, exportedDump, failureText, MAX_DUMP_BYTES, missingSettings, sendOps, startExport, storeCopy, successText } from '../src/backup'
+import { backupKeys, downloadDump, encryptDump, exportedDump, failureText, MAX_DUMP_BYTES, missingSettings, PermanentError, sendOps, startExport, storeCopy, successText } from '../src/backup'
 import type { BackupEnv } from '../src/backup'
 
 // The nightly backup's steps (D225) with stand-ins for Cloudflare's API, the backup bucket and Telegram.
@@ -160,6 +160,56 @@ describe('storing a copy', () => {
   it('fails on any other refusal', async () => {
     await expect(storeCopy(stub(() => new Response('<Error><Code>OperationAborted</Code></Error>', { status: 409 })).fetchFn, env, 'k', body)).rejects.toThrow('HTTP 409')
     await expect(storeCopy(stub(() => new Response('<Error><Code>AccessDenied</Code></Error>', { status: 403 })).fetchFn, env, 'k', body)).rejects.toThrow('AccessDenied')
+  })
+})
+
+describe('failures no retry can fix end the run at once (D227)', () => {
+  const body = new Uint8Array([1, 2, 3])
+  const refused = (status: number, text = '<Error><Code>X</Code></Error>') => stub(() => new Response(text, { status })).fetchFn
+  const exportRefused = (status: number) => stub(() => Response.json({ success: false, errors: [{ message: 'refused' }] }, { status })).fetchFn
+
+  it('a refused export token, account or request is permanent; a busy or failing service retries', async () => {
+    for (const status of [400, 401, 403, 404]) {
+      await expect(startExport(exportRefused(status), env), String(status)).rejects.toBeInstanceOf(PermanentError)
+    }
+    for (const status of [429, 500, 502, 503]) {
+      const error = await startExport(exportRefused(status), env).catch((e: Error) => e)
+      expect(error, String(status)).toBeInstanceOf(Error)
+      expect(error, String(status)).not.toBeInstanceOf(PermanentError)
+    }
+    // An answer that isn't ok but says nothing about the request (D1's own failure) retries too.
+    await expect(exportedDump(stub(() => exportAnswer({ error: 'internal' })).fetchFn, env, 'bm-1')).rejects.not.toBeInstanceOf(PermanentError)
+  })
+
+  it('a refused bucket key, signature or bucket is permanent; anything else from R2 retries', async () => {
+    for (const [status, code] of [[403, 'AccessDenied'], [403, 'SignatureDoesNotMatch'], [403, 'InvalidAccessKeyId'], [404, 'NoSuchBucket'], [400, 'InvalidArgument']] as const) {
+      const error = await storeCopy(refused(status, `<Error><Code>${code}</Code></Error>`), env, 'k', body).catch((e: Error) => e)
+      expect(error, code).toBeInstanceOf(PermanentError)
+      expect(String(error), code).toContain(code)
+    }
+    for (const status of [409, 429, 500, 503]) {
+      await expect(storeCopy(refused(status), env, 'k', body), String(status)).rejects.not.toBeInstanceOf(PermanentError)
+    }
+  })
+
+  it('a public key that isn\'t one, or none, is permanent, and says which setting', async () => {
+    const error = await encryptDump(bytes('x'), 'age1notakey').catch((e: Error) => e)
+    expect(error).toBeInstanceOf(PermanentError)
+    expect(String(error)).toContain('BACKUP_AGE_RECIPIENTS')
+    await expect(encryptDump(bytes('x'), ' ')).rejects.toBeInstanceOf(PermanentError)
+  })
+
+  it('the FAILED message gives the reason without the Workflow\'s NonRetryableError prefix', () => {
+    const text = failureText(new Error('NonRetryableError: D1\'s export answered HTTP 403: Authentication error'), Date.UTC(2026, 9, 30, 2, 12))
+    expect(text).toContain('Reason: D1\'s export answered HTTP 403: Authentication error')
+    expect(text).not.toContain('NonRetryableError')
+  })
+
+  it('a dump too big for memory is permanent; a failed or empty download retries (the next try exports again)', async () => {
+    const big = stub(() => new Response('x', { headers: { 'content-length': String(MAX_DUMP_BYTES + 1) } })).fetchFn
+    await expect(downloadDump(big, 'https://dump')).rejects.toBeInstanceOf(PermanentError)
+    await expect(downloadDump(refused(403), 'https://dump')).rejects.not.toBeInstanceOf(PermanentError)
+    await expect(downloadDump(stub(() => new Response('')).fetchFn, 'https://dump')).rejects.not.toBeInstanceOf(PermanentError)
   })
 })
 

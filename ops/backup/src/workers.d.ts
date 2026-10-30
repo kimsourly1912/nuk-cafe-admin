@@ -22,3 +22,10 @@ declare module 'cloudflare:workers' {
     abstract run(event: WorkflowEvent<T>, step: WorkflowStep): Promise<unknown>
   }
 }
+
+declare module 'cloudflare:workflows' {
+  /** Thrown in a step: no more retries; the error reaches `run` (D227). */
+  export class NonRetryableError extends Error {
+    constructor(message: string, name?: string)
+  }
+}
