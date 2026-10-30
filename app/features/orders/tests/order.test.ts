@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Order } from '#shared/contracts/orders'
-import { cancellationText, countdown, formatPickupNumber, nextStep, orderBarText, paymentText, placedText, statusBadge, trackerSteps } from '../utils/order'
+import { cancellationText, countdown, formatPickupNumber, nextStep, orderBarText, paymentText, placedText, refundText, statusBadge, trackerSteps } from '../utils/order'
 
 const payment = (over: Partial<NonNullable<Order['payment']>> = {}): NonNullable<Order['payment']> => ({
   method: 'cash_usd', amountMinor: 975, amountKhr: null, collectedAt: '2026-09-30T03:21:00.000Z', returnMethod: null, returnedAt: null, ...over,
@@ -51,6 +51,17 @@ describe('the order page (D100, D114)', () => {
     expect(cancellationText({ cancellation: { by: 'cafe', reason: 'item_unavailable' }, payment: payment({ returnMethod: 'cash', returnedAt: '2026-09-30T03:30:00.000Z' }), totalMinor: 975 }))
       .toEqual({ title: 'Cancelled by the cafe: item unavailable.', detail: '$9.75 returned in cash.' })
     expect(cancellationText({ cancellation: { by: 'cafe', reason: 'other' }, payment: payment({ method: 'khqr', returnMethod: 'khqr' }), totalMinor: 975 }).detail).toBe('$9.75 returned by KHQR.')
+  })
+
+  it('a completed order\'s refund (D234): the full payment, how and when; nothing otherwise', () => {
+    const returned = { returnMethod: 'khqr', returnedAt: '2026-10-02T12:05:00.000Z' } as const
+    expect(refundText({ status: 'completed', payment: payment(returned) }))
+      .toEqual({ title: '$9.75 refunded by KHQR', detail: expect.stringMatching(/^The cafe returned your payment on 2 Oct, \d{1,2}:\d{2} [AP]M\.$/) })
+    expect(refundText({ status: 'completed', payment: payment({ method: 'cash_khr', amountKhr: 40_000, returnMethod: 'cash', returnedAt: returned.returnedAt }) })?.title).toBe('៛40,000 refunded in cash')
+    expect(refundText({ status: 'completed', payment: payment() })).toBeNull()
+    expect(refundText({ status: 'completed', payment: null })).toBeNull()
+    // A cancelled order says it in its cancellation instead.
+    expect(refundText({ status: 'cancelled', payment: payment(returned) })).toBeNull()
   })
 
   it('the payment line, in riel for cash riel', () => {

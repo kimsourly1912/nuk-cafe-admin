@@ -6,6 +6,7 @@ import type { PublicMenu } from '#shared/contracts/public-menu'
 import type { SeedCustomer } from './support/seed'
 import { setupE2e } from './support/mock-api'
 import { asNewVisitor, clientHeaders } from './support/client-address'
+import { e2eDatabase } from './support/database'
 
 await setupE2e()
 
@@ -49,6 +50,17 @@ async function counter(order: Order, action: 'pay' | 'ready' | 'complete', versi
   const body = action === 'pay' ? { version, method: 'cash_usd' } : { version }
   const response = await send(`/api/c/nuk/counter/${seed.openBranchId}/orders/${order.id}/${action}`, cashier, body)
   expect(response.status).toBe(200)
+}
+
+/** Writes straight to the e2e server's database (the owner's refund is tested in `refund.service.test.ts`). */
+async function sql(statement: string, args: (string | number)[] = []) {
+  const client = e2eDatabase(seed.dbFile)
+  try {
+    await client.execute({ sql: statement, args })
+  }
+  finally {
+    client.close()
+  }
 }
 
 const number = (order: Order) => String(order.pickupNumber).padStart(3, '0')
@@ -104,6 +116,23 @@ describe('following an order', () => {
     await expect.poll(() => page.getByText('Added 2 items to your order').first().isVisible()).toBe(true)
     const panel = page.getByRole('complementary', { name: 'Your order' })
     await expect.poll(() => panel.getByText('Banana Bread', { exact: true }).isVisible()).toBe(true)
+    expect(problems).toEqual([])
+  })
+
+  it('a completed order the owner refunded stays completed and says the money went back (D234)', async () => {
+    const order = await placeOrder(seed.customers.followerD)
+    await counter(order, 'pay', 1)
+    await counter(order, 'ready', 2)
+    await counter(order, 'complete', 3)
+    // What the owner's refund writes on the payment (D233), by the cafe's owner.
+    await sql('update counter_payments set return_method = \'khqr\', returned_at = ?, returned_by = (select id from user where email = \'e2e-admin@example.com\') where order_id = ?', [Date.now(), order.id])
+
+    const { page, problems } = await signedIn(seed.customers.followerD, `/c/nuk/orders/${order.id}`, 390)
+    await expect.poll(() => page.getByText(/^Picked up at /).isVisible()).toBe(true)
+    expect(await page.getByText('Completed', { exact: true }).isVisible()).toBe(true)
+    await expect.poll(() => page.getByText(/^\$\d+\.\d{2} refunded by KHQR$/).isVisible()).toBe(true)
+    expect(await page.getByText(/^The cafe returned your payment on \d{1,2} \w{3}, \d{1,2}:\d{2} [AP]M\.$/).isVisible()).toBe(true)
+    expect(await page.getByText('Thanks for ordering. Enjoy!').count()).toBe(0)
     expect(problems).toEqual([])
   })
 

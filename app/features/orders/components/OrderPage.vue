@@ -4,7 +4,7 @@
  * frames styled by Nuxt UI, D74): the pickup number as the hero with its status, the four steps,
  * what to do next, the time left to pay, the payment, and the order's lines. Ready stands out (a
  * success panel and "Ready: 042" as the tab title). While unpaid: Cancel order (a confirm sheet).
- * Completed: Order again. Cancelled: why.
+ * Completed: Order again, and the owner's refund if there was one (D234). Cancelled: why.
  *
  * Two columns from `lg` (the status, then the details), one on phones. Read again every 10 seconds
  * while it's in progress and the tab is visible (D114). Browser-only (`routeRules`): only its
@@ -16,7 +16,7 @@ import { savingsOf } from '#shared/contracts/orders'
 import { accountLink, ACCOUNT_PATHS } from '~/features/account'
 import { useOrderAgain } from '~/features/menu'
 import { useOrderTracking } from '../composables/useOrders'
-import { cancellationText, countdown, formatPickupNumber, isInProgress, nextStep, orderTypeText, paymentText, statusBadge } from '../utils/order'
+import { cancellationText, countdown, formatPickupNumber, isInProgress, nextStep, orderTypeText, paymentText, refundText, statusBadge } from '../utils/order'
 import CancelOrderSheet from './CancelOrderSheet.vue'
 import OrderReadyTelegram from './OrderReadyTelegram.vue'
 import OrdersHeader from './OrdersHeader.vue'
@@ -48,6 +48,7 @@ const updatedText = computed(() => {
 })
 const cancelled = computed(() => (order.value?.status === 'cancelled' ? cancellationText(order.value) : null))
 const paid = computed(() => (order.value ? paymentText(order.value) : null))
+const refunded = computed(() => (order.value ? refundText(order.value) : null))
 
 useHead({
   title: () => (order.value?.status === 'ready' ? `Ready: ${number.value}` : String(route.meta.title ?? 'Your order')),
@@ -238,7 +239,15 @@ async function again(from: Order) {
               variant="subtle"
               icon="i-lucide-circle-check"
               :title="`Picked up at ${formatTime(order.completedAt)}`"
-              description="Thanks for ordering. Enjoy!"
+              :description="refunded ? undefined : 'Thanks for ordering. Enjoy!'"
+            />
+            <UAlert
+              v-if="refunded"
+              color="neutral"
+              variant="subtle"
+              icon="i-lucide-undo-2"
+              :title="refunded.title"
+              :description="refunded.detail"
             />
             <p
               v-if="isInProgress(order.status) && updatedText"

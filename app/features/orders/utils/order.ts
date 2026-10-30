@@ -1,6 +1,6 @@
 import type { CancelReason, Order, OrderStatus, OrderSummary, PaymentMethod } from '#shared/contracts/orders'
 import { IN_PROGRESS_STATUSES } from '#shared/contracts/orders'
-import { formatDate, formatShortDate, formatTime } from '~/utils/date-format'
+import { formatDate, formatShortDate, formatShortDateTime, formatTime } from '~/utils/date-format'
 import { formatMinor, formatRiel } from '~/utils/money'
 import { pluralize } from '~/utils/text'
 
@@ -119,6 +119,24 @@ export function cancellationText(order: Pick<Order, 'cancellation' | 'payment' |
     ? `${formatMinor(payment.amountMinor)} returned ${payment.returnMethod === 'cash' ? 'in cash' : 'by KHQR'}.`
     : null
   return { title, detail: returned }
+}
+
+/**
+ * The owner's refund of a completed order (D233, D234): it stays completed, so the page says the
+ * money went back, the full payment (in riel when paid in riel, like the owner's dialog), how, and
+ * when (up to 30 days later, so with its day). Never the owner's note (D106). `null` otherwise: a
+ * cancelled order says it in `cancellationText`.
+ */
+export function refundText(order: Pick<Order, 'status' | 'payment'>): { title: string, detail: string } | null {
+  const payment = order.payment
+  if (order.status !== 'completed' || !payment?.returnMethod || !payment.returnedAt) return null
+  const amount = payment.method === 'cash_khr' && payment.amountKhr !== null
+    ? formatRiel(payment.amountKhr)
+    : formatMinor(payment.amountMinor)
+  return {
+    title: `${amount} refunded ${payment.returnMethod === 'cash' ? 'in cash' : 'by KHQR'}`,
+    detail: `The cafe returned your payment on ${formatShortDateTime(payment.returnedAt)}.`,
+  }
 }
 
 /** "Paid $9.75 · Cash · 10:21 AM" (riel: "Paid ៛40,000 · Cash (riel) · …"). */
