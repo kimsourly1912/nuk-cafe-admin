@@ -265,3 +265,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D233](decisions.md#d233-the-owners-refund-of-a-ready-or-completed-order-2026-10-30) | The owner's refund of a ready or completed order, 2026-10-30 |
 | [D234](decisions.md#d234-the-customer-sees-the-owners-refund-of-a-completed-order-2026-10-30) | The customer sees the owner's refund of a completed order, 2026-10-30 |
 | [D235](decisions.md#d235-a-pages-first-load-waits-for-everything-that-decides-its-layout-2026-10-30) | A page's first load waits for everything that decides its layout, 2026-10-30 |
+| [D236](decisions.md#d236-a-sign-in-refused-at-a-workspace-shows-where-the-account-may-go-2026-10-30) | A sign-in refused at a workspace shows where the account may go, 2026-10-30 |

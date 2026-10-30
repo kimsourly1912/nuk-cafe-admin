@@ -206,7 +206,10 @@ When leaving happens anyway (a crash, a dropped tab, an expired session), the **
 | Session expired (401 from any request) | `clearSession()` → redirect to `/admin/login?redirect=<current page>`. No refresh or retry: Better Auth keeps a live session's cookie fresh itself, so a 401 means it's over. **No unsaved-changes dialog**: staying isn't possible. Open form modals close, toasts clear (see the transition contract below) |
 | Admin access removed mid-session (403 `NOT_ADMIN`; removing the role also deletes the sessions, so usually a 401) | Same as a 401 |
 | Many requests fail at once | One session change: `clearSession()` is idempotent |
-| A customer or branch-staff account signs in on the admin login | `/api/admin/me` answers 403; the account is signed out again and the form says "This account doesn't have access to the admin app." (e2e `auth.test.ts`, both `NOT_ADMIN` and the route gate's `FORBIDDEN`) |
+| A customer signs in on the admin (or counter) sign-in | `/api/admin/me` answers 403 and `/api/me/cafes` names no cafe; the account is signed out again and the form says "This account doesn't have access to the admin app." (e2e `auth.test.ts`, both `NOT_ADMIN` and the route gate's `FORBIDDEN`; `counter.test.ts` on the real server) |
+| A manager, staff member or another cafe's owner signs in on the admin sign-in (or another cafe's staff on the counter's) | 403, but `/api/me/cafes` names a way on: the account **stays signed in** and `<WorkspaceRefused>` replaces the form: "No access to the admin app", why, "Signed in as <email>", **Open the counter** (this cafe's), **Your cafes** (another cafe), **Use another account** (signs out, the empty form again) (D236; e2e `your-cafes.test.ts`, `cafes.test.ts` on the real server) |
+| A platform team account (super admin) signs in on a cafe's admin or counter sign-in | 403; stays signed in; the panel says it's a platform account, which doesn't open a cafe's data, with **Open the platform console** and Use another account (D236; e2e `your-cafes.test.ts`) |
+| Opening a workspace already signed in by an account it refuses (a platform account, a manager on `/admin`, a signed-in customer) | Sent to its sign-in, which shows a skeleton, then the same panel at once instead of the form; with nothing to offer, "Only <cafe>'s owners use the admin app" and Use another account (D236; e2e `your-cafes.test.ts`, `cafes.test.ts` on the real server: a reload of the sign-in) |
 | Signed in on a temporary password, or a route answers 403 `PASSWORD_CHANGE_REQUIRED` | Every admin page goes to `/admin/change-password` until it's changed ([auth → change-password page](./auth.md#public-pages-and-the-change-password-page)) |
 | Better Auth refetches its own session (startup, tab focus) | No effect on the staff session: separate state keys (`staff-session:*` vs the module's `auth:*`) |
 | Log out with unsaved input | Asks first ([`useLeaveGuard`](./forms.md#useleaveguard)), **before** calling the backend |
@@ -284,7 +287,7 @@ Tests: e2e `color-mode.test.ts`, `ui-foundations.test.ts` (dark shades).
 |---|---|
 | Any visit | The server's page is the same for everyone; the header's account slot shows a placeholder until the browser knows (Better Auth's `get-session`, then `GET /api/shop/me` only with a session: no failed request for visitors) |
 | Sign in from the header | Back to the same page afterwards (`?redirect=`); other hosts, the admin and sign-in/password pages go to the menu instead |
-| Already signed in, opening `/sign-in` or `/sign-up` | Moves on to the return page |
+| Already signed in, opening `/sign-in` or `/sign-up` | A skeleton shaped like the form until the browser knows the session, then moves on to the return page; the form never shows (D235; e2e `shop-account.test.ts`) |
 | Signed in, email not verified | A banner on the menu and a badge in the account menu, each with Resend email; one 60 s wait shared by every Resend in the tab |
 | The verification link | Verifies and signs in (Better Auth), lands on "Email verified"; expired, replaced or foreign: "This link doesn't work anymore", with a new link (signed in) or sign-in first |
 | The reset link | "Choose a new password", the token removed from the address bar; saving signs the account out everywhere and goes to sign-in, which says the password changed; expired or used: "This link doesn't work anymore" |
@@ -300,7 +303,7 @@ Tests: e2e `shop-account.test.ts`; unit `app/features/account/tests/account.test
 
 | Case | Behavior |
 |---|---|
-| Opening Review order | The order kept in this browser, priced by the server (`POST /api/public/checkout/quote`); skeleton totals until the answer. Empty: "Your order is empty" with Back to the menu |
+| Opening Review order | The order kept in this browser, priced by the server (`POST /api/public/checkout/quote`); skeleton totals until the answer. Empty: the shopping-bag illustration, "Your order is empty", "Add some delicious items from our menu to get started." and Back to the menu |
 | A quantity changed or a line removed | Priced again (the running request is cancelled, D30). Typing a note doesn't ask again: notes never change a price |
 | A line that can't be ordered (sold out, gone) | Marked on the line with Remove; the button is off with "Remove the unavailable items to continue." |
 | The cafe closed, or last orders passed (15 minutes before closing) | A warning with the next opening; the button is off with "Available when the cafe is open." The menu's Review order button is off while closed |
