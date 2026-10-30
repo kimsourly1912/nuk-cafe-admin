@@ -140,22 +140,29 @@ describe('signing in and out', () => {
     expect(problems).toEqual([])
   })
 
-  it('a staff account on its temporary password is refused and signed out; signed in elsewhere, the menu shows it signed out', async () => {
+  it('a staff account on its temporary password stays signed in with a link to its counter\'s change-password page; the menu shows it signed out (Q3)', async () => {
     const staff = seed.customers.temporaryStaff
     const { page, problems } = await open('/sign-in')
     await signIn(page, staff)
-    await page.getByRole('alert').filter({ hasText: 'This account still has a temporary password.' }).waitFor()
+    await page.getByRole('alert').filter({ hasText: 'This account still has a temporary password. Choose a new one in NUK Cafe\'s counter' }).waitFor()
     expect(new URL(page.url()).pathname).toBe('/sign-in')
     const session = () => page.evaluate(() => fetch('/api/auth/get-session').then(r => r.json()))
-    expect(await session()).toBeNull()
+    expect(await session()).not.toBeNull()
+    const link = page.getByRole('link', { name: 'Change password' })
+    expect(await link.getAttribute('href')).toBe('/c/nuk/counter/change-password')
 
-    // Signed in at the counter (same browser, same session, D97), then on the menu: no account, no error.
-    const status = await page.evaluate(body => fetch('/api/auth/sign-in/email', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.status), { email: staff.email, password: staff.password })
-    expect(status).toBe(200)
+    // On the menu: no account, no error (the store counts it as signed out).
     await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
     await page.getByRole('link', { name: 'Sign in' }).waitFor()
     expect(await session()).not.toBeNull()
     expect(problems).toEqual([])
+    // Still refused everywhere else until the password is changed (the server's rule, D52); after the
+    // check above, since a refused request logs to the console.
+    expect(await page.evaluate(() => fetch('/api/c/nuk/shop/me').then(r => r.status))).toBe(403)
+
+    // The link's page asks for the new password on the same session (not changed here: other tests use it).
+    await page.goto(url('/c/nuk/counter/change-password'), { waitUntil: 'hydration' })
+    await page.getByLabel('Temporary password').waitFor()
   })
 
   it('the password can be shown', async () => {

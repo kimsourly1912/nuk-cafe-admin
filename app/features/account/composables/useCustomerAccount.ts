@@ -1,7 +1,8 @@
 import { useIntervalFn } from '@vueuse/core'
 import type { CustomerAccount, DeleteAccountInput, GuestCustomer, ShopMe } from '#shared/contracts/account'
+import type { ChangePasswordTarget } from '~/utils/account-cafes'
 import type { ForgotPasswordForm, SignInForm, SignUpForm } from '../schemas/account-form'
-import { ACCOUNT_PATHS, accountLink } from '../utils/account'
+import { ACCOUNT_PATHS, accountLink, TemporaryPasswordError } from '../utils/account'
 
 /**
  * The customer's account on the customer site (step 5.2, D97): who is signed in, from
@@ -139,9 +140,10 @@ export function useAccountActions() {
   }
   /**
    * Signs in: the password step. `two-factor` (D188): the page asks for the code, then calls
-   * `finishSignIn`. A staff account on its temporary password is refused (see `loadAccount`):
-   * signed out again, like the workspaces' sign-ins do with an account they don't let in, so the
-   * menu isn't left with a session it can't use.
+   * `finishSignIn`. A staff account on its temporary password can't use the store (see
+   * `loadAccount`): it stays signed in and the page links to its workspace's change-password page
+   * (`TemporaryPasswordError`, Q3, D241). With no workspace to send it to, or when that can't be
+   * checked, it's signed out again, so the menu isn't left with a session it can't use.
    */
   async function signIn(form: SignInForm): Promise<PasswordStep> {
     const response = await authFetch<{ user?: AuthUser, twoFactorRedirect?: boolean }>('/sign-in/email', { email: form.email, password: form.password })
@@ -159,6 +161,17 @@ export function useAccountActions() {
 
   async function signedIn(user: AuthUser) {
     if (user.mustChangePassword) {
+      let target: ChangePasswordTarget | null = null
+      try {
+        target = await changePasswordTarget()
+      }
+      catch {
+        // Couldn't check where: signed out with the general message below.
+      }
+      if (target) {
+        await identityChanged()
+        throw new TemporaryPasswordError(target)
+      }
       await authFetch('/sign-out').catch(() => {})
       await identityChanged()
       throw new ApiError('Change your temporary password to continue.', { kind: 'forbidden', status: 403, code: PASSWORD_CHANGE_REQUIRED })

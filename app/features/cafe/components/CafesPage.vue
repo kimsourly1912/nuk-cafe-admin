@@ -3,13 +3,14 @@
  * Your cafes (`/cafes`, T2c, D144): the cafes the signed-in account works in, each with the
  * workspaces it may open there (Admin for an owner, Counter for an owner or branch staff). A
  * paused cafe is listed without them. Each one opens as a full page load (D141). Signed out, it
- * sends the person to sign in and back. A task-flow page (page-patterns §5): a card from `sm`, the
- * whole screen on phones.
+ * sends the person to sign in and back. A platform team account also gets Open the platform console
+ * (Q5, D241). A task-flow page (page-patterns §5): a card from `sm`, the whole screen on phones.
  */
 import type { Workspace } from '#shared/contracts/account'
-import { useAccountCafes } from '../composables/useAccountCafes'
+import { useAccountCafes, usePlatformTeam } from '../composables/useAccountCafes'
 
 const { data: cafes, error, loading, refresh } = useAccountCafes()
+const { data: platformTeam } = usePlatformTeam()
 const signedOut = computed(() => error.value?.kind === 'unauthorized')
 watch(signedOut, (out) => {
   if (out) void navigateTo({ path: '/sign-in', query: { redirect: CAFES_PATH } }, { replace: true })
@@ -56,7 +57,7 @@ const WORKSPACES: { workspace: Workspace, label: string, icon: string }[] = [
         This account doesn't work at a cafe
       </p>
       <p class="text-sm text-muted">
-        Sign in with the account your cafe's owner added, or ask them to add you.
+        {{ platformTeam ? 'This is a platform team account: its work is in the platform console.' : 'Sign in with the account your cafe\'s owner added, or ask them to add you.' }}
       </p>
     </div>
     <ul
@@ -119,5 +120,20 @@ const WORKSPACES: { workspace: Workspace, label: string, icon: string }[] = [
         </div>
       </li>
     </ul>
+
+    <template
+      v-if="platformTeam && !loading && !signedOut"
+      #footer
+    >
+      <UButton
+        label="Open the platform console"
+        icon="i-lucide-layers"
+        :to="PLATFORM_CONSOLE_PATH"
+        external
+        :color="cafes?.length ? 'neutral' : 'primary'"
+        :variant="cafes?.length ? 'outline' : 'solid'"
+        block
+      />
+    </template>
   </TaskFrame>
 </template>

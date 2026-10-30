@@ -1,3 +1,4 @@
+import type { ChangePasswordTarget } from '~/utils/account-cafes'
 import { ApiError } from '~/utils/api-error'
 import { BREACHED_PASSWORD_MESSAGE } from '~/utils/password-requirements'
 import { splitTenantUrl, tenantUrl } from '~/utils/tenant-path'
@@ -83,10 +84,25 @@ export interface AccountFormError {
 }
 
 /**
+ * A staff account signed in here on its temporary password (Q3, D241): it stays signed in, and the
+ * page links to `target`, its workspace's change-password page. The store still counts it as signed
+ * out: every route but `/api/auth` refuses it until the password is changed.
+ */
+export class TemporaryPasswordError extends ApiError {
+  constructor(readonly target: ChangePasswordTarget) {
+    super('Change your temporary password to continue.', { kind: 'forbidden', status: 403, code: 'PASSWORD_CHANGE_REQUIRED' })
+    this.name = 'TemporaryPasswordError'
+  }
+}
+
+/**
  * Better Auth's answers, in the words of the account pages. Better Auth's 401 for a wrong password
  * isn't a lost session, and it never says which of the two was wrong, so neither do we.
  */
 export function accountFormError(error: unknown): AccountFormError {
+  if (error instanceof TemporaryPasswordError) {
+    return { message: `This account still has a temporary password. Choose a new one in ${error.target.name}, then sign in here.` }
+  }
   const apiError = ApiError.from(error)
   switch (apiError.code) {
     case 'INVALID_EMAIL_OR_PASSWORD':

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AccountCafe } from '#shared/contracts/cafe'
-import { otherAccess, otherCafes, workspaceUrl } from '~/utils/account-cafes'
+import { changePasswordTargetOf, otherAccess, otherCafes, workspaceUrl } from '~/utils/account-cafes'
 
 const cafe = (slug: string, overrides: Partial<AccountCafe> = {}): AccountCafe => ({ slug, name: slug, logoUrl: null, status: 'active', workspaces: ['admin', 'counter'], ...overrides })
 
@@ -37,5 +37,14 @@ describe('a refused sign-in (D239)', () => {
     expect(otherAccess([cafe('nuk', { workspaces: ['counter'] })], '', 'console')).toEqual({ here: null, elsewhere: true, platform: false })
     expect(otherAccess([cafe('nuk', { status: 'suspended' })], '', 'console')).toBeNull()
     expect(otherAccess([], '', 'console')).toBeNull()
+  })
+})
+
+describe('changePasswordTargetOf (Q3, D241)', () => {
+  it('names the first active cafe\'s admin, else its counter, else the console for the team; nothing otherwise', () => {
+    expect(changePasswordTargetOf([cafe('quiet', { status: 'suspended' }), cafe('nuk')], false)).toEqual({ path: '/c/nuk/admin/change-password', name: 'nuk\'s admin app' })
+    expect(changePasswordTargetOf([cafe('nuk', { workspaces: ['counter'] })], true)).toEqual({ path: '/c/nuk/counter/change-password', name: 'nuk\'s counter' })
+    expect(changePasswordTargetOf([], true)).toEqual({ path: '/platform/change-password', name: 'the platform console' })
+    expect(changePasswordTargetOf([cafe('nuk', { status: 'suspended' })], false)).toBeNull()
   })
 })

@@ -1,6 +1,6 @@
 # Workspace access: who may open which door, and what a refusal shows
 
-Status: **answered and in progress (2026-10-30).** The owner took every recommendation (D241). Done: page access inside a workspace (§7 A–B, D240), the cafe doors (step 1) and the console door (step 2, D241). Next: the customer sign-in and Your cafes (step 3). Related: D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D142 (console), D144 (Your cafes), D156 (guests), D188 (two-step sign-in), D193 (support access), D238 (first load), D239 (refused sign-in panel, in progress).
+Status: **done (2026-10-30).** The owner took every recommendation (D241). Done: page access inside a workspace (§7 A–B, D240), the cafe doors (step 1), the console door (step 2) and the customer sign-in and Your cafes (step 3, D241). The current behavior lives in [app-behavior → Session](../reference/app-behavior.md); this plan is history. Related: D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D142 (console), D144 (Your cafes), D156 (guests), D188 (two-step sign-in), D193 (support access), D238 (first load), D239 (refused sign-in panel, in progress).
 
 ## 1. The pieces
 
@@ -79,8 +79,8 @@ Status: **answered and in progress (2026-10-30).** The owner took every recommen
 | Account | Behavior |
 |---|---|
 | Anyone with a real account | May sign in; one session for the whole browser (D97). Signed in and opening `/sign-in`/`/sign-up`: skeleton, then on to the return page (done, D238 follow-up) |
-| T staff on a temporary password | Today: signed out, "This account still has a temporary password". Proposed: keep it, plus a link to **its workspace's change-password page** (**Q3**) |
-| G platform | May order like a customer (nothing stops it today; **Q5**) |
+| T staff on a temporary password | Kept signed in, with **Change password** to its workspace's change-password page; signed out only when no workspace opens or the check fails (**done**, D241) |
+| G platform | May order like a customer (Q5: yes) |
 
 ### Your cafes (`/cafes`)
 
@@ -88,7 +88,7 @@ Status: **answered and in progress (2026-10-30).** The owner took every recommen
 |---|---|
 | A | sign in first (`?redirect=/cafes`) |
 | C | "This account doesn't work at a cafe" |
-| G | same, plus **Open the platform console** (**Q5**) |
+| G | **Open the platform console** (**done**, D241) |
 | D, E, F | their cafes with Admin/Counter buttons |
 
 ### Inside a workspace: which pages each account opens
@@ -140,6 +140,6 @@ With the answers (D241):
 
 1. **Done (D241):** the cafe doors (admin, counter): the built slice of D239 plus Back to the menu for a customer, E3, E4 (Q4) and the two-step test.
 2. **Done (D241):** the console door with the same panel (Q2): Your cafes for a cafe's staff, Back to home for a signed-in customer, a customer signing in signed out (Q1), Try again (Q4).
-3. Customer sign-in for temporary passwords (Q3) and Your cafes for the platform team (Q5).
+3. **Done (D241):** customer sign-in for temporary passwords (Q3: kept, Change password link) and Your cafes for the platform team (Q5: Open the platform console).
 4. Tests: one e2e per matrix row group (mocked API), real-server tests for D at the admin, F at the admin, G at the admin (needs a seeded super admin with two-step sign-in), C at the console; each new guard removed once to see its test fail.
-5. D239 rewritten as the final rule; app-behavior gets the matrix's rows; this plan marked done.
+5. **Done:** D239 points to D240 and D241 as the current rule (decisions are history, so it isn't rewritten); app-behavior has the matrix's rows; this plan is marked done.

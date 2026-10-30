@@ -2,7 +2,7 @@ import * as v from 'valibot'
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '~/utils/api-error'
 import { signInSchema, signUpSchema } from '../schemas/account-form'
-import { accountBackLabel, accountFormError, accountHome, accountLink, accountRedirectTarget, initialsOf, isDeadLink } from '../utils/account'
+import { accountBackLabel, accountFormError, accountHome, accountLink, accountRedirectTarget, initialsOf, isDeadLink, TemporaryPasswordError } from '../utils/account'
 
 describe('accountRedirectTarget (D141)', () => {
   const HOME = '/c/nuk'
@@ -81,6 +81,10 @@ describe('accountFormError', () => {
   it('a temporary password says where to change it, above the fields', () => {
     expect(accountFormError(betterAuthError(403, 'PASSWORD_CHANGE_REQUIRED'))).toEqual({
       message: 'This account still has a temporary password. Choose a new one in the cafe\'s admin or counter, then sign in here.',
+    })
+    // Kept signed in with a place to change it (Q3, D241): the message names it.
+    expect(accountFormError(new TemporaryPasswordError({ path: '/c/nuk/counter/change-password', name: 'NUK Cafe\'s counter' }))).toEqual({
+      message: 'This account still has a temporary password. Choose a new one in NUK Cafe\'s counter, then sign in here.',
     })
   })
 

@@ -4,14 +4,17 @@
  * Returns to `?redirect=` (a page of the customer site) or the menu. After a password reset
  * (`?reset=1`) it says so. Someone already signed in goes straight on, never seeing the form: a
  * skeleton shows until the browser knows (D238). With two-step sign-in (D188)
- * the password is followed by the code from the app (`<TwoFactorCodeForm>`).
+ * the password is followed by the code from the app (`<TwoFactorCodeForm>`). A staff account on its
+ * temporary password stays signed in and gets a link to its workspace's change-password page (Q3,
+ * D241).
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import type { SignInForm } from '../schemas/account-form'
 import { signInSchema } from '../schemas/account-form'
 import { useAccountActions, useAccountSession } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
-import { ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget } from '../utils/account'
+import type { ChangePasswordTarget } from '~/utils/account-cafes'
+import { ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget, TemporaryPasswordError } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
@@ -27,6 +30,20 @@ const { saving, formError, submit } = useAccountForm({ email: 'sign-in-email', p
 const { signIn, finishSignIn } = useAccountActions()
 /** After a password that needs a code: the code step replaces the form. */
 const codeStep = ref(false)
+/** A temporary password (Q3): where to change it, linked under the message. */
+const changePasswordAt = ref<ChangePasswordTarget | null>(null)
+
+/** Signs in, keeping a temporary password's way on; the message itself is `submit`'s. */
+async function signInAnd(step: () => Promise<void>) {
+  changePasswordAt.value = null
+  try {
+    await step()
+  }
+  catch (error) {
+    if (error instanceof TemporaryPasswordError) changePasswordAt.value = error.target
+    throw error
+  }
+}
 
 const { account, known } = useAccountSession()
 /** Already signed in on arrival: on its way on, so the form never shows (D238). */
@@ -44,23 +61,23 @@ const loading = computed(() => !known.value || leaving.value)
 
 async function onSubmit(event: FormSubmitEvent<SignInForm>) {
   arrived = true
-  await submit(async () => {
+  await submit(() => signInAnd(async () => {
     if (await signIn(event.data) === 'two-factor') {
       codeStep.value = true
       state.password = ''
       return
     }
     await navigateTo(target.value)
-  })
+  }))
 }
 
 /** The code was right: finish as after a password alone. A failure goes back to the password form. */
 async function onCodeVerified() {
   codeStep.value = false
-  await submit(async () => {
+  await submit(() => signInAnd(async () => {
     await finishSignIn()
     await navigateTo(target.value)
-  })
+  }))
 }
 
 function restart(message?: string) {
@@ -107,6 +124,15 @@ function restart(message?: string) {
         title="Password changed. Sign in with your new password."
       />
       <FormErrorAlert :message="formError" />
+      <!-- A full page load: the workspace reads its own session (D141). -->
+      <UButton
+        v-if="changePasswordAt && formError"
+        label="Change password"
+        icon="i-lucide-key-round"
+        :to="changePasswordAt.path"
+        external
+        block
+      />
 
       <UFormField
         label="Email"

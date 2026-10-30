@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Temporary passwords on the customer site, and the console on Your cafes: step 3 (D241, 2026-10-30)
+Branch `ccr-e2b7ccc7-mhvnj3`, restarted from `main` after PR #228. Plan step 3 (Q3, Q5); the [workspace access plan](plans/workspace-access.md) is done. [Decision](decisions.md#d241-workspace-access-questions-answered-a-refused-sign-in-keeps-a-failed-check-and-offers-the-safe-page-2026-10-30).
+
+- **Change:** `changePasswordTargetOf`/`changePasswordTarget` and `isPlatformTeamSession` (`utils/account-cafes.ts`); `TemporaryPasswordError` and its message (`features/account/utils/account.ts`); `useAccountActions` keeps a temporary-password session that has a workspace; `SignInPage` shows **Change password**; `usePlatformTeam` and Your cafes' **Open the platform console**. D239 points to D240/D241. No server change.
+- **Evidence (2026-10-30, cloud Linux, pnpm 12.15.0, Playwright's Chromium):** `pnpm lint`, `pnpm typecheck` clean; unit `account-cafes.test.ts`, `account.test.ts` 19/19; e2e `your-cafes`, `shop-account` (real server), `cafes` (real server), `password` 69/69 at 2 workers. Guards: ignoring the target failed the Q3 test; hiding the footer failed the Q5 test. Not run: the full e2e suite (CI runs it).
+- **Next:** none for workspace access.
+
 ## The console door: step 2 (D241, 2026-10-30)
 Branch `ccr-e2b7ccc7-mhvnj3`, restarted from `main` after PR #227. Plan step 2 (Q2). [Decision](decisions.md#d241-workspace-access-questions-answered-a-refused-sign-in-keeps-a-failed-check-and-offers-the-safe-page-2026-10-30).
 
