@@ -2,6 +2,8 @@ import type { LocationQuery } from 'vue-router'
 import type { ItemSalesReport, OrderHistory, OrderHistoryDetail, ReportBranch, ReportPeriodQuery, ReportSummary } from '#shared/contracts/reports'
 import { csvFilename } from '#shared/contracts/reports'
 import type { ReportMessageInput, ReportMessagePreview, ReportSent, SendReportInput, TelegramDestination } from '#shared/contracts/notifications'
+import type { RefundOrderInput } from '#shared/contracts/orders'
+import { orderNumber } from '../utils/display'
 import type { Period } from '../utils/period'
 import { validPeriod } from '../utils/period'
 import { useReportSurface } from './useReportSurface'
@@ -107,6 +109,35 @@ export function useOrderHistoryDetail(id: MaybeRefOrGetter<string | undefined>) 
     async () => {
       const current = toValue(id)
       return current ? apiFetch<OrderHistoryDetail>(`${api}/orders/${current}`) : null
+    },
+  )
+}
+
+export interface RefundRequest {
+  order: OrderHistoryDetail
+  body: RefundOrderInput
+  /** The dialog's key: one per refund it opens for, the same for its retries, so money is never recorded twice. */
+  idempotencyKey: string
+}
+
+/**
+ * An owner records that a ready or completed order's money went back (D233), from Order history's
+ * panel; the admin's only (`ReportSurface.refunds`). Under the order's branch, where the server
+ * checks `payment: ['refund']`. Every report is read again: the refund counts on its own day.
+ */
+export function useRefundOrder() {
+  const { key } = useReportSurface()
+  return useMutation(
+    (input: RefundRequest) => apiFetch<OrderHistoryDetail>(
+      `/admin/branches/${encodeURIComponent(input.order.branch.id)}/orders/${encodeURIComponent(input.order.id)}/refund`,
+      { method: 'POST', body: input.body, headers: { 'Idempotency-Key': input.idempotencyKey } },
+    ),
+    {
+      id: 'reports:refund',
+      key: input => input.order.id,
+      successMessage: (order: OrderHistoryDetail) => `Order ${orderNumber(order.pickupNumber)} refunded`,
+      errorMessage: input => `Couldn't refund order ${orderNumber(input.order.pickupNumber)}`,
+      invalidate: [key],
     },
   )
 }

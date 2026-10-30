@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, exists, gt, gte, inArray, lte, ne, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, exists, gt, gte, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm'
 import type { AnyColumn, SQL } from 'drizzle-orm'
 import type { OrderSource } from '#shared/contracts/marketing'
 import type { CancelReason, OrderStatus, OrderType, PaymentMethod, QuotedModifier, ReturnMethod } from '#shared/contracts/orders'
@@ -278,7 +278,8 @@ const stamp: Partial<Record<OrderStatus, 'paidAt' | 'readyAt' | 'completedAt' | 
  * read; follow it with `requireOneChange`, so a change made meanwhile stops the whole batch.
  */
 export function transitionStatement(db: Db, change: OrderChange): Statement {
-  const at = stamp[change.toStatus]
+  // A status's time records entering it: a refund that keeps an order completed (D233) keeps its completion time.
+  const at = change.fromStatus === change.toStatus ? undefined : stamp[change.toStatus]
   return db.update(orders)
     .set({ status: change.toStatus, version: change.version + 1, updatedAt: change.at, ...(at ? { [at]: change.at } : {}) })
     .where(inTenant(orders, change.tenantId, eq(orders.id, change.orderId), eq(orders.status, change.fromStatus), eq(orders.version, change.version)))
@@ -310,6 +311,11 @@ export function insertPaymentStatement(db: Db, payment: NewPayment): Statement {
 /** Records how the money of a cancelled paid order went back. */
 export function returnPaymentStatement(db: Db, tenantId: string, orderId: string, returned: { returnMethod: ReturnMethod, returnedBy: string, returnedAt: Date }): Statement {
   return db.update(counterPayments).set(returned).where(inTenant(counterPayments, tenantId, eq(counterPayments.orderId, orderId)))
+}
+
+/** An owner's refund (D233): the payment's money went back, only if it hasn't already (a guard: pair with requireOneChange). */
+export function refundPaymentStatement(db: Db, tenantId: string, orderId: string, returned: { returnMethod: ReturnMethod, returnedBy: string, returnedAt: Date }): Statement {
+  return db.update(counterPayments).set(returned).where(inTenant(counterPayments, tenantId, eq(counterPayments.orderId, orderId), isNull(counterPayments.returnedAt)))
 }
 
 export interface PaymentRow {

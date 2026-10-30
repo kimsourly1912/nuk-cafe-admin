@@ -1,6 +1,6 @@
 # Reports
 
-**Reports** in the sidebar shows how the cafe is doing: **Summary**, **Sales by item** and **Order history**. Admins only. Reports only read: nothing is changed from them.
+**Reports** in the sidebar shows how the cafe is doing: **Summary**, **Sales by item** and **Order history**. Admins only. Reports only read, except an order's **Refund order** (below).
 
 ## Choosing the period
 
@@ -11,7 +11,7 @@ A **business day runs from 4:00 AM to 4:00 AM** in the branch's time zone (Asia/
 ## Summary
 
 - **Paid sales**: payments taken in the period, whenever the order was placed; with the change against the period before ("vs yesterday").
-- **Paid orders**, **Average order** (paid sales ÷ paid orders), **Refunds** (money returned in the period for cancelled paid orders), and **Net sales** = paid sales − refunds.
+- **Paid orders**, **Average order** (paid sales ÷ paid orders), **Refunds** (money returned in the period: paid orders cancelled at the counter, and refunds recorded here), and **Net sales** = paid sales − refunds.
 - **Paid sales by hour** for one day, **by day** for longer periods. Point at or tap a bar (or Tab to the chart and use the arrow keys) to see its sales and number of orders.
 - **Payments**: Cash USD, Cash riel (the riel taken, each at the rate used that day, and its dollar value), KHQR, and the total.
 - **Current orders** (only when the period includes today; live): waiting for payment, preparing, ready. Otherwise **Orders placed in this period**.
@@ -28,6 +28,8 @@ Every order placed in the period. Search by **order number** (numbers restart ev
 
 Press an order's number to open it: its items with options, add-ons and notes, the payment (method, amount, reference, who took it and when, and any money returned), and a timeline of every step with who did it.
 
+**Refund order** (cafe owners): for a **ready or completed** order paid in the last **30 days**, record that you gave the money back. First give it back yourself (cash, or a KHQR/bank transfer: the app doesn't send money), then press **Refund order**, choose **Cash** or **KHQR**, write **why**, and press **Refund**. Always the full amount. A ready order is also cancelled and leaves the counter; a completed one stays completed and its payment shows **Refunded**. The refund counts in Reports on the day you record it. An order still being prepared is cancelled at the counter instead, saying how the money went back. Once refunded, it can't be refunded again.
+
 ## Download CSV and Print
 
 - **Download CSV** saves a spreadsheet file with every matching row (not only the page shown), with the page's filters and order. It opens in Excel or Google Sheets.
@@ -42,3 +44,4 @@ On a phone these are in the **⋯** (Actions) menu.
 - **A payment isn't in today's sales**: sales count when the payment is taken, not when the order was placed. An order placed yesterday and paid today counts today.
 - **"More than 20,000 orders match"** (CSV): choose a shorter period or add filters.
 - **Numbers changed after printing**: today's numbers keep changing until the business day ends at 4:00 AM. Past days don't change, except for refunds, which count on the day the money was returned.
+- **No Refund order button**: only cafe owners see it, and only for a ready or completed order paid in the last 30 days that isn't refunded yet. A manager's reports on the counter don't have it.

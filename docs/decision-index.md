@@ -262,3 +262,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D230](decisions.md#d230-the-production-assistant-uses-openai-with-a-20-monthly-cap-q43-answered-2026-10-30) | The production assistant uses OpenAI with a $20 monthly cap (Q43 answered), 2026-10-30 |
 | [D231](decisions.md#d231-a-khqr-payment-is-returned-by-the-cafe-the-app-records-it-q44-answered-2026-10-30) | A KHQR payment is returned by the cafe; the app records it (Q44 answered), 2026-10-30 |
 | [D232](decisions.md#d232-the-platform-is-called-angder-everywhere-qt1-answered-2026-10-30) | The platform is called Angder everywhere (QT1 answered), 2026-10-30 |
+| [D233](decisions.md#d233-the-owners-refund-of-a-ready-or-completed-order-2026-10-30) | The owner's refund of a ready or completed order, 2026-10-30 |

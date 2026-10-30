@@ -362,6 +362,20 @@ export const cancelOrderSchema = v.pipe(
 )
 export type CancelOrderInput = v.InferOutput<typeof cancelOrderSchema>
 
+/** How long after an order's payment its owner may still record a refund (owner, 2026-10-30, D233). */
+export const REFUND_DAYS = 30
+
+/**
+ * An owner's refund of a ready or completed order (D233): the full amount went back, by cash or
+ * KHQR; why is required.
+ */
+export const refundOrderSchema = v.strictObject({
+  version: versionSchema,
+  returnMethod: v.picklist(RETURN_METHODS, 'Choose how the money went back'),
+  note: v.pipe(v.string(), v.trim(), v.minLength(1, 'Say why the money went back'), v.maxLength(CANCEL_NOTE_MAX, `At most ${CANCEL_NOTE_MAX} characters`)),
+})
+export type RefundOrderInput = v.InferOutput<typeof refundOrderSchema>
+
 /** The payment recorded for an order. */
 export interface CounterPayment {
   method: PaymentMethod

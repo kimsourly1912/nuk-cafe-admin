@@ -156,6 +156,7 @@ export async function orderHistoryDetail(db: Db, tenantId: string, id: string, o
     tableLabel: order.tableLabel,
     customerFirstName: firstName(order.customerName),
     status: order.status,
+    version: order.version,
     totalMinor: order.totalMinor,
     lines: lines.map(line => ({
       itemName: line.itemName,

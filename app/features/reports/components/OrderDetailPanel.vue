@@ -3,10 +3,14 @@
  * One order as sold (Order history's `?order=<id>`, D111, the owner's frames): its lines with
  * version, add-ons and note, the total, the payment (method, amount, riel at its own rate, KHQR
  * reference, who took it and when, and any money returned), and every recorded step with who took
- * it. A side panel from `sm`, full screen on phones. Read-only: nothing is done to an order here.
+ * it. A side panel from `sm`, full screen on phones. Read-only, except an owner's refund of a ready
+ * or completed order on the admin's surface (D233, `RefundOrderModal`); the server checks it again.
  */
+import { REFUND_DAYS } from '#shared/contracts/orders'
 import type { OrderHistoryDetail } from '#shared/contracts/reports'
 import { useOrderHistoryDetail } from '../composables/useReports'
+import { useReportSurface } from '../composables/useReportSurface'
+import RefundOrderModal from './RefundOrderModal.vue'
 import {
   clockIn,
   eventBy,
@@ -31,6 +35,23 @@ const overlayProps = computed(() => (isCompact.value ? { fullscreen: true } : { 
 
 const detail = useOrderHistoryDetail(() => props.orderId)
 const order = computed(() => detail.data.value ?? undefined)
+
+const surface = useReportSurface()
+const refundModal = useOverlay().create(RefundOrderModal)
+/** Ready or completed, paid, not refunded, paid within REFUND_DAYS: what the server accepts (D233). */
+const refundable = computed(() => {
+  const current = order.value
+  if (!surface.refunds || !current || (current.status !== 'ready' && current.status !== 'completed')) return false
+  const paidAt = current.payment.state === 'paid' ? current.payment.collectedAt : null
+  return Boolean(paidAt) && Date.now() - new Date(paidAt!).getTime() <= REFUND_DAYS * 24 * 60 * 60 * 1000
+})
+
+async function openRefund() {
+  if (!order.value) return
+  await refundModal.open({ order: order.value }).result
+  // Refunded (the mutation read every report again) or changed meanwhile: show it as it is now.
+  await detail.refresh()
+}
 
 const modifierText = (line: OrderHistoryDetail['lines'][number]) =>
   [line.detail, ...line.modifiers.map(m => (m.priceDeltaMinor ? `${m.name} +${formatMinor(m.priceDeltaMinor)}` : m.name))]
@@ -182,6 +203,15 @@ const timeline = computed(() => (order.value?.timeline ?? []).map((event, index)
               Cancelled before payment: no money was taken.
             </p>
           </div>
+          <UButton
+            v-if="refundable"
+            label="Refund order"
+            icon="i-lucide-undo-2"
+            color="error"
+            variant="soft"
+            class="mt-3"
+            @click="openRefund"
+          />
         </section>
 
         <section aria-labelledby="order-timeline">

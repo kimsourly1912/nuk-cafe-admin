@@ -4,6 +4,7 @@ Snapshot reviewed against main `f486cf9`, 2026-10-30. Read only when resuming or
 
 ## Waiting on the owner
 
+- **Active: the owner's refund (D233, 2026-10-30):** branch `ccr-c6503e1b-4fiibm`, committed after PR #218; PR to open once #218 is merged. Reports → Order history → **Refund order** for a ready or completed order paid within 30 days. [Decision](decisions.md#d233-the-owners-refund-of-a-ready-or-completed-order-2026-10-30), [progress](progress.md#the-owners-refund-of-a-ready-or-completed-order-d233-2026-10-30).
 - **Backups still not working (D225, D227, D228; paused by the owner, 2026-10-30):** D228 merged (PR #217 as `f486cf9`) and deployed with Deploy backup run 4 (03:00 UTC), but still no message or copy. The owner paused this to work on the rest. Next time: a screenshot of the newest `angder-backup` instance's failing step (Workers & Pages → Workflows). Until then production's only backup is D1 Time Travel (30 days), and the restore drill can't start. [Progress](progress.md#the-backup-polls-d1s-export-like-wrangler-d228-2026-10-30).
 - **Merged: a backup failure no retry can fix reports at once (D227):** PR #216 as `5f31021`. **Merged: page addresses match their exact case (D226):** PR #215 as `70c227d`.
 - **Done by the owner on staging (2026-10-30):** the Nuxt 4.6.2 smoke test, the release hand check's remaining checks 1 and 4, and DNSSEC on `angder.app`: all reported working. [Progress](progress.md#owner-checks-smoke-test-release-hand-check-dnssec-production-setup-2026-10-30).
@@ -14,7 +15,7 @@ Snapshot reviewed against main `f486cf9`, 2026-10-30. Read only when resuming or
 
 Each is its own step and branch.
 
-- **From the 2026-10-30 answers:** the admin refund for ready/completed orders (D231; the counter's message promises it, nothing implements it); "Angder" everywhere in the console (D232); the production assistant (`$env.prod` AI variables, then the owner's key with a $20 cap, D230); the 90-day guest cleanup and account erasure (D229).
+- **From the 2026-10-30 answers:** "Angder" everywhere in the console (D232); the production assistant (`$env.prod` AI variables, then the owner's key with a $20 cap, D230); the 90-day guest cleanup and account erasure (D229).
 - **Customer order index (performance):** PR #196 (`orders_tenant_customer_status_due_idx`, migration 0050 on its branch) was closed unmerged as a ~9,000-line draft with conflicts; no reason recorded. The only customer index is still `orders_customer_idx (customer_id, placed_at)`. Ask the owner whether it was rejected before redoing it as a small PR; the next free migration number is `0052`.
 - **One membership per person and cafe (data integrity):** `member` has no unique `(organization_id, user_id)` (noted in [D184](decisions.md#d184-the-staff-list-starts-from-the-cafes-memberships-not-from-every-account-2026-10-19)); PR #119, which added it, was closed unmerged. Needs a duplicate check on existing data before the migration.
 - **CSP `script-src 'unsafe-inline'`:** still pending a hash/nonce policy ([security → Request protection](server/security.md)). The customer menu is server-rendered and edge-cached (`swr`), so per-request nonces don't fit; a hash policy needs its own decision. Docs also disagree with the code on `Referrer-Policy` (`security.md` says `strict-origin-when-cross-origin`, `nuxt.config.ts` sends `strict-origin`).
