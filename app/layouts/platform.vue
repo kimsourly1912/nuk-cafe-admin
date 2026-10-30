@@ -1,8 +1,7 @@
 <script setup lang="ts">
 /**
  * The platform console's shell (D142): Nuxt UI's dashboard, like a cafe's admin, with the
- * platform's own sidebar. Its name is the working name "NUK Platform" until the owner decides
- * (QT1).
+ * platform's own sidebar, named Angder (QT1, D232).
  */
 import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
 import { ShortcutsHelp } from '#components'
@@ -65,7 +64,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
             name="i-lucide-layers"
             class="size-5 shrink-0 text-primary"
           />
-          <span v-if="!collapsed">NUK Platform</span>
+          <span v-if="!collapsed">Angder</span>
         </NuxtLink>
       </template>
 

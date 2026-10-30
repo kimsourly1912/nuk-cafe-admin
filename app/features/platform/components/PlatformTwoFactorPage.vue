@@ -33,7 +33,7 @@ const copyCodes = useClipboard({ source: backupText, copiedDuring: 2000 })
 
 function downloadCodes() {
   const link = document.createElement('a')
-  link.href = URL.createObjectURL(new Blob([`NUK Platform backup codes for ${user.value?.email ?? ''}\nEach code works once.\n\n${backupText.value}\n`], { type: 'text/plain' }))
+  link.href = URL.createObjectURL(new Blob([`Angder backup codes for ${user.value?.email ?? ''}\nEach code works once.\n\n${backupText.value}\n`], { type: 'text/plain' }))
   link.download = 'nuk-platform-backup-codes.txt'
   link.click()
   URL.revokeObjectURL(link.href)

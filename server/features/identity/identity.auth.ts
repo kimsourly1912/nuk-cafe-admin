@@ -171,7 +171,7 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
       // Two-step sign-in (P1b, D188): an authenticator app's code (TOTP) or a backup code, after the
       // password. Required for super admins (\`authorizePlatform\`); any account that turns it on is
       // asked for a code at every sign-in. No "trust this device": sessions already last 7 days.
-      twoFactor({ issuer: 'NUK Platform' }),
+      twoFactor({ issuer: 'Angder' }),
       // Guests (D156): Place order without an account signs the browser in as a guest, a user with
       // no email or password. Orders keep their owner, so "only your own orders" holds as before.
       anonymous({

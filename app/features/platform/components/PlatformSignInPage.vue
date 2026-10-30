@@ -86,7 +86,7 @@ async function restart(message?: string) {
           class="size-6 text-primary"
         />
         <h1 class="text-lg font-semibold">
-          NUK Platform
+          Angder
         </h1>
       </div>
     </template>
