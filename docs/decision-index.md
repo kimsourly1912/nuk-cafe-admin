@@ -269,4 +269,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D237](decisions.md#d237-an-account-deletes-itself-emptied-like-a-guest-d229s-erasure-2026-10-30) | An account deletes itself, emptied like a guest (D229's erasure), 2026-10-30 |
 | [D238](decisions.md#d238-a-pages-first-load-waits-for-everything-that-decides-its-layout-2026-10-30) | A page's first load waits for everything that decides its layout, 2026-10-30 |
 | [D239](decisions.md#d239-a-sign-in-refused-at-a-workspace-shows-where-the-account-may-go-2026-10-30) | A sign-in refused at a workspace shows where the account may go, 2026-10-30 |
-| [D240](decisions.md#d240-admin-pages-name-their-permission-the-app-refuses-a-page-before-loading-it-2026-10-30) | Admin pages name their permission; the app refuses a page before loading it, 2026-10-30 |
+| [D240](decisions.md#d240-workspace-pages-name-their-permission-the-app-refuses-a-page-before-loading-it-2026-10-30) | Workspace pages name their permission; the app refuses a page before loading it, 2026-10-30 |

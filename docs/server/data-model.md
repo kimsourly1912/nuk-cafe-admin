@@ -442,7 +442,7 @@ placed (unpaid) ──payment recorded──► preparing ──► ready ──
 
 | Route | Permission | Does |
 |---|---|---|
-| `GET /api/counter/me` | signed in (a temporary password too) | The counter app's session (D102): the branches this account works at with its role (every active branch for an admin); 403 `NOT_STAFF` for an account at no branch |
+| `GET /api/counter/me` | signed in (a temporary password too) | The counter app's session (D102): the branches this account works at with its role and `permissions` there (`resource:action`, from `branchRoles`; all of them for an owner, whatever their role at the branch, D240), every active branch for an owner; 403 `NOT_STAFF` for an account at no branch |
 | `GET …/orders` | `order: ['read']` | `{ orders, khrRate, serverTime }`: to pay (not past their time), preparing and ready, oldest first, with lines, the customer's name and the payment |
 | `GET …/orders/{orderId}` | `order: ['read']` | One of the branch's orders, any status; another branch's is 404 |
 | `GET`/`POST …/tables`, `PATCH …/tables/{tableId}`, `POST …/tables/{tableId}/archive\|restore` | `table: ['manage']` (managers, owners; D198) | A manager's dining tables: the admin's table routes and rules on the counter surface |

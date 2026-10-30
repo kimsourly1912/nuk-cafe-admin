@@ -96,13 +96,17 @@ describe('manager tools on the counter (D198)', () => {
     expect(api.filter(path => path.startsWith('/admin/'))).toEqual([])
   })
 
-  it('staff see no Manage, and opening a manager\'s page by address is refused', async () => {
-    const { page } = await atCounter(seed.customers.cashier)
+  it('staff see no Manage, and a manager\'s page by address says No access before any request (D240)', async () => {
+    const { page, api } = await atCounter(seed.customers.cashier)
     await page.getByRole('link', { name: 'Sold out' }).waitFor()
     expect(await page.getByRole('button', { name: 'Manage' }).count()).toBe(0)
-    await page.goto(url(`${counterHome}/tables`), { waitUntil: 'hydration' })
-    await page.getByText('Could not load the tables').waitFor()
-    expect(await page.getByRole('article').count()).toBe(0)
+    for (const path of ['tables', 'reports/summary']) {
+      await page.goto(url(`${counterHome}/${path}`), { waitUntil: 'hydration' })
+      await page.getByRole('heading', { name: 'No access to this page' }).waitFor()
+    }
+    expect(api.filter(path => path.includes('/tables') || path.includes('/reports'))).toEqual([])
+    await page.getByRole('button', { name: 'Back to the counter' }).click()
+    await page.waitForURL(u => u.pathname === counterHome)
   })
 
   it('the server: staff 403, another branch 404, and a report reads the path\'s branch whatever the query says', async () => {

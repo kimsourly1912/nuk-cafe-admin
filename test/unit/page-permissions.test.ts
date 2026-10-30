@@ -1,15 +1,17 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { TenantPermission } from '../../server/features/identity/identity.permissions'
-import { tenantRoles, tenantStatements } from '../../server/features/identity/identity.permissions'
+import type { BranchPermission, TenantPermission } from '../../server/features/identity/identity.permissions'
+import { branchRoles, branchStatements, tenantRoles, tenantStatements } from '../../server/features/identity/identity.permissions'
 import { supportPermissionList } from '../../server/features/support/support.rules'
 import { allowedNavigation } from '../../app/utils/navigation-access'
 
-// Page-level access in the admin (D240): every page names the permission its main read asks the
-// server for, the route middleware refuses a session without it, and the sidebar leaves it out.
+// Page-level access (D240): every admin page names the permission its main read asks the server for,
+// every counter branch page its branch permission; the route middleware refuses a session without
+// it, and the sidebar or the counter's Manage menu leaves it out.
 
 const ADMIN_PAGES = join(import.meta.dirname, '../../app/pages/c/[slug]/admin')
+const BRANCH_PAGES = join(import.meta.dirname, '../../app/pages/c/[slug]/counter/[branchId]')
 /** Pages every admin session opens: sign-in, the temporary-password page, Overview, and a redirect. */
 const OPEN_TO_EVERY_SESSION = ['login.vue', 'change-password.vue', 'index.vue', 'reports/index.vue']
 
@@ -18,11 +20,16 @@ function pageFiles(dir: string): string[] {
     entry.isDirectory() ? pageFiles(join(dir, entry.name)) : entry.name.endsWith('.vue') ? [join(dir, entry.name)] : [])
 }
 
-/** Each page's `permission` meta, by its path under `admin/`. */
-const pagePermissions = Object.fromEntries(pageFiles(ADMIN_PAGES).map(file => [
-  relative(ADMIN_PAGES, file),
-  /definePageMeta\(\{[^)]*permission: '([^']+)'/.exec(readFileSync(file, 'utf8'))?.[1],
-]))
+/** Each page's `permission` (or `branchPermission`) meta, by its path under `dir`. */
+function metaOf(dir: string, key: 'permission' | 'branchPermission'): Record<string, string | undefined> {
+  return Object.fromEntries(pageFiles(dir).map(file => [
+    relative(dir, file),
+    new RegExp(`definePageMeta\\(\\{[^)]*\\b${key}: '([^']+)'`).exec(readFileSync(file, 'utf8'))?.[1],
+  ]))
+}
+
+const pagePermissions = metaOf(ADMIN_PAGES, 'permission')
+const branchPagePermissions = metaOf(BRANCH_PAGES, 'branchPermission')
 
 const ownerGrants = (permission: string) => {
   const [resource, action] = permission.split(':')
@@ -47,6 +54,32 @@ describe('admin pages', () => {
     const support = new Set(supportPermissionList())
     const refused = Object.entries(pagePermissions).filter(([, permission]) => permission && !support.has(permission)).map(([page]) => page)
     expect(refused.sort()).toEqual(['sample-data/index.vue', 'support/index.vue'])
+  })
+})
+
+describe('counter branch pages', () => {
+  const statement = (permission: string) => {
+    const [resource, action] = permission.split(':')
+    return { [resource!]: [action!] } as BranchPermission
+  }
+
+  it('each name a branch permission, except the Reports redirect', () => {
+    const missing = Object.entries(branchPagePermissions).filter(([page, permission]) => !permission && page !== 'reports/index.vue')
+    expect(missing).toEqual([])
+  })
+
+  it('name only real branch permissions', () => {
+    const known = new Set(Object.entries(branchStatements).flatMap(([resource, actions]) => actions.map(action => `${resource}:${action}`)))
+    for (const permission of Object.values(branchPagePermissions).filter(Boolean)) expect(known, permission).toContain(permission)
+  })
+
+  it('open every page to a manager and refuse staff only Dining tables and Reports (D198)', () => {
+    const refused = (role: keyof typeof branchRoles) => Object.entries(branchPagePermissions)
+      .filter(([, permission]) => permission && !branchRoles[role].authorize(statement(permission)).success)
+      .map(([page]) => page)
+      .sort()
+    expect(refused('manager')).toEqual([])
+    expect(refused('staff')).toEqual(['reports/items.vue', 'reports/orders.vue', 'reports/summary.vue', 'tables.vue'])
   })
 })
 

@@ -61,7 +61,7 @@ The counter's **Sold out** page (`/counter/<branch>/sold-out`) switches individu
 
 ## Manage (managers and admins)
 
-Managers (and admins) have a **Manage** button in the counter's header, for the branch the counter is open at. Staff don't see it.
+Managers (and admins) have a **Manage** button in the counter's header, for the branch the counter is open at. Staff don't see it, and opening Dining tables or Reports by their address says **No access to this page** with **Back to the counter**.
 
 - **Dining tables**: the branch's tables and their QR codes, as on Admin → Branch → Dining tables: **New table**, edit a table's name or area, **View QR** to print or download it, **New QR** (the printed one stops working), archive and restore.
 - **Reports**: the branch's **Summary**, **Sales by item** and **Order history**, with **Print**. Choose the period at the top. Download CSV and Send to Telegram are on the admin's Reports only.

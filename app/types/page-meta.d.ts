@@ -10,6 +10,11 @@ declare module '#app' {
      * anything, and the sidebar leaves it out. For the app only: the server checks every request.
      */
     permission?: string
+    /**
+     * The counter's: the branch permission the page needs at the branch in its path
+     * (`table:manage`), from the session's branches (D240). Same refusal, same sidebar rule.
+     */
+    branchPermission?: string
   }
 }
 
