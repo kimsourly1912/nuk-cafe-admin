@@ -48,3 +48,7 @@ Write the date and anything odd into `docs/progress.md` (step 10.5).
 **Left on staging:** Thursday closes at 23:20 (checked in D1: minute 1400); set it back to 21:20 in Cafe → Branches once saves work. Test orders 002–004 are Ready at Table T08, one payment each.
 
 **Still to do before sign-off:** checks 1 (signed out, a real phone) and 4 by two people on two devices, after the 1102 fix.
+
+## Hand check result, 2026-10-30 (staging, the owner): PASSED
+
+Checks 1 (table QR signed out, on a real phone) and 4 (Mark ready on two devices), the two left on 2026-10-01, reported working by the owner after the move to Workers Paid fixed Error 1102. With checks 2, 3 and 5 passed on 2026-10-01, every check has passed.

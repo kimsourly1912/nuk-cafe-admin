@@ -205,7 +205,7 @@ D1 Time Travel is Cloudflare's, always on, no code of ours: every change is kept
 **Done 2026-10-01 by the owner** (dashboard, by date): restored in about 2 seconds; afterwards admin sign-in, the customer menu and the counter worked with their data.
 
 For production (8.2): note the bookmark before every migration (see Deploys); a restore there loses real orders written after the bookmark, so it's the last resort after redeploying the previous Worker.
-- [Open] Q24: acceptable downtime (RTO) and data retention/erasure periods. Answered: the Workers Paid plan (D211), alerts (D223) and backups (D225: nightly, 30 days plus 12 months).
+- Q24 answered (D229, 2026-10-30): back within **4 hours** (RTO); orders and payments kept 5 years; guest accounts deleted after 90 days unused (cleanup not built yet). Earlier parts: Workers Paid (D211), alerts (D223), backups (D225).
 
 ### Nightly backups (D225)
 

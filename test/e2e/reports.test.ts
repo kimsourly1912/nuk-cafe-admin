@@ -82,6 +82,7 @@ const DETAIL: OrderHistoryDetail = {
   tableLabel: null,
   customerFirstName: 'Sokha',
   status: 'completed',
+  version: 4,
   totalMinor: 650,
   lines: [{ itemName: 'Iced Latte', categoryName: 'Coffee', detail: 'Large', modifiers: [{ name: 'Oat milk', priceDeltaMinor: 50 }], unitPriceMinor: 650, quantity: 1, totalMinor: 650, note: 'Less sugar please' }],
   payment: { state: 'paid', method: 'khqr', amountMinor: 650, amountKhr: null, khrPerUsd: null, reference: '8812', collectedAt: '2026-09-30T02:04:00.000Z', collectedBy: 'Dara', returnMethod: null, returnedAt: null, returnedBy: null },
@@ -283,6 +284,85 @@ describe('Reports: Sales by item', () => {
     await page.locator('[data-slot="refresh-bar"]:not([data-active])').waitFor({ state: 'attached' })
     await expect.poll(bodyOpacity).toBe('1')
     await page.getByText('· Updated', { exact: false }).waitFor()
+  })
+})
+
+/** DETAIL paid `ago` before now: the browser decides whether to offer a refund from its own clock (D233). */
+const paidAgo = (ms: number, over: Partial<OrderHistoryDetail> = {}): OrderHistoryDetail =>
+  ({ ...DETAIL, payment: { ...DETAIL.payment, collectedAt: new Date(Date.now() - ms).toISOString() }, ...over })
+const HOUR = 60 * 60 * 1000
+
+describe('Reports: an owner\'s refund (D233)', () => {
+  it('asks how and why, sends the version with a key, and the panel shows the money returned', async () => {
+    let current = paidAgo(HOUR)
+    const posts: { body: unknown, key: string | undefined }[] = []
+    const { page } = await open('/c/nuk/admin/reports/orders?order=ord-1', {
+      'GET /admin/reports/orders/{id}': () => current,
+      'POST /admin/branches/{id}/orders/{id}/refund': ({ body, headers }) => {
+        posts.push({ body, key: headers['idempotency-key'] })
+        current = {
+          ...current,
+          version: 5,
+          payment: { ...current.payment, state: 'refunded', returnMethod: 'khqr', returnedAt: new Date().toISOString(), returnedBy: 'Kim' },
+          timeline: [...current.timeline, { at: new Date().toISOString(), fromStatus: 'completed', toStatus: 'completed', by: { kind: 'staff', name: 'Kim' }, reason: 'other', note: 'Wrong drink' }],
+        }
+        return current
+      },
+    })
+    const panel = page.getByRole('dialog')
+    await panel.getByRole('button', { name: 'Refund order' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Refund order #042?' })
+    await dialog.getByText('The order stays completed.').waitFor()
+    await dialog.getByText('$6.50', { exact: true }).waitFor()
+
+    // Why is required; nothing is sent without it. It was paid by KHQR, so KHQR is chosen.
+    await dialog.getByRole('button', { name: 'Refund $6.50' }).click()
+    await dialog.getByText('Say why the money went back').waitFor()
+    expect(posts).toEqual([])
+    await expect.poll(() => dialog.getByRole('tab', { name: 'KHQR' }).getAttribute('aria-selected')).toBe('true')
+
+    await dialog.getByRole('textbox', { name: 'Why' }).fill('Wrong drink')
+    await dialog.getByRole('button', { name: 'Refund $6.50' }).click()
+    await toast(page, 'Order #042 refunded').waitFor()
+    expect(posts).toHaveLength(1)
+    expect(posts[0]!.body).toEqual({ version: 4, returnMethod: 'khqr', note: 'Wrong drink' })
+    expect(posts[0]!.key).toMatch(/^[0-9a-f-]{36}$/)
+
+    await panel.getByText(/Money returned \(KHQR\) by Kim/).waitFor()
+    await panel.getByText('Refunded', { exact: true }).first().waitFor()
+    await panel.getByText('Wrong drink').waitFor()
+    await expect.poll(() => panel.getByRole('button', { name: 'Refund order' }).count()).toBe(0)
+  })
+
+  it('a refusal stays in the dialog; an order changed meanwhile offers Reload', async () => {
+    const { page } = await open('/c/nuk/admin/reports/orders?order=ord-1', {
+      'GET /admin/reports/orders/{id}': () => paidAgo(HOUR),
+      'POST /admin/branches/{id}/orders/{id}/refund': () => {
+        throw failures.conflict('ORDER_CHANGED', 'Order 042 changed meanwhile: it\'s completed now.')
+      },
+    })
+    await page.getByRole('dialog').getByRole('button', { name: 'Refund order' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Refund order #042?' })
+    await dialog.getByRole('textbox', { name: 'Why' }).fill('Wrong drink')
+    await dialog.getByRole('button', { name: 'Refund $6.50' }).click()
+    await dialog.getByText('Order 042 changed meanwhile: it\'s completed now.').waitFor()
+    await dialog.getByRole('textbox', { name: 'Why' }).waitFor()
+    await dialog.getByRole('button', { name: 'Reload' }).click()
+    await expect.poll(() => page.getByRole('dialog', { name: 'Refund order #042?' }).count()).toBe(0)
+  })
+
+  it('isn\'t offered for an order that isn\'t ready or completed, already refunded, or paid more than 30 days ago', async () => {
+    const cases: OrderHistoryDetail[] = [
+      paidAgo(HOUR, { status: 'preparing' }),
+      { ...paidAgo(HOUR), payment: { ...paidAgo(HOUR).payment, state: 'refunded', returnMethod: 'cash', returnedAt: new Date().toISOString(), returnedBy: 'Kim' } },
+      paidAgo(31 * 24 * HOUR),
+    ]
+    for (const detail of cases) {
+      const { page } = await open('/c/nuk/admin/reports/orders?order=ord-1', { 'GET /admin/reports/orders/{id}': () => detail })
+      await page.getByRole('dialog').getByText('Reference 8812').waitFor()
+      expect(await page.getByRole('dialog').getByRole('button', { name: 'Refund order' }).count()).toBe(0)
+      await page.close()
+    }
   })
 })
 

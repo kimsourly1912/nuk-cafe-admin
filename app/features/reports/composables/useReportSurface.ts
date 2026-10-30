@@ -19,6 +19,8 @@ export interface ReportSurface {
   counterBranchId?: string
   /** Download CSV and Send to Telegram. */
   exports: boolean
+  /** An owner's refund of a ready or completed order (D233): the admin's only. */
+  refunds: boolean
 }
 
 const SURFACE: InjectionKey<ReportSurface> = Symbol('report-surface')
@@ -32,6 +34,7 @@ export function provideCounterReportSurface(branchId: string) {
     page: report => tenantPath(`/counter/${branchId}/reports/${report}`),
     counterBranchId: branchId,
     exports: false,
+    refunds: false,
   })
 }
 
@@ -43,5 +46,6 @@ export function useReportSurface(): ReportSurface {
     key: 'reports',
     page: (report: ReportPage) => tenantPath(`/admin/reports/${report}`),
     exports: true,
+    refunds: true,
   }), true)
 }

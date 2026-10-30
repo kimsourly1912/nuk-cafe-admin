@@ -201,6 +201,8 @@ export interface OrderHistoryDetail {
   /** The customer's first name only. */
   customerFirstName: string
   status: OrderStatus
+  /** The order's version, which a refund sends back (D233). */
+  version: number
   totalMinor: number
   lines: {
     itemName: string

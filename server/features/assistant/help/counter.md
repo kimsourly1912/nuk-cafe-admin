@@ -43,7 +43,7 @@ If another cashier pays or moves the order while you have it open, the panel say
 3. If it was already paid: give the full payment back, and choose how the money went back (**Cash** or **KHQR**).
 4. Press the red cancel button. **Keep order** closes without cancelling.
 
-A ready or completed order can't be cancelled.
+A ready or completed order can't be cancelled here: give the money back, then the cafe's owner records it with **Refund order** in **Reports → Order history** (within 30 days).
 
 ## Finished today
 

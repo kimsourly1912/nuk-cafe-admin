@@ -16,8 +16,12 @@ export const OrderErrorCodes = {
   ORDER_CHANGED: 'ORDER_CHANGED',
   /** Its 30 minutes to pay are over: the expiry task cancels it (6.6). */
   PAYMENT_EXPIRED: 'PAYMENT_EXPIRED',
-  /** Ready or completed: only an admin refund undoes it (Q36). */
+  /** Ready or completed: only the owner's refund undoes it (Q36, D233). */
   ORDER_NOT_CANCELLABLE: 'ORDER_NOT_CANCELLABLE',
+  /** An owner's refund (D233) of an order that isn't ready or completed and paid, or already refunded. */
+  ORDER_NOT_REFUNDABLE: 'ORDER_NOT_REFUNDABLE',
+  /** Paid more than REFUND_DAYS ago (D233). */
+  REFUND_TOO_LATE: 'REFUND_TOO_LATE',
   /** Cash in riel with no rate set by an admin. */
   NO_EXCHANGE_RATE: 'NO_EXCHANGE_RATE',
   /** The riel rate changed since the screen showed the amount. */
@@ -65,7 +69,19 @@ export const paymentExpired = () =>
   apiError(409, OrderErrorCodes.PAYMENT_EXPIRED, 'The 30 minutes to pay are over, so this order is cancelled. The customer can place a new one.')
 
 export const orderNotCancellable = () =>
-  apiError(409, OrderErrorCodes.ORDER_NOT_CANCELLABLE, 'A ready or completed order can\'t be cancelled at the counter. An admin can refund it.')
+  apiError(409, OrderErrorCodes.ORDER_NOT_CANCELLABLE, 'A ready or completed order can\'t be cancelled at the counter. The cafe\'s owner can refund it in Reports → Orders.')
+
+/** Why an owner can't refund this order (D233): the counter cancels before ready; once only. */
+export function orderNotRefundable(status: OrderStatus, refunded: boolean, pickupNumber: number) {
+  const which = `Order ${String(pickupNumber).padStart(3, '0')}`
+  if (refunded) return apiError(409, OrderErrorCodes.ORDER_NOT_REFUNDABLE, `${which} is already refunded.`)
+  if (status === 'cancelled') return apiError(409, OrderErrorCodes.ORDER_NOT_REFUNDABLE, `${which} is cancelled: there's nothing to refund.`)
+  if (status === 'awaiting_payment') return apiError(409, OrderErrorCodes.ORDER_NOT_REFUNDABLE, `${which} isn't paid: there's nothing to refund.`)
+  return apiError(409, OrderErrorCodes.ORDER_NOT_REFUNDABLE, `${which} is being prepared: cancel it at the counter, saying how the money went back.`)
+}
+
+export const refundTooLate = (days: number) =>
+  apiError(409, OrderErrorCodes.REFUND_TOO_LATE, `This order was paid more than ${days} days ago, so it can't be refunded here.`)
 
 export const noExchangeRate = () =>
   apiError(409, OrderErrorCodes.NO_EXCHANGE_RATE, 'No riel rate is set yet. An admin sets it on the Payments page; take dollars or KHQR meanwhile.')

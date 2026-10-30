@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { chartPoints } from '../utils/chart'
 import { changeText } from '~/utils/text'
-import { eventBy, eventTitle, hourLabel, orderTypeText, paymentBadge } from '../utils/display'
+import { eventBy, eventReason, eventTitle, hourLabel, orderTypeText, paymentBadge } from '../utils/display'
 import { addDays, beyondRangeLimit, periodButtonLabel, periodLabel, presetOf, presetPeriod, previousLabel, validPeriod } from '../utils/period'
 
 describe('report periods', () => {
@@ -75,5 +75,12 @@ describe('report display', () => {
     expect(eventBy({ by: { kind: 'system', name: null }, toStatus: 'cancelled' })).toBe('Automatically (not paid in 30 minutes)')
     expect(eventBy({ by: { kind: 'customer', name: 'Sokha' }, toStatus: 'cancelled' })).toBe('By the customer')
     expect(eventBy({ by: { kind: 'staff', name: 'Dara' }, toStatus: 'ready' })).toBe('By Dara')
+  })
+
+  it('an owner\'s refund of a completed order reads "Refunded" with their words; a cancel keeps its reason (D233)', () => {
+    expect(eventTitle({ fromStatus: 'completed', toStatus: 'completed' })).toBe('Refunded')
+    expect(eventReason({ fromStatus: 'completed', toStatus: 'completed', reason: 'other', note: 'Wrong drink' })).toBe('Wrong drink')
+    expect(eventTitle({ fromStatus: 'ready', toStatus: 'cancelled' })).toBe('Cancelled')
+    expect(eventReason({ fromStatus: 'preparing', toStatus: 'cancelled', reason: 'other', note: 'Spilled' })).toBe('Other: Spilled')
   })
 })

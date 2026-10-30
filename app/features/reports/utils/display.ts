@@ -68,6 +68,8 @@ export const stampIn = (iso: string, timeZone: string) => formatShortDateTime(is
 /** A step of the timeline, in words: "Paid", "Cancelled". */
 export function eventTitle(event: Pick<OrderHistoryEvent, 'fromStatus' | 'toStatus'>): string {
   if (event.fromStatus === null) return 'Placed'
+  // Only an owner's refund of a completed order leaves the status as it was (D233).
+  if (event.fromStatus === event.toStatus) return 'Refunded'
   switch (event.toStatus) {
     case 'preparing': return 'Paid'
     case 'ready': return 'Ready'
@@ -86,8 +88,9 @@ export function eventBy(event: Pick<OrderHistoryEvent, 'by' | 'toStatus'>): stri
   }
 }
 
-export function eventReason(event: Pick<OrderHistoryEvent, 'reason' | 'note'>): string | null {
-  if (!event.reason) return event.note
+export function eventReason(event: Pick<OrderHistoryEvent, 'reason' | 'note' | 'fromStatus' | 'toStatus'>): string | null {
+  // A refund's why is the owner's own words (D233).
+  if (!event.reason || event.fromStatus === event.toStatus) return event.note
   const reason = REASON_LABELS[event.reason]
   return event.note ? `${reason}: ${event.note}` : reason
 }
