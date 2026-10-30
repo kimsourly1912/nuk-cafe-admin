@@ -42,7 +42,7 @@ describe('auth', () => {
   it.each([
     ['a customer or branch staff (NOT_ADMIN)', () => failures.notAdmin()],
     ['refused by the route gate (FORBIDDEN)', () => failures.forbidden()],
-  ])('refuses an account without admin access, %s, and signs it out again', async (_, failure) => {
+  ])('refuses an account without admin access that works nowhere, %s, and signs it out again', async (_, failure) => {
     const page = await createPage()
     const api = await mockApi(page, {
       ...SIGNED_OUT,
@@ -52,6 +52,8 @@ describe('auth', () => {
       'GET /admin/me': () => {
         throw failure()
       },
+      // A customer: no cafe to offer instead (D239).
+      'GET /me/cafes': () => [],
     })
     await page.goto(url('/c/nuk/admin/login'), { waitUntil: 'hydration' })
     await signIn(page, 'customer@example.com')

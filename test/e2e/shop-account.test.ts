@@ -108,6 +108,38 @@ describe('signing in and out', () => {
     await page.waitForURL(url('/c/nuk'))
   })
 
+  it.each([
+    ['/sign-in', 'Sign in'],
+    ['/sign-up', 'Create your account'],
+  ])('signed in, %s opened directly shows a skeleton and moves on, never the form (D238)', async (path, title) => {
+    const { page, problems } = await open('/sign-in')
+    await signIn(page, seed.customers.verified)
+    await page.waitForURL(u => u.pathname === '/')
+    // Remembers whether the form ever showed, from the first byte of the next page.
+    await page.addInitScript(() => {
+      const state = window as unknown as { formShown: boolean }
+      state.formShown = false
+      new MutationObserver(() => {
+        if (document.querySelector('input[type="email"]')) state.formShown = true
+      }).observe(document, { childList: true, subtree: true })
+    })
+    let answer!: () => void
+    const held = new Promise<void>(resolve => (answer = resolve))
+    await page.route('**/api/auth/get-session', async (route) => {
+      await held
+      await route.continue()
+    })
+    await page.goto(url(`${path}?redirect=/c/nuk`), { waitUntil: 'hydration' })
+    await page.getByRole('status', { name: 'Loading' }).waitFor()
+    expect(await page.getByLabel('Email').count()).toBe(0)
+    expect(await heading(page, title).count()).toBe(0)
+
+    answer()
+    await page.waitForURL(url('/c/nuk'))
+    expect(await page.evaluate(() => (window as unknown as { formShown: boolean }).formShown)).toBe(false)
+    expect(problems).toEqual([])
+  })
+
   it('a staff account on its temporary password is refused and signed out; signed in elsewhere, the menu shows it signed out', async () => {
     const staff = seed.customers.temporaryStaff
     const { page, problems } = await open('/sign-in')

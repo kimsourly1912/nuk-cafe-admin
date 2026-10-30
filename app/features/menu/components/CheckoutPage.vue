@@ -49,7 +49,15 @@ const branch = computed(() => quoted.value?.branch)
 const orderProblem = computed(() => quoted.value?.problems[0])
 const closedNote = computed(() => (branch.value ? openingText(branch.value) : undefined))
 const hasLineProblem = computed(() => quoted.value?.lines.some(line => line.problem) ?? false)
-const ready = computed(() => mounted.value && known.value)
+/**
+ * First load: one skeleton until the page knows what to show (never the empty state or a field
+ * that then goes away): who orders (an account asks no name), the branches (the order and its
+ * table are kept per branch) and the order's first prices.
+ */
+const loading = computed(() => !mounted.value || !known.value || checkout.shop.loading.value
+  || (lines.value.length > 0 && !quoted.value && !quote.error.value))
+/** Without the branches the order can't be read: not "Your order is empty". */
+const shopError = computed(() => (checkout.shop.branches.value.length ? undefined : checkout.shop.error.value))
 
 // --- Without an account: the name the counter calls (D156) ---
 const guestName = ref('')
@@ -72,12 +80,14 @@ async function submit() {
 }
 
 const action = computed(() => {
-  if (!ready.value) return { label: 'Place order', disabled: true, loading: true }
+  if (loading.value) return { label: 'Place order', disabled: true, loading: true }
   const total = quoted.value ? ` · ${formatMinor(quoted.value.totalMinor)}` : ''
+  // Pricing a changed order again: a spinner (which also blocks it), not greyed out as if refused.
+  const repricing = quoteSettling.value || quote.pending.value
   return {
     label: placing.value ? 'Placing order…' : `Place order${total}`,
-    disabled: !quoted.value?.orderable || quoteSettling.value || quote.pending.value || placing.value,
-    loading: placing.value,
+    disabled: !quoted.value?.orderable || placing.value,
+    loading: placing.value || repricing,
   }
 })
 
@@ -132,32 +142,80 @@ useSeoMeta({ robots: 'noindex' })
         Review order
       </h1>
 
+      <!-- Shaped like the page below: the order type, the lines and, from lg, the summary -->
       <div
-        v-if="!mounted || placed"
-        class="mt-6 space-y-3"
-        aria-busy="true"
+        v-if="loading || placed"
+        class="mt-4 lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-6"
+        role="status"
         :aria-label="placed ? 'Opening your order' : 'Loading your order'"
       >
-        <USkeleton class="h-16 w-full" />
-        <USkeleton class="h-40 w-full" />
+        <div class="space-y-4">
+          <div class="flex items-center gap-3 rounded-lg border border-default p-4 sm:p-6">
+            <USkeleton class="size-5 shrink-0 rounded" />
+            <div class="flex-1 space-y-2">
+              <USkeleton class="h-4 w-40" />
+              <USkeleton class="h-3 w-28" />
+            </div>
+          </div>
+          <div class="divide-y divide-default rounded-lg border border-default px-4 sm:px-6">
+            <div
+              v-for="i in Math.min(Math.max(lines.length, 1), 4)"
+              :key="i"
+              class="flex gap-3 py-4"
+            >
+              <USkeleton class="size-14 shrink-0 rounded-md" />
+              <div class="flex-1 space-y-2">
+                <USkeleton class="h-4 w-1/2" />
+                <USkeleton class="h-3 w-1/3" />
+              </div>
+              <USkeleton class="h-4 w-14" />
+            </div>
+          </div>
+        </div>
+        <div class="hidden space-y-4 rounded-lg border border-default p-6 lg:block">
+          <USkeleton class="h-5 w-32" />
+          <USkeleton class="h-4 w-full" />
+          <USkeleton class="h-6 w-full" />
+          <USkeleton class="h-16 w-full" />
+          <USkeleton class="h-11 w-full" />
+        </div>
       </div>
 
       <div
-        v-else-if="!lines.length"
-        class="flex flex-col items-center gap-3 py-16 text-center"
+        v-else-if="shopError"
+        class="mt-4"
       >
-        <UIcon
-          name="i-lucide-shopping-bag"
-          class="size-10 text-dimmed"
-        />
-        <p class="font-medium text-highlighted">
-          Your order is empty
-        </p>
-        <UButton
-          :to="tenantPath('/')"
-          label="Back to the menu"
+        <ApiErrorAlert
+          :error="shopError"
+          title="Couldn't load your order"
+          @retry="checkout.shop.refresh()"
         />
       </div>
+
+      <UCard
+        v-else-if="!lines.length"
+        class="mx-auto mt-4 w-full max-w-lg"
+        variant="soft"
+        :ui="{ body: 'py-10 sm:py-12' }"
+      >
+        <div class="flex flex-col items-center gap-4 text-center">
+          <UIcon
+            name="i-app-cafe-shopping-bag"
+            class="size-64 sm:size-80"
+          />
+          <h2 class="text-3xl font-semibold text-highlighted">
+            Your order is empty
+          </h2>
+          <p class="max-w-sm text-muted">
+            Add some delicious items from our menu to get started.
+          </p>
+          <UButton
+            :to="tenantPath('/')"
+            icon="i-lucide-arrow-left"
+            label="Back to the menu"
+          />
+        </div>
+      </UCard>
 
       <template v-else>
         <div class="mt-4 space-y-3">
@@ -355,7 +413,7 @@ useSeoMeta({ robots: 'noindex' })
     <!-- Below lg: the total and the button in thumb reach -->
     <BottomActionBar
       label="Place your order"
-      :open="mounted && lines.length > 0"
+      :open="!loading && !placed && lines.length > 0"
       expanded="hidden"
     >
       <div class="w-full space-y-2">

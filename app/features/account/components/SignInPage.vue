@@ -2,7 +2,8 @@
 /**
  * Sign in (step 5.2, D97): email and password, "Forgot password?", a link to create an account.
  * Returns to `?redirect=` (a page of the customer site) or the menu. After a password reset
- * (`?reset=1`) it says so. Someone already signed in goes straight on. With two-step sign-in (D188)
+ * (`?reset=1`) it says so. Someone already signed in goes straight on, never seeing the form: a
+ * skeleton shows until the browser knows (D238). With two-step sign-in (D188)
  * the password is followed by the code from the app (`<TwoFactorCodeForm>`).
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
@@ -28,12 +29,18 @@ const { signIn, finishSignIn } = useAccountActions()
 const codeStep = ref(false)
 
 const { account, known } = useAccountSession()
+/** Already signed in on arrival: on its way on, so the form never shows (D238). */
+const leaving = ref(false)
 let arrived = false
 watch(known, (isKnown) => {
   if (!isKnown || arrived) return
   arrived = true
-  if (account.value) navigateTo(target.value, { replace: true })
+  if (account.value) {
+    leaving.value = true
+    navigateTo(target.value, { replace: true })
+  }
 }, { immediate: true })
+const loading = computed(() => !known.value || leaving.value)
 
 async function onSubmit(event: FormSubmitEvent<SignInForm>) {
   arrived = true
@@ -63,7 +70,12 @@ function restart(message?: string) {
 </script>
 
 <template>
+  <TaskFrameSkeleton
+    v-if="loading"
+    :fields="2"
+  />
   <AccountFrame
+    v-else
     title="Sign in"
     description="Sign in to order ahead and collect points."
     :back="{ label: accountBackLabel(home), to: home }"

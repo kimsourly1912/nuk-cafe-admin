@@ -4,7 +4,8 @@ Snapshot reviewed against main `4832310`, 2026-10-30. Read only when resuming or
 
 ## Waiting on the owner
 
-- **Active: account erasure (D237, 2026-10-30):** branch `claude/modest-ramanujan-1dfubo`, awaiting review. Account menu → **Delete account**; `POST /api/me/delete-account`; no migration. [Plan](plans/account-erasure.md), [decision](decisions.md#d237-an-account-deletes-itself-emptied-like-a-guest-d229s-erasure-2026-10-30), [progress](progress.md#account-erasure-d237-2026-10-30).
+- **In review: Review order's first load and the first-load rule (D238),** branch `claude/checkout-loading-state`. Next: other pages checked against the new UI checklist item, one per branch. [Progress](progress.md#review-orders-first-load-and-the-first-load-rule-d238-2026-10-30).
+- **Merged: account erasure (D237, 2026-10-30):** PR #224 as `3ed2cbf`. Account menu → **Delete account**; `POST /api/me/delete-account`; no migration. [Plan](plans/account-erasure.md), [decision](decisions.md#d237-an-account-deletes-itself-emptied-like-a-guest-d229s-erasure-2026-10-30), [progress](progress.md#account-erasure-d237-2026-10-30).
 - **Merged: idle guests emptied after 90 days (D236):** PR #223 as `b4d28cc`.
 - **Merged: Angder in the console and the production assistant's config (D232, D230):** PR #222 as `b2254cf`. The owner, after its production deploy: a production-only OpenAI key with a $20 limit, as the Worker secret `NUXT_AI_API_KEY` on `nuk-cafe-production`.
 - **Merged: one membership per person and cafe (D235):** PR #221 as `d798bc8`.

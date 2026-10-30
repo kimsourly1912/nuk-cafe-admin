@@ -87,21 +87,25 @@ useSeoMeta({ robots: 'noindex' })
         @retry="query.refresh()"
       />
 
-      <UCard v-else-if="empty">
-        <div class="space-y-3 py-6 text-center">
+      <UCard
+        v-else-if="empty"
+        :ui="{ body: 'py-10 sm:py-12' }"
+      >
+        <div class="flex flex-col items-center gap-4 text-center">
           <UIcon
-            name="i-lucide-receipt"
-            class="size-10 text-muted"
+            name="i-app-cafe-shopping-bag"
+            class="size-64 sm:size-80"
           />
-          <p class="font-medium text-highlighted">
+          <h2 class="text-3xl font-semibold text-highlighted">
             No orders yet
-          </p>
-          <p class="text-sm text-muted">
-            Your orders will show up here.
+          </h2>
+          <p class="max-w-sm text-muted">
+            Explore the menu and place your first order. You can track it here once it's placed.
           </p>
           <UButton
-            label="Browse the menu"
             :to="tenantPath('/')"
+            icon="i-lucide-arrow-left"
+            label="Browse the menu"
           />
         </div>
       </UCard>
