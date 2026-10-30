@@ -2,9 +2,25 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## One membership per person and cafe (D235, 2026-10-30)
+
+Branch `claude/modest-ramanujan-1dfubo`. [Decision](decisions.md#d235-one-membership-per-person-and-cafe-enforced-by-the-database-2026-10-30).
+
+- **Change:** migration `0052_member_unique` (one unique index on `member (organization_id, user_id)`, written by hand, deletes nothing; its snapshot is `0051`'s with new ids). The staff list test no longer inserts a repeated membership row. No app or route change.
+- **Evidence (2026-10-30, local Linux, pnpm 12.15.0):** `drizzle-kit generate --config .nuxt/hub/db/drizzle.config.ts` says "No schema changes" (with the index in the snapshot it generated a `DROP INDEX`); `migrations.test.ts` → `0052_member_unique` 2, both failed with the index replaced by `SELECT 1`; `server/features/identity` and `migrations.test.ts` 269 passed. `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 154 files, 2126 passed, 1 skipped; e2e `shop-tracking.test.ts` 11/11 (its seeded database runs every migration, 0052 included). Not run: the full e2e suite, D1 itself (the index is plain SQLite).
+- **Owner, before deploying:** run the duplicate check on staging and production; it should answer no rows:
+
+  ```bash
+  npx wrangler d1 execute nuk-cafe-staging --remote --command "select organization_id, user_id, count(*) from member group by 1, 2 having count(*) > 1"
+  ```
+
+  ```bash
+  npx wrangler d1 execute nuk-cafe-production --remote --command "select organization_id, user_id, count(*) from member group by 1, 2 having count(*) > 1"
+  ```
+
 ## The customer sees a completed order's refund (D234, 2026-10-30)
 
-Merged as PR #219 (`4832310`), deployed (owner, 2026-10-30). The owner's answer to D233's open question: show it. [Decision](decisions.md#d234-the-customer-sees-the-owners-refund-of-a-completed-order-2026-10-30).
+Merged as PR #219 (`4832310`), deployed, checked on staging by the owner (2026-10-30). The owner's answer to D233's open question: show it. [Decision](decisions.md#d234-the-customer-sees-the-owners-refund-of-a-completed-order-2026-10-30).
 
 - **Change:** `refundText` and a neutral alert on the customer's order page ("$9.75 refunded by KHQR", "The cafe returned your payment on …"); the status stays Completed. No server, contract or migration change (the payment's return columns were already sent).
 - **Evidence (2026-10-30, local Linux, pnpm 12.15.0, Playwright's Chromium):** `order.test.ts` 10 (incl. the refund: dollars, riel, not returned, cancelled); e2e `shop-tracking.test.ts` 11/11 against the seeded server incl. the new refunded-completed test (phone width). `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 154 files, 2124 passed, 1 skipped. Not run: full local e2e (no shared code changed).

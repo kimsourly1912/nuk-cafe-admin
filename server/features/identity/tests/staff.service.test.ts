@@ -359,10 +359,10 @@ describe('list from the cafe\'s memberships', () => {
     for (let start = 0; start < 120; start += 12) {
       await db.insert(user).values(Array.from({ length: 12 }, (_, i) => ({ id: `crowd-${start + i}`, name: `Crowd ${start + i}`, email: `crowd${start + i}@example.com` })))
     }
-    // Vanna works at three branches (one archived since) and has a repeated membership row (nothing makes the pair unique).
+    // Vanna works at three branches (one archived since). A second membership row is refused by the
+    // database (`member_organization_user_unique`, D235; tested in `migrations.test.ts`).
     const vanna = (await createStaff(db, actor, staffInput({ name: 'Vanna', email: 'vanna@example.com', memberships: [{ branchId, role: 'staff' }, { branchId: otherBranchId, role: 'manager' }] }))).staff
     await addBranchStaff(db, archivedBranchId, vanna.id, 'staff')
-    await db.insert(member).values({ id: newId(), organizationId: TEST_TENANT, userId: vanna.id, role: 'member', createdAt: new Date() })
     await createStaff(db, actor, staffInput({ name: 'Sophea', email: 'sophea@example.com', memberships: [{ branchId, role: 'staff' }] }))
     const closed = (await createStaff(db, actor, staffInput({ name: 'Closed hand', email: 'closed@example.com', memberships: [] }))).staff
     await addBranchStaff(db, archivedBranchId, closed.id, 'manager')
@@ -372,7 +372,7 @@ describe('list from the cafe\'s memberships', () => {
     await db.insert(member).values({ id: newId(), organizationId: OTHER, userId: 'crowd-2', role: 'owner', createdAt: new Date() })
   })
 
-  it('returns each person once, however many branches or membership rows they have', async () => {
+  it('returns each person once, however many branches they work at', async () => {
     expect(await everyone()).toEqual(['Closed hand', 'Owner', 'Sophea', 'Vanna'])
     expect(await listStaff(db, actor, PAGE)).toMatchObject({ total: 4 })
     expect(await everyone({ role: 'staff' })).toEqual(['Sophea', 'Vanna'])
