@@ -2,9 +2,16 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Idle guests emptied after 90 days (D236, 2026-10-30)
+
+Branch `claude/modest-ramanujan-1dfubo`, after PR #222. D229's guest cleanup; the owner chose emptying over deleting (the `orders` rebuild). [Decision](decisions.md#d236-idle-guests-are-emptied-not-deleted-d229s-cleanup-2026-10-30).
+
+- **Change:** `user.anonymized_at` (Better Auth additional field, migration `0053_user_anonymized_at`, generated); `guests.repository.ts` and `clearIdleGuests` in identity; `customersOrderingSince` in orders' `index.ts`; the daily task `identity:clear-idle-guests` (03:15 UTC) and its System health label. No route or screen.
+- **Evidence (2026-10-30, local Linux, pnpm 12.15.0):** `drizzle-kit generate --config .nuxt/hub/db/drizzle.config.ts` after the migration: "No schema changes". `guests.service.test.ts` 9; each of the 8 guards removed in turn failed a test (guest only, not emptied yet, last change, no recent session, the write's re-check, sessions only of the emptied, the orders check, the paging). `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 155 files, 2135 passed, 1 skipped; e2e `shop-tracking` and `platform` 45/45 (the seeded database runs 0053). Not run: the task in a running server or on D1, the full e2e suite.
+
 ## Angder in the console and the production assistant (D232, D230, 2026-10-30)
 
-Branch `claude/modest-ramanujan-1dfubo`, after PR #221. Two of the owner's 2026-10-30 answers, together because both are text or config. [D232](decisions.md#d232-the-platform-is-called-angder-everywhere-qt1-answered-2026-10-30), [D230](decisions.md#d230-the-production-assistant-uses-openai-with-a-20-monthly-cap-q43-answered-2026-10-30).
+Merged as PR #222 (`b2254cf`). Two of the owner's 2026-10-30 answers, together because both are text or config. [D232](decisions.md#d232-the-platform-is-called-angder-everywhere-qt1-answered-2026-10-30), [D230](decisions.md#d230-the-production-assistant-uses-openai-with-a-20-monthly-cap-q43-answered-2026-10-30).
 
 - **Change:** "NUK Platform" → "Angder" in the console sidebar, the platform tab title, the platform sign-in page, the two-step code prompt, the backup-codes file and the authenticator issuer; the e2e tests that named it. `$env.prod` gets `NUXT_AI_PROVIDER: 'openai'` and `NUXT_AI_MODEL: 'gpt-5.4-mini'`. Operations → Production names the key.
 - **Evidence (2026-10-30, local Linux, pnpm 12.15.0):** `identity.two-factor.test.ts` 5 (the authenticator link's name and issuer are Angder; with the old issuer it failed). `pnpm build:production` (with `NODE_OPTIONS=--max-old-space-size=6144`: the default heap ran out here): `.output/server/wrangler.json` is `nuk-cafe-production` with both AI variables and no key. `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 154 files, 2126 passed, 1 skipped; e2e `platform`, `two-factor`, `your-cafes` 49/49 (Playwright's Chromium). Not run: the full e2e suite; the assistant in production (needs the key).

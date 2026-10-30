@@ -435,6 +435,16 @@ export async function tenantsWithOrdersSince(db: Db, tenantIds: string[], since:
   return rows.map(row => row.tenantId)
 }
 
+/**
+ * Across cafes (a guest is a person's, not a cafe's, D156): of these customers, the ones with an order
+ * placed since `since`. Ids only (`orders_customer_idx`). For the idle-guest cleanup (D236).
+ */
+export async function customersWithOrdersSince(db: Db, customerIds: readonly string[], since: Date): Promise<string[]> {
+  const rows = await readInChunks(customerIds, ids => db.selectDistinct({ customerId: orders.customerId }).from(orders)
+    .where(and(inArray(orders.customerId, ids), gte(orders.placedAt, since))))
+  return rows.map(row => row.customerId)
+}
+
 /** Across cafes: every order of one customer handed to another (a guest's to their account, D156). */
 export function moveOrdersStatement(db: Db, fromCustomerId: string, toCustomerId: string): Statement {
   return db.update(orders).set({ customerId: toCustomerId }).where(eq(orders.customerId, fromCustomerId))
