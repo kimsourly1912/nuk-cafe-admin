@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Admin pages name their permission (D240, 2026-10-30)
+Branch `ccr-e2b7ccc7-mhvnj3`. Found by the owner: pages aren't limited by role. Step A of the [workspace access plan](plans/workspace-access.md#7-steps); step B (the counter) is next. [Decision](decisions.md#d240-admin-pages-name-their-permission-the-app-refuses-a-page-before-loading-it-2026-10-30).
+
+- **Change:** `permission` in `PageMeta`; every admin route file but Overview, sign-in, change-password and the Reports redirect names one; `auth.global.ts` refuses a page the session lacks with a fatal 403 `PAGE_FORBIDDEN`; the errors feature's `page-forbidden` kind (**No access to this page**); `allowedNavigation` (`app/utils/navigation-access.ts`) filters the sidebar and search. The e2e `ADMIN` fixture holds an owner's real permissions, the support fixture a visit's. No server change.
+- **Evidence (2026-10-30, cloud Linux, pnpm 12.15.0, Playwright's Chromium):** `pnpm lint`, `pnpm typecheck` clean; unit `admin-page-permissions.test.ts` 5/5, `classify-error.test.ts` 6/6; `pnpm test:unit` 156/157 files (the one failure: `counter-d1-performance.test.ts` timed out at 60 s while the e2e build ran in parallel; orders code, untouched here); e2e `support-access.test.ts` 10/10. Guards: removing the middleware check failed the new e2e test (heading timeout); filtering nothing in the sidebar failed it (`expected 1 to be +0`). Full local e2e: pending.
+- **Next:** step B, counter pages by branch permission.
+
 ## A refused sign-in shows where the account may go (D239, 2026-10-30)
 Branch `claude/checkout-loading-state` (on the owner's request, with D238's work). Found by the owner: a manager or staff account at the admin sign-in was signed out again with no way on.
 

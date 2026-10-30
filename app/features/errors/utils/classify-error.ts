@@ -1,6 +1,12 @@
 import { CAFE_NOT_FOUND, TENANT_SUSPENDED } from '#shared/contracts/cafe'
 
-export type ErrorKind = 'cafe-not-found' | 'cafe-paused' | 'page-not-found' | 'generic'
+export type ErrorKind = 'cafe-not-found' | 'cafe-paused' | 'page-not-found' | 'page-forbidden' | 'generic'
+
+/**
+ * The code of the app's own refusal of a page the session's permissions don't include (the route
+ * middleware's, D240). The server never sends it: its 403s are errors on a page, not error pages.
+ */
+export const PAGE_FORBIDDEN = 'PAGE_FORBIDDEN'
 
 /**
  * The `code` of a server error's `data`. Nuxt hands that over as JSON text after a server render,
@@ -28,5 +34,6 @@ export function classifyError(error: { statusCode?: number, data?: unknown }, sl
   const code = errorCode(error.data)
   if (slug && code === CAFE_NOT_FOUND) return 'cafe-not-found'
   if (slug && code === TENANT_SUSPENDED) return 'cafe-paused'
+  if (code === PAGE_FORBIDDEN) return 'page-forbidden'
   return error.statusCode === 404 ? 'page-not-found' : 'generic'
 }

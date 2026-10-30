@@ -8,7 +8,7 @@
 2. While it's on, a strip at the top of every admin page says until when.
 3. Tell the platform team what you need: they open the cafe from their own console.
 
-They see what you see in the admin: the menu, orders, reports, staff and settings. They **can't change anything**: every save is refused. They can't download reports, use the assistant or upload photos either.
+They see what you see in the admin: the menu, orders, reports, staff and settings. They **can't change anything**: every save is refused. They can't download reports, use the assistant or upload photos either, and Platform support and Sample data aren't in their sidebar.
 
 ## End it
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import CategoryListPage from '~/features/categories/components/CategoryListPage.vue'
 
-definePageMeta({ title: 'Categories' })
+definePageMeta({ title: 'Categories', permission: 'menu:read' })
 </script>
 
 <template>

@@ -34,7 +34,8 @@ const SUPPORT_SESSION: AdminSession = {
   email: 'ops@example.com',
   name: 'Ops',
   role: 'support',
-  permissions: ['menu:read', 'report:read'],
+  // A support visit's, as the server grants them (supportPermissionList).
+  permissions: ['menu:read', 'branch:read', 'branch:update', 'staff:read', 'report:read', 'settings:manage', 'audit:read'],
   mustChangePassword: false,
   support: { tenantId: 'cafe-1', visitExpiresAt: '2026-10-19T06:10:00.000Z', grantExpiresAt: UNTIL },
   supportAllowedUntil: UNTIL,
@@ -155,6 +156,21 @@ describe('a super admin on a support visit', () => {
     await strip.getByRole('button', { name: 'Leave' }).click()
     await page.waitForURL(address => address.pathname === '/platform/cafes/cafe-1')
     expect(api.calls).toContain('POST /platform/tenants/cafe-1/support/close')
+  })
+
+  it('sees only the pages a visit opens; Platform support\'s address says so before any request (D240)', async () => {
+    const { page, api } = await open('/c/nuk/admin', { 'GET /admin/me': () => SUPPORT_SESSION })
+    const sidebar = page.getByRole('navigation').first()
+    await sidebar.getByRole('link', { name: 'Staff' }).waitFor()
+    expect(await sidebar.getByRole('link', { name: 'Platform support' }).count()).toBe(0)
+
+    await page.goto(url('/c/nuk/admin/support'), { waitUntil: 'hydration' })
+    await page.getByRole('heading', { name: 'No access to this page' }).waitFor()
+    expect(await page.title()).toMatch(/^No access to this page/)
+    expect(api.calls).not.toContain('GET /admin/support')
+    await page.getByRole('button', { name: 'Back to dashboard' }).click()
+    await page.waitForURL(address => address.pathname === '/c/nuk/admin')
+    await page.getByTestId('support-banner').waitFor()
   })
 
   it('a change is stopped by the app with a clear message, before any request', async () => {

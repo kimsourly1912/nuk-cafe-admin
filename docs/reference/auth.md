@@ -34,14 +34,16 @@ const { user, isLoggedIn, logout } = useAuth()
 | `logout()` | `() => Promise<void>` | If a form has unsaved changes, asks first and does nothing on "Keep editing" ([`useLeaveGuard`](./forms.md#useleaveguard)). Then `POST /api/auth/sign-out`, clears the user and goes to `/admin/login` (no `?redirect=`), even if the request fails. Cleared **first**: the login page sends a signed-in admin to the dashboard, which would load after the sign-out; `signingOut` keeps the session-lost redirect in `plugins/api.ts` out of it. The counter's and the console's `signOut()` do the same. Other open tabs go to login too (`plugins/auth-sync.client.ts`). e2e `session.test.ts`, `counter.test.ts`, `platform.test.ts` ("goes straight to …"). |
 | `signingOut` | `Readonly<Ref<boolean>>` | True while `logout()` is on its way to the login page. Read only by `plugins/api.ts`. |
 | `clearSession()` | `() => void` | Clears the user locally (used by `apiFetch` on a 401 or 403 `NOT_ADMIN`). |
-| `can(permission)` | `(string) => boolean` | `'resource:action'` (`'staff:create'`), from the session's `permissions`. For hiding actions. The server checks every request regardless. |
+| `can(permission)` | `(string) => boolean` | `'resource:action'` (`'staff:create'`), from the session's `permissions`. Read by the route middleware and the sidebar for each page's `permission` meta (D240). The server checks every request regardless. |
 
 ```ts
 type SessionUser = AdminSession
 // { userId, email, name, role: 'admin', permissions: string[], mustChangePassword } from #shared/contracts/identity
 ```
 
-Only the cafe's **owners** may use the admin app (D52): branch managers and staff get "No access to the admin app" at login, stay signed in, and are offered Open the counter (D239). `permissions` lists every `resource:action` the platform role grants (from `server/features/identity/identity.permissions.ts`).
+Only the cafe's **owners** may use the admin app (D52): branch managers and staff get "No access to the admin app" at login, stay signed in, and are offered Open the counter (D239). `permissions` lists every `resource:action` the session's role grants (an owner's from `server/features/identity/identity.permissions.ts`, a support visit's from `supportPermissionList()`, D193).
+
+**Page permissions (D240):** an admin route file names the permission its main read asks the server for, `definePageMeta({ title: 'Staff', permission: 'staff:read' })`. `middleware/auth.global.ts` shows **No access to this page** (a fatal 403, code `PAGE_FORBIDDEN`) before the page loads when `can()` says no, and the sidebar and search leave the page out (`allowedNavigation`). Every new admin page names one unless every admin session may open it; `test/unit/admin-page-permissions.test.ts` fails otherwise.
 
 The state keys are `staff-session:*`, never `auth:*`: `@nuxtjs/better-auth` keeps its own session in `auth:user` and refetches it on startup and tab focus; sharing the key let it overwrite the admin session (e2e: auth.test.ts → "Better Auth refetching its own session…").
 

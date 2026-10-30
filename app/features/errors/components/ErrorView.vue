@@ -70,14 +70,15 @@ function goBack() {
     </div>
   </ErrorCard>
 
-  <ErrorCard v-else-if="kind === 'page-not-found'">
+  <!-- An unknown page, or one this account may not open (D240): the same card, with its code. -->
+  <ErrorCard v-else-if="kind === 'page-not-found' || kind === 'page-forbidden'">
     <div class="flex flex-col items-center gap-3 text-center">
       <UIcon
         :name="copy.icon"
-        class="h-40 w-44 sm:h-48 sm:w-52"
+        :class="kind === 'page-forbidden' ? 'h-40 w-56 sm:h-48 sm:w-64' : 'h-40 w-44 sm:h-48 sm:w-52'"
       />
       <p class="text-sm tracking-widest text-muted">
-        404
+        {{ kind === 'page-forbidden' ? '403' : '404' }}
       </p>
       <h1 class="text-3xl font-semibold text-highlighted">
         {{ copy.title }}

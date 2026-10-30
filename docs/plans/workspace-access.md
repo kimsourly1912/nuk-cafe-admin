@@ -1,6 +1,6 @@
 # Workspace access: who may open which door, and what a refusal shows
 
-Status: **draft for the owner's review (2026-10-30).** Nothing past D239's first slice is built until the questions below are answered. Related: D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D142 (console), D144 (Your cafes), D156 (guests), D188 (two-step sign-in), D193 (support access), D238 (first load), D239 (refused sign-in panel, in progress).
+Status: **draft for the owner's review (2026-10-30).** Nothing past D239's first slice is built until the questions below are answered, except page access inside a workspace (§7 steps A–B), which needs no answer: A is done (D240). Related: D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D142 (console), D144 (Your cafes), D156 (guests), D188 (two-step sign-in), D193 (support access), D238 (first load), D239 (refused sign-in panel, in progress).
 
 ## 1. The pieces
 
@@ -91,6 +91,19 @@ Status: **draft for the owner's review (2026-10-30).** Nothing past D239's first
 | G | same, plus **Open the platform console** (**Q5**) |
 | D, E, F | their cafes with Admin/Counter buttons |
 
+### Inside a workspace: which pages each account opens
+
+The doors above decide who gets into a workspace; once inside, each page needs its own permission. The server checks every request either way (D134); this is what the app shows.
+
+| Account | Page | Behavior |
+|---|---|---|
+| E owner | any admin page | ✅ (an owner holds every admin permission) |
+| G on a support visit (D193) | menu, reports, Cafe profile, Payments, Telegram, branches, Staff | ✅ read-only; a save is stopped by `useMutation`'s `readOnly` |
+| G on a support visit | Platform support, Sample data | not in the sidebar; the address shows **No access to this page** → Back to dashboard (**done, D240**) |
+| D staff | the counter's Dining tables and Reports (D198) | today: the page loads, then the server's 403. Proposed: the same refusal page, from per-branch permissions in `/counter/me` (**step 2 below**) |
+| D staff/manager | another branch's counter (`/counter/<id>`) | the server answers 404; the page should say so with Back to the counter (step 2) |
+| D manager → staff mid-session | Dining tables open | the next request's 403; on the next navigation the refusal page (step 2) |
+
 ## 5. Edge cases to cover
 
 - **E1 Two-step sign-in:** the refusal comes after the code (super admins always have it): the panel after Verify. Covered by `finishLogin`/`finishSignIn`; add a test.
@@ -115,7 +128,14 @@ Status: **draft for the owner's review (2026-10-30).** Nothing past D239's first
 - **Q4 When the account-list check fails at sign-in:** keep the session with Try again? *Recommended: yes.*
 - **Q5 Platform team accounts as customers and on Your cafes:** allowed to order (as today), and Your cafes links them to the console? *Recommended: yes to both.*
 
-## 7. Steps once answered
+## 7. Steps
+
+Not waiting for the owner (page access inside a workspace):
+
+- **A. Admin pages name their permission (done, D240).** `permission` route meta, checked by `auth.global.ts`, the sidebar filtered by it, **No access to this page**.
+- **B. Counter pages:** `/counter/me` sends each branch's permissions (from `branchRoles` on the server, as `adminSession` does for the admin); counter pages name a branch permission (`table:manage`, `report:read`); `counter.global.ts` checks the branch in the path; the counter menu reads the same meta instead of `role !== 'staff'`.
+
+Once the questions are answered:
 
 1. Finish the cafe doors (admin, counter): the built slice of D239 plus E3, E4 and the two-step test.
 2. The console door with the same panel (Q2).

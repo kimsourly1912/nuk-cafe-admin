@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import BranchPage from '~/features/branches/components/BranchPage.vue'
 
-definePageMeta({ title: 'Branch' })
+definePageMeta({ title: 'Branch', permission: 'branch:read' })
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ProductEditorPage from '~/features/products/components/ProductEditorPage.vue'
 
-definePageMeta({ title: 'Menu item' })
+definePageMeta({ title: 'Menu item', permission: 'menu:read' })
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))

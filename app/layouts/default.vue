@@ -6,14 +6,20 @@ import { useAuth } from '~/features/auth'
 import { CafeSwitcher } from '~/features/cafe'
 import { SupportBanner } from '~/features/support'
 
-const { user, logout } = useAuth()
+const { user, logout, can } = useAuth()
 /** A support visit, or support allowed: the strip above the admin (P5, D193). */
 const supportStrip = computed(() => Boolean(user.value?.support || user.value?.supportAllowedUntil))
 const allItems = navigationItems({ sampleData: useRuntimeConfig().public.sampleData.enabled })
 const route = useRoute()
+const router = useRouter()
 const tenantPath = useTenantPath()
+// Only the pages this session opens (D240): each page's `permission` meta, the one the route middleware checks.
+const opens = (to: string) => {
+  const permission = router.resolve(tenantPath(to)).meta.permission
+  return !permission || can(permission)
+}
 // Features name their pages inside the cafe (`/admin/products`); the sidebar links to this cafe's (D141).
-const sidebarItems = computed(() => withActiveItem(allItems, splitTenantUrl(route.path)?.path ?? route.path)
+const sidebarItems = computed(() => withActiveItem(allowedNavigation(allItems, opens), splitTenantUrl(route.path)?.path ?? route.path)
   .map(group => group.map(item => (typeof item.to === 'string' ? { ...item, to: tenantPath(item.to) } : item))))
 // Ctrl/⌘+B collapses the desktop sidebar; below `lg` it opens or closes the phone menu.
 const { open, collapsed: sidebarCollapsed } = useSidebarShortcut()

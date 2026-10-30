@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import ModifierGroupPage from '~/features/modifier-groups/components/ModifierGroupPage.vue'
 
-definePageMeta({ title: 'Add-on group' })
+definePageMeta({ title: 'Add-on group', permission: 'menu:read' })
 
 const route = useRoute()
 const id = computed(() => String(route.params.id))
