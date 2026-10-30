@@ -4,6 +4,41 @@ import { applyMigration, createTestClient, migrationFiles } from '#server/tests/
 
 // Migrations that change tables holding data are checked against data, not only an empty
 // database: staging runs them over its rows.
+describe('0052_member_unique', () => {
+  async function upTo0052() {
+    const client = await createTestClient()
+    const files = migrationFiles()
+    const at = files.indexOf('0052_member_unique.sql')
+    expect(at).toBeGreaterThan(0)
+    for (const file of files.slice(0, at)) await applyMigration(client, file)
+    await client.batch([
+      `insert into organization (id, name, slug, created_at) values ('t1', 'NUK Cafe', 'nuk', 1), ('t2', 'Brown Bean', 'brown-bean', 1)`,
+      `insert into user (id, name, email, email_verified, created_at, updated_at) values ('u1', 'Kim', 'kim@example.com', 1, 1, 1), ('u2', 'Dara', 'dara@example.com', 1, 1, 1)`,
+    ])
+    return { client, apply: () => applyMigration(client, files[at]!) }
+  }
+  const members = async (client: Awaited<ReturnType<typeof createTestClient>>) =>
+    (await client.execute('select id, organization_id, user_id, role from member order by id')).rows.map(row => ({ ...row }))
+
+  it('keeps one person in two cafes and two people in one, then refuses a second membership in the same cafe', async () => {
+    const { client, apply } = await upTo0052()
+    await client.execute(`insert into member (id, organization_id, user_id, role, created_at) values ('m1', 't1', 'u1', 'owner', 1), ('m2', 't2', 'u1', 'member', 1), ('m3', 't1', 'u2', 'member', 1)`)
+    await apply()
+    expect(await members(client)).toHaveLength(3)
+    await expect(client.execute(`insert into member (id, organization_id, user_id, role, created_at) values ('m4', 't1', 'u1', 'member', 2)`)).rejects.toThrow(/UNIQUE/)
+    // How every write changes a membership (`replaceAccessStatements`): delete, then insert, in one batch.
+    await client.batch([`delete from member where organization_id = 't1' and user_id = 'u2'`, `insert into member (id, organization_id, user_id, role, created_at) values ('m5', 't1', 'u2', 'owner', 2)`])
+    expect((await members(client)).map(row => row.id)).toEqual(['m1', 'm2', 'm5'])
+  })
+
+  it('deletes nothing: an existing duplicate stops the migration, its rows untouched', async () => {
+    const { client, apply } = await upTo0052()
+    await client.execute(`insert into member (id, organization_id, user_id, role, created_at) values ('m1', 't1', 'u1', 'owner', 1), ('m2', 't1', 'u1', 'member', 2)`)
+    await expect(apply()).rejects.toThrow(/UNIQUE/)
+    expect((await members(client)).map(row => row.id)).toEqual(['m1', 'm2'])
+  })
+})
+
 describe('0040_order_ready_delivery', () => {
   it('keeps an old subscribed row and a row written by the old code, with no delivery work invented', async () => {
     const client = await createTestClient()
