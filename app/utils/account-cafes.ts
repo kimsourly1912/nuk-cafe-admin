@@ -7,7 +7,7 @@ import { tenantUrl } from './tenant-path'
 /**
  * The cafes one account works in (T2c, D144). Your cafes and the switcher read them through the
  * cafe feature's `useAccountCafes()`; the admin and counter sign-ins ask once, when the account
- * isn't let in here, what it may open instead (D236).
+ * isn't let in here, what it may open instead (D239).
  */
 
 /** Your cafes: signed out, the page sends the person to sign in first. */
@@ -34,7 +34,7 @@ export function otherCafes(cafes: readonly AccountCafe[] | null | undefined, cur
 /** The platform console's home (D142); its own sign-in and session decide access there. */
 export const PLATFORM_CONSOLE_PATH = '/platform'
 
-/** What an account refused at a workspace may open instead (D236). */
+/** What an account refused at a workspace may open instead (D239). */
 export interface OtherAccess {
   /** This cafe's other workspace, when it opens: a manager refused by the admin app works at the counter. */
   here: Workspace | null
@@ -56,7 +56,7 @@ export function otherAccess(cafes: readonly AccountCafe[], currentSlug: string, 
 }
 
 /**
- * A sign-in refused at this workspace by an account that works somewhere (D236, after T2c's D144):
+ * A sign-in refused at this workspace by an account that works somewhere (D239, after T2c's D144):
  * it stays signed in, and the page shows `<WorkspaceRefused>` with where it may go instead.
  */
 export class WorkspaceRefusedError extends ApiError {
@@ -103,7 +103,7 @@ export interface RefusedSession {
 /**
  * Opening a workspace's sign-in already signed in (its own session check said 403): the account and
  * what it may open instead, even nothing, so the page says so instead of a form that would refuse it
- * again (D236). Signed out, a guest, or any failure: `null`, the form.
+ * again (D239). Signed out, a guest, or any failure: `null`, the form.
  */
 export async function refusedSession(currentSlug: string, workspace: Workspace): Promise<RefusedSession | null> {
   try {

@@ -1,6 +1,6 @@
 # Workspace access: who may open which door, and what a refusal shows
 
-Status: **draft for the owner's review (2026-10-30).** Nothing past D236's first slice is built until the questions below are answered. Related: D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D142 (console), D144 (Your cafes), D156 (guests), D188 (two-step sign-in), D193 (support access), D235 (first load), D236 (refused sign-in panel, in progress).
+Status: **draft for the owner's review (2026-10-30).** Nothing past D239's first slice is built until the questions below are answered. Related: D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D142 (console), D144 (Your cafes), D156 (guests), D188 (two-step sign-in), D193 (support access), D238 (first load), D239 (refused sign-in panel, in progress).
 
 ## 1. The pieces
 
@@ -35,14 +35,14 @@ Status: **draft for the owner's review (2026-10-30).** Nothing past D236's first
 
 1. **The server decides; the app only picks words and links.** Every link the panel offers leads to a door that checks again.
 2. **A correct password at the wrong door isn't punished.** The account sees who is signed in, why this door refuses it, the door it *can* use, and **Use another account**. One shared panel (`<WorkspaceRefused>`) at every staff door: admin, counter, console.
-3. **Arriving already signed in never shows a form that would refuse the account again.** The door's sign-in shows a skeleton until it knows (D235), then the panel or the form.
+3. **Arriving already signed in never shows a form that would refuse the account again.** The door's sign-in shows a skeleton until it knows (D238), then the panel or the form.
 4. **Only the account's own facts.** The panel names the current cafe (public) and the account's own cafes; never other people or other cafes.
 5. **Shared devices are never left without a way out.** Use another account is always there; where keeping the session has no benefit, sign out (see Q1).
 6. **Unknown or paused cafe first.** "Cafe not found" / "This cafe is paused" come before any identity check (as today).
 
 ## 4. The matrix (proposed)
 
-`panel → X` means `<WorkspaceRefused>` with X as the primary action and Use another account below it. ✅ = opens. Rows marked **change** differ from the code before D236.
+`panel → X` means `<WorkspaceRefused>` with X as the primary action and Use another account below it. ✅ = opens. Rows marked **change** differ from the code before D239.
 
 ### Cafe admin (`/c/<slug>/admin`)
 
@@ -78,7 +78,7 @@ Status: **draft for the owner's review (2026-10-30).** Nothing past D236's first
 
 | Account | Behavior |
 |---|---|
-| Anyone with a real account | May sign in; one session for the whole browser (D97). Signed in and opening `/sign-in`/`/sign-up`: skeleton, then on to the return page (done, D235 follow-up) |
+| Anyone with a real account | May sign in; one session for the whole browser (D97). Signed in and opening `/sign-in`/`/sign-up`: skeleton, then on to the return page (done, D238 follow-up) |
 | T staff on a temporary password | Today: signed out, "This account still has a temporary password". Proposed: keep it, plus a link to **its workspace's change-password page** (**Q3**) |
 | G platform | May order like a customer (nothing stops it today; **Q5**) |
 
@@ -117,8 +117,8 @@ Status: **draft for the owner's review (2026-10-30).** Nothing past D236's first
 
 ## 7. Steps once answered
 
-1. Finish the cafe doors (admin, counter): the built slice of D236 plus E3, E4 and the two-step test.
+1. Finish the cafe doors (admin, counter): the built slice of D239 plus E3, E4 and the two-step test.
 2. The console door with the same panel (Q2).
 3. Customer sign-in for temporary passwords (Q3) and Your cafes for the platform team (Q5).
 4. Tests: one e2e per matrix row group (mocked API), real-server tests for D at the admin, F at the admin, G at the admin (needs a seeded super admin with two-step sign-in), C at the console; each new guard removed once to see its test fail.
-5. D236 rewritten as the final rule; app-behavior gets the matrix's rows; this plan marked done.
+5. D239 rewritten as the final rule; app-behavior gets the matrix's rows; this plan marked done.

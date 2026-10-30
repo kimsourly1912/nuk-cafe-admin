@@ -98,7 +98,7 @@ export function useAuth() {
 
   /**
    * Signs in with Better Auth, then checks admin access. An account without it that works somewhere
-   * (branch staff, another cafe's owner) stays signed in: `WorkspaceRefusedError` (D236). Any other
+   * (branch staff, another cafe's owner) stays signed in: `WorkspaceRefusedError` (D239). Any other
    * (a customer) is signed out again and gets a clear error. Throws `ApiError`.
    */
   async function login(credentials: Credentials): Promise<PasswordStep> {
@@ -129,7 +129,7 @@ export function useAuth() {
     catch (error) {
       const apiError = ApiError.from(error)
       if (!isNoAccess(apiError)) throw apiError
-      // Works somewhere (this cafe's counter, another cafe, D236): stays signed in, and the page says where.
+      // Works somewhere (this cafe's counter, another cafe, D239): stays signed in, and the page says where.
       const access = await accessInstead(splitTenantUrl(window.location.pathname)?.slug ?? '', 'admin')
       if (access) throw new WorkspaceRefusedError(access, error)
       await authFetch('/sign-out').catch(() => {})

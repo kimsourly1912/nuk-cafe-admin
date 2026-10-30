@@ -3,7 +3,7 @@
  * Sign in (step 5.2, D97): email and password, "Forgot password?", a link to create an account.
  * Returns to `?redirect=` (a page of the customer site) or the menu. After a password reset
  * (`?reset=1`) it says so. Someone already signed in goes straight on, never seeing the form: a
- * skeleton shows until the browser knows (D235). With two-step sign-in (D188)
+ * skeleton shows until the browser knows (D238). With two-step sign-in (D188)
  * the password is followed by the code from the app (`<TwoFactorCodeForm>`).
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
@@ -29,7 +29,7 @@ const { signIn, finishSignIn } = useAccountActions()
 const codeStep = ref(false)
 
 const { account, known } = useAccountSession()
-/** Already signed in on arrival: on its way on, so the form never shows (D235). */
+/** Already signed in on arrival: on its way on, so the form never shows (D238). */
 const leaving = ref(false)
 let arrived = false
 watch(known, (isKnown) => {

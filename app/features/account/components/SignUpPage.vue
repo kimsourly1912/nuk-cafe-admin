@@ -24,7 +24,7 @@ const { saving, formError, submit } = useAccountForm({ name: 'sign-up-name', ema
 const { signUp } = useAccountActions()
 
 const { account, known } = useAccountSession()
-/** Already signed in on arrival: on its way on, so the form never shows (D235). */
+/** Already signed in on arrival: on its way on, so the form never shows (D238). */
 const leaving = ref(false)
 let arrived = false
 watch(known, (isKnown) => {

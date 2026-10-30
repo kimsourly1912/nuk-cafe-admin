@@ -259,7 +259,7 @@ describe('your cafes (D144)', () => {
     await page.getByRole('button', { name: 'Brown Bean Admin: cafe menu' }).waitFor()
   })
 
-  it('a manager who signs in at the admin stays signed in and opens the counter from there (D236)', async () => {
+  it('a manager who signs in at the admin stays signed in and opens the counter from there (D239)', async () => {
     const page = await createPage()
     await asNewVisitor(page)
     await page.goto(url('/c/nuk/admin/login'), { waitUntil: 'hydration' })

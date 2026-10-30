@@ -109,7 +109,7 @@ describe('signing in and out', () => {
   it.each([
     ['/sign-in', 'Sign in'],
     ['/sign-up', 'Create your account'],
-  ])('signed in, %s opened directly shows a skeleton and moves on, never the form (D235)', async (path, title) => {
+  ])('signed in, %s opened directly shows a skeleton and moves on, never the form (D238)', async (path, title) => {
     const { page, problems } = await open('/sign-in')
     await signIn(page, seed.customers.verified)
     await page.waitForURL(u => u.pathname === '/')

@@ -18,7 +18,7 @@ describe('switching cafes', () => {
   })
 })
 
-describe('a refused sign-in (D236)', () => {
+describe('a refused sign-in (D239)', () => {
   it('names this cafe\'s other workspace and whether another cafe opens; nothing for an account that works nowhere', () => {
     // A manager at the admin sign-in: this cafe's counter.
     expect(otherAccess([cafe('nuk', { workspaces: ['counter'] })], 'nuk', 'admin')).toEqual({ here: 'counter', elsewhere: false, platform: false })

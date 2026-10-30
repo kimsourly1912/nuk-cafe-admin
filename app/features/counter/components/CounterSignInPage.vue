@@ -2,7 +2,7 @@
 /**
  * Counter sign-in (`/counter/sign-in`, D102): the admin sign-in's frame (D84), for branch staff,
  * managers and admins. An account that works at another cafe stays signed in and is told where to go
- * (D236); one that works nowhere is signed out again with a clear message.
+ * (D239); one that works nowhere is signed out again with a clear message.
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import * as v from 'valibot'
@@ -22,8 +22,8 @@ const error = ref<string>()
 /** After a password that needs a code (two-step sign-in, D188): the code step replaces the form. */
 const codeStep = ref(false)
 /**
- * A session the counter refuses (D236), met on arriving here already signed in or after a refused
- * sign-in: `<WorkspaceRefused>` replaces the form. Until it's checked, the skeleton (D235).
+ * A session the counter refuses (D239), met on arriving here already signed in or after a refused
+ * sign-in: `<WorkspaceRefused>` replaces the form. Until it's checked, the skeleton (D238).
  */
 const { refused, checked } = useRefusedSession('counter')
 

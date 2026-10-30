@@ -52,7 +52,7 @@ describe('auth', () => {
       'GET /admin/me': () => {
         throw failure()
       },
-      // A customer: no cafe to offer instead (D236).
+      // A customer: no cafe to offer instead (D239).
       'GET /me/cafes': () => [],
     })
     await page.goto(url('/c/nuk/admin/login'), { waitUntil: 'hydration' })

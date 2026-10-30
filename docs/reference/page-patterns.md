@@ -218,7 +218,7 @@ Every page and overlay handles the states that can occur for it. This table is t
 
 | State | What the user sees | Built with |
 |---|---|---|
-| **Loading (first)** | Placeholder rows or cards shaped like the content; never the empty state. On a page built from several sources, one skeleton until the small sources that decide its structure answer, then each section with its own skeleton ([below](#first-load-waits-for-everything-that-decides-the-layout-d235)) | `ListSkeleton`, `useApiQuery().loading` ([ui-helpers](./ui-helpers.md#listskeleton)) |
+| **Loading (first)** | Placeholder rows or cards shaped like the content; never the empty state. On a page built from several sources, one skeleton until the small sources that decide its structure answer, then each section with its own skeleton ([below](#first-load-waits-for-everything-that-decides-the-layout-d238)) | `ListSkeleton`, `useApiQuery().loading` ([ui-helpers](./ui-helpers.md#listskeleton)) |
 | **Refreshing** | Existing content stays, dimmed; a thin moving bar on the header's bottom edge (nothing moves; nothing for a refresh under 150ms). Never a spinner in the toolbar: on phones it wrapped onto a line of its own (D206) | `<RefreshBar :active="refreshing">` ([ui-helpers](./ui-helpers.md#refreshbar-and-userefreshindicator)) |
 | **Initial empty** | A title naming the resource ("No availability rules yet", "No staff yet"), one sentence of why it matters, and the create action (if the user may create) | `ListEmptyState` |
 | **Filtered empty** | A title naming the resource ("No availability rules match your filters", "No menu items match your search") + Clear filters. Say it when everything is archived ("Every add-on group is archived" + Show archived) | `ListEmptyState`, a feature-specific variant |
@@ -234,7 +234,7 @@ Every page and overlay handles the states that can occur for it. This table is t
 
 **Errors inside overlays** appear in the overlay, not only as toasts: toasts behind a modal are unreachable (they're `aria-hidden`).
 
-### First load waits for everything that decides the layout (D235)
+### First load waits for everything that decides the layout (D238)
 
 Nothing on screen may be removed or switched once shown. The page is drawn in two layers:
 

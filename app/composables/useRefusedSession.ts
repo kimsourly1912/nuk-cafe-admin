@@ -3,9 +3,9 @@ import type { RefusedSession } from '~/utils/account-cafes'
 
 /**
  * A workspace's sign-in page, arrived at already signed in by an account the workspace refuses (a
- * manager or a platform account sent to the admin's sign-in, D236): `refused` names it and where it
+ * manager or a platform account sent to the admin's sign-in, D239): `refused` names it and where it
  * may go, and the page shows `<WorkspaceRefused>` instead of the form. Read once in the browser;
- * until `checked`, the page shows its skeleton (D235). The page also sets `refused` after a refused
+ * until `checked`, the page shows its skeleton (D238). The page also sets `refused` after a refused
  * sign-in, and clears it after Use another account.
  */
 export function useRefusedSession(workspace: Workspace) {

@@ -17,8 +17,8 @@ const error = ref<string>()
 /** After a password that needs a code (two-step sign-in, D188): the code step replaces the form. */
 const codeStep = ref(false)
 /**
- * A session the admin app refuses (D236), met on arriving here already signed in or after a refused
- * sign-in: `<WorkspaceRefused>` replaces the form. Until it's checked, the skeleton (D235).
+ * A session the admin app refuses (D239), met on arriving here already signed in or after a refused
+ * sign-in: `<WorkspaceRefused>` replaces the form. Until it's checked, the skeleton (D238).
  */
 const { refused, checked } = useRefusedSession('admin')
 

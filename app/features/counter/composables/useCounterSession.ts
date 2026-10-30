@@ -97,7 +97,7 @@ export function useCounterSession() {
     catch (error) {
       const apiError = ApiError.from(error)
       if (!isNoAccess(apiError)) throw apiError
-      // Works at another cafe (D236): stays signed in, and the page says where.
+      // Works at another cafe (D239): stays signed in, and the page says where.
       const access = await accessInstead(splitTenantUrl(window.location.pathname)?.slug ?? '', 'counter')
       if (access) throw new WorkspaceRefusedError(access, error)
       await authFetch('/sign-out').catch(() => {})

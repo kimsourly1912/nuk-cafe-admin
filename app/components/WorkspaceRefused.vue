@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * A session this workspace refuses (D236), after a refused sign-in or on arriving at the sign-in
+ * A session this workspace refuses (D239), after a refused sign-in or on arriving at the sign-in
  * already signed in: in place of the admin or counter sign-in form, what it may open instead. The
  * account stays signed in: this cafe's other workspace (a manager on the admin sign-in: Open the
  * counter), Your cafes when it works at another cafe, the platform console for a platform team
