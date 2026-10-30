@@ -1,6 +1,6 @@
 # Workspace access: who may open which door, and what a refusal shows
 
-Status: **answered and in progress (2026-10-30).** The owner took every recommendation (D241). Done: page access inside a workspace (§7 A–B, D240) and the cafe doors (step 1, D241). Next: the console door (step 2), then the customer sign-in and Your cafes (step 3). Related: D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D142 (console), D144 (Your cafes), D156 (guests), D188 (two-step sign-in), D193 (support access), D238 (first load), D239 (refused sign-in panel, in progress).
+Status: **answered and in progress (2026-10-30).** The owner took every recommendation (D241). Done: page access inside a workspace (§7 A–B, D240), the cafe doors (step 1) and the console door (step 2, D241). Next: the customer sign-in and Your cafes (step 3). Related: D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D142 (console), D144 (Your cafes), D156 (guests), D188 (two-step sign-in), D193 (support access), D238 (first load), D239 (refused sign-in panel, in progress).
 
 ## 1. The pieces
 
@@ -70,8 +70,8 @@ Status: **answered and in progress (2026-10-30).** The owner took every recommen
 
 | Account | Arriving signed in | Signing in here |
 |---|---|---|
-| C customer | today: the form, then signed out on sign-in. Proposed: panel "This account isn't on the platform team", → **Back to home** (**Q2**) | signed out (**Q1**) or panel (**Q2**) |
-| D, E, F cafe staff/owners | today: same. Proposed: panel → **Your cafes** (**Q2**) | today: signed out. Proposed: panel → Your cafes (**Q2**) |
+| C customer | panel "Only the platform team uses the console." → **Back to home**, session kept (**done**, D241) | signed out (Q1) |
+| D, E, F cafe staff/owners | panel → **Your cafes** (**done**, D241) | panel → Your cafes, session kept (**done**, D241) |
 | G | ✅ (two-step setup forced first, D188) | ✅ |
 
 ### Customer site and account pages
@@ -139,7 +139,7 @@ Not waiting for the owner (page access inside a workspace):
 With the answers (D241):
 
 1. **Done (D241):** the cafe doors (admin, counter): the built slice of D239 plus Back to the menu for a customer, E3, E4 (Q4) and the two-step test.
-2. The console door with the same panel (Q2).
+2. **Done (D241):** the console door with the same panel (Q2): Your cafes for a cafe's staff, Back to home for a signed-in customer, a customer signing in signed out (Q1), Try again (Q4).
 3. Customer sign-in for temporary passwords (Q3) and Your cafes for the platform team (Q5).
 4. Tests: one e2e per matrix row group (mocked API), real-server tests for D at the admin, F at the admin, G at the admin (needs a seeded super admin with two-step sign-in), C at the console; each new guard removed once to see its test fail.
 5. D239 rewritten as the final rule; app-behavior gets the matrix's rows; this plan marked done.

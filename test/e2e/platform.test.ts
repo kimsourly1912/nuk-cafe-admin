@@ -126,7 +126,7 @@ describe('signing in', () => {
     expect(api.calls).toContain('POST /auth/sign-in/email')
   })
 
-  it('refuses an account that isn\'t on the platform team, and signs it out again', async () => {
+  it('refuses a customer account (no cafe either), and signs it out again (Q1)', async () => {
     let signedInOnce = false
     const { page, api } = await open('/platform/sign-in', {
       'GET /platform/me': () => {
@@ -137,6 +137,8 @@ describe('signing in', () => {
         signedInOnce = true
         return { redirect: false, token: 't', user: { id: 'owner-1' } }
       },
+      // Works at no cafe: nothing to offer, so signed out (a cafe's staff stay signed in, your-cafes.test.ts).
+      'GET /me/cafes': () => [],
     })
     await page.getByLabel('Email').fill('owner@example.com')
     await page.getByLabel('Password', { exact: true }).fill('a long password')

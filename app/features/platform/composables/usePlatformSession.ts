@@ -1,4 +1,5 @@
 import type { PlatformSession } from '#shared/contracts/tenants'
+import type { OtherAccess } from '~/utils/account-cafes'
 
 /**
  * The platform console (`/platform/**`, step T2a, D142): the platform team (super admins) signs in
@@ -90,7 +91,12 @@ export function usePlatformSession() {
     return step
   }
 
-  /** Signed in (by password, or by the code after it): checks the account is a super admin. Throws `ApiError`. */
+  /**
+   * Signed in (by password, or by the code after it): checks the account is a super admin. Off the
+   * team but working at a cafe, or when that can't be checked: stays signed in,
+   * `WorkspaceRefusedError` (D241, as the cafes' sign-ins, D239). Working nowhere (a customer): signed
+   * out again (Q1). Throws `ApiError`.
+   */
   async function finishSignIn() {
     let session: PlatformSession
     try {
@@ -99,6 +105,14 @@ export function usePlatformSession() {
     catch (error) {
       const apiError = ApiError.from(error)
       if (!isNoAccess(apiError)) throw apiError
+      let access: OtherAccess | null
+      try {
+        access = await accessInstead('', 'console')
+      }
+      catch {
+        throw new WorkspaceRefusedError(null, error)
+      }
+      if (access) throw new WorkspaceRefusedError(access, error)
       await authFetch('/sign-out').catch(() => {})
       throw new ApiError(NO_PLATFORM_ACCESS, { kind: 'forbidden', status: 403, code: apiError.code, cause: error })
     }

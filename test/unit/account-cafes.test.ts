@@ -32,4 +32,10 @@ describe('a refused sign-in (D239)', () => {
     expect(otherAccess([], 'nuk', 'admin')).toBeNull()
     expect(otherAccess([cafe('nuk', { workspaces: ['counter'], status: 'suspended' }), cafe('quiet-corner', { status: 'suspended' })], 'nuk', 'admin')).toBeNull()
   })
+
+  it('at the platform console (no cafe): Your cafes for a cafe\'s staff, nothing for a customer (D241)', () => {
+    expect(otherAccess([cafe('nuk', { workspaces: ['counter'] })], '', 'console')).toEqual({ here: null, elsewhere: true, platform: false })
+    expect(otherAccess([cafe('nuk', { status: 'suspended' })], '', 'console')).toBeNull()
+    expect(otherAccess([], '', 'console')).toBeNull()
+  })
 })
