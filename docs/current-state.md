@@ -4,6 +4,7 @@ Snapshot reviewed against main `4832310`, 2026-10-30. Read only when resuming or
 
 ## Waiting on the owner
 
+- **Next: account security (planned 2026-10-30, owner's answers given).** Two-step sign-in for owners and staff, 1-day sessions for staff/owners/platform, re-confirming dangerous actions, owners seeing staff access, Switch person on the counter. Start with step 1. [Plan](plans/account-security.md). Workspace access is done (D239–D241, PRs #226–#229).
 - **In review: Review order's first load and the first-load rule (D238),** branch `claude/checkout-loading-state`. Next: other pages checked against the new UI checklist item, one per branch. [Progress](progress.md#review-orders-first-load-and-the-first-load-rule-d238-2026-10-30).
 - **Merged: account erasure (D237, 2026-10-30):** PR #224 as `3ed2cbf`. Account menu → **Delete account**; `POST /api/me/delete-account`; no migration. [Plan](plans/account-erasure.md), [decision](decisions.md#d237-an-account-deletes-itself-emptied-like-a-guest-d229s-erasure-2026-10-30), [progress](progress.md#account-erasure-d237-2026-10-30).
 - **Merged: idle guests emptied after 90 days (D236):** PR #223 as `b4d28cc`.

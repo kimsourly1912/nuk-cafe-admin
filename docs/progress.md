@@ -2,6 +2,9 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Account security planned (2026-10-30)
+After the workspace access plan (D239–D241, PRs #226–#229, deployed to staging). The owner asked what else access needs and how others handle it; they took every recommendation. [Plan](plans/account-security.md): two-step sign-in for owners and staff, session length by role, re-confirming dangerous actions, owners seeing staff access, Switch person on the counter. Nothing built yet; next is step 1 on its own branch.
+
 ## Temporary passwords on the customer site, and the console on Your cafes: step 3 (D241, 2026-10-30)
 Branch `ccr-e2b7ccc7-mhvnj3`, restarted from `main` after PR #228. Plan step 3 (Q3, Q5); the [workspace access plan](plans/workspace-access.md) is done. [Decision](decisions.md#d241-workspace-access-questions-answered-a-refused-sign-in-keeps-a-failed-check-and-offers-the-safe-page-2026-10-30).
 
