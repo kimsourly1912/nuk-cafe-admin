@@ -2,6 +2,7 @@ import { and, asc, count, desc, eq, exists, gt, gte, inArray, isNull, lte, ne, o
 import type { AnyColumn, SQL } from 'drizzle-orm'
 import type { OrderSource } from '#shared/contracts/marketing'
 import type { CancelReason, OrderStatus, OrderType, PaymentMethod, QuotedModifier, ReturnMethod } from '#shared/contracts/orders'
+import { IN_PROGRESS_STATUSES } from '#shared/contracts/orders'
 import { branches, user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
 import { insertAll, readInChunks, requireAtMost } from '#server/utils/batch'
@@ -433,6 +434,11 @@ export async function tenantsWithOrdersSince(db: Db, tenantIds: string[], since:
   const rows = await readInChunks(tenantIds, ids => db.selectDistinct({ tenantId: orders.tenantId }).from(orders)
     .where(and(inArray(orders.tenantId, ids), gte(orders.placedAt, since))))
   return rows.map(row => row.tenantId)
+}
+
+/** Across cafes: the customer's orders still waiting for payment, being made or ready (D237). */
+export function inProgressOrdersOf(db: Db, customerId: string) {
+  return db.$count(orders, and(eq(orders.customerId, customerId), inArray(orders.status, [...IN_PROGRESS_STATUSES])))
 }
 
 /**

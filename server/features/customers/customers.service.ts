@@ -22,6 +22,11 @@ export function profileStatement(db: Db, tenantId: string, userId: string): Stat
   return repo.insertProfileStatement(db, tenantId, userId, generateMemberCode())
 }
 
+/** For the batch that deletes an account (D237): its profile in every cafe, anonymised. */
+export function anonymizeProfilesStatement(db: Db, userId: string, now: Date): Statement {
+  return repo.anonymizeProfilesStatement(db, userId, now)
+}
+
 /**
  * Makes sure the account has a profile in the tenant, and returns it (one per account and cafe,
  * D137). Better Auth's sign-up hook runs after the account is stored and D1 has no transactions, so

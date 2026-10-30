@@ -48,7 +48,7 @@ export async function activeTenantById(db: Db, id: string): Promise<{ id: string
  * Any signed-in account that may use the app: not banned, and not holding a temporary password
  * (Better Auth doesn't enforce `mustChangePassword`; we do, on every surface but /api/auth).
  */
-function signedIn(user: SessionUser | null | undefined): SessionUser {
+export function signedIn(user: SessionUser | null | undefined): SessionUser {
   if (!user || user.banned) throw unauthenticated()
   if (user.mustChangePassword) throw passwordChangeRequired()
   return user

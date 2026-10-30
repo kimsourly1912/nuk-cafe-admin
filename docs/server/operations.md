@@ -87,7 +87,7 @@ A super admin sees each cafe's usage numbers, never its menu, orders or customer
 | Worker | `nuk-cafe-production`, same Cloudflare account (Workers Paid) |
 | D1 | `nuk-cafe-production` (`1ba21c84-75fa-4498-aacc-44ea6b53ea95`, Asia-Pacific), binding `DB` |
 | R2 | `nuk-cafe-production-media` (Asia-Pacific), binding `BLOB` |
-| Rate limits | namespaces 2001–2003 (staging's are 1001–1003) |
+| Rate limits | namespaces 2001–2004 (staging's are 1001–1004; 1004/2004 deleting an account, D237) |
 | Config | `$env.prod` in `nuxt.config.ts`, built with `--envName prod` (`pnpm build:production`). **Not** named `production`: without `--envName`, c12 uses `NODE_ENV`, so a `production` block would turn every plain production build (the e2e suite's Node server) into this Worker. `--envName prod` replaces `$production`, so the security headers are repeated there, as for staging. No Sample data variables, ever. The AI assistant's `NUXT_AI_PROVIDER` = `openai` and `NUXT_AI_MODEL` = `gpt-5.4-mini`, like staging (D230) |
 | Telegram | `@angders_bot` |
 | Secrets | each set once with `npx wrangler secret put <NAME> --name nuk-cafe-production`, generated on the owner's machine, **never copied from staging**: `NUXT_BETTER_AUTH_SECRET`, `NUXT_QR_SECRET` (before any QR is printed), `NUXT_BAKONG_ENCRYPTION_KEY` (kept in a password manager), the three `NUXT_TELEGRAM_…`; `NUXT_AI_API_KEY` when the assistant should be on: a production-only OpenAI key with a $20 monthly limit in OpenAI's billing settings (D230; without it the assistant is off). Email needs none: the `EMAIL` binding (D212) |

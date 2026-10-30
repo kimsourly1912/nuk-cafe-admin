@@ -1,10 +1,12 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
+import type { CheckoutQuote, Order } from '#shared/contracts/orders'
+import type { PublicMenu } from '#shared/contracts/public-menu'
 import type { SeedCustomer } from './support/seed'
 import { e2eDatabase } from './support/database'
 import { setupE2e, toast } from './support/mock-api'
-import { asNewVisitor } from './support/client-address'
+import { asNewVisitor, clientHeaders } from './support/client-address'
 
 await setupE2e()
 
@@ -130,6 +132,83 @@ describe('signing in and out', () => {
     expect(await password.getAttribute('type')).toBe('password')
     await button(page, 'Show password').click()
     expect(await password.getAttribute('type')).toBe('text')
+  })
+})
+
+describe('deleting the account (D237)', () => {
+  const origin = new URL(url('/')).origin
+
+  /** Signs in over HTTP: the session cookie, or `null` when refused. */
+  async function apiSignIn(account: Pick<SeedCustomer, 'email' | 'password'>) {
+    const response = await fetch(url('/api/auth/sign-in/email'), { method: 'POST', headers: { 'content-type': 'application/json', origin, ...clientHeaders() }, body: JSON.stringify(account) })
+    return response.ok ? response.headers.getSetCookie().map(c => c.split(';')[0]).join('; ') : null
+  }
+  const send = (path: string, cookie: string, body: unknown) =>
+    fetch(url(path), { method: 'POST', headers: { 'content-type': 'application/json', origin, cookie, 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify(body) })
+
+  /** One Banana Bread at Riverside, placed and left unpaid. */
+  async function placeOrder(cookie: string) {
+    const menu = await (await fetch(url(`/api/c/nuk/public/menu?branchId=${seed.openBranchId}`))).json() as PublicMenu
+    const bread = menu.categories.flatMap(c => [...c.items, ...c.categories.flatMap(s => s.items)]).find(i => i.name === 'Banana Bread')!
+    const lines = [{ itemId: bread.id, variationId: bread.variations[0]!.id, quantity: 1 }]
+    const quote = await (await fetch(url('/api/c/nuk/public/checkout/quote'), { method: 'POST', headers: { 'content-type': 'application/json', origin }, body: JSON.stringify({ branchId: seed.openBranchId, lines }) })).json() as CheckoutQuote
+    const response = await send('/api/c/nuk/shop/orders', cookie, { branchId: seed.openBranchId, lines, expectedTotalMinor: quote.totalMinor })
+    expect(response.status).toBe(201)
+    return await response.json() as Order
+  }
+
+  async function sql<T>(statement: string, args: (string | number)[]): Promise<T[]> {
+    const client = e2eDatabase(seed.dbFile)
+    try {
+      return (await client.execute({ sql: statement, args })).rows as unknown as T[]
+    }
+    finally {
+      client.close()
+    }
+  }
+
+  it('asks for the password, waits for an order in progress, then deletes: signed out, the order kept without the name, one email', async () => {
+    const leaver = seed.customers.leaver
+    const cookie = (await apiSignIn(leaver))!
+    const order = await placeOrder(cookie)
+
+    const { page, problems } = await open('/sign-in?redirect=/c/nuk', 390)
+    await signIn(page, leaver)
+    await page.waitForURL(url('/c/nuk'))
+    await button(page, 'KL, account: Kanha Leav').click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Delete account' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Delete your account?' })
+    await dialog.getByText('The cafes keep your past orders for their records, without your name.').waitFor()
+
+    // A wrong password stays on its field.
+    await dialog.getByLabel('Your password').fill('not-the-password-at-all')
+    await dialog.getByRole('button', { name: 'Delete account' }).click()
+    await dialog.getByText('That password isn\'t right').waitFor()
+
+    // The unpaid order is still in progress: refused, in the dialog.
+    await dialog.getByLabel('Your password').fill(leaver.password)
+    await dialog.getByRole('button', { name: 'Delete account' }).click()
+    await dialog.getByText('You have an order in progress. Delete your account once it\'s picked up or cancelled.').waitFor()
+
+    expect((await send(`/api/c/nuk/shop/orders/${order.id}/cancel`, cookie, { version: order.version })).status).toBe(200)
+    await dialog.getByRole('button', { name: 'Delete account' }).click()
+    await toast(page, 'Your account was deleted').waitFor()
+    // Signed out: on a phone the header's account icon (D124), no initials.
+    await button(page, 'Account').waitFor()
+    expect(await button(page, 'KL, account: Kanha Leav').count()).toBe(0)
+    expect(new URL(page.url()).pathname).toBe('/c/nuk')
+
+    // Signed out everywhere: the other session too, and the password no longer works.
+    expect((await fetch(url('/api/c/nuk/shop/me'), { headers: { cookie } })).status).toBe(401)
+    expect(await apiSignIn(leaver)).toBeNull()
+    const [account] = await sql<{ id: string, name: string, email: string }>('select id, name, email from user where id = (select customer_id from orders where id = ?)', [order.id])
+    expect(account).toMatchObject({ name: 'Deleted account', email: `deleted-${account!.id}@anonymous.invalid` })
+    const mails = await sql<{ payload: string }>('select payload from outbox_messages where kind = ?', ['identity.account-deleted'])
+    expect(mails.map(m => JSON.parse(m.payload)).filter(p => p.to === leaver.email || JSON.stringify(p) === '{}')).toHaveLength(1)
+    // The browser logs the two refusals this test asked for, and nothing else.
+    const refusals = problems.filter(p => /status of (400|409) .*\/api\/me\/delete-account/.test(p))
+    expect(refusals).toHaveLength(2)
+    expect(problems.filter(p => !refusals.includes(p))).toEqual([])
   })
 })
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * The open account menu of a signed-in account (D97, D124): name, email, verification, member
- * code, Your orders, the staff workspaces, Appearance below `lg`, and Sign out.
+ * code, Your orders, the staff workspaces, Appearance below `lg`, Sign out, and Delete account (D237).
  *
  * Rendered only while the menu is open (the popover's content), so the resend-email countdown and
  * its timer exist only then.
@@ -12,7 +12,7 @@ import { useAccountActions, useResendVerification } from '../composables/useCust
 import AppearanceChoice from './AppearanceChoice.vue'
 
 const props = defineProps<{ account: CustomerAccount }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: [], delete: [] }>()
 
 const tenantPath = useTenantPath()
 const notify = useNotify()
@@ -135,6 +135,15 @@ async function signOutNow() {
       block
       class="justify-start"
       @click="signOutNow"
+    />
+    <UButton
+      label="Delete account"
+      icon="i-lucide-user-x"
+      color="error"
+      variant="ghost"
+      block
+      class="justify-start"
+      @click="emit('close'); emit('delete')"
     />
   </div>
 </template>
