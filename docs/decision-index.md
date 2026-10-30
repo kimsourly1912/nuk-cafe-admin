@@ -263,3 +263,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D231](decisions.md#d231-a-khqr-payment-is-returned-by-the-cafe-the-app-records-it-q44-answered-2026-10-30) | A KHQR payment is returned by the cafe; the app records it (Q44 answered), 2026-10-30 |
 | [D232](decisions.md#d232-the-platform-is-called-angder-everywhere-qt1-answered-2026-10-30) | The platform is called Angder everywhere (QT1 answered), 2026-10-30 |
 | [D233](decisions.md#d233-the-owners-refund-of-a-ready-or-completed-order-2026-10-30) | The owner's refund of a ready or completed order, 2026-10-30 |
+| [D234](decisions.md#d234-the-customer-sees-the-owners-refund-of-a-completed-order-2026-10-30) | The customer sees the owner's refund of a completed order, 2026-10-30 |

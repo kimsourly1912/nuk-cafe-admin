@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## The customer sees a completed order's refund (D234, 2026-10-30)
+
+Branch `claude/modest-ramanujan-1dfubo`, after PR #218. The owner's answer to D233's open question: show it. [Decision](decisions.md#d234-the-customer-sees-the-owners-refund-of-a-completed-order-2026-10-30).
+
+- **Change:** `refundText` and a neutral alert on the customer's order page ("$9.75 refunded by KHQR", "The cafe returned your payment on …"); the status stays Completed. No server, contract or migration change (the payment's return columns were already sent).
+- **Evidence (2026-10-30, local Linux, pnpm 12.15.0, Playwright's Chromium):** `order.test.ts` 10 (incl. the refund: dollars, riel, not returned, cancelled); e2e `shop-tracking.test.ts` 11/11 against the seeded server incl. the new refunded-completed test (phone width). `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 154 files, 2124 passed, 1 skipped. Not run: full local e2e (no shared code changed).
+
 ## The owner's refund of a ready or completed order (D233, 2026-10-30)
 
 Branch `ccr-c6503e1b-4fiibm`, after PR #218. Fixes the gap D231 found: the counter promised an admin refund nobody could make. [Plan](plans/admin-refund.md), [decision](decisions.md#d233-the-owners-refund-of-a-ready-or-completed-order-2026-10-30). Owner's answers: full amount, 30 days, ready → cancelled and completed stays, no mockup round.

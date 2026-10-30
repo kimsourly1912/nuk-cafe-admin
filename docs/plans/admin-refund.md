@@ -1,4 +1,4 @@
-# Admin refund (D231, D233)
+# Admin refund (D231, D233, D234)
 
 The cafe's owner records that a **ready or completed** order's money went back. Before ready, the counter's cancel already does this (Q36, D101). The owner's answers (2026-10-30): the full amount only; within 30 days; a ready order becomes cancelled, a completed one stays completed; no mockup round (a button and a dialog on an existing panel, like D197).
 
@@ -9,6 +9,10 @@ The cafe's owner records that a **ready or completed** order's money went back. 
 - **What it writes** (one batch through `runOrderCommand`): the payment's `return_method`, `returned_by`, `returned_at` (guarded: still not returned); the status change at the version read (ready → cancelled, completed → completed with the version + 1); an `order_events` row (reason `other`, the owner's note); the audit entry `orders.order.refund` (method, amount); the idempotency key `orders.refund`.
 - **Reports:** unchanged code. A refund already counts on the day the money went back (`returned_at`, D110); the payment shows "Refunded"; past days' totals never change.
 - **Timestamps:** a status timestamp (`completed_at`…) is written only when the status changes, so a completed order keeps its completion time (fix in `transitionStatement`).
+
+## The customer (D234)
+
+The order page of a refunded **completed** order says "$X refunded in cash/by KHQR" and when, under "Picked up at …"; the status stays Completed. A refunded ready order reads cancelled by the cafe with the money returned. Your orders is unchanged.
 
 ## API
 
