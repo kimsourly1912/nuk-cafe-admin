@@ -78,6 +78,9 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
         // Set when an admin creates a staff account with a temporary password. Better Auth doesn't
         // enforce it: our access helpers refuse with PASSWORD_CHANGE_REQUIRED (security.md).
         mustChangePassword: { type: 'boolean', required: false, defaultValue: false, input: false },
+        // When the daily cleanup emptied an idle guest (D229, D236): its name, sessions and sign-in
+        // are gone; the row stays because its orders reference it. Account erasure will use it too.
+        anonymizedAt: { type: 'date', required: false, input: false, returned: false },
       },
     },
     hooks: {

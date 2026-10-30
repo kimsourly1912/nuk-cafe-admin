@@ -11,6 +11,7 @@ export const JOB_LABELS: Record<string, string> = {
   'platform:expire-idempotency-keys': 'Clean up retry keys',
   'assistant:purge-usage': 'Clean up assistant usage',
   'notifications:purge-deliveries': 'Clean up old notifications',
+  'identity:clear-idle-guests': 'Clear guests unused for 90 days',
   'media:purge-temporary': 'Clean up unused uploads',
   'platform:maintain-outbox': 'Tidy the outbox',
 }
