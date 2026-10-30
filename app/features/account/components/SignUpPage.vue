@@ -24,12 +24,18 @@ const { saving, formError, submit } = useAccountForm({ name: 'sign-up-name', ema
 const { signUp } = useAccountActions()
 
 const { account, known } = useAccountSession()
+/** Already signed in on arrival: on its way on, so the form never shows (D235). */
+const leaving = ref(false)
 let arrived = false
 watch(known, (isKnown) => {
   if (!isKnown || arrived) return
   arrived = true
-  if (account.value) navigateTo(target.value, { replace: true })
+  if (account.value) {
+    leaving.value = true
+    navigateTo(target.value, { replace: true })
+  }
 }, { immediate: true })
+const loading = computed(() => !known.value || leaving.value)
 
 /** The password the server refused as breached, for the checklist. */
 const refusedPassword = ref<string>()
@@ -52,7 +58,12 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
 </script>
 
 <template>
+  <TaskFrameSkeleton
+    v-if="loading"
+    :fields="3"
+  />
   <AccountFrame
+    v-else
     title="Create your account"
     description="Order ahead and collect points. It takes a minute."
     :back="{ label: accountBackLabel(home), to: home }"
