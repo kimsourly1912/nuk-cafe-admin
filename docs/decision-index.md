@@ -255,3 +255,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D223](decisions.md#d223-platform-alerts-one-down-and-one-recovered-message-to-a-private-ops-chat-2026-10-29) | Platform alerts: one DOWN and one RECOVERED message to a private ops chat, 2026-10-29 |
 | [D224](decisions.md#d224-the-alarm-is-a-watchdog-worker-not-a-github-schedule-2026-10-29) | The alarm is a watchdog Worker, not a GitHub schedule, 2026-10-29 |
 | [D225](decisions.md#d225-nightly-encrypted-backups-in-a-separate-cloudflare-account-2026-10-29) | Nightly encrypted backups in a separate Cloudflare account, 2026-10-29 |
+| [D226](decisions.md#d226-page-addresses-match-their-exact-case-2026-10-29) | Page addresses match their exact case, 2026-10-29 |
