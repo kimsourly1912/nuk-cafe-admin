@@ -258,3 +258,7 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D226](decisions.md#d226-page-addresses-match-their-exact-case-2026-10-29) | Page addresses match their exact case, 2026-10-29 |
 | [D227](decisions.md#d227-a-backup-failure-no-retry-can-fix-reports-at-once-2026-10-30) | A backup failure no retry can fix reports at once, 2026-10-30 |
 | [D228](decisions.md#d228-the-backup-polls-d1s-export-without-pause-with-the-newest-bookmark-2026-10-30) | The backup polls D1's export without pause, with the newest bookmark, 2026-10-30 |
+| [D229](decisions.md#d229-back-within-4-hours-orders-kept-5-years-guests-cleared-after-90-days-q24-answered-2026-10-30) | Back within 4 hours; orders kept 5 years; guests cleared after 90 days (Q24 answered), 2026-10-30 |
+| [D230](decisions.md#d230-the-production-assistant-uses-openai-with-a-20-monthly-cap-q43-answered-2026-10-30) | The production assistant uses OpenAI with a $20 monthly cap (Q43 answered), 2026-10-30 |
+| [D231](decisions.md#d231-a-khqr-payment-is-returned-by-the-cafe-the-app-records-it-q44-answered-2026-10-30) | A KHQR payment is returned by the cafe; the app records it (Q44 answered), 2026-10-30 |
+| [D232](decisions.md#d232-the-platform-is-called-angder-everywhere-qt1-answered-2026-10-30) | The platform is called Angder everywhere (QT1 answered), 2026-10-30 |

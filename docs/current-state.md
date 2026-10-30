@@ -14,6 +14,7 @@ Snapshot reviewed against main `f486cf9`, 2026-10-30. Read only when resuming or
 
 Each is its own step and branch.
 
+- **From the 2026-10-30 answers:** the admin refund for ready/completed orders (D231; the counter's message promises it, nothing implements it); "Angder" everywhere in the console (D232); the production assistant (`$env.prod` AI variables, then the owner's key with a $20 cap, D230); the 90-day guest cleanup and account erasure (D229).
 - **Customer order index (performance):** PR #196 (`orders_tenant_customer_status_due_idx`, migration 0050 on its branch) was closed unmerged as a ~9,000-line draft with conflicts; no reason recorded. The only customer index is still `orders_customer_idx (customer_id, placed_at)`. Ask the owner whether it was rejected before redoing it as a small PR; the next free migration number is `0052`.
 - **One membership per person and cafe (data integrity):** `member` has no unique `(organization_id, user_id)` (noted in [D184](decisions.md#d184-the-staff-list-starts-from-the-cafes-memberships-not-from-every-account-2026-10-19)); PR #119, which added it, was closed unmerged. Needs a duplicate check on existing data before the migration.
 - **CSP `script-src 'unsafe-inline'`:** still pending a hash/nonce policy ([security → Request protection](server/security.md)). The customer menu is server-rendered and edge-cached (`swr`), so per-request nonces don't fit; a hash policy needs its own decision. Docs also disagree with the code on `Referrer-Policy` (`security.md` says `strict-origin-when-cross-origin`, `nuxt.config.ts` sends `strict-origin`).
@@ -42,7 +43,7 @@ One Nuxt/Nitro app, no Spring SDK or `/api/v1` menu (D39/D43/D71). Customer menu
 
 ## Blockers and retrieval
 
-The [open-question table](progress.md#open-questions--waiting-on-others) holds the exact questions and affected steps: Q43 production AI provider/spending (AI is off in production); QT1 platform name (emails say Angder, D213); QT2 commercial plan; Q24 RTO, retention and erasure (plan, alerts and backups answered); QT3 shared Bakong token feasibility; Q44 KHQR refund policy; QM1 Facebook review/domain prerequisites. No new answers are inferred here.
+The [open-question table](progress.md#open-questions--waiting-on-others) holds what is still open: QT2 commercial plan (deferred), QT3 shared Bakong token (test deferred), QM1 Facebook (Telegram only for now). Answered 2026-10-30: Q24 → D229, Q43 → D230, Q44 → D231, QT1 → D232. No new answers are inferred here.
 
 | Resume/investigate | Read bounded sections |
 |---|---|

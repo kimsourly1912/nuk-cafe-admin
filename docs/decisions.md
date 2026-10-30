@@ -2549,3 +2549,34 @@ This is a narrow exception to preferring builder operators for every expressible
 - **Decision:** `exportDump` in `ops/backup/src/backup.ts` starts the export and asks again every second with the newest bookmark until D1 gives the download address (5 minutes at most, then a failure the step retries). One step, **export, encrypt and store**, does the whole night's work, so a retry starts a new export. Refusals stay as in D227 (permanent 4xx, everything else retried).
 - **Alternatives:** keep two steps and poll faster in the second (a retry still can't start a new export); `output_format: "file"` or another single-call form (not what Wrangler uses; the polling form is the documented one).
 - **Consequences:** the export, download, encryption and upload share one step's 10-minute timeout; at production's size the export took seconds. A night with a failing step now repeats the export on each retry, at 03:17 when cafes are closed. Tests: `ops/backup/tests/backup.test.ts` → "the export" with a stand-in D1 that forgets a stale bookmark (sending the first bookmark again fails a test; dropping the wait between questions makes the run never end). Local Workflow runs against that stand-in: main's code got "not ready", then "Not currently exporting anything" at +30 s and +90 s (the owner's error); this code polled b0 → b1 → b2 → complete in 3 s, stored the copy (`If-None-Match: *`), sent 🟢, and the copy decrypted with the test key to the exact dump.
+
+### D229: Back within 4 hours; orders kept 5 years; guests cleared after 90 days (Q24 answered, 2026-10-30)
+
+- **Context:** Q24's last parts: acceptable downtime (RTO) and data retention and erasure. Already answered: Workers Paid (D211), alerts (D223, D224), nightly backups (D225). Orders and payments are accounting records and are never deleted (root rule).
+- **Decision (owner, 2026-10-30, the recommended defaults):**
+  - **RTO 4 hours:** after a disaster the app is back within 4 hours. Data loss (RPO) follows D225: at most about a day beyond Time Travel's 30 days, once the nightly backups work.
+  - **Orders and payments kept 5 years**, then they may be removed. The owner checks this period against Cambodian tax law with an accountant; a longer legal period wins.
+  - **Guest accounts** (D156, Better Auth's anonymous users) unused for **90 days** are deleted; their orders stay, without a person attached.
+  - **A deleted account** loses its name, email and phone; its orders stay, anonymised (`customer_profiles.anonymized_at` exists for this, unused so far).
+- **Not built yet (own steps, each with its two-cafe and guard tests):** the 90-day guest cleanup task; account erasure with anonymisation; the 5-year order cleanup (not needed before 2031). The 4-hour RTO depends on the backups working and the restore drill timing them (D225, D228: still failing on 2026-10-30).
+- **Consequences:** Q24 leaves the open questions. Personal data of people who stop using the app no longer stays forever; accounting history stays complete.
+
+### D230: The production assistant uses OpenAI with a $20 monthly cap (Q43 answered, 2026-10-30)
+
+- **Context:** the help assistant (D107–D109) runs on staging with OpenAI `gpt-5.4-mini`; production has no AI variables, so it is off there (its routes answer 404).
+- **Decision (owner, 2026-10-30):** production uses **OpenAI `gpt-5.4-mini`**, like staging, with a **hard monthly limit of $20 set in OpenAI's billing settings**. The app's daily per-admin limit (`NUXT_AI_DAILY_LIMIT`, 100) stays as a second limit.
+- **To turn it on (own step):** `$env.prod` in `nuxt.config.ts` gets `NUXT_AI_PROVIDER: 'openai'` and `NUXT_AI_MODEL: 'gpt-5.4-mini'` like staging; the owner creates a production-only OpenAI key, sets the $20 limit, and stores the key as the Worker secret `NUXT_AI_API_KEY` on `nuk-cafe-production` (never the staging key). Until the key is set the assistant stays off.
+- **Consequences:** Q43 leaves the open questions. At the cap, OpenAI refuses requests and the assistant shows its unavailable message until the next month.
+
+### D231: A KHQR payment is returned by the cafe; the app records it (Q44 answered, 2026-10-30)
+
+- **Context:** Q44 asked who returns the money when an order paid by KHQR on the customer's phone is cancelled. The money goes to the cafe's own Bakong account (D148); the app has no Bakong refund call. Q36 (D101) already lets staff and managers cancel a paid order **before it is ready**, recording how the money went back (cash or KHQR, the full amount), audited.
+- **Decision (owner, 2026-10-30):** the **cafe returns the money itself** (Bakong/ABA transfer or cash) and **the app records it**: the same cancel with the return method as Q36, for KHQR payments made on the customer's phone too.
+- **Gap found:** for a **ready or completed** order the counter answers "An admin can refund it" (`ORDER_NOT_CANCELLABLE`), but no admin refund exists (no route or page). Such an order can't be refunded in the app today. The admin refund (record the method and amount, reverse the order's sales in reports, audited, idempotent) is its own step; until then the message promises something that isn't there.
+- **Consequences:** Q44 leaves the open questions; the admin refund becomes the next payments step.
+
+### D232: The platform is called Angder everywhere (QT1 answered, 2026-10-30)
+
+- **Context:** the domain is `angder.app` and account emails say Angder (D211, D213), but the console still uses the working name "NUK Platform".
+- **Decision (owner, 2026-10-30):** **Angder** everywhere, in one small step: the console sidebar (`app/layouts/platform.vue`), the platform tab title (`app/app.vue`), the platform sign-in page, the two-step sign-in prompt (`TwoFactorCodeForm.vue`), the backup-codes file, and the authenticator issuer (`twoFactor({ issuer })` in `server/features/identity/identity.auth.ts`).
+- **Consequences:** QT1 leaves the open questions. Changing the issuer renames only newly added authenticator entries; super admins' existing entries keep "NUK Platform" until they set two-step sign-in up again (they keep working either way).
