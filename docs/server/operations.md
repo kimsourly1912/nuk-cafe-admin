@@ -233,7 +233,7 @@ Once, by the owner, about 20 minutes, all in the **production account** except s
 
 #### When "Angder backup FAILED" arrives
 
-Earlier copies are untouched; the next run is the following night. Read the **Reason**:
+Earlier copies are untouched; the next run is the following night. A setup mistake (a refused token or key, a missing bucket, a bad public key) fails at once, so after **Deploy backup** it arrives within about a minute (D227); a busy or unreachable service is retried first, for up to about 15 minutes (the export) or 8.5 hours (storing the copy). No message at all a few minutes after Deploy backup: Workers & Pages → Workflows → `angder-backup` → the newest instance shows each step, its tries and its error. Read the **Reason**:
 
 - *D1's export answered HTTP 401/403*: the export token was revoked, expired or lacks permission (setup step 5); replace `BACKUP_D1_EXPORT_TOKEN`.
 - *The backup bucket refused … HTTP 403*: the bucket's R2 key changed (step 3); replace the three `BACKUP_R2_*` secrets.

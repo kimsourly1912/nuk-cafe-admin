@@ -59,6 +59,24 @@ const TIMEOUT_MS = 60_000
 /** Error bodies are quoted this far in a failure, never more. */
 const ERROR_TEXT_LENGTH = 300
 
+/**
+ * A failure no retry can fix (D227): a token without permission, a wrong key, an account, bucket or
+ * address that doesn't exist, a public key that isn't one, a database too big for memory. `index.ts`
+ * ends the step at once with it, so the ops chat hears the reason within a minute instead of after
+ * hours of retries. Anything else (a busy service, the network, an export not ready yet) retries.
+ */
+export class PermanentError extends Error {
+  override name = 'PermanentError'
+}
+
+/** Answers that say the request itself is wrong (its token, key, account, bucket or address), not that the service is busy. */
+const PERMANENT_STATUSES = new Set([400, 401, 403, 404])
+
+/** A refused request's error: permanent for those statuses, otherwise one to retry. */
+function refusal(status: number, message: string): Error {
+  return PERMANENT_STATUSES.has(status) ? new PermanentError(message) : new Error(message)
+}
+
 /** Cambodia's clock (UTC+7, no daylight saving): the date and its parts. */
 export function cambodiaDate(ms: number) {
   const local = new Date(ms + 7 * 3_600_000)
@@ -108,7 +126,7 @@ async function callExport(fetchFn: typeof fetch, env: BackupEnv, body: Record<st
   }
   if (!response.ok || !answer?.success || !answer.result) {
     const reason = answer?.errors?.map(error => error.message).filter(Boolean).join('; ') || text.slice(0, ERROR_TEXT_LENGTH)
-    throw new Error(`D1's export answered HTTP ${response.status}: ${reason}`)
+    throw refusal(response.status, `D1's export answered HTTP ${response.status}: ${reason}`)
   }
   if (answer.result.error) throw new Error(`D1's export failed: ${answer.result.error.slice(0, ERROR_TEXT_LENGTH)}`)
   return answer.result
@@ -138,7 +156,7 @@ async function readAtMost(body: ReadableStream<Uint8Array>, max: number): Promis
     size += value.byteLength
     if (size > max) {
       await reader.cancel()
-      throw new Error(tooBig())
+      throw tooBig()
     }
     chunks.push(value)
   }
@@ -151,7 +169,7 @@ async function readAtMost(body: ReadableStream<Uint8Array>, max: number): Promis
   return bytes
 }
 
-const tooBig = () => `The database dump is larger than ${MAX_DUMP_BYTES / 1024 / 1024} MB, the most this backup holds in memory: switch it to a streamed upload (D225).`
+const tooBig = () => new PermanentError(`The database dump is larger than ${MAX_DUMP_BYTES / 1024 / 1024} MB, the most this backup holds in memory: switch it to a streamed upload (D225).`)
 
 /** The SQL dump from its download address. An empty dump is an error: production always has tables. */
 export async function downloadDump(fetchFn: typeof fetch, url: string): Promise<Uint8Array> {
@@ -162,7 +180,7 @@ export async function downloadDump(fetchFn: typeof fetch, url: string): Promise<
   }
   if (Number(response.headers.get('content-length')) > MAX_DUMP_BYTES) {
     await response.body.cancel()
-    throw new Error(tooBig())
+    throw tooBig()
   }
   const dump = await readAtMost(response.body, MAX_DUMP_BYTES)
   if (dump.byteLength === 0) throw new Error('The database dump is empty')
@@ -172,9 +190,16 @@ export async function downloadDump(fetchFn: typeof fetch, url: string): Promise<
 /** The dump encrypted with age for every listed public key; only their private keys can read it. */
 export async function encryptDump(dump: Uint8Array, recipients: string): Promise<Uint8Array<ArrayBuffer>> {
   const keys = recipients.split(/[\s,]+/).filter(Boolean)
-  if (keys.length === 0) throw new Error('BACKUP_AGE_RECIPIENTS has no public key')
+  if (keys.length === 0) throw new PermanentError('BACKUP_AGE_RECIPIENTS has no public key')
   const encrypter = new Encrypter()
-  for (const key of keys) encrypter.addRecipient(key)
+  for (const key of keys) {
+    try {
+      encrypter.addRecipient(key)
+    }
+    catch (error) {
+      throw new PermanentError(`BACKUP_AGE_RECIPIENTS holds something that isn't an age public key (age1…): ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
   const encrypted = await encrypter.encrypt(dump)
   // A request body must sit on a plain ArrayBuffer; age's output does, so this is a view, not a copy.
   return encrypted.buffer instanceof ArrayBuffer ? new Uint8Array(encrypted.buffer, encrypted.byteOffset, encrypted.byteLength) : encrypted.slice()
@@ -199,7 +224,7 @@ export async function storeCopy(signedFetch: SignedFetch, env: BackupEnv, key: s
   const text = await response.text()
   if (response.ok) return 'stored'
   if (response.status === 412 || (response.status === 409 && text.includes('ObjectLockedByBucketPolicy'))) return 'exists'
-  throw new Error(`The backup bucket refused ${key}: HTTP ${response.status} ${text.slice(0, ERROR_TEXT_LENGTH)}`)
+  throw refusal(response.status, `The backup bucket refused ${key}: HTTP ${response.status} ${text.slice(0, ERROR_TEXT_LENGTH)}`)
 }
 
 /** A short size: `12.3 KB`, `4.5 MB`. */
@@ -219,7 +244,8 @@ export interface StoredBackup {
 const RUNBOOK = 'What to do: docs/server/operations.md → Backups and restore.'
 
 export function failureText(error: unknown, at: number): string {
-  const reason = error instanceof Error ? error.message : String(error)
+  // A permanent failure reaches here as the Workflow's NonRetryableError (D227): its prefix says nothing to the owner.
+  const reason = (error instanceof Error ? error.message : String(error)).replace(/^NonRetryableError:\s*/, '')
   return [
     '🔴 Angder backup FAILED',
     `Tonight's copy of the production database wasn't stored (${cambodiaDate(at).label}).`,

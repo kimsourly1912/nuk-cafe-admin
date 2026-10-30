@@ -7,6 +7,9 @@
   "name": "angder-backup",
   "main": "src/index.ts",
   "compatibility_date": "2025-07-15",
+  // A step's NonRetryableError keeps its own message (D227), so the FAILED message says why.
+  // The default only from 2026-05-14; before it Cloudflare replaces the message with a generic one.
+  "compatibility_flags": ["workflows_preserve_non_retryable_error_message"],
   "workers_dev": false,
   "preview_urls": false,
   "workflows": [
