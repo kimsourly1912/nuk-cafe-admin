@@ -79,7 +79,7 @@ describe('Your cafes', () => {
     expect(await page.getByRole('link', { name: 'Admin, Tea Kiosk' }).count()).toBe(0)
     await page.getByText('Paused by the platform team').waitFor()
     expect(await page.getByRole('link', { name: /Quiet Corner/ }).count()).toBe(0)
-    await expect.poll(() => page.title()).toBe('Your cafes · NUK Platform')
+    await expect.poll(() => page.title()).toBe('Your cafes · Angder')
   })
 
   it('says so for an account that works at no cafe', async () => {

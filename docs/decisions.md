@@ -2566,6 +2566,7 @@ This is a narrow exception to preferring builder operators for every expressible
 - **Context:** the help assistant (D107–D109) runs on staging with OpenAI `gpt-5.4-mini`; production has no AI variables, so it is off there (its routes answer 404).
 - **Decision (owner, 2026-10-30):** production uses **OpenAI `gpt-5.4-mini`**, like staging, with a **hard monthly limit of $20 set in OpenAI's billing settings**. The app's daily per-admin limit (`NUXT_AI_DAILY_LIMIT`, 100) stays as a second limit.
 - **To turn it on (own step):** `$env.prod` in `nuxt.config.ts` gets `NUXT_AI_PROVIDER: 'openai'` and `NUXT_AI_MODEL: 'gpt-5.4-mini'` like staging; the owner creates a production-only OpenAI key, sets the $20 limit, and stores the key as the Worker secret `NUXT_AI_API_KEY` on `nuk-cafe-production` (never the staging key). Until the key is set the assistant stays off.
+- **Built (2026-10-30):** the two variables in `$env.prod`; the key is the owner's to set.
 - **Consequences:** Q43 leaves the open questions. At the cap, OpenAI refuses requests and the assistant shows its unavailable message until the next month.
 
 ### D231: A KHQR payment is returned by the cafe; the app records it (Q44 answered, 2026-10-30)
@@ -2579,6 +2580,7 @@ This is a narrow exception to preferring builder operators for every expressible
 
 - **Context:** the domain is `angder.app` and account emails say Angder (D211, D213), but the console still uses the working name "NUK Platform".
 - **Decision (owner, 2026-10-30):** **Angder** everywhere, in one small step: the console sidebar (`app/layouts/platform.vue`), the platform tab title (`app/app.vue`), the platform sign-in page, the two-step sign-in prompt (`TwoFactorCodeForm.vue`), the backup-codes file, and the authenticator issuer (`twoFactor({ issuer })` in `server/features/identity/identity.auth.ts`).
+- **Built (2026-10-30):** every place above, the e2e tests that named it, and `identity.two-factor.test.ts` checks the issuer in the authenticator link (it failed with the old issuer).
 - **Consequences:** QT1 leaves the open questions. Changing the issuer renames only newly added authenticator entries; super admins' existing entries keep "NUK Platform" until they set two-step sign-in up again (they keep working either way).
 
 ### D233: The owner's refund of a ready or completed order (2026-10-30)

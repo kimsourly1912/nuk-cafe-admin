@@ -117,7 +117,7 @@ describe('signing in', () => {
       'GET /platform/tenants/{id}': () => NUK,
     })
     await page.waitForURL(address => address.pathname === '/platform/sign-in')
-    await page.getByRole('heading', { name: 'NUK Platform' }).waitFor()
+    await page.getByRole('heading', { name: 'Angder' }).waitFor()
     await page.getByLabel('Email').fill('ops@example.com')
     await page.getByLabel('Password', { exact: true }).fill('a long password')
     await page.getByRole('button', { name: 'Sign in' }).click()

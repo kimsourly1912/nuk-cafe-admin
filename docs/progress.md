@@ -2,9 +2,17 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Angder in the console and the production assistant (D232, D230, 2026-10-30)
+
+Branch `claude/modest-ramanujan-1dfubo`, after PR #221. Two of the owner's 2026-10-30 answers, together because both are text or config. [D232](decisions.md#d232-the-platform-is-called-angder-everywhere-qt1-answered-2026-10-30), [D230](decisions.md#d230-the-production-assistant-uses-openai-with-a-20-monthly-cap-q43-answered-2026-10-30).
+
+- **Change:** "NUK Platform" → "Angder" in the console sidebar, the platform tab title, the platform sign-in page, the two-step code prompt, the backup-codes file and the authenticator issuer; the e2e tests that named it. `$env.prod` gets `NUXT_AI_PROVIDER: 'openai'` and `NUXT_AI_MODEL: 'gpt-5.4-mini'`. Operations → Production names the key.
+- **Evidence (2026-10-30, local Linux, pnpm 12.15.0):** `identity.two-factor.test.ts` 5 (the authenticator link's name and issuer are Angder; with the old issuer it failed). `pnpm build:production` (with `NODE_OPTIONS=--max-old-space-size=6144`: the default heap ran out here): `.output/server/wrangler.json` is `nuk-cafe-production` with both AI variables and no key. `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 154 files, 2126 passed, 1 skipped; e2e `platform`, `two-factor`, `your-cafes` 49/49 (Playwright's Chromium). Not run: the full e2e suite; the assistant in production (needs the key).
+- **Owner, after deploy:** create a production-only OpenAI key, set the $20 monthly limit in OpenAI's billing settings, then `npx wrangler secret put NUXT_AI_API_KEY --name nuk-cafe-production` (or the dashboard, type **Secret**). Until then the assistant stays off in production. Super admins' existing authenticator entries keep the name "NUK Platform" and keep working.
+
 ## One membership per person and cafe (D235, 2026-10-30)
 
-Branch `claude/modest-ramanujan-1dfubo`. [Decision](decisions.md#d235-one-membership-per-person-and-cafe-enforced-by-the-database-2026-10-30).
+Merged as PR #221 (`d798bc8`). [Decision](decisions.md#d235-one-membership-per-person-and-cafe-enforced-by-the-database-2026-10-30).
 
 - **Change:** migration `0052_member_unique` (one unique index on `member (organization_id, user_id)`, written by hand, deletes nothing; its snapshot is `0051`'s with new ids). The staff list test no longer inserts a repeated membership row. No app or route change.
 - **Evidence (2026-10-30, local Linux, pnpm 12.15.0):** `drizzle-kit generate --config .nuxt/hub/db/drizzle.config.ts` says "No schema changes" (with the index in the snapshot it generated a `DROP INDEX`); `migrations.test.ts` → `0052_member_unique` 2, both failed with the index replaced by `SELECT 1`; `server/features/identity` and `migrations.test.ts` 269 passed. `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 154 files, 2126 passed, 1 skipped; e2e `shop-tracking.test.ts` 11/11 (its seeded database runs every migration, 0052 included). Not run: the full e2e suite, D1 itself (the index is plain SQLite).

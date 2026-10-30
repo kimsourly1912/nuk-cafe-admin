@@ -107,7 +107,7 @@ A tenant's `owner` has every branch permission in every branch of that tenant: *
 
 ## Two-step sign-in (D188)
 
-- Better Auth's `twoFactor` plugin: an authenticator app's 6-digit code (TOTP, issuer "NUK Platform") or one of ten backup codes, after the password. Its secret and backup codes are stored encrypted (`two_factor`, migration `0041_two_factor`).
+- Better Auth's `twoFactor` plugin: an authenticator app's 6-digit code (TOTP, issuer "Angder" (D232; entries added before it keep "NUK Platform" and still work)) or one of ten backup codes, after the password. Its secret and backup codes are stored encrypted (`two_factor`, migration `0041_two_factor`).
 - **Required for super admins:** `authorizePlatform` refuses 403 `TWO_FACTOR_REQUIRED` until `user.two_factor_enabled`; the console's only page is then `/platform/two-factor` (password, QR code or key, backup codes shown once, a code from the app).
 - It belongs to the **account**: every sign-in (the console, a cafe's admin and counter, the customer account) answers a password with `twoFactorRedirect` and a 10-minute challenge cookie, and shows the shared `<TwoFactorCodeForm>`; 5 wrong codes end the challenge, 10 across challenges lock the account for 15 minutes (Better Auth's defaults). No "trust this device".
 - Turning it on signs the account out on its other devices (`identity.auth.ts`, after-hook on `/two-factor/verify-totp`): a session made with the password alone must not count as two-step.

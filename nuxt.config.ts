@@ -147,7 +147,7 @@ export default defineNuxtConfig({
     // Named `prod`, not `production`: without `--envName`, c12 uses NODE_ENV, so a block named
     // `production` would turn every plain production build (the e2e suite's Node server) into this
     // Worker. `--envName prod` replaces `$production`, so the security headers are repeated here.
-    // Never the Sample data variables (D94), and no AI variables until the provider is chosen (Q43).
+    // Never the Sample data variables (D94).
     prod: {
       runtimeConfig: { humanCheck: { enabled: true }, public: { humanCheck: { enabled: true, siteKey: '0x4AAAAAAFm5duhYy7YUelxB' } } },
       routeRules: deployedSecurityRules(),
@@ -171,6 +171,11 @@ export default defineNuxtConfig({
               // the Telegram secrets: without a bot, generation never runs and health stays 503.
               NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS: '300',
               NUXT_MAINTENANCE_DELIVERY_MAX_AGE_SECONDS: '900',
+              // The AI assistant (D230): OpenAI, like staging. The key is the Worker secret
+              // NUXT_AI_API_KEY, the owner's production-only key with a $20 monthly limit set in
+              // OpenAI's billing; without it the assistant stays off (its routes answer 404).
+              NUXT_AI_PROVIDER: 'openai',
+              NUXT_AI_MODEL: 'gpt-5.4-mini',
             },
             ...mailConfig(PRODUCTION.mail).binding,
             triggers: { crons: Object.keys(SCHEDULED_TASKS) },

@@ -63,7 +63,7 @@ describe('setting up two-step sign-in', () => {
 
     await expect(enable(headers, 'not the password')).rejects.toThrow()
     const { totpURI, backupCodes } = await enable(headers)
-    expect(totpURI).toMatch(/^otpauth:\/\/totp\/NUK%20Platform:/)
+    expect(totpURI).toMatch(/^otpauth:\/\/totp\/Angder:.*issuer=Angder/)
     expect(backupCodes).toHaveLength(10)
     // Not on until a code from the app proves it was added there.
     expect((await userOf(headers))?.twoFactorEnabled).toBe(false)

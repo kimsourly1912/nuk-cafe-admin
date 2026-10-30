@@ -12,7 +12,7 @@ const route = useRoute()
 const cafe = useCafe()
 const siteName = computed(() => {
   // The platform console, and Your cafes, which spans cafes (D144).
-  if (isPlatformPath(route.path) || route.path === CAFES_PATH) return 'NUK Platform'
+  if (isPlatformPath(route.path) || route.path === CAFES_PATH) return 'Angder'
   const name = cafe.name.value
   if (isAdminPath(route.path)) return name ? `${name} Admin` : 'Admin'
   if (isCounterPath(route.path)) return name ? `${name} Counter` : 'Counter'

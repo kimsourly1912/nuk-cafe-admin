@@ -93,7 +93,7 @@ async function onSubmit({ data }: FormSubmitEvent<{ code: string }>) {
   >
     <p class="text-sm text-muted">
       {{ method === 'app'
-        ? 'Open your authenticator app and enter the 6-digit code for NUK Platform.'
+        ? 'Open your authenticator app and enter the 6-digit code for Angder.'
         : 'Enter one of the backup codes you saved when you set up two-step sign-in. Each works once.' }}
     </p>
 
