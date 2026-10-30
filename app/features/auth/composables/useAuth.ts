@@ -97,8 +97,9 @@ export function useAuth() {
   }
 
   /**
-   * Signs in with Better Auth, then checks admin access. An account without it (a customer, branch
-   * staff) is signed out again and gets a clear error. Throws `ApiError`.
+   * Signs in with Better Auth, then checks admin access. An account without it that works somewhere
+   * (branch staff, another cafe's owner) stays signed in: `WorkspaceRefusedError` (D236). Any other
+   * (a customer) is signed out again and gets a clear error. Throws `ApiError`.
    */
   async function login(credentials: Credentials): Promise<PasswordStep> {
     let step: PasswordStep
@@ -128,10 +129,9 @@ export function useAuth() {
     catch (error) {
       const apiError = ApiError.from(error)
       if (!isNoAccess(apiError)) throw apiError
-      // Works at another cafe (T2c, D144): stays signed in, and the page offers Your cafes.
-      if (await worksElsewhere(splitTenantUrl(window.location.pathname)?.slug ?? '', 'admin')) {
-        throw new ApiError('This account doesn\'t manage this cafe. Open your own cafe from Your cafes.', { kind: 'forbidden', status: 403, code: WORKS_ELSEWHERE, cause: error })
-      }
+      // Works somewhere (this cafe's counter, another cafe, D236): stays signed in, and the page says where.
+      const access = await accessInstead(splitTenantUrl(window.location.pathname)?.slug ?? '', 'admin')
+      if (access) throw new WorkspaceRefusedError(access, error)
       await authFetch('/sign-out').catch(() => {})
       throw new ApiError(NO_ADMIN_ACCESS, { kind: 'forbidden', status: 403, code: apiError.code, cause: error })
     }

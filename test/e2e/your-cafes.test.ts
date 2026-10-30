@@ -98,27 +98,129 @@ describe('Your cafes', () => {
   })
 })
 
-describe('signing in at the wrong cafe', () => {
-  it('keeps the owner of another cafe signed in and offers Your cafes', async () => {
+describe('signing in where the account has no access (D236)', () => {
+  /** Signs in at `path`, refused there by `me` (403), with `cafes` as the account's cafes and `role` its platform role. */
+  async function refusedAt(path: string, me: string, cafes: AccountCafe[], width = 1440, role = 'customer') {
     const page = await createPage()
+    await page.setViewportSize({ width, height: 900 })
     const api = await mockApi(page, {
       ...SIGNED_OUT,
+      'GET /counter/me': () => {
+        throw failures.unauthorized()
+      },
       'POST /auth/sign-in/email': () => ({ redirect: false, token: 't', user: { id: ADMIN.userId, email: ADMIN.email } }),
     })
-    await page.goto(url('/c/nuk/admin/login'), { waitUntil: 'hydration' })
+    await page.goto(url(path), { waitUntil: 'hydration' })
     api.set({
-      'GET /admin/me': () => {
-        throw failures.notAdmin()
+      [me]: () => {
+        throw failures.forbidden()
       },
-      'GET /me/cafes': () => [BROWN],
+      'GET /me/cafes': () => cafes,
+      'GET /auth/get-session': () => ({ user: { email: 'mony@example.com', role } }),
     })
-    await page.getByLabel('Email').fill('bea@brown-bean.example')
+    await page.getByLabel('Email').fill('mony@example.com')
     await page.getByLabel('Password', { exact: true }).fill('secret')
     await page.getByRole('button', { name: 'Sign in' }).click()
-    await page.getByText('This account doesn\'t manage this cafe.', { exact: false }).waitFor()
+    return { page, api }
+  }
+
+  it('keeps the owner of another cafe signed in and offers Your cafes', async () => {
+    const { page, api } = await refusedAt('/c/nuk/admin/login', 'GET /admin/me', [BROWN])
+    await page.getByRole('heading', { name: 'No access to the admin app' }).waitFor()
+    await page.getByText('This account doesn\'t manage NUK Cafe.', { exact: false }).waitFor()
     expect(api.calls).not.toContain('POST /auth/sign-out')
+    expect(await page.getByRole('link', { name: 'Open the counter' }).count()).toBe(0)
     await page.getByRole('link', { name: 'Your cafes' }).click()
     await expect.poll(() => new URL(page.url()).pathname).toBe('/cafes')
     await page.getByRole('link', { name: 'Admin, Brown Bean' }).waitFor()
+  })
+
+  it('sends this cafe\'s manager on to the counter, focused and announced, still signed in; phone width fits', async () => {
+    const { page, api } = await refusedAt('/c/nuk/admin/login', 'GET /admin/me', [{ ...NUK_PROFILE, workspaces: ['counter'] }], 390)
+    const panel = page.getByRole('alert').filter({ hasText: 'No access to the admin app' })
+    await panel.waitFor()
+    await expect.poll(() => panel.evaluate(el => el === document.activeElement)).toBe(true)
+    await panel.getByText('This account works at NUK Cafe\'s counter, not in the admin app.').waitFor()
+    await panel.getByText('mony@example.com').waitFor()
+    expect(api.calls).not.toContain('POST /auth/sign-out')
+    // Nowhere else to go: no Your cafes.
+    expect(await page.getByRole('link', { name: 'Your cafes' }).count()).toBe(0)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    expect(await page.getByRole('link', { name: 'Open the counter' }).getAttribute('href')).toBe('/c/nuk/counter')
+  })
+
+  it('Use another account signs out and brings the form back, empty', async () => {
+    const { page, api } = await refusedAt('/c/nuk/admin/login', 'GET /admin/me', [{ ...NUK_PROFILE, workspaces: ['counter'] }, BROWN])
+    // Both: this cafe's counter first, Your cafes beside it.
+    await page.getByRole('link', { name: 'Open the counter' }).waitFor()
+    await page.getByRole('link', { name: 'Your cafes' }).waitFor()
+    await page.getByRole('button', { name: 'Use another account' }).click()
+    await expect.poll(() => api.calls).toContain('POST /auth/sign-out')
+    await page.getByRole('button', { name: 'Sign in' }).waitFor()
+    expect(await page.getByLabel('Email').inputValue()).toBe('')
+    expect(new URL(page.url()).pathname).toBe('/c/nuk/admin/login')
+  })
+
+  it('keeps a platform team account signed in and offers the platform console, never the cafe', async () => {
+    const { page, api } = await refusedAt('/c/nuk/admin/login', 'GET /admin/me', [], 1440, 'superadmin')
+    await page.getByRole('heading', { name: 'No access to the admin app' }).waitFor()
+    await page.getByText('This is a platform team account', { exact: false }).waitFor()
+    expect(api.calls).not.toContain('POST /auth/sign-out')
+    expect(await page.getByRole('link', { name: 'Open the platform console' }).getAttribute('href')).toBe('/platform')
+    expect(await page.getByRole('link', { name: /Open the counter|Your cafes/ }).count()).toBe(0)
+  })
+
+  /** Opens `path` already signed in as `role`, which the workspace refuses (`me` answers 403). */
+  async function arriveSignedIn(path: string, me: string, role: string, cafes: AccountCafe[]) {
+    const page = await createPage()
+    const api = await mockApi(page, {
+      'GET /admin/me': () => {
+        throw failures.notAdmin()
+      },
+      'GET /counter/me': () => {
+        throw failures.forbidden()
+      },
+      [me]: () => {
+        throw failures.forbidden()
+      },
+      'GET /auth/get-session': () => ({ user: { email: 'pat@angder.example', role } }),
+      'GET /me/cafes': () => cafes,
+    })
+    await page.goto(url(path), { waitUntil: 'hydration' })
+    return { page, api }
+  }
+
+  it('already signed in as a platform account, the admin says so at once instead of a sign-in form', async () => {
+    const { page, api } = await arriveSignedIn('/c/nuk/admin', 'GET /admin/me', 'superadmin', [])
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin/login')
+    await page.getByRole('heading', { name: 'No access to the admin app' }).waitFor()
+    await page.getByText('pat@angder.example').waitFor()
+    expect(await page.getByLabel('Email').count()).toBe(0)
+    await page.getByRole('link', { name: 'Open the platform console' }).waitFor()
+    expect(api.calls).not.toContain('POST /auth/sign-out')
+  })
+
+  it('already signed in as a customer: no access, Use another account brings the form', async () => {
+    const { page, api } = await arriveSignedIn('/c/nuk/admin/login', 'GET /admin/me', 'customer', [])
+    await page.getByText('Only NUK Cafe\'s owners use the admin app.').waitFor()
+    expect(await page.getByRole('link').filter({ hasText: /Open|Your cafes/ }).count()).toBe(0)
+    api.set({ 'GET /auth/get-session': () => null })
+    await page.getByRole('button', { name: 'Use another account' }).click()
+    await expect.poll(() => api.calls).toContain('POST /auth/sign-out')
+    await page.getByLabel('Email').waitFor()
+  })
+
+  it('already signed in as this cafe\'s manager, the admin sign-in offers the counter at once', async () => {
+    const { page } = await arriveSignedIn('/c/nuk/admin/login', 'GET /admin/me', 'customer', [{ ...NUK_PROFILE, workspaces: ['counter'] }])
+    await page.getByText('This account works at NUK Cafe\'s counter, not in the admin app.').waitFor()
+    expect(await page.getByRole('link', { name: 'Open the counter' }).getAttribute('href')).toBe('/c/nuk/counter')
+  })
+
+  it('the counter sign-in offers Your cafes to staff of another cafe', async () => {
+    const { page, api } = await refusedAt('/c/nuk/counter/sign-in', 'GET /counter/me', [KIOSK])
+    await page.getByRole('heading', { name: 'No access to the counter' }).waitFor()
+    await page.getByText('This account doesn\'t work at NUK Cafe.', { exact: false }).waitFor()
+    expect(api.calls).not.toContain('POST /auth/sign-out')
+    expect(await page.getByRole('link', { name: 'Your cafes' }).getAttribute('href')).toBe('/cafes')
   })
 })

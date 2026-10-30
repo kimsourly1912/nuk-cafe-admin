@@ -252,10 +252,32 @@ describe('your cafes (D144)', () => {
     await page.getByLabel('Email').fill(seed.customers.beanOwner.email)
     await page.getByLabel('Password', { exact: true }).fill(seed.customers.beanOwner.password)
     await page.getByRole('button', { name: 'Sign in' }).click()
-    await page.getByText('This account doesn\'t manage this cafe.', { exact: false }).waitFor()
+    await page.getByText('This account doesn\'t manage NUK Cafe.', { exact: false }).waitFor()
     await page.getByRole('link', { name: 'Your cafes' }).click()
     await page.getByRole('link', { name: 'Admin, Brown Bean' }).click()
     await page.waitForURL(address => address.pathname === `/c/${cafe.slug}/admin`)
     await page.getByRole('button', { name: 'Brown Bean Admin: cafe menu' }).waitFor()
+  })
+
+  it('a manager who signs in at the admin stays signed in and opens the counter from there (D236)', async () => {
+    const page = await createPage()
+    await asNewVisitor(page)
+    await page.goto(url('/c/nuk/admin/login'), { waitUntil: 'hydration' })
+    await page.getByLabel('Email').fill(seed.customers.manager.email)
+    await page.getByLabel('Password', { exact: true }).fill(seed.customers.manager.password)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.getByRole('heading', { name: 'No access to the admin app' }).waitFor()
+    // The session names the platform role the panel reads to offer the console (a platform account's is `superadmin`).
+    const session = await page.evaluate(() => fetch('/api/auth/get-session').then(r => r.json())) as { user: Record<string, unknown> }
+    expect(session.user).toHaveProperty('role')
+    expect(await page.getByRole('link', { name: 'Open the platform console' }).count()).toBe(0)
+    // Back on the sign-in already signed in: the panel at once, not the form.
+    await page.reload()
+    await page.getByRole('heading', { name: 'No access to the admin app' }).waitFor()
+    expect(await page.getByLabel('Email').count()).toBe(0)
+    await page.getByRole('link', { name: 'Open the counter' }).click()
+    // The same session: the counter opens without signing in again.
+    await page.waitForURL(address => address.pathname.startsWith('/c/nuk/counter') && !address.pathname.endsWith('/sign-in'))
+    await page.getByRole('button', { name: 'account: Mony Chan', exact: false }).waitFor()
   })
 })

@@ -16,8 +16,11 @@ const showPassword = ref(false)
 const error = ref<string>()
 /** After a password that needs a code (two-step sign-in, D188): the code step replaces the form. */
 const codeStep = ref(false)
-/** Refused here, but the account works at another cafe (T2c, D144): the alert offers Your cafes. */
-const elsewhere = ref(false)
+/**
+ * A session the admin app refuses (D236), met on arriving here already signed in or after a refused
+ * sign-in: `<WorkspaceRefused>` replaces the form. Until it's checked, the skeleton (D235).
+ */
+const { refused, checked } = useRefusedSession('admin')
 
 const route = useRoute()
 const slug = useTenantSlug()
@@ -32,7 +35,6 @@ useFormErrorRecheck(form)
 async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
   error.value = undefined
-  elsewhere.value = false
   try {
     if (await login(event.data) === 'two-factor') {
       codeStep.value = true
@@ -50,10 +52,20 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 }
 
 async function showError(e: unknown) {
+  if (e instanceof WorkspaceRefusedError) {
+    refused.value = { email: state.email, access: e.access }
+    state.password = ''
+    return
+  }
   error.value = typeof e === 'string' ? e : getErrorMessage(e)
-  elsewhere.value = typeof e !== 'string' && ApiError.from(e).code === WORKS_ELSEWHERE
   await nextTick()
   errorAlert.value?.focus()
+}
+
+/** Use another account: signed out, the form again for the next person. */
+function onSignedOut() {
+  refused.value = null
+  state.email = ''
 }
 
 /** The code was right (D188): finish the sign-in as after a password alone. */
@@ -80,7 +92,21 @@ async function restart(message?: string) {
 </script>
 
 <template>
-  <TaskFrame>
+  <TaskFrameSkeleton
+    v-if="!checked"
+    :fields="2"
+    cafe
+  />
+  <WorkspaceRefused
+    v-else-if="refused"
+    workspace="admin"
+    :access="refused.access"
+    :email="refused.email"
+    :title="`${name} Admin`"
+    @signed-out="onSignedOut"
+  />
+
+  <TaskFrame v-else>
     <template #header>
       <div class="flex items-center gap-2">
         <CafeLogo
@@ -123,7 +149,6 @@ async function restart(message?: string) {
           variant="subtle"
           icon="i-lucide-circle-alert"
           :title="error"
-          :actions="elsewhere ? [{ label: 'Your cafes', icon: 'i-lucide-store', to: CAFES_PATH, color: 'error', variant: 'outline' }] : undefined"
         />
       </div>
 
