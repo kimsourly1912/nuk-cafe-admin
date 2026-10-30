@@ -137,7 +137,7 @@ export async function markFailed(db: Db, id: string, token: string, error: strin
   return rows.length === 1
 }
 
-/** Across cafes: expired one-time email links have no reason to remain in failed/pending payloads. */
+/** Across cafes: expired one-time email links, and a deleted account's address, have no reason to remain in failed/pending payloads. */
 export async function redactExpiredMail(db: Db, now: Date, limit: number): Promise<number> {
   const expired = or(
     and(
@@ -146,6 +146,11 @@ export async function redactExpiredMail(db: Db, now: Date, limit: number): Promi
     ),
     and(
       eq(outboxMessages.kind, 'identity.verify-email'),
+      lt(outboxMessages.createdAt, new Date(now.getTime() - 86400_000)),
+    ),
+    // A deleted account's address (D237): its retries end within hours; after a day it isn't kept.
+    and(
+      eq(outboxMessages.kind, 'identity.account-deleted'),
       lt(outboxMessages.createdAt, new Date(now.getTime() - 86400_000)),
     ),
   )

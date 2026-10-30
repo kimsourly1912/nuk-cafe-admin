@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import type { Db, Statement } from '#server/utils/batch'
 import { firstRow, inTenant } from '#server/utils/query'
 import { customerProfiles } from './customers.schema'
@@ -45,4 +45,15 @@ export async function findProfile(db: Db, tenantId: string, userId: string): Pro
  */
 export function insertProfileStatement(db: Db, tenantId: string, userId: string, memberCode: string): Statement {
   return db.insert(customerProfiles).values({ tenantId, userId, memberCode }).onConflictDoNothing({ target: [customerProfiles.tenantId, customerProfiles.userId] })
+}
+
+/**
+ * Across cafes (an account is a person's, D137): the person's phone and marketing choice removed from
+ * every cafe's profile, which is marked anonymised. The member code stays: it means nothing alone,
+ * and the counter's lookups by code then find nobody to name.
+ */
+export function anonymizeProfilesStatement(db: Db, userId: string, now: Date): Statement {
+  return db.update(customerProfiles)
+    .set({ phone: null, marketingOptIn: false, anonymizedAt: now })
+    .where(and(eq(customerProfiles.userId, userId), isNull(customerProfiles.anonymizedAt)))
 }

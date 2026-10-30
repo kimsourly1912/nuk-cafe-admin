@@ -87,10 +87,10 @@ A super admin sees each cafe's usage numbers, never its menu, orders or customer
 | Worker | `nuk-cafe-production`, same Cloudflare account (Workers Paid) |
 | D1 | `nuk-cafe-production` (`1ba21c84-75fa-4498-aacc-44ea6b53ea95`, Asia-Pacific), binding `DB` |
 | R2 | `nuk-cafe-production-media` (Asia-Pacific), binding `BLOB` |
-| Rate limits | namespaces 2001–2003 (staging's are 1001–1003) |
-| Config | `$env.prod` in `nuxt.config.ts`, built with `--envName prod` (`pnpm build:production`). **Not** named `production`: without `--envName`, c12 uses `NODE_ENV`, so a `production` block would turn every plain production build (the e2e suite's Node server) into this Worker. `--envName prod` replaces `$production`, so the security headers are repeated there, as for staging. No Sample data variables, ever. No AI variables until Q43 |
+| Rate limits | namespaces 2001–2004 (staging's are 1001–1004; 1004/2004 deleting an account, D237) |
+| Config | `$env.prod` in `nuxt.config.ts`, built with `--envName prod` (`pnpm build:production`). **Not** named `production`: without `--envName`, c12 uses `NODE_ENV`, so a `production` block would turn every plain production build (the e2e suite's Node server) into this Worker. `--envName prod` replaces `$production`, so the security headers are repeated there, as for staging. No Sample data variables, ever. The AI assistant's `NUXT_AI_PROVIDER` = `openai` and `NUXT_AI_MODEL` = `gpt-5.4-mini`, like staging (D230) |
 | Telegram | `@angders_bot` |
-| Secrets | each set once with `npx wrangler secret put <NAME> --name nuk-cafe-production`, generated on the owner's machine, **never copied from staging**: `NUXT_BETTER_AUTH_SECRET`, `NUXT_QR_SECRET` (before any QR is printed), `NUXT_BAKONG_ENCRYPTION_KEY` (kept in a password manager), the three `NUXT_TELEGRAM_…`. Email needs none: the `EMAIL` binding (D212) |
+| Secrets | each set once with `npx wrangler secret put <NAME> --name nuk-cafe-production`, generated on the owner's machine, **never copied from staging**: `NUXT_BETTER_AUTH_SECRET`, `NUXT_QR_SECRET` (before any QR is printed), `NUXT_BAKONG_ENCRYPTION_KEY` (kept in a password manager), the three `NUXT_TELEGRAM_…`; `NUXT_AI_API_KEY` when the assistant should be on: a production-only OpenAI key with a $20 monthly limit in OpenAI's billing settings (D230; without it the assistant is off). Email needs none: the `EMAIL` binding (D212) |
 
 **Setting it up once** (the owner):
 1. `npx wrangler d1 create nuk-cafe-production --location apac` and `npx wrangler r2 bucket create nuk-cafe-production-media --location apac`; the D1 id goes into `PRODUCTION.d1DatabaseId` in `nuxt.config.ts`.
@@ -205,7 +205,7 @@ D1 Time Travel is Cloudflare's, always on, no code of ours: every change is kept
 **Done 2026-10-01 by the owner** (dashboard, by date): restored in about 2 seconds; afterwards admin sign-in, the customer menu and the counter worked with their data.
 
 For production (8.2): note the bookmark before every migration (see Deploys); a restore there loses real orders written after the bookmark, so it's the last resort after redeploying the previous Worker.
-- Q24 answered (D229, 2026-10-30): back within **4 hours** (RTO); orders and payments kept 5 years; guest accounts deleted after 90 days unused (cleanup not built yet). Earlier parts: Workers Paid (D211), alerts (D223), backups (D225).
+- Q24 answered (D229, 2026-10-30): back within **4 hours** (RTO); orders and payments kept 5 years; guest accounts unused for 90 days emptied (`identity:clear-idle-guests`, D236). Earlier parts: Workers Paid (D211), alerts (D223), backups (D225).
 
 ### Nightly backups (D225)
 
@@ -269,13 +269,14 @@ The owner's plan once the app has many users (D225 follow-up). No code changes: 
 
 Nitro tasks in `server/tasks/`, scheduled in `shared/scheduled-tasks.ts` (`SCHEDULED_TASKS`, given to `nitro.scheduledTasks` by `nuxt.config.ts`, cron in UTC; D192). Each run's outcome is recorded in `job_runs` by `runJob` (a success at most every 5 minutes) and shown in the console's **System health** (`/platform/health`), which lists every scheduled job, one that never ran too: Cloudflare cron triggers in deployed environments; the dev server runs them itself. Every task is **idempotent** (safe to run twice) and logs what it did. Every scheduled task runs its work through `runJob` (`server/utils/jobs.ts`, D150): a failure is logged with its stack, recorded for System health, then thrown again. Jobs belong to no cafe, so no cafe's Telegram chats hear about them (D221; until then they went to the oldest cafe's). An outbox message given up on is logged as an error. Until the platform has an alert channel of its own (Q24), the [independent health check](#independent-platform-health-d168) reports work that stops moving **only where `NUXT_MAINTENANCE_NOTIFICATION_MAX_AGE_SECONDS` / `NUXT_MAINTENANCE_DELIVERY_MAX_AGE_SECONDS` are set**. **Production sets both** (300 s and 900 s, plain vars in `$env.prod`, so every deploy keeps them): health turns 503 when notification generation hasn't succeeded for 5 minutes or outbox/Telegram work is overdue by 15. The generation check needs production's three Telegram secrets: without a bot, `notifications:deliver` never generates and health stays 503. Staging sets neither. Locally a task runs on demand with `curl http://localhost:3000/_nitro/tasks/<name>` (dev only).
 
-Built so far: `platform:deliver-outbox`, `orders:expire-unpaid` and `notifications:deliver` (every minute), `platform:expire-idempotency-keys`, `assistant:purge-usage` and `notifications:purge-deliveries` (daily at 03:15 UTC) and `media:purge-temporary` (hourly at :05).
+Built so far: `platform:deliver-outbox`, `orders:expire-unpaid` and `notifications:deliver` (every minute), `platform:expire-idempotency-keys`, `assistant:purge-usage`, `notifications:purge-deliveries` and `identity:clear-idle-guests` (daily at 03:15 UTC) and `media:purge-temporary` (hourly at :05).
 
 | Task | Schedule | Does |
 |---|---|---|
 | `media:purge-temporary` | hourly | Deletes temporary assets older than 24 h and their R2 objects |
 | `platform:expire-idempotency-keys` | daily | Removes expired idempotency keys |
 | `assistant:purge-usage` | daily | Removes AI assistant usage rows older than 90 days (D108) |
+| `identity:clear-idle-guests` | daily | Empties guests with no change, session or order for 90 days: name "Guest", sessions and sign-ins deleted, `anonymized_at` set; the row and its orders stay (D229, D236). Logs `emptied` and `kept` (kept: an order in the 90 days though the sessions are gone) |
 | `platform:deliver-outbox` | every minute | Sends pending outbox messages with retries and backoff. An order's own request already sends its new-order and payment alerts right after answering (D150); this run sends the rest and retries. A message given up on after its last try is alerted |
 | `notifications:deliver` | every minute | Queues the closing summaries that are due and sends due Telegram deliveries, with retries (D113) |
 | `notifications:purge-deliveries` | daily | Removes Telegram deliveries older than 90 days |

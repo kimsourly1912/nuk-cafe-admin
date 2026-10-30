@@ -3,7 +3,8 @@ import type { PublicMenuCategory } from '#shared/contracts/public-menu'
 import { totalPages } from '#shared/contracts/common'
 import { MAX_UNPAID_ORDERS, PAYMENT_WINDOW_MINUTES } from '#shared/contracts/orders'
 import { ORDER_EVENTS } from './orders.events'
-import type { Db } from '#server/utils/batch'
+import type { Db, Statement } from '#server/utils/batch'
+import { requireCount } from '#server/utils/batch'
 import { apiError, ErrorCodes } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
@@ -256,6 +257,21 @@ export async function orderActivity(db: Db, tenantIds: string[], now = new Date(
 /** Of these cafes, the ones with an order placed in the last `days` days (the console's Overview, D191): counts, never the orders. */
 export async function tenantsOrderingRecently(db: Db, tenantIds: string[], days: number, now = new Date()): Promise<Set<string>> {
   return new Set(await repo.tenantsWithOrdersSince(db, tenantIds, new Date(now.getTime() - days * 24 * 60 * 60 * 1000)))
+}
+
+/** Whether the customer has an order in progress in any cafe (deleting an account waits for it, D237). */
+export async function hasOrderInProgress(db: Db, customerId: string): Promise<boolean> {
+  return await repo.inProgressOrdersOf(db, customerId) > 0
+}
+
+/** A guard statement for that batch: aborts it if an order in progress appeared meanwhile. */
+export function requireNoOrderInProgress(db: Db, customerId: string): Statement {
+  return requireCount(db, repo.inProgressOrdersOf(db, customerId), 0)
+}
+
+/** Of these customers, the ones who placed an order since `since`, in any cafe (the idle-guest cleanup, D236). */
+export async function customersOrderingSince(db: Db, customerIds: readonly string[], since: Date): Promise<Set<string>> {
+  return new Set(await repo.customersWithOrdersSince(db, customerIds, since))
 }
 
 /**

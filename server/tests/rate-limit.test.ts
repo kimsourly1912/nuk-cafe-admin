@@ -52,7 +52,16 @@ describe('public API rate limits (D121)', () => {
   it('the quote rule comes before the general prefix, so it wins over it', () => {
     const prefixes = RATE_LIMIT_RULES.map(rule => rule.prefix)
     expect(prefixes.indexOf('/api/public/checkout/quote')).toBeLessThan(prefixes.indexOf('/api/public/'))
-    expect(prefixes.every(prefix => prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/', '/api/client-errors', '/api/password-ranges/', '/api/shop/orders'].includes(prefix))).toBe(true)
+    expect(prefixes.every(prefix => prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/', '/api/client-errors', '/api/password-ranges/', '/api/shop/orders', '/api/me/delete-account'].includes(prefix))).toBe(true)
+  })
+
+  it('deleting an account has its own small limit (D237); only its POST counts', async () => {
+    const accounts = fakeLimiter(1)
+    const limiters = { RATE_LIMIT_ACCOUNT: accounts.limiter }
+    const remove = () => checkRateLimit({ path: '/api/me/delete-account', method: 'POST', address: '203.0.113.7', limiters })
+    expect(await remove()).toEqual({ checked: true, limited: null })
+    expect(await remove()).toEqual({ checked: true, limited: 'RATE_LIMIT_ACCOUNT' })
+    expect(await checkRateLimit({ path: '/api/me/cafes', method: 'GET', address: '203.0.113.7', limiters })).toEqual({ checked: false, limited: null })
   })
 
   it('placing an order has its own limit (D156); the order page polling its order never counts', async () => {

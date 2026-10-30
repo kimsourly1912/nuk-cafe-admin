@@ -4,7 +4,8 @@
  * - Signed out: from `lg`, "Sign in", coming back to this page afterwards; below `lg` an icon
  *   opening Sign in, Create account and Appearance (the header has no light/dark button there).
  *   A guest (D156, signed in by Place order) is signed out here, with **Your orders** added.
- * - Signed in: the initials, opening the account menu (AccountMenuContent).
+ * - Signed in: the initials, opening the account menu (AccountMenuContent). Its Delete account
+ *   opens DeleteAccountModal from here: the menu's content unmounts as it closes (D237).
  *
  * Which signed-out button shows is CSS (both are rendered).
  *
@@ -15,6 +16,7 @@ import { useCustomerAccount } from '../composables/useCustomerAccount'
 import { ACCOUNT_PATHS, accountLink, initialsOf } from '../utils/account'
 import AccountMenuContent from './AccountMenuContent.vue'
 import AppearanceChoice from './AppearanceChoice.vue'
+import DeleteAccountModal from './DeleteAccountModal.vue'
 
 const route = useRoute()
 const tenantPath = useTenantPath()
@@ -30,6 +32,12 @@ const signedOutLinks = computed(() => [
   { label: 'Create account', icon: 'i-lucide-user-plus', to: accountLink(ACCOUNT_PATHS.signUp, route.fullPath) },
 ])
 const initials = computed(() => (account.value ? initialsOf(account.value.name, account.value.email) : ''))
+
+const deleteModal = useOverlay().create(DeleteAccountModal)
+async function deleteAccount(email: string) {
+  // Deleted: signed out everywhere, so back to this cafe's menu, signed out.
+  if (await deleteModal.open({ email }).result) await navigateTo(tenantPath('/'))
+}
 </script>
 
 <template>
@@ -110,6 +118,7 @@ const initials = computed(() => (account.value ? initialsOf(account.value.name, 
       <AccountMenuContent
         :account="account"
         @close="open = false"
+        @delete="deleteAccount(account.email)"
       />
     </template>
   </UPopover>

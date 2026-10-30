@@ -19,9 +19,47 @@ Branch `claude/checkout-loading-state`, after PR #219. Found by the owner: after
 - **Follow-up (owner, 2026-10-30): `/sign-in` and `/sign-up` opened while signed in** showed the form, then moved on once the browser knew the session. Both now show the root `<TaskFrameSkeleton>` (shaped like the form) until the account's `known`, and keep it while a signed-in visitor is sent on (`leaving`), so the form never shows to them. e2e `shop-account.test.ts` "signed in, /sign-in (and /sign-up) opened directly shows a skeleton and moves on, never the form" (get-session held; a MutationObserver checks no email field ever appeared); removing `!known` or `leaving` from the gate each failed it. e2e `shop-account`, `human-check`, `platform-home`, `shop-checkout` 35/35; lint and typecheck clean.
 - **Next:** check other pages against the new checklist item, one page per branch.
 
+## Account erasure (D237, 2026-10-30)
+
+Branch `claude/modest-ramanujan-1dfubo`, after PR #223. D229's erasure, with the owner's answers (self-service, staff lose access first, immediate with an email, refused while an order is in progress, no mockup). [Plan](plans/account-erasure.md), [decision](decisions.md#d237-an-account-deletes-itself-emptied-like-a-guest-d229s-erasure-2026-10-30).
+
+- **Change:** `POST /api/me/delete-account` (rate limit `RATE_LIMIT_ACCOUNT`, 1004/2004); identity's `erasure.service.ts`/`erasure.repository.ts` and the mail kind `identity.account-deleted`; customers' `anonymizeProfilesStatement`; orders' `hasOrderInProgress` and `requireNoOrderInProgress`; the outbox clears a failed "account deleted" address after a day; `verification` added to `server/db/tables.ts`; the account menu's **Delete account** and `DeleteAccountModal`; the seeded customer `leaver`. No migration (`anonymized_at` came with D236).
+- **Evidence (2026-10-30, local Linux, pnpm 12.15.0, Playwright's Chromium):** `erasure.service.test.ts` 12 against real Better Auth; each of the 16 guards removed in turn failed a test (the write's email, access and platform-role conditions, `requireOneChange`, the order guard, the password, guest, platform, access, order and already-deleted checks, the verified-only email, the four sign-in deletes); two conditions were dropped because nothing could make them the one that refuses (a registered account; not deleted yet, which the email covers). The outbox rule disabled failed its test. The D1 `LIKE` limit in the test database caught a first superadmin check (`instr` now). e2e `shop-account.test.ts` 15/15 incl. the new test at phone width (wrong password on its field, the order in progress refused in the dialog, deleted after the cancel, the other session signed out, the old password refused, "Deleted account" on the order, one email). `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 156 files, 2149 passed, 1 skipped. Full local e2e (4 workers): 747/755; the 8 failures (platform-owners ×2, platform, products, reports, session, shop-account's sign-up, shop-menu) were timeouts and slow loads in screens this change doesn't touch; those 7 files alone with `E2E_WORKERS=1`: 185/185. Not run: D1 itself, staging.
+
+## Idle guests emptied after 90 days (D236, 2026-10-30)
+
+Merged as PR #223 (`b4d28cc`). D229's guest cleanup; the owner chose emptying over deleting (the `orders` rebuild). [Decision](decisions.md#d236-idle-guests-are-emptied-not-deleted-d229s-cleanup-2026-10-30).
+
+- **Change:** `user.anonymized_at` (Better Auth additional field, migration `0053_user_anonymized_at`, generated); `guests.repository.ts` and `clearIdleGuests` in identity; `customersOrderingSince` in orders' `index.ts`; the daily task `identity:clear-idle-guests` (03:15 UTC) and its System health label. No route or screen.
+- **Evidence (2026-10-30, local Linux, pnpm 12.15.0):** `drizzle-kit generate --config .nuxt/hub/db/drizzle.config.ts` after the migration: "No schema changes". `guests.service.test.ts` 9; each of the 8 guards removed in turn failed a test (guest only, not emptied yet, last change, no recent session, the write's re-check, sessions only of the emptied, the orders check, the paging). `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 155 files, 2135 passed, 1 skipped; e2e `shop-tracking` and `platform` 45/45 (the seeded database runs 0053). Not run: the task in a running server or on D1, the full e2e suite.
+
+## Angder in the console and the production assistant (D232, D230, 2026-10-30)
+
+Merged as PR #222 (`b2254cf`). Two of the owner's 2026-10-30 answers, together because both are text or config. [D232](decisions.md#d232-the-platform-is-called-angder-everywhere-qt1-answered-2026-10-30), [D230](decisions.md#d230-the-production-assistant-uses-openai-with-a-20-monthly-cap-q43-answered-2026-10-30).
+
+- **Change:** "NUK Platform" → "Angder" in the console sidebar, the platform tab title, the platform sign-in page, the two-step code prompt, the backup-codes file and the authenticator issuer; the e2e tests that named it. `$env.prod` gets `NUXT_AI_PROVIDER: 'openai'` and `NUXT_AI_MODEL: 'gpt-5.4-mini'`. Operations → Production names the key.
+- **Evidence (2026-10-30, local Linux, pnpm 12.15.0):** `identity.two-factor.test.ts` 5 (the authenticator link's name and issuer are Angder; with the old issuer it failed). `pnpm build:production` (with `NODE_OPTIONS=--max-old-space-size=6144`: the default heap ran out here): `.output/server/wrangler.json` is `nuk-cafe-production` with both AI variables and no key. `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 154 files, 2126 passed, 1 skipped; e2e `platform`, `two-factor`, `your-cafes` 49/49 (Playwright's Chromium). Not run: the full e2e suite; the assistant in production (needs the key).
+- **Owner, after deploy:** create a production-only OpenAI key, set the $20 monthly limit in OpenAI's billing settings, then `npx wrangler secret put NUXT_AI_API_KEY --name nuk-cafe-production` (or the dashboard, type **Secret**). Until then the assistant stays off in production. Super admins' existing authenticator entries keep the name "NUK Platform" and keep working.
+
+## One membership per person and cafe (D235, 2026-10-30)
+
+Merged as PR #221 (`d798bc8`). [Decision](decisions.md#d235-one-membership-per-person-and-cafe-enforced-by-the-database-2026-10-30).
+
+- **Change:** migration `0052_member_unique` (one unique index on `member (organization_id, user_id)`, written by hand, deletes nothing; its snapshot is `0051`'s with new ids). The staff list test no longer inserts a repeated membership row. No app or route change.
+- **Evidence (2026-10-30, local Linux, pnpm 12.15.0):** `drizzle-kit generate --config .nuxt/hub/db/drizzle.config.ts` says "No schema changes" (with the index in the snapshot it generated a `DROP INDEX`); `migrations.test.ts` → `0052_member_unique` 2, both failed with the index replaced by `SELECT 1`; `server/features/identity` and `migrations.test.ts` 269 passed. `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 154 files, 2126 passed, 1 skipped; e2e `shop-tracking.test.ts` 11/11 (its seeded database runs every migration, 0052 included). Not run: the full e2e suite, D1 itself (the index is plain SQLite).
+- **Owner, before deploying:** run the duplicate check on staging and production; it should answer no rows:
+
+  ```bash
+  npx wrangler d1 execute nuk-cafe-staging --remote --command "select organization_id, user_id, count(*) from member group by 1, 2 having count(*) > 1"
+  ```
+
+  ```bash
+  npx wrangler d1 execute nuk-cafe-production --remote --command "select organization_id, user_id, count(*) from member group by 1, 2 having count(*) > 1"
+  ```
+
 ## The customer sees a completed order's refund (D234, 2026-10-30)
 
-Merged as PR #219 (`4832310`), deployed (owner, 2026-10-30). The owner's answer to D233's open question: show it. [Decision](decisions.md#d234-the-customer-sees-the-owners-refund-of-a-completed-order-2026-10-30).
+Merged as PR #219 (`4832310`), deployed, checked on staging by the owner (2026-10-30). The owner's answer to D233's open question: show it. [Decision](decisions.md#d234-the-customer-sees-the-owners-refund-of-a-completed-order-2026-10-30).
 
 - **Change:** `refundText` and a neutral alert on the customer's order page ("$9.75 refunded by KHQR", "The cafe returned your payment on …"); the status stays Completed. No server, contract or migration change (the payment's return columns were already sent).
 - **Evidence (2026-10-30, local Linux, pnpm 12.15.0, Playwright's Chromium):** `order.test.ts` 10 (incl. the refund: dollars, riel, not returned, cancelled); e2e `shop-tracking.test.ts` 11/11 against the seeded server incl. the new refunded-completed test (phone width). `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 154 files, 2124 passed, 1 skipped. Not run: full local e2e (no shared code changed).

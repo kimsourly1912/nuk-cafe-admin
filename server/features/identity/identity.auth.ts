@@ -78,6 +78,9 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
         // Set when an admin creates a staff account with a temporary password. Better Auth doesn't
         // enforce it: our access helpers refuse with PASSWORD_CHANGE_REQUIRED (security.md).
         mustChangePassword: { type: 'boolean', required: false, defaultValue: false, input: false },
+        // When the daily cleanup emptied an idle guest (D229, D236): its name, sessions and sign-in
+        // are gone; the row stays because its orders reference it. Account erasure will use it too.
+        anonymizedAt: { type: 'date', required: false, input: false, returned: false },
       },
     },
     hooks: {
@@ -171,7 +174,7 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
       // Two-step sign-in (P1b, D188): an authenticator app's code (TOTP) or a backup code, after the
       // password. Required for super admins (\`authorizePlatform\`); any account that turns it on is
       // asked for a code at every sign-in. No "trust this device": sessions already last 7 days.
-      twoFactor({ issuer: 'NUK Platform' }),
+      twoFactor({ issuer: 'Angder' }),
       // Guests (D156): Place order without an account signs the browser in as a guest, a user with
       // no email or password. Orders keep their owner, so "only your own orders" holds as before.
       anonymous({

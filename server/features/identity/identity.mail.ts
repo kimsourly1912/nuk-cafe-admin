@@ -9,6 +9,8 @@ import type { OutboxHandler } from '#server/features/platform'
 export const MAIL_KINDS = {
   verifyEmail: 'identity.verify-email',
   resetPassword: 'identity.reset-password',
+  /** After an account deleted itself, to its verified address only (D237). */
+  accountDeleted: 'identity.account-deleted',
 } as const
 
 export interface MailMessage {
@@ -55,6 +57,18 @@ export function resetPasswordMail(to: string, url: string, appName: string): Mai
   return render({ to, url, appName, subject: `Reset your ${appName} password`, intro: 'Someone asked to reset the password of this account. The link works once and expires in 1 hour.', action: 'Choose a new password', outro: 'If it wasn\'t you, ignore this email: your password stays the same.' })
 }
 
+/** No link: there is nothing left to open. Tells the owner, in case it wasn't them (D237). */
+export function accountDeletedMail(to: string, appName: string): MailMessage {
+  const intro = `Your ${appName} account for ${to} was deleted. You're signed out everywhere, and your name, email and phone are removed. The cafes keep your past orders for their records, without your name.`
+  const outro = 'If you didn\'t do this, someone may have known your password: use a new one wherever you used it. You can create a new account with this email at any time.'
+  return {
+    to,
+    subject: `Your ${appName} account was deleted`,
+    text: `${intro}\n\n${outro}\n\n${appName}`,
+    html: `<p>${escapeHtml(intro)}</p><p>${escapeHtml(outro)}</p><p>${escapeHtml(appName)}</p>`,
+  }
+}
+
 interface LinkPayload {
   to: string
   url: string
@@ -76,6 +90,10 @@ export function accountMailHandlers(send: MailSender, options: { appName: string
     [MAIL_KINDS.resetPassword]: async ({ payload }) => {
       const { to, url } = linkPayload(payload)
       await send(resetPasswordMail(to, url, appName))
+    },
+    [MAIL_KINDS.accountDeleted]: async ({ payload }) => {
+      if (typeof payload.to !== 'string') throw new Error('Mail payload needs "to"')
+      await send(accountDeletedMail(payload.to, appName))
     },
   }
 }

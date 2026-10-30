@@ -14,7 +14,7 @@ await setupE2e()
 // and the customer account) asks for the code after the password when the account has it.
 
 const SUPER: PlatformSession = { userId: 'super-1', email: 'ops@example.com', name: 'Ops', mustChangePassword: false, twoFactorEnabled: true }
-const TOTP_URI = 'otpauth://totp/NUK%20Platform:ops%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=NUK%20Platform'
+const TOTP_URI = 'otpauth://totp/Angder:ops%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=Angder'
 const BACKUP_CODES = ['aaaa1-bbbb2', 'cccc3-dddd4', 'eeee5-ffff6', 'gggg7-hhhh8']
 
 const TWO_FACTOR_REDIRECT = () => ({ twoFactorRedirect: true, twoFactorMethods: ['totp'] })
@@ -134,7 +134,7 @@ describe('signing in with two-step sign-in', () => {
       'GET /platform/overview': () => ({ cafes: { active: 0, suspended: 0 }, newCafesThisMonth: 0, quietCafes: 0, noActiveOwner: 0, bannedAccounts: 0, timeZone: 'Asia/Phnom_Penh' }),
     })
     await password(page)
-    await page.getByText(/enter the 6-digit code for NUK Platform/).waitFor()
+    await page.getByText(/enter the 6-digit code for Angder/).waitFor()
     // Six digits, checked before asking.
     await enterAppCode(page, '12')
     await page.getByRole('button', { name: 'Verify' }).click()

@@ -264,5 +264,8 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D232](decisions.md#d232-the-platform-is-called-angder-everywhere-qt1-answered-2026-10-30) | The platform is called Angder everywhere (QT1 answered), 2026-10-30 |
 | [D233](decisions.md#d233-the-owners-refund-of-a-ready-or-completed-order-2026-10-30) | The owner's refund of a ready or completed order, 2026-10-30 |
 | [D234](decisions.md#d234-the-customer-sees-the-owners-refund-of-a-completed-order-2026-10-30) | The customer sees the owner's refund of a completed order, 2026-10-30 |
+| [D235](decisions.md#d235-one-membership-per-person-and-cafe-enforced-by-the-database-2026-10-30) | One membership per person and cafe, enforced by the database, 2026-10-30 |
+| [D236](decisions.md#d236-idle-guests-are-emptied-not-deleted-d229s-cleanup-2026-10-30) | Idle guests are emptied, not deleted (D229's cleanup), 2026-10-30 |
+| [D237](decisions.md#d237-an-account-deletes-itself-emptied-like-a-guest-d229s-erasure-2026-10-30) | An account deletes itself, emptied like a guest (D229's erasure), 2026-10-30 |
 | [D238](decisions.md#d238-a-pages-first-load-waits-for-everything-that-decides-its-layout-2026-10-30) | A page's first load waits for everything that decides its layout, 2026-10-30 |
 | [D239](decisions.md#d239-a-sign-in-refused-at-a-workspace-shows-where-the-account-may-go-2026-10-30) | A sign-in refused at a workspace shows where the account may go, 2026-10-30 |

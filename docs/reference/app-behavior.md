@@ -50,7 +50,7 @@ Context that shapes these choices: the portal stays **open all day** on counter 
 
 ## Browser tab titles
 
-Every tab reads `<Page> · <cafe> Admin` (the counter `· <cafe> Counter`, the customer site `· <cafe>`, the platform console `· NUK Platform`), so staff with several tabs open can tell them apart. The cafe's name is its own (`useCafe()`, D143): never written into a page, and the tab follows a rename at once (the template is a computed, so unhead re-applies it).
+Every tab reads `<Page> · <cafe> Admin` (the counter `· <cafe> Counter`, the customer site `· <cafe>`, the platform console `· Angder`), so staff with several tabs open can tell them apart. The cafe's name is its own (`useCafe()`, D143): never written into a page, and the tab follows a rename at once (the template is a computed, so unhead re-applies it).
 
 Source: `app/app.vue` (`useHead` + `titleTemplate`), `app/types/page-meta.d.ts`, `app/error.vue`. E2E: `test/e2e/app-shell.test.ts`, `cafe-profile.test.ts`, `cafes.test.ts`.
 
