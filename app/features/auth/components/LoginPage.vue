@@ -62,6 +62,33 @@ async function showError(e: unknown) {
   errorAlert.value?.focus()
 }
 
+/**
+ * Try again after a check that failed (Q4): the whole check again. In: on to the admin. Refused with
+ * somewhere to go: the panel says where. A customer (signed out again): the form with the reason.
+ * The network again: the panel stays.
+ */
+const retrying = ref(false)
+async function onRetry() {
+  retrying.value = true
+  try {
+    await finishLogin()
+    await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
+  }
+  catch (e) {
+    if (e instanceof WorkspaceRefusedError) {
+      if (refused.value) refused.value = { ...refused.value, access: e.access }
+      return
+    }
+    if (ApiError.from(e).kind === 'forbidden') {
+      refused.value = null
+      await showError(e)
+    }
+  }
+  finally {
+    retrying.value = false
+  }
+}
+
 /** Use another account: signed out, the form again for the next person. */
 function onSignedOut() {
   refused.value = null
@@ -103,7 +130,9 @@ async function restart(message?: string) {
     :access="refused.access"
     :email="refused.email"
     :title="`${name} Admin`"
+    :retrying="retrying"
     @signed-out="onSignedOut"
+    @retry="onRetry"
   />
 
   <TaskFrame v-else>

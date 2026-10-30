@@ -5,7 +5,7 @@ import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { PlatformSession } from '../../shared/contracts/tenants'
 import type { MockHandler } from './support/mock-api'
-import { ADMIN, deferred, MockFailure, mockApi, setupE2e, SIGNED_OUT, toast } from './support/mock-api'
+import { ADMIN, deferred, failures, MockFailure, mockApi, NUK_PROFILE, setupE2e, SIGNED_OUT, toast } from './support/mock-api'
 
 await setupE2e()
 
@@ -187,6 +187,29 @@ describe('signing in with two-step sign-in', () => {
     await enterAppCode(page, '123456')
     await expect.poll(() => new URL(page.url()).pathname).not.toBe('/c/nuk/admin/login')
     expect(new URL(page.url()).pathname).toMatch(/^\/c\/nuk\/admin(\/|$)/)
+  })
+
+  it('a cafe\'s admin refuses a manager only after the code, then offers the counter, still signed in (E1)', async () => {
+    let signedIn = false
+    const { page, api } = await open('/c/nuk/admin/login', {
+      ...SIGNED_OUT,
+      'GET /admin/me': () => {
+        if (!signedIn) throw new MockFailure(401, 'UNAUTHENTICATED', 'Sign in to continue.')
+        throw failures.forbidden()
+      },
+      'POST /auth/sign-in/email': TWO_FACTOR_REDIRECT,
+      'POST /auth/two-factor/verify-totp': () => {
+        signedIn = true
+        return { token: 't', user: { id: 'manager-1' } }
+      },
+      'GET /me/cafes': () => [{ ...NUK_PROFILE, workspaces: ['counter'] }],
+    })
+    await password(page)
+    await enterAppCode(page, '123456')
+    await page.getByRole('heading', { name: 'No access to the admin app' }).waitFor()
+    expect(await page.getByRole('link', { name: 'Open the counter' }).getAttribute('href')).toBe('/c/nuk/counter')
+    expect(api.calls.filter(c => c.startsWith('POST /auth/two-factor'))).toEqual(['POST /auth/two-factor/verify-totp'])
+    expect(api.calls).not.toContain('POST /auth/sign-out')
   })
 
   it('a cafe\'s counter asks for the code too; Back returns to the password', async () => {

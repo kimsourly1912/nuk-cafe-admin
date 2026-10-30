@@ -5,8 +5,9 @@
  * account stays signed in: this cafe's other workspace (a manager on the admin sign-in: Open the
  * counter), Your cafes when it works at another cafe, the platform console for a platform team
  * account, and Use another account, which signs out and shows the form again (a shared counter
- * tablet is never left on someone else's session without a way out). With nothing else to offer,
- * Use another account is the primary action.
+ * tablet is never left on someone else's session without a way out). With nothing else to offer (a
+ * customer), the primary action is the safe page, Back to the cafe's menu. When the check failed (the
+ * network, Q4), it says so and offers Try again (`retry`); the session is kept.
  *
  * Each workspace is opened as a full page load: its session and data start fresh (D141).
  *
@@ -19,14 +20,17 @@ import type { OtherAccess } from '~/utils/account-cafes'
 const props = defineProps<{
   /** The workspace that refused the account. */
   workspace: Workspace
-  access: OtherAccess
+  /** `null`: what the account opens couldn't be checked (Q4). */
+  access: OtherAccess | null
   /** The account signed in, so a shared device shows whose session it is. */
   email: string
   /** The frame's heading: "<cafe> Admin", "<cafe> Counter". */
   title: string
+  /** Try again is checking. */
+  retrying?: boolean
 }>()
 
-const emit = defineEmits<{ 'signed-out': [] }>()
+const emit = defineEmits<{ 'signed-out': [], 'retry': [] }>()
 
 const slug = useTenantSlug()
 const { name, logoUrl } = useCafe()
@@ -36,6 +40,7 @@ const signingOut = ref(false)
 const workspaceNames: Record<Workspace, string> = { admin: 'the admin app', counter: 'the counter' }
 
 const description = computed(() => {
+  if (!props.access) return `We couldn't check where this account works. Check the connection and try again.`
   const { here, elsewhere, platform } = props.access
   if (here) return `This account works at ${name.value}'s ${here === 'counter' ? 'counter' : 'admin app'}, not in ${workspaceNames[props.workspace]}.`
   if (elsewhere) return `This account ${props.workspace === 'admin' ? `doesn't manage ${name.value}` : `doesn't work at ${name.value}`}. Open a cafe you work at from Your cafes.`
@@ -46,8 +51,15 @@ const description = computed(() => {
   return props.workspace === 'admin' ? `Only ${name.value}'s owners use the admin app.` : `Only ${name.value}'s staff use the counter.`
 })
 
-/** The one way on that gets the primary button: this cafe's other workspace, else Your cafes, else the console. */
-const primary = computed(() => props.access.here ? 'here' : props.access.elsewhere ? 'elsewhere' : props.access.platform ? 'platform' : null)
+/**
+ * The one way on that gets the primary button: Try again when the check failed, else this cafe's other
+ * workspace, Your cafes, the console, or, with nothing to offer, the cafe's menu (the safe page).
+ */
+const primary = computed(() => {
+  const access = props.access
+  if (!access) return 'retry'
+  return access.here ? 'here' : access.elsewhere ? 'elsewhere' : access.platform ? 'platform' : 'menu'
+})
 
 // Announced and focused on arrival, like the form's error it replaces (page-patterns §5).
 const panel = useTemplateRef<HTMLElement>('panel')
@@ -106,14 +118,30 @@ async function useAnotherAccount() {
     <template #footer>
       <div class="flex w-full flex-col gap-2">
         <UButton
-          v-if="access.here"
+          v-if="!access"
+          label="Try again"
+          icon="i-lucide-rotate-cw"
+          block
+          :loading="retrying"
+          @click="emit('retry')"
+        />
+        <UButton
+          v-if="access?.here"
           :label="access.here === 'counter' ? 'Open the counter' : 'Open the admin app'"
           :to="workspaceUrl(slug, access.here)"
           external
           block
         />
         <UButton
-          v-if="access.elsewhere"
+          v-if="primary === 'menu'"
+          :label="`Back to ${name}'s menu`"
+          icon="i-lucide-house"
+          :to="tenantUrl(slug, '/')"
+          external
+          block
+        />
+        <UButton
+          v-if="access?.elsewhere"
           label="Your cafes"
           icon="i-lucide-store"
           :to="CAFES_PATH"
@@ -122,7 +150,7 @@ async function useAnotherAccount() {
           block
         />
         <UButton
-          v-if="access.platform"
+          v-if="access?.platform"
           label="Open the platform console"
           :to="PLATFORM_CONSOLE_PATH"
           external
@@ -132,8 +160,8 @@ async function useAnotherAccount() {
         />
         <UButton
           label="Use another account"
-          :color="primary ? 'neutral' : 'primary'"
-          :variant="primary ? 'ghost' : 'solid'"
+          color="neutral"
+          :variant="primary === 'menu' ? 'outline' : 'ghost'"
           block
           :loading="signingOut"
           @click="useAnotherAccount"

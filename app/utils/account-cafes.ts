@@ -60,7 +60,8 @@ export function otherAccess(cafes: readonly AccountCafe[], currentSlug: string, 
  * it stays signed in, and the page shows `<WorkspaceRefused>` with where it may go instead.
  */
 export class WorkspaceRefusedError extends ApiError {
-  constructor(readonly access: OtherAccess, cause: unknown) {
+  /** `access`: `null` when it couldn't be checked (the network); the page offers Try again (Q4). */
+  constructor(readonly access: OtherAccess | null, cause: unknown) {
     super('This account can\'t open this workspace.', { kind: 'forbidden', status: 403, code: 'WORKSPACE_REFUSED', cause })
     this.name = 'WorkspaceRefusedError'
   }
@@ -83,21 +84,21 @@ async function sessionAccount() {
 /** Only for what to offer: the console checks the role itself. */
 const isPlatformTeam = (account: SessionAccount | null) => (account?.role ?? '').split(',').map(r => r.trim()).includes('superadmin')
 
-/** What the signed-in account may open instead of `workspace` at `currentSlug`. Any failure: `null`. */
+/**
+ * What the signed-in account may open instead of `workspace` at `currentSlug`; `null` when nothing (a
+ * customer). Throws when it can't be checked: a sign-in then keeps the session and offers Try again
+ * instead of signing out an account that may work here (Q4).
+ */
 export async function accessInstead(currentSlug: string, workspace: Workspace): Promise<OtherAccess | null> {
-  try {
-    const [cafes, account] = await Promise.all([fetchAccountCafes(), sessionAccount()])
-    return otherAccess(cafes, currentSlug, workspace, isPlatformTeam(account))
-  }
-  catch {
-    return null
-  }
+  const [cafes, account] = await Promise.all([fetchAccountCafes(), sessionAccount()])
+  return otherAccess(cafes, currentSlug, workspace, isPlatformTeam(account))
 }
 
 /** A session the workspace refused, met on arriving at its sign-in: whose it is and where it may go. */
 export interface RefusedSession {
   email: string
-  access: OtherAccess
+  /** `null`: a refused sign-in whose check failed (Q4); arriving signed in, it's always known. */
+  access: OtherAccess | null
 }
 
 /**

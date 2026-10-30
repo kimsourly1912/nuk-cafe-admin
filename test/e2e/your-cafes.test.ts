@@ -99,8 +99,8 @@ describe('Your cafes', () => {
 })
 
 describe('signing in where the account has no access (D239)', () => {
-  /** Signs in at `path`, refused there by `me` (403), with `cafes` as the account's cafes and `role` its platform role. */
-  async function refusedAt(path: string, me: string, cafes: AccountCafe[], width = 1440, role = 'customer') {
+  /** Signs in at `path`, refused there by `me` (403), with `cafes` as the account's cafes (or their handler) and `role` its platform role. */
+  async function refusedAt(path: string, me: string, cafes: AccountCafe[] | (() => AccountCafe[]), width = 1440, role = 'customer') {
     const page = await createPage()
     await page.setViewportSize({ width, height: 900 })
     const api = await mockApi(page, {
@@ -115,7 +115,7 @@ describe('signing in where the account has no access (D239)', () => {
       [me]: () => {
         throw failures.forbidden()
       },
-      'GET /me/cafes': () => cafes,
+      'GET /me/cafes': typeof cafes === 'function' ? cafes : () => cafes,
       'GET /auth/get-session': () => ({ user: { email: 'mony@example.com', role } }),
     })
     await page.getByLabel('Email').fill('mony@example.com')
@@ -200,10 +200,13 @@ describe('signing in where the account has no access (D239)', () => {
     expect(api.calls).not.toContain('POST /auth/sign-out')
   })
 
-  it('already signed in as a customer: no access, Use another account brings the form', async () => {
+  it('already signed in as a customer: no access, Back to the menu first, Use another account brings the form', async () => {
     const { page, api } = await arriveSignedIn('/c/nuk/admin/login', 'GET /admin/me', 'customer', [])
     await page.getByText('Only NUK Cafe\'s owners use the admin app.').waitFor()
     expect(await page.getByRole('link').filter({ hasText: /Open|Your cafes/ }).count()).toBe(0)
+    // The safe page is the way on; signed in on purpose elsewhere, the session is kept (Q1).
+    expect(await page.getByRole('link', { name: 'Back to NUK Cafe\'s menu' }).getAttribute('href')).toBe('/c/nuk')
+    expect(api.calls).not.toContain('POST /auth/sign-out')
     api.set({ 'GET /auth/get-session': () => null })
     await page.getByRole('button', { name: 'Use another account' }).click()
     await expect.poll(() => api.calls).toContain('POST /auth/sign-out')
@@ -214,6 +217,50 @@ describe('signing in where the account has no access (D239)', () => {
     const { page } = await arriveSignedIn('/c/nuk/admin/login', 'GET /admin/me', 'customer', [{ ...NUK_PROFILE, workspaces: ['counter'] }])
     await page.getByText('This account works at NUK Cafe\'s counter, not in the admin app.').waitFor()
     expect(await page.getByRole('link', { name: 'Open the counter' }).getAttribute('href')).toBe('/c/nuk/counter')
+  })
+
+  it('a failed check keeps the session with Try again, which then says where the account may go (Q4)', async () => {
+    const { page, api } = await refusedAt('/c/nuk/admin/login', 'GET /admin/me', () => {
+      throw failures.server()
+    })
+    await page.getByText('We couldn\'t check where this account works.', { exact: false }).waitFor()
+    await page.getByText('mony@example.com').waitFor()
+    expect(api.calls).not.toContain('POST /auth/sign-out')
+
+    api.set({ 'GET /me/cafes': () => [{ ...NUK_PROFILE, workspaces: ['counter'] }] })
+    await page.getByRole('button', { name: 'Try again' }).click()
+    await page.getByText('This account works at NUK Cafe\'s counter, not in the admin app.').waitFor()
+    expect(await page.getByRole('link', { name: 'Open the counter' }).getAttribute('href')).toBe('/c/nuk/counter')
+    expect(api.calls).not.toContain('POST /auth/sign-out')
+  })
+
+  it('Try again for an account that works nowhere signs it out, as any customer at a staff sign-in (Q1, Q4)', async () => {
+    const { page, api } = await refusedAt('/c/nuk/counter/sign-in', 'GET /counter/me', () => {
+      throw failures.server()
+    })
+    await page.getByRole('button', { name: 'Try again' }).waitFor()
+    api.set({ 'GET /me/cafes': () => [] })
+    await page.getByRole('button', { name: 'Try again' }).click()
+    await expect.poll(() => api.calls).toContain('POST /auth/sign-out')
+    await page.getByText('This account doesn\'t work at any branch', { exact: false }).waitFor()
+    await page.getByLabel('Email').waitFor()
+  })
+
+  it('follows another tab: back in view, the panel names the account signed in now (E3)', async () => {
+    const { page, api } = await arriveSignedIn('/c/nuk/admin/login', 'GET /admin/me', 'customer', [])
+    await page.getByText('pat@angder.example').waitFor()
+    api.set({
+      'GET /auth/get-session': () => ({ user: { email: 'sam@example.com', role: 'customer' } }),
+      'GET /me/cafes': () => [{ ...NUK_PROFILE, workspaces: ['counter'] }],
+    })
+    await page.evaluate(() => {
+      for (const state of ['hidden', 'visible']) {
+        Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+        document.dispatchEvent(new Event('visibilitychange'))
+      }
+    })
+    await page.getByText('sam@example.com').waitFor()
+    await page.getByRole('link', { name: 'Open the counter' }).waitFor()
   })
 
   it('the counter sign-in offers Your cafes to staff of another cafe', async () => {

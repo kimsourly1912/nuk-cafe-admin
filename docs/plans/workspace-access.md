@@ -1,6 +1,6 @@
 # Workspace access: who may open which door, and what a refusal shows
 
-Status: **draft for the owner's review (2026-10-30).** Nothing past D239's first slice is built until the questions below are answered, except page access inside a workspace (§7 steps A–B), which needs no answer: A and B are done (D240). Related: D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D142 (console), D144 (Your cafes), D156 (guests), D188 (two-step sign-in), D193 (support access), D238 (first load), D239 (refused sign-in panel, in progress).
+Status: **answered and in progress (2026-10-30).** The owner took every recommendation (D241). Done: page access inside a workspace (§7 A–B, D240) and the cafe doors (step 1, D241). Next: the console door (step 2), then the customer sign-in and Your cafes (step 3). Related: D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D142 (console), D144 (Your cafes), D156 (guests), D188 (two-step sign-in), D193 (support access), D238 (first load), D239 (refused sign-in panel, in progress).
 
 ## 1. The pieces
 
@@ -49,7 +49,7 @@ Status: **draft for the owner's review (2026-10-30).** Nothing past D239's first
 | Account | Arriving signed in (b) | Signing in here (c) |
 |---|---|---|
 | A, B | form | ✅ if E, else as the row for that account |
-| C customer | panel, nothing to offer: "Only <cafe>'s owners use the admin app" (**change**) | signed out, "This account doesn't have access to the admin app" (**Q1**) |
+| C customer | panel: "Only <cafe>'s owners use the admin app" → **Back to <cafe>'s menu** (the safe page), session kept (**done**, D241) | signed out, "This account doesn't have access to the admin app" (Q1: yes) |
 | D staff/manager here | panel → **Open the counter** (**change**) | panel → Open the counter (**change**) |
 | E owner | ✅ | ✅ |
 | F other cafe | panel → **Your cafes** (**change**) | panel → Your cafes (D144) |
@@ -107,10 +107,10 @@ The doors above decide who gets into a workspace; once inside, each page needs i
 
 ## 5. Edge cases to cover
 
-- **E1 Two-step sign-in:** the refusal comes after the code (super admins always have it): the panel after Verify. Covered by `finishLogin`/`finishSignIn`; add a test.
+- **E1 Two-step sign-in:** the refusal comes after the code (super admins always have it): the panel after Verify. Covered by `finishLogin`/`finishSignIn` (**done**: e2e `two-factor.test.ts`, D241).
 - **E2 Access removed mid-session:** removing a role deletes the sessions → 401 → the sign-in form with `?redirect=` (as today). A role changed without deleting sessions answers 403 `NOT_ADMIN` → sent to the sign-in → the panel (arrival rule).
-- **E3 Another tab changes the account while the panel shows:** the panel's "Signed in as" goes stale. Re-check on `app:session-changed` (auth-sync) and redraw.
-- **E4 The account-list check fails** (network) **at sign-in:** today the session is signed out as if nothing were offered. Proposed: keep it and show the panel with **Try again** (**Q4**). On arrival a failure already falls back to the form.
+- **E3 Another tab changes the account while the panel shows:** the panel's "Signed in as" goes stale. **Done (D241):** read again when the tab comes back into view (covers the counter and customer site too, which send no cross-tab message).
+- **E4 The account-list check fails** (network) **at sign-in:** today the session is signed out as if nothing were offered. **Done (Q4, D241):** kept, with **Try again**. On arrival a failure still falls back to the form.
 - **E5 The door's own check failed for a reason other than 403** (owner on a bad network): the arrival check sees the cafe list says this door opens → the form, never a wrong "no access" (built).
 - **E6 Paused cafe:** its pages answer "This cafe is paused" before any sign-in; a paused cafe is never offered as a way on (built: active cafes only).
 - **E7 Banned account:** Better Auth refuses the sign-in itself; check what the form shows (`BANNED_USER` message) and that no panel appears.
@@ -121,7 +121,7 @@ The doors above decide who gets into a workspace; once inside, each page needs i
 - **E12 Rate limits:** the extra reads (`get-session`, `/me/cafes`) happen once per refusal or arrival; `/me/cafes` isn't rate limited per account. Fine.
 - **E13 Information:** the panel never says whether an email exists before a correct password (the refusal comes only after one).
 
-## 6. Questions for the owner
+## 6. Questions for the owner (answered 2026-10-30: every recommendation, D241)
 
 - **Q1 Sign out when the account has nothing to do at this door** (a customer signing in at the admin, counter or console)? *Recommended: yes, at sign-in only.* That person just typed a password on a staff device; keeping the session gains nothing and risks leaving a customer's session on a shared tablet. On arrival (they were already signed in elsewhere on purpose) show the panel and don't sign out.
 - **Q2 The platform console gets the same panel?** A non-team account stays signed in and is offered Your cafes (or Back to home). *Recommended: yes*, for one rule at every staff door.
@@ -136,9 +136,9 @@ Not waiting for the owner (page access inside a workspace):
 - **A. Admin pages name their permission (done, D240).** `permission` route meta, checked by `auth.global.ts`, the sidebar filtered by it, **No access to this page**.
 - **B. Counter pages (done, D240):** `/counter/me` sends each branch's permissions (from `branchRoles` on the server, as `adminSession` does for the admin); counter pages name a branch permission (`table:manage`, `report:read`); `counter.global.ts` checks the branch in the path; the counter menu reads the same meta instead of `role !== 'staff'`.
 
-Once the questions are answered:
+With the answers (D241):
 
-1. Finish the cafe doors (admin, counter): the built slice of D239 plus E3, E4 and the two-step test.
+1. **Done (D241):** the cafe doors (admin, counter): the built slice of D239 plus Back to the menu for a customer, E3, E4 (Q4) and the two-step test.
 2. The console door with the same panel (Q2).
 3. Customer sign-in for temporary passwords (Q3) and Your cafes for the platform team (Q5).
 4. Tests: one e2e per matrix row group (mocked API), real-server tests for D at the admin, F at the admin, G at the admin (needs a seeded super admin with two-step sign-in), C at the console; each new guard removed once to see its test fail.
