@@ -1,5 +1,5 @@
 import { useIntervalFn } from '@vueuse/core'
-import type { CustomerAccount, GuestCustomer, ShopMe } from '#shared/contracts/account'
+import type { CustomerAccount, DeleteAccountInput, GuestCustomer, ShopMe } from '#shared/contracts/account'
 import type { ForgotPasswordForm, SignInForm, SignUpForm } from '../schemas/account-form'
 import { ACCOUNT_PATHS, accountLink } from '../utils/account'
 
@@ -209,6 +209,27 @@ export function useAccountActions() {
   }
 
   return { signIn, finishSignIn, signUp, signInAsGuest, signOut, resendVerification, requestPasswordReset, resetPassword }
+}
+
+/**
+ * The account deletes itself, in every cafe (D237): `POST /api/me/delete-account` with its password.
+ * The server ends every session, so on success the site forgets the account like a sign-out does.
+ * A refusal (wrong password, still working at a cafe, an order in progress) is the dialog's to show.
+ */
+export function useDeleteAccount() {
+  const known = useState('account:known', () => false)
+  return useMutation(
+    (input: DeleteAccountInput) => apiFetch<null>('/me/delete-account', { method: 'POST', body: input }),
+    {
+      id: 'account:delete',
+      successMessage: 'Your account was deleted',
+      errorMessage: 'Couldn\'t delete your account',
+      onSuccess: () => {
+        known.value = false
+        void accountChanged()
+      },
+    },
+  )
 }
 
 /** Seconds between two emails of the same kind (the server allows about 3 per 10 minutes). */

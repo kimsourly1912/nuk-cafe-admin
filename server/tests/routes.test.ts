@@ -52,7 +52,7 @@ describe('cafe routes (D140)', () => {
   it('routes outside a cafe\'s address never act in one', () => {
     const global = routeFiles(apiDir).filter(file => !file.startsWith(cafeDir) && !file.startsWith(platformDir))
     // Forward slashes on every OS: Windows paths use `\`.
-    expect(global.map(file => file.slice(apiDir.length + 1).replaceAll('\\', '/')).sort()).toEqual(['[...].ts', 'cafes/[slug].get.ts', 'client-errors.post.ts', 'health.get.ts', 'me/cafes.get.ts', 'password-ranges/[prefix].get.ts', 'tables/[token].get.ts', 'webhooks/telegram.post.ts'])
+    expect(global.map(file => file.slice(apiDir.length + 1).replaceAll('\\', '/')).sort()).toEqual(['[...].ts', 'cafes/[slug].get.ts', 'client-errors.post.ts', 'health.get.ts', 'me/cafes.get.ts', 'me/delete-account.post.ts', 'password-ranges/[prefix].get.ts', 'tables/[token].get.ts', 'webhooks/telegram.post.ts'])
     expect(global.filter(file => calls(file, TENANT_HELPERS))).toEqual([])
   })
 })

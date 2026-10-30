@@ -4,7 +4,8 @@ Snapshot reviewed against main `4832310`, 2026-10-30. Read only when resuming or
 
 ## Waiting on the owner
 
-- **Active: idle guests emptied after 90 days (D236, 2026-10-30):** branch `claude/modest-ramanujan-1dfubo`, migration `0053_user_anonymized_at`, task `identity:clear-idle-guests`, awaiting review. [Decision](decisions.md#d236-idle-guests-are-emptied-not-deleted-d229s-cleanup-2026-10-30), [progress](progress.md#idle-guests-emptied-after-90-days-d236-2026-10-30).
+- **Active: account erasure (D237, 2026-10-30):** branch `claude/modest-ramanujan-1dfubo`, awaiting review. Account menu → **Delete account**; `POST /api/me/delete-account`; no migration. [Plan](plans/account-erasure.md), [decision](decisions.md#d237-an-account-deletes-itself-emptied-like-a-guest-d229s-erasure-2026-10-30), [progress](progress.md#account-erasure-d237-2026-10-30).
+- **Merged: idle guests emptied after 90 days (D236):** PR #223 as `b4d28cc`.
 - **Merged: Angder in the console and the production assistant's config (D232, D230):** PR #222 as `b2254cf`. The owner, after its production deploy: a production-only OpenAI key with a $20 limit, as the Worker secret `NUXT_AI_API_KEY` on `nuk-cafe-production`.
 - **Merged: one membership per person and cafe (D235):** PR #221 as `d798bc8`.
 - **Merged and deployed: the owner's refund (D233, PR #218 as `be44d91`) and the customer seeing it on a completed order (D234, PR #219 as `4832310`).** Checked on staging by the owner (2026-10-30): works. [D233 progress](progress.md#the-owners-refund-of-a-ready-or-completed-order-d233-2026-10-30), [D234 progress](progress.md#the-customer-sees-a-completed-orders-refund-d234-2026-10-30).
@@ -18,7 +19,6 @@ Snapshot reviewed against main `4832310`, 2026-10-30. Read only when resuming or
 
 Each is its own step and branch.
 
-- **From the 2026-10-30 answers (D229):** account erasure, which waits on the owner's answers (who can erase, staff and owner accounts, immediate or delayed) and a mockup for its screen.
 - **Customer order index (performance):** PR #196 (`orders_tenant_customer_status_due_idx`, migration 0050 on its branch) was closed unmerged as a ~9,000-line draft with conflicts; no reason recorded. The only customer index is still `orders_customer_idx (customer_id, placed_at)`. Ask the owner whether it was rejected before redoing it as a small PR; the next free migration number is `0054`.
 - **CSP `script-src 'unsafe-inline'`:** still pending a hash/nonce policy ([security → Request protection](server/security.md)). The customer menu is server-rendered and edge-cached (`swr`), so per-request nonces don't fit; a hash policy needs its own decision. Docs also disagree with the code on `Referrer-Policy` (`security.md` says `strict-origin-when-cross-origin`, `nuxt.config.ts` sends `strict-origin`).
 - **Upgrade follow-ups:** nuxt 4.6.3 in its own run; remove the four unused `simple-git` audit exemptions (D54) from `pnpm-workspace.yaml`; give the e2e server a stand-in for Have I Been Pwned (`shop-account` calls the real one).

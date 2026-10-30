@@ -16,6 +16,12 @@ export const IdentityErrorCodes = {
   TWO_FACTOR_REQUIRED: 'TWO_FACTOR_REQUIRED',
   /** Have I Been Pwned didn't answer: the new-password field's live check waits for the save (D210). */
   PASSWORD_CHECK_UNAVAILABLE: 'PASSWORD_CHECK_UNAVAILABLE',
+  /** Deleting an account (D237): the password given isn't the account's. */
+  WRONG_PASSWORD: 'WRONG_PASSWORD',
+  /** Deleting an account that still works in a cafe, or runs the platform (D237). */
+  ACCOUNT_HAS_ACCESS: 'ACCOUNT_HAS_ACCESS',
+  /** Deleting an account with an order still waiting for payment, being made or ready (D237). */
+  ORDER_IN_PROGRESS: 'ORDER_IN_PROGRESS',
 } as const
 
 export const passwordCheckUnavailable = () =>
@@ -47,3 +53,25 @@ export const tenantNotFound = () => notFound('The cafe')
 /** A tenant the platform has paused: nothing in it answers until it's resumed (D134, D140). */
 export const tenantSuspended = () =>
   apiError(403, IdentityErrorCodes.TENANT_SUSPENDED, 'This cafe is paused at the moment.')
+
+// --- Deleting an account (D237) ---
+
+export const wrongPassword = () =>
+  apiError(400, IdentityErrorCodes.WRONG_PASSWORD, 'That password isn\'t right.', { fieldErrors: { password: ['That password isn\'t right'] } })
+
+/** A guest has no password and nothing to delete by hand: the 90-day cleanup empties it (D236). */
+export const guestCannotDelete = () =>
+  apiError(403, ErrorCodes.FORBIDDEN, 'A guest has no account to delete.')
+
+export const accountHasCafeAccess = () =>
+  apiError(409, IdentityErrorCodes.ACCOUNT_HAS_ACCESS, 'You still work at a cafe. Ask its owner to remove your access first, then delete your account.')
+
+export const platformAccountCannotDelete = () =>
+  apiError(409, IdentityErrorCodes.ACCOUNT_HAS_ACCESS, 'A platform account can\'t delete itself. Ask another super admin to remove its role first.')
+
+export const orderInProgress = () =>
+  apiError(409, IdentityErrorCodes.ORDER_IN_PROGRESS, 'You have an order in progress. Delete your account once it\'s picked up or cancelled.')
+
+/** The account changed between the checks and the write (access given, an order placed): nothing was deleted. */
+export const accountChanged = () =>
+  apiError(409, ErrorCodes.VERSION_CONFLICT, 'Your account changed while it was being deleted. Nothing was deleted: try again.')

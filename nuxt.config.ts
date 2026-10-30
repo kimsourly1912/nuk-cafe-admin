@@ -121,6 +121,8 @@ const RATE_LIMITS = [
   { name: 'RATE_LIMIT_PUBLIC', namespace_id: '1002', simple: { limit: 600, period: 60 as const } },
   // Placing orders (D156): a busy cafe's Wi-Fi places a few a minute; a script, hundreds.
   { name: 'RATE_LIMIT_ORDERS', namespace_id: '1003', simple: { limit: 20, period: 60 as const } },
+  // Deleting an account (D237): each try checks a password. Cloudflare counts per 10 or 60 seconds only.
+  { name: 'RATE_LIMIT_ACCOUNT', namespace_id: '1004', simple: { limit: 3, period: 60 as const } },
 ]
 /** The same limits in production's own namespaces (2001…), so the two environments never share a counter. */
 const PRODUCTION_RATE_LIMITS = RATE_LIMITS.map(limit => ({

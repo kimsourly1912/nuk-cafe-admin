@@ -197,7 +197,10 @@ describe('delivery', () => {
     const base = { tenantId: null, attempt: 1, payload: { to: 'a@example.com', url: 'https://cafe.example/x' } }
     await handlers[MAIL_KINDS.verifyEmail]!({ ...base, id: 'm1', kind: MAIL_KINDS.verifyEmail })
     await handlers[MAIL_KINDS.resetPassword]!({ ...base, id: 'm2', kind: MAIL_KINDS.resetPassword })
-    expect(sent.map(m => m.subject)).toEqual(['Confirm your email for Brew & <Co>', 'Reset your Brew & <Co> password'])
+    await handlers[MAIL_KINDS.accountDeleted]!({ ...base, id: 'm3', kind: MAIL_KINDS.accountDeleted, payload: { to: 'a@example.com' } })
+    expect(sent.map(m => m.subject)).toEqual(['Confirm your email for Brew & <Co>', 'Reset your Brew & <Co> password', 'Your Brew & <Co> account was deleted'])
+    // The deletion email has no link: there is nothing left to open (D237).
+    expect(sent[2]!.html).not.toContain('href')
     for (const message of sent) {
       expect(message.text).toMatch(/\n\nBrew & <Co>$/)
       expect(message.html).toContain('<p>Brew &amp; &lt;Co&gt;</p>')

@@ -21,6 +21,20 @@ describe('bounded platform maintenance', () => {
     expect(rows.find(row => row.kind === 'orders.placed')?.payload).toEqual({ orderId: 'keep' })
   })
 
+  it('scrubs a deleted account\'s address after a day, well after its retries end (D237)', async () => {
+    const db = await createTestDb()
+    const now = new Date()
+    await db.batch([
+      outboxStatement(db, null, 'identity.account-deleted', { to: 'old@example.com' }),
+      outboxStatement(db, null, 'identity.account-deleted', { to: 'recent@example.com' }),
+    ])
+    const [old] = await db.select().from(outboxMessages).where(eq(outboxMessages.payload, { to: 'old@example.com' }))
+    await db.update(outboxMessages).set({ createdAt: new Date(now.getTime() - 25 * 3600_000), status: 'failed' }).where(eq(outboxMessages.id, old!.id))
+    expect(await maintainOutbox(db, { now })).toEqual({ redacted: 1, removed: 0 })
+    const payloads = (await db.select().from(outboxMessages)).map(row => row.payload)
+    expect(payloads.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))).toEqual([{ to: 'recent@example.com' }, {}])
+  })
+
   it('keeps metadata by default; configured retention removes only a bounded page of sent work', async () => {
     const db = await createTestDb()
     const now = new Date()

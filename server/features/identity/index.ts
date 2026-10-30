@@ -16,6 +16,7 @@ export { activeOwnerCounts, ownershipFacts, planExistingOwner, planNewOwner, pla
 export type { OwnerAddPlan, OwnershipFacts } from './owners.service'
 export { passwordRange } from './password-range.service'
 export { clearIdleGuests, IDLE_GUEST_DAYS } from './guests.service'
+export { deleteAccount } from './erasure.service'
 export type { FetchText } from './password-range.service'
 export { DEV_PASSWORD, resetDevAccount, resetDevSignIn } from './dev-accounts.service'
 export type { DevAccount, DevAccountRole, DevAccountSpec } from './dev-accounts.service'
