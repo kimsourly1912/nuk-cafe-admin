@@ -108,6 +108,9 @@ describe('signing in where the account has no access (D239)', () => {
       'GET /counter/me': () => {
         throw failures.unauthorized()
       },
+      'GET /platform/me': () => {
+        throw failures.unauthorized()
+      },
       'POST /auth/sign-in/email': () => ({ redirect: false, token: 't', user: { id: ADMIN.userId, email: ADMIN.email } }),
     })
     await page.goto(url(path), { waitUntil: 'hydration' })
@@ -261,6 +264,49 @@ describe('signing in where the account has no access (D239)', () => {
     })
     await page.getByText('sam@example.com').waitFor()
     await page.getByRole('link', { name: 'Open the counter' }).waitFor()
+  })
+
+  it('the platform console keeps a cafe owner signed in and offers Your cafes, never the console (D241)', async () => {
+    const { page, api } = await refusedAt('/platform/sign-in', 'GET /platform/me', [BROWN])
+    await page.getByRole('heading', { name: 'No access to the platform console' }).waitFor()
+    await page.getByText('This account isn\'t on the platform team.', { exact: false }).waitFor()
+    await page.getByRole('heading', { name: 'Angder' }).waitFor()
+    expect(api.calls).not.toContain('POST /auth/sign-out')
+    expect(await page.getByRole('link', { name: 'Your cafes' }).getAttribute('href')).toBe('/cafes')
+    expect(await page.getByRole('link', { name: /Open the platform console|Open the counter/ }).count()).toBe(0)
+  })
+
+  it('the platform console, a failed check: the session is kept with Try again (Q4)', async () => {
+    const { page, api } = await refusedAt('/platform/sign-in', 'GET /platform/me', () => {
+      throw failures.server()
+    })
+    await page.getByText('We couldn\'t check where this account works.', { exact: false }).waitFor()
+    expect(api.calls).not.toContain('POST /auth/sign-out')
+    api.set({ 'GET /me/cafes': () => [BROWN] })
+    await page.getByRole('button', { name: 'Try again' }).click()
+    await page.getByRole('link', { name: 'Your cafes' }).waitFor()
+  })
+
+  it('already signed in as a customer, the console says so with Back to home, the session kept', async () => {
+    const { page, api } = await arriveSignedIn('/platform', 'GET /platform/me', 'customer', [])
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/platform/sign-in')
+    await page.getByText('Only the platform team uses the console.').waitFor()
+    expect(await page.getByLabel('Email').count()).toBe(0)
+    expect(await page.getByRole('link', { name: 'Back to home' }).getAttribute('href')).toBe('/')
+    expect(api.calls).not.toContain('POST /auth/sign-out')
+  })
+
+  it('already signed in as a platform team account whose check failed, the console shows the form, never a wrong refusal', async () => {
+    const page = await createPage()
+    await mockApi(page, {
+      'GET /platform/me': () => {
+        throw failures.server()
+      },
+      'GET /auth/get-session': () => ({ user: { email: 'ops@angder.example', role: 'superadmin' } }),
+    })
+    await page.goto(url('/platform/sign-in'), { waitUntil: 'hydration' })
+    await page.getByLabel('Email').waitFor()
+    expect(await page.getByRole('heading', { name: 'No access to the platform console' }).count()).toBe(0)
   })
 
   it('the counter sign-in offers Your cafes to staff of another cafe', async () => {

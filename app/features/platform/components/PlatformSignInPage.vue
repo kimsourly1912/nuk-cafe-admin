@@ -1,8 +1,11 @@
 <script setup lang="ts">
 /**
  * Platform console sign-in (`/platform/sign-in`, D142): the admin sign-in's frame (D84), for the
- * platform team. An account that isn't a super admin is signed out again with a clear message. With
- * two-step sign-in (D188) the password is followed by the code from the app (`<TwoFactorCodeForm>`).
+ * platform team. An account off the team that works at a cafe stays signed in and sees
+ * `<WorkspaceRefused>` with Your cafes; one that works nowhere (a customer) is signed out again with a
+ * clear message (D241). Arriving already signed in by an account off the team: the panel at once, Back
+ * to home for a customer. With two-step sign-in (D188) the password is followed by the code from the
+ * app (`<TwoFactorCodeForm>`).
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
 import * as v from 'valibot'
@@ -24,6 +27,11 @@ const route = useRoute()
 const { signIn, finishSignIn } = usePlatformSession()
 /** After a password that needs a code: the code step replaces the password form. */
 const codeStep = ref(false)
+/**
+ * A session the console refuses (D241), met on arriving here already signed in or after a refused
+ * sign-in: `<WorkspaceRefused>` replaces the form. Until it's checked, the skeleton (D238).
+ */
+const { refused, checked } = useRefusedSession('console')
 
 // A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
 const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
@@ -50,9 +58,43 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 }
 
 async function showError(e: unknown) {
+  if (e instanceof WorkspaceRefusedError) {
+    refused.value = { email: state.email, access: e.access }
+    state.password = ''
+    return
+  }
   error.value = typeof e === 'string' ? e : getErrorMessage(e)
   await nextTick()
   errorAlert.value?.focus()
+}
+
+/** Try again after a check that failed (Q4); see the admin's `LoginPage`. */
+const retrying = ref(false)
+async function onRetry() {
+  retrying.value = true
+  try {
+    await finishSignIn()
+    await navigateTo(platformRedirectTarget(route.query.redirect))
+  }
+  catch (e) {
+    if (e instanceof WorkspaceRefusedError) {
+      if (refused.value) refused.value = { ...refused.value, access: e.access }
+      return
+    }
+    if (ApiError.from(e).kind === 'forbidden') {
+      refused.value = null
+      await showError(e)
+    }
+  }
+  finally {
+    retrying.value = false
+  }
+}
+
+/** Use another account: signed out, the form again for the next person. */
+function onSignedOut() {
+  refused.value = null
+  state.email = ''
 }
 
 async function onCodeVerified() {
@@ -78,7 +120,23 @@ async function restart(message?: string) {
 </script>
 
 <template>
-  <TaskFrame>
+  <TaskFrameSkeleton
+    v-if="!checked"
+    :fields="2"
+    cafe
+  />
+  <WorkspaceRefused
+    v-else-if="refused"
+    workspace="console"
+    :access="refused.access"
+    :email="refused.email"
+    title="Angder"
+    :retrying="retrying"
+    @signed-out="onSignedOut"
+    @retry="onRetry"
+  />
+
+  <TaskFrame v-else>
     <template #header>
       <div class="flex items-center gap-2">
         <UIcon

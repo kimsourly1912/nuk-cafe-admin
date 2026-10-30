@@ -259,6 +259,21 @@ describe('your cafes (D144)', () => {
     await page.getByRole('button', { name: 'Brown Bean Admin: cafe menu' }).waitFor()
   })
 
+  it('a cafe owner who signs in at the platform console stays signed in, is offered Your cafes, and the console still refuses them (D241)', async () => {
+    const page = await createPage()
+    await asNewVisitor(page)
+    await page.goto(url('/platform/sign-in'), { waitUntil: 'hydration' })
+    await page.getByLabel('Email').fill(seed.customers.beanOwner.email)
+    await page.getByLabel('Password', { exact: true }).fill(seed.customers.beanOwner.password)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.getByRole('heading', { name: 'No access to the platform console' }).waitFor()
+    // The panel is words and links only: the server still refuses the console to this session.
+    expect(await page.evaluate(() => fetch('/api/platform/me').then(r => r.status))).toBe(403)
+    expect(await page.evaluate(() => fetch('/api/platform/tenants').then(r => r.status))).toBe(403)
+    await page.getByRole('link', { name: 'Your cafes' }).click()
+    await page.getByRole('link', { name: 'Admin, Brown Bean' }).waitFor()
+  })
+
   it('a manager who signs in at the admin stays signed in and opens the counter from there (D239)', async () => {
     const page = await createPage()
     await asNewVisitor(page)

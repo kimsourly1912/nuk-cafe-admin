@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## The console door: step 2 (D241, 2026-10-30)
+Branch `ccr-e2b7ccc7-mhvnj3`, restarted from `main` after PR #227. Plan step 2 (Q2). [Decision](decisions.md#d241-workspace-access-questions-answered-a-refused-sign-in-keeps-a-failed-check-and-offers-the-safe-page-2026-10-30).
+
+- **Change:** `WorkspaceDoor` and the console case in `otherAccess`/`accessInstead`/`refusedSession`; `usePlatformSession.finishSignIn` keeps a cafe's staff signed in (`WorkspaceRefusedError`), signs a customer out, keeps a failed check; `<WorkspaceRefused workspace="console">` (platform header, Your cafes, Back to home; `useOptionalTenantSlug`); `PlatformSignInPage` gets the skeleton, the panel, Try again and Use another account. No server change.
+- **Evidence (2026-10-30, cloud Linux, pnpm 12.15.0, Playwright's Chromium):** `pnpm lint`, `pnpm typecheck` clean; unit `account-cafes.test.ts` 4/4; e2e `your-cafes`, `platform`, `cafes` (real server), `two-factor`, `auth` 97/98 at 2 workers: the one failure, `your-cafes`'s platform-account-at-the-admin test, a 30 s timeout; `your-cafes.test.ts` alone 21/21. Guards: removing the console's `if (access)` and the platform-team check in `refusedSession` each failed its test. Not run: the full e2e suite (CI runs it).
+- **Next:** plan step 3, the customer sign-in for temporary passwords (Q3) and Your cafes for the platform team (Q5).
+
 ## The cafe doors: the owner's answers and step 1 (D241, 2026-10-30)
 Branch `ccr-e2b7ccc7-mhvnj3`, restarted from `main` after PR #226. The owner answered the [workspace access plan](plans/workspace-access.md)'s Q1–Q5 with every recommendation and left the rest to us. [Decision](decisions.md#d241-workspace-access-questions-answered-a-refused-sign-in-keeps-a-failed-check-and-offers-the-safe-page-2026-10-30).
 

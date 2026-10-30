@@ -34,6 +34,12 @@ export function otherCafes(cafes: readonly AccountCafe[] | null | undefined, cur
 /** The platform console's home (D142); its own sign-in and session decide access there. */
 export const PLATFORM_CONSOLE_PATH = '/platform'
 
+/**
+ * A staff sign-in that may refuse an account: a cafe's admin or counter, or the platform console
+ * (D241). The console has no cafe: its `currentSlug` is `''`, so no cafe is "here".
+ */
+export type WorkspaceDoor = Workspace | 'console'
+
 /** What an account refused at a workspace may open instead (D239). */
 export interface OtherAccess {
   /** This cafe's other workspace, when it opens: a manager refused by the admin app works at the counter. */
@@ -48,7 +54,7 @@ export interface OtherAccess {
 export const NO_OTHER_ACCESS: OtherAccess = { here: null, elsewhere: false, platform: false }
 
 /** What `cafes` (and the console) open other than `workspace` at `currentSlug`; `null` when nothing does (a customer). */
-export function otherAccess(cafes: readonly AccountCafe[], currentSlug: string, workspace: Workspace, platform = false): OtherAccess | null {
+export function otherAccess(cafes: readonly AccountCafe[], currentSlug: string, workspace: WorkspaceDoor, platform = false): OtherAccess | null {
   const active = cafes.filter(cafe => cafe.status === 'active')
   const here = active.find(cafe => cafe.slug === currentSlug)?.workspaces.find(w => w !== workspace) ?? null
   const elsewhere = active.some(cafe => cafe.slug !== currentSlug && cafe.workspaces.length > 0)
@@ -89,9 +95,10 @@ const isPlatformTeam = (account: SessionAccount | null) => (account?.role ?? '')
  * customer). Throws when it can't be checked: a sign-in then keeps the session and offers Try again
  * instead of signing out an account that may work here (Q4).
  */
-export async function accessInstead(currentSlug: string, workspace: Workspace): Promise<OtherAccess | null> {
+export async function accessInstead(currentSlug: string, workspace: WorkspaceDoor): Promise<OtherAccess | null> {
   const [cafes, account] = await Promise.all([fetchAccountCafes(), sessionAccount()])
-  return otherAccess(cafes, currentSlug, workspace, isPlatformTeam(account))
+  // The console only refuses accounts off the platform team: never offer it back to them.
+  return otherAccess(cafes, currentSlug, workspace, workspace !== 'console' && isPlatformTeam(account))
 }
 
 /** A session the workspace refused, met on arriving at its sign-in: whose it is and where it may go. */
@@ -106,14 +113,16 @@ export interface RefusedSession {
  * what it may open instead, even nothing, so the page says so instead of a form that would refuse it
  * again (D239). Signed out, a guest, or any failure: `null`, the form.
  */
-export async function refusedSession(currentSlug: string, workspace: Workspace): Promise<RefusedSession | null> {
+export async function refusedSession(currentSlug: string, workspace: WorkspaceDoor): Promise<RefusedSession | null> {
   try {
     const account = await sessionAccount()
     if (!account || account.isAnonymous) return null
+    // A platform team account opens the console after all (its check failed for another reason): the form.
+    if (workspace === 'console' && isPlatformTeam(account)) return null
     const cafes = await fetchAccountCafes()
     // It opens here after all (the workspace's check failed for another reason): the form.
-    if (cafes.some(cafe => cafe.slug === currentSlug && cafe.workspaces.includes(workspace))) return null
-    const access = otherAccess(cafes, currentSlug, workspace, isPlatformTeam(account))
+    if (cafes.some(cafe => cafe.slug === currentSlug && cafe.workspaces.some(w => w === workspace))) return null
+    const access = otherAccess(cafes, currentSlug, workspace, workspace !== 'console' && isPlatformTeam(account))
     return { email: account.email, access: access ?? NO_OTHER_ACCESS }
   }
   catch {
