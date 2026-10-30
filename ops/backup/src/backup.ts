@@ -132,17 +132,37 @@ async function callExport(fetchFn: typeof fetch, env: BackupEnv, body: Record<st
   return answer.result
 }
 
-/** Starts an export of the whole database; answers the bookmark it's taken at. */
-export async function startExport(fetchFn: typeof fetch, env: BackupEnv): Promise<string> {
-  const result = await callExport(fetchFn, env, { output_format: 'polling' })
-  if (!result.at_bookmark) throw new Error('D1\'s export gave no bookmark')
-  return result.at_bookmark
+/** How often the export is asked again while D1 writes it. */
+const EXPORT_POLL_MS = 1_000
+/** The longest one export may take before the step gives up and its retry starts a new one. */
+const EXPORT_MAX_MS = 5 * 60_000
+
+export interface ExportOptions {
+  /** Waits between two questions; a stand-in in tests. */
+  wait?: (ms: number) => Promise<void>
+  now?: () => number
 }
 
-/** The export's download address once it's ready, `null` while D1 is still writing it. */
-export async function exportedDump(fetchFn: typeof fetch, env: BackupEnv, bookmark: string): Promise<string | null> {
-  const result = await callExport(fetchFn, env, { output_format: 'polling', current_bookmark: bookmark })
-  return result.signed_url ?? null
+/**
+ * Exports the whole database and answers the dump's download address. As `wrangler d1 export`
+ * does, it starts the export and asks again at once, each time with the newest bookmark, until D1
+ * gives the address: D1 forgets an export nobody keeps asking about ("Not currently exporting
+ * anything", D228), so the polling can't be spread over a step's retries, and a retry starts a new
+ * export instead.
+ */
+export async function exportDump(fetchFn: typeof fetch, env: BackupEnv, options: ExportOptions = {}): Promise<string> {
+  const wait = options.wait ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)))
+  const now = options.now ?? Date.now
+  const deadline = now() + EXPORT_MAX_MS
+  let result = await callExport(fetchFn, env, { output_format: 'polling' })
+  for (;;) {
+    if (result.signed_url) return result.signed_url
+    if (result.status === 'error') throw new Error('D1\'s export failed without a reason')
+    if (!result.at_bookmark) throw new Error('D1\'s export gave no bookmark')
+    if (now() >= deadline) throw new Error(`D1's export wasn't ready after ${EXPORT_MAX_MS / 60_000} minutes`)
+    await wait(EXPORT_POLL_MS)
+    result = await callExport(fetchFn, env, { output_format: 'polling', current_bookmark: result.at_bookmark })
+  }
 }
 
 /** Reads a stream to its end, refusing more than `max` bytes. */

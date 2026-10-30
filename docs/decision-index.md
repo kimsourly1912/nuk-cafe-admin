@@ -257,3 +257,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D225](decisions.md#d225-nightly-encrypted-backups-in-a-separate-cloudflare-account-2026-10-29) | Nightly encrypted backups in a separate Cloudflare account, 2026-10-29 |
 | [D226](decisions.md#d226-page-addresses-match-their-exact-case-2026-10-29) | Page addresses match their exact case, 2026-10-29 |
 | [D227](decisions.md#d227-a-backup-failure-no-retry-can-fix-reports-at-once-2026-10-30) | A backup failure no retry can fix reports at once, 2026-10-30 |
+| [D228](decisions.md#d228-the-backup-polls-d1s-export-without-pause-with-the-newest-bookmark-2026-10-30) | The backup polls D1's export without pause, with the newest bookmark, 2026-10-30 |

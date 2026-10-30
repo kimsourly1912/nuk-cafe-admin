@@ -2,7 +2,7 @@ import { WorkflowEntrypoint } from 'cloudflare:workers'
 import type { WorkflowEvent, WorkflowStep } from 'cloudflare:workers'
 import { NonRetryableError } from 'cloudflare:workflows'
 import { AwsClient } from 'aws4fetch'
-import { backupKeys, cambodiaDate, downloadDump, encryptDump, exportedDump, failureText, missingSettings, PermanentError, sendOps, startExport, storeCopy, successText } from './backup'
+import { backupKeys, cambodiaDate, downloadDump, encryptDump, exportDump, failureText, missingSettings, PermanentError, sendOps, storeCopy, successText } from './backup'
 import type { BackupEnv, StoredBackup } from './backup'
 
 /**
@@ -44,14 +44,12 @@ export class BackupWorkflow extends WorkflowEntrypoint<BackupEnv, Params> {
       const missing = missingSettings(env)
       if (missing.length > 0) throw new Error(`Settings not set: ${missing.join(', ')}`)
 
-      const bookmark = await step.do('start the export', { retries: { limit: 5, delay: '30 seconds', backoff: 'exponential' }, timeout: '2 minutes' }, () => failFastOnPermanent(() => startExport(fetch, env)))
-
-      // One step from download to upload: the dump never leaves memory unencrypted, and a step
-      // can't hand a dump to the next one (its result is kept, and limited to 1 MiB). A retry
-      // repeats it all and keeps whatever copy was already stored.
-      backup = await step.do('store the encrypted copy', { retries: { limit: 10, delay: '30 seconds', backoff: 'exponential' }, timeout: '10 minutes' }, () => failFastOnPermanent(async () => {
-        const url = await exportedDump(fetch, env, bookmark)
-        if (!url) throw new Error('The export isn\'t ready yet')
+      // One step from the export to the upload: D1 keeps an export only while it's asked about
+      // (D228), and the dump never leaves memory unencrypted; a step can't hand a dump to the next
+      // one (its result is kept, and limited to 1 MiB). A retry starts a new export and keeps
+      // whatever copy was already stored.
+      backup = await step.do('export, encrypt and store', { retries: { limit: 10, delay: '30 seconds', backoff: 'exponential' }, timeout: '10 minutes' }, () => failFastOnPermanent(async () => {
+        const url = await exportDump(fetch, env)
         const encrypted = await encryptDump(await downloadDump(fetch, url), env.BACKUP_AGE_RECIPIENTS!)
         const r2 = new AwsClient({ accessKeyId: env.BACKUP_R2_ACCESS_KEY_ID!, secretAccessKey: env.BACKUP_R2_SECRET_ACCESS_KEY!, service: 's3', region: 'auto' })
         const keys = backupKeys(startedAt)
