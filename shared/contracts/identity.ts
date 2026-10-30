@@ -20,6 +20,8 @@ export interface AdminSession {
    * `PASSWORD_CHANGE_REQUIRED` until it's changed, and the app shows the change-password page.
    */
   mustChangePassword: boolean
+  /** Two-step sign-in is on for this account (D188, D242): the account security page's state. */
+  twoFactorEnabled: boolean
   /** During a support visit: when the visit and the owner's permission end. */
   support?: { tenantId: string, visitExpiresAt: string, grantExpiresAt: string }
   /** Platform support is allowed until then (the owners' banner); `null` when it isn't. */
@@ -64,6 +66,8 @@ export interface CounterSession {
   email: string
   name: string
   mustChangePassword: boolean
+  /** Two-step sign-in is on for this account (D242): the account security page's state. */
+  twoFactorEnabled: boolean
   /**
    * `permissions`: what the session may do at that branch, as `resource:action` (`table:manage`); an
    * owner's are all of them (D240). For the app to show only what opens: the server checks every

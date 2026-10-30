@@ -286,6 +286,12 @@ describe('list', () => {
     expect(page).toMatchObject({ total: 3, totalPages: 1 })
   })
 
+  it('shows each person\'s two-step sign-in status (D242)', async () => {
+    await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.email, 'vanna@example.com'))
+    const page = await listStaff(db, actor, PAGE)
+    expect(page.items.map(s => [s.name, s.twoFactorEnabled])).toEqual([['Owner', false], ['Sophea', false], ['Vanna', true]])
+  })
+
   it('filters by role, branch and search, and paginates', async () => {
     expect((await listStaff(db, actor, { ...PAGE, role: 'admin' })).items.map(s => s.name)).toEqual(['Owner'])
     expect((await listStaff(db, actor, { ...PAGE, role: 'manager' })).items.map(s => s.name)).toEqual(['Vanna'])
@@ -500,6 +506,13 @@ describe('tenants', () => {
     expect(await failure(resetStaffPassword(db, theirs, ours.staff.id, version))).toEqual({ status: 404, code: 'NOT_FOUND' })
     // Nothing changed here.
     expect(await getStaffMember(db, actor, ours.staff.id)).toEqual(ours.staff)
+  })
+
+  it('shows two-step status for the cafe\'s own people only (D242)', async () => {
+    const ours = await createStaff(db, actor, staffInput())
+    await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, ours.staff.id))
+    expect((await listStaff(db, theirs, PAGE)).items.map(s => [s.email, s.twoFactorEnabled])).toEqual([['their-owner@example.com', false]])
+    expect((await listStaff(db, actor, PAGE)).items.find(s => s.id === ours.staff.id)?.twoFactorEnabled).toBe(true)
   })
 
   it('searches only the cafe\'s own people, also with a search past 50 bytes', async () => {

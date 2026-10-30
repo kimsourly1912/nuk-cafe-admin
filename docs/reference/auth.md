@@ -30,6 +30,7 @@ const { user, isLoggedIn, logout } = useAuth()
 | `fetchSession()` | `() => Promise<SessionUser \| null>` | Calls `GET /api/admin/me`. **Never throws.** Signed out (401) or signed in without admin access (403) makes the user `null`; a network failure keeps the current state (except on the very first check). |
 | `login(credentials)` | `({ email, password }) => Promise<PasswordStep>` | Signs in with Better Auth (`POST /api/auth/sign-in/email`, which sets the cookie), then reads `/api/admin/me`. Answers `'two-factor'` without reading it when the account has two-step sign-in (D188): the page shows `<TwoFactorCodeForm>`, then calls `finishLogin()`, which does the rest. **Throws `ApiError`**: "Incorrect email or password." (`kind: 'business'`), rate limiting, `WorkspaceRefusedError` (a 403 for an account that works somewhere: this cafe's counter or another cafe; or whose check of that failed, with `access: null` and Try again, Q4; it stays signed in and the page shows [`<WorkspaceRefused>`](./ui-helpers.md#your-cafes-and-the-switcher), D239, D241), or "This account doesn't have access to the admin app." (a 403 for an account that works nowhere, a customer, which is then signed out again). |
 | `changePassword(current, next)` | `(string, string) => Promise<void>` | Better Auth `POST /api/auth/change-password` with `revokeOtherSessions: true`, then reads the session again (the server has cleared a temporary-password flag). **Throws `ApiError`**: "Your current password is incorrect." (`INVALID_PASSWORD`), Better Auth's `PASSWORD_COMPROMISED` / length messages. |
+| `twoFactorChanged(enabled)` | `(boolean) => void` | Two-step sign-in was just turned on or off on the account security page (D242): sets `user.twoFactorEnabled` now and reads the session again in the background (the server swapped this browser's session). `useCounterSession` and `usePlatformSession` have the same. |
 | `requirePasswordChange()` | `() => void` | Marks the session as needing a new password (used by `apiFetch` on 403 `PASSWORD_CHANGE_REQUIRED`); `plugins/api.ts` then navigates to the change-password page. |
 | `logout()` | `() => Promise<void>` | If a form has unsaved changes, asks first and does nothing on "Keep editing" ([`useLeaveGuard`](./forms.md#useleaveguard)). Then `POST /api/auth/sign-out`, clears the user and goes to `/admin/login` (no `?redirect=`), even if the request fails. Cleared **first**: the login page sends a signed-in admin to the dashboard, which would load after the sign-out; `signingOut` keeps the session-lost redirect in `plugins/api.ts` out of it. The counter's and the console's `signOut()` do the same. Other open tabs go to login too (`plugins/auth-sync.client.ts`). e2e `session.test.ts`, `counter.test.ts`, `platform.test.ts` ("goes straight to …"). |
 | `signingOut` | `Readonly<Ref<boolean>>` | True while `logout()` is on its way to the login page. Read only by `plugins/api.ts`. |
@@ -38,7 +39,7 @@ const { user, isLoggedIn, logout } = useAuth()
 
 ```ts
 type SessionUser = AdminSession
-// { userId, email, name, role: 'admin', permissions: string[], mustChangePassword } from #shared/contracts/identity
+// { userId, email, name, role: 'admin', permissions: string[], mustChangePassword, twoFactorEnabled } from #shared/contracts/identity
 ```
 
 Only the cafe's **owners** may use the admin app (D52): branch managers and staff get "No access to the admin app" at login, stay signed in, and are offered Open the counter (D239). `permissions` lists every `resource:action` the session's role grants (an owner's from `server/features/identity/identity.permissions.ts`, a support visit's from `supportPermissionList()`, D193).
@@ -89,6 +90,27 @@ definePageMeta({ public: true, layout: 'auth' })
 | Breached new password | Better Auth refuses (`PASSWORD_COMPROMISED`): "This password is too common. Choose another one." on the New password field (focused), the checklist's breach line red until the password is changed, no alert (D210) | e2e `password.test.ts` (mocked answer); real-server (step 1.2) |
 
 ---
+
+## Account security: two-step sign-in (D242)
+
+`/c/<slug>/admin/account-security` and `/c/<slug>/counter/account-security` (layout `auth`, in each user menu under Change password) turn two-step sign-in on and off for the signed-in account. Optional for owners and staff, never required at the counter (account security plan, Q1). Every session opens it (no `permission`: it touches only one's own account).
+
+- `<AccountSecurity :enabled :email :back-to :back-label :changed>` (root): the status (**On**/**Off**), **Turn on** (shows `<TwoFactorSetupFrame>` with Cancel), **Turn off** (`<TwoFactorTurnOffModal>`), Back. The feature pages (`auth/AccountSecurityPage.vue`, `counter/CounterAccountSecurityPage.vue`) pass their session's `user.twoFactorEnabled` and `twoFactorChanged`.
+- `<TwoFactorSetupFrame :intro :email :done>` (root): the whole setup task frame, shared with the console's `/platform/two-factor`: password → QR code and setup key → backup codes (shown once; Copy, Download; the tick) → a code from the app. Success toasts "Two-step sign-in is on / You were signed out on your other devices." and then awaits `done`; slot `secondary` (`{ saving }`) is the footer's second button (console: Log out; account security: Cancel).
+- `<TwoFactorTurnOffModal>` (root): the password, then `useMutation` `account:two-factor-off` (invalidates `staff`); a wrong password beside the field, any other refusal in the modal; `close(true)` once off.
+- `useTwoFactorSettings()` (root): `start(password)` (`/two-factor/enable`, `method: 'totp'`), `confirm(code)` (`/two-factor/verify-totp`), `turnOff(password)` (`/two-factor/disable`). `INVALID_PASSWORD` becomes "Your password is incorrect." on the `password` field. Better Auth 1.7.7: enabling again while on is `TOTP_ALREADY_ENABLED`; turning off needs the password and swaps this browser's session.
+
+| Case | Behavior | Tested |
+|---|---|---|
+| Turn on (owner, cashier) | Password, codes, code; toast; status On; the other sessions end (server after-hook) | e2e `two-factor.test.ts` (mocked); server `identity.two-factor.test.ts` |
+| Next sign-in | The password step asks for the code; no session until it | e2e `two-factor.test.ts` (real server, seeded `twoStepCashier`); server |
+| Cancel during setup | Back to Off; Better Auth keeps an unverified secret that the next Turn on replaces; nothing is on | e2e |
+| Turn off | Password; wrong one beside the field; then Off, and the password alone signs in | e2e (mocked, real server); server |
+| A super admin turns it off (e.g. one who owns a cafe) | 403 `TWO_FACTOR_REQUIRED` from a before-hook in `identity.auth.ts` ("The platform team must keep two-step sign-in on."), shown in the modal; still on | server (guard removed: fails); e2e |
+| Another person signs in from another tab mid-setup | The page body is keyed by `userId`: it starts over, no key or codes left | e2e `two-factor.test.ts` |
+| Support visit (D193) | `useMutation` sends nothing in a read-only session ("Nothing was changed") | by `useMutation` |
+| Lost authenticator and backup codes | Not handled in the app yet: open question QA1 | |
+| Staff | The **Two-step** column (On / Off), the phone row's "Two-step sign-in"; own cafe's people only | e2e `staff.test.ts`; server `staff.service.test.ts` (two cafes) |
 
 ## How the session works
 

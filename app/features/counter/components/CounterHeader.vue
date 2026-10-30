@@ -73,6 +73,7 @@ const menu = computed<DropdownMenuItem[][]>(() => [
     ...((user.value?.branches.length ?? 0) > 1 ? [{ label: 'Another branch', icon: 'i-lucide-store', to: counterHomePath(slug.value) }] : []),
     ...(elsewhere.value ? [{ label: 'Another cafe', icon: 'i-lucide-arrow-left-right', to: CAFES_PATH }] : []),
     { label: 'Change password', icon: 'i-lucide-key-round', to: counterChangePasswordPath(slug.value) },
+    { label: 'Account security', icon: 'i-lucide-shield-check', to: tenantPath('/counter/account-security') },
     { label: muted.value ? 'Turn on the new-order sound' : 'Mute the new-order sound', icon: muted.value ? 'i-lucide-bell' : 'i-lucide-bell-off', onSelect: () => { muted.value = !muted.value } },
     // Not inside the installed app itself (D203).
     ...(installApp.installed.value ? [] : [{ label: 'Install app', icon: 'i-lucide-monitor-smartphone', onSelect: () => void installApp.install(name.value ? `${name.value} Counter` : 'Counter') }]),

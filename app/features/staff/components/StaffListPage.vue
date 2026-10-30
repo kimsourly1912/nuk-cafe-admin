@@ -48,6 +48,8 @@ const branchItems = computed(() => [
 const columns: TableColumn<StaffMember>[] = [
   { accessorKey: 'name', header: 'Name' },
   { id: 'access', header: 'Access' },
+  // Shown, not changed: each person turns it on for themselves (account security, D242).
+  { id: 'twoFactor', header: 'Two-step' },
   { id: 'actions', meta: { class: { td: 'text-right' } } },
 ]
 
@@ -191,6 +193,16 @@ usePageShortcuts({ n: () => openForm() })
             </span>
             <span class="max-w-full truncate text-muted">{{ member.email }}</span>
             <span class="max-w-full text-muted">{{ accessLine(member) }}</span>
+            <span
+              v-if="member.twoFactorEnabled"
+              class="flex items-center gap-1 text-muted"
+            >
+              <UIcon
+                name="i-lucide-shield-check"
+                class="size-4 shrink-0 text-success"
+              />
+              Two-step sign-in
+            </span>
             <UBadge
               v-if="member.mustChangePassword"
               color="warning"
@@ -273,6 +285,21 @@ usePageShortcuts({ n: () => openForm() })
               Temporary password
             </UBadge>
           </div>
+        </template>
+
+        <template #twoFactor-cell="{ row }">
+          <UBadge
+            v-if="row.original.twoFactorEnabled"
+            color="success"
+            variant="subtle"
+            icon="i-lucide-shield-check"
+          >
+            On
+          </UBadge>
+          <span
+            v-else
+            class="text-muted"
+          >Off</span>
         </template>
 
         <template #actions-cell="{ row }">

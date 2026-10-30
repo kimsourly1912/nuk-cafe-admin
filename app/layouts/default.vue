@@ -78,6 +78,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
   // Not inside the installed app itself (D203).
   ...(installApp.installed.value ? [] : [{ label: 'Install app', icon: 'i-lucide-monitor-smartphone', onSelect: () => void installApp.install(cafe.name.value ? `${cafe.name.value} Admin` : 'Admin') }]),
   { label: 'Change password', icon: 'i-lucide-key-round', to: tenantPath('/admin/change-password') },
+  { label: 'Account security', icon: 'i-lucide-shield-check', to: tenantPath('/admin/account-security') },
   { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
   { type: 'separator' },
   { label: 'Log out', icon: 'i-lucide-log-out', onSelect: () => logout() },

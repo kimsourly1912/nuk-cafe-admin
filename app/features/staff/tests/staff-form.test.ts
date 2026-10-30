@@ -11,6 +11,7 @@ const member: StaffMember = {
   admin: false,
   memberships: [{ branchId: 'b2', branchName: 'Riverside', role: 'staff' }, { branchId: 'b1', branchName: 'Airport', role: 'manager' }],
   mustChangePassword: true,
+  twoFactorEnabled: false,
   version: 1790000000000,
   createdAt: '2026-09-27T00:00:00.000Z',
 }

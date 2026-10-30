@@ -1,4 +1,4 @@
-import { createAuthMiddleware, isAPIError } from 'better-auth/api'
+import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from 'better-auth/api'
 import { admin, anonymous, haveIBeenPwned, organization, twoFactor } from 'better-auth/plugins'
 import type { ServerAuthConfig } from '@nuxtjs/better-auth/config'
 import type { Db } from '#server/utils/batch'
@@ -35,6 +35,9 @@ async function queueMail(db: Db, kind: string, to: string, url: string) {
  * succeeded: the token is gone by then.
  */
 const resetFor = new WeakMap<object, string>()
+
+/** Super admins must keep two-step sign-in (D188): `authorizePlatform` checks it, this keeps it on. */
+const isSuperAdmin = (role: unknown) => typeof role === 'string' && role.split(',').some(r => r.trim() === 'superadmin')
 
 /**
  * Our Better Auth configuration (docs/server/security.md, D45, D47). `server/auth.config.ts` passes
@@ -94,6 +97,11 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
             secret: humanCheck.secret,
             siteUrl,
           })
+        }
+        // Owners and staff may turn two-step sign-in off on their account security page (D242);
+        // a super admin may not.
+        if (ctx.path === '/two-factor/disable' && isSuperAdmin((await getSessionFromCtx(ctx))?.user.role)) {
+          throw new APIError('FORBIDDEN', { code: 'TWO_FACTOR_REQUIRED', message: 'The platform team must keep two-step sign-in on.' })
         }
         if (ctx.path !== '/reset-password' || typeof ctx.body?.token !== 'string') return
         const verification = await ctx.context.internalAdapter.findVerificationValue(`reset-password:${ctx.body.token}`)

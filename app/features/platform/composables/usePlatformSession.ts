@@ -161,31 +161,11 @@ export function usePlatformSession() {
   }
 
   /**
-   * Starts setting up two-step sign-in (D188): checks the password, and answers what the app needs
-   * (the `otpauth://` link for the QR code) and the backup codes, shown once. Nothing is on until
-   * `confirmTwoFactor` gets a right code. Throws `ApiError`.
+   * Two-step sign-in was just turned on or off (`<TwoFactorSetupFrame>`, D188, D242): the server
+   * gave this browser a new session. Reflects it now, confirms in the background.
    */
-  async function startTwoFactor(password: string): Promise<{ totpURI: string, backupCodes: string[] }> {
-    try {
-      return await authFetch<{ totpURI: string, backupCodes: string[] }>('/two-factor/enable', { password, method: 'totp' })
-    }
-    catch (error) {
-      const apiError = ApiError.from(error)
-      if (apiError.code === 'INVALID_PASSWORD') {
-        throw new ApiError('Your password is incorrect.', { kind: 'business', status: apiError.status, code: apiError.code, cause: error })
-      }
-      throw apiError
-    }
-  }
-
-  /**
-   * A code from the app turns two-step sign-in on. The server signs the account out on its other
-   * devices and gives this one a new session. Throws `ApiError`.
-   */
-  async function confirmTwoFactor(code: string) {
-    await verifyTwoFactorCode('app', code)
-    // Reflect it now, confirm in the background.
-    if (user.value && !user.value.twoFactorEnabled) user.value = { ...user.value, twoFactorEnabled: true }
+  function twoFactorChanged(enabled: boolean) {
+    if (user.value && user.value.twoFactorEnabled !== enabled) user.value = { ...user.value, twoFactorEnabled: enabled }
     void fetchSession()
   }
 
@@ -205,8 +185,7 @@ export function usePlatformSession() {
     fetchSession,
     signIn,
     finishSignIn,
-    startTwoFactor,
-    confirmTwoFactor,
+    twoFactorChanged,
     changePassword,
     signOut,
     requirePasswordChange,

@@ -70,6 +70,7 @@ export const ADMIN: AdminSession = {
     'loyalty:adjust', 'settings:manage', 'report:read', 'report:export', 'audit:read', 'assistant:use', 'support:grant',
   ],
   mustChangePassword: false,
+  twoFactorEnabled: false,
   supportAllowedUntil: null,
 }
 
@@ -115,6 +116,7 @@ export function staffOf(id: string, name: string, overrides: Partial<StaffMember
     admin: false,
     memberships: [{ branchId: RIVERSIDE.id, branchName: RIVERSIDE.name, role: 'staff' }],
     mustChangePassword: false,
+    twoFactorEnabled: false,
     version: 1790000000000,
     createdAt: STAMP,
     ...overrides,

@@ -84,6 +84,8 @@ export interface StaffMember {
   memberships: StaffMembership[]
   /** Still on the temporary password. */
   mustChangePassword: boolean
+  /** Signs in with a code from an authenticator app too (two-step sign-in, D242). Shown, never changed here. */
+  twoFactorEnabled: boolean
   /** Send back on update/disable; changes whenever the account changes. */
   version: number
   createdAt: string

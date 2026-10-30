@@ -13,6 +13,7 @@ const SOPHEA = staffOf('staff-2', 'Sophea')
 const VANNA = staffOf('staff-3', 'Vanna', {
   memberships: [{ branchId: AIRPORT.id, branchName: AIRPORT.name, role: 'manager' }],
   mustChangePassword: true,
+  twoFactorEnabled: true,
 })
 
 async function open(rows: StaffMember[] = [SELF, SOPHEA, VANNA], extra: Parameters<typeof mockApi>[1] = {}, width?: number) {
@@ -47,6 +48,13 @@ describe('staff list', () => {
     await row(page, 'Vanna').getByText('Manager at Airport').waitFor()
     await row(page, 'Vanna').getByText('Temporary password').waitFor()
     expect(await row(page, 'Sophea').getByText('Temporary password').count()).toBe(0)
+  })
+
+  it('shows who signs in with two-step sign-in (D242)', async () => {
+    const { page } = await open()
+    await page.getByRole('columnheader', { name: 'Two-step' }).waitFor()
+    await row(page, 'Vanna').getByText('On', { exact: true }).waitFor()
+    await row(page, 'Sophea').getByText('Off', { exact: true }).waitFor()
   })
 
   it('filters by role and branch through the URL and the API', async () => {
@@ -250,6 +258,8 @@ describe('staff on a phone', () => {
       await list.getByRole('button', { name: 'Vanna', exact: true }).waitFor()
       await list.getByText('Manager at Airport').waitFor()
       await list.getByText('Temporary password').waitFor()
+      // Two-step sign-in only where it's on.
+      expect(await list.getByText('Two-step sign-in').count()).toBe(1)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
       // The toolbar wraps instead of scrolling: search on its own row, the filters below
       const toolbar = page.getByPlaceholder('Search name or email…').locator('xpath=ancestor::*[contains(@class, "border-b")][1]')
