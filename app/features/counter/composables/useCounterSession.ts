@@ -1,4 +1,5 @@
 import type { CounterSession } from '#shared/contracts/identity'
+import type { OtherAccess } from '~/utils/account-cafes'
 
 /**
  * The counter workspace (`/counter/**`, step 6.3b, D102). Branch staff, managers and admins sign
@@ -97,8 +98,15 @@ export function useCounterSession() {
     catch (error) {
       const apiError = ApiError.from(error)
       if (!isNoAccess(apiError)) throw apiError
-      // Works at another cafe (D239): stays signed in, and the page says where.
-      const access = await accessInstead(splitTenantUrl(window.location.pathname)?.slug ?? '', 'counter')
+      // Works at another cafe (D239), or the check failed (Q4): stays signed in, and the page says
+      // where, or offers Try again. Only an account known to work nowhere is signed out (Q1).
+      let access: OtherAccess | null
+      try {
+        access = await accessInstead(splitTenantUrl(window.location.pathname)?.slug ?? '', 'counter')
+      }
+      catch {
+        throw new WorkspaceRefusedError(null, error)
+      }
       if (access) throw new WorkspaceRefusedError(access, error)
       await authFetch('/sign-out').catch(() => {})
       throw new ApiError(NO_COUNTER_ACCESS, { kind: 'forbidden', status: 403, code: apiError.code, cause: error })

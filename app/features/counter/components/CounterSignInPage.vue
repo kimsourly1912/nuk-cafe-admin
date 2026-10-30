@@ -67,6 +67,29 @@ async function showError(e: unknown) {
   errorAlert.value?.focus()
 }
 
+/** Try again after a check that failed (Q4); see the admin's `LoginPage`. */
+const retrying = ref(false)
+async function onRetry() {
+  retrying.value = true
+  try {
+    await finishSignIn()
+    await navigateTo(counterRedirectTarget(route.query.redirect, slug.value))
+  }
+  catch (e) {
+    if (e instanceof WorkspaceRefusedError) {
+      if (refused.value) refused.value = { ...refused.value, access: e.access }
+      return
+    }
+    if (ApiError.from(e).kind === 'forbidden') {
+      refused.value = null
+      await showError(e)
+    }
+  }
+  finally {
+    retrying.value = false
+  }
+}
+
 /** Use another account: signed out, the form again for the next person. */
 function onSignedOut() {
   refused.value = null
@@ -108,7 +131,9 @@ async function restart(message?: string) {
     :access="refused.access"
     :email="refused.email"
     :title="`${name} Counter`"
+    :retrying="retrying"
     @signed-out="onSignedOut"
+    @retry="onRetry"
   />
 
   <TaskFrame v-else>

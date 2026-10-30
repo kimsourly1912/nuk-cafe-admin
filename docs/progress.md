@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## The cafe doors: the owner's answers and step 1 (D241, 2026-10-30)
+Branch `ccr-e2b7ccc7-mhvnj3`, restarted from `main` after PR #226. The owner answered the [workspace access plan](plans/workspace-access.md)'s Q1–Q5 with every recommendation and left the rest to us. [Decision](decisions.md#d241-workspace-access-questions-answered-a-refused-sign-in-keeps-a-failed-check-and-offers-the-safe-page-2026-10-30).
+
+- **Change:** `accessInstead` throws when it can't check; `finishLogin`/`finishSignIn` keep the session with `WorkspaceRefusedError(null)`; `<WorkspaceRefused>` gets Try again (`retry`, `retrying`) and Back to <cafe>'s menu as the primary action with nothing else to offer; both sign-in pages run their whole check again on Try again; `useRefusedSession` reads the session again when the tab is back in view. No server change.
+- **Evidence (2026-10-30, cloud Linux, pnpm 12.15.0, Playwright's Chromium):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 157 files, 2160 passed, 1 skipped; e2e `your-cafes`, `two-factor`, `auth`, `cafes`, `counter` 77/77 (2 workers). Guards: the Q4 catch turned into "nothing" failed the Q4 test; the visibility read removed failed the E3 test. Not run: the full e2e suite (only the two sign-ins and their shared panel changed; CI runs it).
+- **Next:** plan step 2, the console door with the same panel (Q2).
+
 ## Workspace pages name their permission (D240, 2026-10-30)
 Branch `ccr-e2b7ccc7-mhvnj3`. Found by the owner: pages aren't limited by role. Steps A (admin) and B (counter) of the [workspace access plan](plans/workspace-access.md#7-steps). [Decision](decisions.md#d240-workspace-pages-name-their-permission-the-app-refuses-a-page-before-loading-it-2026-10-30).
 

@@ -1,4 +1,5 @@
 import type { AdminSession } from '#shared/contracts/identity'
+import type { OtherAccess } from '~/utils/account-cafes'
 
 /** The signed-in admin, kept in state. The session itself is an HttpOnly cookie. */
 export type SessionUser = AdminSession
@@ -98,8 +99,9 @@ export function useAuth() {
 
   /**
    * Signs in with Better Auth, then checks admin access. An account without it that works somewhere
-   * (branch staff, another cafe's owner) stays signed in: `WorkspaceRefusedError` (D239). Any other
-   * (a customer) is signed out again and gets a clear error. Throws `ApiError`.
+   * (branch staff, another cafe's owner), or whose check failed, stays signed in:
+   * `WorkspaceRefusedError` (D239, Q4). Any other (a customer) is signed out again and gets a clear
+   * error. Throws `ApiError`.
    */
   async function login(credentials: Credentials): Promise<PasswordStep> {
     let step: PasswordStep
@@ -130,7 +132,15 @@ export function useAuth() {
       const apiError = ApiError.from(error)
       if (!isNoAccess(apiError)) throw apiError
       // Works somewhere (this cafe's counter, another cafe, D239): stays signed in, and the page says where.
-      const access = await accessInstead(splitTenantUrl(window.location.pathname)?.slug ?? '', 'admin')
+      // The check failed (the network): stays signed in too, with Try again (Q4); only an account
+      // known to work nowhere (a customer) is signed out again (Q1).
+      let access: OtherAccess | null
+      try {
+        access = await accessInstead(splitTenantUrl(window.location.pathname)?.slug ?? '', 'admin')
+      }
+      catch {
+        throw new WorkspaceRefusedError(null, error)
+      }
       if (access) throw new WorkspaceRefusedError(access, error)
       await authFetch('/sign-out').catch(() => {})
       throw new ApiError(NO_ADMIN_ACCESS, { kind: 'forbidden', status: 403, code: apiError.code, cause: error })
