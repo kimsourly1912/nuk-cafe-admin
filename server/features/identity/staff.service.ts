@@ -34,6 +34,7 @@ function toStaffMember(row: AccountRow, owners: Set<string>, memberships: Member
     admin: owners.has(row.id),
     memberships: memberships.filter(m => m.userId === row.id).map(m => ({ branchId: m.branchId, branchName: m.branchName, role: m.role as BranchRoleName })),
     mustChangePassword: Boolean(row.mustChangePassword),
+    twoFactorEnabled: Boolean(row.twoFactorEnabled),
     version: row.updatedAt.getTime(),
     createdAt: toIso(row.createdAt),
   }

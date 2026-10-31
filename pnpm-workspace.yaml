@@ -9,9 +9,6 @@ overrides:
   undici@7: ^7.29.1
   tinypool@2: ^2.1.2
   sharp@0.35: ^0.35.5
-# node-forge GHSA-86w9-cpqp-85rv (high, no patched version): only through listhen, the dev server's
-# HTTPS listener (nuxt > @nuxt/cli, nitropack > listhen); not in the Worker build. Remove once
-# node-forge ships a fix (D54).
 # braces GHSA-vfj7-8cjw-p6xm (high, stack exhaustion on deeply nested patterns; no patched version):
 # only through the build's file globbing (nitropack > globby > fast-glob > micromatch), fed our own
 # patterns; not in the built server. Remove once braces ships a fix (D54).
@@ -27,5 +24,4 @@ auditConfig:
     - GHSA-g4wm-2vf7-vfgr
     - GHSA-858h-whjf-mvg5
     - GHSA-v5rq-49vh-5v5c
-    - GHSA-86w9-cpqp-85rv
     - GHSA-vfj7-8cjw-p6xm

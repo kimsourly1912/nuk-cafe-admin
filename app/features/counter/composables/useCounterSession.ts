@@ -157,6 +157,15 @@ export function useCounterSession() {
     }
   }
 
+  /**
+   * Two-step sign-in was just turned on or off on the account security page (D242): the server gave
+   * this browser a new session. Reflects it now, confirms in the background.
+   */
+  function twoFactorChanged(enabled: boolean) {
+    if (user.value && user.value.twoFactorEnabled !== enabled) user.value = { ...user.value, twoFactorEnabled: enabled }
+    void fetchSession()
+  }
+
   /** A route answered PASSWORD_CHANGE_REQUIRED: the middleware moves to the change-password page. */
   function requirePasswordChange() {
     if (user.value && !user.value.mustChangePassword) user.value = { ...user.value, mustChangePassword: true }
@@ -184,6 +193,7 @@ export function useCounterSession() {
     changePassword,
     signOut,
     requirePasswordChange,
+    twoFactorChanged,
     clearSession: () => setUser(null),
   }
 }

@@ -10,7 +10,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | API/server architecture and integrity | D39–D45, D52, D71, D116, D194, D200; version, idempotency, guard, audit, repository, shared owner conditions, token queues, connect codes, joined snapshots and JSON-bound sets, archive and permanent delete |
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173, D202–D204; installable app, PWA, manifest, service worker |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166 |
-| Tenancy and permissions | D134–D146, D186–D193, D239–D241; organization, tenant, branch, platform console |
+| Tenancy and permissions | D134–D146, D186–D193, D239–D242; organization, tenant, branch, platform console |
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109 |
@@ -271,3 +271,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D239](decisions.md#d239-a-sign-in-refused-at-a-workspace-shows-where-the-account-may-go-2026-10-30) | A sign-in refused at a workspace shows where the account may go, 2026-10-30 |
 | [D240](decisions.md#d240-workspace-pages-name-their-permission-the-app-refuses-a-page-before-loading-it-2026-10-30) | Workspace pages name their permission; the app refuses a page before loading it, 2026-10-30 |
 | [D241](decisions.md#d241-workspace-access-questions-answered-a-refused-sign-in-keeps-a-failed-check-and-offers-the-safe-page-2026-10-30) | Workspace access questions answered; a refused sign-in keeps a failed check and offers the safe page, 2026-10-30 |
+| [D242](decisions.md#d242-owners-and-staff-turn-two-step-sign-in-on-themselves-the-setup-is-shared-with-the-console-2026-10-30) | Owners and staff turn two-step sign-in on themselves; the setup is shared with the console, 2026-10-30 |

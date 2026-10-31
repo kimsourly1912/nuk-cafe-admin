@@ -37,6 +37,7 @@ const SUPPORT_SESSION: AdminSession = {
   // A support visit's, as the server grants them (supportPermissionList).
   permissions: ['menu:read', 'branch:read', 'branch:update', 'staff:read', 'report:read', 'settings:manage', 'audit:read'],
   mustChangePassword: false,
+  twoFactorEnabled: true,
   support: { tenantId: 'cafe-1', visitExpiresAt: '2026-10-19T06:10:00.000Z', grantExpiresAt: UNTIL },
   supportAllowedUntil: UNTIL,
 }

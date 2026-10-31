@@ -1,12 +1,13 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Db } from '#server/utils/batch'
-import { session, user } from '#server/db/tables'
+import { member, session, user } from '#server/db/tables'
+import { newId } from '#server/utils/ids'
 import { createTestAuth, sessionHeaders, signIn } from '#server/tests/support/auth'
 import type { TestAuth } from '#server/tests/support/auth'
-import { createTestDb, ensureTenant } from '#server/tests/support/db'
+import { addBranchStaff, createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
-import { authorizePlatform, platformSession } from '#server/features/identity/identity.service'
+import { adminSession, authorizePlatform, counterSession, platformSession } from '#server/features/identity/identity.service'
 import type { SessionUser } from '#server/features/identity/identity.types'
 
 // Two-step sign-in (P1b, D188) with Better Auth's `twoFactor` plugin on a test database: setting it
@@ -42,16 +43,16 @@ async function enable(headers: Headers, password = PASSWORD) {
 }
 
 /** Sets up 2FA from a signed-in session; returns the new session's headers, the secret and the backup codes. */
-async function setUp(headers: Headers) {
-  const { totpURI, backupCodes } = await enable(headers)
+async function setUp(headers: Headers, password = PASSWORD) {
+  const { totpURI, backupCodes } = await enable(headers, password)
   const secret = secretOf(totpURI)
   const { headers: swapped } = await auth.api.verifyTOTP({ headers, body: { code: await codeFor(secret) }, returnHeaders: true })
   return { headers: sessionHeaders(swapped), secret, backupCodes }
 }
 
 /** The password step of a sign-in: no session yet, a challenge cookie to send with the code. */
-async function passwordStep() {
-  const { headers, response } = await auth.api.signInEmail({ body: { email: EMAIL, password: PASSWORD }, returnHeaders: true })
+async function passwordStep(email = EMAIL, password = PASSWORD) {
+  const { headers, response } = await auth.api.signInEmail({ body: { email, password }, returnHeaders: true })
   return { response: response as { twoFactorRedirect?: boolean }, challenge: sessionHeaders(headers) }
 }
 
@@ -110,5 +111,52 @@ describe('signing in with two-step sign-in', () => {
   it('a code without the password step first is refused', async () => {
     const { secret } = await setUp(await signIn(auth, EMAIL, PASSWORD))
     await expect(auth.api.verifyTOTP({ headers: new Headers(), body: { code: await codeFor(secret) } })).rejects.toThrow()
+  })
+})
+
+describe('owners and staff (account security page, D242)', () => {
+  const OWNER = 'owner@example.com'
+  const CASHIER = 'cashier@example.com'
+  const OTHER_PASSWORD = 'a cafe account password'
+
+  beforeEach(async () => {
+    const owner = await auth.api.signUpEmail({ body: { email: OWNER, password: OTHER_PASSWORD, name: 'Owner' } })
+    await db.insert(member).values({ id: newId(), organizationId: TEST_TENANT, userId: owner.user.id, role: 'owner', createdAt: new Date() })
+    const cashier = await auth.api.signUpEmail({ body: { email: CASHIER, password: OTHER_PASSWORD, name: 'Cashier' } })
+    const branchId = newId()
+    await insertBranch(db, { id: branchId, name: 'Riverside', timezone: 'Asia/Phnom_Penh' })
+    await addBranchStaff(db, branchId, cashier.user.id, 'staff')
+  })
+
+  it('an owner turns it on: the admin session says so, and the next sign-in asks for a code', async () => {
+    const before = await signIn(auth, OWNER, OTHER_PASSWORD)
+    expect((await adminSession(db, await userOf(before), TEST_TENANT)).twoFactorEnabled).toBe(false)
+    const { headers, secret } = await setUp(before, OTHER_PASSWORD)
+    expect((await adminSession(db, await userOf(headers), TEST_TENANT)).twoFactorEnabled).toBe(true)
+
+    const { response, challenge } = await passwordStep(OWNER, OTHER_PASSWORD)
+    expect(response.twoFactorRedirect).toBe(true)
+    expect(await userOf(challenge)).toBeUndefined()
+    const { headers: signedIn } = await auth.api.verifyTOTP({ headers: challenge, body: { code: await codeFor(secret) }, returnHeaders: true })
+    expect(await adminSession(db, await userOf(sessionHeaders(signedIn)), TEST_TENANT)).toMatchObject({ role: 'admin', twoFactorEnabled: true })
+  })
+
+  it('a cashier turns it on, and off again with the password: then the password alone signs in', async () => {
+    const { headers } = await setUp(await signIn(auth, CASHIER, OTHER_PASSWORD), OTHER_PASSWORD)
+    expect((await counterSession(db, await userOf(headers), TEST_TENANT)).twoFactorEnabled).toBe(true)
+
+    await expect(auth.api.disableTwoFactor({ headers, body: { password: 'not the password' } })).rejects.toThrow()
+    expect((await userOf(headers))?.twoFactorEnabled).toBe(true)
+    // Turning it off swaps this browser's session for a new one.
+    const { headers: swapped } = await auth.api.disableTwoFactor({ headers, body: { password: OTHER_PASSWORD }, returnHeaders: true })
+    expect((await counterSession(db, await userOf(sessionHeaders(swapped)), TEST_TENANT)).twoFactorEnabled).toBe(false)
+    expect((await passwordStep(CASHIER, OTHER_PASSWORD)).response.twoFactorRedirect).toBeUndefined()
+  })
+
+  it('a super admin can\'t turn it off: the console requires it (D188)', async () => {
+    const { headers } = await setUp(await signIn(auth, EMAIL, PASSWORD))
+    // Better Auth's own error: the code is on its body.
+    await expect(auth.api.disableTwoFactor({ headers, body: { password: PASSWORD } })).rejects.toMatchObject({ statusCode: 403, body: { code: 'TWO_FACTOR_REQUIRED' } })
+    expect((await userOf(headers))?.twoFactorEnabled).toBe(true)
   })
 })

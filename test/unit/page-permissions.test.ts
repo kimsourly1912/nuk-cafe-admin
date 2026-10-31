@@ -12,8 +12,11 @@ import { allowedNavigation } from '../../app/utils/navigation-access'
 
 const ADMIN_PAGES = join(import.meta.dirname, '../../app/pages/c/[slug]/admin')
 const BRANCH_PAGES = join(import.meta.dirname, '../../app/pages/c/[slug]/counter/[branchId]')
-/** Pages every admin session opens: sign-in, the temporary-password page, Overview, and a redirect. */
-const OPEN_TO_EVERY_SESSION = ['login.vue', 'change-password.vue', 'index.vue', 'reports/index.vue']
+/**
+ * Pages every admin session opens: sign-in, the temporary-password page, one's own account security
+ * (D242), Overview, and a redirect.
+ */
+const OPEN_TO_EVERY_SESSION = ['login.vue', 'change-password.vue', 'account-security.vue', 'index.vue', 'reports/index.vue']
 
 function pageFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap(entry =>

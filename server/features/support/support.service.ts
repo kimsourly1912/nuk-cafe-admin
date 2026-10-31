@@ -233,6 +233,7 @@ export async function supportSession(db: Db, request: SupportRequest, now = new 
     role: 'support',
     permissions: supportPermissionList(),
     mustChangePassword: false,
+    twoFactorEnabled: Boolean(request.user!.twoFactorEnabled),
     support: { tenantId: request.tenantId, visitExpiresAt: toIso(visit.expiresAt), grantExpiresAt: toIso(visit.grantExpiresAt) },
     supportAllowedUntil: toIso(visit.grantExpiresAt),
   }

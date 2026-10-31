@@ -1,6 +1,6 @@
 # Account security: two-step sign-in, session length, re-confirming dangerous actions
 
-Status: **planned, answers given (2026-10-30).** Nothing built yet. Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
+Status: **step 1 built (D242, 2026-10-30, in review)**; steps 2–5 not started. The owner waived the mockup round for step 1. Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
 
 ## 1. Where we are (checked in the code, 2026-10-30)
 
@@ -31,7 +31,9 @@ Status: **planned, answers given (2026-10-30).** Nothing built yet. Follows the 
 
 ## 4. Steps (one branch and PR each, in this order)
 
-### Step 1: two-step sign-in for owners and staff
+### Step 1: two-step sign-in for owners and staff ✅ (D242, in review)
+
+Built as planned: the page per workspace, the shared `<TwoFactorSetupFrame>` (the console's setup moved to the root), the Staff column. Also: a super admin can't turn it off (server). Deferred: the lost-authenticator recovery below (QA1).
 
 - An **account security** page for a signed-in owner or staff member, reachable from the admin's and the counter's user menus: turn two-step sign-in on (password → QR code and key → backup codes → a code from the app), and off (password). Reuse the console's setup flow (`PlatformTwoFactorPage.vue`, `usePlatformSession.startTwoFactor` / `confirmTwoFactor`, D188) rather than a copy: move the shared part to a root building block if both need it (app-architecture: promote when a second feature needs it).
 - Setting it up already ends the account's other sessions (`identity.auth.ts` after-hook on `/two-factor/verify-totp`): keep that, and say so on the page.
@@ -69,7 +71,7 @@ Status: **planned, answers given (2026-10-30).** Nothing built yet. Follows the 
 
 ## 5. Edge cases to keep in mind
 
-- **Lost authenticator:** backup codes at setup; an owner without them is helped by the platform team (console: reset password and two-step, audited). Decide in step 1 whether the console can turn two-step off for an account.
+- **Lost authenticator:** backup codes at setup; an owner without them is helped by the platform team. Whether the console can turn two-step off for an account is open question **QA1** (recommended: yes, the platform team only, audited, signing the account out everywhere). Cafe owners can't do it for their staff: one account can work at several cafes.
 - **Shared counter tablet with two-step:** counter staff aren't required to use it (Q1), but a staff member who turned it on enters a code at the counter like anywhere else.
 - **Support visits (D193):** a super admin on a visit never re-confirms cafe actions: visits are read-only already.
 - **Session cut at 1 day mid-shift:** the 401 already sends the person to sign-in with `?redirect=`; unsaved form drafts are kept by the existing draft rules. Check the counter's queue recovers cleanly after re-sign-in.

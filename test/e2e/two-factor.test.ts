@@ -1,13 +1,18 @@
+import { createHmac } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, inject, it } from 'vitest'
+import type { AdminSession, CounterSession } from '../../shared/contracts/identity'
 import type { PlatformSession } from '../../shared/contracts/tenants'
 import type { MockHandler } from './support/mock-api'
-import { ADMIN, deferred, failures, MockFailure, mockApi, NUK_PROFILE, setupE2e, SIGNED_OUT, toast } from './support/mock-api'
+import { ADMIN, deferred, failures, gotoHydrated, MockFailure, mockApi, NUK_PROFILE, openTabs, setupE2e, SIGNED_OUT, toast } from './support/mock-api'
+import { asNewVisitor } from './support/client-address'
 
 await setupE2e()
+
+const seed = inject('shopSeed')
 
 // Two-step sign-in (P1b, D188) in the browser, against a mocked API: the platform console sends a
 // super admin without it to its setup, and every sign-in (the console, a cafe's admin, its counter
@@ -250,6 +255,222 @@ describe('signing in with two-step sign-in', () => {
   })
 })
 
+/** The authenticator app's code now for a setup key (base32, as the page shows it): RFC 6238, 6 digits, 30 s. */
+function totpCode(key: string, now = Date.now()) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  const bits = [...key.replace(/[\s=]/g, '')].map(c => alphabet.indexOf(c).toString(2).padStart(5, '0')).join('')
+  const secret = Buffer.from(bits.match(/.{8}/g)!.map(byte => Number.parseInt(byte, 2)))
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(now / 30_000)))
+  const hash = createHmac('sha1', secret).update(counter).digest()
+  const offset = hash[hash.length - 1]! & 0xf
+  return String((hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0')
+}
+
+/** Account security's setup, from Turn on to Turn on two-step sign-in, with this code. */
+async function setUpOnAccountSecurity(page: Page, code: (page: Page) => Promise<string>) {
+  await page.getByRole('button', { name: 'Turn on', exact: true }).click()
+  await page.getByLabel('Your password').fill('a long password')
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByTestId('backup-codes').waitFor()
+  await page.getByRole('checkbox', { name: 'I\'ve saved my backup codes' }).click()
+  await enterSetupCode(page, await code(page))
+  await page.getByRole('button', { name: 'Turn on two-step sign-in' }).click()
+}
+
+describe('account security for owners and staff (D242)', () => {
+  it('an owner turns it on from the admin\'s user menu, and off with the password', async () => {
+    let session: AdminSession = ADMIN
+    const sent: { path: string, body: unknown }[] = []
+    const { page } = await open('/c/nuk/admin', {
+      'GET /admin/me': () => session,
+      'POST /auth/two-factor/enable': ({ body }) => {
+        sent.push({ path: 'enable', body })
+        return { totpURI: TOTP_URI, backupCodes: BACKUP_CODES }
+      },
+      'POST /auth/two-factor/verify-totp': ({ body }) => {
+        sent.push({ path: 'verify', body })
+        session = { ...ADMIN, twoFactorEnabled: true }
+        return { token: 't', user: { id: ADMIN.userId } }
+      },
+      'POST /auth/two-factor/disable': ({ body }) => {
+        sent.push({ path: 'disable', body })
+        if ((body as { password: string }).password !== 'a long password') throw new MockFailure(400, 'INVALID_PASSWORD', 'Invalid password')
+        session = ADMIN
+        return { status: true }
+      },
+    })
+    await page.getByRole('button', { name: 'alice', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Account security' }).click()
+    await page.getByRole('heading', { name: 'Account security' }).waitFor()
+    expect(await page.getByTestId('two-factor-status').textContent()).toBe('Off')
+
+    await setUpOnAccountSecurity(page, async () => '123456')
+    await toast(page, 'Two-step sign-in is on').waitFor()
+    await page.getByText('You were signed out on your other devices.', { exact: true }).waitFor()
+    await expect.poll(() => page.getByTestId('two-factor-status').textContent()).toBe('On')
+
+    await page.getByRole('button', { name: 'Turn off' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Turn off two-step sign-in?' })
+    await dialog.getByLabel('Your password').fill('wrong')
+    await dialog.getByRole('button', { name: 'Turn off' }).click()
+    await dialog.getByText('Your password is incorrect.').first().waitFor()
+    await dialog.getByLabel('Your password').fill('a long password')
+    await dialog.getByRole('button', { name: 'Turn off' }).click()
+    await toast(page, 'Two-step sign-in is off').waitFor()
+    await dialog.waitFor({ state: 'hidden' })
+    await expect.poll(() => page.getByTestId('two-factor-status').textContent()).toBe('Off')
+    expect(sent).toEqual([
+      { path: 'enable', body: { password: 'a long password', method: 'totp' } },
+      { path: 'verify', body: { code: '123456' } },
+      { path: 'disable', body: { password: 'wrong' } },
+      { path: 'disable', body: { password: 'a long password' } },
+    ])
+
+    await page.getByRole('link', { name: 'Back' }).click()
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/c/nuk/admin')
+  })
+
+  it('Cancel leaves the setup without turning it on', async () => {
+    const { page, api } = await open('/c/nuk/admin/account-security', {
+      'POST /auth/two-factor/enable': () => ({ totpURI: TOTP_URI, backupCodes: BACKUP_CODES }),
+    })
+    await page.getByRole('button', { name: 'Turn on', exact: true }).click()
+    await page.getByLabel('Your password').fill('a long password')
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByTestId('backup-codes').waitFor()
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('heading', { name: 'Account security' }).waitFor()
+    expect(await page.getByTestId('two-factor-status').textContent()).toBe('Off')
+    expect(api.calls.filter(c => c.startsWith('POST /auth/two-factor'))).toEqual(['POST /auth/two-factor/enable'])
+  })
+
+  it('another person signing in elsewhere never sees this one\'s setup key or backup codes', async () => {
+    const [aliceTab, bobTab] = await openTabs(2)
+    let who: 'alice' | 'bob' = 'alice'
+    const BOB: AdminSession = { ...ADMIN, userId: 'user-bob', email: 'bob@nukcafe.test', name: 'bob' }
+    await mockApi(aliceTab!, {
+      'GET /admin/me': () => (who === 'alice' ? ADMIN : BOB),
+      'POST /auth/two-factor/enable': () => ({ totpURI: TOTP_URI, backupCodes: BACKUP_CODES }),
+    })
+    await mockApi(bobTab!, {
+      'GET /admin/me': () => {
+        if (who === 'alice') throw failures.unauthorized()
+        return BOB
+      },
+      'POST /auth/sign-in/email': () => {
+        who = 'bob'
+        return { token: 't' }
+      },
+    })
+    await gotoHydrated(aliceTab!, '/c/nuk/admin/account-security')
+    await aliceTab!.getByRole('button', { name: 'Turn on', exact: true }).click()
+    await aliceTab!.getByLabel('Your password').fill('a long password')
+    await aliceTab!.getByRole('button', { name: 'Continue' }).click()
+    await aliceTab!.getByTestId('backup-codes').waitFor()
+
+    await gotoHydrated(bobTab!, '/c/nuk/admin/login')
+    await bobTab!.getByLabel('Email').fill(BOB.email)
+    await bobTab!.getByLabel('Password', { exact: true }).fill('secret')
+    await bobTab!.getByRole('button', { name: 'Sign in' }).click()
+    // Alice's tab follows the new identity: the page starts again, without her codes.
+    await aliceTab!.getByRole('button', { name: 'Turn on', exact: true }).waitFor({ timeout: 10_000 })
+    expect(await aliceTab!.getByTestId('backup-codes').count()).toBe(0)
+    expect(await aliceTab!.getByText('aaaa1-bbbb2').count()).toBe(0)
+  })
+
+  it('a cashier turns it on and off at the counter', async () => {
+    const cashier: CounterSession = { userId: 'cashier-1', email: 'cashier@example.com', name: 'Sophea', mustChangePassword: false, twoFactorEnabled: false, branches: [{ id: 'branch-1', name: 'Riverside', role: 'staff', permissions: [] }] }
+    let session = cashier
+    const { page } = await open('/c/nuk/counter/account-security', {
+      'GET /counter/me': () => session,
+      'POST /auth/two-factor/enable': () => ({ totpURI: TOTP_URI, backupCodes: BACKUP_CODES }),
+      'POST /auth/two-factor/verify-totp': () => {
+        session = { ...cashier, twoFactorEnabled: true }
+        return { token: 't', user: { id: cashier.userId } }
+      },
+      'POST /auth/two-factor/disable': () => {
+        session = cashier
+        return { status: true }
+      },
+    })
+    await page.getByRole('heading', { name: 'Account security' }).waitFor()
+    await setUpOnAccountSecurity(page, async () => '123456')
+    await toast(page, 'Two-step sign-in is on').waitFor()
+    await expect.poll(() => page.getByTestId('two-factor-status').textContent()).toBe('On')
+    await page.getByRole('button', { name: 'Turn off' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Turn off two-step sign-in?' })
+    await dialog.getByLabel('Your password').fill('a long password')
+    await dialog.getByRole('button', { name: 'Turn off' }).click()
+    await toast(page, 'Two-step sign-in is off').waitFor()
+    await expect.poll(() => page.getByTestId('two-factor-status').textContent()).toBe('Off')
+    expect(await page.getByRole('link', { name: 'Back' }).getAttribute('href')).toBe('/c/nuk/counter')
+  })
+
+  it('a super admin who owns a cafe is told the console needs it on', async () => {
+    const { page } = await open('/c/nuk/admin/account-security', {
+      'GET /admin/me': () => ({ ...ADMIN, twoFactorEnabled: true }),
+      'POST /auth/two-factor/disable': () => {
+        throw new MockFailure(403, 'TWO_FACTOR_REQUIRED', 'The platform team must keep two-step sign-in on.')
+      },
+    })
+    await page.getByRole('button', { name: 'Turn off' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Turn off two-step sign-in?' })
+    await dialog.getByLabel('Your password').fill('a long password')
+    await dialog.getByRole('button', { name: 'Turn off' }).click()
+    await dialog.getByRole('alert').getByText('The platform team must keep two-step sign-in on.').waitFor()
+    expect(await page.getByTestId('two-factor-status').textContent()).toBe('On')
+  })
+
+  it('on the real server: a cashier turns it on at the counter, and the next sign-in asks for the code', async () => {
+    const { email, password: ownPassword } = seed.customers.twoStepCashier
+    const page = await createPage()
+    page.setDefaultTimeout(10_000)
+    await asNewVisitor(page)
+    const signInAtCounter = async () => {
+      await page.waitForURL(u => u.pathname === '/c/nuk/counter/sign-in')
+      await page.getByLabel('Email').fill(email)
+      await page.getByLabel('Password', { exact: true }).fill(ownPassword)
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    }
+    await page.goto(url('/c/nuk/counter'), { waitUntil: 'hydration' })
+    await signInAtCounter()
+    await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}`)
+    await page.getByRole('button', { name: /, account:/ }).click()
+    await page.getByRole('menuitem', { name: 'Account security' }).click()
+    await page.getByRole('heading', { name: 'Account security' }).waitFor()
+
+    await page.getByRole('button', { name: 'Turn on', exact: true }).click()
+    await page.getByLabel('Your password').fill(ownPassword)
+    await page.getByRole('button', { name: 'Continue' }).click()
+    await page.getByRole('button', { name: 'Can\'t scan? Use a setup key' }).click()
+    const key = (await page.getByTestId('two-factor-key').textContent())!.trim()
+    await page.getByRole('checkbox', { name: 'I\'ve saved my backup codes' }).click()
+    await enterSetupCode(page, totpCode(key))
+    await page.getByRole('button', { name: 'Turn on two-step sign-in' }).click()
+    await toast(page, 'Two-step sign-in is on').waitFor()
+    await expect.poll(() => page.getByTestId('two-factor-status').textContent()).toBe('On')
+
+    // Signed out, the password alone no longer opens the counter.
+    await page.goto(url(`/c/nuk/counter/${seed.openBranchId}`), { waitUntil: 'hydration' })
+    await page.getByRole('button', { name: /, account:/ }).click()
+    await page.getByRole('menuitem', { name: 'Sign out' }).click()
+    await signInAtCounter()
+    await page.locator(APP_CODE_CELL).first().waitFor()
+    expect(new URL(page.url()).pathname).toBe('/c/nuk/counter/sign-in')
+    await enterAppCode(page, totpCode(key))
+    await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}`)
+
+    // Off again with the password: the account is as seeded.
+    await page.goto(url('/c/nuk/counter/account-security'), { waitUntil: 'hydration' })
+    await page.getByRole('button', { name: 'Turn off' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Turn off two-step sign-in?' })
+    await dialog.getByLabel('Your password').fill(ownPassword)
+    await dialog.getByRole('button', { name: 'Turn off' }).click()
+    await expect.poll(() => page.getByTestId('two-factor-status').textContent()).toBe('Off')
+  })
+})
+
 describe('accessibility', () => {
   const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
   async function axeFindings(page: Page): Promise<string[]> {
@@ -293,6 +514,21 @@ describe('accessibility', () => {
       await code.page.evaluate(() => document.documentElement.classList.add('dark'))
       await code.page.waitForTimeout(500)
       expect(await axeFindings(code.page)).toEqual([])
+    }
+  })
+
+  it('account security meets the rules in light and dark, wide and narrow, on and off', async () => {
+    for (const width of [1440, 390]) {
+      for (const enabled of [false, true]) {
+        const { page } = await open('/c/nuk/admin/account-security', { 'GET /admin/me': () => ({ ...ADMIN, twoFactorEnabled: enabled }) })
+        await page.setViewportSize({ width, height: 844 })
+        await page.getByTestId('two-factor-status').waitFor()
+        expect(await axeFindings(page)).toEqual([])
+        await page.evaluate(() => document.documentElement.classList.add('dark'))
+        await page.waitForTimeout(500)
+        expect(await axeFindings(page)).toEqual([])
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      }
     }
   })
 })

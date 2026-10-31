@@ -45,7 +45,7 @@ export interface ShopSeed {
    * files run in any order, so no other file may rely on its state (`apiUnverified` is
    * shop-orders-api's, since shop-account verifies `unverified`).
    */
-  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'followerD' | 'a11yGuest' | 'tableGuest' | 'cafeHopper' | 'beanOwner' | 'guestLinker' | 'budgetShopper' | 'leaver' | 'temporaryStaff' | 'manager' | 'popupManager', SeedCustomer>
+  customers: Record<'verified' | 'unverified' | 'reset' | 'shopperA' | 'shopperB' | 'shopperC' | 'shopperUnverified' | 'apiUnverified' | 'counterCustomer' | 'counterShopperA' | 'counterShopperB' | 'cashier' | 'tracker' | 'followerA' | 'followerB' | 'followerC' | 'followerD' | 'a11yGuest' | 'tableGuest' | 'cafeHopper' | 'beanOwner' | 'guestLinker' | 'budgetShopper' | 'leaver' | 'temporaryStaff' | 'manager' | 'popupManager' | 'twoStepCashier', SeedCustomer>
   /** A second table at Riverside (T02), for tests that archive it. */
   spareTableToken: string
   /**
@@ -105,6 +105,9 @@ const CUSTOMERS: ShopSeed['customers'] = {
   manager: { name: 'Mony Chan', email: 'mony@example.com', password: 'long-enough-password-45' },
   // Not a customer: Zulu Pop-up's manager, who pauses its online orders (pause-orders.test.ts, D199).
   popupManager: { name: 'Rina Sok', email: 'rina@example.com', password: 'long-enough-password-46' },
+  // Not a customer: staff at Riverside who turns two-step sign-in on and off (two-factor.test.ts,
+  // D242): no other test may sign in as them.
+  twoStepCashier: { name: 'Bunna Phan', email: 'bunna@example.com', password: 'long-enough-password-48' },
 }
 
 async function addBranch(db: Db, name: string, tenantId = TEST_TENANT) {
@@ -181,13 +184,14 @@ export async function seedShop(dbFile: string, qrSecret: string, bakong: { encry
   // without the breached-password lookup (an external API). Their queued emails carry test links.
   const auth = createTestAuth(db)
   for (const customer of Object.values(CUSTOMERS)) await auth.api.signUpEmail({ body: customer })
-  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.followerD, CUSTOMERS.a11yGuest, CUSTOMERS.tableGuest, CUSTOMERS.cafeHopper, CUSTOMERS.guestLinker, CUSTOMERS.cashier, CUSTOMERS.beanOwner, CUSTOMERS.budgetShopper, CUSTOMERS.leaver, CUSTOMERS.manager, CUSTOMERS.popupManager]) {
+  for (const customer of [CUSTOMERS.verified, CUSTOMERS.reset, CUSTOMERS.shopperA, CUSTOMERS.shopperB, CUSTOMERS.shopperC, CUSTOMERS.counterCustomer, CUSTOMERS.counterShopperA, CUSTOMERS.counterShopperB, CUSTOMERS.tracker, CUSTOMERS.followerA, CUSTOMERS.followerB, CUSTOMERS.followerC, CUSTOMERS.followerD, CUSTOMERS.a11yGuest, CUSTOMERS.tableGuest, CUSTOMERS.cafeHopper, CUSTOMERS.guestLinker, CUSTOMERS.cashier, CUSTOMERS.beanOwner, CUSTOMERS.budgetShopper, CUSTOMERS.leaver, CUSTOMERS.manager, CUSTOMERS.popupManager, CUSTOMERS.twoStepCashier]) {
     await db.update(user).set({ emailVerified: true }).where(eq(user.email, customer.email))
   }
   // An existing account keeps its password when it's given branch access (D49).
   await createStaff(db, actor, { name: CUSTOMERS.cashier.name, email: CUSTOMERS.cashier.email, admin: false, memberships: [{ branchId: openBranchId, role: 'staff' }] })
   await createStaff(db, actor, { name: CUSTOMERS.popupManager.name, email: CUSTOMERS.popupManager.email, admin: false, memberships: [{ branchId: popupBranchId, role: 'manager' }] })
   await createStaff(db, actor, { name: CUSTOMERS.manager.name, email: CUSTOMERS.manager.email, admin: false, memberships: [{ branchId: openBranchId, role: 'manager' }] })
+  await createStaff(db, actor, { name: CUSTOMERS.twoStepCashier.name, email: CUSTOMERS.twoStepCashier.email, admin: false, memberships: [{ branchId: openBranchId, role: 'staff' }] })
   await createStaff(db, actor, { name: CUSTOMERS.temporaryStaff.name, email: CUSTOMERS.temporaryStaff.email, admin: false, memberships: [{ branchId: openBranchId, role: 'staff' }] })
   await db.update(user).set({ mustChangePassword: true }).where(eq(user.email, CUSTOMERS.temporaryStaff.email))
   // Brown Bean's owner too (the platform console adds an existing account so, D142).

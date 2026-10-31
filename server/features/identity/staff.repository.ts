@@ -17,6 +17,7 @@ export interface AccountRow {
   email: string
   role: string | null
   mustChangePassword: boolean | null
+  twoFactorEnabled: boolean | null
   updatedAt: Date
   createdAt: Date
 }
@@ -51,6 +52,7 @@ const accountColumns = {
   email: user.email,
   role: user.role,
   mustChangePassword: user.mustChangePassword,
+  twoFactorEnabled: user.twoFactorEnabled,
   updatedAt: user.updatedAt,
   createdAt: user.createdAt,
 }

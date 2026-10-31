@@ -146,6 +146,7 @@ export async function adminSession(db: Db, user: SessionUser | null | undefined,
     role: 'admin',
     permissions: grantedPermissions('owner'),
     mustChangePassword: Boolean(user.mustChangePassword),
+    twoFactorEnabled: Boolean(user.twoFactorEnabled),
     supportAllowedUntil: null,
   }
 }
@@ -170,6 +171,7 @@ export async function counterSession(db: Db, user: SessionUser | null | undefine
     email: user.email ?? '',
     name: user.name ?? '',
     mustChangePassword: Boolean(user.mustChangePassword),
+    twoFactorEnabled: Boolean(user.twoFactorEnabled),
     branches,
   }
 }

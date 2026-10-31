@@ -40,6 +40,10 @@ From their row's menu choose **Reset password**, then confirm. A **Temporary pas
 
 You can't reset your own password here: use **Change password** in your account menu.
 
+## Two-step sign-in
+
+The **Two-step** column shows who signs in with a code from an authenticator app as well as their password (**On**) and who doesn't (**Off**); on a phone, a shield with "Two-step sign-in" under the person's access. Each person turns it on or off for themselves, from **Account security** in their user menu (in this portal or in the counter app). You can't turn it on or off for someone else here.
+
 ## Common problems
 
 - **"The cafe needs at least one admin. Make someone else an admin first."**: you can't remove or disable the last admin.
