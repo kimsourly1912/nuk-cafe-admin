@@ -68,6 +68,37 @@ Add the partial `orders_active_queue_idx (tenant_id, branch_id, placed_at, id)` 
 
 Compare actual local D1 plans and rows read with the old predicate, both before and after ANALYZE; statistics can already make the old query cheaper. Do not infer a universal speedup from a cold-plan fixture. Require boundary/tenant/freshness tests, mutation checks, standard checks and full CI browser tests before review. Verify staging migration and representative D1/route measurements after merge. Production's manual gate remains.
 
+## Owner security checklist (D244)
+
+Settings outside the repository, done by the owner in the Cloudflare and GitHub dashboards. All free on the current plans; no new subscription (D215). Record each one's date and what was read back in [progress](../progress.md#security-hardening-ci-pinning-no-v-html-staging-access-d244-2026-10-31); an unchecked box is not done. Dashboard paths move: follow Cloudflare's current docs if a name differs.
+
+**Accounts (first: whoever holds these holds everything below, the backups included)**
+
+- [ ] Cloudflare, GitHub and the email inbox behind them: two-step sign-in with an **authenticator app**, not SMS; unique passwords in the password manager; nobody else invited.
+- [ ] The CI Cloudflare token (`CLOUDFLARE_API_TOKEN`): still limited to this account and the `angder.app` zone; give it an expiry date and a reminder to replace it before then.
+- [ ] GitHub → Settings → Actions → General → **Workflow permissions: Read repository contents**. (Each workflow already asks for read only, D244; this covers a workflow that forgets.)
+- [ ] GitHub → Settings → Rules (or Branches): `main` requires a pull request and the CI checks; the `production` environment keeps its required reviewer.
+
+**Domain**
+
+- [x] DNSSEC: *pending* on 2026-10-26 (D215); reported working by the owner on 2026-10-30 ([progress](../progress.md#owner-checks-smoke-test-release-hand-check-dnssec-production-setup-2026-10-30)).
+- [ ] Security Center → **Security Insights**: read the findings. Don't turn on Bot Fight Mode because of one (D214).
+- [ ] Security → WAF → Managed rules: the **Cloudflare Free Managed Ruleset** is on. Afterwards a deploy's smoke check and Telegram still pass (the D214 lesson).
+- [ ] Email: `_dmarc.angder.app` moves to `p=quarantine`, then `p=reject` once the DMARC reports show only Cloudflare Email Sending's mail passing. A **CAA** record allowing only the certificate authorities Cloudflare uses for the zone (SSL/TLS → Edge Certificates shows them).
+- [ ] Page Shield / client-side security (Security → Client-side security, if the Free plan lists it): turn on script monitoring. Needs verification on this plan; skip if it isn't offered.
+
+**Staging behind Cloudflare Access** (Zero Trust free for up to 50 users)
+
+Order matters: the CI change (D244) must be merged first, or the next staging deploy's smoke check fails.
+
+1. Zero Trust → Access → Service credentials → **Service Tokens** → Create: name `github-staging-smoke`, a duration with a reminder. Copy the Client ID and Secret (shown once).
+2. GitHub → Settings → Environments → `staging` → secrets `STAGING_ACCESS_CLIENT_ID` and `STAGING_ACCESS_CLIENT_SECRET`.
+3. Zero Trust → Access → Applications → **Self-hosted**, domain `staging.angder.app`, policies: **Allow** the owner's (and testers') emails; **Service Auth** with the service token.
+4. Two more self-hosted applications, `staging.angder.app/api/webhooks/telegram` and `staging.angder.app/api/health`, each with a **Bypass / Everyone** policy: Telegram and a manual Platform health run on staging can't sign in.
+5. Check: merge or re-run a staging deploy (its smoke check passes); a private browser window at `https://staging.angder.app` asks for Access; Telegram to `@nuk_cafe_bot` still answers.
+
+To undo: delete the three Access applications (staging is public again); the secrets can stay.
+
 ## Verification and rollback
 
 1. Read the current zone and Worker settings, preserving nonsecret before/after evidence.

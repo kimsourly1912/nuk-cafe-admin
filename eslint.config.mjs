@@ -58,6 +58,15 @@ const DATE_FORMAT_RESTRICTIONS = [
 ].map(selector => ({ selector, message: DATE_FORMAT_MESSAGE }))
 
 export default withNuxt(
+  // No `v-html` (D244): Vue escapes text, `v-html` doesn't, and the CSP still allows inline scripts
+  // (security.md → Request protection), so one `v-html` of a cafe's or customer's text is stored XSS.
+  // The default only warns, which CI doesn't fail on.
+  {
+    files: ['**/*.vue'],
+    rules: {
+      'vue/no-v-html': 'error',
+    },
+  },
   {
     files: ['app/**/*.{ts,vue}'],
     ignores: ['app/pages/**'],

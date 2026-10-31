@@ -14,7 +14,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109 |
-| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212, D214; production, domains, email, bot protection |
+| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212, D214, D244; production, CI pinning, domains, email, bot protection |
 | Documentation loading | D167 |
 
 ## Entries by ID
@@ -273,3 +273,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D241](decisions.md#d241-workspace-access-questions-answered-a-refused-sign-in-keeps-a-failed-check-and-offers-the-safe-page-2026-10-30) | Workspace access questions answered; a refused sign-in keeps a failed check and offers the safe page, 2026-10-30 |
 | [D242](decisions.md#d242-owners-and-staff-turn-two-step-sign-in-on-themselves-the-setup-is-shared-with-the-console-2026-10-30) | Owners and staff turn two-step sign-in on themselves; the setup is shared with the console, 2026-10-30 |
 | [D243](decisions.md#d243-a-workspace-session-lasts-a-day-from-sign-in-your-devices-2026-10-31) | A workspace session lasts a day from sign-in; Your devices, 2026-10-31 |
+| [D244](decisions.md#d244-security-hardening-pinned-ci-actions-no-v-html-staging-behind-access-health-stays-unlimited-2026-10-31) | Security hardening: pinned CI actions, no `v-html`, staging behind Access; health stays unlimited, 2026-10-31 |

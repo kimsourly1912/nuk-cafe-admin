@@ -18,6 +18,11 @@ on:
         type: boolean
         default: false
 
+# The workflow token can only read the repository: no job writes to GitHub. Deploys use the
+# Cloudflare token instead, so a compromised step can't also push code or change releases (D244).
+permissions:
+  contents: read
+
 # A newer push to a pull request cancels its older run. On main, never: the deploy starts right
 # away (D133), and a cancel between the migrations and the Worker would leave staging half done.
 concurrency:
@@ -31,7 +36,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Read the project's Node.js requirement
         id: node
@@ -42,7 +47,7 @@ jobs:
       # Installs pnpm (packageManager) and Node (engines.node) from package.json, then `pnpm install`
       # (frozen lockfile in CI) with the store cached. Pinned by commit: v2.0.0.
       - name: Install pnpm, Node.js and dependencies
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
         with:
           runtime: node@${{ steps.node.outputs.version }}
           cache: true
@@ -74,7 +79,7 @@ jobs:
       matrix:
         shard: [1, 2, 3]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Read the project's Node.js requirement
         id: node
@@ -83,7 +88,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Install pnpm, Node.js and dependencies
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
         with:
           runtime: node@${{ steps.node.outputs.version }}
           cache: true
@@ -111,8 +116,12 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       STAGING_URL: https://staging.angder.app
+      # A Cloudflare Access service token, once staging is behind Access (D244): the smoke check
+      # sends it so Access lets it through. Unset, nothing is sent (staging is public).
+      STAGING_ACCESS_CLIENT_ID: ${{ secrets.STAGING_ACCESS_CLIENT_ID }}
+      STAGING_ACCESS_CLIENT_SECRET: ${{ secrets.STAGING_ACCESS_CLIENT_SECRET }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Read the project's Node.js requirement
         id: node
@@ -121,7 +130,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Install pnpm, Node.js and dependencies
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
         with:
           runtime: node@${{ steps.node.outputs.version }}
           cache: true
@@ -144,21 +153,26 @@ jobs:
       - name: Smoke check
         run: |
           set -eu
+          access=()
+          if [ -n "$STAGING_ACCESS_CLIENT_ID" ]; then
+            access=(--header "CF-Access-Client-Id: $STAGING_ACCESS_CLIENT_ID" --header "CF-Access-Client-Secret: $STAGING_ACCESS_CLIENT_SECRET")
+          fi
+          get() { curl "${access[@]}" "$@"; }
           # The database answers through the Worker.
-          curl --fail --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors "$STAGING_URL/api/health" | grep -q '"ok"'
+          get --fail --silent --show-error --retry 5 --retry-delay 3 --retry-all-errors "$STAGING_URL/api/health" | grep -q '"ok"'
           # NUK Cafe answers at its address `nuk` (D141, 0029); if not, show what the Worker said.
-          code="$(curl --silent --output cafe.json --write-out '%{http_code}' "$STAGING_URL/api/c/nuk/public/branches")"
+          code="$(get --silent --output cafe.json --write-out '%{http_code}' "$STAGING_URL/api/c/nuk/public/branches")"
           if [ "$code" != 200 ]; then echo "GET /api/c/nuk/public/branches answered $code:"; cat cafe.json; echo; exit 1; fi
           # The app shell loads at NUK Cafe's address (D141), with the security headers.
-          curl --fail --silent --show-error --head "$STAGING_URL/c/nuk/admin/login" | grep -qi '^content-security-policy:'
+          get --fail --silent --show-error --head "$STAGING_URL/c/nuk/admin/login" | grep -qi '^content-security-policy:'
           # The site's root is the platform's, and addresses from before cafe addresses lead into no cafe (D221).
           # Same text as platform-home.test.ts checks in the server's HTML: change both together.
-          curl --fail --silent --show-error "$STAGING_URL/" | grep -q 'scan the QR code shared by your cafe'
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/admin/login")" = 404
+          get --fail --silent --show-error "$STAGING_URL/" | grep -q 'scan the QR code shared by your cafe'
+          test "$(get --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/admin/login")" = 404
           # An unknown API path is our JSON 404, not the app's HTML.
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/api/does-not-exist")" = 404
+          test "$(get --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/api/does-not-exist")" = 404
           # A cafe's admin routes refuse without a session (NUK Cafe's address, D140).
-          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/api/c/nuk/admin/me")" = 401
+          test "$(get --silent --output /dev/null --write-out '%{http_code}' "$STAGING_URL/api/c/nuk/admin/me")" = 401
           echo "Staging is up: $STAGING_URL"
 
   verified-release:
@@ -179,7 +193,7 @@ jobs:
           with open('verified-release.json', 'w') as output:
               json.dump({'commit': os.environ['VERIFIED_SHA'], 'checks': os.environ['VERIFIED_RUN']}, output)
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: verified-release-${{ github.sha }}
           path: verified-release.json
@@ -204,7 +218,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       PRODUCTION_URL: https://angder.app
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
       - name: Read the project's Node.js requirement
         id: node
@@ -213,7 +227,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Install pnpm, Node.js and dependencies
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
         with:
           runtime: node@${{ steps.node.outputs.version }}
           cache: true
