@@ -52,8 +52,22 @@ describe('cafe routes (D140)', () => {
   it('routes outside a cafe\'s address never act in one', () => {
     const global = routeFiles(apiDir).filter(file => !file.startsWith(cafeDir) && !file.startsWith(platformDir))
     // Forward slashes on every OS: Windows paths use `\`.
-    expect(global.map(file => file.slice(apiDir.length + 1).replaceAll('\\', '/')).sort()).toEqual(['[...].ts', 'cafes/[slug].get.ts', 'client-errors.post.ts', 'health.get.ts', 'me/cafes.get.ts', 'me/delete-account.post.ts', 'password-ranges/[prefix].get.ts', 'tables/[token].get.ts', 'webhooks/telegram.post.ts'])
+    expect(global.map(file => file.slice(apiDir.length + 1).replaceAll('\\', '/')).sort()).toEqual(['[...].ts', 'cafes/[slug].get.ts', 'client-errors.post.ts', 'health.get.ts', 'me/cafes.get.ts', 'me/delete-account.post.ts', 'me/sessions.get.ts', 'password-ranges/[prefix].get.ts', 'tables/[token].get.ts', 'webhooks/telegram.post.ts'])
     expect(global.filter(file => calls(file, TENANT_HELPERS))).toEqual([])
+  })
+})
+
+// Session length by role (D243): a workspace's routes (a cafe's admin and counter, the platform
+// console) read the session only through `workspaceSession`, directly or in a helper that calls it,
+// so a session older than a day from sign-in is refused everywhere there.
+describe('workspace routes keep the day limit (D243)', () => {
+  const WORKSPACE_HELPERS = ['requirePermission(', 'requireBranchPermission(', 'requirePlatformPermission(', 'requireSampleData(', 'requireAssistant(', 'workspaceSession(']
+  const files = [...routeFiles(adminDir), ...routeFiles(join(cafeDir, 'counter')), ...routeFiles(platformDir)]
+  const name = (file: string) => file.slice(apiDir.length + 1).replaceAll('\\', '/')
+
+  it.each(files.map(file => [name(file), file]))('%s reads the session through the workspace check', (_name, file) => {
+    expect(calls(file, WORKSPACE_HELPERS)).toBe(true)
+    expect(calls(file, ['getUserSession('])).toBe(false)
   })
 })
 

@@ -22,7 +22,12 @@ export const IdentityErrorCodes = {
   ACCOUNT_HAS_ACCESS: 'ACCOUNT_HAS_ACCESS',
   /** Deleting an account with an order still waiting for payment, being made or ready (D237). */
   ORDER_IN_PROGRESS: 'ORDER_IN_PROGRESS',
+  /** A workspace session older than a day from sign-in (D243): signed out, sign in again. */
+  SESSION_EXPIRED: 'SESSION_EXPIRED',
 } as const
+
+export const sessionExpired = () =>
+  apiError(401, IdentityErrorCodes.SESSION_EXPIRED, 'Your sign-in has ended. Sign in again.')
 
 export const passwordCheckUnavailable = () =>
   apiError(503, IdentityErrorCodes.PASSWORD_CHECK_UNAVAILABLE, 'The password can\'t be checked right now. It\'s checked when you save.')

@@ -72,7 +72,9 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
     },
     trustedOrigins: siteUrl ? [new URL(siteUrl).origin] : [],
     session: {
-      // 7 days for everyone, extended once a day while used (D45).
+      // 7 days, extended once a day while used (D45): a customer's. A workspace (admin, counter,
+      // console) takes a session for a day from sign-in only, checked on its requests (D243,
+      // `requireWorkspaceSession`): Better Auth's own renewal can't keep a shorter absolute limit.
       expiresIn: 7 * DAY,
       updateAge: DAY,
     },

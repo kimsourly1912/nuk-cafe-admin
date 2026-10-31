@@ -13,7 +13,7 @@ import { allowSupport, openSupportVisit } from '#server/features/support'
 let db: Db
 vi.mock('#server/utils/db', () => ({ useDb: () => db }))
 const SUPER = '0a1b2c3d-0000-4000-8000-0000000000a1'
-let current: { user: Record<string, unknown>, session: { id: string } } | null
+let current: { user: Record<string, unknown>, session: { id: string, createdAt: Date } } | null
 
 function eventOf(method: string, path = '/api/c/nuk/admin/menu/items') {
   return { method, context: {}, path, node: { req: { url: path, headers: {} } } } as unknown as H3Event
@@ -26,7 +26,7 @@ beforeEach(async () => {
   vi.stubGlobal('getUserSession', async () => current)
   vi.stubGlobal('getRouterParam', (_event: H3Event, name: string) => (name === 'slug' ? 'nuk' : undefined))
   vi.stubGlobal('getRequestURL', (event: H3Event) => new URL(`https://cafe.example${(event as unknown as { path: string }).path}`))
-  current = { user: { id: SUPER, email: 'ops@example.com', name: 'Ops', role: 'superadmin', twoFactorEnabled: true }, session: { id: 'session-1' } }
+  current = { user: { id: SUPER, email: 'ops@example.com', name: 'Ops', role: 'superadmin', twoFactorEnabled: true }, session: { id: 'session-1', createdAt: new Date() } }
 })
 
 afterEach(() => {
@@ -47,11 +47,11 @@ describe('requirePermission and support access', () => {
     await expectApiError(() => requirePermission(eventOf('GET'), { report: ['export'] }), 403, 'FORBIDDEN')
 
     // Another session of the same super admin: no visit there.
-    current = { ...current!, session: { id: 'session-2' } }
+    current = { ...current!, session: { id: 'session-2', createdAt: new Date() } }
     await expectApiError(() => requirePermission(eventOf('GET'), { menu: ['read'] }), 403, 'FORBIDDEN')
 
     // The cafe's owner is unaffected: their role decides.
-    current = { user: { id: owner.userId, email: 'owner@example.com', name: 'Admin', role: 'customer' }, session: { id: 'owner-session' } }
+    current = { user: { id: owner.userId, email: 'owner@example.com', name: 'Admin', role: 'customer' }, session: { id: 'owner-session', createdAt: new Date() } }
     expect(await requirePermission(eventOf('POST'), { menu: ['write'] })).toMatchObject({ role: 'owner' })
   })
 })

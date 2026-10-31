@@ -1,6 +1,6 @@
 import type { H3Event } from 'h3'
-import { authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, tenantBySlug } from '#server/features/identity'
-import type { Actor, BranchActor, BranchPermission, PlatformPermission, SessionUser, TenantPermission } from '#server/features/identity'
+import { authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, requireWorkspaceSession, tenantBySlug } from '#server/features/identity'
+import type { Actor, BranchActor, BranchPermission, PlatformPermission, SessionStamp, SessionUser, TenantPermission } from '#server/features/identity'
 import type { PlatformActor } from '#server/features/tenants'
 import { supportActor } from '#server/features/support'
 import type { SupportRequest } from '#server/features/support'
@@ -56,6 +56,19 @@ async function sessionOf(event: H3Event): Promise<{ user: SessionUser | null, se
   return { user: (session?.user as SessionUser | undefined) ?? null, sessionId: (session?.session as { id?: string } | undefined)?.id }
 }
 
+/**
+ * The session of a workspace request (a cafe's admin and counter, the platform console, and their
+ * `/me` checks): at most a day from sign-in (D243); older, it's deleted and the request is 401
+ * `SESSION_EXPIRED`. Customer routes keep Better Auth's 7 days.
+ */
+export async function workspaceSession(event: H3Event): Promise<{ user: SessionUser | null, sessionId: string | undefined }> {
+  const session = await getUserSession(event)
+  const user = (session?.user as SessionUser | undefined) ?? null
+  const stamp = session?.session as SessionStamp | undefined
+  await requireWorkspaceSession(useDb(), user, stamp)
+  return { user, sessionId: stamp?.id }
+}
+
 const isForbidden = (error: unknown) => (error as { statusCode?: number, data?: { code?: string } }).statusCode === 403 && (error as { data?: { code?: string } }).data?.code === 'FORBIDDEN'
 
 /** What a support visit needs to know about this request: who, which session, and what it does where. */
@@ -70,7 +83,7 @@ export async function supportRequestOf(event: H3Event, tenantId: string): Promis
  */
 export async function requirePermission(event: H3Event, permissions: TenantPermission): Promise<Actor> {
   const tenant = await requireTenant(event)
-  const { user } = await sessionOf(event)
+  const { user } = await workspaceSession(event)
   try {
     return { ...await authorizeTenant(useDb(), user, tenant.id, permissions), requestId: requestIdOf(event) }
   }
@@ -90,7 +103,8 @@ export async function requirePermission(event: H3Event, permissions: TenantPermi
  */
 export async function requireBranchPermission(event: H3Event, branchId: string, permissions: BranchPermission): Promise<BranchActor> {
   const tenant = await requireTenant(event)
-  return { ...await authorizeBranch(useDb(), await sessionUser(event), tenant.id, branchId, permissions), requestId: requestIdOf(event) }
+  const { user } = await workspaceSession(event)
+  return { ...await authorizeBranch(useDb(), user, tenant.id, branchId, permissions), requestId: requestIdOf(event) }
 }
 
 /**
@@ -99,5 +113,6 @@ export async function requireBranchPermission(event: H3Event, branchId: string, 
  * cafe's menu, orders or customers.
  */
 export async function requirePlatformPermission(event: H3Event, permissions: PlatformPermission): Promise<PlatformActor> {
-  return { ...authorizePlatform(await sessionUser(event), permissions), requestId: requestIdOf(event) }
+  const { user } = await workspaceSession(event)
+  return { ...authorizePlatform(user, permissions), requestId: requestIdOf(event) }
 }

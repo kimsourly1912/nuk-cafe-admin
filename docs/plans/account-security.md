@@ -1,6 +1,6 @@
 # Account security: two-step sign-in, session length, re-confirming dangerous actions
 
-Status: **step 1 built (D242, 2026-10-30, in review)**; steps 2–5 not started. The owner waived the mockup round for step 1. Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
+Status: **step 1 done (D242, PR #231); step 2 built (D243, 2026-10-31, in review)**; steps 3–5 not started. The owner waived the mockup round for step 1. Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
 
 ## 1. Where we are (checked in the code, 2026-10-30)
 
@@ -31,7 +31,7 @@ Status: **step 1 built (D242, 2026-10-30, in review)**; steps 2–5 not started.
 
 ## 4. Steps (one branch and PR each, in this order)
 
-### Step 1: two-step sign-in for owners and staff ✅ (D242, in review)
+### Step 1: two-step sign-in for owners and staff ✅ (D242, PR #231)
 
 Built as planned: the page per workspace, the shared `<TwoFactorSetupFrame>` (the console's setup moved to the root), the Staff column. Also: a super admin can't turn it off (server). Deferred: the lost-authenticator recovery below (QA1).
 
@@ -41,7 +41,9 @@ Built as planned: the page per workspace, the shared `<TwoFactorSetupFrame>` (th
 - Tests: e2e setup and turn-off for an owner and a cashier (mocked API), the code asked at the next sign-in (real server, a seeded account), Staff shows the status, two-cafe isolation for the new field.
 - Decision: a new D (how setup is shared with the console; what owners see).
 
-### Step 2: session length by role, and "Your devices"
+### Step 2: session length by role, and "Your devices" ✅ (D243, in review)
+
+Verified first, as asked: Better Auth 1.7.7 can set a per-session `expiresAt`, but its renewal would push a 1-day session to 7 days on the first read, and clamping renewals would write the session row on every request. Built instead: the day limit is checked on every workspace request (`workspaceSession`, `server/utils/access.ts`), from the session's own sign-in time; access gained mid-session therefore needs a new sign-in at the workspace. Your devices uses our own `GET /api/me/sessions` (Better Auth's `/list-sessions` returns tokens to the browser) and Better Auth's `/revoke-other-sessions`. It shows the sign-in time, not "last used" (Better Auth only updates a session when it renews it).
 
 - 1 day for any account that is an owner, staff member or super admin; 7 days for others. **Needs verification first** (installed `better-auth` ^1.7.7, its current docs, never from memory): whether `databaseHooks.session.create.before` may set `expiresAt` per user, and whether `updateAge` renewal then extends it past the limit (the limit must be absolute: measured from sign-in, not renewed). If the hook can't do it, record the alternative before building.
 - A role change after sign-in: removing access already deletes sessions; gaining access mid-session keeps the 7-day session until the next sign-in. Decide whether that's acceptable (likely yes: the server checks every request; record it).

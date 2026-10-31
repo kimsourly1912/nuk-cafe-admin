@@ -118,7 +118,8 @@ A tenant's `owner` has every branch permission in every branch of that tenant: *
 ## Sessions
 
 - Better Auth database sessions, HttpOnly + `Secure` (production) + `SameSite=Lax` cookie, one origin.
-- Lifetime: **7 days for everyone**, refreshed daily while used (Better Auth default; D45).
+- Lifetime: **7 days** for a customer, refreshed daily while used (Better Auth; D45). **A workspace (a cafe's admin and counter, the platform console) takes a session for a day from sign-in, never renewed** (D243): `workspaceSession` in `server/utils/access.ts` deletes an older one and answers 401 `SESSION_EXPIRED`; every admin, counter and console route reads the session through it (`routes.test.ts`). Better Auth's own renewal can't keep a shorter absolute limit (verified in D243).
+- **Your devices** (D243): `GET /api/me/sessions` lists the account's own live sessions without tokens; signing the others out is Better Auth's `/revoke-other-sessions`. Better Auth's `/list-sessions` returns tokens and isn't used.
 - **Revoke all sessions** of a user when their role changes, they're removed from a branch, their staff access is disabled, or they're banned (`admin.revokeUserSessions`).
 - `trustedOrigins` is the origin of `NUXT_PUBLIC_SITE_URL` (the module adds localhost origins in dev only). The origin check on our routes (`server/middleware/10.origin-check.ts`) accepts the same origin.
 
