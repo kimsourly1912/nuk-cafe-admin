@@ -2,6 +2,14 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Security hardening: CI pinning, no v-html, staging Access (D244, 2026-10-31)
+Branch `claude/affectionate-galileo-rivb8d`, from `main` at `6e49885`. The owner asked what we and Cloudflare could still protect, then for the small items in one change. [Decision](decisions.md#d244-security-hardening-pinned-ci-actions-no-v-html-staging-behind-access-health-stays-unlimited-2026-10-31), [owner checklist](plans/cloudflare-improvements.md#owner-security-checklist-d244).
+
+- **Change:** every workflow action pinned to the commit its tag pointed at (checkout v6.1.0 `d23441a`, upload-artifact v4.6.2 `ea165f8`, pnpm/setup v2.0.0 `c9883cc`, read with `git ls-remote`); `ci.yml` top-level `permissions: contents: read`; `test/unit/ci-workflows.test.ts`; ESLint `vue/no-v-html` an error; the staging smoke check sends an Access service token when `STAGING_ACCESS_CLIENT_ID`/`_SECRET` exist; security.md, operations.md (pinning, the corrected Access note), the Cloudflare plan's owner checklist.
+- **Not done, on purpose:** a rate limit on `/api/health` (proposed in the review; refused, see D244: Worker callers share one address). Re-confirming dangerous actions and required two-step sign-in for owners stay [account security](plans/account-security.md) steps; a hash/nonce CSP stays its own decision.
+- **Evidence (2026-10-31, cloud Linux, pnpm 12.15.0):** `pnpm lint`, `pnpm typecheck` clean; `pnpm audit --audit-level high` passes (3 low, 12 moderate); `pnpm test:unit` 2376 passed, 1 skipped, incl. `ci-workflows.test.ts` 9/9. Guards: `actions/checkout@v6` put back in `ci.yml` failed "names every action by a full commit id"; the top-level `permissions` removed failed "no write access by default"; a probe `.vue` file with `v-html` failed `eslint` (exit 1). The workflows parse as YAML. The smoke check's header logic run in bash 5.2 with and without the secrets (no headers / both headers). Not run: e2e (no app code changed) and a real staging deploy through Access (needs the owner's token; CI's next staging deploy runs the changed smoke check without it).
+- **Owner, after merging:** the [checklist](plans/cloudflare-improvements.md#owner-security-checklist-d244): account two-step sign-in, CI token expiry, GitHub's workflow and branch settings, Security Insights, the WAF managed ruleset, DMARC/CAA, then staging behind Access in the listed order. Record each here with its date.
+
 ## Session length by role and Your devices: account security step 2 (D243, 2026-10-31)
 Branch `ccr-c1f7f890-4m5om1`, restarted from `main` at `a5c262c` after PR #231. [Plan](plans/account-security.md) step 2. [Decision](decisions.md#d243-a-workspace-session-lasts-a-day-from-sign-in-your-devices-2026-10-31).
 

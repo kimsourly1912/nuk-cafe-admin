@@ -12,6 +12,9 @@ import { log } from '#server/utils/log'
  * Where no binding exists (the dev server, tests, the e2e build), nothing is limited. Cloudflare
  * counts per location and lets a few requests past a limit: this bounds abuse, it isn't a quota.
  */
+// `/api/health` stays outside on purpose (D244): the watchdog Worker calls it from outside the zone,
+// and Cloudflare gives every such Worker request one shared address (`2a06:98c0:3600::103`), so a
+// limit keyed on it would let anyone's Worker make the watchdog report production down.
 export const RATE_LIMIT_RULES = [
   // Deleting an account (D237): each try checks a password, so few a minute.
   { prefix: '/api/me/delete-account', exact: true, method: 'POST', binding: 'RATE_LIMIT_ACCOUNT' },
