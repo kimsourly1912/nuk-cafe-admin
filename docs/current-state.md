@@ -4,7 +4,7 @@ Snapshot reviewed against main `4832310`, 2026-10-30. Read only when resuming or
 
 ## Waiting on the owner
 
-- **In review: account security step 1 (D242),** branch `ccr-c1f7f890-4m5om1`: owners and staff turn two-step sign-in on and off (Account security in each user menu), Staff shows who has it. Waiting on the owner: QA1 (lost-authenticator recovery). Next: step 2, session length by role and Your devices. [Plan](plans/account-security.md), [progress](progress.md#two-step-sign-in-for-owners-and-staff-account-security-step-1-d242-2026-10-30). Workspace access is done (D239–D241, PRs #226–#229).
+- **In review: account security step 2 (D243),** branch `ccr-c1f7f890-4m5om1`: admin, counter and console sessions last a day from sign-in; Your devices with Sign out other devices. Step 1 (D242) merged as PR #231. Waiting on the owner: QA1 (lost-authenticator recovery). Next: step 3, re-confirming dangerous actions. [Plan](plans/account-security.md), [progress](progress.md#session-length-by-role-and-your-devices-account-security-step-2-d243-2026-10-31).
 - **In review: Review order's first load and the first-load rule (D238),** branch `claude/checkout-loading-state`. Next: other pages checked against the new UI checklist item, one per branch. [Progress](progress.md#review-orders-first-load-and-the-first-load-rule-d238-2026-10-30).
 - **Merged: account erasure (D237, 2026-10-30):** PR #224 as `3ed2cbf`. Account menu → **Delete account**; `POST /api/me/delete-account`; no migration. [Plan](plans/account-erasure.md), [decision](decisions.md#d237-an-account-deletes-itself-emptied-like-a-guest-d229s-erasure-2026-10-30), [progress](progress.md#account-erasure-d237-2026-10-30).
 - **Merged: idle guests emptied after 90 days (D236):** PR #223 as `b4d28cc`.

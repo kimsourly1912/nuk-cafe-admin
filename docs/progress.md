@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Session length by role and Your devices: account security step 2 (D243, 2026-10-31)
+Branch `ccr-c1f7f890-4m5om1`, restarted from `main` at `a5c262c` after PR #231. [Plan](plans/account-security.md) step 2. [Decision](decisions.md#d243-a-workspace-session-lasts-a-day-from-sign-in-your-devices-2026-10-31).
+
+- **Change:** `workspaceSession` (`server/utils/access.ts`) and `requireWorkspaceSession` (`identity/sessions.service.ts`): admin, counter and console requests refuse a session a day old from sign-in (401 `SESSION_EXPIRED`, session deleted); the three `/me` routes use it. `GET /api/me/sessions` (`AccountSession`, `deviceLabel`); Your devices on the account security page (`useAccountSessions`, `useSignOutOtherDevices` → Better Auth `/revoke-other-sessions`). Help `general.md`. No migration.
+- **Evidence (2026-10-31, cloud Linux, pnpm 12.15.0, Playwright's Chromium):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 158/159 files with `routes.test.ts` failing only on the new route's name in its list, then fixed: `routes.test.ts` 563/563; server `workspace-session.test.ts` 6/6, `sessions.service.test.ts` 6/6, `support-access.test.ts`. e2e `two-factor.test.ts` 19/19 at 2 workers (real server included). Guards: the age check disabled failed 8 of the 12 session tests; `requireBranchPermission` reading the session directly failed 2; `counter/me` reverted failed `routes.test.ts`.
+- **Next:** step 3, re-confirming before dangerous actions.
+
 ## Two-step sign-in for owners and staff: account security step 1 (D242, 2026-10-30)
 Branch `ccr-c1f7f890-4m5om1`, from `main` at `565f78b`. [Plan](plans/account-security.md) step 1; the owner waived the mockup round for it. [Decision](decisions.md#d242-owners-and-staff-turn-two-step-sign-in-on-themselves-the-setup-is-shared-with-the-console-2026-10-30).
 
@@ -9,7 +16,7 @@ Branch `ccr-c1f7f890-4m5om1`, from `main` at `565f78b`. [Plan](plans/account-sec
 - **Evidence (2026-10-30, cloud Linux, pnpm 12.15.0, Playwright's Chromium):** `pnpm lint`, `pnpm typecheck`, `pnpm audit --audit-level high` clean; `pnpm test:unit` 157 files, 2165 passed, 1 skipped, plus the two tests it then caught (`batch.test.ts`'s D1 row, `page-permissions.test.ts`), fixed and passing. e2e `two-factor.test.ts` 16/16 (real server included), `staff.test.ts`. Full `pnpm test:e2e` at 4 workers: 773/786; the 13 failures were 30 s timeouts in untouched files, a leaked-password lookup answering 503 (no Have I Been Pwned from this sandbox), and the new identity test on a build made before its fix. Those 8 files again at 2 workers on a fresh build: 259/259. Guards: the super-admin before-hook removed, its server test failed; the per-identity `:key` missing (that earlier build), the identity test failed.
 - **CI fix (2026-10-31):** PR #231's audit failed on five new high `node-forge` advisories (≤1.4.0, through `listhen`, the dev server's HTTPS listener). The lockfile now resolves `node-forge` 1.4.2 (within `listhen`'s range, no override), which also fixes the long-ignored GHSA-86w9-cpqp-85rv, so that exemption is removed (D54). `pnpm audit --audit-level high` passes with no ignored advisory for it.
 - **Open:** QA1 (recovery when the authenticator and the backup codes are lost) waits for the owner; nothing in the app changes it until answered.
-- **Next:** step 2, session length by role and Your devices (verify Better Auth first).
+- **Next:** step 2, session length by role and Your devices (verify Better Auth first). **Merged as PR #231 (2026-10-31)**, with the `node-forge` 1.4.2 audit fix.
 
 ## Account security planned (2026-10-30)
 After the workspace access plan (D239–D241, PRs #226–#229, deployed to staging). The owner asked what else access needs and how others handle it; they took every recommendation. [Plan](plans/account-security.md): two-step sign-in for owners and staff, session length by role, re-confirming dangerous actions, owners seeing staff access, Switch person on the counter. Nothing built yet; next is step 1 on its own branch.

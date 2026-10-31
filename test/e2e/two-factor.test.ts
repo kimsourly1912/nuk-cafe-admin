@@ -471,6 +471,84 @@ describe('account security for owners and staff (D242)', () => {
   })
 })
 
+describe('Your devices (D243)', () => {
+  it('lists where the account is signed in, and signs the others out after asking', async () => {
+    let devices = [
+      { id: 'here', device: 'Chrome on Android', signedInAt: '2026-10-31T01:00:00.000Z', current: true },
+      { id: 'tablet', device: 'Safari on iPad', signedInAt: '2026-10-30T09:00:00.000Z', current: false },
+      { id: 'laptop', device: 'Edge on Windows', signedInAt: '2026-10-30T08:00:00.000Z', current: false },
+    ]
+    const { page, api } = await open('/c/nuk/admin/account-security', {
+      'GET /me/sessions': () => devices,
+      'POST /auth/revoke-other-sessions': () => {
+        devices = devices.filter(d => d.current)
+        return { status: true }
+      },
+    })
+    const list = page.getByRole('list', { name: 'Your devices' })
+    await list.getByText('Safari on iPad').waitFor()
+    await list.getByRole('listitem').filter({ hasText: 'Chrome on Android' }).getByText('This device').waitFor()
+    expect(await list.getByText('This device').count()).toBe(1)
+
+    await page.getByRole('button', { name: 'Sign out 2 other devices' }).click()
+    const confirm = page.getByRole('alertdialog').or(page.getByRole('dialog'))
+    await confirm.getByText('Sign out your other devices?').waitFor()
+    await confirm.getByRole('button', { name: 'Sign out other devices' }).click()
+    await toast(page, 'Signed out on your other devices').waitFor()
+    await expect.poll(() => list.getByRole('listitem').count()).toBe(1)
+    expect(await page.getByRole('button', { name: /other device/ }).count()).toBe(0)
+    expect(api.calls.filter(c => c === 'POST /auth/revoke-other-sessions')).toHaveLength(1)
+  })
+
+  it('a list that didn\'t load says so and offers Retry; the rest of the page still works', async () => {
+    let fail = true
+    const { page } = await open('/c/nuk/admin/account-security', {
+      'GET /me/sessions': () => {
+        if (fail) throw failures.server()
+        return [{ id: 'here', device: 'Chrome on Android', signedInAt: '2026-10-31T01:00:00.000Z', current: true }]
+      },
+    })
+    await page.getByText('Couldn\'t load your devices').waitFor()
+    await page.getByRole('button', { name: 'Turn on', exact: true }).waitFor()
+    fail = false
+    await page.getByRole('button', { name: 'Retry' }).click()
+    await page.getByRole('list', { name: 'Your devices' }).getByText('This device').waitFor()
+  })
+
+  it('on the real server: Sign out other devices ends the other browser\'s sign-in', async () => {
+    const { email, password: ownPassword } = seed.customers.twoStepCashier
+    const signInAtCounter = async (page: Page) => {
+      await asNewVisitor(page)
+      await page.goto(url('/c/nuk/counter/sign-in'), { waitUntil: 'hydration' })
+      await page.getByLabel('Email').fill(email)
+      await page.getByLabel('Password', { exact: true }).fill(ownPassword)
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+      await page.waitForURL(u => u.pathname === `/c/nuk/counter/${seed.openBranchId}`)
+    }
+    const other = await createPage()
+    other.setDefaultTimeout(10_000)
+    await signInAtCounter(other)
+    const here = await createPage()
+    here.setDefaultTimeout(10_000)
+    await signInAtCounter(here)
+
+    await here.goto(url('/c/nuk/counter/account-security'), { waitUntil: 'hydration' })
+    const list = here.getByRole('list', { name: 'Your devices' })
+    await list.getByText('This device').waitFor()
+    await expect.poll(() => list.getByRole('listitem').count()).toBeGreaterThanOrEqual(2)
+    await here.getByRole('button', { name: /^Sign out (the other device|\d+ other devices)$/ }).click()
+    await here.getByRole('button', { name: 'Sign out other devices' }).click()
+    await toast(here, 'Signed out on your other devices').waitFor()
+    await expect.poll(() => list.getByRole('listitem').count()).toBe(1)
+
+    // The other browser's next page asks it to sign in again; this one is still signed in.
+    await other.goto(url(`/c/nuk/counter/${seed.openBranchId}`))
+    await other.waitForURL(u => u.pathname === '/c/nuk/counter/sign-in')
+    await here.goto(url(`/c/nuk/counter/${seed.openBranchId}`), { waitUntil: 'hydration' })
+    expect(new URL(here.url()).pathname).toBe(`/c/nuk/counter/${seed.openBranchId}`)
+  })
+})
+
 describe('accessibility', () => {
   const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
   async function axeFindings(page: Page): Promise<string[]> {

@@ -43,3 +43,18 @@ export const deleteAccountSchema = v.strictObject({
   password: v.pipe(v.string(), v.minLength(1, 'Enter your password'), v.maxLength(PASSWORD_MAX, `At most ${PASSWORD_MAX} characters`)),
 })
 export type DeleteAccountInput = v.InferOutput<typeof deleteAccountSchema>
+
+/**
+ * `GET /api/me/sessions` (D243): where the signed-in account is signed in, newest first, for Your
+ * devices on the account security page. No tokens: signing the others out is Better Auth's
+ * `/revoke-other-sessions`.
+ */
+export interface AccountSession {
+  id: string
+  /** From the browser's user agent: "Chrome on Android", "Safari on iPhone"; "Unknown device". */
+  device: string
+  /** When this sign-in happened. */
+  signedInAt: string
+  /** This browser's own session. */
+  current: boolean
+}

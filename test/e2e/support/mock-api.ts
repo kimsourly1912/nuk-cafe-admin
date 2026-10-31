@@ -151,6 +151,8 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /cafes/nuk': () => NUK_PROFILE,
   // The account's cafes (D144): only this one, so the sidebar shows no switcher.
   'GET /me/cafes': () => [{ ...NUK_PROFILE, workspaces: ['admin', 'counter'] }],
+  // Your devices on the account security page (D243): only this browser.
+  'GET /me/sessions': () => [{ id: 'session-here', device: 'Chrome on Linux', signedInAt: STAMP, current: true }],
   // The dashboard (D155): a new cafe with nothing set up and no branch to report on. Tests of the
   // pages behind each step override their own.
   'GET /admin/reports/branches': () => [],

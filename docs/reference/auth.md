@@ -110,6 +110,8 @@ definePageMeta({ public: true, layout: 'auth' })
 | Another person signs in from another tab mid-setup | The page body is keyed by `userId`: it starts over, no key or codes left | e2e `two-factor.test.ts` |
 | Support visit (D193) | `useMutation` sends nothing in a read-only session ("Nothing was changed") | by `useMutation` |
 | Lost authenticator and backup codes | Not handled in the app yet: open question QA1 | |
+| Your devices (D243) | `useAccountSessions` (`account-sessions:list`, `GET /api/me/sessions`): device, sign-in time, **This device**; a failed load is `<ApiErrorAlert>` with Retry. **Sign out N other devices**: `useSignOutOtherDevices` (`account-sessions:sign-out-others`, confirm, Better Auth `/revoke-other-sessions`). Turning two-step sign-in on or off refreshes the list | e2e `two-factor.test.ts` (mocked; real server with two browsers); server `sessions.service.test.ts` |
+| A workspace session a day old (D243) | Any admin, counter or console request answers 401 `SESSION_EXPIRED` and the session is deleted; the app's 401 handling goes to sign-in with `?redirect=` | server `workspace-session.test.ts`, `routes.test.ts` |
 | Staff | The **Two-step** column (On / Off), the phone row's "Two-step sign-in"; own cafe's people only | e2e `staff.test.ts`; server `staff.service.test.ts` (two cafes) |
 
 ## How the session works
