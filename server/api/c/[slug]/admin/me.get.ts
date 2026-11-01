@@ -1,11 +1,12 @@
-import { adminSession } from '#server/features/identity'
+import { adminSession, recordWorkspaceVisit } from '#server/features/identity'
 import { supportSession, tenantSupport } from '#server/features/support'
 
 /**
  * The admin app's session check: who is signed in, what they may do, and whether they must change
  * a temporary password first (D52). The only admin route that answers while a temporary password
  * is in place. A super admin on a support visit gets a read-only session (P5, D193); an owner sees
- * until when platform support is allowed. A day from sign-in at most (D243).
+ * until when platform support is allowed. A day from sign-in at most (D243). Records the owner's
+ * visit for the Staff page's "Last active here" (D248); a support visit isn't one.
  */
 export default defineEventHandler(async (event) => {
   const tenant = await requireTenant(event)
@@ -13,6 +14,7 @@ export default defineEventHandler(async (event) => {
   const db = useDb()
   try {
     const admin = await adminSession(db, user, tenant.id)
+    await recordWorkspaceVisit(db, tenant.id, user!.id).catch(error => log('warn', 'Workspace visit not recorded', { error: String(error) }, event))
     return { ...admin, supportAllowedUntil: (await tenantSupport(db, tenant.id))?.expiresAt ?? null }
   }
   catch (error) {

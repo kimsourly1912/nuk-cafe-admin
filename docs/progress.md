@@ -2,6 +2,17 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Owners see when staff were last active here: account security step 4 (D248, 2026-11-01)
+Branch `claude/affectionate-galileo-rivb8d`, restarted from `main` at `c056efd` after PR #235 (its staging deploy, run 540, green; the PR's e2e failure was a slow runner: files ran one at a time, unit tests twice as slow; the rerun of the same commit passed). [Plan](plans/account-security.md) step 4. [Decision](decisions.md#d248-owners-see-when-staff-were-last-active-here-never-elsewhere-2026-11-01).
+
+- **Owner decision (2026-11-01):** "Last active here" (this cafe only) instead of the account's sign-in, which would show one cafe's owner when the person was at another.
+- **Change:** `workspace_visits` (identity's `identity.schema.ts`, migration `0055_workspace_visits`, generated with drizzle-kit, a second run "No schema changes"); `visits.repository.ts`, `visits.service.ts` (`recordWorkspaceVisit`, `VISIT_INTERVAL_MS`); recorded by `admin/me` and `counter/me`; `StaffMember.lastActiveAt`; account deletion removes the rows; Staff page column **Last active here** and the phone line; `formatTimeAgo` in `app/utils/date-format.ts` (from the platform feature); staff help page.
+- **Evidence (2026-11-01, cloud Linux, pnpm 12.15.0, Playwright's Chromium):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 162 files, 2415 passed, 1 skipped. On the way it caught a real bug: `d1-limits.test.ts` failed with 101 bound values for a full page of 100 staff, fixed with `readInChunks`. Server `visits.service.test.ts` 5/5 (not yet, then the time; two cafes: a visit at one never shows at the other; at most hourly; two at once one row; kept across an access change), `erasure.service.test.ts` (rows deleted), `routes.test.ts` (both `/me` record after the session check; a support visit doesn't). Unit `date-format.test.ts`. e2e `staff.test.ts` + `platform-accounts.test.ts` 37/37 three runs in a row, incl. one **on the real server** (Brown Bean's owner opens the admin; the Staff page shows them "just now"; the API's time within minutes).
+- **Guards removed one at a time, each failed its test:** the hourly condition; the cafe condition in the read; deleting the rows with the account; recording in `counter/me`.
+- **Fixed on the way:** `platform-accounts.test.ts`'s D247 test counted the closing dialog's same-named button once (1 of 4 runs); it now waits for the dialog to close.
+- **Full e2e:** running at commit time; result recorded below.
+- **Next:** step 5, Switch person on the counter.
+
 ## The platform team turns off a lost two-step sign-in: account security step 3b (D247, 2026-11-01)
 Branch `claude/affectionate-galileo-rivb8d`, restarted from `main` at `6f26904` after PR #234 (its staging deploy, run 538, green). [Plan](plans/account-security.md) step 3b (QA1, D245); no mockup round (D245). [Decision](decisions.md#d247-the-platform-team-turns-off-a-lost-two-step-sign-in-qa1-2026-11-01).
 
@@ -10,7 +21,7 @@ Branch `claude/affectionate-galileo-rivb8d`, restarted from `main` at `6f26904` 
 - **Evidence (2026-11-01, cloud Linux, pnpm 12.15.0, Playwright's Chromium):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 161 files: 2405 passed, 1 skipped, 1 failed (`batch.test.ts`'s fake D1 row, positional, didn't have the new column), fixed and passing 19/19 (now also checks the boolean decodes). Server `accounts.service.test.ts` 29/29 (+5: with Better Auth on the test database, a password sign-in asks for a code before and not after; the secret deleted; sessions ended; audit with the reason; refusals: not on, own, super admin, stale version; turned off meanwhile and made a super admin meanwhile change nothing; the permission is the platform team's only). `routes.test.ts` (the route asks for confirmation after the permission). e2e `platform-accounts.test.ts` + `platform-activity.test.ts` 25/25 (+2: a reason required and nothing sent without it; refused, Confirm it's you, then the same request again; On to Off and the button gone; no button when off).
 - **Guards removed one at a time, each failed its test:** the route's `requireConfirmation`; the "not on" check; the SQL "still on" condition; ending the sessions; deleting the secret; the SQL "not a super admin" condition.
 - **Not run:** a real-server browser test (the console needs a super admin signed in with a live authenticator code; the e2e seed has none); the full e2e suite (only the console's own code and contracts changed).
-- **Next:** step 4, owners see their staff's access.
+- **Next:** step 4, owners see their staff's access. **Merged as PR #235 (2026-11-01)**; staging deploy run 540 green.
 
 ## Confirm it's you before dangerous changes: account security step 3 (D246, 2026-11-01)
 Branch `claude/affectionate-galileo-rivb8d`, restarted from `main` at `14f3fc2` after PR #233. [Plan](plans/account-security.md) step 3 (Q3); no mockup round (D245). [Decision](decisions.md#d246-confirm-its-you-before-dangerous-changes-per-session-password-15-minutes-2026-11-01), [security](server/security.md#re-confirming-dangerous-changes-d246).

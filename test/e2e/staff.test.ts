@@ -2,14 +2,16 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, inject, it } from 'vitest'
 import type { StaffMember } from '../../shared/contracts/staff'
 import { ADMIN, AIRPORT, mockApi, paginatedHandler, RIVERSIDE, setupE2e, staffOf, stretchedTarget, toast } from './support/mock-api'
+import { asNewVisitor } from './support/client-address'
 
 await setupE2e()
 
 const SELF = staffOf(ADMIN.userId, 'alice', { email: ADMIN.email, admin: true, memberships: [] })
-const SOPHEA = staffOf('staff-2', 'Sophea')
+// Sophea opened this cafe's counter 2 hours ago (D248); Vanna hasn't since it's recorded.
+const SOPHEA = staffOf('staff-2', 'Sophea', { lastActiveAt: new Date(Date.now() - 2 * 3_600_000).toISOString() })
 const VANNA = staffOf('staff-3', 'Vanna', {
   memberships: [{ branchId: AIRPORT.id, branchName: AIRPORT.name, role: 'manager' }],
   mustChangePassword: true,
@@ -55,6 +57,13 @@ describe('staff list', () => {
     await page.getByRole('columnheader', { name: 'Two-step' }).waitFor()
     await row(page, 'Vanna').getByText('On', { exact: true }).waitFor()
     await row(page, 'Sophea').getByText('Off', { exact: true }).waitFor()
+  })
+
+  it('shows when each person last opened this cafe\'s admin or counter (D248)', async () => {
+    const { page } = await open()
+    await page.getByRole('columnheader', { name: 'Last active here' }).waitFor()
+    await row(page, 'Sophea').getByText('2 hours ago', { exact: true }).waitFor()
+    await row(page, 'Vanna').getByText('Not yet', { exact: true }).waitFor()
   })
 
   it('filters by role and branch through the URL and the API', async () => {
@@ -260,6 +269,7 @@ describe('staff on a phone', () => {
       await list.getByText('Temporary password').waitFor()
       // Two-step sign-in only where it's on.
       expect(await list.getByText('Two-step sign-in').count()).toBe(1)
+      await list.getByText('Last active here: 2 hours ago').waitFor()
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
       // The toolbar wraps instead of scrolling: search on its own row, the filters below
       const toolbar = page.getByPlaceholder('Search name or email…').locator('xpath=ancestor::*[contains(@class, "border-b")][1]')
@@ -330,5 +340,29 @@ describe('accessibility', () => {
       expect(await axeFindings(page)).toEqual([])
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  })
+})
+
+describe('last active here on the real server (D248)', () => {
+  const seed = inject('shopSeed')
+
+  it('opening the admin records the visit, and the Staff page shows it for this cafe', async () => {
+    const { email, password } = seed.customers.beanOwner
+    const { slug } = seed.secondCafe
+    const page = await createPage()
+    page.setDefaultTimeout(10_000)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await asNewVisitor(page)
+    await page.goto(url(`/c/${slug}/admin/login`), { waitUntil: 'hydration' })
+    await page.getByLabel('Email').fill(email)
+    await page.getByLabel('Password', { exact: true }).fill(password)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.waitForURL(address => address.pathname === `/c/${slug}/admin`)
+
+    await page.goto(url(`/c/${slug}/admin/staff`), { waitUntil: 'hydration' })
+    await page.getByRole('row').filter({ hasText: 'Bea Brown' }).getByText('just now', { exact: true }).waitFor()
+    const listed = await page.evaluate(path => fetch(path).then(r => r.json()), `/api/c/${slug}/admin/staff`) as { items: StaffMember[] }
+    const bea = listed.items.find(member => member.email === email)!
+    expect(Date.now() - new Date(bea.lastActiveAt!).getTime()).toBeLessThan(5 * 60_000)
   })
 })

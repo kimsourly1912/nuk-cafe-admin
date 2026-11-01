@@ -8,6 +8,7 @@ import { MAIL_KINDS } from './identity.mail'
 import { signedIn } from './identity.service'
 import type { SessionUser } from './identity.types'
 import * as repo from './erasure.repository'
+import * as visitsRepo from './visits.repository'
 
 export interface DeleteAccountOptions {
   /** Better Auth's check of the password against the signed-in session (`verifyPassword`). */
@@ -48,6 +49,8 @@ export async function deleteAccount(db: Db, sessionUser: SessionUser | null | un
     requireOneChange(db),
     noOrderInProgress,
     ...repo.deleteSignInStatements(db, me.id),
+    // When they last worked at any cafe (D248): nothing of theirs stays with the cafes but orders.
+    visitsRepo.deleteVisitsStatement(db, me.id),
     anonymizeProfilesStatement(db, me.id, now),
     ...(facts.emailVerified ? [outboxStatement(db, null, MAIL_KINDS.accountDeleted, { to: facts.email })] : []),
     auditStatement(db, { userId: me.id, tenantId: null, requestId }, { action: 'identity.account.delete', targetType: 'user', targetId: me.id }),

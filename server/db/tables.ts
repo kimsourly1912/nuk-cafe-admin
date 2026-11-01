@@ -12,6 +12,8 @@
 // and `verification`, by account deletion only (D237). Others may read
 // `user.id`, `user.name` and `organization.id`, `.slug`, `.name`, `.status`.
 export { account, member, organization, session, twoFactor, user, verification } from 'hub:db:schema'
+// Owned by identity (D248): when a person last opened a cafe's admin or counter. Read by identity only.
+export { workspaceVisits } from '#server/features/identity/identity.schema'
 // Owned by the platform feature (D50); others add rows through `platform.auditStatement`.
 export { auditEvents } from '#server/features/platform/platform.schema'
 // Owned by the branches feature. Others may read `branches.id`, `.tenantId`, `.name`, `.timezone`,

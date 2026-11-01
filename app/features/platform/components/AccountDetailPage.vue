@@ -9,7 +9,6 @@
 import { usePlatformSession } from '../composables/usePlatformSession'
 import { ACCOUNTS_PATH, useAccount, useAccountMutations } from '../composables/useAccounts'
 import { banLine } from '../schemas/account-form'
-import { timeAgo } from '../schemas/cafe-form'
 import AccountBanModal from './AccountBanModal.vue'
 import AccountPasswordModal from './AccountPasswordModal.vue'
 import AccountTwoFactorOffModal from './AccountTwoFactorOffModal.vue'
@@ -161,7 +160,7 @@ const twoFactorOffModal = overlay.create(AccountTwoFactorOffModal)
                 Last active
               </dt>
               <dd class="text-highlighted">
-                {{ account.lastActiveAt ? timeAgo(account.lastActiveAt) : 'Not signed in' }}
+                {{ account.lastActiveAt ? formatTimeAgo(account.lastActiveAt) : 'Not signed in' }}
               </dd>
             </div>
             <div>

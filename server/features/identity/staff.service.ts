@@ -12,6 +12,7 @@ import type { AuditActor } from '#server/features/platform'
 import type { Actor } from './identity.types'
 import { confirmationRequired } from './identity.errors'
 import { findTenantRole } from './identity.repository'
+import { lastWorkspaceVisits } from './visits.service'
 import { lastAdmin, ownAccess, staffAlreadyExists, staffChanged, staffElsewhere, staffNotFound, unknownBranches } from './staff.errors'
 import * as repo from './staff.repository'
 import type { AccountRow, MembershipRow } from './staff.repository'
@@ -27,7 +28,7 @@ import { generateTemporaryPassword, isSuperadmin, nextVersion } from './staff.ru
 
 type Memberships = { branchId: string, role: BranchRoleName }[]
 
-function toStaffMember(row: AccountRow, owners: Set<string>, memberships: MembershipRow[]): StaffMember {
+function toStaffMember(row: AccountRow, owners: Set<string>, memberships: MembershipRow[], visits: Map<string, Date>): StaffMember {
   return {
     id: row.id,
     name: row.name,
@@ -36,6 +37,7 @@ function toStaffMember(row: AccountRow, owners: Set<string>, memberships: Member
     memberships: memberships.filter(m => m.userId === row.id).map(m => ({ branchId: m.branchId, branchName: m.branchName, role: m.role as BranchRoleName })),
     mustChangePassword: Boolean(row.mustChangePassword),
     twoFactorEnabled: Boolean(row.twoFactorEnabled),
+    lastActiveAt: visits.has(row.id) ? toIso(visits.get(row.id)!) : null,
     version: row.updatedAt.getTime(),
     createdAt: toIso(row.createdAt),
   }
@@ -45,7 +47,7 @@ function toStaffMember(row: AccountRow, owners: Set<string>, memberships: Member
 async function loadStaffMember(db: Db, tenantId: string, userId: string): Promise<StaffMember> {
   const row = await repo.findAccount(db, userId)
   if (!row || !await findTenantRole(db, tenantId, userId)) throw staffNotFound()
-  return toStaffMember(row, await repo.ownersAmong(db, tenantId, [userId]), await repo.membershipsOf(db, tenantId, [userId]))
+  return toStaffMember(row, await repo.ownersAmong(db, tenantId, [userId]), await repo.membershipsOf(db, tenantId, [userId]), await lastWorkspaceVisits(db, tenantId, [userId]))
 }
 
 async function ensureActiveBranches(db: Db, tenantId: string, memberships: Memberships) {
@@ -85,8 +87,8 @@ async function runAccessBatch(db: Db, statements: Statement[], userId: string, e
 export async function listStaff(db: Db, actor: Actor, query: StaffListQuery): Promise<Page<StaffMember>> {
   const { rows, total } = await repo.listStaff(db, actor.tenantId, query)
   const ids = rows.map(r => r.id)
-  const [owners, memberships] = await Promise.all([repo.ownersAmong(db, actor.tenantId, ids), repo.membershipsOf(db, actor.tenantId, ids)])
-  return toPage(rows.map(row => toStaffMember(row, owners, memberships)), query, total)
+  const [owners, memberships, visits] = await Promise.all([repo.ownersAmong(db, actor.tenantId, ids), repo.membershipsOf(db, actor.tenantId, ids), lastWorkspaceVisits(db, actor.tenantId, ids)])
+  return toPage(rows.map(row => toStaffMember(row, owners, memberships, visits)), query, total)
 }
 
 export async function getStaffMember(db: Db, actor: Actor, userId: string): Promise<StaffMember> {

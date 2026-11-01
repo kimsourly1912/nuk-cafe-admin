@@ -13,7 +13,6 @@ import { accountPath } from '../composables/useAccounts'
 import { cafeActivityPath, useCafeActivity } from '../composables/useActivity'
 import { ACTION_LABELS, activitySubject, actorName } from '../schemas/activity'
 import { newCafePath, useCafe, useCafeMutations } from '../composables/useCafes'
-import { timeAgo } from '../schemas/cafe-form'
 import { othersCanSignIn } from '../schemas/owner-form'
 import CafeAddressModal from './CafeAddressModal.vue'
 import CafeNotesModal from './CafeNotesModal.vue'
@@ -174,7 +173,7 @@ const created = computed(() => cafe.value && formatDate(cafe.value.createdAt))
           />
           <StatCard
             label="Last order"
-            :value="cafe.usage.lastOrderAt ? timeAgo(cafe.usage.lastOrderAt) : 'None yet'"
+            :value="cafe.usage.lastOrderAt ? formatTimeAgo(cafe.usage.lastOrderAt) : 'None yet'"
             icon="i-lucide-clock"
           />
         </dl>
@@ -389,7 +388,7 @@ const created = computed(() => cafe.value && formatDate(cafe.value.createdAt))
               v-if="cafe.notes.updatedAt"
               class="text-muted"
             >
-              Updated {{ timeAgo(cafe.notes.updatedAt) }}
+              Updated {{ formatTimeAgo(cafe.notes.updatedAt) }}
             </p>
           </div>
           <p
@@ -475,7 +474,7 @@ const created = computed(() => cafe.value && formatDate(cafe.value.createdAt))
                 Reason: {{ entry.details.reason }}
               </p>
               <p class="text-muted">
-                {{ actorName(entry) }} · {{ timeAgo(entry.at) }}
+                {{ actorName(entry) }} · {{ formatTimeAgo(entry.at) }}
               </p>
             </li>
           </ul>

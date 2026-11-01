@@ -44,6 +44,8 @@ You can't reset your own password here: use **Change password** in your account 
 
 The **Two-step** column shows who signs in with a code from an authenticator app as well as their password (**On**) and who doesn't (**Off**); on a phone, a shield with "Two-step sign-in" under the person's access. Each person turns it on or off for themselves, from **Account security** in their user menu (in this portal or in the counter app). You can't turn it on or off for someone else here.
 
+The **Last active here** column shows when each person last opened this cafe's admin portal or counter app ("2 hours ago"; to the hour), or **Not yet**. Hover it for the exact date and time. It never shows what they do at another cafe. Someone you thought had left but who was active recently: **Disable** them, which signs them out everywhere.
+
 ## Common problems
 
 - **"Confirm it's you"** when you make someone an **Admin**: enter your own password, then **Confirm**. It's asked at most once every 15 minutes on this device, so someone using your unlocked phone can't hand out admin access. **Cancel** changes nothing.

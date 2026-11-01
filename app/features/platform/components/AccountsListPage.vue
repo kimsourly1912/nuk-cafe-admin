@@ -9,7 +9,6 @@ import type { TableColumn } from '@nuxt/ui'
 import type { AccountKind, PlatformAccountSummary } from '#shared/contracts/accounts'
 import { accountPath, useAccountList } from '../composables/useAccounts'
 import { accessLine, banLine } from '../schemas/account-form'
-import { timeAgo } from '../schemas/cafe-form'
 
 const { isCompact } = useLayoutContext()
 
@@ -171,7 +170,7 @@ const columns: TableColumn<PlatformAccountSummary>[] = [
         </template>
 
         <template #created-cell="{ row }">
-          <span class="text-muted">{{ timeAgo(row.original.createdAt) }}</span>
+          <span class="text-muted">{{ formatTimeAgo(row.original.createdAt) }}</span>
         </template>
       </UTable>
 

@@ -86,6 +86,11 @@ export interface StaffMember {
   mustChangePassword: boolean
   /** Signs in with a code from an authenticator app too (two-step sign-in, D242). Shown, never changed here. */
   twoFactorEnabled: boolean
+  /**
+   * When they last opened **this cafe's** admin or counter, to the hour (D248); `null`: not since it
+   * was recorded. Never their sign-in at another cafe or as a customer.
+   */
+  lastActiveAt: string | null
   /** Send back on update/disable; changes whenever the account changes. */
   version: number
   createdAt: string
