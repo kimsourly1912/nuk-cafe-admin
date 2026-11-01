@@ -2,6 +2,15 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## A failed e2e test keeps what the browser showed (D249, 2026-11-01)
+Branch `claude/affectionate-galileo-rivb8d`, restarted from `main` at `f2978f7` after PR #236. The owner asked to fix the intermittent e2e failures before step 5. [Decision](decisions.md#d249-a-failed-e2e-test-keeps-what-the-browser-showed-2026-11-01).
+
+- **Investigation:** `counter.test.ts` "sold out at the counter" (failed in PR #236's CI and a local full run): 6/6 alone; 4/4 with every core busy (other files timed out instead); with the sold-out list's reply delayed 2.5 s each time, and with only the first refetch's (stale) reply held 6 s: passed every time, so an out-of-order response isn't it (the later refresh replaces it). `your-cafes.test.ts` sign-ins: 1.3 s normally, 30 s timeouts only under load. No cause found from code: the next failure must show what the page had.
+- **Change:** `test/e2e/support/failure-capture.ts` (a failed test's pages: screenshot, HTML, address); `setupE2e` awaits test-utils' `setup` and registers it after; `test-results/` git-ignored; CI uploads `e2e-failures-<shard>` on a failed shard; development guide and How to verify.
+- **Evidence (2026-11-01, cloud Linux, pnpm 12.15.0, Playwright's Chromium):** a throwaway failing e2e test wrote `page-1.png` (the real admin Overview), `.html` and `.txt`; the passing test before it wrote nothing. Two pitfalls hit and fixed on the way: test-utils clears its context in its own `afterEach` ("No context is available"), and registers its hooks after an `await`, so registering after `setup()` without awaiting it broke 21 of 22 `your-cafes` tests; awaiting it: 22/22, no folder written. `ci-workflows.test.ts` 9/9 (the new step's action pinned). `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 2415 passed, 1 skipped.
+- **Full e2e:** running at commit time; result recorded below.
+- **Next:** step 5, Switch person on the counter; the next intermittent failure is fixed from its artifact.
+
 ## Owners see when staff were last active here: account security step 4 (D248, 2026-11-01)
 Branch `claude/affectionate-galileo-rivb8d`, restarted from `main` at `c056efd` after PR #235 (its staging deploy, run 540, green; the PR's e2e failure was a slow runner: files ran one at a time, unit tests twice as slow; the rerun of the same commit passed). [Plan](plans/account-security.md) step 4. [Decision](decisions.md#d248-owners-see-when-staff-were-last-active-here-never-elsewhere-2026-11-01).
 
@@ -11,7 +20,7 @@ Branch `claude/affectionate-galileo-rivb8d`, restarted from `main` at `c056efd` 
 - **Guards removed one at a time, each failed its test:** the hourly condition; the cafe condition in the read; deleting the rows with the account; recording in `counter/me`.
 - **Fixed on the way:** `platform-accounts.test.ts`'s D247 test counted the closing dialog's same-named button once (1 of 4 runs); it now waits for the dialog to close.
 - **Full e2e (`pnpm test:e2e`, nothing else running, 4 workers):** 788 passed, 8 failed in 7 files. One was this step's real-server test, **a test bug**: other files (payments, cafes, photos) sign Brown Bean's owner in first, and the hourly rule rightly keeps that earlier visit, so "just now" depended on file order; it now accepts any time within the hour. The other 7 (counter, platform-owners, platform, products, shop-account, your-cafes) were 30 s and 10 s timeouts and accessibility checks under load. The 7 files plus payments at 2 workers: **204/204 passed**. Test pitfall: a real-server test that reads "last active" must allow an earlier visit by another file.
-- **Next:** step 5, Switch person on the counter.
+- **Next:** step 5, Switch person on the counter. **Merged as PR #236 (2026-11-01)** after a rerun (the counter sold-out flake, D249).
 
 ## The platform team turns off a lost two-step sign-in: account security step 3b (D247, 2026-11-01)
 Branch `claude/affectionate-galileo-rivb8d`, restarted from `main` at `6f26904` after PR #234 (its staging deploy, run 538, green). [Plan](plans/account-security.md) step 3b (QA1, D245); no mockup round (D245). [Decision](decisions.md#d247-the-platform-team-turns-off-a-lost-two-step-sign-in-qa1-2026-11-01).
@@ -1239,6 +1248,7 @@ Business decisions the build still needs, with the step each blocks. Answered on
 
 ## How to verify
 
+- **An e2e failure that passes on a rerun (D249):** download the run's **e2e-failures-<shard>** artifact and look at the screenshot and HTML before rerunning; record what it showed in the step's progress entry. Known intermittent ones (2026-11-01): `counter.test.ts` "sold out at the counter" (line 543, "Available" not shown after switching back; passed 6/6 alone and under load; a stale-response race was ruled out by delaying the list's reply), and `your-cafes.test.ts` sign-in tests that time out at 30 s only when the machine is busy.
 - **D169 server work:** run the opt-in catalog workload with `CATALOG_BENCH=1 pnpm exec vitest run --project server server/features/menu/tests/catalog-performance.test.ts --maxWorkers=2 --reporter=verbose`. The normal suite skips only that timing run; isolation/freshness/query-plan regressions always run. Base relation batching changes which `db.batch` occurs first: future concurrency probes for placing orders must explicitly target the write boundary when they require a pre-write interleave. The Bakong tamper helper now changes the first encoded character; selecting a replacement based on a different character caused intermittent false failures.
 - **D169 browser environment:** if setup fails before executing tests with “Chromium distribution 'chrome' is not found”, select an installed Chromium with `E2E_BROWSER_PATH=/usr/bin/chromium`. CI retains its Chrome default. A launch failure with skipped tests is not browser validation evidence.
 - Before a PR: `pnpm lint`, `pnpm typecheck`, `pnpm test:unit` and the changed feature's e2e files; CI runs everything ([development guide → Checks](guides/development.md#commands), D83). All pass as of 2026-09-30 (unit + server 795 and the full e2e suite 368, at steps 10.2–10.4).

@@ -7,6 +7,7 @@ import type { AdminSession } from '../../../shared/contracts/identity'
 import type { MenuCategory } from '../../../shared/contracts/menu-categories'
 import type { MenuItem, MenuItemSummary } from '../../../shared/contracts/menu-items'
 import type { BranchOption, StaffMember } from '../../../shared/contracts/staff'
+import { captureFailures } from './failure-capture'
 
 /** Requests no handler answered, across every `mockApi` of the current test. */
 const unhandled: string[] = []
@@ -18,17 +19,21 @@ const contexts: BrowserContext[] = []
  * Call at the top of every e2e file: a browser against the app served by `global-setup.ts`.
  * Each test then fails if the app made an API request that no handler answers (see `mockApi`).
  */
-export function setupE2e() {
+export async function setupE2e() {
   afterEach(async () => {
     await Promise.all(contexts.splice(0).map(context => context.close().catch(() => {})))
     const missing = unhandled.splice(0)
     expect(missing, 'API requests without a mock handler (add them to the test explicitly)').toEqual([])
   })
-  return setup({
+  // test-utils registers its hooks after an `await` inside `setup`: wait for it, so the capture's
+  // hooks come after them. Its `beforeEach` then runs after test-utils' (which sets the browser),
+  // and its `afterEach` first, while the failed test's tabs are still open (hooks unwind like a stack).
+  await setup({
     host: inject('e2eHost'),
     browser: true,
     browserOptions: { type: 'chromium', launch: process.env.E2E_BROWSER_PATH ? { executablePath: process.env.E2E_BROWSER_PATH } : { channel: 'chrome' } },
   })
+  captureFailures()
 }
 
 /**

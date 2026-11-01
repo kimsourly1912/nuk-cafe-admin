@@ -69,6 +69,8 @@ Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix o
 - **e2e** (`test/e2e`): builds the app once and drives Chrome. Admin tests mock the API in the browser (`mockApi`); the customer site's tests read a real database seeded before each run (`test/e2e/support/seed.ts`, the Standard sample menu, D95), because the server renders those pages.
 - **nuxt**: only created once a `*.nuxt.test.ts` exists (D42).
 
+**When an e2e test fails (D249):** every page the test opened is saved under `test-results/e2e/<file> - <test>/` (`page-N.png` full-page screenshot, `page-N.html`, `page-N.txt` with the address and title; `test/e2e/support/failure-capture.ts`, set up by `setupE2e`). Locally, open the folder. In CI, a failed e2e shard uploads it as the artifact **e2e-failures-<shard>** (Actions → the run → Artifacts, kept 14 days). Look there before calling a failure flaky: a timeout says only that something didn't appear, the screenshot says what was there instead.
+
 ## Conventions
 
 - Prefer Nuxt-native tools (`useAsyncData`, `useState`, `useRuntimeConfig`, route middleware), then `@vueuse/core` (import it explicitly: it isn't auto-imported), before adding a library or hand-rolling a utility. There is no Pinia: shared state is `useState` inside a composable.

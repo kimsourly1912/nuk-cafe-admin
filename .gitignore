@@ -28,3 +28,6 @@ upgrade/logs/
 
 # The dev server's test accounts (pnpm dev:accounts, D209)
 dev-accounts.local.md
+
+# What the browser showed when an e2e test failed (test/e2e/support/failure-capture.ts)
+test-results/

@@ -14,7 +14,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109 |
-| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212, D214, D244; production, CI pinning, domains, email, bot protection |
+| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212, D214, D244, D249; production, CI pinning, e2e failure evidence, domains, email, bot protection |
 | Documentation loading | D167 |
 
 ## Entries by ID
@@ -278,3 +278,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D246](decisions.md#d246-confirm-its-you-before-dangerous-changes-per-session-password-15-minutes-2026-11-01) | Confirm it's you before dangerous changes: per-session password, 15 minutes, 2026-11-01 |
 | [D247](decisions.md#d247-the-platform-team-turns-off-a-lost-two-step-sign-in-qa1-2026-11-01) | The platform team turns off a lost two-step sign-in (QA1), 2026-11-01 |
 | [D248](decisions.md#d248-owners-see-when-staff-were-last-active-here-never-elsewhere-2026-11-01) | Owners see when staff were last active here, never elsewhere, 2026-11-01 |
+| [D249](decisions.md#d249-a-failed-e2e-test-keeps-what-the-browser-showed-2026-11-01) | A failed e2e test keeps what the browser showed, 2026-11-01 |
