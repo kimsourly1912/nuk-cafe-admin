@@ -21,7 +21,8 @@ export const platformStatements = {
   ...adminPluginStatements,
   tenant: ['create', 'read', 'update', 'suspend'],
   // Accounts in the console (step P1, D187): through our routes, audited in the same batch.
-  account: ['read', 'ban', 'sign-out', 'reset-password'],
+  // `two-factor-off`: a lost authenticator and backup codes (QA1, D245).
+  account: ['read', 'ban', 'sign-out', 'reset-password', 'two-factor-off'],
   // A cafe's owners and the platform's notes about it (step P2, D189).
   owner: ['add', 'remove', 'transfer'],
   notes: ['update'],
@@ -42,7 +43,7 @@ export const platformRoles = {
     // row or version guard, so accounts change only through the console's routes. No impersonation
     // either: off until there is a support process for it (QP1).
     tenant: ['create', 'read', 'update', 'suspend'],
-    account: ['read', 'ban', 'sign-out', 'reset-password'],
+    account: ['read', 'ban', 'sign-out', 'reset-password', 'two-factor-off'],
     owner: ['add', 'remove', 'transfer'],
     notes: ['update'],
     activity: ['read'],

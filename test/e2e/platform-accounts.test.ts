@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import type { PlatformAccountDetail, PlatformAccountSummary } from '../../shared/contracts/accounts'
 import type { PlatformSession } from '../../shared/contracts/tenants'
 import type { MockHandler } from './support/mock-api'
-import { failures, lastSegment, mockApi, paginatedHandler, setupE2e, toast } from './support/mock-api'
+import { failures, lastSegment, MockFailure, mockApi, paginatedHandler, setupE2e, toast } from './support/mock-api'
 
 await setupE2e()
 
@@ -30,6 +30,7 @@ function accountOf(id: string, name: string, overrides: Partial<PlatformAccountD
     createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     cafes: [],
     mustChangePassword: false,
+    twoFactorEnabled: false,
     activeSessions: 2,
     lastActiveAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
     version: 10,
@@ -47,7 +48,7 @@ const BANNED = accountOf('acc-4', 'Gone Person', { ban: { reason: 'Fraudulent or
 const OTHER_SUPER = accountOf('acc-5', 'Second Admin', { isSuperadmin: true })
 const SELF = accountOf(SUPERADMIN.userId, 'Ops', { isSuperadmin: true })
 const ALL = [OWNER, STAFF, CUSTOMER, BANNED, OTHER_SUPER]
-const summary = ({ cafes: _c, mustChangePassword: _m, activeSessions: _a, lastActiveAt: _l, version: _v, ...account }: PlatformAccountDetail): PlatformAccountSummary => account
+const summary = ({ cafes: _c, mustChangePassword: _m, twoFactorEnabled: _t, activeSessions: _a, lastActiveAt: _l, version: _v, ...account }: PlatformAccountDetail): PlatformAccountSummary => account
 
 /** Accounts filtered by `kind` like the server, then searched and paged. */
 function accountsHandler(accounts: () => PlatformAccountDetail[]): MockHandler {
@@ -238,6 +239,52 @@ describe('an account\'s page', () => {
     await form.getByRole('button', { name: 'Done' }).click()
     await form.waitFor({ state: 'detached' })
     await page.getByText('Has a temporary password').waitFor()
+  })
+
+  it('turns off a lost two-step sign-in (QA1, D247): a reason, then the super admin\'s own password, then it\'s Off', async () => {
+    let account: PlatformAccountDetail = { ...OWNER, twoFactorEnabled: true }
+    let confirmed = false
+    const sent: unknown[] = []
+    const { page, api } = await open('/platform/accounts/acc-1', {
+      'GET /platform/accounts/{id}': () => account,
+      'POST /platform/accounts/{id}/two-factor-off': ({ body }) => {
+        sent.push(body)
+        if (!confirmed) throw new MockFailure(403, 'CONFIRMATION_REQUIRED', 'Confirm it\'s you: enter your password to make this change.')
+        account = { ...account, twoFactorEnabled: false, activeSessions: 0, version: 11 }
+        return account
+      },
+      'POST /me/confirm': ({ body }) => {
+        expect(body).toEqual({ password: 'ops password' })
+        confirmed = true
+        return { confirmedUntil: new Date(Date.now() + 15 * 60_000).toISOString() }
+      },
+    })
+    await expect.poll(() => page.getByTestId('account-two-factor').textContent()).toBe('On')
+    await page.getByRole('button', { name: 'Turn off two-step sign-in' }).click()
+    const form = page.getByRole('dialog', { name: /Turn off two-step sign-in for Bea Brown/ })
+    // A reason is required, and nothing is sent without one.
+    await form.getByRole('button', { name: 'Turn off two-step sign-in' }).click()
+    await form.getByText('Required').waitFor()
+    expect(sent).toEqual([])
+    await form.getByLabel('Reason').fill('Checked her ID at the cafe')
+    await form.getByRole('button', { name: 'Turn off two-step sign-in' }).click()
+
+    const confirm = page.getByRole('dialog', { name: 'Confirm it\'s you' })
+    await confirm.getByLabel('Your password').fill('ops password')
+    await confirm.getByRole('button', { name: 'Confirm' }).click()
+    await toast(page, 'Two-step sign-in is off for Bea Brown').waitFor()
+    await expect.poll(() => page.getByTestId('account-two-factor').textContent()).toBe('Off')
+    // The same request twice: refused, then sent again after confirming.
+    expect(sent).toEqual([{ version: 10, reason: 'Checked her ID at the cafe' }, { version: 10, reason: 'Checked her ID at the cafe' }])
+    expect(await page.getByRole('button', { name: 'Turn off two-step sign-in' }).count()).toBe(0)
+    expect(writes(api.calls)).toEqual(['POST /platform/accounts/acc-1/two-factor-off', 'POST /me/confirm', 'POST /platform/accounts/acc-1/two-factor-off'])
+  })
+
+  it('offers turning off two-step sign-in only for an account that has it', async () => {
+    const { page } = await open('/platform/accounts/acc-1')
+    await page.getByRole('button', { name: 'Set temporary password' }).waitFor()
+    expect(await page.getByTestId('account-two-factor').textContent()).toBe('Off')
+    expect(await page.getByRole('button', { name: 'Turn off two-step sign-in' }).count()).toBe(0)
   })
 
   it('a change someone else made meanwhile is said, and nothing is shown as banned', async () => {

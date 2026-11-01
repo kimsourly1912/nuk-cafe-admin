@@ -104,5 +104,6 @@ platform.
   confirmation naming the cafes left without an owner.
 - Two super admins acting on one account at once: the version guard; the second gets 409 and reloads.
 - A temporary password for a banned account: refused (unban first).
+- Two-step sign-in off (QA1, D247): only for an account that has it, never a super admin's or one's own; a reason and the super admin's own password (D246); every session ends.
 - Removing an owner who is also signed in to the admin: their sessions end in the batch, as staff
   disable does.

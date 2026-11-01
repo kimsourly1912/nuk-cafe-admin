@@ -142,6 +142,8 @@ describe('dangerous changes need a fresh confirmation (D246)', () => {
     'platform/tenants/[tenantId]/owners/index.post.ts',
     'platform/tenants/[tenantId]/owners/[userId]/remove.post.ts',
     'platform/tenants/[tenantId]/owners/[userId]/transfer.post.ts',
+    // Removes a protection from someone's account (QA1, D247).
+    'platform/accounts/[userId]/two-factor-off.post.ts',
   ]
 
   it.each(DANGEROUS)('%s asks for it after the permission check', (route) => {

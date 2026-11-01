@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { accountListQuerySchema } from '#shared/contracts/accounts'
 import * as v from 'valibot'
 import type { Db } from '#server/utils/batch'
-import { auditEvents, member, session, user } from '#server/db/tables'
+import { auditEvents, member, session, twoFactor, user } from '#server/db/tables'
 import { addBranchStaff, createAdmin, createTestDb, createUser, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { createTestAuth, signIn } from '#server/tests/support/auth'
 import type { TestAuth } from '#server/tests/support/auth'
 import { expectApiError } from '#server/tests/support/failure'
 import { interleaved } from '#server/tests/support/interleave'
-import { banAccount, getPlatformAccount, listPlatformAccounts, setTemporaryPassword, signOutAccount, unbanAccount } from '#server/features/identity'
+import { banAccount, getPlatformAccount, listPlatformAccounts, setTemporaryPassword, signOutAccount, turnOffTwoFactor, unbanAccount } from '#server/features/identity'
 import { authorizeCustomer, authorizePlatform, authorizeTenant } from '#server/features/identity/identity.service'
 import type { SessionUser } from '#server/features/identity/identity.types'
 
@@ -283,6 +283,72 @@ describe('a temporary password', () => {
     expect((await getPlatformAccount(db, userId)).mustChangePassword).toBe(false)
     await db.update(user).set({ banned: false }).where(eq(user.id, userId))
     await expect(signIn(auth, 'dara@example.com', PASSWORD)).resolves.toBeDefined()
+  })
+})
+
+describe('turning off a lost two-step sign-in (QA1, D247)', () => {
+  /** Two-step sign-in on, as Better Auth leaves it: the flag and the account's secret. */
+  async function withTwoFactor(email: string) {
+    const userId = await signUp(email)
+    await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, userId))
+    await db.insert(twoFactor).values({ id: `tf-${userId}`, secret: 'sealed-secret', backupCodes: 'sealed-codes', userId })
+    return userId
+  }
+  /** Whether a password sign-in stops at the code step. */
+  const asksForCode = async (email: string) => {
+    const result = await auth.api.signInEmail({ body: { email, password: PASSWORD } }) as { twoFactorRedirect?: boolean }
+    return result.twoFactorRedirect === true
+  }
+
+  it('turns it off like Better Auth does, ends every session and audits why; the password alone signs in', async () => {
+    const userId = await withTwoFactor('dara@example.com')
+    expect(await asksForCode('dara@example.com')).toBe(true)
+    await db.insert(session).values({ id: 'old-session', token: 'old-token', userId, expiresAt: new Date(Date.now() + 86_400_000), createdAt: new Date(), updatedAt: new Date() })
+    const before = await getPlatformAccount(db, userId)
+    expect(before.twoFactorEnabled).toBe(true)
+
+    const account = await turnOffTwoFactor(db, actor, userId, { version: before.version, reason: 'Checked her ID at the cafe' })
+    expect(account).toMatchObject({ twoFactorEnabled: false, activeSessions: 0 })
+    expect(account.version).toBeGreaterThan(before.version)
+    expect(await db.select().from(twoFactor).where(eq(twoFactor.userId, userId))).toEqual([])
+    expect(await asksForCode('dara@example.com')).toBe(false)
+    const rows = await db.select().from(auditEvents).where(eq(auditEvents.action, 'platform.account.two-factor.off'))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ actorId: SUPER, targetId: userId, tenantId: null, metadata: { reason: 'Checked her ID at the cafe' } })
+  })
+
+  it('refuses an account without it, one\'s own, a super admin\'s and a stale version', async () => {
+    const without = await signUp('plain@example.com')
+    await expectApiError(async () => turnOffTwoFactor(db, actor, without, { version: await versionOf(without), reason: 'x' }), 409, 'TWO_FACTOR_NOT_ON')
+    await db.update(user).set({ twoFactorEnabled: true }).where(eq(user.id, SUPER))
+    await expectApiError(async () => turnOffTwoFactor(db, actor, SUPER, { version: await versionOf(SUPER), reason: 'x' }), 409, 'OWN_ACCOUNT')
+    await db.insert(user).values({ id: 'super-2', email: 'super2@example.com', name: 'Super 2', role: 'superadmin', twoFactorEnabled: true })
+    await expectApiError(async () => turnOffTwoFactor(db, actor, 'super-2', { version: await versionOf('super-2'), reason: 'x' }), 409, 'PLATFORM_ACCOUNT')
+    const userId = await withTwoFactor('dara@example.com')
+    await expectApiError(async () => turnOffTwoFactor(db, actor, userId, { version: 1, reason: 'x' }), 409, 'VERSION_CONFLICT')
+    expect(await asksForCode('dara@example.com')).toBe(true)
+  })
+
+  it('turned off meanwhile by the person (keeping the version): the batch changes nothing, the secret stays', async () => {
+    const userId = await withTwoFactor('dara@example.com')
+    const version = await versionOf(userId)
+    const racing = interleaved(db, () => db.update(user).set({ twoFactorEnabled: false, updatedAt: new Date(version) }).where(eq(user.id, userId)))
+    await expectApiError(async () => turnOffTwoFactor(racing, actor, userId, { version, reason: 'x' }), 409, 'VERSION_CONFLICT')
+    expect(await db.select().from(twoFactor).where(eq(twoFactor.userId, userId))).toHaveLength(1)
+    expect(await db.select().from(auditEvents).where(eq(auditEvents.action, 'platform.account.two-factor.off'))).toEqual([])
+  })
+
+  it('made a super admin meanwhile: refused, nothing changed', async () => {
+    const userId = await withTwoFactor('dara@example.com')
+    const version = await versionOf(userId)
+    const racing = interleaved(db, () => db.update(user).set({ role: 'superadmin', updatedAt: new Date(version) }).where(eq(user.id, userId)))
+    await expectApiError(async () => turnOffTwoFactor(racing, actor, userId, { version, reason: 'x' }), 409, 'VERSION_CONFLICT')
+    expect((await db.select({ on: user.twoFactorEnabled }).from(user).where(eq(user.id, userId)))[0]?.on).toBe(true)
+  })
+
+  it('is the platform team\'s only: cafe roles don\'t grant it', () => {
+    expect(() => authorizePlatform({ id: 'owner-1', role: 'customer' } as SessionUser, { account: ['two-factor-off'] })).toThrow()
+    expect(authorizePlatform({ id: SUPER, role: 'superadmin', twoFactorEnabled: true } as SessionUser, { account: ['two-factor-off'] })).toMatchObject({ userId: SUPER })
   })
 })
 

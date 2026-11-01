@@ -190,8 +190,8 @@ describe('on D1', () => {
 
   it('reads identity and cafe pages with their totals through D1, preserving booleans and dates (D194)', async () => {
     const now = new Date('2026-10-20T03:00:00Z')
-    const { db: accountDb } = fakeD1([['person', 'Person', 'person@example.com', 1, 'customer', 0, null, null, 0, 0, now.getTime(), now.getTime()], [1]])
-    expect(await listAccounts(accountDb, { page: 1, pageSize: 20, kind: 'owner' })).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'person', name: 'Person', emailVerified: true, banned: false, createdAt: now, updatedAt: now })] })
+    const { db: accountDb } = fakeD1([['person', 'Person', 'person@example.com', 1, 'customer', 0, null, null, 0, 1, 0, now.getTime(), now.getTime()], [1]])
+    expect(await listAccounts(accountDb, { page: 1, pageSize: 20, kind: 'owner' })).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'person', name: 'Person', emailVerified: true, banned: false, twoFactorEnabled: true, isAnonymous: false, createdAt: now, updatedAt: now })] })
     const { db: staffDb } = fakeD1([['person', 'Person', 'person@example.com', 'customer', 0, 1, now.getTime(), now.getTime()], [1]])
     expect(await listStaff(staffDb, 'cafe-a', { page: 1, pageSize: 20, branchId: 'branch-a' })).toEqual({ total: 1, rows: [expect.objectContaining({ id: 'person', mustChangePassword: false, twoFactorEnabled: true, updatedAt: now, createdAt: now })] })
     const { db: tenantDb } = fakeD1([['cafe-a', 'Cafe A', 'cafe-a', 'active', null, null, 2, now.getTime()], [1]])

@@ -1,12 +1,12 @@
 import { hashPassword } from 'better-auth/crypto'
-import type { AccountBan, AccountListQuery, AccountPasswordInput, AccountTemporaryPassword, BanAccountInput, PlatformAccountDetail, PlatformAccountSummary, UnbanAccountInput } from '#shared/contracts/accounts'
+import type { AccountBan, AccountListQuery, AccountPasswordInput, AccountTemporaryPassword, BanAccountInput, PlatformAccountDetail, PlatformAccountSummary, TurnOffTwoFactorInput, UnbanAccountInput } from '#shared/contracts/accounts'
 import type { Page } from '#shared/contracts/common'
 import { toPage } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
 import { runBatch, requireOneChange } from '#server/utils/batch'
 import { toIso } from '#server/utils/time'
 import { auditStatement } from '#server/features/platform'
-import { accountBanned, accountChanged, accountNotFound, alreadyBanned, banEndInPast, notBanned, ownAccount, platformAccount } from './accounts.errors'
+import { accountBanned, accountChanged, accountNotFound, alreadyBanned, banEndInPast, notBanned, ownAccount, platformAccount, twoFactorNotOn } from './accounts.errors'
 import * as repo from './accounts.repository'
 import type { CafeMembershipRow, PlatformAccountRow } from './accounts.repository'
 import * as staffRepo from './staff.repository'
@@ -76,6 +76,7 @@ async function toDetail(db: Db, row: PlatformAccountRow, now: Date): Promise<Pla
       onlyActiveOwner: m.role === 'owner' && !row.banned && activeOwners.get(m.tenantId) === 1,
     })),
     mustChangePassword: Boolean(row.mustChangePassword),
+    twoFactorEnabled: Boolean(row.twoFactorEnabled),
     activeSessions: sessions.total,
     lastActiveAt: sessions.lastActiveAt ? toIso(sessions.lastActiveAt) : null,
     version: row.updatedAt.getTime(),
@@ -164,6 +165,28 @@ export async function setTemporaryPassword(db: Db, actor: PlatformAccountActor, 
     audit(db, actor, 'platform.account.password.temporary', userId, { reason: input.reason }),
   ], accountChanged)
   return { account: await getPlatformAccount(db, userId, now), temporaryPassword }
+}
+
+/**
+ * Turns off two-step sign-in for someone who lost both the authenticator and the backup codes (QA1,
+ * D245, D247). Only the platform team, never a cafe owner (one account can work at several cafes);
+ * never a super admin's (it's required for them, D188: the manual reset in operations) or one's own.
+ * One batch: the flag off and the secret gone (as Better Auth's own disable), every session ended
+ * (whoever holds a session made before can't keep it), and an audit row with how the team checked
+ * it's really them. The route asks the super admin to confirm their password first (D246).
+ */
+export async function turnOffTwoFactor(db: Db, actor: PlatformAccountActor, userId: string, input: TurnOffTwoFactorInput, now = new Date()): Promise<PlatformAccountDetail> {
+  const row = await loadChangeable(db, actor, userId, input.version)
+  if (!row.twoFactorEnabled) throw twoFactorNotOn()
+
+  await runBatch(db, [
+    repo.turnOffTwoFactorStatement(db, userId, row.updatedAt, nextVersion(row.updatedAt, now)),
+    requireOneChange(db),
+    repo.deleteTwoFactorStatement(db, userId),
+    staffRepo.deleteSessionsStatement(db, userId),
+    audit(db, actor, 'platform.account.two-factor.off', userId, { reason: input.reason }),
+  ], accountChanged)
+  return getPlatformAccount(db, userId, now)
 }
 
 /** Registered accounts banned now, for the console's Overview (D191). */

@@ -21,6 +21,7 @@ export const ACTION_LABELS: Record<PlatformAction, string> = {
   'platform.account.unban': 'Account unbanned',
   'platform.account.sign-out': 'Signed out everywhere',
   'platform.account.password.temporary': 'Temporary password set',
+  'platform.account.two-factor.off': 'Two-step sign-in turned off',
   'platform.superadmin.grant': 'Super admin granted',
 }
 

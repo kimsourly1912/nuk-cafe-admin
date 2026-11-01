@@ -2,7 +2,7 @@
 /**
  * One account in the platform console (`/platform/accounts/:id`, step P1, D187): who it is, the
  * cafes it works in, its sessions, and the platform's actions on it (ban or unban, sign out
- * everywhere, a temporary password). Never the cafes a customer orders from (D186). A super admin's
+ * everywhere, a temporary password, two-step sign-in off for a lost authenticator, D247). Never the cafes a customer orders from (D186). A super admin's
  * account and one's own are shown without actions: another super admin is changed by hand, one's
  * own through the account menu.
  */
@@ -12,6 +12,7 @@ import { banLine } from '../schemas/account-form'
 import { timeAgo } from '../schemas/cafe-form'
 import AccountBanModal from './AccountBanModal.vue'
 import AccountPasswordModal from './AccountPasswordModal.vue'
+import AccountTwoFactorOffModal from './AccountTwoFactorOffModal.vue'
 
 const props = defineProps<{ id: string }>()
 
@@ -27,6 +28,7 @@ const changeable = computed(() => !!account.value && !own.value && !account.valu
 const overlay = useOverlay()
 const banModal = overlay.create(AccountBanModal)
 const passwordModal = overlay.create(AccountPasswordModal)
+const twoFactorOffModal = overlay.create(AccountTwoFactorOffModal)
 </script>
 
 <template>
@@ -162,6 +164,17 @@ const passwordModal = overlay.create(AccountPasswordModal)
                 {{ account.lastActiveAt ? timeAgo(account.lastActiveAt) : 'Not signed in' }}
               </dd>
             </div>
+            <div>
+              <dt class="text-muted">
+                Two-step sign-in
+              </dt>
+              <dd
+                class="text-highlighted"
+                data-testid="account-two-factor"
+              >
+                {{ account.twoFactorEnabled ? 'On' : 'Off' }}
+              </dd>
+            </div>
           </dl>
           <p
             v-if="account.mustChangePassword"
@@ -271,6 +284,28 @@ const passwordModal = overlay.create(AccountPasswordModal)
                 class="shrink-0"
                 :disabled="busy || !!account.ban"
                 @click="passwordModal.open({ account })"
+              />
+            </div>
+            <div
+              v-if="account.twoFactorEnabled"
+              class="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div>
+                <h3 class="font-medium text-highlighted">
+                  Two-step sign-in
+                </h3>
+                <p class="text-sm text-muted">
+                  Only when they lost both their authenticator app and their backup codes.
+                </p>
+              </div>
+              <UButton
+                label="Turn off two-step sign-in"
+                icon="i-lucide-shield-off"
+                color="neutral"
+                variant="outline"
+                class="shrink-0"
+                :disabled="busy"
+                @click="twoFactorOffModal.open({ account })"
               />
             </div>
           </div>

@@ -1,10 +1,10 @@
 # Current-state navigation
 
-Snapshot reviewed against main `14f3fc2`, 2026-11-01. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
+Snapshot reviewed against main `6f26904`, 2026-11-01. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
 
 ## Waiting on the owner
 
-- **In review: account security step 3, Confirm it's you (D246), and no default mockup round with QA1 answered (D245),** branch `claude/affectionate-galileo-rivb8d`. [Progress](progress.md#confirm-its-you-before-dangerous-changes-account-security-step-3-d246-2026-11-01). Next: step 3b (the console turns off a lost two-step sign-in).
+- **In review: account security step 3b (D247),** branch `claude/affectionate-galileo-rivb8d`: the console turns off a lost two-step sign-in. Step 3 (D246) and D245 merged as PR #234. The owner reported the D244 security checklist done (2026-11-01). Next: step 4, owners see their staff's access. [Progress](progress.md#the-platform-team-turns-off-a-lost-two-step-sign-in-account-security-step-3b-d247-2026-11-01).
 - **Merged: account security step 2 (D243, PR #232) and security hardening (D244, PR #233).** The owner works through the [security checklist](plans/cloudflare-improvements.md#owner-security-checklist-d244).
 - **In review: Review order's first load and the first-load rule (D238),** branch `claude/checkout-loading-state`. Next: other pages checked against the new UI checklist item, one per branch. [Progress](progress.md#review-orders-first-load-and-the-first-load-rule-d238-2026-10-30).
 - **Merged: account erasure (D237, 2026-10-30):** PR #224 as `3ed2cbf`. Account menu → **Delete account**; `POST /api/me/delete-account`; no migration. [Plan](plans/account-erasure.md), [decision](decisions.md#d237-an-account-deletes-itself-emptied-like-a-guest-d229s-erasure-2026-10-30), [progress](progress.md#account-erasure-d237-2026-10-30).
