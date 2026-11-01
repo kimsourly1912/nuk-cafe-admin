@@ -52,7 +52,7 @@ describe('cafe routes (D140)', () => {
   it('routes outside a cafe\'s address never act in one', () => {
     const global = routeFiles(apiDir).filter(file => !file.startsWith(cafeDir) && !file.startsWith(platformDir))
     // Forward slashes on every OS: Windows paths use `\`.
-    expect(global.map(file => file.slice(apiDir.length + 1).replaceAll('\\', '/')).sort()).toEqual(['[...].ts', 'cafes/[slug].get.ts', 'client-errors.post.ts', 'health.get.ts', 'me/cafes.get.ts', 'me/delete-account.post.ts', 'me/sessions.get.ts', 'password-ranges/[prefix].get.ts', 'tables/[token].get.ts', 'webhooks/telegram.post.ts'])
+    expect(global.map(file => file.slice(apiDir.length + 1).replaceAll('\\', '/')).sort()).toEqual(['[...].ts', 'cafes/[slug].get.ts', 'client-errors.post.ts', 'health.get.ts', 'me/cafes.get.ts', 'me/confirm.post.ts', 'me/delete-account.post.ts', 'me/sessions.get.ts', 'password-ranges/[prefix].get.ts', 'tables/[token].get.ts', 'webhooks/telegram.post.ts'])
     expect(global.filter(file => calls(file, TENANT_HELPERS))).toEqual([])
   })
 })
@@ -126,5 +126,35 @@ describe('DELETE routes (D200)', () => {
   it.each(deletes.map(file => [file.slice(apiDir.length + 1), file]))('%s reads no body', (_name, file) => {
     const source = readFileSync(file, 'utf8')
     expect(source).not.toMatch(/readValidBody|readBody|readRawBody|readLimitedBody|readMultipart/)
+  })
+})
+
+// Dangerous changes ask for the password again (D246): each of these routes calls the check after
+// its permission check. Staff create asks only when it gives admin; the access change, in the
+// service, only when it gives admin to someone who isn't one (staff.service.test.ts).
+describe('dangerous changes need a fresh confirmation (D246)', () => {
+  const DANGEROUS = [
+    'c/[slug]/admin/khqr/index.put.ts',
+    'c/[slug]/admin/khqr/token.put.ts',
+    'c/[slug]/admin/khqr/token.delete.ts',
+    'c/[slug]/admin/staff/index.post.ts',
+    'c/[slug]/admin/staff/[userId].patch.ts',
+    'platform/tenants/[tenantId]/owners/index.post.ts',
+    'platform/tenants/[tenantId]/owners/[userId]/remove.post.ts',
+    'platform/tenants/[tenantId]/owners/[userId]/transfer.post.ts',
+  ]
+
+  it.each(DANGEROUS)('%s asks for it after the permission check', (route) => {
+    const source = readFileSync(join(apiDir, route), 'utf8')
+    const permission = Math.max(source.indexOf('requirePermission('), source.indexOf('requirePlatformPermission('))
+    const confirmation = source.indexOf('requireConfirmation(event)')
+    expect(permission).toBeGreaterThan(-1)
+    expect(confirmation).toBeGreaterThan(permission)
+  })
+
+  it('every route that changes KHQR settings or a cafe\'s owners is in the list', () => {
+    const name = (file: string) => file.slice(apiDir.length + 1).replaceAll('\\', '/')
+    const writes = routeFiles(apiDir).map(name).filter(route => /\/(khqr\/(index\.put|token\.(put|delete))|owners\/.+\.post)\.ts$/.test(route) && !route.includes('/counter/'))
+    expect(writes.sort()).toEqual(DANGEROUS.filter(route => /khqr|owners/.test(route)).sort())
   })
 })

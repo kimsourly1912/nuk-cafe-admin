@@ -1,9 +1,12 @@
 import { createPage, url } from '@nuxt/test-utils/e2e'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, inject, it } from 'vitest'
 import type { BakongConnectionTest, ExchangeRate, ExchangeRates, KhqrSettings } from '../../shared/contracts/orders'
 import { failures, MockFailure, mockApi, setupE2e, toast } from './support/mock-api'
+import { asNewVisitor } from './support/client-address'
 
 await setupE2e()
+
+const seed = inject('shopSeed')
 
 // The admin Payments page (D102): the riel rate for cash payments, and its history.
 
@@ -14,19 +17,26 @@ const HISTORY = [rate(4100, '2026-09-29T02:00:00.000Z'), rate(4080, '2026-09-28T
 const WITH_TOKEN: KhqrSettings = { version: 1, enabled: true, accountId: 'nukcafe@aclb', merchantName: 'NUK Cafe', merchantCity: 'Phnom Penh', currencies: ['USD'], updatedAt: '2026-10-01T05:00:00.000Z', updatedBy: { name: 'Kim' }, automaticCheck: true, token: { version: 3, expiresAt: new Date(Date.now() + 80 * 86_400_000).toISOString(), setAt: '2026-10-01T05:00:00.000Z', setBy: { name: 'Kim' } }, tokenStorage: true }
 const KHQR_OFF: KhqrSettings = { version: 0, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: [], updatedAt: null, updatedBy: null, automaticCheck: false, token: null, tokenStorage: true }
 
-async function open(start: ExchangeRates, khqr: KhqrSettings = KHQR_OFF, options: { conflictOnce?: boolean, bakongTest?: BakongConnectionTest[], refuseToken?: boolean } = {}) {
+async function open(start: ExchangeRates, khqr: KhqrSettings = KHQR_OFF, options: { conflictOnce?: boolean, bakongTest?: BakongConnectionTest[], refuseToken?: boolean, confirmOnce?: boolean } = {}) {
   let state = start
   let khqrState = khqr
   let conflict = options.conflictOnce ?? false
   const posted: unknown[] = []
   const saved: unknown[] = []
   const tokenCalls: string[] = []
+  // Dangerous changes ask for the password again (D246): refused until `POST /me/confirm`.
+  let confirmed = !options.confirmOnce
+  const confirmCalls: unknown[] = []
+  const needsConfirmation = () => {
+    if (!confirmed) throw new MockFailure(403, 'CONFIRMATION_REQUIRED', 'Confirm it\'s you: enter your password to make this change.')
+  }
   const page = await createPage()
   await page.setViewportSize({ width: 1440, height: 900 })
   await mockApi(page, {
     'GET /admin/khqr': () => khqrState,
     'PUT /admin/khqr': ({ body }) => {
       saved.push(body)
+      needsConfirmation()
       if (conflict) {
         conflict = false
         khqrState = { ...khqrState, version: khqrState.version + 1, merchantName: 'Someone else' }
@@ -35,6 +45,12 @@ async function open(start: ExchangeRates, khqr: KhqrSettings = KHQR_OFF, options
       const input = body as KhqrSettings
       khqrState = { ...input, version: input.version + 1, updatedAt: '2026-10-02T05:00:00.000Z', updatedBy: { name: 'Admin' }, automaticCheck: khqrState.automaticCheck, token: khqrState.token, tokenStorage: khqrState.tokenStorage }
       return khqrState
+    },
+    'POST /me/confirm': ({ body }) => {
+      confirmCalls.push(body)
+      if ((body as { password: string }).password !== 'the right one') throw new MockFailure(400, 'WRONG_PASSWORD', 'That password isn\'t right.', { password: ['That password isn\'t right'] })
+      confirmed = true
+      return { confirmedUntil: new Date(Date.now() + 15 * 60_000).toISOString() }
     },
     'POST /admin/khqr/test': () => options.bakongTest?.shift() ?? { status: 'connected' },
     // The cafe's own token (D148): sent once, answered back only as its date and who set it.
@@ -60,7 +76,7 @@ async function open(start: ExchangeRates, khqr: KhqrSettings = KHQR_OFF, options
   })
   await page.goto(url('/c/nuk/admin/payments'), { waitUntil: 'hydration' })
   await page.getByRole('heading', { name: 'Riel exchange rate' }).waitFor()
-  return { page, posted, saved, tokenCalls }
+  return { page, posted, saved, tokenCalls, confirmCalls }
 }
 
 describe('Payments', () => {
@@ -102,6 +118,42 @@ describe('Payments', () => {
     await form.getByRole('button', { name: 'Save KHQR settings' }).click()
     await toast(page, 'KHQR settings saved: the counter shows a QR for each order').waitFor()
     expect(saved).toEqual([{ version: 0, enabled: true, accountId: 'nukcafe@aclb', merchantName: 'NUK Cafe', merchantCity: 'Phnom Penh', currencies: ['USD', 'KHR'] }])
+  })
+
+  it('KHQR (D246): saving asks "Confirm it\'s you"; a wrong password stays on its field; then the same save is sent again', async () => {
+    const { page, saved, confirmCalls } = await open({ current: HISTORY[0]!, history: HISTORY }, KHQR_OFF, { confirmOnce: true })
+    const form = page.getByRole('region', { name: 'KHQR at the counter' })
+    await form.getByLabel('Bakong account ID').fill('nukcafe@aclb')
+    await form.getByLabel('Name customers see').fill('NUK Cafe')
+    await form.getByRole('button', { name: 'Save KHQR settings' }).click()
+
+    const dialog = page.getByRole('dialog', { name: 'Confirm it\'s you' })
+    await dialog.getByLabel('Your password').fill('a guess')
+    await dialog.getByRole('button', { name: 'Confirm' }).click()
+    await dialog.getByText('That password isn\'t right').waitFor()
+    await dialog.getByLabel('Your password').fill('the right one')
+    await dialog.getByRole('button', { name: 'Confirm' }).click()
+
+    await toast(page, 'KHQR settings saved: the counter shows a QR for each order').waitFor()
+    await dialog.waitFor({ state: 'detached' })
+    const sent = { version: 0, enabled: true, accountId: 'nukcafe@aclb', merchantName: 'NUK Cafe', merchantCity: 'Phnom Penh', currencies: ['USD'] }
+    // The refused save, then the same one again: same body, same version.
+    expect(saved).toEqual([sent, sent])
+    expect(confirmCalls).toEqual([{ password: 'a guess' }, { password: 'the right one' }])
+  })
+
+  it('KHQR (D246): Cancel in "Confirm it\'s you" sends nothing again, shows no error, and keeps the input', async () => {
+    const { page, saved } = await open({ current: HISTORY[0]!, history: HISTORY }, KHQR_OFF, { confirmOnce: true })
+    const form = page.getByRole('region', { name: 'KHQR at the counter' })
+    await form.getByLabel('Bakong account ID').fill('nukcafe@aclb')
+    await form.getByLabel('Name customers see').fill('NUK Cafe')
+    await form.getByRole('button', { name: 'Save KHQR settings' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Confirm it\'s you' })
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await dialog.waitFor({ state: 'detached' })
+    expect(saved).toHaveLength(1)
+    expect(await toast(page, /Could not save the KHQR settings|Not confirmed/).count()).toBe(0)
+    expect(await form.getByLabel('Name customers see').inputValue()).toBe('NUK Cafe')
   })
 
   it('KHQR: refuses a Khmer name or an ID without @bank before sending; someone else\'s save shows Reload, which keeps the input', async () => {
@@ -192,5 +244,51 @@ describe('Payments', () => {
   it('is in the sidebar', async () => {
     const { page } = await open({ current: HISTORY[0]!, history: HISTORY })
     expect(await page.getByRole('link', { name: 'Payments' }).getAttribute('href')).toBe('/c/nuk/admin/payments')
+  })
+})
+
+describe('Confirm it\'s you on the real server (D246)', () => {
+  it('an owner\'s KHQR save is refused until the password is confirmed, then goes through; a wrong one is refused by the server', async () => {
+    const { email, password } = seed.customers.beanOwner
+    const { slug } = seed.secondCafe
+    const page = await createPage()
+    page.setDefaultTimeout(10_000)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await asNewVisitor(page)
+    await page.goto(url(`/c/${slug}/admin/login`), { waitUntil: 'hydration' })
+    await page.getByLabel('Email').fill(email)
+    await page.getByLabel('Password', { exact: true }).fill(password)
+    await page.getByRole('button', { name: 'Sign in' }).click()
+    await page.waitForURL(address => address.pathname === `/c/${slug}/admin`)
+
+    // The server itself refuses without a confirmation (the app's dialog isn't the guard).
+    const unconfirmed = await page.evaluate(async (path) => {
+      const response = await fetch(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ version: 0, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: [] }) })
+      return { status: response.status, code: ((await response.json()) as { data?: { code?: string } }).data?.code }
+    }, `/api/c/${slug}/admin/khqr`)
+    expect(unconfirmed).toEqual({ status: 403, code: 'CONFIRMATION_REQUIRED' })
+
+    await page.goto(url(`/c/${slug}/admin/payments`), { waitUntil: 'hydration' })
+    const form = page.getByRole('region', { name: 'KHQR at the counter' })
+    await form.getByLabel('Bakong account ID').fill('brownbean@aclb')
+    await form.getByLabel('Name customers see').fill('Brown Bean')
+    await form.getByRole('button', { name: 'Save KHQR settings' }).click()
+
+    const dialog = page.getByRole('dialog', { name: 'Confirm it\'s you' })
+    await dialog.getByLabel('Your password').fill('not the password')
+    await dialog.getByRole('button', { name: 'Confirm' }).click()
+    await dialog.getByText('That password isn\'t right').waitFor()
+    await dialog.getByLabel('Your password').fill(password)
+    await dialog.getByRole('button', { name: 'Confirm' }).click()
+    await toast(page, 'KHQR settings saved: the counter shows a QR for each order').waitFor()
+
+    // Confirmed for this session: the next dangerous change doesn't ask again.
+    const settings = await page.evaluate(path => fetch(path).then(r => r.json()), `/api/c/${slug}/admin/khqr`) as KhqrSettings
+    expect(settings).toMatchObject({ enabled: true, accountId: 'brownbean@aclb', merchantName: 'Brown Bean' })
+    const again = await page.evaluate(async ({ path, version }) => {
+      const response = await fetch(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ version, enabled: false, accountId: 'brownbean@aclb', merchantName: 'Brown Bean', merchantCity: 'Phnom Penh', currencies: ['USD'] }) })
+      return response.status
+    }, { path: `/api/c/${slug}/admin/khqr`, version: settings.version })
+    expect(again).toBe(200)
   })
 })

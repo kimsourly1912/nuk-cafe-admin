@@ -46,6 +46,8 @@ The **Two-step** column shows who signs in with a code from an authenticator app
 
 ## Common problems
 
+- **"Confirm it's you"** when you make someone an **Admin**: enter your own password, then **Confirm**. It's asked at most once every 15 minutes on this device, so someone using your unlocked phone can't hand out admin access. **Cancel** changes nothing.
+
 - **"The cafe needs at least one admin. Make someone else an admin first."**: you can't remove or disable the last admin.
 - **"You can't remove your own admin role."**: another admin must do it.
 - **"Pick at least one branch"**: a Manager or Staff needs a branch; tick one, or choose **Admin**.

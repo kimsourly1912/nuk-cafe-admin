@@ -45,6 +45,23 @@ export const deleteAccountSchema = v.strictObject({
 export type DeleteAccountInput = v.InferOutput<typeof deleteAccountSchema>
 
 /**
+ * `POST /api/me/confirm` (D246): the signed-in account's password, so this session may make a
+ * dangerous change (payment settings, admin access, owners) for `CONFIRMATION_MS`.
+ */
+export const confirmIdentitySchema = v.strictObject({
+  password: v.pipe(v.string(), v.minLength(1, 'Enter your password'), v.maxLength(PASSWORD_MAX, `At most ${PASSWORD_MAX} characters`)),
+})
+export type ConfirmIdentityInput = v.InferOutput<typeof confirmIdentitySchema>
+
+/** How long a confirmation lasts: dangerous changes within it don't ask again (D246). */
+export const CONFIRMATION_MS = 15 * 60_000
+
+/** `POST /api/me/confirm`: until when this session's confirmation lasts. */
+export interface IdentityConfirmed {
+  confirmedUntil: string
+}
+
+/**
  * `GET /api/me/sessions` (D243): where the signed-in account is signed in, newest first, for Your
  * devices on the account security page. No tokens: signing the others out is Better Auth's
  * `/revoke-other-sessions`.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { RateLimiter } from '#server/utils/rate-limit'
-import { checkRateLimit, RATE_LIMIT_RULES, rateLimited, rateLimitPath } from '#server/utils/rate-limit'
+import { checkRateLimit, RATE_LIMIT_RULES, rateLimited, rateLimitPath, rateLimitRule } from '#server/utils/rate-limit'
 
 /** Allows `limit` calls per key, like Cloudflare's binding within one period. */
 function fakeLimiter(limit: number) {
@@ -52,7 +52,7 @@ describe('public API rate limits (D121)', () => {
   it('the quote rule comes before the general prefix, so it wins over it', () => {
     const prefixes = RATE_LIMIT_RULES.map(rule => rule.prefix)
     expect(prefixes.indexOf('/api/public/checkout/quote')).toBeLessThan(prefixes.indexOf('/api/public/'))
-    expect(prefixes.every(prefix => prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/', '/api/client-errors', '/api/password-ranges/', '/api/shop/orders', '/api/me/delete-account'].includes(prefix))).toBe(true)
+    expect(prefixes.every(prefix => prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/', '/api/client-errors', '/api/password-ranges/', '/api/shop/orders', '/api/me/delete-account', '/api/me/confirm'].includes(prefix))).toBe(true)
   })
 
   it('deleting an account has its own small limit (D237); only its POST counts', async () => {
@@ -62,6 +62,11 @@ describe('public API rate limits (D121)', () => {
     expect(await remove()).toEqual({ checked: true, limited: null })
     expect(await remove()).toEqual({ checked: true, limited: 'RATE_LIMIT_ACCOUNT' })
     expect(await checkRateLimit({ path: '/api/me/cafes', method: 'GET', address: '203.0.113.7', limiters })).toEqual({ checked: false, limited: null })
+  })
+
+  it('confirming it\'s you shares the account limit (D246); only its POST counts', () => {
+    expect(rateLimitRule('/api/me/confirm', 'POST')?.binding).toBe('RATE_LIMIT_ACCOUNT')
+    expect(rateLimitRule('/api/me/confirm', 'GET')).toBeUndefined()
   })
 
   it('placing an order has its own limit (D156); the order page polling its order never counts', async () => {

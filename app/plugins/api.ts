@@ -1,4 +1,5 @@
 import { ofetch } from 'ofetch'
+import { ConfirmIdentityModal } from '#components'
 import { changePasswordPath, isAdminPath, loginPath, useAuth } from '~/features/auth'
 import { counterChangePasswordPath, counterSignInPath, isCounterPath, useCounterSession } from '~/features/counter'
 import { isPlatformPath, PLATFORM_CHANGE_PASSWORD, PLATFORM_SIGN_IN, usePlatformSession } from '~/features/platform'
@@ -24,6 +25,19 @@ export default defineNuxtPlugin({
     // platform's pages have none: a cafe's API called there throws (`apiPath`, D221).
     const tenant = () => splitTenantUrl(window.location.pathname)?.slug ?? null
 
+    // "Confirm it's you" before a dangerous change (D246). One dialog at a time: two requests asking
+    // together share it. A session change closes it (session-boundary), which counts as cancelled.
+    const overlay = useOverlay()
+    let asking: Promise<boolean> | undefined
+    const confirmIdentity = () => {
+      asking ??= overlay.create(ConfirmIdentityModal, { destroyOnClose: true }).open().result
+        .then(confirmed => confirmed === true)
+        .finally(() => {
+          asking = undefined
+        })
+      return asking
+    }
+
     configureApi(createApiFetch({
       // Same engine as Nuxt's $fetch; created from ofetch directly for its types.
       // Fails as ApiError kind 'timeout' instead of hanging forever.
@@ -41,6 +55,7 @@ export default defineNuxtPlugin({
       },
       // Any workspace's identity changing discards responses to older requests.
       sessionGeneration: () => auth.generation.value + counter.generation.value + platform.generation.value,
+      onConfirmationRequired: confirmIdentity,
     }), tenant)
 
     // The cafe of the page on screen, for the redirects below (D141). They act only on a cafe's

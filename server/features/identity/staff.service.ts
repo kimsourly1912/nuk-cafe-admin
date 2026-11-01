@@ -10,6 +10,7 @@ import { profileStatement } from '#server/features/customers'
 import { auditStatement } from '#server/features/platform'
 import type { AuditActor } from '#server/features/platform'
 import type { Actor } from './identity.types'
+import { confirmationRequired } from './identity.errors'
 import { findTenantRole } from './identity.repository'
 import { lastAdmin, ownAccess, staffAlreadyExists, staffChanged, staffElsewhere, staffNotFound, unknownBranches } from './staff.errors'
 import * as repo from './staff.repository'
@@ -57,6 +58,10 @@ const staffAudit = (db: Db, by: AuditActor, tenantId: string, action: string, us
   auditStatement(db, by, { action, targetType: 'user', targetId: userId, metadata: { ...metadata, tenantId } })
 
 const tenantRole = (admin: boolean) => admin ? 'owner' as const : 'member' as const
+
+const refuseUnconfirmed = async () => {
+  throw confirmationRequired()
+}
 
 const accessMetadata = (admin: boolean, memberships: Memberships) => ({ admin, memberships })
 
@@ -170,13 +175,25 @@ async function createStaffAs(db: Db, by: AuditActor, tenantId: string, input: Cr
  * Replaces a person's access (admin role and branch memberships). Their other sessions end, so a
  * removed role can't linger; an admin editing their own branches stays signed in.
  */
-export async function updateStaffAccess(db: Db, actor: Actor, userId: string, input: UpdateStaffAccessInput): Promise<StaffMember> {
+export interface UpdateStaffAccessOptions {
+  /**
+   * Called when the change **gives** admin access (D246): the route's `requireConfirmation`. Not
+   * called for someone already an admin. The default refuses: a caller that forgets it can't skip it.
+   * The batch's version guard covers a role changed between this read and the write.
+   */
+  confirmAdminGrant?: () => Promise<void>
+}
+
+export async function updateStaffAccess(db: Db, actor: Actor, userId: string, input: UpdateStaffAccessInput, options: UpdateStaffAccessOptions = {}): Promise<StaffMember> {
+  const { confirmAdminGrant = refuseUnconfirmed } = options
   const { tenantId } = actor
   const target = await repo.findAccount(db, userId)
-  if (!target || !await findTenantRole(db, tenantId, userId)) throw staffNotFound()
+  const role = target ? await findTenantRole(db, tenantId, userId) : undefined
+  if (!target || !role) throw staffNotFound()
   if (target.updatedAt.getTime() !== input.version) throw staffChanged()
   const self = actor.userId === userId
   if (self && !input.admin) throw ownAccess('remove admin')
+  if (input.admin && role !== tenantRole(true)) await confirmAdminGrant()
   await ensureActiveBranches(db, tenantId, input.memberships)
 
   const now = new Date()

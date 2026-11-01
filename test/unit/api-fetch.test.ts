@@ -94,3 +94,77 @@ describe('createApiFetch', () => {
     expect(error.retryable).toBe(true)
   })
 })
+
+describe('a dangerous change that needs the password again (D246)', () => {
+  const needsConfirmation = () => httpError(403, errorBody('CONFIRMATION_REQUIRED', 'Confirm it\'s you.'))
+  const body = { version: 3, enabled: true }
+  const headers = { 'Idempotency-Key': 'key-1' }
+
+  it('asks, then sends the same request once more and returns its answer', async () => {
+    let refused = false
+    const { fetch, calls } = fakeFetch(async () => {
+      if (!refused) {
+        refused = true
+        throw needsConfirmation()
+      }
+      return { saved: true }
+    })
+    const ask = vi.fn(async () => true)
+    const apiFetch = createApiFetch({ baseFetch: fetch, onSessionLost: vi.fn(), onConfirmationRequired: ask })
+    expect(await apiFetch('/admin/khqr', { method: 'PUT', body, headers })).toEqual({ saved: true })
+    expect(ask).toHaveBeenCalledTimes(1)
+    expect(calls).toHaveLength(2)
+    // The same request: body (with its version) and idempotency key unchanged.
+    expect(calls[1]).toEqual(calls[0])
+  })
+
+  it('cancelled: nothing is sent again, and the failure is silent', async () => {
+    const { fetch, calls } = fakeFetch(async () => {
+      throw needsConfirmation()
+    })
+    const apiFetch = createApiFetch({ baseFetch: fetch, onSessionLost: vi.fn(), onConfirmationRequired: async () => false })
+    const error = await apiFetch('/admin/khqr', { method: 'PUT', body }).catch((e: unknown) => e)
+    expect(error).toMatchObject({ kind: 'aborted' })
+    expect(calls).toHaveLength(1)
+  })
+
+  it('asks once: refused again after confirming, the refusal is shown, no second dialog', async () => {
+    const { fetch, calls } = fakeFetch(async () => {
+      throw needsConfirmation()
+    })
+    // Says yes only the first time, so asking again can't loop: it would end as `aborted`.
+    const ask = vi.fn(async () => ask.mock.calls.length === 1)
+    const apiFetch = createApiFetch({ baseFetch: fetch, onSessionLost: vi.fn(), onConfirmationRequired: ask })
+    const error = await apiFetch('/admin/khqr', { method: 'PUT', body }).catch((e: unknown) => e)
+    expect(error).toMatchObject({ kind: 'forbidden', code: 'CONFIRMATION_REQUIRED' })
+    expect(ask).toHaveBeenCalledTimes(1)
+    expect(calls).toHaveLength(2)
+  })
+
+  it('the session changed while asking: discarded, not sent again', async () => {
+    let generation = 1
+    const { fetch, calls } = fakeFetch(async () => {
+      throw needsConfirmation()
+    })
+    const apiFetch = createApiFetch({
+      baseFetch: fetch,
+      onSessionLost: vi.fn(),
+      sessionGeneration: () => generation,
+      onConfirmationRequired: async () => {
+        generation++
+        return true
+      },
+    })
+    const error = await apiFetch('/admin/khqr', { method: 'PUT', body }).catch((e: unknown) => e)
+    expect(error).toMatchObject({ kind: 'aborted' })
+    expect(calls).toHaveLength(1)
+  })
+
+  it('without a handler (or another 403) it\'s an ordinary refusal', async () => {
+    const { fetch } = fakeFetch(async () => {
+      throw needsConfirmation()
+    })
+    const apiFetch = createApiFetch({ baseFetch: fetch, onSessionLost: vi.fn() })
+    expect(await apiFetch('/admin/khqr').catch((e: unknown) => e)).toMatchObject({ kind: 'forbidden', code: 'CONFIRMATION_REQUIRED' })
+  })
+})

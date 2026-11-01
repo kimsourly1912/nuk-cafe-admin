@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import { authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, requireWorkspaceSession, tenantBySlug } from '#server/features/identity'
+import { authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, requireRecentConfirmation, requireWorkspaceSession, tenantBySlug } from '#server/features/identity'
 import type { Actor, BranchActor, BranchPermission, PlatformPermission, SessionStamp, SessionUser, TenantPermission } from '#server/features/identity'
 import type { PlatformActor } from '#server/features/tenants'
 import { supportActor } from '#server/features/support'
@@ -115,4 +115,16 @@ export async function requireBranchPermission(event: H3Event, branchId: string, 
 export async function requirePlatformPermission(event: H3Event, permissions: PlatformPermission): Promise<PlatformActor> {
   const { user } = await workspaceSession(event)
   return { ...authorizePlatform(user, permissions), requestId: requestIdOf(event) }
+}
+
+/**
+ * Dangerous changes (D246): payment receiving settings, giving admin access, a cafe's owners. Called
+ * **after** the route's permission check (someone without the permission is refused as before):
+ * this session must have confirmed its password in the last 15 minutes, or 403
+ * `CONFIRMATION_REQUIRED`. The app then asks for the password (`POST /api/me/confirm`) and repeats the
+ * same request.
+ */
+export async function requireConfirmation(event: H3Event): Promise<void> {
+  const { user, sessionId } = await workspaceSession(event)
+  await requireRecentConfirmation(useDb(), user, sessionId)
 }

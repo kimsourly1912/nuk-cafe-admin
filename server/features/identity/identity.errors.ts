@@ -24,10 +24,20 @@ export const IdentityErrorCodes = {
   ORDER_IN_PROGRESS: 'ORDER_IN_PROGRESS',
   /** A workspace session older than a day from sign-in (D243): signed out, sign in again. */
   SESSION_EXPIRED: 'SESSION_EXPIRED',
+  /** A dangerous change (D246) needs this session's password confirmed in the last 15 minutes. */
+  CONFIRMATION_REQUIRED: 'CONFIRMATION_REQUIRED',
 } as const
 
 export const sessionExpired = () =>
   apiError(401, IdentityErrorCodes.SESSION_EXPIRED, 'Your sign-in has ended. Sign in again.')
+
+/** The app answers it with "Confirm it's you" and sends the same request again (D246). */
+export const confirmationRequired = () =>
+  apiError(403, IdentityErrorCodes.CONFIRMATION_REQUIRED, 'Confirm it\'s you: enter your password to make this change.')
+
+/** Too many wrong passwords in a row: this session is ended, so a stolen one can't keep guessing (D246). */
+export const tooManyConfirmations = () =>
+  apiError(401, IdentityErrorCodes.SESSION_EXPIRED, 'Too many wrong passwords. You\'ve been signed out: sign in again.')
 
 export const passwordCheckUnavailable = () =>
   apiError(503, IdentityErrorCodes.PASSWORD_CHECK_UNAVAILABLE, 'The password can\'t be checked right now. It\'s checked when you save.')

@@ -44,9 +44,13 @@ An illustrative proposal may be written down, labelled **awaiting approval**. It
 
 Evidence levels follow [progress.md → Verification levels](progress.md#verification-levels). Note that **e2e tests are browser-mock evidence** (real Chrome, mocked API); **server** and **real-server** evidence come from the server tests and from running against `pnpm dev` (or staging).
 
-### Designing a UI step with mockups (the owner's workflow)
+### Designing a UI step (the owner's workflow)
 
-Every step with new screens starts with a design round before any code:
+**No mockup round by default (owner, 2026-11-01, D245).** The agent designs the screens itself from the [UI standard](reference/ui.md) and [page patterns](reference/page-patterns.md): it writes the layout in the step's plan (pages, states such as empty, error, success, expired; desktop and phone), builds, verifies, and the owner reviews the result on staging before production. Questions only the owner can answer (business rules, permissions, copy that commits the business) are still asked, each with a recommendation.
+
+**Offer the mockup round only when it pays for itself:** a screen needs a new page pattern (no existing one fits), or a large workflow change where the owner should choose between layouts before code. Say why in one line and recommend; the owner decides. Also when the owner asks for it. Earlier plans that say "mockups first" follow this rule now.
+
+#### The mockup round (when used)
 
 1. **Brief and prompts.** The agent writes a design brief and one prompt per page for the owner's image tool (ChatGPT): the pages, their states (empty, error, success, expired), desktop 1440 and phone 390, the real copy and rules (limits, what the server enforces), and what is out of scope.
 2. **Upload.** The owner uploads the frames over several messages (at most 5 files per message) and says **"all uploaded"**. Until then the agent only confirms what arrived.

@@ -2,7 +2,7 @@
 
 _2026-09-30. Owner decisions (this session, "use your defaults"): an assistant for **admins** in the admin portal first; it answers questions about the portal and guides through existing workflows, drafts menu items from a description, and improves menu wording; translation later. **Any AI provider** with the owner's own API key; **the AI suggests, a person saves**; the panel is Nuxt UI's `USidebar` (owner's choice over a slide-over). Built before 6.5b at the owner's request. Decision record: D107. Options decided against for now, and what would bring them back: [ai-later.md](ai-later.md)._
 
-Four steps, each its own PR: **9.0** groundwork, **9.1** the help assistant, **9.2** menu drafts from a description, **9.3** improve wording. 9.1–9.3 have screens, so each starts with the mockup round ([feature-standard.md](../feature-standard.md#designing-a-ui-step-with-mockups-the-owners-workflow)).
+Four steps, each its own PR: **9.0** groundwork, **9.1** the help assistant, **9.2** menu drafts from a description, **9.3** improve wording. 9.1–9.3 have screens; they follow the feature standard's [UI design rule](../feature-standard.md#designing-a-ui-step-the-owners-workflow) (no mockup round by default since D245).
 
 ## Purpose and scope
 
@@ -104,7 +104,7 @@ All `POST`, admin surface, `assistant: ['use']`; 404 when the assistant is off. 
 - **Limit:** before calling the provider, the server inserts the row (`outcome` `pending`) in one batch with a guard (`requireAtMost`: the user's rows with today's `day`, counting this one, at most the limit), so two requests at once can't both take the last slot; after the call it fills in the tokens and the outcome. A failed call still counts (it may have cost tokens). A refused request is not inserted (nothing to record but a 429). So `outcome` is `pending` \| `ok` \| `error`.
 - **Retention [Choice]:** rows older than 90 days deleted by a daily task (cost reports need about a quarter).
 
-## Screens (mockups first, per step)
+## Screens (per step)
 
 - **9.1 Help panel:** `USidebar` on the right (owner): docked beside the page from `lg` (**[Choice]** `collapsible="offcanvas"`, the page narrows while it's open); below `lg` its own slide-over, full screen on phones. Opened by an **Assistant** button in the admin sidebar's footer (inside the menu on phones; D109: each page owns its navbar) and `Ctrl`/`⌘`+`/` (added to the shortcuts list). Inside: suggested questions for the current page, the messages (`UChatMessages`), link results as buttons (`UChatTool`), the prompt (`UChatPrompt`) with Stop; "Clear chat"; an error row with Try again; "AI can make mistakes: check before you act" under the prompt. **Needs verification:** `USidebar` beside `UDashboardGroup`'s panel (layout and focus); every page still fits at its narrower width.
 - **9.2 Draft from description:** "Draft with AI" beside New item on Menu items → a dialog (a sheet on phones) with a text box and an example → the item editor at `/admin/products/new` (D90) filled in, with a banner "Drafted by AI: check everything before saving" and the `notFound` list with links to create them.
