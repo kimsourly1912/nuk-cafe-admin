@@ -144,6 +144,8 @@ Like GitHub's sudo mode: a stolen signed-in session (an unlocked phone, a copied
 
 ## Staff onboarding
 
+**What an owner sees of their staff (D248):** name, email, access, two-step on or off (D242), and **Last active here**: when the person last opened *this* cafe's admin or counter (`workspace_visits`). Not the account's sign-in time: an account is the platform's and works at several cafes, so it would show one cafe's owner when the person was at another. Two-cafe test: `visits.service.test.ts`.
+
 Built in step 1.4 (D49): `server/features/identity/staff.*`, routes under `/api/admin/staff`.
 
 1. An admin creates the account with name, email and access: `admin` and/or one role per branch (several branches allowed). The server generates a **temporary password** (16 characters, e.g. `Hq7x-3mPa-kR9t-Wz2c`), returns it **once** for the admin to hand over, and stores only Better Auth's hash. The email is marked verified (the admin vouches for it).

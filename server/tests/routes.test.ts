@@ -160,3 +160,19 @@ describe('dangerous changes need a fresh confirmation (D246)', () => {
     expect(writes.sort()).toEqual(DANGEROUS.filter(route => /khqr|owners/.test(route)).sort())
   })
 })
+
+// "Last active here" (D248): each workspace's `/me` records the visit, after letting the person in.
+describe('the workspaces record a visit for the Staff page (D248)', () => {
+  it.each(['c/[slug]/admin/me.get.ts', 'c/[slug]/counter/me.get.ts'])('%s records it after the session check', (route) => {
+    const source = readFileSync(join(apiDir, route), 'utf8')
+    const check = Math.max(source.indexOf('adminSession('), source.indexOf('counterSession('))
+    const record = source.indexOf('recordWorkspaceVisit(')
+    expect(check).toBeGreaterThan(-1)
+    expect(record).toBeGreaterThan(check)
+  })
+
+  it('a platform support visit to the admin isn\'t recorded as the cafe\'s staff', () => {
+    const source = readFileSync(join(apiDir, 'c/[slug]/admin/me.get.ts'), 'utf8')
+    expect(source.indexOf('recordWorkspaceVisit(')).toBeLessThan(source.indexOf('supportSession('))
+  })
+})

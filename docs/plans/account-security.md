@@ -1,6 +1,6 @@
 # Account security: two-step sign-in, session length, re-confirming dangerous actions
 
-Status: **step 1 done (D242, PR #231); step 2 done (D243, PR #232)**; step 3 done (D246, PR #234); step 3b built (D247, in review); 4–5 not started. No mockup rounds (step 1 waived; D245 made that the default). Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
+Status: **step 1 done (D242, PR #231); step 2 done (D243, PR #232)**; step 3 done (D246, PR #234); step 3b done (D247, PR #235); step 4 built (D248, in review); 5 not started. No mockup rounds (step 1 waived; D245 made that the default). Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
 
 ## 1. Where we are (checked in the code, 2026-10-30)
 
@@ -69,7 +69,10 @@ Built as below. The account page also shows **Two-step sign-in: On/Off** for eve
 - One batch: two-step data removed, every session of the account deleted, an audit row (who, whose account, when). Not for a super admin's own account, nor another super admin's (their two-step sign-in is required, D188; that stays the manual reset in operations).
 - Re-confirmed like step 3's actions (it removes a protection). Tests: refused for cafe staff and owners, for super admin targets, without confirmation; the account's sessions end; the audit row; two-cafe accounts unaffected elsewhere.
 
-### Step 4: owners see their staff's access
+### Step 4: owners see their staff's access (built, D248)
+
+**Changed with the owner (2026-11-01):** not the account's sign-in from Better Auth's sessions, which is the platform's and would show when someone was at another cafe, but **Last active here**: when they last opened this cafe's admin or counter (`workspace_visits`, written by the `/me` checks at most hourly). Two-step status already came with step 1 (D242). [Decision](../decisions.md#d248-owners-see-when-staff-were-last-active-here-never-elsewhere-2026-11-01).
+
 
 - Staff list: last sign-in (from Better Auth's sessions) and two-step status. Only this cafe's staff (two-cafe isolation test). No new action: disabling someone already signs them out everywhere.
 

@@ -117,6 +117,7 @@ export function staffOf(id: string, name: string, overrides: Partial<StaffMember
     memberships: [{ branchId: RIVERSIDE.id, branchName: RIVERSIDE.name, role: 'staff' }],
     mustChangePassword: false,
     twoFactorEnabled: false,
+    lastActiveAt: null,
     version: 1790000000000,
     createdAt: STAMP,
     ...overrides,

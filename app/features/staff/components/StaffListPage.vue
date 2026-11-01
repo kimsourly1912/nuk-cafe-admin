@@ -50,10 +50,14 @@ const columns: TableColumn<StaffMember>[] = [
   { id: 'access', header: 'Access' },
   // Shown, not changed: each person turns it on for themselves (account security, D242).
   { id: 'twoFactor', header: 'Two-step' },
+  // When they last opened this cafe's admin or counter, never another cafe's (D248).
+  { id: 'lastActive', header: 'Last active here' },
   { id: 'actions', meta: { class: { td: 'text-right' } } },
 ]
 
 const isSelf = (member: StaffMember) => member.id === user.value?.userId
+/** "2 hours ago"; "Not yet" before their first visit since it's recorded (D248). */
+const lastActive = (member: StaffMember) => (member.lastActiveAt ? formatTimeAgo(member.lastActiveAt) : 'Not yet')
 /** "Admin · Manager at Riverside": access as text on a phone row (at most two badges per row). */
 const accessLine = (member: StaffMember) => describeAccess(member).join(' · ') || 'No access'
 
@@ -194,6 +198,10 @@ usePageShortcuts({ n: () => openForm() })
             <span class="max-w-full truncate text-muted">{{ member.email }}</span>
             <span class="max-w-full text-muted">{{ accessLine(member) }}</span>
             <span
+              class="max-w-full text-muted"
+              :title="member.lastActiveAt ? formatDateTime(member.lastActiveAt) : undefined"
+            >Last active here: {{ lastActive(member) }}</span>
+            <span
               v-if="member.twoFactorEnabled"
               class="flex items-center gap-1 text-muted"
             >
@@ -300,6 +308,13 @@ usePageShortcuts({ n: () => openForm() })
             v-else
             class="text-muted"
           >Off</span>
+        </template>
+
+        <template #lastActive-cell="{ row }">
+          <span
+            class="text-muted"
+            :title="row.original.lastActiveAt ? formatDateTime(row.original.lastActiveAt) : undefined"
+          >{{ lastActive(row.original) }}</span>
         </template>
 
         <template #actions-cell="{ row }">

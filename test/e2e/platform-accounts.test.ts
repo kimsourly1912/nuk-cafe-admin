@@ -276,7 +276,9 @@ describe('an account\'s page', () => {
     await expect.poll(() => page.getByTestId('account-two-factor').textContent()).toBe('Off')
     // The same request twice: refused, then sent again after confirming.
     expect(sent).toEqual([{ version: 10, reason: 'Checked her ID at the cafe' }, { version: 10, reason: 'Checked her ID at the cafe' }])
-    expect(await page.getByRole('button', { name: 'Turn off two-step sign-in' }).count()).toBe(0)
+    // The dialog's own submit button has the same name: once it has closed, none is left.
+    await form.waitFor({ state: 'detached' })
+    await expect.poll(() => page.getByRole('button', { name: 'Turn off two-step sign-in' }).count()).toBe(0)
     expect(writes(api.calls)).toEqual(['POST /platform/accounts/acc-1/two-factor-off', 'POST /me/confirm', 'POST /platform/accounts/acc-1/two-factor-off'])
   })
 

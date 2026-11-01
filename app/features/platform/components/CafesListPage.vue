@@ -9,7 +9,7 @@
 import type { SelectItem, TableColumn } from '@nuxt/ui'
 import type { TenantSummary } from '#shared/contracts/tenants'
 import { NEW_CAFE_PATH, useCafeCounts, useCafeList } from '../composables/useCafes'
-import { lastOrderText, timeAgo, usageLine } from '../schemas/cafe-form'
+import { lastOrderText, usageLine } from '../schemas/cafe-form'
 
 const { isCompact } = useLayoutContext()
 
@@ -207,7 +207,7 @@ usePageShortcuts({ n: openForm })
         </template>
 
         <template #lastOrder-cell="{ row }">
-          <span class="text-muted">{{ row.original.usage.lastOrderAt ? timeAgo(row.original.usage.lastOrderAt) : 'No orders yet' }}</span>
+          <span class="text-muted">{{ row.original.usage.lastOrderAt ? formatTimeAgo(row.original.usage.lastOrderAt) : 'No orders yet' }}</span>
         </template>
       </UTable>
 

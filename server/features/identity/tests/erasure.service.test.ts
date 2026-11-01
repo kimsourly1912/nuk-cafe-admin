@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { DeleteAccountInput } from '#shared/contracts/account'
-import { account, branchStaff, member, session, twoFactor, user, verification } from '#server/db/tables'
+import { account, branchStaff, member, session, twoFactor, user, verification, workspaceVisits } from '#server/db/tables'
 import { customerProfiles } from '#server/features/customers/customers.schema'
 import { ensureProfile } from '#server/features/customers/customers.service'
 import { deleteAccount } from '#server/features/identity/erasure.service'
@@ -93,6 +93,8 @@ describe('deleting an account', () => {
     const ours = await order(sophal.id)
     const theirs = await order(sophal.id, 'cancelled', OTHER)
     await db.insert(twoFactor).values({ id: newId(), userId: sophal.id, secret: 's', backupCodes: 'b' })
+    // When they last worked at each cafe, from a job they've since left (D248).
+    await db.insert(workspaceVisits).values([{ tenantId: TEST_TENANT, userId: sophal.id, lastActiveAt: NOW }, { tenantId: OTHER, userId: sophal.id, lastActiveAt: NOW }])
     await auth.api.requestPasswordReset({ body: { email: 'sophal@example.com' } })
     expect((await db.select().from(verification).where(eq(verification.value, sophal.id))).length).toBe(1)
 
@@ -100,6 +102,7 @@ describe('deleting an account', () => {
 
     expect(await userRow(sophal.id)).toMatchObject({ name: 'Deleted account', email: `deleted-${sophal.id}@anonymous.invalid`, emailVerified: false, image: null, anonymizedAt: NOW })
     for (const table of [session, account, twoFactor] as const) expect(await countOf(table, sophal.id)).toBe(0)
+    expect(await db.select().from(workspaceVisits).where(eq(workspaceVisits.userId, sophal.id))).toEqual([])
     expect((await db.select().from(verification).where(eq(verification.value, sophal.id))).length).toBe(0)
     const profiles = await db.select().from(customerProfiles).where(eq(customerProfiles.userId, sophal.id))
     expect(profiles.map(p => ({ tenantId: p.tenantId, phone: p.phone, marketingOptIn: p.marketingOptIn, anonymizedAt: p.anonymizedAt })).sort((a, b) => a.tenantId.localeCompare(b.tenantId)))

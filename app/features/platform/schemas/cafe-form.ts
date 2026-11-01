@@ -1,5 +1,6 @@
 import type { OwnerKind, PlatformOwner, TenantUsage } from '#shared/contracts/tenants'
 import { createTenantSchema } from '#shared/contracts/tenants'
+import { formatTimeAgo } from '~/utils/date-format'
 import { pluralize, previewList } from '~/utils/text'
 
 /**
@@ -67,21 +68,9 @@ export function usageLine(usage: TenantUsage): string {
   ].join(' · ')
 }
 
-const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
-const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [['day', 86_400_000], ['hour', 3_600_000], ['minute', 60_000]]
-
-/** "2 hours ago", "yesterday", "just now". */
-export function timeAgo(at: string, now = new Date()): string {
-  const ago = now.getTime() - new Date(at).getTime()
-  for (const [unit, ms] of UNITS) {
-    if (ago >= ms) return rtf.format(-Math.floor(ago / ms), unit)
-  }
-  return 'just now'
-}
-
 /** "Last order 2 hours ago"; "No orders yet" without one. */
 export function lastOrderText(at: string | null, now = new Date()): string {
-  return at ? `Last order ${timeAgo(at, now)}` : 'No orders yet'
+  return at ? `Last order ${formatTimeAgo(at, now)}` : 'No orders yet'
 }
 
 /**
