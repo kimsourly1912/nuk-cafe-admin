@@ -23,7 +23,7 @@ Use the returned line numbers and stop at the next heading at the same level. Fo
 | Auth/tenant isolation | Security identity/roles/sessions/request protection; [auth](reference/auth.md), [shell](guides/app-shell.md) | [App behavior](reference/app-behavior.md) session contract; [multi-tenant](plans/multi-tenant.md) for boundary changes |
 | Database/payment | Data-model domain, architecture versions/batches/idempotency, security permissions | [Operations](server/operations.md) migrations/configuration, [KHQR](plans/khqr.md), domain plan |
 | Deploy/operations | Operations environments/configuration/deploys/backups/monitoring | [Release check](plans/release-check.md), progress environment notes and open questions |
-| New feature | [Feature standard](feature-standard.md), applicable standards and domain plan | [Blueprint](plans/system-blueprint.md) journeys; mockup/owner workflow for new screens |
+| New feature | [Feature standard](feature-standard.md), applicable standards and domain plan | [Blueprint](plans/system-blueprint.md) journeys; the feature standard's UI design rule (no mockup round by default, D245) |
 | Tests | [Development](guides/development.md) commands/checks/tests | [Progress](progress.md) "How to verify" for affected harness/flake; reference edge-case tables |
 | Shared helper | [Reference index](reference/README.md) Pages/API table or [catalog](guides/project-map.md#shared-building-blocks-root-auto-imported) | Only the helper's owning section in ui-helpers/app-behavior/etc. |
 
@@ -32,7 +32,7 @@ The five guides preserve former root instructions: project identity/resource/cat
 ## Authority and history
 
 - **Always required:** root security, tenant, permission, data-integrity, session and architecture invariants; verification and documentation maintenance rules.
-- **Task-specific:** current feature standard and reference/server pages; extracted guide rules; accepted domain-plan requirements. `[Open]`, `[Proposed]` and deferred plan items do not authorize behavior. New screens retain the feature standard's mockup workflow unless the owner waived it.
+- **Task-specific:** current feature standard and reference/server pages; extracted guide rules; accepted domain-plan requirements. `[Open]`, `[Proposed]` and deferred plan items do not authorize behavior. New screens follow the feature standard's UI design rule: no mockup round by default (D245).
 - **Historical/on demand:** completed phases, old implementation evidence and decision context. A plan can contain both current domain rules and completed steps. Check current status before resuming it.
 
 Read [current-state navigation](current-state.md) only for resumption/planning, then the relevant progress section. Search [decision index](decision-index.md) by ID/domain, read that entry and follow-ups when changing a pattern. D1–D5 describe a replaced stack; D39/D43/D71/D95/D135/D140/D141 explain subsequent changes. Earlier dates and "verified then" evidence are not current deployment status. Preserve existing IDs and anchors.

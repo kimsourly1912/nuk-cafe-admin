@@ -28,7 +28,7 @@ Classify the change **before editing** and read applicable sections below. Combi
 | Database/migrations/payments | Data-model domain, architecture write rules, [operations migrations](docs/server/operations.md#migrations), security permissions and domain plan |
 | Testing/deployment | [Development checks/tests](docs/guides/development.md); deployment also needs operations and [release check](docs/plans/release-check.md) |
 | Production alerts/watchdog/incidents | [Operations → Alerts](docs/server/operations.md#alerts-d223-d224): what alerts, routine checks, fire drill, changes, the incident checklist |
-| New feature/new screens | [Feature standard](docs/feature-standard.md), domain plan, applicable routes above. Preserve its owner mockup/approval workflow for new screens unless already waived by the owner |
+| New feature/new screens | [Feature standard](docs/feature-standard.md), domain plan, applicable routes above. No mockup round by default (D245): design from the UI standard and page patterns, the owner reviews on staging; offer mockups only for a new page pattern or a large workflow change |
 | Resume work | [Current-state navigation](docs/current-state.md), then relevant progress phase, open question and plan |
 | Investigate/change old pattern | Search [decision index](docs/decision-index.md), read matching decision and follow-ups before changing it |
 | Documentation only | [Documentation index](docs/README.md) and affected sections; check links, imports, preservation and scope |

@@ -1,6 +1,6 @@
 # Account security: two-step sign-in, session length, re-confirming dangerous actions
 
-Status: **step 1 done (D242, PR #231); step 2 built (D243, 2026-10-31, in review)**; steps 3–5 not started. The owner waived the mockup round for step 1. Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
+Status: **step 1 done (D242, PR #231); step 2 done (D243, PR #232)**; step 3 in progress; 3b–5 not started. No mockup rounds (step 1 waived; D245 made that the default). Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
 
 ## 1. Where we are (checked in the code, 2026-10-30)
 
@@ -33,7 +33,7 @@ Status: **step 1 done (D242, PR #231); step 2 built (D243, 2026-10-31, in review
 
 ### Step 1: two-step sign-in for owners and staff ✅ (D242, PR #231)
 
-Built as planned: the page per workspace, the shared `<TwoFactorSetupFrame>` (the console's setup moved to the root), the Staff column. Also: a super admin can't turn it off (server). Deferred: the lost-authenticator recovery below (QA1).
+Built as planned: the page per workspace, the shared `<TwoFactorSetupFrame>` (the console's setup moved to the root), the Staff column. Also: a super admin can't turn it off (server). Deferred: the lost-authenticator recovery below (QA1, answered by D245: step 3b).
 
 - An **account security** page for a signed-in owner or staff member, reachable from the admin's and the counter's user menus: turn two-step sign-in on (password → QR code and key → backup codes → a code from the app), and off (password). Reuse the console's setup flow (`PlatformTwoFactorPage.vue`, `usePlatformSession.startTwoFactor` / `confirmTwoFactor`, D188) rather than a copy: move the shared part to a root building block if both need it (app-architecture: promote when a second feature needs it).
 - Setting it up already ends the account's other sessions (`identity.auth.ts` after-hook on `/two-factor/verify-totp`): keep that, and say so on the page.
@@ -57,6 +57,12 @@ Verified first, as asked: Better Auth 1.7.7 can set a per-session `expiresAt`, b
 - Applies to: `PUT …/admin/khqr`, `PUT/DELETE …/admin/khqr/token`, staff create/update that gives `admin`, console owner add/remove/transfer.
 - Tests: each route refuses without confirmation and works after; removing the check fails its test; confirmation expires; another session's confirmation doesn't count.
 
+### Step 3b: the platform team turns off a lost two-step sign-in (QA1, D245)
+
+- Console → an account's page: **Turn off two-step sign-in**, beside Sign out everywhere, only when the account has it. Super admins with the console's account permission only; never a cafe owner (one account can work at several cafes).
+- One batch: two-step data removed, every session of the account deleted, an audit row (who, whose account, when). Not for a super admin's own account, nor another super admin's (their two-step sign-in is required, D188; that stays the manual reset in operations).
+- Re-confirmed like step 3's actions (it removes a protection). Tests: refused for cafe staff and owners, for super admin targets, without confirmation; the account's sessions end; the audit row; two-cafe accounts unaffected elsewhere.
+
 ### Step 4: owners see their staff's access
 
 - Staff list: last sign-in (from Better Auth's sessions) and two-step status. Only this cafe's staff (two-cafe isolation test). No new action: disabling someone already signs them out everywhere.
@@ -73,7 +79,7 @@ Verified first, as asked: Better Auth 1.7.7 can set a per-session `expiresAt`, b
 
 ## 5. Edge cases to keep in mind
 
-- **Lost authenticator:** backup codes at setup; an owner without them is helped by the platform team. Whether the console can turn two-step off for an account is open question **QA1** (recommended: yes, the platform team only, audited, signing the account out everywhere). Cafe owners can't do it for their staff: one account can work at several cafes.
+- **Lost authenticator:** backup codes at setup; an owner without them is helped by the platform team. **QA1 answered (owner, 2026-11-01, D245):** the console can turn two-step off for an account (the platform team only, audited, signing the account out everywhere). Cafe owners can't do it for their staff: one account can work at several cafes.
 - **Shared counter tablet with two-step:** counter staff aren't required to use it (Q1), but a staff member who turned it on enters a code at the counter like anywhere else.
 - **Support visits (D193):** a super admin on a visit never re-confirms cafe actions: visits are read-only already.
 - **Session cut at 1 day mid-shift:** the 401 already sends the person to sign-in with `?redirect=`; unsaved form drafts are kept by the existing draft rules. Check the counter's queue recovers cleanly after re-sign-in.
