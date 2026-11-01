@@ -360,9 +360,11 @@ describe('last active here on the real server (D248)', () => {
     await page.waitForURL(address => address.pathname === `/c/${slug}/admin`)
 
     await page.goto(url(`/c/${slug}/admin/staff`), { waitUntil: 'hydration' })
-    await page.getByRole('row').filter({ hasText: 'Bea Brown' }).getByText('just now', { exact: true }).waitFor()
+    // Other files sign this owner in too: a visit is written at most hourly (D248), so this one may
+    // show an earlier visit of this run, never "Not yet" and never more than an hour ago.
+    await page.getByRole('row').filter({ hasText: 'Bea Brown' }).getByText(/^(just now|\d+ minutes? ago)$/).waitFor()
     const listed = await page.evaluate(path => fetch(path).then(r => r.json()), `/api/c/${slug}/admin/staff`) as { items: StaffMember[] }
     const bea = listed.items.find(member => member.email === email)!
-    expect(Date.now() - new Date(bea.lastActiveAt!).getTime()).toBeLessThan(5 * 60_000)
+    expect(Date.now() - new Date(bea.lastActiveAt!).getTime()).toBeLessThan(60 * 60_000)
   })
 })
