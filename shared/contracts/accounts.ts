@@ -41,6 +41,13 @@ export type UnbanAccountInput = v.InferOutput<typeof unbanAccountSchema>
 export const accountPasswordSchema = v.object({ version: versionSchema, reason: reasonSchema })
 export type AccountPasswordInput = v.InferOutput<typeof accountPasswordSchema>
 
+/**
+ * `POST …/accounts/{id}/two-factor-off` (QA1, D245, D247): someone who lost both the authenticator and
+ * the backup codes. `reason`: how the platform team made sure it's really them (kept in Activity).
+ */
+export const turnOffTwoFactorSchema = v.object({ version: versionSchema, reason: reasonSchema })
+export type TurnOffTwoFactorInput = v.InferOutput<typeof turnOffTwoFactorSchema>
+
 export type AccountCafeRole = 'owner' | 'staff'
 
 /** A cafe the account works in. */
@@ -76,6 +83,8 @@ export interface PlatformAccountDetail extends PlatformAccountSummary {
   cafes: AccountCafeAccess[]
   /** Must choose a new password at the next sign-in (a temporary one is set). */
   mustChangePassword: boolean
+  /** Signs in with a code from an authenticator app too (D188, D242). */
+  twoFactorEnabled: boolean
   /** Sessions still open, and the latest activity among them. */
   activeSessions: number
   lastActiveAt: string | null

@@ -4,7 +4,7 @@ import type { AccountListQuery } from '#shared/contracts/accounts'
 import type { Db, Statement } from '#server/utils/batch'
 import { readInChunks } from '#server/utils/batch'
 import { byName, firstRow, readPage, searchIn } from '#server/utils/query'
-import { member, organization, session, user } from '#server/db/tables'
+import { member, organization, session, twoFactor, user } from '#server/db/tables'
 import { accountCanSignIn, ownerCanSignIn, registeredAccount } from './identity.repository'
 
 // --- Row types ---
@@ -19,6 +19,7 @@ export interface PlatformAccountRow {
   banReason: string | null
   banExpires: Date | null
   mustChangePassword: boolean | null
+  twoFactorEnabled: boolean | null
   isAnonymous: boolean | null
   createdAt: Date
   updatedAt: Date
@@ -44,6 +45,7 @@ const accountColumns = {
   banReason: user.banReason,
   banExpires: user.banExpires,
   mustChangePassword: user.mustChangePassword,
+  twoFactorEnabled: user.twoFactorEnabled,
   isAnonymous: user.isAnonymous,
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
@@ -164,6 +166,21 @@ export function unbanAccountStatement(db: Db, userId: string, expected: Date, ne
 }
 
 /** Moves the changeable account's version and asks for a new password. Follow it with `requireOneChange`; the password is another statement. */
+// Two-step sign-in off (D247), as Better Auth's own `/two-factor/disable` leaves it (1.7.7): the flag
+// off and the account's `two_factor` row deleted.
+
+/** The flag off, guarded by the version read and still on. */
+export function turnOffTwoFactorStatement(db: Db, userId: string, expected: Date, next: Date): Statement {
+  return db.update(user)
+    .set({ twoFactorEnabled: false, updatedAt: next })
+    .where(and(changeable(userId, expected), eq(user.twoFactorEnabled, true)))
+}
+
+/** The account's authenticator secret and backup codes. */
+export function deleteTwoFactorStatement(db: Db, userId: string): Statement {
+  return db.delete(twoFactor).where(eq(twoFactor.userId, userId))
+}
+
 export function updateTemporaryPasswordStatement(db: Db, userId: string, expected: Date, next: Date): Statement {
   return db.update(user)
     .set({ mustChangePassword: true, updatedAt: next })

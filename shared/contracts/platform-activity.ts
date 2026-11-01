@@ -25,6 +25,7 @@ export const PLATFORM_ACTIONS = [
   'platform.account.unban',
   'platform.account.sign-out',
   'platform.account.password.temporary',
+  'platform.account.two-factor.off',
   'platform.superadmin.grant',
 ] as const
 export type PlatformAction = typeof PLATFORM_ACTIONS[number]

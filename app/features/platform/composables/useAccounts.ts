@@ -1,11 +1,11 @@
-import type { AccountListQuery, AccountPasswordInput, AccountTemporaryPassword, BanAccountInput, PlatformAccountDetail, PlatformAccountSummary } from '#shared/contracts/accounts'
+import type { AccountListQuery, AccountPasswordInput, AccountTemporaryPassword, BanAccountInput, PlatformAccountDetail, PlatformAccountSummary, TurnOffTwoFactorInput } from '#shared/contracts/accounts'
 import type { Page } from '#shared/contracts/common'
 
 /** The console's Accounts (step P1, D187). */
 export const ACCOUNTS_PATH = '/platform/accounts'
 export const accountPath = (id: string) => `${ACCOUNTS_PATH}/${id}`
 
-/** Banning, unbanning, signing out and a temporary password for one account never overlap. */
+/** Banning, unbanning, signing out, a temporary password and two-step sign-in for one account never overlap. */
 const lockOf = (id: string) => `account:${id}`
 
 /** Every registered account, a page at a time. Refetches whenever `query` changes. */
@@ -83,12 +83,28 @@ export function useAccountMutations() {
     },
   )
 
+  // A lost authenticator and backup codes (QA1, D247). The server asks the super admin to confirm
+  // their own password first (D246): `apiFetch` shows "Confirm it's you" and sends it again.
+  const turnOffTwoFactor = useMutation(
+    ({ account, body }: { account: PlatformAccountDetail, body: TurnOffTwoFactorInput }) =>
+      apiFetch<PlatformAccountDetail>(`/platform/accounts/${account.id}/two-factor-off`, { method: 'POST', body }),
+    {
+      id: 'platform:account-two-factor-off',
+      key: ({ account }) => account.id,
+      lock: ({ account }) => lockOf(account.id),
+      successMessage: (_, { account }) => `Two-step sign-in is off for ${account.name}`,
+      errorMessage: ({ account }) => `Could not turn off two-step sign-in for ${account.name}`,
+      invalidate: ['platform'],
+    },
+  )
+
   return {
     ban,
     unban,
     signOut,
     temporaryPassword,
+    turnOffTwoFactor,
     /** Any change in flight for this account: its actions wait. */
-    isBusy: (id: string) => ban.isPending(id) || unban.isPending(id) || signOut.isPending(id) || temporaryPassword.isPending(id),
+    isBusy: (id: string) => ban.isPending(id) || unban.isPending(id) || signOut.isPending(id) || temporaryPassword.isPending(id) || turnOffTwoFactor.isPending(id),
   }
 }

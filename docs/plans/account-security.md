@@ -1,6 +1,6 @@
 # Account security: two-step sign-in, session length, re-confirming dangerous actions
 
-Status: **step 1 done (D242, PR #231); step 2 done (D243, PR #232)**; step 3 built (D246, in review); 3b–5 not started. No mockup rounds (step 1 waived; D245 made that the default). Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
+Status: **step 1 done (D242, PR #231); step 2 done (D243, PR #232)**; step 3 done (D246, PR #234); step 3b built (D247, in review); 4–5 not started. No mockup rounds (step 1 waived; D245 made that the default). Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
 
 ## 1. Where we are (checked in the code, 2026-10-30)
 
@@ -60,7 +60,10 @@ Built as below, with two choices made in the step: kept on the session row (`con
 - Applies to: `PUT …/admin/khqr`, `PUT/DELETE …/admin/khqr/token`, staff create/update that gives `admin`, console owner add/remove/transfer.
 - Tests: each route refuses without confirmation and works after; removing the check fails its test; confirmation expires; another session's confirmation doesn't count.
 
-### Step 3b: the platform team turns off a lost two-step sign-in (QA1, D245)
+### Step 3b: the platform team turns off a lost two-step sign-in (QA1, D245; built, D247)
+
+Built as below. The account page also shows **Two-step sign-in: On/Off** for every account; the button appears only when it's on. [Decision](../decisions.md#d247-the-platform-team-turns-off-a-lost-two-step-sign-in-qa1-2026-11-01).
+
 
 - Console → an account's page: **Turn off two-step sign-in**, beside Sign out everywhere, only when the account has it. Super admins with the console's account permission only; never a cafe owner (one account can work at several cafes).
 - One batch: two-step data removed, every session of the account deleted, an audit row (who, whose account, when). Not for a super admin's own account, nor another super admin's (their two-step sign-in is required, D188; that stays the manual reset in operations).

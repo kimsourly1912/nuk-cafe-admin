@@ -6,6 +6,8 @@ export const AccountErrorCodes = {
   ALREADY_BANNED: 'ALREADY_BANNED',
   NOT_BANNED: 'NOT_BANNED',
   ACCOUNT_BANNED: 'ACCOUNT_BANNED',
+  /** Turning off two-step sign-in for an account that doesn't have it (D247). */
+  TWO_FACTOR_NOT_ON: 'TWO_FACTOR_NOT_ON',
 } as const
 
 export const accountNotFound = () => notFound('This account')
@@ -30,3 +32,7 @@ export const accountBanned = () =>
 export const banEndInPast = () => apiError(400, ErrorCodes.VALIDATION_FAILED, 'The ban must end in the future.', {
   fieldErrors: { until: ['Choose a time in the future'] },
 })
+
+/** Turning off two-step sign-in (D247) for an account that doesn't use it (maybe turned off meanwhile). */
+export const twoFactorNotOn = () =>
+  apiError(409, AccountErrorCodes.TWO_FACTOR_NOT_ON, 'This account doesn\'t use two-step sign-in.')
