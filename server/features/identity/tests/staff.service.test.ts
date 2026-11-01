@@ -150,8 +150,18 @@ describe('update access', () => {
 
   it('lets admins grant admin, but never remove their own', async () => {
     const created = await createStaff(db, actor, staffInput())
-    const promoted = await updateStaffAccess(db, actor, created.staff.id, { version: created.staff.version, admin: true, memberships: [] })
+    // Giving admin asks for the password (D246): refused unconfirmed, nothing changed.
+    await expectApiError(() => updateStaffAccess(db, actor, created.staff.id, { version: created.staff.version, admin: true, memberships: [] }), 403, 'CONFIRMATION_REQUIRED')
+    let asked = 0
+    const confirmAdminGrant = async () => {
+      asked++
+    }
+    const promoted = await updateStaffAccess(db, actor, created.staff.id, { version: created.staff.version, admin: true, memberships: [] }, { confirmAdminGrant })
     expect(promoted.admin).toBe(true)
+    expect(asked).toBe(1)
+    // Already an admin: changing their branches doesn't ask again.
+    await updateStaffAccess(db, actor, created.staff.id, { version: promoted.version, admin: true, memberships: [{ branchId, role: 'manager' }] }, { confirmAdminGrant })
+    expect(asked).toBe(1)
 
     const owner = (await listStaff(db, actor, { ...PAGE, search: 'owner' })).items[0]!
     await expectApiError(() => updateStaffAccess(db, actor, actor.userId, { version: owner.version, admin: false, memberships: [{ branchId, role: 'manager' }] }), 409, 'OWN_ACCESS')
@@ -399,7 +409,7 @@ describe('list from the cafe\'s memberships', () => {
     expect(await everyone({ role: 'admin' })).toEqual(['Owner'])
     expect(await everyone({ role: 'admin', branchId })).toEqual([])
     const [sophea] = (await listStaff(db, actor, { ...PAGE, search: 'sophea' })).items
-    await updateStaffAccess(db, actor, sophea!.id, { version: sophea!.version, admin: true, memberships: [{ branchId, role: 'staff' }] })
+    await updateStaffAccess(db, actor, sophea!.id, { version: sophea!.version, admin: true, memberships: [{ branchId, role: 'staff' }] }, { confirmAdminGrant: async () => {} })
     expect(await everyone({ role: 'admin', branchId })).toEqual(['Sophea'])
   })
 

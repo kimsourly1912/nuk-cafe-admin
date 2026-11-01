@@ -1,6 +1,6 @@
 # Account security: two-step sign-in, session length, re-confirming dangerous actions
 
-Status: **step 1 done (D242, PR #231); step 2 done (D243, PR #232)**; step 3 in progress; 3b–5 not started. No mockup rounds (step 1 waived; D245 made that the default). Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
+Status: **step 1 done (D242, PR #231); step 2 done (D243, PR #232)**; step 3 built (D246, in review); 3b–5 not started. No mockup rounds (step 1 waived; D245 made that the default). Follows the [workspace access plan](workspace-access.md) (done: D239 refusal panels, D240 page access, D241 the sign-ins' rules). Related: D45 (sessions), D52 (admin is owners only), D97 (one session per browser), D102 (counter), D135 (platform team never opens cafe data), D188 (two-step sign-in for super admins), D193 (support access).
 
 ## 1. Where we are (checked in the code, 2026-10-30)
 
@@ -50,7 +50,10 @@ Verified first, as asked: Better Auth 1.7.7 can set a per-session `expiresAt`, b
 - **Your devices** on the account security page: this browser and the others (device, last used), **Sign out other devices** (Better Auth's session list and revoke endpoints, checked against the installed version).
 - Tests: server test that a staff sign-in's session ends after a day and a customer's doesn't; e2e for the devices list and signing others out.
 
-### Step 3: re-confirm before dangerous actions
+### Step 3: re-confirm before dangerous actions (built, D246)
+
+Built as below, with two choices made in the step: kept on the session row (`confirmed_at`, `confirm_failures`), and the password only (every staff and owner account has one). Staff access changes ask only when they **give** admin. [Decision](../decisions.md#d246-confirm-its-you-before-dangerous-changes-per-session-password-15-minutes-2026-11-01).
+
 
 - A server check (a new access helper beside `requirePermission`, `server/utils/access.ts`) that the session was confirmed within 15 minutes; refused with a clear code (e.g. `CONFIRMATION_REQUIRED`). Confirming: the password, or a two-step code when the account has it. Where the confirmation time is kept (the session row's own field, or a small table) is decided in the step; it must be per session, server-side, and cleared at sign-out.
 - The app: `apiFetch`/`useMutation` turns that code into a confirm dialog, then repeats the request once (the request's idempotency key and version unchanged).

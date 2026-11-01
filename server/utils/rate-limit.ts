@@ -18,6 +18,8 @@ import { log } from '#server/utils/log'
 export const RATE_LIMIT_RULES = [
   // Deleting an account (D237): each try checks a password, so few a minute.
   { prefix: '/api/me/delete-account', exact: true, method: 'POST', binding: 'RATE_LIMIT_ACCOUNT' },
+  // Confirming it's you before a dangerous change (D246): a password check too.
+  { prefix: '/api/me/confirm', exact: true, method: 'POST', binding: 'RATE_LIMIT_ACCOUNT' },
   // Placing an order, now that a guest can (D156): only the POST, never the order page's polling.
   { prefix: '/api/shop/orders', exact: true, method: 'POST', binding: 'RATE_LIMIT_ORDERS' },
   // Prices the whole order from the catalog: the costliest public call.

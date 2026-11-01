@@ -379,6 +379,13 @@
       "when": 1793346873023,
       "tag": "0053_user_anonymized_at",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "6",
+      "when": 1793515779457,
+      "tag": "0054_session_confirmation",
+      "breakpoints": true
     }
   ]
 }

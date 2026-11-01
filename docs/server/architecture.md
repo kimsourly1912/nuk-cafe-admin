@@ -289,7 +289,7 @@ HTTP 409
 |---|---|---|
 | 400 | Invalid input | `VALIDATION_FAILED` |
 | 401 | No session | `UNAUTHENTICATED` |
-| 403 | Signed in, not allowed; write from another origin | `FORBIDDEN`, `PASSWORD_CHANGE_REQUIRED` |
+| 403 | Signed in, not allowed; write from another origin | `FORBIDDEN`, `PASSWORD_CHANGE_REQUIRED`, `CONFIRMATION_REQUIRED` (the password again first, D246) |
 | 404 | Not found, or not visible to this caller | `NOT_FOUND` |
 | 409 | Stale version, wrong state, still in use | `VERSION_CONFLICT`, `INVALID_STATE`, feature codes |
 | 413 / 415 | Upload too large / wrong type | `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA` |

@@ -4,7 +4,8 @@ Snapshot reviewed against main `14f3fc2`, 2026-11-01. Read only when resuming or
 
 ## Waiting on the owner
 
-- **Merged: account security step 2 (D243, PR #232) and security hardening (D244, PR #233).** The owner works through the [security checklist](plans/cloudflare-improvements.md#owner-security-checklist-d244). QA1 answered (D245). Next: account security step 3 (re-confirming dangerous actions), then 3b (the console turns off a lost two-step sign-in).
+- **In review: account security step 3, Confirm it's you (D246), and no default mockup round with QA1 answered (D245),** branch `claude/affectionate-galileo-rivb8d`. [Progress](progress.md#confirm-its-you-before-dangerous-changes-account-security-step-3-d246-2026-11-01). Next: step 3b (the console turns off a lost two-step sign-in).
+- **Merged: account security step 2 (D243, PR #232) and security hardening (D244, PR #233).** The owner works through the [security checklist](plans/cloudflare-improvements.md#owner-security-checklist-d244).
 - **In review: Review order's first load and the first-load rule (D238),** branch `claude/checkout-loading-state`. Next: other pages checked against the new UI checklist item, one per branch. [Progress](progress.md#review-orders-first-load-and-the-first-load-rule-d238-2026-10-30).
 - **Merged: account erasure (D237, 2026-10-30):** PR #224 as `3ed2cbf`. Account menu → **Delete account**; `POST /api/me/delete-account`; no migration. [Plan](plans/account-erasure.md), [decision](decisions.md#d237-an-account-deletes-itself-emptied-like-a-guest-d229s-erasure-2026-10-30), [progress](progress.md#account-erasure-d237-2026-10-30).
 - **Merged: idle guests emptied after 90 days (D236):** PR #223 as `b4d28cc`.

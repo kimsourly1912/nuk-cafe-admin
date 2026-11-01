@@ -77,6 +77,15 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
       // `requireWorkspaceSession`): Better Auth's own renewal can't keep a shorter absolute limit.
       expiresIn: 7 * DAY,
       updateAge: DAY,
+      additionalFields: {
+        // When this session last confirmed its password before a dangerous action (D246,
+        // `confirmation.service.ts`): per session, so it ends with it at sign-out. Never read by
+        // the browser; only identity writes it.
+        confirmedAt: { type: 'date', required: false, input: false, returned: false },
+        // Wrong passwords given to that check since the last right one: at the limit the session
+        // is ended, so a stolen session can't keep guessing (D246).
+        confirmFailures: { type: 'number', required: false, defaultValue: 0, input: false, returned: false },
+      },
     },
     user: {
       additionalFields: {

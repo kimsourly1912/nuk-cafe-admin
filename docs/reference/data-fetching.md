@@ -29,7 +29,7 @@ await apiFetch<MenuCategory>(`/admin/menu/categories/${id}`, { method: 'PATCH', 
 - **the cafe's address is added for you** (D140, `apiPath` in `app/utils/api-path.ts`): `/admin/…`, `/counter/…`, `/public/…` and `/shop/…` go to `/api/c/<slug>/…`, the cafe of the page on screen (its address, `/c/<slug>/…`, D141); called from the platform's pages, which have no cafe, it throws instead of guessing one (D221); `/auth/…`, `/tables/{token}` and `/health` are the platform's and go as they are. Never write `/c/<slug>` in feature code;
 - same-origin cookie, 30 s timeout (pass `timeout` for uploads), **no retries**;
 - every failure throws [`ApiError`](./errors.md#apierror) (our error body and Better Auth's);
-- a 401 or 403 `NOT_ADMIN` clears the session (the app goes to login); a 403 `PASSWORD_CHANGE_REQUIRED` sends the app to the change-password page;
+- a 401 or 403 `NOT_ADMIN` clears the session (the app goes to login); a 403 `PASSWORD_CHANGE_REQUIRED` sends the app to the change-password page; a 403 `CONFIRMATION_REQUIRED` opens "Confirm it's you" and, once confirmed, sends the same request once more (cancelled: a silent `aborted` error, D246);
 - a response to a request started under a previous identity is discarded as a silent `aborted` error (D29).
 
 Call it only inside `useApiQuery` (reads) and `useMutation` (writes).

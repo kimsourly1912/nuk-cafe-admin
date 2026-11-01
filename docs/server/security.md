@@ -123,6 +123,24 @@ A tenant's `owner` has every branch permission in every branch of that tenant: *
 - **Revoke all sessions** of a user when their role changes, they're removed from a branch, their staff access is disabled, or they're banned (`admin.revokeUserSessions`).
 - `trustedOrigins` is the origin of `NUXT_PUBLIC_SITE_URL` (the module adds localhost origins in dev only). The origin check on our routes (`server/middleware/10.origin-check.ts`) accepts the same origin.
 
+## Re-confirming dangerous changes (D246)
+
+Like GitHub's sudo mode: a stolen signed-in session (an unlocked phone, a copied cookie) can read a workspace but can't make these changes without the account's password.
+
+| Change | Route | Asks when |
+|---|---|---|
+| Where the cafe's payments go | `PUT …/admin/khqr`, `PUT`/`DELETE …/admin/khqr/token` | always |
+| Admin access | `POST …/admin/staff` | it gives admin |
+| | `PATCH …/admin/staff/{userId}` | it gives admin to someone who isn't one (`updateStaffAccess`'s `confirmAdminGrant`; its default refuses, so a caller can't forget it) |
+| A cafe's owners (console) | `POST /api/platform/tenants/{id}/owners`, `…/owners/{userId}/remove`, `…/transfer` | always |
+
+- **Check:** `requireConfirmation(event)` (`server/utils/access.ts`), **after** the route's permission check: this session's `session.confirmed_at` is less than 15 minutes old, or 403 `CONFIRMATION_REQUIRED`. `routes.test.ts` fails a listed route without it, or with it before the permission check.
+- **Confirming:** `POST /api/me/confirm` `{ password }`, checked by Better Auth's `verifyPassword` against this session. Password only: every staff and owner account signs in with email and password (no social sign-in). Rate limited per address (`RATE_LIMIT_ACCOUNT`, like deleting an account).
+- **Per session:** kept on the session row, so it ends at sign-out and never counts for another device or account.
+- **Wrong passwords:** 400 beside the field, audited (`identity.confirm.failed`), counted on the session (`confirm_failures`); the 5th in a row deletes that session (401). Counted per session, so a stranger's guesses on a stolen session never sign out the owner's other devices.
+- **App:** `apiFetch` answers `CONFIRMATION_REQUIRED` with `<ConfirmIdentityModal>` ("Confirm it's you") and sends the same request **once** more (same body, version and idempotency key). Cancel: nothing is sent again, silently. One dialog at a time; a session change closes it.
+- **Not covered (by design):** a super admin on a support visit is read-only already (D193); creating a new cafe with its first owner (no existing cafe is at risk).
+
 ## Staff onboarding
 
 Built in step 1.4 (D49): `server/features/identity/staff.*`, routes under `/api/admin/staff`.
@@ -256,6 +274,7 @@ Never in the repo, never logged, never in error messages. `.env` is git-ignored;
 - [ ] Records outside the caller's scope answer 404.
 - [ ] Writes check `version`; money/points/voucher actions take an `Idempotency-Key`.
 - [ ] Privileged writes add an audit event in the same batch.
+- [ ] A change to payment settings, admin access or owners calls `requireConfirmation` after the permission check (D246).
 - [ ] Errors use shared codes or the feature's `*.errors.ts` factories, with user-safe messages; nothing internal leaks.
 - [ ] The response is mapped (no raw rows) and contains nothing the caller shouldn't see.
 - [ ] Tests cover the permission cases, each error code, and the race/replay case.

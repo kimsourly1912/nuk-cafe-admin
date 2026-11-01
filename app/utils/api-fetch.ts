@@ -23,7 +23,17 @@ interface CreateApiFetchOptions {
    * so it can't show or change data in another user's session.
    */
   sessionGeneration?: () => number
+  /**
+   * Called when a dangerous change needs the password again (403 `CONFIRMATION_REQUIRED`, D246):
+   * shows "Confirm it's you" and resolves `true` once confirmed, `false` when cancelled. Confirmed,
+   * the same request is sent **once** more (same body, idempotency key and version); cancelled, it
+   * fails silently (`aborted`), leaving the form as it was.
+   */
+  onConfirmationRequired?: () => Promise<boolean>
 }
+
+/** The server's code for "confirm your password first" (D246). */
+export const CONFIRMATION_REQUIRED = 'CONFIRMATION_REQUIRED'
 
 /**
  * Wraps ofetch for our API (docs/reference/api-client.md):
@@ -33,9 +43,8 @@ interface CreateApiFetchOptions {
  *   the session is over;
  * - responses from a previous identity are discarded.
  */
-export function createApiFetch({ baseFetch, onSessionLost, onPasswordChangeRequired, sessionGeneration = () => 0 }: CreateApiFetchOptions): ApiFetch {
-  return async function apiFetch<T>(path: string, options?: ApiFetchOptions): Promise<T> {
-    const generation = sessionGeneration()
+export function createApiFetch({ baseFetch, onSessionLost, onPasswordChangeRequired, sessionGeneration = () => 0, onConfirmationRequired }: CreateApiFetchOptions): ApiFetch {
+  async function send<T>(path: string, options: ApiFetchOptions | undefined, generation: number, mayAsk: boolean): Promise<T> {
     const stale = () => new ApiError(API_ERROR_MESSAGES.aborted, {
       kind: 'aborted',
       status: 0,
@@ -50,9 +59,22 @@ export function createApiFetch({ baseFetch, onSessionLost, onPasswordChangeRequi
       const apiError = ApiError.from(error)
       if (apiError.kind === 'unauthorized' || apiError.code === 'NOT_ADMIN') onSessionLost()
       else if (apiError.code === 'PASSWORD_CHANGE_REQUIRED') onPasswordChangeRequired?.()
+      else if (apiError.code === CONFIRMATION_REQUIRED && mayAsk && onConfirmationRequired) {
+        const confirmed = await onConfirmationRequired()
+        if (sessionGeneration() !== generation) throw stale()
+        if (!confirmed) {
+          throw new ApiError(API_ERROR_MESSAGES.aborted, { kind: 'aborted', status: 0, detail: `${path}: the password wasn't confirmed, so nothing was sent again.` })
+        }
+        // Once: a second refusal is shown as it is, never another dialog.
+        return send<T>(path, options, generation, false)
+      }
       throw apiError
     }
     if (sessionGeneration() !== generation) throw stale()
     return data
+  }
+
+  return function apiFetch<T>(path: string, options?: ApiFetchOptions): Promise<T> {
+    return send<T>(path, options, sessionGeneration(), true)
   }
 }
