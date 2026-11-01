@@ -36,6 +36,13 @@ const E2E_BAKONG_KEY = Buffer.alloc(32, 7).toString('base64')
 const FINGERPRINT_FILE = join(rootDir, '.output', '.e2e-build-fingerprint')
 /** Local builds skip Nitro's dependency tracing (D177); CI and `E2E_TRACE=1` keep it. */
 const UNTRACED = !process.env.CI && !process.env.E2E_TRACE
+/**
+ * The untraced server imports its database connection from this file, which NuxtHub writes on every
+ * `nuxt prepare`, `nuxt typecheck` or build (D249). A `pnpm typecheck` after the e2e build points it
+ * at the dev database: the reused build's server then answers every page 500 ("no such table").
+ */
+const HUB_DB_FILE = join(rootDir, 'node_modules', '@nuxthub', 'db', 'db.mjs')
+const pointsAtE2eDatabase = () => existsSync(HUB_DB_FILE) && readFileSync(HUB_DB_FILE, 'utf8').includes(`${E2E_HUB_DIR}/db/`)
 
 /**
  * Builds the app once and serves it for every e2e file (`setup({ host: inject('e2eHost') })`),
@@ -56,6 +63,7 @@ export default async function ({ provide }: TestProject) {
     && existsSync(join(rootDir, '.output', 'server', 'index.mjs'))
     && existsSync(FINGERPRINT_FILE)
     && readFileSync(FINGERPRINT_FILE, 'utf8') === fingerprint
+    && (!UNTRACED || pointsAtE2eDatabase())
   if (reuse) {
     console.info('[e2e] Reusing the build: no build input changed (E2E_REBUILD=1 to force one).')
   }

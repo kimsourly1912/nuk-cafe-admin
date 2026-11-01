@@ -1,10 +1,10 @@
 # Current-state navigation
 
-Snapshot reviewed against main `c056efd`, 2026-11-01. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
+Snapshot reviewed against main `f2978f7`, 2026-11-01. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
 
 ## Waiting on the owner
 
-- **In review: account security step 4 (D248),** branch `claude/affectionate-galileo-rivb8d`: Last active here on the Staff page (this cafe only, the owner's choice). Step 3b (D247) merged as PR #235. Next: step 5, Switch person on the counter. [Progress](progress.md#owners-see-when-staff-were-last-active-here-account-security-step-4-d248-2026-11-01).
+- **In review: e2e failure evidence (D249),** branch `claude/affectionate-galileo-rivb8d`: a failed e2e test saves screenshots and HTML; CI uploads them. Step 4 (D248) merged as PR #236. Next: step 5, Switch person on the counter. [Progress](progress.md#a-failed-e2e-test-keeps-what-the-browser-showed-d249-2026-11-01).
 - **Merged: account security step 2 (D243, PR #232) and security hardening (D244, PR #233).** The owner works through the [security checklist](plans/cloudflare-improvements.md#owner-security-checklist-d244).
 - **In review: Review order's first load and the first-load rule (D238),** branch `claude/checkout-loading-state`. Next: other pages checked against the new UI checklist item, one per branch. [Progress](progress.md#review-orders-first-load-and-the-first-load-rule-d238-2026-10-30).
 - **Merged: account erasure (D237, 2026-10-30):** PR #224 as `3ed2cbf`. Account menu → **Delete account**; `POST /api/me/delete-account`; no migration. [Plan](plans/account-erasure.md), [decision](decisions.md#d237-an-account-deletes-itself-emptied-like-a-guest-d229s-erasure-2026-10-30), [progress](progress.md#account-erasure-d237-2026-10-30).
