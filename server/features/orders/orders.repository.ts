@@ -91,12 +91,15 @@ export function insertLinesStatements(db: Db, tenantId: string, orderId: string,
   return insertAll(db, orderLines, lines.map(line => ({ ...line, tenantId, orderId })))
 }
 
+const dueUnpaid = (tenantId: string, customerId: string, now: Date) =>
+  inTenant(orders, tenantId, eq(orders.customerId, customerId), eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now))
+
 /**
  * A guard for the batch: the customer has at most `max` unpaid orders still due, counting the one
  * this batch inserts (put it after the insert). Concurrent placements can't both slip under it.
  */
 export function requireUnpaidAtMost(db: Db, tenantId: string, customerId: string, now: Date, max: number): Statement {
-  return requireAtMost(db, db.$count(orders, inTenant(orders, tenantId, eq(orders.customerId, customerId), eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now))), max)
+  return requireAtMost(db, db.$count(orders, dueUnpaid(tenantId, customerId, now)), max)
 }
 
 export interface OrderRow {
@@ -475,4 +478,9 @@ export async function customersWithOrdersSince(db: Db, customerIds: readonly str
 /** Across cafes: every order of one customer handed to another (a guest's to their account, D156). */
 export function moveOrdersStatement(db: Db, fromCustomerId: string, toCustomerId: string): Statement {
   return db.update(orders).set({ customerId: toCustomerId }).where(eq(orders.customerId, fromCustomerId))
+}
+
+/** Due unpaid orders, for the refusal after an atomic checkout guard rolls back. */
+export async function countUnpaid(db: Db, tenantId: string, customerId: string, now: Date): Promise<number> {
+  return db.$count(orders, dueUnpaid(tenantId, customerId, now))
 }

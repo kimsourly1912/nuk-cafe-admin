@@ -4,3 +4,5 @@ export { qrConfigFrom } from './branches.qr'
 export type { QrConfig } from './branches.qr'
 
 export { activeBranch } from './branches.repository'
+
+export { captureCheckoutBranchGuard } from './branches.service'
