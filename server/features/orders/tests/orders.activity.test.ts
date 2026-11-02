@@ -1,7 +1,13 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { drizzle } from 'drizzle-orm/d1'
+import { getPlatformProxy } from 'wrangler'
 import { describe, expect, it } from 'vitest'
+import type { Db } from '#server/utils/batch'
 import { orders } from '#server/features/orders/orders.schema'
+import { orderActivityQuery } from '#server/features/orders/orders.repository'
 import { orderActivity } from '#server/features/orders/orders.service'
-import { createTestDb, createUser, ensureTenant, insertBranch } from '#server/tests/support/db'
+import { createTestDb, createUser, ensureTenant, insertBranch, migrationFiles } from '#server/tests/support/db'
 
 describe('platform order activity (indexed tenant reads)', () => {
   it('keeps old-only last order dates, counts the 30-day boundary and excludes other cafes', async () => {
@@ -44,5 +50,31 @@ describe('platform order activity (indexed tenant reads)', () => {
     const now = new Date('2026-11-02T00:00:00.000Z')
     const rows = await orderActivity(db, [...Array.from({ length: 120 }, (_, i) => 'missing-' + i), 'missing-1', 'missing-1'], now)
     expect(rows.size).toBe(0)
+  })
+
+  it('uses the tenant and placed-at index for both correlated reads on local D1', { tags: ['slow'] }, async () => {
+    const proxy = await getPlatformProxy({ configPath: fileURLToPath(new URL('../../../tests/support/d1-wrangler.json', import.meta.url)), persist: false })
+    const d1 = proxy.env.DB as {
+      prepare: (sql: string) => {
+        bind: (...params: unknown[]) => { all: () => Promise<{ results: { detail: string }[] }> }
+        all: () => Promise<unknown>
+      }
+    }
+    try {
+      for (const file of migrationFiles()) {
+        const source = readFileSync(fileURLToPath(new URL(`../../../db/migrations/sqlite/${file}`, import.meta.url)), 'utf8')
+        for (const statement of source.split('--> statement-breakpoint')) {
+          if (statement.trim()) await d1.prepare(statement).all()
+        }
+      }
+      const db = drizzle(d1 as never, { casing: 'snake_case' }) as unknown as Db
+      const query = orderActivityQuery(db, ['plan-cafe-a', 'plan-cafe-b'], new Date('2026-11-02T00:00:00.000Z')).toSQL()
+      const plan = await d1.prepare(`EXPLAIN QUERY PLAN ${query.sql}`).bind(...query.params).all()
+      const indexedReads = plan.results.map(row => row.detail).filter(detail => detail.includes('orders_tenant_placed_idx'))
+      expect(indexedReads).toHaveLength(3)
+    }
+    finally {
+      await proxy.dispose()
+    }
   })
 })

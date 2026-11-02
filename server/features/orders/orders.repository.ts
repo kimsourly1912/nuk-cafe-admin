@@ -422,9 +422,7 @@ export function findExpiredUnpaid(db: Db, now: Date, limit: number): Promise<{ i
  * Across cafes: per cafe, orders placed since `since`, and when the last one was placed (the
  * platform console's usage numbers, D142). Counts only: a super admin never sees the orders themselves.
  */
-export function orderActivity(db: Db, tenantIds: string[], since: Date): Promise<{ tenantId: string, recent: number, lastPlacedAt: Date | null }[]> {
-  if (!tenantIds.length) return Promise.resolve([])
-
+export function orderActivityQuery(db: Db, tenantIds: string[], since: Date) {
   // Drive from requested cafes rather than scanning every historical order. One JSON bind also
   // stays within D1's parameter limit when a platform list contains many cafes.
   const requested = sql`json_each(${JSON.stringify([...new Set(tenantIds)])}) as requested_tenants`
@@ -435,14 +433,21 @@ export function orderActivity(db: Db, tenantIds: string[], since: Date): Promise
     .where(eq(latestOrders.tenantId, requestedId))
     .orderBy(desc(latestOrders.placedAt))
     .limit(1)
+  const recent = db.select({ total: count() }).from(recentOrders)
+    .where(and(eq(recentOrders.tenantId, requestedId), gte(recentOrders.placedAt, since)))
 
   // Both subqueries use orders_tenant_placed_idx: range count and newest indexed row.
   // Cafes with no order still have no result row, matching the previous group-by query.
   return db.select({
     tenantId: requestedId,
-    recent: db.$count(recentOrders, and(eq(recentOrders.tenantId, requestedId), gte(recentOrders.placedAt, since))),
+    recent: sql<number>`(${recent})`.mapWith(Number),
     lastPlacedAt: sql<Date | null>`(${latest})`.mapWith(orders.placedAt),
   }).from(requested).where(exists(latest))
+}
+
+export function orderActivity(db: Db, tenantIds: string[], since: Date): Promise<{ tenantId: string, recent: number, lastPlacedAt: Date | null }[]> {
+  if (!tenantIds.length) return Promise.resolve([])
+  return orderActivityQuery(db, tenantIds, since)
 }
 
 /** Across cafes: of these cafes, those with an order placed at or after `since` (`orders_tenant_placed_idx`: a range per cafe). */

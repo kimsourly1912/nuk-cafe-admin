@@ -385,11 +385,10 @@ describe('the list', () => {
     expect(usage['brown-bean']).toEqual({ branches: 1, staff: 1, ordersLast30Days: 0, lastOrderAt: null })
     // The platform's last-order date is all-time, even when the recent count is zero.
     const oldOnly = await createTenant(db, admin, input({ name: 'Old Orders Cafe', slug: 'old-orders', ownerEmail: 'old@example.com' }))
-    await insertBranch(db, { id: 'b-old', name: 'Old Branch', timezone: 'Asia/Phnom_Penh', tenantId: oldOnly.tenant.id })
-    await db.insert(orders).values({ ...order(4, days(40)), tenantId: oldOnly.tenant.id, branchId: 'b-old' })
+    const [oldBranch] = await db.select({ id: branches.id }).from(branches).where(eq(branches.tenantId, oldOnly.tenant.id))
+    await db.insert(orders).values({ ...order(4, days(40)), tenantId: oldOnly.tenant.id, branchId: oldBranch!.id })
     const after = Object.fromEntries((await listTenants(db, query())).items.map(t => [t.slug, t.usage]))
     expect(after['old-orders']).toEqual({ branches: 1, staff: 1, ordersLast30Days: 0, lastOrderAt: days(40).toISOString() })
-
   })
 })
 

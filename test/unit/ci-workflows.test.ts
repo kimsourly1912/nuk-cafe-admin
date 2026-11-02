@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
  */
 const WORKFLOWS = new URL('../../.github/workflows/', import.meta.url)
 const workflows = readdirSync(WORKFLOWS).filter(name => /\.ya?ml$/.test(name))
-const read = (name: string) => readFileSync(new URL(name, WORKFLOWS), 'utf8')
+const read = (name: string) => readFileSync(new URL(name, WORKFLOWS), 'utf8').replaceAll('\r\n', '\n')
 
 describe('GitHub Actions workflows (D244)', () => {
   it('finds the workflows', () => {
