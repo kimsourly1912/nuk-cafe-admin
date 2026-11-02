@@ -13,6 +13,18 @@ import AssistantText from './AssistantText.vue'
  * conversation lives in this tab only; a change of account clears it.
  */
 const { status, open } = useAssistant()
+// The shell mounts this panel on its first opening (D254), so `open` is already true. Below `lg`,
+// USidebar's slide-over opens on a change only: it starts closed and opens once mounted.
+const mounted = ref(false)
+onMounted(() => {
+  mounted.value = true
+})
+const sidebarOpen = computed({
+  get: () => mounted.value && open.value,
+  set: (value: boolean) => {
+    open.value = value
+  },
+})
 const route = useRoute()
 const { isExpanded } = useLayoutContext()
 const tenantPath = useTenantPath()
@@ -79,7 +91,7 @@ const asMessage = (message: unknown) => message as AssistantMessage
 
 <template>
   <USidebar
-    v-model:open="open"
+    v-model:open="sidebarOpen"
     side="right"
     collapsible="offcanvas"
     title="Assistant"

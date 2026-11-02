@@ -2,6 +2,15 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## The admin assistant's chat code loads when it's first opened (D254, 2026-11-02)
+Branch `claude/zen-davinci-hgbbfz`, restarted from `main` at `3333fb5` after PR #244 (staging deploy green). The owner chose this D253 finding before the Nuxt Hints trial. [Decision](decisions.md#d254-the-admin-assistants-chat-code-loads-when-its-first-opened-2026-11-02).
+
+- **Change:** the assistant's `index.ts` exports `AssistantPanel` as an async component; `useAssistant()` gains `opened` (set by `toggle`); the admin layout mounts the panel from the first opening on. The panel mounts its `USidebar` closed and opens it once mounted (below `lg` the slide-over opens on a change only). App architecture guide rule 2 records the pattern; the development guide notes that the analyze report's summed module gzip overstates a download.
+- **Result (`pnpm analyze`, built files gzip -9):** admin layout chunk `default.js` 65.0 → 7.3 kB; the panel's 58.8 kB chunk loads on the first opening.
+- **Tests:** new `assistant.test.ts` "loads its chat code only when first opened, not with the admin page"; "is hidden where it is off" expects no panel at all. Guard checked: with the static export back the new test fails (`expected [ '/_nuxt/6fqxZDG3.js' ] to deeply equal []`). The phone test failed on the first version (the panel mounted open showed nothing below `lg`; also when opened with the shortcut, so not the menu closing): fixed by mounting closed.
+- **Evidence (2026-11-02, cloud Linux, Node 24.22.1, pnpm 12.15.0, Google Chrome):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 2421 passed, 1 skipped. Full `pnpm test:e2e` (3 workers) on the first version: 801 passed, 2 failed: the phone test above, and `shop-account` "a breached password" (this session can't reach `api.pwnedpasswords.com`, the known open follow-up). After the fix, `assistant.test.ts` 7/7; the fix touches only the panel, so the full suite wasn't rerun locally (CI runs it).
+- **Next:** the Nuxt Hints trial in dev, the last planned tooling step.
+
 ## Bundle and Worker size measured by hand, with a baseline (D253, 2026-11-02)
 Branch `claude/zen-davinci-hgbbfz`, restarted from `main` at `c56b94c` after PR #243 (#242's staging deploy green). The owner's next planned tooling step. [Decision](decisions.md#d253-bundle-and-worker-size-are-measured-by-hand-with-a-recorded-baseline-2026-11-02), [guide](guides/development.md#bundle-and-worker-size-d253).
 
