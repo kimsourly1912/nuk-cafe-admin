@@ -15,6 +15,10 @@
  * `wide` lifts the card's width from `sm:max-w-sm` to `sm:max-w-3xl` for a step with side-by-side
  * parts (the two-factor setup); it is still one column on phones.
  *
+ * The `aside` slot puts a panel to the left of the card from `sm` (the account pages' picture, D97),
+ * the two drawn as one card `sm:max-w-2xl` wide, at least `sm:min-h-128` tall; the panel fills
+ * the height the card's content gives it and is hidden on phones.
+ *
  * @example
  * <TaskFrame>
  *   <template #header><h1>Sign in</h1></template>
@@ -26,7 +30,37 @@ defineProps<{ wide?: boolean }>()
 </script>
 
 <template>
+  <div
+    v-if="$slots.aside"
+    class="flex w-full bg-default max-sm:flex-1 sm:min-h-128 sm:max-w-2xl sm:overflow-hidden sm:rounded-lg sm:ring sm:ring-default"
+  >
+    <div class="relative w-2/5 shrink-0 max-sm:hidden">
+      <div class="absolute inset-0">
+        <slot name="aside" />
+      </div>
+    </div>
+    <!-- The panel and this card are one card: the outer box draws its ring and corners. -->
+    <UCard
+      class="flex min-w-0 flex-1 flex-col rounded-none ring-0"
+      :ui="{ body: 'flex-1', footer: 'space-y-2 max-sm:pb-[max(env(safe-area-inset-bottom),1rem)]' }"
+    >
+      <template
+        v-if="$slots.header"
+        #header
+      >
+        <slot name="header" />
+      </template>
+      <slot />
+      <template
+        v-if="$slots.footer"
+        #footer
+      >
+        <slot name="footer" />
+      </template>
+    </UCard>
+  </div>
   <UCard
+    v-else
     class="w-full max-sm:flex max-sm:flex-1 max-sm:flex-col max-sm:rounded-none max-sm:ring-0"
     :class="wide ? 'sm:max-w-3xl' : 'sm:max-w-sm'"
     :ui="{ body: 'max-sm:flex-1', footer: 'space-y-2 max-sm:pb-[max(env(safe-area-inset-bottom),1rem)]' }"

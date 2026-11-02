@@ -14,6 +14,8 @@
  *
  * Each workspace is opened as a full page load: its session and data start fresh (D141).
  *
+ * An `aside` slot is passed on to the frame, so the sign-in's picture panel stays in place.
+ *
  * @example
  * <WorkspaceRefused v-if="refused" workspace="admin" :access="refused" :email="state.email" :title="`${name} Admin`" @signed-out="refused = null" />
  */
@@ -90,6 +92,12 @@ async function useAnotherAccount() {
 
 <template>
   <TaskFrame>
+    <template
+      v-if="$slots.aside"
+      #aside
+    >
+      <slot name="aside" />
+    </template>
     <template #header>
       <div class="flex items-center gap-2">
         <UIcon

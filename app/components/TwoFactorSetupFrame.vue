@@ -305,7 +305,7 @@ const savedCodes = ref(false)
               <UCheckbox
                 v-model="savedCodes"
                 label="I've saved my backup codes"
-                :description="savedCodes ? undefined : 'Tick this to turn on two-step sign-in.'"
+                description="Tick this to turn on two-step sign-in."
                 class="border-t border-default pt-3"
                 :ui="{ description: 'text-toned' }"
               />

@@ -14,8 +14,9 @@ import { signInSchema } from '../schemas/account-form'
 import { useAccountActions, useAccountSession } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
 import type { ChangePasswordTarget } from '~/utils/account-cafes'
-import { ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget, TemporaryPasswordError } from '../utils/account'
+import { ACCOUNT_ASIDES, ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget, TemporaryPasswordError } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
+import AccountAside from './AccountAside.vue'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
@@ -90,11 +91,16 @@ function restart(message?: string) {
   <TaskFrameSkeleton
     v-if="loading"
     :fields="2"
-  />
+  >
+    <template #aside>
+      <AccountAside v-bind="ACCOUNT_ASIDES.signIn" />
+    </template>
+  </TaskFrameSkeleton>
   <AccountFrame
     v-else
     title="Sign in"
     description="Sign in to order ahead and collect points."
+    :aside="ACCOUNT_ASIDES.signIn"
     :back="{ label: accountBackLabel(home), to: home }"
   >
     <TwoFactorCodeForm
@@ -144,6 +150,7 @@ function restart(message?: string) {
           v-model="state.email"
           type="email"
           autocomplete="username"
+          icon="i-lucide-mail"
           class="w-full"
         />
       </UFormField>

@@ -21,7 +21,7 @@ Status labels used below:
 4. **Tailwind tokens only (owner-directed).** Layout uses Tailwind's standard scales: spacing (`gap-4`, `p-3`), breakpoints (`sm:`, `lg:`, `max-sm:`), container queries (`@container`, `@md:`), sizing (`size-5`, `max-w-md`), typography (`text-sm`, `font-semibold`) and Nuxt UI's semantic color utilities (`text-muted`, `bg-elevated`, `border-default`). **No arbitrary values** (`[13px]`, `min-[700px]:`, `@[500px]:`), no hex colors, no palette classes.
 5. **Allowed layout-only tweaks on a component:** grid and flex placement, `min-w-0`, `shrink`, `break-words`, visibility per width class, and a `ui` slot class that changes *layout* only (a card body becoming a flex row). Anything that changes color, size, radius or shadow is not a layout tweak and belongs in `app.config.ts`.
 6. **Custom CSS is limited (owner-directed)** to global theme variables, safe-area handling (`env(safe-area-inset-*)`, the one place a non-token value is allowed) and behavior that neither Nuxt UI nor Tailwind utilities can express (the existing pointer-cursor rule). No one-off CSS, no broad element selectors for styling.
-7. **Avoid (owner-directed):** decorative gradients, glass and blur effects (`backdrop-blur`), custom shadows, excessive pills, and one-off styling.
+7. **Avoid (owner-directed):** decorative gradients, glass and blur effects (`backdrop-blur`), custom shadows, excessive pills, and one-off styling. One exception (owner, 2026-11-02): the sign-in pages' picture panel (`<AuthAside>`) puts a frosted veil (`bg-default/50`, `backdrop-blur-md`, fading out with `mask-b-from-50%`) behind its words on the photo; nowhere else.
 
 ## 2. Color tokens
 

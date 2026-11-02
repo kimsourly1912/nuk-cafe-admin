@@ -6,7 +6,7 @@
  */
 import { useAccountActions, useAccountSession, useResendCooldown } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
-import { ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget } from '../utils/account'
+import { ACCOUNT_ASIDES, ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
@@ -57,6 +57,7 @@ async function resend() {
     description="Sign in to the account you created, then we can send a new link."
     icon="i-lucide-mail"
     :back="{ label: accountBackLabel(home), to: home }"
+    :aside="ACCOUNT_ASIDES.signUp"
   >
     <template #footer>
       <UButton
@@ -71,8 +72,8 @@ async function resend() {
     v-else-if="account.emailVerified"
     title="Your email is verified"
     :description="`You're signed in as ${account.name}.`"
-    icon="i-lucide-circle-check"
-    icon-color="success"
+    illustration="i-app-nuk-cafe-email-verified"
+    :aside="ACCOUNT_ASIDES.signUp"
   >
     <template #footer>
       <UButton
@@ -86,8 +87,9 @@ async function resend() {
   <AccountFrame
     v-else
     title="Check your email"
-    icon="i-lucide-mail"
+    illustration="i-app-nuk-cafe-verify-email"
     :back="{ label: accountBackLabel(target), to: target }"
+    :aside="ACCOUNT_ASIDES.signUp"
   >
     <template #description>
       <p class="mt-1 text-highlighted">

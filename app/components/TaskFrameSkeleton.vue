@@ -4,13 +4,20 @@
  * signed in goes on, or is told the workspace refuses them, so the form must not show first. Shaped
  * like the form with `fields` fields and the submit button, so the form takes its place without
  * moving. `cafe`: a workspace sign-in's header (the cafe's logo and name); else an account page's
- * (a back link, the title and a line under it).
+ * (a back link, the title and a line under it). An `aside` slot is passed on to the frame, so a page
+ * with a picture panel keeps it while loading.
  */
 defineProps<{ fields: number, cafe?: boolean }>()
 </script>
 
 <template>
   <TaskFrame>
+    <template
+      v-if="$slots.aside"
+      #aside
+    >
+      <slot name="aside" />
+    </template>
     <template #header>
       <div
         v-if="cafe"
