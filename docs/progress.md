@@ -2,6 +2,16 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Bundle and Worker size measured by hand, with a baseline (D253, 2026-11-02)
+Branch `claude/zen-davinci-hgbbfz`, restarted from `main` at `c56b94c` after PR #243 (#242's staging deploy green). The owner's next planned tooling step. [Decision](decisions.md#d253-bundle-and-worker-size-are-measured-by-hand-with-a-recorded-baseline-2026-11-02), [guide](guides/development.md#bundle-and-worker-size-d253).
+
+- **Change:** `pnpm analyze` (`nuxt analyze --no-serve` + `scripts/analyze-report.mjs`, the client report as text); `scripts/page-weight.mjs` (what a page needs on a first visit, idle prefetches apart); the Worker's `wrangler deploy --dry-run` and `wrangler check startup` documented. Manual, not CI.
+- **Baseline:** menu at 390px needs 350.5 kB JS + 31.7 kB CSS gzip (prefetches 131.3 kB when idle); `/` 318.3, `/sign-in` 330.4, admin sign-in 265.1 kB JS. Staging Worker `Total Upload` 10,366 KiB (limit 64 MiB uncompressed since Cloudflare's 2026-09-04 change; gzip 2,075 KiB is no longer a limit); local startup 553.7 ms active (limit 1 s on Cloudflare's CPU). Full figures in D253.
+- **Verified side effects of `nuxt analyze`:** replaces `.output` and the e2e fingerprint, rewrites `node_modules/@nuxthub/db/db.mjs`, and applies migrations to `.data/db` (created it here; with an inconsistent dev database it stops at "table account already exists"). Reports land in `node_modules/.cache/nuxt/.nuxt/analyze/`, not `.nuxt/analyze` as the review assumed. A first count of all page requests was ~130 kB too high: it included Nuxt's idle `prefetch` hints (`default.js` on the menu), which `page-weight.mjs` now separates.
+- **Found:** the admin layout imports the assistant's chat code (zod and the `ai` SDK, ~58 kB gzip) on every admin page, also where the assistant is off: a separate follow-up. Wrangler warns `Duplicate key "payload"` while bundling the Worker (not traced).
+- **Evidence (2026-11-02, cloud Linux, Node 24.22.1, pnpm 12.15.0, Chrome for Testing 153):** `pnpm analyze` ran end to end; `page-weight.mjs` against the analysis build with the e2e seed (the dev database restored after); staging build + `wrangler deploy --dry-run` + `wrangler check startup` (no deploy, no credentials). `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 2421 passed, 1 skipped. No app code changed, so no e2e run (CI runs it).
+- **Next:** a Nuxt Hints trial in dev (the last planned tooling step), or the assistant follow-up first.
+
 ## Agents read the browser with Chrome DevTools MCP (D252, 2026-11-02)
 Branch `claude/zen-davinci-hgbbfz`, restarted from `main` at `82a9516` after PR #241 (staging deploy green). The owner's next planned tooling step after D251. [Decision](decisions.md#d252-agents-read-the-browser-with-chrome-devtools-mcp-local-only-2026-11-02), [guide](guides/development.md#browser-evidence-for-agents-chrome-devtools-mcp-d252).
 

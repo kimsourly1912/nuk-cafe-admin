@@ -20,6 +20,7 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
+    "analyze": "nuxt analyze --no-serve && node scripts/analyze-report.mjs",
     "lint": "eslint . --cache --cache-strategy content --cache-location node_modules/.cache/eslint/",
     "lint:fix": "eslint . --fix --cache --cache-strategy content --cache-location node_modules/.cache/eslint/",
     "test": "vitest run",

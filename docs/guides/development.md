@@ -97,6 +97,25 @@ An agent can drive a real Chrome and read what it reports: console messages with
 
 DevTools **issues** (for example "A form field element should have an id or name attribute") appear in `list_console_messages` but not in the e2e check, which reads console messages only.
 
+### Bundle and Worker size (D253)
+
+A manual check, run when a change adds a dependency, a heavy component, or a page customers open on phones; not in CI. Three questions, three commands; record the numbers in the step's progress entry, compared with the last baseline ([D253](../decisions.md#d253-bundle-and-worker-size-are-measured-by-hand-with-a-recorded-baseline-2026-11-02)).
+
+**1. What is in the client bundle:** `pnpm analyze` (`nuxt analyze --no-serve`, then `scripts/analyze-report.mjs`): the largest packages, features and chunks by gzip, as text. The treemap is `node_modules/.cache/nuxt/.nuxt/analyze/client.html` (open it in a browser; Chrome DevTools MCP can't, it allows local addresses only). Its `nitro.html` is the **Node** server build, not the Worker: ignore it for Worker size.
+- It is a full production build: it replaces `.output` (the next local e2e run rebuilds), rewrites `node_modules/@nuxthub/db/db.mjs` (the e2e setup notices, D249), and **applies migrations to the dev database** `.data/db` (it fails there if that database is inconsistent).
+
+**2. What a page needs on a first visit:** serve that build with data (`node .output/server/index.mjs`; for the menu, a cafe with a menu, e.g. the Sample data page under `pnpm dev` first), then `node scripts/page-weight.mjs http://localhost:3000 /c/<slug>:390 /c/<slug>:1440 /sign-in:390`. It separates what the page loads to render from Nuxt's idle `prefetch` hints for other pages (a request count in DevTools mixes them), and computes gzip from the built files: Cloudflare may send brotli, slightly smaller.
+
+**3. The Worker:** `pnpm build:staging`, then:
+```bash
+pnpm exec wrangler deploy --dry-run --outdir /tmp/worker-dry --config .output/server/wrangler.json
+```
+`Total Upload` is what Cloudflare limits: **64 MiB uncompressed** on every plan; the gzip figure is no longer a limit (Cloudflare, 2026-09-04). The tighter limit is **startup, 1 second** of CPU for the Worker's top-level code:
+```bash
+pnpm exec wrangler check startup --config .output/server/wrangler.json --outfile /tmp/worker-startup.cpuprofile
+```
+It runs the Worker locally and prints the active time; a local CPU differs from Cloudflare's, so compare it with the last baseline on a similar machine, not with the limit alone. The profile opens in Chrome DevTools' Performance panel. Neither command deploys or needs Cloudflare credentials.
+
 ## Conventions
 
 - Prefer Nuxt-native tools (`useAsyncData`, `useState`, `useRuntimeConfig`, route middleware), then `@vueuse/core` (import it explicitly: it isn't auto-imported), before adding a library or hand-rolling a utility. There is no Pinia: shared state is `useState` inside a composable.
