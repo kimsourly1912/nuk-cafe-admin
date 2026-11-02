@@ -246,6 +246,10 @@ export default defineNuxtConfig({
   // The customer site is server-rendered (D45, D95); the admin workspace stays a SPA
   // (`routeRules` below). Counter screens will be SPAs too.
   ssr: true,
+  // The e2e build only (D251): Vue's production build logs a hydration mismatch as one line without
+  // the element; this keeps its detailed warning, which the e2e suite reports (browser-problems.ts).
+  // Deployed builds stay without it.
+  ...(process.env.E2E_HUB_DIR ? { debug: { hydration: true } } : {}),
   devtools: { enabled: true },
   app: {
     head: {
