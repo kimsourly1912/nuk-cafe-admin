@@ -2,6 +2,7 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { SampleDataState, SampleMenuStage } from '../../shared/contracts/sample-data'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
 import { failures, gotoViaSidebar, MockFailure, mockApi, setupE2e } from './support/mock-api'
 
@@ -86,6 +87,7 @@ describe('sample data', () => {
   })
 
   it('stops on a failed step, says why, and "Try again" continues where it stopped', async () => {
+    allowBrowserProblems(/POST \/api\/c\/nuk\/admin\/sample-data\/menu → 500/)
     const backend = menuBackend({ steps: 4, fail: 3 })
     const { page } = await open(backend.handlers)
     await menuCard(page).getByRole('button', { name: 'Load sample menu' }).click()
@@ -185,6 +187,7 @@ describe('sample data', () => {
   })
 
   it('shows a load error on the page, with Retry', async () => {
+    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/sample-data → 500/)
     let fail = true
     const page = await createPage()
     await mockApi(page, { 'GET /admin/sample-data': () => {

@@ -6,6 +6,7 @@ import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
 import type { AdminSession, CounterSession } from '../../shared/contracts/identity'
 import type { PlatformSession } from '../../shared/contracts/tenants'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
 import { ADMIN, deferred, failures, gotoHydrated, MockFailure, mockApi, NUK_PROFILE, openTabs, setupE2e, SIGNED_OUT, toast } from './support/mock-api'
 import { asNewVisitor } from './support/client-address'
@@ -501,6 +502,7 @@ describe('Your devices (D243)', () => {
   })
 
   it('a list that didn\'t load says so and offers Retry; the rest of the page still works', async () => {
+    allowBrowserProblems(/GET \/api\/me\/sessions → 500/)
     let fail = true
     const { page } = await open('/c/nuk/admin/account-security', {
       'GET /me/sessions': () => {

@@ -3,6 +3,7 @@ import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
 import type { CheckoutQuote, CounterOrder, Order } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { SeedCustomer } from './support/seed'
 import { asNewVisitor, clientHeaders } from './support/client-address'
 import { e2eDatabase } from './support/database'
@@ -85,6 +86,7 @@ async function sql(statement: string, args: (string | number)[] = []) {
 
 describe('the counter', () => {
   it('keeps the screen on, counts the orders to pay in the tab, and says when the queue last loaded while it can\'t refresh (D149); asks for a tap to turn sound on and warns louder after 2 minutes (D150)', async () => {
+    allowBrowserProblems(/request failed: GET \/api\/c\/nuk\/counter\/[\w-]+\/orders \(net::ERR_FAILED\)/)
     const order = await placeOrder(seed.customers.counterShopperA)
     const { page, problems } = await cashierAtCounter(1180, async (page) => {
       await page.clock.install()
@@ -550,6 +552,7 @@ describe('sold out at the counter (D105)', () => {
   })
 
   it('a switch moves at once, and goes back with the reason when the server refuses (D152)', async () => {
+    allowBrowserProblems(/PUT \/api\/c\/nuk\/counter\/[\w-]+\/sold-out → 500/)
     const { page, problems } = await cashierAtCounter()
     await page.goto(url(`/c/nuk/counter/${seed.openBranchId}/sold-out`), { waitUntil: 'hydration' })
     await page.getByRole('searchbox', { name: 'Find an item' }).fill('coconut')

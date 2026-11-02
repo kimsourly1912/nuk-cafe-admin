@@ -3,6 +3,7 @@ import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { MenuItemSummary } from '../../shared/contracts/menu-items'
 import type { Modifier, ModifierGroup } from '../../shared/contracts/menu-modifiers'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
 import { failures, MockFailure, menuItemOf, menuItemSummaryOf, mockApi, pageOf, setupE2e, toast, toastAction } from './support/mock-api'
 
@@ -216,6 +217,7 @@ describe('add-ons library', () => {
   })
 
   it('shows a load error with Retry', async () => {
+    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/menu\/modifier-groups\?status=all → 500/)
     let fail = true
     const { page } = await open(backend(undefined, {
       'GET /admin/menu/modifier-groups': () => {

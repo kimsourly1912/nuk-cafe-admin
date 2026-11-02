@@ -1,6 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
 import { failures, menuItemOf, menuItemSummaryOf, mockApi, pageOf, setupE2e } from './support/mock-api'
 
@@ -58,6 +59,7 @@ describe('the admin search', () => {
   })
 
   it('one source failing says so; the others still answer', async () => {
+    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/menu\/categories\?status=all → 500/)
     const { page } = await open({
       'GET /admin/menu/categories': () => {
         throw failures.server()

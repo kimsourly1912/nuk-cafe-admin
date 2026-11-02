@@ -1,6 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
+import { allowBrowserProblems } from './support/browser-problems'
 import { ADMIN, beforeUnloadPrevented, categoryItem, menuCategoryOf, deferred, failures, gotoHydrated, mockApi, openTabs, setupE2e, MENU_TEA, toast } from './support/mock-api'
 
 // The session-transition contract (plugins/session-boundary.client.ts, useAuth generation,
@@ -182,6 +183,7 @@ describe('switching users in the same browser', () => {
   })
 
   it('a list kept after a failed refresh is never shown to the next person (D150)', async () => {
+    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/menu\/categories\?status=all → 500/)
     const page = await createPage()
     let aliceSignedIn = true
     let failing = false
@@ -223,6 +225,7 @@ describe('switching users in the same browser', () => {
   })
 
   it('an open page whose refresh failed shows nothing of the previous person when another signs in elsewhere (D150)', async () => {
+    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/menu\/categories\?status=all → 500/)
     const [aliceTab, bobTab] = await openTabs(2)
     let who: 'alice' | 'bob' = 'alice'
     let failing = false

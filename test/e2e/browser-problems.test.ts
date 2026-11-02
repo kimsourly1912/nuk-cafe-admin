@@ -55,8 +55,8 @@ describe('browser problems (D251)', () => {
     await page.route(url('/sign-in'), async (route) => {
       const response = await route.fetch()
       const html = await response.text()
-      expect(html).toContain('<div id="__nuxt">')
-      await route.fulfill({ response, body: html.replace('<div id="__nuxt">', '<div id="__nuxt"><span>not rendered by the app</span>') })
+      expect(html).toMatch(/<div id="__nuxt"[^>]*>/)
+      await route.fulfill({ response, body: html.replace(/<div id="__nuxt"[^>]*>/, root => `${root}<span>not rendered by the app</span>`) })
     })
     await page.goto(url('/sign-in'), { waitUntil: 'hydration' })
 
@@ -66,6 +66,28 @@ describe('browser problems (D251)', () => {
     expect(problems).toContainEqual(expect.stringMatching(/^console\.warning: \[Vue warn\]: Hydration \w+ mismatch/))
     // …and the one line a production build logs.
     expect(problems).toContainEqual(expect.stringMatching(/^console\.error: Hydration completed but contains mismatches\./))
+  })
+
+  it('leaves out an imported image whose address only differs in form, and reports one that points elsewhere', async () => {
+    // `/` shows an imported image: the server writes `/_nuxt/…png`, the browser build `http://host/_nuxt/…png`.
+    const same = await createPage()
+    await same.goto(url('/'), { waitUntil: 'hydration' })
+    const sameProblems = await browserProblems(same, origin)
+    await same.close()
+    expect(sameProblems).toEqual([])
+
+    const other = await createPage()
+    await other.route(url('/'), async (route) => {
+      const response = await route.fetch()
+      const html = await response.text()
+      expect(html).toMatch(/src="\/_nuxt\/cafe-storefront\./)
+      await route.fulfill({ response, body: html.replace(/src="\/_nuxt\/cafe-storefront\./, 'src="/_nuxt/elsewhere.') })
+    })
+    await other.goto(url('/'), { waitUntil: 'hydration' })
+    const otherProblems = await browserProblems(other, origin)
+    await other.close()
+    expect(otherProblems).toContainEqual(expect.stringMatching(/^console\.warning: \[Vue warn\]: Hydration attribute mismatch on <img[\s\S]*elsewhere/))
+    expect(otherProblems).toContainEqual(expect.stringMatching(/^console\.error: Hydration completed but contains mismatches\./))
   })
 
   it('lets a test allow the problems it causes on purpose', async () => {

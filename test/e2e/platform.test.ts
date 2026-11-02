@@ -4,6 +4,7 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { CreatedTenant, PlatformOwner, PlatformSession, SlugAvailability, TenantDetail, TenantSummary } from '../../shared/contracts/tenants'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
 import { deferred, failures, MockFailure, mockApi, paginatedHandler, setupE2e, toast } from './support/mock-api'
 
@@ -562,6 +563,7 @@ describe('creating a cafe (D185)', () => {
   })
 
   it('a server failure keeps every value and can be tried again', async () => {
+    allowBrowserProblems(/POST \/api\/platform\/tenants → 500/)
     let fail = true
     const { page, api } = await openNew({
       'POST /platform/tenants': () => {
@@ -619,6 +621,7 @@ describe('creating a cafe (D185)', () => {
   })
 
   it('a save that fails after the page was left offers Reopen, with the input back and no password anywhere', async () => {
+    allowBrowserProblems(/POST \/api\/platform\/tenants → 500/)
     const save = deferred()
     const { page } = await openNew({ 'POST /platform/tenants': save.handler })
     await fillNewAccount(page)

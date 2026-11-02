@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import type { AdminSession } from '../../shared/contracts/identity'
 import type { CafeSupport, SupportGrant } from '../../shared/contracts/support'
 import type { PlatformSession, TenantDetail } from '../../shared/contracts/tenants'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
 import { ADMIN, MockFailure, mockApi, setupE2e, toast } from './support/mock-api'
 
@@ -160,6 +161,8 @@ describe('a super admin on a support visit', () => {
   })
 
   it('sees only the pages a visit opens; Platform support\'s address says so before any request (D240)', async () => {
+    // Opening an error page by its address: Nuxt logs the error it raises while starting (NUXT_E1005).
+    allowBrowserProblems(/\[NUXT_E1005\]/)
     const { page, api } = await open('/c/nuk/admin', { 'GET /admin/me': () => SUPPORT_SESSION })
     const sidebar = page.getByRole('navigation').first()
     await sidebar.getByRole('link', { name: 'Staff' }).waitFor()

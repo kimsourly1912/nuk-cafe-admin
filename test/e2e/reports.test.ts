@@ -3,6 +3,7 @@ import { createPage, url } from '@nuxt/test-utils/e2e'
 import type { Page } from 'playwright-core'
 import { describe, expect, it } from 'vitest'
 import type { ItemSalesReport, ItemSalesRow, OrderHistory, OrderHistoryDetail, OrderHistoryRow, ReportBranch, ReportContext, ReportSummary } from '../../shared/contracts/reports'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
 import { failures, mockApi, setupE2e, toast } from './support/mock-api'
 
@@ -173,6 +174,7 @@ describe('Reports: Summary', () => {
   })
 
   it('an empty period says so; a failed load offers Try again', async () => {
+    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/reports\/summary\?\S+ → 500/)
     let fail = true
     const { page } = await open('/c/nuk/admin/reports/summary', {
       'GET /admin/reports/summary': ({ url: u }) => {

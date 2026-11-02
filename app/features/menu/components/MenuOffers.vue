@@ -113,8 +113,11 @@ function openItem(item: PublicMenuItem) {
       </li>
     </ul>
 
+    <!-- Mounted once an offer is opened (browser only): the server has no width, so a shell chosen by
+      it on the server would differ from a phone's (a hydration mismatch, D251). -->
     <component
       :is="Shell"
+      v-if="shown"
       v-model:open="open"
       :title="shown?.name"
       :description="shown?.description || shown?.label"

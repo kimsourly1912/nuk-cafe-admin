@@ -1,6 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
+import { allowBrowserProblems } from './support/browser-problems'
 import { gotoViaSidebar, mockApi, setupE2e } from './support/mock-api'
 
 await setupE2e()
@@ -16,6 +17,8 @@ describe('app shell', () => {
   })
 
   it('titles the error page', async () => {
+    // Opening an error page by its address: Nuxt logs the error it raises while starting (NUXT_E1005).
+    allowBrowserProblems(/\[NUXT_E1005\]/)
     const page = await createPage()
     await mockApi(page)
     await page.goto(url('/c/nuk/admin/does-not-exist'))

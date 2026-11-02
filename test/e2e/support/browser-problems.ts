@@ -41,9 +41,15 @@ export async function browserProblems(page: Page, origin: string): Promise<strin
     page.requests().catch(() => []),
   ])
   const problems = new Set<string>()
-  for (const message of messages) {
-    const problem = consoleProblem(message)
-    if (problem) problems.add(problem)
+  const consoleLines = await Promise.all(messages.map(message => consoleProblem(message)))
+  // Vue's one-line summary repeats the detailed warnings; it says nothing more when each of them was
+  // a same-address attribute (sameAddressMismatch), and stays when there is no detail at all.
+  const details = consoleLines.filter(line => line?.startsWith('console.warning: [Vue warn]: Hydration'))
+  const onlySameAddress = details.length > 0 && details.every(line => sameAddressMismatch(line!, origin))
+  for (const line of consoleLines) {
+    if (!line || (line.startsWith('console.warning: [Vue warn]: Hydration') && sameAddressMismatch(line, origin))) continue
+    if (onlySameAddress && line.startsWith('console.error: Hydration completed but contains mismatches.')) continue
+    problems.add(line)
   }
   for (const error of errors) problems.add(`pageerror: ${error.message}`)
   for (const request of requests) {
@@ -59,13 +65,45 @@ export async function browserProblems(page: Page, origin: string): Promise<strin
  * the element (`debug.hydration` in nuxt.config.ts). Chrome's "Failed to load resource" errors are
  * left to `requestProblem`, which reports our server's 5xx and leaves expected 4xx answers alone.
  */
-function consoleProblem(message: ConsoleMessage): string | undefined {
+async function consoleProblem(message: ConsoleMessage): Promise<string | undefined> {
   const text = message.text()
   const hydration = /hydration/i.test(text)
   if (message.type() !== 'error' && !hydration) return undefined
   if (!hydration && text.startsWith('Failed to load resource:')) return undefined
   const { url, lineNumber } = message.location()
-  return `console.${message.type()}: ${text}${url ? ` (${url}:${lineNumber})` : ''}`
+  return `console.${message.type()}: ${hydration ? await withElements(message, text) : text}${url ? ` (${url}:${lineNumber})` : ''}`
+}
+
+/**
+ * The message with each logged element as its HTML (the first 300 characters): `text()` writes a
+ * DOM node as `JSHandle@node`, which doesn't say which element didn't match.
+ */
+async function withElements(message: ConsoleMessage, text: string): Promise<string> {
+  const args = message.args()
+  if (!args.length) return text
+  const parts = await Promise.all(args.map(arg => arg.evaluate((value) => {
+    if (!(value instanceof Node)) return String(value)
+    const html = value instanceof Element ? value.outerHTML : `${value.nodeName} ${JSON.stringify(value.textContent)}`
+    return html.length > 300 ? `${html.slice(0, 300)}…` : html
+  }).catch(() => arg.toString())))
+  return parts.join(' ')
+}
+
+/**
+ * A hydration attribute mismatch whose two values are the same address, such as an imported image:
+ * Nuxt's server writes `/_nuxt/x.png` and its browser build `http://host/_nuxt/x.png` (both by
+ * design, `renderBuiltUrl` in @nuxt/vite-builder 4.6.2). Deployed builds never compare attributes
+ * (only with `debug.hydration`), and the browser loads the same file either way.
+ */
+function sameAddressMismatch(line: string, origin: string): boolean {
+  const found = /Hydration attribute mismatch[\s\S]*rendered on server: ([\w:-]+)="([^"]*)"[\s\S]*expected on client: \1="([^"]*)"/.exec(line)
+  if (!found) return false
+  try {
+    return new URL(found[2]!, origin).href === new URL(found[3]!, origin).href
+  }
+  catch {
+    return false
+  }
 }
 
 /**
