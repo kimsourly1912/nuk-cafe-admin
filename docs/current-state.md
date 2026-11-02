@@ -4,6 +4,8 @@ Snapshot reviewed against main `f2978f7`, 2026-11-01. Read only when resuming or
 
 ## Waiting on the owner
 
+- **In progress: checkout concurrency audit (D257),** branch `codex/checkout-concurrency-audit` from `26b24f7`: confirmed checkout validation/commit gaps; focused guards and migration-backed SQLite/local D1 regressions implemented; verification and PR pending. [Progress](progress.md#checkout-validates-at-commit-d257-2026-11-02), [audit](reviews/checkout-concurrency-2026-11-02.md). No inventory or payment change; next financial risks recorded separately.
+
 - **In review: platform order activity indexed reads (PR #238),** branch `codex/server-order-activity-indexed-stats`: fixed the lint issue and a Drizzle alias query error; local lint, typecheck, audit, unit/server, platform e2e and D1 query-plan checks passed. Push the repair and wait for GitHub CI; keep the PR draft until CI and staging performance evidence are reviewed. [Progress](progress.md#platform-order-activity-uses-cafe-indexed-reads-pr-238-2026-11-02).
 - **In review: e2e failure evidence (D249),** branch `claude/affectionate-galileo-rivb8d`: a failed e2e test saves screenshots and HTML; CI uploads them. Step 4 (D248) merged as PR #236. Next: step 5, Switch person on the counter. [Progress](progress.md#a-failed-e2e-test-keeps-what-the-browser-showed-d249-2026-11-01).
 - **Merged: account security step 2 (D243, PR #232) and security hardening (D244, PR #233).** The owner works through the [security checklist](plans/cloudflare-improvements.md#owner-security-checklist-d244).

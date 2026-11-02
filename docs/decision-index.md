@@ -11,7 +11,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173, D202–D204; installable app, PWA, manifest, service worker |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166, D256 |
 | Tenancy and permissions | D134–D146, D186–D193, D239–D243, D245–D248; organization, tenant, branch, platform console |
-| Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222, D250 |
+| Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222, D250, D257 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109, D254 |
 | Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212, D214, D244, D249, D251, D252, D253, D255, D256; production, CI pinning, e2e failure evidence, browser problems, hydration, Chrome DevTools MCP, bundle and Worker size, Nuxt Hints, HTML validation, domains, email, bot protection |
@@ -286,3 +286,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D254](decisions.md#d254-the-admin-assistants-chat-code-loads-when-its-first-opened-2026-11-02) | The admin assistant's chat code loads when it's first opened, 2026-11-02 |
 | [D255](decisions.md#d255-nuxt-hints-tried-in-dev-and-not-adopted-its-html-validation-goes-to-the-e2e-suite-instead-2026-11-02) | Nuxt Hints tried in dev and not adopted; its HTML validation goes to the e2e suite instead, 2026-11-02 |
 | [D256](decisions.md#d256-the-e2e-suite-validates-the-server-rendered-pages-html-2026-11-02) | The e2e suite validates the server-rendered pages' HTML, 2026-11-02 |
+| [D257](decisions.md#d257-checkout-validates-its-read-state-inside-the-order-batch-2026-11-02) | Checkout validates its read state inside the order batch (2026-11-02) |
