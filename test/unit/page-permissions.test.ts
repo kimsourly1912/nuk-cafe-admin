@@ -26,7 +26,7 @@ function pageFiles(dir: string): string[] {
 /** Each page's `permission` (or `branchPermission`) meta, by its path under `dir`. */
 function metaOf(dir: string, key: 'permission' | 'branchPermission'): Record<string, string | undefined> {
   return Object.fromEntries(pageFiles(dir).map(file => [
-    relative(dir, file),
+    relative(dir, file).replaceAll('\\', '/'),
     new RegExp(`definePageMeta\\(\\{[^)]*\\b${key}: '([^']+)'`).exec(readFileSync(file, 'utf8'))?.[1],
   ]))
 }
