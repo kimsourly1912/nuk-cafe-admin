@@ -18,8 +18,9 @@ const seed = inject('shopSeed')
 async function open(width = 1440, path = '/c/nuk') {
   const page = await createPage()
   const problems: string[] = []
+  // Hydration is the shared check's (D251, support/browser-problems.ts): it names the element.
   page.on('console', (message) => {
-    if (message.type() === 'error' || /hydration/i.test(message.text())) problems.push(`${message.text()} ${message.location().url}`)
+    if (message.type() === 'error' && !/hydration/i.test(message.text())) problems.push(`${message.text()} ${message.location().url}`)
   })
   page.on('pageerror', error => problems.push(error.message))
   await page.setViewportSize({ width, height: width < 640 ? 844 : 900 })
@@ -375,8 +376,9 @@ describe('an item\'s address', () => {
     // Not `open()`: it waits for a heading, and the open item hides the page behind it.
     const page = await createPage()
     const problems: string[] = []
+    // Hydration is the shared check's (D251, support/browser-problems.ts): it names the element.
     page.on('console', (message) => {
-      if (message.type() === 'error' || /hydration/i.test(message.text())) problems.push(message.text())
+      if (message.type() === 'error' && !/hydration/i.test(message.text())) problems.push(message.text())
     })
     await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto(url(`/c/nuk?item=${latte.id}`), { waitUntil: 'hydration' })

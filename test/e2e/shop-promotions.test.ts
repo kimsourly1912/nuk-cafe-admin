@@ -13,8 +13,9 @@ const cafe = inject('shopSeed').secondCafe
 async function open(width = 1440) {
   const page = await createPage()
   const problems: string[] = []
+  // Hydration is the shared check's (D251, support/browser-problems.ts): it names the element.
   page.on('console', (message) => {
-    if (message.type() === 'error' || /hydration/i.test(message.text())) problems.push(message.text())
+    if (message.type() === 'error' && !/hydration/i.test(message.text())) problems.push(message.text())
   })
   await page.setViewportSize({ width, height: width < 640 ? 844 : 900 })
   await page.goto(url(`/c/${cafe.slug}`), { waitUntil: 'hydration' })

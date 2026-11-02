@@ -22,8 +22,9 @@ async function open(path: string, width = 1440) {
   const page = await createPage()
   await asNewVisitor(page)
   const problems: string[] = []
+  // Hydration is the shared check's (D251, support/browser-problems.ts): it names the element.
   page.on('console', (message) => {
-    if (message.type() === 'error' || /hydration/i.test(message.text())) problems.push(`${message.text()} ${message.location().url}`)
+    if (message.type() === 'error' && !/hydration/i.test(message.text())) problems.push(`${message.text()} ${message.location().url}`)
   })
   page.on('pageerror', error => problems.push(error.message))
   await page.setViewportSize({ width, height: width < 640 ? 844 : 900 })

@@ -3,6 +3,7 @@ import type { Page } from 'playwright-core'
 import { describe, expect, it } from 'vitest'
 import type { BranchSettings } from '../../shared/contracts/branches'
 import type { ReportBranch, ReportSummary } from '../../shared/contracts/reports'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
 import { ADMIN, failures, menuItemSummaryOf, mockApi, pageOf, RIVERSIDE, setupE2e, staffOf } from './support/mock-api'
 
@@ -108,6 +109,7 @@ describe('dashboard', () => {
   })
 
   it('a check that fails says so; the others still answer', async () => {
+    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/menu\/items\/counts → 500/)
     const { page } = await open({
       ...RUNNING,
       'GET /admin/menu/items': () => {

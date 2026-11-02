@@ -2,6 +2,7 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { AccountCafe } from '../../shared/contracts/cafe'
+import { allowBrowserProblems } from './support/browser-problems'
 import { ADMIN, failures, mockApi, NUK_PROFILE, setupE2e, SIGNED_OUT } from './support/mock-api'
 
 await setupE2e()
@@ -237,6 +238,7 @@ describe('signing in where the account has no access (D239)', () => {
   })
 
   it('a failed check keeps the session with Try again, which then says where the account may go (Q4)', async () => {
+    allowBrowserProblems(/GET \/api\/me\/cafes → 500/)
     const { page, api } = await refusedAt('/c/nuk/admin/login', 'GET /admin/me', () => {
       throw failures.server()
     })
@@ -252,6 +254,7 @@ describe('signing in where the account has no access (D239)', () => {
   })
 
   it('Try again for an account that works nowhere signs it out, as any customer at a staff sign-in (Q1, Q4)', async () => {
+    allowBrowserProblems(/GET \/api\/me\/cafes → 500/)
     const { page, api } = await refusedAt('/c/nuk/counter/sign-in', 'GET /counter/me', () => {
       throw failures.server()
     })
@@ -291,6 +294,7 @@ describe('signing in where the account has no access (D239)', () => {
   })
 
   it('the platform console, a failed check: the session is kept with Try again (Q4)', async () => {
+    allowBrowserProblems(/GET \/api\/me\/cafes → 500/)
     const { page, api } = await refusedAt('/platform/sign-in', 'GET /platform/me', () => {
       throw failures.server()
     })
@@ -311,6 +315,7 @@ describe('signing in where the account has no access (D239)', () => {
   })
 
   it('already signed in as a platform team account whose check failed, the console shows the form, never a wrong refusal', async () => {
+    allowBrowserProblems(/GET \/api\/platform\/me → 500/)
     const page = await createPage()
     await mockApi(page, {
       'GET /platform/me': () => {

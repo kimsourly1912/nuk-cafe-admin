@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { MenuItem, MenuItemSummary } from '../../shared/contracts/menu-items'
 import type { ModifierGroup } from '../../shared/contracts/menu-modifiers'
 import type { OptionSet } from '../../shared/contracts/menu-options'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
 import { deferred, failures, MENU_TEA, menuCategoryOf, menuItemOf, menuItemSummaryOf, mockApi, paginatedHandler, setupE2e, toast } from './support/mock-api'
 
@@ -914,6 +915,7 @@ describe('menu item form', () => {
   }, 60_000)
 
   it('Use photo closes the editor at once; the upload shows on the preview, Save waits, Edit photo reopens it from memory, and a failed upload offers Try again (D158)', async () => {
+    allowBrowserProblems(/POST \/api\/c\/nuk\/admin\/media\/photos → 503/)
     const { page } = await open()
     let answer: 'hold' | 'fail' | 'ok' = 'hold'
     const held: (() => void)[] = []
@@ -977,6 +979,7 @@ describe('menu item form', () => {
   }, 60_000)
 
   it('a failed upload\'s Cancel keeps the photo the item had (D158)', async () => {
+    allowBrowserProblems(/POST \/api\/c\/nuk\/admin\/media\/photos → 503/)
     const { page } = await open()
     await page.route('**/api/c/nuk/admin/media/photos', (route) => {
       const message = 'Busy'

@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { SeedCustomer } from './support/seed'
 import { asNewVisitor, clientHeaders } from './support/client-address'
 import { setupE2e, toast } from './support/mock-api'
@@ -97,6 +98,8 @@ describe('manager tools on the counter (D198)', () => {
   })
 
   it('staff see no Manage, and a manager\'s page by address says No access before any request (D240)', async () => {
+    // Opening an error page by its address: Nuxt logs the error it raises while starting (NUXT_E1005).
+    allowBrowserProblems(/\[NUXT_E1005\]/)
     const { page, api } = await atCounter(seed.customers.cashier)
     await page.getByRole('link', { name: 'Sold out' }).waitFor()
     expect(await page.getByRole('button', { name: 'Manage' }).count()).toBe(0)

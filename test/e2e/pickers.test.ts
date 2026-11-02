@@ -1,6 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
 import { failures, MENU_TEA, menuCategoryOf, mockApi, setupE2e } from './support/mock-api'
 
@@ -25,6 +26,7 @@ async function editRow(page: Page, name: string, handlers: Record<string, MockHa
 
 describe('CategorySelect', () => {
   it('a failed options load shows the error with Retry, not an empty list', async () => {
+    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/menu\/categories\?status=all → 500/)
     let fail = true
     const page = await createPage()
     await mockApi(page, {

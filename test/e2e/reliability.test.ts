@@ -2,6 +2,7 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { ClientErrorReport } from '#shared/contracts/client-errors'
+import { allowBrowserProblems } from './support/browser-problems'
 import { mockApi, setupE2e } from './support/mock-api'
 
 // The reliability pack (D149): a new build deployed while a tab is open, and browser errors reported
@@ -90,6 +91,7 @@ describe('browser errors reported to the server', () => {
   }
 
   it('an error thrown outside Vue: its message and stack, the page without its query, the build', async () => {
+    allowBrowserProblems(/^pageerror: boom from a timer$/)
     const { page, reports } = await adminRecordingReports()
     await page.evaluate(() => setTimeout(() => {
       throw new Error('boom from a timer')
@@ -101,6 +103,7 @@ describe('browser errors reported to the server', () => {
   })
 
   it('an unhandled rejection; the same error twice is sent once', async () => {
+    allowBrowserProblems(/^pageerror: a promise nobody caught$/)
     const { page, reports } = await adminRecordingReports()
     await page.evaluate(() => {
       for (let i = 0; i < 2; i++) setTimeout(() => void Promise.reject(new TypeError('a promise nobody caught')))

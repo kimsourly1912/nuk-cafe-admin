@@ -3,6 +3,7 @@ import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
 import type { CheckoutQuote, Order } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
+import { allowBrowserProblems } from './support/browser-problems'
 import type { SeedCustomer } from './support/seed'
 import { setupE2e } from './support/mock-api'
 import { asNewVisitor, clientHeaders } from './support/client-address'
@@ -137,6 +138,7 @@ describe('following an order', () => {
   })
 
   it('keeps the order on screen while the connection drops, says so, and follows again once it\'s back (D150)', { timeout: 60_000 }, async () => {
+    allowBrowserProblems(/request failed: GET \/api\/c\/nuk\/shop\/orders\/[\w-]+ \(net::ERR_FAILED\)/)
     const order = await placeOrder(seed.customers.followerD)
     const { page, problems } = await signedIn(seed.customers.followerD, `/c/nuk/orders/${order.id}`)
     await page.getByRole('heading', { name: `Your number ${number(order)}` }).waitFor()
