@@ -28,7 +28,7 @@ onMounted(() => {
 })
 
 const state = reactive({ password: '' })
-const { saving, formError, submit } = useAccountForm({ password: 'reset-password' })
+const { saving, formError, submit } = useAccountForm({ formId: 'reset-form', fields: ['password'] })
 const { resetPassword } = useAccountActions()
 /** The password the server refused as breached, for the checklist. */
 const refusedPassword = ref<string>()

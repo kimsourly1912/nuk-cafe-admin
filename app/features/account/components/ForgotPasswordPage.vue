@@ -15,7 +15,7 @@ import FormErrorAlert from './FormErrorAlert.vue'
 const state = reactive({ email: '' })
 /** The address the link went to; set once sent. */
 const sentTo = ref<string>()
-const { saving, formError, submit } = useAccountForm({ email: 'forgot-email' })
+const { saving, formError, submit } = useAccountForm({ formId: 'forgot-form', fields: ['email'] })
 const { requestPasswordReset } = useAccountActions()
 const { waiting, start: startCooldown, waitLabel } = useResendCooldown('reset')
 
@@ -60,7 +60,6 @@ function useAnotherEmail() {
         required
       >
         <UInput
-          id="forgot-email"
           v-model="state.email"
           type="email"
           autocomplete="email"

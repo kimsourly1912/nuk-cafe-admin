@@ -104,6 +104,7 @@ async function again(from: Order) {
       <div
         v-if="query.loading.value"
         class="mx-auto max-w-lg space-y-3 p-4"
+        role="status"
         aria-busy="true"
         aria-label="Loading your order"
       >

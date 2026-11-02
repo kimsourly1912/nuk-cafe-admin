@@ -18,7 +18,7 @@ const target = computed(() => accountRedirectTarget(route.query.redirect, home.v
 const { account, known } = useAccountSession()
 const { resendVerification } = useAccountActions()
 const { waiting, start: startCooldown, waitLabel } = useResendCooldown('verify')
-const { saving, formError, submit } = useAccountForm({})
+const { saving, formError, submit } = useAccountForm()
 const sentAgain = ref(false)
 
 async function resend() {
@@ -41,6 +41,7 @@ async function resend() {
     <UCard class="w-full max-sm:rounded-none max-sm:ring-0">
       <div
         class="space-y-3"
+        role="status"
         aria-busy="true"
         aria-label="Loading your account"
       >

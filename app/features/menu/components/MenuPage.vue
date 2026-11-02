@@ -289,12 +289,15 @@ watch(detailOpen, (open) => {
               class="size-6"
             />
             <div class="min-w-0 lg:flex lg:items-center lg:gap-4">
-              <NuxtLink
-                :to="tenantPath('/')"
-                class="block whitespace-nowrap font-semibold leading-tight text-highlighted lg:text-lg"
-              >
-                {{ cafeName }}
-              </NuxtLink>
+              <!-- The page's h1 (ui.md: headings from the bar's h1 down); categories are h2. -->
+              <h1>
+                <NuxtLink
+                  :to="tenantPath('/')"
+                  class="block whitespace-nowrap font-semibold leading-tight text-highlighted lg:text-lg"
+                >
+                  {{ cafeName }}
+                </NuxtLink>
+              </h1>
               <UPopover
                 v-if="branch"
                 :content="{ align: 'start' }"
@@ -420,6 +423,7 @@ watch(detailOpen, (open) => {
         <div
           v-if="loading"
           class="space-y-4"
+          role="status"
           aria-busy="true"
           aria-label="Loading the menu"
         >

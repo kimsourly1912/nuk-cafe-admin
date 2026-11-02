@@ -212,6 +212,7 @@ useSeoMeta({ robots: 'noindex' })
       <div
         v-else-if="!queue"
         class="grid flex-1 gap-3 p-4 sm:grid-cols-3"
+        role="status"
         aria-busy="true"
         aria-label="Loading the queue"
       >
