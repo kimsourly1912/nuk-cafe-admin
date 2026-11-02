@@ -142,6 +142,8 @@ describe('login redirect', () => {
     const page = await createPage()
     const api = await mockApi(page, SIGNED_OUT)
     await page.goto(url('/c/nuk/admin/login?redirect=//evil.example'), { waitUntil: 'hydration' })
+    // After the page's own session check (the form shows once it answered), like your-cafes' refusedAt.
+    await page.getByLabel('Email').waitFor()
     api.set({ ...SIGN_IN_OK, 'GET /admin/me': () => ADMIN })
     await signIn(page)
     await expect.poll(() => page.url()).toBe(url('/c/nuk/admin'))
@@ -201,6 +203,8 @@ describe('login as a task flow (D84)', () => {
     const page = await createPage()
     const api = await mockApi(page, SIGNED_OUT)
     await page.goto(url('/c/nuk/admin/login?redirect=/c/nuk/admin/categories'), { waitUntil: 'hydration' })
+    // After the page's own session check (the form shows once it answered), like your-cafes' refusedAt.
+    await page.getByLabel('Email').waitFor()
     api.set({ ...SIGN_IN_OK, 'GET /admin/me': () => ADMIN })
     await page.getByLabel('Email').fill('admin@nukcafe.test')
     await page.getByLabel('Password', { exact: true }).fill('secret')

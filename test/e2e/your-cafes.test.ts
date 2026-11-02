@@ -129,6 +129,10 @@ describe('signing in where the account has no access (D239)', () => {
       'POST /auth/sign-in/email': () => ({ redirect: false, token: 't', user: { id: ADMIN.userId, email: ADMIN.email } }),
     })
     await page.goto(url(path), { waitUntil: 'hydration' })
+    // The form shows once the page has checked the session (signed out). Swapping the mocks before
+    // that check answered made it find the refused account already signed in: the refusal, no form,
+    // and `fill` waiting out the test (CI, PR #244; one in nine runs under load locally).
+    await page.getByLabel('Email').waitFor()
     api.set({
       [me]: () => {
         throw failures.forbidden()
