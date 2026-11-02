@@ -25,6 +25,7 @@ function fillGenerated(password: string) {
     v-model="model"
     :type="visible ? 'text' : 'password'"
     :autocomplete="autocomplete"
+    icon="i-lucide-lock"
     class="w-full"
     :ui="{ trailing: 'pe-1' }"
   >

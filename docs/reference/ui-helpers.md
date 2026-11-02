@@ -155,6 +155,8 @@ The submit button is outside the form, joined with `form="<id>"`: Enter still su
 
 `wide` lifts the card from `sm:max-w-sm` to `sm:max-w-3xl` for a step with side-by-side parts (the platform two-factor setup: QR code and backup codes in two columns from `md`); still one column on phones.
 
+The `aside` slot puts a panel to the left of the card from `sm`, the two drawn as one card (`sm:max-w-2xl`, at least `sm:min-h-128`); the panel fills the height the card's content gives it and is hidden on phones. The sign-in style pages fill it with `<AuthAside title text>` (`app/components/AuthAside.vue`): the cafe photo, a large line and a line under it, an optional top row as its default slot (the account pages' cafe and light/dark button, `AccountAside`). Used by the account pages, the admin, counter and console sign-in and change-password pages (D97 follow-up). `<TaskFrameSkeleton>` and `<WorkspaceRefused>` pass an `aside` slot on, so the panel stays while the page loads or refuses the session. Not on the two-factor setup or account security (`wide`).
+
 ## `<PasswordRequirements>` and `<GeneratePasswordButton>`
 
 The password rules as a checklist under every new-password field, and a Generate button inside it (D210): sign-up, reset password and the three change-password pages. Only the rules the server enforces, in this order: "At least 8 characters" (`PASSWORD_MIN`), "Repeat new password matches" on forms with a repeat, and last "Not a commonly used password" with its reason underneath ("Checked against passwords leaked from other websites, the first ones attackers try."): Better Auth's `haveIBeenPwned`. No composition rules (digits, capitals): those would be a new policy, an owner decision.

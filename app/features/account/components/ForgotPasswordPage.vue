@@ -8,7 +8,7 @@ import type { ForgotPasswordForm } from '../schemas/account-form'
 import { forgotPasswordSchema } from '../schemas/account-form'
 import { useAccountActions, useResendCooldown } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
-import { ACCOUNT_PATHS } from '../utils/account'
+import { ACCOUNT_ASIDES, ACCOUNT_PATHS } from '../utils/account'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 
@@ -38,9 +38,10 @@ function useAnotherEmail() {
 <template>
   <AccountFrame
     v-if="!sentTo"
-    title="Reset your password"
+    title="Forgot your password?"
     description="Enter your account's email and we'll send you a link."
     :back="{ label: 'Back to sign in', to: ACCOUNT_PATHS.signIn }"
+    :aside="ACCOUNT_ASIDES.forgotPassword"
   >
     <UForm
       id="forgot-form"
@@ -63,6 +64,7 @@ function useAnotherEmail() {
           v-model="state.email"
           type="email"
           autocomplete="email"
+          icon="i-lucide-mail"
           class="w-full"
         />
       </UFormField>
@@ -81,8 +83,9 @@ function useAnotherEmail() {
   <AccountFrame
     v-else
     title="Check your email"
-    icon="i-lucide-mail"
+    illustration="i-app-nuk-cafe-verify-email"
     :back="{ label: 'Back to sign in', to: ACCOUNT_PATHS.signIn }"
+    :aside="ACCOUNT_ASIDES.forgotPassword"
   >
     <template #description>
       <p class="mt-1 text-sm text-muted">

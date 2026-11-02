@@ -13,6 +13,14 @@ export const ACCOUNT_PATHS = {
   resetPassword: '/reset-password',
 } as const
 
+/** The words in the picture panel beside each account page's card (`AccountAside`, D97 follow-up). */
+export const ACCOUNT_ASIDES = {
+  signUp: { title: 'Create your account', text: 'Order your favorite drinks ahead and collect points.' },
+  signIn: { title: 'Welcome back', text: 'Sign in to your account to order ahead and collect points.' },
+  forgotPassword: { title: 'Reset your password', text: 'We\'ll send a link to help you create a new password.' },
+  resetPassword: { title: 'Create a new password', text: 'Choose a strong password to keep your account secure.' },
+} as const
+
 /** Pages that make no sense to come back to after signing in (the email pages do). */
 const NO_RETURN = new Set<string>([ACCOUNT_PATHS.signIn, ACCOUNT_PATHS.signUp, ACCOUNT_PATHS.forgotPassword, ACCOUNT_PATHS.resetPassword])
 

@@ -116,6 +116,8 @@ async function restart(message?: string) {
   if (message) await showError(message)
   else error.value = undefined
 }
+/** The picture panel beside the form from `sm` (`AuthAside`), kept while loading or refused. */
+const aside = { title: 'Welcome back', text: 'Sign in to manage your cafe.' }
 </script>
 
 <template>
@@ -123,7 +125,11 @@ async function restart(message?: string) {
     v-if="!checked"
     :fields="2"
     cafe
-  />
+  >
+    <template #aside>
+      <AuthAside v-bind="aside" />
+    </template>
+  </TaskFrameSkeleton>
   <WorkspaceRefused
     v-else-if="refused"
     workspace="admin"
@@ -133,9 +139,16 @@ async function restart(message?: string) {
     :retrying="retrying"
     @signed-out="onSignedOut"
     @retry="onRetry"
-  />
+  >
+    <template #aside>
+      <AuthAside v-bind="aside" />
+    </template>
+  </WorkspaceRefused>
 
   <TaskFrame v-else>
+    <template #aside>
+      <AuthAside v-bind="aside" />
+    </template>
     <template #header>
       <div class="flex items-center gap-2">
         <CafeLogo
@@ -190,6 +203,7 @@ async function restart(message?: string) {
           v-model="state.email"
           type="email"
           autocomplete="username"
+          icon="i-lucide-mail"
           class="w-full"
         />
       </UFormField>
@@ -204,6 +218,7 @@ async function restart(message?: string) {
           v-model="state.password"
           :type="showPassword ? 'text' : 'password'"
           autocomplete="current-password"
+          icon="i-lucide-lock"
           class="w-full"
           :ui="{ trailing: 'pe-1' }"
         >

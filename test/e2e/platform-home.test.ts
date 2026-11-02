@@ -7,7 +7,8 @@ import { asNewVisitor, clientHeaders } from './support/client-address'
 await setupE2e()
 
 // The platform's page at the site's root (D221): the same static page for everyone, on the built
-// server, no mocks. It names no cafe, links into none, and Sign in leads to Your cafes.
+// server, no mocks. The server render names no cafe and links into none; signed out, Sign in leads
+// to Your cafes. The browser then reads who is signed in and shows where the account works.
 
 const seed = inject('shopSeed')
 const origin = new URL(url('/')).origin
@@ -31,7 +32,9 @@ describe('the platform\'s page (D221)', () => {
       expect(response.headers.getSetCookie()).toEqual([])
       expect(html).toContain('Angder')
       expect(html).toContain('scan the QR code shared by your cafe')
-      expect(html).toContain('href="/cafes"')
+      // The account is the browser's to read: the server renders a loading button, never a session.
+      expect(html).not.toContain('Sign in')
+      expect(html).toContain('Loading…')
       // No address of any cafe, and nothing of the account that sent the cookie.
       expect(html).not.toMatch(/href="\/c\//)
       expect(html).not.toContain(cashier.email)
@@ -55,22 +58,41 @@ describe('the platform\'s page (D221)', () => {
     await page.close()
   })
 
-  it('signed in, the same page, and Sign in opens Your cafes', async () => {
-    const cashier = seed.customers.cashier
+  async function signedInHome(person: { email: string, password: string }) {
     const page = await createPage()
     await asNewVisitor(page)
     await page.goto(url('/sign-in?redirect=/cafes'), { waitUntil: 'hydration' })
-    await page.getByLabel('Email').fill(cashier.email)
-    await page.getByLabel('Password', { exact: true }).fill(cashier.password)
+    await page.getByLabel('Email').fill(person.email)
+    await page.getByLabel('Password', { exact: true }).fill(person.password)
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
     await page.waitForURL(u => u.pathname === '/cafes')
-
     await page.goto(url('/'), { waitUntil: 'hydration' })
     await page.getByRole('heading', { level: 1, name: 'A better way to order from your cafe' }).waitFor()
-    expect((await linksOf(page)).filter(href => href.startsWith('/c/'))).toEqual([])
-    await page.getByRole('link', { name: 'Sign in' }).click()
-    await page.waitForURL(u => u.pathname === '/cafes')
-    await page.getByRole('link', { name: /Counter/ }).first().waitFor()
+    return page
+  }
+
+  it('signed in at one cafe\'s counter, opens it directly; the menu signs out back to Sign in', async () => {
+    const cashier = seed.customers.cashier
+    const page = await signedInHome(cashier)
+    const open = page.getByRole('link', { name: /^Open counter, / })
+    await open.waitFor()
+    expect(await open.getAttribute('href')).toMatch(/^\/c\/[\w-]+\/counter$/)
+    expect(await page.getByRole('link', { name: 'Sign in' }).count()).toBe(0)
+
+    await page.getByRole('button', { name: /account: Sophea Keo/ }).click()
+    await page.getByRole('menuitem', { name: 'Your cafes' }).waitFor()
+    await page.getByRole('menuitem', { name: 'Sign out' }).click()
+    await page.getByRole('link', { name: 'Sign in' }).waitFor()
+    expect(await page.getByRole('link', { name: /^Open counter/ }).count()).toBe(0)
+    await page.close()
+  })
+
+  it('signed in as a customer, only the account menu: no workspace to open', async () => {
+    const page = await signedInHome(seed.customers.verified)
+    await page.getByRole('button', { name: /account: Dara Sok/ }).click()
+    await page.getByRole('menuitem', { name: 'Sign out' }).waitFor()
+    expect(await page.getByRole('menuitem', { name: 'Your cafes' }).count()).toBe(0)
+    expect((await linksOf(page)).filter(href => href.startsWith('/c/') || href === '/cafes')).toEqual([])
     await page.close()
   })
 
@@ -83,6 +105,26 @@ describe('the platform\'s page (D221)', () => {
     const signIn = await page.getByRole('link', { name: 'Sign in' }).boundingBox()
     expect(signIn).not.toBeNull()
     expect(signIn!.y + signIn!.height).toBeLessThanOrEqual(640)
+    await page.close()
+  })
+
+  it('signed in, still fits a 320px phone: the place to work and light/dark move into the account menu', async () => {
+    const page = await createPage()
+    await page.setViewportSize({ width: 320, height: 640 })
+    // The longest button: a platform team account (the seed has none; the browser's reads are faked).
+    await page.route('**/api/auth/get-session', route => route.fulfill({ json: { session: {}, user: { name: 'Ops Team', email: 'ops@example.com', role: 'superadmin', emailVerified: true } } }))
+    await page.route('**/api/me/cafes', route => route.fulfill({ json: [] }))
+    await page.goto(url('/'), { waitUntil: 'hydration' })
+    const account = page.getByRole('button', { name: /account: Ops Team/ })
+    await account.waitFor()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320)
+    expect(await page.getByRole('link', { name: 'Platform console' }).isVisible()).toBe(false)
+    expect(await page.getByRole('button', { name: /^Switch to (dark|light) mode$/ }).isVisible()).toBe(false)
+
+    await account.click()
+    expect(await page.getByRole('menuitem', { name: 'Platform console' }).getAttribute('href')).toBe('/platform')
+    await page.getByRole('menuitemcheckbox', { name: 'Dark' }).click()
+    await page.waitForFunction(() => document.documentElement.classList.contains('dark'))
     await page.close()
   })
 })

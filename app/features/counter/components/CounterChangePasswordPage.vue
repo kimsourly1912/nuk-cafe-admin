@@ -77,10 +77,15 @@ const fields = [
   { name: 'newPassword', label: 'New password', autocomplete: 'new-password' },
   { name: 'confirmPassword', label: 'Repeat new password', autocomplete: 'new-password' },
 ] as const
+/** The picture panel beside the form from `sm` (`AuthAside`). */
+const aside = { title: 'Keep your account secure', text: 'Choose a strong password you don\'t use anywhere else.' }
 </script>
 
 <template>
   <TaskFrame>
+    <template #aside>
+      <AuthAside v-bind="aside" />
+    </template>
     <template #header>
       <div class="space-y-1">
         <h1 class="text-lg font-semibold">
@@ -136,6 +141,7 @@ const fields = [
             v-model="state[field.name]"
             :type="showPasswords ? 'text' : 'password'"
             :autocomplete="field.autocomplete"
+            icon="i-lucide-lock"
             class="w-full"
             :ui="field.name === 'newPassword' ? { trailing: 'pe-1' } : undefined"
           >

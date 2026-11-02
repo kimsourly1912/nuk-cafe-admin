@@ -9,8 +9,9 @@ import type { SignUpForm } from '../schemas/account-form'
 import { signUpSchema } from '../schemas/account-form'
 import { useAccountActions, useAccountSession } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
-import { ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget } from '../utils/account'
+import { ACCOUNT_ASIDES, ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
+import AccountAside from './AccountAside.vue'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
@@ -61,11 +62,16 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
   <TaskFrameSkeleton
     v-if="loading"
     :fields="3"
-  />
+  >
+    <template #aside>
+      <AccountAside v-bind="ACCOUNT_ASIDES.signUp" />
+    </template>
+  </TaskFrameSkeleton>
   <AccountFrame
     v-else
-    title="Create your account"
+    title="Create an account"
     description="Order ahead and collect points. It takes a minute."
+    :aside="ACCOUNT_ASIDES.signUp"
     :back="{ label: accountBackLabel(home), to: home }"
   >
     <UForm
@@ -89,6 +95,7 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
           id="sign-up-name"
           v-model="state.name"
           autocomplete="name"
+          icon="i-lucide-user"
           class="w-full"
         />
       </UFormField>
@@ -103,6 +110,7 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
           v-model="state.email"
           type="email"
           autocomplete="email"
+          icon="i-lucide-mail"
           class="w-full"
         />
       </UFormField>
