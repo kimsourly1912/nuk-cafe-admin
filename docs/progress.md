@@ -9,6 +9,10 @@ Branch `claude/sweet-johnson-u45xz8` from `main` at `83387ed`. Documentation onl
 - **Change:** `plans/live-updates.md` revised: Durable Objects + WebSocket Hibernation kept (KV, Queues, Realtime, SSE compared); publish with `waitUntil` after the commit; objects named `<tenantId>:<branchId>`; routes under `/api/c/<slug>/…/live`; 60 s fallback poll while a socket is open; a two-cafe risk row. D114 notes the revision.
 - **Evidence:** Cloudflare docs read 2026-11-02 (Durable Objects WebSockets, `acceptWebSocket`/`getWebSockets` tags after hibernation, pricing: outgoing messages free, incoming 20:1). Not checked: crossws on the installed Nitro version (no `node_modules`), CSP `connect-src 'self'` for `wss:`; both are build-step checks in the plan. No code changed, so no lint/typecheck/tests were run.
 - **Next:** unchanged (account security step 5). Live updates become a step only when the owner asks.
+## Platform order activity uses cafe-indexed reads (PR #238, 2026-11-02)
+
+- **Change:** `orderActivityQuery` uses a JSON-bound requested-cafe set, an indexed date-range count, and an indexed latest-order lookup. A focused test caught and fixed Drizzle `$count()` emitting an alias as a table name. Added a migration-backed local D1 query-plan test; normalized two unit-test helpers for Windows line endings and path separators.
+- **Evidence (2026-11-02, Windows 11, Node 24.22.1, pnpm 12.15.0):** lint and typecheck passed; audit passed with 15 low/moderate advisories; `pnpm test:unit` 2,418 passed, 1 skipped; platform activity/platform e2e 44/44; local D1 plan confirmed three indexed order reads. Original PR CI failed at lint while all three e2e shards passed; the new head must rerun CI. No staging or production performance measurement yet. Keep PR #238 in draft pending green CI and staging evidence.
 
 ## A failed e2e test keeps what the browser showed (D249, 2026-11-01)
 Branch `claude/affectionate-galileo-rivb8d`, restarted from `main` at `f2978f7` after PR #236. The owner asked to fix the intermittent e2e failures before step 5. [Decision](decisions.md#d249-a-failed-e2e-test-keeps-what-the-browser-showed-2026-11-01).
