@@ -2,6 +2,14 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Live updates plan rechecked (D250, 2026-11-02)
+Branch `claude/sweet-johnson-u45xz8` from `main` at `83387ed`. Documentation only. The owner asked which Cloudflare product would make order polling real time. [Decision](decisions.md#d250-live-updates-plan-revised-publish-after-the-commit-one-object-per-cafe-branch-2026-11-02), [plan](plans/live-updates.md).
+
+- **Finding:** the D114 plan published from the outbox handler, but the outbox is delivered once a minute (`server/tasks/platform/deliver-outbox.ts`): live updates would arrive later than the 10 s polls. It also predated cafes as tenants (D135).
+- **Change:** `plans/live-updates.md` revised: Durable Objects + WebSocket Hibernation kept (KV, Queues, Realtime, SSE compared); publish with `waitUntil` after the commit; objects named `<tenantId>:<branchId>`; routes under `/api/c/<slug>/…/live`; 60 s fallback poll while a socket is open; a two-cafe risk row. D114 notes the revision.
+- **Evidence:** Cloudflare docs read 2026-11-02 (Durable Objects WebSockets, `acceptWebSocket`/`getWebSockets` tags after hibernation, pricing: outgoing messages free, incoming 20:1). Not checked: crossws on the installed Nitro version (no `node_modules`), CSP `connect-src 'self'` for `wss:`; both are build-step checks in the plan. No code changed, so no lint/typecheck/tests were run.
+- **Next:** unchanged (account security step 5). Live updates become a step only when the owner asks.
+
 ## A failed e2e test keeps what the browser showed (D249, 2026-11-01)
 Branch `claude/affectionate-galileo-rivb8d`, restarted from `main` at `f2978f7` after PR #236. The owner asked to fix the intermittent e2e failures before step 5. [Decision](decisions.md#d249-a-failed-e2e-test-keeps-what-the-browser-showed-2026-11-01).
 

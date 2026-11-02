@@ -11,7 +11,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173, D202–D204; installable app, PWA, manifest, service worker |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166 |
 | Tenancy and permissions | D134–D146, D186–D193, D239–D243, D245–D248; organization, tenant, branch, platform console |
-| Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222 |
+| Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222, D250 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109 |
 | Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212, D214, D244, D249; production, CI pinning, e2e failure evidence, domains, email, bot protection |
@@ -279,3 +279,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D247](decisions.md#d247-the-platform-team-turns-off-a-lost-two-step-sign-in-qa1-2026-11-01) | The platform team turns off a lost two-step sign-in (QA1), 2026-11-01 |
 | [D248](decisions.md#d248-owners-see-when-staff-were-last-active-here-never-elsewhere-2026-11-01) | Owners see when staff were last active here, never elsewhere, 2026-11-01 |
 | [D249](decisions.md#d249-a-failed-e2e-test-keeps-what-the-browser-showed-2026-11-01) | A failed e2e test keeps what the browser showed, 2026-11-01 |
+| [D250](decisions.md#d250-live-updates-plan-revised-publish-after-the-commit-one-object-per-cafe-branch-2026-11-02) | Live updates plan revised: publish after the commit, one object per cafe branch, 2026-11-02 |
