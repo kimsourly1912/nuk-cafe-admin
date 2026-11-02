@@ -27,6 +27,7 @@ Classify the change **before editing** and read applicable sections below. Combi
 | Authentication/permissions/tenancy | [Security](docs/server/security.md), [auth](docs/reference/auth.md), shell session rules; [multi-tenant plan](docs/plans/multi-tenant.md) for boundary changes |
 | Database/migrations/payments | Data-model domain, architecture write rules, [operations migrations](docs/server/operations.md#migrations), security permissions and domain plan |
 | Testing/deployment | [Development checks/tests](docs/guides/development.md); deployment also needs operations and [release check](docs/plans/release-check.md) |
+| Browser bug (console, network, hydration, performance) | [Browser evidence for agents](docs/guides/development.md#browser-evidence-for-agents-chrome-devtools-mcp-d252) (Chrome DevTools MCP, local only) and the e2e [browser check](docs/guides/development.md#tests) |
 | Production alerts/watchdog/incidents | [Operations → Alerts](docs/server/operations.md#alerts-d223-d224): what alerts, routine checks, fire drill, changes, the incident checklist |
 | New feature/new screens | [Feature standard](docs/feature-standard.md), domain plan, applicable routes above. No mockup round by default (D245): design from the UI standard and page patterns, the owner reviews on staging; offer mockups only for a new page pattern or a large workflow change |
 | Resume work | [Current-state navigation](docs/current-state.md), then relevant progress phase, open question and plan |
