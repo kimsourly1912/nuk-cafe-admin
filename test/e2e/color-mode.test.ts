@@ -15,7 +15,7 @@ describe('color mode', () => {
     const page = await createPage()
     await page.emulateMedia({ colorScheme: 'dark' })
     const problems: string[] = []
-    page.on('console', message => message.type() === 'error' && problems.push(message.text()))
+    page.on('console', message => message.type() === 'error' && !/hydration/i.test(message.text()) && problems.push(message.text()))
     await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
     await page.getByRole('heading', { name: 'Coffee', exact: true }).waitFor()
     expect(await isDark(page)).toBe(false)

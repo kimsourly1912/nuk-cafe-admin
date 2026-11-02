@@ -40,13 +40,15 @@ describe('browser problems (D251)', () => {
 
     const problems = await browserProblems(page, origin)
     await page.close()
-    expect(problems).toEqual([
-      expect.stringMatching(/^console\.error: boom from the test/),
-      expect.stringMatching(/^console\.warning: \[Vue warn\]: Hydration text content mismatch/),
-      'pageerror: uncaught from the test',
-      'GET /api/test/500 → 500',
-      'request failed: GET /api/test/fail (net::ERR_FAILED)',
-    ])
+    for (const reported of [
+      /^console\.error: boom from the test/,
+      /^console\.warning: \[Vue warn\]: Hydration text content mismatch/,
+      /^pageerror: uncaught from the test$/,
+      /^GET \/api\/test\/500 → 500$/,
+      /^request failed: GET \/api\/test\/fail \(net::ERR_FAILED\)$/,
+    ]) expect(problems).toContainEqual(expect.stringMatching(reported))
+    // A 4xx answer, an aborted request, a plain warning and Chrome's own "Failed to load resource".
+    expect(problems.filter(problem => /\/api\/test\/(404|slow)|only a warning|Failed to load resource/.test(problem))).toEqual([])
   })
 
   it('names the element of a real hydration mismatch on a server-rendered page (the e2e build keeps Vue\'s details)', async () => {
