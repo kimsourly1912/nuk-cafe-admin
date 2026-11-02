@@ -2,6 +2,14 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Nuxt Hints tried in dev, not adopted (D255, 2026-11-02)
+Branch `claude/zen-davinci-hgbbfz`, restarted from `main` at `c1b901d` after PR #245 (staging deploy green). The last planned tooling step. Documentation only: the trial's install was removed. [Decision](decisions.md#d255-nuxt-hints-tried-in-dev-and-not-adopted-its-html-validation-goes-to-the-e2e-suite-instead-2026-11-02).
+
+- **Trial:** `@nuxt/hints` 1.1.5 under `pnpm dev` with the dev accounts and the standard sample menu; seven page visits in Chrome (server-rendered pages at phone and desktop width, one SPA page). Audit unchanged; lockfile +~490 lines.
+- **Found (real, not fixed here):** `/forgot-password`'s server HTML labels the email field `for="v-0-0-0"` (the input is `forgot-email`): no accessible name and no tap-to-focus until hydration, when `UFormField` repoints it (checked with JavaScript off and on). The menu has no `<h1>` (first heading a category `<h2>`). Neither is seen by the axe test (WCAG A/AA rules only) or the browser check (D251).
+- **Not useful here:** five hydration-heuristic warnings, all that one label change (Vue's detector reported nothing); 2–15 lazy-load notices per page, mostly Nuxt UI primitives; no Web Vitals or third-party reports. Hints wrote 3–17 of each page's console messages (16 of 22 on the menu).
+- **Next:** if the owner agrees, `html-validate` as an e2e check of the server-rendered pages (CI), fixing the two defects with their tests. Otherwise the planned tooling is complete; back to account security step 5.
+
 ## The admin assistant's chat code loads when it's first opened (D254, 2026-11-02)
 Branch `claude/zen-davinci-hgbbfz`, restarted from `main` at `3333fb5` after PR #244 (staging deploy green). The owner chose this D253 finding before the Nuxt Hints trial. [Decision](decisions.md#d254-the-admin-assistants-chat-code-loads-when-its-first-opened-2026-11-02).
 

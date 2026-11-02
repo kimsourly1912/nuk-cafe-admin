@@ -14,7 +14,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222, D250 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109, D254 |
-| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212, D214, D244, D249, D251, D252, D253; production, CI pinning, e2e failure evidence, browser problems, hydration, Chrome DevTools MCP, bundle and Worker size, domains, email, bot protection |
+| Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212, D214, D244, D249, D251, D252, D253, D255; production, CI pinning, e2e failure evidence, browser problems, hydration, Chrome DevTools MCP, bundle and Worker size, Nuxt Hints, domains, email, bot protection |
 | Documentation loading | D167 |
 
 ## Entries by ID
@@ -284,3 +284,4 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D252](decisions.md#d252-agents-read-the-browser-with-chrome-devtools-mcp-local-only-2026-11-02) | Agents read the browser with Chrome DevTools MCP, local only, 2026-11-02 |
 | [D253](decisions.md#d253-bundle-and-worker-size-are-measured-by-hand-with-a-recorded-baseline-2026-11-02) | Bundle and Worker size are measured by hand, with a recorded baseline, 2026-11-02 |
 | [D254](decisions.md#d254-the-admin-assistants-chat-code-loads-when-its-first-opened-2026-11-02) | The admin assistant's chat code loads when it's first opened, 2026-11-02 |
+| [D255](decisions.md#d255-nuxt-hints-tried-in-dev-and-not-adopted-its-html-validation-goes-to-the-e2e-suite-instead-2026-11-02) | Nuxt Hints tried in dev and not adopted; its HTML validation goes to the e2e suite instead, 2026-11-02 |
