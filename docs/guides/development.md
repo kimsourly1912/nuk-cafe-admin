@@ -75,6 +75,28 @@ Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix o
 
 **Hydration in the e2e build (D251):** a production build logs a hydration mismatch only as "Hydration completed but contains mismatches.", without the element. The e2e build (`E2E_HUB_DIR` set) adds `debug: { hydration: true }`, which keeps Vue's detailed `[Vue warn]: Hydration … mismatch` with the element; deployed builds don't have it. Only server-rendered pages hydrate (`/`, `/c/<slug>`, the account pages); `ssr: false` routes can't mismatch. `pnpm typecheck` can't find one (it checks types, not what the server and the browser rendered), and a green e2e run says nothing about pages and states no test opened. To see one in full while developing, open the page under `pnpm dev`: the console shows the warning with the component trace.
 
+### Browser evidence for agents: Chrome DevTools MCP (D252)
+
+An agent can drive a real Chrome and read what it reports: console messages with source-mapped stacks, DevTools issues, network requests with status and bodies, performance traces, Lighthouse (accessibility, SEO, best practices), screenshots and accessibility snapshots. Use it to investigate a browser problem before changing code; it is a local tool, not a check: CI and the e2e suite stay the gate (D251).
+
+**Setup:** the `chrome-devtools` server is in the project's `.mcp.json`, running the pinned dev dependency `chrome-devtools-mcp` (`pnpm exec`, no download at start; upgrades go through the upgrade workflow). Claude Code asks each person once before starting a project server. Codex and other clients: add the same command and arguments to their own MCP config (not verified in this repo). Needs Google Chrome (or Chrome for Testing) 149+ for the address allowlist. On a machine without a display (a cloud container), set `CHROME_DEVTOOLS_MCP_HEADLESS=true` before starting the agent; the default opens a visible window.
+
+**What the configuration enforces:**
+- **Local addresses only:** `--allowedUrlPattern` admits `http://localhost:*/*` and `http://127.0.0.1:*/*`; staging, production and other sites are refused ("blocked by blocklist/allowlist rules"). Point it at `pnpm dev` (`http://localhost:3000`) or a local production build.
+- **A throwaway profile** (`--isolated`): no saved sign-ins or cookies from your own browser. Sign in with the dev accounts (`pnpm dev:accounts`), never a real person's.
+- **Cookies and authorization headers redacted** from what the agent reads (`--redactNetworkHeaders`).
+- **Nothing sent to Google** from it: no usage statistics (`--no-usage-statistics`), no CrUX lookups of traced addresses (`--no-performance-crux`), no update checks (`CHROME_DEVTOOLS_MCP_NO_UPDATE_CHECKS`).
+- Everything the page shows still reaches the agent's model: local sample data only. These flags guard against mistakes; an agent that edits `.mcp.json` can change them, which code review must catch.
+
+**Workflow for a problem the e2e check reported** (`page-N.problems.txt`) **or one seen by hand:**
+1. `pnpm dev`, then `navigate_page` to the page; `emulate` or `resize_page` to the test's width (hydration problems are often phone-only).
+2. `list_console_messages` (warnings and errors; under `pnpm dev` Vue's hydration warning includes the component trace), `get_console_message` for the stack and an issue's affected element.
+3. For hydration: `evaluate_script` with `async () => (await fetch(location.href)).text()` gives the server's HTML; compare the element with the hydrated DOM (`take_snapshot` or `evaluate_script` reading `outerHTML`).
+4. For a request: `list_network_requests`, then `get_network_request` for its body and status.
+5. Fix in code, then prove it with the e2e test (the shared check fails without the fix).
+
+DevTools **issues** (for example "A form field element should have an id or name attribute") appear in `list_console_messages` but not in the e2e check, which reads console messages only.
+
 ## Conventions
 
 - Prefer Nuxt-native tools (`useAsyncData`, `useState`, `useRuntimeConfig`, route middleware), then `@vueuse/core` (import it explicitly: it isn't auto-imported), before adding a library or hand-rolling a utility. There is no Pinia: shared state is `useState` inside a composable.

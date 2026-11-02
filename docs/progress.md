@@ -2,6 +2,14 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Agents read the browser with Chrome DevTools MCP (D252, 2026-11-02)
+Branch `claude/zen-davinci-hgbbfz`, restarted from `main` at `82a9516` after PR #241 (staging deploy green). The owner's next planned tooling step after D251. [Decision](decisions.md#d252-agents-read-the-browser-with-chrome-devtools-mcp-local-only-2026-11-02), [guide](guides/development.md#browser-evidence-for-agents-chrome-devtools-mcp-d252).
+
+- **Change:** `chrome-devtools-mcp` 1.12.0 (exact dev dependency); `.mcp.json` starts it with `pnpm exec`, local addresses only (`--allowedUrlPattern`), a throwaway profile, redacted cookie/authorization headers, no usage statistics, CrUX or update checks, headless from `CHROME_DEVTOOLS_MCP_HEADLESS`. Development guide section with the workflow; an AGENTS.md routing row.
+- **Evidence (2026-11-02, cloud Linux, Chrome for Testing 153, Node 24.22.1, pnpm 12.15.0):** an MCP client over stdio against the local production build: 32 tools; the menu loaded; console messages, an issue's detail, 127 network requests and the server's HTML through `evaluate_script` all answered; `https://staging.angder.app/` refused by the allowlist. `pnpm audit --audit-level high` passed (15 low/moderate, unchanged). Not exercised: `.mcp.json` `${…}` expansion (read at session start), Codex's setup, header redaction while signed in.
+- **Found with it:** the customer menu's search field has neither `id` nor `name` (a Chrome DevTools issue, invisible to the D251 check). Separate follow-up.
+- **Next:** `nuxt analyze` documented as a manual client-bundle check (it builds the Node preset, not the Worker), then a Nuxt Hints trial in dev.
+
 ## Every e2e test fails on what the browser reported (D251, 2026-11-02)
 Branch `claude/zen-davinci-hgbbfz` from `main` at `c06450a`, `main` merged in after PR #240. The owner asked, after a read-only review of Nuxt diagnostics tools (Nuxt Hints, Chrome DevTools MCP, `nuxt analyze`), for the highest-value step: the e2e suite looking at the browser. [Decision](decisions.md#d251-every-e2e-test-fails-on-what-the-browser-reported-2026-11-02).
 
