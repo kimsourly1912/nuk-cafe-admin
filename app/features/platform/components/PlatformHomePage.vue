@@ -4,12 +4,12 @@
  * the platform's page, never a cafe's. Customers arrive through their cafe's link or a table's QR, so
  * it only says so and how ordering works; owners and staff sign in to Your cafes, which checks what
  * the account may open. The same page for everyone: no session, no cafe and no list of cafes (that
- * would show every cafe and its address), so one server render serves every visitor. It brings its
- * own header and footer, like the customer site's pages (the `shop` layout is only the page).
+ * would show every cafe and its address), so one server render serves every visitor; the header's
+ * account (`HomeAccount`) is read in the browser. It brings its own header and footer, like the
+ * customer site's pages (the `shop` layout is only the page).
  */
-// Your cafes, `/cafes` (not the console's `/platform/cafes`).
-import { CAFES_PATH } from '~/utils/account-cafes'
 import storefront from '~/assets/img/cafe-storefront.png'
+import HomeAccount from './HomeAccount.vue'
 
 const steps = [
   { icon: 'i-lucide-link', title: 'Open the cafe link', text: 'Use the link or QR code shared by your cafe.' },
@@ -46,13 +46,7 @@ const year = new Date().getFullYear()
         Angder
       </template>
       <template #right>
-        <UColorModeButton />
-        <!-- Your cafes sends a signed-out visitor to sign in and back, so one link serves both. -->
-        <UButton
-          :to="CAFES_PATH"
-          label="Sign in"
-          icon="i-lucide-log-in"
-        />
+        <HomeAccount />
       </template>
     </UHeader>
 

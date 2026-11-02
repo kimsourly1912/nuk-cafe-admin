@@ -38,8 +38,7 @@ async function sendNewLink() {
     v-if="!failed || account?.emailVerified"
     title="Email verified"
     :description="account ? `You're signed in as ${account.name}.` : 'You can order as soon as the cafe is open.'"
-    icon="i-lucide-circle-check"
-    icon-color="success"
+    illustration="i-app-nuk-cafe-email-verified"
   >
     <template #footer>
       <UButton

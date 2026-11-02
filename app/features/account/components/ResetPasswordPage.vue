@@ -13,7 +13,7 @@ import type { ResetPasswordForm } from '../schemas/account-form'
 import { resetPasswordSchema } from '../schemas/account-form'
 import { useAccountActions } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
-import { ACCOUNT_PATHS, isDeadLink } from '../utils/account'
+import { ACCOUNT_ASIDES, ACCOUNT_PATHS, isDeadLink } from '../utils/account'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
@@ -62,6 +62,7 @@ async function onSubmit(event: FormSubmitEvent<ResetPasswordForm>) {
     icon="i-lucide-link-2-off"
     icon-color="warning"
     :back="{ label: 'Back to sign in', to: ACCOUNT_PATHS.signIn }"
+    :aside="ACCOUNT_ASIDES.resetPassword"
   >
     <template #footer>
       <UButton
@@ -76,6 +77,7 @@ async function onSubmit(event: FormSubmitEvent<ResetPasswordForm>) {
     v-else
     title="Choose a new password"
     :back="{ label: 'Back to sign in', to: ACCOUNT_PATHS.signIn }"
+    :aside="ACCOUNT_ASIDES.resetPassword"
   >
     <UForm
       id="reset-form"

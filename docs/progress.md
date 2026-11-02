@@ -2,6 +2,19 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## The account pages' new look (D97 follow-up, 2026-11-02)
+Same branch. [Decision](decisions.md#d97-the-customers-account-pages-step-52-2026-09-29).
+
+- **Change:** sign-in, sign-up, verify email, forgot and reset password are a two-panel card from `sm` (picture panel via `TaskFrame`'s new `aside` slot, `AccountAside`, `AccountBrand`); email verified a single card; phones unchanged. Illustrations on the email pages, leading icons on fields, titles "Create an account" and "Forgot your password?".
+- **Also:** the frosted veil behind the panel's words (owner; ui.md §1.7 exception); the panel promoted to `app/components/AuthAside.vue` and added to the admin, counter and console sign-in and change-password pages (and `WorkspaceRefused`), with mail/lock icons on their fields. The light/dark button sits in the panel's top row; the `auth` layout hides its corner button from `sm` when the page has one (`group-has-data-aside`).
+- **Evidence (2026-11-02, Windows 11):** `pnpm lint`, `pnpm typecheck` passed; `pnpm test:unit` 2,421 passed, 1 skipped; e2e `shop-account.test.ts` and `accessibility.test.ts` 43/43; after the other sign-in pages, auth, password, counter, platform, accessibility, shop-account and your-cafes 143/143 (a first run alongside `pnpm dev` had 3 timeouts on the queue and admin pages, which passed alone and on the rerun). Screenshots of the six pages at 1280, 700 and 390 px, light and dark, against `pnpm dev` (signed out; the signed-in "Check your email" not captured). Not run: full `pnpm test:e2e` (`TaskFrame` is shared; its default branch is unchanged).
+
+## The site root's header knows who is signed in (D221 follow-up, 2026-11-02)
+Branch `claude/home-signed-in-action` from `origin/main` at `c06450a`. [Decision](decisions.md#d221-nothing-guesses-a-cafe-the-sites-root-is-the-platforms-2026-10-27).
+
+- **Change:** `/`'s header shows Sign in only when signed out (or a guest, or on a temporary password). Signed in, `HomeAccount` → `HomeAccountSignedIn` shows Open admin / Open counter (one workspace), Your cafes (several, or the team with a cafe), Platform console (team only) or nothing (a customer), and an initials menu with Sign out (below `sm`, signed in, the button and the light/dark button are hidden: the menu lists the workspace and Appearance). Read in the browser only; the `swr`-cached server render is a disabled Loading… button. `homeDestination` in `app/features/platform/utils/`. Account exports `useAccountSession`, `AccountIdentity`, `initialsOf`; cafe exports `usePlatformTeam`.
+- **Evidence (2026-11-02, Windows 11):** `pnpm lint` and `pnpm typecheck` passed; `pnpm test:unit` 2,421 passed, 1 skipped; `home-destination.test.ts` 3/3; `test/e2e/platform-home.test.ts` 6/6 on the built server (server HTML has Loading… and no Sign in or session; the cashier gets Open counter to `/c/<slug>/counter` and signs out back to Sign in; a customer gets only the menu; 320px fits signed out, and signed in as the platform team with the session faked in the browser, Dark chosen from the menu); accessibility "platform's page" 2/2. Not covered by e2e: the several-cafes case (unit only).
+
 ## Live updates plan rechecked (D250, 2026-11-02)
 Branch `claude/sweet-johnson-u45xz8` from `main` at `83387ed`. Documentation only. The owner asked which Cloudflare product would make order polling real time. [Decision](decisions.md#d250-live-updates-plan-revised-publish-after-the-commit-one-object-per-cafe-branch-2026-11-02), [plan](plans/live-updates.md).
 

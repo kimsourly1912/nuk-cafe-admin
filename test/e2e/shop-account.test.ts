@@ -110,7 +110,7 @@ describe('signing in and out', () => {
 
   it.each([
     ['/sign-in', 'Sign in'],
-    ['/sign-up', 'Create your account'],
+    ['/sign-up', 'Create an account'],
   ])('signed in, %s opened directly shows a skeleton and moves on, never the form (D238)', async (path, title) => {
     const { page, problems } = await open('/sign-in')
     await signIn(page, seed.customers.verified)
@@ -297,7 +297,7 @@ describe('resetting the password', () => {
     const customer = seed.customers.reset
     const { page, problems } = await open('/sign-in')
     await page.getByRole('link', { name: 'Forgot password?' }).click()
-    await heading(page, 'Reset your password').waitFor()
+    await heading(page, 'Forgot your password?').waitFor()
     const sentAt = Date.now() - 1000
     await page.getByLabel('Email').fill(customer.email)
     await button(page, 'Send reset link').click()
@@ -329,7 +329,7 @@ describe('resetting the password', () => {
     const { page } = await open('/reset-password?error=INVALID_TOKEN')
     await heading(page, 'This link doesn\'t work anymore').waitFor()
     await page.getByRole('link', { name: 'Send a new link' }).click()
-    await heading(page, 'Reset your password').waitFor()
+    await heading(page, 'Forgot your password?').waitFor()
 
     await page.goto(url('/reset-password?token=abcdefghijklmnopqrstuvwx'), { waitUntil: 'hydration' })
     await page.route('**/api/auth/reset-password', route => route.fulfill({ status: 400, json: { code: 'INVALID_TOKEN', message: 'Invalid token' } }))
