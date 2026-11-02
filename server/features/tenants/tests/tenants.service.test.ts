@@ -383,6 +383,13 @@ describe('the list', () => {
     const usage = Object.fromEntries((await listTenants(db, query())).items.map(t => [t.slug, t.usage]))
     expect(usage.nuk).toEqual({ branches: 1, staff: 0, ordersLast30Days: 2, lastOrderAt: days(1).toISOString() })
     expect(usage['brown-bean']).toEqual({ branches: 1, staff: 1, ordersLast30Days: 0, lastOrderAt: null })
+    // The platform's last-order date is all-time, even when the recent count is zero.
+    const oldOnly = await createTenant(db, admin, input({ name: 'Old Orders Cafe', slug: 'old-orders', ownerEmail: 'old@example.com' }))
+    await insertBranch(db, { id: 'b-old', name: 'Old Branch', timezone: 'Asia/Phnom_Penh', tenantId: oldOnly.tenant.id })
+    await db.insert(orders).values({ ...order(4, days(40)), tenantId: oldOnly.tenant.id, branchId: 'b-old' })
+    const after = Object.fromEntries((await listTenants(db, query())).items.map(t => [t.slug, t.usage]))
+    expect(after['old-orders']).toEqual({ branches: 1, staff: 1, ordersLast30Days: 0, lastOrderAt: days(40).toISOString() })
+
   })
 })
 
