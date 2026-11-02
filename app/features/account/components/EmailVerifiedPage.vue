@@ -19,7 +19,7 @@ const failed = computed(() => typeof route.query.error === 'string')
 const { account, known } = useAccountSession()
 const { resendVerification } = useAccountActions()
 const { waiting, start: startCooldown, waitLabel } = useResendCooldown('verify')
-const { saving, formError, submit } = useAccountForm({})
+const { saving, formError, submit } = useAccountForm([])
 const sent = ref(false)
 
 async function sendNewLink() {

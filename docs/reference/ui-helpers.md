@@ -332,6 +332,7 @@ Source: `app/components/SearchInput.vue` (VueUse `watchDebounced`). E2E: `test/e
 |---|---|---|---|
 | `v-model` | `string` | `''` | Receives the **trimmed** text |
 | `placeholder` | `string` | `'Search…'` | Also its accessible name (`searchbox` role) |
+| `name` | `string` | `'search'` | The input's `name` (every form field needs an `id` or a `name`, or Chrome DevTools reports an issue); `autocomplete` stays `off` |
 | `delay` | `number` | `300` | ms without typing before it applies |
 
 - **Enter** applies at once. The **✕** button clears and applies at once.

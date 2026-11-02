@@ -18,7 +18,7 @@ const target = computed(() => accountRedirectTarget(route.query.redirect, home.v
 const { account, known } = useAccountSession()
 const { resendVerification } = useAccountActions()
 const { waiting, start: startCooldown, waitLabel } = useResendCooldown('verify')
-const { saving, formError, submit } = useAccountForm({})
+const { saving, formError, submit } = useAccountForm([])
 const sentAgain = ref(false)
 
 async function resend() {

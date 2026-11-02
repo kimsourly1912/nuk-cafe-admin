@@ -332,6 +332,7 @@ A submit that fails validation must show the person what's wrong, even when it i
 - It waits one frame: the form keeps its fields disabled until after its events (`loadingAuto`), and a disabled field can't take focus.
 - An error on a group with no input of its own (a list's "listed only once") has nothing to focus: the page scrolls to the first error message.
 - A form whose sections hide fields (the menu item editor's tabs) opens the field's section first (`emit('invalid', section)`) and then calls `focusFirstInvalid(event)` from its own handler (it runs on the next frame, after the section is shown). A server's field error (`setErrors`) is not an `error` event: focus that field yourself, as the sign-in forms do.
+- **On a server-rendered page** (`/`, `/c/<slug>`, the account pages), an input inside a `UFormField` takes the field's id: give it no `id` of its own. Nuxt UI 4.12 lets the input's `id` replace the field's only after the server has rendered the label, so the server's HTML has a label pointing at no element (a Chrome DevTools issue, `FormLabelForMatchesNonExistingIdError`) until hydration. To focus such a field, ask the form for its id: `form.getErrors(name)[0]?.id` (`useAccountForm`); a part that needs the element uses `UInput`'s `inputRef` (`PasswordInput`). `ssr: false` routes (admin, counter, platform) are not affected. E2E: `shop-account.test.ts` "the server's page links each label to its field".
 
 ## `isSameFormValue` and `cloneFormValue`
 

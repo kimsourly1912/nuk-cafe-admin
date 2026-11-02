@@ -6,22 +6,31 @@
  */
 import { fillInput } from '~/utils/password-requirements'
 
-const props = defineProps<{ id: string, autocomplete: 'current-password' | 'new-password' }>()
+defineProps<{ autocomplete: 'current-password' | 'new-password' }>()
 const model = defineModel<string>({ required: true })
 const visible = ref(false)
 const emit = defineEmits<{ generate: [password: string] }>()
+
+// The input takes its `UFormField`'s id, so the label matches it in the server's HTML too. An `id`
+// set here would replace that id only after the label was rendered on the server.
+const input = useTemplateRef('input')
+/** For the show/hide button's `aria-controls`; known once mounted (the server renders none). */
+const inputId = ref<string>()
+onMounted(() => {
+  inputId.value = input.value?.inputRef?.id
+})
 
 function fillGenerated(password: string) {
   // First, so the checklist knows it before the field changes.
   emit('generate', password)
   visible.value = true
-  fillInput(document.getElementById(props.id) as HTMLInputElement | null, password)
+  fillInput(input.value?.inputRef ?? null, password)
 }
 </script>
 
 <template>
   <UInput
-    :id="id"
+    ref="input"
     v-model="model"
     :type="visible ? 'text' : 'password'"
     :autocomplete="autocomplete"
@@ -41,7 +50,7 @@ function fillGenerated(password: string) {
         :icon="visible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
         :aria-label="visible ? 'Hide password' : 'Show password'"
         :aria-pressed="visible"
-        :aria-controls="id"
+        :aria-controls="inputId"
         @click="visible = !visible"
       />
     </template>

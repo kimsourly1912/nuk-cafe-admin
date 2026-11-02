@@ -192,6 +192,9 @@ describe('the customer menu', () => {
   it('searches by name or description, grouped by place, with the same cards; nothing found says so', async () => {
     const { page } = await open()
     const search = page.getByRole('searchbox', { name: 'Search the menu' })
+    // A form field with neither id nor name is a Chrome DevTools issue (not a console error).
+    expect(await search.getAttribute('name')).toBe('search')
+    expect(await search.getAttribute('autocomplete')).toBe('off')
     await search.fill('latte')
     await page.getByText(/results for "latte"/).waitFor()
     await page.getByRole('heading', { name: 'Tea → Milk Tea' }).waitFor()

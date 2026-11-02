@@ -11,11 +11,14 @@ import { watchDebounced } from '@vueuse/core'
 const model = defineModel<string>({ default: '' })
 const props = withDefaults(defineProps<{
   placeholder?: string
+  /** The field's `name`: browsers and DevTools expect every form field to have an `id` or a `name`. */
+  name?: string
   delay?: number
   /** A refresh is running: the spinner takes the search icon's place, so it never wraps onto its own line. */
   loading?: boolean
 }>(), {
   placeholder: 'Search…',
+  name: 'search',
   delay: 300,
 })
 
@@ -47,6 +50,7 @@ function clear() {
     ref="input"
     v-model="text"
     type="search"
+    :name="name"
     icon="i-lucide-search"
     :loading="loading"
     :placeholder="placeholder"

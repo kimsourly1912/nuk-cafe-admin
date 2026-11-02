@@ -28,7 +28,7 @@ onMounted(() => {
 })
 
 const state = reactive({ password: '' })
-const { saving, formError, submit } = useAccountForm({ password: 'reset-password' })
+const { saving, formError, submit } = useAccountForm(['password'])
 const { resetPassword } = useAccountActions()
 /** The password the server refused as breached, for the checklist. */
 const refusedPassword = ref<string>()
@@ -97,7 +97,6 @@ async function onSubmit(event: FormSubmitEvent<ResetPasswordForm>) {
           required
         >
           <PasswordInput
-            id="reset-password"
             v-model="state.password"
             autocomplete="new-password"
             @generate="generatedPassword = $event"

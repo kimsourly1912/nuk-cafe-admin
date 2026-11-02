@@ -90,7 +90,6 @@ async function onSubmit({ data }: FormSubmitEvent<DeleteAccountInput>) {
           required
         >
           <PasswordInput
-            id="delete-account-password"
             v-model="state.password"
             autocomplete="current-password"
             autofocus

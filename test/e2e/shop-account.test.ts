@@ -170,6 +170,7 @@ describe('signing in and out', () => {
     const { page } = await open('/sign-in')
     const password = page.getByLabel('Password', { exact: true })
     expect(await password.getAttribute('type')).toBe('password')
+    await expect.poll(() => button(page, 'Show password').getAttribute('aria-controls')).toBe(await password.getAttribute('id'))
     await button(page, 'Show password').click()
     expect(await password.getAttribute('type')).toBe('text')
   })
@@ -337,6 +338,18 @@ describe('resetting the password', () => {
     await page.getByLabel('New password').fill('a-brand-new-password-9')
     await page.getByLabel('New password').press('Enter')
     await heading(page, 'This link doesn\'t work anymore').waitFor()
+  })
+
+  // The fields keep their UFormField's id: an input's own id replaced it only after the server had
+  // rendered the label, so the label pointed at no element until hydration (a Chrome DevTools issue).
+  it('the server\'s page links each label to its field', async () => {
+    for (const path of ['/forgot-password', '/reset-password?token=abcdefghijklmnopqrstuvwx']) {
+      const html = await (await fetch(url(path))).text()
+      const labels = [...html.matchAll(/<label\b[^>]*\bfor="([^"]+)"/g)].map(match => match[1])
+      const inputs = [...html.matchAll(/<input\b[^>]*\bid="([^"]+)"/g)].map(match => match[1])
+      expect(labels, path).toHaveLength(1)
+      expect(inputs, path).toEqual(labels)
+    }
   })
 
   it('answers the same for an email without an account', async () => {
