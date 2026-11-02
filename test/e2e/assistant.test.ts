@@ -46,8 +46,9 @@ async function mockChat(page: Page, replies: ChatReply[]) {
   return requests
 }
 
-async function open(path = '/c/nuk/admin/staff', width = 1440) {
+async function open(path = '/c/nuk/admin/staff', width = 1440, prepare?: (page: Page) => void) {
   const page = await createPage()
+  prepare?.(page)
   await page.setViewportSize({ width, height: 900 })
   await mockApi(page, {
     'GET /admin/assistant': () => STATUS,
@@ -76,10 +77,30 @@ describe('the help assistant', () => {
     await expect.poll(() => api.calls.includes('GET /admin/assistant')).toBe(true)
     await page.getByRole('heading', { name: 'Shortcuts' }).waitFor()
     expect(await askButton(page).count()).toBe(0)
-    // Its shortcut does nothing either: the panel stays closed.
+    // Its shortcut does nothing either: the panel is never mounted (D254), so never opens.
     await page.keyboard.press('Control+/')
     await page.waitForTimeout(300)
-    expect(await panel(page).getAttribute('data-state')).toBe('collapsed')
+    expect(await panel(page).count()).toBe(0)
+  })
+
+  it('loads its chat code only when first opened, not with the admin page (D254)', async () => {
+    // Scripts whose code holds the chat route: only the panel's chunk (useAssistantChat). Nuxt's idle
+    // prefetch hints don't count; a page needs what it loads to render.
+    const chatCode: string[] = []
+    const page = await open('/c/nuk/admin/staff', 1440, (tab) => {
+      tab.on('response', async (response) => {
+        const request = response.request()
+        if (request.resourceType() !== 'script' || ((await request.allHeaders())['sec-purpose'] ?? '').includes('prefetch')) return
+        if ((await response.text().catch(() => '')).includes('/admin/assistant/chat')) chatCode.push(new URL(request.url()).pathname)
+      })
+    })
+    await page.waitForLoadState('networkidle')
+    await askButton(page).waitFor()
+    expect(chatCode).toEqual([])
+
+    await askButton(page).click()
+    await panel(page).getByText('Answers from the help guide').waitFor()
+    await expect.poll(() => chatCode.length).toBeGreaterThan(0)
   })
 
   it('opens beside the page, suggests questions for it, streams an answer with a link that opens the page', async () => {

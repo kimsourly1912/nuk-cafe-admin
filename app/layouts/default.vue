@@ -206,7 +206,11 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
 
       <!-- Mounted with the shell, closed: only the Ask button or Ctrl/⌘+/ opens it, where it's on.
            Mounting it at the moment it opens would let USidebar close it again on phones. -->
-      <AssistantPanel class="print:hidden" />
+      <!-- Mounted from the first opening on, and kept: the conversation lives in it (D254). -->
+      <AssistantPanel
+        v-if="assistant.opened.value"
+        class="print:hidden"
+      />
       <AdminSearch
         v-model:open="searchOpen"
         :pages="searchPages"
