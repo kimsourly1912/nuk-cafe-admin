@@ -88,6 +88,7 @@ const paymentsTotal = (report: ReportSummary) => ({
       <div
         v-else-if="!data"
         class="grid grid-cols-2 gap-3 lg:grid-cols-4"
+        role="status"
         aria-busy="true"
         aria-label="Loading the report…"
       >

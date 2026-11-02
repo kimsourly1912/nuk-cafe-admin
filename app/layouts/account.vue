@@ -12,7 +12,8 @@ import { AccountBrand } from '~/features/account'
     <div class="flex w-full flex-1 flex-col items-center sm:flex-none">
       <div class="flex w-full items-center justify-between gap-2 border-b border-default bg-default px-4 py-2 sm:hidden">
         <AccountBrand />
-        <UColorModeButton />
+        <!-- On the right even when there's no cafe to name (no brand). -->
+        <UColorModeButton class="ms-auto" />
       </div>
       <slot />
     </div>

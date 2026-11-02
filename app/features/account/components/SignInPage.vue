@@ -27,7 +27,7 @@ const target = computed(() => accountRedirectTarget(route.query.redirect, home.v
 const afterReset = computed(() => route.query.reset === '1')
 
 const state = reactive({ email: '', password: '' })
-const { saving, formError, submit } = useAccountForm({ email: 'sign-in-email', password: 'sign-in-password' })
+const { saving, formError, submit } = useAccountForm({ formId: 'sign-in-form', fields: ['email', 'password'] })
 const { signIn, finishSignIn } = useAccountActions()
 /** After a password that needs a code: the code step replaces the form. */
 const codeStep = ref(false)
@@ -146,7 +146,6 @@ function restart(message?: string) {
         required
       >
         <UInput
-          id="sign-in-email"
           v-model="state.email"
           type="email"
           autocomplete="username"

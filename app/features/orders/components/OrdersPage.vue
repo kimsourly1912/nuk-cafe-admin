@@ -57,6 +57,7 @@ useSeoMeta({ robots: 'noindex' })
       <div
         v-if="!list && query.loading.value"
         class="space-y-3"
+        role="status"
         aria-busy="true"
         aria-label="Loading your orders"
       >

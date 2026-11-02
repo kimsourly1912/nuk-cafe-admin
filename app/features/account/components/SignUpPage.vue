@@ -21,7 +21,7 @@ const home = useAccountHome()
 const target = computed(() => accountRedirectTarget(route.query.redirect, home.value))
 
 const state = reactive({ name: '', email: '', password: '' })
-const { saving, formError, submit } = useAccountForm({ name: 'sign-up-name', email: 'sign-up-email', password: 'sign-up-password' })
+const { saving, formError, submit } = useAccountForm({ formId: 'sign-up-form', fields: ['name', 'email', 'password'] })
 const { signUp } = useAccountActions()
 
 const { account, known } = useAccountSession()
@@ -92,7 +92,6 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
         required
       >
         <UInput
-          id="sign-up-name"
           v-model="state.name"
           autocomplete="name"
           icon="i-lucide-user"
@@ -106,7 +105,6 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
         required
       >
         <UInput
-          id="sign-up-email"
           v-model="state.email"
           type="email"
           autocomplete="email"

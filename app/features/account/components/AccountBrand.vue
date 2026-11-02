@@ -10,7 +10,9 @@ const { name, logoUrl } = useCafe(() => splitTenantUrl(home.value)?.slug ?? null
 </script>
 
 <template>
+  <!-- No cafe, no brand: a link with only the placeholder logo had no name (html-validate wcag/h30). -->
   <NuxtLink
+    v-if="name"
     :to="home"
     class="flex min-w-0 items-center gap-2 font-semibold text-highlighted"
   >

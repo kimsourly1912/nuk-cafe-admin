@@ -177,7 +177,7 @@ Alerts (`UAlert`, `variant="subtle"`) are for states that need action or explain
 - **Focus:** never remove focus outlines. Nuxt UI's focus-visible rings are the style. After an action, focus goes somewhere sensible: the next row after a delete, the moved row after a reorder, the trigger after a dialog closes.
 - **Names:** every control has a visible label or `aria-label`; row actions name their record ("Actions for Oat milk").
 - **Structure:** landmarks from the dashboard shell, headings in order, lists as `ul`/`ol`, tables as `UTable` with headers.
-- **Announcements:** async results reach screen readers: toasts (`aria-live`), inline alerts, `role="status"` for "Saving…/Saved", `aria-live="polite"` for reorder positions.
+- **Announcements:** async results reach screen readers: toasts (`aria-live`), inline alerts, `role="status"` for "Saving…/Saved", `aria-live="polite"` for reorder positions. A loading skeleton named for screen readers is `role="status"` with `aria-busy="true"` and `aria-label="Loading …"`, like `ListSkeleton`: without a role, `aria-label` on a `div` is ignored (D256).
 - **Input:** everything works by keyboard; no hover-only information (tooltips duplicate something reachable); gestures have button alternatives ([page-patterns → Gestures](./page-patterns.md#7-gestures)).
 - **Reflow and zoom:** content works at 320 CSS px wide and at 200% text zoom without two-dimensional scrolling ([checklist](./ui-review-checklist.md)).
 

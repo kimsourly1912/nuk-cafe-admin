@@ -2,6 +2,15 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## The e2e suite validates the server-rendered pages' HTML (D256, 2026-11-02)
+Branch `claude/zen-davinci-hgbbfz`, restarted from `main` at `cd80f24` after PR #246 (staging deploy green). The owner chose D255's proposal. [Decision](decisions.md#d256-the-e2e-suite-validates-the-server-rendered-pages-html-2026-11-02).
+
+- **Change:** `html-validate` 11.17.0 (exact pin; lockfile +78 lines) and `test/e2e/html-validity.test.ts` over the ten server-rendered page addresses (`standard`, `a11y`, `document`; `require-sri` off). Presets compared on the real pages first: `recommended`'s extra rules fire only on Nuxt UI's and Nuxt's own markup.
+- **Fixed:** the account forms' labels in the server's HTML (plain fields without an own `id`; `useAccountForm({ formId, fields })` finds a field by `name`), `AccountBrand` without a cafe (nothing instead of a nameless link; the phone bar's light/dark button `ms-auto`), `role="status"` on eight labelled loading skeletons, the menu's header cafe name as the page's `h1`. Forms edge case 35, ui.md → Accessibility, development guide → Tests.
+- **Guard checked:** with the app fixes stashed the test failed on 9 of 10 pages (every finding above; `/` was already clean); with them, 10/10.
+- **Evidence (2026-11-02, cloud Linux, Node 24.22.1, pnpm 12.15.0, Google Chrome):** `pnpm lint`, `pnpm typecheck` clean; `pnpm test:unit` 2421 passed, 1 skipped; `pnpm audit --audit-level high` unchanged (15 low/moderate). Full `pnpm test:e2e` (3 workers): 812 passed, 1 failed: `shop-account` "a breached password" (this session's proxy refuses `api.pwnedpasswords.com`, the known open follow-up), which is also the test of password focus after a server error on sign-up: that path is verified by CI, not here. Email focus (`shop-account`) and the reset page's password focus (`password.test.ts`) passed.
+- **Next:** the planned tooling and its follow-ups are done. Back to account security step 5 (Switch person on the counter); left open: the menu's lazy-load candidates (measure first, D253 tools) and Wrangler's `Duplicate key "payload"` warning.
+
 ## Nuxt Hints tried in dev, not adopted (D255, 2026-11-02)
 Branch `claude/zen-davinci-hgbbfz`, restarted from `main` at `c1b901d` after PR #245 (staging deploy green). The last planned tooling step. Documentation only: the trial's install was removed. [Decision](decisions.md#d255-nuxt-hints-tried-in-dev-and-not-adopted-its-html-validation-goes-to-the-e2e-suite-instead-2026-11-02).
 

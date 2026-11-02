@@ -32,6 +32,7 @@ const steps = computed(() => (props.history ? timelineItems(props.history) : [])
       <div
         v-else-if="loading && !history"
         class="space-y-3"
+        role="status"
         aria-busy="true"
         aria-label="Loading the order"
       >
