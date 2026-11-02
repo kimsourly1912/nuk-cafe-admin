@@ -1,5 +1,6 @@
 import { and, asc, count, desc, eq, exists, gt, gte, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm'
 import type { AnyColumn, SQL } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/sqlite-core'
 import type { OrderSource } from '#shared/contracts/marketing'
 import type { CancelReason, OrderStatus, OrderType, PaymentMethod, QuotedModifier, ReturnMethod } from '#shared/contracts/orders'
 import { IN_PROGRESS_STATUSES } from '#shared/contracts/orders'
@@ -422,11 +423,26 @@ export function findExpiredUnpaid(db: Db, now: Date, limit: number): Promise<{ i
  * platform console's usage numbers, D142). Counts only: a super admin never sees the orders themselves.
  */
 export function orderActivity(db: Db, tenantIds: string[], since: Date): Promise<{ tenantId: string, recent: number, lastPlacedAt: Date | null }[]> {
-  return readInChunks(tenantIds, ids => db.select({
-    tenantId: orders.tenantId,
-    recent: sql<number>`sum(case when ${gte(orders.placedAt, since)} then 1 else 0 end)`.mapWith(Number),
-    lastPlacedAt: sql<Date | null>`max(${orders.placedAt})`.mapWith(orders.placedAt),
-  }).from(orders).where(inArray(orders.tenantId, ids)).groupBy(orders.tenantId))
+  if (!tenantIds.length) return Promise.resolve([])
+
+  // Drive from requested cafes rather than scanning every historical order. One JSON bind also
+  // stays within D1's parameter limit when a platform list contains many cafes.
+  const requested = sql`json_each(${JSON.stringify([...new Set(tenantIds)])}) as requested_tenants`
+  const requestedId = sql<string>`requested_tenants.value`
+  const recentOrders = alias(orders, 'recent_orders')
+  const latestOrders = alias(orders, 'latest_orders')
+  const latest = db.select({ placedAt: latestOrders.placedAt }).from(latestOrders)
+    .where(eq(latestOrders.tenantId, requestedId))
+    .orderBy(desc(latestOrders.placedAt))
+    .limit(1)
+
+  // Both subqueries use orders_tenant_placed_idx: range count and newest indexed row.
+  // Cafes with no order still have no result row, matching the previous group-by query.
+  return db.select({
+    tenantId: requestedId,
+    recent: db.$count(recentOrders, and(eq(recentOrders.tenantId, requestedId), gte(recentOrders.placedAt, since))),
+    lastPlacedAt: sql<Date | null>`(${latest})`.mapWith(orders.placedAt),
+  }).from(requested).where(exists(latest))
 }
 
 /** Across cafes: of these cafes, those with an order placed at or after `since` (`orders_tenant_placed_idx`: a range per cafe). */
