@@ -1175,7 +1175,7 @@ The server follows the **server standard** ([docs/server/](server/README.md), D4
 
 | # | Step | Done when |
 |---|---|---|
-| 0.1 ✅ | **Clean stale docs:** fold the few platform facts from `plans/fullstack-backend.md` into `docs/server/` and delete it; replace the system blueprint's data map, API shape and build order sections with links; mark `reference/api.md` as "current code, being replaced" | No doc tells an agent to build the old design |
+| 0.1 ✅ | **Clean stale docs:** fold the old platform facts into the current server standard and replace the old design references in the system blueprint with links to the live architecture docs, so no document still points an agent toward the superseded backend design | No doc tells an agent to build the old design |
 | 0.2 ✅ | **Auth spike** (throwaway branch, ½ day): `admin` + `organization` plugins with access control | Report: plugin tables are generated into migrations; `userHasPermission` / `hasPermission` work from a Nitro route; `createUser` can set `emailVerified` and `mustChangePassword`. Standard amended if anything differs |
 
 ### Phase 1: platform foundation
