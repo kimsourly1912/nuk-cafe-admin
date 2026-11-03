@@ -82,8 +82,14 @@ describe('Google accounts', () => {
     expect(flow.authorization.searchParams.get('redirect_uri')).toBe(SITE + '/api/auth/callback/google')
     expect(flow.authorization.searchParams.get('state')).toBeTruthy()
     expect(flow.authorization.searchParams.get('prompt')).toBe('select_account')
-    await expect(auth.api.signInSocial({ body: { provider: 'google', callbackURL: 'https://evil.example' }, headers: new Headers({ origin: SITE }) })).rejects.toThrow()
-    await expect(auth.api.signInSocial({ body: { provider: 'google', idToken: { token: 'forged' } } })).rejects.toThrow()
+    // Origin/callback checks run on HTTP requests. The trusted server API intentionally bypasses them.
+    const external = await auth.handler(new Request(SITE + '/api/auth/sign-in/social', {
+      method: 'POST',
+      headers: { origin: SITE, 'content-type': 'application/json' },
+      body: JSON.stringify({ provider: 'google', callbackURL: 'https://evil.example' }),
+    }))
+    expect(external.status).toBe(403)
+    await expect(auth.api.signInSocial({ body: { provider: 'google', idToken: { token: 'forged' } } })).rejects.toMatchObject({ body: { code: 'ID_TOKEN_NOT_SUPPORTED' } })
   })
 
   it('creates a verified customer, stores no Google bearer tokens, and reuses that account on return', async () => {
