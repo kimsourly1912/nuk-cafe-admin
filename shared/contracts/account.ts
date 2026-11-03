@@ -1,6 +1,11 @@
 import * as v from 'valibot'
 import { PASSWORD_MAX } from './identity'
 
+/** `GET /api/account/providers`: current configured providers, never credentials. */
+export interface AccountProviders {
+  google: boolean
+}
+
 /** A staff workspace the account may open: the admin app (D52) or the counter (D102). */
 export type Workspace = 'admin' | 'counter'
 

@@ -291,3 +291,5 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D258](decisions.md#d258-auth-pages-share-one-identity-boundary-and-stable-session-states-2026-11-02) | Auth pages share one identity boundary and stable session states, 2026-11-02 |
 
 | [D259](decisions.md#d259--google-creates-customer-accounts-without-implicit-linking-2026-11-03) | Google creates customer accounts without implicit linking, 2026-11-03 |
+
+| [D260](decisions.md#d260--verified-same-email-google-sign-in-reuses-the-account-2026-11-03) | Verified same-email Google sign-in reuses the account; D259 linking correction |

@@ -85,7 +85,7 @@ export default async function ({ provide }: TestProject) {
 
   const port = await freePort()
   const host = `http://127.0.0.1:${port}`
-  const server = spawn(process.execPath, ['.output/server/index.mjs'], {
+  const server = spawn(process.execPath, ['--import', join(rootDir, 'test/e2e/support/fake-password-ranges.mjs'), '.output/server/index.mjs'], {
     cwd: rootDir,
     // The Sample data page (D94) is on, like local and staging, so its tests can reach it.
     env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', NUXT_PUBLIC_SAMPLE_DATA_ENABLED: 'true', NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT: 'Test', NUXT_QR_SECRET: E2E_QR_SECRET,

@@ -43,6 +43,7 @@ Routes are Nuxt file routes, **unversioned** (the apps deploy together with the 
 
 | Surface | Caller | Auth | Examples |
 |---|---|---|---|
+| `/api/account/providers` (platform) | anyone | none; no-store, public rate limit | current configured Google availability; boolean only, no credentials or tenant data (D260) |
 | `/api/auth/**` (platform) | anyone | Better Auth owns it | sign-up, sign-in, sign-out, verify email, reset password |
 | `/api/tables/{token}` (platform) | anyone | none; read-only | a scanned table QR: the table, branch and cafe (D140; a printed code names no cafe) |
 | `/api/cafes/{slug}` (platform) | anyone | none; read-only | a cafe's name, logo and status, paused cafes too (D143): the account pages have no cafe in their address, and a paused cafe's page names it |

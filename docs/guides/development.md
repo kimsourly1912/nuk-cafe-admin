@@ -63,6 +63,9 @@ Commit messages: say what changed in the subject (`Add cross-tab logout`, `Fix o
 
 ## Tests
 
+The e2e server alone loads `test/e2e/support/fake-password-ranges.mjs` via Node's `--import` (D260). Requests to the external password-range host receive a padded zero-count fixture inside the process; no test password hash prefix leaves the runner. This keeps reset/sign-up journeys offline and reproducible. Negative/failed breach-check UI and server cases retain their explicit mocks. The production app and its breach checks do not load this fixture.
+
+
 `vitest.config.ts` projects:
 - **unit** (`test/unit`, `app/features/*/tests`): pure logic in Node: engines, form schemas and mappings.
 - **server** (`server/features/*/tests`, shared utils in `server/tests`): services against an in-memory SQLite database built from the checked-in migrations, foreign keys on (D42). The project's global setup runs the migrations once per run and `createTestDb()` replays a dump of the result (schema and rows, ~14 ms instead of ~230 ms, D174); `test-db.test.ts` checks the dump equals a migrated database. Tests of one migration use `createTestClient()` + `applyMigration()`. Both close their database after the test that opened it, or after the file when it was opened in `beforeAll` (`server/tests/support/setup.ts`): libsql crashes the worker when it frees one left open (D176). A test whose own work is heavy (data at the contracts' limits, a whole sample menu, migrations replayed, several password hashes) and takes over ~1 s idle gets the `slow` tag (`{ tags: ['slow'] }` on the test or describe, or `// @module-tag slow` atop the file): 60 s instead of 5 s, skipped by `test:fast` (D175). A slow import or setup gets fixed, not tagged.

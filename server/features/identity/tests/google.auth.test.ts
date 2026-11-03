@@ -6,6 +6,7 @@ import * as authSchema from '#auth/schema'
 import { customerProfiles } from '#server/features/customers/customers.schema'
 import { outboxMessages } from '#server/features/platform/platform.schema'
 import { orders } from '#server/features/orders/orders.schema'
+import { accountProviders } from '#server/features/identity/identity.providers'
 import { identityAuthOptions } from '#server/features/identity/identity.auth'
 import { createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { sessionHeaders, TEST_SITE as SITE } from '#server/tests/support/auth'
@@ -77,7 +78,12 @@ describe('Google accounts', () => {
   it('is off without the rollout flag or either credential', () => {
     for (const settings of [undefined, { ...google, enabled: false }, { ...google, clientId: '' }, { ...google, clientSecret: '' }]) {
       expect(identityAuthOptions({ db, google: settings }).socialProviders).toEqual({})
+      expect(accountProviders(settings)).toEqual({ google: false })
     }
+  })
+
+  it('exposes only availability, never private provider settings', () => {
+    expect(accountProviders(google)).toEqual({ google: true })
   })
 
   it('starts a state-bound Google redirect and rejects direct ID-token sign-in', async () => {
@@ -139,17 +145,69 @@ describe('Google accounts', () => {
     expect(await db.select().from(customerProfiles)).toHaveLength(0)
   })
 
-  it('never attaches Google to an existing same-email password account, verified or unverified', async () => {
+  it('reuses a verified same-email password account without changing its identity or cafe access', async () => {
+    await mockGoogle()
+    const password = 'existing long password'
+    const created = await auth.api.signUpEmail({ body: { email, name: 'Existing Person', password } })
+    await db.update(authSchema.user).set({ emailVerified: true }).where(eq(authSchema.user.id, created.user.id))
+    for (const tenantId of [TEST_TENANT, 'other-cafe']) {
+      await ensureTenant(db, tenantId)
+      await db.insert(authSchema.member).values({ id: newId(), organizationId: tenantId, userId: created.user.id, role: 'owner', createdAt: new Date() })
+    }
+    const memberships = await db.select().from(authSchema.member)
+    const first = await login()
+    expect(first.session?.user).toMatchObject({ id: created.user.id, name: 'Existing Person', email, emailVerified: true })
+    expect((await login()).session?.user.id).toBe(created.user.id)
+    expect((await auth.api.signInEmail({ body: { email, password } })).user.id).toBe(created.user.id)
+    expect(await db.select().from(authSchema.user)).toHaveLength(1)
+    expect(await db.select().from(authSchema.member)).toEqual(memberships)
+    const accounts = await db.select().from(authSchema.account)
+    expect(accounts.map(row => row.providerId).sort()).toEqual(['credential', 'google'])
+    expect(accounts.find(row => row.providerId === 'google')).toMatchObject({ userId: created.user.id, accessToken: null, refreshToken: null, idToken: null })
+  })
+
+  it('does not attach Google to an unverified local email or issue a session', async () => {
+    await mockGoogle()
+    await auth.api.signUpEmail({ body: { email, name: 'Existing Person', password: 'existing long password' } })
+    const result = await login()
+    expect(result.session).toBeNull()
+    expect(new URL(result.response.headers.get('location')!).searchParams.get('error')).toBe('account_not_linked')
+    expect(await db.select().from(authSchema.account).where(eq(authSchema.account.providerId, 'google'))).toHaveLength(0)
+    expect(await db.select().from(authSchema.user)).toHaveLength(1)
+  })
+
+  it.each([
+    { twoFactorEnabled: true },
+    { mustChangePassword: true },
+    { role: 'superadmin' },
+    { banned: true, banExpires: new Date(Date.now() + 86_400_000) },
+  ])('does not even link Google to a protected password account: %j', async (flags) => {
     await mockGoogle()
     const created = await auth.api.signUpEmail({ body: { email, name: 'Existing Person', password: 'existing long password' } })
-    for (const emailVerified of [false, true]) {
-      await db.update(authSchema.user).set({ emailVerified }).where(eq(authSchema.user.id, created.user.id))
-      const result = await login()
-      expect(result.session).toBeNull()
-      expect(new URL(result.response.headers.get('location')!).searchParams.get('error')).toBe('account_not_linked')
-      expect(await db.select().from(authSchema.account).where(eq(authSchema.account.providerId, 'google'))).toHaveLength(0)
-      expect(await db.select().from(authSchema.user)).toHaveLength(1)
-    }
+    await db.update(authSchema.user).set({ emailVerified: true, ...flags }).where(eq(authSchema.user.id, created.user.id))
+    await db.delete(authSchema.session).where(eq(authSchema.session.userId, created.user.id))
+    expect((await login()).session).toBeNull()
+    expect(await db.select().from(authSchema.account).where(eq(authSchema.account.providerId, 'google'))).toHaveLength(0)
+    expect(await db.select().from(authSchema.session)).toHaveLength(0)
+  })
+
+  it.each([
+    { localVerified: false, googleVerified: true, googleEmail: 'google@example.com' },
+    { localVerified: true, googleVerified: false, googleEmail: 'google@example.com' },
+    { localVerified: true, googleVerified: true, googleEmail: 'someone-else@example.com' },
+  ])('refuses explicit linking unless both sides verified the same email: %j', async (settings) => {
+    await mockGoogle()
+    const created = await auth.api.signUpEmail({ body: { email, name: 'Existing Person', password: 'existing long password' }, returnHeaders: true })
+    await db.update(authSchema.user).set({ emailVerified: settings.localVerified }).where(eq(authSchema.user.id, created.response.user.id))
+    verified = settings.googleVerified
+    email = settings.googleEmail
+    const headers = sessionHeaders(created.headers)
+    headers.set('origin', SITE)
+    const flow = await auth.api.linkSocialAccount({ body: { provider: 'google', callbackURL: SITE + '/sign-in' }, headers, returnHeaders: true })
+    const response = await callback({ authorization: new URL(flow.response.url!), headers: sessionHeaders(flow.headers) })
+    expect(new URL(response.headers.get('location')!).searchParams.has('error')).toBe(true)
+    expect(await db.select().from(authSchema.account).where(eq(authSchema.account.providerId, 'google'))).toHaveLength(0)
+    expect(await db.select().from(authSchema.user)).toHaveLength(1)
   })
 
   it('lets a Google-only customer set a password through the existing reset-email flow', async () => {

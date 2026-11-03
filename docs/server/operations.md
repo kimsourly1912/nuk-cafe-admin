@@ -126,6 +126,8 @@ Nobody types passwords into a deployed database: Better Auth stores them hashed 
 
 ## Configuration
 
+Google (D259/D260): `NUXT_GOOGLE_AUTH_CLIENT_ID` and `NUXT_GOOGLE_AUTH_CLIENT_SECRET` are private Worker secrets. The public `NUXT_PUBLIC_GOOGLE_AUTH_ENABLED` flag is declared on in staging after the owner configured it; production remains off by default. Dashboard-only vars are not durable across a Wrangler deploy. To roll staging back, set the flag false immediately and change both its staging Nuxt default and declared Worker variable to false before the next deploy. No provider is registered without both private credentials. [Exact callbacks and verification](../plans/google-auth.md).
+
 Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudflare secrets, never committed. `.env.example` lists every name.
 
 | Variable | Purpose | Local | Staging / production |
