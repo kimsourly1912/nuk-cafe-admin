@@ -2883,3 +2883,14 @@ This is a narrow exception to preferring builder operators for every expressible
 **Implementation choice:** use Better Auth 1.7.7's Google provider with the normal same-tab authorization-code/state flow, an initially disabled flag and environment-specific private credentials. Disable all provider linking and direct ID-token sign-in. Require verified Google email. Refuse OAuth session creation for two-step, temporary-password and platform-team accounts, because the installed twoFactor plugin challenges only credential sign-ins. Keep token material out of the account table; no profile photos or new dependency/schema/CSP changes. New Google users set a password via the existing reset-email flow before password-confirmed security/deletion actions.
 
 **Boundary:** no change to cafe access, money, tenant profiles or guest-order-transfer rules. Not deployed or real-provider verified. [Plan/setup/evidence](plans/google-auth.md).
+
+
+## D260 — Verified same-email Google sign-in reuses the account (2026-11-03)
+
+**Owner correction:** after staging setup, the owner expects an existing Gmail account to sign in through Google instead of seeing "account already exists". This supersedes only D259's no-link policy.
+
+**Choice:** enable Better Auth 1.7.7 linking with verified local email required, verified Google email, different-email linking off, no trusted-provider bypass and no profile overwrite. Keep the account ID, local password and every cafe's membership. Refuse linking before any provider binding is created for unverified local email, two-step, temporary-password, superadmin or actively banned accounts; retain the session-create guard for existing bindings. An unverified local email signs in with its password and verifies first. This avoids pre-registration account takeover. Native authorization code/state/cookie handling and token removal remain unchanged.
+
+**Reported UI issues:** popup styling and disappearing Google after sign-out require reproduction, separately from the linking policy. Add enabled-provider browser regressions instead of relying on disabled-rollout tests. The owner clarified that the chooser is Google's and the missing button leaves a normal password form. Fresh no-store server availability, checked on every account-page entry, replaces reliance on the tab's bootstrap flag. This public configuration read survives identity resets; server provider gating remains authoritative. No chooser-layout repair, deployment or production activation is claimed. [Setup and evidence](plans/google-auth.md#d260-staging-feedback-and-reproduction).
+
+D260 verification boundary: the e2e server preloads an offline password-range fixture so public fixture-password hash prefixes stay inside the runner and recovery flows do not depend on an external service. Only the spawned test server loads it. This resolves the existing Have I Been Pwned test-isolation follow-up; production checks remain intact.

@@ -52,7 +52,7 @@ describe('public API rate limits (D121)', () => {
   it('the quote rule comes before the general prefix, so it wins over it', () => {
     const prefixes = RATE_LIMIT_RULES.map(rule => rule.prefix)
     expect(prefixes.indexOf('/api/public/checkout/quote')).toBeLessThan(prefixes.indexOf('/api/public/'))
-    expect(prefixes.every(prefix => prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/', '/api/client-errors', '/api/password-ranges/', '/api/shop/orders', '/api/me/delete-account', '/api/me/confirm'].includes(prefix))).toBe(true)
+    expect(prefixes.every(prefix => prefix.startsWith('/api/public/') || ['/api/tables/', '/api/cafes/', '/api/client-errors', '/api/password-ranges/', '/api/account/providers', '/api/shop/orders', '/api/me/delete-account', '/api/me/confirm'].includes(prefix))).toBe(true)
   })
 
   it('deleting an account has its own small limit (D237); only its POST counts', async () => {

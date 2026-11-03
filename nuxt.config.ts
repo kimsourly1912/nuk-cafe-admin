@@ -191,7 +191,7 @@ export default defineNuxtConfig({
       },
     },
     staging: {
-      runtimeConfig: { humanCheck: { enabled: true }, public: { humanCheck: { enabled: true, siteKey: '0x4AAAAAAFm5caeAd9ORYnJa' } } },
+      runtimeConfig: { humanCheck: { enabled: true }, public: { googleAuth: { enabled: true }, humanCheck: { enabled: true, siteKey: '0x4AAAAAAFm5caeAd9ORYnJa' } } },
       // `--envName staging` replaces `$production` (one environment block applies), so the security
       // headers are repeated here.
       routeRules: deployedSecurityRules(),
@@ -209,6 +209,8 @@ export default defineNuxtConfig({
             // Public, not secret: Better Auth's base URL and the only trusted origin.
             vars: {
               NUXT_PUBLIC_SITE_URL: STAGING.siteUrl,
+              // Staging is configured by the owner. Keep its public rollout flag on redeploy.
+              NUXT_PUBLIC_GOOGLE_AUTH_ENABLED: 'true',
               NUXT_HUMAN_CHECK_ENABLED: 'true',
               NUXT_PUBLIC_HUMAN_CHECK_ENABLED: 'true',
               NUXT_PUBLIC_HUMAN_CHECK_SITE_KEY: '0x4AAAAAAFm5caeAd9ORYnJa',

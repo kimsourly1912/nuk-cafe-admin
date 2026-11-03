@@ -4,7 +4,7 @@ Snapshot reviewed against main `f2978f7`, 2026-11-01. Read only when resuming or
 
 ## Waiting on the owner
 
-- **Draft: Google account integration (D259),** [PR #255](https://github.com/kimsourly1912/nuk-cafe-admin/pull/255), branch `codex/google-account-auth`. Owner chose no linking to existing password accounts. Disabled pending credentials, final CI and real-provider staging verification. Resumed local lint/typecheck and 2,477 unit/server tests passed (1 skipped); Google 17/17 and four guard-mutation checks passed. Test-mode origin-check fixture repaired; fresh audit/network and local browser availability remain limited. [Setup and checks](plans/google-auth.md).
+- **Google staging follow-up (D260):** PR #255 merged as `0e447d9` with green CI; staging deployment passed. Owner configured credentials and reported partial success, popup styling, Google disappearing after sign-out and unwanted same-email refusal. Branch `codex/google-auth-staging-fixes` changes linking for verified same-email accounts with protected-account safeguards and adds enabled-provider browser reproductions. Fresh server availability addresses missing Google on navigation; Google chooser styling remains unconfirmed. Local unit/server 2,486 passed/1 skipped; focused browser 54/54 passed; full browser run stopped at 60 passed/2 timeouts. No follow-up merged or deployed. [Setup and checks](plans/google-auth.md).
 
 - **PR #253: D1 backup export repair, production verification pending.** Corrected the polling request against the API schema/Wrangler, kept nested completion parsing and added malformed-response/interruption/synthetic restore regressions. Local pnpm checks are blocked by Corepack permissions/network; see the repair CI evidence and [progress](progress.md#d1-backup-export-contract-repair-pr-253-2026-11-03). Do not deploy or trigger without owner approval. A real encrypted R2 copy, full decryption and isolated test D1 restore are still required.
 
@@ -34,7 +34,7 @@ Each is its own step and branch.
 
 - **Customer order index (performance):** PR #196 (`orders_tenant_customer_status_due_idx`, migration 0050 on its branch) was closed unmerged as a ~9,000-line draft with conflicts; no reason recorded. The only customer index is still `orders_customer_idx (customer_id, placed_at)`. Ask the owner whether it was rejected before redoing it as a small PR; the next free migration number is `0054`.
 - **CSP `script-src 'unsafe-inline'`:** still pending a hash/nonce policy ([security → Request protection](server/security.md)). The customer menu is server-rendered and edge-cached (`swr`), so per-request nonces don't fit; a hash policy needs its own decision. Docs also disagree with the code on `Referrer-Policy` (`security.md` says `strict-origin-when-cross-origin`, `nuxt.config.ts` sends `strict-origin`).
-- **Upgrade follow-ups:** nuxt 4.6.3 in its own run; remove the four unused `simple-git` audit exemptions (D54) from `pnpm-workspace.yaml`; give the e2e server a stand-in for Have I Been Pwned (`shop-account` calls the real one).
+- **Upgrade follow-ups:** nuxt 4.6.3 in its own run; remove the four unused `simple-git` audit exemptions (D54) from `pnpm-workspace.yaml`.
 - **Audit N9 remainder:** expired Telegram/marketing link cleanup is bounded (500 per call) but still runs in the Connect request across cafes, not in scheduled maintenance. Low priority.
 - **Live updates:** other devices' changes show on tab return or navigation; pushes are planned ([plan](plans/live-updates.md)).
 

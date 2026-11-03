@@ -1,7 +1,6 @@
 <script setup lang="ts">
-defineProps<{ disabled: boolean }>()
+defineProps<{ enabled: boolean, disabled: boolean }>()
 defineEmits<{ click: [] }>()
-const enabled = useRuntimeConfig().public.googleAuth.enabled
 </script>
 
 <template>
@@ -29,14 +28,14 @@ const enabled = useRuntimeConfig().public.googleAuth.enabled
       </template>
     </UButton>
     <p class="text-sm text-muted">
-      Already have an account? Use your email and password. For a Google account, use
+      Google-only account? Use
       <ULink
         to="/forgot-password"
         class="text-primary"
       >
         Forgot password
       </ULink>
-      to set a password before using account security or deleting your account.
+      to set a password for account security or deletion.
     </p>
     <USeparator label="or use email" />
   </div>

@@ -35,9 +35,9 @@ export default defineNuxtPlugin((nuxtApp) => {
     toast.clear()
     resetMutationOutcomes()
 
-    // These three reads are public and identical for every identity. Clearing them emptied the
+    // These reads are public and identical for every identity. Clearing menu reads emptied the
     // menu after public sign-out/erasure, when protected queries deliberately do not refetch.
-    const publicKey = (key: string) => key.startsWith('cafe:profile:') || key === 'menu:branches' || key.startsWith('menu:public:')
+    const publicKey = (key: string) => key.startsWith('cafe:profile:') || key === 'menu:branches' || key.startsWith('menu:public:') || key === 'account:providers'
     const keys = Object.keys(nuxtApp.payload.data).filter(key => /^[\w-]+:/.test(key) && !publicKey(key))
     if (!keys.length) return
     clearNuxtData(keys)

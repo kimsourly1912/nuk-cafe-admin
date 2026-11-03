@@ -16,8 +16,10 @@ import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
 import GoogleSignInButton from './GoogleSignInButton.vue'
+import { useAccountProviders } from '../composables/useAccountProviders'
 
 const route = useRoute()
+const { googleEnabled, known: providersKnown, error: providersError, refresh: refreshProviders } = useAccountProviders()
 const home = useAccountHome()
 const target = computed(() => accountRedirectTarget(route.query.redirect, home.value))
 
@@ -40,7 +42,7 @@ watch([known, account], async ([isKnown, current]) => {
     }
   }
 }, { immediate: true })
-const loading = computed(() => (!known.value && !sessionError.value && !saving.value) || leaving.value)
+const loading = computed(() => (!known.value && !sessionError.value && !saving.value) || (!providersKnown.value && !providersError.value) || leaving.value)
 
 /** The password the server refused as breached, for the checklist. */
 const refusedPassword = ref<string>()
@@ -108,7 +110,14 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
       @error="focusFirstInvalid"
     >
       <FormErrorAlert :message="formError" />
+      <ApiErrorAlert
+        v-if="providersError"
+        title="Could not check Google sign-in"
+        :error="providersError"
+        @retry="refreshProviders()"
+      />
       <GoogleSignInButton
+        :enabled="googleEnabled"
         :disabled="saving"
         @click="onGoogleSignIn"
       />

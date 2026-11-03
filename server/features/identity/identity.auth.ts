@@ -9,6 +9,8 @@ import { platformAc, platformRoles, tenantAc, tenantRoles } from './identity.per
 import { HUMAN_CHECK_HEADER, humanCheckAction } from '#shared/utils/human-check'
 import { verifyHumanCheck } from './human-check'
 import type { HumanCheckSettings } from './human-check'
+import { accountProviders } from './identity.providers'
+import type { GoogleAuthSettings } from './identity.providers'
 
 const MINUTE = 60
 const DAY = 24 * 60 * MINUTE
@@ -22,7 +24,7 @@ export interface IdentityAuthSettings {
   checkBreachedPasswords?: boolean
   humanCheck?: HumanCheckSettings
   /** Google is enabled only with both private credentials and the public rollout flag. */
-  google?: { enabled: boolean, clientId: string, clientSecret: string }
+  google?: GoogleAuthSettings
 }
 
 /** Queues an account email (verification, reset); `platform:deliver-outbox` sends it. */
@@ -47,7 +49,7 @@ const isSuperAdmin = (role: unknown) => typeof role === 'string' && role.split('
  */
 export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true, humanCheck, google }: IdentityAuthSettings) {
   return {
-    socialProviders: google?.enabled && google.clientId && google.clientSecret
+    socialProviders: google && accountProviders(google).google
       ? {
           google: {
             clientId: google.clientId,
@@ -61,8 +63,8 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
           },
         }
       : {},
-    // Owner choice (2026-11-03): existing password accounts are never silently linked.
-    account: { accountLinking: { enabled: false } },
+    // D260: one verified email can use either password or Google, on the same local account.
+    account: { accountLinking: { enabled: true, requireLocalEmailVerified: true, allowDifferentEmails: false, updateUserInfoOnLink: false, trustedProviders: [] } },
     databaseHooks: {
       session: {
         create: {
@@ -137,9 +139,19 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
     },
     user: {
       // This native validation seam covers creation AND returning OAuth identities.
-      validateUserInfo: ({ user, source }) => {
+      validateUserInfo: async ({ user, source }, ctx) => {
         if (source.oauth?.providerId === 'google' && user.emailVerified !== true) {
           return { error: 'google_email_unverified', errorDescription: 'Google must verify your email first.' }
+        }
+        if (source.oauth?.providerId === 'google' && source.action === 'link-account') {
+          const stored = user.id ? await ctx.context.internalAdapter.findUserById(user.id) : null
+          const flags = stored as { emailVerified?: boolean, twoFactorEnabled?: boolean, mustChangePassword?: boolean, role?: string, banned?: boolean, banExpires?: Date | null } | null
+          // Refuse before creating the provider binding, as well as before issuing a session.
+          if (!flags?.emailVerified) return { error: 'account_not_linked', errorDescription: 'Verify your account email before using Google.' }
+          if (flags.twoFactorEnabled || flags.mustChangePassword || isSuperAdmin(flags.role)
+            || (flags.banned && (!flags.banExpires || flags.banExpires.getTime() > Date.now()))) {
+            return { error: 'google_password_required', errorDescription: 'Use email and password to sign in to this account.' }
+          }
         }
       },
       additionalFields: {

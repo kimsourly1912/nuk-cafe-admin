@@ -143,6 +143,7 @@ export const NUK_PROFILE: CafeProfile = { slug: 'nuk', name: 'NUK Cafe', logoUrl
 export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   // Better Auth's client plugin reads the session once at startup; the app itself uses /admin/me.
   'GET /auth/get-session': () => null,
+  'GET /account/providers': () => ({ google: false }),
   'POST /auth/sign-out': () => ({ success: true }),
   // The new-password checklist's leaked-password check (D210): nothing leaked unless a test says so.
   'GET /password-ranges/{prefix}': () => ({ suffixes: [] }),
@@ -322,7 +323,7 @@ export async function mockApi(page: Page, handlers: Record<string, MockHandler> 
     const requestUrl = new URL(request.url())
     // Keys name the route without `/api` and the cafe's address (`/api/c/<slug>`, D140): 'GET /admin/me',
     // 'GET /public/menu', 'POST /auth/sign-out', 'GET /tables/{id}'.
-    const path = requestUrl.pathname.replace(/^\/api(?:\/c\/[^/]+)?(?=\/(?:admin|public|shop|counter|auth|tables|platform|cafes|me|client-errors|password-ranges)\b)/, '')
+    const path = requestUrl.pathname.replace(/^\/api(?:\/c\/[^/]+)?(?=\/(?:admin|public|shop|counter|auth|tables|platform|cafes|me|client-errors|password-ranges|account)\b)/, '')
     // A leaked-password range (D210) is named by its 5-character prefix, which may have no digit.
     const key = `${request.method()} ${path}`.replace(/^(GET \/password-ranges\/)[0-9A-F]{5}$/, '$1{prefix}')
     calls.push(key)
