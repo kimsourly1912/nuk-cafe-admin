@@ -2,6 +2,17 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+
+### Payment reliability audit and daily operations brief (2026-11-03)
+
+- Base main `82cbe189523950df5fd4f318711b5524c4fee969`; independent of backup PR #253. Main's latest CI/deploy run 41597701880 was successful at preparation. No open PRs besides #253 were found initially.
+- [Payment audit](reviews/payment-reliability-2026-11-03.md): traced cash USD/KHR, manual/automatic KHQR, leases, idempotency, atomic version guards, late payments, returns and tenant access. Confirmed no durable exception is written for a bank receipt that cannot become the order payment; polling depends on the open tablet panel. Existing order guards prevent a second local payment but cannot recover an abandoned bank observation.
+- Added four migration-backed SQLite tests with mocked bank answers: DB batch failure after bank confirmation and subsequent replay; cash commits while the check waits; expiry commits while the check waits; USD/KHR charges race for the same order. No new runtime safeguard, migration, API/permission/financial behavior or dependency change.
+- [Daily operations decision brief](plans/daily-operations-improvements.md): compared all five proposals with existing code and official Square/Toast approaches. Recommend elapsed prep/ready labels as the smallest low-risk UI slice; validate assisted walk-in demand. Inventory reservation/decrement and exact mixed-currency cash reconciliation are explicit approval gates. Received/change tender is currently UI-only, so sales totals cannot prove drawer contents.
+- The durable-recovery proposal includes discovery from persisted charges before bank lookup, tenant-scoped exception evidence, duplicate handling, owner resolution and external manual refund evidence. This is not an approved implementation plan or permission to auto-charge/refund, impersonate a cashier or change deadline/rate rules. Rate/deadline and in-flight permission changes remain reproduction tasks, clearly separated from confirmed recovery gaps.
+- Local pnpm checks are blocked before execution by Corepack cache EPERM; writable-cache bootstrap also needs blocked network access. Verification therefore uses the exact PR-head CI run, with results reported in the PR. These mocked-bank/database tests are not live Bakong, real fund movement, remote D1 or a process-kill test.
+- Next: review the audit, approve exception states/visibility/recovery horizon/return evidence before schema or financial workflow changes. No production deployment, merge, real payment or backup action performed.
+
 ## Platform Activity searchable filter accessibility (PR #250, 2026-11-03)
 Branch `claude/fix-ui-bug-2`; [PR #250](https://github.com/kimsourly1912/nuk-cafe-admin/pull/250). Follow-up to [D152](decisions.md#d152-the-ux-pack-undo-instead-of-asking-ctrlk-search-a-sold-out-switch-that-moves-at-once-an-accessibility-check-2026-10-10).
 

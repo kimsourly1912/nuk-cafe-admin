@@ -29,6 +29,11 @@ Use the returned line numbers and stop at the next heading at the same level. Fo
 
 The five guides preserve former root instructions: project identity/resource/catalog map, app feature boundaries, CRUD recipes, authentication/shell, and development/checks/conventions. They are mandatory for tasks in their scope, retrieved by section. API signatures and behavior live in the existing reference pages; update the owning page and affected guide summary together.
 
+## Current focused reviews
+
+- [Payment reliability audit](reviews/payment-reliability-2026-11-03.md): confirmed recovery gaps, current safeguards, evidence and owner approval gates.
+- [Daily cafe operations decision brief](plans/daily-operations-improvements.md): five proposals compared with current functionality and the smallest useful versions; planning only.
+
 ## Authority and history
 
 - **Always required:** root security, tenant, permission, data-integrity, session and architecture invariants; verification and documentation maintenance rules.
