@@ -37,7 +37,8 @@ const list = useTemplateRef<HTMLElement>('list')
 async function addRow() {
   state.modifiers.push({ name: '', price: undefined, isDefault: false })
   await nextTick()
-  list.value?.querySelectorAll<HTMLInputElement>('input[type="text"], input:not([type])')[state.modifiers.length - 1]?.focus()
+  // Only the name inputs: the price steppers are text inputs too, so counting them focused a random row.
+  list.value?.querySelectorAll<HTMLInputElement>('input[aria-label^="Add-on "]')[state.modifiers.length - 1]?.focus()
 }
 
 /** Removes an add-on; the ones after it move up, and their errors with them. */
@@ -88,7 +89,9 @@ async function onSubmit({ data }: FormSubmitEvent<ModifierGroupForm>) {
           />
         </UFormField>
 
-        <div class="flex flex-wrap items-end gap-3">
+        <!-- Two equal columns so labels, steppers and errors line up; "No limit" sits under "At most"
+             outside its field (inside, it would take the field's id, D165). -->
+        <div class="grid grid-cols-2 items-start gap-x-3 gap-y-2">
           <UFormField
             label="At least"
             name="minSelect"
@@ -98,36 +101,32 @@ async function onSubmit({ data }: FormSubmitEvent<ModifierGroupForm>) {
               :min="0"
               :max="MAX_MODIFIERS"
               aria-label="At least"
-              class="w-28"
+              class="w-full"
             />
           </UFormField>
-          <UFormField
-            label="At most"
-            name="maxSelect"
-          >
-            <UInputNumber
-              v-if="!noLimit"
-              :model-value="state.maxSelect ?? undefined"
-              :min="1"
-              :max="MAX_MODIFIERS"
-              aria-label="At most"
-              class="w-28"
-              @update:model-value="value => state.maxSelect = value ?? 1"
-            />
-            <p
-              v-else
-              class="flex h-8 items-center text-sm text-muted"
+          <div class="space-y-2">
+            <UFormField
+              label="At most"
+              name="maxSelect"
             >
-              No limit
-            </p>
-          </UFormField>
-          <UCheckbox
-            v-model="noLimit"
-            label="No limit"
-            class="pb-1.5"
-          />
+              <UInputNumber
+                :model-value="state.maxSelect ?? undefined"
+                :min="1"
+                :max="MAX_MODIFIERS"
+                :disabled="noLimit"
+                placeholder="No limit"
+                aria-label="At most"
+                class="w-full"
+                @update:model-value="value => state.maxSelect = value ?? 1"
+              />
+            </UFormField>
+            <UCheckbox
+              v-model="noLimit"
+              label="No limit"
+            />
+          </div>
         </div>
-        <p class="-mt-2 text-xs text-muted">
+        <p class="text-xs text-muted">
           {{ describeRules(state.minSelect, state.maxSelect) }}
         </p>
 
@@ -138,50 +137,55 @@ async function onSubmit({ data }: FormSubmitEvent<ModifierGroupForm>) {
         >
           <div
             ref="list"
-            class="space-y-2"
+            class="space-y-3"
           >
+            <!-- One card per add-on: the name and its remove button on top, price and pre-selected below
+                 on a phone; all in one line from `sm`. -->
             <div
               v-for="(row, i) in state.modifiers"
               :key="i"
-              class="flex items-start gap-2"
+              class="grid grid-cols-[1fr_auto] items-start gap-x-2 gap-y-3 rounded-lg border border-default bg-elevated/40 p-3 sm:grid-cols-[1fr_auto_auto] sm:border-0 sm:bg-transparent sm:p-0"
             >
-              <UFormField
-                :name="`modifiers.${i}.name`"
-                class="flex-1"
-              >
+              <UFormField :name="`modifiers.${i}.name`">
                 <UInput
                   v-model="row.name"
                   :aria-label="`Add-on ${i + 1}`"
+                  placeholder="e.g. Oat milk"
                   class="w-full"
                 />
               </UFormField>
-              <UFormField :name="`modifiers.${i}.price`">
-                <UInputNumber
-                  :model-value="row.price"
-                  :format-options="PRICE_FORMAT"
-                  :min="0"
-                  :step="0.05"
-                  placeholder="Free"
-                  :aria-label="`Price of add-on ${i + 1}`"
-                  class="w-28"
-                  @update:model-value="value => row.price = value ?? undefined"
-                />
-              </UFormField>
-              <!-- Its own field: inside the Add-ons field it took that field's id (every label ticked the
-                   first box) and turned red with the field's errors (D165, D166). -->
-              <UFormField :name="`modifiers.${i}.isDefault`">
-                <UCheckbox
-                  v-model="row.isDefault"
-                  label="Pre-selected"
-                  :aria-label="`Pre-select add-on ${i + 1}`"
-                  class="pt-1.5"
-                />
-              </UFormField>
+              <!-- Remove comes last in the DOM so Tab goes name → price → pre-selected → remove; the grid
+                   places it beside the name. -->
+              <div class="col-span-2 row-start-2 flex items-start gap-4 sm:col-span-1 sm:col-start-2 sm:row-start-1">
+                <UFormField :name="`modifiers.${i}.price`">
+                  <UInputNumber
+                    :model-value="row.price"
+                    :format-options="PRICE_FORMAT"
+                    :min="0"
+                    :step="0.05"
+                    placeholder="Free"
+                    :aria-label="`Price of add-on ${i + 1}`"
+                    class="w-32"
+                    @update:model-value="value => row.price = value ?? undefined"
+                  />
+                </UFormField>
+                <!-- Its own field: inside the Add-ons field it took that field's id (every label ticked the
+                     first box) and turned red with the field's errors (D165, D166). -->
+                <UFormField :name="`modifiers.${i}.isDefault`">
+                  <UCheckbox
+                    v-model="row.isDefault"
+                    label="Pre-selected"
+                    :aria-label="`Pre-select add-on ${i + 1}`"
+                    class="pt-1.5"
+                  />
+                </UFormField>
+              </div>
               <UButton
                 v-if="state.modifiers.length > 1"
-                icon="i-lucide-x"
-                color="neutral"
+                icon="i-lucide-trash-2"
+                color="error"
                 variant="ghost"
+                class="col-start-2 row-start-1 sm:col-start-3"
                 :aria-label="`Remove add-on ${i + 1}`"
                 @click="removeRow(i)"
               />

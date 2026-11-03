@@ -38,6 +38,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof schema>>)
         ref="form"
         :schema="schema"
         :state="state"
+        :validate-on="['input', 'change']"
         :disabled="turnOffTwoFactor.pending"
         @submit="onSubmit"
         @error="focusFirstInvalid"

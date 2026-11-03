@@ -322,6 +322,7 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
         label="Save changes"
         icon="i-lucide-save"
         :loading="saving"
+        :disabled="!unsaved.isDirty.value"
       />
     </BottomActionBar>
   </div>

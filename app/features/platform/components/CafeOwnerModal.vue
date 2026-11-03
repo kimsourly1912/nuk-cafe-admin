@@ -131,6 +131,7 @@ async function onSubmit({ data }: FormSubmitEvent<v.InferOutput<typeof ownerForm
         ref="form"
         :schema="ownerFormSchema"
         :state="state"
+        :validate-on="['input', 'change']"
         :disabled="saving"
         class="space-y-4"
         @submit="onSubmit"

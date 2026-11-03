@@ -50,6 +50,7 @@ async function onSubmit() {
         ref="form"
         :schema="notesFormSchema"
         :state="state"
+        :validate-on="['input', 'change']"
         :disabled="saving"
         class="space-y-4"
         @submit="onSubmit"
@@ -102,6 +103,7 @@ async function onSubmit() {
           form="notes-form"
           label="Save notes"
           :loading="saving"
+          :disabled="!unsaved.isDirty.value"
         />
       </div>
     </template>

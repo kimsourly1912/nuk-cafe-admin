@@ -70,6 +70,7 @@ const subscribers = (count: number | null) => (count === null ? '' : `${count.to
     :fullscreen="isCompact"
     :dismissible="false"
     :ui="{ body: 'space-y-5' }"
+    @back="close()"
     @update:open="(open: boolean) => { if (!open) close() }"
   >
     <template #body>

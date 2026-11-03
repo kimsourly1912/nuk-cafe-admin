@@ -132,6 +132,7 @@ useSubmitShortcut(save)
             form="table-form"
             :label="table ? 'Save' : 'Add table'"
             :loading="saving"
+            :disabled="Boolean(table) && !unsaved.isDirty.value"
           />
         </UTooltip>
       </div>
