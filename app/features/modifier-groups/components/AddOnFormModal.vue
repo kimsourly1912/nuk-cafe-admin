@@ -149,6 +149,7 @@ useSubmitShortcut(save)
             form="add-on-form"
             :label="modifier ? 'Save' : 'Add add-on'"
             :loading="saving"
+            :disabled="Boolean(modifier) && !unsaved.isDirty.value"
           />
         </UTooltip>
       </div>

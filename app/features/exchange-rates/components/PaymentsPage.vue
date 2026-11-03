@@ -109,6 +109,7 @@ const columns: TableColumn<ExchangeRate>[] = [
                 ref="form"
                 :schema="setExchangeRateSchema"
                 :state="state"
+                :validate-on="['input', 'change']"
                 :disabled="saving"
                 class="space-y-3"
                 @submit="save"

@@ -287,6 +287,7 @@ async function onSubmit({ data }: FormSubmitEvent<StaffForm>) {
             form="staff-form"
             :label="isEdit ? 'Save' : 'Add'"
             :loading="saving"
+            :disabled="isEdit && !unsaved.isDirty.value"
           />
         </UTooltip>
       </div>

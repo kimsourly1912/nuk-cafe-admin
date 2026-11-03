@@ -270,6 +270,19 @@ async function onSubmit() {
 - **Kept:** when the session ends on its own (`discard('session')`), for the same person.
 - **Only for long forms and never for secrets** (passwords, the Bakong token). Source: `app/utils/form-draft.ts` (the store, unit-tested), `useUnsavedChanges.ts` (`useStoredDraft`), `components/FormDraftAlert.vue`, `plugins/form-drafts.client.ts`.
 
+## Validation timing
+
+Every `UForm` sets `:validate-on="['input', 'change']"`. Nuxt UI's default is `['blur', 'change', 'input']`, so leaving an untouched required field would show "is required" before the person has tried anything; with this prop the required messages appear when the form is submitted, and a field already edited updates as it changes. A new form copies the examples below; a form without the prop is a bug.
+
+Exceptions, each for a reason in its own section (a server error must survive until the field is edited, D149): `BakongTokenModal`, `CafeCreatePage` and `CafeSupportOpenModal` use `['blur', 'change']`, and `TwoFactorCodeForm` uses `[]` (it validates on submit only). A new exception needs the same written reason.
+
+## The submit button
+
+- **An edit form's Save is disabled while nothing has changed**: `:disabled="!unsaved.isDirty.value"` (`isEdit && …` in a form that both creates and edits). An unchanged save would only send a request that bumps the version. `isDirty` is compared with the record as loaded, so a restored draft counts as a change, and it is `false` while saving (the button already shows `loading`).
+- **A create, confirm or destructive form's button stays enabled.** The schema already stops an empty submit before any request, and a disabled button hides why (the required messages appear on submit, see above), is skipped by Tab and does nothing on touch.
+- **Every submit button has `:loading="saving"`** and its `UForm` `:disabled="saving"`: that, not the pristine check, stops a double submit.
+- The `Cmd/Ctrl + Enter` shortcut (`useSubmitShortcut`) submits the form directly and does not read the button's `disabled`; a pristine edit form still validates and sends. Guard it in the form's `onSubmit` where that matters.
+
 ## `useFormErrorRecheck`
 
 Errors leave as soon as they're fixed (D166, [ui §17](./ui.md#forms-and-their-errors)). `UForm` checks only the field being edited, so an error another field caused stayed after that field fixed it. After every change, the fields that show an error **the schema gave** are checked again, silently: fixed ones clear, changed ones update. Nothing new appears on a field the person hasn't reached, and an error the server gave (`setErrors`) stays until its own field is edited.

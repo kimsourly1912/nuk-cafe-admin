@@ -62,6 +62,8 @@ For each screen and overlay, show and test the applicable [states](./page-patter
 - [ ] Load error with Retry; not found (detail routes)
 - [ ] Unauthorized / forbidden; offline
 - [ ] Saving (loading control, locked inputs), validation next to fields
+- [ ] Every `UForm` has `:validate-on="['input', 'change']"`: no error appears just because a field was left ([forms → Validation timing](./forms.md#validation-timing)).
+- [ ] An edit form's Save is disabled while unchanged (`!unsaved.isDirty.value`); a create or confirm form's button stays enabled ([forms → The submit button](./forms.md#the-submit-button)).
 - [ ] Errors: each leaves as soon as it's fixed, a rule across fields too (`useFormErrorRecheck`); a checkbox or switch inside a group's field has its own `UFormField` (no shared id, no borrowed red) ([ui §17](./ui.md#forms-and-their-errors))
 - [ ] A failed submit scrolls to and focuses the first invalid field, also one out of view: `@error="focusFirstInvalid"` on the `UForm` ([ui §17](./ui.md#forms-and-their-errors))
 - [ ] A page banner stays while its action is retried (cleared on success, a new answer or a changed page, never when the request starts), and its action buttons are disabled while in flight: no layout shift on press ([ui §17](./ui.md#page-banners-and-retries))

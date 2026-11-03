@@ -241,7 +241,7 @@ How controls behave, so every screen behaves the same. Each rule names what enfo
 
 ### Forms and their errors
 
-- **An error appears** when a field is left (blur) or the form is submitted; while typing in a field already left, it updates as you type (`validate-on` `input`, `change`).
+- **An error appears** when the field's value changes (typing, picking, ticking) or the form is submitted, **never merely because a field was left**. Tabbing through an empty field shows nothing; the required-field messages appear on submit. Every `UForm` sets `:validate-on="['input', 'change']"`: Nuxt UI's default also validates on `blur`, so a form without the prop shows errors the moment a field is left ([forms → Validation timing](./forms.md#validation-timing)).
 - **An error leaves the moment it's fixed, wherever the fix is.** A rule across fields (At most not below At least, two add-ons with one name, the two new passwords) clears when either field fixes it, and an error on a removed row goes with the row: every form calls `useFormErrorRecheck(form)` ([forms → Errors](./forms.md#useformerrorrecheck)). Fixing one field never shows new errors on fields not reached yet.
 - **A server's error on a field** (`setErrors`: a name already used) stays until that field is edited, or the form is submitted again.
 - **A removed or moved row takes its errors with it.** A row's error is named by its position (`values.2`), so removing a row must not leave the error for the row that moves into its place. Remove and move rows with `useFormRowErrors` ([forms → Rows and their errors](./forms.md#rows-and-their-errors), D171); a list that removes rows any other way is a bug.

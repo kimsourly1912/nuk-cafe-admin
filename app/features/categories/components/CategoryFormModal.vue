@@ -213,6 +213,7 @@ async function onSubmit({ data }: FormSubmitEvent<CategoryForm>) {
             form="category-form"
             :label="isEdit ? 'Save' : 'Create'"
             :loading="saving"
+            :disabled="isEdit && !unsaved.isDirty.value"
           />
         </UTooltip>
       </div>

@@ -145,6 +145,7 @@ const currencyItems: { label: string, value: KhqrCurrency }[] = [
       ref="form"
       :schema="khqrSettingsSchema"
       :state="state"
+      :validate-on="['input', 'change']"
       :disabled="saving"
       class="space-y-4"
       @submit="submit"

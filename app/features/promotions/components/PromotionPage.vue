@@ -14,6 +14,7 @@ import PromotionPostsCard from './PromotionPostsCard.vue'
 const props = defineProps<{ id: string }>()
 
 const tenantPath = useTenantPath()
+const { isCompact } = useLayoutContext()
 const today = localToday()
 const { data: promotion, error, refresh, loading } = usePromotion(props.id)
 const { data: results, error: resultsError, refresh: refreshResults } = usePromotionResults(props.id)
@@ -56,7 +57,8 @@ const more = computed<DropdownMenuItem[]>(() => {
         >
           <UButton
             v-if="promotion.phase === 'draft'"
-            label="Publish"
+            :label="isCompact ? undefined : 'Publish'"
+            aria-label="Publish"
             icon="i-lucide-send"
             :loading="publish.isPending(`promotion:${promotion.id}`)"
             :disabled="busy"
@@ -64,7 +66,8 @@ const more = computed<DropdownMenuItem[]>(() => {
           />
           <UButton
             v-if="promotion.phase !== 'ended'"
-            label="Edit"
+            :label="isCompact ? undefined : 'Edit'"
+            aria-label="Edit"
             icon="i-lucide-pencil"
             :color="promotion.phase === 'draft' ? 'neutral' : 'primary'"
             :variant="promotion.phase === 'draft' ? 'outline' : 'solid'"
@@ -73,7 +76,8 @@ const more = computed<DropdownMenuItem[]>(() => {
           />
           <UButton
             v-else
-            label="Run again"
+            :label="isCompact ? undefined : 'Run again'"
+            aria-label="Run again"
             icon="i-lucide-copy"
             :to="tenantPath(`/admin/promotions/new?copy=${promotion.id}`)"
           />
@@ -112,6 +116,13 @@ const more = computed<DropdownMenuItem[]>(() => {
       >
         <div class="min-w-0 space-y-6">
           <div class="space-y-1">
+            <!-- The navbar title is cut short on a phone: the full name leads the page. -->
+            <h1
+              v-if="isCompact"
+              class="text-lg font-semibold break-words text-highlighted"
+            >
+              {{ promotion.name }}
+            </h1>
             <div class="flex flex-wrap items-center gap-2">
               <UBadge
                 v-if="phase"

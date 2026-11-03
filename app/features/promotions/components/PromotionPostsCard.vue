@@ -79,14 +79,14 @@ function state(p: MarketingPost): { label: string, color: BadgeProps['color'], d
       <li
         v-for="p in posts"
         :key="p.id"
-        class="flex items-start gap-3 p-4 sm:px-6"
+        class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-3 gap-y-2 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:px-6"
         :class="isBusy(p.id) && 'opacity-50'"
       >
         <UIcon
           name="i-lucide-send"
           class="mt-0.5 size-5 shrink-0 text-muted"
         />
-        <div class="min-w-0 flex-1 space-y-1">
+        <div class="min-w-0 space-y-1">
           <div class="flex flex-wrap items-center gap-2">
             <span class="font-medium break-words text-highlighted">{{ p.channel.title }}</span>
             <UBadge
@@ -108,10 +108,13 @@ function state(p: MarketingPost): { label: string, color: BadgeProps['color'], d
         <UIcon
           v-if="isBusy(p.id)"
           name="i-lucide-loader-circle"
-          class="size-5 shrink-0 animate-spin text-muted"
+          class="col-start-2 size-5 shrink-0 animate-spin text-muted sm:col-start-3"
           aria-label="Working…"
         />
-        <template v-else>
+        <div
+          v-else
+          class="col-start-2 flex sm:col-start-3"
+        >
           <UButton
             v-if="p.url"
             label="View post"
@@ -140,7 +143,7 @@ function state(p: MarketingPost): { label: string, color: BadgeProps['color'], d
             :aria-label="`Cancel the post to ${p.channel.title}`"
             @click="cancel.execute(p)"
           />
-        </template>
+        </div>
       </li>
     </ul>
   </UCard>

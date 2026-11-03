@@ -369,6 +369,7 @@ async function onSubmit({ data }: FormSubmitEvent<AvailabilityRuleForm>) {
               form="availability-rule-form"
               :label="isEdit ? 'Save' : 'Create'"
               :loading="saving"
+              :disabled="isEdit && !unsaved.isDirty.value"
             />
           </UTooltip>
         </template>

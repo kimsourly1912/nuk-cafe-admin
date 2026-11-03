@@ -167,7 +167,7 @@ const zone = computed(() => data.value?.branch.timeZone ?? branch.value?.timeZon
           <SearchInput
             v-model="filters.search"
             placeholder="Order number"
-            class="min-w-0 flex-1 sm:w-40 sm:flex-none"
+            class="min-w-0 flex-1 sm:w-48 sm:flex-none"
           />
           <AppDrawer
             v-if="isCompact"
