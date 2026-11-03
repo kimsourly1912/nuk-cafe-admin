@@ -289,3 +289,5 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D257](decisions.md#d257-checkout-validates-its-read-state-inside-the-order-batch-2026-11-02) | Checkout validates its read state inside the order batch (2026-11-02) |
 
 | [D258](decisions.md#d258-auth-pages-share-one-identity-boundary-and-stable-session-states-2026-11-02) | Auth pages share one identity boundary and stable session states, 2026-11-02 |
+
+| [D259](decisions.md#d259--google-creates-customer-accounts-without-implicit-linking-2026-11-03) | Google creates customer accounts without implicit linking, 2026-11-03 |

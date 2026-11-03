@@ -2873,3 +2873,11 @@ This is a narrow exception to preferring builder operators for every expressible
 - **Preserved:** tenant authorization, platform/cafe separation, mandatory platform two-factor, session lengths, guest order ownership, refusal policy (D239/D241), full page loads between cafes, existing links and the owner's uncommitted Your cafes layout.
 - **Alternatives:** independent per-surface generations (missed customer/cross-tab changes); keeping a sticky `known` flag beside cleared query data (wrong initial states); generic request errors treated as signed out; waiting arbitrary delays or adding transitions to hide flashes; shared/serialized reset-token state. None addresses the lifecycle directly.
 - **Verification:** see [progress](progress.md#auth-page-state-consistency-fixes-d258-2026-11-02) and [the plan](plans/auth-page-state-consistency.md). No push, PR or deployment is authorized by this decision.
+
+## D259 — Google creates customer accounts without implicit linking (2026-11-03)
+
+**Owner:** add Google sign-in/sign-up; for the same-email question chose “Keep accounts protected”: existing password users keep their login method; explicit linking is deferred.
+
+**Implementation choice:** use Better Auth 1.7.7's Google provider with the normal same-tab authorization-code/state flow, an initially disabled flag and environment-specific private credentials. Disable all provider linking and direct ID-token sign-in. Require verified Google email. Refuse OAuth session creation for two-step, temporary-password and platform-team accounts, because the installed twoFactor plugin challenges only credential sign-ins. Keep token material out of the account table; no profile photos or new dependency/schema/CSP changes. New Google users set a password via the existing reset-email flow before password-confirmed security/deletion actions.
+
+**Boundary:** no change to cafe access, money, tenant profiles or guest-order-transfer rules. Not deployed or real-provider verified. [Plan/setup/evidence](plans/google-auth.md).

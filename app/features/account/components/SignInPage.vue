@@ -20,15 +20,24 @@ import AccountAside from './AccountAside.vue'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
+import GoogleSignInButton from './GoogleSignInButton.vue'
 
 const route = useRoute()
 const home = useAccountHome()
 const target = computed(() => accountRedirectTarget(route.query.redirect, home.value))
+// Display only our own bounded text; never render the provider's raw error/description.
+const googleError = computed(() => {
+  if (!route.query.error) return undefined
+  return route.query.error === 'account_not_linked'
+    ? 'This email already has an account. Sign in with your email and password.'
+    : 'Google sign-in did not finish. Try again, or use your email and password.'
+})
+const identity = useSessionIdentity()
 const afterReset = computed(() => route.query.reset === '1')
 
 const state = reactive({ email: '', password: '' })
 const { saving, formError, submit } = useAccountForm({ formId: 'sign-in-form', fields: ['email', 'password'] }, state)
-const { signIn, finishSignIn } = useAccountActions()
+const { googleSignIn, signIn, finishSignIn } = useAccountActions()
 const assertActive = useAuthCompletion()
 /** After a password that needs a code: the code step replaces the form. */
 const codeStep = ref(false)
@@ -54,6 +63,10 @@ watch([known, account], async ([isKnown, current]) => {
   if (isKnown && current && !saving.value && !leaving.value) {
     leaving.value = true
     try {
+      if (route.query.google === '1') {
+        await identity.change('login', 'account')
+        assertActive()
+      }
       await navigateTo(target.value, { replace: true })
     }
     finally {
@@ -62,6 +75,15 @@ watch([known, account], async ([isKnown, current]) => {
   }
 }, { immediate: true })
 const loading = computed(() => (!known.value && !sessionError.value && !saving.value) || leaving.value)
+
+async function onGoogleSignIn() {
+  if (saving.value) return
+  await submit(async () => {
+    const destination = await googleSignIn(route.query.redirect)
+    assertActive()
+    await navigateTo(destination, { external: true })
+  })
+}
 
 async function onSubmit(event: FormSubmitEvent<SignInForm>) {
   await submit(() => signInAnd(async () => {
@@ -145,7 +167,11 @@ function restart(message?: string) {
         icon="i-lucide-circle-check"
         title="Password changed. Sign in with your new password."
       />
-      <FormErrorAlert :message="formError" />
+      <FormErrorAlert :message="formError || googleError" />
+      <GoogleSignInButton
+        :disabled="saving"
+        @click="onGoogleSignIn"
+      />
       <!-- A full page load: the workspace reads its own session (D141). -->
       <UButton
         v-if="changePasswordAt && formError"

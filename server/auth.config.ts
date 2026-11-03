@@ -8,5 +8,9 @@ export default defineServerAuth(({ runtimeConfig, db }) => identityAuthOptions({
   // NuxtHub's database, the one Better Auth itself uses.
   db: db as Db,
   siteUrl: (runtimeConfig.public as { siteUrl?: string } | undefined)?.siteUrl || undefined,
+  google: {
+    ...(runtimeConfig.googleAuth as { clientId: string, clientSecret: string }),
+    enabled: (runtimeConfig.public.googleAuth as { enabled: boolean }).enabled,
+  },
   humanCheck: runtimeConfig.humanCheck as { enabled: boolean, secret: string },
 }))

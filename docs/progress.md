@@ -1508,3 +1508,9 @@ Business decisions the build still needs, with the step each blocks. Answered on
 
 - Windows, pnpm 12. Bash (Git Bash) and PowerShell are both available. **Python is not installed.**
 - `pnpm nuxt prepare` regenerates `.nuxt/`. Run it if lint or typecheck reports missing `.nuxt/*` files or new auto-imports aren't recognized.
+
+## Google account integration (D259, 2026-11-03)
+
+Branch `codex/google-account-auth`, based on main `82cbe189`. Google sign-in/sign-up uses Better Auth's state-bound redirect flow behind an off-by-default flag. Owner chose no linking to existing email/password accounts. Callback joins the shared identity boundary; protected accounts cannot get an OAuth session; Google tokens are removed from stored accounts. No migration/dependency/payment/permission change. [Setup, edge cases and hand checks](plans/google-auth.md).
+
+Evidence: current-main files inspected through connected GitHub (local git fetch blocked). Added migration-backed callback tests with mocked Google network and disabled-rollout/error-page e2e. pnpm could not start: default Corepack cache EPERM; writable cache download network EACCES. Local lint/typecheck/audit/unit/e2e and guard-mutation checks are **blocked, not passed**. CI pending; responsive screenshots and real Google staging checks pending. No merge/deployment/secret change. Staging activation needs Google OAuth client configuration.
