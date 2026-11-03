@@ -62,20 +62,23 @@ describe('the export', () => {
   }
   const body = (call: { init?: RequestInit }) => JSON.parse(String(call.init!.body)) as Record<string, unknown>
 
-  /**
-   * D1 as it behaves (D228): each answer names a new bookmark; asked about any other bookmark, it has
-   * forgotten the export. Ready after `readyAfter` questions.
-   */
+  /** Cloudflare's D1 polling contract: initial request gives a stable bookmark,
+   * later requests contain ONLY current_bookmark, and completion nests the signed URL. */
   function d1(readyAfter: number) {
-    let current = 'bm-0'
+    const bookmark = 'bm-export-1'
     let asked = 0
     return stub((_url, init) => {
-      const { current_bookmark: bookmark } = JSON.parse(String(init!.body)) as { current_bookmark?: string }
-      if (bookmark !== undefined && bookmark !== current) return exportAnswer({ error: 'Not currently exporting anything.' })
+      const payload = JSON.parse(String(init!.body)) as Record<string, unknown>
+      if (asked === 0) {
+        if (payload.output_format !== 'polling' || 'current_bookmark' in payload)
+          return exportAnswer({ status: 'error', error: 'Initial request incorrect' })
+      }
+      else if (payload.current_bookmark !== bookmark || 'output_format' in payload) {
+        return exportAnswer({ status: 'error', error: 'Polling request incorrect' })
+      }
       asked += 1
-      if (asked > readyAfter) return exportAnswer({ status: 'complete', signed_url: 'https://dump.example/x.sql' })
-      current = `bm-${asked}`
-      return exportAnswer({ at_bookmark: current, status: 'active' })
+      if (asked > readyAfter) return exportAnswer({ at_bookmark: bookmark, status: 'complete', result: { signed_url: 'https://dump.example/x.sql' } })
+      return exportAnswer({ at_bookmark: bookmark, status: 'active' })
     })
   }
 
@@ -87,15 +90,15 @@ describe('the export', () => {
     expect(body(calls[0]!)).toEqual({ output_format: 'polling' })
   })
 
-  it('asks again every second with the newest bookmark until D1 gives the download address', async () => {
+  it('polls with the same export bookmark and no output_format until D1 gives its nested download address', async () => {
     const { fetchFn, calls } = d1(3)
     const { waits, wait } = noWait()
     expect(await exportDump(fetchFn, env, { wait })).toBe('https://dump.example/x.sql')
     expect(calls.map(body)).toEqual([
       { output_format: 'polling' },
-      { output_format: 'polling', current_bookmark: 'bm-1' },
-      { output_format: 'polling', current_bookmark: 'bm-2' },
-      { output_format: 'polling', current_bookmark: 'bm-3' },
+      { current_bookmark: 'bm-export-1' },
+      { current_bookmark: 'bm-export-1' },
+      { current_bookmark: 'bm-export-1' },
     ])
     expect(waits).toEqual([1000, 1000, 1000])
   })
@@ -128,6 +131,7 @@ describe('the export', () => {
     await expect(exportDump(stub(() => exportAnswer({ status: 'error', error: 'Database too busy' })).fetchFn, env, noWait())).rejects.toThrow('D1\'s export failed: Database too busy')
     await expect(exportDump(stub(() => exportAnswer({ error: 'Not currently exporting anything.' })).fetchFn, env, noWait())).rejects.toThrow('Not currently exporting anything')
     await expect(exportDump(stub(() => exportAnswer({ status: 'error' })).fetchFn, env, noWait())).rejects.toThrow('without a reason')
+    await expect(exportDump(stub(() => exportAnswer({ status: 'complete' })).fetchFn, env, noWait())).rejects.toThrow('completed without a download address')
     await expect(exportDump(stub(() => exportAnswer({ status: 'active' })).fetchFn, env, noWait())).rejects.toThrow('no bookmark')
   })
 })
