@@ -4,7 +4,7 @@ Snapshot reviewed against main `f2978f7`, 2026-11-01. Read only when resuming or
 
 ## Waiting on the owner
 
-- **Draft: Google account integration (D259),** [PR #255](https://github.com/kimsourly1912/nuk-cafe-admin/pull/255), branch `codex/google-account-auth`. Owner chose no linking to existing password accounts. Disabled pending credentials, final CI and real-provider staging verification; local pnpm blocked by cache/network restrictions. [Setup and checks](plans/google-auth.md).
+- **Draft: Google account integration (D259),** [PR #255](https://github.com/kimsourly1912/nuk-cafe-admin/pull/255), branch `codex/google-account-auth`. Owner chose no linking to existing password accounts. Disabled pending credentials, final CI and real-provider staging verification. Resumed local lint/typecheck and 2,477 unit/server tests passed (1 skipped); Google 17/17 and four guard-mutation checks passed. Test-mode origin-check fixture repaired; fresh audit/network and local browser availability remain limited. [Setup and checks](plans/google-auth.md).
 
 - **PR #253: D1 backup export repair, production verification pending.** Corrected the polling request against the API schema/Wrangler, kept nested completion parsing and added malformed-response/interruption/synthetic restore regressions. Local pnpm checks are blocked by Corepack permissions/network; see the repair CI evidence and [progress](progress.md#d1-backup-export-contract-repair-pr-253-2026-11-03). Do not deploy or trigger without owner approval. A real encrypted R2 copy, full decryption and isolated test D1 restore are still required.
 

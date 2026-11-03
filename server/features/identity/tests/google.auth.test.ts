@@ -15,8 +15,12 @@ import { newId } from '#server/utils/ids'
 let db: Db
 const google = { enabled: true, clientId: 'test-client', clientSecret: 'test-secret' }
 function createAuth() {
+  const options = identityAuthOptions({ db, siteUrl: SITE, checkBreachedPasswords: false, google })
   return betterAuth({
-    ...identityAuthOptions({ db, siteUrl: SITE, checkBreachedPasswords: false, google }),
+    ...options,
+    // Better Auth skips origin checks in NODE_ENV=test unless explicitly enabled.
+    // Exercise production HTTP protections without changing process-wide test settings.
+    advanced: { ...options.advanced, disableOriginCheck: false, disableCSRFCheck: false },
     baseURL: SITE,
     secret: 'google-test-secret-at-least-32-characters',
     database: drizzleAdapter(db, { provider: 'sqlite', schema: authSchema }),
@@ -76,20 +80,47 @@ describe('Google accounts', () => {
     }
   })
 
-  it('starts a state-bound Google redirect and rejects external callbacks and direct ID-token sign-in', async () => {
+  it('starts a state-bound Google redirect and rejects direct ID-token sign-in', async () => {
     const flow = await start()
     expect(flow.authorization.origin).toBe('https://accounts.google.com')
     expect(flow.authorization.searchParams.get('redirect_uri')).toBe(SITE + '/api/auth/callback/google')
     expect(flow.authorization.searchParams.get('state')).toBeTruthy()
     expect(flow.authorization.searchParams.get('prompt')).toBe('select_account')
-    // Origin/callback checks run on HTTP requests. The trusted server API intentionally bypasses them.
+    await expect(auth.api.signInSocial({ body: { provider: 'google', idToken: { token: 'forged' } } })).rejects.toMatchObject({ body: { code: 'ID_TOKEN_NOT_SUPPORTED' } })
+  })
+
+  it.each([
+    ['callbackURL', 'INVALID_CALLBACK_URL'],
+    ['errorCallbackURL', 'INVALID_ERROR_CALLBACK_URL'],
+    ['newUserCallbackURL', 'INVALID_NEW_USER_CALLBACK_URL'],
+  ])('rejects an external %s through the real HTTP handler', async (field, code) => {
     const external = await auth.handler(new Request(SITE + '/api/auth/sign-in/social', {
       method: 'POST',
       headers: { 'origin': SITE, 'content-type': 'application/json' },
-      body: JSON.stringify({ provider: 'google', callbackURL: 'https://evil.example' }),
+      body: JSON.stringify({ provider: 'google', [field]: 'https://evil.example' }),
     }))
     expect(external.status).toBe(403)
-    await expect(auth.api.signInSocial({ body: { provider: 'google', idToken: { token: 'forged' } } })).rejects.toMatchObject({ body: { code: 'ID_TOKEN_NOT_SUPPORTED' } })
+    expect(await external.json()).toMatchObject({ code })
+    expect(external.headers.getSetCookie()).toHaveLength(0)
+  })
+
+  it('accepts a local HTTP callback and refuses an untrusted origin on a cookie-bearing request', async () => {
+    for (const origin of [SITE, 'https://evil.example']) {
+      const response = await auth.handler(new Request(SITE + '/api/auth/sign-in/social', {
+        method: 'POST',
+        headers: { 'origin': origin, 'content-type': 'application/json', 'cookie': 'browser=test' },
+        body: JSON.stringify({ provider: 'google', callbackURL: SITE + '/sign-in?google=1' }),
+      }))
+      if (origin === SITE) {
+        expect(response.status).toBe(200)
+        expect(new URL((await response.json()).url).origin).toBe('https://accounts.google.com')
+      }
+      else {
+        expect(response.status).toBe(403)
+        expect(await response.json()).toMatchObject({ code: 'INVALID_ORIGIN' })
+        expect(response.headers.getSetCookie()).toHaveLength(0)
+      }
+    }
   })
 
   it('creates a verified customer, stores no Google bearer tokens, and reuses that account on return', async () => {

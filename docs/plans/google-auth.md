@@ -49,7 +49,7 @@ Rollback: set the public flag false and redeploy/verify both pages hide the opti
 
 `test/e2e/google-account.test.ts` covers disabled rollout, fixed callback error copy and preserved return links. These checks do not prove Google's network or browser flow. Changed feature checks: this file and `test/e2e/shop-account.test.ts`; the full CI e2e suite must also pass.
 
-Local execution is currently blocked before pnpm starts (Corepack cache EPERM; a writable cache cannot download pnpm due to network EACCES). No passing local checks, guard mutation results, screenshots or real-provider evidence are claimed. Review CI before merging.
+The resumed environment can run local checks with Node 24.22.1 and Corepack pnpm 12.15.0. The Google server fixture explicitly sets `advanced.disableOriginCheck: false` and `disableCSRFCheck: false`: Better Auth 1.7.7 otherwise skips origin validation in test mode. This is test configuration only, not a change to production authentication. HTTP tests cover all three callback fields and cookie-bearing untrusted origins. Google server tests pass (17/17); mutation checks detect removal of linking, protected-session, verified-email and callback-origin protections. See the latest [progress entry](../progress.md#google-account-integration-d259-2026-11-03) for full-suite and CI evidence. Real Google staging and enabled-button visual checks remain pending.
 
 Before enabling staging, manually verify:
 - Both pages at 320, 390, 768, 1024, 1440 and 844×390, light/dark; keyboard navigation and disabled/double-click state.
