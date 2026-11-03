@@ -81,7 +81,7 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
       account: {
         create: {
           // Google is an identity provider, not a Google API integration. Keep no bearer tokens.
-          before: async (account) => account.providerId === 'google'
+          before: async account => account.providerId === 'google'
             ? { data: { ...account, accessToken: null, refreshToken: null, idToken: null } }
             : undefined,
         },
