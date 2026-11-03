@@ -50,8 +50,9 @@ export function missingSettings(env: BackupEnv): string[] {
 
 /**
  * The largest dump this Worker backs up. The dump and its encrypted copy are held in memory (R2's
- * upload needs the length first), well inside a Worker's 128 MB. A bigger database fails the run
- * loudly; then switch to a streamed upload (D225).
+ * upload needs the length first). This caps input size, not total peak allocation: chunk assembly
+ * and encryption also need memory, so headroom near the cap is not established. A larger dump
+ * fails loudly; then switch to a streamed upload (D225).
  */
 export const MAX_DUMP_BYTES = 40 * 1024 * 1024
 /** How long one call to Cloudflare, the dump download or Telegram may take. */
@@ -101,14 +102,20 @@ export function backupKeys(startedAt: number): string[] {
   return keys
 }
 
-interface ExportResult {
+interface ExportTask {
+  at_bookmark?: string
+  status?: string
   success?: boolean
-  errors?: { message?: string }[]
-  result?: { at_bookmark?: string, status?: string, signed_url?: string, error?: string }
+  result?: { signed_url?: string }
+  error?: string
 }
 
-/** One call to D1's export endpoint; throws on anything but a successful answer. */
-async function callExport(fetchFn: typeof fetch, env: BackupEnv, body: Record<string, unknown>): Promise<NonNullable<ExportResult['result']>> {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** One call to D1's export endpoint; validate the external JSON before using it. */
+async function callExport(fetchFn: typeof fetch, env: BackupEnv, body: Record<string, unknown>): Promise<ExportTask> {
   const api = env.CLOUDFLARE_API_URL ?? 'https://api.cloudflare.com/client/v4'
   const response = await fetchFn(`${api}/accounts/${env.D1_ACCOUNT_ID}/d1/database/${env.D1_DATABASE_ID}/export`, {
     method: 'POST',
@@ -117,19 +124,30 @@ async function callExport(fetchFn: typeof fetch, env: BackupEnv, body: Record<st
     signal: AbortSignal.timeout(TIMEOUT_MS),
   })
   const text = await response.text()
-  let answer: ExportResult | undefined
+  let answer: unknown
   try {
-    answer = JSON.parse(text) as ExportResult
+    answer = JSON.parse(text)
   }
   catch {
     answer = undefined
   }
-  if (!response.ok || !answer?.success || !answer.result) {
-    const reason = answer?.errors?.map(error => error.message).filter(Boolean).join('; ') || text.slice(0, ERROR_TEXT_LENGTH)
-    throw refusal(response.status, `D1's export answered HTTP ${response.status}: ${reason}`)
+  if (!response.ok || !isRecord(answer) || answer.success !== true || !isRecord(answer.result)) {
+    const errors = isRecord(answer) && Array.isArray(answer.errors) ? answer.errors : []
+    const reason = errors.filter(isRecord).map(error => error.message).filter(message => typeof message === 'string').join('; ') || text
+    throw refusal(response.status, `D1's export answered HTTP ${response.status}: ${reason.slice(0, ERROR_TEXT_LENGTH)}`)
   }
-  if (answer.result.error) throw new Error(`D1's export failed: ${answer.result.error.slice(0, ERROR_TEXT_LENGTH)}`)
-  return answer.result
+  const result = answer.result
+  if (typeof result.error === 'string' && result.error) throw new Error(`D1's export failed: ${result.error.slice(0, ERROR_TEXT_LENGTH)}`)
+  if (result.success === false) throw new Error('D1\'s export reported an unsuccessful task')
+  if ((result.success !== undefined && result.success !== true)
+    || (result.status !== undefined && typeof result.status !== 'string')
+    || (result.at_bookmark !== undefined && typeof result.at_bookmark !== 'string')
+    || (result.error !== undefined && typeof result.error !== 'string')
+    || (result.result !== undefined && !isRecord(result.result))
+    || (isRecord(result.result) && result.result.signed_url !== undefined && typeof result.result.signed_url !== 'string')) {
+    throw new Error('D1\'s export gave a malformed task')
+  }
+  return result as ExportTask
 }
 
 /** How often the export is asked again while D1 writes it. */
@@ -144,11 +162,9 @@ export interface ExportOptions {
 }
 
 /**
- * Exports the whole database and answers the dump's download address. As `wrangler d1 export`
- * does, it starts the export and asks again at once, each time with the newest bookmark, until D1
- * gives the address: D1 forgets an export nobody keeps asking about ("Not currently exporting
- * anything", D228), so the polling can't be spread over a step's retries, and a retry starts a new
- * export instead.
+ * Match the D1 export API schema and Wrangler: every request specifies output_format: polling;
+ * active responses give the export bookmark, and completion nests result.signed_url.
+ * Keep polling in one Workflow step; interruption or failure retries with a fresh export.
  */
 export async function exportDump(fetchFn: typeof fetch, env: BackupEnv, options: ExportOptions = {}): Promise<string> {
   const wait = options.wait ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)))
@@ -156,11 +172,16 @@ export async function exportDump(fetchFn: typeof fetch, env: BackupEnv, options:
   const deadline = now() + EXPORT_MAX_MS
   let result = await callExport(fetchFn, env, { output_format: 'polling' })
   for (;;) {
-    if (result.signed_url) return result.signed_url
+    if (result.status === 'complete') {
+      if (result.result?.signed_url?.trim()) return result.result.signed_url
+      throw new Error('D1\'s export completed without a download address')
+    }
     if (result.status === 'error') throw new Error('D1\'s export failed without a reason')
-    if (!result.at_bookmark) throw new Error('D1\'s export gave no bookmark')
+    if (result.status !== 'active') throw new Error('D1\'s export gave an unknown status')
+    if (!result.at_bookmark?.trim()) throw new Error('D1\'s export gave no bookmark')
     if (now() >= deadline) throw new Error(`D1's export wasn't ready after ${EXPORT_MAX_MS / 60_000} minutes`)
     await wait(EXPORT_POLL_MS)
+    if (now() >= deadline) throw new Error(`D1's export wasn't ready after ${EXPORT_MAX_MS / 60_000} minutes`)
     result = await callExport(fetchFn, env, { output_format: 'polling', current_bookmark: result.at_bookmark })
   }
 }
