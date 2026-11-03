@@ -4,6 +4,7 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as authSchema from '#auth/schema'
 import { customerProfiles } from '#server/features/customers/customers.schema'
+import { outboxMessages } from '#server/features/platform/platform.schema'
 import { orders } from '#server/features/orders/orders.schema'
 import { identityAuthOptions } from '#server/features/identity/identity.auth'
 import { createTestDb, ensureTenant, insertBranch, TEST_TENANT } from '#server/tests/support/db'
@@ -112,6 +113,21 @@ describe('Google accounts', () => {
       expect(await db.select().from(authSchema.account).where(eq(authSchema.account.providerId, 'google'))).toHaveLength(0)
       expect(await db.select().from(authSchema.user)).toHaveLength(1)
     }
+  })
+
+  it('lets a Google-only customer set a password through the existing reset-email flow', async () => {
+    await mockGoogle()
+    const first = await login()
+    await auth.api.requestPasswordReset({ body: { email, redirectTo: SITE + '/reset-password' } })
+    const [message] = await db.select().from(outboxMessages).where(eq(outboxMessages.kind, 'identity.reset-password'))
+    const link = new URL((message!.payload as { url: string }).url)
+    const token = link.searchParams.get('token') ?? link.pathname.split('/').pop()!
+    const password = 'a new local password for Google'
+    await auth.api.resetPassword({ body: { token, newPassword: password } })
+    const result = await auth.api.signInEmail({ body: { email, password } })
+    expect(result.user.id).toBe(first.session!.user.id)
+    const rows = await db.select().from(authSchema.account).where(eq(authSchema.account.userId, result.user.id))
+    expect(rows.map(row => row.providerId).sort()).toEqual(['credential', 'google'])
   })
 
   it('refuses an unverified Google email before creating a user', async () => {
