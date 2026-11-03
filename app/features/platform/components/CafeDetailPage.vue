@@ -505,7 +505,7 @@ const created = computed(() => cafe.value && formatDate(cafe.value.createdAt))
               icon="i-lucide-circle-pause"
               color="error"
               variant="outline"
-              class="shrink-0"
+              class="shrink-0 justify-center"
               :disabled="busy"
               @click="suspendModal.open({ cafe })"
             />

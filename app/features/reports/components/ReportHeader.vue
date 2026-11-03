@@ -52,8 +52,8 @@ function openReport(report: ReportPage) {
 const branchItems = computed(() => props.branches.map(b => ({ label: b.name, value: b.id })))
 
 const actions = computed<DropdownMenuItem[]>(() => [
-  ...(surface.exports ? [{ label: 'Download CSV', icon: 'i-lucide-download', disabled: props.downloading || !props.branch, onSelect: () => emit('download') }] : []),
   { label: 'Print', icon: 'i-lucide-printer', disabled: !props.branch, onSelect: () => emit('print') },
+  ...(surface.exports ? [{ label: 'Download CSV', icon: 'i-lucide-download', disabled: props.downloading || !props.branch, onSelect: () => emit('download') }] : []),
   ...(props.canSend && surface.exports ? [{ label: 'Send to Telegram', icon: 'i-lucide-send', disabled: !props.branch, onSelect: () => emit('send') }] : []),
 ])
 </script>

@@ -139,10 +139,11 @@ const problems = computed(() => {
             </p>
           </template>
           <div class="space-y-4">
-            <dl class="grid grid-cols-3 gap-3">
+            <dl class="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <StatCard
                 label="Waiting"
                 :value="String(health.outbox.waiting)"
+                class="col-span-2 sm:col-span-1"
               />
               <StatCard
                 label="Retrying"

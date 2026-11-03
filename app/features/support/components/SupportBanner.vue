@@ -24,7 +24,7 @@ async function leave() {
   <div
     v-if="user?.support"
     role="status"
-    class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-warning px-4 py-2 text-sm font-medium text-inverted print:hidden"
+    class="flex flex-col items-start gap-2 bg-warning px-4 py-2 text-sm font-medium text-inverted sm:flex-row sm:items-center sm:justify-center sm:gap-3 print:hidden"
     data-testid="support-banner"
   >
     <span>Platform support view: read-only until {{ formatShortDateTime(user.support.visitExpiresAt) }}. Nothing can be changed.</span>
@@ -40,7 +40,7 @@ async function leave() {
   <div
     v-else-if="user?.supportAllowedUntil"
     role="status"
-    class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-info/10 px-4 py-2 text-sm text-highlighted print:hidden"
+    class="flex flex-col items-start gap-1 bg-info/10 px-4 py-2 text-sm text-highlighted sm:flex-row sm:items-center sm:justify-center sm:gap-3 print:hidden"
     data-testid="support-allowed-banner"
   >
     <span>Platform support can look at this cafe until {{ formatShortDateTime(user.supportAllowedUntil) }}.</span>

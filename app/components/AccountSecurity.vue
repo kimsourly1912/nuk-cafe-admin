@@ -74,6 +74,11 @@ async function turnOff() {
         <h1 class="text-lg font-semibold">
           Account security
         </h1>
+        <!-- `data-color-mode`: the `auth` layout hides its corner button. -->
+        <UColorModeButton
+          data-color-mode
+          class="ms-auto"
+        />
       </div>
     </template>
 
@@ -144,13 +149,13 @@ async function turnOff() {
         <li
           v-for="device in devices"
           :key="device.id"
-          class="flex items-center gap-3 py-2"
+          class="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
         >
           <UIcon
             name="i-lucide-monitor-smartphone"
             class="size-5 shrink-0 text-muted"
           />
-          <div class="min-w-0 flex-1">
+          <div class="min-w-40 flex-1">
             <p class="truncate text-sm font-medium">
               {{ device.device }}
             </p>
@@ -161,6 +166,7 @@ async function turnOff() {
           <UBadge
             v-if="device.current"
             label="This device"
+            class="shrink-0 whitespace-nowrap"
             color="primary"
             variant="subtle"
           />
@@ -196,7 +202,6 @@ async function turnOff() {
       <UButton
         :label="backLabel"
         :to="backTo"
-        icon="i-lucide-arrow-left"
         color="neutral"
         variant="ghost"
         block

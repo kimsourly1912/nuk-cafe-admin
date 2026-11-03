@@ -120,7 +120,7 @@ describe('a cafe\'s owners', () => {
     // An account and a reason are required.
     await form.getByRole('button', { name: 'Add owner' }).click()
     await form.getByText('Choose an account').waitFor()
-    await form.getByText('Required').waitFor()
+    await form.getByText('Reason is required').waitFor()
     await chooseAccount(page, 'zoe', /zoe@example\.com/)
     await form.getByTestId('chosen-owner').getByText('Owns Tea Kiosk').waitFor()
     await form.getByLabel('Reason').fill('The owner asked by phone')

@@ -160,7 +160,7 @@ describe('an account\'s page', () => {
     await form.getByTestId('ownerless-warning').getByText(/Brown Bean keeps taking orders/).waitFor()
     // A reason is required.
     await form.getByRole('button', { name: 'Ban account' }).click()
-    await form.getByText('Required').waitFor()
+    await form.getByText('Reason is required').waitFor()
     await form.getByLabel('Reason').fill('Chargebacks')
     await form.getByRole('radio', { name: '7 days' }).check()
     const before = Date.now()
@@ -264,7 +264,7 @@ describe('an account\'s page', () => {
     const form = page.getByRole('dialog', { name: /Turn off two-step sign-in for Bea Brown/ })
     // A reason is required, and nothing is sent without one.
     await form.getByRole('button', { name: 'Turn off two-step sign-in' }).click()
-    await form.getByText('Required').waitFor()
+    await form.getByText('Reason is required').waitFor()
     expect(sent).toEqual([])
     await form.getByLabel('Reason').fill('Checked her ID at the cafe')
     await form.getByRole('button', { name: 'Turn off two-step sign-in' }).click()

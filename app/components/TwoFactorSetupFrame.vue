@@ -140,6 +140,11 @@ const savedCodes = ref(false)
             Protect your account with an authenticator app.
           </p>
         </div>
+        <!-- `data-color-mode`: the `auth` layout hides its corner button. -->
+        <UColorModeButton
+          data-color-mode
+          class="ms-auto"
+        />
       </div>
     </template>
 

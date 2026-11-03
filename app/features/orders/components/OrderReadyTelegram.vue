@@ -94,26 +94,28 @@ watch(() => alert.value?.status, (status) => {
 
     <div
       v-else
-      class="flex flex-wrap items-center gap-3"
+      class="space-y-3"
     >
-      <UIcon
-        name="i-lucide-bell"
-        class="size-5 shrink-0 text-muted"
-      />
-      <div class="min-w-0 flex-1">
-        <p class="text-sm font-medium text-highlighted">
-          Get a message when it's ready
-        </p>
-        <p class="text-sm text-muted">
-          On Telegram, from the cafe's bot.
-        </p>
+      <div class="flex items-start gap-3">
+        <UIcon
+          name="i-lucide-bell"
+          class="mt-0.5 size-5 shrink-0 text-muted"
+        />
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-highlighted">
+            Get a message when it's ready
+          </p>
+          <p class="text-sm text-muted">
+            On Telegram, from the cafe's bot.
+          </p>
+        </div>
       </div>
       <UButton
         label="Message me on Telegram"
         color="neutral"
         variant="outline"
         :loading="createLink.isPending(order.id)"
-        class="max-sm:w-full max-sm:justify-center"
+        block
         @click="ask"
       />
     </div>

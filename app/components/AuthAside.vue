@@ -20,7 +20,8 @@
  */
 import background from '~/assets/img/nuk-cafe-auth-background.png'
 
-defineProps<{ title: string, text: string }>()
+/** `colorMode: false`: the page's card has the light/dark button instead. */
+withDefaults(defineProps<{ title: string, text: string, colorMode?: boolean }>(), { colorMode: true })
 // Vite can resolve the client import to an absolute URL; SSR must use that same form.
 const backgroundUrl = new URL(background, useRequestURL().origin).href
 </script>
@@ -38,9 +39,15 @@ const backgroundUrl = new URL(background, useRequestURL().origin).href
     >
     <div class="absolute inset-x-0 top-0 h-full max-h-80 bg-default/50 mask-b-from-50% backdrop-blur-md" />
     <div class="relative space-y-6 p-6">
-      <div class="flex items-center justify-between gap-2">
+      <div
+        v-if="colorMode || $slots.default"
+        class="flex items-center justify-between gap-2"
+      >
         <slot />
-        <UColorModeButton class="ms-auto" />
+        <UColorModeButton
+          v-if="colorMode"
+          class="ms-auto"
+        />
       </div>
       <div class="space-y-2">
         <p class="text-3xl font-semibold text-highlighted">

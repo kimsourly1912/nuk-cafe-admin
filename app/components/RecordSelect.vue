@@ -7,6 +7,8 @@
  * are never filtered out. A fixed set the code defines (status, role, sort) stays a `USelect`.
  *
  * Attributes (`aria-label`, `placeholder`, `loading`, `disabled`, `multiple`, `size`, …) go to the select.
+ * The chosen row is highlighted and scrolled to when the menu opens, and shown in the primary color
+ * with its check mark.
  * Its trigger is a combobox, like `USelect`'s (D152): `aria-label` names it and the text on it is its
  * value. As a plain button, the shown value had to be part of its name (axe: label-content-name-mismatch).
  *
@@ -57,6 +59,13 @@ function selectedLabel(value: unknown): string {
   return values.map(one => props.items.find(item => item.value === one)?.label ?? '').filter(Boolean).join(', ')
 }
 
+/**
+ * The model holds a value but the menu's options are `{ label, value }` objects. The virtual list finds
+ * the chosen row by comparing the two, so without this nothing matches: on opening it highlights the
+ * first row, not the chosen one, and doesn't scroll to it.
+ */
+const sameValue = (option: unknown, value: unknown) => (option && typeof option === 'object' ? (option as RecordSelectItem).value : option) === value
+
 const searchTerm = ref('')
 const shown = computed<SelectMenuItem[]>(() => {
   const term = searchTerm.value.trim().toLocaleLowerCase()
@@ -78,7 +87,9 @@ const shown = computed<SelectMenuItem[]>(() => {
     :items="shown"
     value-key="value"
     ignore-filter
+    :by="sameValue"
     :content="contentProps"
+    :ui="{ itemLabel: 'group-data-[state=checked]:font-medium group-data-[state=checked]:text-primary' }"
     virtualize
     :search-input="{ placeholder: `Search ${noun}…` }"
   >

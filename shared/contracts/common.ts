@@ -39,8 +39,9 @@ export const idSchema = v.pipe(v.string(), v.uuid('Must be a valid id'))
 export const statusSchema = v.picklist(STATUSES, 'Must be ACTIVE or INACTIVE')
 export const versionSchema = v.pipe(v.number(), v.integer(), v.minValue(1))
 
-export const nameSchema = (max = 100) =>
-  v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(max, `Max ${max} characters`))
+/** `label` names the field in its empty message ("Reason is required"); without it, "Required". */
+export const nameSchema = (max = 100, label?: string) =>
+  v.pipe(v.string(), v.trim(), v.minLength(1, label ? `${label} is required` : 'Required'), v.maxLength(max, `Max ${max} characters`))
 export const textSchema = (max = 500) => v.pipe(v.string(), v.trim(), v.maxLength(max, `Max ${max} characters`))
 
 /** A query-string integer (query values arrive as strings). */

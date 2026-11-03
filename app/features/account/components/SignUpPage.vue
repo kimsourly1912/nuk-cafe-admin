@@ -84,6 +84,7 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
     title="Create an account"
     description="Order ahead and collect points. It takes a minute."
     :aside="ACCOUNT_ASIDES.signUp"
+    height="tall"
     :back="{ label: accountBackLabel(home), to: home }"
   >
     <UForm

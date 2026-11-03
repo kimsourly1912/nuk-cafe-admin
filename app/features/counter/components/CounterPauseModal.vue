@@ -79,9 +79,11 @@ useSubmitShortcut(submit)
           hint="Optional"
           help="Shown on the counter, not to customers."
         >
-          <UInput
+          <UTextarea
             v-model="state.reason"
             :maxlength="PAUSE_REASON_MAX"
+            :rows="2"
+            autoresize
             placeholder="For example: the coffee machine is broken"
             class="w-full"
             :disabled="saving"

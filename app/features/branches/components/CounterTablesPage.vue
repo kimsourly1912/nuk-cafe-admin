@@ -15,45 +15,56 @@ useSeoMeta({ robots: 'noindex' })
 </script>
 
 <template>
-  <UDashboardPanel
-    id="counter-tables"
-    class="page-narrow"
+  <!-- The counter layout has no dashboard shell, which the panel expects: it pins the navbar and
+       scrolls the body inside, and gives the white page the cards sit on. -->
+  <UDashboardGroup
+    unit="rem"
+    class="bg-default"
   >
-    <template #header>
-      <UDashboardNavbar
-        title="Dining tables"
-        :toggle="false"
-      >
-        <template #leading>
-          <UButton
-            :to="tenantPath(`/counter/${branchId}`)"
-            icon="i-lucide-arrow-left"
-            color="neutral"
-            variant="ghost"
-            aria-label="Back to queue"
-          />
-        </template>
-        <template #right>
-          <UTooltip
-            text="New table"
-            :kbds="['n']"
-          >
+    <UDashboardPanel
+      id="counter-tables"
+      class="page-narrow"
+    >
+      <template #header>
+        <UDashboardNavbar
+          title="Dining tables"
+          :toggle="false"
+        >
+          <template #leading>
             <UButton
-              label="New table"
-              icon="i-lucide-plus"
-              @click="tablesTab?.openNew()"
+              :to="tenantPath(`/counter/${branchId}`)"
+              icon="i-lucide-arrow-left"
+              color="neutral"
+              variant="ghost"
+              aria-label="Back to queue"
             />
-          </UTooltip>
-        </template>
-      </UDashboardNavbar>
-    </template>
+          </template>
+          <template #right>
+            <!-- The counter has no sidebar to hold it (the admin's is there). -->
+            <UColorModeButton />
+            <UTooltip
+              text="New table"
+              :kbds="['n']"
+            >
+              <UButton
+                label="New table"
+                icon="i-lucide-plus"
+                class="max-sm:px-1.5"
+                :ui="{ label: 'max-sm:sr-only' }"
+                @click="tablesTab?.openNew()"
+              />
+            </UTooltip>
+          </template>
+        </UDashboardNavbar>
+      </template>
 
-    <template #body>
-      <BranchTablesTab
-        ref="tablesTab"
-        :branch-id="branchId"
-        surface="counter"
-      />
-    </template>
-  </UDashboardPanel>
+      <template #body>
+        <BranchTablesTab
+          ref="tablesTab"
+          :branch-id="branchId"
+          surface="counter"
+        />
+      </template>
+    </UDashboardPanel>
+  </UDashboardGroup>
 </template>

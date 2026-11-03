@@ -67,32 +67,35 @@ const columns: TableColumn<ActivityEntry>[] = [
         </template>
       </UDashboardNavbar>
 
-      <UDashboardToolbar>
+      <!-- Phone: Action gets its own full row (its labels are long), Who and When share the next. -->
+      <UDashboardToolbar :ui="{ left: 'grid w-full min-w-0 grid-cols-2 sm:flex sm:w-auto' }">
         <template #left>
+          <USelectMenu
+            v-model="filters.action"
+            :items="actionItems"
+            value-key="value"
+            :search-input="{ placeholder: 'Search actions…', icon: 'i-lucide-search' }"
+            aria-label="Action"
+            class="col-span-2 min-w-0 sm:order-2 sm:w-52 sm:flex-none"
+          />
           <USelect
             v-model="filters.actorId"
             :items="actorItems"
             aria-label="Who"
-            class="min-w-0 flex-1 sm:w-40 sm:flex-none"
-          />
-          <USelect
-            v-model="filters.action"
-            :items="actionItems"
-            aria-label="Action"
-            class="min-w-0 flex-1 sm:w-52 sm:flex-none"
+            class="min-w-0 sm:order-1 sm:w-40 sm:flex-none"
           />
           <USelect
             v-model="filters.period"
             :items="periodItems"
             aria-label="When"
-            class="min-w-0 flex-1 sm:w-36 sm:flex-none"
+            class="min-w-0 sm:order-3 sm:w-36 sm:flex-none"
           />
           <UBadge
             v-if="filters.tenantId !== ANY"
             color="neutral"
             variant="subtle"
             size="lg"
-            class="gap-1"
+            class="col-span-2 w-fit gap-1 sm:order-4"
           >
             {{ cafeName }}
             <UButton

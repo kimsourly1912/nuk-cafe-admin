@@ -22,7 +22,7 @@ export type AccountListQuery = v.InferOutput<typeof accountListQuerySchema>
 export const ACCOUNT_REASON_MAX = 500
 
 /** Why a super admin acted: kept in the platform's audit log, never shown to the account. */
-const reasonSchema = nameSchema(ACCOUNT_REASON_MAX)
+const reasonSchema = nameSchema(ACCOUNT_REASON_MAX, 'Reason')
 
 /**
  * `POST …/accounts/{id}/ban`: `until` ends the ban by itself (Better Auth lifts it at the next
