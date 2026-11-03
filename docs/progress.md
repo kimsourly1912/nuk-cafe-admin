@@ -2,6 +2,17 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+
+### D1 backup export contract repair (PR #253, 2026-11-03)
+
+- Reviewed head `a6ee858` against current main `82cbe18` (main had not moved at review). Only open PR at initial inspection: #253, draft. Its CI check job failed on three quote-style errors; typecheck/audit/unit were skipped. Browser shards run separately.
+- The proposed nested completion URL is correct. The proposed removal of `output_format` from polls conflicts with the current D1 API required field and Wrangler implementation; restored it on every request. Active exports may reuse the same bookmark; completion uses `result.result.signed_url`. The simplified Workflows tutorial disagrees; it is not the authoritative response fixture. This is a repair candidate, not proof of the live incident's complete cause.
+- Added external-response validation, rejection of unsuccessful tasks/unknown states, empty completion URLs, and a deadline check after an interrupted wait. Added regressions for repeated HTTP 202 polls, malformed JSON shapes, failed exports, lost poll responses/fresh attempts, suspension past deadline, and a lost upload response. Synthetic integration uses mocked HTTP/R2, real age encryption/decryption and a separate in-memory SQLite restore; it does not run the Cloudflare Workflow engine, remote D1 or real production data.
+- Existing safeguards reviewed: plaintext stays within the combined step, only public age recipients on the Worker, conditional writes retain earlier objects, key names remain based on run start, permanent auth/config errors fail fast, transient failures retry, and success notification is outside the backup failure handler. Retention remains bucket lock/lifecycle configuration, not verified remotely here. Same-account storage and memory headroom remain limitations. Runtime failure reporting waits for combined-step retry exhaustion and can itself fail if Telegram is unavailable.
+- Updated the runbook to require full decryption and an isolated D1 restore, tenant/payment/ledger consistency checks, explicit owner approval and separate production cutover. No migration, app API, payment behavior, dependency or production configuration changed.
+- Local verification: all four requested pnpm commands were attempted but blocked before execution by Corepack cache access (`EPERM`). A writable Corepack home then required a network download, also blocked. Git fetch was blocked by local network restrictions; current refs/files were read through the connected GitHub service. The user's existing checkout was preserved. Updated CI evidence is recorded after the repair run below.
+- Production boundary: no deploy, manual backup trigger, real-data download/decryption, remote database creation/restore, merge or secret changes performed. **Not production verified.** Owner must approve deployment/trigger and the isolated restore drill before backups can be called working.
+
 ## Platform Activity searchable filter accessibility (PR #250, 2026-11-03)
 Branch `claude/fix-ui-bug-2`; [PR #250](https://github.com/kimsourly1912/nuk-cafe-admin/pull/250). Follow-up to [D152](decisions.md#d152-the-ux-pack-undo-instead-of-asking-ctrlk-search-a-sold-out-switch-that-moves-at-once-an-accessibility-check-2026-10-10).
 

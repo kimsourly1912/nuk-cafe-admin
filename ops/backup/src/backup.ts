@@ -101,14 +101,20 @@ export function backupKeys(startedAt: number): string[] {
   return keys
 }
 
-interface ExportResult {
+interface ExportTask {
+  at_bookmark?: string
+  status?: string
   success?: boolean
-  errors?: { message?: string }[]
-  result?: { at_bookmark?: string, status?: string, result?: { signed_url?: string }, error?: string }
+  result?: { signed_url?: string }
+  error?: string
 }
 
-/** One call to D1's export endpoint; throws on anything but a successful answer. */
-async function callExport(fetchFn: typeof fetch, env: BackupEnv, body: Record<string, unknown>): Promise<NonNullable<ExportResult['result']>> {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** One call to D1's export endpoint; validate the external JSON before using it. */
+async function callExport(fetchFn: typeof fetch, env: BackupEnv, body: Record<string, unknown>): Promise<ExportTask> {
   const api = env.CLOUDFLARE_API_URL ?? 'https://api.cloudflare.com/client/v4'
   const response = await fetchFn(`${api}/accounts/${env.D1_ACCOUNT_ID}/d1/database/${env.D1_DATABASE_ID}/export`, {
     method: 'POST',
@@ -117,19 +123,30 @@ async function callExport(fetchFn: typeof fetch, env: BackupEnv, body: Record<st
     signal: AbortSignal.timeout(TIMEOUT_MS),
   })
   const text = await response.text()
-  let answer: ExportResult | undefined
+  let answer: unknown
   try {
-    answer = JSON.parse(text) as ExportResult
+    answer = JSON.parse(text)
   }
   catch {
     answer = undefined
   }
-  if (!response.ok || !answer?.success || !answer.result) {
-    const reason = answer?.errors?.map(error => error.message).filter(Boolean).join('; ') || text.slice(0, ERROR_TEXT_LENGTH)
-    throw refusal(response.status, `D1's export answered HTTP ${response.status}: ${reason}`)
+  if (!response.ok || !isRecord(answer) || answer.success !== true || !isRecord(answer.result)) {
+    const errors = isRecord(answer) && Array.isArray(answer.errors) ? answer.errors : []
+    const reason = errors.filter(isRecord).map(error => error.message).filter(message => typeof message === 'string').join('; ') || text
+    throw refusal(response.status, `D1's export answered HTTP ${response.status}: ${reason.slice(0, ERROR_TEXT_LENGTH)}`)
   }
-  if (answer.result.error) throw new Error(`D1's export failed: ${answer.result.error.slice(0, ERROR_TEXT_LENGTH)}`)
-  return answer.result
+  const result = answer.result
+  if (typeof result.error === 'string' && result.error) throw new Error(`D1's export failed: ${result.error.slice(0, ERROR_TEXT_LENGTH)}`)
+  if (result.success === false) throw new Error('D1\'s export reported an unsuccessful task')
+  if ((result.success !== undefined && result.success !== true)
+    || (result.status !== undefined && typeof result.status !== 'string')
+    || (result.at_bookmark !== undefined && typeof result.at_bookmark !== 'string')
+    || (result.error !== undefined && typeof result.error !== 'string')
+    || (result.result !== undefined && !isRecord(result.result))
+    || (isRecord(result.result) && result.result.signed_url !== undefined && typeof result.result.signed_url !== 'string')) {
+    throw new Error('D1\'s export gave a malformed task')
+  }
+  return result as ExportTask
 }
 
 /** How often the export is asked again while D1 writes it. */
@@ -144,10 +161,9 @@ export interface ExportOptions {
 }
 
 /**
- * Exports D1 with its current REST API contract: start with output_format: polling, then poll
- * using only the bookmark returned by D1. The bookmark remains stable for this export.
- * Completion returns result.result.signed_url, not result.signed_url.
- * Keep polls inside one Workflow step; a failed step retry starts a fresh export.
+ * Match the D1 export API schema and Wrangler: every request specifies output_format: polling;
+ * active responses give the export bookmark, and completion nests result.signed_url.
+ * Keep polling in one Workflow step; interruption or failure retries with a fresh export.
  */
 export async function exportDump(fetchFn: typeof fetch, env: BackupEnv, options: ExportOptions = {}): Promise<string> {
   const wait = options.wait ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)))
@@ -156,14 +172,16 @@ export async function exportDump(fetchFn: typeof fetch, env: BackupEnv, options:
   let result = await callExport(fetchFn, env, { output_format: 'polling' })
   for (;;) {
     if (result.status === 'complete') {
-      if (result.result?.signed_url) return result.result.signed_url
-      throw new Error("D1's export completed without a download address")
+      if (result.result?.signed_url?.trim()) return result.result.signed_url
+      throw new Error('D1\'s export completed without a download address')
     }
-    if (result.status === 'error') throw new Error("D1's export failed without a reason")
-    if (!result.at_bookmark) throw new Error("D1's export gave no bookmark")
+    if (result.status === 'error') throw new Error('D1\'s export failed without a reason')
+    if (result.status !== 'active') throw new Error('D1\'s export gave an unknown status')
+    if (!result.at_bookmark?.trim()) throw new Error('D1\'s export gave no bookmark')
     if (now() >= deadline) throw new Error(`D1's export wasn't ready after ${EXPORT_MAX_MS / 60_000} minutes`)
     await wait(EXPORT_POLL_MS)
-    result = await callExport(fetchFn, env, { current_bookmark: result.at_bookmark })
+    if (now() >= deadline) throw new Error(`D1's export wasn't ready after ${EXPORT_MAX_MS / 60_000} minutes`)
+    result = await callExport(fetchFn, env, { output_format: 'polling', current_bookmark: result.at_bookmark })
   }
 }
 
