@@ -104,7 +104,7 @@ export function backupKeys(startedAt: number): string[] {
 interface ExportResult {
   success?: boolean
   errors?: { message?: string }[]
-  result?: { at_bookmark?: string, status?: string, signed_url?: string, error?: string }
+  result?: { at_bookmark?: string, status?: string, result?: { signed_url?: string }, error?: string }
 }
 
 /** One call to D1's export endpoint; throws on anything but a successful answer. */
@@ -144,11 +144,10 @@ export interface ExportOptions {
 }
 
 /**
- * Exports the whole database and answers the dump's download address. As `wrangler d1 export`
- * does, it starts the export and asks again at once, each time with the newest bookmark, until D1
- * gives the address: D1 forgets an export nobody keeps asking about ("Not currently exporting
- * anything", D228), so the polling can't be spread over a step's retries, and a retry starts a new
- * export instead.
+ * Exports D1 with its current REST API contract: start with output_format: polling, then poll
+ * using only the bookmark returned by D1. The bookmark remains stable for this export.
+ * Completion returns result.result.signed_url, not result.signed_url.
+ * Keep polls inside one Workflow step; a failed step retry starts a fresh export.
  */
 export async function exportDump(fetchFn: typeof fetch, env: BackupEnv, options: ExportOptions = {}): Promise<string> {
   const wait = options.wait ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)))
@@ -156,12 +155,15 @@ export async function exportDump(fetchFn: typeof fetch, env: BackupEnv, options:
   const deadline = now() + EXPORT_MAX_MS
   let result = await callExport(fetchFn, env, { output_format: 'polling' })
   for (;;) {
-    if (result.signed_url) return result.signed_url
-    if (result.status === 'error') throw new Error('D1\'s export failed without a reason')
-    if (!result.at_bookmark) throw new Error('D1\'s export gave no bookmark')
+    if (result.status === 'complete') {
+      if (result.result?.signed_url) return result.result.signed_url
+      throw new Error("D1's export completed without a download address")
+    }
+    if (result.status === 'error') throw new Error("D1's export failed without a reason")
+    if (!result.at_bookmark) throw new Error("D1's export gave no bookmark")
     if (now() >= deadline) throw new Error(`D1's export wasn't ready after ${EXPORT_MAX_MS / 60_000} minutes`)
     await wait(EXPORT_POLL_MS)
-    result = await callExport(fetchFn, env, { output_format: 'polling', current_bookmark: result.at_bookmark })
+    result = await callExport(fetchFn, env, { current_bookmark: result.at_bookmark })
   }
 }
 
