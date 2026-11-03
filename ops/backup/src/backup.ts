@@ -50,8 +50,9 @@ export function missingSettings(env: BackupEnv): string[] {
 
 /**
  * The largest dump this Worker backs up. The dump and its encrypted copy are held in memory (R2's
- * upload needs the length first), well inside a Worker's 128 MB. A bigger database fails the run
- * loudly; then switch to a streamed upload (D225).
+ * upload needs the length first). This caps input size, not total peak allocation: chunk assembly
+ * and encryption also need memory, so headroom near the cap is not established. A larger dump
+ * fails loudly; then switch to a streamed upload (D225).
  */
 export const MAX_DUMP_BYTES = 40 * 1024 * 1024
 /** How long one call to Cloudflare, the dump download or Telegram may take. */
