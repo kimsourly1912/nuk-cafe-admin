@@ -72,6 +72,7 @@ const columns: TableColumn<ActivityEntry>[] = [
         <template #left>
           <USelectMenu
             v-model="filters.action"
+            role="combobox"
             :items="actionItems"
             value-key="value"
             :search-input="{ placeholder: 'Search actions…', icon: 'i-lucide-search' }"
