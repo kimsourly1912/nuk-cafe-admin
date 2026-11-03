@@ -16,7 +16,11 @@ watchEffect(() => {
 </script>
 
 <template>
-  <TaskFrame v-if="branches.length !== 1">
+  <TaskFrameSkeleton
+    v-if="branches.length === 1"
+    :fields="0"
+  />
+  <TaskFrame v-else>
     <template #header>
       <div class="space-y-1">
         <h1 class="text-lg font-semibold">

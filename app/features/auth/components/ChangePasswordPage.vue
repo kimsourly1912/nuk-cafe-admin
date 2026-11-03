@@ -5,7 +5,7 @@
  * account out on its other devices.
  */
 import type { FormSubmitEvent } from '@nuxt/ui'
-import { loginRedirectTarget, useAuth } from '../composables/useAuth'
+import { adminHomePath, loginRedirectTarget, useAuth } from '../composables/useAuth'
 import { emptyPasswordForm, passwordFormSchema } from '../schemas/password-form'
 import type { PasswordForm } from '../schemas/password-form'
 
@@ -19,6 +19,7 @@ const forced = mustChangePassword.value
 
 const state = reactive<PasswordForm>(emptyPasswordForm())
 const saving = ref(false)
+const assertActive = useAuthCompletion()
 const error = ref<string>()
 const showPasswords = ref(false)
 /** The new password the server refused as breached, for the checklist (D210). */
@@ -37,6 +38,7 @@ async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
   error.value = undefined
   try {
     await changePassword(data.currentPassword, data.newPassword)
+    assertActive()
   }
   catch (e) {
     saving.value = false
@@ -57,7 +59,8 @@ async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
   unsaved.markClean()
   toast.add({ title: 'Password changed', description: 'You were signed out on your other devices.', color: 'success', icon: 'i-lucide-circle-check' })
   try {
-    await navigateTo(loginRedirectTarget(route.query.redirect, slug.value))
+    const target = loginRedirectTarget(route.query.redirect, slug.value)
+    await navigateTo(target.split(/[?#]/)[0] === route.path ? adminHomePath(slug.value) : target)
   }
   finally {
     saving.value = false

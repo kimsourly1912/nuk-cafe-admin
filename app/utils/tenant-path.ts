@@ -23,3 +23,9 @@ export function splitTenantUrl(url: string): { slug: string, path: string } | nu
   const rest = url.slice(match[0].length)
   return { slug: match[1]!, path: rest === '' || rest.startsWith('?') || rest.startsWith('#') ? `/${rest}` : rest }
 }
+
+/** Platform/account routes keep the app's cafe binding until a new document replaces it (D141). */
+export function tenantNavigation(bound: string | null, path: string) {
+  const next = splitTenantUrl(path)?.slug ?? null
+  return { tenant: bound ?? next, reload: Boolean(next && bound && next !== bound) }
+}

@@ -1,4 +1,4 @@
-import { adminHomePath, changePasswordPath, isAdminPath, loginPath, useAuth } from '~/features/auth'
+import { adminHomePath, changePasswordPath, isAdminPath, loginPath, loginRedirectTarget, useAuth } from '~/features/auth'
 import { PAGE_FORBIDDEN } from '~/features/errors'
 
 /**
@@ -9,16 +9,18 @@ import { PAGE_FORBIDDEN } from '~/features/errors'
  * the admin session (D93, D141).
  */
 export default defineNuxtRouteMiddleware(async (to) => {
+  // Preserve the server's cafe error during its SSR/hydration pass; it owns this response.
+  if (useError().value && (import.meta.server || useNuxtApp().isHydrating)) return
   const slug = splitTenantUrl(to.path)?.slug
   if (!slug || !isAdminPath(to.path)) return
 
-  const { isLoggedIn, checked, mustChangePassword, fetchSession, can } = useAuth()
+  const { isLoggedIn, checked, mustChangePassword, sessionError, fetchSession, can } = useAuth()
 
-  if (!checked.value) await fetchSession()
+  if (!checked.value && !sessionError.value) await fetchSession()
 
   if (to.meta.public) {
     // Logged-in users have no business on the login page.
-    if (to.path === loginPath(slug) && isLoggedIn.value) return navigateTo(adminHomePath(slug))
+    if (to.path === loginPath(slug) && isLoggedIn.value) return navigateTo(loginRedirectTarget(to.query.redirect, slug), { replace: true })
     return
   }
 

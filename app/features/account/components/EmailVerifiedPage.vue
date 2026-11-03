@@ -16,17 +16,35 @@ const route = useRoute()
 const home = useAccountHome()
 const failed = computed(() => typeof route.query.error === 'string')
 
-const { account, known } = useAccountSession()
+const { account, known, error: sessionError, refresh } = useAccountSession({ fresh: true })
+const nuxtApp = useNuxtApp()
+let announced = false
+// Verification may have changed this browser's cookie on the server, outside the auth transport.
+watch(known, (ready) => {
+  if (ready && !failed.value && account.value && !announced) {
+    announced = true
+    void nuxtApp.callHook('app:auth-changed', 'login')
+  }
+})
+const verifyReturn = computed(() => {
+  const link = accountLink(ACCOUNT_PATHS.verifyEmail, route.query.redirect)
+  return typeof link === 'string' ? link : `${link.path}?${new URLSearchParams(link.query)}`
+})
 const { resendVerification } = useAccountActions()
+const assertActive = useAuthCompletion()
 const { waiting, start: startCooldown, waitLabel } = useResendCooldown('verify')
 const { saving, formError, submit } = useAccountForm()
 const sent = ref(false)
+watch(useSessionIdentity().generation, () => {
+  sent.value = false
+})
 
 async function sendNewLink() {
   const email = account.value?.email
   if (!email) return
   await submit(async () => {
     await resendVerification(email, route.query.redirect)
+    assertActive()
     sent.value = true
     startCooldown()
   })
@@ -34,8 +52,18 @@ async function sendNewLink() {
 </script>
 
 <template>
+  <TaskFrameSkeleton
+    v-if="!known && !sessionError"
+    :fields="0"
+    message
+  />
+  <SessionCheckError
+    v-else-if="sessionError && !known"
+    :error="sessionError"
+    @retry="refresh()"
+  />
   <AccountFrame
-    v-if="!failed || account?.emailVerified"
+    v-else-if="!failed || account?.emailVerified"
     title="Email verified"
     :description="account ? `You're signed in as ${account.name}.` : 'You can order as soon as the cafe is open.'"
     illustration="i-app-nuk-cafe-email-verified"
@@ -82,7 +110,7 @@ async function sendNewLink() {
       />
       <UButton
         v-else
-        :to="accountLink(ACCOUNT_PATHS.signIn, ACCOUNT_PATHS.verifyEmail)"
+        :to="accountLink(ACCOUNT_PATHS.signIn, verifyReturn)"
         label="Sign in to get a new link"
         block
         :loading="!known"

@@ -9,11 +9,6 @@ export interface Credentials {
   password: string
 }
 
-/** Who is signed in, for detecting identity changes. `null`: nobody. */
-function identityOf(user: SessionUser | null): string | null {
-  return user?.userId ?? null
-}
-
 /**
  * A cafe's admin workspace lives under its address, `/c/<slug>/admin` (D93, D141); every other page
  * is the customer site, the counter or the platform's.
@@ -36,7 +31,7 @@ export const changePasswordPath = (slug: string) => tenantUrl(slug, '/admin/chan
  * another cafe's or another site's), else the cafe's dashboard.
  */
 export function loginRedirectTarget(redirect: unknown, slug: string): string {
-  return typeof redirect === 'string' && splitTenantUrl(redirect)?.slug === slug && isAdminPath(redirect) ? redirect : adminHomePath(slug)
+  return typeof redirect === 'string' && splitTenantUrl(redirect)?.slug === slug && isAdminPath(redirect) && redirect.split(/[?#]/)[0] !== loginPath(slug) ? redirect : adminHomePath(slug)
 }
 
 const NO_ADMIN_ACCESS = 'This account doesn\'t have access to the admin app.'
@@ -48,54 +43,10 @@ export function useAuth() {
   const authFetch = useAuthRequest()
   // Captured now: login/logout call hooks after an `await`, where the Nuxt context is gone.
   const nuxtApp = useNuxtApp()
-  // Not `auth:*`: @nuxtjs/better-auth keeps its own session in `auth:user` / `auth:session` and
-  // refetches it on its own (startup, tab focus). Sharing a key let it overwrite the staff session.
-  const user = useState<SessionUser | null>('staff-session:user', () => null)
-  /** Whether the session has been checked against the server at least once. */
-  const checked = useState('staff-session:checked', () => false)
+  const identity = useSessionIdentity()
+  const { user, checked, error: sessionError, generation, signingOut, setUser, reset, fetchSession, supersede } = useWorkspaceSession<AdminSession>('admin', '/admin/me')
   const isLoggedIn = computed(() => user.value !== null)
-  /** Signed in on a temporary password: only the change-password page is available (D52). */
   const mustChangePassword = computed(() => user.value?.mustChangePassword ?? false)
-  /**
-   * Identity generation: +1 whenever the signed-in identity changes (login, logout, expiry,
-   * another staff member in another tab). The API layer discards responses to requests started
-   * in an older generation, and the session boundary clears the previous identity's data.
-   */
-  const generation = useState('staff-session:generation', () => 0)
-  /** A voluntary logout is on its way to the login page (see `logout`). */
-  const signingOut = useState('staff-session:signing-out', () => false)
-
-  function setUser(next: SessionUser | null) {
-    // The first check isn't a change: this tab knew no staff identity before it, and what it loaded
-    // (the customer site's account and menu) came with the same browser session (D97). Counting it
-    // cleared and refetched the page being left, so its header flashed "Sign in".
-    const changed = checked.value && identityOf(next) !== identityOf(user.value)
-    user.value = next
-    checked.value = true
-    if (changed) sessionChanged()
-  }
-
-  /** Synchronous bump, then the boundary (plugins/session-boundary.client.ts) cleans up. */
-  function sessionChanged() {
-    generation.value++
-    void nuxtApp.callHook('app:session-changed', { signedIn: user.value !== null })
-  }
-
-  /**
-   * The admin session from `GET /api/admin/me`. Signed out, or signed in without admin access
-   * (a customer or branch staff account), both count as logged out here. A network failure keeps
-   * the current state.
-   */
-  async function fetchSession() {
-    try {
-      setUser(await apiFetch<AdminSession>('/admin/me'))
-    }
-    catch (error) {
-      const apiError = ApiError.from(error)
-      if (apiError.kind === 'unauthorized' || isNoAccess(apiError) || !checked.value) setUser(null)
-    }
-    return user.value
-  }
 
   /**
    * Signs in with Better Auth, then checks admin access. An account without it that works somewhere
@@ -143,11 +94,10 @@ export function useAuth() {
       }
       if (access) throw new WorkspaceRefusedError(access, error)
       await authFetch('/sign-out').catch(() => {})
+      await identity.change('logout', 'admin')
       throw new ApiError(NO_ADMIN_ACCESS, { kind: 'forbidden', status: 403, code: apiError.code, cause: error })
     }
     setUser(session)
-    // Other tabs follow (plugins/auth-sync.client.ts).
-    await nuxtApp.callHook('app:auth-changed', 'login')
   }
 
   /**
@@ -168,8 +118,10 @@ export function useAuth() {
     }
     // The server cleared the flag: reflect that now so the route middleware lets the next page
     // through without waiting for a round trip, then confirm against the server in the background.
+    supersede()
     if (user.value?.mustChangePassword) user.value = { ...user.value, mustChangePassword: false }
     void fetchSession()
+    await identity.updated()
   }
 
   /**
@@ -177,44 +129,43 @@ export function useAuth() {
    * this browser a new session. Reflects it now, confirms in the background.
    */
   function twoFactorChanged(enabled: boolean) {
+    supersede()
     if (user.value && user.value.twoFactorEnabled !== enabled) user.value = { ...user.value, twoFactorEnabled: enabled }
     void fetchSession()
+    void identity.updated()
   }
 
   /** A route answered PASSWORD_CHANGE_REQUIRED: the app moves to the change-password page. */
   function requirePasswordChange() {
+    supersede()
     if (user.value && !user.value.mustChangePassword) user.value = { ...user.value, mustChangePassword: true }
   }
 
   async function logout() {
-    // Ask before signing out: once it's sent, staying on the page is no longer possible.
     if (!await useLeaveGuard().confirmLeave()) return
+    const startedIn = identity.generation.value
     try {
       await authFetch('/sign-out')
     }
-    catch {
-      // Signed out locally anyway; the cookie expires on its own.
+    catch (error) {
+      if (ApiError.from(error).kind === 'aborted') return
+      // Preserve the existing local sign-out behavior when the network fails.
+    }
+    if (identity.generation.value !== startedIn) return
+    const slug = splitTenantUrl(nuxtApp.$router.currentRoute.value.path)?.slug
+    signingOut.value = true
+    reset(true)
+    await identity.change('logout', 'admin')
+    try {
+      await navigateTo(slug ? loginPath(slug) : CAFES_PATH)
     }
     finally {
-      // Signed out before leaving: the sign-in page's guard would send a session still here back to
-      // the home page, which then loads after the sign-out. `signingOut` keeps the session-lost
-      // watcher (plugins/api.ts) from also redirecting, with a `?redirect=` to this page.
-      // Signing out happens in a cafe's admin; without a cafe (never expected) the cafe list, not a guess (D221).
-      const slug = splitTenantUrl(nuxtApp.$router.currentRoute.value.path)?.slug
-      signingOut.value = true
-      clearSession()
-      try {
-        await navigateTo(slug ? loginPath(slug) : CAFES_PATH)
-      }
-      finally {
-        signingOut.value = false
-      }
-      await nuxtApp.callHook('app:auth-changed', 'logout')
+      signingOut.value = false
     }
   }
 
   function clearSession() {
-    setUser(null)
+    reset(true)
   }
 
   /**
@@ -228,6 +179,8 @@ export function useAuth() {
   return {
     user: readonly(user),
     checked: readonly(checked),
+    sessionError: readonly(sessionError),
+    resetSession: reset,
     generation: readonly(generation),
     signingOut: readonly(signingOut),
     isLoggedIn,

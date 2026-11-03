@@ -7,7 +7,7 @@
  * (a back link, the title and a line under it). An `aside` slot is passed on to the frame, so a page
  * with a picture panel keeps it while loading.
  */
-defineProps<{ fields: number, cafe?: boolean }>()
+withDefaults(defineProps<{ fields: number, cafe?: boolean, message?: boolean, actions?: number }>(), { actions: 1 })
 </script>
 
 <template>
@@ -28,8 +28,14 @@ defineProps<{ fields: number, cafe?: boolean }>()
       </div>
       <template v-else>
         <USkeleton class="mb-2 h-5 w-28" />
-        <USkeleton class="h-7 w-32" />
-        <USkeleton class="mt-2 h-4 w-full max-w-64" />
+        <div :class="message ? 'flex flex-col items-center' : ''">
+          <USkeleton
+            v-if="message"
+            class="mb-3 h-36 w-48"
+          />
+          <USkeleton class="h-7 w-32" />
+          <USkeleton class="mt-2 h-4 w-full max-w-64" />
+        </div>
       </template>
     </template>
     <div
@@ -37,6 +43,10 @@ defineProps<{ fields: number, cafe?: boolean }>()
       aria-label="Loading"
       class="space-y-4"
     >
+      <template v-if="message">
+        <USkeleton class="h-4 w-full" />
+        <USkeleton class="h-4 w-3/4" />
+      </template>
       <div
         v-for="field in fields"
         :key="field"
@@ -47,7 +57,11 @@ defineProps<{ fields: number, cafe?: boolean }>()
       </div>
     </div>
     <template #footer>
-      <USkeleton class="h-8 w-full" />
+      <USkeleton
+        v-for="action in actions"
+        :key="action"
+        class="h-8 w-full"
+      />
     </template>
   </TaskFrame>
 </template>

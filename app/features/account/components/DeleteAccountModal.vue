@@ -23,7 +23,7 @@ const form = useTemplateRef('form')
 useFormErrorRecheck(form)
 useSubmitShortcut(() => form.value?.submit())
 
-const remove = useDeleteAccount()
+const remove = useDeleteAccount(() => emit('close', true))
 /** The last refusal, in the server's words. */
 const lastError = ref<string>()
 
@@ -33,7 +33,6 @@ async function onSubmit({ data }: FormSubmitEvent<DeleteAccountInput>) {
   const result = await remove.execute(data)
   saving.value = false
   if (result.ok) {
-    emit('close', true)
     return
   }
   if (result.status === 'error') {

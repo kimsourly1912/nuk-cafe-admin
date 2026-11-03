@@ -74,24 +74,50 @@ describe('Your cafes', () => {
     return page
   }
 
-  it('lists each cafe with the workspaces the account may open; a paused one without them', async () => {
-    const page = await open([BROWN, NUK, KIOSK, QUIET])
+  it('lists each cafe with its role and the workspaces the account may open; a paused one without them', async () => {
+    const page = await open([BROWN, NUK, KIOSK, QUIET], 'user')
     await page.getByRole('heading', { name: 'Your cafes' }).waitFor()
     expect(await page.getByRole('link', { name: 'Admin, Brown Bean' }).getAttribute('href')).toBe('/c/brown-bean/admin')
     expect(await page.getByRole('link', { name: 'Counter, Brown Bean' }).getAttribute('href')).toBe('/c/brown-bean/counter')
     expect(await page.getByRole('link', { name: 'Counter, Tea Kiosk' }).getAttribute('href')).toBe('/c/tea-kiosk/counter')
     expect(await page.getByRole('link', { name: 'Admin, Tea Kiosk' }).count()).toBe(0)
+    expect(await page.getByText('Owner', { exact: true }).count()).toBe(3)
+    expect(await page.getByText('Staff', { exact: true }).count()).toBe(1)
     await page.getByText('Paused by the platform team').waitFor()
     expect(await page.getByRole('link', { name: /Quiet Corner/ }).count()).toBe(0)
+    await page.getByText('Signed in as pat@example.com').waitFor()
+    // The light/dark button is in the card's header; the layout's corner one is hidden.
+    expect(await page.getByRole('button', { name: /mode/i }).filter({ visible: true }).count()).toBe(1)
     await expect.poll(() => page.title()).toBe('Your cafes · Angder')
   })
 
-  it('says so for an account that works at no cafe', async () => {
-    const page = await open([])
-    await page.getByText('This account doesn\'t work at a cafe').waitFor()
+  it('says so for an account that works at no cafe, with Switch account and Back to home', async () => {
+    const page = await open([], 'user')
+    await page.getByText('You don\'t have access to a cafe yet').waitFor()
     // No link into a guessed cafe (D221), nor to the console for an account off the platform team.
     expect(await page.locator('a[href^="/c/"]').count()).toBe(0)
     expect(await page.getByRole('link', { name: 'Open the platform console' }).count()).toBe(0)
+    expect(await page.getByRole('link', { name: 'Back to home' }).getAttribute('href')).toBe('/')
+  })
+
+  it('Switch account signs out and goes to sign in, back here afterwards', async () => {
+    const page = await createPage()
+    let signedIn = true
+    await page.setViewportSize({ width: 390, height: 844 })
+    const api = await mockApi(page, {
+      'GET /me/cafes': () => [],
+      'GET /auth/get-session': () => signedIn ? { user: { email: 'pat@example.com', role: 'user' } } : null,
+      'POST /auth/sign-out': () => {
+        signedIn = false
+        return { success: true }
+      },
+    })
+    await page.goto(url('/cafes'), { waitUntil: 'hydration' })
+    await page.getByRole('button', { name: 'Switch account' }).click()
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/sign-in')
+    await page.getByRole('heading', { name: 'Sign in', exact: true }).waitFor()
+    expect(new URL(page.url()).searchParams.get('redirect')).toBe('/cafes')
+    expect(api.calls).toContain('POST /auth/sign-out')
   })
 
   it('links a platform team account to the console, first when it works at no cafe (Q5)', async () => {
@@ -318,7 +344,7 @@ describe('signing in where the account has no access (D239)', () => {
     expect(api.calls).not.toContain('POST /auth/sign-out')
   })
 
-  it('already signed in as a platform team account whose check failed, the console shows the form, never a wrong refusal', async () => {
+  it('a failed platform session check offers Retry without showing credentials or a wrong refusal', async () => {
     allowBrowserProblems(/GET \/api\/platform\/me → 500/)
     const page = await createPage()
     await mockApi(page, {
@@ -328,7 +354,9 @@ describe('signing in where the account has no access (D239)', () => {
       'GET /auth/get-session': () => ({ user: { email: 'ops@angder.example', role: 'superadmin' } }),
     })
     await page.goto(url('/platform/sign-in'), { waitUntil: 'hydration' })
-    await page.getByLabel('Email').waitFor()
+    await page.getByRole('heading', { name: 'Could not check your session', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Retry', exact: true }).waitFor()
+    expect(await page.getByLabel('Email').count()).toBe(0)
     expect(await page.getByRole('heading', { name: 'No access to the platform console' }).count()).toBe(0)
   })
 

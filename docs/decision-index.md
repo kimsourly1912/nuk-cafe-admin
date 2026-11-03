@@ -287,3 +287,5 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D255](decisions.md#d255-nuxt-hints-tried-in-dev-and-not-adopted-its-html-validation-goes-to-the-e2e-suite-instead-2026-11-02) | Nuxt Hints tried in dev and not adopted; its HTML validation goes to the e2e suite instead, 2026-11-02 |
 | [D256](decisions.md#d256-the-e2e-suite-validates-the-server-rendered-pages-html-2026-11-02) | The e2e suite validates the server-rendered pages' HTML, 2026-11-02 |
 | [D257](decisions.md#d257-checkout-validates-its-read-state-inside-the-order-batch-2026-11-02) | Checkout validates its read state inside the order batch (2026-11-02) |
+
+| [D258](decisions.md#d258-auth-pages-share-one-identity-boundary-and-stable-session-states-2026-11-02) | Auth pages share one identity boundary and stable session states, 2026-11-02 |

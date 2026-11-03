@@ -32,6 +32,8 @@ await apiFetch<MenuCategory>(`/admin/menu/categories/${id}`, { method: 'PATCH', 
 - a 401 or 403 `NOT_ADMIN` clears the session (the app goes to login); a 403 `PASSWORD_CHANGE_REQUIRED` sends the app to the change-password page; a 403 `CONFIRMATION_REQUIRED` opens "Confirm it's you" and, once confirmed, sends the same request once more (cancelled: a silent `aborted` error, D246);
 - a response to a request started under a previous identity is discarded as a silent `aborted` error (D29).
 
+The session composable also passes `isCurrent: () => read === revision.value` (D258). This callback is consumed by the API engine, never sent to the server. A superseded session response is discarded before any 401/password-required side effect as well as before returning its body; the shared identity generation still applies independently. Normal feature queries do not need this option.
+
 Call it only inside `useApiQuery` (reads) and `useMutation` (writes).
 
 ---

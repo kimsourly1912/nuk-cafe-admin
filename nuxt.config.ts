@@ -308,6 +308,8 @@ export default defineNuxtConfig({
     },
   },
   routeRules: {
+    // Recovery tokens are read in client memory only; SSR would serialize the entry URL in its payload.
+    '/reset-password': { ssr: false },
     // A cafe's pages live under its address, `/c/<slug>/…` (D141); `*` is the cafe.
     // The admin workspace renders in the browser only: its pages need the staff session and never
     // need search engines (D95).

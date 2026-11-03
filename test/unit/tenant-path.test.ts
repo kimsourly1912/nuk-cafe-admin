@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { splitTenantUrl, tenantUrl } from '../../app/utils/tenant-path'
+import { splitTenantUrl, tenantNavigation, tenantUrl } from '../../app/utils/tenant-path'
 
 describe('cafe addresses (D141)', () => {
+  it('keeps a cafe binding through account pages and reloads before entering a second cafe', () => {
+    let bound = tenantNavigation(null, '/c/nuk').tenant
+    expect(bound).toBe('nuk')
+    for (const path of ['/sign-in', '/verify-email', '/cafes']) {
+      const next = tenantNavigation(bound, path)
+      expect(next).toEqual({ tenant: 'nuk', reload: false })
+      bound = next.tenant
+    }
+    expect(tenantNavigation(bound, '/c/nuk/checkout')).toEqual({ tenant: 'nuk', reload: false })
+    expect(tenantNavigation(bound, '/c/brown-bean/checkout')).toEqual({ tenant: 'nuk', reload: true })
+    expect(tenantNavigation(null, '/c/brown-bean/checkout')).toEqual({ tenant: 'brown-bean', reload: false })
+  })
   it('puts a page inside its cafe', () => {
     expect(tenantUrl('nuk', '/admin/products')).toBe('/c/nuk/admin/products')
     expect(tenantUrl('nuk', '/')).toBe('/c/nuk')

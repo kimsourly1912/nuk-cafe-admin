@@ -20,7 +20,7 @@ import DeleteAccountModal from './DeleteAccountModal.vue'
 
 const route = useRoute()
 const tenantPath = useTenantPath()
-const { account, guest, known } = useCustomerAccount()
+const { account, guest, known, error, refresh } = useCustomerAccount()
 const open = ref(false)
 const signedOutOpen = ref(false)
 
@@ -41,8 +41,15 @@ async function deleteAccount(email: string) {
 </script>
 
 <template>
+  <UButton
+    v-if="error && !known"
+    label="Retry account check"
+    color="neutral"
+    variant="outline"
+    @click="refresh()"
+  />
   <USkeleton
-    v-if="!known"
+    v-else-if="!known"
     class="size-8 shrink-0 rounded-full"
   />
 

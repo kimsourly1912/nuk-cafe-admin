@@ -38,37 +38,10 @@ export function useCounterSession() {
   const authFetch = useAuthRequest()
   // Captured now: the hooks below run after an `await`, where the Nuxt context is gone.
   const nuxtApp = useNuxtApp()
-  // Not `auth:*` (Better Auth's module owns those) and not the admin's `staff-session:*`.
-  const user = useState<CounterSession | null>('counter-session:user', () => null)
-  const checked = useState('counter-session:checked', () => false)
-  const generation = useState('counter-session:generation', () => 0)
-  /** A voluntary sign-out is on its way to the sign-in page (see `signOut`). */
-  const signingOut = useState('counter-session:signing-out', () => false)
+  const identity = useSessionIdentity()
+  const { user, checked, error: sessionError, generation, signingOut, setUser, reset, fetchSession, supersede } = useWorkspaceSession<CounterSession>('counter', '/counter/me')
   const isSignedIn = computed(() => user.value !== null)
   const mustChangePassword = computed(() => user.value?.mustChangePassword ?? false)
-
-  function setUser(next: CounterSession | null) {
-    // The first check isn't a change (see the admin's useAuth `setUser`).
-    const changed = checked.value && (next?.userId ?? null) !== (user.value?.userId ?? null)
-    user.value = next
-    checked.value = true
-    if (changed) {
-      generation.value++
-      void nuxtApp.callHook('app:session-changed', { signedIn: next !== null })
-    }
-  }
-
-  /** Reads the session; signed out and "not staff" both count as signed out here. */
-  async function fetchSession() {
-    try {
-      setUser(await apiFetch<CounterSession>('/counter/me'))
-    }
-    catch (error) {
-      const apiError = ApiError.from(error)
-      if (apiError.kind === 'unauthorized' || isNoAccess(apiError) || !checked.value) setUser(null)
-    }
-    return user.value
-  }
 
   /** Signs in with Better Auth, then checks the account works at a branch. Throws `ApiError`. */
   async function signIn(credentials: { email: string, password: string }): Promise<PasswordStep> {
@@ -109,6 +82,7 @@ export function useCounterSession() {
       }
       if (access) throw new WorkspaceRefusedError(access, error)
       await authFetch('/sign-out').catch(() => {})
+      await identity.change('logout', 'counter')
       throw new ApiError(NO_COUNTER_ACCESS, { kind: 'forbidden', status: 403, code: apiError.code, cause: error })
     }
     setUser(session)
@@ -127,33 +101,32 @@ export function useCounterSession() {
       throw apiError
     }
     // The server cleared the flag: reflect it now, confirm in the background.
+    supersede()
     if (user.value?.mustChangePassword) user.value = { ...user.value, mustChangePassword: false }
     void fetchSession()
+    await identity.updated()
   }
 
   async function signOut() {
     if (!await useLeaveGuard().confirmLeave()) return
+    const startedIn = identity.generation.value
     try {
       await authFetch('/sign-out')
     }
-    catch {
-      // Signed out here anyway; the cookie expires on its own.
+    catch (error) {
+      if (ApiError.from(error).kind === 'aborted') return
+      // Preserve the existing local sign-out behavior when the network fails.
+    }
+    if (identity.generation.value !== startedIn) return
+    const slug = splitTenantUrl(nuxtApp.$router.currentRoute.value.path)?.slug
+    signingOut.value = true
+    reset(true)
+    await identity.change('logout', 'counter')
+    try {
+      await navigateTo(slug ? counterSignInPath(slug) : CAFES_PATH)
     }
     finally {
-      // Signed out before leaving: the sign-in page's guard would send a session still here back to
-      // the home page, which then loads after the sign-out. `signingOut` keeps the session-lost
-      // watcher (plugins/api.ts) from also redirecting, with a `?redirect=` to this page.
-      // Signing out happens in a cafe's counter; without a cafe (never expected) the cafe list, not a guess (D221).
-      const slug = splitTenantUrl(nuxtApp.$router.currentRoute.value.path)?.slug
-      const target = slug ? counterSignInPath(slug) : CAFES_PATH
-      signingOut.value = true
-      setUser(null)
-      try {
-        await navigateTo(target)
-      }
-      finally {
-        signingOut.value = false
-      }
+      signingOut.value = false
     }
   }
 
@@ -162,12 +135,15 @@ export function useCounterSession() {
    * this browser a new session. Reflects it now, confirms in the background.
    */
   function twoFactorChanged(enabled: boolean) {
+    supersede()
     if (user.value && user.value.twoFactorEnabled !== enabled) user.value = { ...user.value, twoFactorEnabled: enabled }
     void fetchSession()
+    void identity.updated()
   }
 
   /** A route answered PASSWORD_CHANGE_REQUIRED: the middleware moves to the change-password page. */
   function requirePasswordChange() {
+    supersede()
     if (user.value && !user.value.mustChangePassword) user.value = { ...user.value, mustChangePassword: true }
   }
 
@@ -182,6 +158,8 @@ export function useCounterSession() {
   return {
     user: readonly(user),
     checked: readonly(checked),
+    sessionError: readonly(sessionError),
+    resetSession: reset,
     generation: readonly(generation),
     signingOut: readonly(signingOut),
     can,
@@ -194,6 +172,6 @@ export function useCounterSession() {
     signOut,
     requirePasswordChange,
     twoFactorChanged,
-    clearSession: () => setUser(null),
+    clearSession: () => reset(true),
   }
 }

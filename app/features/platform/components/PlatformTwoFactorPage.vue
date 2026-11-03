@@ -4,14 +4,15 @@
  * page (the route middleware sends every page here until it's on). The steps are the shared
  * `<TwoFactorSetupFrame>` (D242); once on, the page goes where it was asked to.
  */
-import { platformRedirectTarget, usePlatformSession } from '../composables/usePlatformSession'
+import { PLATFORM_HOME, platformRedirectTarget, usePlatformSession } from '../composables/usePlatformSession'
 
 const route = useRoute()
 const { user, twoFactorChanged, signOut } = usePlatformSession()
 
 async function finish() {
   twoFactorChanged(true)
-  await navigateTo(platformRedirectTarget(route.query.redirect))
+  const target = platformRedirectTarget(route.query.redirect)
+  await navigateTo(target.split(/[?#]/)[0] === route.path ? PLATFORM_HOME : target)
 }
 </script>
 

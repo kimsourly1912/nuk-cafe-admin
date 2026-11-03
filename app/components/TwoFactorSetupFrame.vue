@@ -31,6 +31,7 @@ defineSlots<{ secondary?: (props: { saving: boolean }) => unknown }>()
 
 const toast = useToast()
 const twoFactor = useTwoFactorSettings()
+const assertActive = useAuthCompletion()
 
 const setup = ref<TwoFactorSetup>()
 const saving = ref(false)
@@ -67,7 +68,9 @@ async function onPassword({ data }: FormSubmitEvent<v.InferOutput<typeof passwor
   saving.value = true
   error.value = undefined
   try {
-    setup.value = await twoFactor.start(data.password)
+    const result = await twoFactor.start(data.password)
+    assertActive()
+    setup.value = result
     passwordState.password = ''
   }
   catch (e) {
@@ -84,6 +87,7 @@ async function onCode({ data }: FormSubmitEvent<{ code: string }>) {
   error.value = undefined
   try {
     await twoFactor.confirm(data.code)
+    assertActive()
   }
   catch (e) {
     saving.value = false

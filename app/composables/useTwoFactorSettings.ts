@@ -40,7 +40,7 @@ export function useTwoFactorSettings() {
    * gives this browser a new session. Throws `ApiError`.
    */
   async function confirm(code: string) {
-    await verifyTwoFactorCode('app', code)
+    await verifyTwoFactorCode('app', code, authFetch)
   }
 
   /**

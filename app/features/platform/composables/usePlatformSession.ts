@@ -35,40 +35,11 @@ const isNoAccess = (error: ApiError) => error.status === 403
 export function usePlatformSession() {
   const authFetch = useAuthRequest()
   // Captured now: the hooks below run after an `await`, where the Nuxt context is gone.
-  const nuxtApp = useNuxtApp()
-  // Not `auth:*` (Better Auth's module owns those), nor the admin's or the counter's keys.
-  const user = useState<PlatformSession | null>('platform-session:user', () => null)
-  const checked = useState('platform-session:checked', () => false)
-  const generation = useState('platform-session:generation', () => 0)
-  /** A voluntary sign-out is on its way to the sign-in page (see `signOut`). */
-  const signingOut = useState('platform-session:signing-out', () => false)
+  const identity = useSessionIdentity()
+  const { user, checked, error: sessionError, generation, signingOut, setUser, reset, fetchSession, supersede } = useWorkspaceSession<PlatformSession>('platform', '/platform/me')
   const isSignedIn = computed(() => user.value !== null)
   const mustChangePassword = computed(() => user.value?.mustChangePassword ?? false)
-  /** Two-step sign-in is set up (D188): until it is, the console's only page is its setup. */
   const twoFactorEnabled = computed(() => user.value?.twoFactorEnabled ?? false)
-
-  function setUser(next: PlatformSession | null) {
-    // The first check isn't a change (see the admin's useAuth `setUser`).
-    const changed = checked.value && (next?.userId ?? null) !== (user.value?.userId ?? null)
-    user.value = next
-    checked.value = true
-    if (changed) {
-      generation.value++
-      void nuxtApp.callHook('app:session-changed', { signedIn: next !== null })
-    }
-  }
-
-  /** Reads the session; signed out and "not a super admin" both count as signed out here. */
-  async function fetchSession() {
-    try {
-      setUser(await apiFetch<PlatformSession>('/platform/me'))
-    }
-    catch (error) {
-      const apiError = ApiError.from(error)
-      if (apiError.kind === 'unauthorized' || isNoAccess(apiError) || !checked.value) setUser(null)
-    }
-    return user.value
-  }
 
   /**
    * The password step of a sign-in. `two-factor`: the page asks for the code (`<TwoFactorCodeForm>`,
@@ -114,6 +85,7 @@ export function usePlatformSession() {
       }
       if (access) throw new WorkspaceRefusedError(access, error)
       await authFetch('/sign-out').catch(() => {})
+      await identity.change('logout', 'platform')
       throw new ApiError(NO_PLATFORM_ACCESS, { kind: 'forbidden', status: 403, code: apiError.code, cause: error })
     }
     setUser(session)
@@ -132,31 +104,31 @@ export function usePlatformSession() {
       throw apiError
     }
     // The server cleared the flag: reflect it now, confirm in the background.
+    supersede()
     if (user.value?.mustChangePassword) user.value = { ...user.value, mustChangePassword: false }
     void fetchSession()
+    await identity.updated()
   }
 
   async function signOut() {
     if (!await useLeaveGuard().confirmLeave()) return
+    const startedIn = identity.generation.value
     try {
       await authFetch('/sign-out')
     }
-    catch {
-      // Signed out here anyway; the cookie expires on its own.
+    catch (error) {
+      if (ApiError.from(error).kind === 'aborted') return
+      // Preserve the existing local sign-out behavior when the network fails.
+    }
+    if (identity.generation.value !== startedIn) return
+    signingOut.value = true
+    reset(true)
+    await identity.change('logout', 'platform')
+    try {
+      await navigateTo(PLATFORM_SIGN_IN)
     }
     finally {
-      // Signed out before leaving: the sign-in page's guard would send a session still here back to
-      // the home page, which then loads after the sign-out. `signingOut` keeps the session-lost
-      // watcher (plugins/api.ts) from also redirecting, with a `?redirect=` to this page.
-      const target = PLATFORM_SIGN_IN
-      signingOut.value = true
-      setUser(null)
-      try {
-        await navigateTo(target)
-      }
-      finally {
-        signingOut.value = false
-      }
+      signingOut.value = false
     }
   }
 
@@ -165,18 +137,23 @@ export function usePlatformSession() {
    * gave this browser a new session. Reflects it now, confirms in the background.
    */
   function twoFactorChanged(enabled: boolean) {
+    supersede()
     if (user.value && user.value.twoFactorEnabled !== enabled) user.value = { ...user.value, twoFactorEnabled: enabled }
     void fetchSession()
+    void identity.updated()
   }
 
   /** A route answered PASSWORD_CHANGE_REQUIRED: the middleware moves to the change-password page. */
   function requirePasswordChange() {
+    supersede()
     if (user.value && !user.value.mustChangePassword) user.value = { ...user.value, mustChangePassword: true }
   }
 
   return {
     user: readonly(user),
     checked: readonly(checked),
+    sessionError: readonly(sessionError),
+    resetSession: reset,
     generation: readonly(generation),
     signingOut: readonly(signingOut),
     isSignedIn,
@@ -189,6 +166,6 @@ export function usePlatformSession() {
     changePassword,
     signOut,
     requirePasswordChange,
-    clearSession: () => setUser(null),
+    clearSession: () => reset(true),
   }
 }
