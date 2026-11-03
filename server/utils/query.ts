@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, max, or, sql } from 'drizzle-orm'
 import type { AnyColumn, SQL } from 'drizzle-orm'
 import type { SQLiteSelect, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import type { Db, Statement } from './batch'
+import { requireCount } from './batch'
 import { containsText } from './search'
 
 /**
@@ -112,4 +113,20 @@ export async function hasAny(db: Db, table: SQLiteTable, where: SQL | undefined)
 export async function nextPosition(db: Db, table: SQLiteTable, column: AnyColumn, where: SQL | undefined): Promise<number> {
   const [row] = await db.select({ top: max(column) }).from(table).where(where)
   return (Number(row?.top) || 0) + 1
+}
+
+/** A deterministic scalar snapshot of a scoped row set, including additions and removals. */
+export function snapshotRows(db: Db, table: SQLiteTable, columns: AnyColumn[], where: SQL, order: AnyColumn[]): SQL<string> {
+  const rows = db.select({ entry: sql`json_array(${sql.join(columns, sql`, `)})`.as('entry') }).from(table).where(where).orderBy(...order.map(column => asc(column)))
+  return sql<string>`(select json_group_array(entry) from (${rows}))`
+}
+
+/**
+ * Capture before validation; put the returned guard in the write batch. Every input to that
+ * validation must be covered by the snapshot. Equality is checked inside the transaction.
+ * Keep the thenable statement inside an object so returning it does not execute it early.
+ */
+export async function captureSnapshotGuard(db: Db, snapshot: SQL<string>): Promise<{ guard: Statement }> {
+  const [row] = await db.select({ snapshot }).from(sql`(select 1)`)
+  return { guard: requireCount(db, sql`select case when ${snapshot} = ${row!.snapshot} then 1 else 0 end`, 1) }
 }

@@ -1,16 +1,17 @@
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { CreateItemInput, MenuItem } from '#shared/contracts/menu-items'
 import type { ModifierGroup } from '#shared/contracts/menu-modifiers'
 import type { OrderLineInput, PlaceOrderInput } from '#shared/contracts/orders'
 import { archiveTable, createTable, pauseBranch, resumeBranch, updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
-import { archiveItem, createCategory, createItem, createModifierGroup, createOptionSet, publishItem, setSoldOut, updateItem } from '#server/features/menu'
-import { orders } from '#server/features/orders/orders.schema'
+import { archiveItem, createAvailabilityRule, updateAvailabilityRule, updateModifier, updatePromotion, archiveModifier, archiveOptionValue, createPromotion, endPromotion, createCategory, createItem, createModifierGroup, createOptionSet, publishItem, setSoldOut, updateItem } from '#server/features/menu'
+import { orderEvents, orderLines, counterPayments, orders } from '#server/features/orders/orders.schema'
 import { getOrder, placeOrder } from '#server/features/orders/orders.service'
 import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
 import type { Db } from '#server/utils/batch'
+import { auditEvents, idempotencyKeys, outboxMessages } from '#server/features/platform/platform.schema'
 import { newId } from '#server/utils/ids'
 
 // Placing orders (step 6.2, D99) against the real menu, branch and platform services and the
@@ -80,6 +81,7 @@ function racing(count: number): Db {
   })
   const racer = Object.create(db) as Db
   racer.batch = (async (statements: Parameters<Db['batch']>[0]) => {
+    if (!(statements[0] as unknown as { toSQL: () => { sql: string } }).toSQL().sql.startsWith('insert into "idempotency_keys"')) return db.batch(statements)
     if (++arrived === count) open()
     await all
     return db.batch(statements)
@@ -95,7 +97,7 @@ beforeEach(async () => {
   otherBranch = await addBranch('Zeta Kiosk', allWeek(420, 1260))
   category = (await createCategory(db, admin, { name: 'Coffee', description: '', parentId: null, availabilityRuleIds: [] })).id
   const size = await createOptionSet(db, admin, { name: 'Size', values: ['Regular', 'Large'] })
-  milk = await createModifierGroup(db, admin, { name: 'Milk', minSelect: 0, maxSelect: 1, modifiers: [{ name: 'Oat milk', priceDeltaMinor: 50, isDefault: false }] })
+  milk = await createModifierGroup(db, admin, { name: 'Milk', minSelect: 0, maxSelect: 1, modifiers: [{ name: 'Oat milk', priceDeltaMinor: 50, isDefault: false }, { name: 'Whole milk', priceDeltaMinor: 0, isDefault: false }] })
   latte = await published('Iced Latte', {
     optionSetIds: [size.id],
     variations: [{ valueIds: [size.values[0]!.id], priceMinor: 300, status: 'active' }, { valueIds: [size.values[1]!.id], priceMinor: 325, status: 'active' }],
@@ -292,5 +294,115 @@ describe('reading an order', () => {
     const order = await placed(sokha)
     await expectApiError(() => getOrder(db, dara, order.id), 404, 'NOT_FOUND')
     await expectApiError(() => getOrder(db, sokha, newId()), 404, 'NOT_FOUND')
+  })
+})
+
+/** Only intercept the write batch: catalog reads also use batch. */
+function beforeCheckoutCommit(meanwhile: () => Promise<unknown>): Db {
+  const on = Object.create(db) as Db
+  let intercepted = false
+  on.batch = (async (statements: Parameters<Db['batch']>[0]) => {
+    const query = (statements[0] as unknown as { toSQL: () => { sql: string } }).toSQL().sql
+    if (!intercepted && query.startsWith('insert into "idempotency_keys"')) {
+      intercepted = true
+      await meanwhile()
+    }
+    return db.batch(statements)
+  }) as unknown as Db['batch']
+  return on
+}
+
+async function checkoutRows() {
+  return Promise.all([orders, orderLines, orderEvents, counterPayments, idempotencyKeys, auditEvents, outboxMessages].map(table => db.select({ count: sql<number>`count(*)` }).from(table)))
+}
+
+describe('checkout state at commit', () => {
+  const staff = (): BranchActor => ({ ...admin, branchId, branchRole: 'manager' })
+  const rejectAfter = async (change: () => Promise<unknown>, code: string, over: Partial<PlaceOrderInput> = {}) => {
+    let afterChange: unknown
+    const on = beforeCheckoutCommit(async () => {
+      await change()
+      afterChange = await checkoutRows()
+    })
+    await expectApiError(() => place(sokha, over, NOON, crypto.randomUUID(), on), 409, code)
+    expect(afterChange).toBeDefined()
+    expect(await checkoutRows()).toEqual(afterChange)
+    expect(await orderCount()).toBe(0)
+  }
+
+  it('refuses an item marked sold out after validation', async () => {
+    await rejectAfter(() => setSoldOut(db, staff(), { variationIds: [large()], soldOut: true }), 'ORDER_NOT_ORDERABLE')
+  })
+
+  it('refuses a price changed after validation without accepting a new total', async () => {
+    await rejectAfter(() => updateItem(db, admin, bread.id, { version: bread.version, variations: [{ valueIds: [], priceMinor: 400, status: 'active' }] }), 'PRICES_CHANGED')
+  })
+
+  it('refuses an option archived after validation', async () => {
+    await rejectAfter(() => archiveOptionValue(db, admin, latte.optionSets[0]!.id, latte.optionSets[0]!.values.find(v => v.name === 'Large')!.id, { version: 1 }), 'ORDER_NOT_ORDERABLE')
+  })
+
+  it('refuses an add-on archived after validation', async () => {
+    await rejectAfter(() => archiveModifier(db, admin, milk.id, oat(), { version: milk.version }), 'ORDER_NOT_ORDERABLE')
+  })
+
+  it('refuses a promotion starting after validation', async () => {
+    await rejectAfter(() => createPromotion(db, admin, { name: 'Lunch', description: '', discount: { kind: 'percent', percent: 20 }, scope: 'menu', itemIds: [], categoryIds: [], branchIds: [branchId], startsOn: '2026-09-28', endsOn: null, posterId: null, publish: true }, NOON), 'PRICES_CHANGED')
+  })
+
+  it('refuses a promotion ending after validation', async () => {
+    const promotion = await createPromotion(db, admin, { name: 'Lunch', description: '', discount: { kind: 'percent', percent: 20 }, scope: 'menu', itemIds: [], categoryIds: [], branchIds: [branchId], startsOn: '2026-09-28', endsOn: null, posterId: null, publish: true }, NOON)
+    // 2 * (325 * 0.8 + 50) + 250 * 0.8 = 820.
+    await rejectAfter(() => endPromotion(db, admin, promotion.id, { version: promotion.version }, NOON), 'PRICES_CHANGED', { expectedTotalMinor: 820 })
+  })
+
+  it('refuses a branch paused after validation (pause does not bump its version)', async () => {
+    await rejectAfter(() => pauseBranch(db, { ...admin, userId: sokha.userId }, branchId, { for: '15m', reason: null }, NOON), 'ORDERING_CLOSED')
+  })
+
+  it('refuses hours closed after validation', async () => {
+    await rejectAfter(() => updateBranchSettings(db, admin, branchId, { version: 2, hours: [] }), 'ORDERING_CLOSED')
+  })
+
+  it('refuses a table archived after validation, preserving dine-in intent', async () => {
+    const table = await createTable(db, admin, branchId, { label: 'Race', area: null }, qr)
+    await rejectAfter(() => archiveTable(db, admin, branchId, table.id, { version: table.version }, qr), 'TABLE_UNAVAILABLE', { tableToken: table.qrUrl!.split('/').pop()! })
+  })
+
+  it('refuses an add-on price changed after validation', async () => {
+    await rejectAfter(() => updateModifier(db, admin, milk.id, oat(), { version: milk.version, name: 'Oat milk', priceDeltaMinor: 75, isDefault: false }), 'PRICES_CHANGED')
+  })
+
+  it('rejects offsetting line price changes even when the total stays the same', async () => {
+    await rejectAfter(async () => {
+      await updateItem(db, admin, bread.id, { version: bread.version, variations: [{ valueIds: [], priceMinor: 300, status: 'active' }] })
+      await updateModifier(db, admin, milk.id, oat(), { version: milk.version, name: 'Oat milk', priceDeltaMinor: 25, isDefault: false })
+    }, 'ORDER_NOT_ORDERABLE')
+  })
+
+  it('refuses availability hours changed after validation', async () => {
+    const rule = await createAvailabilityRule(db, admin, { name: 'Lunch hours', windows: [{ weekday: 1, startMinute: 660, endMinute: 780 }] })
+    bread = await updateItem(db, admin, bread.id, { version: bread.version, availabilityRuleIds: [rule.id] })
+    await rejectAfter(() => updateAvailabilityRule(db, admin, rule.id, { version: rule.version, name: rule.name, windows: [{ weekday: 1, startMinute: 780, endMinute: 840 }] }), 'ORDER_NOT_ORDERABLE')
+  })
+
+  it('refuses a promotion discount edited after validation', async () => {
+    const fields = { name: 'Lunch', description: '', discount: { kind: 'percent' as const, percent: 20 }, scope: 'menu' as const, itemIds: [], categoryIds: [], branchIds: [branchId], startsOn: '2026-09-28', endsOn: null, posterId: null, publish: true }
+    const promotion = await createPromotion(db, admin, fields, NOON)
+    await rejectAfter(() => updatePromotion(db, admin, promotion.id, { ...fields, version: promotion.version, discount: { kind: 'percent', percent: 30 } }, NOON), 'PRICES_CHANGED', { expectedTotalMinor: 820 })
+  })
+
+  it('rolls back if time crosses the last-order minute before commit', async () => {
+    const on = beforeCheckoutCommit(() => new Promise(resolve => setTimeout(resolve, 30)))
+    const before = await checkoutRows()
+    // Just before 20:45; the shifted logical clock uses actual elapsed database time.
+    await expectApiError(() => place(sokha, {}, new Date(monday('20:45').getTime() - 1), crypto.randomUUID(), on), 409, 'ORDER_NOT_ORDERABLE')
+    expect(await checkoutRows()).toEqual(before)
+  })
+
+  it('does not reject another branch sold-out change', async () => {
+    const on = beforeCheckoutCommit(() => setSoldOut(db, { ...staff(), branchId: otherBranch }, { variationIds: [large()], soldOut: true }))
+    const result = await place(sokha, {}, NOON, crypto.randomUUID(), on)
+    expect((await getOrder(db, sokha, result.orderId)).totalMinor).toBe(1000)
   })
 })

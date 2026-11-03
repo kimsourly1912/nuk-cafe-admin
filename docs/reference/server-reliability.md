@@ -61,6 +61,16 @@ An empty page after a non-null cursor immediately wraps and processes the first 
 
 Local workload command: `CATALOG_BENCH=1 pnpm exec vitest run --project server server/features/menu/tests/catalog-performance.test.ts --maxWorkers=2 --reporter=verbose`. It reports returned relation rows, database calls and local p50/p95 over twenty samples. These are SQLite workload measurements, not D1 row-read billing or production latency.
 
+## Checkout validation at commit (D257)
+
+`captureCheckoutMenuGuard(db, tenantId, branchId, itemIds)` (`menu`) and `captureCheckoutBranchGuard(db, tenantId, branchId)` (`branches`) return `Promise<{ guard: Statement }>`. Capture them **before** loading the menu/branch/table; include their guards in the existing idempotent order batch. Menu snapshots include selected aggregate versions, category/rule/promotion sets and actual branch sold-out values. Branch snapshots include settings version, unversioned pause and table versions. A version covers its aggregate's children and links. New/deleted records invalidate the captured sets too.
+
+Shared repository helpers in `query.ts`: `snapshotRows(db, table, columns, where, order)` creates a scalar JSON row set (supply tenant scope and a deterministic unique order); `captureSnapshotGuard(db, snapshot)` reads it and returns `{ guard }`, an equality guard for the write batch. Keep a returned statement inside an object: Drizzle builders are thenable, so an async function returning the builder directly executes it too early.
+
+Checkout takes its validation time from the database and puts a database-clock guard last in the batch: all current minute/date rules must still be in the same minute. A minute boundary or conservative library/table conflict can refuse an otherwise valid cart (`ORDER_NOT_ORDERABLE`). After rollback, fresh reads only explain the refusal with existing error codes. They never authorize a second write. Replays retain the committed order even after price/availability changes. No quote reservation or quantity inventory is added.
+
+Forced interleavings, late SQL failure, lost response, contract maximum, same-key concurrency and two-cafe/branch isolation: orders `orders.service.test.ts` and `checkout-d1.test.ts` (actual local workerd/D1 adapter). [Audit, limitations and financial follow-ups](../reviews/checkout-concurrency-2026-11-02.md). No deployed concurrency/failover guarantee is inferred from local tests.
+
 ## Fresh counter reads and D1 batch columns
 
 `listCounterQueue(db, actor, now?, automaticCheck?)` loads one context row for the actor's tenant/branch, then one four-statement batch for active orders, lines, payments and finished count. The context combines timezone, the rate at `now`, KHQR settings and token presence without selecting the sealed token. An explicit `automaticCheck` argument remains an internal override; the HTTP route uses fresh token presence. Business-date calculation stays in the existing timezone rules, between context and batch.

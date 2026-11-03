@@ -217,6 +217,8 @@ Nitro auto-imports every export of `server/utils/` into routes, so a helper's na
 | `withPage(query, { page, pageSize })` | query | limit and offset on a `.$dynamic()` query, as [Drizzle's pagination guide](https://orm.drizzle.team/docs/guides/limit-offset-pagination) | 7 |
 | `readPage(db, rows, total, { page, pageSize })` | query | `{ rows, total }`: the ordered `.$dynamic()` page and `select({ total: count() })` in one [`db.batch`](https://orm.drizzle.team/docs/sqlite/batch-api); `total` must be a batch item, so `$count` is refused at compile time | 7, and their 10 casts |
 | `hasAny(db, table, where)` | query | `boolean` from `select 1 … limit 1` | ~10 |
+| `snapshotRows(db, table, columns, where, order)` | query | deterministic scalar JSON of scoped ordered rows, including set additions/removals | menu and branch checkout snapshots (D257) |
+| `captureSnapshotGuard(db, snapshot)` | query | reads a scalar snapshot; returns `Promise<{ guard: Statement }>` for equality inside the caller's atomic batch; capture before validation; never return a thenable statement directly from an async function | menu and branch checkout guards (D257) |
 | `nextPosition(db, table, column, where)` | query | `max(column) + 1`, 1 when nothing matches | 4 |
 | `updateAtVersion(db, table, { tenantId, id, version }, set, extra?)` | batch | a `Statement`: the cafe's row at its version, `version + 1`; `set` is typed by the table (a wrong column or value is refused). Follow it with `requireOneChange` | 22 |
 | `insertAll(db, table, rows)` | batch | `Statement[]` in pieces under D1's limit; none for no rows | 13 |

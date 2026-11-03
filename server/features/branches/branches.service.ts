@@ -1,3 +1,4 @@
+import { captureSnapshotGuard } from '#server/utils/query'
 import type { BranchPause, BranchSettings, CreateBranchInput, PauseBranchInput, PauseChoice, CreateTableInput, DiningTable, PublicBranch, PublicTable, ScannedTable, TableListQuery, TableVersionInput, UpdateBranchSettingsInput, UpdateTableInput } from '#shared/contracts/branches'
 import { MAX_BRANCH_TABLES, MAX_BRANCHES } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
@@ -460,4 +461,9 @@ export async function cafeToday(db: Db, tenantId: string, now = new Date(), fall
   const first = (await repo.listActiveBranches(db, tenantId))[0]
   const branch = first && await repo.findBranch(db, tenantId, first.id)
   return localDate(now, branch?.timezone ?? fallback)
+}
+
+/** Capture before resolving the branch/table for checkout; put the guard in its write batch. */
+export function captureCheckoutBranchGuard(db: Db, tenantId: string, branchId: string): Promise<{ guard: Statement }> {
+  return captureSnapshotGuard(db, repo.checkoutSnapshot(db, tenantId, branchId))
 }

@@ -1,9 +1,10 @@
 import { and, asc, count, eq, inArray, not, sql } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
 import type { DiningTableStatus, TableDeleteBlocker } from '#shared/contracts/branches'
 import type { WeeklyWindow } from '#shared/contracts/common'
 import type { Db, Statement } from '#server/utils/batch'
 import { readInChunks, replaceAll, requireAtMost, updateAtVersion } from '#server/utils/batch'
-import { atVersion, byId, firstRow, hasAny, inTenant, withStatus } from '#server/utils/query'
+import { atVersion, byId, firstRow, hasAny, inTenant, snapshotRows, withStatus } from '#server/utils/query'
 import { organization, user } from '#server/db/tables'
 import { tableOnAnOrder } from '#server/features/orders'
 import { branches, branchHours, diningTables } from './branches.schema'
@@ -234,4 +235,12 @@ export function deleteTableStatement(db: Db, tenantId: string, branchId: string,
     eq(diningTables.status, 'archived'),
     not(tableOnAnOrder(db, diningTables)),
   ))
+}
+
+/** Settings version covers hours; pause is deliberately outside it. Tables have their own versions. */
+export function checkoutSnapshot(db: Db, tenantId: string, branchId: string): SQL<string> {
+  const tables = snapshotRows(db, diningTables, [diningTables.id, diningTables.version], inTenant(diningTables, tenantId, eq(diningTables.branchId, branchId)), [diningTables.id])
+  const branch = db.select({ state: sql`json_array(${branches.version}, ${branches.pausedUntil}, ${tables})` })
+    .from(branches).where(byId(branches, tenantId, branchId))
+  return sql<string>`(${branch})`
 }

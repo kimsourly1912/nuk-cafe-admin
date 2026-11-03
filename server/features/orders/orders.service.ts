@@ -8,15 +8,16 @@ import { requireCount } from '#server/utils/batch'
 import { apiError, ErrorCodes } from '#server/utils/errors'
 import { newId } from '#server/utils/ids'
 import { toIso } from '#server/utils/time'
-import { resolveTableToken } from '#server/features/branches'
+import { captureCheckoutBranchGuard } from '#server/features/branches'
 import { guestNameStatement } from '#server/features/identity'
 import type { Actor } from '#server/features/identity'
-import { getPublicMenu } from '#server/features/menu'
+import { captureCheckoutMenuGuard } from '#server/features/menu'
 import { outboxStatement, withIdempotency } from '#server/features/platform'
 import { runOrderCommand } from './commands'
-import { cannotCancelNow, orderingClosed, orderNotFound, orderNotOrderable, pricesChanged, tableUnavailable, tooManyUnpaidOrders } from './orders.errors'
+import { cannotCancelNow, orderNotFound, orderNotOrderable, tooManyUnpaidOrders } from './orders.errors'
 import * as repo from './orders.repository'
-import { quoteOrder } from './quote.rules'
+import { CheckoutChanged, validateCheckout } from './checkout.service'
+import { checkoutClock } from './checkout.repository'
 import { businessDateAt } from './reports.rules'
 import { toOrderLine } from './order-lines'
 
@@ -31,19 +32,6 @@ const MINUTE = 60_000
 
 /** The branch's business day at an instant: the local date, the day starting at 4:00 (Q39). */
 export { businessDateAt }
-
-/** The table a QR token names, if it's an active table of this branch. */
-async function tableFor(db: Db, tenantId: string, branchId: string, token: string | null) {
-  if (!token) return null
-  try {
-    const found = await resolveTableToken(db, tenantId, token)
-    if (found.branch.id === branchId) return found.table
-  }
-  catch {
-    // Unknown or archived: refused below, never switched to pickup silently (Q42).
-  }
-  throw tableUnavailable()
-}
 
 /** Each item's category on the menu (its sub-category when it has one), kept on the line as sold (D110). */
 function categoriesOfItems(categories: PublicMenuCategory[]): Map<string, { id: string, name: string }> {
@@ -62,7 +50,7 @@ function categoriesOfItems(categories: PublicMenuCategory[]): Map<string, { id: 
  * placed at once can't both pass). Returns the new order's id: its pickup number is computed in
  * the insert, so the order is read back (`getOrder`).
  */
-export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, idempotencyKey: string, now = new Date()): Promise<{ orderId: string, replayed: boolean }> {
+export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, idempotencyKey: string, now?: Date): Promise<{ orderId: string, replayed: boolean }> {
   const { response, replayed } = await withIdempotency(
     db,
     { tenantId: actor.tenantId, actorId: actor.userId, operation: 'orders.place', key: idempotencyKey },
@@ -72,12 +60,12 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
       if (actor.guest && !input.guestName?.trim()) {
         throw apiError(400, ErrorCodes.VALIDATION_FAILED, 'Some of the submitted data is invalid.', { fieldErrors: { guestName: ['Enter your name'] } })
       }
-      const menu = await getPublicMenu(db, actor.tenantId, { branchId: input.branchId }, now, input.lines.map(line => line.itemId))
-      const quote = quoteOrder(menu, input.lines)
-      if (quote.problems[0]) throw orderingClosed(quote.problems[0].message)
-      if (!quote.orderable) throw orderNotOrderable()
-      if (quote.totalMinor !== input.expectedTotalMinor) throw pricesChanged()
-      const table = await tableFor(db, actor.tenantId, menu.branch.id, input.tableToken)
+      const clock = await checkoutClock(db, now)
+      const at = clock.at
+      // Capture before ANY validation reads, including branch, catalog and dynamic state.
+      const { guard: menuGuard } = await captureCheckoutMenuGuard(db, actor.tenantId, input.branchId, input.lines.map(line => line.itemId))
+      const { guard: branchGuard } = await captureCheckoutBranchGuard(db, actor.tenantId, input.branchId)
+      const { menu, quote, table } = await validateCheckout(db, actor.tenantId, input, at)
 
       const orderId = newId()
       const order: repo.NewOrder = {
@@ -85,14 +73,14 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
         tenantId: actor.tenantId,
         branchId: menu.branch.id,
         customerId: actor.userId,
-        businessDate: businessDateAt(now, menu.branch.timezone),
+        businessDate: businessDateAt(at, menu.branch.timezone),
         orderType: table ? 'dine_in' : 'pickup',
         tableId: table?.id ?? null,
         tableLabel: table?.label ?? null,
         subtotalMinor: quote.subtotalMinor,
         totalMinor: quote.totalMinor,
-        placedAt: now,
-        paymentDueAt: new Date(now.getTime() + PAYMENT_WINDOW_MINUTES * MINUTE),
+        placedAt: at,
+        paymentDueAt: new Date(at.getTime() + PAYMENT_WINDOW_MINUTES * MINUTE),
         source: input.source ?? null,
       }
       const categories = categoriesOfItems(menu.categories)
@@ -117,20 +105,30 @@ export async function placeOrder(db: Db, actor: Actor, input: PlaceOrderInput, i
       }))
       return {
         statements: [
+          menuGuard, branchGuard,
           // Ignored for an account (the statement only renames a guest).
-          ...(actor.guest && input.guestName ? [guestNameStatement(db, actor.userId, input.guestName.trim(), now)] : []),
+          ...(actor.guest && input.guestName ? [guestNameStatement(db, actor.userId, input.guestName.trim(), at)] : []),
           repo.insertOrderStatement(db, order),
           ...repo.insertLinesStatements(db, actor.tenantId, orderId, lines),
-          repo.eventStatement(db, { tenantId: actor.tenantId, orderId, toVersion: 1, actorId: actor.userId, fromStatus: null, toStatus: 'awaiting_payment', at: now }),
-          repo.requireUnpaidAtMost(db, actor.tenantId, actor.userId, now, MAX_UNPAID_ORDERS),
+          repo.eventStatement(db, { tenantId: actor.tenantId, orderId, toVersion: 1, actorId: actor.userId, fromStatus: null, toStatus: 'awaiting_payment', at }),
+          repo.requireUnpaidAtMost(db, actor.tenantId, actor.userId, at, MAX_UNPAID_ORDERS),
           // A neutral event for whoever listens (the Telegram alerts, D113): orders don't know them.
           outboxStatement(db, actor.tenantId, ORDER_EVENTS.placed, { orderId }),
+          clock.guard,
         ],
         response: { orderId },
       }
     },
-    { onStale: tooManyUnpaidOrders, now },
-  )
+    { onStale: () => new CheckoutChanged(), now },
+  ).catch(async (error: unknown) => {
+    if (!(error instanceof CheckoutChanged)) throw error
+    // The failed batch left nothing. Fresh reads choose the existing user-facing refusal;
+    // they never authorize another write or accept a changed total.
+    const at = now ?? new Date()
+    await validateCheckout(db, actor.tenantId, input, at)
+    if (await repo.countUnpaid(db, actor.tenantId, actor.userId, at) >= MAX_UNPAID_ORDERS) throw tooManyUnpaidOrders()
+    throw orderNotOrderable()
+  })
   return { orderId: response.orderId, replayed }
 }
 
