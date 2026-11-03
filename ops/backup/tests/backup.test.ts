@@ -1,3 +1,4 @@
+import { createClient } from '@libsql/client'
 import { Decrypter, generateIdentity, identityToRecipient } from 'age-encryption'
 import { describe, expect, it, vi } from 'vitest'
 import { backupKeys, downloadDump, encryptDump, exportDump, failureText, MAX_DUMP_BYTES, missingSettings, PermanentError, sendOps, storeCopy, successText } from '../src/backup'
@@ -62,20 +63,23 @@ describe('the export', () => {
   }
   const body = (call: { init?: RequestInit }) => JSON.parse(String(call.init!.body)) as Record<string, unknown>
 
-  /**
-   * D1 as it behaves (D228): each answer names a new bookmark; asked about any other bookmark, it has
-   * forgotten the export. Ready after `readyAfter` questions.
-   */
+  /** Cloudflare's D1 polling contract: initial request gives a stable bookmark,
+   * every request declares output_format, and completion nests the signed URL. */
   function d1(readyAfter: number) {
-    let current = 'bm-0'
+    const bookmark = 'bm-export-1'
     let asked = 0
     return stub((_url, init) => {
-      const { current_bookmark: bookmark } = JSON.parse(String(init!.body)) as { current_bookmark?: string }
-      if (bookmark !== undefined && bookmark !== current) return exportAnswer({ error: 'Not currently exporting anything.' })
+      const payload = JSON.parse(String(init!.body)) as Record<string, unknown>
+      if (asked === 0) {
+        if (payload.output_format !== 'polling' || 'current_bookmark' in payload)
+          return exportAnswer({ status: 'error', error: 'Initial request incorrect' })
+      }
+      else if (payload.current_bookmark !== bookmark || payload.output_format !== 'polling') {
+        return exportAnswer({ status: 'error', error: 'Polling request incorrect' })
+      }
       asked += 1
-      if (asked > readyAfter) return exportAnswer({ status: 'complete', signed_url: 'https://dump.example/x.sql' })
-      current = `bm-${asked}`
-      return exportAnswer({ at_bookmark: current, status: 'active' })
+      if (asked > readyAfter) return exportAnswer({ at_bookmark: bookmark, status: 'complete', result: { signed_url: 'https://dump.example/x.sql' } })
+      return Response.json({ success: true, errors: [], result: { at_bookmark: bookmark, status: 'active', success: true } }, { status: 202 })
     })
   }
 
@@ -87,15 +91,15 @@ describe('the export', () => {
     expect(body(calls[0]!)).toEqual({ output_format: 'polling' })
   })
 
-  it('asks again every second with the newest bookmark until D1 gives the download address', async () => {
+  it('polls with output_format and the stable bookmark until D1 gives its nested download address', async () => {
     const { fetchFn, calls } = d1(3)
     const { waits, wait } = noWait()
     expect(await exportDump(fetchFn, env, { wait })).toBe('https://dump.example/x.sql')
     expect(calls.map(body)).toEqual([
       { output_format: 'polling' },
-      { output_format: 'polling', current_bookmark: 'bm-1' },
-      { output_format: 'polling', current_bookmark: 'bm-2' },
-      { output_format: 'polling', current_bookmark: 'bm-3' },
+      { output_format: 'polling', current_bookmark: 'bm-export-1' },
+      { output_format: 'polling', current_bookmark: 'bm-export-1' },
+      { output_format: 'polling', current_bookmark: 'bm-export-1' },
     ])
     expect(waits).toEqual([1000, 1000, 1000])
   })
@@ -128,7 +132,80 @@ describe('the export', () => {
     await expect(exportDump(stub(() => exportAnswer({ status: 'error', error: 'Database too busy' })).fetchFn, env, noWait())).rejects.toThrow('D1\'s export failed: Database too busy')
     await expect(exportDump(stub(() => exportAnswer({ error: 'Not currently exporting anything.' })).fetchFn, env, noWait())).rejects.toThrow('Not currently exporting anything')
     await expect(exportDump(stub(() => exportAnswer({ status: 'error' })).fetchFn, env, noWait())).rejects.toThrow('without a reason')
+    await expect(exportDump(stub(() => exportAnswer({ status: 'complete' })).fetchFn, env, noWait())).rejects.toThrow('completed without a download address')
     await expect(exportDump(stub(() => exportAnswer({ status: 'active' })).fetchFn, env, noWait())).rejects.toThrow('no bookmark')
+  })
+
+  it('rejects malformed envelopes and task fields without a TypeError', async () => {
+    const malformed: unknown[] = [
+      null, [], 'ok', { success: 'true', result: {} }, { success: true, result: [] },
+      { success: false, errors: 'not an array' }, { success: false, errors: [null, { message: 7 }] },
+      ...[
+        { status: 1 }, { status: 'queued', at_bookmark: 'bm' },
+        { status: 'active', at_bookmark: 7 }, { status: 'active', at_bookmark: ' ' },
+        { status: 'active', at_bookmark: 'bm', error: {} },
+        { status: 'complete', result: [] }, { status: 'complete', result: { signed_url: 7 } },
+        { status: 'complete', result: { signed_url: ' ' } },
+        { status: 'complete', success: 'true', result: { signed_url: 'https://dump.example/x.sql' } },
+      ].map(result => ({ success: true, result })),
+    ]
+    for (const payload of malformed) {
+      const error = await exportDump(stub(() => Response.json(payload)).fetchFn, env, noWait()).catch((e: Error) => e)
+      expect(error).toBeInstanceOf(Error)
+      expect(error).not.toBeInstanceOf(TypeError)
+      expect(error).not.toBeInstanceOf(PermanentError)
+    }
+  })
+
+  it('rejects a failed task even if it includes a completed URL', async () => {
+    const { fetchFn } = stub(() => exportAnswer({ success: false, status: 'complete', result: { signed_url: 'https://dump.example/x.sql' } }))
+    await expect(exportDump(fetchFn, env, noWait())).rejects.toThrow('unsuccessful task')
+  })
+
+  it('rejects the tutorial\'s flat URL instead of accepting an incomplete contract', async () => {
+    await expect(exportDump(stub(() => exportAnswer({ status: 'complete', signed_url: 'https://dump.example/x.sql' })).fetchFn, env, noWait())).rejects.toThrow('without a download address')
+  })
+
+  it('propagates a mid-poll failure and starts a fresh export on the next attempt', async () => {
+    let attempt = 0
+    const { fetchFn, calls } = stub((_url, init) => {
+      const payload = JSON.parse(String(init!.body)) as Record<string, unknown>
+      if (!payload.current_bookmark) {
+        attempt += 1
+        return exportAnswer({ status: 'active', at_bookmark: 'bm-' + attempt })
+      }
+      if (attempt === 1) return exportAnswer({ status: 'error', error: 'Not currently exporting anything.' })
+      return exportAnswer({ status: 'complete', result: { signed_url: 'https://dump.example/retry.sql' } })
+    })
+    await expect(exportDump(fetchFn, env, noWait())).rejects.toThrow('Not currently exporting anything')
+    expect(await exportDump(fetchFn, env, noWait())).toBe('https://dump.example/retry.sql')
+    expect(calls.map(body)).toEqual([
+      { output_format: 'polling' }, { output_format: 'polling', current_bookmark: 'bm-1' },
+      { output_format: 'polling' }, { output_format: 'polling', current_bookmark: 'bm-2' },
+    ])
+  })
+
+  it('does not reuse a bookmark after a lost poll response', async () => {
+    let requests = 0
+    const { fetchFn, calls } = stub(() => {
+      requests += 1
+      if (requests === 2) throw new DOMException('connection interrupted', 'AbortError')
+      if (requests === 1) return exportAnswer({ status: 'active', at_bookmark: 'old-export' })
+      return exportAnswer({ status: 'complete', result: { signed_url: 'https://dump.example/new.sql' } })
+    })
+    await expect(exportDump(fetchFn, env, noWait())).rejects.toThrow('connection interrupted')
+    expect(await exportDump(fetchFn, env, noWait())).toBe('https://dump.example/new.sql')
+    expect(body(calls[2]!)).toEqual({ output_format: 'polling' })
+  })
+
+  it('does not poll after a suspended wait has passed the export deadline', async () => {
+    let clock = 0
+    const { fetchFn, calls } = d1(5)
+    const wait = async () => {
+      clock = 6 * 60_000
+    }
+    await expect(exportDump(fetchFn, env, { wait, now: () => clock })).rejects.toThrow('wasn\'t ready after 5 minutes')
+    expect(calls).toHaveLength(1)
   })
 })
 
@@ -290,5 +367,46 @@ describe('the ops chat', () => {
     expect(report).toContain('daily/angder-2026-11-02.sql.age: stored (12.5 KB)')
     expect(report).toContain('monthly/angder-2026-11.sql.age: already there')
     expect(successText({ ...backup, results: [...backup.results] }, true)).toContain('a missing one means the backup has stopped')
+  })
+})
+
+describe('synthetic backup recovery (mocked HTTP, real age and SQLite)', () => {
+  it('decrypts the first stored copy into a separate test database after an upload response is lost', async () => {
+    const identity = await generateIdentity()
+    const recipient = await identityToRecipient(identity)
+    const sql = 'CREATE TABLE orders (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, total_cents INTEGER NOT NULL);\nINSERT INTO orders VALUES (\'one\', \'cafe-a\', 1250), (\'two\', \'cafe-b\', 700);'
+    const { fetchFn } = stub(url => url.endsWith('/export')
+      ? exportAnswer({ success: true, status: 'complete', result: { signed_url: 'https://dump.example/fixture.sql' } })
+      : new Response(sql))
+    const dump = await downloadDump(fetchFn, await exportDump(fetchFn, env))
+    const encrypted = await encryptDump(dump, recipient)
+    let stored: Uint8Array<ArrayBuffer> | undefined
+    const upload = vi.fn(async (_url: string, init: RequestInit) => {
+      expect(new Headers(init.headers).get('if-none-match')).toBe('*')
+      if (stored) return new Response(null, { status: 412 })
+      stored = (init.body as Uint8Array<ArrayBuffer>).slice()
+      throw new Error('upload response lost after storage')
+    })
+    const key = backupKeys(Date.parse('2026-11-03T20:17:00Z'))[0]!
+    await expect(storeCopy(upload, env, key, encrypted)).rejects.toThrow('response lost')
+    // A retry encrypts afresh; the original object must survive.
+    expect(await storeCopy(upload, env, key, await encryptDump(dump, recipient))).toBe('exists')
+    expect(stored).toEqual(encrypted)
+    const decrypter = new Decrypter()
+    decrypter.addIdentity(identity)
+    const restoredSql = await decrypter.decrypt(stored!, 'text')
+    expect(restoredSql).toBe(sql)
+    const restored = createClient({ url: 'file::memory:' })
+    try {
+      await restored.executeMultiple(restoredSql)
+      expect((await restored.execute('SELECT id, tenant_id, total_cents FROM orders ORDER BY id')).rows).toMatchObject([
+        { id: 'one', tenant_id: 'cafe-a', total_cents: 1250 },
+        { id: 'two', tenant_id: 'cafe-b', total_cents: 700 },
+      ])
+      expect((await restored.execute('PRAGMA integrity_check')).rows[0]!.integrity_check).toBe('ok')
+    }
+    finally {
+      restored.close()
+    }
   })
 })
