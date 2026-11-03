@@ -21,6 +21,8 @@ export interface IdentityAuthSettings {
   /** Check new passwords against Have I Been Pwned. Off only in tests (it calls an external API). */
   checkBreachedPasswords?: boolean
   humanCheck?: HumanCheckSettings
+  /** Google is enabled only with both private credentials and the public rollout flag. */
+  google?: { enabled: boolean, clientId: string, clientSecret: string }
 }
 
 /** Queues an account email (verification, reset); `platform:deliver-outbox` sends it. */
@@ -43,8 +45,54 @@ const isSuperAdmin = (role: unknown) => typeof role === 'string' && role.split('
  * Our Better Auth configuration (docs/server/security.md, D45, D47). `server/auth.config.ts` passes
  * it to `defineServerAuth`; the identity tests run it against the real migration.
  */
-export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true, humanCheck }: IdentityAuthSettings) {
+export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true, humanCheck, google }: IdentityAuthSettings) {
   return {
+    socialProviders: google?.enabled && google.clientId && google.clientSecret
+      ? {
+          google: {
+            clientId: google.clientId,
+            clientSecret: google.clientSecret,
+            prompt: 'select_account' as const,
+            accessType: 'online' as const,
+            // Redirect flow only: Better Auth validates the state cookie and exchanges the code.
+            disableIdTokenSignIn: true,
+            // No external avatar requests (the existing CSP permits same-origin images only).
+            mapProfileToUser: () => ({ image: '' }),
+          },
+        }
+      : {},
+    // Owner choice (2026-11-03): existing password accounts are never silently linked.
+    account: { accountLinking: { enabled: false } },
+    databaseHooks: {
+      session: {
+        create: {
+          before: async (session, ctx) => {
+            if (!ctx || !(ctx.path?.startsWith('/callback/') || ctx.path === '/sign-in/social')) return
+            const user = await ctx.context.internalAdapter.findUserById(session.userId)
+            const flags = user as { twoFactorEnabled?: boolean, mustChangePassword?: boolean, role?: string } | null
+            // Better Auth 1.7.7's twoFactor plugin challenges credential sign-ins only.
+            // Refuse BEFORE a session is written; an OAuth session must never bypass that step.
+            if (!flags || flags.twoFactorEnabled || flags.mustChangePassword || isSuperAdmin(flags.role)) {
+              throw new APIError('FORBIDDEN', { code: 'GOOGLE_PASSWORD_REQUIRED', message: 'Use email and password to sign in to this account.' })
+            }
+          },
+        },
+      },
+      account: {
+        create: {
+          // Google is an identity provider, not a Google API integration. Keep no bearer tokens.
+          before: async account => account.providerId === 'google'
+            ? { data: { ...account, accessToken: null, refreshToken: null, idToken: null } }
+            : undefined,
+        },
+        update: {
+          // A returning Google sign-in refreshes the account's token fields.
+          before: async (account, ctx) => ctx?.path?.startsWith('/callback/')
+            ? { data: { ...account, accessToken: null, refreshToken: null, idToken: null } }
+            : undefined,
+        },
+      },
+    },
     emailAndPassword: {
       enabled: true,
       // Guests and unverified accounts can order (D156); verification still confirms account email.
@@ -88,6 +136,12 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
       },
     },
     user: {
+      // This native validation seam covers creation AND returning OAuth identities.
+      validateUserInfo: ({ user, source }) => {
+        if (source.oauth?.providerId === 'google' && user.emailVerified !== true) {
+          return { error: 'google_email_unverified', errorDescription: 'Google must verify your email first.' }
+        }
+      },
       additionalFields: {
         // Set when an admin creates a staff account with a temporary password. Better Auth doesn't
         // enforce it: our access helpers refuse with PASSWORD_CHANGE_REQUIRED (security.md).
@@ -145,6 +199,7 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
       storage: 'database',
       customRules: {
         '/sign-in/email': { window: MINUTE, max: 5 },
+        '/sign-in/social': { window: MINUTE, max: 5 },
         '/sign-up/email': { window: 10 * MINUTE, max: 5 },
         '/request-password-reset': { window: 10 * MINUTE, max: 3 },
         '/reset-password': { window: 10 * MINUTE, max: 5 },

@@ -15,6 +15,7 @@ import AccountAside from './AccountAside.vue'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
+import GoogleSignInButton from './GoogleSignInButton.vue'
 
 const route = useRoute()
 const home = useAccountHome()
@@ -22,7 +23,7 @@ const target = computed(() => accountRedirectTarget(route.query.redirect, home.v
 
 const state = reactive({ name: '', email: '', password: '' })
 const { saving, formError, submit } = useAccountForm({ formId: 'sign-up-form', fields: ['name', 'email', 'password'] }, state)
-const { signUp } = useAccountActions()
+const { googleSignIn, signUp } = useAccountActions()
 const assertActive = useAuthCompletion()
 
 const { account, known, error: sessionError, refresh } = useAccountSession({ fresh: true })
@@ -45,6 +46,15 @@ const loading = computed(() => (!known.value && !sessionError.value && !saving.v
 const refusedPassword = ref<string>()
 /** The last password Generate made: random, so the checklist skips its leaked-password check. */
 const generatedPassword = ref<string>()
+
+async function onGoogleSignIn() {
+  if (saving.value) return
+  await submit(async () => {
+    const destination = await googleSignIn(route.query.redirect)
+    assertActive()
+    await navigateTo(destination, { external: true })
+  })
+}
 
 async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
   await submit(async () => {
@@ -98,6 +108,10 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
       @error="focusFirstInvalid"
     >
       <FormErrorAlert :message="formError" />
+      <GoogleSignInButton
+        :disabled="saving"
+        @click="onGoogleSignIn"
+      />
 
       <UFormField
         label="Name"

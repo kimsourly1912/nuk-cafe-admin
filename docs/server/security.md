@@ -281,3 +281,11 @@ Never in the repo, never logged, never in error messages. `.env` is git-ignored;
 - [ ] Errors use shared codes or the feature's `*.errors.ts` factories, with user-safe messages; nothing internal leaks.
 - [ ] The response is mapped (no raw rows) and contains nothing the caller shouldn't see.
 - [ ] Tests cover the permission cases, each error code, and the race/replay case.
+
+## Google account boundary (D259)
+
+Google is an optional redirect-only identity provider; server configuration requires both private credentials and an enabled rollout flag. Account linking is disabled (owner decision): matching email never attaches a provider to an existing password account, and direct provider-link APIs cannot bypass that decision. Google's email must be verified via Better Auth's native user validation hook.
+
+Before an OAuth session is created, the stored account is checked for two-step sign-in, a temporary password and superadmin role; each is refused, preserving password/second-factor requirements. The admin plugin's ban check remains. Direct ID-token sign-in is disabled. OAuth initiation has a database-backed 5/minute limit; callbacks retain Better Auth's normal state-cookie/nonce validation and rate policy.
+
+No Google bearer token is retained in the account table, and no provider avatar, external browser script or broader CSP allowance is added. Anonymous-order transfer uses the existing hook. No tenant permission, profile-creation rule, password-confirmation or erasure rule changes. [Rollout and tests](../plans/google-auth.md).

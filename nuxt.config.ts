@@ -268,6 +268,8 @@ export default defineNuxtConfig({
   // the first paint by the color-mode script, on server-rendered and browser-only pages alike.
   colorMode: { preference: 'light', fallback: 'light' },
   runtimeConfig: {
+    // NUXT_GOOGLE_AUTH_CLIENT_ID / NUXT_GOOGLE_AUTH_CLIENT_SECRET (Worker secrets).
+    googleAuth: { clientId: '', clientSecret: '' },
     // Only deployed environments enable the account browser gate (D217).
     humanCheck: { enabled: false, secret: '' },
     // NUXT_MAINTENANCE_OUTBOX_RETENTION_DAYS: 0 keeps metadata until retention is agreed.
@@ -298,6 +300,8 @@ export default defineNuxtConfig({
     // hand. NUXT_BAKONG_API_URL: Bakong's own unless a relay stands in front of it.
     bakong: { encryptionKey: '', apiUrl: 'https://api-bakong.nbc.gov.kh' },
     public: {
+      // Enable only after configuring the matching private Google OAuth credentials.
+      googleAuth: { enabled: false },
       humanCheck: { enabled: false, siteKey: '' },
       // NUXT_PUBLIC_CAFE_TIME_ZONE: the zone schedule times are in (one branch, D41).
       cafeTimeZone: 'Asia/Phnom_Penh',
