@@ -201,11 +201,12 @@ describe('the export', () => {
   it('does not poll after a suspended wait has passed the export deadline', async () => {
     let clock = 0
     const { fetchFn, calls } = d1(5)
-    const wait = async () => { clock = 6 * 60_000 }
+    const wait = async () => {
+      clock = 6 * 60_000
+    }
     await expect(exportDump(fetchFn, env, { wait, now: () => clock })).rejects.toThrow('wasn\'t ready after 5 minutes')
     expect(calls).toHaveLength(1)
   })
-
 })
 
 describe('the dump', () => {
@@ -368,7 +369,6 @@ describe('the ops chat', () => {
     expect(successText({ ...backup, results: [...backup.results] }, true)).toContain('a missing one means the backup has stopped')
   })
 })
-
 
 describe('synthetic backup recovery (mocked HTTP, real age and SQLite)', () => {
   it('decrypts the first stored copy into a separate test database after an upload response is lost', async () => {
