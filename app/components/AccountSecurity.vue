@@ -21,6 +21,9 @@ const props = defineProps<{
 }>()
 
 const settingUp = ref(false)
+watch(() => props.enabled, (enabled) => {
+  if (enabled) settingUp.value = false
+})
 const turnOffModal = useOverlay().create(TwoFactorTurnOffModal)
 
 const { data: devices, loading: devicesLoading, error: devicesError, refresh: refreshDevices } = useAccountSessions()

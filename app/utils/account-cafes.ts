@@ -13,6 +13,9 @@ import { tenantUrl } from './tenant-path'
 /** Your cafes: signed out, the page sends the person to sign in first. */
 export const CAFES_PATH = '/cafes'
 
+/** The site's root: the platform's home page, never a cafe's (D221). */
+export const SITE_HOME_PATH = '/'
+
 /** `GET /api/me/cafes`: the signed-in account's cafes, by name. Throws `ApiError` (401 signed out). */
 export function fetchAccountCafes() {
   return apiFetch<AccountCafe[]>('/me/cafes')
@@ -84,7 +87,7 @@ interface SessionAccount {
 
 /** This browser's Better Auth account; `null` when signed out. Throws on a failed request. */
 async function sessionAccount() {
-  return (await $fetch<{ user: SessionAccount } | null>('/api/auth/get-session', { retry: 0, timeout: 30_000 }))?.user ?? null
+  return (await apiFetch<{ user: SessionAccount } | null>('/auth/get-session'))?.user ?? null
 }
 
 /** Only for what to offer: the console checks the role itself. */
@@ -164,7 +167,9 @@ export async function refusedSession(currentSlug: string, workspace: WorkspaceDo
     const access = otherAccess(cafes, currentSlug, workspace, workspace !== 'console' && isPlatformTeam(account))
     return { email: account.email, access: access ?? NO_OTHER_ACCESS }
   }
-  catch {
-    return null
+  catch (error) {
+    const failure = ApiError.from(error)
+    if (failure.kind === 'unauthorized') return null
+    throw failure
   }
 }

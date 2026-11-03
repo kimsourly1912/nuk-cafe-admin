@@ -1,7 +1,10 @@
 import type { $Fetch, FetchOptions } from 'ofetch'
 import { API_ERROR_MESSAGES, ApiError } from './api-error'
 
-export type ApiFetchOptions = Omit<FetchOptions<'json'>, 'retry' | 'baseURL'>
+export type ApiFetchOptions = Omit<FetchOptions<'json'>, 'retry' | 'baseURL'> & {
+  /** A superseded session read must not change auth state, even when it fails with 401. */
+  isCurrent?: () => boolean
+}
 export type ApiFetch = <T>(path: string, options?: ApiFetchOptions) => Promise<T>
 
 interface CreateApiFetchOptions {
@@ -52,10 +55,11 @@ export function createApiFetch({ baseFetch, onSessionLost, onPasswordChangeRequi
     })
     let data: T
     try {
-      data = await baseFetch<T>(path, { ...options, retry: 0 } as FetchOptions<'json'>)
+      const { isCurrent: _isCurrent, ...fetchOptions } = options ?? {}
+      data = await baseFetch<T>(path, { ...fetchOptions, retry: 0 } as FetchOptions<'json'>)
     }
     catch (error) {
-      if (sessionGeneration() !== generation) throw stale()
+      if (sessionGeneration() !== generation || options?.isCurrent?.() === false) throw stale()
       const apiError = ApiError.from(error)
       if (apiError.kind === 'unauthorized' || apiError.code === 'NOT_ADMIN') onSessionLost()
       else if (apiError.code === 'PASSWORD_CHANGE_REQUIRED') onPasswordChangeRequired?.()
@@ -70,7 +74,7 @@ export function createApiFetch({ baseFetch, onSessionLost, onPasswordChangeRequi
       }
       throw apiError
     }
-    if (sessionGeneration() !== generation) throw stale()
+    if (sessionGeneration() !== generation || options?.isCurrent?.() === false) throw stale()
     return data
   }
 

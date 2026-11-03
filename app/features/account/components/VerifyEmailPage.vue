@@ -9,17 +9,26 @@ import { useAccountForm } from '../composables/useAccountForm'
 import { ACCOUNT_ASIDES, ACCOUNT_PATHS, accountBackLabel, accountLink, accountRedirectTarget } from '../utils/account'
 import { useAccountHome } from '../composables/useAccountHome'
 import AccountFrame from './AccountFrame.vue'
+import AccountAside from './AccountAside.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 
 const route = useRoute()
 const home = useAccountHome()
 const target = computed(() => accountRedirectTarget(route.query.redirect, home.value))
 
-const { account, known } = useAccountSession()
+const { account, known, error: sessionError, refresh } = useAccountSession()
+const verifyReturn = computed(() => {
+  const link = accountLink(ACCOUNT_PATHS.verifyEmail, route.query.redirect)
+  return typeof link === 'string' ? link : `${link.path}?${new URLSearchParams(link.query)}`
+})
 const { resendVerification } = useAccountActions()
+const assertActive = useAuthCompletion()
 const { waiting, start: startCooldown, waitLabel } = useResendCooldown('verify')
 const { saving, formError, submit } = useAccountForm()
 const sentAgain = ref(false)
+watch(useSessionIdentity().generation, () => {
+  sentAgain.value = false
+})
 
 async function resend() {
   const email = account.value?.email
@@ -27,6 +36,7 @@ async function resend() {
   sentAgain.value = false
   await submit(async () => {
     await resendVerification(email, route.query.redirect)
+    assertActive()
     sentAgain.value = true
     startCooldown()
   })
@@ -34,23 +44,25 @@ async function resend() {
 </script>
 
 <template>
-  <div
-    v-if="!known"
-    class="max-sm:flex-1 max-sm:bg-default"
+  <TaskFrameSkeleton
+    v-if="!known && !sessionError"
+    :fields="0"
+    :actions="2"
+    message
   >
-    <UCard class="w-full max-sm:rounded-none max-sm:ring-0">
-      <div
-        class="space-y-3"
-        role="status"
-        aria-busy="true"
-        aria-label="Loading your account"
-      >
-        <USkeleton class="mx-auto size-10 rounded-full" />
-        <USkeleton class="mx-auto h-6 w-40" />
-        <USkeleton class="h-4 w-full" />
-      </div>
-    </UCard>
-  </div>
+    <template #aside>
+      <AccountAside v-bind="ACCOUNT_ASIDES.signUp" />
+    </template>
+  </TaskFrameSkeleton>
+  <SessionCheckError
+    v-else-if="sessionError && !known"
+    :error="sessionError"
+    @retry="refresh()"
+  >
+    <template #aside>
+      <AccountAside v-bind="ACCOUNT_ASIDES.signUp" />
+    </template>
+  </SessionCheckError>
 
   <AccountFrame
     v-else-if="!account"
@@ -62,7 +74,7 @@ async function resend() {
   >
     <template #footer>
       <UButton
-        :to="accountLink(ACCOUNT_PATHS.signIn, ACCOUNT_PATHS.verifyEmail)"
+        :to="accountLink(ACCOUNT_PATHS.signIn, verifyReturn)"
         label="Sign in"
         block
       />

@@ -27,8 +27,9 @@ const target = computed(() => accountRedirectTarget(route.query.redirect, home.v
 const afterReset = computed(() => route.query.reset === '1')
 
 const state = reactive({ email: '', password: '' })
-const { saving, formError, submit } = useAccountForm({ formId: 'sign-in-form', fields: ['email', 'password'] })
+const { saving, formError, submit } = useAccountForm({ formId: 'sign-in-form', fields: ['email', 'password'] }, state)
 const { signIn, finishSignIn } = useAccountActions()
+const assertActive = useAuthCompletion()
 /** After a password that needs a code: the code step replaces the form. */
 const codeStep = ref(false)
 /** A temporary password (Q3): where to change it, linked under the message. */
@@ -46,24 +47,27 @@ async function signInAnd(step: () => Promise<void>) {
   }
 }
 
-const { account, known } = useAccountSession()
+const { account, known, error: sessionError, refresh } = useAccountSession({ fresh: true })
 /** Already signed in on arrival: on its way on, so the form never shows (D238). */
 const leaving = ref(false)
-let arrived = false
-watch(known, (isKnown) => {
-  if (!isKnown || arrived) return
-  arrived = true
-  if (account.value) {
+watch([known, account], async ([isKnown, current]) => {
+  if (isKnown && current && !saving.value && !leaving.value) {
     leaving.value = true
-    navigateTo(target.value, { replace: true })
+    try {
+      await navigateTo(target.value, { replace: true })
+    }
+    finally {
+      leaving.value = false
+    }
   }
 }, { immediate: true })
-const loading = computed(() => !known.value || leaving.value)
+const loading = computed(() => (!known.value && !sessionError.value && !saving.value) || leaving.value)
 
 async function onSubmit(event: FormSubmitEvent<SignInForm>) {
-  arrived = true
   await submit(() => signInAnd(async () => {
-    if (await signIn(event.data) === 'two-factor') {
+    const step = await signIn(event.data)
+    assertActive()
+    if (step === 'two-factor') {
       codeStep.value = true
       state.password = ''
       return
@@ -74,11 +78,14 @@ async function onSubmit(event: FormSubmitEvent<SignInForm>) {
 
 /** The code was right: finish as after a password alone. A failure goes back to the password form. */
 async function onCodeVerified() {
-  codeStep.value = false
+  let completed = false
   await submit(() => signInAnd(async () => {
     await finishSignIn()
+    assertActive()
     await navigateTo(target.value)
+    completed = true
   }))
+  if (!completed) codeStep.value = false
 }
 
 function restart(message?: string) {
@@ -96,6 +103,15 @@ function restart(message?: string) {
       <AccountAside v-bind="ACCOUNT_ASIDES.signIn" />
     </template>
   </TaskFrameSkeleton>
+  <SessionCheckError
+    v-else-if="sessionError && !known && !saving"
+    :error="sessionError"
+    @retry="refresh()"
+  >
+    <template #aside>
+      <AccountAside v-bind="ACCOUNT_ASIDES.signIn" />
+    </template>
+  </SessionCheckError>
   <AccountFrame
     v-else
     title="Sign in"
@@ -167,7 +183,7 @@ function restart(message?: string) {
       </UFormField>
       <div class="-mt-2 flex justify-end">
         <ULink
-          :to="ACCOUNT_PATHS.forgotPassword"
+          :to="accountLink(ACCOUNT_PATHS.forgotPassword, route.query.redirect)"
           class="text-sm text-primary"
         >
           Forgot password?

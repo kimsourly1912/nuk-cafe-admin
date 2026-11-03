@@ -28,10 +28,12 @@ const RESTART_CODES = new Set(['INVALID_TWO_FACTOR_COOKIE', 'TOO_MANY_ATTEMPTS_R
  * `ApiError` with a message for the person: a wrong code (try again), a locked account, or
  * `TWO_FACTOR_RESTART` when the challenge is gone.
  */
-export async function verifyTwoFactorCode(method: TwoFactorMethod, code: string): Promise<void> {
+export async function verifyTwoFactorCode(method: TwoFactorMethod, code: string, send?: (path: string, body: Record<string, unknown>) => Promise<unknown>): Promise<void> {
   const path = method === 'app' ? '/two-factor/verify-totp' : '/two-factor/verify-backup-code'
   try {
-    await $fetch(`/api/auth${path}`, { method: 'POST', body: { code: code.replace(/\s+/g, '') }, retry: 0, timeout: 30_000 })
+    const body = { code: code.replace(/\s+/g, '') }
+    if (send) await send(path, body)
+    else await $fetch(`/api/auth${path}`, { method: 'POST', body, retry: 0, timeout: 30_000 })
   }
   catch (error) {
     const apiError = ApiError.from(error)

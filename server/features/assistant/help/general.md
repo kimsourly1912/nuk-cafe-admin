@@ -2,6 +2,12 @@
 
 The admin portal is where admins set up their cafe (its profile, the menu, staff, the branch and payments) and see how sales went (reports). Customers order on the cafe's website; staff take payment and prepare orders in the counter app.
 
+## Sign-in and account checks
+
+The admin portal, counter and customer website share this browser's account. Signing out in another tab signs this tab out too. Signing in as another person reloads this tab's access and clears the previous person's forms. A short loading frame while this happens is expected; it does not grant access to another cafe.
+
+If sign-in says **Could not check your session**, press **Retry**. A failed connection does not mean your password is wrong or your cafe access was removed. After a temporary password, choose your new password first; the original page opens afterwards. For two-step sign-in, wait for the code to finish checking before starting again.
+
 ## The sidebar
 
 - **Overview**: the start page (see below).

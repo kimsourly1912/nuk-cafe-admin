@@ -19,16 +19,43 @@ export function useRefusedSession(workspace: WorkspaceDoor) {
   const slug = useOptionalTenantSlug()
   const refused = ref<RefusedSession | null>(null)
   const checked = ref(false)
-  onMounted(async () => {
-    refused.value = await refusedSession(slug.value ?? '', workspace)
-    checked.value = true
+  const error = shallowRef<ApiError>()
+  const surface = workspace === 'console' ? 'platform' : workspace
+  const session = useWorkspaceSession<{ userId: string }>(surface, `/${surface}/me`)
+  const identity = useSessionIdentity()
+  const admitted = computed(() => !!session.user.value)
+  let read = 0
+  async function refresh() {
+    const current = ++read
+    const startedIn = identity.generation.value
+    try {
+      if (!session.checked.value || session.error.value) await session.fetchSession()
+      if (session.error.value) throw session.error.value
+      const next = session.user.value ? null : await refusedSession(slug.value ?? '', workspace)
+      if (read !== current || startedIn !== identity.generation.value) return
+      refused.value = next
+      error.value = undefined
+      checked.value = true
+    }
+    catch (cause) {
+      if (read !== current || startedIn !== identity.generation.value) return
+      const failure = ApiError.from(cause)
+      if (failure.kind !== 'aborted') error.value = failure
+    }
+  }
+  onMounted(() => {
+    if (session.error.value) error.value = session.error.value
+    else void refresh()
+  })
+  onScopeDispose(() => {
+    read++
   })
 
   const visibility = useDocumentVisibility()
   watch(visibility, async (state) => {
     if (state !== 'visible' || !refused.value) return
-    refused.value = await refusedSession(slug.value ?? '', workspace)
+    await refresh()
   })
 
-  return { refused, checked }
+  return { refused, checked, error, refresh, admitted }
 }

@@ -12,5 +12,6 @@ export function useAccountCafes() {
  * cafes' link to the console (Q5, D241). Only what to show: the console checks the role itself.
  */
 export function usePlatformTeam() {
-  return useApiQuery('cafe:platform-team', isPlatformTeamSession, { server: false, default: () => false })
+  const query = useApiQuery('cafe:platform-team', async () => ({ platform: await isPlatformTeamSession() }), { server: false, default: () => null })
+  return { ...query, data: computed(() => query.data.value?.platform ?? false), known: computed(() => query.data.value != null) }
 }

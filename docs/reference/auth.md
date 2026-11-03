@@ -9,6 +9,12 @@
 
 Source: `app/features/auth/`. Import it from `~/features/auth` (feature code isn't auto-imported). Paths here are inside a cafe (D141): `/admin/login` means `/c/<slug>/admin/login`; the paths are functions of the cafe (`loginPath(slug)`, `changePasswordPath(slug)`, `adminHomePath(slug)`, `loginRedirectTarget(redirect, slug)`).
 
+D258: `useSessionIdentity().updated()` broadcasts same-identity password/two-factor flag changes and refreshes account/device reads. Other tabs recheck their active workspace without clearing forms. `useAuthCompletion()` returns a scope assertion: call it after an awaited auth action and before navigation or page-local success state; it throws a silent aborted error after the page leaves. This complements the identity generation and per-read revision checks.
+
+The global tenant navigation middleware retains the first cafe's public slug through account/platform routes and uses a full page load before entering a different cafe (D141). Same-cafe and first-cafe navigation use the normal router. No authorization comes from this binding.
+
+During SSR or initial hydration, an existing Nuxt error owns the response: auth and tenant navigation middleware leave it intact. In particular, an unknown or suspended cafe must retain its server error page rather than redirect through staff sign-in. Normal subsequent navigation still checks the session. Regression: `test/e2e/cafes.test.ts`, unknown and paused cafe addresses on the store, admin and counter.
+
 ---
 
 ## `useAuth`
@@ -66,6 +72,20 @@ catch (e) {
 ---
 
 ## Public pages and the change-password page
+
+### Consistent session checks and handoffs (D258)
+
+`useAuth`, `useCounterSession` and `usePlatformSession` keep their existing public session APIs and separate permissions. Their `generation` now reads the shared `useSessionIdentity().generation`. `sessionError` exposes an unsuccessful workspace session read; `checked` becomes true only after a successful or definitive unauthorized/forbidden answer. A first network/server failure remains an error, with Retry on the sign-in page. `resetSession(signedOut?)` invalidates earlier reads and clears only that surface; the identity boundary calls it for the other surfaces. `fetchSession()` applies only the latest read for the current identity. Password/2FA changes supersede old reads before reflecting their flags locally.
+
+Customer `useAccountSession({ fresh?: boolean })` and `useCustomerAccount()` expose `known`, `error` and `refresh`. A successful signed-out answer is kept as an internal query result object, so ordinary refreshes keep the decided layout; clearing the query for an identity change makes `known` false again. Failure is never a signed-out answer. Arrival pages react to later external account changes; while their own form is submitting, that form controls the next step (sign-up still goes to Check your email).
+
+Verification result and recovery pages wait for deciding session reads, keep their task-frame/aside skeleton and show Retry for a failed read. `/email-verified` confirms a fresh session before selecting success versus expired-link recovery. The customer code form stays on screen until finalization/navigation ends. Password-required navigation during sign-in belongs to the page/middleware handoff; the API plugin watches only protected pages for a requirement reported mid-session. Existing safe redirect rules still apply, including the original destination on an already-signed-in arrival. Recovery/nested verification sign-in retain a validated customer return path.
+
+`/reset-password` is client-rendered: Nuxt's SSR payload otherwise includes the token-bearing entry URL even without `useState`. The token exists only in the active page's client ref, is removed from the address with replace, and is cleared on departure, terminal failure or success. Back/reload without a fresh link shows the expired-link state. No reset token goes into shared state or SSR HTML; token-entry security headers are retained. Browser failure evidence redacts credential URL parameters, password inputs, setup keys and backup codes.
+
+Regressions: `auth-state.test.ts` (held verification reads, layout width, check errors/retry, mounted arrival, own sign-up, two-factor finalization, all workspace logout receivers, reset-token lifetime, recovery return paths and late password/2FA session responses); existing auth/password/session/two-factor/shop-account suites cover the existing policies and real-server flows. `api-fetch.test.ts` checks superseded success/401/password-required responses; `failure-redaction.test.ts` checks token redaction.
+
+`useAuthCompletion()` binds UI completion to its Vue scope: a request may still finish its authorized server action, but an unmounted form cannot redirect the new page, reopen setup or show its old result. The real Vue effect-scope tests (`auth-completion.test.ts`) and a held sign-in navigated away from check this guard. `auth-layout.test.ts` checks all 15 pages plus the two handoff screens at 320, 390, 768, 1024, 1440 and landscape 844×390, in light/dark with reduced motion; optional `AUTH_LAYOUT_SCREENSHOTS=1` records the matrix.
 
 **Every page requires a session by default** (`app/middleware/auth.global.ts`). To opt out:
 

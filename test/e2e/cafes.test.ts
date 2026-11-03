@@ -140,7 +140,7 @@ describe('each cafe by its own name (D143)', () => {
 
   it('an address that names no cafe says so', async () => {
     const page = await createPage()
-    for (const path of ['/c/nowhere', '/c/nowhere/admin']) {
+    for (const path of ['/c/nowhere', '/c/nowhere/admin', '/c/nowhere/counter']) {
       await page.goto(url(path))
       await page.getByRole('heading', { name: 'This cafe doesn\'t exist' }).waitFor()
       expect(await page.getByRole('button', { name: /Back to/ }).count()).toBe(0)
@@ -153,9 +153,11 @@ describe('each cafe by its own name (D143)', () => {
     await page.getByRole('heading', { name: 'Ordering is paused' }).waitFor()
     await page.getByText('Quiet Corner isn\'t taking orders at the moment.').waitFor()
     await expect.poll(() => page.title()).toBe('Ordering is paused · Quiet Corner')
-    await page.goto(url('/c/quiet-corner/admin'))
-    await page.getByRole('heading', { name: 'This cafe is paused' }).waitFor()
-    await page.getByText(/Quiet Corner is paused by the platform team/).waitFor()
+    for (const path of ['/c/quiet-corner/admin', '/c/quiet-corner/counter']) {
+      await page.goto(url(path))
+      await page.getByRole('heading', { name: 'This cafe is paused' }).waitFor()
+      await page.getByText(/Quiet Corner is paused by the platform team/).waitFor()
+    }
   })
 })
 

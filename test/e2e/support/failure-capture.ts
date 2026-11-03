@@ -4,6 +4,7 @@ import type { Browser, Page } from 'playwright-core'
 import { getBrowser } from '@nuxt/test-utils/e2e'
 import { afterEach, beforeEach, expect, inject } from 'vitest'
 import { browserProblems, resetAllowedProblems, unexpectedProblems } from './browser-problems'
+import { redactFailureEntry } from './failure-redaction'
 
 /**
  * What the browser showed when an e2e test failed: for each page the test opened, a screenshot,
@@ -47,10 +48,16 @@ export function captureFailures() {
       await mkdir(folder, { recursive: true })
       await Promise.all(opened.map(async (page, i) => {
         const name = `page-${i + 1}`
-        await page.screenshot({ path: join(folder, `${name}.png`), fullPage: true, timeout: 5000 }).catch(() => {})
-        const html = await page.content().catch(() => '')
-        await writeFile(join(folder, `${name}.html`), html)
-        await writeFile(join(folder, `${name}.txt`), `${page.url()}\n${await page.title().catch(() => '')}\n`)
+        const secrets = 'input[type="password"], input[autocomplete="new-password"], input[autocomplete="current-password"], input[autocomplete="one-time-code"], [data-testid="backup-codes"], [data-testid="two-factor-key"], [aria-label="QR code for your authenticator app"]'
+        await page.screenshot({ path: join(folder, `${name}.png`), fullPage: true, timeout: 5000, mask: [page.locator(secrets)] }).catch(() => {})
+        const html = await page.evaluate((selector) => {
+          const copy = document.documentElement.cloneNode(true) as HTMLElement
+          for (const element of copy.querySelectorAll(selector)) element.replaceWith(document.createTextNode('[redacted]'))
+          return copy.outerHTML
+        }, secrets).catch(() => '')
+        const redacted = redactFailureEntry(page.url(), html)
+        await writeFile(join(folder, `${name}.html`), redacted.html)
+        await writeFile(join(folder, `${name}.txt`), `${redacted.address}\n${await page.title().catch(() => '')}\n`)
         // Every problem, allowed ones too: an allowed 500 can still explain a failure.
         if (reported[i]!.length) await writeFile(join(folder, `${name}.problems.txt`), `${reported[i]!.join('\n')}\n`)
       }))

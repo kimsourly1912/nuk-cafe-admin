@@ -8,26 +8,33 @@ import type { ForgotPasswordForm } from '../schemas/account-form'
 import { forgotPasswordSchema } from '../schemas/account-form'
 import { useAccountActions, useResendCooldown } from '../composables/useCustomerAccount'
 import { useAccountForm } from '../composables/useAccountForm'
-import { ACCOUNT_ASIDES, ACCOUNT_PATHS } from '../utils/account'
+import { ACCOUNT_ASIDES, ACCOUNT_PATHS, accountLink } from '../utils/account'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 
 const state = reactive({ email: '' })
+const route = useRoute()
+const signInLink = computed(() => accountLink(ACCOUNT_PATHS.signIn, route.query.redirect))
 /** The address the link went to; set once sent. */
 const sentTo = ref<string>()
-const { saving, formError, submit } = useAccountForm({ formId: 'forgot-form', fields: ['email'] })
+const { saving, formError, submit } = useAccountForm({ formId: 'forgot-form', fields: ['email'] }, state)
 const { requestPasswordReset } = useAccountActions()
+const assertActive = useAuthCompletion()
 const { waiting, start: startCooldown, waitLabel } = useResendCooldown('reset')
 
 async function send(form: ForgotPasswordForm) {
   await submit(async () => {
-    await requestPasswordReset(form)
+    await requestPasswordReset(form, route.query.redirect)
+    assertActive()
     sentTo.value = form.email
     startCooldown()
   })
 }
 const onSubmit = (event: FormSubmitEvent<ForgotPasswordForm>) => send(event.data)
 const sendAgain = () => send({ email: sentTo.value! })
+watch(useSessionIdentity().generation, () => {
+  sentTo.value = undefined
+})
 
 function useAnotherEmail() {
   sentTo.value = undefined
@@ -40,7 +47,7 @@ function useAnotherEmail() {
     v-if="!sentTo"
     title="Forgot your password?"
     description="Enter your account's email and we'll send you a link."
-    :back="{ label: 'Back to sign in', to: ACCOUNT_PATHS.signIn }"
+    :back="{ label: 'Back to sign in', to: signInLink }"
     :aside="ACCOUNT_ASIDES.forgotPassword"
   >
     <UForm
@@ -83,7 +90,7 @@ function useAnotherEmail() {
     v-else
     title="Check your email"
     illustration="i-app-nuk-cafe-verify-email"
-    :back="{ label: 'Back to sign in', to: ACCOUNT_PATHS.signIn }"
+    :back="{ label: 'Back to sign in', to: signInLink }"
     :aside="ACCOUNT_ASIDES.forgotPassword"
   >
     <template #description>

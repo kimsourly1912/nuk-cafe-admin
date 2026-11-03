@@ -7,7 +7,7 @@
 import type { FormSubmitEvent } from '@nuxt/ui'
 import { emptyPasswordForm, passwordFormSchema } from '~/features/auth'
 import type { PasswordForm } from '~/features/auth'
-import { platformRedirectTarget, usePlatformSession } from '../composables/usePlatformSession'
+import { PLATFORM_HOME, platformRedirectTarget, usePlatformSession } from '../composables/usePlatformSession'
 
 const route = useRoute()
 const { user, mustChangePassword, changePassword, signOut } = usePlatformSession()
@@ -18,6 +18,7 @@ const forced = mustChangePassword.value
 
 const state = reactive<PasswordForm>(emptyPasswordForm())
 const saving = ref(false)
+const assertActive = useAuthCompletion()
 const error = ref<string>()
 const showPasswords = ref(false)
 /** The new password the server refused as breached, for the checklist (D210). */
@@ -36,6 +37,7 @@ async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
   error.value = undefined
   try {
     await changePassword(data.currentPassword, data.newPassword)
+    assertActive()
   }
   catch (e) {
     saving.value = false
@@ -55,7 +57,8 @@ async function onSubmit({ data }: FormSubmitEvent<PasswordForm>) {
   unsaved.markClean()
   toast.add({ title: 'Password changed', description: 'You were signed out on your other devices.', color: 'success', icon: 'i-lucide-circle-check' })
   try {
-    await navigateTo(platformRedirectTarget(route.query.redirect))
+    const target = platformRedirectTarget(route.query.redirect)
+    await navigateTo(target.split(/[?#]/)[0] === route.path ? PLATFORM_HOME : target)
   }
   finally {
     saving.value = false

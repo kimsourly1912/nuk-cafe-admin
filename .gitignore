@@ -31,3 +31,6 @@ dev-accounts.local.md
 
 # What the browser showed when an e2e test failed (test/e2e/support/failure-capture.ts)
 test-results/
+
+# Local investigation logs, reports, screenshots and verification evidence
+/output/

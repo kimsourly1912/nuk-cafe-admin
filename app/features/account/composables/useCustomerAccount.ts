@@ -18,16 +18,14 @@ import { ACCOUNT_PATHS, accountLink, TemporaryPasswordError } from '../utils/acc
  * treats a guest as signed out.
  */
 export function useCustomerAccount() {
+  const identity = useSessionIdentity()
   // Kept between pages (D173): back from a workspace without the header, it shows the account at
   // once instead of "Sign in" until a reload answers. Its own changes refresh it (`invalidate`).
-  const query = useApiQuery('account:me', loadAccount, { server: false, default: () => null, staleTime: REFERENCE_STALE_TIME })
-  const account = computed<CustomerAccount | null>(() => (query.data.value && !query.data.value.guest ? query.data.value : null))
-  const guest = computed<GuestCustomer | null>(() => (query.data.value?.guest ? query.data.value : null))
+  const query = useApiQuery('account:me', async () => ({ account: await loadAccount(identity) }), { server: false, default: () => null, staleTime: REFERENCE_STALE_TIME })
+  const account = computed<CustomerAccount | null>(() => (query.data.value?.account && !query.data.value.account.guest ? query.data.value.account : null))
+  const guest = computed<GuestCustomer | null>(() => (query.data.value?.account?.guest ? query.data.value.account : null))
   /** The first answer arrived (signed in or not); stays true while it's refetched. */
-  const known = useState('account:known', () => false)
-  watch(query.status, (status) => {
-    if (status === 'success' || status === 'error') known.value = true
-  }, { immediate: true })
+  const known = computed(() => query.data.value != null)
   return { account, guest, known, error: query.error, refresh: query.refresh }
 }
 
@@ -44,17 +42,25 @@ export interface AccountIdentity {
  * never a cafe's `/shop/me`: reading that would make the person a member of a cafe they didn't
  * open. `null` when signed out, for a guest (D156) and on a temporary password, as on the store.
  */
-export function useAccountSession() {
-  const query = useApiQuery('account:session', loadIdentity, { server: false, default: () => null, staleTime: REFERENCE_STALE_TIME })
-  const known = useState('account:session-known', () => false)
-  watch(query.status, (status) => {
-    if (status === 'success' || status === 'error') known.value = true
-  }, { immediate: true })
-  return { account: query.data, known, error: query.error, refresh: query.refresh }
+export function useAccountSession(options: { fresh?: boolean } = {}) {
+  const identity = useSessionIdentity()
+  const query = useApiQuery('account:session', async () => ({ account: await loadIdentity(identity) }), { server: false, default: () => null, staleTime: REFERENCE_STALE_TIME })
+  const ready = ref(!options.fresh)
+  if (options.fresh) {
+    const hadAnswer = query.data.value != null
+    onMounted(async () => {
+      if (hadAnswer) query.clear()
+      if (query.data.value == null) await query.refresh({ dedupe: 'defer' })
+      ready.value = true
+    })
+  }
+  const known = computed(() => ready.value && query.data.value != null)
+  return { account: computed(() => query.data.value?.account ?? null), known, error: computed(() => ready.value ? query.error.value : undefined), refresh: query.refresh }
 }
 
-async function loadIdentity(): Promise<AccountIdentity | null> {
+async function loadIdentity(identity: ReturnType<typeof useSessionIdentity>): Promise<AccountIdentity | null> {
   const user = (await fetchSession())?.user
+  identity.observe(user?.isAnonymous ? null : user?.id ?? user?.email ?? null, 'account')
   if (!user || user.mustChangePassword || user.isAnonymous) return null
   return { name: user.name, email: user.email, emailVerified: Boolean(user.emailVerified) }
 }
@@ -64,6 +70,7 @@ const PASSWORD_CHANGE_REQUIRED = 'PASSWORD_CHANGE_REQUIRED'
 
 /** The part of Better Auth's user (sign-in, `get-session`) the store reads. */
 interface AuthUser {
+  id?: string
   name: string
   email: string
   emailVerified?: boolean | null
@@ -82,8 +89,9 @@ interface AuthUser {
  * password. It isn't signed out, since the same session may be on the change-password page in
  * another tab (one sign-in per browser, D97).
  */
-async function loadAccount(): Promise<ShopMe | null> {
+async function loadAccount(identity: ReturnType<typeof useSessionIdentity>): Promise<ShopMe | null> {
   const session = await fetchSession()
+  identity.observe(session?.user.isAnonymous ? null : session?.user.id ?? session?.user.email ?? null, 'account')
   if (!session?.user || session.user.mustChangePassword) return null
   try {
     return await apiFetch<ShopMe>('/shop/me')
@@ -99,7 +107,7 @@ async function loadAccount(): Promise<ShopMe | null> {
 /** This browser's Better Auth session, `null` when signed out. */
 async function fetchSession() {
   try {
-    return await $fetch<{ user: AuthUser } | null>('/api/auth/get-session', { retry: 0, timeout: 30_000 })
+    return await apiFetch<{ user: AuthUser } | null>('/auth/get-session')
   }
   catch (error) {
     throw ApiError.from(error)
@@ -116,7 +124,6 @@ function verifyCallback(from?: unknown): string {
   return typeof link === 'string' ? link : `${link.path}?${new URLSearchParams(link.query)}`
 }
 /** Where the reset link lands (`?token=`, or `?error=INVALID_TOKEN`). */
-const RESET_CALLBACK = ACCOUNT_PATHS.resetPassword
 
 /** Refetch the account here and in the site's other tabs. */
 const accountChanged = () => invalidate('account')
@@ -127,17 +134,7 @@ const accountChanged = () => invalidate('account')
  */
 export function useAccountActions() {
   const authFetch = useAuthRequest()
-  const known = useState('account:known', () => false)
-  /**
-   * Someone else (or nobody) is signed in now. The account pages read no cafe's account (D221), so
-   * one loaded before is still someone else's: until the next load, a cafe's page shows itself as
-   * loading, not with the previous person's account (Review order asked a signed-in customer for a
-   * name). Not for a guest made by Place order: that page is mid-order and stays on screen.
-   */
-  const identityChanged = () => {
-    known.value = false
-    return accountChanged()
-  }
+  const identity = useSessionIdentity()
   /**
    * Signs in: the password step. `two-factor` (D188): the page asks for the code, then calls
    * `finishSignIn`. A staff account on its temporary password can't use the store (see
@@ -169,14 +166,12 @@ export function useAccountActions() {
         // Couldn't check where: signed out with the general message below.
       }
       if (target) {
-        await identityChanged()
         throw new TemporaryPasswordError(target)
       }
       await authFetch('/sign-out').catch(() => {})
-      await identityChanged()
+      await identity.change('logout')
       throw new ApiError('Change your temporary password to continue.', { kind: 'forbidden', status: 403, code: PASSWORD_CHANGE_REQUIRED })
     }
-    await identityChanged()
   }
 
   /**
@@ -185,7 +180,6 @@ export function useAccountActions() {
    */
   async function signUp(form: SignUpForm, from?: unknown) {
     await authFetch('/sign-up/email', { name: form.name, email: form.email, password: form.password, callbackURL: verifyCallback(from) })
-    await identityChanged()
   }
 
   /**
@@ -198,12 +192,17 @@ export function useAccountActions() {
   }
 
   async function signOut() {
+    const startedIn = identity.generation.value
     try {
       await authFetch('/sign-out')
     }
-    finally {
-      await identityChanged()
+    catch (error) {
+      if (ApiError.from(error).kind === 'aborted') throw error
+      await identity.change('logout')
+      throw error
     }
+    identity.assertCurrent(startedIn)
+    await identity.change('logout')
   }
 
   async function resendVerification(email: string, from?: unknown) {
@@ -211,14 +210,16 @@ export function useAccountActions() {
   }
 
   /** Answers the same whether or not the email has an account. */
-  async function requestPasswordReset(form: ForgotPasswordForm) {
-    await authFetch('/request-password-reset', { email: form.email, redirectTo: RESET_CALLBACK })
+  async function requestPasswordReset(form: ForgotPasswordForm, from?: unknown) {
+    const link = accountLink(ACCOUNT_PATHS.resetPassword, from)
+    const redirectTo = typeof link === 'string' ? link : `${link.path}?${new URLSearchParams(link.query)}`
+    await authFetch('/request-password-reset', { email: form.email, redirectTo })
   }
 
   /** Sets the new password; Better Auth signs the account out everywhere (D51). */
   async function resetPassword(token: string, newPassword: string) {
     await authFetch('/reset-password', { token, newPassword })
-    await identityChanged()
+    await identity.change('logout')
   }
 
   return { signIn, finishSignIn, signUp, signInAsGuest, signOut, resendVerification, requestPasswordReset, resetPassword }
@@ -229,18 +230,20 @@ export function useAccountActions() {
  * The server ends every session, so on success the site forgets the account like a sign-out does.
  * A refusal (wrong password, still working at a cafe, an order in progress) is the dialog's to show.
  */
-export function useDeleteAccount() {
-  const known = useState('account:known', () => false)
+export function useDeleteAccount(onDeleted: () => void) {
+  const identity = useSessionIdentity()
   return useMutation(
-    (input: DeleteAccountInput) => apiFetch<null>('/me/delete-account', { method: 'POST', body: input }),
+    async (input: DeleteAccountInput) => {
+      const result = await apiFetch<null>('/me/delete-account', { method: 'POST', body: input })
+      // Resolve this modal's successful result before the boundary closes remaining overlays.
+      onDeleted()
+      await identity.change('logout')
+      return result
+    },
     {
       id: 'account:delete',
       successMessage: 'Your account was deleted',
       errorMessage: 'Couldn\'t delete your account',
-      onSuccess: () => {
-        known.value = false
-        void accountChanged()
-      },
     },
   )
 }

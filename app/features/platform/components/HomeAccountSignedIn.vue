@@ -20,11 +20,11 @@ const props = defineProps<{ account: AccountIdentity }>()
 const notify = useNotify()
 const { signOut } = useAccountActions()
 const { data: cafes, error, loading } = useAccountCafes()
-const { data: platformTeam, status: teamStatus } = usePlatformTeam()
+const { data: platformTeam, known: teamKnown, error: teamError } = usePlatformTeam()
 
-const checking = computed(() => loading.value || teamStatus.value === 'idle' || teamStatus.value === 'pending')
+const checking = computed(() => loading.value || (!teamKnown.value && !teamError.value))
 // Not readable here: Your cafes reads them again and offers Try again.
-const destination = computed(() => (error.value ? YOUR_CAFES : homeDestination(cafes.value ?? [], platformTeam.value)))
+const destination = computed(() => (error.value || teamError.value ? YOUR_CAFES : homeDestination(cafes.value ?? [], platformTeam.value)))
 const initials = computed(() => initialsOf(props.account.name, props.account.email))
 
 // Below `sm` the header hides its light/dark button (`HomeAccount`): Light or Dark here instead, no
@@ -49,7 +49,7 @@ const items = computed<DropdownMenuItem[][]>(() => [
   [
     // The workspace the header's button opens: that button is hidden below `sm`, so it's here too.
     ...(destination.value?.cafeName ? [{ label: destination.value.label, description: destination.value.cafeName, icon: destination.value.icon, to: destination.value.to, external: true }] : []),
-    ...(cafes.value?.length || error.value ? [{ label: 'Your cafes', icon: 'i-lucide-store', to: CAFES_PATH }] : []),
+    ...(cafes.value?.length || error.value || teamError.value ? [{ label: 'Your cafes', icon: 'i-lucide-store', to: CAFES_PATH }] : []),
     ...(platformTeam.value ? [{ label: 'Platform console', icon: 'i-lucide-layers', to: PLATFORM_CONSOLE_PATH, external: true }] : []),
   ],
   phone.value ? appearance.value : [],

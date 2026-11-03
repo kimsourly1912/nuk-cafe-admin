@@ -21,6 +21,8 @@
 import background from '~/assets/img/nuk-cafe-auth-background.png'
 
 defineProps<{ title: string, text: string }>()
+// Vite can resolve the client import to an absolute URL; SSR must use that same form.
+const backgroundUrl = new URL(background, useRequestURL().origin).href
 </script>
 
 <template>
@@ -29,7 +31,7 @@ defineProps<{ title: string, text: string }>()
     data-aside
   >
     <img
-      :src="background"
+      :src="backgroundUrl"
       alt=""
       loading="lazy"
       class="absolute inset-0 size-full object-cover object-bottom"

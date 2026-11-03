@@ -21,6 +21,7 @@ const pin = computed<number[]>({
 })
 const error = ref<string>()
 const saving = defineModel<boolean>('saving', { default: false })
+const authFetch = useAuthRequest()
 
 const schema = computed(() => method.value === 'app'
   ? v.object({ code: v.pipe(v.string(), v.trim(), v.regex(/^\d{6}$/, 'Enter the 6 digits from your app')) })
@@ -61,7 +62,7 @@ async function onSubmit({ data }: FormSubmitEvent<{ code: string }>) {
   saving.value = true
   error.value = undefined
   try {
-    await verifyTwoFactorCode(method.value, data.code)
+    await verifyTwoFactorCode(method.value, data.code, (path, body) => authFetch(path, body, { signIn: true }))
     emit('verified')
   }
   catch (e) {

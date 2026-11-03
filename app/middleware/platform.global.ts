@@ -1,4 +1,4 @@
-import { isPlatformPath, PLATFORM_CHANGE_PASSWORD, PLATFORM_HOME, PLATFORM_SIGN_IN, PLATFORM_TWO_FACTOR, usePlatformSession } from '~/features/platform'
+import { isPlatformPath, PLATFORM_CHANGE_PASSWORD, PLATFORM_HOME, PLATFORM_SIGN_IN, platformRedirectTarget, PLATFORM_TWO_FACTOR, usePlatformSession } from '~/features/platform'
 
 /**
  * The platform console (`/platform/**`, D142) requires a super admin's session unless a page
@@ -7,13 +7,14 @@ import { isPlatformPath, PLATFORM_CHANGE_PASSWORD, PLATFORM_HOME, PLATFORM_SIGN_
  * Nothing here touches a cafe's admin or counter session.
  */
 export default defineNuxtRouteMiddleware(async (to) => {
+  if (useError().value && (import.meta.server || useNuxtApp().isHydrating)) return
   if (!isPlatformPath(to.path)) return
 
-  const { isSignedIn, checked, mustChangePassword, twoFactorEnabled, fetchSession } = usePlatformSession()
-  if (!checked.value) await fetchSession()
+  const { isSignedIn, checked, mustChangePassword, twoFactorEnabled, sessionError, fetchSession } = usePlatformSession()
+  if (!checked.value && !sessionError.value) await fetchSession()
 
   if (to.meta.public) {
-    if (to.path === PLATFORM_SIGN_IN && isSignedIn.value) return navigateTo(PLATFORM_HOME)
+    if (to.path === PLATFORM_SIGN_IN && isSignedIn.value) return navigateTo(platformRedirectTarget(to.query.redirect), { replace: true })
     return
   }
 

@@ -24,13 +24,25 @@ interface AccountFormOptions {
  * `id` reaches the label only after the label was rendered, so the server's HTML labelled the field
  * with an id nothing had (D256).
  */
-export function useAccountForm(options: AccountFormOptions = {}) {
+export function useAccountForm(options: AccountFormOptions = {}, state?: Record<string, string>) {
   const { formId, fields = [] } = options
+  const identity = useSessionIdentity()
   const saving = ref(false)
   /** The message for the alert above the fields. */
   const formError = ref<string>()
   const form = useTemplateRef<FormHandle>('form')
   useFormErrorRecheck(form)
+  let disposed = false
+  onScopeDispose(() => {
+    disposed = true
+  })
+  function clearIdentityInput() {
+    if (state) for (const key of Object.keys(state)) state[key] = ''
+    formError.value = undefined
+  }
+  watch(identity.generation, () => {
+    if (!saving.value) clearIdentityInput()
+  }, { flush: 'sync' })
 
   function focusField(field: AccountField) {
     // The form keeps its fields disabled until after its events (`loadingAuto`), and a disabled
@@ -56,9 +68,12 @@ export function useAccountForm(options: AccountFormOptions = {}) {
     formError.value = undefined
     try {
       await action()
+      return true
     }
     catch (error) {
-      await showError(error)
+      if (ApiError.from(error).kind === 'aborted' || disposed) clearIdentityInput()
+      else await showError(error)
+      return false
     }
     finally {
       saving.value = false

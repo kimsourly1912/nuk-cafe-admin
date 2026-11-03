@@ -19,6 +19,8 @@ export default defineNuxtPlugin({
     const counter = useCounterSession()
     // So does the platform console (D142).
     const platform = usePlatformSession()
+    const identity = useSessionIdentity()
+    const rechecking = useState('session-identity:rechecking', () => false)
     // The cafe whose API this app calls (D140, D141): the one in the page's address. Read from the
     // browser's address, not the router's: a route middleware calls the API before the router has
     // moved (its first page included). Moving to another cafe is a full page load (D141). The
@@ -44,9 +46,7 @@ export default defineNuxtPlugin({
       // `/api`: the standard's routes (`/admin/me`, `/admin/menu/…`).
       baseFetch: ofetch.create({ baseURL: '/api', timeout: 30_000 }),
       onSessionLost: () => {
-        auth.clearSession()
-        counter.clearSession()
-        platform.clearSession()
+        if (identity.isSignedIn.value || auth.user.value || counter.user.value || platform.user.value) identity.change('logout', undefined, false)
       },
       onPasswordChangeRequired: () => {
         auth.requirePasswordChange()
@@ -54,7 +54,7 @@ export default defineNuxtPlugin({
         platform.requirePasswordChange()
       },
       // Any workspace's identity changing discards responses to older requests.
-      sessionGeneration: () => auth.generation.value + counter.generation.value + platform.generation.value,
+      sessionGeneration: () => identity.generation.value,
       onConfirmationRequired: confirmIdentity,
     }), tenant)
 
@@ -66,15 +66,15 @@ export default defineNuxtPlugin({
     // customer site (outside the admin) never reads the admin session, so it's left alone (D93).
     watch(auth.mustChangePassword, (must) => {
       const path = router.currentRoute.value.path
-      if (!must || !isAdminPath(path)) return
+      if (!must || !isAdminPath(path) || router.currentRoute.value.meta.public || rechecking.value) return
       const target = changePasswordPath(slugOf(path))
-      if (path !== target) nuxtApp.runWithContext(() => navigateTo(target))
+      if (path !== target) nuxtApp.runWithContext(() => navigateTo({ path: target, query: { redirect: router.currentRoute.value.fullPath } }))
     })
 
     // Session lost mid-use (expired, signed out elsewhere, admin access removed): back to login.
     watch(auth.user, (user, previous) => {
       const route = router.currentRoute.value
-      if (!user && previous && !auth.signingOut.value && isAdminPath(route.path) && !route.meta.public) {
+      if (!user && previous && !auth.signingOut.value && !rechecking.value && isAdminPath(route.path) && !route.meta.public) {
         nuxtApp.runWithContext(() => navigateTo({ path: loginPath(slugOf(route.path)), query: { redirect: route.fullPath } }))
       }
     })
@@ -82,13 +82,13 @@ export default defineNuxtPlugin({
     // The same for the counter workspace: a temporary password, or a session lost mid-use.
     watch(counter.mustChangePassword, (must) => {
       const path = router.currentRoute.value.path
-      if (!must || !isCounterPath(path)) return
+      if (!must || !isCounterPath(path) || router.currentRoute.value.meta.public || rechecking.value) return
       const target = counterChangePasswordPath(slugOf(path))
-      if (path !== target) nuxtApp.runWithContext(() => navigateTo(target))
+      if (path !== target) nuxtApp.runWithContext(() => navigateTo({ path: target, query: { redirect: router.currentRoute.value.fullPath } }))
     })
     watch(counter.user, (user, previous) => {
       const route = router.currentRoute.value
-      if (!user && previous && !counter.signingOut.value && isCounterPath(route.path) && !route.meta.public) {
+      if (!user && previous && !counter.signingOut.value && !rechecking.value && isCounterPath(route.path) && !route.meta.public) {
         nuxtApp.runWithContext(() => navigateTo({ path: counterSignInPath(slugOf(route.path)), query: { redirect: route.fullPath } }))
       }
     })
@@ -96,11 +96,11 @@ export default defineNuxtPlugin({
     // And for the platform console (D142).
     watch(platform.mustChangePassword, (must) => {
       const path = router.currentRoute.value.path
-      if (must && isPlatformPath(path) && path !== PLATFORM_CHANGE_PASSWORD) nuxtApp.runWithContext(() => navigateTo(PLATFORM_CHANGE_PASSWORD))
+      if (must && isPlatformPath(path) && path !== PLATFORM_CHANGE_PASSWORD && !router.currentRoute.value.meta.public && !rechecking.value) nuxtApp.runWithContext(() => navigateTo({ path: PLATFORM_CHANGE_PASSWORD, query: { redirect: router.currentRoute.value.fullPath } }))
     })
     watch(platform.user, (user, previous) => {
       const route = router.currentRoute.value
-      if (!user && previous && !platform.signingOut.value && isPlatformPath(route.path) && !route.meta.public) {
+      if (!user && previous && !platform.signingOut.value && !rechecking.value && isPlatformPath(route.path) && !route.meta.public) {
         nuxtApp.runWithContext(() => navigateTo({ path: PLATFORM_SIGN_IN, query: { redirect: route.fullPath } }))
       }
     })

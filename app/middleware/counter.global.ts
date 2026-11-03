@@ -1,4 +1,4 @@
-import { counterChangePasswordPath, counterHomePath, counterSignInPath, isCounterPath, useCounterSession } from '~/features/counter'
+import { counterChangePasswordPath, counterHomePath, counterSignInPath, counterRedirectTarget, isCounterPath, useCounterSession } from '~/features/counter'
 import { PAGE_FORBIDDEN } from '~/features/errors'
 
 /**
@@ -9,14 +9,15 @@ import { PAGE_FORBIDDEN } from '~/features/errors'
  * touches the admin session.
  */
 export default defineNuxtRouteMiddleware(async (to) => {
+  if (useError().value && (import.meta.server || useNuxtApp().isHydrating)) return
   const slug = splitTenantUrl(to.path)?.slug
   if (!slug || !isCounterPath(to.path)) return
 
-  const { user, isSignedIn, checked, mustChangePassword, fetchSession, can } = useCounterSession()
-  if (!checked.value) await fetchSession()
+  const { user, isSignedIn, checked, mustChangePassword, sessionError, fetchSession, can } = useCounterSession()
+  if (!checked.value && !sessionError.value) await fetchSession()
 
   if (to.meta.public) {
-    if (to.path === counterSignInPath(slug) && isSignedIn.value) return navigateTo(counterHomePath(slug))
+    if (to.path === counterSignInPath(slug) && isSignedIn.value) return navigateTo(counterRedirectTarget(to.query.redirect, slug), { replace: true })
     return
   }
 

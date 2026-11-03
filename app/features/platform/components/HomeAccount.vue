@@ -13,13 +13,20 @@ import { useAccountSession } from '~/features/account'
 import { CAFES_PATH } from '~/utils/account-cafes'
 import HomeAccountSignedIn from './HomeAccountSignedIn.vue'
 
-const { account, known } = useAccountSession()
+const { account, known, error, refresh } = useAccountSession()
 </script>
 
 <template>
   <UColorModeButton :class="account ? 'max-sm:hidden' : undefined" />
   <UButton
-    v-if="!known"
+    v-if="error && !known"
+    label="Retry account check"
+    color="neutral"
+    variant="outline"
+    @click="refresh()"
+  />
+  <UButton
+    v-else-if="!known"
     label="Loading…"
     loading
     disabled

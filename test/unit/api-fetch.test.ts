@@ -93,6 +93,22 @@ describe('createApiFetch', () => {
     expect(error.kind).toBe('network')
     expect(error.retryable).toBe(true)
   })
+
+  it.each([200, 401, 403])('a superseded session read (%s) cannot restore flags or end the newer session', async (status) => {
+    let current = true
+    const onSessionLost = vi.fn()
+    const onPasswordChangeRequired = vi.fn()
+    const { fetch, calls } = fakeFetch(async () => {
+      current = false // a newer password/2FA/session update won while this read was in flight
+      if (status !== 200) throw httpError(status, errorBody(status === 401 ? 'UNAUTHENTICATED' : 'PASSWORD_CHANGE_REQUIRED', 'Old session'))
+      return { mustChangePassword: true, twoFactorEnabled: false }
+    })
+    const request = createApiFetch({ baseFetch: fetch, onSessionLost, onPasswordChangeRequired })
+    await expect(request('/admin/me', { isCurrent: () => current })).rejects.toMatchObject({ kind: 'aborted' })
+    expect(onSessionLost).not.toHaveBeenCalled()
+    expect(onPasswordChangeRequired).not.toHaveBeenCalled()
+    expect(calls[0]!.options).not.toHaveProperty('isCurrent')
+  })
 })
 
 describe('a dangerous change that needs the password again (D246)', () => {

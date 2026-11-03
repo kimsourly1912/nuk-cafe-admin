@@ -21,6 +21,7 @@ const siteName = computed(() => {
 // The workspaces' tabs stay open all day: they're offered a new build when one is deployed (D149).
 // The customer site just loads it on the next page change.
 const isWorkspace = computed(() => isAdminPath(route.path) || isCounterPath(route.path) || isPlatformPath(route.path))
+const rechecking = useState('session-identity:rechecking', () => false)
 
 // The counter and the admin install as the cafe's own apps (D202): each links its manifest. The
 // customer site and the platform console don't.
@@ -57,7 +58,11 @@ useHead(computed(() => {
 <template>
   <UApp>
     <NuxtLayout>
-      <NuxtPage />
+      <TaskFrameSkeleton
+        v-if="rechecking && isWorkspace"
+        :fields="2"
+      />
+      <NuxtPage v-else />
     </NuxtLayout>
     <!-- Bottom center, stacked: the update notice in the workspaces (D149), the offline notice everywhere. -->
     <div class="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4">

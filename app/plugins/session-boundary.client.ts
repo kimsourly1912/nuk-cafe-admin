@@ -15,19 +15,37 @@
  *
  * Cases and tests: docs/reference/app-behavior.md → "Session loss", test/e2e/session.test.ts.
  */
+import { useAuth } from '~/features/auth'
+import { useCounterSession } from '~/features/counter'
+import { usePlatformSession } from '~/features/platform'
+
 export default defineNuxtPlugin((nuxtApp) => {
   const overlay = useOverlay()
   const toast = useToast()
+  const auth = useAuth()
+  const counter = useCounterSession()
+  const platform = usePlatformSession()
 
-  nuxtApp.hook('app:session-changed', ({ signedIn }) => nuxtApp.runWithContext(() => {
+  nuxtApp.hook('app:session-changed', ({ signedIn, source }) => nuxtApp.runWithContext(() => {
+    if (source !== 'admin') auth.resetSession(!signedIn)
+    if (source !== 'counter') counter.resetSession(!signedIn)
+    if (source !== 'platform') platform.resetSession(!signedIn)
     useLeaveGuard().discardAll()
     overlay.closeAll()
     toast.clear()
     resetMutationOutcomes()
 
-    const keys = Object.keys(nuxtApp.payload.data).filter(key => /^[\w-]+:/.test(key))
+    // These three reads are public and identical for every identity. Clearing them emptied the
+    // menu after public sign-out/erasure, when protected queries deliberately do not refetch.
+    const publicKey = (key: string) => key.startsWith('cafe:profile:') || key === 'menu:branches' || key.startsWith('menu:public:')
+    const keys = Object.keys(nuxtApp.payload.data).filter(key => /^[\w-]+:/.test(key) && !publicKey(key))
     if (!keys.length) return
     clearNuxtData(keys)
-    if (signedIn) void refreshNuxtData(keys)
+    // Await only the small deciding account reads. Other sections refresh independently, and a
+    // signed-out workspace never restarts its protected reads while navigating away.
+    const accounts = keys.filter(key => key.startsWith('account:'))
+    const sections = keys.filter(key => !key.startsWith('account:'))
+    if (signedIn && sections.length) void refreshNuxtData(sections)
+    if (accounts.length) return refreshNuxtData(accounts)
   }))
 })

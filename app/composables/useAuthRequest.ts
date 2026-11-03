@@ -7,8 +7,10 @@ export function useAuthRequest() {
   const config = useRuntimeConfig().public.humanCheck
   const overlay = useOverlay()
   const router = useRouter()
+  const identity = useSessionIdentity()
 
-  return async <T>(path: string, body: Record<string, unknown> = {}): Promise<T> => {
+  return async <T>(path: string, body: Record<string, unknown> = {}, options: { signIn?: boolean } = {}): Promise<T> => {
+    const startedIn = identity.generation.value
     const action = humanCheckAction(path)
     let headers: Record<string, string> | undefined
     if (config.enabled && action) {
@@ -23,6 +25,20 @@ export function useAuthRequest() {
       headers = { [HUMAN_CHECK_HEADER]: token }
     }
     // Never retry an auth write with a single-use token. A new submit creates a new widget/token.
-    return await ofetch<T>(`/api/auth${path}`, { method: 'POST', body, headers, retry: 0, timeout: 30_000 })
+    try {
+      const result = await ofetch<T>(`/api/auth${path}`, { method: 'POST', body, headers, retry: 0, timeout: 30_000 })
+      identity.assertCurrent(startedIn)
+      if ((path === '/sign-in/email' && passwordStepOf(result) === 'signed-in') || path === '/sign-up/email' || options.signIn) {
+        const current = router.currentRoute.value.path
+        const inCafe = splitTenantUrl(current)?.path
+        const surface = inCafe?.startsWith('/admin') ? 'admin' : inCafe?.startsWith('/counter') ? 'counter' : current.startsWith('/platform') ? 'platform' : 'account'
+        await identity.change('login', surface)
+      }
+      return result
+    }
+    catch (error) {
+      identity.assertCurrent(startedIn)
+      throw error
+    }
   }
 }

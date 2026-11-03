@@ -31,7 +31,7 @@ const tenantPath = useTenantPath()
 
 const route = useRoute()
 const branchId = computed(() => String(route.params.branchId ?? ''))
-const { user } = useCounterSession()
+const { user, signingOut } = useCounterSession()
 const branch = computed(() => user.value?.branches.find(b => b.id === branchId.value) ?? null)
 
 const { query, queue, now, serverOffset, updatedAt, localNow, isNew, muted, sound } = useCounterQueue(branchId)
@@ -48,7 +48,9 @@ const branchStatus = computed(() => status.data.value?.find(b => b.id === branch
 const closedNote = computed(() => (branchStatus.value ? openingText(branchStatus.value) : undefined))
 // Online orders paused (D199): refreshed with the board, so another tablet's pause shows here too.
 const { query: pauseQuery, pausedUntil, resume } = useBranchPause(branchId)
-watch(updatedAt, () => void pauseQuery.refresh())
+watch(updatedAt, (loadedAt) => {
+  if (loadedAt && user.value && !signingOut.value) void pauseQuery.refresh()
+})
 const pause = computed(() => pauseQuery.data.value)
 const canResume = computed(() => !!branch.value && branch.value.role !== 'staff')
 const pauseDetail = computed(() => [pause.value?.pausedByName && `By ${pause.value.pausedByName}`, pause.value?.reason].filter(Boolean).join(' · ') || undefined)

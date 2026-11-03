@@ -16,6 +16,7 @@ type Schema = v.InferOutput<typeof schema>
 
 const state = reactive({ email: '', password: '' })
 const loading = ref(false)
+const assertActive = useAuthCompletion()
 // Hidden by default: staff sign in at the counter, where customers can see the screen.
 const showPassword = ref(false)
 const error = ref<string>()
@@ -25,12 +26,16 @@ const codeStep = ref(false)
  * A session the counter refuses (D239), met on arriving here already signed in or after a refused
  * sign-in: `<WorkspaceRefused>` replaces the form. Until it's checked, the skeleton (D238).
  */
-const { refused, checked } = useRefusedSession('counter')
+const { refused, checked, error: checkError, refresh: checkSession, admitted } = useRefusedSession('counter')
 
 const route = useRoute()
 const slug = useTenantSlug()
 const { signIn, finishSignIn } = useCounterSession()
 const { name, logoUrl } = useCafe()
+
+watch(admitted, async (allowed) => {
+  if (allowed && !loading.value) await navigateTo(counterRedirectTarget(route.query.redirect, slug.value), { replace: true })
+})
 
 // A failed step moves focus to what's wrong (page-patterns §5): the first invalid field, or the error.
 const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
@@ -41,7 +46,9 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
   loading.value = true
   error.value = undefined
   try {
-    if (await signIn(event.data) === 'two-factor') {
+    const step = await signIn(event.data)
+    assertActive()
+    if (step === 'two-factor') {
       codeStep.value = true
       state.password = ''
       return
@@ -57,6 +64,7 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 }
 
 async function showError(e: unknown) {
+  if (ApiError.from(e).kind === 'aborted') return
   if (e instanceof WorkspaceRefusedError) {
     refused.value = { email: state.email, access: e.access }
     state.password = ''
@@ -73,6 +81,7 @@ async function onRetry() {
   retrying.value = true
   try {
     await finishSignIn()
+    assertActive()
     await navigateTo(counterRedirectTarget(route.query.redirect, slug.value))
   }
   catch (e) {
@@ -101,6 +110,7 @@ async function onCodeVerified() {
   loading.value = true
   try {
     await finishSignIn()
+    assertActive()
     await navigateTo(counterRedirectTarget(route.query.redirect, slug.value))
   }
   catch (e) {
@@ -123,7 +133,7 @@ const aside = { title: 'Ready for service', text: 'Sign in to take and serve you
 
 <template>
   <TaskFrameSkeleton
-    v-if="!checked"
+    v-if="(!checked || admitted) && !checkError"
     :fields="2"
     cafe
   >
@@ -131,6 +141,15 @@ const aside = { title: 'Ready for service', text: 'Sign in to take and serve you
       <AuthAside v-bind="aside" />
     </template>
   </TaskFrameSkeleton>
+  <SessionCheckError
+    v-else-if="checkError"
+    :error="checkError"
+    @retry="checkSession()"
+  >
+    <template #aside>
+      <AuthAside v-bind="aside" />
+    </template>
+  </SessionCheckError>
   <WorkspaceRefused
     v-else-if="refused"
     workspace="counter"

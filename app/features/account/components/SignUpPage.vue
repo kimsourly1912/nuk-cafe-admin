@@ -21,22 +21,25 @@ const home = useAccountHome()
 const target = computed(() => accountRedirectTarget(route.query.redirect, home.value))
 
 const state = reactive({ name: '', email: '', password: '' })
-const { saving, formError, submit } = useAccountForm({ formId: 'sign-up-form', fields: ['name', 'email', 'password'] })
+const { saving, formError, submit } = useAccountForm({ formId: 'sign-up-form', fields: ['name', 'email', 'password'] }, state)
 const { signUp } = useAccountActions()
+const assertActive = useAuthCompletion()
 
-const { account, known } = useAccountSession()
+const { account, known, error: sessionError, refresh } = useAccountSession({ fresh: true })
 /** Already signed in on arrival: on its way on, so the form never shows (D238). */
 const leaving = ref(false)
-let arrived = false
-watch(known, (isKnown) => {
-  if (!isKnown || arrived) return
-  arrived = true
-  if (account.value) {
+watch([known, account], async ([isKnown, current]) => {
+  if (isKnown && current && !saving.value && !leaving.value) {
     leaving.value = true
-    navigateTo(target.value, { replace: true })
+    try {
+      await navigateTo(target.value, { replace: true })
+    }
+    finally {
+      leaving.value = false
+    }
   }
 }, { immediate: true })
-const loading = computed(() => !known.value || leaving.value)
+const loading = computed(() => (!known.value && !sessionError.value && !saving.value) || leaving.value)
 
 /** The password the server refused as breached, for the checklist. */
 const refusedPassword = ref<string>()
@@ -44,10 +47,10 @@ const refusedPassword = ref<string>()
 const generatedPassword = ref<string>()
 
 async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
-  arrived = true
   await submit(async () => {
     try {
       await signUp(event.data, route.query.redirect)
+      assertActive()
     }
     catch (error) {
       if (isBreachedPassword(error)) refusedPassword.value = event.data.password
@@ -67,6 +70,15 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
       <AccountAside v-bind="ACCOUNT_ASIDES.signUp" />
     </template>
   </TaskFrameSkeleton>
+  <SessionCheckError
+    v-else-if="sessionError && !known && !saving"
+    :error="sessionError"
+    @retry="refresh()"
+  >
+    <template #aside>
+      <AccountAside v-bind="ACCOUNT_ASIDES.signUp" />
+    </template>
+  </SessionCheckError>
   <AccountFrame
     v-else
     title="Create an account"
