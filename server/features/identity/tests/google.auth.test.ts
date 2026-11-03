@@ -41,7 +41,7 @@ async function mockGoogle() {
     accessToken: 'test-access-token', refreshToken: 'test-refresh-token', idToken: 'test-id-token',
   })
   vi.spyOn(provider, 'getUserInfo').mockImplementation(async () => ({
-    user: { id: 'google-subject', name: 'Google Person', email, emailVerified: verified, image: '' },
+    user: { name: 'Google Person', email, emailVerified: verified, image: '' },
     data: { sub: 'google-subject', email, email_verified: verified },
   }))
   return provider
