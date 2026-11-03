@@ -61,3 +61,5 @@ Before enabling staging, manually verify:
 - Missing credentials and rollback fail safely; no secret, auth code, token or raw provider description in UI/application logs.
 
 Reference APIs checked against [Better Auth Google](https://better-auth.com/docs/authentication/google), [accounts](https://better-auth.com/docs/concepts/users-accounts), [database hooks](https://better-auth.com/docs/concepts/database), and the [v1.7.7 source](https://github.com/better-auth/better-auth/tree/v1.7.7). In particular `user.validateUserInfo` and the session-create hook use that version's contract.
+
+The button uses the unmodified [official Google G asset](https://developers.google.com/static/identity/images/g-logo.png), downloaded from Google's [branding guide](https://developers.google.com/identity/branding-guidelines) and served locally as `public/google-g.png`. Its aspect ratio is preserved; no third-party image request is needed. Include the enabled button in the staging visual/branding review before public activation.

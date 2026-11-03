@@ -85,7 +85,7 @@ describe('Google accounts', () => {
     // Origin/callback checks run on HTTP requests. The trusted server API intentionally bypasses them.
     const external = await auth.handler(new Request(SITE + '/api/auth/sign-in/social', {
       method: 'POST',
-      headers: { origin: SITE, 'content-type': 'application/json' },
+      headers: { 'origin': SITE, 'content-type': 'application/json' },
       body: JSON.stringify({ provider: 'google', callbackURL: 'https://evil.example' }),
     }))
     expect(external.status).toBe(403)

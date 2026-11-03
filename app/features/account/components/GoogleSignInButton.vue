@@ -17,7 +17,17 @@ const enabled = useRuntimeConfig().public.googleAuth.enabled
       block
       :disabled="disabled"
       @click="$emit('click')"
-    />
+    >
+      <template #leading>
+        <img
+          src="/google-g.png"
+          alt=""
+          width="200"
+          height="204"
+          class="size-5 object-contain"
+        >
+      </template>
+    </UButton>
     <p class="text-sm text-muted">
       Already have an account? Use your email and password. For a Google account, use
       <ULink
