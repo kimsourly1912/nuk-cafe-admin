@@ -138,6 +138,8 @@ describe('activity', () => {
     await page.getByText('Account banned').first().waitFor()
 
     await page.getByRole('combobox', { name: 'Action' }).click()
+    await page.getByPlaceholder('Search actions…').fill('banned')
+    await page.getByRole('option', { name: 'Ownership transferred' }).waitFor({ state: 'hidden' })
     await page.getByRole('option', { name: 'Account banned' }).click()
     await page.getByRole('combobox', { name: 'When' }).click()
     await page.getByRole('option', { name: 'Last 7 days' }).click()

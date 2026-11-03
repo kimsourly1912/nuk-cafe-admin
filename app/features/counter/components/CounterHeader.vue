@@ -52,12 +52,12 @@ const manage = computed<DropdownMenuItem[][]>(() => {
     ? []
     : [pausedUntil.value
         ? { label: 'Resume online orders', icon: 'i-lucide-play', onSelect: () => void resume.execute(props.branchId) }
-        : { label: 'Pause online orders…', icon: 'i-lucide-pause', disabled: openNow.value === false, onSelect: () => void pauseModal.open({ branchId: props.branchId }) }]
+        : { label: 'Pause online orders', icon: 'i-lucide-pause', disabled: openNow.value === false, onSelect: () => void pauseModal.open({ branchId: props.branchId }) }]
   const pages: DropdownMenuItem[] = [
     { label: 'Reports', icon: 'i-lucide-chart-column', to: tenantPath(`/counter/${branch.value.id}/reports/summary`) },
     { label: 'Dining tables', icon: 'i-lucide-armchair', to: tenantPath(`/counter/${branch.value.id}/tables`) },
   ].filter(item => opens(item.to))
-  return [pause, pages].filter(group => group.length > 0)
+  return [pages, pause].filter(group => group.length > 0)
 })
 const muted = useCounterMuted()
 const { name, logoUrl } = useCafe()
@@ -70,13 +70,13 @@ const initials = computed(() => (user.value?.name || user.value?.email || '?').s
 const menu = computed<DropdownMenuItem[][]>(() => [
   [{ label: user.value?.name || user.value?.email, description: user.value?.email, type: 'label' }],
   [
-    ...((user.value?.branches.length ?? 0) > 1 ? [{ label: 'Another branch', icon: 'i-lucide-store', to: counterHomePath(slug.value) }] : []),
+    // Not inside the installed app itself (D203).
+    ...(installApp.installed.value ? [] : [{ label: 'Install app', icon: 'i-lucide-monitor-smartphone', onSelect: () => void installApp.install(name.value ? `${name.value} Counter` : 'Counter') }]),
     ...(elsewhere.value ? [{ label: 'Another cafe', icon: 'i-lucide-arrow-left-right', to: CAFES_PATH }] : []),
+    ...((user.value?.branches.length ?? 0) > 1 ? [{ label: 'Another branch', icon: 'i-lucide-store', to: counterHomePath(slug.value) }] : []),
     { label: 'Change password', icon: 'i-lucide-key-round', to: counterChangePasswordPath(slug.value) },
     { label: 'Account security', icon: 'i-lucide-shield-check', to: tenantPath('/counter/account-security') },
     { label: muted.value ? 'Turn on the new-order sound' : 'Mute the new-order sound', icon: muted.value ? 'i-lucide-bell' : 'i-lucide-bell-off', onSelect: () => { muted.value = !muted.value } },
-    // Not inside the installed app itself (D203).
-    ...(installApp.installed.value ? [] : [{ label: 'Install app', icon: 'i-lucide-monitor-smartphone', onSelect: () => void installApp.install(name.value ? `${name.value} Counter` : 'Counter') }]),
   ],
   [{ label: 'Sign out', icon: 'i-lucide-log-out', onSelect: () => signOut() }],
 ])
@@ -172,7 +172,7 @@ const menu = computed<DropdownMenuItem[][]>(() => [
           :label="initials"
           color="neutral"
           variant="soft"
-          class="rounded-full"
+          class="size-8 justify-center rounded-full p-0"
           :aria-label="`${initials}, account: ${user?.name || user?.email}`"
         />
       </UDropdownMenu>

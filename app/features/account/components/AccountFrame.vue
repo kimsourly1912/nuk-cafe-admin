@@ -19,6 +19,8 @@ const props = defineProps<{
   /** One of the app's illustrations (`i-app-…`, 4:3), in place of an icon. */
   illustration?: string
   aside?: { title: string, text: string }
+  /** The card's minimum height from `sm`, for a form that grows with its errors (`TaskFrame`'s `height`). */
+  height?: 'tall' | 'taller'
 }>()
 
 const ICON_CLASS = { primary: 'text-primary', success: 'text-success', warning: 'text-warning' } as const
@@ -26,7 +28,7 @@ const message = computed(() => !!(props.icon || props.illustration))
 </script>
 
 <template>
-  <TaskFrame>
+  <TaskFrame :height="height">
     <template
       v-if="aside"
       #aside

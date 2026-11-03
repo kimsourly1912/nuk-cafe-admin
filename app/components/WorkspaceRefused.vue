@@ -120,7 +120,7 @@ async function useAnotherAccount() {
       ref="panel"
       role="alert"
       tabindex="-1"
-      class="flex flex-col items-center gap-2 py-6 text-center"
+      class="flex flex-col items-center gap-2 py-6 text-center outline-none"
     >
       <UIcon
         name="i-lucide-lock"

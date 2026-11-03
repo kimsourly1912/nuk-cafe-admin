@@ -15,7 +15,9 @@ const props = defineProps<{
   /** The token's version when replacing one; 0 for the first. */
   version: number
 }>()
-const emit = defineEmits<{ close: [saved: boolean] }>()
+// `update:open` is declared so closing (X, Esc, outside click) goes through `unsaved` instead of
+// straight to the overlay.
+const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: boolean] }>()
 
 const schema = v.pick(bakongTokenSchema, ['token'])
 const initial = { token: '' }

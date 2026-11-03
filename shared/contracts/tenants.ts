@@ -48,7 +48,7 @@ export function slugFromName(name: string): string {
 export const TENANT_STATUSES = ['active', 'suspended'] as const
 export type TenantStatus = typeof TENANT_STATUSES[number]
 
-const emailSchema = v.pipe(v.string(), v.trim(), v.toLowerCase(), v.email('Must be a valid email address'), v.maxLength(254))
+const emailSchema = v.pipe(v.string(), v.trim(), v.toLowerCase(), v.minLength(1, 'Email is required'), v.email('Must be a valid email address'), v.maxLength(254))
 
 export const OWNER_KINDS = ['existing', 'new'] as const
 export type OwnerKind = typeof OWNER_KINDS[number]
@@ -69,7 +69,7 @@ export const newCafeOwnerSchema = v.variant('kind', [
   }),
   v.object({
     kind: v.literal('new'),
-    name: nameSchema(100),
+    name: nameSchema(100, 'Name'),
     email: emailSchema,
   }),
 ])
@@ -77,11 +77,11 @@ export type NewCafeOwner = v.InferOutput<typeof newCafeOwnerSchema>
 
 /** `POST /api/platform/tenants`: the cafe, its first branch and its first owner, in one save. */
 export const createTenantSchema = v.object({
-  name: nameSchema(80),
+  name: nameSchema(80, 'Cafe name'),
   slug: slugSchema,
-  branchName: nameSchema(100),
+  branchName: nameSchema(100, 'Branch name'),
   /** An IANA zone (`Asia/Phnom_Penh`); the server checks it's known. */
-  timezone: v.pipe(v.string(), v.trim(), v.minLength(1, 'Required'), v.maxLength(64)),
+  timezone: v.pipe(v.string(), v.trim(), v.minLength(1, 'Time zone is required'), v.maxLength(64)),
   owner: newCafeOwnerSchema,
 })
 export type CreateTenantInput = v.InferOutput<typeof createTenantSchema>
@@ -122,7 +122,7 @@ export const SUSPEND_REASON_MAX = 200
 /** `POST …/{id}/suspend`: why, shown to the platform team (customers see "Ordering is paused"). */
 export const suspendTenantSchema = v.object({
   version: versionSchema,
-  reason: nameSchema(SUSPEND_REASON_MAX),
+  reason: nameSchema(SUSPEND_REASON_MAX, 'Reason'),
 })
 export type SuspendTenantInput = v.InferOutput<typeof suspendTenantSchema>
 
@@ -138,7 +138,7 @@ export type ChangeTenantSlugInput = v.InferOutput<typeof changeTenantSlugSchema>
 export const OWNERSHIP_REASON_MAX = 500
 
 /** Why a super admin changed a cafe's owners: kept in the audit row, never shown to the cafe. */
-const ownershipReasonSchema = nameSchema(OWNERSHIP_REASON_MAX)
+const ownershipReasonSchema = nameSchema(OWNERSHIP_REASON_MAX, 'Reason')
 
 /** `POST …/{id}/owners`: an existing account (by id) or a new person, made an owner. */
 export const addOwnerSchema = v.object({

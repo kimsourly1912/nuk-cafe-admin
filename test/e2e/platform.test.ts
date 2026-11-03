@@ -383,9 +383,9 @@ describe('creating a cafe (D185)', () => {
   it('names what is missing, on the fields, and sends nothing', async () => {
     const { page, api } = await openNew()
     await createButton(page).click()
-    await cafeCard(page).getByText('Required').first().waitFor()
+    await cafeCard(page).getByText('Cafe name is required').first().waitFor()
     await page.getByText('At least 3 characters').waitFor()
-    await ownerCard(page).getByText('Required').first().waitFor()
+    await ownerCard(page).getByText(/is required/).first().waitFor()
     // The first invalid field takes focus.
     await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('name') ?? document.activeElement?.id)).toBeTruthy()
     // An existing account has to be chosen.
@@ -798,7 +798,7 @@ describe('a cafe\'s page', () => {
     const form = dialog(page)
     // A reason is required.
     await form.getByRole('button', { name: 'Pause cafe' }).click()
-    await form.getByText('Required').waitFor()
+    await form.getByText('Reason is required').waitFor()
     await form.getByLabel('Reason').fill('Unpaid invoice')
     await form.getByRole('button', { name: 'Pause cafe' }).click()
     await page.getByText('This cafe is paused').waitFor()

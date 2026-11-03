@@ -85,23 +85,33 @@ const aside = { title: 'Keep your account secure', text: 'Choose a strong passwo
 </script>
 
 <template>
-  <TaskFrame>
+  <TaskFrame height="taller">
     <template #aside>
-      <AuthAside v-bind="aside" />
+      <AuthAside
+        v-bind="aside"
+        :color-mode="false"
+      />
     </template>
     <template #header>
-      <div class="space-y-1">
-        <h1 class="text-lg font-semibold">
-          {{ forced ? 'Choose your password' : 'Change password' }}
-        </h1>
-        <p class="text-sm text-muted">
-          <template v-if="forced">
-            {{ user?.email }} was given a temporary password. Choose your own to continue.
-          </template>
-          <template v-else>
-            {{ user?.email }}
-          </template>
-        </p>
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0 space-y-1">
+          <h1 class="text-lg font-semibold">
+            {{ forced ? 'Choose your password' : 'Change password' }}
+          </h1>
+          <p class="text-sm text-muted">
+            <template v-if="forced">
+              {{ user?.email }} was given a temporary password. Choose your own to continue.
+            </template>
+            <template v-else>
+              {{ user?.email }}
+            </template>
+          </p>
+        </div>
+        <!-- `data-color-mode`: the `auth` layout hides its corner button. -->
+        <UColorModeButton
+          data-color-mode
+          class="shrink-0"
+        />
       </div>
     </template>
 

@@ -264,8 +264,8 @@ const paymentsTotal = (report: ReportSummary) => ({
                 />
               </div>
             </template>
-            <dl class="grid grid-cols-3 gap-3 text-center">
-              <div class="rounded-md bg-elevated/50 p-3">
+            <dl class="grid grid-cols-2 gap-3 text-center sm:grid-cols-3">
+              <div class="col-span-2 rounded-md bg-elevated/50 p-3 ring ring-default sm:col-span-1">
                 <dt class="text-xs text-muted">
                   Waiting for payment
                 </dt>
@@ -273,7 +273,7 @@ const paymentsTotal = (report: ReportSummary) => ({
                   {{ data.current.awaitingPayment }}
                 </dd>
               </div>
-              <div class="rounded-md bg-elevated/50 p-3">
+              <div class="rounded-md bg-elevated/50 p-3 ring ring-default">
                 <dt class="text-xs text-muted">
                   Preparing
                 </dt>
@@ -281,7 +281,7 @@ const paymentsTotal = (report: ReportSummary) => ({
                   {{ data.current.preparing }}
                 </dd>
               </div>
-              <div class="rounded-md bg-elevated/50 p-3">
+              <div class="rounded-md bg-elevated/50 p-3 ring ring-default">
                 <dt class="text-xs text-muted">
                   Ready
                 </dt>

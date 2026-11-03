@@ -2,6 +2,13 @@
 
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
+## Platform Activity searchable filter accessibility (PR #250, 2026-11-03)
+Branch `claude/fix-ui-bug-2`; [PR #250](https://github.com/kimsourly1912/nuk-cafe-admin/pull/250). Follow-up to [D152](decisions.md#d152-the-ux-pack-undo-instead-of-asking-ctrlk-search-a-sold-out-switch-that-moves-at-once-an-accessibility-check-2026-10-10).
+
+- **Failure:** CI run 574 passed lint, typecheck, audit, unit/server tests and E2E shards 1/2. Shard 3 failed only Activity: the Action filter became a `USelectMenu` whose trigger defaults to a button, losing the combobox lookup and failing axe's label-content-name-mismatch rule at 1440 and 390 px.
+- **Fix:** give the searchable Action trigger `role="combobox"`, matching `RecordSelect` and D152. Keep the Action label, search and responsive layout. Extend the existing URL/API filter test to search for an action and exclude unrelated options; existing accessibility checks cover light/dark at 1440 and 390 px.
+- **Verification (Node 24.22.2, pnpm 12.15.0, Chromium):** the uncorrected browser build reproduced all three CI failures (7 passed). After the fix, `E2E_BROWSER_PATH=/usr/bin/chromium E2E_WORKERS=1 pnpm vitest run --project e2e test/e2e/platform-activity.test.ts`: **10 passed**. `pnpm lint`, `pnpm typecheck` and `pnpm audit --audit-level high` passed (3 low / 12 moderate); `pnpm test:unit`: **2453 passed, 1 skipped, 167 files**. A first corrected-page run passed both accessibility cases but hit a scope error in an added test assertion; that assertion was removed before the final green run. API fixtures prove the browser flow, not real-server authorization. No merge or deployment.
+
 ## Checkout validates at commit (D257, 2026-11-02)
 Branch `codex/checkout-concurrency-audit`, from `main` `26b24f7` (still current at final verification); [PR #248](https://github.com/kimsourly1912/nuk-cafe-admin/pull/248). Owner-requested checkout-first audit. [Decision](decisions.md#d257-checkout-validates-its-read-state-inside-the-order-batch-2026-11-02), [scenario table, reproduction and follow-ups](reviews/checkout-concurrency-2026-11-02.md).
 

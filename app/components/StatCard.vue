@@ -26,13 +26,14 @@ defineProps<{
   <!-- Nuxt UI's subtle card, drawn here: a `dl` may hold only `dt`/`dd` and one `div` around them (axe). -->
   <div
     class="relative rounded-lg bg-elevated/50 p-4 ring ring-default"
-    :class="icon && 'ps-12'"
+    :class="icon && 'sm:ps-12'"
   >
     <dt class="text-sm text-muted">
+      <!-- Narrow screens: icon, label and value stack in three rows; from `sm` the icon sits beside them. -->
       <UIcon
         v-if="icon"
         :name="icon"
-        class="absolute start-4 top-4.5 size-5 text-muted"
+        class="mb-2 block size-5 text-muted sm:absolute sm:start-4 sm:top-4.5 sm:mb-0"
       />
       {{ label }}
     </dt>

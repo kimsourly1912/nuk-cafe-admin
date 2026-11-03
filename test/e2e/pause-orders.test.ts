@@ -57,7 +57,7 @@ async function atCounter(width = 1180) {
 
 async function pauseFromManage(page: Page, choice: string, reason?: string) {
   await page.getByRole('button', { name: 'Manage' }).click()
-  await page.getByRole('menuitem', { name: 'Pause online orders…' }).click()
+  await page.getByRole('menuitem', { name: 'Pause online orders' }).click()
   const dialog = page.getByRole('dialog', { name: 'Pause online orders' })
   await dialog.getByRole('radio', { name: choice }).click()
   if (reason) await dialog.getByLabel(/^Reason/).fill(reason)
@@ -160,7 +160,7 @@ describe('pausing online orders at the counter (D199)', () => {
   it.each([1180, 390])('the dialog and the paused queue meet the rules in light and dark and fit at %ipx', { timeout: 60_000 }, async (width) => {
     const page = await atCounter(width)
     await page.getByRole('button', { name: 'Manage' }).click()
-    await page.getByRole('menuitem', { name: 'Pause online orders…' }).click()
+    await page.getByRole('menuitem', { name: 'Pause online orders' }).click()
     await page.getByRole('dialog', { name: 'Pause online orders' }).getByRole('radio', { name: '15 minutes' }).waitFor()
     await bothModes(page)
     await page.getByRole('dialog', { name: 'Pause online orders' }).getByRole('button', { name: 'Pause orders' }).click()

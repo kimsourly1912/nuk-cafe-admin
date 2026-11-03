@@ -12,7 +12,9 @@ import { saveItemOrder, useCategoryItems } from '../composables/useItems'
 import ProductReorderList from './ProductReorderList.vue'
 
 const props = defineProps<{ categoryId?: string }>()
-const emit = defineEmits<{ close: [saved: boolean] }>()
+// `update:open` is declared so closing (X, Esc, outside click) goes through `unsaved` instead of
+// straight to the overlay.
+const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: boolean] }>()
 
 const { isCompact } = useLayoutContext()
 const categoryId = ref<string | undefined>(props.categoryId)

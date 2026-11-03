@@ -32,6 +32,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
   { type: 'separator' },
   { label: 'Change password', icon: 'i-lucide-key-round', to: PLATFORM_CHANGE_PASSWORD },
   { label: 'Keyboard shortcuts', icon: 'i-lucide-keyboard', kbds: ['?'], onSelect: showShortcuts },
+  { type: 'separator' },
   { label: 'Log out', icon: 'i-lucide-log-out', onSelect: () => signOut() },
 ])
 </script>

@@ -329,7 +329,7 @@ const twoFactorOffModal = overlay.create(AccountTwoFactorOffModal)
               icon="i-lucide-ban"
               color="error"
               variant="outline"
-              class="shrink-0"
+              class="shrink-0 justify-center"
               :disabled="busy"
               @click="banModal.open({ account })"
             />

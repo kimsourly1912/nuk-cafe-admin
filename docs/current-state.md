@@ -4,6 +4,7 @@ Snapshot reviewed against main `f2978f7`, 2026-11-01. Read only when resuming or
 
 ## Waiting on the owner
 
+- **In review: platform UI fixes ([PR #250](https://github.com/kimsourly1912/nuk-cafe-admin/pull/250)),** including the searchable Activity filter's combobox semantics (D152); lint/typecheck/audit passed, 2453 unit/server tests passed (1 skipped), Activity E2E 10/10. [Progress](progress.md#platform-activity-searchable-filter-accessibility-pr-250-2026-11-03).
 - **In review: checkout concurrency audit/fix (D257, [PR #248](https://github.com/kimsourly1912/nuk-cafe-admin/pull/248)),** branch `codex/checkout-concurrency-audit` from `26b24f7`: commit-time guards and migration-backed SQLite/local D1 regressions; lint/typecheck/audit passed, 2446 unit/server tests passed (1 skipped), full local E2E 813 passed, implementation CI green. Final verification-note update changes documentation only. [Progress](progress.md#checkout-validates-at-commit-d257-2026-11-02), [audit](reviews/checkout-concurrency-2026-11-02.md). No inventory or payment change; next financial risks recorded separately.
 
 
