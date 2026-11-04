@@ -15,7 +15,6 @@ import AccountAside from './AccountAside.vue'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
-import GoogleSignInButton from './GoogleSignInButton.vue'
 import { useAccountProviders } from '../composables/useAccountProviders'
 import { useGoogleSignInPopup } from '../composables/useGoogleSignInPopup'
 
@@ -26,9 +25,10 @@ const target = computed(() => accountRedirectTarget(route.query.redirect, home.v
 
 const state = reactive({ name: '', email: '', password: '' })
 const { saving, formError, submit } = useAccountForm({ formId: 'sign-up-form', fields: ['name', 'email', 'password'] }, state)
-const { signUp } = useAccountActions()
+const { signUp, finishSignIn } = useAccountActions()
 const assertActive = useAuthCompletion()
 const googlePopup = useGoogleSignInPopup()
+const codeStep = ref(false)
 
 const { account, known, error: sessionError, refresh } = useAccountSession({ fresh: true })
 /** Already signed in on arrival: on its way on, so the form never shows (D238). */
@@ -54,7 +54,12 @@ const generatedPassword = ref<string>()
 async function onGoogleSignIn() {
   if (saving.value) return
   await submit(async () => {
-    await googlePopup.open(route.query.redirect)
+    const step = await googlePopup.open(route.query.redirect)
+    if (step === 'two-factor') {
+      codeStep.value = true
+      state.password = ''
+      return
+    }
     assertActive()
     await navigateTo(target.value)
   })
@@ -73,6 +78,21 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
     }
     await navigateTo(accountLink(ACCOUNT_PATHS.verifyEmail, route.query.redirect))
   })
+}
+async function onCodeVerified() {
+  let completed = false
+  await submit(async () => {
+    await finishSignIn()
+    assertActive()
+    await navigateTo(target.value)
+    completed = true
+  })
+  if (!completed) codeStep.value = false
+}
+
+function restart(message?: string) {
+  codeStep.value = false
+  formError.value = message
 }
 </script>
 
@@ -102,7 +122,15 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
     height="tall"
     :back="{ label: accountBackLabel(home), to: home }"
   >
+    <TwoFactorCodeForm
+      v-if="codeStep"
+      v-model:saving="saving"
+      form-id="sign-up-code"
+      @verified="onCodeVerified()"
+      @restart="restart"
+    />
     <UForm
+      v-else
       id="sign-up-form"
       ref="form"
       :schema="signUpSchema"
@@ -178,13 +206,25 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
     <template #footer>
       <UButton
         type="submit"
-        form="sign-up-form"
-        label="Create account"
+        :form="codeStep ? 'sign-up-code' : 'sign-up-form'"
+        :label="codeStep ? 'Verify' : 'Create account'"
         block
         :loading="saving && !googlePopup.pending.value"
         :disabled="saving"
       />
-      <p class="text-center text-sm text-muted">
+      <UButton
+        v-if="codeStep"
+        label="Back"
+        color="neutral"
+        variant="ghost"
+        block
+        :disabled="saving"
+        @click="restart()"
+      />
+      <p
+        v-else
+        class="text-center text-sm text-muted"
+      >
         Already have an account?
         <ULink
           :to="accountLink(ACCOUNT_PATHS.signIn, route.query.redirect)"

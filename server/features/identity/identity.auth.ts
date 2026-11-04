@@ -1,9 +1,10 @@
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from 'better-auth/api'
-import { admin, anonymous, haveIBeenPwned, organization, twoFactor } from 'better-auth/plugins'
+import { admin, anonymous, haveIBeenPwned, organization } from 'better-auth/plugins'
 import type { ServerAuthConfig } from '@nuxtjs/better-auth/config'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import { outboxStatement } from '#server/features/platform'
+import { googleTwoFactor, isGoogleCallback } from './google-two-factor'
 import { MAIL_KINDS } from './identity.mail'
 import { platformAc, platformRoles, tenantAc, tenantRoles } from './identity.permissions'
 import { HUMAN_CHECK_HEADER, humanCheckAction } from '#shared/utils/human-check'
@@ -72,9 +73,10 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
             if (!ctx || !(ctx.path?.startsWith('/callback/') || ctx.path === '/sign-in/social')) return
             const user = await ctx.context.internalAdapter.findUserById(session.userId)
             const flags = user as { twoFactorEnabled?: boolean, mustChangePassword?: boolean, role?: string } | null
-            // Better Auth 1.7.7's twoFactor plugin challenges credential sign-ins only.
-            // Refuse BEFORE a session is written; an OAuth session must never bypass that step.
-            if (!flags || flags.twoFactorEnabled || flags.mustChangePassword || isSuperAdmin(flags.role)) {
+            // Google uses the native two-factor challenge through googleTwoFactor. Other OAuth
+            // paths and platform accounts without configured two-factor remain refused.
+            if (!flags || flags.mustChangePassword || (isSuperAdmin(flags.role) && !flags.twoFactorEnabled)
+              || (flags.twoFactorEnabled && !isGoogleCallback(ctx))) {
               throw new APIError('FORBIDDEN', { code: 'GOOGLE_PASSWORD_REQUIRED', message: 'Use email and password to sign in to this account.' })
             }
           },
@@ -148,7 +150,7 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
           const flags = stored as { emailVerified?: boolean, twoFactorEnabled?: boolean, mustChangePassword?: boolean, role?: string, banned?: boolean, banExpires?: Date | null } | null
           // Refuse before creating the provider binding, as well as before issuing a session.
           if (!flags?.emailVerified) return { error: 'account_not_linked', errorDescription: 'Verify your account email before using Google.' }
-          if (flags.twoFactorEnabled || flags.mustChangePassword || isSuperAdmin(flags.role)
+          if (flags.mustChangePassword || (isSuperAdmin(flags.role) && !flags.twoFactorEnabled)
             || (flags.banned && (!flags.banExpires || flags.banExpires.getTime() > Date.now()))) {
             return { error: 'google_password_required', errorDescription: 'Use email and password to sign in to this account.' }
           }
@@ -258,9 +260,9 @@ export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true
       }),
       haveIBeenPwned({ enabled: checkBreachedPasswords }),
       // Two-step sign-in (P1b, D188): an authenticator app's code (TOTP) or a backup code, after the
-      // password. Required for super admins (\`authorizePlatform\`); any account that turns it on is
+      // password or Google. Required for super admins (\`authorizePlatform\`); any account that turns it on is
       // asked for a code at every sign-in. No "trust this device": sessions already last 7 days.
-      twoFactor({ issuer: 'Angder' }),
+      googleTwoFactor(),
       // Guests (D156): Place order without an account signs the browser in as a guest, a user with
       // no email or password. Orders keep their owner, so "only your own orders" holds as before.
       anonymous({

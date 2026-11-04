@@ -2908,3 +2908,14 @@ D260 verification boundary: the e2e server preloads an offline password-range fi
 
 
 D261 error-boundary repair (2026-11-04): Better Auth forwards custom `APIError` codes verbatim. The session guard's `GOOGLE_PASSWORD_REQUIRED` must normalize to the existing bounded `google_password_required` instruction in both the passive popup and legacy sign-in path; unknown codes and provider descriptions remain discarded. Returning protected identities retain the password/second-factor requirement. [Evidence](progress.md#google-protected-account-error-repair-d261-2026-11-04).
+
+
+### D262: Google sign-in at every workspace retains native two-factor verification (2026-11-04)
+
+**Owner:** add Google to platform, counter and admin authentication pages.
+
+**Choice:** share the existing popup button, provider discovery, bounded error mapping and lifecycle across the five entry points. Each workspace keeps its existing completion/access check and redirect guard. Google never adds a role, membership or branch. A completed Google session updates the shared identity before workspace authorization, including wrong-workspace refusal; a pending second factor does not announce login.
+
+Better Auth 1.7.7's native twoFactor challenge hook also matches the Google callback. Its unmodified handler removes the provisional session/cookie and issues its existing expiring, attempt-limited challenge. A following hook redirects only through the validated same-origin callback with bounded pending-factor metadata. The original form uses the existing TOTP/backup-code verifier. Configured two-step users, including super admins, may link a verified same-email Google identity as their first factor; no usable session is returned until the code succeeds. Temporary-password and banned accounts, and super admins without configured 2FA, retain their previous refusal. Password confirmations and security setup still require a local password. This supersedes the corresponding D259/D260 Google refusal, not the platform's mandatory two-step requirement.
+
+No copied crypto, internal library imports, new dependencies, migrations, credential settings or deployment. The wrapper is version-sensitive and its regression must be rerun on Better Auth upgrades. Existing two-factor guest-order-transfer limits remain. [Contract](plans/google-auth.md#workspace-google-sign-in-d262-2026-11-04) · [Evidence](progress.md#google-workspace-sign-in-d262-2026-11-04).

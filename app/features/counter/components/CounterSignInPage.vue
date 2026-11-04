@@ -17,6 +17,7 @@ type Schema = v.InferOutput<typeof schema>
 const state = reactive({ email: '', password: '' })
 const loading = ref(false)
 const assertActive = useAuthCompletion()
+const identity = useSessionIdentity()
 // Hidden by default: staff sign in at the counter, where customers can see the screen.
 const showPassword = ref(false)
 const error = ref<string>()
@@ -31,6 +32,8 @@ const { refused, checked, error: checkError, refresh: checkSession, admitted } =
 const route = useRoute()
 const slug = useTenantSlug()
 const { signIn, finishSignIn } = useCounterSession()
+const { googleEnabled, known: providersKnown, error: providersError, refresh: refreshProviders } = useAccountProviders()
+const googlePopup = useGoogleAuthPopup({ start: useGoogleAuthRequest(), finish: finishSignIn, surface: 'counter' })
 const { name, logoUrl } = useCafe()
 
 watch(admitted, async (allowed) => {
@@ -42,7 +45,37 @@ const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
 const form = useTemplateRef('form')
 useFormErrorRecheck(form)
 
+async function onGoogleSignIn() {
+  if (loading.value) return
+  const startedIn = identity.generation.value
+  loading.value = true
+  error.value = undefined
+  try {
+    const step = await googlePopup.open()
+    assertActive()
+    if (step === 'two-factor') {
+      codeStep.value = true
+      state.password = ''
+      return
+    }
+    await navigateTo(counterRedirectTarget(route.query.redirect, slug.value))
+  }
+  catch (e) {
+    if (e instanceof WorkspaceRefusedError) await checkSession()
+    else await showError(e)
+  }
+  finally {
+    if (identity.generation.value !== startedIn) {
+      state.email = ''
+      state.password = ''
+      showPassword.value = false
+    }
+    loading.value = false
+  }
+}
+
 async function onSubmit(event: FormSubmitEvent<Schema>) {
+  if (loading.value) return
   loading.value = true
   error.value = undefined
   try {
@@ -133,7 +166,7 @@ const aside = { title: 'Ready for service', text: 'Sign in to take and serve you
 
 <template>
   <TaskFrameSkeleton
-    v-if="(!checked || admitted) && !checkError"
+    v-if="((!checked || admitted) && !checkError) || (!providersKnown && !providersError)"
     :fields="2"
     cafe
   >
@@ -195,6 +228,7 @@ const aside = { title: 'Ready for service', text: 'Sign in to take and serve you
       ref="form"
       :schema="schema"
       :state="state"
+      :disabled="loading"
       :validate-on="['input', 'change']"
       class="space-y-4"
       @submit="onSubmit"
@@ -213,6 +247,19 @@ const aside = { title: 'Ready for service', text: 'Sign in to take and serve you
           :title="error"
         />
       </div>
+
+      <ApiErrorAlert
+        v-if="providersError"
+        title="Could not check Google sign-in"
+        :error="providersError"
+        @retry="refreshProviders()"
+      />
+      <GoogleSignInButton
+        :enabled="googleEnabled"
+        :disabled="loading"
+        :pending="googlePopup.pending.value"
+        @click="onGoogleSignIn"
+      />
 
       <UFormField
         label="Email"
@@ -265,7 +312,8 @@ const aside = { title: 'Ready for service', text: 'Sign in to take and serve you
           :form="codeStep ? 'counter-sign-in-code' : 'counter-sign-in'"
           :label="codeStep ? 'Verify' : 'Sign in'"
           block
-          :loading="loading"
+          :loading="loading && !googlePopup.pending.value"
+          :disabled="loading"
         />
         <UButton
           v-if="codeStep"

@@ -177,7 +177,6 @@ describe('Google accounts', () => {
   })
 
   it.each([
-    { twoFactorEnabled: true },
     { mustChangePassword: true },
     { role: 'superadmin' },
     { banned: true, banExpires: new Date(Date.now() + 86_400_000) },
@@ -235,7 +234,6 @@ describe('Google accounts', () => {
   })
 
   it.each([
-    { twoFactorEnabled: true },
     { mustChangePassword: true },
     { role: 'superadmin' },
     { banned: true, banExpires: new Date(Date.now() + 86_400_000) },
@@ -249,9 +247,35 @@ describe('Google accounts', () => {
     expect(refused.session).toBeNull()
     expect(await db.select().from(authSchema.session).where(eq(authSchema.session.userId, userId))).toHaveLength(0)
     expect(new URL(refused.response.headers.get('location')!).searchParams.has('error')).toBe(true)
-    if (!('banned' in flags)) {
-      expect(new URL(refused.response.headers.get('location')!).searchParams.get('error')).toBe('GOOGLE_PASSWORD_REQUIRED')
-    }
+  })
+
+  it.each(['customer', 'superadmin'])('challenges a Google %s before issuing any usable session', async (role) => {
+    const password = 'existing long password'
+    const created = await auth.api.signUpEmail({ body: { email, name: 'Existing Person', password }, returnHeaders: true })
+    await db.update(authSchema.user).set({ emailVerified: true, role }).where(eq(authSchema.user.id, created.response.user.id))
+    const setup = await auth.api.enableTwoFactor({ headers: sessionHeaders(created.headers), body: { password, method: 'totp' } })
+    if (setup.method !== 'totp') throw new Error('Expected TOTP')
+    const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+    const bits = [...new URL(setup.totpURI).searchParams.get('secret')!.replace(/=+$/, '')].map(c => alphabet.indexOf(c).toString(2).padStart(5, '0')).join('')
+    const secret = String.fromCharCode(...bits.match(/.{8}/g)!.map(byte => Number.parseInt(byte, 2)))
+    const code = async () => (await auth.api.generateTOTP({ body: { secret } })).code
+    await auth.api.verifyTOTP({ headers: sessionHeaders(created.headers), body: { code: await code() } })
+    await db.delete(authSchema.session)
+    await mockGoogle()
+    const response = await callback(await start())
+    const challenge = sessionHeaders(response.headers)
+    expect(await auth.api.getSession({ headers: challenge })).toBeNull()
+    expect(await db.select().from(authSchema.session)).toHaveLength(0)
+    expect(new URL(response.headers.get('location')!).searchParams.get('googleTwoFactor')).toBe('1')
+    await expect(auth.api.verifyTOTP({ headers: challenge, body: { code: 'invalid' } })).rejects.toThrow()
+    const verified = await auth.api.verifyTOTP({ headers: challenge, body: { code: await code() }, returnHeaders: true })
+    expect((await auth.api.getSession({ headers: sessionHeaders(verified.headers) }))?.user).toMatchObject({ id: created.response.user.id, twoFactorEnabled: true, role })
+    await expect(auth.api.verifyTOTP({ headers: challenge, body: { code: await code() } })).rejects.toThrow()
+    const returning = await callback(await start())
+    expect(new URL(returning.headers.get('location')!).searchParams.get('googleTwoFactor')).toBe('1')
+    expect(await auth.api.getSession({ headers: sessionHeaders(returning.headers) })).toBeNull()
+    const recovered = await auth.api.verifyBackupCode({ headers: sessionHeaders(returning.headers), body: { code: setup.backupCodes[0]! }, returnHeaders: true })
+    expect((await auth.api.getSession({ headers: sessionHeaders(recovered.headers) }))?.user.id).toBe(created.response.user.id)
   })
 
   it('rejects missing, mismatched and replayed state without issuing a session', async () => {

@@ -23,7 +23,7 @@ describe('Google popup lifecycle', () => {
       assertCurrent: (generation) => {
         if (generation !== identity.generation.value) throw new ApiError('Stale identity.', { kind: 'aborted', status: 0 })
       },
-      change: vi.fn(),
+      change: vi.fn(() => { identity.generation.value++ }),
     }
     popup = { closed: false, opener: {}, document: { title: '', body: { textContent: '' } }, location: { href: 'about:blank', replace: vi.fn() }, close: vi.fn(() => {
       popup.closed = true
@@ -36,6 +36,7 @@ describe('Google popup lifecycle', () => {
       return channel
     }))
     vi.stubGlobal('ApiError', ApiError)
+    vi.stubGlobal('apiFetch', vi.fn().mockResolvedValue({ user: { id: 'google-user' } }))
     vi.stubGlobal('ref', ref)
     vi.stubGlobal('watch', watch)
     vi.stubGlobal('onScopeDispose', onScopeDispose)
@@ -113,6 +114,36 @@ describe('Google popup lifecycle', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('waits for the code without checking a session or announcing login', async () => {
+    const { completion } = start()
+    const attempt = actions.googleSignIn.mock.calls[0]![1]
+    channel.onmessage?.({ origin: 'https://cafe.test', data: { type: 'google-complete', path: '/google-callback', attempt, success: true, twoFactor: true } } as MessageEvent)
+    await expect(completion).resolves.toBe('two-factor')
+    expect(actions.finishSignIn).not.toHaveBeenCalled()
+    expect(identity.change).not.toHaveBeenCalled()
+    expect(popup.closed).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('discards an account change while its own login announcement is still pending', async () => {
+    let release!: () => void
+    identity.change = vi.fn(() => {
+      identity.generation.value++
+      return new Promise<void>((resolve) => {
+        release = resolve
+      })
+    })
+    const { completion } = start()
+    const refused = expect(completion).rejects.toMatchObject({ kind: 'aborted' })
+    callback()
+    await vi.advanceTimersByTimeAsync(250)
+    identity.generation.value++
+    expect(popup.closed).toBe(true)
+    release()
+    await refused
+    expect(actions.finishSignIn).not.toHaveBeenCalled()
+  })
+
   it('does not treat an existing guest cookie as completed account sign-in', async () => {
     const { useAccountActions } = await vi.importActual<typeof import('../composables/useCustomerAccount')>('../composables/useCustomerAccount')
     vi.stubGlobal('useAuthRequest', () => vi.fn())
@@ -136,6 +167,6 @@ describe('Google popup lifecycle', () => {
     release()
     await refused
     expect(closedOnDeparture).toBe(true)
-    expect(identity.change).not.toHaveBeenCalled()
+    expect(identity.change).toHaveBeenCalledOnce()
   })
 })

@@ -13,7 +13,7 @@ onMounted(() => {
     if (event.origin === window.location.origin && event.data?.type === 'google-received' && event.data?.attempt === attempt) window.close()
   }
   const error = googleSignInErrorCode(route.query.error)
-  channel.postMessage({ type: 'google-complete', path: ACCOUNT_PATHS.googleCallback, attempt, success: route.query.google === '1' && !route.query.error, error })
+  channel.postMessage({ type: 'google-complete', path: ACCOUNT_PATHS.googleCallback, attempt, twoFactor: route.query.googleTwoFactor === '1', success: route.query.google === '1' && !route.query.error, error })
 })
 </script>
 

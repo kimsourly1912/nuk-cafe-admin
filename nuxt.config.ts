@@ -67,6 +67,9 @@ function deployedSecurityRules() {
     // Keep the OAuth popup handle across Google's origin; retain isolation elsewhere.
     '/sign-in': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },
     '/sign-up': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },
+    '/c/*/admin/login': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },
+    '/c/*/counter/sign-in': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },
+    '/platform/sign-in': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },
     // The returning popup must keep the provider document's unsafe-none policy (D261).
     '/google-callback': { headers: { 'cross-origin-opener-policy': 'unsafe-none', 'cache-control': 'no-store' } },
     '/c/*': { headers: securityHeaders(true) },
