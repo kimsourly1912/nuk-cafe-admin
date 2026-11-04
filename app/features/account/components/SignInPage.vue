@@ -22,27 +22,23 @@ import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
 import GoogleSignInButton from './GoogleSignInButton.vue'
 import { useAccountProviders } from '../composables/useAccountProviders'
+import { useGoogleSignInPopup } from '../composables/useGoogleSignInPopup'
+import { googleSignInError } from '../utils/google-sign-in'
 
 const route = useRoute()
 const { googleEnabled, known: providersKnown, error: providersError, refresh: refreshProviders } = useAccountProviders()
 const home = useAccountHome()
 const target = computed(() => accountRedirectTarget(route.query.redirect, home.value))
 // Display only our own bounded text; never render the provider's raw error/description.
-const googleError = computed(() => {
-  if (!route.query.error) return undefined
-  return route.query.error === 'account_not_linked'
-    ? 'Sign in with your email and password and verify your account email before using Google.'
-    : route.query.error === 'google_password_required'
-      ? 'Use your email and password for this account. Complete two-step verification if it is enabled.'
-      : 'Google sign-in did not finish. Try again, or use your email and password.'
-})
+const googleError = computed(() => route.query.error ? googleSignInError(route.query.error) : undefined)
 const identity = useSessionIdentity()
 const afterReset = computed(() => route.query.reset === '1')
 
 const state = reactive({ email: '', password: '' })
 const { saving, formError, submit } = useAccountForm({ formId: 'sign-in-form', fields: ['email', 'password'] }, state)
-const { googleSignIn, signIn, finishSignIn } = useAccountActions()
+const { signIn, finishSignIn } = useAccountActions()
 const assertActive = useAuthCompletion()
+const googlePopup = useGoogleSignInPopup()
 /** After a password that needs a code: the code step replaces the form. */
 const codeStep = ref(false)
 /** A temporary password (Q3): where to change it, linked under the message. */
@@ -83,13 +79,14 @@ const loading = computed(() => (!known.value && !sessionError.value && !saving.v
 async function onGoogleSignIn() {
   if (saving.value) return
   await submit(async () => {
-    const destination = await googleSignIn(route.query.redirect)
+    await googlePopup.open(route.query.redirect)
     assertActive()
-    await navigateTo(destination, { external: true })
+    await navigateTo(target.value)
   })
 }
 
 async function onSubmit(event: FormSubmitEvent<SignInForm>) {
+  if (saving.value) return
   await submit(() => signInAnd(async () => {
     const step = await signIn(event.data)
     assertActive()
@@ -159,6 +156,7 @@ function restart(message?: string) {
       ref="form"
       :schema="signInSchema"
       :state="state"
+      :disabled="saving"
       :validate-on="['input', 'change']"
       class="space-y-4"
       @submit="onSubmit"
@@ -181,6 +179,7 @@ function restart(message?: string) {
       <GoogleSignInButton
         :enabled="googleEnabled"
         :disabled="saving"
+        :pending="googlePopup.pending.value"
         @click="onGoogleSignIn"
       />
       <!-- A full page load: the workspace reads its own session (D141). -->
@@ -234,7 +233,8 @@ function restart(message?: string) {
         :form="codeStep ? 'sign-in-code' : 'sign-in-form'"
         :label="codeStep ? 'Verify' : 'Sign in'"
         block
-        :loading="saving"
+        :loading="saving && !googlePopup.pending.value"
+        :disabled="saving"
       />
       <UButton
         v-if="codeStep"

@@ -27,6 +27,7 @@ const PAGES = [
   `/c/${cafe.slug}`,
   '/sign-in',
   '/sign-up',
+  '/google-callback',
   '/forgot-password',
   '/reset-password',
   '/verify-email',

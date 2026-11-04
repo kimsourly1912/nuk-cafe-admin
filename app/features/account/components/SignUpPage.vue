@@ -17,6 +17,7 @@ import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
 import GoogleSignInButton from './GoogleSignInButton.vue'
 import { useAccountProviders } from '../composables/useAccountProviders'
+import { useGoogleSignInPopup } from '../composables/useGoogleSignInPopup'
 
 const route = useRoute()
 const { googleEnabled, known: providersKnown, error: providersError, refresh: refreshProviders } = useAccountProviders()
@@ -25,8 +26,9 @@ const target = computed(() => accountRedirectTarget(route.query.redirect, home.v
 
 const state = reactive({ name: '', email: '', password: '' })
 const { saving, formError, submit } = useAccountForm({ formId: 'sign-up-form', fields: ['name', 'email', 'password'] }, state)
-const { googleSignIn, signUp } = useAccountActions()
+const { signUp } = useAccountActions()
 const assertActive = useAuthCompletion()
+const googlePopup = useGoogleSignInPopup()
 
 const { account, known, error: sessionError, refresh } = useAccountSession({ fresh: true })
 /** Already signed in on arrival: on its way on, so the form never shows (D238). */
@@ -52,13 +54,14 @@ const generatedPassword = ref<string>()
 async function onGoogleSignIn() {
   if (saving.value) return
   await submit(async () => {
-    const destination = await googleSignIn(route.query.redirect)
+    await googlePopup.open(route.query.redirect)
     assertActive()
-    await navigateTo(destination, { external: true })
+    await navigateTo(target.value)
   })
 }
 
 async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
+  if (saving.value) return
   await submit(async () => {
     try {
       await signUp(event.data, route.query.redirect)
@@ -104,6 +107,7 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
       ref="form"
       :schema="signUpSchema"
       :state="state"
+      :disabled="saving"
       :validate-on="['input', 'change']"
       class="space-y-4"
       @submit="onSubmit"
@@ -119,6 +123,7 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
       <GoogleSignInButton
         :enabled="googleEnabled"
         :disabled="saving"
+        :pending="googlePopup.pending.value"
         @click="onGoogleSignIn"
       />
 
@@ -176,7 +181,8 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
         form="sign-up-form"
         label="Create account"
         block
-        :loading="saving"
+        :loading="saving && !googlePopup.pending.value"
+        :disabled="saving"
       />
       <p class="text-center text-sm text-muted">
         Already have an account?

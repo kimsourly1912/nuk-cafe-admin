@@ -8,6 +8,13 @@ import { asNewVisitor } from './support/client-address'
 await setupE2e()
 
 describe('Google account page fallback', () => {
+  it('permits popup handles only on the two account entry routes and retains CSP', async () => {
+    for (const path of ['/sign-in', '/sign-up', '/google-callback', '/cafes']) {
+      const response = await fetch(url(path))
+      expect(response.headers.get('cross-origin-opener-policy')).toBe(path === '/cafes' ? 'same-origin' : path === '/google-callback' ? 'unsafe-none' : 'same-origin-allow-popups')
+      expect(response.headers.get('content-security-policy')).toContain('default-src \'self\'')
+    }
+  })
   it('the real public endpoint returns only availability and prevents HTTP caching', async () => {
     const response = await fetch(url('/api/account/providers'))
     expect(response.status).toBe(200)
@@ -48,6 +55,142 @@ describe('Google account page fallback', () => {
 async function enableGoogle(page: Awaited<ReturnType<typeof createPage>>) {
   await page.route(url('/api/account/providers'), route => route.fulfill({ json: { google: true } }))
 }
+
+/** Provider traffic stays offline; the real browser still crosses origins and keeps its popup. */
+async function popupFlow(path = '/sign-in') {
+  const page = await createPage()
+  let callback = ''
+  let errorCallback = ''
+  let signedIn = false
+  const api = await mockApi(page, {
+    'GET /account/providers': () => ({ google: true }),
+    'GET /auth/get-session': () => signedIn ? { user: { id: 'google-user', name: 'Google User', email: 'google@example.com', emailVerified: true } } : null,
+    'POST /auth/sign-in/social': ({ body }) => {
+      const request = body as { callbackURL: string, errorCallbackURL: string, disableRedirect: boolean }
+      expect(request.disableRedirect).toBe(true)
+      callback = request.callbackURL
+      errorCallback = request.errorCallbackURL
+      return { url: 'https://accounts.google.com/o/oauth2/v2/auth?state=offline-test' }
+    },
+  })
+  await page.context().route('https://accounts.google.com/**', route => route.fulfill({ contentType: 'text/html', body: '<title>Offline Google</title>' }))
+  await page.goto(url(`${path}?redirect=/verify-email`), { waitUntil: 'hydration' })
+  await page.getByRole('button', { name: 'Continue with Google' }).waitFor()
+  return { page, api, callback: () => callback, errorCallback: () => errorCallback, authenticate: () => {
+    signedIn = true
+  } }
+}
+
+describe('Google popup completion', () => {
+  it.each(['/sign-in', '/sign-up'])('%s completes only after a fresh authenticated session and keeps the return path', async (path) => {
+    const flow = await popupFlow(path)
+    const opened = flow.page.waitForEvent('popup')
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+    const popup = await opened
+    await popup.waitForURL('https://accounts.google.com/**')
+    expect(new URL(flow.page.url()).pathname).toBe(path)
+    flow.authenticate()
+    await popup.goto(flow.callback(), { waitUntil: 'commit' })
+    await flow.page.waitForURL(url('/verify-email'))
+    await expect.poll(() => popup.isClosed()).toBe(true)
+    await flow.page.getByRole('heading', { name: 'Your email is verified', exact: true }).waitFor()
+  })
+
+  it.each(['/sign-in', '/sign-up'])('%s shows bounded provider errors in the original form and allows retry', async (path) => {
+    const flow = await popupFlow(path)
+    await flow.page.getByLabel('Email', { exact: true }).fill('kept@example.com')
+    for (const error of ['account_not_linked', 'google_password_required', 'access_denied']) {
+      const opened = flow.page.waitForEvent('popup')
+      await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+      const popup = await opened
+      await popup.waitForURL('https://accounts.google.com/**')
+      const failure = new URL(flow.errorCallback())
+      failure.searchParams.set('error', error)
+      failure.searchParams.set('error_description', 'DO_NOT_RENDER_PROVIDER_TEXT')
+      await popup.goto(failure.toString(), { waitUntil: 'commit' })
+      await flow.page.getByRole('alert').waitFor()
+      await expect.poll(() => popup.isClosed()).toBe(true)
+      expect(await flow.page.getByText('DO_NOT_RENDER_PROVIDER_TEXT').count()).toBe(0)
+      expect(await flow.page.getByLabel('Email', { exact: true }).inputValue()).toBe('kept@example.com')
+      expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isEnabled()).toBe(true)
+    }
+  })
+
+  it('explains blocked popups without sending an OAuth request', async () => {
+    const flow = await popupFlow()
+    await flow.page.evaluate(() => {
+      window.open = () => null
+    })
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+    await flow.page.getByRole('alert').filter({ hasText: 'Allow popups for this site' }).waitFor()
+    expect(flow.api.calls.includes('POST /auth/sign-in/social')).toBe(false)
+  })
+
+  it('does not accept a callback without a real session', async () => {
+    const flow = await popupFlow()
+    const opened = flow.page.waitForEvent('popup')
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+    const popup = await opened
+    await popup.waitForURL('https://accounts.google.com/**')
+    await popup.goto(flow.callback(), { waitUntil: 'commit' })
+    await flow.page.getByRole('alert').filter({ hasText: 'Sign in to continue.' }).waitFor()
+    expect(new URL(flow.page.url()).pathname).toBe('/sign-in')
+    expect(popup.isClosed()).toBe(true)
+  })
+
+  it('refuses an unexpected provider destination and closes the blank popup', async () => {
+    const flow = await popupFlow()
+    flow.api.set({ 'POST /auth/sign-in/social': () => ({ url: 'https://example.invalid/untrusted' }) })
+    const opened = flow.page.waitForEvent('popup')
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+    const popup = await opened
+    await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in is unavailable.' }).waitFor()
+    expect(popup.isClosed()).toBe(true)
+    expect(new URL(flow.page.url()).pathname).toBe('/sign-in')
+  })
+
+  it('times out and allows retry without changing the form', async () => {
+    const flow = await popupFlow()
+    await flow.page.clock.install()
+    const opened = flow.page.waitForEvent('popup')
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+    const popup = await opened
+    await popup.waitForURL('https://accounts.google.com/**')
+    await flow.page.clock.fastForward(181_000)
+    await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in timed out.' }).waitFor()
+    expect(popup.isClosed()).toBe(true)
+    expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isEnabled()).toBe(true)
+  })
+
+  it('ignores a mismatched popup attempt and allows retry after it is closed', async () => {
+    const flow = await popupFlow()
+    const opened = flow.page.waitForEvent('popup')
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+    const popup = await opened
+    await popup.waitForURL('https://accounts.google.com/**')
+    await flow.page.clock.install()
+    const mismatch = new URL(flow.callback())
+    mismatch.searchParams.set('googlePopup', 'another-attempt')
+    await popup.goto(mismatch.toString())
+    await popup.getByText('Returning to your sign-in window', { exact: true }).waitFor()
+    await flow.page.clock.runFor(1000)
+    expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isDisabled()).toBe(true)
+    await popup.close()
+    await flow.page.clock.runFor(250)
+    await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in was closed.' }).waitFor()
+  })
+
+  it('closes the provider popup when leaving the form', async () => {
+    const flow = await popupFlow()
+    const opened = flow.page.waitForEvent('popup')
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+    const popup = await opened
+    await popup.waitForURL('https://accounts.google.com/**')
+    await flow.page.getByRole('link', { name: 'Create an account', exact: true }).click()
+    await flow.page.getByLabel('Name', { exact: true }).waitFor()
+    expect(popup.isClosed()).toBe(true)
+  })
+})
 
 describe('enabled Google account pages', () => {
   it('keeps password sign-in usable when provider discovery fails and retries without losing input', async () => {
@@ -122,7 +265,7 @@ describe('enabled Google account pages', () => {
     expect(new URL(page.url()).pathname).toBe('/sign-in')
   })
 
-  it.each([[320, 844], [390, 844], [768, 900], [1024, 900], [1440, 900], [844, 390]])('keeps the Google form in place during initiation at %s × %s', async (width, height) => {
+  it.each(['/sign-in', '/sign-up'].flatMap(path => ([[320, 844], [390, 844], [768, 900], [1024, 900], [1440, 900], [844, 390]] as const).map(([width, height]) => [path, width, height] as const)))('keeps %s styled during popup initiation at %s by %s', async (path, width, height) => {
     const page = await createPage()
     await page.setViewportSize({ width, height })
     let release!: () => void
@@ -136,16 +279,20 @@ describe('enabled Google account pages', () => {
       },
     })
     await enableGoogle(page)
-    let leftForGoogle = false
-    await page.route('https://accounts.google.com/**', (route) => {
-      leftForGoogle = route.request().isNavigationRequest() && route.request().frame() === page.mainFrame()
-      return route.fulfill({ status: 204 })
+    let popupAtGoogle = false
+    await page.context().route('https://accounts.google.com/**', (route) => {
+      popupAtGoogle = route.request().isNavigationRequest() && route.request().frame().page() !== page
+      return route.fulfill({ contentType: 'text/html', body: '<title>Mock Google</title>' })
     })
-    await page.goto(url('/sign-in?redirect=/c/nuk'), { waitUntil: 'hydration' })
+    await page.goto(url(`${path}?redirect=/c/nuk`), { waitUntil: 'hydration' })
     const google = page.getByRole('button', { name: 'Continue with Google' })
     await google.waitFor()
     const before = await google.boundingBox()
+    const submitButton = page.getByRole('button', { name: path === '/sign-in' ? 'Sign in' : 'Create account', exact: true })
+    const colors = await submitButton.evaluate(element => ({ background: getComputedStyle(element).backgroundColor, color: getComputedStyle(element).color }))
+    const popupOpened = page.waitForEvent('popup')
     await google.click()
+    const popup = await popupOpened
     try {
       await expect.poll(() => api.calls.includes('POST /auth/sign-in/social')).toBe(true)
       expect(await google.isDisabled()).toBe(true)
@@ -155,13 +302,22 @@ describe('enabled Google account pages', () => {
       if (process.env.AUTH_LAYOUT_SCREENSHOTS) {
         const directory = 'output/playwright/google-enabled'
         await mkdir(directory, { recursive: true })
-        await page.screenshot({ path: `${directory}/${width}x${height}-light.png`, fullPage: true })
+        await page.screenshot({ path: `${directory}/${path.slice(1)}-${width}x${height}-light.png`, fullPage: true })
         await page.getByRole('button', { name: 'Switch to dark mode', exact: true }).click()
         await page.getByRole('button', { name: 'Switch to light mode', exact: true }).waitFor()
-        await page.screenshot({ path: `${directory}/${width}x${height}-dark.png`, fullPage: true })
+        await page.screenshot({ path: `${directory}/${path.slice(1)}-${width}x${height}-dark.png`, fullPage: true })
+        await page.getByRole('button', { name: 'Switch to light mode', exact: true }).click()
+        await page.getByRole('button', { name: 'Switch to dark mode', exact: true }).waitFor()
       }
     }
     finally { release() }
-    await expect.poll(() => leftForGoogle).toBe(true)
+    await expect.poll(() => popupAtGoogle).toBe(true)
+    expect(new URL(page.url()).pathname).toBe(path)
+    expect(await submitButton.evaluate(element => ({ background: getComputedStyle(element).backgroundColor, color: getComputedStyle(element).color }))).toEqual(colors)
+    expect(await submitButton.isDisabled()).toBe(true)
+    await popup.close()
+    await page.getByRole('alert').filter({ hasText: 'Google sign-in was closed.' }).waitFor()
+    expect(await google.isEnabled()).toBe(true)
+    expect(await submitButton.isEnabled()).toBe(true)
   })
 })
