@@ -32,16 +32,6 @@ defineEmits<{ click: [] }>()
       class="sr-only"
       role="status"
     >{{ pending ? 'Complete Google sign-in in the popup window.' : '' }}</span>
-    <p class="text-sm text-muted">
-      Google-only account? Use
-      <ULink
-        to="/forgot-password"
-        class="text-primary"
-      >
-        Forgot password
-      </ULink>
-      to set a password for account security or deletion.
-    </p>
-    <USeparator label="or use email" />
+    <USeparator label="or" />
   </div>
 </template>
