@@ -126,6 +126,8 @@ Nobody types passwords into a deployed database: Better Auth stores them hashed 
 
 ## Configuration
 
+Google (D259/D260): `NUXT_GOOGLE_AUTH_CLIENT_ID` and `NUXT_GOOGLE_AUTH_CLIENT_SECRET` are private Worker secrets. The public `NUXT_PUBLIC_GOOGLE_AUTH_ENABLED` flag is declared on in staging after the owner configured it; production remains off by default. Dashboard-only vars are not durable across a Wrangler deploy. To roll staging back, set the flag false immediately and change both its staging Nuxt default and declared Worker variable to false before the next deploy. No provider is registered without both private credentials. [Exact callbacks and verification](../plans/google-auth.md).
+
 Runtime config comes from environment variables (`NUXT_…`); secrets are Cloudflare secrets, never committed. `.env.example` lists every name.
 
 | Variable | Purpose | Local | Staging / production |
@@ -183,7 +185,7 @@ Never deploy production by hand from a laptop: the job above is the one path. Ro
 ## Backups and restore
 
 - **D1 Time Travel**: point-in-time restore for the retention window of the Cloudflare plan (checked on staging: `wrangler d1 time-travel info nuk-cafe-staging` gives the current bookmark). Note the bookmark before every production migration.
-- **Nightly backups (D225)**: production's database, encrypted for the owner's key, every night in the R2 bucket `angder-backups`; kept 30 nights and 12 months, and no key can delete them early. For what Time Travel can't undo: a deleted database, damage found after 30 days. **For now the bucket is in the production account (owner, 2026-10-29), so the backups don't survive losing that account**; a separate account comes later. [Below](#nightly-backups-d225).
+- **Nightly backups (D225; production verification pending)**: production's database, encrypted for the owner's key, every night in the R2 bucket `angder-backups`; kept 30 nights and 12 months, and no key can delete them early. For what Time Travel can't undo: a deleted database, damage found after 30 days. **For now the bucket is in the production account (owner, 2026-10-29), so the backups don't survive losing that account**; a separate account comes later. [Below](#nightly-backups-d225).
 - **R2**: menu images are re-uploadable; no separate backup at launch.
 - **Restore drill** on staging before launch and then yearly: restore to a bookmark, check the app works, write down how long it took. Runbook below (step 10.4, D119).
 
@@ -211,6 +213,8 @@ For production (8.2): note the bookmark before every migration (see Deploys); a 
 
 ### Nightly backups (D225)
 
+**Status (2026-11-03):** scheduled exports have repeatedly failed; PR #253 is a code repair, not evidence of a usable backup. Do not mark backups working until a real encrypted R2 object has been fully decrypted and restored into a separate test D1 database. Production deployment, manual triggering and access/restoration of real backup data require explicit owner approval.
+
 `angder-backup` (`ops/backup`), a Worker beside the app, runs a Cloudflare Workflow every night at **03:17 Cambodia time**: it exports production's D1 database as SQL, encrypts it with **age** for the owner's public key, and stores it in the R2 bucket **`angder-backups`**, for now **in the production account** (owner, 2026-10-29; [moving it later](#moving-the-backups-to-a-separate-account-later)):
 
 - `daily/angder-<YYYY-MM-DD>.sql.age` every night, kept **30 days**;
@@ -231,15 +235,15 @@ Once, by the owner, about 20 minutes, all in the **production account** except s
 5. **The export token** (production account): My Profile → API Tokens → Create Custom Token → permission **Account · D1 · Read**, account resources: the production account. (Cloudflare doesn't say which permission the export needs: if the test backup fails with an authentication or permission error, edit the token to **D1 · Edit**.)
 6. **GitHub → Settings → Secrets and variables → Actions → New repository secret:** `BACKUP_D1_EXPORT_TOKEN` (step 5), `BACKUP_R2_ENDPOINT`, `BACKUP_R2_ACCESS_KEY_ID`, `BACKUP_R2_SECRET_ACCESS_KEY` (step 3), `BACKUP_AGE_RECIPIENTS` (step 4's public key or keys). `CLOUDFLARE_ACCOUNT_ID` and the `OPS_TELEGRAM_*` secrets already exist.
 7. **Actions → Deploy backup → Run workflow** (on main), and approve it. Its last step takes a backup: **🟢 Angder backup stored** arrives in Angder Ops within a few minutes, and the file appears under R2 → `angder-backups` → `daily/`.
-8. **Check the key works:** download that file (R2 → `angder-backups` → `daily/`) and run `age -d -i angder-backup-key.txt angder-<date>.sql.age | head`: the first lines of SQL prove the key reads it.
+8. **Complete the restore drill below:** after owner approval, download the encrypted file, decrypt the whole file to authenticated completion (not a pipeline to `head`) and restore to a separate test D1 database. A Telegram message or SQL prefix alone does not prove recoverability.
 
 #### When "Angder backup FAILED" arrives
 
-Earlier copies are untouched; the next run is the following night. A setup mistake (a refused token or key, a missing bucket, a bad public key) fails at once, so after **Deploy backup** it arrives within about a minute (D227); a busy or unreachable service is retried first, for up to about 15 minutes (the export) or 8.5 hours (storing the copy). No message at all a few minutes after Deploy backup: Workers & Pages → Workflows → `angder-backup` → the newest instance shows each step, its tries and its error. Read the **Reason**:
+Earlier copies are untouched; the next run is the following night. A setup mistake (a refused token or key, a missing bucket, a bad public key) fails at once, so after **Deploy backup** it arrives within about a minute (D227); a busy or unreachable service retries the combined export/encrypt/upload step up to 10 times after the first attempt, with exponential delays starting at 30 seconds and a 10-minute timeout per attempt. Delays alone can total about 8.5 hours; active attempts add time. Export polling stops after five minutes (an in-flight API call may add up to 60 seconds). A new attempt starts a fresh export; a stored key is kept. No message at all a few minutes after Deploy backup: Workers & Pages → Workflows → `angder-backup` → the newest instance shows each step, its tries and its error. Read the **Reason**:
 
 - *D1's export answered HTTP 401/403*: the export token was revoked, expired or lacks permission (setup step 5); replace `BACKUP_D1_EXPORT_TOKEN`.
 - *The backup bucket refused … HTTP 403*: the bucket's R2 key changed (step 3); replace the three `BACKUP_R2_*` secrets.
-- *D1's export failed: Not currently exporting anything*: the backup code before D228 (2026-10-30) asked about the export too slowly; deploy the current main with **Deploy backup**.
+- *D1's export failed: Not currently exporting anything*: D1 no longer has this export, for example after interrupted polling. PR #253 corrects nested completion parsing and validates the polling contract. Every request must include `output_format: 'polling'` (API schema and Wrangler); subsequent requests also include `current_bookmark`. The bookmark is stable for the task. The simplified Workflows tutorial omits the required field and shows a flat URL; use the [API schema](https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/export/) and [Wrangler implementation](https://github.com/cloudflare/workers-sdk/blob/main/packages/wrangler/src/d1/export.ts). Do not assume the incident's cause or deployment outcome without live evidence.
 - *Settings not set*: a secret is missing; add it.
 - *larger than 40 MB*: the database outgrew the in-memory backup: the code needs a streamed upload (D225).
 - Anything else (a Cloudflare or Telegram outage): wait for the next night, or take one now.
@@ -248,13 +252,13 @@ After fixing, **Deploy backup** again: it redeploys and takes a backup now (a ni
 
 #### Restoring from a backup
 
-Into a **new** database first, never over production:
+**Explicit owner approval required before downloading/decrypting real data, creating a remote database or running this drill.** Into a **new, isolated test** database first, never over production or the shared staging database. Do not connect the restored database to the app, scheduled jobs, email, Telegram or bank integrations; it contains real customer data. Use a trusted machine, keep SQL/private keys out of Git, CI artifacts and logs, and agree secure cleanup after the drill:
 
 1. **Download** the night's file: R2 → `angder-backups` → `daily/` (or `monthly/`) → Download.
 2. **Decrypt:** `age -d -i angder-backup-key.txt -o angder.sql angder-<date>.sql.age`.
-3. **Load it into a new D1 database** (production account): `npx wrangler d1 create angder-restore`, then `npx wrangler d1 execute angder-restore --remote --file angder.sql`.
-4. **Check** it: `npx wrangler d1 execute angder-restore --remote --command "select count(*) from orders"`, and the newest order's time.
-5. **Use it:** to replace production (the database is gone or ruined), set `PRODUCTION.d1DatabaseId` in `nuxt.config.ts` (and `ops/backup/wrangler.jsonc`) to the new database's id and deploy. To recover a few rows, copy them from it instead. Anything written after that night's backup is lost; Time Travel may still have it if the old database exists.
+3. **Load it into a new D1 database** (production account): `pnpm exec wrangler d1 create angder-restore`, then `pnpm exec wrangler d1 execute angder-restore --remote --file angder.sql`.
+4. **Check** the isolated restore: `pnpm exec wrangler d1 execute angder-restore --remote --command "PRAGMA integrity_check; PRAGMA foreign_key_check;"`. Require integrity `ok` and no foreign-key violations. Check schema/migration history, counts and financial totals for orders/payments/refunds/ledgers per tenant, sampled relationships and newest order/payment timestamps against evidence from the same export snapshot (concurrent production counts are not a matching baseline). Record object key, size, encrypted-file hash, export time, database id, checks, duration and cleanup outcome without customer data or keys. Mark unavailable comparisons explicitly.
+5. **Stop the drill here.** Production cutover or copying recovered rows is a separate owner-approved recovery operation. **Only if separately approved:** to replace production (the database is gone or ruined), set `PRODUCTION.d1DatabaseId` in `nuxt.config.ts` (and `ops/backup/wrangler.jsonc`) to the new database's id and deploy. To recover a few rows, copy them from it instead. Anything written after that night's backup is lost; Time Travel may still have it if the old database exists.
 
 This restore is not drilled yet (next step): until it is, treat these steps as untested.
 

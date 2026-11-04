@@ -13,7 +13,7 @@ await setupE2e()
 // The customer's account pages (step 5.2, D97) against the e2e server's seeded database
 // (support/seed.ts): real Better Auth, real sessions. The emails the server queues are read from its
 // outbox, so verification and reset links are the real ones. Only sign-up's error answers are
-// mocked: a real sign-up asks Have I Been Pwned, an external API.
+// mocked. The e2e server's password-range fixture prevents external breach-service calls (D260).
 
 const seed = inject('shopSeed')
 

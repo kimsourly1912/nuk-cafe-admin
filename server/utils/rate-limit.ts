@@ -32,6 +32,7 @@ export const RATE_LIMIT_RULES = [
   { prefix: '/api/client-errors', binding: 'RATE_LIMIT_PUBLIC' },
   // The new-password checklist's leaked-password ranges (D210): public, and each one calls Have I Been Pwned.
   { prefix: '/api/password-ranges/', binding: 'RATE_LIMIT_PUBLIC' },
+  { prefix: '/api/account/providers', exact: true, binding: 'RATE_LIMIT_PUBLIC' },
 ] as const satisfies readonly { prefix: string, exact?: boolean, method?: string, binding: string }[]
 
 /** The rule for a request: the first whose prefix (and method, when it names one) matches. */

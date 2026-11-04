@@ -1,5 +1,6 @@
 export { identityAuthOptions } from './identity.auth'
 export type { IdentityAuthSettings } from './identity.auth'
+export { accountProviders } from './identity.providers'
 export { BRANCH_ROLES, branchAc, branchRoles, branchStatements, PLATFORM_ROLES, platformAc, platformRoles, platformStatements, TENANT_ROLES, tenantAc, tenantRoles, tenantStatements } from './identity.permissions'
 export type { BranchPermission, BranchRole, PlatformPermission, PlatformRole, TenantPermission, TenantRole } from './identity.permissions'
 export { accountWorkspaces, activeTenantById, activeTenantPage, adminSession, authorizeBranch, authorizeCustomer, authorizePlatform, authorizeSignedIn, authorizeTenant, counterSession, guestNameStatement, platformSession, tenantById, tenantBySlug, workspacesOf } from './identity.service'

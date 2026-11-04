@@ -142,6 +142,25 @@ export function useAccountActions() {
    * (`TemporaryPasswordError`, Q3, D241). With no workspace to send it to, or when that can't be
    * checked, it's signed out again, so the menu isn't left with a session it can't use.
    */
+  /** Starts OAuth only. The full-page callback announces the completed identity change. */
+  async function googleSignIn(from?: unknown) {
+    const link = accountLink(ACCOUNT_PATHS.signIn, from)
+    const callback = typeof link === 'string' ? link : `${link.path}?${new URLSearchParams(link.query)}`
+    const success = new URL(callback, window.location.origin)
+    success.searchParams.set('google', '1')
+    const result = await authFetch<{ url?: string }>('/sign-in/social', {
+      provider: 'google',
+      callbackURL: success.toString(),
+      errorCallbackURL: new URL(callback, window.location.origin).toString(),
+    })
+    // Never navigate to a URL supplied by a query string or an unrecognised upstream origin.
+    const destination = result.url ? new URL(result.url) : null
+    if (destination?.origin !== 'https://accounts.google.com') {
+      throw new ApiError('Google sign-in is unavailable. Try again shortly.', { kind: 'business', status: 0 })
+    }
+    return destination.toString()
+  }
+
   async function signIn(form: SignInForm): Promise<PasswordStep> {
     const response = await authFetch<{ user?: AuthUser, twoFactorRedirect?: boolean }>('/sign-in/email', { email: form.email, password: form.password })
     if (passwordStepOf(response) === 'two-factor') return 'two-factor'
@@ -222,7 +241,7 @@ export function useAccountActions() {
     await identity.change('logout')
   }
 
-  return { signIn, finishSignIn, signUp, signInAsGuest, signOut, resendVerification, requestPasswordReset, resetPassword }
+  return { googleSignIn, signIn, finishSignIn, signUp, signInAsGuest, signOut, resendVerification, requestPasswordReset, resetPassword }
 }
 
 /**

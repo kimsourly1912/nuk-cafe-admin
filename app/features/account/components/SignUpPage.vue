@@ -15,14 +15,17 @@ import AccountAside from './AccountAside.vue'
 import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
+import GoogleSignInButton from './GoogleSignInButton.vue'
+import { useAccountProviders } from '../composables/useAccountProviders'
 
 const route = useRoute()
+const { googleEnabled, known: providersKnown, error: providersError, refresh: refreshProviders } = useAccountProviders()
 const home = useAccountHome()
 const target = computed(() => accountRedirectTarget(route.query.redirect, home.value))
 
 const state = reactive({ name: '', email: '', password: '' })
 const { saving, formError, submit } = useAccountForm({ formId: 'sign-up-form', fields: ['name', 'email', 'password'] }, state)
-const { signUp } = useAccountActions()
+const { googleSignIn, signUp } = useAccountActions()
 const assertActive = useAuthCompletion()
 
 const { account, known, error: sessionError, refresh } = useAccountSession({ fresh: true })
@@ -39,12 +42,21 @@ watch([known, account], async ([isKnown, current]) => {
     }
   }
 }, { immediate: true })
-const loading = computed(() => (!known.value && !sessionError.value && !saving.value) || leaving.value)
+const loading = computed(() => (!known.value && !sessionError.value && !saving.value) || (!providersKnown.value && !providersError.value) || leaving.value)
 
 /** The password the server refused as breached, for the checklist. */
 const refusedPassword = ref<string>()
 /** The last password Generate made: random, so the checklist skips its leaked-password check. */
 const generatedPassword = ref<string>()
+
+async function onGoogleSignIn() {
+  if (saving.value) return
+  await submit(async () => {
+    const destination = await googleSignIn(route.query.redirect)
+    assertActive()
+    await navigateTo(destination, { external: true })
+  })
+}
 
 async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
   await submit(async () => {
@@ -98,6 +110,17 @@ async function onSubmit(event: FormSubmitEvent<SignUpForm>) {
       @error="focusFirstInvalid"
     >
       <FormErrorAlert :message="formError" />
+      <ApiErrorAlert
+        v-if="providersError"
+        title="Could not check Google sign-in"
+        :error="providersError"
+        @retry="refreshProviders()"
+      />
+      <GoogleSignInButton
+        :enabled="googleEnabled"
+        :disabled="saving"
+        @click="onGoogleSignIn"
+      />
 
       <UFormField
         label="Name"

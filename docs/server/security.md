@@ -281,3 +281,11 @@ Never in the repo, never logged, never in error messages. `.env` is git-ignored;
 - [ ] Errors use shared codes or the feature's `*.errors.ts` factories, with user-safe messages; nothing internal leaks.
 - [ ] The response is mapped (no raw rows) and contains nothing the caller shouldn't see.
 - [ ] Tests cover the permission cases, each error code, and the race/replay case.
+
+## Google account boundary (D259, D260)
+
+Google is an optional redirect-only identity provider; server configuration requires both private credentials and an enabled rollout flag. Public `GET /api/account/providers` returns only `{ google: boolean }` using that same predicate, with no-store and the public address rate limit. It grants no access and reveals no credential. D260 supersedes the initial no-link policy: Better Auth may attach Google to an existing account only when both sides verified the same email. Keep `requireLocalEmailVerified: true`, `allowDifferentEmails: false`, no trusted-provider bypass and no provider profile overwrite. The native user-validation hook enforces verified Google email and, before linking, rechecks the stored local email, two-step/temporary-password/superadmin flags and active ban. Explicit linking has the same boundary. No second user or cafe access is created; existing password and memberships remain.
+
+Before an OAuth session is created, the stored account is checked for two-step sign-in, a temporary password and superadmin role; each is refused, preserving password/second-factor requirements. The admin plugin's ban check remains. Direct ID-token sign-in is disabled. OAuth initiation has a database-backed 5/minute limit; callbacks retain Better Auth's normal state-cookie/nonce validation and rate policy.
+
+No Google bearer token is retained in the account table, and no provider avatar, external browser script or broader CSP allowance is added. Anonymous-order transfer uses the existing hook. No tenant permission, profile-creation rule, password-confirmation or erasure rule changes. [Rollout and tests](../plans/google-auth.md).
