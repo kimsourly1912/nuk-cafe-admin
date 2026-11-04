@@ -249,6 +249,9 @@ describe('Google accounts', () => {
     expect(refused.session).toBeNull()
     expect(await db.select().from(authSchema.session).where(eq(authSchema.session.userId, userId))).toHaveLength(0)
     expect(new URL(refused.response.headers.get('location')!).searchParams.has('error')).toBe(true)
+    if (!('banned' in flags)) {
+      expect(new URL(refused.response.headers.get('location')!).searchParams.get('error')).toBe('GOOGLE_PASSWORD_REQUIRED')
+    }
   })
 
   it('rejects missing, mismatched and replayed state without issuing a session', async () => {

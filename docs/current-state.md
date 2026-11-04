@@ -4,6 +4,8 @@ Snapshot reviewed against main `f2978f7`, 2026-11-01. Read only when resuming or
 
 ## Ready for review
 
+- **Google protected-account error repair (D261, 2026-11-04):** confirmed uppercase callback code was dropped, hiding the password/two-step instruction. Known-code normalization and targeted regressions prepared; Node reproduction fails before/passes after. Full CI pending. Live staging popup initiation/cancellation inspected without credentials; successful real Google callback remains unverified. [Progress](progress.md#google-protected-account-error-repair-d261-2026-11-04).
+
 - **Google account popup (D261, 2026-11-04):** branch `codex/google-auth-popup` from fetched remote main `800f04ef`. Local unit/server 2,492 passed/1 skipped and affected Chrome 79/79 passed; full browser run 852 passed/1 failed plus a Windows product-worker exit, both affected files passed 109/109 with one worker; lint and final typecheck passed; original sign-in/sign-up form stays mounted, callback verifies a fresh session, and popup failures allow retry. [Progress](progress.md#google-account-popup-d261-2026-11-04). No push or deployment.
 
 ## Waiting on the owner

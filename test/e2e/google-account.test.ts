@@ -99,7 +99,7 @@ describe('Google popup completion', () => {
   it.each(['/sign-in', '/sign-up'])('%s shows bounded provider errors in the original form and allows retry', async (path) => {
     const flow = await popupFlow(path)
     await flow.page.getByLabel('Email', { exact: true }).fill('kept@example.com')
-    for (const error of ['account_not_linked', 'google_password_required', 'access_denied']) {
+    for (const error of ['account_not_linked', 'google_password_required', 'GOOGLE_PASSWORD_REQUIRED', 'access_denied']) {
       const opened = flow.page.waitForEvent('popup')
       await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
       const popup = await opened
@@ -108,7 +108,12 @@ describe('Google popup completion', () => {
       failure.searchParams.set('error', error)
       failure.searchParams.set('error_description', 'DO_NOT_RENDER_PROVIDER_TEXT')
       await popup.goto(failure.toString(), { waitUntil: 'commit' })
-      await flow.page.getByRole('alert').waitFor()
+      const message = error === 'google_password_required' || error === 'GOOGLE_PASSWORD_REQUIRED'
+        ? 'Use your email and password for this account. Complete two-step verification if it is enabled.'
+        : error === 'account_not_linked'
+          ? 'Sign in with your email and password and verify your account email before using Google.'
+          : 'Google sign-in did not finish.'
+      await flow.page.getByRole('alert').filter({ hasText: message }).waitFor()
       await expect.poll(() => popup.isClosed()).toBe(true)
       expect(await flow.page.getByText('DO_NOT_RENDER_PROVIDER_TEXT').count()).toBe(0)
       expect(await flow.page.getByLabel('Email', { exact: true }).inputValue()).toBe('kept@example.com')

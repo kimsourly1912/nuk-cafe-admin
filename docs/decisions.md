@@ -2905,3 +2905,6 @@ D260 verification boundary: the e2e server preloads an offline password-range fi
 **Headers:** only sign-in/sign-up use COOP `same-origin-allow-popups` to retain the handle across the provider origin; the passive `/google-callback` uses `unsafe-none` and no-store so the callback can finish without enforcing a new isolated opener group; all other routes retain `same-origin`. CSP and server authorization/linking checks are unchanged.
 
 **Verification:** [progress](progress.md#google-account-popup-d261-2026-11-04). The existing e2e launcher passed a Windows drive-letter path to Node's `--import`, reproduced as `ERR_UNSUPPORTED_ESM_URL_SCHEME`; convert that path with `pathToFileURL` so local browser tests can start.
+
+
+D261 error-boundary repair (2026-11-04): Better Auth forwards custom `APIError` codes verbatim. The session guard's `GOOGLE_PASSWORD_REQUIRED` must normalize to the existing bounded `google_password_required` instruction in both the passive popup and legacy sign-in path; unknown codes and provider descriptions remain discarded. Returning protected identities retain the password/second-factor requirement. [Evidence](progress.md#google-protected-account-error-repair-d261-2026-11-04).
