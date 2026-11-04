@@ -110,6 +110,16 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+      # Synthetic seeded counter screenshots for the elapsed-time change, including compact widths.
+      - name: Keep counter stage-time screenshots
+        if: always() && hashFiles('test-results/counter-stage-age/*.png') != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: counter-stage-age-${{ matrix.shard }}
+          path: test-results/counter-stage-age
+          retention-days: 7
+          if-no-files-found: ignore
+
   deploy-staging:
     # Only a push to main (a merged pull request, checked there: D133); pull requests and runs by
     # hand never deploy. The smoke check below still guards the deploy.

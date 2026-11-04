@@ -415,6 +415,46 @@ describe('the counter', () => {
     await panel(page).getByText(/Cash USD \$2\.25 · by Sophea$/).waitFor()
   })
 
+  it('shows time in preparation and ready across counter widths, using real order timestamps', { timeout: 60_000 }, async () => {
+    const order = await placeOrder(seed.customers.counterShopperA)
+    await command(order, 'pay', { version: order.version, method: 'cash_usd' })
+    const { page, problems } = await cashierAtCounter()
+    const started = Date.now()
+    await sql('update orders set placed_at = ?, paid_at = ? where id = ?', [started - 25 * 60_000, started - 5 * 60_000, order.id])
+    await page.reload({ waitUntil: 'hydration' })
+    const viewports = [
+      { width: 320, height: 844 }, { width: 390, height: 844 },
+      { width: 768, height: 820 }, { width: 1024, height: 820 },
+      { width: 1440, height: 900 }, { width: 844, height: 390 },
+    ]
+    async function checkStage(stage: 'Preparing' | 'Ready', minutes: number) {
+      for (const viewport of viewports) {
+        await page.setViewportSize(viewport)
+        const tab = page.getByRole('tab', { name: new RegExp('^' + stage) })
+        if (viewport.width < 640) {
+          await tab.waitFor()
+          await tab.click()
+        }
+        else {
+          await tab.waitFor({ state: 'hidden' })
+        }
+        const own = card(page, order)
+        await own.getByText(new RegExp('^' + stage + ' for ' + minutes + ' min$')).waitFor()
+        expect(await own.getByText('25 min ago', { exact: true }).count()).toBe(0)
+        expect(await own.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+        await page.screenshot({ path: 'test-results/counter-stage-age/' + stage.toLowerCase() + '-' + viewport.width + 'x' + viewport.height + '.png', fullPage: true })
+      }
+    }
+    await checkStage('Preparing', 5)
+    await command({ ...order, version: order.version + 1 }, 'ready', { version: order.version + 1 })
+    await sql('update orders set ready_at = ? where id = ?', [Date.now() - 2 * 60_000, order.id])
+    await page.reload({ waitUntil: 'hydration' })
+    await checkStage('Ready', 2)
+    await command({ ...order, version: order.version + 2 }, 'complete', { version: order.version + 2 })
+    expect(problems).toEqual([])
+  })
+
   it('on a phone: one list at a time, as tabs with counts', async () => {
     const order = await placeOrder(seed.customers.counterShopperB)
     const { page } = await cashierAtCounter(390)

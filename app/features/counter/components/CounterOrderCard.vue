@@ -1,13 +1,13 @@
 <script setup lang="ts">
 /**
  * One order on the counter's board (D102, the owner's frames): the big number, pickup or the table,
- * the customer's first name, the items, the total, the time since it was placed and, while unpaid,
+ * the customer's first name, the items, the total, the time in its current stage and, while unpaid,
  * the time to pay by (amber in the last 5 minutes). One action: Take payment (opens the order),
  * Mark ready, or Complete. The number and name open the order. No dragging between columns: a
  * payment needs its method, and an order only moves forward (the owner's review).
  */
 import type { CounterOrder } from '#shared/contracts/orders'
-import { firstName, itemCount, itemNames, orderNumber, orderTypeText, payBySoon, timeAgo } from '../utils/counter'
+import { firstName, itemCount, itemNames, orderAgeText, orderNumber, orderTypeText, payBySoon } from '../utils/counter'
 
 const props = defineProps<{
   order: CounterOrder
@@ -65,7 +65,7 @@ const action = computed(() => {
 
     <div class="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-base">
       <span class="font-semibold text-highlighted">{{ formatMinor(order.totalMinor) }}</span>
-      <span class="text-muted">{{ timeAgo(order.placedAt, now) }}</span>
+      <span class="text-muted">{{ orderAgeText(order, now) }}</span>
       <span
         v-if="order.status === 'awaiting_payment'"
         :class="soon ? 'font-medium text-warning' : 'text-muted'"

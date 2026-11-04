@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CounterOrder } from '#shared/contracts/orders'
 import { ApiError } from '~/utils/api-error'
-import { changeDue, commandFailure, firstName, itemCount, itemNames, lastUpdatedText, matchesSearch, orderTypeText, payBySoon, queueLongStale, queueTitle, rielQuickAmounts, timeAgo, usdQuickAmounts } from '../utils/counter'
+import { changeDue, commandFailure, firstName, itemCount, itemNames, lastUpdatedText, matchesSearch, orderAgeText, orderTypeText, payBySoon, queueLongStale, queueTitle, rielQuickAmounts, timeAgo, usdQuickAmounts } from '../utils/counter'
 
 const order = (over: Partial<CounterOrder> = {}): CounterOrder => ({
   id: 'o1', version: 1, pickupNumber: 42, businessDate: '2026-09-29', status: 'awaiting_payment', orderType: 'pickup', table: null,
@@ -31,6 +31,31 @@ describe('what a card says (D102)', () => {
     expect(timeAgo('2026-09-29T03:00:00.000Z', at('04:05'))).toBe('1 h 5 min ago')
     expect(payBySoon(order(), at('03:25'))).toBe(false)
     expect(payBySoon(order(), at('03:26'))).toBe(true)
+  })
+
+  it('counts preparation from payment and ready waiting from ready, excluding earlier stages', () => {
+    const paid = order({ status: 'preparing', paidAt: '2026-09-29T03:20:00.000Z' })
+    expect(orderAgeText(paid, at('03:25'))).toBe('Preparing for 5 min')
+    expect(orderAgeText({ ...paid, status: 'ready', readyAt: '2026-09-29T03:24:00.000Z' }, at('03:25'))).toBe('Ready for 1 min')
+    expect(orderAgeText(order(), at('03:25'))).toBe('25 min ago')
+  })
+
+  it('shows minute and hour boundaries and clamps a future stage timestamp', () => {
+    const paid = order({ status: 'preparing', paidAt: '2026-09-29T03:00:00.000Z' })
+    expect(orderAgeText(paid, at('03:00') + 59_999)).toBe('Preparing for less than 1 min')
+    expect(orderAgeText(paid, at('03:01'))).toBe('Preparing for 1 min')
+    expect(orderAgeText(paid, at('04:00'))).toBe('Preparing for 1 h')
+    expect(orderAgeText(paid, at('04:05'))).toBe('Preparing for 1 h 5 min')
+    expect(orderAgeText(paid, at('02:59'))).toBe('Preparing for less than 1 min')
+  })
+
+  it('labels placement explicitly when a stage timestamp is missing or invalid', () => {
+    for (const startedAt of [null, '', 'invalid']) {
+      expect(orderAgeText(order({ status: 'preparing', paidAt: startedAt }), at('03:25'))).toBe('Placed 25 min ago')
+      expect(orderAgeText(order({ status: 'ready', readyAt: startedAt }), at('03:25'))).toBe('Placed 25 min ago')
+    }
+    expect(orderAgeText(order({ placedAt: 'invalid' }), at('03:25'))).toBe('Time unavailable')
+    expect(orderAgeText(order(), Number.NaN)).toBe('Time unavailable')
   })
 
   it('search by number (with or without zeros) or name', () => {

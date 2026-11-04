@@ -13,7 +13,7 @@ Branch staff, managers and admins use the **counter app** at `/counter` (its own
 ## The queue
 
 - After sign-in, choose the branch (it opens straight away when you work at only one).
-- Three columns, **To pay**, **Preparing**, **Ready** (tabs with counts on a phone). Each card shows the number, pickup or table, the customer's first name, the items, the total and how long ago it was placed. "Pay by" turns amber in the last 5 minutes.
+- Three columns, **To pay**, **Preparing**, **Ready** (tabs with counts on a phone). Each card shows the number, pickup or table, the customer's first name, the items, the total and elapsed time: unpaid cards show how long ago they were placed; Preparing shows time since payment; Ready shows time since it was marked ready. Missing stage timestamps are explicitly labelled with placement age. "Pay by" turns amber in the last 5 minutes.
 - New orders are marked **New** for a minute with a chime. Mute the chime in the user menu.
 - Someone who works at more than one cafe finds **Another cafe** in the user menu: it opens **Your cafes**, where each cafe's counter (and admin, for an owner) opens fresh.
 - Search by order number or name.

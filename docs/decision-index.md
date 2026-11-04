@@ -131,7 +131,7 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D99](decisions.md#d99-placing-an-order-step-62a-server-2026-09-29) | Placing an order (step 6.2a, server), 2026-09-29 |
 | [D100](decisions.md#d100-review-order-and-the-order-placed-step-62b-the-pages-2026-09-29) | Review order and the order placed (step 6.2b, the pages), 2026-09-29 |
 | [D101](decisions.md#d101-the-counter-on-the-server-queue-payment-and-actions-step-63a-2026-09-29) | The counter on the server: queue, payment and actions (step 6.3a), 2026-09-29 |
-| [D102](decisions.md#d102-the-counter-app-and-the-payments-page-step-63b-2026-09-29) | The counter app and the Payments page (step 6.3b), 2026-09-29 |
+| [D102](decisions.md#d102-the-counter-app-and-the-payments-page-step-63b-2026-09-29) | The counter app and the Payments page (step 6.3b), 2026-09-29; elapsed preparation/ready times, 2026-11-04 |
 | [D103](decisions.md#d103-rate-limits-per-real-client-address-and-sqlite-waits-for-a-lock-found-in-ci-on-step-63b-2026-09-29) | Rate limits per real client address, and SQLite waits for a lock (found in CI on step 6.3b), 2026-09-29 |
 | [D104](decisions.md#d104-unpaid-orders-cancelled-after-30-minutes-step-66-2026-09-30) | Unpaid orders cancelled after 30 minutes (step 6.6), 2026-09-30 |
 | [D105](decisions.md#d105-the-counters-sold-out-page-step-63c-2026-09-30) | The counter's Sold out page (step 6.3c), 2026-09-30 |

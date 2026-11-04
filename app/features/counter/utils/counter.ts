@@ -57,6 +57,24 @@ export function timeAgo(iso: string, now: number): string {
   return rest ? `${hours} h ${rest} min ago` : `${hours} h ago`
 }
 
+/** Age of the current work stage; unpaid waiting is never counted as preparation. */
+export function orderAgeText(order: Pick<CounterOrder, 'status' | 'placedAt' | 'paidAt' | 'readyAt'>, now: number): string {
+  if (!Number.isFinite(now)) return 'Time unavailable'
+  const label = order.status === 'preparing' ? 'Preparing' : order.status === 'ready' ? 'Ready' : null
+  const startedAt = order.status === 'preparing' ? order.paidAt : order.status === 'ready' ? order.readyAt : null
+  const started = startedAt ? Date.parse(startedAt) : Number.NaN
+  if (label && Number.isFinite(started)) {
+    const minutes = Math.max(0, Math.floor((now - started) / MINUTE))
+    const hours = Math.floor(minutes / 60)
+    const rest = minutes % 60
+    const duration = minutes < 1 ? 'less than 1 min' : hours === 0 ? `${minutes} min` : rest ? `${hours} h ${rest} min` : `${hours} h`
+    return `${label} for ${duration}`
+  }
+  if (!Number.isFinite(Date.parse(order.placedAt))) return 'Time unavailable'
+  const placed = timeAgo(order.placedAt, now)
+  return label ? `Placed ${placed.toLowerCase()}` : placed
+}
+
 /** Less than 5 minutes left to pay: the card says so in amber. */
 export const payBySoon = (order: Pick<CounterOrder, 'paymentDueAt'>, now: number) => Date.parse(order.paymentDueAt) - now < 5 * MINUTE
 
