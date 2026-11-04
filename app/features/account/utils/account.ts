@@ -7,6 +7,7 @@ import { splitTenantUrl, tenantUrl } from '~/utils/tenant-path'
 export const ACCOUNT_PATHS = {
   signIn: '/sign-in',
   signUp: '/sign-up',
+  googleCallback: '/google-callback',
   verifyEmail: '/verify-email',
   emailVerified: '/email-verified',
   forgotPassword: '/forgot-password',
@@ -22,7 +23,7 @@ export const ACCOUNT_ASIDES = {
 } as const
 
 /** Pages that make no sense to come back to after signing in (the email pages do). */
-const NO_RETURN = new Set<string>([ACCOUNT_PATHS.signIn, ACCOUNT_PATHS.signUp, ACCOUNT_PATHS.forgotPassword, ACCOUNT_PATHS.resetPassword])
+const NO_RETURN = new Set<string>([ACCOUNT_PATHS.signIn, ACCOUNT_PATHS.signUp, ACCOUNT_PATHS.googleCallback, ACCOUNT_PATHS.forgotPassword, ACCOUNT_PATHS.resetPassword])
 
 /**
  * A cafe's workspaces (D93, D141: `/c/<slug>/admin/…`, `/c/<slug>/counter/…`; the auth and counter

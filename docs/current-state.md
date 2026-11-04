@@ -2,6 +2,10 @@
 
 Snapshot reviewed against main `f2978f7`, 2026-11-01. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
 
+## Ready for review
+
+- **Google account popup (D261, 2026-11-04):** branch `codex/google-auth-popup` from fetched remote main `800f04ef`. Local unit/server 2,492 passed/1 skipped and affected Chrome 79/79 passed; full browser run 852 passed/1 failed plus a Windows product-worker exit, both affected files passed 109/109 with one worker; lint and final typecheck passed; original sign-in/sign-up form stays mounted, callback verifies a fresh session, and popup failures allow retry. [Progress](progress.md#google-account-popup-d261-2026-11-04). No push or deployment.
+
 ## Waiting on the owner
 
 - **Google staging follow-up (D260):** PR #255 merged as `0e447d9` with green CI; staging deployment passed. Owner configured credentials and reported partial success, popup styling, Google disappearing after sign-out and unwanted same-email refusal. Branch `codex/google-auth-staging-fixes` changes linking for verified same-email accounts with protected-account safeguards and adds enabled-provider browser reproductions. Fresh server availability addresses missing Google on navigation; Google chooser styling remains unconfirmed. Local unit/server 2,486 passed/1 skipped; focused browser 54/54 passed; full browser run stopped at 60 passed/2 timeouts. No follow-up merged or deployed. [Setup and checks](plans/google-auth.md).

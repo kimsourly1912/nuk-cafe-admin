@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ enabled: boolean, disabled: boolean }>()
+defineProps<{ enabled: boolean, disabled: boolean, pending?: boolean }>()
 defineEmits<{ click: [] }>()
 </script>
 
@@ -15,6 +15,7 @@ defineEmits<{ click: [] }>()
       variant="outline"
       block
       :disabled="disabled"
+      :aria-busy="pending || undefined"
       @click="$emit('click')"
     >
       <template #leading>
@@ -27,6 +28,10 @@ defineEmits<{ click: [] }>()
         >
       </template>
     </UButton>
+    <span
+      class="sr-only"
+      role="status"
+    >{{ pending ? 'Complete Google sign-in in the popup window.' : '' }}</span>
     <p class="text-sm text-muted">
       Google-only account? Use
       <ULink
