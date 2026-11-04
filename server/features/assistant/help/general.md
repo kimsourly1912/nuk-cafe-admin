@@ -83,3 +83,8 @@ The assistant answers questions about this portal and links to its pages. It can
 ## Browser check when signing in
 
 Signing in may open **Browser check** before the password is submitted. Complete the check to continue. If it cannot load or expires, use **Try again**; **Cancel** or your phone's Back returns to the form with its input kept. Submit again after a failed attempt to get a fresh check. This does not replace your password or two-step code.
+
+
+## Continue with Google
+
+When **Continue with Google** is offered on sign-in, it opens a separate popup. Keep the original page open. After approving Google, enter your authenticator or backup code if two-step sign-in is enabled. Closing the popup keeps the form and lets you try again. Google does not grant cafe or branch access: the same workspace permissions still apply. An account on a temporary password must replace it through email/password sign-in first. A Google-only account needs to set a local password through **Forgot password** on the account sign-in page before password-confirmed security actions.

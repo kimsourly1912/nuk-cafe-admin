@@ -4,6 +4,10 @@ Snapshot reviewed against main `f2978f7`, 2026-11-01. Read only when resuming or
 
 ## Ready for review
 
+- **Google at all workspaces (D262, 2026-11-04), draft PR #259:** expands the earlier Google error repair to admin/counter/platform entry points and native Google-to-authenticator challenges. Full unit/server 2,503 passed/1 existing skipped; guard-removal regression detects a session before the code. Run 609 passed check and two browser shards, including all 62 Google browser checks; the remaining shard hit its 15-minute limit. Run 610 still timed out on two of four shards without failed assertions; six native shards now leave measured setup headroom. Complete CI still pending. Browser build succeeds but local Chrome launch is blocked; new browser/visual checks are not claimed passed. No merge/deploy. This supersedes the earlier Google status rows below. [Contract](plans/google-auth.md#workspace-google-sign-in-d262-2026-11-04) · [Evidence](progress.md#google-workspace-sign-in-d262-2026-11-04).
+
+- **Google protected-account error repair (D261, 2026-11-04):** confirmed uppercase callback code was dropped, hiding the password/two-step instruction. Known-code normalization and targeted regressions prepared; Node reproduction fails before/passes after. Full CI pending. Live staging popup initiation/cancellation inspected without credentials; successful real Google callback remains unverified. [Progress](progress.md#google-protected-account-error-repair-d261-2026-11-04).
+
 - **Google account popup (D261, 2026-11-04):** branch `codex/google-auth-popup` from fetched remote main `800f04ef`. Local unit/server 2,492 passed/1 skipped and affected Chrome 79/79 passed; full browser run 852 passed/1 failed plus a Windows product-worker exit, both affected files passed 109/109 with one worker; lint and final typecheck passed; original sign-in/sign-up form stays mounted, callback verifies a fresh session, and popup failures allow retry. [Progress](progress.md#google-account-popup-d261-2026-11-04). No push or deployment.
 
 ## Waiting on the owner

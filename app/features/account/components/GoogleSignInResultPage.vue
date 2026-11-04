@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ACCOUNT_PATHS } from '../utils/account'
-import { googlePopupChannel } from '../utils/google-sign-in'
+import { googlePopupChannel, googleSignInErrorCode } from '../utils/google-sign-in'
 
 const route = useRoute()
 let channel: BroadcastChannel | undefined
@@ -12,8 +12,8 @@ onMounted(() => {
   channel.onmessage = (event: MessageEvent) => {
     if (event.origin === window.location.origin && event.data?.type === 'google-received' && event.data?.attempt === attempt) window.close()
   }
-  const error = route.query.error === 'account_not_linked' || route.query.error === 'google_password_required' ? route.query.error : undefined
-  channel.postMessage({ type: 'google-complete', path: ACCOUNT_PATHS.googleCallback, attempt, success: route.query.google === '1' && !route.query.error, error })
+  const error = googleSignInErrorCode(route.query.error)
+  channel.postMessage({ type: 'google-complete', path: ACCOUNT_PATHS.googleCallback, attempt, twoFactor: route.query.googleTwoFactor === '1', success: route.query.google === '1' && !route.query.error, error })
 })
 </script>
 

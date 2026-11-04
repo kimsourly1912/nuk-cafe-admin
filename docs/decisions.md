@@ -431,6 +431,8 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Balance:** Vitest shards by file count, not duration: shard 1 got products, schedules and unsaved-changes (194 s vs 101 s for shard 3). Accepted: a hand-kept file list per shard would silently skip a new file someone forgets to add. If the slowest shard passes about 2 minutes, add a fourth shard or split the biggest file (`products.test.ts`).
 - **Cost:** four runners per run instead of one (each e2e shard installs dependencies and builds the app, about 45 s), which counts against the private repository's Actions minutes.
 
+- **2026-11-04 timeout repair (PR #259):** run 609 passed check, two browser shards and all 62 Google browser checks, but timed out at 15 minutes. Four shards in run 610 still timed out in 1/4 and 2/4; 3/4 and 4/4 and the check job passed, with no failed test assertions. Use six native shards, keeping every test, fail-fast false and the 15-minute bound. The installed sequencer assigns all 66 files once (11 each). Run 610's measured file durations, with a conservative 30 s allowance for each of five uncompleted files, estimate 620/593/508/440/265/310 s of test work; this leaves build/setup headroom that five shards' 783 s maximum would not. Three more runners than the original matrix add fixed installation/build cost. No hand-maintained file lists or timeout relaxation. See [repair evidence](progress.md#google-ci-shard-timeout-repair-pr-259-2026-11-04).
+
 ### D57: Media uploads (step 3.2), 2026-09-27
 
 - **Same move as D55:** the `media` feature owns `media_assets` (with `sha256` and `state_changed_at`); the pre-standard table is renamed `legacy_media_assets` (hand-written migration `0004`), so the legacy menu screens and their upload route keep working until step 3.8.
@@ -2905,3 +2907,17 @@ D260 verification boundary: the e2e server preloads an offline password-range fi
 **Headers:** only sign-in/sign-up use COOP `same-origin-allow-popups` to retain the handle across the provider origin; the passive `/google-callback` uses `unsafe-none` and no-store so the callback can finish without enforcing a new isolated opener group; all other routes retain `same-origin`. CSP and server authorization/linking checks are unchanged.
 
 **Verification:** [progress](progress.md#google-account-popup-d261-2026-11-04). The existing e2e launcher passed a Windows drive-letter path to Node's `--import`, reproduced as `ERR_UNSUPPORTED_ESM_URL_SCHEME`; convert that path with `pathToFileURL` so local browser tests can start.
+
+
+D261 error-boundary repair (2026-11-04): Better Auth forwards custom `APIError` codes verbatim. The session guard's `GOOGLE_PASSWORD_REQUIRED` must normalize to the existing bounded `google_password_required` instruction in both the passive popup and legacy sign-in path; unknown codes and provider descriptions remain discarded. Returning protected identities retain the password/second-factor requirement. [Evidence](progress.md#google-protected-account-error-repair-d261-2026-11-04).
+
+
+### D262: Google sign-in at every workspace retains native two-factor verification (2026-11-04)
+
+**Owner:** add Google to platform, counter and admin authentication pages.
+
+**Choice:** share the existing popup button, provider discovery, bounded error mapping and lifecycle across the five entry points. Each workspace keeps its existing completion/access check and redirect guard. Google never adds a role, membership or branch. A completed Google session updates the shared identity before workspace authorization, including wrong-workspace refusal; a pending second factor does not announce login.
+
+Better Auth 1.7.7's native twoFactor challenge hook also matches the Google callback. Its unmodified handler removes the provisional session/cookie and issues its existing expiring, attempt-limited challenge. A following hook redirects only through the validated same-origin callback with bounded pending-factor metadata. The original form uses the existing TOTP/backup-code verifier. Configured two-step users, including super admins, may link a verified same-email Google identity as their first factor; no usable session is returned until the code succeeds. Temporary-password and banned accounts, and super admins without configured 2FA, retain their previous refusal. Password confirmations and security setup still require a local password. This supersedes the corresponding D259/D260 Google refusal, not the platform's mandatory two-step requirement.
+
+No copied crypto, internal library imports, new dependencies, migrations, credential settings or deployment. The wrapper is version-sensitive and its regression must be rerun on Better Auth upgrades. Existing two-factor guest-order-transfer limits remain. [Contract](plans/google-auth.md#workspace-google-sign-in-d262-2026-11-04) · [Evidence](progress.md#google-workspace-sign-in-d262-2026-11-04).

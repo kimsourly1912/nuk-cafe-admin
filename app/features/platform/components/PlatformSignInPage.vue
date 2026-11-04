@@ -20,12 +20,15 @@ type Schema = v.InferOutput<typeof schema>
 const state = reactive({ email: '', password: '' })
 const loading = ref(false)
 const assertActive = useAuthCompletion()
+const identity = useSessionIdentity()
 // Hidden by default, like every sign-in.
 const showPassword = ref(false)
 const error = ref<string>()
 
 const route = useRoute()
 const { signIn, finishSignIn } = usePlatformSession()
+const { googleEnabled, known: providersKnown, error: providersError, refresh: refreshProviders } = useAccountProviders()
+const googlePopup = useGoogleAuthPopup({ start: useGoogleAuthRequest(), finish: finishSignIn, surface: 'platform' })
 /** After a password that needs a code: the code step replaces the password form. */
 const codeStep = ref(false)
 /**
@@ -43,7 +46,37 @@ const errorAlert = useTemplateRef<HTMLElement>('errorAlert')
 const form = useTemplateRef('form')
 useFormErrorRecheck(form)
 
+async function onGoogleSignIn() {
+  if (loading.value) return
+  const startedIn = identity.generation.value
+  loading.value = true
+  error.value = undefined
+  try {
+    const step = await googlePopup.open()
+    assertActive()
+    if (step === 'two-factor') {
+      codeStep.value = true
+      state.password = ''
+      return
+    }
+    await navigateTo(platformRedirectTarget(route.query.redirect))
+  }
+  catch (e) {
+    if (e instanceof WorkspaceRefusedError) await checkSession()
+    else await showError(e)
+  }
+  finally {
+    if (identity.generation.value !== startedIn) {
+      state.email = ''
+      state.password = ''
+      showPassword.value = false
+    }
+    loading.value = false
+  }
+}
+
 async function onSubmit(event: FormSubmitEvent<Schema>) {
+  if (loading.value) return
   loading.value = true
   error.value = undefined
   try {
@@ -133,7 +166,7 @@ const aside = { title: 'Welcome back', text: 'Sign in to look after the cafes on
 
 <template>
   <TaskFrameSkeleton
-    v-if="(!checked || admitted) && !checkError"
+    v-if="((!checked || admitted) && !checkError) || (!providersKnown && !providersError)"
     :fields="2"
     cafe
   >
@@ -195,6 +228,7 @@ const aside = { title: 'Welcome back', text: 'Sign in to look after the cafes on
       ref="form"
       :schema="schema"
       :state="state"
+      :disabled="loading"
       :validate-on="['input', 'change']"
       class="space-y-4"
       @submit="onSubmit"
@@ -213,6 +247,19 @@ const aside = { title: 'Welcome back', text: 'Sign in to look after the cafes on
           :title="error"
         />
       </div>
+
+      <ApiErrorAlert
+        v-if="providersError"
+        title="Could not check Google sign-in"
+        :error="providersError"
+        @retry="refreshProviders()"
+      />
+      <GoogleSignInButton
+        :enabled="googleEnabled"
+        :disabled="loading"
+        :pending="googlePopup.pending.value"
+        @click="onGoogleSignIn"
+      />
 
       <UFormField
         label="Email"
@@ -265,7 +312,8 @@ const aside = { title: 'Welcome back', text: 'Sign in to look after the cafes on
           :form="codeStep ? 'platform-sign-in-code' : 'platform-sign-in'"
           :label="codeStep ? 'Verify' : 'Sign in'"
           block
-          :loading="loading"
+          :loading="loading && !googlePopup.pending.value"
+          :disabled="loading"
         />
         <UButton
           v-if="codeStep"
