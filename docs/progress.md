@@ -3,7 +3,6 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
-#
 ### Counter elapsed preparation and ready time (2026-11-04)
 
 - Base main `800f04e`; separate branch `codex/counter-stage-age`. The card previously showed age since placement even during preparation, including unpaid waiting. It now derives Preparing age from `paidAt` and Ready age from `readyAt`, using the existing server-offset queue clock and refresh cadence.
@@ -14,7 +13,7 @@
 - Files: counter helper/card/unit test, counter e2e, CI screenshot retention, counter assistant help and D102/progress/current-state/index notes. New metadata stays inside the existing card layout; no page composition/shell changes.
 - Next: owner review screenshots and code; payment exception workflow remains a separate policy approval. Backup #253 is merged, but real encrypted-copy/decrypt/isolated D1 restoration is still unverified in this work.
 
-## D1 backup export contract repair (PR #253, 2026-11-03)
+### D1 backup export contract repair (PR #253, 2026-11-03)
 
 - Reviewed head `a6ee858` against current main `82cbe18` (main had not moved at review). Only open PR at initial inspection: #253, draft. Its CI check job failed on three quote-style errors; typecheck/audit/unit were skipped. Browser shards run separately.
 - The proposed nested completion URL is correct. The proposed removal of `output_format` from polls conflicts with the current D1 API required field and Wrangler implementation; restored it on every request. Active exports may reuse the same bookmark; completion uses `result.result.signed_url`. The simplified Workflows tutorial disagrees; it is not the authoritative response fixture. This is a repair candidate, not proof of the live incident's complete cause.
