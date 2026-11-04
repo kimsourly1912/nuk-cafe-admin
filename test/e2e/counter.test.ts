@@ -421,7 +421,7 @@ describe('the counter', () => {
     const { page, problems } = await cashierAtCounter()
     const started = Date.now()
     await sql('update orders set placed_at = ?, paid_at = ? where id = ?', [started - 25 * 60_000, started - 5 * 60_000, order.id])
-    await page.reload({ waitUntil: 'hydration' })
+    await page.reload({ waitUntil: 'domcontentloaded' })
     const viewports = [
       { width: 320, height: 844 }, { width: 390, height: 844 },
       { width: 768, height: 820 }, { width: 1024, height: 820 },
@@ -449,7 +449,7 @@ describe('the counter', () => {
     await checkStage('Preparing', 5)
     await command({ ...order, version: order.version + 1 }, 'ready', { version: order.version + 1 })
     await sql('update orders set ready_at = ? where id = ?', [Date.now() - 2 * 60_000, order.id])
-    await page.reload({ waitUntil: 'hydration' })
+    await page.reload({ waitUntil: 'domcontentloaded' })
     await checkStage('Ready', 2)
     await command({ ...order, version: order.version + 2 }, 'complete', { version: order.version + 2 })
     expect(problems).toEqual([])
