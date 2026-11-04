@@ -2,10 +2,14 @@
 
 Snapshot reviewed against main `f2978f7`, 2026-11-01. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
 
+## Ready for review
+
+- **Google account popup (D261, 2026-11-04):** branch `codex/google-auth-popup` from fetched remote main `800f04ef`. Local unit/server 2,492 passed/1 skipped and affected Chrome 79/79 passed; full browser run 852 passed/1 failed plus a Windows product-worker exit, both affected files passed 109/109 with one worker; lint and final typecheck passed; original sign-in/sign-up form stays mounted, callback verifies a fresh session, and popup failures allow retry. [Progress](progress.md#google-account-popup-d261-2026-11-04). No push or deployment.
+
 ## Waiting on the owner
 
 - **Counter elapsed stage times (2026-11-04):** `codex/counter-stage-age` shows preparation from payment and ready waiting from ready time using the existing server clock. Edge-case and real-server browser tests cover the change; CI screenshots at six viewports are retained for owner review. No overdue target/ETA or financial change. [Progress](progress.md#counter-elapsed-preparation-and-ready-time-2026-11-04).
-- **Payment audit PR #254 refreshed:** main `800f04e` integrated, preserving merged backups and Google authentication work; fresh CI pending. Durable financial recovery rules still need explicit owner approval.
+- **Payment audit PR #254 refreshed:** main `2fb9ad1` integrated, preserving merged backups and Google authentication work; fresh CI pending. Durable financial recovery rules still need explicit owner approval.
 
 - **Google staging follow-up (D260):** PR #255 merged as `0e447d9` with green CI; staging deployment passed. Owner configured credentials and reported partial success, popup styling, Google disappearing after sign-out and unwanted same-email refusal. Branch `codex/google-auth-staging-fixes` changes linking for verified same-email accounts with protected-account safeguards and adds enabled-provider browser reproductions. Fresh server availability addresses missing Google on navigation; Google chooser styling remains unconfirmed. Local unit/server 2,486 passed/1 skipped; focused browser 54/54 passed; full browser run stopped at 60 passed/2 timeouts. No follow-up merged or deployed. [Setup and checks](plans/google-auth.md).
 

@@ -293,3 +293,5 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D259](decisions.md#d259--google-creates-customer-accounts-without-implicit-linking-2026-11-03) | Google creates customer accounts without implicit linking, 2026-11-03 |
 
 | [D260](decisions.md#d260--verified-same-email-google-sign-in-reuses-the-account-2026-11-03) | Verified same-email Google sign-in reuses the account; D259 linking correction |
+
+| [D261](decisions.md#d261-google-account-sign-in-uses-a-popup-and-preserves-the-form-2026-11-04) | Google account popup; original form styling, bounded errors and scope cleanup |

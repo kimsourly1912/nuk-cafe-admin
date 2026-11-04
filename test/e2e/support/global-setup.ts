@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { join, relative } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { TestProject } from 'vitest/node'
 import { FAKE_BAKONG_TOKEN, startFakeBakong } from './fake-bakong'
 import type { ShopSeed } from './seed'
@@ -85,7 +85,7 @@ export default async function ({ provide }: TestProject) {
 
   const port = await freePort()
   const host = `http://127.0.0.1:${port}`
-  const server = spawn(process.execPath, ['--import', join(rootDir, 'test/e2e/support/fake-password-ranges.mjs'), '.output/server/index.mjs'], {
+  const server = spawn(process.execPath, ['--import', pathToFileURL(join(rootDir, 'test/e2e/support/fake-password-ranges.mjs')).href, '.output/server/index.mjs'], {
     cwd: rootDir,
     // The Sample data page (D94) is on, like local and staging, so its tests can reach it.
     env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', NUXT_PUBLIC_SAMPLE_DATA_ENABLED: 'true', NUXT_PUBLIC_SAMPLE_DATA_ENVIRONMENT: 'Test', NUXT_QR_SECRET: E2E_QR_SECRET,
