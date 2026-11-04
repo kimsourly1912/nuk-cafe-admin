@@ -431,6 +431,8 @@ Owner answers (2026-09-27): **admins may grant and remove admin**, with safeguar
 - **Balance:** Vitest shards by file count, not duration: shard 1 got products, schedules and unsaved-changes (194 s vs 101 s for shard 3). Accepted: a hand-kept file list per shard would silently skip a new file someone forgets to add. If the slowest shard passes about 2 minutes, add a fourth shard or split the biggest file (`products.test.ts`).
 - **Cost:** four runners per run instead of one (each e2e shard installs dependencies and builds the app, about 45 s), which counts against the private repository's Actions minutes.
 
+- **2026-11-04 timeout repair (PR #259):** run 609 passed check, browser shards 2/3 and 3/3, and all 62 Google browser checks, but shard 1/3 was cancelled at the unchanged 15-minute job limit. Shard 2 needed 815.40 s and shard 3 467.95 s. Increase the matrix/name/Vitest denominator together to four shards; keep native file discovery, fail-fast false, all checks and the 15-minute bound. No hand-maintained test lists or increased per-test timeouts. One additional runner installs/builds the app, adding fixed setup cost to private Actions minutes. See [repair evidence](progress.md#google-ci-shard-timeout-repair-pr-259-2026-11-04).
+
 ### D57: Media uploads (step 3.2), 2026-09-27
 
 - **Same move as D55:** the `media` feature owns `media_assets` (with `sha256` and `state_changed_at`); the pre-standard table is renamed `legacy_media_assets` (hand-written migration `0004`), so the legacy menu screens and their upload route keep working until step 3.8.
