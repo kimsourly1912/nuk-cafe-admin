@@ -195,7 +195,7 @@ describe('cafes', () => {
     await page.getByRole('table').getByText('NUK Cafe').waitFor({ state: 'detached' })
     await page.getByPlaceholder('Search name or address…').fill('mill')
     await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('mill')
-    expect(api.calls.filter(c => c === 'GET /platform/tenants').length).toBeGreaterThan(2)
+    await expect.poll(() => api.calls.filter(c => c === 'GET /platform/tenants').length).toBeGreaterThan(2)
     // The tab counts are one read that filters and search don't repeat.
     expect(api.calls.filter(c => c === 'GET /platform/tenants/counts')).toHaveLength(1)
   })
