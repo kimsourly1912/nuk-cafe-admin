@@ -100,3 +100,7 @@ Before a behavior PR: settle the owner decisions, reproduce rate/deadline/QR-gen
 - [NBC Bakong Open API documentation](https://sit-api-bakong.nbc.gov.kh/document): MD5/hash/reference lookup contracts. This is a public SIT document; it does not prove production availability, quotas or webhook/refund support.
 - [NBC published Open API PDF](https://bakong.nbc.gov.kh/download/KHQR/integration/Bakong%20Open%20API%20Document.pdf).
 - [Current project KHQR policy](../plans/khqr.md) and [operations setup](../server/operations.md#khqr). Historical claims of free/unlimited access are not newly asserted or used to choose a reconciliation polling budget.
+
+## Implementation preparation (2026-11-04)
+
+The owner requested starting recovery work. The [concrete recovery proposal](../plans/khqr-recovery.md) maps current code to durable work/evidence, shared claims, atomic reconciliation, owner review and failure tests. Three decision bundles remain explicit: access/resolution evidence, background payment/system attribution and automatic search horizon. This follow-up is documentation only; the original tests and current payment behavior are unchanged.

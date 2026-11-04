@@ -3,6 +3,14 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### KHQR recovery implementation proposal (2026-11-04)
+
+- Owner requested starting the recovery improvement after the automatic-recheck/durable-case explanation. Reviewed current main `2fb9ad1`, open #254/#258 and current main CI/health status; no runtime recovery implementation exists yet.
+- Prepared [the concrete recovery design](plans/khqr-recovery.md): durable work before bank lookup, shared claim ownership, receipt identity, atomic reconciliation, owner review UI/API boundaries, failure/tenant tests and rollout. The three decision bundles (access/resolution evidence, automatic attachment/system attribution, search window) remain proposals rather than invented payment policy.
+- Rechecked NBC's public MD5/full-hash response contract and D1 batch rollback documentation. The older NBC document does not establish live quotas, lookup retention or enumeration of every transfer; automatic scan enablement remains dependent on that evidence.
+- Documentation-only follow-up within existing PR #254. App/schema/permission/financial behavior, #258, backups and deployment are unchanged. Existing audit-test CI evidence belongs to its earlier head; no new test execution is claimed here. Local CLI clone could not authenticate; current repository content was read through the GitHub connection.
+- Next: owner choices recorded in the plan, then a focused implementation branch from current main. No merge or production action.
+
 ### Payment reliability audit and daily operations brief (2026-11-03)
 
 - **Current-base verification (2026-11-04):** integrated main `2fb9ad1` after the owner merged Google popup PR #257. Preserved those changes. Earlier green checks on `800f04e` are superseded; fresh CI is required on the integrated head.

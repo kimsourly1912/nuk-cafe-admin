@@ -49,3 +49,7 @@ _2026-10-02. The owner's choice after the KHQR research: a dynamic KHQR shown **
 | No token, token expired, Bakong refuses this server or is down | "Automatic check unavailable": Confirm by hand; Try again (not for a blip, which retries by itself) | server, unit |
 | Bakong's answer has a field of the wrong type or length (an account that isn't text, no amount), or is longer than 16 KB (audit S6) | "Automatic check unavailable", nothing recorded; at most 16 KB is read, then the body is cancelled | server, unit |
 | Paid, but Bakong leaves out the bank's reference and the hash | Recorded without a reference (`null`, never empty) | server |
+
+## Recovery follow-up (2026-11-04)
+
+The current implementation can return `refund_needed` without a durable operator case; the tablet owns polling. [Payment audit](../reviews/payment-reliability-2026-11-03.md) records the confirmed gap. The [concrete recovery proposal](khqr-recovery.md) defines the next implementation and its unresolved owner choices. It is a proposal, not an accepted change to the existing payment/expiry/refund rules above.
