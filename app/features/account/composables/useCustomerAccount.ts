@@ -142,16 +142,19 @@ export function useAccountActions() {
    * (`TemporaryPasswordError`, Q3, D241). With no workspace to send it to, or when that can't be
    * checked, it's signed out again, so the menu isn't left with a session it can't use.
    */
-  /** Starts OAuth only. The full-page callback announces the completed identity change. */
-  async function googleSignIn(from?: unknown) {
+  /** Starts OAuth only; the caller verifies the completed session before announcing login. */
+  async function googleSignIn(from?: unknown, popupId?: string) {
     const link = accountLink(ACCOUNT_PATHS.signIn, from)
     const callback = typeof link === 'string' ? link : `${link.path}?${new URLSearchParams(link.query)}`
-    const success = new URL(callback, window.location.origin)
+    const success = new URL(popupId ? ACCOUNT_PATHS.googleCallback : callback, window.location.origin)
+    if (popupId) success.searchParams.set('googlePopup', popupId)
+    const failure = new URL(success)
     success.searchParams.set('google', '1')
     const result = await authFetch<{ url?: string }>('/sign-in/social', {
       provider: 'google',
+      disableRedirect: true,
       callbackURL: success.toString(),
-      errorCallbackURL: new URL(callback, window.location.origin).toString(),
+      errorCallbackURL: failure.toString(),
     })
     // Never navigate to a URL supplied by a query string or an unrecognised upstream origin.
     const destination = result.url ? new URL(result.url) : null
@@ -171,7 +174,7 @@ export function useAccountActions() {
   /** Signed in by the code after the password: the same checks as a password-only sign-in. */
   async function finishSignIn() {
     const session = await fetchSession()
-    if (!session) throw new ApiError('Sign in to continue.', { kind: 'unauthorized', status: 401 })
+    if (!session || session.user.isAnonymous) throw new ApiError('Sign in to continue.', { kind: 'unauthorized', status: 401 })
     await signedIn(session.user)
   }
 

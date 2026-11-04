@@ -21,7 +21,7 @@ describe('accountRedirectTarget (D141)', () => {
   })
 
   it('never goes to a cafe\'s workspace or back to a sign-in or password page', () => {
-    for (const bad of ['/c/nuk/admin', '/c/nuk/admin/products', '/c/other/counter/b1', '/sign-in', '/sign-up?redirect=/x', '/reset-password']) {
+    for (const bad of ['/c/nuk/admin', '/c/nuk/admin/products', '/c/other/counter/b1', '/sign-in', '/sign-up?redirect=/x', '/reset-password', '/google-callback?google=1']) {
       expect(accountRedirectTarget(bad, HOME)).toBe(HOME)
     }
     expect(accountRedirectTarget('/c/nuk/administrator', HOME)).toBe('/c/nuk/administrator')

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-defineProps<{ enabled: boolean, disabled: boolean }>()
+defineProps<{ enabled: boolean, disabled: boolean, pending?: boolean }>()
 defineEmits<{ click: [] }>()
 </script>
 
@@ -15,6 +15,7 @@ defineEmits<{ click: [] }>()
       variant="outline"
       block
       :disabled="disabled"
+      :aria-busy="pending || undefined"
       @click="$emit('click')"
     >
       <template #leading>
@@ -27,16 +28,10 @@ defineEmits<{ click: [] }>()
         >
       </template>
     </UButton>
-    <p class="text-sm text-muted">
-      Google-only account? Use
-      <ULink
-        to="/forgot-password"
-        class="text-primary"
-      >
-        Forgot password
-      </ULink>
-      to set a password for account security or deletion.
-    </p>
-    <USeparator label="or use email" />
+    <span
+      class="sr-only"
+      role="status"
+    >{{ pending ? 'Complete Google sign-in in the popup window.' : '' }}</span>
+    <USeparator label="or" />
   </div>
 </template>
