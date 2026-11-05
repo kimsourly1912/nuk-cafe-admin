@@ -3,6 +3,14 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Leave animations and controls (D264, 2026-11-05)
+
+- Owner asked for leave animations (a field error vanished), a rolling quantity, "Clear order" one line at a time and an animated checkbox tick. Base: main `16b078b` (D263 merged in #262/#263). PR #265.
+- Built: patched `@nuxt/ui` 4.12.0 (`UFormField` error/help through `<Transition name="field-message">`, recorded in `.claude/upgrade/profile.md`); `<FormErrorAlert>` leaves; `<QuantityStepper>` rolls; `useListTransition` staggers rows leaving together and measures them all before pinning (an older bug: rows after the first were pinned one row too high); checkbox/radio pop in/out and the tick draws.
+- Found by CI run 624: axe measured `<ListEmptyState>` half-faded (D263) on Options/Add-ons at 390px. Fix: `settleAnimations(page)` in `test/e2e/support/mock-api.ts`, called before every axe run (12 files); it skips looping animations.
+- Local evidence (Chromium 1243, `E2E_BROWSER_PATH`): lint, typecheck, unit/server 2,503 (1 existing skip). Clean full `pnpm test:e2e`: 908 passed, 4 failed; rerun alone, counter and manager-tools pass (load flakes; manager-tools also passed in CI on this commit); `google-account` fails only here because the sandbox proxy refuses accounts.google.com (passes in CI). The staggered-clear test fails without measuring rows together (checked).
+- How to verify: a test that reads a transition uses a MutationObserver installed before the action (`watchClasses` in `shop-menu.test.ts`), never a later round trip. Behind an open dialog the page is hidden from roles: find elements there by attribute. **Never run two e2e runs at once locally**: they share the build and server, and the earlier mixed run reported 78 false failures. Owner review on staging: the field error leave, the quantity roll, Clear order, the checkbox tick.
+
 ### Interaction motion (D263, 2026-11-05)
 
 - Owner asked for smoother interactions and approved widening UI §11 after a plan (built-in Vue transitions; Motion for Vue deferred). Base: main `c176d19`. One PR, as the owner asked.
