@@ -3,6 +3,15 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Server P2 reliability fixes (D265, 2026-11-06)
+
+- Owner requested all P2 findings B3–B7 in one PR. Branch `codex/server-p2-reliability` starts at main `26b0da9`; the latest main CI/deploy run was successful. No application UI, schema, dependency, CI configuration, bank-recovery policy or deployment change.
+- Payments/QR: atomic validation guards with a database clock, current indexed rate/settings snapshots, conflict explanations and safe retry. Consistent monetary/status snapshots for reports, tracking, details, customer lists and finished-counter rows. Confirmation reserves attempts before verification and refuses success after revocation. Marketing idempotency includes its promotion path ID.
+- Evidence (cloud Linux, Node 24.22.1 / pnpm 12.15.0, frozen lockfile): full unit/server 2,531 passed / 1 existing skipped, 171 files; lint and typecheck passed; dependency audit 3 low / 12 moderate, no high/critical. Final confirmation/QR wording and completion-time check: 27/27 focused tests passed. Local workerd/D1 + two-cafe repository files: 22/22 passed. All 14 guard-removal checks failed their intended regression (cash rate/deadline, QR order/settings/rate/reuse lifetime, confirmation reservation/revocation/expiry, promotion target and four read snapshots), then source was restored. The production-mode e2e build passed (46.5 s). All 9 selected browser suites were blocked before assertions: Chromium process-singleton socket creation is denied by this cloud sandbox (`Operation not permitted`); 103 tests did not run. The unchanged GitHub Actions browser shards are required for review evidence. No local browser pass is claimed. No live external bank/Google or production evidence is claimed.
+- How to verify: targeted migrated-SQLite tests in `counter.service`, `khqr.service`, `reads.service`, `confirmation.service`, `marketing.service`; real local workerd/D1 in `checkout-d1.test.ts`; two-cafe repository isolation in `orders.repository.tenants.test.ts`. New protections must fail their regressions when individually removed. Mocked external services are not live bank/Google evidence.
+- Remaining P1 work: durable bank-receipt recovery (closed/unmerged #254, policy choices remain) and successful encrypted production backup plus isolated restore proof. Neither is performed by this step.
+
+
 ### Current-state refreshed against GitHub (2026-11-05)
 
 - `current-state.md` listed #248, #250, #253, #259, #260 and older branches as in review; GitHub showed no open PRs on main `ba4f2c2`. Rewritten: owner waits (backups unproven, live Google unverified, motion review), PRs closed without a recorded reason (#254 KHQR, #258, #261, #196), and open follow-ups (account security step 5 has no code yet; next free migration is `0056`, not `0054`).

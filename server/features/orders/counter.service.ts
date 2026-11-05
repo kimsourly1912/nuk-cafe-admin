@@ -5,7 +5,8 @@ import { toIso } from '#server/utils/time'
 import { findBranchClock } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { auditStatement, outboxStatement } from '#server/features/platform'
-import type { OrderStep } from './commands'
+import type { OrderCommand, OrderStep } from './commands'
+import { paymentClock } from './checkout.repository'
 import { runOrderCommand } from './commands'
 import { exchangeRateChanged, noExchangeRate, orderChanged, orderNotCancellable, orderNotFound, ownOrderPayment, paymentExpired, returnMethodInvalid } from './orders.errors'
 import { requireOrderCharge } from './khqr.service'
@@ -76,13 +77,6 @@ function counterOrders(rows: repo.OrderRow[], lines: Awaited<ReturnType<typeof r
   return rows.map(row => toCounterOrder(row, linesOf.get(row.id) ?? [], paymentOf.get(row.id)))
 }
 
-async function withDetails(db: Db, tenantId: string, rows: repo.OrderRow[]): Promise<CounterOrder[]> {
-  if (!rows.length) return []
-  const ids = rows.map(row => row.id)
-  const [lines, payments] = await Promise.all([repo.linesOfOrders(db, tenantId, ids), repo.paymentsOf(db, tenantId, ids)])
-  return counterOrders(rows, lines, payments)
-}
-
 const toRate = (row: repo.RateRow): ExchangeRate => ({ khrPerUsd: row.perUsd, effectiveFrom: toIso(row.effectiveFrom), setBy: { name: row.setByName } })
 
 /** The branch's business day at `now` (it starts at 4:00 in the branch's time zone, D99). */
@@ -114,7 +108,8 @@ export async function listCounterQueue(db: Db, actor: BranchActor, now = new Dat
  */
 export async function listFinishedToday(db: Db, actor: BranchActor, now = new Date()): Promise<CounterFinishedOrders> {
   const businessDate = await businessDateOf(db, actor.tenantId, actor.branchId, now)
-  return { businessDate, orders: await withDetails(db, actor.tenantId, await repo.findFinishedOrders(db, actor.tenantId, actor.branchId, businessDate)) }
+  const { rows, lines, payments } = await repo.finishedOrderRows(db, actor.tenantId, actor.branchId, businessDate)
+  return { businessDate, orders: counterOrders(rows, lines, payments) }
 }
 
 /**
@@ -123,11 +118,11 @@ export async function listFinishedToday(db: Db, actor: BranchActor, now = new Da
  * shown here, never to the customer (D106).
  */
 export async function getCounterOrderHistory(db: Db, actor: BranchActor, orderId: string): Promise<CounterOrderHistory> {
-  const row = await repo.findOrder(db, actor.tenantId, orderId)
-  if (!row || row.branchId !== actor.branchId) throw orderNotFound()
-  const [[order], events, returnedBy] = await Promise.all([withDetails(db, actor.tenantId, [row]), reportsRepo.eventsOf(db, actor.tenantId, orderId), reportsRepo.returnedByName(db, actor.tenantId, orderId)])
+  const { order: row, lines, payment, events, returnedBy } = await reportsRepo.orderDetailRows(db, actor.tenantId, orderId, { branchId: actor.branchId })
+  if (!row) throw orderNotFound()
+  const order = toCounterOrder(row, lines, payment)
   return {
-    order: order!,
+    order,
     timeline: events.map(event => ({
       at: toIso(event.at),
       toStatus: event.toStatus,
@@ -145,10 +140,9 @@ export async function getCounterOrderHistory(db: Db, actor: BranchActor, orderId
 
 /** One of the branch's orders, whatever its status. Another branch's is 404, like an unknown id. */
 export async function getCounterOrder(db: Db, actor: BranchActor, orderId: string): Promise<CounterOrder> {
-  const row = await repo.findOrder(db, actor.tenantId, orderId)
-  if (!row || row.branchId !== actor.branchId) throw orderNotFound()
-  const [order] = await withDetails(db, actor.tenantId, [row])
-  return order!
+  const { order, lines, payment } = await reportsRepo.orderDetailRows(db, actor.tenantId, orderId, { branchId: actor.branchId })
+  if (!order) throw orderNotFound()
+  return toCounterOrder(order, lines, payment)
 }
 
 /**
@@ -162,6 +156,7 @@ async function runCommand(
   key: string,
   command: { operation: string, input: CounterCommandInput, request: object, now: Date },
   plan: (order: repo.OrderRow) => OrderStep | Promise<OrderStep>,
+  changed?: OrderCommand['changed'],
 ): Promise<CounterOrder> {
   await runOrderCommand(db, {
     actor,
@@ -172,7 +167,7 @@ async function runCommand(
     request: { branchId: actor.branchId, ...command.request },
     now: command.now,
     owns: order => order.branchId === actor.branchId,
-    changed: order => orderChanged(order.pickupNumber, order.status),
+    changed: changed ?? (order => orderChanged(order.pickupNumber, order.status)),
   }, plan)
   return getCounterOrder(db, actor, orderId)
 }
@@ -187,14 +182,17 @@ function requireStatus(order: repo.OrderRow, allowed: OrderStatus[]) {
  * total; cash in riel uses the rate in force, which must be the one the screen showed. Refused
  * once the 30 minutes to pay are over.
  */
-export async function payOrder(db: Db, actor: BranchActor, orderId: string, input: PayOrderInput, key: string, now = new Date()): Promise<CounterOrder> {
+export async function payOrder(db: Db, actor: BranchActor, orderId: string, input: PayOrderInput, key: string, now?: Date): Promise<CounterOrder> {
+  const clock = await paymentClock(db, now)
+  now = clock.at
   return runCommand(db, actor, orderId, key, { operation: 'pay', input, request: input, now }, async (order) => {
     requireStatus(order, ['awaiting_payment'])
     // Staff never complete their own order's payment by hand (security.md → Identity). Bakong-confirmed
     // arrivals go through `recordCheckedKhqrPayment`, which the money itself verifies.
     if (order.customerId === actor.userId) throw ownOrderPayment()
     if (order.paymentDueAt.getTime() <= now.getTime()) throw paymentExpired()
-    const rate = input.method === 'cash_khr' ? await repo.currentRate(db, actor.tenantId, now) : undefined
+    const rateGuard = input.method === 'cash_khr' ? await repo.captureExchangeRateGuard(db, actor.tenantId, clock.now) : undefined
+    const rate = input.method === 'cash_khr' ? await repo.currentRate(db, actor.tenantId, await clock.readNow()) : undefined
     if (input.method === 'cash_khr') {
       if (!rate) throw noExchangeRate()
       if (rate.perUsd !== input.khrPerUsd) throw exchangeRateChanged(rate.perUsd)
@@ -204,6 +202,7 @@ export async function payOrder(db: Db, actor: BranchActor, orderId: string, inpu
     const charge = input.method === 'khqr' && input.chargeId ? await requireOrderCharge(db, actor, orderId, input.chargeId) : undefined
     return {
       to: 'preparing',
+      guards: [...(rateGuard ? [rateGuard.guard] : []), repo.requirePaymentDeadline(db, actor.tenantId, orderId, clock.now)],
       statements: [repo.insertPaymentStatement(db, {
         tenantId: actor.tenantId,
         orderId,
@@ -219,6 +218,16 @@ export async function payOrder(db: Db, actor: BranchActor, orderId: string, inpu
       }), outboxStatement(db, actor.tenantId, ORDER_EVENTS.paid, { orderId })],
       metadata: { method: input.method, amountMinor: order.totalMinor, amountKhr, ...(charge && { khqrChargeId: charge.id, khqrCurrency: charge.currency, khqrAmount: charge.amount }) },
     }
+  }, async (order) => {
+    if (order.status !== 'awaiting_payment' || order.version !== input.version) return orderChanged(order.pickupNumber, order.status)
+    const at = await clock.readNow()
+    if (order.paymentDueAt.getTime() <= at.getTime()) return paymentExpired()
+    if (input.method === 'cash_khr') {
+      const rate = await repo.currentRate(db, actor.tenantId, at)
+      if (!rate) return noExchangeRate()
+      if (rate.perUsd !== input.khrPerUsd) return exchangeRateChanged(rate.perUsd)
+    }
+    return orderChanged(order.pickupNumber, order.status)
   })
 }
 

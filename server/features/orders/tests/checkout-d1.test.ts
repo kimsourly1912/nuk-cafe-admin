@@ -9,6 +9,10 @@ import type { Db } from '#server/utils/batch'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem, setSoldOut, updateItem } from '#server/features/menu'
 import { captureCheckoutBranchGuard, createTable, pauseBranch, updateBranchSettings } from '#server/features/branches'
+import { cancelOrderAtCounter, getCounterOrder, payOrder, setExchangeRate } from '#server/features/orders/counter.service'
+import { createKhqrCharge, saveKhqrSettings } from '#server/features/orders/khqr.service'
+import { reportSummary, orderHistoryDetail } from '#server/features/orders/reports.service'
+import { interleaved } from '#server/tests/support/interleave'
 import { getOrder, placeOrder } from '#server/features/orders/orders.service'
 import { counterPayments, orderEvents, orderLines, orders } from '#server/features/orders/orders.schema'
 import { auditEvents, idempotencyKeys, outboxMessages } from '#server/features/platform/platform.schema'
@@ -184,5 +188,66 @@ describe('checkout on local workerd/D1 with every migration', { tags: ['slow'] }
     const results = await Promise.all([placeOrder(on, c.customer, c.input, key, noon), placeOrder(other, c.customer, c.input, key, noon)])
     expect(results[0]!.orderId).toBe(results[1]!.orderId)
     expect(results.map(r => r.replayed).sort()).toEqual([false, true])
+  })
+})
+
+describe('payment and detail reliability on local workerd/D1', { tags: ['slow'] }, () => {
+  it('rolls back cash payment if the current rate changes at commit, then safely retries', async () => {
+    const c = await cafe()
+    const id = (await placeOrder(db, c.customer, c.input, crypto.randomUUID(), noon)).orderId
+    await setExchangeRate(db, c.owner, { khrPerUsd: 4100 }, noon)
+    const key = crypto.randomUUID()
+    let after: unknown
+    const on = interleaved(db, async () => {
+      await setExchangeRate(db, c.owner, { khrPerUsd: 4200 }, new Date(noon.getTime() + 1000))
+      after = await counts()
+    })
+    await expectApiError(() => payOrder(on, c.staff, id, { version: 1, method: 'cash_khr', khrPerUsd: 4100 }, key, new Date(noon.getTime() + 60_000)), 409, 'EXCHANGE_RATE_CHANGED')
+    expect(await counts()).toEqual(after)
+    expect((await payOrder(db, c.staff, id, { version: 1, method: 'cash_khr', khrPerUsd: 4200 }, key, new Date(noon.getTime() + 60_000))).payment).toMatchObject({ khrPerUsd: 4200, amountMinor: 250 })
+  })
+
+  it('rolls back a cash payment that crosses the database deadline', async () => {
+    const c = await cafe()
+    const id = (await placeOrder(db, c.customer, c.input, crypto.randomUUID(), noon)).orderId
+    const before = await counts()
+    const on = interleaved(db, () => new Promise(resolve => setTimeout(resolve, 30)))
+    await expectApiError(() => payOrder(on, c.staff, id, { version: 1, method: 'cash_usd' }, crypto.randomUUID(), new Date(noon.getTime() + 30 * 60_000 - 1)), 409, 'PAYMENT_EXPIRED')
+    expect(await counts()).toEqual(before)
+  })
+
+  for (const reuse of [false, true]) {
+    it(`refuses a cancelled order's ${reuse ? 'reused' : 'new'} QR at commit`, async () => {
+      const c = await cafe()
+      const id = (await placeOrder(db, c.customer, c.input, crypto.randomUUID(), noon)).orderId
+      await saveKhqrSettings(db, c.owner, { version: 0, enabled: true, accountId: `cafe${c.owner.userId.slice(-8)}@aclb`, merchantName: 'Cafe', merchantCity: 'Phnom Penh', currencies: ['USD'] }, noon)
+      if (reuse) await createKhqrCharge(db, c.staff, id, { currency: 'USD' }, noon)
+      const on = interleaved(db, () => cancelOrderAtCounter(db, c.staff, id, { version: 1, reason: 'other', note: 'Changed', returnMethod: null }, crypto.randomUUID(), noon))
+      await expectApiError(() => createKhqrCharge(on, c.staff, id, { currency: 'USD' }, noon), 409, 'ORDER_CHANGED')
+      expect((await getOrder(db, c.customer, id)).status).toBe('cancelled')
+    })
+  }
+
+  it('rate and receiving-setting guards isolate cafes and D1 detail columns keep their decoders', async () => {
+    const a = await cafe()
+    const b = await cafe()
+    const settings = { version: 0, enabled: true, accountId: `cafe${a.owner.userId.slice(-8)}@aclb`, merchantName: 'Cafe', merchantCity: 'Phnom Penh', currencies: ['USD' as const] }
+    await saveKhqrSettings(db, a.owner, settings, noon)
+    await saveKhqrSettings(db, b.owner, settings, noon)
+    await setExchangeRate(db, a.owner, { khrPerUsd: 4100 }, noon)
+    const id = (await placeOrder(db, a.customer, a.input, crypto.randomUUID(), noon)).orderId
+    const qrOn = interleaved(db, () => saveKhqrSettings(db, b.owner, { ...settings, version: 1, enabled: false }, noon))
+    await createKhqrCharge(qrOn, a.staff, id, { currency: 'USD' }, noon)
+    const payOn = interleaved(db, () => setExchangeRate(db, b.owner, { khrPerUsd: 5000 }, noon))
+    await payOrder(payOn, a.staff, id, { version: 1, method: 'cash_khr', khrPerUsd: 4100 }, crypto.randomUUID(), noon)
+    const detail = await orderHistoryDetail(db, a.owner.tenantId, id)
+    expect(detail).toMatchObject({ branch: { id: a.input.branchId, name: 'Branch', timeZone: 'Asia/Phnom_Penh' }, status: 'preparing', payment: { state: 'paid', amountMinor: 250, khrPerUsd: 4100 } })
+    expect(detail.timeline.map(event => event.toStatus)).toEqual(['awaiting_payment', 'preparing'])
+    expect((await getCounterOrder(db, a.staff, id)).customer.name).toBe('Test User')
+    const summary = await reportSummary(db, a.owner.tenantId, { branchId: a.input.branchId, from: '2026-09-28', to: '2026-09-28' }, noon)
+    expect(summary.paid).toMatchObject({ salesMinor: 250, orders: 1 })
+    expect(summary.bestSellers[0]).toMatchObject({ name: 'Coffee' })
+    await expectApiError(() => getOrder(db, b.customer, id), 404, 'NOT_FOUND')
+    await expectApiError(() => orderHistoryDetail(db, b.owner.tenantId, id), 404, 'NOT_FOUND')
   })
 })

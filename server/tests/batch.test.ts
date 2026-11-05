@@ -235,11 +235,11 @@ describe('on D1', () => {
   it('keeps branch and customer names distinct in D1 batch objects without shifting timestamps', async () => {
     const now = new Date('2026-10-14T05:00:00Z')
     const { db: d1 } = fakeD1([
-      ['order-a', 'cafe-a', 'branch-a', 'Branch A', 'customer-a', 'Customer A', 1, '2026-10-14', 'preparing', 'pickup', null, 100, 100, now.getTime(), now.getTime() + 60000, now.getTime(), null, null, null, 2],
+      ['order-a', 'cafe-a', 'branch-a', 'Branch A', 'Asia/Phnom_Penh', 'customer-a', 'Customer A', 1, '2026-10-14', 'preparing', 'pickup', null, 100, 100, now.getTime(), now.getTime() + 60000, now.getTime(), null, null, null, 2],
       undefined, undefined, [0],
     ])
     const result = await counterQueueRows(d1, 'cafe-a', 'branch-a', '2026-10-14', now)
-    expect(result.rows).toEqual([expect.objectContaining({ branchName: 'Branch A', customerName: 'Customer A', placedAt: now, paymentDueAt: new Date(now.getTime() + 60000), paidAt: now, version: 2 })])
+    expect(result.rows).toEqual([expect.objectContaining({ branchName: 'Branch A', branchTimeZone: 'Asia/Phnom_Penh', customerName: 'Customer A', placedAt: now, paymentDueAt: new Date(now.getTime() + 60000), paidAt: now, version: 2 })])
   })
 
   it('keeps the order id apart from its payment id in an order history page read in one D1 batch (D170, D194)', async () => {

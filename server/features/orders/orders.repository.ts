@@ -6,9 +6,9 @@ import type { CancelReason, OrderStatus, OrderType, PaymentMethod, QuotedModifie
 import { IN_PROGRESS_STATUSES } from '#shared/contracts/orders'
 import { branches, user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
-import { insertAll, readInChunks, requireAtMost } from '#server/utils/batch'
+import { insertAll, readInChunks, requireAtMost, requireCount } from '#server/utils/batch'
 import type { PageQuery } from '#server/utils/query'
-import { byId, firstRow, inTenant, readPage } from '#server/utils/query'
+import { byId, captureSnapshotGuard, firstRow, inTenant, readPage } from '#server/utils/query'
 import { bakongTokens, counterPayments, exchangeRates, khqrSettings, orderEvents, orderLines, orders } from './orders.schema'
 
 /**
@@ -107,6 +107,7 @@ export interface OrderRow {
   tenantId: string
   branchId: string
   branchName: string
+  branchTimeZone: string
   customerId: string
   customerName: string
   pickupNumber: number
@@ -131,6 +132,7 @@ const orderColumns = {
   branchId: orders.branchId,
   // D1 batch results are objects: repeated SQL names would collapse fields before Drizzle maps them.
   branchName: sql<string>`${branches.name}`.as('branch_name'),
+  branchTimeZone: branches.timezone,
   customerId: orders.customerId,
   customerName: sql<string>`${user.name}`.as('customer_name'),
   pickupNumber: orders.pickupNumber,
@@ -210,6 +212,18 @@ export function findFinishedOrders(db: Db, tenantId: string, branchId: string, b
     .limit(FINISHED_LIMIT)
 }
 
+/** Finished rows and their immutable lines/payment state, in one bounded snapshot. */
+export async function finishedOrderRows(db: Db, tenantId: string, branchId: string, businessDate: string) {
+  const where = inTenant(orders, tenantId, eq(orders.branchId, branchId), eq(orders.businessDate, businessDate), inArray(orders.status, ['completed', 'cancelled']))
+  const ids = db.select({ id: orders.id }).from(orders).where(where).orderBy(desc(finishedAt), desc(orders.id)).limit(FINISHED_LIMIT)
+  const [rows, lines, payments] = await db.batch([
+    selectOrders(db).where(where).orderBy(desc(finishedAt), desc(orders.id)).limit(FINISHED_LIMIT),
+    db.select().from(orderLines).where(inTenant(orderLines, tenantId, inArray(orderLines.orderId, ids))).orderBy(asc(orderLines.orderId), asc(orderLines.position)),
+    selectPayments(db).where(inTenant(counterPayments, tenantId, inArray(counterPayments.orderId, ids))),
+  ])
+  return { rows, lines, payments }
+}
+
 // --- The customer's orders (6.5, D106) ---
 
 const IN_PROGRESS: OrderStatus[] = ['awaiting_payment', 'preparing', 'ready']
@@ -229,6 +243,23 @@ export function findCustomerOrdersInProgress(db: Db, tenantId: string, customerI
 export function findCustomerOrdersPast(db: Db, tenantId: string, customerId: string, page: PageQuery): Promise<{ rows: OrderRow[], total: number }> {
   const where = inTenant(orders, tenantId, eq(orders.customerId, customerId), inArray(orders.status, FINISHED))
   return readPage(db, selectOrders(db).where(where).orderBy(...newestFirst).$dynamic(), db.select({ total: count() }).from(orders).where(where), page)
+}
+
+/** Current and past orders, page total and displayed item counts from the same transaction. */
+export async function customerOrderRows(db: Db, tenantId: string, customerId: string, limit: number, page: PageQuery) {
+  const active = inTenant(orders, tenantId, eq(orders.customerId, customerId), inArray(orders.status, IN_PROGRESS))
+  const past = inTenant(orders, tenantId, eq(orders.customerId, customerId), inArray(orders.status, FINISHED))
+  const activeIds = db.select({ id: orders.id }).from(orders).where(active).orderBy(...newestFirst).limit(limit)
+  const pastIds = db.select({ id: orders.id }).from(orders).where(past).orderBy(...newestFirst).limit(page.pageSize).offset((page.page - 1) * page.pageSize)
+  const [inProgress, rows, [total], counts] = await db.batch([
+    selectOrders(db).where(active).orderBy(...newestFirst).limit(limit),
+    selectOrders(db).where(past).orderBy(...newestFirst).limit(page.pageSize).offset((page.page - 1) * page.pageSize),
+    db.select({ n: count() }).from(orders).where(past),
+    db.select({ orderId: orderLines.orderId, count: sql<number>`sum(${orderLines.quantity})`.mapWith(Number) }).from(orderLines)
+      .where(inTenant(orderLines, tenantId, or(inArray(orderLines.orderId, activeIds), inArray(orderLines.orderId, pastIds))))
+      .groupBy(orderLines.orderId),
+  ])
+  return { inProgress, past: { rows, total: total?.n ?? 0 }, counts: new Map(counts.map(row => [row.orderId, row.count])) }
 }
 
 /** Units per order (the sum of the lines' quantities). */
@@ -257,6 +288,17 @@ export function linesOf(db: Db, tenantId: string, orderId: string): Promise<Orde
 export async function linesOfOrders(db: Db, tenantId: string, orderIds: string[]): Promise<OrderLineRow[]> {
   const rows = await readInChunks(orderIds, ids => db.select().from(orderLines).where(inTenant(orderLines, tenantId, inArray(orderLines.orderId, ids))))
   return rows.sort((a, b) => a.position - b.position)
+}
+
+/** Queries shared by tracking, counter details and report details; execute together in one batch. */
+export function orderDetailQueries(db: Db, tenantId: string, id: string, scope: { customerId?: string, branchId?: string } = {}) {
+  const where = and(byId(orders, tenantId, id), scope.customerId ? eq(orders.customerId, scope.customerId) : undefined, scope.branchId ? eq(orders.branchId, scope.branchId) : undefined)
+  const ownId = db.select({ id: orders.id }).from(orders).where(where)
+  return [
+    selectOrders(db).where(where).limit(1),
+    db.select().from(orderLines).where(inTenant(orderLines, tenantId, inArray(orderLines.orderId, ownId))).orderBy(asc(orderLines.position)),
+    selectPayments(db).where(inTenant(counterPayments, tenantId, inArray(counterPayments.orderId, ownId))),
+  ] as const
 }
 
 // --- The counter (6.3, D101) ---
@@ -372,7 +414,7 @@ const rateColumns = { perUsd: exchangeRates.perUsd, effectiveFrom: exchangeRates
 function currentRateQuery(db: Db, tenantId: string, now: Date) {
   return db.select(rateColumns).from(exchangeRates).innerJoin(user, eq(user.id, exchangeRates.setBy))
     .where(inTenant(exchangeRates, tenantId, eq(exchangeRates.currency, 'KHR'), lte(exchangeRates.effectiveFrom, now)))
-    .orderBy(desc(exchangeRates.effectiveFrom))
+    .orderBy(desc(exchangeRates.effectiveFrom), desc(exchangeRates.id))
     .limit(1)
 }
 
@@ -405,7 +447,7 @@ export function counterContext(db: Db, tenantId: string, branchId: string, now: 
 export function rateHistory(db: Db, tenantId: string, limit: number): Promise<RateRow[]> {
   return db.select(rateColumns).from(exchangeRates).innerJoin(user, eq(user.id, exchangeRates.setBy))
     .where(inTenant(exchangeRates, tenantId, eq(exchangeRates.currency, 'KHR')))
-    .orderBy(desc(exchangeRates.effectiveFrom))
+    .orderBy(desc(exchangeRates.effectiveFrom), desc(exchangeRates.id))
     .limit(limit)
 }
 
@@ -483,4 +525,23 @@ export function moveOrdersStatement(db: Db, fromCustomerId: string, toCustomerId
 /** Due unpaid orders, for the refusal after an atomic checkout guard rolls back. */
 export async function countUnpaid(db: Db, tenantId: string, customerId: string, now: Date): Promise<number> {
   return db.$count(orders, dueUnpaid(tenantId, customerId, now))
+}
+
+/** Cash payment's strict deadline, checked last in its atomic batch (after the status moves). */
+export function requirePaymentDeadline(db: Db, tenantId: string, orderId: string, now: SQL<number>): Statement {
+  return requireCount(db, db.$count(orders, inTenant(orders, tenantId, eq(orders.id, orderId), gt(orders.paymentDueAt, now))), 1)
+}
+
+/** QR generation/reuse is only authorized by the same unpaid order version and a live deadline. */
+export function requirePayableOrder(db: Db, tenantId: string, branchId: string, orderId: string, version: number, now: SQL<number>): Statement {
+  return requireCount(db, db.$count(orders, inTenant(orders, tenantId, eq(orders.id, orderId), eq(orders.branchId, branchId), eq(orders.version, version), eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now))), 1)
+}
+
+/** Capture the indexed current rate before validation, then recheck the rate in force at commit. */
+export function captureExchangeRateGuard(db: Db, tenantId: string, now: SQL<number>) {
+  const latest = db.select({ entry: sql<string>`json_array(${exchangeRates.id}, ${exchangeRates.perUsd}, ${exchangeRates.effectiveFrom})` })
+    .from(exchangeRates)
+    .where(inTenant(exchangeRates, tenantId, eq(exchangeRates.currency, 'KHR'), lte(exchangeRates.effectiveFrom, now)))
+    .orderBy(desc(exchangeRates.effectiveFrom), desc(exchangeRates.id)).limit(1)
+  return captureSnapshotGuard(db, sql<string>`coalesce((${latest}), 'null')`)
 }

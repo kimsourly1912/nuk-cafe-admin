@@ -11,7 +11,6 @@ import { toIso } from '#server/utils/time'
 import { findBranchClock, listActiveBranchClocks } from '#server/features/branches'
 import { parseInput } from '#server/utils/validation'
 import { orderNotFound } from './orders.errors'
-import * as orderRepo from './orders.repository'
 import { csvFilename, itemsCsv, ordersCsv, summaryCsv } from './reports.csv'
 import { itemsMessage, periodText, plainText, summaryMessage } from './reports.message'
 import * as repo from './reports.repository'
@@ -53,15 +52,9 @@ export async function reportSummary(db: Db, tenantId: string, query: ReportPerio
   const includesToday = query.from <= today && today <= query.to
   const dates = { tenantId, branchId: ctx.branch.id, from: query.from, to: query.to }
 
-  const [payments, refunds, previousPaidSalesMinor, paidItems, placed, cancelled, current] = await Promise.all([
-    repo.paymentsCollected(db, ctx.range, paymentWindows(query, ctx.branch.timeZone)),
-    repo.refundsReturned(db, ctx.range),
-    repo.paidSalesTotal(db, { tenantId, branchId: ctx.branch.id, ...previous }),
-    repo.itemTotals(db, ctx.range, 'collected'),
-    repo.ordersPlaced(db, dates),
-    repo.cancelledUnpaid(db, dates),
-    includesToday ? repo.currentCounts(db, tenantId, ctx.branch.id, now) : Promise.resolve(null),
-  ])
+  const { payments, refunds, previousPaidSalesMinor, paidItems, placed, cancelled, current } = await repo.summaryRows(
+    db, ctx.range, paymentWindows(query, ctx.branch.timeZone), { tenantId, branchId: ctx.branch.id, ...previous }, dates, includesToday ? now : null,
+  )
 
   const salesMinor = payments.reduce((sum, p) => sum + p.amountMinor, 0)
   const paidOrders = payments.reduce((sum, p) => sum + p.orders, 0)
@@ -95,10 +88,7 @@ export async function reportSummary(db: Db, tenantId: string, query: ReportPerio
 /** Sales by item: paid line totals and refunded ones per item, filtered, sorted, a page of them. */
 export async function itemSalesReport(db: Db, tenantId: string, query: ItemSalesQuery, now = new Date()): Promise<ItemSalesReport> {
   const ctx = await context(db, tenantId, query, now)
-  const [paid, refunded] = await Promise.all([
-    repo.itemTotals(db, ctx.range, 'collected'),
-    repo.itemTotals(db, ctx.range, 'returned'),
-  ])
+  const [paid, refunded] = await repo.itemSalesSnapshot(db, ctx.range)
   const all = itemSalesRows(paid, refunded)
   const { rows, totals } = itemSalesTable(all, query)
   return {
@@ -137,15 +127,9 @@ export interface OrderDetailOptions {
 /** One order as sold: its lines, payment, and every recorded step with who took it. */
 export async function orderHistoryDetail(db: Db, tenantId: string, id: string, options: OrderDetailOptions = {}): Promise<OrderHistoryDetail> {
   const { branchId } = options
-  const order = await orderRepo.findOrder(db, tenantId, id)
-  if (!order || (branchId !== undefined && order.branchId !== branchId)) throw orderNotFound()
-  const [branch, lines, [payment], events, returnedBy] = await Promise.all([
-    findBranchClock(db, tenantId, order.branchId),
-    orderRepo.linesOf(db, tenantId, id),
-    orderRepo.paymentsOf(db, tenantId, [id]),
-    repo.eventsOf(db, tenantId, id),
-    repo.returnedByName(db, tenantId, id),
-  ])
+  const { order, lines, payment, events, returnedBy } = await repo.orderDetailRows(db, tenantId, id, { branchId })
+  if (!order) throw orderNotFound()
+  const branch = { id: order.branchId, name: order.branchName, timeZone: order.branchTimeZone }
   return {
     id: order.id,
     branch: branch!,
@@ -212,7 +196,7 @@ export async function summaryExport(db: Db, tenantId: string, query: ReportPerio
 
 export async function itemSalesExport(db: Db, tenantId: string, query: ItemSalesQuery, now = new Date()): Promise<CsvFile> {
   const ctx = await context(db, tenantId, query, now)
-  const [paid, refunded] = await Promise.all([repo.itemTotals(db, ctx.range, 'collected'), repo.itemTotals(db, ctx.range, 'returned')])
+  const [paid, refunded] = await repo.itemSalesSnapshot(db, ctx.range)
   const { rows } = itemSalesTable(itemSalesRows(paid, refunded), query)
   return { filename: csvFilename(ctx.branch.name, query, 'items'), csv: itemsCsv(rows) }
 }
@@ -257,7 +241,7 @@ export async function reportMessage(db: Db, tenantId: string, input: ReportMessa
   }
   const query = parseInput(itemSalesQuerySchema, input.query)
   const ctx = await context(db, tenantId, query, now)
-  const [paid, refunded] = await Promise.all([repo.itemTotals(db, ctx.range, 'collected'), repo.itemTotals(db, ctx.range, 'returned')])
+  const [paid, refunded] = await repo.itemSalesSnapshot(db, ctx.range)
   const all = itemSalesRows(paid, refunded)
   const { rows } = itemSalesTable(all, query)
   const categoryName = query.categoryId ? categoriesOf(all).find(c => c.id === query.categoryId)?.name ?? null : null

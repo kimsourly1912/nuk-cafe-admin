@@ -301,3 +301,5 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D263](decisions.md#d263-interaction-motion-rows-that-come-and-go-and-feedback-as-it-appears-2026-11-05) | Interaction motion: rows that come and go (`useListTransition`), errors and alerts easing in, count bump, button press (2026-11-05) |
 
 | [D264](decisions.md#d264-leave-animations-rolling-quantity-staggered-clear-and-animated-checkboxes-2026-11-05) | Leave animations (patched `UFormField`, `FormErrorAlert`), rolling quantity, staggered "Clear order", checkbox/radio pop and tick (2026-11-05) |
+
+| [D265](decisions.md#d265-server-p2-reliability-fixes-share-one-review-2026-11-06) | Server P2 payment/QR commit guards, consistent reads, confirmation attempts and promotion retries, 2026-11-06 |

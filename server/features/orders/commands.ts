@@ -28,7 +28,7 @@ export interface OrderCommand {
   /** Whether this actor may act on the order; any other is 404, like an unknown id. */
   owns: (order: repo.OrderRow) => boolean
   /** The refusal for an order that changed since the screen read it (it's re-read first). */
-  changed: (order: repo.OrderRow) => Error
+  changed: (order: repo.OrderRow) => Error | Promise<Error>
 }
 
 export interface OrderStep {
@@ -37,6 +37,8 @@ export interface OrderStep {
   statements?: Statement[]
   reason?: { reason: CancelReason, note: string | null }
   metadata?: Record<string, unknown>
+  /** Conditions that must hold at the final statement, including cash payment time/rate. */
+  guards?: Statement[]
 }
 
 /** Thrown by a guard inside the batch; replaced by the order's state now, read afresh. */
@@ -56,7 +58,7 @@ export async function runOrderCommand(db: Db, command: OrderCommand, plan: (orde
       async () => {
         const order = await repo.findOrder(db, actor.tenantId, orderId)
         if (!order || !command.owns(order)) throw orderNotFound()
-        if (order.version !== command.version) throw command.changed(order)
+        if (order.version !== command.version) throw await command.changed(order)
         const step = await plan(order)
         const change: repo.OrderChange = { tenantId: order.tenantId, orderId, fromStatus: order.status, toStatus: step.to, version: order.version, at: now }
         return {
@@ -82,6 +84,7 @@ export async function runOrderCommand(db: Db, command: OrderCommand, plan: (orde
               branchId: order.branchId,
               metadata: { from: order.status, to: step.to, ...step.metadata },
             }),
+            ...(step.guards ?? []),
           ],
           response: { orderId },
         }
@@ -94,7 +97,7 @@ export async function runOrderCommand(db: Db, command: OrderCommand, plan: (orde
     // unique index, the last guard). Say what it is now.
     if (error instanceof OrderMovedOn || isStaleWrite(error) || isUniqueViolation(error)) {
       const current = await repo.findOrder(db, actor.tenantId, orderId)
-      if (current) throw command.changed(current)
+      if (current) throw await command.changed(current)
     }
     throw error
   }

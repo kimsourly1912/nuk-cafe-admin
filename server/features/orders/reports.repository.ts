@@ -8,6 +8,7 @@ import type { Db } from '#server/utils/batch'
 import { firstRow, inTenant, readPage } from '#server/utils/query'
 import { counterPayments, orderEvents, orderLines, orders } from './orders.schema'
 import type { ItemTotalsRow } from './reports.rules'
+import { orderDetailQueries } from './orders.repository'
 
 /** The reports' SQL (step 8.1, D110). Money is summed as integers in SQL, never as floats. */
 
@@ -15,35 +16,35 @@ import type { ItemTotalsRow } from './reports.rules'
 export interface Range { tenantId: string, branchId: string, start: Date, end: Date }
 
 /** At most one row per method/window, independent of sales volume. One JSON bind respects D1's limit. */
-export async function paymentsCollected(db: Db, range: Range, windows: { start: number, end: number }[]): Promise<{ method: PaymentMethod, amountMinor: number, amountKhr: number | null, collectedAt: Date, orders: number }[]> {
-  const rows = await db.select({
+function paymentsCollectedQuery(db: Db, range: Range, windows: { start: number, end: number }[]) {
+  return db.select({
     method: counterPayments.method,
     amountMinor: sql<number>`sum(${counterPayments.amountMinor})`,
     amountKhr: sql<number | null>`sum(${counterPayments.amountKhr})`,
-    collectedAt: sql<number>`min(${counterPayments.collectedAt})`,
+    collectedAt: sql<Date>`min(${counterPayments.collectedAt})`.mapWith(value => new Date(Number(value))),
     orders: count(),
   })
     .from(counterPayments)
     .innerJoin(sql`json_each(${JSON.stringify(windows)}) as bucket`, sql`${counterPayments.collectedAt} >= json_extract(bucket.value, '$.start') and ${counterPayments.collectedAt} < json_extract(bucket.value, '$.end')`)
     .where(inTenant(counterPayments, range.tenantId, eq(counterPayments.branchId, range.branchId), gte(counterPayments.collectedAt, range.start), lt(counterPayments.collectedAt, range.end)))
     .groupBy(counterPayments.method, sql`bucket.key`)
-  return rows.map(row => ({ ...row, collectedAt: new Date(row.collectedAt) }))
+}
+
+export function paymentsCollected(db: Db, range: Range, windows: { start: number, end: number }[]) {
+  return paymentsCollectedQuery(db, range, windows)
 }
 
 /** Paid sales in `[start, end)` as one sum (the previous period's, for comparison). */
-export async function paidSalesTotal(db: Db, range: Range): Promise<number> {
-  const row = await firstRow(db.select({ total: sql<number>`coalesce(sum(${counterPayments.amountMinor}), 0)` })
+function paidSalesTotalQuery(db: Db, range: Range) {
+  return db.select({ total: sql<number>`coalesce(sum(${counterPayments.amountMinor}), 0)` })
     .from(counterPayments)
-    .where(inTenant(counterPayments, range.tenantId, eq(counterPayments.branchId, range.branchId), gte(counterPayments.collectedAt, range.start), lt(counterPayments.collectedAt, range.end))))
-  return row?.total ?? 0
+    .where(inTenant(counterPayments, range.tenantId, eq(counterPayments.branchId, range.branchId), gte(counterPayments.collectedAt, range.start), lt(counterPayments.collectedAt, range.end)))
 }
 
-/** Money returned in `[start, end)`: the full payment of each refunded order. */
-export async function refundsReturned(db: Db, range: Range): Promise<{ amountMinor: number, orders: number }> {
-  const row = await firstRow(db.select({ amountMinor: sql<number>`coalesce(sum(${counterPayments.amountMinor}), 0)`, orders: count() })
+function refundsReturnedQuery(db: Db, range: Range) {
+  return db.select({ amountMinor: sql<number>`coalesce(sum(${counterPayments.amountMinor}), 0)`, orders: count() })
     .from(counterPayments)
-    .where(inTenant(counterPayments, range.tenantId, eq(counterPayments.branchId, range.branchId), gte(counterPayments.returnedAt, range.start), lt(counterPayments.returnedAt, range.end))))
-  return { amountMinor: row?.amountMinor ?? 0, orders: row?.orders ?? 0 }
+    .where(inTenant(counterPayments, range.tenantId, eq(counterPayments.branchId, range.branchId), gte(counterPayments.returnedAt, range.start), lt(counterPayments.returnedAt, range.end)))
 }
 
 /**
@@ -51,7 +52,7 @@ export async function refundsReturned(db: Db, range: Range): Promise<{ amountMin
  * (`at` = returned_at) in `[start, end)`. SQLite takes the bare name and category columns from the
  * row holding `max(placed_at)`: the item's latest sale.
  */
-export function itemTotals(db: Db, range: Range, at: 'collected' | 'returned'): Promise<ItemTotalsRow[]> {
+function itemTotalsQuery(db: Db, range: Range, at: 'collected' | 'returned') {
   const time = at === 'collected' ? counterPayments.collectedAt : counterPayments.returnedAt
   return db.select({
     itemId: orderLines.itemId,
@@ -74,15 +75,15 @@ export interface DateRange { tenantId: string, branchId: string, from: string, t
 const placedIn = (range: DateRange) => inTenant(orders, range.tenantId, eq(orders.branchId, range.branchId), gte(orders.businessDate, range.from), lte(orders.businessDate, range.to))
 
 /** Orders placed in the business dates, any outcome. */
-export function ordersPlaced(db: Db, range: DateRange): Promise<number> {
-  return db.$count(orders, placedIn(range))
+function ordersPlacedQuery(db: Db, range: DateRange) {
+  return db.select({ n: count() }).from(orders).where(placedIn(range))
 }
 
 /**
  * Orders placed in the business dates and cancelled without a payment, by who cancelled: nobody
  * (the 30-minute expiry), the customer, or someone at the cafe.
  */
-export function cancelledUnpaid(db: Db, range: DateRange): Promise<{ by: 'system' | 'customer' | 'cafe', n: number }[]> {
+function cancelledUnpaidQuery(db: Db, range: DateRange) {
   const by = sql<'system' | 'customer' | 'cafe'>`case when ${orderEvents.actorId} is null then 'system' when ${orderEvents.actorId} = ${orders.customerId} then 'customer' else 'cafe' end`
   return db.select({ by, n: count() })
     .from(orders)
@@ -93,16 +94,36 @@ export function cancelledUnpaid(db: Db, range: DateRange): Promise<{ by: 'system
 }
 
 /** Live counts of the branch's orders in play (waiting ones only while still due). */
-export function currentCounts(db: Db, tenantId: string, branchId: string, now: Date): Promise<{ status: OrderStatus, n: number }[]> {
+function currentCountsQuery(db: Db, tenantId: string, branchId: string, now: Date, enabled = true) {
   return db.select({ status: orders.status, n: count() })
     .from(orders)
     .where(inTenant(
       orders,
       tenantId,
       eq(orders.branchId, branchId),
+      enabled ? undefined : sql`0`,
       or(inArray(orders.status, ['preparing', 'ready']), and(eq(orders.status, 'awaiting_payment'), gt(orders.paymentDueAt, now))),
     ))
     .groupBy(orders.status)
+}
+
+/** One transactional read of every monetary/count input to a summary. Uses the payment date indexes. */
+export async function summaryRows(db: Db, range: Range, windows: { start: number, end: number }[], previous: Range, dates: DateRange, currentAt: Date | null) {
+  const [payments, [refunds], [previousPaid], paidItems, [placed], cancelled, current] = await db.batch([
+    paymentsCollectedQuery(db, range, windows),
+    refundsReturnedQuery(db, range),
+    paidSalesTotalQuery(db, previous),
+    itemTotalsQuery(db, range, 'collected'),
+    ordersPlacedQuery(db, dates),
+    cancelledUnpaidQuery(db, dates),
+    currentCountsQuery(db, range.tenantId, range.branchId, currentAt ?? range.start, currentAt !== null),
+  ])
+  return { payments, refunds: refunds ?? { amountMinor: 0, orders: 0 }, previousPaidSalesMinor: previousPaid?.total ?? 0, paidItems, placed: placed?.n ?? 0, cancelled, current: currentAt ? current : null }
+}
+
+/** Collected and returned item totals in one snapshot, shared by page, CSV and Telegram. */
+export async function itemSalesSnapshot(db: Db, range: Range): Promise<[ItemTotalsRow[], ItemTotalsRow[]]> {
+  return db.batch([itemTotalsQuery(db, range, 'collected'), itemTotalsQuery(db, range, 'returned')])
 }
 
 // --- Order history ---
@@ -182,7 +203,7 @@ export interface EventRow {
 }
 
 /** An order's steps, oldest first, with who took each (null: the system). */
-export function eventsOf(db: Db, tenantId: string, orderId: string): Promise<EventRow[]> {
+function eventsQuery(db: Db, tenantId: string, orderId: string) {
   return db.select({
     at: orderEvents.at,
     fromStatus: orderEvents.fromStatus,
@@ -199,11 +220,28 @@ export function eventsOf(db: Db, tenantId: string, orderId: string): Promise<Eve
 }
 
 /** Who returned an order's money, when it was. */
-export async function returnedByName(db: Db, tenantId: string, orderId: string): Promise<string | null> {
-  const row = await firstRow(db.select({ name: user.name }).from(counterPayments)
+function returnedByQuery(db: Db, tenantId: string, orderId: string) {
+  return db.select({ name: user.name }).from(counterPayments)
     .innerJoin(user, eq(user.id, counterPayments.returnedBy))
-    .where(inTenant(counterPayments, tenantId, eq(counterPayments.orderId, orderId))))
-  return row?.name ?? null
+    .where(inTenant(counterPayments, tenantId, eq(counterPayments.orderId, orderId))).limit(1)
+}
+
+export function eventsOf(db: Db, tenantId: string, orderId: string): Promise<EventRow[]> {
+  return eventsQuery(db, tenantId, orderId)
+}
+
+export async function returnedByName(db: Db, tenantId: string, orderId: string): Promise<string | null> {
+  return (await returnedByQuery(db, tenantId, orderId))[0]?.name ?? null
+}
+
+/** One scoped snapshot for customer tracking, counter history and report detail. */
+export async function orderDetailRows(db: Db, tenantId: string, orderId: string, scope: { customerId?: string, branchId?: string } = {}) {
+  const [rows, lines, payments, events, returned] = await db.batch([
+    ...orderDetailQueries(db, tenantId, orderId, scope),
+    eventsQuery(db, tenantId, orderId),
+    returnedByQuery(db, tenantId, orderId),
+  ])
+  return { order: rows[0], lines, payment: payments[0], events, returnedBy: returned[0]?.name ?? null }
 }
 
 /**

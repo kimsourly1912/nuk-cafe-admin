@@ -8,8 +8,9 @@ import { findBranchClock } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
 import { buildKhqr, KHQR_LIMITS } from './khqr'
+import { paymentClock } from './checkout.repository'
 import * as khqrRepo from './khqr.repository'
-import { khqrChargeInvalid, khqrNotSetUp, khqrSettingsChanged, noExchangeRate, orderChanged, orderNotFound, paymentExpired } from './orders.errors'
+import { khqrChargeInvalid, khqrGenerationChanged, khqrNotSetUp, khqrSettingsChanged, noExchangeRate, orderChanged, orderNotFound, paymentExpired } from './orders.errors'
 import * as repo from './orders.repository'
 
 /**
@@ -88,7 +89,11 @@ const MIN_REMAINING_MS = 60_000
  * until the order's time to pay is over. Riel at the current rate, rounded up to ៛100 as cash riel.
  * Two cashiers at once may make two: both are this order's, and either can be paid.
  */
-export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: string, input: CreateKhqrInput, now = new Date()): Promise<KhqrCharge> {
+export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: string, input: CreateKhqrInput, now?: Date): Promise<KhqrCharge> {
+  const clock = await paymentClock(db, now)
+  now = clock.at
+  const settingsGuard = await khqrRepo.captureSettingsGuard(db, actor.tenantId)
+  const rateGuard = input.currency === 'KHR' ? await repo.captureExchangeRateGuard(db, actor.tenantId, clock.now) : undefined
   const order = await repo.findOrder(db, actor.tenantId, orderId)
   if (!order || order.branchId !== actor.branchId) throw orderNotFound()
   if (order.status !== 'awaiting_payment') throw orderChanged(order.pickupNumber, order.status)
@@ -99,12 +104,17 @@ export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: stri
   if (!settings.currencies.includes(input.currency)) throw khqrNotSetUp(input.currency)
 
   const open = await khqrRepo.findOpenCharge(db, actor.tenantId, orderId, input.currency, new Date(now.getTime() + MIN_REMAINING_MS))
-  if (open && open.accountId === settings.accountId && open.merchantName === settings.merchantName) return toCharge(open)
+  const guards = [settingsGuard.guard, ...(rateGuard ? [rateGuard.guard] : []), repo.requirePayableOrder(db, actor.tenantId, actor.branchId, orderId, order.version, clock.now)]
+  const changed = () => khqrGenerationChanged(order.pickupNumber)
+  if (open && open.accountId === settings.accountId && open.merchantName === settings.merchantName) {
+    await runBatch(db, [...guards, khqrRepo.requireLiveCharge(db, actor.tenantId, open.id, clock.now, MIN_REMAINING_MS)], changed)
+    return toCharge(open)
+  }
 
   let amount = order.totalMinor
   let khrPerUsd: number | null = null
   if (input.currency === 'KHR') {
-    const rate = await repo.currentRate(db, actor.tenantId, now)
+    const rate = await repo.currentRate(db, actor.tenantId, await clock.readNow())
     if (!rate) throw noExchangeRate()
     khrPerUsd = rate.perUsd
     amount = toRiel(order.totalMinor, rate.perUsd)
@@ -141,7 +151,7 @@ export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: stri
     expiresAt,
     createdBy: actor.userId,
   }
-  await db.batch([khqrRepo.insertChargeStatement(db, charge)])
+  await runBatch(db, [khqrRepo.insertChargeStatement(db, charge), ...guards], changed)
   const { tenantId: _, createdBy: __, ...row } = charge
   return toCharge(row)
 }

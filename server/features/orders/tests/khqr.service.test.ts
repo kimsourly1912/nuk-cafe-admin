@@ -6,12 +6,13 @@ import { updateBranchSettings } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { createCategory, createItem, publishItem } from '#server/features/menu'
 import { auditEvents } from '#server/features/platform/platform.schema'
-import { listCounterQueue, payOrder, setExchangeRate } from '#server/features/orders/counter.service'
+import { cancelOrderAtCounter, listCounterQueue, payOrder, setExchangeRate } from '#server/features/orders/counter.service'
 import { createKhqrCharge, getKhqrSettings, saveKhqrSettings } from '#server/features/orders/khqr.service'
 import { counterPayments, khqrCharges } from '#server/features/orders/orders.schema'
 import { placeOrder } from '#server/features/orders/orders.service'
 import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
+import { interleaved } from '#server/tests/support/interleave'
 import type { Db } from '#server/utils/batch'
 import { newId } from '#server/utils/ids'
 import { parseInput } from '#server/utils/validation'
@@ -205,5 +206,56 @@ describe('paying with the QR shown', () => {
     await expectApiError(() => payOrder(db, cashier, orderId, { version: 1, method: 'khqr', chargeId: 'missing-1', reference: null }, crypto.randomUUID(), monday('12:05')), 409, 'KHQR_CHARGE_INVALID')
     expect(await db.select().from(counterPayments).where(eq(counterPayments.orderId, orderId))).toEqual([])
     expect((await db.select().from(khqrCharges)).length).toBe(1)
+  })
+})
+
+describe('QR authorization at commit', () => {
+  beforeEach(async () => {
+    await saveKhqrSettings(db, owner, SETTINGS, monday('11:00'))
+  })
+
+  for (const reuse of [false, true]) {
+    it(`refuses cancellation after validation (${reuse ? 'existing' : 'new'} QR)`, async () => {
+      const id = await place()
+      if (reuse) await qr(id)
+      const before = await db.select().from(khqrCharges)
+      const on = interleaved(db, () => cancelOrderAtCounter(db, cashier, id, { version: 1, reason: 'customer_changed_mind', note: null, returnMethod: null }, crypto.randomUUID(), monday('12:03')))
+      await expectApiError(() => createKhqrCharge(on, cashier, id, { currency: 'USD' }, monday('12:04')), 409, 'ORDER_CHANGED')
+      expect(await db.select().from(khqrCharges)).toEqual(before)
+    })
+
+    it(`refuses receiving settings changed after validation (${reuse ? 'existing' : 'new'} QR)`, async () => {
+      const id = await place()
+      if (reuse) await qr(id)
+      const before = await db.select().from(khqrCharges)
+      const settings = await getKhqrSettings(db, TEST_TENANT)
+      const on = interleaved(db, () => saveKhqrSettings(db, owner, { ...SETTINGS, version: settings.version, accountId: 'changed@aclb' }, monday('12:03')))
+      await expectApiError(() => createKhqrCharge(on, cashier, id, { currency: 'USD' }, monday('12:04')), 409, 'ORDER_CHANGED')
+      expect(await db.select().from(khqrCharges)).toEqual(before)
+    })
+  }
+
+  it('refuses a riel rate changed after validation and can retry with the new rate', async () => {
+    const id = await place()
+    await setExchangeRate(db, owner, { khrPerUsd: 4100 }, monday('12:01'))
+    const on = interleaved(db, () => setExchangeRate(db, owner, { khrPerUsd: 4200 }, monday('12:03')))
+    await expectApiError(() => createKhqrCharge(on, cashier, id, { currency: 'KHR' }, monday('12:04')), 409, 'ORDER_CHANGED')
+    expect(await db.select().from(khqrCharges)).toHaveLength(0)
+    expect((await qr(id, 'KHR', monday('12:04'))).amount).toBe(toRiel(875, 4200))
+  })
+
+  it('refuses a QR after pay-by is crossed while its insert was waiting', async () => {
+    const id = await place()
+    const on = interleaved(db, () => new Promise(resolve => setTimeout(resolve, 30)))
+    await expectApiError(() => createKhqrCharge(on, cashier, id, { currency: 'USD' }, new Date(monday('12:30').getTime() - 1)), 409, 'ORDER_CHANGED')
+    expect(await db.select().from(khqrCharges)).toHaveLength(0)
+  })
+
+  it('refuses reuse if its remaining minute is crossed before the guarded read', async () => {
+    const id = await place()
+    const existing = await qr(id)
+    const on = interleaved(db, () => new Promise(resolve => setTimeout(resolve, 30)))
+    await expectApiError(() => createKhqrCharge(on, cashier, id, { currency: 'USD' }, new Date(monday('12:16').getTime() - 1)), 409, 'ORDER_CHANGED')
+    expect((await db.select().from(khqrCharges)).map(charge => charge.id)).toEqual([existing.id])
   })
 })

@@ -123,3 +123,44 @@ describe('wrong passwords', () => {
     expect(checked).toBe(false)
   })
 })
+
+describe('parallel confirmation attempts', () => {
+  it('reserves at most five checks and ends only the attacked device', async () => {
+    const device = await signIn()
+    const other = await signIn()
+    let checked = 0
+    const attempts = Array.from({ length: 12 }, () => confirmIdentity(db, device.user, device.sessionId, { password: 'wrong' }, {
+      verifyPassword: async () => {
+        checked++
+        return false
+      },
+    }))
+    const results = await Promise.allSettled(attempts)
+    expect(results.every(result => result.status === 'rejected')).toBe(true)
+    expect(checked).toBeGreaterThan(0)
+    expect(checked).toBeLessThanOrEqual(MAX_CONFIRM_FAILURES)
+    expect(await failuresOf(device.sessionId)).toBeUndefined()
+    expect((await auth.api.getSession({ headers: other.cookies }))?.session.id).toBe(other.sessionId)
+  })
+
+  it('does not report confirmation after the session was revoked during the password check', async () => {
+    const device = await signIn()
+    await expectApiError(() => confirmIdentity(db, device.user, device.sessionId, { password: PASSWORD }, {
+      verifyPassword: async () => {
+        await db.delete(session).where(eq(session.id, device.sessionId))
+        return true
+      },
+    }), 401, 'UNAUTHENTICATED')
+  })
+
+  it('does not confirm a session that expires during verification', async () => {
+    const device = await signIn()
+    await expectApiError(() => confirmIdentity(db, device.user, device.sessionId, { password: PASSWORD }, {
+      verifyPassword: async () => {
+        await db.update(session).set({ expiresAt: new Date() }).where(eq(session.id, device.sessionId))
+        await new Promise(resolve => setTimeout(resolve, 10))
+        return true
+      },
+    }), 401, 'UNAUTHENTICATED')
+  })
+})

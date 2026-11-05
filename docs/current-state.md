@@ -1,10 +1,10 @@
 # Current-state navigation
 
-Snapshot reviewed against main `ba4f2c2` and GitHub's PR list, 2026-11-05. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
+Snapshot reviewed against main `26b0da9` and GitHub's PR list, 2026-11-06. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
 
 ## In review
 
-No open PRs on 2026-11-05.
+- **Server P2 reliability fixes (D265, 2026-11-06):** branch `codex/server-p2-reliability` from main `26b0da9`. Owner requested B3–B7 in one PR: payment/QR commit guards, consistent order/report reads, atomic confirmation attempts and promotion-scoped idempotency. Local lint/typecheck/audit and 2,531 unit/server tests passed (1 existing skip); 14 guard-removal checks detected their missing protection. E2e build passed, but local Chromium is blocked by sandbox socket permissions; full GitHub browser CI pending. No merge or deployment. [Progress](progress.md#server-p2-reliability-fixes-d265-2026-11-06).
 
 ## Waiting on the owner
 
