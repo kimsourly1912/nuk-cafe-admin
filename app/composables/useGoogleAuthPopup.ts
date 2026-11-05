@@ -1,8 +1,9 @@
+import { ofetch } from 'ofetch'
 import { googlePopupChannel, googleSignInError } from '~/utils/google-sign-in'
 import type { SessionSurface } from './useSessionIdentity'
 
 /** The popup carries OAuth; only the still-mounted initiating form completes login. */
-export function useGoogleAuthPopup({ start, finish, surface }: { start: (from?: unknown, popupId?: string) => Promise<string>, finish: () => Promise<void>, surface: SessionSurface }) {
+export function useGoogleAuthPopup({ start, finish, surface }: { start: (popupId: string) => Promise<string>, finish: () => Promise<void>, surface: SessionSurface }) {
   const identity = useSessionIdentity()
   const assertActive = useAuthCompletion()
   const pending = ref(false)
@@ -13,7 +14,7 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (from?: 
     if (generation !== announcingGeneration) cancel?.()
   }, { flush: 'sync' })
 
-  async function open(from?: unknown) {
+  async function open() {
     const startedIn = identity.generation.value
     const popupId = crypto.randomUUID()
     const channel = new BroadcastChannel(googlePopupChannel(popupId))
@@ -53,7 +54,7 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (from?: 
       timeout = setTimeout(() => reject(new ApiError('Google sign-in timed out. Try again.', { kind: 'business', status: 0 })), 180_000)
     })
     try {
-      const initiation = start(from, popupId).then((destination) => {
+      const initiation = start(popupId).then((destination) => {
         assertActive()
         identity.assertCurrent(startedIn)
         if (!popup.closed) popup.location.replace(destination)
@@ -62,9 +63,12 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (from?: 
       assertActive()
       identity.assertCurrent(startedIn)
       if (step === 'two-factor') return step
-      const session = await apiFetch<{ user: { isAnonymous?: boolean } } | null>('/auth/get-session')
+      // The callback already set this browser's cookie. Another read on this page may observe the
+      // new account first (a phone tab returning to view refreshes stale data): that is this
+      // sign-in, not a competing one. The server's session decides, not the identity generation,
+      // so this read is not discarded by that observation (like `useAuthRequest`'s auth writes).
+      const session = await readSession()
       assertActive()
-      identity.assertCurrent(startedIn)
       if (!session?.user || session.user.isAnonymous) throw new ApiError('Sign in to continue.', { kind: 'unauthorized', status: 401 })
       // Announce the verified cookie before workspace authorization observes the new account.
       // This also clears the old identity when the account belongs to another workspace.
@@ -94,4 +98,13 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (from?: 
   }
 
   return { open, pending }
+}
+
+async function readSession() {
+  try {
+    return await ofetch<{ user?: { isAnonymous?: boolean } } | null>('/api/auth/get-session', { retry: 0, timeout: 30_000 })
+  }
+  catch (error) {
+    throw ApiError.from(error)
+  }
 }

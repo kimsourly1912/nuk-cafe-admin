@@ -1,5 +1,4 @@
 import { useIntervalFn } from '@vueuse/core'
-import { useGoogleAuthRequest } from '~/composables/useGoogleAuthRequest'
 import type { CustomerAccount, DeleteAccountInput, GuestCustomer, ShopMe } from '#shared/contracts/account'
 import type { ChangePasswordTarget } from '~/utils/account-cafes'
 import type { ForgotPasswordForm, SignInForm, SignUpForm } from '../schemas/account-form'
@@ -143,9 +142,6 @@ export function useAccountActions() {
    * (`TemporaryPasswordError`, Q3, D241). With no workspace to send it to, or when that can't be
    * checked, it's signed out again, so the menu isn't left with a session it can't use.
    */
-  /** Starts the shared popup request; this feature owns its eventual return destination. */
-  const googleSignIn = useGoogleAuthRequest()
-
   async function signIn(form: SignInForm): Promise<PasswordStep> {
     const response = await authFetch<{ user?: AuthUser, twoFactorRedirect?: boolean }>('/sign-in/email', { email: form.email, password: form.password })
     if (passwordStepOf(response) === 'two-factor') return 'two-factor'
@@ -226,7 +222,7 @@ export function useAccountActions() {
     await identity.change('logout')
   }
 
-  return { googleSignIn, signIn, finishSignIn, signUp, signInAsGuest, signOut, resendVerification, requestPasswordReset, resetPassword }
+  return { signIn, finishSignIn, signUp, signInAsGuest, signOut, resendVerification, requestPasswordReset, resetPassword }
 }
 
 /**

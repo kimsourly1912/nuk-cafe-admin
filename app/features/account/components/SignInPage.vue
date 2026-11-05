@@ -21,8 +21,6 @@ import AccountFrame from './AccountFrame.vue'
 import FormErrorAlert from './FormErrorAlert.vue'
 import PasswordInput from './PasswordInput.vue'
 import { useAccountProviders } from '../composables/useAccountProviders'
-import { useGoogleSignInPopup } from '../composables/useGoogleSignInPopup'
-import { googleSignInError } from '../utils/google-sign-in'
 
 const route = useRoute()
 const { googleEnabled, known: providersKnown, error: providersError, refresh: refreshProviders } = useAccountProviders()
@@ -37,7 +35,7 @@ const state = reactive({ email: '', password: '' })
 const { saving, formError, submit } = useAccountForm({ formId: 'sign-in-form', fields: ['email', 'password'] }, state)
 const { signIn, finishSignIn } = useAccountActions()
 const assertActive = useAuthCompletion()
-const googlePopup = useGoogleSignInPopup()
+const googlePopup = useGoogleAuthPopup({ start: useGoogleAuthRequest(), finish: finishSignIn, surface: 'account' })
 /** After a password that needs a code: the code step replaces the form. */
 const codeStep = ref(route.query.googleTwoFactor === '1')
 /** A temporary password (Q3): where to change it, linked under the message. */
@@ -78,7 +76,7 @@ const loading = computed(() => (!known.value && !sessionError.value && !saving.v
 async function onGoogleSignIn() {
   if (saving.value) return
   await submit(async () => {
-    const step = await googlePopup.open(route.query.redirect)
+    const step = await googlePopup.open()
     if (step === 'two-factor') {
       codeStep.value = true
       state.password = ''
