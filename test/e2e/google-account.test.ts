@@ -135,6 +135,47 @@ describe('Google popup completion', () => {
     await flow.page.getByRole('heading', { name: 'Your email is verified', exact: true }).waitFor()
   })
 
+  it.each(['/sign-in', '/sign-up'])('%s completes when the original tab returns and its freshness check sees the new session first', async (path) => {
+    // On phones the popup is a tab: closing it shows the original tab, whose stale session read
+    // refetches and observes the Google account while the popup flow's own check is in flight.
+    let release: (() => void) | undefined
+    let holdNext = false
+    const flow = await popupFlow(path, current => ({
+      'GET /auth/get-session': async () => {
+        if (holdNext) {
+          holdNext = false
+          await new Promise<void>((resolve) => {
+            release = resolve
+          })
+        }
+        return current() ? { user: { id: 'google-user', name: 'Google User', email: 'google@example.com', emailVerified: true } } : null
+      },
+    }))
+    const setVisibility = (state: 'hidden' | 'visible') => flow.page.evaluate((value) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => value })
+      document.dispatchEvent(new Event('visibilitychange'))
+    }, state)
+    const opened = flow.page.waitForEvent('popup')
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+    const popup = await opened
+    await popup.waitForURL('https://accounts.google.com/**')
+    await setVisibility('hidden')
+    await flow.page.clock.install()
+    await flow.page.clock.runFor(6000)
+    holdNext = true
+    flow.authenticate()
+    await popup.goto(flow.callback(), { waitUntil: 'commit' })
+    await expect.poll(() => release).toBeDefined()
+    const reads = flow.api.calls.filter(call => call === 'GET /auth/get-session').length
+    await setVisibility('visible')
+    await flow.page.clock.runFor(100)
+    await expect.poll(() => flow.api.calls.filter(call => call === 'GET /auth/get-session').length).toBeGreaterThan(reads)
+    // Let the page apply that answer (the identity observation) before the flow's own check returns.
+    await flow.page.waitForTimeout(300)
+    release!()
+    await flow.page.waitForURL(url('/verify-email'))
+  })
+
   it.each(['/sign-in', '/sign-up'])('%s shows bounded provider errors in the original form and allows retry', async (path) => {
     const flow = await popupFlow(path)
     await flow.page.getByLabel('Email', { exact: true }).fill('kept@example.com')

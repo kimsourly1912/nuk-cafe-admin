@@ -7,7 +7,7 @@ import type { Promotion } from '#shared/contracts/menu-promotions'
 import type { CheckoutQuote, Order } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
 import { asNewVisitor, clientHeaders } from './support/client-address'
-import { ADMIN, menuItemSummaryOf, mockApi, pageOf, RIVERSIDE, settleAnimations, setupE2e, staffOf } from './support/mock-api'
+import { ADMIN, menuItemSummaryOf, mockApi, pageOf, RIVERSIDE, setupE2e, staffOf } from './support/mock-api'
 
 // An accessibility check (D152): axe-core's WCAG 2.1 A and AA rules on the main pages, at a
 // desktop and a phone width. Admin pages on mocked data; the customer menu and the counter on the
@@ -20,10 +20,11 @@ const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/
 /** axe's findings on the page as it is now: `rule: element, element…`. */
 async function findings(page: Page): Promise<string[]> {
   // Evaluated through the browser's protocol: the production CSP doesn't apply.
-  await settleAnimations(page)
   await page.evaluate(axeSource)
   const violations = await page.evaluate(async () => {
     const axe = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<{ violations: { id: string, nodes: { target: string[] }[] }[] }> } }).axe
+    // Entrance fades (D263) would be measured half-transparent: let finite animations finish.
+    await Promise.all(document.getAnimations().filter(a => Number.isFinite(Number(a.effect?.getComputedTiming().endTime))).map(a => a.finished.catch(() => {})))
     const result = await axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'] } })
     return result.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target.join(' ')) }))
   })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ACCOUNT_PATHS } from '../utils/account'
-import { googlePopupChannel, googleSignInErrorCode } from '../utils/google-sign-in'
+import { googlePopupChannel, googleSignInErrorCode } from '~/utils/google-sign-in'
 
 const route = useRoute()
 let channel: BroadcastChannel | undefined
