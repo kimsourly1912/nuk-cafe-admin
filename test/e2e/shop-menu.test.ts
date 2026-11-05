@@ -225,6 +225,35 @@ describe('the order beside the menu and in its drawer (D124)', () => {
     await panel(page).getByText('Your order is empty').waitFor()
   })
 
+  it('a removed line fades out where it stood while the next slides up; at once with reduced motion (D263)', async () => {
+    const page = await openWithLongOrder(1440)
+    await panel(page).getByText('12 items').waitFor()
+    const lines = panel(page).getByRole('list', { name: 'Items in your order' })
+    // Clicks the first line's trash in the page and reads the list on the next task: Vue has
+    // rendered the removal, and the 200 ms leave is still running.
+    const removeFirst = () => lines.evaluate(async (list) => {
+      const [first, second] = [...list.children] as HTMLElement[]
+      const top = first!.offsetTop
+      first!.querySelector<HTMLButtonElement>('button[aria-label^="Remove "]')!.click()
+      await new Promise(resolve => setTimeout(resolve))
+      return {
+        stillThere: first!.isConnected,
+        position: first!.style.position,
+        pinnedAt: first!.offsetTop === top,
+        hidden: first!.getAttribute('aria-hidden') === 'true' && first!.inert,
+        nextMoving: second!.classList.contains('list-move'),
+      }
+    })
+
+    expect(await removeFirst()).toEqual({ stillThere: true, position: 'absolute', pinnedAt: true, hidden: true, nextMoving: true })
+    await panel(page).getByText('11 items').waitFor()
+    await expect.poll(() => lines.evaluate(list => list.children.length)).toBe(11)
+
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    expect(await removeFirst()).toMatchObject({ stillThere: false, position: '' })
+    expect(await lines.evaluate(list => list.children.length)).toBe(10)
+  })
+
   it('a line\'s card: the quantity without a keyboard on touch screens, typed on a computer, at most 20; a note carried to Review order (D128)', async () => {
     const { page } = await open()
     await visible(card(page, 'Banana Bread').getByRole('button', { name: 'Add Banana Bread to order' })).click()

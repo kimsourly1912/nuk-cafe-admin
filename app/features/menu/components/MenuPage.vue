@@ -618,7 +618,11 @@ watch(detailOpen, (open) => {
       expanded="hidden"
     >
       <p class="min-w-0 flex-1 text-sm">
-        <span class="font-medium text-highlighted">{{ pluralize(cart.count, ['item', 'items']) }}</span>
+        <!-- Re-keyed by the count, so the count bumps when an item is added or removed (D263) -->
+        <span
+          :key="cart.count"
+          class="inline-block font-medium text-highlighted motion-safe:animate-bump"
+        >{{ pluralize(cart.count, ['item', 'items']) }}</span>
         <span class="text-muted"> · {{ formatMinor(cart.subtotalMinor) }}</span>
       </p>
       <UButton

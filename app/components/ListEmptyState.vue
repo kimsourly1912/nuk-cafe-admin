@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Empty table content (`UTable`'s `#empty` slot). Tells "nothing exists yet" (offer to create)
- * apart from "filters hide everything" (offer to clear them).
+ * apart from "filters hide everything" (offer to clear them). Fades in when it replaces rows (D263).
  *
  * @example
  * <template #empty>
@@ -22,7 +22,7 @@ const emit = defineEmits<{ create: [], clear: [] }>()
 </script>
 
 <template>
-  <div class="flex flex-col items-center gap-2 py-10 text-center">
+  <div class="flex flex-col items-center gap-2 py-10 text-center motion-safe:animate-fade-in">
     <UIcon
       :name="filtered ? 'i-lucide-search-x' : 'i-lucide-inbox'"
       class="size-10 text-dimmed"

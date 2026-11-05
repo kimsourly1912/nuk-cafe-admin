@@ -92,5 +92,22 @@ export default defineAppConfig({
         description: 'wrap-break-word',
       },
     },
+    // State feedback (D263, ui.md §11), played once, never with reduced motion (`motion-safe:`): a
+    // field's error and every alert ease in when they appear, so a message that pushes the form down
+    // reads as new rather than as a jump. A pressed button sinks a little (not a link-style button, a
+    // disabled or a loading one), so a tap on a phone shows it was taken. `transition-colors` widens
+    // to `scale` (Tailwind's `scale-*` sets the `scale` property, not `transform`).
+    formField: {
+      slots: { error: 'motion-safe:animate-reveal' },
+    },
+    alert: {
+      slots: { root: 'motion-safe:animate-reveal' },
+    },
+    button: {
+      slots: {
+        base: 'transition-[color,background-color,border-color,text-decoration-color,fill,stroke,scale] motion-safe:not-disabled:not-aria-disabled:active:scale-[0.97]',
+      },
+      compoundVariants: [{ variant: 'link', class: { base: 'motion-safe:not-disabled:not-aria-disabled:active:scale-100' } }],
+    },
   },
 })

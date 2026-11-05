@@ -3,6 +3,13 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Interaction motion (D263, 2026-11-05)
+
+- Owner asked for smoother interactions and approved widening UI §11 after a plan (built-in Vue transitions; Motion for Vue deferred). Base: main `c176d19`. One PR, as the owner asked.
+- Added root `useListTransition` (rows fade in/out, the rest slide; instant for search/tab/branch/layout and reduced motion) on the order's lines and the counter's queue; `.list-*`/`.fade-*` classes and `animate-reveal`/`fade-in`/`bump` in `tailwind.css`; in `app.config.ts` field errors and `UAlert` ease in and buttons sink when pressed (not link-style); `<ListEmptyState>` fades in; the order's "N items" bumps.
+- Verified locally (Node 24 / pnpm 12.15.0, Chromium 1243 via `E2E_BROWSER_PATH`): lint, typecheck; `shop-menu.test.ts` and `counter.test.ts` 48/48 including the two new tests; the counter test fails without `instantWhen`. Built CSS checked for the new utilities and the button's link-variant override (tailwind-merge). Full `pnpm test:e2e`: see the PR.
+- How to verify: a removed row stays 200 ms, hidden from roles; read removals inside `evaluate` on the next task. Owner review on staging: feel of the cart (phone sheet and desktop panel) and the counter board when an order moves column. Open: whether the order tracker's looping step stays (D263).
+
 ### Google popup inherited document policy repair (D261, 2026-11-05)
 
 - Owner reproduced an open Google callback popup while the initiating form reported it closed. Base: main `6f2a9e27466d1f0faf863e867695316edeaac929`; unrelated open PRs #254/#258 remain separate. Fix PR: [#260](https://github.com/kimsourly1912/nuk-cafe-admin/pull/260).

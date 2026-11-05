@@ -583,6 +583,27 @@ The argument turns the slide on (only while reordering, so a filter or refresh n
 
 ---
 
+## `useListTransition`
+
+The enter and leave of a list whose rows come and go with the data (D263): a row added fades in; a row removed fades out pinned where it stood (absolute, `aria-hidden`, `inert`) while the rows after it slide up. 200 ms, never on the first render, none for `prefers-reduced-motion` (the composable turns `css` off). Source: `app/composables/useListTransition.ts`, the `.list-*` classes in `app/assets/css/tailwind.css`. Used by the order's lines (`OrderLines`) and the counter's queue.
+
+```ts
+const listTransition = useListTransition({ instantWhen: [search, tab] })
+```
+
+```vue
+<TransitionGroup tag="ul" class="relative flex flex-col gap-3" v-bind="listTransition">
+  <li v-for="line in lines" :key="line.key">…</li>
+</TransitionGroup>
+```
+
+- `instantWhen`: the values that change *which* rows show (a search, a tab, a branch, the layout). While one changes, rows appear and go at once.
+- Rows need stable keys (ids); other children of the group (an empty state) need their own `key`. The container is `relative`, so the leaving row is pinned inside it.
+- Not for reorder lists (`useReorderTransition`) or tables (`UTable` owns its rows).
+- **Testing:** a leaving row stays in the DOM for 200 ms, hidden from roles. Read a removal's state in the page on the next task (`await new Promise(r => setTimeout(r))` inside `evaluate`), not with a later round trip; `page.emulateMedia({ reducedMotion: 'reduce' })` removes rows at once.
+
+---
+
 ## `<OrderLinePromotion>`
 
 An order line's promotion as it was sold (D163): "20% off · Coffee week · was $7.00", in the error colour with a badge icon; nothing without one. The customer's order page, the counter's order panel and Finished today, and Order history put it under the line's detail.
