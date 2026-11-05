@@ -53,7 +53,8 @@ function securityHeaders(publicMenu = false): Record<string, string> {
     'x-content-type-options': 'nosniff',
     'x-frame-options': 'DENY',
     'referrer-policy': 'strict-origin',
-    'cross-origin-opener-policy': 'same-origin',
+    // SPA navigation keeps the initial document's policy, including when entering Google sign-in.
+    'cross-origin-opener-policy': 'same-origin-allow-popups',
     'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
   }
 }
@@ -64,13 +65,6 @@ function deployedSecurityRules() {
   const tokenEntryHeaders = { ...securityHeaders(), 'cache-control': 'no-store, no-transform' }
   return {
     '/**': { headers: securityHeaders() },
-    // Entry middleware loads these document policies on router entry too (D261).
-    // Keep the OAuth popup handle across Google's origin; retain isolation elsewhere.
-    '/sign-in': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },
-    '/sign-up': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },
-    '/c/*/admin/login': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },
-    '/c/*/counter/sign-in': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },
-    '/platform/sign-in': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },
     // The returning popup must keep the provider document's unsafe-none policy (D261).
     '/google-callback': { headers: { 'cross-origin-opener-policy': 'unsafe-none', 'cache-control': 'no-store' } },
     '/c/*': { headers: securityHeaders(true) },

@@ -9,10 +9,10 @@ import { asNewVisitor } from './support/client-address'
 await setupE2e()
 
 describe('Google account page fallback', () => {
-  it('permits popup handles only on auth entry routes and retains CSP', async () => {
-    for (const path of ['/sign-in', '/sign-up', '/c/nuk/admin/login', '/c/nuk/counter/sign-in', '/platform/sign-in', '/google-callback', '/cafes']) {
+  it('keeps app entry documents popup-compatible and retains CSP', async () => {
+    for (const path of ['/', '/c/nuk', '/sign-in', '/sign-up', '/c/nuk/admin/login', '/c/nuk/counter/sign-in', '/platform/sign-in', '/google-callback', '/cafes', '/reset-password', '/verify-email']) {
       const response = await fetch(url(path))
-      expect(response.headers.get('cross-origin-opener-policy')).toBe(path === '/cafes' ? 'same-origin' : path === '/google-callback' ? 'unsafe-none' : 'same-origin-allow-popups')
+      expect(response.headers.get('cross-origin-opener-policy')).toBe(path === '/google-callback' ? 'unsafe-none' : 'same-origin-allow-popups')
       expect(response.headers.get('content-security-policy')).toContain('default-src \'self\'')
     }
   })
@@ -64,6 +64,7 @@ async function popupFlow(path = '/sign-in', handlers: (current: () => boolean) =
   let callback = ''
   let errorCallback = ''
   let signedIn = false
+  let documentStartedAt: number | undefined
   const api = await mockApi(page, {
     'GET /account/providers': () => ({ google: true }),
     'GET /shop/me': () => { throw failures.unauthorized() },
@@ -79,9 +80,10 @@ async function popupFlow(path = '/sign-in', handlers: (current: () => boolean) =
   })
   await page.context().route('https://accounts.google.com/**', route => route.fulfill({ contentType: 'text/html', body: '<title>Offline Google</title>' }))
   if (entry === 'menu') {
-    // A router navigation keeps the menu document's COOP policy unless auth entry reloads it.
+    // Router navigation must inherit a popup-compatible policy from the menu document.
     await page.route(url('/api/c/nuk/public/**'), route => route.continue())
     await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
+    documentStartedAt = await page.evaluate(() => performance.timeOrigin)
     await page.getByRole('link', { name: 'Sign in', exact: true }).click()
     if (path === '/sign-up') await page.getByRole('link', { name: 'Create an account', exact: true }).click()
   }
@@ -93,7 +95,7 @@ async function popupFlow(path = '/sign-in', handlers: (current: () => boolean) =
     await page.goto(url(`${path}?redirect=${encodeURIComponent(redirect)}`), { waitUntil: 'hydration' })
   }
   await page.getByRole('button', { name: 'Continue with Google' }).waitFor()
-  return { page, api, callback: () => callback, errorCallback: () => errorCallback, signOut: () => {
+  return { page, api, documentStartedAt, callback: () => callback, errorCallback: () => errorCallback, signOut: () => {
     signedIn = false
   }, authenticate: () => {
     signedIn = true
@@ -103,6 +105,7 @@ async function popupFlow(path = '/sign-in', handlers: (current: () => boolean) =
 describe('Google popup completion', () => {
   it.each(['/sign-in', '/sign-up'])('%s completes Google after entering from the menu', async (path) => {
     const flow = await popupFlow(path, undefined, '/c/nuk', undefined, 'menu')
+    expect(await flow.page.evaluate(() => performance.timeOrigin)).toBe(flow.documentStartedAt)
     const opened = flow.page.waitForEvent('popup')
     await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
     const popup = await opened

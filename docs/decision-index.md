@@ -294,6 +294,6 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 
 | [D260](decisions.md#d260--verified-same-email-google-sign-in-reuses-the-account-2026-11-03) | Verified same-email Google sign-in reuses the account; D259 linking correction |
 
-| [D261](decisions.md#d261-google-account-sign-in-uses-a-popup-and-preserves-the-form-2026-11-04) | Google account popup; original form styling, bounded errors, scope cleanup and entry document policy (2026-11-05) |
+| [D261](decisions.md#d261-google-account-sign-in-uses-a-popup-and-preserves-the-form-2026-11-04) | Google account popup; form styling, bounded errors, scope cleanup and consistent document policy (2026-11-05) |
 
 | [D262](decisions.md#d262-google-sign-in-at-every-workspace-retains-native-two-factor-verification-2026-11-04) | Google sign-in at every workspace retains native two-factor verification (2026-11-04) |
