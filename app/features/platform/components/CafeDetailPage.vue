@@ -379,7 +379,7 @@ const created = computed(() => cafe.value && formatDate(cafe.value.createdAt))
                 <dt class="text-muted">
                   Notes
                 </dt>
-                <dd class="whitespace-pre-line break-words text-highlighted">
+                <dd class="whitespace-pre-line wrap-break-word text-highlighted">
                   {{ cafe.notes.notes }}
                 </dd>
               </div>
@@ -469,7 +469,7 @@ const created = computed(() => cafe.value && formatDate(cafe.value.createdAt))
               </p>
               <p
                 v-if="entry.details.reason"
-                class="break-words text-muted"
+                class="wrap-break-word text-muted"
               >
                 Reason: {{ entry.details.reason }}
               </p>

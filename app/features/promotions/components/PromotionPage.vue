@@ -119,7 +119,7 @@ const more = computed<DropdownMenuItem[]>(() => {
             <!-- The navbar title is cut short on a phone: the full name leads the page. -->
             <h1
               v-if="isCompact"
-              class="text-lg font-semibold break-words text-highlighted"
+              class="text-lg font-semibold wrap-break-word text-highlighted"
             >
               {{ promotion.name }}
             </h1>

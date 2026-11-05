@@ -191,7 +191,7 @@ const range = computed(() => {
                 class="flex items-start justify-between gap-3 p-3"
               >
                 <div class="min-w-0">
-                  <p class="font-medium break-words text-highlighted">
+                  <p class="font-medium wrap-break-word text-highlighted">
                     {{ item.name }}
                   </p>
                   <p class="text-sm text-muted">

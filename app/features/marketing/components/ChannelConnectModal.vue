@@ -81,7 +81,7 @@ const subscribers = (count: number | null) => (count === null ? '' : `${count.to
             class="size-6 shrink-0 text-primary"
           />
           <div class="min-w-0">
-            <p class="font-semibold break-words text-highlighted">
+            <p class="font-semibold wrap-break-word text-highlighted">
               {{ channel.title }}
             </p>
             <p class="text-sm text-muted">

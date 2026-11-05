@@ -180,7 +180,7 @@ usePageShortcuts({ n: () => openForm() })
         >
           <!-- The name is the button, stretched over the row (D152): its name is the text on it -->
           <div class="relative flex min-w-0 flex-1 flex-col items-start gap-0.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-elevated/50">
-            <span class="max-w-full break-words">
+            <span class="max-w-full wrap-break-word">
               <UButton
                 color="neutral"
                 variant="link"

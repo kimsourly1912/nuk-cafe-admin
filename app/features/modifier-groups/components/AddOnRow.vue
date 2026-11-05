@@ -43,7 +43,7 @@ const name = computed(() => props.modifier.name)
       @click="emit('edit')"
     >
       <span class="flex min-w-0 flex-col items-start">
-        <span class="max-w-full break-words font-normal text-highlighted">{{ name }}</span>
+        <span class="max-w-full wrap-break-word font-normal text-highlighted">{{ name }}</span>
         <span class="font-normal text-muted @md:hidden">Default price {{ formatMinor(modifier.priceDeltaMinor) }}</span>
       </span>
     </UButton>
@@ -51,7 +51,7 @@ const name = computed(() => props.modifier.name)
       v-else
       class="min-w-0 flex-1"
     >
-      <p class="break-words text-highlighted">
+      <p class="wrap-break-word text-highlighted">
         {{ name }}
       </p>
       <p class="text-sm text-muted @md:hidden">

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="360" viewBox="0 0 440 360" fill="none" role="img" aria-labelledby="cafe-closed-title cafe-closed-desc" data-theme="auto">
+  <title id="cafe-closed-title">Cafe closed</title>
+  <desc id="cafe-closed-desc">A takeaway coffee cup beside a hanging closed sign.</desc>
+  <!-- Transparent background. Use data-theme="light" or "dark" on this SVG
+       to force a palette. Inline SVG also follows an ancestor .dark,
+       .light, or data-theme attribute. External img follows system theme. -->
+  <style>
+    svg { --cafe-ink: #9b6b16; --cafe-wash: #d5a438; --cafe-paper: #fffaf0; }
+    @media (prefers-color-scheme: dark) {
+      svg { --cafe-ink: #f4c752; --cafe-wash: #d6a024; --cafe-paper: #29231b; }
+    }
+    .light svg, [data-theme="light"] svg, svg[data-theme="light"] {
+      --cafe-ink: #9b6b16; --cafe-wash: #d5a438; --cafe-paper: #fffaf0;
+    }
+    .dark svg, [data-theme="dark"] svg, svg[data-theme="dark"] {
+      --cafe-ink: #f4c752; --cafe-wash: #d6a024; --cafe-paper: #29231b;
+    }
+    .ink { stroke: var(--cafe-ink); }
+    .paper { fill: var(--cafe-paper); }
+    .wash { fill: var(--cafe-wash); }
+  </style>
+  <path class="wash" opacity=".13" d="M54 244C28 217 43 178 78 157C113 136 106 82 150 52C188 26 236 26 270 52C304 77 297 111 316 145C334 176 377 185 395 215C422 260 387 297 343 304C294 312 257 296 211 305C156 316 85 293 54 244Z"/>
+  <ellipse class="wash" opacity=".09" cx="220" cy="322" rx="178" ry="9"/>
+  <g class="ink" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M52 321H276M303 321H352"/>
+    <path d="M87 115L79 107M106 103L102 91M72 134L61 131" stroke-width="4"/>
+    <!-- Cup: lid, tapered body, sleeve and coffee bean. -->
+    <path class="paper" d="M93 157H202L188 312C187.5 317 184 321 179 321H116C111 321 107.5 317 107 312Z"/>
+    <path class="wash" opacity=".09" d="M93 157H202L188 312C187.5 317 184 321 179 321H116C111 321 107.5 317 107 312Z" stroke="none"/>
+    <path class="paper" d="M101 141L105 128C106 124 109 122 113 122H181C185 122 188 124 189 128L193 141Z"/>
+    <path class="paper" d="M92 141H202C207 141 210 144 211 149L213 160H81L83 149C84 144 87 141 92 141Z"/>
+    <path class="paper" d="M97 195H198L192 266H103Z"/>
+    <path class="wash" opacity=".12" d="M97 195H198L192 266H103Z" stroke="none"/>
+    <ellipse cx="147" cy="231" rx="21" ry="14" transform="rotate(-39 147 231)"/>
+    <path d="M131 244C150 243 141 221 163 218"/>
+    <!-- Hanging sign, rotated as a single object. -->
+    <circle cx="310" cy="67" r="8" class="paper"/>
+    <path d="M306 74L270 151M314 74L352 137"/>
+    <g transform="rotate(-10 316 189)">
+      <rect class="paper" x="242" y="146" width="154" height="89" rx="12"/>
+      <path class="wash" opacity=".06" d="M254 146H384C390.6 146 396 151.4 396 158V223C396 229.6 390.6 235 384 235H254C247.4 235 242 229.6 242 223V158C242 151.4 247.4 146 254 146Z" stroke="none"/>
+      <!-- CLOSED is outlined vector lettering: no font dependency. -->
+      <g stroke-width="3.3">
+        <path d="M269 182C267 179 260 179 258 183C256 187 256 193 258 197C260 201 267 201 269 198"/>
+        <path d="M277 180V200H288"/>
+        <rect x="295" y="180" width="13" height="20" rx="6.5"/>
+        <path d="M329 182C326 179 317 179 316 184C314 190 329 188 329 195C329 201 319 202 315 198"/>
+        <path d="M349 180H338V200H349M338 190H347"/>
+        <path d="M358 180V200H363C376 200 376 180 363 180Z"/>
+      </g>
+    </g>
+  </g>
+</svg>

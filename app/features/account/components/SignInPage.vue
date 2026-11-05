@@ -244,7 +244,7 @@ function restart(message?: string) {
         v-if="codeStep"
         label="Back"
         color="neutral"
-        variant="ghost"
+        variant="subtle"
         block
         :disabled="saving"
         @click="restart()"

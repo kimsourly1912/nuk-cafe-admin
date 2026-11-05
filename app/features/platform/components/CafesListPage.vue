@@ -139,7 +139,7 @@ usePageShortcuts({ n: openForm })
           >
             <span class="flex min-w-0 flex-col items-start gap-0.5">
               <span class="flex max-w-full flex-wrap items-center gap-2">
-                <span class="break-words font-medium text-highlighted">{{ cafe.name }}</span>
+                <span class="wrap-break-word font-medium text-highlighted">{{ cafe.name }}</span>
                 <UBadge
                   v-if="cafe.status === 'suspended'"
                   color="warning"

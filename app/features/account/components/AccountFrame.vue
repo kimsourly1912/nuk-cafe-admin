@@ -28,61 +28,90 @@ const message = computed(() => !!(props.icon || props.illustration))
 </script>
 
 <template>
-  <TaskFrame :height="height">
-    <template
-      v-if="aside"
-      #aside
+  <div class="contents">
+    <!-- Phones: back and title in the top bar (the layout's bar hides via `data-account-bar`). -->
+    <div
+      v-if="!message"
+      data-account-bar
+      class="flex w-full items-center gap-1 border-b border-default bg-default px-2 py-2 sm:hidden"
     >
-      <AccountAside v-bind="aside" />
-    </template>
-    <template #header>
-      <div
-        v-if="!aside"
-        class="mb-4 flex items-center justify-between gap-2 max-sm:hidden"
-      >
-        <AccountBrand />
-        <UColorModeButton />
-      </div>
       <UButton
         v-if="back"
         :to="back.to"
-        :label="back.label"
         icon="i-lucide-arrow-left"
         color="neutral"
-        variant="link"
-        size="sm"
-        class="-ms-2.5 mb-2"
+        variant="ghost"
+        :aria-label="back.label"
       />
-      <div :class="message ? 'flex flex-col items-center text-center' : ''">
-        <UIcon
-          v-if="illustration"
-          :name="illustration"
-          class="mb-3 h-36 w-48"
-        />
-        <UIcon
-          v-else-if="icon"
-          :name="icon"
-          class="mb-3 size-10"
-          :class="ICON_CLASS[iconColor ?? 'primary']"
-        />
-        <h1 class="text-xl font-semibold text-highlighted">
-          {{ title }}
-        </h1>
-        <p
-          v-if="description"
-          class="mt-1 text-sm text-muted"
+      <span
+        aria-hidden="true"
+        class="min-w-0 flex-1 truncate font-semibold text-highlighted"
+        :class="back ? '' : 'ps-2'"
+      >{{ title }}</span>
+      <UColorModeButton />
+    </div>
+    <TaskFrame :height="height">
+      <template
+        v-if="aside"
+        #aside
+      >
+        <AccountAside v-bind="aside" />
+      </template>
+      <template #header>
+        <div
+          v-if="!aside"
+          class="mb-4 flex items-center justify-between gap-2 max-sm:hidden"
         >
-          {{ description }}
-        </p>
-        <slot name="description" />
-      </div>
-    </template>
-    <slot />
-    <template
-      v-if="$slots.footer"
-      #footer
-    >
-      <slot name="footer" />
-    </template>
-  </TaskFrame>
+          <AccountBrand />
+          <UColorModeButton />
+        </div>
+        <UButton
+          v-if="back"
+          :to="back.to"
+          :label="back.label"
+          icon="i-lucide-arrow-left"
+          color="neutral"
+          variant="link"
+          size="sm"
+          class="-ms-2.5 mb-2"
+          :class="message ? '' : 'max-sm:hidden'"
+        />
+        <div :class="message ? 'flex flex-col items-center text-center' : ''">
+          <UIcon
+            v-if="illustration"
+            :name="illustration"
+            class="mb-3 h-36 w-48"
+          />
+          <UIcon
+            v-else-if="icon"
+            :name="icon"
+            class="mb-3 size-10"
+            :class="ICON_CLASS[iconColor ?? 'primary']"
+          />
+          <!-- On phones the bar shows the title; this stays the page's one heading for screen readers. -->
+          <h1
+            class="text-xl font-semibold text-highlighted"
+            :class="message ? '' : 'max-sm:sr-only'"
+          >
+            {{ title }}
+          </h1>
+          <p
+            v-if="description"
+            class="text-sm text-muted"
+            :class="message ? 'mt-1' : 'sm:mt-1'"
+          >
+            {{ description }}
+          </p>
+          <slot name="description" />
+        </div>
+      </template>
+      <slot />
+      <template
+        v-if="$slots.footer"
+        #footer
+      >
+        <slot name="footer" />
+      </template>
+    </TaskFrame>
+  </div>
 </template>

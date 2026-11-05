@@ -331,7 +331,7 @@ function onEscape(event: KeyboardEvent) {
   >
     <template #title>
       <span class="flex flex-wrap items-center gap-2 pr-10">
-        <span class="min-w-0 break-words">{{ current.name }}</span>
+        <span class="min-w-0 wrap-break-word">{{ current.name }}</span>
         <UBadge
           :label="archived ? 'Archived' : 'Active'"
           :color="archived ? 'neutral' : 'success'"
@@ -404,7 +404,7 @@ function onEscape(event: KeyboardEvent) {
             v-else
             class="flex items-center justify-between gap-3"
           >
-            <span class="min-w-0 break-words">{{ current.name }}</span>
+            <span class="min-w-0 wrap-break-word">{{ current.name }}</span>
             <UButton
               v-if="!archived"
               label="Edit"
@@ -576,7 +576,7 @@ function onEscape(event: KeyboardEvent) {
                   :aria-label="value.name"
                   class="flex items-center justify-between gap-2 py-2"
                 >
-                  <span class="min-w-0 break-words text-muted">{{ value.name }}</span>
+                  <span class="min-w-0 wrap-break-word text-muted">{{ value.name }}</span>
                   <div
                     v-if="!archived"
                     class="flex shrink-0 items-center gap-1"

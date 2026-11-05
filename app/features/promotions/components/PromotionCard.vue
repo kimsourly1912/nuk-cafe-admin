@@ -53,7 +53,7 @@ const ended = computed(() => props.promotion.phase === 'ended')
         <div class="min-w-0 flex-1">
           <ULink
             :to="tenantPath(`/admin/promotions/${promotion.id}`)"
-            class="break-words font-semibold after:absolute after:inset-0"
+            class="wrap-break-word font-semibold after:absolute after:inset-0"
             :class="ended ? 'text-muted' : 'text-highlighted'"
           >
             {{ promotion.name }}

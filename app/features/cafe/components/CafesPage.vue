@@ -118,7 +118,7 @@ async function switchAccount() {
             />
           </span>
           <!-- The name has the line to itself and wraps; the badges keep their width. -->
-          <p class="min-w-0 flex-1 font-medium break-words text-highlighted">
+          <p class="min-w-0 flex-1 font-medium wrap-break-word text-highlighted">
             {{ cafe.name }}
           </p>
           <div class="flex shrink-0 flex-col items-end gap-1">

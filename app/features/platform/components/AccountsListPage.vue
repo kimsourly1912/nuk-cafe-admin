@@ -107,7 +107,7 @@ const columns: TableColumn<PlatformAccountSummary>[] = [
           >
             <span class="flex min-w-0 flex-col items-start gap-0.5">
               <span class="flex max-w-full items-center gap-2">
-                <span class="break-words font-medium text-highlighted">{{ account.name }}</span>
+                <span class="wrap-break-word font-medium text-highlighted">{{ account.name }}</span>
                 <UBadge
                   v-if="account.ban"
                   color="error"

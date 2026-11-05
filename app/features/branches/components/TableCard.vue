@@ -53,7 +53,7 @@ const archived = computed(() => props.table.status === 'archived')
 
       <div class="min-w-0 flex-1 space-y-1">
         <h3
-          class="break-words font-semibold"
+          class="wrap-break-word font-semibold"
           :class="archived ? 'text-muted' : 'text-highlighted'"
         >
           {{ table.label }}

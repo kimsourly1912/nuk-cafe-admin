@@ -166,7 +166,7 @@ const columns: TableColumn<ActivityEntry>[] = [
           </p>
           <p
             v-if="entry.details.reason"
-            class="break-words text-muted"
+            class="wrap-break-word text-muted"
           >
             Reason: {{ entry.details.reason }}
           </p>
@@ -205,7 +205,7 @@ const columns: TableColumn<ActivityEntry>[] = [
             </p>
             <p
               v-if="row.original.details.reason"
-              class="break-words text-muted"
+              class="wrap-break-word text-muted"
             >
               Reason: {{ row.original.details.reason }}
             </p>

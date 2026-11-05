@@ -175,7 +175,7 @@ function onName() {
             :class="isMain ? 'text-base font-semibold text-highlighted' : 'font-normal text-default'"
             @click="onName"
           >
-            <span class="line-clamp-2 break-words">{{ name }}</span>
+            <span class="line-clamp-2 wrap-break-word">{{ name }}</span>
           </UButton>
           <UBadge
             v-if="showStatus"
@@ -195,7 +195,7 @@ function onName() {
       >
         <p class="flex flex-wrap items-center gap-x-2">
           <span
-            class="line-clamp-2 break-words text-muted"
+            class="line-clamp-2 wrap-break-word text-muted"
             :class="isMain && 'text-base font-semibold'"
           >{{ name }}</span>
           <UBadge

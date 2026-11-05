@@ -1,6 +1,15 @@
 import { googlePopupChannel, googleSignInError } from '~/utils/google-sign-in'
 import type { SessionSurface } from './useSessionIdentity'
 
+/** Window features that center the popup over the opener window, kept inside the screen. */
+function centeredPopupFeatures(width: number, height: number) {
+  const w = Math.min(width, window.screen.availWidth)
+  const h = Math.min(height, window.screen.availHeight)
+  const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - w) / 2))
+  const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - h) / 2))
+  return `popup,width=${w},height=${h},left=${left},top=${top}`
+}
+
 /** The popup carries OAuth; only the still-mounted initiating form completes login. */
 export function useGoogleAuthPopup({ start, finish, surface }: { start: (from?: unknown, popupId?: string) => Promise<string>, finish: () => Promise<void>, surface: SessionSurface }) {
   const identity = useSessionIdentity()
@@ -18,7 +27,7 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (from?: 
     const popupId = crypto.randomUUID()
     const channel = new BroadcastChannel(googlePopupChannel(popupId))
     // Open synchronously during the click, before browser checks or any network await.
-    const popup = window.open('about:blank', '_blank', 'popup,width=500,height=700')
+    const popup = window.open('about:blank', '_blank', centeredPopupFeatures(500, 700))
     if (!popup) {
       channel.close()
       throw new ApiError('Allow popups for this site, then try Continue with Google again.', { kind: 'business', status: 0 })

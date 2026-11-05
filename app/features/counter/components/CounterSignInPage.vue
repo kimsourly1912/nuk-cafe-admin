@@ -319,7 +319,7 @@ const aside = { title: 'Ready for service', text: 'Sign in to take and serve you
           v-if="codeStep"
           label="Back"
           color="neutral"
-          variant="ghost"
+          variant="subtle"
           block
           :disabled="loading"
           @click="restart()"

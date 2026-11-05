@@ -88,7 +88,7 @@ function state(p: MarketingPost): { label: string, color: BadgeProps['color'], d
         />
         <div class="min-w-0 space-y-1">
           <div class="flex flex-wrap items-center gap-2">
-            <span class="font-medium break-words text-highlighted">{{ p.channel.title }}</span>
+            <span class="font-medium wrap-break-word text-highlighted">{{ p.channel.title }}</span>
             <UBadge
               :label="state(p).label"
               :color="state(p).color"

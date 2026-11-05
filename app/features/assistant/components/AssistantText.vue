@@ -7,7 +7,7 @@ import { formatAnswer } from '../utils/chat'
  */
 const props = defineProps<{ text: string }>()
 
-const Answer = () => h('div', { class: 'space-y-1 break-words' }, formatAnswer(props.text).map(runs => h(
+const Answer = () => h('div', { class: 'space-y-1 wrap-break-word' }, formatAnswer(props.text).map(runs => h(
   'p',
   { class: runs.length ? undefined : 'h-1' },
   runs.map(run => (run.bold ? h('strong', { class: 'font-semibold text-highlighted' }, run.text) : run.text)),

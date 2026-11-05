@@ -19,7 +19,7 @@ Status labels used below:
 2. **Configure globally, not per page (owner-directed).** Colors, radius, default sizes and component defaults change only in `app/app.config.ts` (`ui.colors`, a component's `slots`, `variants` or `defaultVariants`). Theme variables that Nuxt UI exposes as CSS variables (`--ui-primary`, `--ui-radius`) are set once in `app/assets/css/tailwind.css`. A page never restyles a component to look different from the same component elsewhere: no per-page `ui` overrides of color, size, radius or shadow.
 3. **No parallel component library (owner-directed).** Shared app components ([ui-helpers.md](./ui-helpers.md)) wrap *behavior* (search, empty states, bulk actions). They don't re-skin Nuxt UI. Don't create `AppButton`, `BaseCard`, a styled row component or similar.
 4. **Tailwind tokens only (owner-directed).** Layout uses Tailwind's standard scales: spacing (`gap-4`, `p-3`), breakpoints (`sm:`, `lg:`, `max-sm:`), container queries (`@container`, `@md:`), sizing (`size-5`, `max-w-md`), typography (`text-sm`, `font-semibold`) and Nuxt UI's semantic color utilities (`text-muted`, `bg-elevated`, `border-default`). **No arbitrary values** (`[13px]`, `min-[700px]:`, `@[500px]:`), no hex colors, no palette classes.
-5. **Allowed layout-only tweaks on a component:** grid and flex placement, `min-w-0`, `shrink`, `break-words`, visibility per width class, and a `ui` slot class that changes *layout* only (a card body becoming a flex row). Anything that changes color, size, radius or shadow is not a layout tweak and belongs in `app.config.ts`.
+5. **Allowed layout-only tweaks on a component:** grid and flex placement, `min-w-0`, `shrink`, `wrap-break-word`, visibility per width class, and a `ui` slot class that changes *layout* only (a card body becoming a flex row). Anything that changes color, size, radius or shadow is not a layout tweak and belongs in `app.config.ts`.
 6. **Custom CSS is limited (owner-directed)** to global theme variables, safe-area handling (`env(safe-area-inset-*)`, the one place a non-token value is allowed) and behavior that neither Nuxt UI nor Tailwind utilities can express (the existing pointer-cursor rule). No one-off CSS, no broad element selectors for styling.
 7. **Avoid (owner-directed):** decorative gradients, glass and blur effects (`backdrop-blur`), custom shadows, excessive pills, and one-off styling. One exception (owner, 2026-11-02): the sign-in pages' picture panel (`<AuthAside>`) puts a frosted veil (`bg-default/50`, `backdrop-blur-md`, fading out with `mask-b-from-50%`) behind its words on the photo; nowhere else.
 
@@ -84,7 +84,7 @@ Use Nuxt UI's `--ui-radius` (the default): controls and badges get the component
 | Small meta | `text-xs text-muted` | Counts under a label, "next day" |
 
 - At most three sizes on one screen. Numbers and times use `tabular-nums`.
-- Long names wrap (`break-words`); they're truncated only where a full value is one tap away.
+- Long names wrap (`wrap-break-word`); they're truncated only where a full value is one tap away.
 - Headings follow document order (`h1` navbar → `h2` → `h3`), never skip a level for looks.
 - Copy: sentence case, verbs on buttons ("Save changes", "Archive group"), no ALL CAPS.
 

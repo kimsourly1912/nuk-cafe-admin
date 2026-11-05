@@ -94,7 +94,7 @@ const columns: TableColumn<NotificationDelivery>[] = [
         class="space-y-1 p-4"
       >
         <div class="flex items-start justify-between gap-2">
-          <p class="font-medium break-words text-highlighted">
+          <p class="font-medium wrap-break-word text-highlighted">
             {{ delivery.subject }}
           </p>
           <UBadge

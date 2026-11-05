@@ -50,7 +50,7 @@ const rowClass = (index: number) => (index < PHONE_ROWS ? 'flex' : index < WIDE_
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-2">
           <h3
-            class="min-w-0 break-words font-semibold"
+            class="min-w-0 wrap-break-word font-semibold"
             :class="archived ? 'text-muted' : 'text-highlighted'"
           >
             {{ group.name }}

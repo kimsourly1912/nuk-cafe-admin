@@ -77,7 +77,7 @@ function onName() {
             :class="muted ? 'text-muted' : 'text-highlighted'"
             @click="onName"
           >
-            <span class="line-clamp-2 break-words">{{ item.name }}</span>
+            <span class="line-clamp-2 wrap-break-word">{{ item.name }}</span>
           </UButton>
           <span
             v-else

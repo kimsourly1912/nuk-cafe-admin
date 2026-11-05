@@ -59,7 +59,7 @@ const name = computed(() => props.value.name)
       <slot v-if="renaming" />
       <span
         v-else
-        class="block break-words text-default"
+        class="block wrap-break-word text-default"
       >{{ name }}</span>
     </div>
 

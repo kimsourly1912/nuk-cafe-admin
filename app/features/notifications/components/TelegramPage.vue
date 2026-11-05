@@ -165,7 +165,7 @@ function actions(destination: TelegramDestination): DropdownMenuItem[] {
                 />
                 <div class="min-w-0 flex-1 space-y-1">
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="font-medium break-words text-highlighted">{{ destination.title }}</span>
+                    <span class="font-medium wrap-break-word text-highlighted">{{ destination.title }}</span>
                     <UBadge
                       v-if="destination.status === 'blocked'"
                       label="Blocked"

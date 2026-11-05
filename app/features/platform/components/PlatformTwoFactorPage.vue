@@ -28,7 +28,7 @@ async function finish() {
       <UButton
         label="Log out"
         color="neutral"
-        variant="ghost"
+        variant="subtle"
         block
         :disabled="saving"
         @click="signOut()"

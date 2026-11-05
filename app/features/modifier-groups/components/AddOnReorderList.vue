@@ -89,7 +89,7 @@ watchEffect(() => sortable.option('disabled', !!props.disabled))
             class="shrink-0"
           />
           <div class="min-w-0 flex-1">
-            <p class="break-words text-highlighted">
+            <p class="wrap-break-word text-highlighted">
               {{ modifier.name }}
             </p>
             <p class="text-sm text-muted">

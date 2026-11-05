@@ -133,7 +133,7 @@ function actions(channel: MarketingChannel): DropdownMenuItem[] {
                 />
                 <div class="min-w-0 flex-1 space-y-1">
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="font-medium break-words text-highlighted">{{ channel.title }}</span>
+                    <span class="font-medium wrap-break-word text-highlighted">{{ channel.title }}</span>
                     <UBadge
                       v-if="channel.status === 'removed'"
                       label="Bot removed"

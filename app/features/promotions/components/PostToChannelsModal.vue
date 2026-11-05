@@ -227,7 +227,7 @@ const previewChannel = computed(() => connected.value.find(c => form.channelIds.
               class="mt-2 max-h-72 w-full object-cover"
             >
             <p
-              class="px-3 py-2 text-sm break-words whitespace-pre-wrap text-default"
+              class="px-3 py-2 text-sm wrap-break-word whitespace-pre-wrap text-default"
               data-testid="post-preview"
             >
               {{ form.caption.trim() || 'Your caption' }}

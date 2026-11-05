@@ -44,7 +44,7 @@ const days = computed(() => activeWeekdays(props.rule.windows))
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-2">
           <h3
-            class="min-w-0 break-words font-semibold"
+            class="min-w-0 wrap-break-word font-semibold"
             :class="archived ? 'text-muted' : 'text-highlighted'"
           >
             {{ rule.name }}

@@ -370,7 +370,7 @@ const headerActions = computed(() => archived.value
           :class="mode === 'reorder' && 'max-lg:hidden'"
         >
           <div class="flex flex-wrap items-center gap-2">
-            <h2 class="break-words text-xl font-semibold text-highlighted">
+            <h2 class="wrap-break-word text-xl font-semibold text-highlighted">
               {{ group.name }}
             </h2>
             <UBadge
@@ -566,7 +566,7 @@ const headerActions = computed(() => archived.value
                           :aria-label="modifier.name"
                           class="flex items-center justify-between gap-2 py-2"
                         >
-                          <span class="min-w-0 break-words text-muted">{{ modifier.name }}</span>
+                          <span class="min-w-0 wrap-break-word text-muted">{{ modifier.name }}</span>
                           <div
                             v-if="!archived"
                             class="flex shrink-0 items-center gap-1"
