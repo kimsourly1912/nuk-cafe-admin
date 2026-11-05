@@ -25,3 +25,9 @@ auditConfig:
     - GHSA-858h-whjf-mvg5
     - GHSA-v5rq-49vh-5v5c
     - GHSA-vfj7-8cjw-p6xm
+# @nuxt/ui: UFormField's error / help line swaps through a <Transition name="field-message"> (D264),
+# so an error eases out when the value is fixed; the library removes it with a bare v-if, which no
+# theme class can animate. Re-create the patch on every @nuxt/ui upgrade (`pnpm patch @nuxt/ui`);
+# install fails loudly when it no longer applies. CSS: `.field-message-*` in app/assets/css/tailwind.css.
+patchedDependencies:
+  '@nuxt/ui@4.12.0': patches/@nuxt__ui@4.12.0.patch

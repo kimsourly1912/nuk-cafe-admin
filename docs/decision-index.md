@@ -9,7 +9,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Replaced Spring/SPA/SDK | D1–D5; superseded by D39, D43, D71, D95 |
 | API/server architecture and integrity | D39–D45, D52, D71, D116, D194, D200; version, idempotency, guard, audit, repository, shared owner conditions, token queues, connect codes, joined snapshots and JSON-bound sets, archive and permanent delete |
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173, D202–D204; installable app, PWA, manifest, service worker |
-| UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166, D256, D263; motion, animation, transitions |
+| UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166, D256, D263, D264; motion, animation, transitions |
 | Tenancy and permissions | D134–D146, D186–D193, D239–D243, D245–D248; organization, tenant, branch, platform console |
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222, D250, D257 |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
@@ -299,3 +299,5 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D262](decisions.md#d262-google-sign-in-at-every-workspace-retains-native-two-factor-verification-2026-11-04) | Google sign-in at every workspace retains native two-factor verification (2026-11-04) |
 
 | [D263](decisions.md#d263-interaction-motion-rows-that-come-and-go-and-feedback-as-it-appears-2026-11-05) | Interaction motion: rows that come and go (`useListTransition`), errors and alerts easing in, count bump, button press (2026-11-05) |
+
+| [D264](decisions.md#d264-leave-animations-rolling-quantity-staggered-clear-and-animated-checkboxes-2026-11-05) | Leave animations (patched `UFormField`, `FormErrorAlert`), rolling quantity, staggered "Clear order", checkbox/radio pop and tick (2026-11-05) |

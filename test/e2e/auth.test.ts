@@ -98,6 +98,16 @@ describe('auth', () => {
     await signIn(page, 'not-an-email')
     await page.getByText('Enter an email address').waitFor()
     expect(api.calls.filter(c => c.startsWith('POST'))).toEqual([])
+    // Fixed, the error eases out (the patched UFormField's transition, D264) rather than vanishing.
+    await page.evaluate(() => {
+      const seen = new Set<string>()
+      Object.assign(window, { seenClasses: seen })
+      new MutationObserver(records => records.forEach(r => (r.target as Element).classList?.forEach(c => seen.add(c))))
+        .observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] })
+    })
+    await page.getByLabel('Email').fill('admin@nukcafe.test')
+    await expect.poll(() => page.getByText('Enter an email address').count()).toBe(0)
+    expect(await page.evaluate(() => (window as unknown as { seenClasses: Set<string> }).seenClasses.has('field-message-leave-active'))).toBe(true)
   })
 })
 

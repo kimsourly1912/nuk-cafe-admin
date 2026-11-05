@@ -9,6 +9,10 @@
  * be typed, applied on Enter or on leaving the field, and ↑ / ↓ step it. The attribute is the same
  * for every visitor, so the server-rendered menu needs no width check.
  *
+ * The number rolls (D264): a copy over the field (`aria-hidden`, no pointer) rises to the new value
+ * going up and falls going down, while the field's own text is transparent. Focusing the field (a
+ * computer) hides the copy and shows the text to type in. None with reduced motion.
+ *
  * @example
  * <QuantityStepper v-model="quantity" :max="LINE_MAX_QUANTITY" label="Iced Latte" />
  */
@@ -35,6 +39,12 @@ function set(value: number) {
   if (next !== quantity.value) quantity.value = next
 }
 
+/** Which way the number rolls: set before the render that shows the new value. */
+const roll = ref<'roll-up' | 'roll-down'>('roll-up')
+watch(quantity, (next, previous) => {
+  roll.value = next < previous ? 'roll-down' : 'roll-up'
+})
+
 /** A typed number, kept within the limits; anything else goes back to the current quantity. */
 function commit() {
   const typed = Number.parseInt(draft.value, 10)
@@ -59,23 +69,38 @@ function commit() {
       :aria-label="`Decrease quantity of ${label}`"
       @click="set(quantity - 1)"
     />
-    <UInput
-      v-model="draft"
-      type="text"
-      inputmode="none"
-      enterkeyhint="done"
-      autocomplete="off"
-      variant="none"
-      :size="size"
-      :disabled="disabled"
-      :aria-label="`Quantity of ${label}`"
-      class="w-9"
-      :ui="{ base: 'px-0 text-center tabular-nums font-medium pointer-coarse:pointer-events-none pointer-coarse:select-none pointer-coarse:caret-transparent' }"
-      @keydown.enter.prevent="commit"
-      @keydown.up.prevent="set(quantity + 1)"
-      @keydown.down.prevent="set(quantity - 1)"
-      @blur="commit"
-    />
+    <div class="group relative">
+      <UInput
+        v-model="draft"
+        type="text"
+        inputmode="none"
+        enterkeyhint="done"
+        autocomplete="off"
+        variant="none"
+        :size="size"
+        :disabled="disabled"
+        :aria-label="`Quantity of ${label}`"
+        class="w-9"
+        :ui="{ base: 'px-0 text-center tabular-nums font-medium text-transparent focus:text-highlighted pointer-coarse:pointer-events-none pointer-coarse:select-none pointer-coarse:caret-transparent' }"
+        @keydown.enter.prevent="commit"
+        @keydown.up.prevent="set(quantity + 1)"
+        @keydown.down.prevent="set(quantity - 1)"
+        @blur="commit"
+      />
+      <!-- The number shown: the field's text is transparent until focused (typing on a computer) -->
+      <span
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0 overflow-hidden font-medium tabular-nums text-highlighted group-has-[input:focus]:invisible"
+        :class="size === 'sm' ? 'text-sm/4' : 'text-base/5'"
+      >
+        <Transition :name="roll">
+          <span
+            :key="quantity"
+            class="absolute inset-0 grid place-items-center"
+          >{{ quantity }}</span>
+        </Transition>
+      </span>
+    </div>
     <UButton
       icon="i-lucide-plus"
       color="neutral"
