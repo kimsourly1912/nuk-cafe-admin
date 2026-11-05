@@ -3,6 +3,15 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Google popup inherited document policy repair (D261, 2026-11-05)
+
+- Owner reproduced an open Google callback popup while the initiating form reported it closed. Base: main `6f2a9e27466d1f0faf863e867695316edeaac929`; unrelated open PRs #254/#258 remain separate. Fix PR: [#260](https://github.com/kimsourly1912/nuk-cafe-admin/pull/260).
+- A menu document's strict COOP survives client navigation to an auth URL. Controlled-origin and built-app Chrome 156 reproductions both report `popup.closed === true` while the popup is actually open; the built app displays the reported alert. The close poll rejects and closes the completion channel before callback acknowledgement.
+- Final approach: app-wide `same-origin-allow-popups`, with the existing passive callback's `unsafe-none`/no-store exception. No custom entry middleware or forced document reload. The policy permits outgoing OAuth popup references, retains isolation from cross-origin openers and same-origin read restrictions, and keeps CSP, provider allowlisting, callback validation, fresh-session checks, 2FA and permissions. See the updated security/auth references.
+- Browser regressions cover menu links and protected admin/counter/platform redirects, provider waiting beyond the close poll, callback return and actual popup closure. Menu-to-auth navigation must retain the original document. Provider/session boundaries are mocked; live Google exchange remains unverified.
+- The first document-reload candidate passed earlier local lint/types/audit, 2,503 unit/server tests (1 existing skip, 170 files) and two new menu-entry tests. Cloud run [41952168751](https://github.com/kimsourly1912/nuk-cafe-admin/actions/runs/41952168751) passed static/unit checks but caught a session-expiry draft-recovery timeout and an extra counter read after sign-out. That candidate is withdrawn; existing recovery/sign-out tests are retained, not weakened. New cloud validation is required for the final policy approach.
+- The owner required cloud-only work after the earlier local checks. Local processes were stopped; the interrupted local full browser run and planned Brave run are not claimed passed. Cloud-PC handoff tools failed; subsequent changes and validation use GitHub APIs/Actions only. No CI workflow change, merge or deployment. Current cloud evidence is recorded on PR #260.
+
 ### D1 backup export contract repair (PR #253, 2026-11-03)
 
 - Reviewed head `a6ee858` against current main `82cbe18` (main had not moved at review). Only open PR at initial inspection: #253, draft. Its CI check job failed on three quote-style errors; typecheck/audit/unit were skipped. Browser shards run separately.
