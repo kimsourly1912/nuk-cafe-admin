@@ -132,3 +132,13 @@ export function cannotCancelNow(pickupNumber: number, status: OrderStatus) {
   if (status === 'cancelled') return apiError(409, OrderErrorCodes.ORDER_CHANGED, `Order ${number(pickupNumber)} is already cancelled.`)
   return apiError(409, OrderErrorCodes.ORDER_NOT_CANCELLABLE, `Order ${number(pickupNumber)} is paid now, so it can't be cancelled here. Ask at the counter.`)
 }
+
+// --- KHQR review cases (D266) ---
+
+export const khqrReviewNotFound = () => notFound('This payment to review')
+
+/** Another owner recorded it meanwhile (or it changed since the page read it). */
+export const khqrReviewChanged = () => versionConflict('This payment to review')
+
+export const khqrReturnTimeInvalid = () =>
+  apiError(422, ErrorCodes.VALIDATION_FAILED, 'Check when the money went back.', { fieldErrors: { returnedAt: ['Not before the payment arrived, and not in the future'] } })

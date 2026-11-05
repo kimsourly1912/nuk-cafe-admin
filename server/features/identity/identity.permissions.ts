@@ -74,6 +74,8 @@ export const tenantStatements = {
   assistant: ['use'],
   // Allowing platform support (step P5, D193): owners only.
   support: ['grant'],
+  // KHQR payments the order couldn't take (D266): owners only, never a support visit.
+  payment: ['review'],
 } as const
 
 export const tenantAc = createAccessControl(tenantStatements)
@@ -91,6 +93,7 @@ export const tenantRoles = {
     audit: ['read'],
     assistant: ['use'],
     support: ['grant'],
+    payment: ['review'],
   }),
   // Works at some branches (branch_staff); nothing tenant-wide.
   member: tenantAc.newRole({}),

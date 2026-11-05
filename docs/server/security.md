@@ -71,6 +71,7 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | order | cancel | ✔ | ✔ | ✔ |
 | payment | collect | ✔ | ✔ | ✔ |
 | payment | refund | ✔ | | |
+| payment | review: KHQR payments an order couldn't take, record their return (tenant permission, D266; never a support visit) | ✔ | | |
 | voucher | look up, redeem | ✔ | ✔ | ✔ |
 | voucher | issue to a customer | ✔ | ✔ | |
 | voucher template | manage | ✔ | | |

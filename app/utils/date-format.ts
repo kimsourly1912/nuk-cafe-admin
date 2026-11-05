@@ -89,3 +89,13 @@ export function formatTimeAgo(at: DateInput, now = new Date()): string {
   }
   return 'just now'
 }
+
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/**
+ * `<DateTimeInput>`'s value (`YYYY-MM-DDTHH:mm`, the `datetime-local` format) for `date` in this
+ * device's time. `new Date(value)` reads it back the same way.
+ */
+export function localInputValue(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}

@@ -73,6 +73,7 @@ export const ADMIN: AdminSession = {
     'menu:read', 'menu:write', 'menu:publish', 'media:upload', 'branch:create', 'branch:read', 'branch:update',
     'staff:read', 'staff:create', 'staff:update', 'staff:disable', 'staff:reset-password', 'voucherTemplate:manage',
     'loyalty:adjust', 'settings:manage', 'report:read', 'report:export', 'audit:read', 'assistant:use', 'support:grant',
+    'payment:review',
   ],
   mustChangePassword: false,
   twoFactorEnabled: false,
@@ -169,6 +170,8 @@ export const DEFAULT_HANDLERS: Record<string, MockHandler> = {
   'GET /admin/menu/items': () => pageOf([]),
   'GET /admin/exchange-rates': () => ({ current: null, history: [] }),
   'GET /admin/khqr': () => ({ version: 1, enabled: false, accountId: null, merchantName: null, merchantCity: null, currencies: ['USD'], updatedAt: null, updatedBy: null, automaticCheck: false, token: null, tokenStorage: false }),
+  // KHQR payments to review (D266): none.
+  'GET /admin/khqr/reviews': () => ({ open: [], returned: [], unchecked: 0 }),
   'GET /admin/telegram': () => ({ enabled: false, botUsername: null, destinations: [], rules: [] }),
   'GET /admin/staff': () => pageOf([]),
   'GET /admin/cafe': () => ({ ...NUK_PROFILE, logoAssetId: null, version: 1 }),

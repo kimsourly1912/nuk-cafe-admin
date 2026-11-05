@@ -6,6 +6,7 @@ import type { BakongTokenState, JobState } from '#shared/contracts/platform-heal
 export const JOB_LABELS: Record<string, string> = {
   'platform:deliver-outbox': 'Deliver messages and emails',
   'orders:expire-unpaid': 'Expire unpaid orders',
+  'orders:recover-khqr': 'Check KHQR payments with Bakong',
   'notifications:deliver': 'Send Telegram notifications',
   'marketing:deliver-posts': 'Publish marketing posts',
   'platform:expire-idempotency-keys': 'Clean up retry keys',

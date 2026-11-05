@@ -4,7 +4,7 @@
  * (P4, D192).
  */
 export const SCHEDULED_TASKS: Record<string, string[]> = {
-  '* * * * *': ['platform:deliver-outbox', 'orders:expire-unpaid', 'notifications:deliver', 'marketing:deliver-posts'],
+  '* * * * *': ['platform:deliver-outbox', 'orders:expire-unpaid', 'orders:recover-khqr', 'notifications:deliver', 'marketing:deliver-posts'],
   '15 3 * * *': ['platform:expire-idempotency-keys', 'assistant:purge-usage', 'notifications:purge-deliveries', 'identity:clear-idle-guests'],
   '5 * * * *': ['media:purge-temporary', 'platform:maintain-outbox'],
 }

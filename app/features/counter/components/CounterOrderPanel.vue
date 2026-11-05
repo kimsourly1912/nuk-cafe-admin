@@ -159,7 +159,7 @@ function onKhqrPaid(paid: CounterOrder) {
 function onKhqrRefund(check: Extract<KhqrCheck, { status: 'refund_needed' }>) {
   toast.add({
     title: `Order ${orderNumber(check.order)}: a KHQR payment arrived after it was ${check.order.status === 'cancelled' ? 'cancelled' : 'paid'}`,
-    description: `Bakong says ${khqrReceivedText(check.received)}. Give it back to the customer.`,
+    description: `Bakong says ${khqrReceivedText(check.received)}. Give it back to the customer: the owner records it under Payments.`,
     color: 'warning',
     icon: 'i-lucide-triangle-alert',
     duration: Number.POSITIVE_INFINITY,
