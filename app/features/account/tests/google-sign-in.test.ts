@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { googleSignInError, googleSignInErrorCode } from '../utils/google-sign-in'
+import { googleSignInError, googleSignInErrorCode } from '~/utils/google-sign-in'
 
 describe('Google callback error boundary', () => {
   it.each(['google_password_required', 'GOOGLE_PASSWORD_REQUIRED'])('explains protected accounts for %s', (code) => {

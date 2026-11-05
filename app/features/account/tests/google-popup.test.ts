@@ -3,10 +3,12 @@ import { effectScope, onScopeDispose, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { ApiError } from '~/utils/api-error'
 import { useAuthCompletion } from '~/composables/useAuthCompletion'
-import { useGoogleSignInPopup } from '../composables/useGoogleSignInPopup'
+import { useGoogleAuthPopup } from '~/composables/useGoogleAuthPopup'
 
 const actions = vi.hoisted(() => ({ googleSignIn: vi.fn(), finishSignIn: vi.fn() }))
 vi.mock('../composables/useCustomerAccount', () => ({ useAccountActions: () => actions }))
+const ofetch = vi.hoisted(() => vi.fn())
+vi.mock('ofetch', () => ({ ofetch }))
 
 describe('Google popup lifecycle', () => {
   let scope: ReturnType<typeof effectScope>
@@ -36,7 +38,7 @@ describe('Google popup lifecycle', () => {
       return channel
     }))
     vi.stubGlobal('ApiError', ApiError)
-    vi.stubGlobal('apiFetch', vi.fn().mockResolvedValue({ user: { id: 'google-user' } }))
+    ofetch.mockResolvedValue({ user: { id: 'google-user' } })
     vi.stubGlobal('ref', ref)
     vi.stubGlobal('watch', watch)
     vi.stubGlobal('onScopeDispose', onScopeDispose)
@@ -53,13 +55,13 @@ describe('Google popup lifecycle', () => {
   })
 
   function start() {
-    const flow = scope.run(useGoogleSignInPopup)!
-    const completion = flow.open('/c/example/checkout')
+    const flow = scope.run(() => useGoogleAuthPopup({ start: actions.googleSignIn, finish: actions.finishSignIn, surface: 'account' }))!
+    const completion = flow.open()
     return { flow, completion }
   }
 
   function callback(origin = 'https://cafe.test', path = '/google-callback', attempt?: string) {
-    const id = attempt ?? actions.googleSignIn.mock.calls[0]![1]
+    const id = attempt ?? actions.googleSignIn.mock.calls[0]![0]
     channel.onmessage?.({ origin, data: { type: 'google-complete', path, attempt: id, success: true } } as MessageEvent)
   }
 
@@ -82,6 +84,24 @@ describe('Google popup lifecycle', () => {
     expect(identity.change).toHaveBeenCalledWith('login', 'account')
     expect(popup.closed).toBe(true)
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('completes when the page observes the new account while its session check is in flight', async () => {
+    let answer!: (session: unknown) => void
+    ofetch.mockReturnValue(new Promise((resolve) => {
+      answer = resolve
+    }))
+    const { completion } = start()
+    await vi.advanceTimersByTimeAsync(0)
+    callback()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ofetch).toHaveBeenCalledWith('/api/auth/get-session', expect.anything())
+    // Another read on the page (a tab returning to view) saw the cookie this callback set.
+    identity.generation.value++
+    answer({ user: { id: 'google-user' } })
+    await expect(completion).resolves.toBe('signed-in')
+    expect(identity.change).toHaveBeenCalledWith('login', 'account')
+    expect(actions.finishSignIn).toHaveBeenCalledOnce()
   })
 
   it.each(['scope', 'identity'])('cancels a held initiation on %s change and never navigates its later result', async (change) => {
@@ -116,7 +136,7 @@ describe('Google popup lifecycle', () => {
 
   it('waits for the code without checking a session or announcing login', async () => {
     const { completion } = start()
-    const attempt = actions.googleSignIn.mock.calls[0]![1]
+    const attempt = actions.googleSignIn.mock.calls[0]![0]
     channel.onmessage?.({ origin: 'https://cafe.test', data: { type: 'google-complete', path: '/google-callback', attempt, success: true, twoFactor: true } } as MessageEvent)
     await expect(completion).resolves.toBe('two-factor')
     expect(actions.finishSignIn).not.toHaveBeenCalled()
