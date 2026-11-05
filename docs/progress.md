@@ -3,6 +3,11 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Current-state refreshed against GitHub (2026-11-05)
+
+- `current-state.md` listed #248, #250, #253, #259, #260 and older branches as in review; GitHub showed no open PRs on main `ba4f2c2`. Rewritten: owner waits (backups unproven, live Google unverified, motion review), PRs closed without a recorded reason (#254 KHQR, #258, #261, #196), and open follow-ups (account security step 5 has no code yet; next free migration is `0056`, not `0054`).
+- `Referrer-Policy`: the code (`strict-origin`, asserted by `monitoring-headers.test.ts`) is the D216 decision; only `security.md`'s header list was stale and now matches. Documentation only, no code change.
+
 ### Leave animations and controls (D264, 2026-11-05)
 
 - Owner asked for leave animations (a field error vanished), a rolling quantity, "Clear order" one line at a time and an animated checkbox tick. Base: main `16b078b` (D263 merged in #262/#263). PR #265.
