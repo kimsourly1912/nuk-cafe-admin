@@ -33,8 +33,12 @@ const emit = defineEmits<{ 'set-quantity': [key: string, quantity: number], 'set
         >
           Your order
         </h2>
+        <!-- Re-keyed by the count, so the count bumps when an item is added or removed (D263) -->
         <p class="text-sm text-muted">
-          {{ pluralize(cart.count, ['item', 'items']) }}
+          <span
+            :key="cart.count"
+            class="inline-block motion-safe:animate-bump"
+          >{{ pluralize(cart.count, ['item', 'items']) }}</span>
         </p>
       </div>
       <OrderActions

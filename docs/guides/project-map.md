@@ -53,6 +53,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](.
 | `useFormErrorRecheck` | `composables/` | Every `UForm`: errors leave as soon as they're fixed, a rule across fields too; server errors stay until their field changes (D166) |
 | `useFormRowErrors`, `followRowErrors` | `composables/`, `utils/form-rows.ts` | A list's rows in a `UForm`: removing or moving a row moves its errors with it (`removeRow`, `moveRow`) (D171) |
 | `focusFirstInvalid` | `utils/focus-first-invalid.ts` | `@error` handler of every `UForm`: a failed submit scrolls to the first invalid field, in page order, and focuses it (D178) |
+| `useListTransition` | `composables/` | A list's rows fade in and out as the data adds or removes them, the others sliding into place; instant for searches and tabs (`<TransitionGroup v-bind>`, D263) |
 | `useReorderTransition` | `composables/` | A reorder list's rows slide to their new place when moved by their chevrons or keys (`<TransitionGroup :move-class>` + Sortable's `onStart`/`onEnd`, D165) |
 | `ApiErrorAlert` | `components/` | Load-error alert with Retry |
 | `StatCard` | `components/` | One number on a page, in a soft card (never a number styled by hand) |

@@ -8,7 +8,8 @@
  * for a minute, with a chime (mute it in the user menu). A closed branch says when it opens.
  * While refreshing fails, the queue says when it last loaded; the tab's title counts the orders to
  * pay (D149). After 2 minutes of that, it warns louder; a browser that holds the chime back until a
- * tap says so (D150).
+ * tap says so (D150). An order arriving, moving to another column or leaving slides in and out
+ * (D263); searching, changing tab or branch shows the new cards at once.
  *
  * Browser-only (`routeRules`), so the width can choose what renders (`useLayoutContext`).
  */
@@ -65,6 +66,8 @@ const tab = ref<ColumnId>('to_pay')
 const tabsRow = useTemplateRef('tabsRow')
 useCenteredTab(tabsRow, () => tab.value)
 const tabItems = computed(() => columns.value.map(column => ({ label: column.label, value: column.id, badge: { label: String(column.orders.length), color: column.color, variant: 'subtle' as const } })))
+// Rows that come and go with the data animate; a search, tab, branch or layout change is not that.
+const listTransition = useListTransition({ instantWhen: [search, tab, branchId, isCompact] })
 const shownColumn = computed(() => columns.value.find(column => column.id === tab.value)!)
 const empty = computed(() => queue.value !== null && queue.value.orders.length === 0)
 
@@ -239,7 +242,11 @@ useSeoMeta({ robots: 'noindex' })
           class="sticky top-16 z-10 w-full bg-default px-2"
           aria-label="Queue"
         />
-        <div class="space-y-3 p-3">
+        <TransitionGroup
+          tag="div"
+          class="relative space-y-3 p-3"
+          v-bind="listTransition"
+        >
           <CounterOrderCard
             v-for="order in shownColumn.orders"
             :key="order.id"
@@ -252,6 +259,7 @@ useSeoMeta({ robots: 'noindex' })
           />
           <div
             v-if="!shownColumn.orders.length"
+            key="empty"
             class="flex flex-col items-center gap-2 py-16 text-center"
           >
             <UIcon
@@ -268,7 +276,7 @@ useSeoMeta({ robots: 'noindex' })
               New orders appear here automatically.
             </p>
           </div>
-        </div>
+        </TransitionGroup>
       </div>
 
       <!-- Tablets and wider: the board -->
@@ -295,7 +303,11 @@ useSeoMeta({ robots: 'noindex' })
               size="sm"
             />
           </h2>
-          <div class="space-y-3 overflow-y-auto p-3">
+          <TransitionGroup
+            tag="div"
+            class="relative space-y-3 overflow-y-auto p-3"
+            v-bind="listTransition"
+          >
             <CounterOrderCard
               v-for="order in column.orders"
               :key="order.id"
@@ -308,12 +320,14 @@ useSeoMeta({ robots: 'noindex' })
             />
             <p
               v-if="!column.orders.length && !empty"
+              key="none"
               class="py-6 text-center text-sm text-muted"
             >
               {{ search.trim() ? 'No matching orders' : 'None right now' }}
             </p>
             <div
               v-if="empty && column.id === 'preparing'"
+              key="empty"
               class="flex flex-col items-center gap-2 py-16 text-center"
             >
               <UIcon
@@ -327,7 +341,7 @@ useSeoMeta({ robots: 'noindex' })
                 New orders appear here automatically.
               </p>
             </div>
-          </div>
+          </TransitionGroup>
         </section>
       </div>
     </div>

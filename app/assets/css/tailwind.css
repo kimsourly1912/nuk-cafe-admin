@@ -182,6 +182,81 @@
 }
 
 /*
+ * Lists whose rows come and go (`useListTransition`, D263): a row added fades and grows in, a row
+ * removed fades out while the rows after it slide into its place (the composable pins the leaving
+ * row where it stood, so the others move at once). 200 ms; unlayered, so it wins over a row's own
+ * `transition-colors`. Off for people who ask for less motion (the composable also turns `css` off).
+ */
+.list-enter-active,
+.list-leave-active {
+  transition:
+    opacity 200ms ease-out,
+    transform 200ms ease-out;
+}
+
+.list-move {
+  transition: transform 200ms ease-out;
+}
+
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  transform: scale(0.97);
+}
+
+/* The order panel's lines and its empty state swap with a short fade (`OrderLines`). */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 120ms ease-out;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .list-enter-active,
+  .list-leave-active,
+  .list-move,
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: none;
+  }
+}
+
+/*
+ * State feedback played once when an element appears (D263); always behind `motion-safe:`.
+ * - `animate-reveal`: an error or alert eases in from just above (a field's error, every `UAlert`).
+ * - `animate-fade-in`: an empty state or a result replacing a list.
+ * - `animate-bump`: a count that changed (re-keyed so it plays again), e.g. the order's item count.
+ */
+@theme {
+  --animate-reveal: reveal 150ms ease-out;
+  --animate-fade-in: fade-in 150ms ease-out;
+  --animate-bump: bump 200ms ease-out;
+
+  @keyframes reveal {
+    from {
+      opacity: 0;
+      transform: translateY(-0.25rem);
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes bump {
+    50% {
+      transform: scale(1.12);
+    }
+  }
+}
+
+/*
  * The order tracker's current step (`motion-safe:animate-soft-ping`): a softer ping than Tailwind's
  * `animate-ping` (1s, twice the size); `animate-line-flow` sweeps light along the line into it.
  */

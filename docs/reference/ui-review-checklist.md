@@ -78,6 +78,7 @@ For each screen and overlay, show and test the applicable [states](./page-patter
 - [ ] Headings in order; lists and tables are semantic; form errors are associated with their fields
 - [ ] Async results are announced (toast, inline alert, `role="status"`, `aria-live` for moves)
 - [ ] 200% text zoom keeps content usable; nothing depends on hover or motion (`motion-safe:`)
+- [ ] A list whose rows come and go with the data uses `useListTransition` (stable keys, `relative` container); searching or switching tabs doesn't animate ([ui §11](./ui.md#11-motion), D263)
 
 ## Tests
 

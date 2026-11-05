@@ -415,6 +415,26 @@ describe('the counter', () => {
     await panel(page).getByText(/Cash USD \$2\.25 · by Sophea$/).waitFor()
   })
 
+  it('a search hides the cards at once: filtering is not an order leaving (D263)', async () => {
+    const order = await placeOrder(seed.customers.counterShopperB)
+    try {
+      const { page } = await cashierAtCounter()
+      await card(page, order).waitFor()
+      // Typed in the page, read on the next task: an animated leave would keep the cards 200 ms.
+      const left = await page.getByRole('textbox', { name: 'Search orders by number or name' }).evaluate(async (input: HTMLInputElement) => {
+        input.value = 'no such customer'
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        await new Promise(resolve => setTimeout(resolve))
+        return document.querySelectorAll('article[aria-label^="Order "]').length
+      })
+      expect(left).toBe(0)
+    }
+    finally {
+      // An open order blocks the shopper's next one (the phone test below orders as them too).
+      await command(order, 'cancel', { version: 1, reason: 'customer_changed_mind', note: null, returnMethod: null })
+    }
+  })
+
   it('on a phone: one list at a time, as tabs with counts', async () => {
     const order = await placeOrder(seed.customers.counterShopperB)
     const { page } = await cashierAtCounter(390)
