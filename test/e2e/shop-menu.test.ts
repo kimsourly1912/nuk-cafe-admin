@@ -50,6 +50,17 @@ async function openWithLongOrder(width: number, height = width < 640 ? 844 : 900
   return page
 }
 
+/** Records every class added in the page from now on, to see a transition that lasts 150–500 ms. */
+async function watchClasses(page: Page) {
+  await page.evaluate(() => {
+    const seen = new Set<string>()
+    Object.assign(window, { seenClasses: seen })
+    new MutationObserver(records => records.forEach(r => (r.target as Element).classList?.forEach(c => seen.add(c))))
+      .observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] })
+  })
+  return () => page.evaluate(() => [...(window as unknown as { seenClasses: Set<string> }).seenClasses])
+}
+
 /** Fully inside the window, top to bottom. */
 async function onScreen(page: Page, locator: ReturnType<Page['getByRole']>) {
   const box = (await locator.boundingBox())!
@@ -166,6 +177,34 @@ describe('the customer menu', () => {
     await expect.poll(() => dialog(page).count()).toBe(0)
     await visible(latte.getByText('2 in order')).waitFor()
     await panel(page).getByText('Large, Iced · Oat milk, Extra shot').waitFor()
+  })
+
+  it('a ticked box pops in with its tick and shrinks out when unticked; the quantity rolls up and down (D264)', async () => {
+    const { page } = await open()
+    await card(page, 'Latte').getByRole('button', { name: 'Latte', exact: true }).click()
+    const vanilla = dialog(page).getByRole('checkbox', { name: 'Vanilla' })
+    await vanilla.click()
+    const indicator = vanilla.locator('[data-slot="indicator"]')
+    expect(await indicator.evaluate(el => getComputedStyle(el).animationName)).toBe('pop-in')
+    expect(await indicator.locator('[data-slot="icon"]').evaluate(el => getComputedStyle(el).animationName)).toBe('tick')
+    // Reka keeps the box until its exit animation ends: it is there, unchecked, for a moment.
+    const exits = await vanilla.evaluate(async (box) => {
+      const states: string[] = []
+      new MutationObserver(() => states.push(box.querySelector('[data-slot="indicator"]')?.getAttribute('data-state') ?? 'gone'))
+        .observe(box, { subtree: true, childList: true, attributes: true })
+      box.click()
+      await new Promise(resolve => setTimeout(resolve, 400))
+      return states
+    })
+    expect(exits).toContain('unchecked')
+    expect(exits.at(-1)).toBe('gone')
+
+    const seen = await watchClasses(page)
+    await dialog(page).getByRole('button', { name: 'Increase quantity of Latte' }).click()
+    await expect.poll(seen).toContain('roll-up-enter-active')
+    await dialog(page).getByRole('button', { name: 'Decrease quantity of Latte' }).click()
+    await expect.poll(seen).toContain('roll-down-enter-active')
+    expect(await dialog(page).getByRole('textbox', { name: 'Quantity of Latte' }).inputValue()).toBe('1')
   })
 
   it('keeps add-on limits: a third syrup can\'t be picked', async () => {
@@ -287,7 +326,25 @@ describe('the order beside the menu and in its drawer (D124)', () => {
     await expect.poll(() => dialog(page).count()).toBe(0)
     expect(await panel(page).getByText('12 items').isVisible()).toBe(true)
     await panel(page).getByRole('button', { name: 'Clear order' }).click()
+    // The lines leave one after another, 40 ms apart (the last four with the ninth), each pinned
+    // where it stood: every line measured before any was taken out of the flow (D264). By its
+    // label, not its role: behind the open dialog the page is hidden from roles.
+    await page.locator('ul[aria-label="Items in your order"]').evaluate((list) => {
+      const leaving: { top: string, delay: string }[] = []
+      new MutationObserver(records => records.forEach(({ target }) => {
+        const li = target as HTMLElement
+        if (li.parentElement === list && li.getAttribute('aria-hidden') === 'true') leaving.push({ top: li.style.top, delay: li.style.transitionDelay })
+      })).observe(list, { subtree: true, attributes: true, attributeFilter: ['aria-hidden'] })
+      Object.assign(window, { leaving })
+    })
     await dialog(page).getByRole('button', { name: 'Remove all' }).click()
+    const leaving = () => page.evaluate(() => (window as unknown as { leaving: { top: string, delay: string }[] }).leaving)
+    await expect.poll(async () => (await leaving()).length).toBe(12)
+    const lines = await leaving()
+    expect(lines.map(line => line.delay)).toEqual(['0ms', '40ms', '80ms', '120ms', '160ms', '200ms', '240ms', '280ms', '320ms', '320ms', '320ms', '320ms'])
+    const tops = lines.map(line => Number.parseFloat(line.top))
+    expect(tops).toEqual([...tops].sort((a, b) => a - b))
+    expect(new Set(tops).size).toBe(12)
     await panel(page).getByText('Your order is empty').waitFor()
     expect(await panel(page).getByRole('button', { name: 'Clear order' }).count()).toBe(0)
   })

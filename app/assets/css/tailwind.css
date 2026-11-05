@@ -204,6 +204,52 @@
   transform: scale(0.97);
 }
 
+/*
+ * A field's error and help line (UFormField, patched to wrap them in <Transition name="field-message">
+ * mode out-in, D264): an error eases in from just above and eases back out when the value is fixed,
+ * then the help text fades in. `.alert-leave-*`: a form's error alert (`FormErrorAlert`) eases out the
+ * same way (it eases in with every `UAlert`).
+ */
+.field-message-enter-active,
+.field-message-leave-active,
+.alert-leave-active {
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
+}
+
+.field-message-enter-from,
+.field-message-leave-to,
+.alert-leave-to {
+  opacity: 0;
+  transform: translateY(-0.25rem);
+}
+
+/*
+ * A number that rolls (`QuantityStepper`, D264): going up, the new number rises from below and the
+ * old one leaves upwards; going down, the other way. Both are absolutely placed in a clipped box.
+ */
+.roll-up-enter-active,
+.roll-up-leave-active,
+.roll-down-enter-active,
+.roll-down-leave-active {
+  transition:
+    transform 180ms ease-out,
+    opacity 180ms ease-out;
+}
+
+.roll-up-enter-from,
+.roll-down-leave-to {
+  opacity: 0;
+  transform: translateY(70%);
+}
+
+.roll-up-leave-to,
+.roll-down-enter-from {
+  opacity: 0;
+  transform: translateY(-70%);
+}
+
 /* The order panel's lines and its empty state swap with a short fade (`OrderLines`). */
 .fade-enter-active,
 .fade-leave-active {
@@ -220,7 +266,14 @@
   .list-leave-active,
   .list-move,
   .fade-enter-active,
-  .fade-leave-active {
+  .fade-leave-active,
+  .field-message-enter-active,
+  .field-message-leave-active,
+  .alert-leave-active,
+  .roll-up-enter-active,
+  .roll-up-leave-active,
+  .roll-down-enter-active,
+  .roll-down-leave-active {
     transition: none;
   }
 }
@@ -235,6 +288,35 @@
   --animate-reveal: reveal 150ms ease-out;
   --animate-fade-in: fade-in 150ms ease-out;
   --animate-bump: bump 200ms ease-out;
+  /* A checkbox's box and a radio's dot pop in and shrink out (Reka waits for the exit, D264); the
+     tick draws from left to right. */
+  --animate-pop-in: pop-in 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-pop-out: pop-out 120ms ease-in forwards;
+  --animate-tick: tick 200ms ease-out 40ms both;
+
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+  }
+
+  @keyframes pop-out {
+    to {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+  }
+
+  @keyframes tick {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
 
   @keyframes reveal {
     from {

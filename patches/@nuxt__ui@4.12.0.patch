@@ -1,0 +1,20 @@
+diff --git a/dist/runtime/components/FormField.vue b/dist/runtime/components/FormField.vue
+index 1213d4177473b3bc1dfef733a32aeffd5e06ac00..2e93ae2ebadea0b869975e044da78b767c9c02c0 100644
+--- a/dist/runtime/components/FormField.vue
++++ b/dist/runtime/components/FormField.vue
+@@ -85,6 +85,7 @@ provide(formFieldInjectionKey, computed(() => ({
+ 
+     <div :class="[(props.label || !!slots.label || props.description || !!slots.description) && ui.container({ class: props.ui?.container })]">
+       <slot :error="error" />
++      <Transition name="field-message" mode="out-in">
+       <div v-if="props.error !== false && (typeof error === 'string' && error || !!slots.error)" :id="`${ariaId}-error`" data-slot="error" :class="ui.error({ class: props.ui?.error })">
+         <slot name="error" :error="error">
+           {{ error }}
+@@ -95,6 +96,7 @@ provide(formFieldInjectionKey, computed(() => ({
+           {{ props.help }}
+         </slot>
+       </div>
++      </Transition>
+     </div>
+   </Primitive>
+ </template>

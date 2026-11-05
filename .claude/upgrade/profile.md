@@ -41,6 +41,12 @@ Report: modules, `future`/`compatibilityVersion`/`experimental` flags,
 Every Nuxt UI component tag (`U*`) in `.vue` files: count, files, props, slots
 and events used. Composables `useToast`, `useOverlay`, `defineShortcuts`,
 `useColorMode`. Every `:ui="..."` and `app.config.ts` `ui:` override.
+**Local patch:** `patches/@nuxt__ui@<version>.patch` (`patchedDependencies` in
+`pnpm-workspace.yaml`, D264) wraps `UFormField`'s error / help line in
+`<Transition name="field-message">`. A new `@nuxt/ui` version needs the patch
+re-created (`pnpm patch @nuxt/ui@<new>`, re-apply, `pnpm patch-commit`) or
+dropped if the library animates the message itself; install fails while it
+doesn't apply. Check: `auth.test.ts` → "validates the email before sending anything".
 
 ### C. App/framework APIs (when upgrading Nuxt / Vue / vue-router)
 `useFetch`, `useAsyncData`, `$fetch`, `useLazyFetch`, `refreshNuxtData`,

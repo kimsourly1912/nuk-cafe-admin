@@ -597,6 +597,7 @@ const listTransition = useListTransition({ instantWhen: [search, tab] })
 </TransitionGroup>
 ```
 
+- Rows that leave in one render ("Clear order") go one after another, 40 ms apart (from the ninth, together); each is pinned where it stood before any was taken out of the flow. To keep the container until the last row has gone, count `@before-leave` / `@after-leave` beside `v-bind` (Vue merges the handlers), as `OrderLines` does.
 - `instantWhen`: the values that change *which* rows show (a search, a tab, a branch, the layout). While one changes, rows appear and go at once.
 - Rows need stable keys (ids); other children of the group (an empty state) need their own `key`. The container is `relative`, so the leaving row is pinned inside it.
 - Not for reorder lists (`useReorderTransition`) or tables (`UTable` owns its rows).
@@ -953,6 +954,8 @@ Source: `app/components/ListPagination.vue`. Used by Staff, Menu items, Sales by
 ## `<QuantityStepper>`
 
 A quantity: − the number + in a pill (D128), Nuxt UI buttons and input. The number stays within `min`–`max`; − is disabled at `min`, + at `max`. The field has `inputmode="none"`, so a tap on a phone or tablet doesn't open the keyboard (− and + are the way there); with a keyboard a number can be typed (applied on Enter or leaving the field, kept within the limits; anything else goes back) and ↑ / ↓ step it. The same markup for every visitor, so it's safe on server-rendered pages.
+
+**The number rolls (D264):** an `aria-hidden` copy over the field rises to the new value going up and falls going down (`.roll-up-*` / `.roll-down-*`), while the field's own text stays transparent; focusing the field (typing on a computer) hides the copy. Tests read the value with `inputValue()`, never the visible text.
 
 Source: `app/components/QuantityStepper.vue`. Used by the customer menu (the card's stepper from 0, which removes; the order's lines and the item detail from 1) and Review order. Customer orders stop at 20 per line (`LINE_MAX_QUANTITY`, D98). E2E: `shop-menu.test.ts` → "a line's card".
 

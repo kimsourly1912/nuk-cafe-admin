@@ -7,6 +7,9 @@
  * *invisible* hit area below `sm` (an `after:` inset): their 16–20px box is hard to hit, and nothing
  * changes visually. Classes here are added to Nuxt UI's own (tailwind-merge), per component.
  */
+/** A checked control's indicator (checkbox box, radio dot): pops in, shrinks out (D264). */
+const POP = 'motion-safe:data-[state=checked]:animate-pop-in motion-safe:data-[state=indeterminate]:animate-pop-in motion-safe:data-[state=unchecked]:animate-pop-out'
+
 export default defineAppConfig({
   ui: {
     colors: {
@@ -47,13 +50,15 @@ export default defineAppConfig({
     checkbox: {
       slots: {
         base: 'max-sm:relative max-sm:overflow-visible max-sm:after:absolute max-sm:after:-inset-3.5',
-        indicator: 'max-sm:rounded-sm',
+        // D264: the box pops in and shrinks out (Reka keeps it until the exit ends); the tick draws.
+        indicator: `max-sm:rounded-sm ${POP}`,
+        icon: 'motion-safe:animate-tick',
       },
     },
     radioGroup: {
       slots: {
         base: 'max-sm:relative max-sm:overflow-visible max-sm:after:absolute max-sm:after:-inset-3.5',
-        indicator: 'max-sm:rounded-full',
+        indicator: `max-sm:rounded-full ${POP}`,
         // A card's description is `text-muted`, 4.1:1 on the checked card's `bg-primary/10`: under AA (4.5:1).
         description: 'text-toned',
       },
@@ -92,17 +97,14 @@ export default defineAppConfig({
         description: 'wrap-break-word',
       },
     },
-    // State feedback (D263, ui.md §11), played once, never with reduced motion (`motion-safe:`): a
-    // field's error and every alert ease in when they appear, so a message that pushes the form down
-    // reads as new rather than as a jump. A pressed button sinks a little (not a disabled or loading
+    // State feedback (D263, ui.md §11), played once, never with reduced motion (`motion-safe:`): every
+    // alert eases in when it appears, so a message that pushes the form down reads as new rather than
+    // as a jump. A field's error eases in and out through the patched UFormField (D264, tailwind.css). A pressed button sinks a little (not a disabled or loading
     // one), so a tap on a phone shows it was taken. `transition-colors` widens to `scale` (Tailwind's
     // `scale-*` sets the `scale` property, not `transform`).
     // **Never a link-style button, not even `scale-100`:** any `scale` makes the button the box its
     // `::after` is placed in, and a card's stretched link (`after:absolute after:inset-0`, always
     // `variant="link"`) shrank to the button on press, so the click was lost (products e2e).
-    formField: {
-      slots: { error: 'motion-safe:animate-reveal' },
-    },
     alert: {
       slots: { root: 'motion-safe:animate-reveal' },
     },

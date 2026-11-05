@@ -8,19 +8,45 @@
  * and totals in view. The note travels with the line to Review order.
  *
  * Motion (D263): a line added fades in, a line removed fades out while the ones below slide up
- * (`useListTransition`); the list and "Your order is empty" swap with a short fade.
+ * (`useListTransition`); the list and "Your order is empty" swap with a short fade. "Clear order"
+ * takes the lines out one after another (D264): the list stays until the last one has gone.
  */
 import { LINE_NOTE_MAX } from '#shared/contracts/orders'
 import type { ResolvedCart } from '../utils/cart'
 import { MAX_LINE_QUANTITY } from '../utils/cart'
 
-defineProps<{ cart: ResolvedCart }>()
+const props = defineProps<{ cart: ResolvedCart }>()
 const emit = defineEmits<{
   'set-quantity': [key: string, quantity: number]
   'set-note': [key: string, note: string]
 }>()
 
 const listTransition = useListTransition()
+// The order emptied ("Clear order", the last trash): the list stays until its lines have gone.
+// Decided from the data before the render that removes them (`pre`): the leave hooks run during
+// that render, too late. Only the end changes reactive state: a change during the leave re-renders
+// the group, and TransitionGroup cancels its rows' slide on the next update.
+const holding = ref(false)
+let leaving = 0
+watch(() => props.cart.lines.length, (count, previous) => {
+  if (count > 0 || previous === 0) return
+  holding.value = true
+  // Nothing left to leave (reduced motion removes rows at once): let the empty state show.
+  nextTick(() => {
+    if (leaving === 0) holding.value = false
+  })
+}, { flush: 'pre' })
+
+function onLineLeaving() {
+  leaving++
+}
+
+function onLineLeft() {
+  leaving = Math.max(0, leaving - 1)
+  if (leaving === 0) holding.value = false
+}
+
+const showList = computed(() => props.cart.lines.length > 0 || holding.value)
 
 /** Lines whose note box was opened here; a line with a note shows it already. */
 const notesOpen = ref(new Set<string>())
@@ -44,7 +70,7 @@ function removeNote(line: ResolvedCart['lines'][number]) {
     mode="out-in"
   >
     <div
-      v-if="!cart.lines.length"
+      v-if="!showList"
       class="flex flex-col items-center gap-2 rounded-lg border border-dashed border-default px-4 py-8 text-center"
     >
       <UIcon
@@ -65,6 +91,8 @@ function removeNote(line: ResolvedCart['lines'][number]) {
       class="relative flex flex-col gap-3"
       aria-label="Items in your order"
       v-bind="listTransition"
+      @before-leave="onLineLeaving"
+      @after-leave="onLineLeft"
     >
       <li
         v-for="line in cart.lines"
