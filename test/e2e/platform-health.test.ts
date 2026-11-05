@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import type { PlatformHealth } from '../../shared/contracts/platform-health'
 import type { PlatformSession } from '../../shared/contracts/tenants'
 import type { MockHandler } from './support/mock-api'
-import { mockApi, setupE2e } from './support/mock-api'
+import { mockApi, settleAnimations, setupE2e } from './support/mock-api'
 
 await setupE2e()
 
@@ -119,6 +119,7 @@ describe('system health', () => {
 describe('accessibility', () => {
   const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
   async function axeFindings(page: Page): Promise<string[]> {
+    await settleAnimations(page)
     await page.evaluate(axeSource)
     return page.evaluate(async () => {
       const axe = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<{ violations: { id: string, nodes: { target: string[] }[] }[] }> } }).axe

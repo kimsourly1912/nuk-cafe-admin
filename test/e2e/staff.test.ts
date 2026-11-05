@@ -4,7 +4,7 @@ import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
 import type { StaffMember } from '../../shared/contracts/staff'
-import { ADMIN, AIRPORT, mockApi, paginatedHandler, RIVERSIDE, setupE2e, staffOf, stretchedTarget, toast } from './support/mock-api'
+import { ADMIN, AIRPORT, mockApi, paginatedHandler, RIVERSIDE, settleAnimations, setupE2e, staffOf, stretchedTarget, toast } from './support/mock-api'
 import { asNewVisitor } from './support/client-address'
 
 await setupE2e()
@@ -312,6 +312,7 @@ describe('staff on a phone', () => {
 describe('accessibility', () => {
   const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
   async function axeFindings(page: Page): Promise<string[]> {
+    await settleAnimations(page)
     await page.evaluate(axeSource)
     return page.evaluate(async () => {
       const axe = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<{ violations: { id: string, nodes: { target: string[] }[] }[] }> } }).axe

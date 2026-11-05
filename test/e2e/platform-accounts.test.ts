@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import type { PlatformAccountDetail, PlatformAccountSummary } from '../../shared/contracts/accounts'
 import type { PlatformSession } from '../../shared/contracts/tenants'
 import type { MockHandler } from './support/mock-api'
-import { failures, lastSegment, MockFailure, mockApi, paginatedHandler, setupE2e, toast } from './support/mock-api'
+import { failures, lastSegment, mockApi, MockFailure, paginatedHandler, settleAnimations, setupE2e, toast } from './support/mock-api'
 
 await setupE2e()
 
@@ -323,6 +323,7 @@ describe('an account\'s page', () => {
 describe('accessibility', () => {
   const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
   async function axeFindings(page: Page): Promise<string[]> {
+    await settleAnimations(page)
     await page.evaluate(axeSource)
     return page.evaluate(async () => {
       const axe = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<{ violations: { id: string, nodes: { target: string[] }[] }[] }> } }).axe

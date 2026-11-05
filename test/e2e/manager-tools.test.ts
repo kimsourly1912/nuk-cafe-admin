@@ -6,7 +6,7 @@ import { describe, expect, inject, it } from 'vitest'
 import { allowBrowserProblems } from './support/browser-problems'
 import type { SeedCustomer } from './support/seed'
 import { asNewVisitor, clientHeaders } from './support/client-address'
-import { setupE2e, toast } from './support/mock-api'
+import { settleAnimations, setupE2e, toast } from './support/mock-api'
 
 await setupE2e()
 
@@ -131,6 +131,7 @@ describe('manager tools on the counter (D198)', () => {
 
   const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
   async function axeFindings(page: Page): Promise<string[]> {
+    await settleAnimations(page)
     await page.evaluate(axeSource)
     return page.evaluate(async () => {
       const axe = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<{ violations: { id: string, nodes: { target: string[] }[] }[] }> } }).axe

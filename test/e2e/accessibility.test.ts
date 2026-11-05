@@ -7,7 +7,7 @@ import type { Promotion } from '#shared/contracts/menu-promotions'
 import type { CheckoutQuote, Order } from '#shared/contracts/orders'
 import type { PublicMenu } from '#shared/contracts/public-menu'
 import { asNewVisitor, clientHeaders } from './support/client-address'
-import { ADMIN, menuItemSummaryOf, mockApi, pageOf, RIVERSIDE, setupE2e, staffOf } from './support/mock-api'
+import { ADMIN, menuItemSummaryOf, mockApi, pageOf, RIVERSIDE, settleAnimations, setupE2e, staffOf } from './support/mock-api'
 
 // An accessibility check (D152): axe-core's WCAG 2.1 A and AA rules on the main pages, at a
 // desktop and a phone width. Admin pages on mocked data; the customer menu and the counter on the
@@ -20,6 +20,7 @@ const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/
 /** axe's findings on the page as it is now: `rule: element, element…`. */
 async function findings(page: Page): Promise<string[]> {
   // Evaluated through the browser's protocol: the production CSP doesn't apply.
+  await settleAnimations(page)
   await page.evaluate(axeSource)
   const violations = await page.evaluate(async () => {
     const axe = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<{ violations: { id: string, nodes: { target: string[] }[] }[] }> } }).axe

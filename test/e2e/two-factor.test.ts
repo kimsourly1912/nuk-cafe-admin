@@ -8,7 +8,7 @@ import type { AdminSession, CounterSession } from '../../shared/contracts/identi
 import type { PlatformSession } from '../../shared/contracts/tenants'
 import { allowBrowserProblems } from './support/browser-problems'
 import type { MockHandler } from './support/mock-api'
-import { ADMIN, deferred, failures, gotoHydrated, MockFailure, mockApi, NUK_PROFILE, openTabs, setupE2e, SIGNED_OUT, toast } from './support/mock-api'
+import { ADMIN, deferred, failures, gotoHydrated, mockApi, MockFailure, NUK_PROFILE, openTabs, settleAnimations, setupE2e, SIGNED_OUT, toast } from './support/mock-api'
 import { asNewVisitor } from './support/client-address'
 
 await setupE2e()
@@ -554,6 +554,7 @@ describe('Your devices (D243)', () => {
 describe('accessibility', () => {
   const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
   async function axeFindings(page: Page): Promise<string[]> {
+    await settleAnimations(page)
     await page.evaluate(axeSource)
     return page.evaluate(async () => {
       const axe = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<{ violations: { id: string, nodes: { target: string[] }[] }[] }> } }).axe

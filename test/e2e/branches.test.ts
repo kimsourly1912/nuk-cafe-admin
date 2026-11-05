@@ -5,7 +5,7 @@ import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import type { BranchSettings, DiningTable } from '../../shared/contracts/branches'
 import type { MockHandler } from './support/mock-api'
-import { AIRPORT, failures, gotoViaSidebar, MockFailure, mockApi, RIVERSIDE, setupE2e, toast, toastAction } from './support/mock-api'
+import { AIRPORT, failures, gotoViaSidebar, mockApi, MockFailure, RIVERSIDE, settleAnimations, setupE2e, toast, toastAction } from './support/mock-api'
 
 await setupE2e()
 
@@ -157,6 +157,7 @@ describe('adding a branch (D197)', () => {
 
   const axeSource = readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8')
   async function axeFindings(page: Page): Promise<string[]> {
+    await settleAnimations(page)
     await page.evaluate(axeSource)
     return page.evaluate(async () => {
       const axe = (window as unknown as { axe: { run: (context: Document, options: unknown) => Promise<{ violations: { id: string, nodes: { target: string[] }[] }[] }> } }).axe

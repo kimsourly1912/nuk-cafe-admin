@@ -427,3 +427,14 @@ export async function stretchedTarget(target: Locator) {
     return { x: area.x, width: area.width, height: area.height, reaches: hit === button || button.contains(hit) }
   })
 }
+
+/**
+ * Waits for the page's finite animations (D263/D264: an alert or empty state fading in, a checkbox
+ * popping) to end, so axe measures colours as people read them, not half-faded. Looping ones (the
+ * order tracker's step) are skipped: they never end.
+ */
+export async function settleAnimations(page: Page) {
+  await page.evaluate(() => Promise.all(document.getAnimations()
+    .filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+    .map(animation => animation.finished.catch(() => undefined))))
+}
