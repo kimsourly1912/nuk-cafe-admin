@@ -3,6 +3,15 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Google popup inherited document policy repair (D261, 2026-11-05)
+
+- Owner reproduced an open Google callback popup while the initiating form reported it closed. Base: remote main `6f2a9e27466d1f0faf863e867695316edeaac929`; open PRs #254/#258 are unrelated. Main CI/staging run 41867812276 succeeded.
+- The auth entry HTTP responses already have popup-compatible COOP, but client navigation from the menu retains the original strict document policy. Controlled-origin and built-app Chrome 156 reproductions both report `popup.closed === true` while the popup is actually open; the built app shows the reported alert. The close poll rejects and closes the completion channel before the callback can be acknowledged.
+- Enter each of the five auth entry routes from a non-entry route using a full local document navigation. Preserve the full target, leave guard and normal link history; replace redirected entries. Direct entry and transitions between auth entry forms need no extra document navigation; hydration redirects from protected workspace documents still do. Existing security headers, OAuth/state/session/linking/two-factor and workspace authorization stay in place.
+- Added menu-link and protected-workspace browser regressions: keep the cross-origin provider open beyond the close poll, then check return destination and actual popup closure. Provider/session boundaries are mocked; these tests do not establish a live Google exchange on staging.
+- Earlier local evidence before the owner requested cloud-only work: frozen install, lint, full typecheck and audit passed on Node 24.22.1/pnpm 12.15.0; audit 3 low/12 moderate, no high/critical. Unit/server: 2,503 passed / 1 existing skipped across 170 files. The two menu-entry browser regressions passed on the fix; they timed out on main, while a separate built-app reproduction established the precise false-closure behavior.
+- The owner then required cloud-only execution. Local test processes were stopped; the unfinished full browser run and planned Brave checks are not claimed passed. Cloud-PC handoff tools failed, so this candidate was prepared through GitHub APIs for existing GitHub Actions cloud validation. Full current-head cloud CI is pending. No merge or deployment.
+
 ### D1 backup export contract repair (PR #253, 2026-11-03)
 
 - Reviewed head `a6ee858` against current main `82cbe18` (main had not moved at review). Only open PR at initial inspection: #253, draft. Its CI check job failed on three quote-style errors; typecheck/audit/unit were skipped. Browser shards run separately.

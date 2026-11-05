@@ -9,7 +9,7 @@ import { asNewVisitor } from './support/client-address'
 await setupE2e()
 
 describe('Google account page fallback', () => {
-  it('permits popup handles only on the two account entry routes and retains CSP', async () => {
+  it('permits popup handles only on auth entry routes and retains CSP', async () => {
     for (const path of ['/sign-in', '/sign-up', '/c/nuk/admin/login', '/c/nuk/counter/sign-in', '/platform/sign-in', '/google-callback', '/cafes']) {
       const response = await fetch(url(path))
       expect(response.headers.get('cross-origin-opener-policy')).toBe(path === '/cafes' ? 'same-origin' : path === '/google-callback' ? 'unsafe-none' : 'same-origin-allow-popups')
@@ -58,7 +58,7 @@ async function enableGoogle(page: Awaited<ReturnType<typeof createPage>>) {
 }
 
 /** Provider traffic stays offline; the real browser still crosses origins and keeps its popup. */
-async function popupFlow(path = '/sign-in', handlers: (current: () => boolean) => Record<string, MockHandler> = () => ({}), redirect = '/verify-email', size?: { width: number, height: number }) {
+async function popupFlow(path = '/sign-in', handlers: (current: () => boolean) => Record<string, MockHandler> = () => ({}), redirect = '/verify-email', size?: { width: number, height: number }, entry: 'direct' | 'menu' | 'workspace' = 'direct') {
   const page = await createPage()
   if (size) await page.setViewportSize(size)
   let callback = ''
@@ -66,6 +66,7 @@ async function popupFlow(path = '/sign-in', handlers: (current: () => boolean) =
   let signedIn = false
   const api = await mockApi(page, {
     'GET /account/providers': () => ({ google: true }),
+    'GET /shop/me': () => { throw failures.unauthorized() },
     'GET /auth/get-session': () => signedIn ? { user: { id: 'google-user', name: 'Google User', email: 'google@example.com', emailVerified: true } } : null,
     'POST /auth/sign-in/social': ({ body }) => {
       const request = body as { callbackURL: string, errorCallbackURL: string, disableRedirect: boolean }
@@ -77,7 +78,20 @@ async function popupFlow(path = '/sign-in', handlers: (current: () => boolean) =
     ...handlers(() => signedIn),
   })
   await page.context().route('https://accounts.google.com/**', route => route.fulfill({ contentType: 'text/html', body: '<title>Offline Google</title>' }))
-  await page.goto(url(`${path}?redirect=${encodeURIComponent(redirect)}`), { waitUntil: 'hydration' })
+  if (entry === 'menu') {
+    // A router navigation keeps the menu document's COOP policy unless auth entry reloads it.
+    await page.route(url('/api/c/nuk/public/**'), route => route.continue())
+    await page.goto(url('/c/nuk'), { waitUntil: 'hydration' })
+    await page.getByRole('link', { name: 'Sign in', exact: true }).click()
+    if (path === '/sign-up') await page.getByRole('link', { name: 'Create an account', exact: true }).click()
+  }
+  else if (entry === 'workspace') {
+    // Let the real route middleware send an unauthenticated strict workspace document to login.
+    await page.goto(url(redirect), { waitUntil: 'hydration' })
+  }
+  else {
+    await page.goto(url(`${path}?redirect=${encodeURIComponent(redirect)}`), { waitUntil: 'hydration' })
+  }
   await page.getByRole('button', { name: 'Continue with Google' }).waitFor()
   return { page, api, callback: () => callback, errorCallback: () => errorCallback, signOut: () => {
     signedIn = false
@@ -87,6 +101,23 @@ async function popupFlow(path = '/sign-in', handlers: (current: () => boolean) =
 }
 
 describe('Google popup completion', () => {
+  it.each(['/sign-in', '/sign-up'])('%s completes Google after entering from the menu', async (path) => {
+    const flow = await popupFlow(path, undefined, '/c/nuk', undefined, 'menu')
+    const opened = flow.page.waitForEvent('popup')
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+    const popup = await opened
+    await popup.waitForURL('https://accounts.google.com/**')
+    // Stay on the provider beyond the close poll; a severed handle must not report cancellation.
+    await flow.page.clock.install()
+    await flow.page.clock.runFor(1000)
+    expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isDisabled()).toBe(true)
+    expect(await flow.page.getByText('Google sign-in was closed.', { exact: false }).count()).toBe(0)
+    flow.authenticate()
+    await popup.goto(flow.callback(), { waitUntil: 'commit' })
+    await flow.page.waitForURL(url('/c/nuk'))
+    await expect.poll(() => popup.isClosed()).toBe(true)
+  })
+
   it.each(['/sign-in', '/sign-up'])('%s completes only after a fresh authenticated session and keeps the return path', async (path) => {
     const flow = await popupFlow(path)
     const opened = flow.page.waitForEvent('popup')
@@ -250,7 +281,7 @@ describe('enabled Google account pages', () => {
     expect(reads).toBe(3)
   })
 
-  it('keeps Google visible after sign-in, sign-out and client-side return without a reload', async () => {
+  it('keeps Google visible after sign-in, sign-out and return without a manual reload', async () => {
     const page = await createPage()
     await asNewVisitor(page)
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -347,6 +378,21 @@ function workspaceHandlers(current: () => boolean): Record<string, MockHandler> 
 }
 
 describe('Google workspace entry points', () => {
+  it.each(WORKSPACES)('%s completes Google after a protected workspace redirects to login', async (path, target) => {
+    const flow = await popupFlow(path, workspaceHandlers, target, undefined, 'workspace')
+    const opened = flow.page.waitForEvent('popup')
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+    const popup = await opened
+    await popup.waitForURL('https://accounts.google.com/**')
+    await flow.page.clock.install()
+    await flow.page.clock.runFor(1000)
+    expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isDisabled()).toBe(true)
+    flow.authenticate()
+    await popup.goto(flow.callback(), { waitUntil: 'commit' })
+    await flow.page.waitForURL(url(target))
+    await expect.poll(() => popup.isClosed()).toBe(true)
+  })
+
   it.each(WORKSPACES)('%s completes Google then checks workspace access before returning to %s', async (path, target) => {
     const flow = await popupFlow(path, workspaceHandlers, target)
     const opened = flow.page.waitForEvent('popup')

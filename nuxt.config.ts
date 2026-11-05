@@ -64,6 +64,7 @@ function deployedSecurityRules() {
   const tokenEntryHeaders = { ...securityHeaders(), 'cache-control': 'no-store, no-transform' }
   return {
     '/**': { headers: securityHeaders() },
+    // Entry middleware loads these document policies on router entry too (D261).
     // Keep the OAuth popup handle across Google's origin; retain isolation elsewhere.
     '/sign-in': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },
     '/sign-up': { headers: { 'cross-origin-opener-policy': 'same-origin-allow-popups' } },

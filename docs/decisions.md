@@ -2912,6 +2912,8 @@ D260 verification boundary: the e2e server preloads an offline password-range fi
 D261 error-boundary repair (2026-11-04): Better Auth forwards custom `APIError` codes verbatim. The session guard's `GOOGLE_PASSWORD_REQUIRED` must normalize to the existing bounded `google_password_required` instruction in both the passive popup and legacy sign-in path; unknown codes and provider descriptions remain discarded. Returning protected identities retain the password/second-factor requirement. [Evidence](progress.md#google-protected-account-error-repair-d261-2026-11-04).
 
 
+D261 navigation repair (2026-11-05): HTTP COOP is a document policy. Router navigation from a strict menu/workspace document to an auth URL does not install the auth response's popup-compatible header. Before mounting any of the five Google entry forms from a non-entry route, load its full local URL as a document, preserving query/fragment and the existing leave guard. Direct arrival/hydration of the entry document and navigation between auth entry forms stay unchanged; hydration redirects from protected documents still reload. All other documents retain strict COOP. Browser regressions begin on the menu and click into sign-in/sign-up, or enter a protected workspace, cross the provider origin, complete the callback and assert the popup actually closes. Direct-entry header checks alone cannot establish this. No OAuth/session/linking/2FA or permission policy changes.
+
 ### D262: Google sign-in at every workspace retains native two-factor verification (2026-11-04)
 
 **Owner:** add Google to platform, counter and admin authentication pages.
