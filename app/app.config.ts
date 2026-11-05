@@ -94,9 +94,12 @@ export default defineAppConfig({
     },
     // State feedback (D263, ui.md §11), played once, never with reduced motion (`motion-safe:`): a
     // field's error and every alert ease in when they appear, so a message that pushes the form down
-    // reads as new rather than as a jump. A pressed button sinks a little (not a link-style button, a
-    // disabled or a loading one), so a tap on a phone shows it was taken. `transition-colors` widens
-    // to `scale` (Tailwind's `scale-*` sets the `scale` property, not `transform`).
+    // reads as new rather than as a jump. A pressed button sinks a little (not a disabled or loading
+    // one), so a tap on a phone shows it was taken. `transition-colors` widens to `scale` (Tailwind's
+    // `scale-*` sets the `scale` property, not `transform`).
+    // **Never a link-style button, not even `scale-100`:** any `scale` makes the button the box its
+    // `::after` is placed in, and a card's stretched link (`after:absolute after:inset-0`, always
+    // `variant="link"`) shrank to the button on press, so the click was lost (products e2e).
     formField: {
       slots: { error: 'motion-safe:animate-reveal' },
     },
@@ -104,10 +107,10 @@ export default defineAppConfig({
       slots: { root: 'motion-safe:animate-reveal' },
     },
     button: {
-      slots: {
-        base: 'transition-[color,background-color,border-color,text-decoration-color,fill,stroke,scale] motion-safe:not-disabled:not-aria-disabled:active:scale-[0.97]',
-      },
-      compoundVariants: [{ variant: 'link', class: { base: 'motion-safe:not-disabled:not-aria-disabled:active:scale-100' } }],
+      compoundVariants: [{
+        variant: ['solid', 'outline', 'soft', 'subtle', 'ghost'],
+        class: { base: 'transition-[color,background-color,border-color,text-decoration-color,fill,stroke,scale] motion-safe:not-disabled:not-aria-disabled:active:scale-[0.97]' },
+      }],
     },
   },
 })
