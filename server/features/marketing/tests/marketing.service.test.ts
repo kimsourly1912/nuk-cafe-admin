@@ -288,6 +288,17 @@ describe('posts', () => {
     expect(await db.select().from(marketingPosts)).toHaveLength(1)
   })
 
+  it('refuses the same key for a different promotion or caption without creating another post', async () => {
+    const ch = await connect(admin)
+    const key = crypto.randomUUID()
+    const input = postInput([ch.id])
+    const other = await createPromotion(db, admin, promotionInput({ name: 'Another promotion' }), NOW)
+    await createPosts(db, admin, promotionId, input, key, CAFE_URL, NOW)
+    await expectApiError(() => createPosts(db, admin, other.id, input, key, CAFE_URL, NOW), 422, 'IDEMPOTENCY_MISMATCH')
+    await expectApiError(() => createPosts(db, admin, promotionId, { ...input, caption: 'Changed' }, key, CAFE_URL, NOW), 422, 'IDEMPOTENCY_MISMATCH')
+    expect(await db.select().from(marketingPosts)).toHaveLength(1)
+  })
+
   it('refuses an ended or draft promotion, and another cafe\'s promotion or channel', async () => {
     const ch = await connect(admin)
     const draft = await createPromotion(db, admin, promotionInput({ name: 'Draft', publish: false }), NOW)

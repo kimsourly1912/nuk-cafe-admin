@@ -31,12 +31,22 @@ export async function sessionConfirmation(db: Db, userId: string, sessionId: str
 
 /** A right password: confirmed now, the wrong-password count back to 0 (D246). */
 export function markSessionConfirmedStatement(db: Db, userId: string, sessionId: string, at: Date) {
-  return db.update(session).set({ confirmedAt: at, confirmFailures: 0 }).where(and(eq(session.id, sessionId), eq(session.userId, userId)))
+  return db.update(session).set({ confirmedAt: at, confirmFailures: 0 }).where(and(eq(session.id, sessionId), eq(session.userId, userId), gt(session.expiresAt, at)))
 }
 
-/** A wrong password: one more on this session's count, in SQL so two at once both count (D246). */
-export function countConfirmFailureStatement(db: Db, userId: string, sessionId: string) {
-  return db.update(session).set({ confirmFailures: sql`coalesce(${session.confirmFailures}, 0) + 1` }).where(and(eq(session.id, sessionId), eq(session.userId, userId)))
+/** Reserve before checking a password: concurrent requests cannot all use the same remaining try. */
+export function reserveConfirmationStatement(db: Db, userId: string, sessionId: string, at: Date, max: number) {
+  return db.update(session).set({ confirmFailures: sql`coalesce(${session.confirmFailures}, 0) + 1` }).where(and(
+    eq(session.id, sessionId),
+    eq(session.userId, userId),
+    gt(session.expiresAt, at),
+    sql`coalesce(${session.confirmFailures}, 0) < ${max}`,
+  ))
+}
+
+/** Revoke at the reserved-attempt limit in the same batch as the failed-check audit. */
+export function endConfirmationSessionStatement(db: Db, userId: string, sessionId: string, max: number) {
+  return db.delete(session).where(and(eq(session.id, sessionId), eq(session.userId, userId), sql`coalesce(${session.confirmFailures}, 0) >= ${max}`)).returning({ id: session.id })
 }
 
 /** Ends one session (the account's own, by id). */

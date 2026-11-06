@@ -65,6 +65,10 @@ const statusWords: Record<OrderStatus, string> = {
 export const orderChanged = (pickupNumber: number, status: OrderStatus) =>
   apiError(409, OrderErrorCodes.ORDER_CHANGED, `Order ${String(pickupNumber).padStart(3, '0')} changed meanwhile: it's ${statusWords[status]} now.`)
 
+/** A QR snapshot changed; do not describe its earlier order status as the current one. */
+export const khqrGenerationChanged = (pickupNumber: number) =>
+  apiError(409, OrderErrorCodes.ORDER_CHANGED, `The payment QR for order ${String(pickupNumber).padStart(3, '0')} changed meanwhile. Reload the order and try again.`)
+
 export const paymentExpired = () =>
   apiError(409, OrderErrorCodes.PAYMENT_EXPIRED, 'The 30 minutes to pay are over, so this order is cancelled. The customer can place a new one.')
 

@@ -247,7 +247,7 @@ const objectKeyOf = (url: string) => url.replace(/^\/media\//, '')
  */
 export async function createPosts(db: Db, actor: Actor, promotionId: string, input: CreatePostsInput, key: string, cafeUrl: string | undefined, now = new Date()): Promise<MarketingPost[]> {
   if (!cafeUrl) throw apiError(500, ErrorCodes.INTERNAL, 'This server doesn\'t know its own address (NUXT_PUBLIC_SITE_URL).')
-  const { response } = await withIdempotency(db, { tenantId: actor.tenantId, actorId: actor.userId, operation: 'marketing.post', key }, input, async () => {
+  const { response } = await withIdempotency(db, { tenantId: actor.tenantId, actorId: actor.userId, operation: 'marketing.post', key }, { promotionId, ...input }, async () => {
     const promotion = await getPromotion(db, actor.tenantId, promotionId, now)
     if (promotion.phase !== 'live' && promotion.phase !== 'scheduled') throw promotionNotRunning()
     let scheduledAt = now

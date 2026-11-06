@@ -2993,3 +2993,16 @@ No copied crypto, internal library imports, new dependencies, migrations, creden
 - **Alternatives:** a separate recovery-work table (an extra insert that could be lost from the charge's; the charge already is the identity); review-only background work (the owner chose attach); 72 h window (owner chose 24 h); managers seeing their branch's cases (owner chose owners only); cases for account mismatches (not the cafe's money).
 - **Consequences:** Bakong is asked about every QR, not only the ones on screen: about 13 questions for each QR that is never paid. Coverage ends 24 h after expiry; "unchecked" is a count, never "unpaid". Not in this step: an owner "check again" action, a Telegram alert for new cases, provider rate limits (429) handled apart from other errors; live Bakong behavior is not verified (provider stand-ins only).
 - **Verified:** see [progress](progress.md#customer-order-index-and-khqr-recovery-d265-d266-2026-11-05).
+
+
+### D267: Server P2 reliability fixes share one review (2026-11-06)
+
+The owner asked for B3–B7 from the server review in one PR. Keep the feature layers, permissions, integer-money calculations, existing bank-receipt behavior and the 30-minute cash-payment policy. No migration or dependency change.
+
+- Manual payments take a database clock and recheck the strict pay-by deadline at the final batch statement. Riel payment validates the indexed current rate and guards that same rate at commit. Replays still return the committed command; a rollback consumes no key. Bakong-confirmed arrivals keep their separate path.
+- New and reused QRs guard the unpaid order version/deadline, the receiving-settings version and, for riel, the current rate. Reuse also rechecks its remaining lifetime. A changed validation snapshot answers an existing conflict; no automatic financial retry or order reopening.
+- Summary, item-sales page/CSV/Telegram, order tracking, counter/report details, current/past customer orders and the finished-counter list read related monetary/status rows in one repository batch. Query builders and D1 column decoders stay in repositories; contexts such as a report period are still resolved before the snapshot. No caching or replica change.
+- Password confirmation reserves one of five per-session attempts atomically before verification. In-flight/interrupted checks conservatively consume a slot; success resets it. Failed checks audit and revoke at the limit together. A successful password check cannot confirm a session revoked while it was running. The address limiter and other devices remain independent.
+- Marketing post fingerprints include the promotion path ID. A reused key naming another promotion is an idempotency mismatch, not another promotion's posts. Keys written before this correction may also mismatch until their existing 24-hour retention expires; the server never reissues their posts automatically.
+
+Verification: migrated SQLite forced interleavings, populated local workerd/D1 reads and commit guards, tenant isolation, replay and guard-removal checks. Exact results and browser evidence belong in [progress](progress.md#server-p2-reliability-fixes-d267-2026-11-06). KHQR recovery is preserved from D266 (PR #267). Production backup/restore proof remains separate work; no operational action is authorized by these code fixes.

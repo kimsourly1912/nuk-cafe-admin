@@ -306,6 +306,8 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 
 | [D266](decisions.md#d266-khqr-recovery-the-server-keeps-checking-each-qr-owners-review-payments-an-order-couldnt-take-2026-11-05) | KHQR recovery: `orders:recover-khqr`, automatic attach, owner-only review cases, 24 h window (2026-11-05) |
 
+| [D267](decisions.md#d267-server-p2-reliability-fixes-share-one-review-2026-11-06) | Server P2 payment/QR commit guards, consistent reads, confirmation attempts and promotion retries, 2026-11-06 |
+
 | [D268](decisions.md#d268-motion-curves-and-the-orders-height-travelling-with-its-rows-2026-11-06) | Motion curves `--ease-enter` / `--ease-move`, `AnimatedHeight` on the order's lines, note box by grid rows, new line brought into view (2026-11-06) |
 
 | [D269](decisions.md#d269-the-counters-board-fills-the-screen-and-each-status-has-one-color-signal-2026-11-06) | Counter board: screen-height columns that scroll by themselves, one color signal per status, card order, empty state in To pay (2026-11-06) |

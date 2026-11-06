@@ -143,6 +143,8 @@ Like GitHub's sudo mode: a stolen signed-in session (an unlocked phone, a copied
 - **App:** `apiFetch` answers `CONFIRMATION_REQUIRED` with `<ConfirmIdentityModal>` ("Confirm it's you") and sends the same request **once** more (same body, version and idempotency key). Cancel: nothing is sent again, silently. One dialog at a time; a session change closes it.
 - **Not covered (by design):** a super admin on a support visit is read-only already (D193); creating a new cafe with its first owner (no existing cafe is at risk).
 
+D267 makes the confirmation attempt limit atomic: reserve one of five per-session slots before checking a password, so parallel requests cannot share the last slot. In-flight and interrupted checks consume slots conservatively until a successful confirmation resets them. A failed check audits and conditionally revokes the session in one batch at the limit. Success guards the still-live session; revocation during verification cannot return a successful confirmation. The existing per-address rate limit remains an additional control. Tests: `identity/tests/confirmation.service.test.ts` covers parallel failures, device isolation and revocation during verification.
+
 ## Staff onboarding
 
 **What an owner sees of their staff (D248):** name, email, access, two-step on or off (D242), and **Last active here**: when the person last opened *this* cafe's admin or counter (`workspace_visits`). Not the account's sign-in time: an account is the platform's and works at several cafes, so it would show one cafe's owner when the person was at another. Two-cafe test: `visits.service.test.ts`.
