@@ -110,6 +110,14 @@ describe('Google accounts', () => {
     expect(external.headers.getSetCookie()).toHaveLength(0)
   })
 
+  it('sends an OAuth failure without a usable state to the popup callback page', async () => {
+    const started = await start()
+    const forged = await callback(started, { state: 'forged-state' })
+    expect(forged.headers.get('location')).toBe('/google-callback?error=state_mismatch')
+    const missing = await auth.handler(new Request(SITE + '/api/auth/callback/google?error=access_denied'))
+    expect(missing.headers.get('location')).toBe('/google-callback?error=state_not_found')
+  })
+
   it('accepts a local HTTP callback and refuses an untrusted origin on a cookie-bearing request', async () => {
     for (const origin of [SITE, 'https://evil.example']) {
       const response = await auth.handler(new Request(SITE + '/api/auth/sign-in/social', {
@@ -204,7 +212,7 @@ describe('Google accounts', () => {
     headers.set('origin', SITE)
     const flow = await auth.api.linkSocialAccount({ body: { provider: 'google', callbackURL: SITE + '/sign-in' }, headers, returnHeaders: true })
     const response = await callback({ authorization: new URL(flow.response.url!), headers: sessionHeaders(flow.headers) })
-    expect(new URL(response.headers.get('location')!).searchParams.has('error')).toBe(true)
+    expect(new URL(response.headers.get('location')!, SITE).searchParams.has('error')).toBe(true)
     expect(await db.select().from(authSchema.account).where(eq(authSchema.account.providerId, 'google'))).toHaveLength(0)
     expect(await db.select().from(authSchema.user)).toHaveLength(1)
   })

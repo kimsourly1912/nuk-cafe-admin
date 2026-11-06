@@ -1,5 +1,5 @@
 import { ofetch } from 'ofetch'
-import { googlePopupChannel, googleSignInError } from '~/utils/google-sign-in'
+import { googlePopupChannel, googlePopupFeatures, googleSignInError } from '~/utils/google-sign-in'
 import type { SessionSurface } from './useSessionIdentity'
 
 /** The popup carries OAuth; only the still-mounted initiating form completes login. */
@@ -19,7 +19,7 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (popupId
     const popupId = crypto.randomUUID()
     const channel = new BroadcastChannel(googlePopupChannel(popupId))
     // Open synchronously during the click, before browser checks or any network await.
-    const popup = window.open('about:blank', '_blank', 'popup,width=500,height=700')
+    const popup = window.open('about:blank', '_blank', googlePopupFeatures(window))
     if (!popup) {
       channel.close()
       throw new ApiError('Allow popups for this site, then try Continue with Google again.', { kind: 'business', status: 0 })
@@ -42,6 +42,8 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (popupId
         const result = event.data
         if (event.origin !== window.location.origin || result?.path !== '/google-callback' || result?.attempt !== popupId || result?.type !== 'google-complete') return
         channel.postMessage({ type: 'google-received', attempt: popupId })
+        // Done with the window now; the session check and any workspace check happen on this page.
+        popup.close()
         if (result.success === true) resolve(result.twoFactor === true ? 'two-factor' : 'signed-in')
         else reject(new ApiError(googleSignInError(result.error), { kind: 'business', status: 0 }))
       }

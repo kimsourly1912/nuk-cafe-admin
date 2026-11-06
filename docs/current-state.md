@@ -37,7 +37,7 @@ Each is its own step and branch.
 
 Details in each progress entry; all merged to main and CI green.
 
-- **2026-11-06:** customer-order index and KHQR recovery (D265/D266, #267); live Bakong remains unverified.
+- **2026-11-06:** customer-order index and KHQR recovery (D265/D266, #267); live Bakong remains unverified. In review, not merged: centered Google popup that always closes (D261, `fix/google-sign-in-popup`).
 - **2026-11-05:** interaction motion (D263, #262/#263) and leave animations (D264, #265); Google phone popup fix (#264); app-wide Google popup COOP (D261, #260).
 - **2026-11-03/04:** Google sign-in and sign-up (D260, #255/#256), popup (D261, #257), at all workspaces with two-step (D262, #259); D1 backup export repair (#253, not production verified); platform UI fixes (#250); auth page state consistency (D258, #249); checkout validates at commit (D257, #248).
 - **2026-11-01/02:** e2e HTML validation (D256, #247); Nuxt Hints not adopted (D255, #246); platform order activity indexed reads (#238); e2e failure evidence (D249, #237); account security steps 1–4 (D242, D243, D246–D248, #231–#236); security hardening (D244, #233); signed-in site root (#240).
