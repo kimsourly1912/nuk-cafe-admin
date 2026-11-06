@@ -9,7 +9,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | Replaced Spring/SPA/SDK | D1–D5; superseded by D39, D43, D71, D95 |
 | API/server architecture and integrity | D39–D45, D52, D71, D116, D194, D200; version, idempotency, guard, audit, repository, shared owner conditions, token queues, connect codes, joined snapshots and JSON-bound sets, archive and permanent delete |
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173, D202–D204; installable app, PWA, manifest, service worker |
-| UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166, D256, D263, D264; motion, animation, transitions |
+| UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166, D256, D263, D264, D268, D269; counter board layout; motion, animation, transitions, easing curves |
 | Tenancy and permissions | D134–D146, D186–D193, D239–D243, D245–D248; organization, tenant, branch, platform console |
 | Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222, D250, D257, D265, D266; KHQR recovery, review cases, customer order index |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
@@ -305,3 +305,7 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D265](decisions.md#d265-index-customer-order-status-and-unpaid-deadlines-within-each-cafe-2026-11-05) | Customer order index `orders_tenant_customer_status_due_idx` with `PRAGMA optimize` (migration 0056) (2026-11-05) |
 
 | [D266](decisions.md#d266-khqr-recovery-the-server-keeps-checking-each-qr-owners-review-payments-an-order-couldnt-take-2026-11-05) | KHQR recovery: `orders:recover-khqr`, automatic attach, owner-only review cases, 24 h window (2026-11-05) |
+
+| [D268](decisions.md#d268-motion-curves-and-the-orders-height-travelling-with-its-rows-2026-11-06) | Motion curves `--ease-enter` / `--ease-move`, `AnimatedHeight` on the order's lines, note box by grid rows, new line brought into view (2026-11-06) |
+
+| [D269](decisions.md#d269-the-counters-board-fills-the-screen-and-each-status-has-one-color-signal-2026-11-06) | Counter board: screen-height columns that scroll by themselves, one color signal per status, card order, empty state in To pay (2026-11-06) |

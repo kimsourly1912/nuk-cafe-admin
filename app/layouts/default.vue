@@ -101,7 +101,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
         collapsible
         resizable
         class="bg-elevated/25 transition-[width] duration-200 ease-out motion-reduce:transition-none data-[dragging=true]:transition-none print:hidden"
-        :ui="{ body: '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden', footer: 'lg:border-t lg:border-default' }"
+        :ui="{ header: 'lg:border-b lg:border-default', body: '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden', footer: 'lg:border-t lg:border-default' }"
       >
         <!-- Drag resizes; a click on the edge collapses or expands. -->
         <template #resize-handle="{ onMouseDown, onTouchStart, ui }">

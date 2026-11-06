@@ -249,8 +249,14 @@ describe('the order beside the menu and in its drawer (D124)', () => {
     const review = panel(page).getByRole('link', { name: 'Review order' })
     expect(await onScreen(page, review)).toBe(true)
     const lines = panel(page).getByRole('list', { name: 'Items in your order' })
-    expect(await lines.evaluate(list => list.parentElement!.scrollHeight > list.parentElement!.clientHeight)).toBe(true)
-    await lines.evaluate(list => list.parentElement!.scrollTo({ top: list.parentElement!.scrollHeight }))
+    expect(await lines.evaluate((list) => {
+      const scroller = list.closest('.overflow-y-auto')!
+      return scroller.scrollHeight > scroller.clientHeight
+    })).toBe(true)
+    await lines.evaluate((list) => {
+      const scroller = list.closest('.overflow-y-auto')!
+      scroller.scrollTo({ top: scroller.scrollHeight })
+    })
     expect(await onScreen(page, panel(page).getByRole('heading', { name: 'Your order' }))).toBe(true)
     expect(await onScreen(page, review)).toBe(true)
   })
@@ -262,6 +268,64 @@ describe('the order beside the menu and in its drawer (D124)', () => {
     expect(await lines.getByRole('button', { name: 'Decrease quantity of Banana Bread' }).isDisabled()).toBe(true)
     await lines.getByRole('button', { name: 'Remove Banana Bread' }).click()
     await panel(page).getByText('Your order is empty').waitFor()
+  })
+
+  it('the panel\'s height travels with the rows when a line goes; at once with reduced motion (D268)', async () => {
+    // Tall enough that all 12 lines fit: the panel's own height changes, not only the scroll.
+    const page = await openWithLongOrder(1440, 2400)
+    await panel(page).getByText('12 items').waitFor()
+    const lines = panel(page).getByRole('list', { name: 'Items in your order' })
+    const removeFirst = () => lines.evaluate(async (list) => {
+      const content = list.parentElement!
+      list.querySelector<HTMLButtonElement>(':scope > li:not([aria-hidden]) button[aria-label^="Remove "]')!.click()
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      // The content has its final height already: the box around it is what is still on its way.
+      return content.parentElement!.getBoundingClientRect().height - content.getBoundingClientRect().height
+    })
+
+    expect(await removeFirst()).toBeGreaterThan(20)
+    await panel(page).getByText('11 items').waitFor()
+
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    expect(await removeFirst()).toBe(0)
+  })
+
+  it('a note box opens by its height and, closed, can\'t be reached (D268)', async () => {
+    const page = await openWithLongOrder(1440)
+    await panel(page).getByText('12 items').waitFor()
+    const line = panel(page).getByRole('listitem').first()
+    const state = () => line.evaluate((row) => {
+      const field = row.querySelector('textarea')!
+      return { inert: field.closest('[inert]') !== null, height: field.closest('.grid')!.getBoundingClientRect().height }
+    })
+
+    expect(await state()).toEqual({ inert: true, height: 0 })
+    const midway = await line.evaluate(async (row) => {
+      const grid = row.querySelector('textarea')!.closest('.grid')!
+      ;[...row.querySelectorAll('button')].find(button => button.textContent?.includes('Add a note'))!.click()
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      return { height: grid.getBoundingClientRect().height, full: grid.firstElementChild!.scrollHeight }
+    })
+    expect(midway.height).toBeLessThan(midway.full)
+    await expect.poll(async () => (await state()).height).toBeGreaterThan(50)
+    expect((await state()).inert).toBe(false)
+
+    await line.getByRole('button', { name: 'Remove note' }).click()
+    await expect.poll(state).toEqual({ inert: true, height: 0 })
+  })
+
+  it('a line added below the scroll is brought into view (D268)', async () => {
+    const page = await openWithLongOrder(1440)
+    await panel(page).getByText('12 items').waitFor()
+    const lines = panel(page).getByRole('list', { name: 'Items in your order' })
+    await lines.evaluate(list => list.closest('.overflow-y-auto')!.scrollTo({ top: 0 }))
+    await visible(page.getByRole('main').getByRole('button', { name: /^Add .* to order$/ })).first().click()
+    await panel(page).getByText('13 items').waitFor()
+    await expect.poll(() => lines.evaluate((list) => {
+      const scroller = list.closest('.overflow-y-auto')!.getBoundingClientRect()
+      const last = list.lastElementChild!.getBoundingClientRect()
+      return last.top >= scroller.top && last.bottom <= scroller.bottom
+    })).toBe(true)
   })
 
   it('a removed line fades out where it stood while the next slides up; at once with reduced motion (D263)', async () => {

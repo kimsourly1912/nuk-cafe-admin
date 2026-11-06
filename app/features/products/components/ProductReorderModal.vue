@@ -7,7 +7,7 @@
  * on phones. Closing with unsaved moves asks first.
  */
 import type { MenuItemSummary } from '#shared/contracts/menu-items'
-import { CategorySelect } from '~/features/categories'
+import { CategorySelect, useCategoryOptions } from '~/features/categories'
 import { saveItemOrder, useCategoryItems } from '../composables/useItems'
 import ProductReorderList from './ProductReorderList.vue'
 
@@ -18,6 +18,12 @@ const emit = defineEmits<{ 'close': [saved: boolean], 'update:open': [open: bool
 
 const { isCompact } = useLayoutContext()
 const categoryId = ref<string | undefined>(props.categoryId)
+// The list may be filtered by a main category, which holds no items itself (they sit in its
+// sub-categories) and so can't be reordered as one list: start with no category chosen instead.
+const { data: categoryOptions } = useCategoryOptions()
+watch(categoryOptions, (categories) => {
+  if (categoryId.value && categories.some(c => c.parentId === categoryId.value)) categoryId.value = undefined
+}, { immediate: true })
 const query = useCategoryItems(categoryId)
 /** The chosen category's items; undefined until they've loaded (never the previous category's). */
 const loaded = computed(() => query.data.value?.categoryId === categoryId.value ? query.data.value?.items : undefined)

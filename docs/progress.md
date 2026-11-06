@@ -3,6 +3,28 @@
 > **Selective retrieval:** for resumption start with [current-state navigation](current-state.md), then the relevant phase, open question or verification section here. Older rows retain evidence from their date; this log is not automatically imported.
 
 
+### Counter queue redesign (D269, 2026-11-06)
+
+- Owner asked for a better queue page, naming responsive, color and style faults. Built: from `sm` the board is the screen's height and each column scrolls under its title and count; phones keep page scrolling, with the tabs now below the header (`top-22`, they stuck at 64 px under an 89 px header); one color signal per status; the card reads number and total, name, pickup or table, items on two lines, time, one action with an icon; "Pay by" is a badge only in its last 5 minutes; "No orders yet" in To pay; the view switch has no box and marks the current view `soft` (Finished today too); search says "Number or name". Uncommitted on `fix/timezone-select-active-item`; replaces the uncommitted color edits to the queue page and card on this branch.
+- **Evidence (local dev server, Chrome DevTools, queue mocked in the browser for full columns; real empty queue too):** at 1300×910, page height 900 of 900 where it was 1,289 of 910 before, three columns of equal height, Preparing's list 1,112 px in 717 px. Screenshots at 320, 640, 768, 844×390, 1024 (dark), 1300 (light, empty) and 390; layout measured at 1440. `pnpm lint`, `pnpm typecheck` clean. `counter.test.ts` + `manager-tools.test.ts` 27/27 (2 new), `accessibility.test.ts` 30/30, `pause-orders.test.ts` 5/5. Guard check: without `sm:h-dvh` and with the tabs at `top-16`, both new tests fail (the phone's with 64 against 88); restored.
+- `pnpm test:unit`: 2,537 passed, 2 failed, 1 skipped; both failures in `server/tests/workspace-session.test.ts`. Alone, 1 of them still fails, a 5 s timeout: the same file and symptom as under D268 below; no server code changed here. Not diagnosed.
+- **Not verified:** full `pnpm test:e2e`, a real tablet, staging. Order states with stacked banners were not looked at in the browser (the layout allows for them).
+- How to verify: at the counter with more orders than fit, scroll one column: the titles, counts and other columns stay. On a phone, scroll a long list: the tabs stay below the header.
+
+### Order line motion (D268, 2026-11-06)
+
+- Owner asked for a smooth, clean flow on the order's lines, from how others do it. Built: curves `--ease-enter` / `--ease-move`; rows enter from 0.96 with no overshoot (replaces the uncommitted `scale(0.8)` with overshoot); `AnimatedHeight` on the lines; note box by grid rows, `inert` closed; a new line brought into view; quicker stepper roll; subtotal `tabular-nums`. Uncommitted on `fix/timezone-select-active-item`.
+- **Evidence (local Chromium, frames sampled after paint):** totals when a line goes: 151 px in 1 frame before, 13 frames (largest step 46 px) after, no overshoot. Note open/close 13 frames. Clear order holds, then one move of 289 px over 10 frames to the empty state. Drawer at 390 px moves in 12 frames. `pnpm lint`, `pnpm typecheck` clean. `shop-menu.test.ts` run alone 33/33 (3 new). Guard check: with the height animation, the reveal and `inert` removed together, all 3 new tests fail; restored.
+- **Not settled:** a 4-file parallel e2e run (`shop-menu`, `shop-checkout`, `counter`, `accessibility`) had 27 failures of 94 (`shop-menu` included, which passed alone; also 409s in `counter`). `pnpm test:unit`: 5 failures, 5 s timeouts and one assertion in `workspace-session` and `erasure`. Alone, those two files left 1 timeout in `workspace-session`. Load is suspected, not shown: the serial rerun was stopped at the owner's request before its e2e part. Run `shop-checkout`, `counter` and `accessibility` one at a time, and the full suites, before a PR. Staging not reviewed.
+- How to verify: on the menu, remove a line and watch Subtotal; open and close a note; add a line with the list scrolled to the top; Clear order; the same in the phone drawer. Frame-level tests read `box height − content height` two frames after the click: the box is what is still moving.
+
+### Reorder menu items with a main category filtered (fix, 2026-11-06)
+
+- Bug: Reorder opened on the filtered category; for a main category the list holds its sub-categories' items, but `PUT /admin/menu/items/order` accepts only a category's own items, so every save answered 409 "Someone changed these items meanwhile". Sub-categories worked.
+- Fix: the dialog starts with no category when the filter is a main category (a category with sub-categories), and `useCategoryItems` keeps only items whose own `categoryId` is the chosen one. No server change.
+- **Evidence:** `pnpm typecheck` clean; ESLint on `app/features/products` clean; `test/e2e/products.test.ts` reordering group 4/4 (new: filtered on a main category, then a sub-category saves). Guard check: with both changes removed, the new test fails; restored, it passes. Full `pnpm test:unit` and `pnpm test:e2e` not run.
+- How to verify: Products → filter by a main category → Reorder → choose a sub-category → move an item → Save order.
+
 ### Customer order index and KHQR recovery (D265, D266, 2026-11-05)
 
 - Owner asked to redo the customer order index (closed #196) and fix the KHQR race (closed #254) in one PR, and answered #254's three decisions: owners only, automatic attach, 24-hour window. Base: main `ba4f2c2`. Branch `ccr-b9e5d333-asclgy`.

@@ -15,6 +15,7 @@ defineProps<{
 }>()
 const country = defineModel<PhoneCountry>({ required: true })
 const id = useId()
+const searchInput = useSelectSearch({ placeholder: 'Search country...', icon: 'i-lucide-search' })
 
 provide(formFieldInjectionKey, undefined)
 </script>
@@ -27,7 +28,7 @@ provide(formFieldInjectionKey, undefined)
     value-key="value"
     :disabled="disabled"
     aria-label="Country code"
-    :search-input="{ placeholder: 'Search country...', icon: 'i-lucide-search' }"
+    :search-input="searchInput"
     :filter-fields="['label']"
     :content="{ align: 'start' }"
     trailing-icon="i-lucide-chevrons-up-down"

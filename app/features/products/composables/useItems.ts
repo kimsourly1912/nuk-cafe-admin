@@ -229,7 +229,7 @@ export function useCategoryItems(categoryId: MaybeRefOrGetter<string | undefined
         if (page >= answer.totalPages) break
       }
       // Tagged with its category: a switch can leave the previous category's answer in `data` until the new one lands.
-      return { categoryId: id, items: items.filter(item => item.status !== 'archived').sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)) }
+      return { categoryId: id, items: items.filter(item => item.status !== 'archived' && item.categoryId === id).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)) }
     },
     { server: false },
   )

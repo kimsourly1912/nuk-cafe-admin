@@ -79,6 +79,7 @@ For each screen and overlay, show and test the applicable [states](./page-patter
 - [ ] Async results are announced (toast, inline alert, `role="status"`, `aria-live` for moves)
 - [ ] 200% text zoom keeps content usable; nothing depends on hover or motion (`motion-safe:`)
 - [ ] A list whose rows come and go with the data uses `useListTransition` (stable keys, `relative` container); searching or switching tabs doesn't animate ([ui §11](./ui.md#11-motion), D263)
+- [ ] New motion uses `ease-enter` or `ease-move`, no `ease-in`, no bounce on large surfaces; what sits below a row or box that changes height travels with it, without a jump ([ui §11](./ui.md#11-motion), D268)
 
 ## Tests
 

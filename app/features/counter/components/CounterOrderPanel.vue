@@ -479,7 +479,7 @@ const busy = computed(() => (props.order ? actions.isBusy(props.order) : false))
         v-if="order.status === 'awaiting_payment' || order.status === 'preparing'"
         label="Cancel order"
         color="neutral"
-        variant="ghost"
+        variant="subtle"
         block
         :disabled="submitting || busy"
         @click="emit('cancel', order)"

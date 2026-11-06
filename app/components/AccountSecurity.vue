@@ -56,7 +56,7 @@ async function turnOff() {
       <UButton
         label="Cancel"
         color="neutral"
-        variant="ghost"
+        variant="subtle"
         block
         :disabled="saving"
         @click="settingUp = false"
@@ -203,7 +203,7 @@ async function turnOff() {
         :label="backLabel"
         :to="backTo"
         color="neutral"
-        variant="ghost"
+        variant="subtle"
         block
       />
     </template>

@@ -2947,6 +2947,32 @@ No copied crypto, internal library imports, new dependencies, migrations, creden
 - **Consequences:** the `@nuxt/ui` patch must be re-created on each Nuxt UI upgrade (recorded in `.claude/upgrade/profile.md`; install fails loudly when it no longer applies). Already-checked boxes pop once when a form opens. A field's help text appears 150 ms after its error leaves (`out-in`).
 - **Verified:** see [progress](progress.md#leave-animations-and-controls-d264-2026-11-05).
 
+### D268: Motion curves, and the order's height travelling with its rows (2026-11-06)
+
+- **Context:** the owner asked for a smooth, clean flow on the order's lines, based on how others do it. Compared: Emil Kowalski's articles (ease-out for enter/exit, under 300 ms, scale from 0.9+, no `scale(0)`, avoid ease-in, less motion for what repeats often), Carbon, Atlassian and Fluent UI's published tokens, Material 3 (values through third-party token lists: its own page didn't load), Vue's `TransitionGroup` and Motion's `popLayout`. Measuring the panel showed the larger problem was flow, not curves: removing a line moved the totals 151 px in one frame.
+- **Decision:**
+  - **Two curves:** `--ease-enter` `cubic-bezier(0.23, 1, 0.32, 1)` and `--ease-move` `cubic-bezier(0.2, 0, 0, 1)` ([ui §11](reference/ui.md#11-motion)). Rows enter from 0.96 with no overshoot (200 ms), leave faster (140 ms), slide 200 ms; `<QuantityStepper>`'s roll is 120 ms, since it repeats under the thumb.
+  - **`AnimatedHeight`** (menu feature) wraps the order's lines: a `ResizeObserver` reports the new height before paint and the Web Animations API animates the box to it, retargeting from the height on screen. Same curve and duration as the rows' slide. The panel's totals and the drawer's top travel with the rows. It follows, rather than eases, content that transitions its own height.
+  - **The note box** stays mounted and opens by the grid-row trick; closed, it is `inert`. Its height then changes through a transition rather than at once, so `TransitionGroup` doesn't also slide the rows below.
+  - **"Clear order"** holds the height until the empty state replaces the list, then moves once.
+  - **A line added below the scroll** is brought into view when its enter ends.
+- **Alternatives:** collapsing each leaving row's own height (layout on many rows, and fights the pinned-row approach of D263/D264); `interpolate-size` (not Baseline: MDN marks it limited, and Firefox and Safari lacked it in the snapshot read); `linear()` springs (Baseline, but time-based and without carried velocity, and these are small UI moves that don't need bounce); `motion-v` or AutoAnimate (Vue's `TransitionGroup` already does the rows; a dependency for one height isn't warranted).
+- **Consequences:** every available line has a hidden note field in the DOM. The `--ease-move` value is repeated in `AnimatedHeight` (WAAPI can't read a variable). The `TransitionGroup` isn't the scroller's direct child any more: tests find the scroller with `closest`. Only the order's lines use `AnimatedHeight`; other motion keeps its own `ease-out` until reviewed, and Review order's note box still pops.
+- **Verified:** see [progress](progress.md#order-line-motion-d268-2026-11-06).
+
+### D269: The counter's board fills the screen, and each status has one color signal (2026-11-06)
+
+- **Context:** the owner asked for a better queue page, naming responsive, color and style faults. Measured: the page scrolled (1,289 px at a 910 px window), so column titles and counts left the screen and the columns' `overflow-y-auto` did nothing; columns had uneven heights below `lg`; on phones the tabs stuck at 64 px under an 89 px header; items were cut to one line in narrow columns. A status was said four ways at once (tinted title, 4 px rule, solid count, card stripe), plus a solid "Pay by" badge, in light mode all the same brown as the primary button (`warning` and `primary` are both amber 800, D78, D80). "No orders yet" sat under Preparing, though new orders arrive in To pay.
+- **Decision:**
+  - **From `sm` the page is the height of the screen** and each column scrolls by itself under its title and count. The content area has `overflow-y-auto` and the board `min-h-72`, so stacked banners, a short window or 200% zoom scroll the content rather than crush the board. Phones keep page scrolling, with the tabs at `top-22` (the phone header's height) and the header above them (`z-20`).
+  - **One color signal per status:** the column's 2 px rule and icon, and a subtle count badge. No tinted title, no card stripe. The solid color left is the card's action. The Queue | Finished today switch has no box and marks the current view `soft`, so it doesn't compete with Take payment (it applies to Finished today too).
+  - **The card reads top down:** number and total, name, pickup or table, items on up to two lines, time. "Pay by" is plain text until its last 5 minutes, then a subtle warning badge with the time icon. All three actions have an icon: `wallet`, `bell-ring`, `circle-check`.
+  - **Empty:** "No orders yet" is in To pay; the other columns say "None right now".
+  - The header's search says "Number or name", which is what it searches.
+- **Alternatives:** keeping page scrolling with sticky column titles (the columns still can't be read side by side while one is long); one whole-board empty state (the columns would vanish and return when the first order arrives); changing To pay's color so it differs from primary (a color role from D100, for the owner to decide).
+- **Consequences:** `top-22` must follow the phone header's height if that header changes; the e2e test fails if the tabs slip under it. On a landscape phone (844×390) a column shows about one card at a time, and the content scrolls a few pixels besides.
+- **Verified:** see [progress](progress.md#counter-queue-redesign-d269-2026-11-06).
+
 ### D265: Index customer order status and unpaid deadlines within each cafe (2026-11-05)
 
 - **Context:** the customer's active-order read (`findCustomerOrdersInProgress`) and the atomic unpaid-order guard (`requireUnpaidAtMost`) used `orders_customer_idx (customer_id, placed_at)`, which walks a customer's whole retained history, at every cafe. Closed PR #196 measured it and proposed an index as migration 0050; it was closed unmerged with no reason recorded, and both 0050 and D222 have since been used. The owner asked for it again (2026-11-05).

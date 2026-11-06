@@ -29,6 +29,7 @@ const props = defineProps<{
 }>()
 
 const { isCompact } = useLayoutContext()
+const searchInput = useSelectSearch({ placeholder: 'Search time zones…' })
 const draft = takeReopenedCafeForm()
 // The account to fetch: a failed save's own choice, else the page's.
 const presetId = draft?.owner.kind === 'existing' ? draft.owner.userId : props.ownerId
@@ -337,7 +338,8 @@ const unset = 'Not set yet'
                       v-model="state.timezone"
                       :items="zones"
                       value-key="value"
-                      :search-input="{ placeholder: 'Search time zones…' }"
+                      :search-input="searchInput"
+                      :by="sameTimezone"
                       virtualize
                       role="combobox"
                       aria-label="Time zone"

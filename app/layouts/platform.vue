@@ -45,7 +45,7 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
       collapsible
       resizable
       class="bg-elevated/25 transition-[width] duration-200 ease-out motion-reduce:transition-none data-[dragging=true]:transition-none"
-      :ui="{ footer: 'lg:border-t lg:border-default' }"
+      :ui="{ header: 'lg:border-b lg:border-default', footer: 'lg:border-t lg:border-default' }"
     >
       <template #resize-handle="{ onMouseDown, onTouchStart, ui }">
         <SidebarResizeHandle
@@ -59,13 +59,18 @@ const userMenu = computed<DropdownMenuItem[]>(() => [
       <template #header="{ collapsed }">
         <NuxtLink
           :to="PLATFORM_HOME"
-          class="flex items-center gap-2 font-semibold"
+          class="flex items-center overflow-hidden font-semibold"
+          :class="{ 'w-full justify-center': collapsed }"
         >
           <UIcon
             name="i-lucide-layers"
             class="size-5 shrink-0 text-primary"
           />
-          <span v-if="!collapsed">Angder</span>
+          <!-- Hidden at once when collapsing; one line, so it never wraps while the width animates. -->
+          <span
+            v-if="!collapsed"
+            class="ml-2 whitespace-nowrap"
+          >Angder</span>
         </NuxtLink>
       </template>
 

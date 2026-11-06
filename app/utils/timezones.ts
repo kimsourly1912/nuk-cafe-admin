@@ -36,6 +36,14 @@ export function utcOffset(timeZone: string, at = new Date()): string {
   return `UTC${sign}${hours}${rest ? `:${String(rest).padStart(2, '0')}` : ''}`
 }
 
+/**
+ * `by` for a virtualized `USelectMenu` of `timezoneOptions` with `value-key="value"`: the model holds
+ * the zone id but the options are `{ label, value }` objects. Without it nothing matches, so opening
+ * highlights the first row instead of scrolling to the chosen zone.
+ */
+export const sameTimezone = (option: unknown, value: unknown) =>
+  (option && typeof option === 'object' ? (option as TimezoneOption).value : option) === value
+
 export function timezoneOptions(current?: string, at = new Date()): TimezoneOption[] {
   const zones = new Set(Intl.supportedValuesOf('timeZone'))
   if (current) zones.add(current)
