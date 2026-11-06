@@ -17,3 +17,18 @@ export async function checkoutClock(db: Db, at?: Date): Promise<{ at: Date, guar
     guard: requireCount(db, sql`select case when ${databaseNow} < ${started + remaining} then 1 else 0 end`, 1),
   }
 }
+
+/** A database clock with an optional logical origin for deterministic service tests. */
+export async function paymentClock(db: Db, at?: Date) {
+  const read = async () => {
+    const [row] = await db.select({ now: databaseNow }).from(sql`(select 1)`)
+    return row!.now
+  }
+  const started = await read()
+  const origin = at?.getTime() ?? started
+  return {
+    at: new Date(origin),
+    now: sql<number>`${databaseNow} - ${started} + ${origin}`,
+    readNow: async () => new Date(origin + await read() - started),
+  }
+}

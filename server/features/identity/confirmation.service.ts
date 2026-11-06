@@ -1,6 +1,7 @@
 import { CONFIRMATION_MS } from '#shared/contracts/account'
 import type { ConfirmIdentityInput, IdentityConfirmed } from '#shared/contracts/account'
 import type { Db } from '#server/utils/batch'
+import { requireOneChange, tryGuardedBatch } from '#server/utils/batch'
 import { toIso } from '#server/utils/time'
 import { auditStatement } from '#server/features/platform'
 import { confirmationRequired, tooManyConfirmations, unauthenticated, wrongPassword } from './identity.errors'
@@ -40,18 +41,21 @@ export async function confirmIdentity(db: Db, user: SessionUser | null | undefin
   const state = await repo.sessionConfirmation(db, user.id, sessionId)
   if (!state) throw unauthenticated()
   if ((state.confirmFailures ?? 0) >= MAX_CONFIRM_FAILURES) return endSession(db, user.id, sessionId)
+  // In-flight or interrupted checks consume a slot until a successful confirmation resets it.
+  if (!await tryGuardedBatch(db, [repo.reserveConfirmationStatement(db, user.id, sessionId, now, MAX_CONFIRM_FAILURES), requireOneChange(db)])) return endSession(db, user.id, sessionId)
 
   if (!(await verifyPassword(input.password))) {
-    await db.batch([
-      repo.countConfirmFailureStatement(db, user.id, sessionId),
+    const [, ended] = await db.batch([
       auditStatement(db, { userId: user.id, tenantId: null, requestId }, { action: CONFIRM_FAILED_ACTION, targetType: 'user', targetId: user.id }),
+      repo.endConfirmationSessionStatement(db, user.id, sessionId, MAX_CONFIRM_FAILURES),
     ])
-    if ((state.confirmFailures ?? 0) + 1 >= MAX_CONFIRM_FAILURES) return endSession(db, user.id, sessionId)
+    if (ended.length) throw tooManyConfirmations()
     throw wrongPassword()
   }
 
-  await db.batch([repo.markSessionConfirmedStatement(db, user.id, sessionId, now)])
-  return { confirmedUntil: toIso(new Date(now.getTime() + CONFIRMATION_MS)) }
+  const confirmedAt = options.now ?? new Date()
+  if (!await tryGuardedBatch(db, [repo.markSessionConfirmedStatement(db, user.id, sessionId, confirmedAt), requireOneChange(db)])) throw unauthenticated()
+  return { confirmedUntil: toIso(new Date(confirmedAt.getTime() + CONFIRMATION_MS)) }
 }
 
 async function endSession(db: Db, userId: string, sessionId: string): Promise<never> {

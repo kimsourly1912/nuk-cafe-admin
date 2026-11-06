@@ -79,6 +79,22 @@ Every poll is fresh: two database calls/five SQL statements, excluding access/se
 
 D1 batches return objects keyed by **SQL column names**, whereas individual raw reads and libsql can preserve duplicate names as arrays. Explicitly alias duplicate selected names in joined batch queries, and keep their column decoders. Branch/customer names and catalog add-on own/default min/max fields have distinct SQL names (D170). Regression fixtures model D1's object collapse through the actual Drizzle adapter; a local workerd/D1 probe also checks mapped values.
 
+## Payment and QR authorization at commit (D267)
+
+Manual payment uses `paymentClock` in the orders repository layer: database time in production, a shifted origin with real elapsed database time for deterministic tests. Its deadline guard runs after the command's audit in the same atomic batch. A riel-rate snapshot reads only the indexed current row, not the complete history, and re-evaluates the rate in force at commit. A refused batch rolls back payment, event, audit, outbox and idempotency key. Fresh reads choose the existing `PAYMENT_EXPIRED` / `EXCHANGE_RATE_CHANGED` / `ORDER_CHANGED` explanation; they never authorize a second write. Bank-confirmed receipts retain D131's separate behavior.
+
+QR generation captures the receiving-settings version before validation; both insert and reuse guard the same unpaid order version/branch, strict deadline, settings and optional riel rate. Reuse checks its minimum remaining minute at the guarded read. A conflict returns `ORDER_CHANGED`; an ordinary retry reads current state. Existing charges/receipts are not deleted or financially reinterpreted.
+
+Regression coverage: orders `counter.service.test.ts`, `khqr.service.test.ts`, and migrated local `checkout-d1.test.ts`. Guard-removal evidence is recorded in progress.
+
+## Consistent order and report responses (D267)
+
+`summaryRows` batches every monetary/count input; `itemSalesSnapshot` batches collected and returned item totals for the page, CSV and Telegram. `orderDetailRows` batches order, lines, payment, timeline and returner for customer tracking and counter/report details. Customer current/past orders, their page total and displayed item counts share `customerOrderRows`; the counter's finished rows/lines/payments share `finishedOrderRows`. Each includes the tenant; customer/branch scope still gates the returned order. SQL output names remain distinct and timestamp/JSON decoders are retained for D1.
+
+The response can legitimately show the state just before a concurrent payment, cancellation or refund. It cannot combine that earlier status/sales total with a later payment/refund. Branch/period context is resolved before the financial snapshot; this does not promise a global snapshot across unrelated feature reads.
+
+`reads.service.test.ts` injects real service writes after the first matching standalone read or after a whole batch: subsequent independent reads wait for the write, so replacing a batch with separate reads fails. Local D1 also verifies populated names, times, integer totals, timeline mapping and two-cafe isolation. No HTTP payload shape changed.
+
 ## Safe structured logs
 
 `log` keeps the request pathname without queries/fragments and masks table/reset/verification token segments. It recursively redacts password/token/cookie/session/authorization/API-key/signature fields, strips URL credentials/query/fragment (including Telegram bot-token paths), and masks common credential assignments/header text in strings. Strings are capped at 4,000 characters, each object/array at 50 entries, and nesting at six levels; cycles and bigint/Error values serialize safely. Trusted context cannot be overwritten by caller fields. This is defense in depth: callers still must not pass bodies or secret values, including opaque free-form secrets the logger cannot recognize.

@@ -1,10 +1,10 @@
 # Current-state navigation
 
-Snapshot reviewed against main `ba4f2c2` and GitHub's PR list, 2026-11-05. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
+Snapshot reviewed against main `ff2ca27` and GitHub's PR list, 2026-11-06. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
 
 ## In review
 
-- **Customer order index and KHQR recovery (D265, D266), branch `ccr-b9e5d333-asclgy`:** migration 0056 (customer order index) and 0057 (KHQR recovery: the server keeps checking each QR for 24 h after it expires, attaches a payment for an order still waiting, opens owner-only review cases for money the order couldn't take; Payments → KHQR payments to review). Local lint/typecheck/unit (2,539) and affected e2e pass; live Bakong and staging not verified. [Progress](progress.md#customer-order-index-and-khqr-recovery-d265-d266-2026-11-05).
+- **Server P2 reliability fixes (D267), PR #268:** B3–B7 payment/QR guards, consistent order/report reads, atomic confirmation attempts and promotion-scoped retries. Updated against main `ff2ca27`; preserves the customer-order index and KHQR recovery from merged PR #267 (D265/D266). Original head CI passed all six browser shards; the integrated revision must pass fresh PR checks before merging. [Progress](progress.md#server-p2-reliability-fixes-d267-2026-11-06).
 
 ## Waiting on the owner
 
@@ -37,6 +37,7 @@ Each is its own step and branch.
 
 Details in each progress entry; all merged to main and CI green.
 
+- **2026-11-06:** customer-order index and KHQR recovery (D265/D266, #267); live Bakong remains unverified.
 - **2026-11-05:** interaction motion (D263, #262/#263) and leave animations (D264, #265); Google phone popup fix (#264); app-wide Google popup COOP (D261, #260).
 - **2026-11-03/04:** Google sign-in and sign-up (D260, #255/#256), popup (D261, #257), at all workspaces with two-step (D262, #259); D1 backup export repair (#253, not production verified); platform UI fixes (#250); auth page state consistency (D258, #249); checkout validates at commit (D257, #248).
 - **2026-11-01/02:** e2e HTML validation (D256, #247); Nuxt Hints not adopted (D255, #246); platform order activity indexed reads (#238); e2e failure evidence (D249, #237); account security steps 1–4 (D242, D243, D246–D248, #231–#236); security hardening (D244, #233); signed-in site root (#240).

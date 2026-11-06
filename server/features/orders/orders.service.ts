@@ -16,6 +16,7 @@ import { outboxStatement, withIdempotency } from '#server/features/platform'
 import { runOrderCommand } from './commands'
 import { cannotCancelNow, orderNotFound, orderNotOrderable, tooManyUnpaidOrders } from './orders.errors'
 import * as repo from './orders.repository'
+import { orderDetailRows } from './reports.repository'
 import { CheckoutChanged, validateCheckout } from './checkout.service'
 import { checkoutClock } from './checkout.repository'
 import { businessDateAt } from './reports.rules'
@@ -146,13 +147,9 @@ function cancellation(event: { actorId: string | null, reason: CancelReason | nu
  * step, the payment, and who cancelled it and why. Someone else's is 404, like an unknown id.
  */
 export async function getOrder(db: Db, actor: Actor, id: string): Promise<Order> {
-  const row = await repo.findOrder(db, actor.tenantId, id)
-  if (!row || row.customerId !== actor.userId) throw orderNotFound()
-  const [lines, [payment], cancel] = await Promise.all([
-    repo.linesOf(db, actor.tenantId, id),
-    repo.paymentsOf(db, actor.tenantId, [id]),
-    row.status === 'cancelled' ? repo.cancelEventOf(db, actor.tenantId, id) : undefined,
-  ])
+  const { order: row, lines, payment, events } = await orderDetailRows(db, actor.tenantId, id, { customerId: actor.userId })
+  if (!row) throw orderNotFound()
+  const cancel = row.status === 'cancelled' ? events.findLast(event => event.toStatus === 'cancelled') : undefined
   return {
     id: row.id,
     version: row.version,
@@ -194,11 +191,7 @@ const IN_PROGRESS_LIMIT = 50
  * finished ones, both newest first.
  */
 export async function listMyOrders(db: Db, actor: Actor, query: CustomerOrdersQuery): Promise<CustomerOrders> {
-  const [inProgress, past] = await Promise.all([
-    repo.findCustomerOrdersInProgress(db, actor.tenantId, actor.userId, IN_PROGRESS_LIMIT),
-    repo.findCustomerOrdersPast(db, actor.tenantId, actor.userId, query),
-  ])
-  const counts = await repo.itemCounts(db, actor.tenantId, [...inProgress, ...past.rows].map(row => row.id))
+  const { inProgress, past, counts } = await repo.customerOrderRows(db, actor.tenantId, actor.userId, IN_PROGRESS_LIMIT, query)
   const summary = (row: repo.OrderRow): OrderSummary => ({
     id: row.id,
     branch: { id: row.branchId, name: row.branchName },

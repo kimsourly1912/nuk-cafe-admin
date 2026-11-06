@@ -1,9 +1,11 @@
-import { and, desc, eq, gt } from 'drizzle-orm'
+import { and, desc, eq, gt, sql } from 'drizzle-orm'
+import type { SQL } from 'drizzle-orm'
 import type { KhqrCurrency } from '#shared/contracts/orders'
 import { user } from '#server/db/tables'
 import type { Db, Statement } from '#server/utils/batch'
+import { requireCount } from '#server/utils/batch'
 import { availableLease } from '#server/utils/claims'
-import { byId, firstRow, inTenant } from '#server/utils/query'
+import { byId, captureSnapshotGuard, firstRow, inTenant, snapshotRows } from '#server/utils/query'
 import { bakongTokens, khqrCharges, khqrSettings } from './orders.schema'
 
 export interface KhqrSettingsRow {
@@ -169,4 +171,14 @@ export type NewCharge = ChargeRow & { tenantId: string, createdBy: string, recov
 /** A new QR for an order; the service makes its id, so the response needs no read back. */
 export function insertChargeStatement(db: Db, charge: NewCharge): Statement {
   return db.insert(khqrCharges).values(charge)
+}
+
+/** The enabled receiving settings must remain exactly those read before making or reusing a QR. */
+export function captureSettingsGuard(db: Db, tenantId: string) {
+  return captureSnapshotGuard(db, snapshotRows(db, khqrSettings, [khqrSettings.version], eq(khqrSettings.tenantId, tenantId), [khqrSettings.tenantId]))
+}
+
+/** A reused charge must still have the required remaining lifetime at the guarded read. */
+export function requireLiveCharge(db: Db, tenantId: string, id: string, now: SQL<number>, remainingMs: number): Statement {
+  return requireCount(db, db.$count(khqrCharges, inTenant(khqrCharges, tenantId, eq(khqrCharges.id, id), gt(khqrCharges.expiresAt, sql<number>`${now} + ${remainingMs}`))), 1)
 }

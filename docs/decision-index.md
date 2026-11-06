@@ -305,3 +305,5 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D265](decisions.md#d265-index-customer-order-status-and-unpaid-deadlines-within-each-cafe-2026-11-05) | Customer order index `orders_tenant_customer_status_due_idx` with `PRAGMA optimize` (migration 0056) (2026-11-05) |
 
 | [D266](decisions.md#d266-khqr-recovery-the-server-keeps-checking-each-qr-owners-review-payments-an-order-couldnt-take-2026-11-05) | KHQR recovery: `orders:recover-khqr`, automatic attach, owner-only review cases, 24 h window (2026-11-05) |
+
+| [D267](decisions.md#d267-server-p2-reliability-fixes-share-one-review-2026-11-06) | Server P2 payment/QR commit guards, consistent reads, confirmation attempts and promotion retries, 2026-11-06 |

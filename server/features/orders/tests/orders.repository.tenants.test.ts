@@ -117,19 +117,14 @@ describe('orders repository: another cafe\'s rows with our cafe\'s id', () => {
 
 describe('reports repository: another cafe\'s branch with our cafe\'s id', () => {
   it('sums, counts and lists nothing of it', async () => {
-    expect(await reportsRepo.paidSalesTotal(db, range(TEST_TENANT))).toBe(0)
-    expect(await reportsRepo.paidSalesTotal(db, range(OTHER))).toBe(1750)
-    expect(await reportsRepo.refundsReturned(db, range(TEST_TENANT))).toEqual({ amountMinor: 0, orders: 0 })
-    expect(await reportsRepo.refundsReturned(db, range(OTHER))).toEqual({ amountMinor: 1750, orders: 1 })
-    expect(await reportsRepo.itemTotals(db, range(TEST_TENANT), 'collected')).toEqual([])
-    expect(await reportsRepo.itemTotals(db, range(OTHER), 'returned')).toHaveLength(1)
-    expect(await reportsRepo.paymentsCollected(db, range(TEST_TENANT), [{ start: 0, end: Number.MAX_SAFE_INTEGER }])).toEqual([])
-    expect(await reportsRepo.ordersPlaced(db, dates(TEST_TENANT))).toBe(0)
-    expect(await reportsRepo.ordersPlaced(db, dates(OTHER))).toBe(3)
-    expect(await reportsRepo.cancelledUnpaid(db, dates(TEST_TENANT))).toEqual([])
-    expect(await reportsRepo.cancelledUnpaid(db, dates(OTHER))).toEqual([{ by: 'customer', n: 1 }])
-    expect(await reportsRepo.currentCounts(db, TEST_TENANT, branchId, NOW)).toEqual([])
-    expect(await reportsRepo.currentCounts(db, OTHER, branchId, NOW)).toEqual([{ status: 'awaiting_payment', n: 1 }])
+    const windows = [{ start: 0, end: Number.MAX_SAFE_INTEGER }]
+    const own = await reportsRepo.summaryRows(db, range(TEST_TENANT), windows, range(TEST_TENANT), dates(TEST_TENANT), NOW)
+    const other = await reportsRepo.summaryRows(db, range(OTHER), windows, range(OTHER), dates(OTHER), NOW)
+    expect(own).toMatchObject({ payments: [], refunds: { amountMinor: 0, orders: 0 }, previousPaidSalesMinor: 0, paidItems: [], placed: 0, cancelled: [], current: [] })
+    expect(other).toMatchObject({ refunds: { amountMinor: 1750, orders: 1 }, previousPaidSalesMinor: 1750, placed: 3, cancelled: [{ by: 'customer', n: 1 }], current: [{ status: 'awaiting_payment', n: 1 }] })
+    expect(await reportsRepo.itemSalesSnapshot(db, range(TEST_TENANT))).toEqual([[], []])
+    expect((await reportsRepo.itemSalesSnapshot(db, range(OTHER)))[1]).toHaveLength(1)
+    expect(await reportsRepo.paymentsCollected(db, range(TEST_TENANT), windows)).toEqual([])
   })
 
   it('reads none of its order history, events or refunds', async () => {

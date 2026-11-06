@@ -462,3 +462,25 @@ describe('finished today (step 10.2, D117)', () => {
     await expectApiError(() => getCounterOrderHistory(db, cashier, elsewhere), 404, 'NOT_FOUND')
   })
 })
+
+describe('payment conditions at commit', () => {
+  it('rolls back the payment, event and retry key when the riel rate changes after validation', async () => {
+    const id = await place(sokha)
+    await setExchangeRate(db, rateSetter, { khrPerUsd: 4100 }, monday('12:01'))
+    const k = key()
+    const on = interleaved(db, () => setExchangeRate(db, rateSetter, { khrPerUsd: 4200 }, monday('12:04')))
+    await expectApiError(() => pay(id, { version: 1, method: 'cash_khr', khrPerUsd: 4100 }, cashier, monday('12:05'), on, k), 409, 'EXCHANGE_RATE_CHANGED')
+    expect(await paymentsOf(id)).toHaveLength(0)
+    expect(await eventsOf(id)).toHaveLength(1)
+    expect((await db.select().from(idempotencyKeys).where(eq(idempotencyKeys.key, k)))).toHaveLength(0)
+    expect((await pay(id, { version: 1, method: 'cash_khr', khrPerUsd: 4200 }, cashier, monday('12:05'), db, k)).payment?.khrPerUsd).toBe(4200)
+  })
+
+  it('rolls back when the database clock crosses pay-by before commit', async () => {
+    const id = await place(sokha)
+    const on = interleaved(db, () => new Promise(resolve => setTimeout(resolve, 30)))
+    await expectApiError(() => pay(id, cash, cashier, new Date(monday('12:30').getTime() - 1), on), 409, 'PAYMENT_EXPIRED')
+    expect(await paymentsOf(id)).toHaveLength(0)
+    expect(await statusOf(id)).toBe('awaiting_payment')
+  })
+})
