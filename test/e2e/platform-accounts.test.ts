@@ -115,7 +115,8 @@ describe('accounts', () => {
     await page.getByRole('table').getByText('Gone Person').waitFor()
     await page.getByPlaceholder('Search name or email…').fill('gone')
     await expect.poll(() => new URL(page.url()).searchParams.get('search')).toBe('gone')
-    expect(api.calls.filter(c => c === 'GET /platform/accounts').length).toBeGreaterThan(2)
+    // The address updates at once; the search request follows the input's debounce.
+    await expect.poll(() => api.calls.filter(c => c === 'GET /platform/accounts').length).toBeGreaterThan(2)
   })
 
   it('on a phone, each account is a row', async () => {

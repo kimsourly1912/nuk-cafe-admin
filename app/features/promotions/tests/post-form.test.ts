@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PostForm } from '../schemas/post-form'
-import { localInputValue, postFormIssues, postRequest, suggestedTime } from '../schemas/post-form'
+import { localInputValue } from '~/utils/date-format'
+import { postFormIssues, postRequest, suggestedTime } from '../schemas/post-form'
 
 const now = new Date(2026, 9, 15, 12, 10)
 const form = (over: Partial<PostForm> = {}): PostForm => ({ channelIds: ['c1'], caption: ' Coffee week ', withPoster: true, when: 'now', at: '', ...over })

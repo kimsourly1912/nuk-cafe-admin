@@ -8,6 +8,7 @@ import { findBranchClock } from '#server/features/branches'
 import type { Actor, BranchActor } from '#server/features/identity'
 import { auditStatement } from '#server/features/platform'
 import { buildKhqr, KHQR_LIMITS } from './khqr'
+import { firstRecoveryCheck } from './khqr-recovery.service'
 import * as khqrRepo from './khqr.repository'
 import { khqrChargeInvalid, khqrNotSetUp, khqrSettingsChanged, noExchangeRate, orderChanged, orderNotFound, paymentExpired } from './orders.errors'
 import * as repo from './orders.repository'
@@ -140,9 +141,11 @@ export async function createKhqrCharge(db: Db, actor: BranchActor, orderId: stri
     createdAt: now,
     expiresAt,
     createdBy: actor.userId,
+    // The server keeps checking it with Bakong after the counter stops (D266).
+    recoveryNextAt: firstRecoveryCheck(now),
   }
   await db.batch([khqrRepo.insertChargeStatement(db, charge)])
-  const { tenantId: _, createdBy: __, ...row } = charge
+  const { tenantId: _, createdBy: __, recoveryNextAt: ___, ...row } = charge
   return toCharge(row)
 }
 

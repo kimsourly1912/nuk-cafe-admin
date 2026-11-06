@@ -11,7 +11,7 @@ History lookup only; do not read the full index or decisions log at startup. Sea
 | App queries, mutations, sessions | D22, D28–D30, D97, D102, D142, D149–D153, D173, D202–D204; installable app, PWA, manifest, service worker |
 | UI and responsive workflows | D74–D90, D126–D129, D152, D165–D166, D256, D263, D264; motion, animation, transitions |
 | Tenancy and permissions | D134–D146, D186–D193, D239–D243, D245–D248; organization, tenant, branch, platform console |
-| Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222, D250, D257 |
+| Orders, payment and KHQR | D98–D106, D114–D115, D130–D132, D148, D156–D157, D222, D250, D257, D265, D266; KHQR recovery, review cases, customer order index |
 | Reports/Telegram/marketing | D110–D113, D157, D163–D164 |
 | AI assistant | D107–D109, D254 |
 | Operations/tests/deploy | D42, D53–D54, D83, D103, D120–D123, D133, D147, D172, D174, D175, D176, D177, D211, D212, D214, D244, D249, D251, D252, D253, D255, D256; production, CI pinning, e2e failure evidence, browser problems, hydration, Chrome DevTools MCP, bundle and Worker size, Nuxt Hints, HTML validation, domains, email, bot protection |
@@ -301,3 +301,7 @@ The links below jump to headings in a viewer; an agent should use bounded file r
 | [D263](decisions.md#d263-interaction-motion-rows-that-come-and-go-and-feedback-as-it-appears-2026-11-05) | Interaction motion: rows that come and go (`useListTransition`), errors and alerts easing in, count bump, button press (2026-11-05) |
 
 | [D264](decisions.md#d264-leave-animations-rolling-quantity-staggered-clear-and-animated-checkboxes-2026-11-05) | Leave animations (patched `UFormField`, `FormErrorAlert`), rolling quantity, staggered "Clear order", checkbox/radio pop and tick (2026-11-05) |
+
+| [D265](decisions.md#d265-index-customer-order-status-and-unpaid-deadlines-within-each-cafe-2026-11-05) | Customer order index `orders_tenant_customer_status_due_idx` with `PRAGMA optimize` (migration 0056) (2026-11-05) |
+
+| [D266](decisions.md#d266-khqr-recovery-the-server-keeps-checking-each-qr-owners-review-payments-an-order-couldnt-take-2026-11-05) | KHQR recovery: `orders:recover-khqr`, automatic attach, owner-only review cases, 24 h window (2026-11-05) |

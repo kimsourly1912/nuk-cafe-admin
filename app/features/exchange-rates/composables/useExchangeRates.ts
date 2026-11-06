@@ -1,4 +1,5 @@
-import type { BakongConnectionTest, BakongTokenInput, ExchangeRates, KhqrSettings, KhqrSettingsInput, RemoveBakongTokenInput, SetExchangeRateInput } from '#shared/contracts/orders'
+import type { BakongConnectionTest, BakongTokenInput, ExchangeRates, KhqrReview, KhqrReviews, KhqrSettings, KhqrSettingsInput, RecordKhqrReturnInput, RemoveBakongTokenInput, SetExchangeRateInput } from '#shared/contracts/orders'
+import { reviewOrderNumber } from '../utils/khqr-review'
 
 /** The riel rate in force and its history (`/api/admin/exchange-rates`, D101). */
 export function useExchangeRates() {
@@ -71,4 +72,36 @@ export function useKhqrSettingsMutations() {
 /** Whether this cafe's token gets an answer from Bakong (10.15b D131, D148). Changes nothing. */
 export function testBakongConnection() {
   return apiFetch<BakongConnectionTest>('/admin/khqr/test', { method: 'POST' })
+}
+
+/**
+ * KHQR payments an order couldn't take (D266), for the cafe's owners (`payment:review`): only
+ * call it when `can('payment:review')`, the server refuses everyone else.
+ */
+export function useKhqrReviews() {
+  return useApiQuery('exchange-rates:khqr-reviews', () => apiFetch<KhqrReviews>('/admin/khqr/reviews'))
+}
+
+export interface RecordKhqrReturnRequest {
+  review: KhqrReview
+  body: RecordKhqrReturnInput
+  /** One per request: a retry of the same one never records the return twice. */
+  idempotencyKey: string
+}
+
+/** The owner records how a case's money went back (D266). Records only: nothing is sent. */
+export function useRecordKhqrReturn() {
+  return useMutation(
+    (input: RecordKhqrReturnRequest) => apiFetch<KhqrReview>(
+      `/admin/khqr/reviews/${encodeURIComponent(input.review.id)}/return`,
+      { method: 'POST', body: input.body, headers: { 'Idempotency-Key': input.idempotencyKey } },
+    ),
+    {
+      id: 'exchange-rates:khqr-return',
+      key: input => input.review.id,
+      successMessage: (review: KhqrReview) => `Return recorded for order ${reviewOrderNumber(review)}`,
+      errorMessage: 'Could not record the return',
+      invalidate: ['exchange-rates'],
+    },
+  )
 }

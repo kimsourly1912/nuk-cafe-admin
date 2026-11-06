@@ -163,7 +163,8 @@ export async function claimBakongCheck(db: Db, tenantId: string, id: string, unt
   return claimed.length > 0
 }
 
-export type NewCharge = ChargeRow & { tenantId: string, createdBy: string }
+/** `recoveryNextAt`: the server's first own check (D266), so the QR's work is written with it. */
+export type NewCharge = ChargeRow & { tenantId: string, createdBy: string, recoveryNextAt: Date }
 
 /** A new QR for an order; the service makes its id, so the response needs no read back. */
 export function insertChargeStatement(db: Db, charge: NewCharge): Statement {

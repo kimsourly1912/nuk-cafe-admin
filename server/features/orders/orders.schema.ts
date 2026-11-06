@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm'
 import { check, foreignKey, index, integer, sqliteTable, text, unique, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { schema as authSchema } from '#auth/schema'
 import { ORDER_SOURCES } from '#shared/contracts/marketing'
-import { CANCEL_REASONS, KHQR_CURRENCIES, ORDER_STATUSES, ORDER_TYPES, PAYMENT_METHODS, RETURN_METHODS } from '#shared/contracts/orders'
+import { CANCEL_REASONS, KHQR_CURRENCIES, KHQR_REVIEW_REASONS, KHQR_REVIEW_STATUSES, ORDER_STATUSES, ORDER_TYPES, PAYMENT_METHODS, RETURN_METHODS } from '#shared/contracts/orders'
 import { newId } from '#server/utils/ids'
 import { branches, tenantId } from '#server/features/branches/branches.schema'
 
@@ -63,6 +63,8 @@ export const orders = sqliteTable('orders', {
   // The final guard against two orders sharing a number on a busy day.
   uniqueIndex('orders_pickup_number_idx').on(t.branchId, t.businessDate, t.pickupNumber),
   index('orders_customer_idx').on(t.customerId, t.placedAt),
+  // Customer active reads and the atomic unpaid guard skip other cafes and finished history (D265).
+  index('orders_tenant_customer_status_due_idx').on(t.tenantId, t.customerId, t.status, t.paymentDueAt),
   index('orders_branch_status_idx').on(t.branchId, t.status),
   // Queue polls skip finished history and return active orders in their display order (D219).
   index('orders_active_queue_idx').on(t.tenantId, t.branchId, t.placedAt, t.id)
@@ -242,6 +244,22 @@ export const khqrCharges = sqliteTable('khqr_charges', {
   expiresAt: instant().notNull(),
   /** Bakong isn't asked about this QR again before this moment, however many counters ask (audit S5). */
   bakongCheckUntil: instant(),
+  /**
+   * The server's own checks (D266): `open` until a payment names this QR, a review case holds its
+   * money, or the checks end (`stopped`, KHQR_RECOVERY_HOURS after the QR expires). Written in the
+   * charge's own insert, so a QR a customer saw always has its work. Its CHECK (and the attempts'
+   * `>= 0`) is a column constraint in migration 0057: a table CHECK would make drizzle-kit rebuild
+   * this table, which payments point at.
+   */
+  recoveryState: text({ enum: ['open', 'done', 'stopped'] }).notNull().default('open'),
+  /** The next check; null: due now (a QR made before D266 rolled out). */
+  recoveryNextAt: instant(),
+  recoveryAttempts: integer().notNull().default(0),
+  /** The claim of the run checking it now: only that run may settle it. */
+  recoveryClaimToken: text(),
+  /** Why the last check couldn't answer (`not_set_up`, `token`, `key`, `refused`, `error`, `account_mismatch`). */
+  recoveryProblem: text(),
+  recoveryCheckedAt: instant(),
 }, t => [
   foreignKey({ name: 'khqr_charges_order_fk', columns: [t.tenantId, t.orderId], foreignColumns: [orders.tenantId, orders.id] }).onDelete('restrict'),
   foreignKey({ name: 'khqr_charges_branch_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }).onDelete('restrict'),
@@ -250,6 +268,56 @@ export const khqrCharges = sqliteTable('khqr_charges', {
   check('khqr_charges_check', sql`${t.currency} in ('USD', 'KHR') and ${t.amount} > 0 and (${t.currency} = 'KHR') = (${t.khrPerUsd} is not null) and ${t.expiresAt} > ${t.createdAt}`),
   uniqueIndex('khqr_charges_md5_idx').on(t.md5),
   index('khqr_charges_order_idx').on(t.orderId, t.currency, t.expiresAt),
+  // The recovery task's due list: only open QRs, a day's worth at most (D266).
+  index('khqr_charges_recovery_idx').on(t.recoveryNextAt).where(sql`${t.recoveryState} = 'open'`),
+  // Unchecked QRs for Payments' count (D266).
+  index('khqr_charges_tenant_recovery_idx').on(t.tenantId, t.recoveryState, t.expiresAt),
+])
+
+/**
+ * A bank payment the order couldn't take (D266): Bakong confirmed money on one of the order's QRs
+ * after it was paid another way or cancelled, or in another amount or currency. Found by the
+ * counter's check or the server's own; one per QR. Only the cafe's owners see it (`payment:
+ * ['review']`) and close it by recording how the money went back. Nothing here moves money. Never
+ * deleted: it is financial history (D266).
+ */
+export const khqrReviewCases = sqliteTable('khqr_review_cases', {
+  id: text().primaryKey().$defaultFn(() => newId()),
+  tenantId: tenantId(),
+  branchId: text().notNull(),
+  orderId: text().notNull(),
+  chargeId: text().notNull(),
+  reason: text({ enum: KHQR_REVIEW_REASONS }).notNull(),
+  /** What Bakong says arrived, in minor units (cents for USD, riel for KHR). */
+  receivedCurrency: text({ enum: KHQR_CURRENCIES }).notNull(),
+  receivedAmount: integer().notNull(),
+  /** Bakong's transaction hash and the bank's reference, when given. */
+  bankHash: text(),
+  bankReference: text(),
+  /** Null: the server's own check (no person). */
+  foundBy: text().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
+  foundAt: instant().notNull(),
+  status: text({ enum: KHQR_REVIEW_STATUSES }).notNull().default('open'),
+  version: integer().notNull().default(1),
+  returnMethod: text({ enum: RETURN_METHODS }),
+  returnCurrency: text({ enum: KHQR_CURRENCIES }),
+  returnAmount: integer(),
+  /** When the money went back, as the owner says. */
+  returnedAt: instant(),
+  returnReference: text(),
+  returnNote: text(),
+  returnedBy: text().references(() => authSchema!.user.id, { onDelete: 'restrict' }),
+  /** When the owner recorded it. */
+  returnRecordedAt: instant(),
+}, t => [
+  foreignKey({ name: 'khqr_review_cases_charge_fk', columns: [t.tenantId, t.chargeId], foreignColumns: [khqrCharges.tenantId, khqrCharges.id] }).onDelete('restrict'),
+  foreignKey({ name: 'khqr_review_cases_order_fk', columns: [t.tenantId, t.orderId], foreignColumns: [orders.tenantId, orders.id] }).onDelete('restrict'),
+  foreignKey({ name: 'khqr_review_cases_branch_fk', columns: [t.tenantId, t.branchId], foreignColumns: [branches.tenantId, branches.id] }).onDelete('restrict'),
+  check('khqr_review_cases_check', sql`${t.reason} in ('paid_otherwise', 'order_cancelled', 'amount_mismatch') and ${t.receivedCurrency} in ('USD', 'KHR') and ${t.receivedAmount} > 0 and ${t.version} >= 1`),
+  check('khqr_review_cases_return_check', sql`(${t.status} = 'open' and ${t.returnMethod} is null and ${t.returnCurrency} is null and ${t.returnAmount} is null and ${t.returnedAt} is null and ${t.returnNote} is null and ${t.returnedBy} is null and ${t.returnRecordedAt} is null and ${t.returnReference} is null) or (${t.status} = 'returned' and ${t.returnMethod} in ('cash', 'khqr') and ${t.returnCurrency} in ('USD', 'KHR') and ${t.returnAmount} > 0 and ${t.returnedAt} is not null and length(${t.returnNote}) > 0 and ${t.returnedBy} is not null and ${t.returnRecordedAt} is not null)`),
+  // One case per QR: the counter's check and the server's can't both open one.
+  uniqueIndex('khqr_review_cases_charge_idx').on(t.tenantId, t.chargeId),
+  index('khqr_review_cases_status_idx').on(t.tenantId, t.status, t.foundAt),
 ])
 
 /** The riel rate an admin set, from `effectiveFrom` on (append-only; 6.3, D101). */

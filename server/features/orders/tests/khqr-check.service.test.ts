@@ -12,7 +12,7 @@ import { expireUnpaidOrders } from '#server/features/orders/expiry.service'
 import { checkKhqrCharge, matchesCharge, testBakongConnection } from '#server/features/orders/khqr-check.service'
 import { claimBakongCheck } from '#server/features/orders/khqr.repository'
 import { createKhqrCharge, getKhqrSettings, saveKhqrSettings } from '#server/features/orders/khqr.service'
-import { counterPayments, khqrCharges, orders } from '#server/features/orders/orders.schema'
+import { counterPayments, khqrCharges, khqrReviewCases, orders } from '#server/features/orders/orders.schema'
 import { placeOrder } from '#server/features/orders/orders.service'
 import { createTestDb, createUser, insertBranch, TEST_TENANT } from '#server/tests/support/db'
 import { expectApiError } from '#server/tests/support/failure'
@@ -219,6 +219,81 @@ describe('checking a QR with Bakong', () => {
     const cancelledCharge = await createKhqrCharge(db, cashier, cancelled, { currency: 'USD' }, monday('12:02'))
     await cancelOrderAtCounter(db, colleague, cancelled, { version: 1, reason: 'customer_changed_mind', note: null, returnMethod: null }, crypto.randomUUID(), monday('12:03'))
     expect(await checkKhqrCharge(db, cashier, cancelled, cancelledCharge.id, fakeBakong(paid()).client, monday('12:04'))).toMatchObject({ status: 'refund_needed', order: { status: 'cancelled' } })
+  })
+
+  it('rechecks a confirmed bank payment after the database write fails, without recording it twice', async () => {
+    const orderId = await place()
+    const charge = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:02'))
+    const bakong = fakeBakong(paid())
+    // The real database handles reads and the check lease; fail only the payment batch.
+    const interrupted = Object.create(db) as Db
+    interrupted.batch = async () => {
+      throw new Error('database unavailable after bank confirmation')
+    }
+    await expect(checkKhqrCharge(interrupted, cashier, orderId, charge.id, bakong.client, round(0))).rejects.toThrow('database unavailable')
+    expect(await paymentsOf(orderId)).toEqual([])
+    expect(await statusOf(orderId)).toBe('awaiting_payment')
+
+    expect(await checkKhqrCharge(db, colleague, orderId, charge.id, bakong.client, round(1))).toMatchObject({ status: 'paid' })
+    expect(await checkKhqrCharge(db, cashier, orderId, charge.id, bakong.client, round(2))).toMatchObject({ status: 'paid' })
+    expect(bakong.asked).toHaveLength(2)
+    expect(await paymentsOf(orderId)).toHaveLength(1)
+    expect(await db.select().from(auditEvents).where(eq(auditEvents.action, 'orders.order.pay'))).toHaveLength(1)
+  })
+
+  it('keeps the cash payment if cash wins while the bank check is in flight', async () => {
+    const orderId = await place()
+    const charge = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:02'))
+    const bakong = fakeBakong(async () => {
+      await payOrder(db, colleague, orderId, { version: 1, method: 'cash_usd' }, crypto.randomUUID(), monday('12:04'))
+      return paid()
+    })
+    const result = await checkKhqrCharge(db, cashier, orderId, charge.id, bakong.client, round(0))
+    expect(result).toMatchObject({ status: 'refund_needed', order: { status: 'preparing', payment: { method: 'cash_usd' } } })
+    expect(await paymentsOf(orderId)).toMatchObject([{ method: 'cash_usd', khqrChargeId: null, returnedAt: null }])
+    // D266: the owner's case is written before the counter hears it.
+    expect(await db.select().from(khqrReviewCases).where(eq(khqrReviewCases.orderId, orderId))).toMatchObject([{ reason: 'paid_otherwise', chargeId: charge.id, foundBy: cashier.userId }])
+  })
+
+  it('does not reopen an order if expiry wins while the bank check is in flight', async () => {
+    const orderId = await place()
+    const charge = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:20'))
+    const bakong = fakeBakong(async () => {
+      await expireUnpaidOrders(db, monday('12:31'))
+      return paid()
+    })
+    expect(await checkKhqrCharge(db, cashier, orderId, charge.id, bakong.client, monday('12:30'))).toMatchObject({
+      status: 'refund_needed', order: { status: 'cancelled', payment: null },
+    })
+    expect(await paymentsOf(orderId)).toEqual([])
+    expect(await db.select().from(khqrReviewCases).where(eq(khqrReviewCases.orderId, orderId))).toMatchObject([{ reason: 'order_cancelled', chargeId: charge.id }])
+  })
+
+  it('records one payment when both USD and KHR charges are confirmed concurrently', async () => {
+    await setExchangeRate(db, owner, { khrPerUsd: 4100 }, monday('11:00'))
+    const orderId = await place()
+    const usd = await createKhqrCharge(db, cashier, orderId, { currency: 'USD' }, monday('12:02'))
+    const khr = await createKhqrCharge(db, colleague, orderId, { currency: 'KHR' }, monday('12:03'))
+    let asked = 0
+    let release!: () => void
+    const bothAsked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const bank = (currency: 'USD' | 'KHR', amount: number) => fakeBakong(async () => {
+      if (++asked === 2) release()
+      await bothAsked
+      return paid({ currency, amount, hash: 'hash-' + currency, externalRef: 'ref-' + currency })
+    }).client
+    const results = await Promise.all([
+      checkKhqrCharge(db, cashier, orderId, usd.id, bank('USD', 8.75), round(0)),
+      checkKhqrCharge(db, colleague, orderId, khr.id, bank('KHR', khr.amount), round(0)),
+    ])
+    expect(results.map(result => result.status).sort()).toEqual(['paid', 'refund_needed'])
+    expect(await paymentsOf(orderId)).toHaveLength(1)
+    // The other currency's payment is one case for the owner.
+    expect(await db.select().from(khqrReviewCases).where(eq(khqrReviewCases.orderId, orderId))).toMatchObject([{ reason: 'paid_otherwise' }])
+    expect(await statusOf(orderId)).toBe('preparing')
+    expect(await db.select().from(auditEvents).where(eq(auditEvents.action, 'orders.order.pay'))).toHaveLength(1)
   })
 
   it('two cashiers whose questions overlap (Bakong slow): one payment; both see it paid', async () => {

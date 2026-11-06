@@ -3,6 +3,7 @@ import type { Db } from '#server/utils/batch'
 import type { BranchActor } from '#server/features/identity'
 import type { BakongClient, BakongTransaction } from './bakong'
 import { getCounterOrder, recordCheckedKhqrPayment } from './counter.service'
+import { openReviewCase, receivedByCafe, receivedMinor } from './khqr-recovery.service'
 import * as khqrRepo from './khqr.repository'
 import type { ChargeRow } from './khqr.repository'
 import { requireOrderCharge } from './khqr.service'
@@ -59,7 +60,13 @@ export async function checkKhqrCharge(db: Db, actor: BranchActor, orderId: strin
   if (answer.kind === 'unavailable') return { status: 'unavailable', problem: answer.problem }
 
   const received = toReceived(answer.transaction)
-  if (!matchesCharge(charge, answer.transaction)) return { status: 'mismatch', received }
+  const owned = { ...charge, tenantId: actor.tenantId }
+  if (!matchesCharge(charge, answer.transaction)) {
+    // Money on the cafe's account in another amount or currency: kept for the owner (D266).
+    const currency = receivedByCafe(charge, answer.transaction)
+    if (currency) await openReviewCase(db, owned, { reason: 'amount_mismatch', currency, amount: receivedMinor(currency, answer.transaction.amount), transaction: answer.transaction, by: actor.userId, at: now })
+    return { status: 'mismatch', received }
+  }
 
   const order = await repo.findOrder(db, actor.tenantId, orderId)
   if (order?.status === 'awaiting_payment') {
@@ -75,6 +82,9 @@ export async function checkKhqrCharge(db: Db, actor: BranchActor, orderId: strin
   const current = await getCounterOrder(db, actor, orderId)
   if (after?.khqrChargeId === charge.id) return { status: 'paid', order: current }
   // Paid on Bakong, but the order was paid another way, or cancelled: the customer gets it back.
+  // The case is written before the counter hears it (D266): a failed write is an error, never a
+  // warning that only lives in a toast.
+  await openReviewCase(db, owned, { reason: current.status === 'cancelled' ? 'order_cancelled' : 'paid_otherwise', currency: charge.currency, amount: charge.amount, transaction: answer.transaction, by: actor.userId, at: now })
   return { status: 'refund_needed', received, order: current }
 }
 
