@@ -154,7 +154,8 @@ describe('request budget: admin', () => {
       'Availability': {},
       'Branches': { '/admin/branches/options': 1 },
       'Staff': { '/admin/staff': 1 },
-      'Payments': { '/admin/exchange-rates': 1, '/admin/khqr': 1 },
+      // An owner also reads the KHQR payments to review (D266).
+      'Payments': { '/admin/exchange-rates': 1, '/admin/khqr': 1, '/admin/khqr/reviews': 1 },
       'Categories (again)': {},
       'Menu items (again)': { '/admin/menu/items': 1, '/admin/menu/items/counts': 1 },
       'Overview': dashboard,
