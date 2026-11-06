@@ -1,8 +1,15 @@
 import { ofetch } from 'ofetch'
-import { googlePopupChannel, googlePopupFeatures, googleSignInError } from '~/utils/google-sign-in'
+import { GOOGLE_POPUP_FAILURES, googlePopupChannel, googlePopupFeatures, googleSignInError } from '~/utils/google-sign-in'
 import type { SessionSurface } from './useSessionIdentity'
 
-/** The popup carries OAuth; only the still-mounted initiating form completes login. */
+/**
+ * The popup carries OAuth; only the still-mounted initiating form completes login.
+ *
+ * `popup.closed` is trusted only while the popup still shows our own blank page. Once it goes to
+ * Google, a page with a strict Cross-Origin-Opener-Policy moves it to another browsing context
+ * group and this handle reads `closed === true` while the window stays open (D261, 2026-11-06).
+ * From then on only the callback's message, `cancel()` or the timeout settle the attempt.
+ */
 export function useGoogleAuthPopup({ start, finish, surface }: { start: (popupId: string) => Promise<string>, finish: () => Promise<void>, surface: SessionSurface }) {
   const identity = useSessionIdentity()
   const assertActive = useAuthCompletion()
@@ -18,10 +25,12 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (popupId
     const startedIn = identity.generation.value
     const popupId = crypto.randomUUID()
     const channel = new BroadcastChannel(googlePopupChannel(popupId))
+    const failures = new BroadcastChannel(GOOGLE_POPUP_FAILURES)
     // Open synchronously during the click, before browser checks or any network await.
     const popup = window.open('about:blank', '_blank', googlePopupFeatures(window))
     if (!popup) {
       channel.close()
+      failures.close()
       throw new ApiError('Allow popups for this site, then try Continue with Google again.', { kind: 'business', status: 0 })
     }
     popup.document.title = 'Continue with Google'
@@ -30,6 +39,8 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (popupId
     let timer: ReturnType<typeof setInterval> | undefined
     let timeout: ReturnType<typeof setTimeout> | undefined
     let rejectWait: ((error: ApiError) => void) | undefined
+    // Set once the popup leaves our blank page: its handle may then report closed while it is open.
+    let atProvider = false
     const abort = () => {
       popup.close()
       rejectWait?.(new ApiError('This sign-in is no longer current.', { kind: 'aborted', status: 0 }))
@@ -47,11 +58,14 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (popupId
         if (result.success === true) resolve(result.twoFactor === true ? 'two-factor' : 'signed-in')
         else reject(new ApiError(googleSignInError(result.error), { kind: 'business', status: 0 }))
       }
+      // A failure on Better Auth's default error address: it has no attempt, and grants nothing.
+      failures.onmessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin || event.data?.type !== 'google-failed') return
+        reject(new ApiError(googleSignInError(undefined), { kind: 'business', status: 0 }))
+      }
       timer = setInterval(() => {
-        if (popup.closed) {
-          reject(new ApiError('Google sign-in was closed. Try again when you are ready.', { kind: 'business', status: 0 }))
-          return
-        }
+        if (atProvider) return clearInterval(timer)
+        if (popup.closed) reject(new ApiError('Google sign-in was closed. Try again when you are ready.', { kind: 'business', status: 0 }))
       }, 250)
       timeout = setTimeout(() => reject(new ApiError('Google sign-in timed out. Try again.', { kind: 'business', status: 0 })), 180_000)
     })
@@ -59,7 +73,10 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (popupId
       const initiation = start(popupId).then((destination) => {
         assertActive()
         identity.assertCurrent(startedIn)
-        if (!popup.closed) popup.location.replace(destination)
+        // Closed on our own page: the poll, still running, reports it (unless a result came first).
+        if (popup.closed) return
+        atProvider = true
+        popup.location.replace(destination)
       })
       const [, step] = await Promise.all([initiation, completed])
       assertActive()
@@ -93,13 +110,19 @@ export function useGoogleAuthPopup({ start, finish, surface }: { start: (popupId
       clearInterval(timer)
       clearTimeout(timeout)
       channel.close()
+      failures.close()
       cancel = undefined
       popup.close()
       pending.value = false
     }
   }
 
-  return { open, pending }
+  /** The person gave up: closes the popup if this page can still reach it, and shows no error. */
+  function cancelAttempt() {
+    cancel?.()
+  }
+
+  return { open, pending, cancel: cancelAttempt }
 }
 
 async function readSession() {

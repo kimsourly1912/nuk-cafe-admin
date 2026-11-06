@@ -183,6 +183,7 @@ function restart(message?: string) {
         :disabled="saving"
         :pending="googlePopup.pending.value"
         @click="onGoogleSignIn"
+        @cancel="googlePopup.cancel()"
       />
       <!-- A full page load: the workspace reads its own session (D141). -->
       <UButton

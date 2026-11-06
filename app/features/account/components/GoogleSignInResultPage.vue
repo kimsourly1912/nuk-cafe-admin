@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ACCOUNT_PATHS } from '../utils/account'
-import { googleCallbackFallback, googlePopupChannel, googleSignInErrorCode } from '~/utils/google-sign-in'
+import { GOOGLE_POPUP_FAILURES, googleCallbackFallback, googlePopupChannel, googleSignInErrorCode } from '~/utils/google-sign-in'
 
 /** The originating form shows every outcome, so this window reports it and closes unseen. */
 const ACK_WAIT_MS = 500
@@ -26,8 +26,16 @@ function leave() {
 
 onMounted(() => {
   const attempt = route.query.googlePopup
-  // Better Auth's default error address carries no attempt: nothing to report, the form sees the close.
-  if (typeof attempt !== 'string' || !/^[\da-f-]{36}$/i.test(attempt)) return leave()
+  if (typeof attempt !== 'string' || !/^[\da-f-]{36}$/i.test(attempt)) {
+    // Better Auth's default error address carries no attempt. The form can't rely on seeing this
+    // window close (Google may have cut its handle), so say it failed; this never reports success.
+    if (route.query.error) {
+      const failures = new BroadcastChannel(GOOGLE_POPUP_FAILURES)
+      failures.postMessage({ type: 'google-failed' })
+      failures.close()
+    }
+    return leave()
+  }
   channel = new BroadcastChannel(googlePopupChannel(attempt))
   channel.onmessage = (event: MessageEvent) => {
     if (event.origin === window.location.origin && event.data?.type === 'google-received' && event.data?.attempt === attempt) leave()
