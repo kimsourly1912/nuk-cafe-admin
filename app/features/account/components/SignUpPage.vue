@@ -152,6 +152,7 @@ function restart(message?: string) {
         :disabled="saving"
         :pending="googlePopup.pending.value"
         @click="onGoogleSignIn"
+        @cancel="googlePopup.cancel()"
       />
 
       <UFormField

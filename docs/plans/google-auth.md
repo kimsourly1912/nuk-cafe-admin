@@ -87,6 +87,8 @@ Open the popup during the click before awaiting initiation; use Better Auth's [d
 
 The callback page no longer shows anything and no longer depends on the acknowledgement to close (2026-11-06): [Google popup window](../reference/auth.md#google-popup-window-d261-2026-11-06).
 
+Staging showed "Google sign-in was closed" after choosing an account (2026-11-06): Google's own opener policy cuts the popup handle, which then reads closed. The form now settles only on the callback, Cancel or the timeout: see the same reference section and the D261 amendment.
+
 ### Protected-account callback error casing (2026-11-04)
 
 For an already-linked Google identity later protected by two-step sign-in, a temporary password or superadmin status, the session-create guard throws `GOOGLE_PASSWORD_REQUIRED`. Better Auth v1.7.7 forwards this exact code; pre-link validation returns its lowercase counterpart. Both must map to the same fixed password/two-step instruction. The popup passes only the normalized allowlisted code; raw upstream descriptions remain excluded. Server regression asserts the returning-account code, and browser checks cover both forms and both spellings. [Verification and live limits](../progress.md#google-protected-account-error-repair-d261-2026-11-04).

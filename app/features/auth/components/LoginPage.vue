@@ -258,6 +258,7 @@ const aside = { title: 'Welcome back', text: 'Sign in to manage your cafe.' }
         :disabled="loading"
         :pending="googlePopup.pending.value"
         @click="onGoogleSignIn"
+        @cancel="googlePopup.cancel()"
       />
 
       <UFormField

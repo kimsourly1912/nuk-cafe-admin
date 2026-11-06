@@ -52,6 +52,12 @@ describe('Google account page fallback', () => {
   })
 })
 
+/**
+ * The offline Google page. Its strict opener policy moves the popup to another browsing context
+ * group, as Google's pages do: the form's handle then reads `closed` while the window is open (D261).
+ */
+const GOOGLE_PAGE = { contentType: 'text/html', headers: { 'cross-origin-opener-policy': 'same-origin' } }
+
 // The document keeps its disabled build flag; the current server availability is authoritative.
 async function enableGoogle(page: Awaited<ReturnType<typeof createPage>>) {
   await page.route(url('/api/account/providers'), route => route.fulfill({ json: { google: true } }))
@@ -78,7 +84,7 @@ async function popupFlow(path = '/sign-in', handlers: (current: () => boolean) =
     },
     ...handlers(() => signedIn),
   })
-  await page.context().route('https://accounts.google.com/**', route => route.fulfill({ contentType: 'text/html', body: '<title>Offline Google</title>' }))
+  await page.context().route('https://accounts.google.com/**', route => route.fulfill({ ...GOOGLE_PAGE, body: '<title>Offline Google</title>' }))
   if (entry === 'menu') {
     // Router navigation must inherit a popup-compatible policy from the menu document.
     await page.route(url('/api/c/nuk/public/**'), route => route.continue())
@@ -113,7 +119,7 @@ describe('Google popup completion', () => {
     // Stay on the provider beyond the close poll; a severed handle must not report cancellation.
     await flow.page.clock.install()
     await flow.page.clock.runFor(1000)
-    expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isDisabled()).toBe(true)
+    expect(await flow.page.getByRole('button', { name: 'Cancel Google sign-in' }).isEnabled()).toBe(true)
     expect(await flow.page.getByText('Google sign-in was closed.', { exact: false }).count()).toBe(0)
     flow.authenticate()
     await popup.goto(flow.callback(), { waitUntil: 'commit' })
@@ -241,14 +247,18 @@ describe('Google popup completion', () => {
     await popup.waitForURL('https://accounts.google.com/**')
     await flow.page.clock.fastForward(181_000)
     await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in timed out.' }).waitFor()
-    expect(popup.isClosed()).toBe(true)
+    // Google cut the handle, so this page can't close its window: a late result must not complete.
+    flow.authenticate()
+    await popup.goto(flow.callback(), { waitUntil: 'commit' })
+    await expect.poll(() => popup.isClosed()).toBe(true)
+    expect(new URL(flow.page.url()).pathname).toBe('/sign-in')
     expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isEnabled()).toBe(true)
   })
 
   it.each([
     ['a malformed attempt', 'another-attempt'],
     ['another attempt nobody acknowledges', '00000000-0000-4000-8000-000000000000'],
-  ])('closes itself on %s without completing, and allows retry', async (_, attempt) => {
+  ])('closes itself on %s without completing; Cancel then allows retry', async (_, attempt) => {
     const flow = await popupFlow()
     const opened = flow.page.waitForEvent('popup')
     await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
@@ -259,7 +269,12 @@ describe('Google popup completion', () => {
     mismatch.searchParams.set('googlePopup', attempt)
     await popup.goto(mismatch.toString(), { waitUntil: 'commit' })
     await expect.poll(() => popup.isClosed()).toBe(true)
-    await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in was closed.' }).waitFor()
+    // Nothing the form trusts arrived: it keeps waiting rather than guessing from the cut handle.
+    await flow.page.getByRole('button', { name: 'Cancel Google sign-in' }).waitFor()
+    expect(await flow.page.getByRole('button', { name: 'Cancel Google sign-in' }).isEnabled()).toBe(true)
+    await flow.page.getByRole('button', { name: 'Cancel Google sign-in' }).click()
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).waitFor()
+    expect(await flow.page.getByRole('alert').count()).toBe(0)
     expect(new URL(flow.page.url()).pathname).toBe('/sign-in')
     expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isEnabled()).toBe(true)
   })
@@ -272,7 +287,8 @@ describe('Google popup completion', () => {
     await popup.waitForURL('https://accounts.google.com/**')
     await popup.goto(url('/google-callback?error=state_mismatch'), { waitUntil: 'commit' })
     await expect.poll(() => popup.isClosed()).toBe(true)
-    await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in was closed.' }).waitFor()
+    await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in did not finish.' }).waitFor()
+    expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isEnabled()).toBe(true)
   })
 
   it('first paints no layout or message in the popup', async () => {
@@ -300,7 +316,7 @@ describe('Google popup completion', () => {
     expect(await page.getByText('DO_NOT_RENDER_PROVIDER_TEXT').count()).toBe(0)
   })
 
-  it('closes the provider popup when leaving the form', async () => {
+  it('leaving the form ends the attempt: the Google window finishing later completes nothing here', async () => {
     const flow = await popupFlow()
     const opened = flow.page.waitForEvent('popup')
     await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
@@ -308,7 +324,12 @@ describe('Google popup completion', () => {
     await popup.waitForURL('https://accounts.google.com/**')
     await flow.page.getByRole('link', { name: 'Create an account', exact: true }).click()
     await flow.page.getByLabel('Name', { exact: true }).waitFor()
-    expect(popup.isClosed()).toBe(true)
+    // The page asked it to close, but Google cut the handle: the browser keeps it open.
+    flow.authenticate()
+    await popup.goto(flow.callback(), { waitUntil: 'commit' })
+    await expect.poll(() => popup.isClosed()).toBe(true)
+    expect(new URL(flow.page.url()).pathname).toBe('/sign-up')
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).waitFor()
   })
 })
 
@@ -402,10 +423,11 @@ describe('enabled Google account pages', () => {
     let popupAtGoogle = false
     await page.context().route('https://accounts.google.com/**', (route) => {
       popupAtGoogle = route.request().isNavigationRequest() && route.request().frame().page() !== page
-      return route.fulfill({ contentType: 'text/html', body: '<title>Mock Google</title>' })
+      return route.fulfill({ ...GOOGLE_PAGE, body: '<title>Mock Google</title>' })
     })
     await page.goto(url(`${path}?redirect=/c/nuk`), { waitUntil: 'hydration' })
-    const google = page.getByRole('button', { name: 'Continue with Google' })
+    // One button: it reads Cancel Google sign-in while Google is open, in the same place.
+    const google = page.getByRole('button', { name: /^(Continue with Google|Cancel Google sign-in)$/ })
     await google.waitFor()
     const before = await google.boundingBox()
     const submitButton = page.getByRole('button', { name: path === '/sign-in' ? 'Sign in' : 'Create account', exact: true })
@@ -415,7 +437,7 @@ describe('enabled Google account pages', () => {
     const popup = await popupOpened
     try {
       await expect.poll(() => api.calls.includes('POST /auth/sign-in/social')).toBe(true)
-      expect(await google.isDisabled()).toBe(true)
+      expect(await google.textContent()).toContain('Cancel Google sign-in')
       expect(await page.getByRole('dialog').count()).toBe(0)
       expect(await google.boundingBox()).toEqual(before)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
@@ -435,9 +457,10 @@ describe('enabled Google account pages', () => {
     expect(new URL(page.url()).pathname).toBe(path)
     expect(await submitButton.evaluate(element => ({ background: getComputedStyle(element).backgroundColor, color: getComputedStyle(element).color }))).toEqual(colors)
     expect(await submitButton.isDisabled()).toBe(true)
+    await page.getByRole('button', { name: 'Cancel Google sign-in' }).click()
+    await expect.poll(() => google.isEnabled()).toBe(true)
+    expect(await page.getByRole('alert').count()).toBe(0)
     await popup.close()
-    await page.getByRole('alert').filter({ hasText: 'Google sign-in was closed.' }).waitFor()
-    expect(await google.isEnabled()).toBe(true)
     expect(await submitButton.isEnabled()).toBe(true)
   })
 })
@@ -470,7 +493,7 @@ describe('Google workspace entry points', () => {
     await popup.waitForURL('https://accounts.google.com/**')
     await flow.page.clock.install()
     await flow.page.clock.runFor(1000)
-    expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isDisabled()).toBe(true)
+    expect(await flow.page.getByRole('button', { name: 'Cancel Google sign-in' }).isEnabled()).toBe(true)
     flow.authenticate()
     await popup.goto(flow.callback(), { waitUntil: 'commit' })
     await flow.page.waitForURL(url(target))
@@ -539,8 +562,10 @@ describe('Google workspace entry points', () => {
     const opened = flow.page.waitForEvent('popup')
     await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
     const popup = await opened
-    await popup.close()
-    await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in was closed.' }).waitFor()
+    await popup.waitForURL('https://accounts.google.com/**')
+    await flow.page.getByRole('button', { name: 'Cancel Google sign-in' }).click()
+    await expect.poll(() => flow.page.getByRole('button', { name: 'Continue with Google' }).isEnabled()).toBe(true)
+    expect(await flow.page.getByRole('alert').count()).toBe(0)
     expect(await flow.page.getByLabel('Email', { exact: true }).inputValue()).toBe('kept@example.com')
     expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isEnabled()).toBe(true)
   })
@@ -565,8 +590,8 @@ describe('Google workspace entry points', () => {
       await flow.page.getByRole('button', { name: 'Switch to light mode', exact: true }).waitFor()
       await flow.page.screenshot({ path: `${directory}/${path.replaceAll('/', '-')}-${width}x${height}-dark.png`, fullPage: true })
     }
+    await flow.page.getByRole('button', { name: 'Cancel Google sign-in' }).click()
+    await expect.poll(() => google.isEnabled()).toBe(true)
     await popup.close()
-    await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in was closed.' }).waitFor()
-    expect(await google.isEnabled()).toBe(true)
   })
 })

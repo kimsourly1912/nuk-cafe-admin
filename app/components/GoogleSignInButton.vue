@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineProps<{ enabled: boolean, disabled: boolean, pending?: boolean }>()
-defineEmits<{ click: [] }>()
+defineEmits<{ click: [], cancel: [] }>()
 </script>
 
 <template>
@@ -8,15 +8,18 @@ defineEmits<{ click: [] }>()
     v-if="enabled"
     class="space-y-4"
   >
+    <!--
+      While Google is open this same button cancels it, in place: the form can't always tell when
+      the Google window closes (D261), and a new row would move the form.
+    -->
     <UButton
       type="button"
-      label="Continue with Google"
+      :label="pending ? 'Cancel Google sign-in' : 'Continue with Google'"
       color="neutral"
       variant="outline"
       block
-      :disabled="disabled"
-      :aria-busy="pending || undefined"
-      @click="$emit('click')"
+      :disabled="disabled && !pending"
+      @click="pending ? $emit('cancel') : $emit('click')"
     >
       <template #leading>
         <img
@@ -31,7 +34,7 @@ defineEmits<{ click: [] }>()
     <span
       class="sr-only"
       role="status"
-    >{{ pending ? 'Complete Google sign-in in the popup window.' : '' }}</span>
+    >{{ pending ? 'Finish signing in in the Google window, or cancel here.' : '' }}</span>
     <USeparator label="or" />
   </div>
 </template>

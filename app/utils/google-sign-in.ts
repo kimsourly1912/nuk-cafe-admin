@@ -1,4 +1,6 @@
 export const googlePopupChannel = (attempt: string) => `account:google-popup:${attempt}`
+/** Failures on Better Auth's default error address, which names no attempt. Never success. */
+export const GOOGLE_POPUP_FAILURES = 'account:google-popup:failures'
 
 const POPUP_WIDTH = 500
 const POPUP_HEIGHT = 700

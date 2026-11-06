@@ -4,6 +4,7 @@ import type { Ref } from 'vue'
 import { ApiError } from '~/utils/api-error'
 import { useAuthCompletion } from '~/composables/useAuthCompletion'
 import { useGoogleAuthPopup } from '~/composables/useGoogleAuthPopup'
+import { GOOGLE_POPUP_FAILURES } from '~/utils/google-sign-in'
 
 const actions = vi.hoisted(() => ({ googleSignIn: vi.fn(), finishSignIn: vi.fn() }))
 vi.mock('../composables/useCustomerAccount', () => ({ useAccountActions: () => actions }))
@@ -14,7 +15,10 @@ describe('Google popup lifecycle', () => {
   let scope: ReturnType<typeof effectScope>
   let popup: { closed: boolean, opener: unknown, document: { title: string, body: { textContent: string } }, location: { href: string, replace: (destination: string) => void }, close: () => void }
   let identity: { generation: Ref<number>, assertCurrent: (generation: number) => void, change: () => void }
-  let channel: { onmessage: ((event: MessageEvent) => void) | null, postMessage: (message: unknown) => void, close: () => void }
+  type Channel = { onmessage: ((event: MessageEvent) => void) | null, postMessage: (message: unknown) => void, close: () => void }
+  /** The attempt's own channel, and the shared one for failures that name no attempt. */
+  let channel: Channel
+  let failures: Channel
 
   beforeEach(() => {
     vi.useFakeTimers()
@@ -31,11 +35,13 @@ describe('Google popup lifecycle', () => {
       popup.closed = true
     }) }
     vi.stubGlobal('window', { location: { origin: 'https://cafe.test' }, screenX: -1920, screenY: 40, outerWidth: 1600, outerHeight: 1000, open: vi.fn(() => popup) })
-    vi.stubGlobal('BroadcastChannel', vi.fn(function () {
-      channel = { onmessage: null, postMessage: vi.fn(), close: vi.fn(() => {
-        channel.onmessage = null
+    vi.stubGlobal('BroadcastChannel', vi.fn(function (name: string) {
+      const created: Channel = { onmessage: null, postMessage: vi.fn(), close: vi.fn(() => {
+        created.onmessage = null
       }) }
-      return channel
+      if (name === GOOGLE_POPUP_FAILURES) failures = created
+      else channel = created
+      return created
     }))
     vi.stubGlobal('ApiError', ApiError)
     ofetch.mockResolvedValue({ user: { id: 'google-user' } })
@@ -157,6 +163,44 @@ describe('Google popup lifecycle', () => {
     expect(flow.pending.value).toBe(false)
     expect(identity.change).not.toHaveBeenCalled()
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('keeps waiting when the handle reads closed after the popup went to Google (a cut handle)', async () => {
+    const { flow, completion } = start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(popup.location.replace).toHaveBeenCalledWith('https://accounts.google.com/authorize')
+    // Google's opener policy cut the handle: the window is still open, and may still finish.
+    popup.closed = true
+    await vi.advanceTimersByTimeAsync(5_000)
+    expect(flow.pending.value).toBe(true)
+    callback()
+    await completion
+    expect(actions.finishSignIn).toHaveBeenCalledOnce()
+  })
+
+  it('Cancel settles without an error the form shows, and never completes', async () => {
+    const { flow, completion } = start()
+    await vi.advanceTimersByTimeAsync(0)
+    const settled = completion.then(() => 'completed', (error: ApiError) => error.kind)
+    flow.cancel()
+    expect(await settled).toBe('aborted')
+    expect(flow.pending.value).toBe(false)
+    expect(popup.close).toHaveBeenCalled()
+    expect(identity.change).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('a failure on the shared channel ends the attempt as not finished; nothing there completes it', async () => {
+    const { completion } = start()
+    await vi.advanceTimersByTimeAsync(0)
+    const refused = expect(completion).rejects.toThrow('Google sign-in did not finish.')
+    failures.onmessage?.({ origin: 'https://other.test', data: { type: 'google-failed' } } as MessageEvent)
+    failures.onmessage?.({ origin: 'https://cafe.test', data: { type: 'google-complete', success: true } } as MessageEvent)
+    await vi.advanceTimersByTimeAsync(250)
+    expect(ofetch).not.toHaveBeenCalled()
+    failures.onmessage?.({ origin: 'https://cafe.test', data: { type: 'google-failed' } } as MessageEvent)
+    await refused
+    expect(failures.close).toHaveBeenCalled()
   })
 
   it('waits for the code without checking a session or announcing login', async () => {
