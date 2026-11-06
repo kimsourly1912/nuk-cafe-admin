@@ -629,5 +629,71 @@ export type KhqrCheck
     | { status: 'refund_needed', received: KhqrReceived, order: CounterOrder }
     | { status: 'unavailable', problem: KhqrCheckProblem }
 
+// --- KHQR recovery (D266): bank payments the order couldn't take ---
+// The server keeps checking each QR with Bakong after the counter stops (a closed tablet, a failed
+// write). A payment it finds for an order still waiting is recorded; one the order can no longer
+// take becomes a review case only the cafe's owners see and close by recording the return.
+
+/** Why a bank payment needs the owner: the order was paid another way, cancelled, or the amount or currency differs from the QR's. */
+export const KHQR_REVIEW_REASONS = ['paid_otherwise', 'order_cancelled', 'amount_mismatch'] as const
+export type KhqrReviewReason = typeof KHQR_REVIEW_REASONS[number]
+
+export const KHQR_REVIEW_STATUSES = ['open', 'returned'] as const
+export type KhqrReviewStatus = typeof KHQR_REVIEW_STATUSES[number]
+
+/** How long after a QR expires the server still asks Bakong about it (owner, 2026-11-05, D266). */
+export const KHQR_RECOVERY_HOURS = 24
+
+/** A return's note: why, and the evidence (a transfer reference, who handed the cash). */
+export const KHQR_RETURN_NOTE_MAX = 500
+export const KHQR_RETURN_REFERENCE_MAX = 100
+
+/** One bank payment for the owner to review (`GET /api/admin/khqr/reviews`). */
+export interface KhqrReview {
+  id: string
+  version: number
+  status: KhqrReviewStatus
+  reason: KhqrReviewReason
+  branch: { id: string, name: string }
+  order: { id: string, pickupNumber: number, businessDate: string, status: OrderStatus, totalMinor: number }
+  /** What the QR asked for. */
+  expected: { currency: KhqrCurrency, amount: number }
+  /** What Bakong says arrived, in minor units (cents or riel). */
+  received: { currency: KhqrCurrency, amount: number }
+  bankReference: string | null
+  foundAt: string
+  /** `null`: the server's own check found it. */
+  foundBy: { name: string } | null
+  returned: {
+    method: ReturnMethod
+    currency: KhqrCurrency
+    amount: number
+    at: string
+    reference: string | null
+    note: string
+    by: { name: string }
+    recordedAt: string
+  } | null
+}
+
+export interface KhqrReviews {
+  open: KhqrReview[]
+  /** The latest returned ones, newest first. */
+  returned: KhqrReview[]
+  /** QRs whose automatic check ended in the last 30 days without an answer from Bakong (no token, refused, errors). */
+  unchecked: number
+}
+
+export const recordKhqrReturnSchema = v.strictObject({
+  version: v.pipe(v.number(), v.integer(), v.minValue(1)),
+  method: v.picklist(RETURN_METHODS, 'Choose how the money went back'),
+  currency: v.picklist(KHQR_CURRENCIES, 'Choose the currency given back'),
+  amount: v.pipe(v.number('Enter the amount given back'), v.integer('Enter whole cents or riel'), v.minValue(1, 'Enter the amount given back')),
+  returnedAt: v.pipe(v.string(), v.isoTimestamp('Enter when the money went back')),
+  reference: v.optional(v.nullable(v.pipe(v.string(), v.trim(), v.maxLength(KHQR_RETURN_REFERENCE_MAX, `At most ${KHQR_RETURN_REFERENCE_MAX} characters`))), null),
+  note: v.pipe(v.string(), v.trim(), v.nonEmpty('Say why and how the money went back'), v.maxLength(KHQR_RETURN_NOTE_MAX, `At most ${KHQR_RETURN_NOTE_MAX} characters`)),
+})
+export type RecordKhqrReturnInput = v.InferInput<typeof recordKhqrReturnSchema>
+
 /** `POST /api/admin/khqr/test`: whether this server can ask Bakong with its token. */
 export type BakongConnectionTest = { status: 'connected' } | { status: 'unavailable', problem: KhqrCheckProblem, detail: string | null }

@@ -86,8 +86,8 @@ The app is named after the cafe ("<cafe> Counter") with a coffee cup icon, and o
 - **"The 30 minutes to pay are over, so this order is cancelled."**: the customer can place a new order.
 - **"No riel rate is set yet."**: an admin sets it on **Payments**; take dollars or KHQR meanwhile.
 - **A payment failed with "Try again"**: press **Try again**. It never charges twice; the same payment is recorded once.
-- **"A payment arrived on this QR that doesn't match it"**: Bakong says money arrived on this order's QR, but not the amount (or currency, or account) the QR asked for. Nothing was recorded: check your bank app, and settle it with the customer before confirming.
-- **"A KHQR payment arrived after it was paid / cancelled"**: the customer paid the QR, but the order had already been paid another way or was cancelled. Give the money back to the customer.
+- **"A payment arrived on this QR that doesn't match it"**: Bakong says money arrived on this order's QR, but not the amount (or currency, or account) the QR asked for. Nothing was recorded: check your bank app, and settle it with the customer before confirming. Money on the cafe's account is also listed for the owners under **Payments → KHQR payments to review**.
+- **"A KHQR payment arrived after it was paid / cancelled"**: the customer paid the QR, but the order had already been paid another way or was cancelled. Give the money back to the customer. It's also listed for the owners under **Payments → KHQR payments to review**, where they record how it went back.
 - **"Automatic check unavailable"**: Bakong didn't answer, or didn't accept the cafe's token. Confirm after the payment appears in your bank app, and tell an admin if it keeps happening.
 
 

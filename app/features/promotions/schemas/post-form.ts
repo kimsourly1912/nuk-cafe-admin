@@ -1,5 +1,6 @@
 import type { CreatePostsInput } from '#shared/contracts/marketing'
 import { POST_CAPTION_MAX, POST_SCHEDULE_MAX_DAYS } from '#shared/contracts/marketing'
+import { localInputValue } from '~/utils/date-format'
 
 /** Post to channels (M2a, D164): the dialog's state, its checks and the request. */
 export interface PostForm {
@@ -9,13 +10,6 @@ export interface PostForm {
   when: 'now' | 'later'
   /** `datetime-local` value in this device's time: `2026-10-15T18:30`. */
   at: string
-}
-
-const pad = (n: number) => String(n).padStart(2, '0')
-
-/** A `datetime-local` value for `date` in this device's time. */
-export function localInputValue(date: Date): string {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 /** The next whole hour at least 30 minutes away: a sensible first choice for Later. */

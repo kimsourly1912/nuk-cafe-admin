@@ -1,7 +1,7 @@
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, inject, it } from 'vitest'
-import type { BakongConnectionTest, ExchangeRate, ExchangeRates, KhqrSettings } from '../../shared/contracts/orders'
-import { failures, MockFailure, mockApi, setupE2e, toast } from './support/mock-api'
+import type { BakongConnectionTest, ExchangeRate, ExchangeRates, KhqrReview, KhqrReviews, KhqrSettings } from '../../shared/contracts/orders'
+import { ADMIN, failures, MockFailure, mockApi, setupE2e, toast } from './support/mock-api'
 import { asNewVisitor } from './support/client-address'
 
 await setupE2e()
@@ -244,6 +244,105 @@ describe('Payments', () => {
   it('is in the sidebar', async () => {
     const { page } = await open({ current: HISTORY[0]!, history: HISTORY })
     expect(await page.getByRole('link', { name: 'Payments' }).getAttribute('href')).toBe('/c/nuk/admin/payments')
+  })
+})
+
+// KHQR payments to review (D266): owners only; Record return sends the version, the amount in
+// minor units and an idempotency key, and records nothing else.
+
+const REVIEW: KhqrReview = {
+  id: 'review-1',
+  version: 1,
+  status: 'open',
+  reason: 'paid_otherwise',
+  branch: { id: 'branch-1', name: 'Riverside' },
+  order: { id: 'order-1', pickupNumber: 42, businessDate: '2026-11-05', status: 'preparing', totalMinor: 875 },
+  expected: { currency: 'USD', amount: 875 },
+  received: { currency: 'USD', amount: 875 },
+  bankReference: '100FT36931627892',
+  foundAt: '2026-11-05T05:03:00.000Z',
+  foundBy: null,
+  returned: null,
+}
+
+async function openReviews(start: KhqrReviews, options: { conflictOnce?: boolean, permissions?: string[] } = {}) {
+  let reviews = start
+  let conflict = options.conflictOnce ?? false
+  const returns: { body: unknown, key: string | undefined }[] = []
+  const page = await createPage()
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const api = await mockApi(page, {
+    ...(options.permissions && { 'GET /admin/me': () => ({ ...ADMIN, permissions: options.permissions }) }),
+    'GET /admin/khqr/reviews': () => reviews,
+    'POST /admin/khqr/reviews/{id}/return': ({ body, headers }) => {
+      returns.push({ body, key: headers['idempotency-key'] })
+      if (conflict) {
+        conflict = false
+        throw failures.conflict('VERSION_CONFLICT', 'This payment to review was changed by someone else. Reload it and try again.')
+      }
+      const input = body as { method: 'cash' | 'khqr', currency: 'USD' | 'KHR', amount: number, returnedAt: string, reference: string | null, note: string }
+      const done: KhqrReview = { ...reviews.open[0]!, status: 'returned', version: 2, returned: { method: input.method, currency: input.currency, amount: input.amount, at: input.returnedAt, reference: input.reference, note: input.note, by: { name: 'alice' }, recordedAt: new Date().toISOString() } }
+      reviews = { ...reviews, open: reviews.open.slice(1), returned: [done, ...reviews.returned] }
+      return done
+    },
+  })
+  await page.goto(url('/c/nuk/admin/payments'), { waitUntil: 'hydration' })
+  await page.getByRole('heading', { name: 'Riel exchange rate' }).waitFor()
+  return { page, returns, api }
+}
+
+describe('KHQR payments to review (D266)', () => {
+  it('lists an open case with its order, branch, reason and what arrived; Record return sends it once and moves it to Recently returned', async () => {
+    const { page, returns } = await openReviews({ open: [REVIEW], returned: [], unchecked: 0 })
+    const list = page.getByRole('list', { name: 'Payments to review' })
+    await list.getByText('Order #042 · Riverside').waitFor()
+    await list.getByText('Paid twice: the order was already paid another way').waitFor()
+    await list.getByText(/\$8\.75/).waitFor()
+    await list.getByText(/Found by the automatic check/).waitFor()
+
+    await list.getByRole('button', { name: 'Record return' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByRole('heading', { name: 'Record the return for order #042' }).waitFor()
+    // The amount starts at what arrived; the note is required.
+    expect(await dialog.getByRole('spinbutton', { name: 'Amount given back' }).inputValue()).toBe('8.75')
+    await dialog.getByRole('button', { name: 'Record return' }).click()
+    await dialog.getByText('Say why and how the money went back').waitFor()
+    expect(returns).toEqual([])
+
+    await dialog.getByRole('textbox', { name: 'Note' }).fill('Paid twice; Sophea gave $8.75 back in cash')
+    await dialog.getByRole('button', { name: 'Record return' }).click()
+    await toast(page, 'Return recorded for order #042').waitFor()
+    expect(returns).toHaveLength(1)
+    expect(returns[0]!.body).toMatchObject({ version: 1, method: 'cash', currency: 'USD', amount: 875, reference: null, note: 'Paid twice; Sophea gave $8.75 back in cash' })
+    expect(returns[0]!.key).toMatch(/^[0-9a-f-]{36}$/)
+    await page.getByText('Nothing to review.').waitFor()
+    await page.getByRole('button', { name: 'Recently returned' }).click()
+    await page.getByRole('list', { name: 'Recently returned' }).getByText(/\$8\.75 back by Cash/).waitFor()
+  })
+
+  it('another owner recorded it first: the dialog says so and Reload closes it', async () => {
+    const { page, returns } = await openReviews({ open: [REVIEW], returned: [], unchecked: 0 }, { conflictOnce: true })
+    await page.getByRole('list', { name: 'Payments to review' }).getByRole('button', { name: 'Record return' }).click()
+    const dialog = page.getByRole('dialog')
+    await dialog.getByRole('textbox', { name: 'Note' }).fill('Gave it back')
+    await dialog.getByRole('button', { name: 'Record return' }).click()
+    await dialog.getByText('This payment to review was changed by someone else').waitFor()
+    await dialog.getByRole('button', { name: 'Reload' }).click()
+    await expect.poll(() => page.getByRole('dialog').count()).toBe(0)
+    expect(returns).toHaveLength(1)
+  })
+
+  it('warns about QRs Bakong couldn\'t check; with nothing open says so', async () => {
+    const { page } = await openReviews({ open: [], returned: [], unchecked: 3 })
+    await page.getByText('3 QRs couldn\'t be checked with Bakong in the last 30 days').waitFor()
+    await page.getByText('Nothing to review.').waitFor()
+  })
+
+  it('is not shown, and not asked for, without payment:review', async () => {
+    const { page, api } = await openReviews({ open: [REVIEW], returned: [], unchecked: 0 }, { permissions: ADMIN.permissions.filter(permission => permission !== 'payment:review') })
+    await page.getByRole('heading', { name: 'KHQR at the counter' }).waitFor()
+    expect(await page.getByRole('heading', { name: 'KHQR payments to review' }).count()).toBe(0)
+    expect(api.calls).not.toContain('GET /admin/khqr/reviews')
   })
 })
 

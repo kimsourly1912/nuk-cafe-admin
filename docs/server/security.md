@@ -71,6 +71,7 @@ Permissions are **statements** (`resource: [actions]`) defined once in `server/f
 | order | cancel | ✔ | ✔ | ✔ |
 | payment | collect | ✔ | ✔ | ✔ |
 | payment | refund | ✔ | | |
+| payment | review: KHQR payments an order couldn't take, record their return (tenant permission, D266; never a support visit) | ✔ | | |
 | voucher | look up, redeem | ✔ | ✔ | ✔ |
 | voucher | issue to a customer | ✔ | ✔ | |
 | voucher template | manage | ✔ | | |
@@ -142,7 +143,7 @@ Like GitHub's sudo mode: a stolen signed-in session (an unlocked phone, a copied
 - **App:** `apiFetch` answers `CONFIRMATION_REQUIRED` with `<ConfirmIdentityModal>` ("Confirm it's you") and sends the same request **once** more (same body, version and idempotency key). Cancel: nothing is sent again, silently. One dialog at a time; a session change closes it.
 - **Not covered (by design):** a super admin on a support visit is read-only already (D193); creating a new cafe with its first owner (no existing cafe is at risk).
 
-D265 makes the confirmation attempt limit atomic: reserve one of five per-session slots before checking a password, so parallel requests cannot share the last slot. In-flight and interrupted checks consume slots conservatively until a successful confirmation resets them. A failed check audits and conditionally revokes the session in one batch at the limit. Success guards the still-live session; revocation during verification cannot return a successful confirmation. The existing per-address rate limit remains an additional control. Tests: `identity/tests/confirmation.service.test.ts` covers parallel failures, device isolation and revocation during verification.
+D267 makes the confirmation attempt limit atomic: reserve one of five per-session slots before checking a password, so parallel requests cannot share the last slot. In-flight and interrupted checks consume slots conservatively until a successful confirmation resets them. A failed check audits and conditionally revokes the session in one batch at the limit. Success guards the still-live session; revocation during verification cannot return a successful confirmation. The existing per-address rate limit remains an additional control. Tests: `identity/tests/confirmation.service.test.ts` covers parallel failures, device isolation and revocation during verification.
 
 ## Staff onboarding
 

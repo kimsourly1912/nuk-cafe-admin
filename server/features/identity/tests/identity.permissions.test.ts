@@ -56,6 +56,8 @@ const tenantMatrix: Row[] = [
   ['settings', 'manage', ['owner']],
   ['assistant', 'use', ['owner']],
   ['support', 'grant', ['owner']],
+  // KHQR review cases (D266): owners only.
+  ['payment', 'review', ['owner']],
   ['report', 'read', ['owner']],
   ['report', 'export', ['owner']],
   ['audit', 'read', ['owner']],

@@ -11,7 +11,7 @@ import type { Promotion } from '#shared/contracts/menu-promotions'
 import { useMarketingChannels } from '~/features/marketing'
 import { usePostMutations } from '../composables/usePromotionPosts'
 import type { PostForm } from '../schemas/post-form'
-import { localInputValue, postFormIssues, postRequest, suggestedTime } from '../schemas/post-form'
+import { postFormIssues, postRequest, suggestedTime } from '../schemas/post-form'
 
 const props = defineProps<{ promotion: Promotion }>()
 // `update:open` is declared so closing (X, Esc, outside click) goes through `unsaved` instead of

@@ -24,6 +24,26 @@ Under the KHQR settings, **Automatic check with Bakong** says **On** or **Off**.
 - **"The saved token can't be read on this server any more"**: press **Replace token** and paste the token again.
 - **"Bakong refused this server"**: Bakong may answer only servers in Cambodia. Cashiers confirm by hand until that's solved.
 
+### KHQR payments to review (owners only)
+
+With the automatic check on, the server keeps asking Bakong about every QR for 24 hours after it expires, even when the counter's tablet was closed or the page was reloaded. If the customer paid and the order is still waiting for payment, the payment is recorded by itself (the order's history says "Paid by KHQR: found by the automatic check").
+
+If the money arrived but the order couldn't take it, the cafe's **owners** see it under **KHQR payments to review** at the top of Payments (managers and staff don't, and nor does platform support):
+
+- **Paid twice**: the order was already paid another way (cash, or a KHQR in the other currency).
+- **Paid after the order was cancelled**: for example after its 30 minutes to pay were over.
+- **Paid a different amount than the QR asked.**
+
+Each shows the order, the branch, what arrived and when, and who found it (a counter, or the automatic check).
+
+1. Give the money back to the customer (cash at the counter, or a KHQR transfer from your banking app). Nothing is sent from this page.
+2. Press **Record return**, choose **Cash** or **KHQR**, the currency and the amount given back (it starts at what arrived), **When**, the transfer's **Reference** if there is one, and a **Note** saying why and how (who handed it back, for example).
+3. Press **Record return**. It moves to **Recently returned**, with who recorded it.
+
+"**N QRs couldn't be checked with Bakong in the last 30 days**": Bakong didn't answer for them (no token, an expired one, or refused), so a payment on them may not show here. Check your bank app for those days.
+
+"**This payment to review was changed by someone else**": another owner recorded it first. Press **Reload**.
+
 ## Set or change the rate
 
 1. Enter **Riel per $1**, for example 4100. It must be between 1,000 and 10,000.

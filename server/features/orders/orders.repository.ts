@@ -97,6 +97,7 @@ const dueUnpaid = (tenantId: string, customerId: string, now: Date) =>
 /**
  * A guard for the batch: the customer has at most `max` unpaid orders still due, counting the one
  * this batch inserts (put it after the insert). Concurrent placements can't both slip under it.
+ * Uses `orders_tenant_customer_status_due_idx`, including the strict payment deadline range (D265).
  */
 export function requireUnpaidAtMost(db: Db, tenantId: string, customerId: string, now: Date, max: number): Statement {
   return requireAtMost(db, db.$count(orders, dueUnpaid(tenantId, customerId, now)), max)
@@ -231,7 +232,10 @@ const FINISHED: OrderStatus[] = ['completed', 'cancelled']
 /** Newest first; the id breaks ties so pages never overlap. */
 const newestFirst = [desc(orders.placedAt), desc(orders.id)]
 
-/** The customer's orders still in play, newest first (a few at most: two can be unpaid). */
+/**
+ * The customer's orders still in play, newest first (a few at most: two can be unpaid).
+ * Uses `orders_tenant_customer_status_due_idx`; sorts only this cafe and customer's active rows (D265).
+ */
 export function findCustomerOrdersInProgress(db: Db, tenantId: string, customerId: string, limit: number): Promise<OrderRow[]> {
   return selectOrders(db)
     .where(inTenant(orders, tenantId, eq(orders.customerId, customerId), inArray(orders.status, IN_PROGRESS)))

@@ -1,17 +1,17 @@
 # Current-state navigation
 
-Snapshot reviewed against main `26b0da9` and GitHub's PR list, 2026-11-06. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
+Snapshot reviewed against main `ff2ca27` and GitHub's PR list, 2026-11-06. Read only when resuming or planning work. This is a compact navigation summary, not evidence of a deployment or replacement for the relevant progress row. Update it when active work changes.
 
 ## In review
 
-- **Server P2 reliability fixes (D265, 2026-11-06):** branch `codex/server-p2-reliability` from main `26b0da9`. Owner requested B3–B7 in one PR: payment/QR commit guards, consistent order/report reads, atomic confirmation attempts and promotion-scoped idempotency. Local lint/typecheck/audit and 2,531 unit/server tests passed (1 existing skip); 14 guard-removal checks detected their missing protection. E2e build passed, but local Chromium is blocked by sandbox socket permissions; full GitHub browser CI pending. No merge or deployment. [Progress](progress.md#server-p2-reliability-fixes-d265-2026-11-06).
+- **Server P2 reliability fixes (D267), PR #268:** B3–B7 payment/QR guards, consistent order/report reads, atomic confirmation attempts and promotion-scoped retries. Updated against main `ff2ca27`; preserves the customer-order index and KHQR recovery from merged PR #267 (D265/D266). Original head CI passed all six browser shards; the integrated revision must pass fresh PR checks before merging. [Progress](progress.md#server-p2-reliability-fixes-d267-2026-11-06).
 
 ## Waiting on the owner
 
 - **Backups are not proven (highest risk).** PR #253 (export polling contract) merged 2026-11-03; no production run, real encrypted R2 copy, full decryption or isolated D1 restore has been verified since. Do not deploy, trigger or restore without owner approval. Runbook and evidence: [progress](progress.md#d1-backup-export-contract-repair-pr-253-2026-11-03), [operations](server/operations.md).
 - **Google sign-in on staging (D260–D262).** Merged: #255, #256, #257 (popup), #259 (admin/counter/platform + two-step), #260 (app-wide COOP), #264 (phone popup returning to the original tab). Every one was checked with mocked Google only; a real Google sign-in has not succeeded on staging from desktop, phone or a workspace. Earlier owner reports still open: Google chooser styling. [Setup and checks](plans/google-auth.md), [latest progress](progress.md#google-sign-in-stuck-after-the-popup-on-phones-d261-follow-up-2026-11-05).
 - **Motion review on staging (D263, D264; #262, #263, #265).** Cart and counter board feel, field error leave, quantity roll, Clear order, checkbox tick. Open: whether the order tracker's looping step stays. [D263](progress.md#interaction-motion-d263-2026-11-05), [D264](progress.md#leave-animations-and-controls-d264-2026-11-05).
-- **Closed without merging, no reason recorded:** #254 (KHQR recovery and bank-confirmation race audit; payments), #258 (time spent preparing/waiting for pickup), #261 (account layout polish), and earlier #196 (customer order index). Ask before redoing any of them; #254 matters most because it concerns money.
+- **Closed without merging, no reason recorded:** #258 (time spent preparing/waiting for pickup) and #261 (account layout polish). Ask before redoing them. (#254 and #196 were redone at the owner's request: D265, D266.)
 - **Security checklist (D244):** the owner works through the [owner security checklist](plans/cloudflare-improvements.md#owner-security-checklist-d244).
 - **Small owner items:** the platform page's contact line waits for the Telegram contact ([progress](progress.md#the-platforms-page-at--d221-follow-up-2026-10-27)); installable apps' iOS check, platform logo (QT1) ([progress](progress.md#installable-counter-and-admin-d202-2026-10-24)).
 - **Production** is live at `https://angder.app` since 2026-10-26 (D211–D214; staging `https://staging.angder.app`). Deploys are manual on `main` behind the `production` environment's reviewer ([operations → Production](server/operations.md#production-step-82-d211)). Left of 8.2: the backups above. [Phase 8](progress.md#phase-8-launch).
@@ -22,7 +22,7 @@ Each is its own step and branch.
 
 - **Account security step 5: Switch person on the counter** ([plan](plans/account-security.md)). Steps 1–4 merged (D242, D243, D246–D248); step 5 has no code yet.
 - **First-load rule (D238):** check other pages against the UI checklist item, one page per branch ([progress](progress.md#review-orders-first-load-and-the-first-load-rule-d238-2026-10-30)).
-- **Customer order index (performance):** see #196 above; the only customer index is still `orders_customer_idx (customer_id, placed_at)`. The next free migration number is `0056`.
+- **KHQR recovery follow-ups (D266):** an owner "check again" action, a Telegram alert for new review cases, explicit Bakong 429 handling. The next free migration number is `0058`.
 - **CSP `script-src 'unsafe-inline'`:** still pending a hash/nonce policy ([security → Request protection](server/security.md)). The customer menu is server-rendered and edge-cached (`swr`), so per-request nonces don't fit; a hash policy needs its own decision.
 - **Upgrade follow-ups:** nuxt 4.6.3 in its own run; remove the four unused `simple-git` audit exemptions (D54) from `pnpm-workspace.yaml`.
 - **Left open after D253:** the menu's lazy-load candidates (measure first) and Wrangler's `Duplicate key "payload"` warning.
@@ -37,6 +37,7 @@ Each is its own step and branch.
 
 Details in each progress entry; all merged to main and CI green.
 
+- **2026-11-06:** customer-order index and KHQR recovery (D265/D266, #267); live Bakong remains unverified.
 - **2026-11-05:** interaction motion (D263, #262/#263) and leave animations (D264, #265); Google phone popup fix (#264); app-wide Google popup COOP (D261, #260).
 - **2026-11-03/04:** Google sign-in and sign-up (D260, #255/#256), popup (D261, #257), at all workspaces with two-step (D262, #259); D1 backup export repair (#253, not production verified); platform UI fixes (#250); auth page state consistency (D258, #249); checkout validates at commit (D257, #248).
 - **2026-11-01/02:** e2e HTML validation (D256, #247); Nuxt Hints not adopted (D255, #246); platform order activity indexed reads (#238); e2e failure evidence (D249, #237); account security steps 1–4 (D242, D243, D246–D248, #231–#236); security hardening (D244, #233); signed-in site root (#240).

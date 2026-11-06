@@ -68,6 +68,8 @@ const ADMIN_PAGES: { path: string, ready: (page: Page) => Promise<unknown> }[] =
   { path: '/c/nuk/admin/promotions/promo-1', ready: page => page.getByRole('link', { name: 'View post in NUK Cafe News' }).waitFor() },
   // Channels (M2a, D164): a connected channel and one the bot was removed from.
   { path: '/c/nuk/admin/channels', ready: page => page.getByText('Bot removed').waitFor() },
+  // KHQR payments to review (D266): an open case and the unchecked warning.
+  { path: '/c/nuk/admin/payments', ready: page => page.getByText('Order #042 · Riverside').waitFor() },
 ]
 
 const COFFEE_WEEK: Promotion = {
@@ -76,7 +78,14 @@ const COFFEE_WEEK: Promotion = {
   poster: null, endedAt: null, version: 1, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
 }
 
+const KHQR_REVIEWS = {
+  open: [{ id: 'review-1', version: 1, status: 'open', reason: 'order_cancelled', branch: { id: 'branch-1', name: 'Riverside' }, order: { id: 'order-1', pickupNumber: 42, businessDate: '2026-11-05', status: 'cancelled', totalMinor: 875 }, expected: { currency: 'USD', amount: 875 }, received: { currency: 'USD', amount: 875 }, bankReference: '100FT36931627892', foundAt: '2026-11-05T05:03:00.000Z', foundBy: { name: 'Sophea' }, returned: null }],
+  returned: [],
+  unchecked: 1,
+}
+
 const ADMIN_MOCKS = {
+  'GET /admin/khqr/reviews': () => KHQR_REVIEWS,
   'GET /admin/menu/items': () => pageOf([menuItemSummaryOf('item-1', 'Latte', { status: 'active', categoryName: 'Coffee' })]),
   'GET /admin/staff': () => pageOf([staffOf(ADMIN.userId, 'alice', { email: ADMIN.email, admin: true, memberships: [] }), staffOf('staff-2', 'Sophea')]),
   'GET /admin/branches/options': () => [RIVERSIDE],
@@ -99,6 +108,16 @@ describe('accessibility (axe, WCAG 2.1 AA)', () => {
         expect(await findings(page)).toEqual([])
       })
     }
+
+    it(`Payments' Record return dialog (D266) at ${width}px`, async () => {
+      const page = await createPage()
+      await page.setViewportSize({ width, height: 900 })
+      await mockApi(page, ADMIN_MOCKS)
+      await page.goto(url('/c/nuk/admin/payments'), { waitUntil: 'hydration' })
+      await page.getByRole('list', { name: 'Payments to review' }).getByRole('button', { name: 'Record return' }).click()
+      await page.getByRole('dialog').getByRole('textbox', { name: 'Note' }).waitFor()
+      expect(await findings(page)).toEqual([])
+    })
 
     it(`the platform's page at ${width}px`, async () => {
       const page = await createPage()

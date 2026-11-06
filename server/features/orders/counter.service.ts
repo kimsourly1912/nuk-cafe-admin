@@ -9,6 +9,7 @@ import type { OrderCommand, OrderStep } from './commands'
 import { paymentClock } from './checkout.repository'
 import { runOrderCommand } from './commands'
 import { exchangeRateChanged, noExchangeRate, orderChanged, orderNotCancellable, orderNotFound, ownOrderPayment, paymentExpired, returnMethodInvalid } from './orders.errors'
+import { finishRecoveryStatement } from './khqr-recovery.repository'
 import { requireOrderCharge } from './khqr.service'
 import { ORDER_EVENTS } from './orders.events'
 import * as repo from './orders.repository'
@@ -215,7 +216,10 @@ export async function payOrder(db: Db, actor: BranchActor, orderId: string, inpu
         khqrChargeId: charge?.id ?? null,
         collectedBy: actor.userId,
         collectedAt: now,
-      }), outboxStatement(db, actor.tenantId, ORDER_EVENTS.paid, { orderId })],
+      }), outboxStatement(db, actor.tenantId, ORDER_EVENTS.paid, { orderId }),
+      // Paid with this QR: the server's own checks of it end (D266). Other QRs of the order keep
+      // being checked: a second payment on one of them is the customer's money to give back.
+      ...(charge ? [finishRecoveryStatement(db, actor.tenantId, charge.id, { state: 'done', checkedAt: now })] : [])],
       metadata: { method: input.method, amountMinor: order.totalMinor, amountKhr, ...(charge && { khqrChargeId: charge.id, khqrCurrency: charge.currency, khqrAmount: charge.amount }) },
     }
   }, async (order) => {
@@ -256,7 +260,7 @@ export async function recordCheckedKhqrPayment(db: Db, actor: BranchActor, order
         khqrChargeId: charge.id,
         collectedBy: actor.userId,
         collectedAt: now,
-      }), outboxStatement(db, actor.tenantId, ORDER_EVENTS.paid, { orderId: current.id })],
+      }), outboxStatement(db, actor.tenantId, ORDER_EVENTS.paid, { orderId: current.id }), finishRecoveryStatement(db, actor.tenantId, charge.id, { state: 'done', checkedAt: now })],
       metadata: { method: 'khqr', amountMinor: current.totalMinor, amountKhr: null, khqrChargeId: charge.id, khqrCurrency: charge.currency, khqrAmount: charge.amount, checkedWithBakong: true },
     }
   })
