@@ -50,6 +50,9 @@ const isSuperAdmin = (role: unknown) => typeof role === 'string' && role.split('
  */
 export function identityAuthOptions({ db, siteUrl, checkBreachedPasswords = true, humanCheck, google }: IdentityAuthSettings) {
   return {
+    // An OAuth failure without a usable state ignores errorCallbackURL. It must still end in the
+    // popup's callback page, not Better Auth's error page or (in production) the home page.
+    onAPIError: { errorURL: '/google-callback' },
     socialProviders: google && accountProviders(google).google
       ? {
           google: {

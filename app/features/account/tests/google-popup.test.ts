@@ -30,7 +30,7 @@ describe('Google popup lifecycle', () => {
     popup = { closed: false, opener: {}, document: { title: '', body: { textContent: '' } }, location: { href: 'about:blank', replace: vi.fn() }, close: vi.fn(() => {
       popup.closed = true
     }) }
-    vi.stubGlobal('window', { location: { origin: 'https://cafe.test' }, open: vi.fn(() => popup) })
+    vi.stubGlobal('window', { location: { origin: 'https://cafe.test' }, screenX: -1920, screenY: 40, outerWidth: 1600, outerHeight: 1000, open: vi.fn(() => popup) })
     vi.stubGlobal('BroadcastChannel', vi.fn(function () {
       channel = { onmessage: null, postMessage: vi.fn(), close: vi.fn(() => {
         channel.onmessage = null
@@ -64,6 +64,31 @@ describe('Google popup lifecycle', () => {
     const id = attempt ?? actions.googleSignIn.mock.calls[0]![0]
     channel.onmessage?.({ origin, data: { type: 'google-complete', path, attempt: id, success: true } } as MessageEvent)
   }
+
+  it('opens centered on the browser window, including on a monitor left of the primary', async () => {
+    const { completion } = start()
+    expect(window.open).toHaveBeenCalledWith('about:blank', '_blank', 'popup,width=500,height=700,left=-1370,top=190')
+    callback()
+    await completion
+  })
+
+  it('closes the popup as soon as the callback reports, before the session check answers', async () => {
+    ofetch.mockReturnValue(new Promise(() => {}))
+    start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(popup.closed).toBe(false)
+    callback()
+    expect(popup.closed).toBe(true)
+  })
+
+  it('closes the popup as soon as the callback reports a failure', async () => {
+    const { completion } = start()
+    const refused = expect(completion).rejects.toThrow('Sign in with your email and password')
+    const attempt = actions.googleSignIn.mock.calls[0]![0]
+    channel.onmessage?.({ origin: 'https://cafe.test', data: { type: 'google-complete', path: '/google-callback', attempt, success: false, error: 'account_not_linked' } } as MessageEvent)
+    expect(popup.closed).toBe(true)
+    await refused
+  })
 
   it('ignores another origin, path or attempt before verifying the session and announcing login', async () => {
     const { completion } = start()

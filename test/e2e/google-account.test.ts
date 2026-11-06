@@ -245,22 +245,59 @@ describe('Google popup completion', () => {
     expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isEnabled()).toBe(true)
   })
 
-  it('ignores a mismatched popup attempt and allows retry after it is closed', async () => {
+  it.each([
+    ['a malformed attempt', 'another-attempt'],
+    ['another attempt nobody acknowledges', '00000000-0000-4000-8000-000000000000'],
+  ])('closes itself on %s without completing, and allows retry', async (_, attempt) => {
     const flow = await popupFlow()
     const opened = flow.page.waitForEvent('popup')
     await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
     const popup = await opened
     await popup.waitForURL('https://accounts.google.com/**')
-    await flow.page.clock.install()
+    flow.authenticate()
     const mismatch = new URL(flow.callback())
-    mismatch.searchParams.set('googlePopup', 'another-attempt')
-    await popup.goto(mismatch.toString())
-    await popup.getByText('Returning to your sign-in window', { exact: true }).waitFor()
-    await flow.page.clock.runFor(1000)
-    expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isDisabled()).toBe(true)
-    await popup.close()
-    await flow.page.clock.runFor(250)
+    mismatch.searchParams.set('googlePopup', attempt)
+    await popup.goto(mismatch.toString(), { waitUntil: 'commit' })
+    await expect.poll(() => popup.isClosed()).toBe(true)
     await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in was closed.' }).waitFor()
+    expect(new URL(flow.page.url()).pathname).toBe('/sign-in')
+    expect(await flow.page.getByRole('button', { name: 'Continue with Google' }).isEnabled()).toBe(true)
+  })
+
+  it('closes itself and settles the form on a failure Better Auth sends to its default address', async () => {
+    const flow = await popupFlow()
+    const opened = flow.page.waitForEvent('popup')
+    await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
+    const popup = await opened
+    await popup.waitForURL('https://accounts.google.com/**')
+    await popup.goto(url('/google-callback?error=state_mismatch'), { waitUntil: 'commit' })
+    await expect.poll(() => popup.isClosed()).toBe(true)
+    await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in was closed.' }).waitFor()
+  })
+
+  it('first paints no layout or message in the popup', async () => {
+    const html = await (await fetch(url('/google-callback?error=access_denied'))).text()
+    expect(html).toContain('class="sr-only"')
+    for (const screen of ['role="alert"', '<header', '<footer', '<h1']) expect(html).not.toContain(screen)
+  })
+
+  it.each([
+    ['account_not_linked', 'Sign in with your email and password and verify your account email'],
+    ['state_mismatch', 'Google sign-in did not finish.'],
+  ])('continues on the sign-in page with %s when the browser refuses to close the window', async (error, message) => {
+    const page = await createPage()
+    await page.addInitScript(() => {
+      window.close = () => {}
+    })
+    await mockApi(page, {
+      'GET /account/providers': () => ({ google: true }),
+      'GET /auth/get-session': () => null,
+      'GET /shop/me': () => { throw failures.unauthorized() },
+    })
+    await page.goto(url(`/google-callback?error=${error}&error_description=DO_NOT_RENDER_PROVIDER_TEXT`), { waitUntil: 'hydration' })
+    await page.waitForURL(url(`/sign-in?error=${error === 'state_mismatch' ? 'google_failed' : error}`))
+    await page.getByRole('alert').filter({ hasText: message }).waitFor()
+    expect(await page.getByText('DO_NOT_RENDER_PROVIDER_TEXT').count()).toBe(0)
   })
 
   it('closes the provider popup when leaving the form', async () => {

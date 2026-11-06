@@ -85,6 +85,8 @@ The owner supplied screenshots of the app form losing semantic colors and its su
 Open the popup during the click before awaiting initiation; use Better Auth's [documented `disableRedirect` option](https://better-auth.com/docs/basic-usage). The callback grants no login by itself: the original active scope validates channel origin/callback marker/attempt and reads the actual session. The callback closes its own window after the originating channel acknowledges receipt, because browser opener isolation can detach direct window access. Browser tests mock the Google boundary; staging must still verify real consent, callback cookies and mobile browser popup behavior. No Google OAuth client redirect URI change is needed: the provider still returns to `/api/auth/callback/google`; Better Auth then redirects to the passive page.
 
 
+The callback page no longer shows anything and no longer depends on the acknowledgement to close (2026-11-06): [Google popup window](../reference/auth.md#google-popup-window-d261-2026-11-06).
+
 ### Protected-account callback error casing (2026-11-04)
 
 For an already-linked Google identity later protected by two-step sign-in, a temporary password or superadmin status, the session-create guard throws `GOOGLE_PASSWORD_REQUIRED`. Better Auth v1.7.7 forwards this exact code; pre-link validation returns its lowercase counterpart. Both must map to the same fixed password/two-step instruction. The popup passes only the normalized allowlisted code; raw upstream descriptions remain excluded. Server regression asserts the returning-account code, and browser checks cover both forms and both spellings. [Verification and live limits](../progress.md#google-protected-account-error-repair-d261-2026-11-04).
