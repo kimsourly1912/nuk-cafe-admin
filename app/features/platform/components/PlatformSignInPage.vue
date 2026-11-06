@@ -319,7 +319,7 @@ const aside = { title: 'Welcome back', text: 'Sign in to look after the cafes on
           v-if="codeStep"
           label="Back"
           color="neutral"
-          variant="ghost"
+          variant="subtle"
           block
           :disabled="loading"
           @click="restart()"

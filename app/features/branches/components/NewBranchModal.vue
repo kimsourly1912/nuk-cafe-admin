@@ -21,6 +21,7 @@ const start = (): NewBranchForm => ({ name: '', timezone: props.timezone ?? useR
 const state = reactive<NewBranchForm>(start())
 const saving = ref(false)
 const { isCompact: fullscreen } = useLayoutContext()
+const searchInput = useSelectSearch({ placeholder: 'Search time zones…' })
 const unsaved = useModalUnsavedChanges(state, { initial: start(), paused: saving, close: () => emit('close') })
 const zones = computed(() => timezoneOptions(start().timezone))
 
@@ -95,7 +96,8 @@ async function onSubmit({ data }: FormSubmitEvent<NewBranchForm>) {
             v-model="state.timezone"
             :items="zones"
             value-key="value"
-            :search-input="{ placeholder: 'Search time zones…' }"
+            :search-input="searchInput"
+            :by="sameTimezone"
             virtualize
             aria-label="Time zone"
             class="w-full"

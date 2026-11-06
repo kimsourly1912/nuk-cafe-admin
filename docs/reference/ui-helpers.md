@@ -278,6 +278,17 @@ const { isCompact, isExpanded } = useLayoutContext()
 
 The queries are Tailwind's own breakpoints in `rem`, so JavaScript and CSS switch at the same width even with a larger browser font. Width only: never the user agent, touch or hover.
 
+### `useSelectSearch`
+
+The `search-input` prop for a `USelectMenu`: the search box is focused on open only from `lg` (≥ 1024px), so a phone or tablet does not raise the on-screen keyboard over the list. Source: `app/composables/useSelectSearch.ts`.
+
+```vue
+<script setup lang="ts">
+const searchInput = useSelectSearch({ placeholder: 'Search time zones…' }) // or a getter for reactive values
+</script>
+<USelectMenu :search-input="searchInput" … />
+```
+
 ---|---|
 | `count: number` | Number of selected rows. |
 | default slot | Action buttons. |
@@ -585,7 +596,7 @@ The argument turns the slide on (only while reordering, so a filter or refresh n
 
 ## `useListTransition`
 
-The enter and leave of a list whose rows come and go with the data (D263): a row added fades in; a row removed fades out pinned where it stood (absolute, `aria-hidden`, `inert`) while the rows after it slide up. 200 ms, never on the first render, none for `prefers-reduced-motion` (the composable turns `css` off). Source: `app/composables/useListTransition.ts`, the `.list-*` classes in `app/assets/css/tailwind.css`. Used by the order's lines (`OrderLines`) and the counter's queue.
+The enter and leave of a list whose rows come and go with the data (D263): a row added fades in; a row removed fades out pinned where it stood (absolute, `aria-hidden`, `inert`) while the rows after it slide up. Enter and slide 200 ms, leave 140 ms ([curves, D268](./ui.md#11-motion)), never on the first render, none for `prefers-reduced-motion` (the composable turns `css` off). Source: `app/composables/useListTransition.ts`, the `.list-*` classes in `app/assets/css/tailwind.css`. Used by the order's lines (`OrderLines`) and the counter's queue.
 
 ```ts
 const listTransition = useListTransition({ instantWhen: [search, tab] })

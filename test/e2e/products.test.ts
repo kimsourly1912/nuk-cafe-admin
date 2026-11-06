@@ -1311,6 +1311,34 @@ describe('reordering a category\'s items (step 10.3, D118)', () => {
     expect(await dialog.getByRole('button', { name: 'Save order' }).isDisabled()).toBe(true)
   })
 
+  it('filtered on a main category: starts with no category (its items sit in sub-categories), then a sub-category reorders', async () => {
+    let sent: unknown
+    const handlers = reorderBackend(({ body }) => {
+      sent = body
+      return null
+    })
+    const SHOT = summaryOf(menuItemOf('item-30', 'Shot', { categoryId: 'cat-11' }), { sortOrder: 1, version: 2 })
+    const DOPPIO = summaryOf(menuItemOf('item-31', 'Doppio', { categoryId: 'cat-11' }), { sortOrder: 2, version: 4 })
+    handlers['GET /admin/menu/items'] = (({ url }: { url: URL }) => {
+      // Like the server: a main category answers with its sub-categories' items.
+      const rows = ['cat-10', 'cat-11'].includes(url.searchParams.get('categoryId') ?? '') ? [SHOT, DOPPIO] : [LATTE_ROW, MATCHA_ROW]
+      return { items: rows, page: 1, pageSize: 100, total: rows.length, totalPages: 1 }
+    }) as MockHandler
+    const { page } = await open(handlers, '', '/c/nuk/admin/products?categoryId=cat-10')
+    await page.getByRole('button', { name: 'Reorder' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Reorder menu items' })
+    await dialog.getByText('Choose a category to arrange its items.').waitFor()
+    expect(await dialog.getByRole('button', { name: 'Save order' }).isDisabled()).toBe(true)
+
+    await dialog.getByRole('combobox', { name: 'Category', exact: true }).click()
+    await chooseOption(page, 'Drinks › Espresso')
+    await dialog.getByRole('list', { name: 'Menu items in order' }).waitFor()
+    await dialog.getByRole('button', { name: 'Move Doppio up' }).click()
+    await dialog.getByRole('button', { name: 'Save order' }).click()
+    await toast(page, 'Order saved').waitFor()
+    expect(sent).toEqual({ categoryId: 'cat-11', items: [{ id: 'item-31', version: 4 }, { id: 'item-30', version: 2 }] })
+  })
+
   it('closing with a move asks first', async () => {
     const { page } = await open(reorderBackend(() => null))
     const dialog = await openReorder(page)

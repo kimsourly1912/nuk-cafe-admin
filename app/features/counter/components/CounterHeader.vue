@@ -83,7 +83,7 @@ const menu = computed<DropdownMenuItem[][]>(() => [
 </script>
 
 <template>
-  <header class="sticky top-0 z-10 border-b border-accented bg-default shadow-xs">
+  <header class="sticky top-0 z-20 border-b border-accented bg-default shadow-xs">
     <!-- Below sm the search drops to its own full-width row so nothing is squeezed; from sm it sits inline. -->
     <div class="mx-auto flex min-h-16 w-full max-w-7xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:flex-nowrap sm:py-0">
       <!-- One block that may shrink (the name truncates), so the buttons stay on the first row on a phone. -->
@@ -120,7 +120,7 @@ const menu = computed<DropdownMenuItem[][]>(() => [
         ref="searchInput"
         v-model="search"
         icon="i-lucide-search"
-        placeholder="Order number"
+        placeholder="Number or name"
         aria-label="Search orders by number or name"
         class="order-last w-full sm:order-0 sm:w-auto sm:min-w-0 sm:max-w-72 sm:flex-1"
         :ui="{ trailing: 'pe-1' }"

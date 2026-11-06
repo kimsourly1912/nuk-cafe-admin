@@ -66,6 +66,7 @@ function selectedLabel(value: unknown): string {
  */
 const sameValue = (option: unknown, value: unknown) => (option && typeof option === 'object' ? (option as RecordSelectItem).value : option) === value
 
+const searchInput = useSelectSearch(() => ({ placeholder: `Search ${props.noun}…` }))
 const searchTerm = ref('')
 const shown = computed<SelectMenuItem[]>(() => {
   const term = searchTerm.value.trim().toLocaleLowerCase()
@@ -91,7 +92,7 @@ const shown = computed<SelectMenuItem[]>(() => {
     :content="contentProps"
     :ui="{ itemLabel: 'group-data-[state=checked]:font-medium group-data-[state=checked]:text-primary' }"
     virtualize
-    :search-input="{ placeholder: `Search ${noun}…` }"
+    :search-input="searchInput"
   >
     <!-- The trigger's text comes from every item: a search that filters the chosen one out of the
          menu must not turn it into its raw value (an id). -->

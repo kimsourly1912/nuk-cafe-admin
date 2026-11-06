@@ -26,7 +26,7 @@ defineProps<{
     </p>
     <div class="flex items-baseline justify-between">
       <span class="font-semibold text-highlighted">Subtotal</span>
-      <span class="text-lg font-semibold text-highlighted">{{ formatMinor(subtotalMinor) }}</span>
+      <span class="text-lg font-semibold tabular-nums text-highlighted">{{ formatMinor(subtotalMinor) }}</span>
     </div>
     <UButton
       label="Review order"

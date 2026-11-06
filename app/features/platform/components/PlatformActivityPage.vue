@@ -15,6 +15,7 @@ import type { ActivityPeriod } from '../schemas/activity'
 import { ACTION_LABELS, ACTIVITY_PERIODS, activitySubject, actorName, periodDates } from '../schemas/activity'
 
 const { isCompact } = useLayoutContext()
+const searchInput = useSelectSearch({ placeholder: 'Search actions…', icon: 'i-lucide-search' })
 const timeZone = useRuntimeConfig().public.cafeTimeZone
 
 const { page, pageSize, filters, isFiltered, clearFilters } = usePaginatedQuery({
@@ -75,7 +76,7 @@ const columns: TableColumn<ActivityEntry>[] = [
             role="combobox"
             :items="actionItems"
             value-key="value"
-            :search-input="{ placeholder: 'Search actions…', icon: 'i-lucide-search' }"
+            :search-input="searchInput"
             aria-label="Action"
             class="col-span-2 min-w-0 sm:order-2 sm:w-52 sm:flex-none"
           />

@@ -17,6 +17,7 @@ defineOptions({ inheritAttrs: false })
 const props = defineProps<{ seed?: { email: string } }>()
 const account = defineModel<PlatformOwner | undefined>('account')
 
+const searchInput = useSelectSearch({ placeholder: 'Search by name or email…' })
 const term = ref('')
 const search = useOwnerAccountSearch(term)
 
@@ -66,7 +67,7 @@ const emptyText = computed(() => {
     value-key="value"
     ignore-filter
     :loading="search.searching.value"
-    :search-input="{ placeholder: 'Search by name or email…' }"
+    :search-input="searchInput"
     @update:model-value="pick"
   >
     <template #default>

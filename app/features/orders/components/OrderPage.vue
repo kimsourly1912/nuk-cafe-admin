@@ -364,7 +364,7 @@ async function again(from: Order) {
                   :to="tenantPath('/orders')"
                   block
                   color="neutral"
-                  variant="ghost"
+                  variant="subtle"
                 />
                 <UButton
                   v-if="order.status === 'awaiting_payment'"

@@ -203,7 +203,7 @@ const aside = { title: 'Keep your account secure', text: 'Choose a strong passwo
           v-else
           label="Back"
           color="neutral"
-          variant="ghost"
+          variant="subtle"
           block
           :to="loginRedirectTarget(route.query.redirect, slug)"
         />

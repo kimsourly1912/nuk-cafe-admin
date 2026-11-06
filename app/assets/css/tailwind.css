@@ -12,9 +12,15 @@
     @apply appearance-none;
   }
 
-  html,
-  body {
-    @apply scrollbar-thin;
+  /*
+   * Every scroll area gets the thin scrollbar (modal, drawer and slideover bodies, UDashboardPanel,
+   * select/menu lists, tables…). `scrollbar-width` is not inherited, so setting it on html/body only
+   * styled the page; the universal selector reaches Nuxt UI's and portaled content too. It sits in
+   * `@layer base`, so any utility (`scrollbar-none`, `scrollbar-hover`, `scrollbar-auto`) still wins.
+   * Only the width changes; the browser's own colors stay.
+   */
+  * {
+    scrollbar-width: thin;
   }
 }
 
@@ -182,26 +188,43 @@
 }
 
 /*
- * Lists whose rows come and go (`useListTransition`, D263): a row added fades and grows in, a row
- * removed fades out while the rows after it slide into its place (the composable pins the leaving
- * row where it stood, so the others move at once). 200 ms; unlayered, so it wins over a row's own
- * `transition-colors`. Off for people who ask for less motion (the composable also turns `css` off).
+ * The app's motion curves (D268, ui.md §11), also utilities (`ease-enter`, `ease-move`):
+ * - `--ease-enter`: appearing or leaving, fast at once then settling, so a tap answers immediately.
+ * - `--ease-move`: something already on screen moving or resizing. `AnimatedHeight` repeats this one
+ *   (the Web Animations API can't read a variable): change them together.
  */
-.list-enter-active,
+@theme {
+  --ease-enter: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-move: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/*
+ * Lists whose rows come and go (`useListTransition`, D263, D268): a row added fades in and settles
+ * from just smaller; a row removed fades out, faster, while the rows after it slide into its place
+ * (the composable pins the leaving row where it stood, so the others move at once). Unlayered, so it
+ * wins over a row's own `transition-colors`. Off for people who ask for less motion (the composable
+ * also turns `css` off).
+ */
+.list-enter-active {
+  transition:
+    opacity 200ms var(--ease-enter),
+    transform 200ms var(--ease-enter);
+}
+
 .list-leave-active {
   transition:
-    opacity 200ms ease-out,
-    transform 200ms ease-out;
+    opacity 140ms var(--ease-enter),
+    transform 140ms var(--ease-enter);
 }
 
 .list-move {
-  transition: transform 200ms ease-out;
+  transition: transform 200ms var(--ease-move);
 }
 
 .list-enter-from,
 .list-leave-to {
   opacity: 0;
-  transform: scale(0.97);
+  transform: scale(0.96);
 }
 
 /*
@@ -228,14 +251,15 @@
 /*
  * A number that rolls (`QuantityStepper`, D264): going up, the new number rises from below and the
  * old one leaves upwards; going down, the other way. Both are absolutely placed in a clipped box.
+ * Quick (D268): people tap this several times in a row.
  */
 .roll-up-enter-active,
 .roll-up-leave-active,
 .roll-down-enter-active,
 .roll-down-leave-active {
   transition:
-    transform 180ms ease-out,
-    opacity 180ms ease-out;
+    transform 120ms var(--ease-enter),
+    opacity 120ms var(--ease-enter);
 }
 
 .roll-up-enter-from,

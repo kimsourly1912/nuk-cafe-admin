@@ -183,7 +183,7 @@ async function useAnotherAccount() {
         <UButton
           label="Use another account"
           color="neutral"
-          :variant="primary === 'menu' ? 'outline' : 'ghost'"
+          :variant="primary === 'menu' ? 'outline' : 'subtle'"
           block
           :loading="signingOut"
           @click="useAnotherAccount"

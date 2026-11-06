@@ -28,6 +28,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](.
 | `TaskFrame` | `components/` | A task-flow page's frame (sign-in, change password, the account pages): a card from `sm`, the full screen with the action at the bottom on phones; CSS only (D84, D97) |
 | `PasswordRequirements`, `GeneratePasswordButton`, `usePasswordLeakCheck`, `passwordRequirements`, `isBreachedPassword`, `generatePassword`, `fillInput` | `components/`, `composables/`, `utils/password-requirements.ts` | The password rules as a live checklist under every new-password field, the Generate button inside it, a breached-password refusal (D210) |
 | `BottomActionBar` | `components/` | The one bottom bar for a page's mode, Save or bulk actions (fixed below `lg`, one at a time, steps aside for the keyboard) |
+| `useSelectSearch(input)` | `composables/` | `search-input` for a `USelectMenu`: search box focused on open only from `lg`, so touch screens keep their keyboard down |
 | `useLayoutContext()` | `composables/` | `isCompact` / `isExpanded` for choices CSS can't make (full-screen modal, drawer vs dropdown); never `useMediaQuery` by hand |
 | `StatusTabs` | `components/` | Status filter as tabs with counts; each feature names its statuses |
 | `ListSkeleton` | `components/` | First-load placeholders (rows or cards) |
@@ -46,7 +47,7 @@ Summary only. Full signatures, options and examples are in **[docs/reference/](.
 | `usePageShortcuts`, `useSubmitShortcut`, `SHORTCUTS`, `<ShortcutsHelp>` | `composables/useShortcuts.ts`, `components/` | Keyboard shortcuts (skipped behind dialogs/menus), Ctrl/⌘+Enter to save, the `?` list |
 | `useNotify()` | `composables/` | Toasts for API actions that aren't mutations |
 | `toMinor`, `fromMinor`, `formatMinor`, `formatPrice`, `PRICE_FORMAT`, `CURRENCY` | `utils/money.ts` | Cents (API) ↔ dollars (forms, display), "$4.20" |
-| `timezoneOptions`, `utcOffset`, `cityOf` | `utils/timezones.ts` | Time zone pickers: "(UTC+07:00) Phnom Penh" by offset (the Branch form, New cafe, D142) |
+| `timezoneOptions`, `sameTimezone` (`:by` for the virtualized menu), `utcOffset`, `cityOf` | `utils/timezones.ts` | Time zone pickers: "(UTC+07:00) Phnom Penh" by offset (the Branch form, New cafe, D142) |
 | `formatClock`, `timeRange`, `isOvernight`, `minuteToTime`, `timeToMinute` | `utils/clock.ts` | Weekly windows' minutes after midnight ↔ "7:30 AM" and `<TimeInput>` (availability rules, branch hours) |
 | `DateTimeInput` | `components/` | A day and a time in one field (`YYYY-MM-DDTHH:mm`): calendar popover + `<TimeInput>`; `type="datetime-local"` is a lint error |
 | `TimeInput` | `components/` | Every time of day: `UInputTime` with AM/PM switched by a tap, which a phone's keyboard can't type (`UInputTime` is a lint error elsewhere, D165) |

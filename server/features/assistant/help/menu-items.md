@@ -58,8 +58,8 @@ A published item has **View on menu** in its form (and in its row's ⋮ menu): i
 
 Customers see a category's items in the order you set here, for example best sellers first.
 
-1. Press **Reorder** in the toolbar (or the **R** key). If you're filtering by a category, it opens on that category.
-2. Choose the **Category**.
+1. Press **Reorder** in the toolbar (or the **R** key). If you're filtering by a sub-category, it opens on that sub-category.
+2. Choose the **Category**. Items are ordered within one sub-category at a time, so a main category isn't offered.
 3. Drag an item by its handle, or use its up and down buttons.
 4. Press **Save order**. Archived items aren't listed and keep their place.
 

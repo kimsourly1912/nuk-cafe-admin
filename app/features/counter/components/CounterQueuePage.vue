@@ -11,6 +11,9 @@
  * tap says so (D150). An order arriving, moving to another column or leaving slides in and out
  * (D263); searching, changing tab or branch shows the new cards at once.
  *
+ * From `sm` the board fills the screen and each column scrolls under its title and count, so all
+ * three stay in sight (D269); on phones the page scrolls and the tabs stick under the header.
+ *
  * Browser-only (`routeRules`), so the width can choose what renders (`useLayoutContext`).
  */
 import type { PublicBranch } from '#shared/contracts/branches'
@@ -62,6 +65,12 @@ const actions = useCounterActions(branchId)
 const search = ref('')
 const orders = computed(() => (queue.value?.orders ?? []).filter(order => matchesSearch(order, search.value)))
 const columns = computed(() => COLUMNS.map(column => ({ ...column, orders: orders.value.filter(order => order.status === column.status) })))
+// A column's one color signal (D269): the rule under its title and its icon; the count is a soft badge.
+const COLUMN_ACCENT = {
+  warning: { rule: 'border-warning', icon: 'text-warning' },
+  info: { rule: 'border-info', icon: 'text-info' },
+  success: { rule: 'border-success', icon: 'text-success' },
+} as const
 const tab = ref<ColumnId>('to_pay')
 const tabsRow = useTemplateRef('tabsRow')
 useCenteredTab(tabsRow, () => tab.value)
@@ -121,7 +130,7 @@ useSeoMeta({ robots: 'noindex' })
 </script>
 
 <template>
-  <div class="flex min-h-dvh flex-col">
+  <div class="flex min-h-dvh flex-col sm:h-dvh">
     <CounterHeader
       v-model:search="search"
       :branch-id="branchId"
@@ -140,9 +149,10 @@ useSeoMeta({ robots: 'noindex' })
       />
     </div>
 
+    <!-- Scrolls only when banners leave the board less than its minimum height (a short window, 200% zoom). -->
     <div
       v-else
-      class="mx-auto flex w-full max-w-7xl flex-1 flex-col"
+      class="mx-auto flex w-full max-w-7xl flex-1 flex-col sm:min-h-0 sm:overflow-y-auto"
     >
       <CounterViewSwitch
         :branch-id="branchId"
@@ -233,18 +243,19 @@ useSeoMeta({ robots: 'noindex' })
         v-else-if="isCompact"
         class="flex-1"
       >
+        <!-- top-22: the header's height on a phone, with the search on its own row. -->
         <UTabs
           ref="tabsRow"
           v-model="tab"
           :items="tabItems"
           :content="false"
           variant="link"
-          class="sticky top-16 z-10 w-full bg-default px-2"
+          class="sticky top-22 z-10 w-full bg-default px-2"
           aria-label="Queue"
         />
         <TransitionGroup
           tag="div"
-          class="relative space-y-3 p-3"
+          class="relative space-y-3 p-4"
           v-bind="listTransition"
         >
           <CounterOrderCard
@@ -270,7 +281,7 @@ useSeoMeta({ robots: 'noindex' })
               {{ empty ? 'No orders yet' : search.trim() ? 'No matching orders' : 'None right now' }}
             </p>
             <p
-              v-if="empty"
+              v-if="empty && tab === 'to_pay'"
               class="text-sm text-muted"
             >
               New orders appear here automatically.
@@ -279,33 +290,38 @@ useSeoMeta({ robots: 'noindex' })
         </TransitionGroup>
       </div>
 
-      <!-- Tablets and wider: the board -->
+      <!-- Tablets and wider: the board. Every column is the full height and scrolls by itself. -->
       <div
         v-else
-        class="grid flex-1 grid-cols-3 gap-3 p-4"
+        class="grid min-h-72 flex-1 grid-cols-3 grid-rows-1 gap-3 p-4"
       >
         <section
           v-for="column in columns"
           :key="column.id"
-          class="flex min-h-0 flex-col rounded-lg bg-elevated/50 ring ring-accented dark:bg-default"
+          class="flex min-h-0 flex-col overflow-hidden rounded-lg bg-elevated/50 ring ring-default dark:bg-default dark:ring-accented"
           :aria-labelledby="`column-${column.id}`"
         >
           <h2
             :id="`column-${column.id}`"
-            class="flex items-center gap-2 border-b-2 px-3 py-2 font-semibold text-highlighted"
-            :class="{ 'border-warning': column.color === 'warning', 'border-info': column.color === 'info', 'border-success': column.color === 'success' }"
+            class="flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 font-semibold text-highlighted"
+            :class="COLUMN_ACCENT[column.color].rule"
           >
-            {{ column.label }}
+            <UIcon
+              :name="column.icon"
+              class="size-5 shrink-0"
+              :class="COLUMN_ACCENT[column.color].icon"
+            />
+            <span class="min-w-0 flex-1 truncate">{{ column.label }}</span>
             <UBadge
               :label="String(column.orders.length)"
               :color="column.color"
               variant="subtle"
-              size="sm"
+              class="tabular-nums"
             />
           </h2>
           <TransitionGroup
             tag="div"
-            class="relative space-y-3 overflow-y-auto p-3"
+            class="relative min-h-0 flex-1 space-y-3 overflow-y-auto p-2 lg:p-3"
             v-bind="listTransition"
           >
             <CounterOrderCard
@@ -319,16 +335,17 @@ useSeoMeta({ robots: 'noindex' })
               @action="act(order)"
             />
             <p
-              v-if="!column.orders.length && !empty"
+              v-if="!column.orders.length && !(empty && column.id === 'to_pay')"
               key="none"
               class="py-6 text-center text-sm text-muted"
             >
-              {{ search.trim() ? 'No matching orders' : 'None right now' }}
+              {{ search.trim() && !empty ? 'No matching orders' : 'None right now' }}
             </p>
+            <!-- In the column new orders arrive in. -->
             <div
-              v-if="empty && column.id === 'preparing'"
+              v-if="empty && column.id === 'to_pay'"
               key="empty"
-              class="flex flex-col items-center gap-2 py-16 text-center"
+              class="flex flex-col items-center gap-2 py-10 text-center"
             >
               <UIcon
                 name="i-lucide-receipt"

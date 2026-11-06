@@ -166,6 +166,9 @@ describe('Google popup completion', () => {
     flow.authenticate()
     await popup.goto(flow.callback(), { waitUntil: 'commit' })
     await expect.poll(() => release).toBeDefined()
+    // The popup closes itself once this tab acknowledges it. `page.clock` is the context's clock and
+    // evaluates in every page, so running it while the popup closes fails with "Target … closed".
+    await expect.poll(() => popup.isClosed()).toBe(true)
     const reads = flow.api.calls.filter(call => call === 'GET /auth/get-session').length
     await setVisibility('visible')
     await flow.page.clock.runFor(100)

@@ -49,7 +49,7 @@ function setPrice(index: number, value: number | null | undefined) {
 
   <div
     v-else
-    class="overflow-x-auto rounded-md border border-default"
+    class="overflow-x-auto rounded-md border border-default scrollbar-thin"
   >
     <table class="w-full text-sm">
       <thead class="bg-elevated/50">

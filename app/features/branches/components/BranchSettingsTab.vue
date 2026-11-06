@@ -21,6 +21,7 @@ const saved = shallowRef(props.settings)
 const state = reactive<BranchForm>(toBranchForm(props.settings))
 const saving = ref(false)
 const auth = useAuth()
+const searchInput = useSelectSearch({ placeholder: 'Search time zones…' })
 const unsaved = useUnsavedChanges(state, {
   paused: saving,
   // Hours take a while to enter: kept in this browser until saved (D151).
@@ -286,7 +287,8 @@ defineExpose({ save, isDirty: unsaved.isDirty, saving })
               v-model="state.timezone"
               :items="zones"
               value-key="value"
-              :search-input="{ placeholder: 'Search time zones…' }"
+              :search-input="searchInput"
+              :by="sameTimezone"
               virtualize
               aria-label="Time zone"
               class="w-full"
