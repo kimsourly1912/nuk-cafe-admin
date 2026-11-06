@@ -20,9 +20,10 @@ const views = computed(() => [
 
 <template>
   <div class="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
+    <!-- Soft, not solid: on the queue the page's solid primary is the card's Take payment (ui §9). -->
     <nav
       aria-label="Counter views"
-      class="inline-flex gap-1 rounded-lg bg-accented p-1 ring ring-default max-sm:w-full"
+      class="inline-flex gap-2 max-sm:w-full"
     >
       <UButton
         v-for="view in views"
@@ -30,10 +31,9 @@ const views = computed(() => [
         :to="view.to"
         :label="view.label"
         :color="view.id === current ? 'primary' : 'neutral'"
-        :variant="view.id === current ? 'solid' : 'ghost'"
+        :variant="view.id === current ? 'soft' : 'ghost'"
         :aria-current="view.id === current ? 'page' : undefined"
         class="justify-center max-sm:flex-1"
-        :class="view.id !== current && 'text-default'"
       />
     </nav>
     <p class="text-sm text-muted max-sm:hidden">

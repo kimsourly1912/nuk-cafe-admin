@@ -16,12 +16,14 @@ export interface Column {
   status: OrderStatus
   /** The same color roles as the customer's order page (D100). */
   color: 'warning' | 'info' | 'success'
+  /** Beside the title, so the columns differ by shape as well as color. */
+  icon: string
 }
 
 export const COLUMNS: Column[] = [
-  { id: 'to_pay', label: 'To pay', status: 'awaiting_payment', color: 'warning' },
-  { id: 'preparing', label: 'Preparing', status: 'preparing', color: 'info' },
-  { id: 'ready', label: 'Ready', status: 'ready', color: 'success' },
+  { id: 'to_pay', label: 'To pay', status: 'awaiting_payment', color: 'warning', icon: 'i-lucide-wallet' },
+  { id: 'preparing', label: 'Preparing', status: 'preparing', color: 'info', icon: 'i-lucide-chef-hat' },
+  { id: 'ready', label: 'Ready', status: 'ready', color: 'success', icon: 'i-lucide-bell-ring' },
 ]
 
 /** "042". */

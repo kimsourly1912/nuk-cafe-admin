@@ -84,7 +84,64 @@ async function sql(statement: string, args: (string | number)[] = []) {
   }
 }
 
+/** A queue longer than any screen, so the layout's scrolling shows (mocked: this checks layout only). */
+async function longQueue(page: Page) {
+  const now = Date.now()
+  const orders = Array.from({ length: 12 }, (_, index) => ({
+    id: `long-${index}`,
+    version: 1,
+    pickupNumber: 900 + index,
+    businessDate: '2026-11-06',
+    status: 'preparing',
+    orderType: 'pickup',
+    table: null,
+    customer: { name: 'Sokha Chan' },
+    lines: [{ itemName: 'Banana Bread', quantity: 1 }],
+    totalMinor: 225,
+    placedAt: new Date(now - 60_000).toISOString(),
+    paymentDueAt: new Date(now + 1_800_000).toISOString(),
+  }))
+  await page.route('**/api/c/nuk/counter/*/orders', route => route.fulfill({
+    json: { orders, khrRate: null, khqr: null, serverTime: new Date(now).toISOString(), finishedToday: 0 },
+  }))
+}
+
 describe('the counter', () => {
+  it('from a tablet up the board fills the screen: columns are one height and each scrolls under its title (D269)', async () => {
+    const { page } = await cashierAtCounter(1180, longQueue)
+    await page.getByRole('article', { name: 'Order 911' }).waitFor()
+    // The page itself doesn't scroll, sideways or down.
+    expect(await page.evaluate(() => {
+      const root = document.documentElement
+      return root.scrollHeight <= window.innerHeight && root.scrollWidth <= window.innerWidth
+    })).toBe(true)
+    const heights = await page.getByRole('region').evaluateAll(regions => regions.filter(r => r.tagName === 'SECTION').map(r => r.getBoundingClientRect().height))
+    expect(heights).toHaveLength(3)
+    expect(new Set(heights).size).toBe(1)
+    // Scrolling the long column leaves its title and the others where they were.
+    const title = page.getByRole('heading', { name: /^Preparing/ })
+    const before = (await title.boundingBox())!.y
+    await page.getByRole('article', { name: 'Order 911' }).scrollIntoViewIfNeeded()
+    expect(await page.getByRole('article', { name: 'Order 911' }).isVisible()).toBe(true)
+    expect((await title.boundingBox())!.y).toBe(before)
+    expect(await page.evaluate(() => window.scrollY)).toBe(0)
+  })
+
+  it('on a phone the tabs stay in sight below the header while the list scrolls, with nothing wider than the screen (D269)', async () => {
+    const { page } = await cashierAtCounter(320, longQueue)
+    await page.getByRole('tab', { name: /^Preparing/ }).click()
+    await page.getByRole('article', { name: 'Order 911' }).scrollIntoViewIfNeeded()
+    const place = await page.evaluate(() => ({
+      scrolled: window.scrollY,
+      header: document.querySelector('header')!.getBoundingClientRect().bottom,
+      tabs: document.querySelector('[role=tablist]')!.getBoundingClientRect().top,
+      fits: document.documentElement.scrollWidth <= window.innerWidth,
+    }))
+    expect(place.scrolled).toBeGreaterThan(0)
+    expect(place.tabs).toBeGreaterThanOrEqual(place.header - 1)
+    expect(place.fits).toBe(true)
+  })
+
   it('keeps the screen on, counts the orders to pay in the tab, and says when the queue last loaded while it can\'t refresh (D149); asks for a tap to turn sound on and warns louder after 2 minutes (D150)', async () => {
     allowBrowserProblems(/request failed: GET \/api\/c\/nuk\/counter\/[\w-]+\/orders \(net::ERR_FAILED\)/)
     const order = await placeOrder(seed.customers.counterShopperA)
