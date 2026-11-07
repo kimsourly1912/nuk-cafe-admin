@@ -261,7 +261,7 @@ Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/c
 | Editing an archived item; publishing a non-draft; restoring a non-archived one | 409 `INVALID_STATE` | ✔ |
 | Publishing with nothing sellable | 422 `NOTHING_TO_SELL` | ✔ |
 | Deleting a published item / one an order line or any promotion names (also if one arrives meanwhile) | 409 `INVALID_STATE` / `ITEM_HAS_HISTORY`; summaries say which (`deleteBlocker`) | ✔ (incl. both races) |
-| Restoring into a category that has since got sub-categories | 422 `CATEGORY_NOT_A_LEAF` | ✔ |
+| Restoring into a category that has since got sub-categories (one moved under it; a new one takes its archived items, D270) | 422 `CATEGORY_NOT_A_LEAF` | ✔ |
 
 Option sets now report `itemCount` (drafts and active items using them).
 
