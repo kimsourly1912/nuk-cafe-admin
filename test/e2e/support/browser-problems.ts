@@ -15,6 +15,15 @@ import type { ConsoleMessage, Page, Request } from 'playwright-core'
 const allowed: RegExp[] = []
 
 /**
+ * For a test that cuts the network (`setOffline`): Nuxt fetches its app manifest when the browser is
+ * idle after hydration (for link prefetch and route rules), and a fetch that lands while offline
+ * logs `[NUXT_E5002]` ("Could not fetch the app manifest"); Nuxt drops it and fetches again later.
+ * On Categories it comes about a second after the list shows (measured on main and with D270), so
+ * the moment a test goes offline can overlap it under load (seen in CI, 2026-11-07).
+ */
+export const OFFLINE_MANIFEST_FETCH = /\[NUXT_E5002\]/
+
+/**
  * Lets the current test's pages report problems that match: a test that answers 500 on purpose,
  * or cuts the network. Call it in the test, with a pattern as narrow as the problem it expects:
  * `allowBrowserProblems(/POST \/api\/c\/nuk\/admin\/categories → 500/)`.
