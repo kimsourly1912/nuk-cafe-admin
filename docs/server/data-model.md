@@ -144,7 +144,7 @@ Feature `server/features/menu/` (`categories.*`), contract `shared/contracts/men
 |---|---|
 | `GET /api/admin/menu/categories?status=active\|archived\|all` | The tree in order: each top-level category followed by its sub-categories; `childCount` = active sub-categories |
 | `GET /api/admin/menu/categories/{id}` | One category |
-| `POST /api/admin/menu/categories` | `{ name, description?, parentId?, moveItems? }` → 201, at the end of its level. `moveItems`: the parent's drafts and active items, as told to the person; all its items of any status move into the new sub-category in the same batch (D270) |
+| `POST /api/admin/menu/categories` | `{ name, description?, parentId?, moveItems? }` → 201, at the end of its level. `moveItems`: the parent's drafts and active items, as told to the person; all its items of any status move into the new sub-category in the same batch (D270), archived ones also without `moveItems` |
 | `PATCH /api/admin/menu/categories/{id}` | `{ version, name?, description?, parentId? }`: absent keeps; a new `parentId` moves it (`null`: to the top level) to the end of its new siblings |
 | `POST /api/admin/menu/categories/{id}/archive` | `{ version }`: archives it and its active sub-categories |
 | `POST /api/admin/menu/categories/{id}/restore` | `{ version }`: restores this one only, at the end of its level |
