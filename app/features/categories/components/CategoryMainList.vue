@@ -169,20 +169,22 @@ function onHandleKey(event: KeyboardEvent, index: number) {
                 {{ meta(group) }}
               </p>
             </div>
-          </div>
 
-          <!-- Below `lg` a card opens its own screen: in a mode, only one with subcategories to reach. -->
-          <UIcon
-            v-if="!isBusy(group.main.id) && (mode === 'browse' || group.subs.length)"
-            name="i-lucide-chevron-right"
-            class="mr-1 size-5 shrink-0 text-muted lg:hidden"
-          />
-          <UIcon
-            v-if="isBusy(group.main.id)"
-            name="i-lucide-loader-circle"
-            class="mr-1 size-5 shrink-0 animate-spin text-muted"
-            aria-label="Working…"
-          />
+            <!-- Below `lg` a card opens its own screen: in a mode, only one with subcategories to reach.
+                 Inside the block and not a target itself (a masked icon paints over the name's stretched
+                 target), so a tap on › opens it too. -->
+            <UIcon
+              v-if="!isBusy(group.main.id) && (mode === 'browse' || group.subs.length)"
+              name="i-lucide-chevron-right"
+              class="pointer-events-none size-5 shrink-0 text-muted lg:hidden"
+            />
+            <UIcon
+              v-if="isBusy(group.main.id)"
+              name="i-lucide-loader-circle"
+              class="size-5 shrink-0 animate-spin text-muted"
+              aria-label="Working…"
+            />
+          </div>
         </div>
       </TransitionGroup>
     </div>

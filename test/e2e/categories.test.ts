@@ -822,6 +822,26 @@ describe('categories on a phone', () => {
     expect(inUrl(page, 'category')).toBeNull()
   })
 
+  it('opens a category from a tap on its ›, in every mode', async () => {
+    const { page } = await openPhone()
+    // Where a finger lands on the ›, not the name: the icon must let it through to the card's target.
+    const tapChevron = async (name: string) => {
+      const box = (await item(page, name).locator('[class*="chevron-right"]').boundingBox())!
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    }
+    await tapChevron('Food')
+    await item(page, 'Toast').waitFor()
+    await button(page, 'Back to main categories').click()
+    for (const mode of ['Select', 'Reorder']) {
+      await button(page, mode).click()
+      await page.getByRole('heading', { name: 'Main categories' }).waitFor()
+      await tapChevron('Food')
+      await item(page, 'Toast').waitFor()
+      await button(page, 'Main categories').click()
+      await button(page, mode === 'Select' ? 'Cancel selection' : 'Done reordering').click()
+    }
+  })
+
   it('changes category from pills where the list isn\'t beside it, and Back still returns to the list', async () => {
     const { page } = await openPhone()
     await showMain(page, 'Food')
