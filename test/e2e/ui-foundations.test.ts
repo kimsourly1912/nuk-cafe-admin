@@ -25,7 +25,7 @@ async function open(width: number, height = 812, colorScheme: 'light' | 'dark' =
   await page.setViewportSize({ width, height })
   await mockApi(page, handlers)
   await page.goto(url('/c/nuk/admin/categories'), { waitUntil: 'hydration' })
-  await page.getByRole('listitem', { name: 'Coffee', exact: true }).waitFor()
+  await page.getByRole('listitem', { name: 'Drinks', exact: true }).waitFor()
   return page
 }
 
@@ -98,7 +98,7 @@ describe('touch targets', () => {
   it('gives a checkbox a 44px hit area on a phone without making it bigger', async () => {
     const page = await open(375)
     await page.getByRole('button', { name: 'Select', exact: true }).click()
-    const checkbox = page.getByRole('checkbox', { name: 'Select Coffee' })
+    const checkbox = page.getByRole('checkbox', { name: 'Select Drinks' })
     const box = (await checkbox.boundingBox())!
     expect(Math.round(box.width)).toBe(16)
     // 12px outside the visible box still hits it
@@ -195,7 +195,7 @@ describe('bottom action bar', () => {
     }).toBe(true)
   })
 
-  it('sits above the tree from lg, in the page flow', async () => {
+  it('sits above the panels from lg, in the page flow', async () => {
     const page = await open(1280)
     await page.getByRole('button', { name: 'Select', exact: true }).click()
     const bar = page.getByRole('toolbar', { name: 'Bulk actions' })

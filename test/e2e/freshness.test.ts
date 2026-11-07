@@ -2,6 +2,7 @@ import type { BrowserContext, Page } from 'playwright-core'
 import { createPage, getBrowser, url, waitForHydration } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
 import { categoryItem, menuCategoryOf, MENU_COFFEE, mockApi, setupE2e, MENU_TEA } from './support/mock-api'
+import { allowBrowserProblems, OFFLINE_MANIFEST_FETCH } from './support/browser-problems'
 
 // plugins/data-freshness.client.ts and components/OfflineBanner.vue.
 // Cases: docs/reference/app-behavior.md → "Data freshness".
@@ -104,6 +105,7 @@ describe('data freshness: returning to the tab', () => {
 
 describe('data freshness: connection', () => {
   it('shows an offline banner, and refetches when the connection is back', async () => {
+    allowBrowserProblems(OFFLINE_MANIFEST_FETCH)
     const tab = await openTab()
     const { page } = tab
     const before = listLoads(tab)

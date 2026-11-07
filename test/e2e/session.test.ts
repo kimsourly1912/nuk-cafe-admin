@@ -1,7 +1,7 @@
 import type { Page } from 'playwright-core'
 import { createPage, url } from '@nuxt/test-utils/e2e'
 import { describe, expect, it } from 'vitest'
-import { allowBrowserProblems } from './support/browser-problems'
+import { allowBrowserProblems, OFFLINE_MANIFEST_FETCH } from './support/browser-problems'
 import { ADMIN, beforeUnloadPrevented, categoryItem, menuCategoryOf, deferred, failures, gotoHydrated, mockApi, openTabs, setupE2e, MENU_TEA, toast } from './support/mock-api'
 
 // The session-transition contract (plugins/session-boundary.client.ts, useAuth generation,
@@ -147,8 +147,8 @@ describe('switching users in the same browser', () => {
     await page.getByRole('toolbar', { name: 'Bulk actions' }).getByRole('button', { name: 'Archive selected' }).click()
     await page.getByRole('button', { name: 'Archive' }).last().click()
     await toast(page, '0 categories archived, 1 failed').waitFor()
-    await page.getByRole('button', { name: 'Actions for Tea' }).click()
-    await page.getByRole('menuitem', { name: 'Edit' }).click()
+    await categoryItem(page, 'Tea').getByRole('button', { name: 'Tea', exact: true }).click()
+    await page.getByRole('region', { name: 'Tea', exact: true }).getByRole('button', { name: 'Edit details' }).click()
     await form(page).locator('input').first().fill('Tea by Alice')
     await form(page).getByRole('button', { name: 'Save' }).click()
     await aliceSave.started()
@@ -183,7 +183,7 @@ describe('switching users in the same browser', () => {
   })
 
   it('a list kept after a failed refresh is never shown to the next person (D150)', async () => {
-    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/menu\/categories\?status=all → 500/)
+    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/menu\/categories\?status=all → 500/, OFFLINE_MANIFEST_FETCH)
     const page = await createPage()
     let aliceSignedIn = true
     let failing = false
@@ -225,7 +225,7 @@ describe('switching users in the same browser', () => {
   })
 
   it('an open page whose refresh failed shows nothing of the previous person when another signs in elsewhere (D150)', async () => {
-    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/menu\/categories\?status=all → 500/)
+    allowBrowserProblems(/GET \/api\/c\/nuk\/admin\/menu\/categories\?status=all → 500/, OFFLINE_MANIFEST_FETCH)
     const [aliceTab, bobTab] = await openTabs(2)
     let who: 'alice' | 'bob' = 'alice'
     let failing = false

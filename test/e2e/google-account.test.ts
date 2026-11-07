@@ -224,7 +224,7 @@ describe('Google popup completion', () => {
     await popup.goto(flow.callback(), { waitUntil: 'commit' })
     await flow.page.getByRole('alert').filter({ hasText: 'Sign in to continue.' }).waitFor()
     expect(new URL(flow.page.url()).pathname).toBe('/sign-in')
-    expect(popup.isClosed()).toBe(true)
+    await expect.poll(() => popup.isClosed()).toBe(true)
   })
 
   it('refuses an unexpected provider destination and closes the blank popup', async () => {
@@ -234,7 +234,7 @@ describe('Google popup completion', () => {
     await flow.page.getByRole('button', { name: 'Continue with Google' }).click()
     const popup = await opened
     await flow.page.getByRole('alert').filter({ hasText: 'Google sign-in is unavailable.' }).waitFor()
-    expect(popup.isClosed()).toBe(true)
+    await expect.poll(() => popup.isClosed()).toBe(true)
     expect(new URL(flow.page.url()).pathname).toBe('/sign-in')
   })
 
@@ -536,7 +536,7 @@ describe('Google workspace entry points', () => {
     await flow.page.getByRole('alert').filter({ hasText: message }).waitFor()
     expect(new URL(flow.page.url()).pathname).toBe(path)
     expect(flow.api.calls).toContain('POST /auth/sign-out')
-    expect(popup.isClosed()).toBe(true)
+    await expect.poll(() => popup.isClosed()).toBe(true)
   })
 
   it.each([...WORKSPACES, ['/sign-in', '/'], ['/sign-up', '/']] as const)('%s waits for the authenticator after Google, without requesting workspace access', async (path) => {
@@ -553,7 +553,7 @@ describe('Google workspace entry points', () => {
     expect(new URL(flow.page.url()).pathname).toBe(path)
     expect(flow.api.calls.slice(calls).filter(call => /GET \/(admin|counter|platform)\/me/.test(call))).toEqual([])
     expect(await flow.page.getByRole('button', { name: 'Verify', exact: true }).isEnabled()).toBe(true)
-    expect(popup.isClosed()).toBe(true)
+    await expect.poll(() => popup.isClosed()).toBe(true)
   })
 
   it.each(WORKSPACES)('%s preserves fields and enables retry after cancelling Google', async (path) => {

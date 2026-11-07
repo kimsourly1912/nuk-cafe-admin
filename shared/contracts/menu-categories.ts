@@ -16,6 +16,8 @@ export const CATEGORY_NAME_MAX = 60
 export const CATEGORY_DESCRIPTION_MAX = 500
 /** More siblings than a menu should ever need; bounds the reorder request. */
 export const MAX_SIBLINGS = 200
+/** Bounds `moveItems`; far more than a category holds. */
+export const MAX_MOVED_ITEMS = 100_000
 
 export interface MenuCategory {
   id: string
@@ -64,6 +66,11 @@ export const createCategorySchema = v.strictObject({
   /** Omit or `null` for a top-level category; a top-level category's id for a sub-category. */
   parentId: v.optional(parentIdSchema, null),
   availabilityRuleIds: v.optional(availabilityRuleIdsSchema, []),
+  /**
+   * A new sub-category of a category holding menu items takes them all (D270): how many this person
+   * was told would move, its drafts and active items (`itemCount`). Another number is refused.
+   */
+  moveItems: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(MAX_MOVED_ITEMS))),
 })
 export type CreateCategoryInput = v.InferOutput<typeof createCategorySchema>
 

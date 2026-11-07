@@ -678,6 +678,18 @@ Width: the menu is at least as wide as its longest label (estimated in `ch`, sin
 
 ---
 
+## `<PillNav>`
+
+Choices as a row of pill buttons that scrolls sideways, with one highlight that slides to the active pill, kept in view (D93, shared since D270). The customer menu's main categories, and the Categories page's below `lg`. Use it to jump between records or sections; a status or a page's sections are tabs ([ui §15](./ui.md#15-tabs-and-the-sidebar-owner-2026-10-02-d126)).
+
+Source: `app/components/PillNav.vue`
+
+```vue
+<PillNav :items="[{ id: 'tea', label: 'Tea' }]" :active-id="activeId" aria-label="Categories" @select="go" />
+```
+
+---
+
 ## `<AppDrawer>`
 
 `UDrawer` without dragging (ui.md §8, D126): no handle, `handle-only`, so the sheet never moves under a finger; its X is on unless `:close="false"`. Back closes it (D201), with `routed` and `@back` as [`<AppModal>`](#appmodal-and-appslideover)'s. Every other prop, event and slot is `UDrawer`'s, also through `<component :is>` (`resolveComponent('AppDrawer')`). `UDrawer` itself is a lint error outside this file.

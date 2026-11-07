@@ -1,26 +1,34 @@
 <script setup lang="ts">
 /**
- * Categories as a tree: top-level categories as groups with their subcategories (D37, D72). The
- * whole list is loaded (it's small), so search, status tabs and counts work on the client. Three
- * modes keep the everyday view quiet:
- * - browse: the tree, expand/collapse, row menus (Edit, Add subcategory, Archive / Restore);
+ * Categories as two panels (D270, replacing the tree of D37 and D72): the main categories on the left,
+ * and beside them a banner and the subcategories of the one on show (`?category=`, else the first).
+ * Below `lg` they're one screen at a time: the list, then the category pushed over it. Select and
+ * Reorder work the same way, one level at a time, starting from the list; a card with subcategories
+ * steps into them, and the bar and the selection or new order carry over. From `lg` the page
+ * scrolls as one, with no scrolling box inside it, and the category on show stays pinned beside a long
+ * list. The whole list is loaded (it's small), so search, status tabs and counts work on the client. Three modes keep the
+ * everyday view quiet:
+ * - browse: a main category's name shows it, a subcategory's opens Edit; Edit details and the row
+ *   menus (Add subcategory, Manage items, Archive / Restore);
  * - select (Active or Archived view): checkboxes and a bar with "Archive selected" or
- *   "Restore selected"; the All view mixes statuses, so it has no bulk actions;
+ *   "Restore selected", across every category; the All view mixes statuses, so it has no bulk actions;
  * - reorder (Active view, no search): drag handles and Move up / Move down per level, then Save
  *   order or Discard. Moving to another parent is done in the Edit form, never by dragging.
  */
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { MenuCategory } from '#shared/contracts/menu-categories'
-import { useEventListener, useLocalStorage } from '@vueuse/core'
-import { insertNodeAt, removeNode, useSortable } from '@vueuse/integrations/useSortable'
+import { useEventListener } from '@vueuse/core'
 import { describeWindows, useAvailabilityRuleOptions } from '~/features/availability-rules'
 import { DELETE_BLOCKED, useCategoryMutations } from '../composables/useCategories'
 import { useCategoryTree } from '../composables/useCategoryTree'
+import { mainSummaryLabel, manageItemsPath, newItemPath } from '../schemas/category-display'
+import CategoryBanner from './CategoryBanner.vue'
 import CategoryFormModal from './CategoryFormModal.vue'
+import CategoryMainList from './CategoryMainList.vue'
 import CategoryRestoreModal from './CategoryRestoreModal.vue'
 import type { CategoryPageMode } from './CategoryRow.vue'
 import CategoryRow from './CategoryRow.vue'
-import CategoryTreeGroup from './CategoryTreeGroup.vue'
+import CategorySubList from './CategorySubList.vue'
 
 const TABS = [
   { label: 'Active', value: 'active' },
@@ -49,26 +57,13 @@ const rows = computed<MenuCategory[]>(() => [
 
 const mode = ref<CategoryPageMode>('browse')
 
-// --- Expand / collapse (a search shows every match); remembered per viewer in this browser ---
-const collapsedIds = useLocalStorage<string[]>('categories:collapsed', [])
-const collapsed = computed(() => new Set(collapsedIds.value))
-const isExpanded = (id: string) => !!filters.search || !collapsed.value.has(id)
-const expandable = computed(() => groups.value.filter(g => g.subs.length).map(g => g.main.id))
-const allExpanded = computed(() => expandable.value.every(id => !collapsed.value.has(id)))
-function toggle(id: string) {
-  const next = new Set(collapsed.value)
-  if (!next.delete(id)) next.add(id)
-  collapsedIds.value = [...next]
-}
-function toggleAllGroups() {
-  collapsedIds.value = allExpanded.value ? [...expandable.value] : []
-}
-
 // --- Select mode: rows of the view's status only, so a bulk action never mixes statuses ---
 const selectableRows = computed(() => (view.value === 'all' ? [] : rows.value.filter(c => c.status === view.value)))
 const selection = useTableSelection(selectableRows, c => c.id, { resetOn: [() => ({ ...filters })] })
 
 function startSelect() {
+  // Below `lg` a mode starts from the main categories: the level you can't reach from a category.
+  if (!isExpanded.value) show(undefined)
   mode.value = 'select'
 }
 function exitSelect() {
@@ -101,6 +96,7 @@ const movable = computed(() => mode.value === 'reorder' && tree.sortable.value &
 function startReorder() {
   exitSelect()
   if (!tree.sortable.value) clearFilters()
+  if (!isExpanded.value) show(undefined)
   mode.value = 'reorder'
 }
 function finishReorder() {
@@ -114,41 +110,62 @@ async function saveOrder() {
 /** A refused save: why, and whether reloading the versions can fix it. */
 const saveConflict = computed(() => tree.saveError.value?.code === 'VERSION_CONFLICT')
 
-const groupsEl = useTemplateRef<HTMLElement>('groupsEl')
-// Moved by a chevron or key, a category slides to its new place (a drag has Sortable's animation).
-const { moveClass: groupsMoveClass, onStart, onEnd } = useReorderTransition(movable)
-const groupsSortable = useSortable(groupsEl, [], {
-  handle: '[data-main-handle]',
-  animation: 150,
-  watchElement: true,
-  onStart,
-  onEnd,
-  // Sortable moves the DOM node; put it back and move the data instead, so Vue owns the rows.
-  onUpdate: (event) => {
-    removeNode(event.item)
-    insertNodeAt(event.from, event.item, event.oldIndex!)
-    tree.moveMain(event.oldIndex!, event.newIndex!)
-  },
+// --- The main category on show: in the URL, so a reload or shared link keeps it ---
+const route = useRoute()
+const router = useRouter()
+const { isExpanded } = useLayoutContext()
+const categoryInUrl = () => typeof route.query.category === 'string' ? route.query.category : undefined
+const shownId = ref(categoryInUrl())
+watch(categoryInUrl, (id) => {
+  shownId.value = id
 })
-watchEffect(() => groupsSortable.option('disabled', !movable.value))
 
-/** Moves a top-level category; focus stays on the control that moved it (or its handle). */
-async function moveMain(index: number, by: -1 | 1, focus: string) {
-  const id = groups.value[index]?.main.id
-  if (!id || index + by < 0 || index + by >= groups.value.length) return
-  tree.moveMain(index, index + by)
-  await nextTick()
-  const row = groupsEl.value?.querySelector<HTMLElement>(`[data-main="${id}"] > :first-child`)
-  const target = row?.querySelector<HTMLElement>(`${focus}:not(:disabled)`) ?? row?.querySelector<HTMLElement>('[data-main-handle]')
-  target?.focus()
+function writeShownToUrl(push: boolean) {
+  if (categoryInUrl() === shownId.value) return
+  const { category: _, ...query } = route.query
+  const next = { query: shownId.value ? { ...query, category: shownId.value } : query }
+  if (push) router.push(next)
+  else router.replace(next)
+}
+/**
+ * Below `lg` opening one from the list is a step Back returns from; the pills then swap it in
+ * place, so Back still returns to the list. In Reorder mode the URL waits until the mode
+ * ends: every route change asks about unsaved changes, and looking at another category's subcategories
+ * while reordering isn't leaving.
+ */
+function show(id: string | undefined) {
+  shownId.value = id
+  if (mode.value !== 'reorder') writeShownToUrl(!isExpanded.value && !!id && !categoryInUrl() && mode.value === 'browse')
 }
 
-function onMainKey(event: KeyboardEvent, index: number) {
-  const by = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : undefined
-  if (by === undefined) return
-  event.preventDefault()
-  moveMain(index, by, '[data-main-handle]')
+/**
+ * A card's name. Below `lg` in a mode it steps into the subcategories; one without any has nowhere to
+ * go, so there it does what the name does on a subcategory's row: ticks it, in Select mode.
+ */
+function onCard(id: string) {
+  const group = groups.value.find(g => g.main.id === id)
+  if (isExpanded.value || mode.value === 'browse' || group?.subs.length) return show(id)
+  if (group && mode.value === 'select' && group.main.status === view.value) selection.toggle(group.main, !selection.isSelected(group.main))
 }
+watch(mode, (next, previous) => {
+  if (previous === 'reorder') writeShownToUrl(false)
+})
+
+/** The one asked for, while the search and tab still show it. */
+const opened = computed(() => groups.value.find(g => g.main.id === shownId.value))
+/** Beside the list there's always one: the first until another is chosen. */
+const shown = computed(() => opened.value ?? groups.value[0])
+const currentId = computed(() => opened.value || isExpanded.value ? shown.value?.main.id : undefined)
+
+/** The pills that change category below `lg`, where the list isn't beside it. */
+const mainPills = computed(() => groups.value.map(g => ({ id: g.main.id, label: g.main.name })))
+/** Subcategories of any status: an archived one still keeps menu items out, on the server too. */
+const hasSubs = (id: string) => tree.categories.value.some(c => c.parentId === id)
+
+const shownSummary = computed(() => {
+  const main = shown.value?.main
+  return main ? mainSummaryLabel(main, tree.categories.value.filter(c => c.parentId === main.id && c.status === 'active')) : ''
+})
 
 // --- Availability: each rule's times, for the tooltips (the library is small and shared) ---
 const { data: rules } = useAvailabilityRuleOptions()
@@ -158,6 +175,7 @@ const ruleTimes = computed(() => new Map(rules.value.map(rule => [rule.id, descr
 const byId = computed(() => new Map(tree.categories.value.map(c => [c.id, c])))
 const archivedSubs = (id: string) => tree.categories.value.filter(c => c.parentId === id && c.status === 'archived').length
 
+const tenantPath = useTenantPath()
 const overlay = useOverlay()
 /** Restore; a top-level category with archived subcategories asks whether they come back too. */
 async function restoreOne(category: MenuCategory) {
@@ -187,15 +205,25 @@ function rowActions(category: MenuCategory): DropdownMenuItem[] {
       deleteForGood,
     ]
   }
-  return [
-    { label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openForm(category) },
-    // A category holds subcategories or menu items, never both (D44).
-    ...(category.parentId === null
-      ? [category.itemCount
-          ? { label: 'Add subcategory (it holds menu items)', icon: 'i-lucide-list-plus', disabled: true }
-          : { label: 'Add subcategory', icon: 'i-lucide-list-plus', onSelect: () => openForm(undefined, category.id) }]
-      : []),
+  // One order at both levels (D270): Edit, what can be added, Manage items, then Archive apart.
+  const addItem: DropdownMenuItem = { label: 'Add menu item', icon: 'i-lucide-plus', to: tenantPath(newItemPath(category.id)) }
+  const manageItems: DropdownMenuItem = { label: 'Manage items', icon: 'i-lucide-utensils', to: tenantPath(manageItemsPath(category.id)) }
+  const archiveLast: DropdownMenuItem[] = [
+    { type: 'separator' },
     { label: 'Archive', icon: 'i-lucide-archive', onSelect: () => archive.execute(category) },
+  ]
+  if (category.parentId !== null) {
+    return [{ label: 'Edit', icon: 'i-lucide-pencil', onSelect: () => openForm(category) }, addItem, manageItems, ...archiveLast]
+  }
+  // A main category's Edit details is beside this menu on its banner. It holds subcategories or menu
+  // items, never both (D44): with subcategories it takes no items, which stays visible, saying why
+  // (ui §9); with items, a new subcategory takes them (D270).
+  return [
+    { label: 'Add subcategory', icon: 'i-lucide-plus', onSelect: () => openForm(undefined, category.id) },
+    ...(hasSubs(category.id)
+      ? [{ label: category.childCount ? 'Add menu item (it has subcategories)' : 'Add menu item (it has archived subcategories)', icon: 'i-lucide-plus', disabled: true }]
+      : [addItem, manageItems]),
+    ...archiveLast,
   ]
 }
 
@@ -234,6 +262,15 @@ useEventListener('keydown', (event: KeyboardEvent) => {
       <UDashboardNavbar title="Categories">
         <template #leading>
           <UDashboardSidebarCollapse />
+          <UButton
+            v-if="opened && mode === 'browse'"
+            icon="i-lucide-arrow-left"
+            color="neutral"
+            variant="ghost"
+            aria-label="Back to main categories"
+            class="lg:hidden"
+            @click="show(undefined)"
+          />
         </template>
         <template #right>
           <UTooltip
@@ -241,10 +278,12 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             :kbds="['n']"
           >
             <UButton
-              label="New category"
               icon="i-lucide-plus"
+              aria-label="New category"
               @click="openForm()"
-            />
+            >
+              <span class="hidden sm:inline">New category</span>
+            </UButton>
           </UTooltip>
         </template>
       </UDashboardNavbar>
@@ -260,16 +299,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           />
         </template>
         <template #right>
-          <UButton
-            :icon="allExpanded ? 'i-lucide-list-collapse' : 'i-lucide-list-tree'"
-            color="neutral"
-            variant="outline"
-            :aria-label="allExpanded ? 'Collapse all' : 'Expand all'"
-            :disabled="!!filters.search || !expandable.length || mode === 'reorder'"
-            @click="toggleAllGroups()"
-          >
-            <span class="hidden lg:inline">{{ allExpanded ? 'Collapse all' : 'Expand all' }}</span>
-          </UButton>
           <!-- Modes are toggles (D129): the button that starts Reorder or Select leaves it. -->
           <UTooltip
             :text="mode === 'reorder' ? (tree.isDirty.value || tree.saving.value ? 'Save or discard the new order first' : 'Leave Reorder mode') : 'Reorder categories'"
@@ -283,7 +312,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               :disabled="mode === 'reorder' ? tree.isDirty.value || tree.saving.value : mode === 'select' || tree.total.value < 2"
               @click="mode === 'reorder' ? finishReorder() : startReorder()"
             >
-              <span class="hidden lg:inline">{{ mode === 'reorder' ? 'Done' : 'Reorder' }}</span>
+              <span class="hidden xl:inline">{{ mode === 'reorder' ? 'Done' : 'Reorder' }}</span>
             </UButton>
           </UTooltip>
           <UTooltip
@@ -298,7 +327,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
               :disabled="mode !== 'select' && (view === 'all' || mode !== 'browse' || !selectableRows.length)"
               @click="mode === 'select' ? exitSelect() : startSelect()"
             >
-              <span class="hidden lg:inline">{{ mode === 'select' ? 'Cancel' : 'Select' }}</span>
+              <span class="hidden xl:inline">{{ mode === 'select' ? 'Cancel' : 'Select' }}</span>
             </UButton>
           </UTooltip>
         </template>
@@ -308,10 +337,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 
     <template #body>
       <div class="space-y-4">
-        <p class="text-sm text-muted">
-          Organize how customers browse your menu.
-        </p>
-
         <StatusTabs
           v-model="filters.status"
           :tabs="TABS"
@@ -330,6 +355,8 @@ useEventListener('keydown', (event: KeyboardEvent) => {
             v-if="view === 'archived'"
             label="Restore selected"
             icon="i-lucide-archive-restore"
+            color="neutral"
+            variant="subtle"
             :disabled="!selection.count"
             @click="runBulk()"
           />
@@ -416,87 +443,114 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           @clear="clearFilters()"
         />
 
-        <!-- @container: the tree lays out by its own width, not the viewport's (D85) -->
+        <!-- Page layout at `lg`; below it, one level at a time: the list or the category on show. -->
         <div
           v-else
-          class="@container"
+          class="flex flex-col gap-4 lg:flex-row lg:items-start"
         >
-          <div class="@2xl:overflow-hidden @2xl:rounded-lg @2xl:border @2xl:border-default">
-            <!-- Column headings of the wide layout; widths match CategoryRow -->
-            <div
-              class="hidden items-center gap-4 border-b border-default bg-elevated/25 px-4 py-2 text-sm font-medium text-muted @2xl:flex"
-              aria-hidden="true"
-            >
-              <span class="min-w-0 flex-1">Category</span>
-              <span class="w-36 shrink-0">Contains</span>
-              <span class="w-44 shrink-0">Availability</span>
-              <span class="w-12 shrink-0 text-right">Actions</span>
-            </div>
+          <CategoryMainList
+            class="w-full lg:w-72 lg:shrink-0 xl:w-80"
+            :class="opened && 'max-lg:hidden'"
+            :groups="groups"
+            :categories="tree.categories.value"
+            :current-id="currentId"
+            :mode="mode"
+            :movable="movable"
+            :show-status="showStatus"
+            :selectable-status="view === 'all' ? undefined : view"
+            :is-selected="selection.isSelected"
+            :is-busy="isBusy"
+            @show="onCard"
+            @select="(category, value) => selection.toggle(category, value)"
+            @move="(from, to) => tree.moveMain(from, to)"
+          />
 
-            <div
-              ref="groupsEl"
-              role="list"
-              aria-label="Categories"
-              class="space-y-3 @2xl:space-y-0 @2xl:divide-y @2xl:divide-default"
-            >
-              <TransitionGroup :move-class="groupsMoveClass">
-                <CategoryTreeGroup
-                  v-for="(group, i) in groups"
-                  :key="group.main.id"
-                  :group="group"
-                  :mode="mode"
-                  :movable="movable"
-                  :expanded="isExpanded(group.main.id)"
-                  :show-status="showStatus"
-                  :selectable-status="view === 'all' ? undefined : view"
-                  :index="i"
-                  :count="groups.length"
-                  :actions="rowActions"
-                  :is-selected="selection.isSelected"
-                  :is-busy="isBusy"
-                  :rule-times="ruleTimes"
-                  @open="category => openForm(category)"
-                  @select="(category, value) => selection.toggle(category, value)"
-                  @toggle="toggle(group.main.id)"
-                  @add-sub="openForm(undefined, group.main.id)"
-                  @move-main="by => moveMain(i, by, by < 0 ? '[data-move=up]' : '[data-move=down]')"
-                  @main-handle-keydown="onMainKey($event, i)"
-                  @move-sub="(from, to) => tree.moveSub(group.main.id, from, to)"
-                />
-              </TransitionGroup>
-            </div>
-
-            <!-- Subcategories whose parent is gone: shown, not reorderable. -->
-            <div
-              v-if="tree.tree.value.orphans.length"
-              role="list"
-              aria-label="Without a parent category"
-              class="mt-3 overflow-hidden rounded-lg border border-default @2xl:mt-0 @2xl:rounded-none @2xl:border-0 @2xl:border-t"
-            >
-              <p class="border-b border-default bg-elevated/25 px-4 py-2 text-sm text-muted">
-                Without a parent category
-              </p>
-              <CategoryRow
-                v-for="orphan in tree.tree.value.orphans"
-                :key="orphan.id"
-                role="listitem"
-                :aria-label="orphan.name"
-                :category="orphan"
-                level="sub"
-                :mode="mode === 'reorder' ? 'browse' : mode"
-                :actions="rowActions(orphan)"
-                :show-status="showStatus"
-                :selected="selection.isSelected(orphan)"
-                :selectable="mode === 'select' && orphan.status === view"
-                :busy="isBusy(orphan.id)"
-                :rule-times="ruleTimes"
-                last
-                @open="openForm(orphan)"
-                @select="value => selection.toggle(orphan, value)"
-              />
-            </div>
+          <!-- Pinned: a card clicked far down a long list changes what's beside it, not something scrolled away. -->
+          <div
+            v-if="shown"
+            class="min-w-0 flex-1 space-y-4 lg:sticky lg:top-6"
+            :class="!opened && 'max-lg:hidden'"
+          >
+            <UButton
+              v-if="mode !== 'browse'"
+              label="Main categories"
+              icon="i-lucide-arrow-left"
+              color="neutral"
+              variant="ghost"
+              class="lg:hidden"
+              @click="show(undefined)"
+            />
+            <PillNav
+              v-if="mode === 'browse'"
+              :items="mainPills"
+              :active-id="shown.main.id"
+              aria-label="Main categories"
+              class="lg:hidden"
+              @select="show"
+            />
+            <CategoryBanner
+              :class="mode !== 'browse' && 'max-lg:hidden'"
+              :category="shown.main"
+              :summary="shownSummary"
+              :actions="mode === 'reorder' ? [] : rowActions(shown.main)"
+              :editable="mode !== 'reorder' && shown.main.status === 'active' && !shown.contextOnly"
+              :show-status="showStatus"
+              :busy="isBusy(shown.main.id)"
+              :rule-times="ruleTimes"
+              @edit="openForm(shown!.main)"
+            />
+            <CategorySubList
+              :key="shown.main.id"
+              :group="shown"
+              :has-subs="hasSubs(shown.main.id)"
+              :mode="mode"
+              :movable="movable"
+              :numbered="tree.sortable.value"
+              :show-status="showStatus"
+              :selectable-status="view === 'all' ? undefined : view"
+              :actions="rowActions"
+              :is-selected="selection.isSelected"
+              :is-busy="isBusy"
+              :rule-times="ruleTimes"
+              @open="category => openForm(category)"
+              @select="(category, value) => selection.toggle(category, value)"
+              @add="openForm(undefined, shown!.main.id)"
+              @move="(from, to) => tree.moveSub(shown!.main.id, from, to)"
+            />
           </div>
         </div>
+
+        <!-- Subcategories whose parent is gone: shown, not reorderable. -->
+        <section
+          v-if="tree.tree.value.orphans.length"
+          class="@container space-y-3"
+        >
+          <h2 class="font-semibold text-highlighted">
+            Without a parent category
+          </h2>
+          <div
+            role="list"
+            aria-label="Without a parent category"
+            class="space-y-2"
+          >
+            <CategoryRow
+              v-for="orphan in tree.tree.value.orphans"
+              :key="orphan.id"
+              role="listitem"
+              :aria-label="orphan.name"
+              :category="orphan"
+              :mode="mode === 'reorder' ? 'browse' : mode"
+              :actions="rowActions(orphan)"
+              :show-status="showStatus"
+              :selected="selection.isSelected(orphan)"
+              :selectable="mode === 'select' && orphan.status === view"
+              :busy="isBusy(orphan.id)"
+              :rule-times="ruleTimes"
+              @open="openForm(orphan)"
+              @select="value => selection.toggle(orphan, value)"
+            />
+          </div>
+        </section>
       </div>
     </template>
   </UDashboardPanel>

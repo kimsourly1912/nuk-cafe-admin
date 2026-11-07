@@ -35,6 +35,10 @@ export const parentHasItems = () =>
     fieldErrors: { parentId: ['Choose a category without menu items'] },
   })
 
+/** The parent's menu items aren't the number this person was told would move (D270). */
+export const parentItemsChanged = () =>
+  apiError(409, ErrorCodes.VERSION_CONFLICT, 'The menu items in that category changed. Check how many will move, then try again.')
+
 export const parentNotAvailable = () =>
   apiError(422, CategoryErrorCodes.PARENT_NOT_AVAILABLE, 'That category doesn\'t exist or is archived.', {
     fieldErrors: { parentId: ['Choose an active top-level category'] },

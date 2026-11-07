@@ -144,7 +144,7 @@ Feature `server/features/menu/` (`categories.*`), contract `shared/contracts/men
 |---|---|
 | `GET /api/admin/menu/categories?status=active\|archived\|all` | The tree in order: each top-level category followed by its sub-categories; `childCount` = active sub-categories |
 | `GET /api/admin/menu/categories/{id}` | One category |
-| `POST /api/admin/menu/categories` | `{ name, description?, parentId? }` → 201, at the end of its level |
+| `POST /api/admin/menu/categories` | `{ name, description?, parentId?, moveItems? }` → 201, at the end of its level. `moveItems`: the parent's drafts and active items, as told to the person; all its items of any status move into the new sub-category in the same batch (D270), archived ones also without `moveItems` |
 | `PATCH /api/admin/menu/categories/{id}` | `{ version, name?, description?, parentId? }`: absent keeps; a new `parentId` moves it (`null`: to the top level) to the end of its new siblings |
 | `POST /api/admin/menu/categories/{id}/archive` | `{ version }`: archives it and its active sub-categories |
 | `POST /api/admin/menu/categories/{id}/restore` | `{ version }`: restores this one only, at the end of its level |
@@ -251,7 +251,7 @@ Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/c
 | Case | Result | Test |
 |---|---|---|
 | Category unknown or archived / has sub-categories (also if one is added meanwhile) | 422 `CATEGORY_NOT_AVAILABLE` / `CATEGORY_NOT_A_LEAF` | ✔ (incl. the race) |
-| A sub-category added to a category that holds drafts or active items (also if one arrives meanwhile, on create and on move) | 422 `CATEGORY_HAS_ITEMS`; archived items don't hold a category | ✔ (incl. both races) |
+| A sub-category added to a category that holds drafts or active items (also if one arrives meanwhile, on create and on move) | 422 `CATEGORY_HAS_ITEMS`; archived items don't hold a category. With `moveItems` on create (D270) they move instead; another number than it holds is 409 `VERSION_CONFLICT` | ✔ (incl. both races) |
 | A new option set that's archived (also if archived meanwhile); more than 2 | 422 `OPTION_SET_NOT_AVAILABLE` / 400; an archived set already on the item stays | ✔ (incl. the race) |
 | Grid missing a combination, listing one twice, wrong shape, an archived value, an active cell without a price, nothing switched on | 422 `PRICE_GRID` with the field and a sentence | ✔ (rules: 9 tests) |
 | An option value archived meanwhile | 422 `PRICE_GRID` ("reload the item") | ✔ (race) |
@@ -261,7 +261,7 @@ Same feature (`items.*`, the grid rules in `items.rules.ts`), contract `shared/c
 | Editing an archived item; publishing a non-draft; restoring a non-archived one | 409 `INVALID_STATE` | ✔ |
 | Publishing with nothing sellable | 422 `NOTHING_TO_SELL` | ✔ |
 | Deleting a published item / one an order line or any promotion names (also if one arrives meanwhile) | 409 `INVALID_STATE` / `ITEM_HAS_HISTORY`; summaries say which (`deleteBlocker`) | ✔ (incl. both races) |
-| Restoring into a category that has since got sub-categories | 422 `CATEGORY_NOT_A_LEAF` | ✔ |
+| Restoring into a category that has since got sub-categories (one moved under it; a new one takes its archived items, D270) | 422 `CATEGORY_NOT_A_LEAF` | ✔ |
 
 Option sets now report `itemCount` (drafts and active items using them).
 

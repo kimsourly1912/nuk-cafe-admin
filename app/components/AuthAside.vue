@@ -18,7 +18,7 @@
  *   …
  * </TaskFrame>
  */
-import background from '~/assets/img/nuk-cafe-auth-background.png'
+import background from '~/assets/img/nuk-cafe-auth-background.webp'
 
 /** `colorMode: false`: the page's card has the light/dark button instead. */
 withDefaults(defineProps<{ title: string, text: string, colorMode?: boolean }>(), { colorMode: true })

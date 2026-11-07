@@ -26,7 +26,9 @@ export function useCategoryMutations() {
       id: 'categories:create',
       // Same name in flight = same submission (double submit); different names run in parallel.
       key: body => `${body.parentId ?? 'top'}:${body.name.toLowerCase()}`,
-      successMessage: (_, body) => `Category "${body.name}" created`,
+      successMessage: (_, body) => body.moveItems
+        ? `Category "${body.name}" created with ${pluralize(body.moveItems, ['menu item', 'menu items'])}`
+        : `Category "${body.name}" created`,
       errorMessage: body => `Could not create "${body.name}"`,
       invalidate: AFFECTED,
     },
